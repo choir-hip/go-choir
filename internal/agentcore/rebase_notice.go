@@ -16,9 +16,10 @@ import (
 
 // U4 (docs/design/u4-stack-rebase-build-2026-10-26.md, route D, slices 1 and
 // 2): when the applied self-development stack sits on a base the computer no
-// longer booted (stack_base_moved) and the owner has turned source.rebase_offer
-// on, the runtime asks the root Texture RLM, with a rebase notice, to rebase it.
-// This file is the trigger and the bounded re-mint.
+// longer booted (stack_base_moved), the runtime asks the root Texture RLM, with a
+// rebase notice, to rebase it. This file is the trigger and the bounded
+// re-mint. There is no switch (capsule overlay S4); with no live root RLM the
+// timer mints nothing and the Cast refusal says rebase_needs_root.
 //
 // Restart rules (CLAUDE.md, "Restarts End Work (Crash) Or Resume It"):
 //   - Nothing here runs inside boot. Reconcile only arms an in-memory timer,
@@ -93,23 +94,15 @@ func (rt *Runtime) rebaseScope() (ownerID, computerID string) {
 	return firstNonEmpty(strings.TrimSpace(rt.selfdevRouteOwnerID), strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))), strings.TrimSpace(rt.cfg.ComputerID)
 }
 
-// rebaseOfferOn is the effective switch: source.rebase_offer, and both
-// source.projection and texture.root_desk, which it needs.
-func (rt *Runtime) rebaseOfferOn(ctx context.Context, ownerID, computerID string) bool {
-	return sourceproj.Enabled() &&
-		rt.computerSettingOn(ctx, ownerID, computerID, store.SettingSourceRebaseOffer) &&
-		rt.computerSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk)
-}
-
 // armRebaseNotice is called after a reconcile. It arms the one timer when the
-// stack sits on a moved base and the switches are on; it never mints, so it is
-// safe at boot. A timer already armed is left as it is.
+// stack sits on a moved base; it never mints, so it is safe at boot. A timer
+// already armed is left as it is.
 func (rt *Runtime) armRebaseNotice(ctx context.Context, result sourceproj.Result) {
 	if rt == nil || result.State != sourceproj.StateBaseMoved {
 		return
 	}
 	ownerID, computerID := rt.rebaseScope()
-	if ownerID == "" || computerID == "" || !rt.rebaseOfferOn(ctx, ownerID, computerID) {
+	if ownerID == "" || computerID == "" {
 		return
 	}
 	rt.rebaseMu.Lock()
@@ -125,16 +118,13 @@ func (rt *Runtime) armRebaseNotice(ctx context.Context, result sourceproj.Result
 	rt.armRebaseLocked(due, now)
 }
 
-// applyRebaseOfferSetting is the owner's change of source.rebase_offer or
-// texture.root_desk at runtime. On, a reconcile arms the timer if the stack
-// sits on a moved base (the timer, not this call, mints, and only after the
-// stay-up interval); off stops the timer, which is the live rollback.
-func (rt *Runtime) applyRebaseOfferSetting(value bool) {
-	if rt == nil {
-		return
-	}
-	if !value {
-		rt.stopRebaseNotice()
+// applyTextureRootDeskSetting is the owner's change of texture.root_desk at
+// runtime. On, a reconcile arms the timer if the stack sits on a moved base, so
+// a root that just became live is asked (the timer, not this call, mints, and
+// only after the stay-up interval). Off changes nothing here: the timer finds
+// no live root and mints nothing.
+func (rt *Runtime) applyTextureRootDeskSetting(value bool) {
+	if rt == nil || !value {
 		return
 	}
 	go rt.reconcileSourceProjectionLogged(context.Background(), "setting")
@@ -210,9 +200,6 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if ownerID == "" || computerID == "" {
 		return rebaseNoticeOutcome{Reason: "no owner or computer"}
 	}
-	if !rt.rebaseOfferOn(ctx, ownerID, computerID) {
-		return rebaseNoticeOutcome{Reason: "a switch is off"}
-	}
 	result, err := rt.ReconcileSourceProjection(ctx, rebaseReconcileReason)
 	if err != nil {
 		return rt.transientRebase("reconcile failed: %v", err)
@@ -232,7 +219,7 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 		return rt.transientRebase("root Texture RLM: %v", err)
 	}
 	if !live {
-		return rebaseNoticeOutcome{Reason: "no live root Texture RLM"}
+		return rebaseNoticeOutcome{Reason: rebaseNeedsRoot}
 	}
 	pair := types.StackRebasePairKey(operationID, booted)
 	if _, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, pair); err == nil {

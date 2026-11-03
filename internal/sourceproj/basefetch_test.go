@@ -216,14 +216,9 @@ func TestLowDiskIsTransientAndSkipsTheFetch(t *testing.T) {
 	}
 }
 
-func TestSwitchOffFetchesNothing(t *testing.T) {
+func TestFetchOffFetchesNothing(t *testing.T) {
 	remote, c := remoteWithHistory(t)
 	guest := guestAt(t, remote, c[0])
-	t.Setenv(EnvSwitch, "")
-	if got := EnsureBaseObjects(context.Background(), guest, c[3], opts(remote)); got.Outcome != FetchDisabled {
-		t.Fatalf("N13: %+v", got)
-	}
-	t.Setenv(EnvSwitch, "1")
 	t.Setenv(EnvBaseFetch, "off")
 	if got := EnsureBaseObjects(context.Background(), guest, c[3], opts(remote)); got.Outcome != FetchDisabled {
 		t.Fatalf("N13 (fetch off): %+v", got)
@@ -259,5 +254,21 @@ func TestTheCallersGitEnvironmentCannotRedirectTheFetch(t *testing.T) {
 	_ = err
 	if _, ok := resolveCommit(context.Background(), guest, c[3]); !ok {
 		t.Fatal("objects went to the wrong repository")
+	}
+}
+
+// RV-03 (residual register 2026-10-26): a 403 is a rate limit or an abuse
+// block as often as a refusal, so it is retried; 401 and 404 stay permanent.
+func TestA403IsRetriedAndA401Or404IsPermanent(t *testing.T) {
+	for reason, permanent := range map[string]bool{
+		"fatal: unable to access 'https://github.com/x/y/': The requested URL returned error: 403": false,
+		"fatal: unable to access 'https://github.com/x/y/': The requested URL returned error: 401": true,
+		"fatal: unable to access 'https://github.com/x/y/': The requested URL returned error: 404": true,
+		"fatal: remote error: upload-pack: not our ref 0123":                                       true,
+		"fatal: unable to access 'https://github.com/x/y/': Could not resolve host: github.com":    false,
+	} {
+		if got := permanentFetchError(reason); got != permanent {
+			t.Errorf("permanentFetchError(%q) = %v, want %v", reason, got, permanent)
+		}
 	}
 }

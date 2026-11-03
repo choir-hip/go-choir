@@ -128,9 +128,7 @@ func TestRebaseRetryMintsAfterAClaimedRoundEnded(t *testing.T) {
 
 func TestRebaseRetryRefusesWhatIsNotTheMovedStack(t *testing.T) {
 	cases := map[string]func(t *testing.T, f *rebaseFixture){
-		"source.rebase_offer off": func(t *testing.T, f *rebaseFixture) { f.setSwitch(t, store.SettingSourceRebaseOffer, false) },
-		"texture.root_desk off":   func(t *testing.T, f *rebaseFixture) { f.setSwitch(t, store.SettingTextureRootDesk, false) },
-		"the stack is projected":  func(t *testing.T, f *rebaseFixture) { setBootedBase(t, f.rt, f.base) },
+		"the stack is projected": func(t *testing.T, f *rebaseFixture) { setBootedBase(t, f.rt, f.base) },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

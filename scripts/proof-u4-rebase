@@ -8,18 +8,22 @@
 #       [--phase all|apply|rebase|conflict|retry|negatives] [--settle SECONDS] [--dry-run]
 #
 # Never run it against the paper or an owner's computer, and never SSH or edit
-# Node B: the one platform act it needs (landing an unrelated commit on main so
-# the test computer refreshes to a newer base B') is FP0's, announced by this
+# Node B: the one platform act it needs (landing a main commit that edits the
+# file A changed, elsewhere in it, so the test computer refreshes to a newer
+# base B' that the stack cannot be grafted onto) is FP0's, announced by this
 # script and awaited, not performed.
 #
 # Steps (the numbers are the design's):
-#   1  set source.projection, texture.root_desk, texture.owner_act_wakes and
-#      source.rebase_offer on, through /api/computer-settings
+#   1  set texture.root_desk and texture.owner_act_wakes on, through
+#      /api/computer-settings (source projection and the rebase offer have no
+#      switch since capsule overlay S4)
 #   2  a fresh document requests a small source change A; approve it; wait for
 #      it to apply; /health shows source_projection.state "projected" with the
 #      operation opA and base B
-#   3  WAIT for FP0 to land an unrelated main commit; the computer refreshes and
-#      /health shows booted_base B' and state stack_base_moved
+#   3  WAIT for FP0 to land a main commit that edits the file A changed (a
+#      commit that leaves A's paths alone is grafted: stack_rematerialized, no
+#      rebase); the computer refreshes and /health shows booted_base B' and
+#      state stack_base_moved
 #   4  after the stay-up interval: attempt 1, rebase-notice:opA:B':1, is in the
 #      master's inbox; the root's Cast names it; management's spec names the
 #      notice, opA and B'; the claim exists; the capsule source is B'; the
@@ -35,8 +39,8 @@
 #      from the trace when present (soft)
 #   8  the owner's retry act (slice 8): POST .../self-development/rebase-retry
 #      answers a minted owner notice or a 409 with a documented code
-#   9  negatives while at stack_base_moved: switch off; an ordinary request; a
-#      hand-made Cast naming a wrong or superseded notice id
+#   9  negatives while at stack_base_moved: an ordinary request; a hand-made
+#      Cast naming a wrong or superseded notice id
 #  10  measure D4: root runs between attempt 1 and the final Report
 #
 # Step 9's wrong-id probe and step 6's "refused if the base moved again" rely on
@@ -109,15 +113,15 @@ fail_step() { log "FAIL: $*"; FAILED=1; }
 
 log "health $(api GET /health | jq -c '{deployed: .build.deployed_commit}')"
 if [ "$DRY" = 1 ]; then
-  log "dry run: would set the four switches, request change A, approve and apply it, wait for FP0's unrelated main commit, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
-  for k in source.projection texture.root_desk texture.owner_act_wakes source.rebase_offer; do setting "$k" true; done
+  log "dry run: would set the two switches, request change A, approve and apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
+  for k in texture.root_desk texture.owner_act_wakes; do setting "$k" true; done
   exit 0
 fi
 
 # Step 1.
-for k in source.projection texture.root_desk texture.owner_act_wakes source.rebase_offer; do setting "$k" true; done
+for k in texture.root_desk texture.owner_act_wakes; do setting "$k" true; done
 api GET /api/computer-settings > "$OUT/settings.json"
-jq -e '[.settings[] | select(.key == "source.rebase_offer" or .key == "source.projection" or .key == "texture.root_desk" or .key == "texture.owner_act_wakes") | .value] | all' "$OUT/settings.json" >/dev/null \
+jq -e '[.settings[] | select(.key == "texture.root_desk" or .key == "texture.owner_act_wakes") | .value] | all' "$OUT/settings.json" >/dev/null \
   || { log "a switch did not take"; exit 1; }
 
 if [ "$PHASE" = all ] || [ "$PHASE" = apply ]; then
@@ -133,7 +137,7 @@ if [ "$PHASE" = all ] || [ "$PHASE" = apply ]; then
   B=$(printf '%s' "$P" | jq -r .base); opAid=$(printf '%s' "$P" | jq -r .operation_id)
   record --arg op "$opAid" --arg b "$B" '{step:2, operation:$op, stack_base:$b}'
   # Step 3: the platform step is FP0's.
-  announce_platform_step "land an unrelated commit on main so $C refreshes to a newer base than $B; then touch $OUT/platform-landed"
+  announce_platform_step "land a main commit that edits the file A changed (away from A's lines) so $C refreshes to a newer base than $B that the stack cannot be grafted onto; then touch $OUT/platform-landed"
   until [ -e "$OUT/platform-landed" ]; do sleep 20; done
   P=$(wait_for "stack_base_moved on B'" 1800 '.state == "stack_base_moved"')
   Bp=$(printf '%s' "$P" | jq -r .booted_base)
@@ -294,7 +298,6 @@ if [ "$PHASE" = all ] || [ "$PHASE" = negatives ]; then
   # Step 9, run while the computer sits at stack_base_moved.
   P=$(projection)
   if [ "$(printf '%s' "$P" | jq -r .state)" = stack_base_moved ]; then
-    setting source.rebase_offer false
     N=$(cli texture create --title "U4 negative: ordinary request" --content "Add one line to the footer." --request-id "u4-neg-$(date +%s)" | jq -r .doc_id)
     sleep 120
     ntraj=$(api GET "/api/texture/documents/$N" | jq -r .trajectory_id)
@@ -304,7 +307,6 @@ if [ "$PHASE" = all ] || [ "$PHASE" = negatives ]; then
     else
       fail_step "negative: no stack_base_moved refusal in the trace"; record '{step:9, negative:"ordinary_request_at_stack_base_moved", result:"fail"}'
     fi
-    setting source.rebase_offer true
     # [needs base-join] a hand-made Cast with a wrong or superseded notice id is
     # refused at admission (rebase_notice_mismatch / rebase_notice_superseded);
     # no CLI act can make that Cast (it is a management turn), so the evidence is

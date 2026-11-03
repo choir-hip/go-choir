@@ -11,10 +11,9 @@ import (
 )
 
 // U1b (docs/design/computer-update-architecture-rnd-2026-10-24.md, "U1b
-// design"): at boot, and when the owner turns the projection on, the guest
-// fetches the booted base's objects if its source repository lacks them, then
-// reconciles so an empty stack moves to that commit. Behind the same switch as
-// U1 (sourceproj.Enabled); with it off none of this runs.
+// design"): at boot the guest fetches the booted base's objects if its source
+// repository lacks them, then reconciles so an empty stack moves to that
+// commit. It runs on every computer (capsule overlay S4).
 
 // sourceBaseFetchTuning is the pacing of the fetch; tests replace it.
 type sourceBaseFetchTuning struct {
@@ -45,11 +44,11 @@ func (rt *Runtime) sourceBaseFetchSettings() sourceBaseFetchTuning {
 	return defaultSourceBaseFetchTuning()
 }
 
-// startSourceProjection is the boot and setting trigger: reconcile as U1 does
+// startSourceProjection is the boot trigger: reconcile as U1 does
 // (it moves HEAD when the objects are already here), then make sure the
 // booted base's objects are, and reconcile again if they had to be fetched.
 func (rt *Runtime) startSourceProjection(ctx context.Context, reason string) {
-	if rt == nil || !sourceproj.Enabled() {
+	if rt == nil {
 		return
 	}
 	rt.reconcileSourceProjectionLogged(ctx, reason)
@@ -139,7 +138,7 @@ func (rt *Runtime) endSourceBaseAttempt(done chan struct{}) {
 // waitSourceBaseFetch lets the cast gate wait, bounded, for an attempt that is
 // running now. It starts none, and does not wait through a back-off (5).
 func (rt *Runtime) waitSourceBaseFetch(ctx context.Context) {
-	if rt == nil || !sourceproj.Enabled() {
+	if rt == nil {
 		return
 	}
 	rt.sourceBaseFetchMu.Lock()

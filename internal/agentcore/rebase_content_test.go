@@ -39,7 +39,8 @@ type rebaseContentFixture struct {
 }
 
 // newRebaseContentFixture opens the rebase assignment (claim written) over the
-// rebase cast fixture. P (op-a) adds frontend/public/a.txt; B' adds other.txt.
+// rebase cast fixture. P (op-a) adds frontend/public/a.txt and edits long.txt;
+// B' adds other.txt and edits long.txt elsewhere (stackChange, movedBaseChange).
 func newRebaseContentFixture(t *testing.T) *rebaseContentFixture {
 	t.Helper()
 	f := &rebaseContentFixture{rebaseCastFixture: newRebaseCastFixture(t)}
@@ -102,7 +103,7 @@ func patchOn(t *testing.T, repo, rev string, files map[string]string) []byte {
 
 func TestRebaseContentPassWritesTheLineageReceiptAndFact(t *testing.T) {
 	f := newRebaseContentFixture(t)
-	good := patchOn(t, f.repo, f.moved, map[string]string{"frontend/public/a.txt": "A\n", "frontend/public/extra.txt": "while rebasing\n"})
+	good := patchOn(t, f.repo, f.moved, rebasedChange(map[string]string{"frontend/public/extra.txt": "while rebasing\n"}))
 	op := f.operation(t, "op-r", f.ownKey(), f.moved, good)
 	checked, err := f.rt.verifyRebaseContentForOperation(context.Background(), op)
 	if err != nil || !checked {
@@ -116,7 +117,7 @@ func TestRebaseContentPassWritesTheLineageReceiptAndFact(t *testing.T) {
 	var receipt rebaseLineageReceipt
 	if json.Unmarshal(raw, &receipt) != nil || receipt.Schema != rebaseLineageSchema || receipt.Verdict != "pass" ||
 		receipt.RebaseOf != f.opID || receipt.NoticeID != f.noticeID(1) || receipt.Base != f.moved || receipt.StackBase != f.base ||
-		len(receipt.Clean) != 1 || receipt.Clean[0] != "frontend/public/a.txt" || len(receipt.Extra) != 1 || receipt.Extra[0] != "frontend/public/extra.txt" ||
+		len(receipt.Clean) != 2 || receipt.Clean[0] != "frontend/public/a.txt" || receipt.Clean[1] != "frontend/public/long.txt" || len(receipt.Extra) != 1 || receipt.Extra[0] != "frontend/public/extra.txt" ||
 		receipt.PatchDigest == "" || receipt.CandidatePatchDigest == "" {
 		t.Fatalf("receipt %+v", receipt)
 	}
@@ -139,7 +140,7 @@ func TestRebaseContentPassWritesTheLineageReceiptAndFact(t *testing.T) {
 
 func TestRebaseContentApplyOwnerActNamesTheReceipt(t *testing.T) {
 	f := newRebaseContentFixture(t)
-	good := patchOn(t, f.repo, f.moved, map[string]string{"frontend/public/a.txt": "A\n"})
+	good := patchOn(t, f.repo, f.moved, rebasedChange(nil))
 	op := f.operation(t, "op-r", f.ownKey(), f.moved, good)
 	if _, err := f.rt.verifyRebaseContentForOperation(context.Background(), op); err != nil {
 		t.Fatal(err)
@@ -172,7 +173,7 @@ func TestRebaseContentRefusesADroppedHunk(t *testing.T) {
 
 func TestRebaseContentRefusesACandidateOnAnotherBase(t *testing.T) {
 	f := newRebaseContentFixture(t)
-	onOld := patchOn(t, f.repo, f.base, map[string]string{"frontend/public/a.txt": "A\n"})
+	onOld := patchOn(t, f.repo, f.base, stackChange())
 	op := f.operation(t, "op-r", f.ownKey(), f.base, onOld)
 	_, err := f.rt.verifyRebaseContentForOperation(context.Background(), op)
 	var mismatch *rebaseContentMismatchError
@@ -183,7 +184,7 @@ func TestRebaseContentRefusesACandidateOnAnotherBase(t *testing.T) {
 
 func TestRebaseContentRefusesWhenTheBootedBaseMoved(t *testing.T) {
 	f := newRebaseContentFixture(t)
-	good := patchOn(t, f.repo, f.moved, map[string]string{"frontend/public/a.txt": "A\n"})
+	good := patchOn(t, f.repo, f.moved, rebasedChange(nil))
 	op := f.operation(t, "op-r", f.ownKey(), f.moved, good)
 	// The platform moved again after the claim: B'' is booted. The candidate on
 	// B' is a stale one, with or without the base join.
@@ -233,7 +234,7 @@ func TestRebaseContentFreezeRefusesBeforeTheOwnerSees(t *testing.T) {
 	if err == nil || !strings.HasPrefix(err.Error(), "rebase_content_mismatch") {
 		t.Fatalf("Freeze let a dropped hunk through: %v", err)
 	}
-	good := patchOn(t, f.repo, f.moved, map[string]string{"frontend/public/a.txt": "A\n"})
+	good := patchOn(t, f.repo, f.moved, rebasedChange(nil))
 	if err := f.rt.verifyRebaseAtFreeze(context.Background(), rec, staged, good); err != nil {
 		t.Fatalf("Freeze refused a correct rebase: %v", err)
 	}

@@ -284,7 +284,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	// U1: the capsule seeds from the repository's HEAD, so HEAD must be the
 	// effective release's source before it is read (and a stack on a moved
 	// base refuses here, visibly, rather than building on the old base).
-	rebaseBase, err := rt.sourceProjectionCastGateFor(ctx, spec.rebase())
+	rebaseBase, err := rt.sourceProjectionCastGateFor(ctx, spec.rebase(), castLedgerRef{OwnerID: ownerID, ComputerID: computerID, CastRecordID: recordID, ManagementAgentID: management, TrajectoryID: trajectoryID})
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
 	}

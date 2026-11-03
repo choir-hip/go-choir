@@ -51,7 +51,6 @@ func baseRepo(t *testing.T) (repo, base string) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	t.Setenv(EnvSwitch, "1")
 	repo = t.TempDir()
 	tgit(t, repo, "init", "-q")
 	tgit(t, repo, "config", "core.filemode", "false")
@@ -119,16 +118,11 @@ func show(t *testing.T, repo, rev, path string) string {
 	return tgit(t, repo, "show", rev+":"+path)
 }
 
-func TestSwitchOffTouchesNothing(t *testing.T) {
+func TestCumulativePassesAPatchNotPinnedToAProjectionCommit(t *testing.T) {
 	repo, base := baseRepo(t)
-	t.Setenv(EnvSwitch, "")
 	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 5, "changed") })
-	res := reconcile(t, Input{Repo: repo, BootedBase: base, Top: opFor("op-a", base, patch)})
-	if res.State != StateDisabled || res.Changed || headOf(t, repo) != base {
-		t.Fatalf("P8: switch off must be inert: %+v head %s", res, headOf(t, repo))
-	}
-	if out, _, err := Cumulative(context.Background(), repo, base, patch); err != nil || string(out) != string(patch) {
-		t.Fatalf("P8: Cumulative must pass the patch through: %v", err)
+	if out, got, err := Cumulative(context.Background(), repo, base, patch); err != nil || string(out) != string(patch) || got != base {
+		t.Fatalf("P8: Cumulative must pass a patch on a plain commit through: base %s err %v", got, err)
 	}
 }
 
@@ -385,7 +379,8 @@ func TestBaseObjectsMissing(t *testing.T) {
 
 func TestStackBaseMovedRefusesAndKeepsTheProjection(t *testing.T) {
 	repo, base := baseRepo(t)
-	moved := platformMoved(t, repo, base, func(r string) { editLine(t, r, "frontend/src/b.txt", 3, "platform edit") })
+	// The platform edits a file the patch touches, so it is not grafted (S4).
+	moved := platformMoved(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 30, "platform edit") })
 	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 5, "A") })
 	res := reconcile(t, Input{Repo: repo, BootedBase: moved, Top: opFor("op-a", base, patch)})
 	if res.State != StateBaseMoved || !res.Diverged || res.Base != base {
@@ -395,8 +390,11 @@ func TestStackBaseMovedRefusesAndKeepsTheProjection(t *testing.T) {
 	if !strings.HasPrefix(res.Refusal(), want) || !strings.Contains(res.Refusal(), base) || !strings.Contains(res.Refusal(), moved) {
 		t.Fatalf("B4: the refusal must name both bases: %q", res.Refusal())
 	}
-	if !strings.Contains(show(t, repo, "HEAD", "frontend/src/a.txt"), "A") || strings.Contains(show(t, repo, "HEAD", "frontend/src/b.txt"), "platform edit") {
+	if !strings.Contains(show(t, repo, "HEAD", "frontend/src/a.txt"), "A") || strings.Contains(show(t, repo, "HEAD", "frontend/src/a.txt"), "platform edit") {
 		t.Fatalf("B4: the identity stays the stack on its own base")
+	}
+	if !strings.Contains(res.Reason, "frontend/src/a.txt") {
+		t.Fatalf("S4: the refusal must name the path the booted base also changed: %q", res.Reason)
 	}
 }
 
@@ -544,7 +542,7 @@ func TestNotContained(t *testing.T) {
 			editLine(t, r, "frontend/src/a.txt", 5, "A change, reworded")
 			editLine(t, r, "frontend/src/b.txt", 5, "B change")
 		},
-		"unrelated platform change": func(r string) { editLine(t, r, "internal/x.go", 3, "func X() int { return 2 }") },
+		"platform change in a touched file": func(r string) { editLine(t, r, "frontend/src/b.txt", 30, "elsewhere in b") },
 		"same line, different content": func(r string) {
 			editLine(t, r, "frontend/src/a.txt", 5, "other")
 			editLine(t, r, "frontend/src/b.txt", 5, "other")

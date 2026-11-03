@@ -31,7 +31,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -54,9 +53,7 @@ func (fx *derivableSelfDevFixture) setBootedBuildCommit(t *testing.T, commit str
 // candidate whose bundle records sourceBase (empty: no source patch).
 func joinFixture(t *testing.T, name, bootedCommit, sourceBase string) *derivableSelfDevFixture {
 	t.Helper()
-	// The join is not gated: source projection stays off, as it is by default.
-	sourceproj.SetSetting(false)
-	t.Setenv(sourceproj.EnvSwitch, "")
+	// The join is not gated by the source projection, which runs everywhere.
 	fx := newDerivableSelfDevFixtureBooted(t, "computer-join-"+name, bootedCommit)
 	fx.sourceBase = sourceBase
 	return fx

@@ -1624,36 +1624,6 @@
    "note": "ON NOW with the visual-capture grant."
   },
   {
-   "id": "source_projection",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "red",
-   "surface": "settings-selfdev",
-   "introduced": "2026-10-28",
-   "settings": [
-    "source.projection"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "ids:1",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW; host base fetch must be reachable."
-  },
-  {
    "id": "engineering_slots_graph",
    "kind": "setting",
    "life": "release",
@@ -2330,39 +2300,6 @@
    ],
    "retire": "keep; review_by only",
    "off_ok": "on is the rollback for S2b, not a feature"
-  },
-  {
-   "id": "source_rebase_offer",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "red",
-   "surface": "settings-selfdev",
-   "introduced": "2026-10-28",
-   "settings": [
-    "source.rebase_offer"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "unknown",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "gate": {
-    "act": "U4 stack rebase has run once on d@e"
-   },
-   "note": "act-gated until the U4 rebase has run (design section 6). Not in the 10-26 audit's settings table."
   },
   {
    "id": "dispatch_wide_slots",

@@ -43,7 +43,7 @@ const (
 type FetchOutcome string
 
 const (
-	// FetchDisabled: the switch or the fetch setting is off; nothing ran.
+	// FetchDisabled: CHOIR_SOURCE_BASE_FETCH=off; nothing ran.
 	FetchDisabled FetchOutcome = "disabled"
 	// FetchPresent: the objects were already here; no network was used.
 	FetchPresent FetchOutcome = "present"
@@ -55,7 +55,8 @@ const (
 	// FetchFailed: a failure that may pass (network, remote down, low disk).
 	FetchFailed FetchOutcome = "failed"
 	// FetchPermanent: the remote does not have the commit, or asks for
-	// credentials. Retrying this process will not help.
+	// credentials. Retrying this process will not help. A 403 is not this: a
+	// rate limit or an abuse block answers 403 and passes (RV-03).
 	FetchPermanent FetchOutcome = "failed_permanent"
 )
 
@@ -135,7 +136,7 @@ func EnsureBaseObjects(ctx context.Context, repo, booted string, opt FetchOption
 		res.Duration = time.Since(start).Round(time.Millisecond).String()
 		return res
 	}
-	if !Enabled() || strings.EqualFold(strings.TrimSpace(os.Getenv(EnvBaseFetch)), "off") {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv(EnvBaseFetch)), "off") {
 		return finish(FetchDisabled, "")
 	}
 	if !commitID.MatchString(res.Commit) {
@@ -163,7 +164,10 @@ func EnsureBaseObjects(ctx context.Context, repo, booted string, opt FetchOption
 	if minFree == 0 {
 		minFree = DefaultMinFreeBytes
 	}
-	if free, err := freeBytes(repo); err == nil && free < minFree {
+	// An unreadable free space is not room to spare (RV-03 F4).
+	if free, err := freeBytes(repo); err != nil {
+		return finish(FetchFailed, "the data volume's free space is unreadable: "+err.Error())
+	} else if free < minFree {
 		return finish(FetchFailed, fmt.Sprintf("the data volume has %d bytes free; a fetch needs %d", free, minFree))
 	}
 	fetchMu.Lock()
@@ -215,13 +219,16 @@ func EnsureBaseObjects(ctx context.Context, repo, booted string, opt FetchOption
 }
 
 // permanentFetchError recognizes what a remote says when the commit or the
-// repository is not there, or when it wants credentials.
+// repository is not there, or when it wants credentials. HTTP 403 is left out
+// on purpose (RV-03, residual register 2026-10-26): GitHub answers a rate
+// limit or an abuse block with 403, and treating that as permanent parked the
+// fetch until the next boot, leaving the computer at base_objects_missing.
 func permanentFetchError(reason string) bool {
 	reason = strings.ToLower(reason)
 	for _, marker := range []string{
 		"not our ref", "couldn't find remote ref", "unadvertised object", "no such remote ref",
 		"repository not found", "does not appear to be a git repository", "could not read username",
-		"authentication failed", "terminal prompts disabled", "returned error: 404", "returned error: 401", "returned error: 403",
+		"authentication failed", "terminal prompts disabled", "returned error: 404", "returned error: 401",
 	} {
 		if strings.Contains(reason, marker) {
 			return true

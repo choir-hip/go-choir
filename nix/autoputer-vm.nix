@@ -1112,10 +1112,10 @@ EOF
       CHOIR_CAPSULE_ARTIFACT_DIR = "/mnt/persistent/capsule-artifacts";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
       # U1b: where the guest fetches the booted base's objects from when its
-      # source repository (seeded once, at creation) lacks them. It does
-      # nothing unless the source.projection setting (or
-      # CHOIR_SOURCE_PROJECTION) is on. Empty, or CHOIR_SOURCE_BASE_FETCH=off in
-      # /run/go-choir-autoputer.env, turns the fetch off.
+      # source repository (seeded once, at creation) lacks them. The source
+      # projection runs on every computer (capsule overlay S4). Empty, or
+      # CHOIR_SOURCE_BASE_FETCH=off in /run/go-choir-autoputer.env, turns the
+      # fetch off.
       CHOIR_SOURCE_BASE_REMOTE = sourceRepoRemote;
       CHOIR_CAPSULE_LOWER_ROOT = "/";
       GIT_AUTHOR_NAME = "Choir Capsule";

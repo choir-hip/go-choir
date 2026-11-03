@@ -2,6 +2,9 @@ package agentcore
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +18,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
-	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // U1 wiring (docs/design/computer-update-architecture-rnd-2026-10-24.md,
@@ -25,7 +27,6 @@ import (
 
 func projectionRuntime(t *testing.T, computerID string) (rt *Runtime, updaterRoot, repo, base string) {
 	t.Helper()
-	t.Setenv(sourceproj.EnvSwitch, "1")
 	rt, _, updaterRoot = releaseTestRuntime(t, computerID)
 	repo, base = releaseSourceRepo(t)
 	rt.releaseSourceDir = repo
@@ -133,22 +134,27 @@ func TestBaseMoveRefusesVisiblyAndUpstreamedRetires(t *testing.T) {
 	const computerID = "computer-basemove"
 	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
 	ctx := context.Background()
-	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	patch, _ := releasePatch(t, repo, stackChange())
 	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
 	if err := rt.sourceProjectionCastGate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	// A deploy moved the booted base to a commit that does not hold A.
-	other := commitOnTop(t, repo, base, map[string]string{"frontend/public/other.txt": "platform\n"})
+	// (It also touched long.txt, which the stack touches, so it is not grafted.)
+	other := commitOnTop(t, repo, base, movedBaseChange())
 	setBootedBase(t, rt, other)
 	err := rt.sourceProjectionCastGate(ctx)
 	if err == nil || !strings.HasPrefix(err.Error(), "stack_base_moved") || !strings.Contains(err.Error(), base) || !strings.Contains(err.Error(), other) {
 		t.Fatalf("B4: %v", err)
 	}
+	// S4: this computer has no root Texture RLM, and the refusal says so.
+	if !strings.HasSuffix(err.Error(), rebaseNeedsRoot) {
+		t.Fatalf("S4: the refusal must name rebase_needs_root: %v", err)
+	}
 
 	// The owner promoted A to main and the computer took that base (B5).
-	promoted := commitOnTop(t, repo, base, map[string]string{"frontend/public/a.txt": "A\n", "frontend/public/other.txt": "platform\n"})
+	promoted := commitOnTop(t, repo, base, rebasedChange(map[string]string{"frontend/public/other.txt": "platform\n"}))
 	setBootedBase(t, rt, promoted)
 	if err := rt.sourceProjectionCastGate(ctx); err != nil {
 		t.Fatalf("B5: an upstreamed stack must not refuse: %v", err)
@@ -184,30 +190,6 @@ func commitOnTop(t *testing.T, repo, base string, files map[string]string) strin
 	commit := releaseGit(t, scratch, "rev-parse", "HEAD")
 	releaseGit(t, repo, "fetch", "-q", scratch, "platform:refs/platform/"+commit[:8])
 	return commit
-}
-
-func TestSwitchOffLeavesEverythingAlone(t *testing.T) {
-	const computerID = "computer-off"
-	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
-	t.Setenv(sourceproj.EnvSwitch, "")
-	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
-	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
-	ctx := context.Background()
-	if result, err := rt.ReconcileSourceProjection(ctx, "boot"); err != nil || result.State != sourceproj.StateDisabled {
-		t.Fatalf("P8: %+v %v", result, err)
-	}
-	if err := rt.sourceProjectionCastGate(ctx); err != nil {
-		t.Fatalf("P8: the gate must be open with the switch off: %v", err)
-	}
-	if gitHead(t, repo) != base {
-		t.Fatalf("P8: HEAD moved")
-	}
-	if identity := rt.EffectiveRelease(ctx); identity.Diverged != nil || identity.SourceProjection != nil {
-		t.Fatalf("P8: nothing is reported with the switch off: %+v", identity)
-	}
-	if _, err := os.Stat(filepath.Join(updaterRoot, "source-projection")); !os.IsNotExist(err) {
-		t.Fatalf("P8: no fact log with the switch off")
-	}
 }
 
 func TestFreezeWritesTheCumulativePatch(t *testing.T) {
@@ -248,12 +230,6 @@ func TestFreezeWritesTheCumulativePatch(t *testing.T) {
 	plain := stageFreeze(t, patchA, base)
 	if err := composeFreezePatch(ctx, repo, plain); err != nil || plain.SourceBaseCommit != base || plain.SourcePatchSHA != computerevent.DigestBytes(patchA) {
 		t.Fatalf("F2: %v %+v", err, plain)
-	}
-	// With the switch off nothing is composed.
-	t.Setenv(sourceproj.EnvSwitch, "")
-	off := stageFreeze(t, patchB, pinned)
-	if err := composeFreezePatch(ctx, repo, off); err != nil || off.SourceBaseCommit != pinned || off.SourcePatchSHA != computerevent.DigestBytes(patchB) {
-		t.Fatalf("P8: %v %+v", err, off)
 	}
 }
 
@@ -396,69 +372,149 @@ func TestPendingRefusalNamesTheOperationAndTheOwnerAct(t *testing.T) {
 	}
 }
 
-// The per-computer switch (FP0 direction 2026-10-24): the owner's setting
-// source.projection turns U1 on for one computer at runtime, no deploy; it
-// defaults off; the environment switch is independent of it.
-func TestSourceProjectionSettingTurnsItOnPerComputerAtRuntime(t *testing.T) {
+// Capsule overlay S4: there is no switch. A computer with no stored setting
+// projects at boot, and the deleted setting key is refused by the API.
+func TestSourceProjectionRunsWithNoSettingAndTheKeyIsGone(t *testing.T) {
 	const computerID = "computer-setting"
 	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
-	t.Setenv(sourceproj.EnvSwitch, "")
-	sourceproj.SetSetting(false)
-	t.Cleanup(func() { sourceproj.SetSetting(false) })
 	owner := "owner-setting"
 	t.Setenv("CHOIR_OWNER_ID", owner)
 	ctx := context.Background()
 	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
 	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
-
-	// Default off: nothing runs, and a boot with no stored setting stays off.
-	rt.configureSourceProjectionSetting(ctx)
-	if sourceproj.Enabled() {
-		t.Fatal("the switch reads on with no setting")
+	if result, err := rt.ReconcileSourceProjection(ctx, "boot"); err != nil || result.State != sourceproj.StateProjected || gitHead(t, repo) == base {
+		t.Fatalf("boot with no setting: %+v %v", result, err)
 	}
-	if result, _ := rt.ReconcileSourceProjection(ctx, "boot"); result.State != sourceproj.StateDisabled || gitHead(t, repo) != base {
-		t.Fatalf("off: %+v", result)
-	}
-
-	post := func(value bool) {
-		req := httptest.NewRequest(http.MethodPost, "/api/computer-settings", strings.NewReader(fmt.Sprintf(`{"key":"source.projection","value":%v}`, value)))
+	for _, key := range []string{"source.projection", "source.rebase_offer"} {
+		req := httptest.NewRequest(http.MethodPost, "/api/computer-settings", strings.NewReader(fmt.Sprintf(`{"key":%q,"value":false}`, key)))
 		req.Header.Set("X-Authenticated-User", owner)
 		rec := httptest.NewRecorder()
 		(&APIHandler{rt: rt}).HandleComputerSettings(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("set %v = %d %s", value, rec.Code, rec.Body)
+		if rec.Code == http.StatusOK {
+			t.Fatalf("%s: the deleted switch was accepted: %s", key, rec.Body)
 		}
 	}
-	post(true)
-	if !sourceproj.Enabled() {
-		t.Fatal("the switch is off after the owner set it")
-	}
-	// The setting's own reconcile runs in the background; the gate reconciles
-	// too, so the outcome does not depend on which runs first.
+}
+
+// S4 (failure modes 7, 10, 12): a moved base that left the stack's paths alone
+// is grafted; the ordinary Cast is admitted with a ledger warning, and Freeze
+// composes a patch on the booted base.
+func TestAGraftedStackAdmitsTheCastWithALedgerWarning(t *testing.T) {
+	const computerID = "computer-graft"
+	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
+	ctx := context.Background()
+	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
 	if err := rt.sourceProjectionCastGate(ctx); err != nil {
-		t.Fatalf("gate: %v", err)
+		t.Fatal(err)
 	}
-	if gitHead(t, repo) == base {
-		t.Fatal("the projection did not follow once the setting was on")
+	moved := commitOnTop(t, repo, base, map[string]string{"frontend/public/other.txt": "platform\n"})
+	setBootedBase(t, rt, moved)
+	cast := castLedgerRef{OwnerID: "owner-graft", ComputerID: computerID, CastRecordID: "cast-1", ManagementAgentID: persistentManagementAgentID("owner-graft"), TrajectoryID: "trajectory-graft"}
+	if _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast); err != nil {
+		t.Fatalf("7: the Cast on a grafted stack must be admitted: %v", err)
 	}
-
-	// A restart reads the stored setting.
-	sourceproj.SetSetting(false)
-	rt.configureSourceProjectionSetting(ctx)
-	if !sourceproj.Enabled() {
-		t.Fatal("the stored setting was not read at boot")
+	status := rt.sourceProjectionStatus()
+	if status == nil || status.State != sourceproj.StateRematerialized || status.Base != moved || status.ServedBase != base || !status.Diverged {
+		t.Fatalf("7: %+v", status)
 	}
-	if got, err := rt.store.GetComputerSetting(ctx, owner, rt.cfg.ComputerID, store.SettingSourceProjection); err != nil || !got.Value {
-		t.Fatalf("stored = %+v %v", got, err)
-	}
-
-	// Off is the rollback: every entry point stops; the repository stays.
-	post(false)
-	if sourceproj.Enabled() {
-		t.Fatal("the switch is on after the owner turned it off")
+	if identity := rt.EffectiveRelease(ctx); identity.SourceProjection == nil || identity.SourceProjection.State != sourceproj.StateRematerialized {
+		t.Fatalf("7: /health must show stack_rematerialized: %+v", identity.SourceProjection)
 	}
 	head := gitHead(t, repo)
-	if result, _ := rt.ReconcileSourceProjection(ctx, "boot"); result.State != sourceproj.StateDisabled || gitHead(t, repo) != head {
-		t.Fatalf("off again: %+v", result)
+	if releaseGit(t, repo, "rev-parse", head+"^") != moved {
+		t.Fatalf("10: the graft's parent must be the booted base")
+	}
+	warning, err := rt.store.GetCommitmentRecord(ctx, cast.OwnerID, computerID, rematerializedCastWarningID("cast-1", "op-a", moved))
+	if err != nil || warning == nil || warning.ParentID != "cast-1" || warning.Addressee != cast.ManagementAgentID ||
+		!strings.Contains(warning.Prediction.Hypothesis, base) || !strings.Contains(warning.Prediction.Hypothesis, moved) || !strings.Contains(warning.Prediction.Hypothesis, "also approves") {
+		t.Fatalf("12: the ledger warning: %+v %v", warning, err)
+	}
+	// A replay of the same Cast records nothing new (the id is the Cast's).
+	if _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast); err != nil {
+		t.Fatal(err)
+	}
+	// A rebase Cast is not needed on a graft.
+	if _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-a", Base: moved}, cast); err == nil || !strings.Contains(err.Error(), "rebase_not_needed") {
+		t.Fatalf("a rebase on a graft: %v", err)
+	}
+	// 10: a capsule cast from the graft freezes a cumulative patch on B'.
+	patchB := stagedPatchFrom(t, repo, head, map[string]string{"frontend/public/b.txt": "B\n"})
+	staged := stageFreeze(t, patchB, head)
+	if err := composeFreezePatch(ctx, repo, staged); err != nil || staged.SourceBaseCommit != moved {
+		t.Fatalf("10: Freeze on a graft: base %s err %v, want %s", staged.SourceBaseCommit, err, moved)
+	}
+}
+
+// S4 (failure modes 1, 5): an owner edit in Source/platform survives a
+// reconcile as a saved ref, and the save is on the tape before the reset.
+func TestAnOwnerEditIsSavedOnTheTapeBeforeTheReset(t *testing.T) {
+	const computerID = "computer-saved"
+	ctx := context.Background()
+	// A runtime with a real tape (genesis minted), wired for the projection.
+	rt := chainBootstrapRuntime(t, computerID)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
+	if rt.eventAppender, err = computerevent.NewComputerEventAppender(computerID, telemetryTestPinner{rollbackTestPinner{key}}, rt.store, rollbackTestCAS{key: key, projection: rt.store}, rollbackTestReceiptVerifier{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.BootstrapChain(ctx, "owner-saved", computerID); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(rt.store, rt.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.selfdevOperations = operations
+	updaterRoot := t.TempDir()
+	rt.selfdevUpdaterRoot = updaterRoot
+	repo, base := releaseSourceRepo(t)
+	rt.releaseSourceDir = repo
+	setBootedBase(t, rt, base)
+	writeCurrentRelease(t, updaterRoot, computerID, "base", nil)
+	if _, err := rt.ReconcileSourceProjection(ctx, "boot"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "frontend", "public", "index.txt"), []byte("an owner edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := rt.ReconcileSourceProjection(ctx, "boot")
+	if err != nil || !result.Changed || len(result.Saved) != 1 {
+		t.Fatalf("1: %+v %v", result, err)
+	}
+	saved := result.Saved[0]
+	if got := releaseGit(t, repo, "show", saved.Commit+":frontend/public/index.txt"); got != "an owner edit" {
+		t.Fatalf("1: the saved commit holds %q", got)
+	}
+	if gitHead(t, repo) != base {
+		t.Fatalf("the reset must still happen")
+	}
+	event, found, err := rt.store.EventByIdempotency(ctx, computerID, sourceProjectionSavedIdempotency(saved.Commit))
+	if err != nil || !found || event.EventKind != computerevent.EventRecoveryRecorded || event.ProposedEffectRef != saved.Commit {
+		t.Fatalf("5: the save must be on the tape: %+v found=%v err=%v", event, found, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(updaterRoot, filepath.FromSlash(sourceProjectionFactsFile)))
+	if err != nil || !strings.Contains(string(raw), sourceproj.FactSaved) || !strings.Contains(string(raw), saved.Ref) {
+		t.Fatalf("the guest-local fact: %v\n%s", err, raw)
+	}
+
+	// 5: a tape append that fails stops the reset, and the Cast is refused.
+	if err := os.WriteFile(filepath.Join(repo, "frontend", "public", "index.txt"), []byte("a second edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	real := appendEventPayload
+	t.Cleanup(func() { appendEventPayload = real })
+	appendEventPayload = func(*Runtime, context.Context, computerevent.Event, computerevent.TransitionInput, []byte, string, string) (computerevent.Receipt, string, error) {
+		return computerevent.Receipt{}, "", errors.New("the tape is down")
+	}
+	err = rt.sourceProjectionCastGate(ctx)
+	if err == nil || !strings.HasPrefix(err.Error(), "source_projection_failed") || !strings.Contains(err.Error(), "the tape is down") {
+		t.Fatalf("5: %v", err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(repo, "frontend", "public", "index.txt")); string(raw) != "a second edit\n" {
+		t.Fatalf("5: the edit was reset without its record: %q", raw)
 	}
 }

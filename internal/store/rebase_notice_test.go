@@ -82,19 +82,17 @@ func TestRebaseNoticeCommitsOnceByCommandAndRecordId(t *testing.T) {
 	mustCommitInbox(t, s, rebaseNoticeRecord(t, 2).RecordID, nil, rebaseNoticeRecord(t, 2))
 }
 
-func TestSourceRebaseOfferSettingIsKnownAndDefaultsOff(t *testing.T) {
-	if on, known := KnownComputerSettings[SettingSourceRebaseOffer]; !known || on {
-		t.Fatalf("source.rebase_offer known=%v default=%v; want known and false", known, on)
-	}
-	if SettingSourceRebaseOffer != "source.rebase_offer" {
-		t.Fatalf("setting key %q", SettingSourceRebaseOffer)
-	}
+// Capsule overlay S4: the projection and rebase-offer switches are deleted.
+// A stored value is never read, and a write of either key is refused.
+func TestTheDeletedSourceSwitchesAreUnknownKeys(t *testing.T) {
 	s := openTestStore(t)
-	if err := s.PutComputerSetting(context.Background(), ComputerSetting{OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, Key: "source.rebase_offr", Value: true}); err == nil {
-		t.Fatal("a typo'd key must still be refused")
-	}
-	if err := s.PutComputerSetting(context.Background(), ComputerSetting{OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, Key: SettingSourceRebaseOffer, Value: true}); err != nil {
-		t.Fatal(err)
+	for _, key := range []string{"source.projection", "source.rebase_offer"} {
+		if _, known := KnownComputerSettings[key]; known {
+			t.Fatalf("%s is still a known setting", key)
+		}
+		if err := s.PutComputerSetting(context.Background(), ComputerSetting{OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, Key: key, Value: true}); err == nil {
+			t.Fatalf("%s must be refused as an unknown key", key)
+		}
 	}
 }
 

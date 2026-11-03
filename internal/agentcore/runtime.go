@@ -1054,8 +1054,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.startSnapshotProducer(ctx)
 	// U1: the guest source repository follows the effective release. Spawned,
 	// because git on a large repository is seconds; the cast gate reconciles
-	// again before it uses the repository.
-	rt.configureSourceProjectionSetting(ctx)
+	// again before it uses the repository. On every computer (S4).
 	go rt.startSourceProjection(ctx, "boot")
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,

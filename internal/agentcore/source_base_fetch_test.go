@@ -158,19 +158,6 @@ func TestACommitTheRemoteLacksIsNotRetried(t *testing.T) {
 	}
 }
 
-func TestSwitchOffFetchesNothingAtBoot(t *testing.T) {
-	rt, updaterRoot, repo, creation, booted, remote := movedPlatform(t, "computer-u1b-off")
-	rt.sourceBaseFetchTune = fastFetch(remote)
-	t.Setenv(sourceproj.EnvSwitch, "")
-	rt.startSourceProjection(context.Background(), "boot")
-	if gitHead(t, repo) != creation || sourceproj.HasCommit(context.Background(), repo, booted) {
-		t.Fatal("N13: something moved with the switch off")
-	}
-	if _, err := os.Stat(filepath.Join(updaterRoot, "source-projection")); !os.IsNotExist(err) {
-		t.Fatal("N13: a fact log appeared")
-	}
-}
-
 func TestTheCastGateWaitsBoundedForAFetchInFlight(t *testing.T) {
 	rt, _, _, _, _, _ := movedPlatform(t, "computer-u1b-wait")
 	rt.sourceBaseFetchTune = &sourceBaseFetchTuning{GateWait: 2 * time.Second}

@@ -40,9 +40,6 @@ func StackBase(ctx context.Context, repo, commit string) (string, bool) {
 // build from the bundle's patch and base, and the builder accepts no base but
 // the booted image's commit (section 4.6, "U1 build notes").
 func Cumulative(ctx context.Context, repo, pinned string, patch []byte) (cumulative []byte, base string, err error) {
-	if !Enabled() {
-		return patch, pinned, nil
-	}
 	stackBase, ok := StackBase(ctx, repo, pinned)
 	if !ok {
 		return patch, pinned, nil

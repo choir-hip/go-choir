@@ -76,24 +76,6 @@ const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 // (the readers read both tables).
 const SettingEventTable = "store.event_table"
 
-// SettingSourceProjection turns on the guest source projection (U1, and the
-// booted base's objects U1b fetches): the guest source repository follows the
-// effective release and the cast gate checks it
-// (docs/design/computer-update-architecture-rnd-2026-10-24.md, section 4.6).
-// An owner act at runtime, per computer, no deploy. Off by default; off is the
-// rollback. The env switch CHOIR_SOURCE_PROJECTION=1 turns it on regardless.
-const SettingSourceProjection = "source.projection"
-
-// SettingSourceRebaseOffer turns on the stack rebase offer (U4,
-// docs/design/u4-stack-rebase-build-2026-10-26.md): when the applied
-// self-development stack sits on a base the computer no longer booted, the
-// runtime asks the root Texture RLM, with a rebase notice, to rebase it
-// through an ordinary implementation assignment. It is effective only when
-// source.projection and texture.root_desk are also on. An owner act at
-// runtime, per computer, no deploy. Off by default; off mints no notice and
-// admits no rebase Cast, and is the rollback.
-const SettingSourceRebaseOffer = "source.rebase_offer"
-
 // SettingTraceLog is retired: the R7 trace segment log was deleted 2026-10-31
 // and traces stay on the single tape
 // (docs/design/one-tape-durability-2026-10-31.md). Nothing acts on the key;
@@ -256,8 +238,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingResearchRelatedStory:         false,
 	SettingDebouncedCheckpoint:          false,
 	SettingEventTable:                   false,
-	SettingSourceProjection:             false,
-	SettingSourceRebaseOffer:            false,
 	SettingTraceLog:                     false,
 	SettingEngineeringProgressToTexture: false,
 	SettingEvidenceGraph:                false,

@@ -28,7 +28,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
-	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -188,8 +187,6 @@ func TestRebaseCastRefusesWhatIsNotTheMovedStack(t *testing.T) {
 		{"the booted base's objects are missing", func(t *testing.T, f *rebaseCastFixture) {
 			setBootedBase(t, f.rt, f40("d"))
 		}, func(m map[string]string) { m["base"] = f40("d") }, "rebase_base_missing"},
-		{"source.rebase_offer off keeps today's refusal", func(t *testing.T, f *rebaseCastFixture) { f.setSwitch(t, store.SettingSourceRebaseOffer, false) }, nil, "stack_base_moved"},
-		{"texture.root_desk off keeps today's refusal", func(t *testing.T, f *rebaseCastFixture) { f.setSwitch(t, store.SettingTextureRootDesk, false) }, nil, "stack_base_moved"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -219,12 +216,9 @@ func TestRebaseCastWithoutANoticeKeepsTodaysRefusal(t *testing.T) {
 	if err == nil || !strings.HasPrefix(strings.TrimPrefix(err.Error(), "engineering cast: "), "stack_base_moved") {
 		t.Fatalf("an ordinary Cast at stack_base_moved: %v", err)
 	}
-	// Projection off: a rebase spec reaches nothing; an off switch with the
-	// state not demanding a refusal still refuses the stray field.
-	t.Setenv(sourceproj.EnvSwitch, "0")
-	sourceproj.SetSetting(false)
-	if _, err := f.plan(t, f.spec(nil), f.rebaseObjective()); err == nil || !strings.Contains(err.Error(), "rebase_offer_off") {
-		t.Fatalf("projection off: %v", err)
+	// The root is live, so the refusal does not ask for one.
+	if strings.Contains(err.Error(), "rebase_needs_root") {
+		t.Fatalf("a live root must not be reported missing: %v", err)
 	}
 }
 

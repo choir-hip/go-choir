@@ -6,8 +6,10 @@
 // a candidate is built on the applied source, not on the creation commit.
 //
 // Nothing here trusts a prior run. Reconcile recomputes the expected HEAD from
-// its input every time; the refs and the facts it leaves are observation.
-// Every function is a no-op unless Enabled.
+// its input every time; the refs and the facts it leaves are observation. It
+// runs on every computer (capsule overlay S4,
+// docs/design/capsule-overlay-computer-state-2026-11-03.md section 5): there
+// is no switch, and it never resets work it has not first saved.
 package sourceproj
 
 import (
@@ -18,36 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
-
-// EnvSwitch is the process-wide switch. Absent or anything but a true value
-// means off for the environment; the per-computer setting below can still turn
-// it on.
-const EnvSwitch = "CHOIR_SOURCE_PROJECTION"
-
-// settingOn is the owner's per-computer setting (store.SettingSourceProjection),
-// set by the runtime at boot and when the owner changes it. It is the switch
-// that needs no deploy: Enabled is true when either it or the environment says
-// on. It defaults off.
-var settingOn atomic.Bool
-
-// SetSetting records the owner's per-computer setting.
-func SetSetting(on bool) { settingOn.Store(on) }
-
-// Enabled reports whether U1 is switched on for this process: the environment
-// switch or the computer setting.
-func Enabled() bool {
-	if settingOn.Load() {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvSwitch))) {
-	case "1", "true", "on", "yes":
-		return true
-	}
-	return false
-}
 
 // Refs and trailers the projection leaves in the repository.
 const (
@@ -62,6 +36,10 @@ const (
 	RefAppliedPrefix = "refs/choir/applied/"
 	// Branch is the computer branch HEAD is attached to.
 	Branch = "refs/heads/choir/computer"
+	// RefSavedPrefix + a commit id holds what a reset would have lost: a
+	// commit of the dirty work tree, or a HEAD the projection did not leave.
+	// The name is the commit, and the ref is created, never moved.
+	RefSavedPrefix = "refs/choir/saved/"
 
 	// TrailerStackBase names the commit a projection commit's patch was
 	// applied to. Freeze reads it from the capsule's pinned commit, so the
@@ -73,8 +51,6 @@ const (
 type State string
 
 const (
-	// StateDisabled: the switch is off; nothing was touched.
-	StateDisabled State = "disabled"
 	// StateBase: an empty stack; HEAD is the booted base.
 	StateBase State = "base"
 	// StateProjected: a live stack on the booted base; HEAD is its commit.
@@ -85,8 +61,15 @@ const (
 	// StatePending: an apply is in flight; nothing was touched.
 	StatePending State = "pending"
 	// StateBaseMoved: a live stack on a base that is not the booted one, and
-	// not upstreamed. The projection is kept; casting refuses.
+	// not upstreamed, and the booted base changed a path the stack's patch
+	// touches. The projection is kept; casting refuses until a rebase.
 	StateBaseMoved State = "stack_base_moved"
+	// StateRematerialized: a live stack on a base that is not the booted one,
+	// where the booted base left every path the patch touches unchanged. HEAD
+	// is the booted base with the patch's after-image at those paths, byte for
+	// byte; casting is admitted (the served build is still the stack on its
+	// own base, which the Cast's ledger warning says).
+	StateRematerialized State = "stack_rematerialized"
 	// StateBaseObjectsMissing: the booted base's objects are not in the
 	// guest repository (residual R3), so it can neither be moved to nor shown
 	// to contain the stack. The cast refuses (U1b); U1b's fetch supplies them.
@@ -105,6 +88,8 @@ const (
 	FactBuilt      = "source_projection_built"
 	FactRepaired   = "source_projection_repaired"
 	FactUpstreamed = "source_projection_upstreamed"
+	// FactSaved: reconcile kept what a reset would have lost at a saved ref.
+	FactSaved = "source.projection_saved"
 	// FactLockCleared: a stale git lock left by a dead process was removed.
 	FactLockCleared = "source_projection_lock_cleared"
 )
@@ -144,6 +129,34 @@ type Input struct {
 	// TopUnavailable is set instead of Top when the operation exists but its
 	// bundle or patch cannot be read; the reason is named in the result.
 	TopUnavailable string
+	// OnSave records what reconcile saved before it resets anything. It is
+	// called with every save (created now or found from an earlier attempt),
+	// so it must be idempotent on the saved commit. The reset runs only when
+	// it returns nil; an error leaves HEAD and the work tree as they were.
+	OnSave func(ctx context.Context, saved []Saved) error
+}
+
+// Saved kinds.
+const (
+	// SavedDirty is a commit of the work tree's tracked changes (and of the
+	// untracked files a reset would overwrite), its parent the HEAD it was on.
+	SavedDirty = "dirty"
+	// SavedHead is a HEAD no refs/choir/ ref names (the creation commit, or a
+	// commit something else made on the computer branch).
+	SavedHead = "head"
+)
+
+// Saved is one ref reconcile kept before a reset.
+type Saved struct {
+	Ref    string `json:"ref"`
+	Commit string `json:"commit"`
+	Kind   string `json:"kind"`
+	// From is the HEAD the reset moves away from.
+	From string `json:"from,omitempty"`
+	// To is the commit the reset moves to.
+	To string `json:"to,omitempty"`
+	// Created: this reconcile made the ref (an earlier attempt may have).
+	Created bool `json:"created,omitempty"`
 }
 
 // Result is what Reconcile did and found.
@@ -152,8 +165,12 @@ type Result struct {
 	Reason string `json:"reason,omitempty"`
 	// Head is HEAD after reconcile ("" when untouched or unavailable).
 	Head string `json:"head,omitempty"`
-	// Base is the stack base (the booted base for an empty stack).
+	// Base is the stack base (the booted base for an empty stack, and for a
+	// rematerialized stack).
 	Base string `json:"base,omitempty"`
+	// ServedBase is the base the served stack's patch is on, set when it is
+	// not Base (stack_rematerialized): the served build is still that.
+	ServedBase string `json:"served_base,omitempty"`
 	// BootedBase is the booted image's build commit as given.
 	BootedBase string `json:"booted_base,omitempty"`
 	// OperationID is the live (or retired) stack operation.
@@ -169,8 +186,10 @@ type Result struct {
 	LocksCleared []string `json:"locks_cleared,omitempty"`
 	// From is the HEAD a changed result moved away from: the rollback handle
 	// when the projection first leaves the creation commit.
-	From string    `json:"from,omitempty"`
-	At   time.Time `json:"at"`
+	From string `json:"from,omitempty"`
+	// Saved lists what was kept at refs/choir/saved/ before the reset.
+	Saved []Saved   `json:"saved,omitempty"`
+	At    time.Time `json:"at"`
 }
 
 // Refusal names why a cast must be refused, or "" when it may go ahead.
@@ -184,9 +203,9 @@ func (r Result) Refusal() string {
 		}
 		return "source_projection_pending: " + detail + "; the capsule source is settled once it records applied"
 	case StateBaseObjectsMissing:
-		// The setting means "build on current main" (FP0, 2026-10-24): with the
+		// Projection means "build on current main" (FP0, 2026-10-24): with the
 		// booted base's objects still missing after the fetch, building on the
-		// creation commit is the failure U1 exists to end. Off, none of this runs.
+		// creation commit is the failure U1 exists to end.
 		return "base_objects_missing: " + r.Reason
 	case StateBaseMoved:
 		return "stack_base_moved: " + r.Reason
@@ -205,10 +224,6 @@ var reconcileMu sync.Mutex
 // failure it could not name as a state; the states carry their own reasons.
 func Reconcile(ctx context.Context, in Input) (Result, error) {
 	res := Result{At: time.Now().UTC(), BootedBase: strings.ToLower(strings.TrimSpace(in.BootedBase))}
-	if !Enabled() {
-		res.State = StateDisabled
-		return res, nil
-	}
 	reconcileMu.Lock()
 	defer reconcileMu.Unlock()
 	before := ""
@@ -256,19 +271,44 @@ func reconcileLocked(ctx context.Context, in Input, res Result) (Result, error) 
 		booted, haveBooted = resolveCommit(ctx, repo, res.BootedBase)
 	}
 	_, hadBase := resolveCommit(ctx, repo, RefBase)
+	cur := current{head: head, haveHead: haveHead, hadBase: hadBase, onSave: in.OnSave}
 
 	if in.Top == nil || len(in.Top.Patch) == 0 {
-		return reconcileEmptyStack(ctx, repo, res, head, haveHead, booted, haveBooted, hadBase)
+		return reconcileEmptyStack(ctx, repo, res, cur, booted, haveBooted)
 	}
-	return reconcileStack(ctx, repo, in.Top, res, head, haveHead, booted, haveBooted, hadBase)
+	return reconcileStack(ctx, repo, in.Top, res, cur, booted, haveBooted)
 }
 
-func reconcileEmptyStack(ctx context.Context, repo string, res Result, head string, haveHead bool, booted string, haveBooted, hadBase bool) (Result, error) {
+// current is what the repository held when reconcile started, and the hook
+// that records a save.
+type current struct {
+	head              string
+	haveHead, hadBase bool
+	onSave            func(context.Context, []Saved) error
+}
+
+// target is what ensureHead makes the repository: HEAD expected, the base ref
+// base, and the applied ref (when appliedDigest names one) appliedCommit.
+type target struct {
+	expected, base               string
+	appliedDigest, appliedCommit string
+}
+
+func (res *Result) settle(ctx context.Context, repo string, cur current, t target) error {
+	moved, err := ensureHead(ctx, repo, cur, t)
+	if err != nil {
+		return err
+	}
+	res.Head, res.Changed, res.Repaired, res.Saved = t.expected, moved.changed, moved.repaired, moved.saved
+	return nil
+}
+
+func reconcileEmptyStack(ctx context.Context, repo string, res Result, cur current, booted string, haveBooted bool) (Result, error) {
 	switch {
 	case haveBooted:
 		res.State, res.Base = StateBase, booted
 	case res.BootedBase == "":
-		res.State, res.Reason, res.Head = StateNoBootedBase, "the booted image names no build commit", head
+		res.State, res.Reason, res.Head = StateNoBootedBase, "the booted image names no build commit", cur.head
 		return res, nil
 	default:
 		// The booted base's objects are not here (R3). Keep the source as it
@@ -277,33 +317,34 @@ func reconcileEmptyStack(ctx context.Context, repo string, res Result, head stri
 		res.State, res.Reason = StateBaseObjectsMissing, "the booted base "+res.BootedBase+" is not in the guest source repository"
 		recorded, ok := resolveCommit(ctx, repo, RefBase)
 		if !ok {
-			res.Head = head
+			res.Head = cur.head
 			return res, nil
 		}
 		res.Base = recorded
 		booted = recorded
 	}
-	changed, repaired, err := ensureHead(ctx, repo, booted, head, haveHead, hadBase, "", booted)
-	if err != nil {
-		return res, err
-	}
-	res.Head, res.Changed, res.Repaired = booted, changed, repaired
-	return res, nil
+	err := res.settle(ctx, repo, cur, target{expected: booted, base: booted})
+	return res, err
 }
 
-func reconcileStack(ctx context.Context, repo string, top *Op, res Result, head string, haveHead bool, booted string, haveBooted, hadBase bool) (Result, error) {
+func reconcileStack(ctx context.Context, repo string, top *Op, res Result, cur current, booted string, haveBooted bool) (Result, error) {
 	res.OperationID = top.OperationID
 	base, ok := resolveCommit(ctx, repo, top.Base)
 	if !ok {
-		res.State, res.Head = StateUnrebuildable, head
+		res.State, res.Head = StateUnrebuildable, cur.head
 		res.Reason = "the patch base commit " + top.Base + " is not in the guest source repository"
 		return res, nil
 	}
 	tree, err := patchedTree(ctx, repo, base, top.Patch, false)
 	if err != nil {
-		res.State, res.Head = StateUnrebuildable, head
+		res.State, res.Head = StateUnrebuildable, cur.head
 		res.Reason = "the operation's patch does not apply to its base " + base + ": " + err.Error()
 		return res, nil
+	}
+	upstreamed := func(reason string) (Result, error) {
+		res.State, res.Base, res.Diverged, res.Reason = StateUpstreamed, booted, false, reason
+		err := res.settle(ctx, repo, cur, target{expected: booted, base: booted})
+		return res, err
 	}
 	if haveBooted {
 		contained, cerr := Contained(ctx, repo, booted, base, top.Patch, tree)
@@ -311,27 +352,46 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, head 
 			return res, cerr
 		}
 		if contained {
-			res.State, res.Base, res.Diverged = StateUpstreamed, booted, false
-			res.Reason = "the operation's patch is already in the booted base " + booted
-			changed, repaired, err := ensureHead(ctx, repo, booted, head, haveHead, hadBase, "", booted)
-			if err != nil {
-				return res, err
-			}
-			res.Head, res.Changed, res.Repaired = booted, changed, repaired
-			return res, nil
+			return upstreamed("the operation's patch is already in the booted base " + booted)
 		}
 	}
 	commit, err := projectionCommit(ctx, repo, top, base, tree)
 	if err != nil {
 		return res, err
 	}
+	if haveBooted && base != booted {
+		// S4: a moved base the patch's paths did not see is grafted, byte for
+		// byte (library design 10.3, applied to the whole stack).
+		graft, ok, why, gerr := graftTree(ctx, repo, base, booted, tree)
+		if gerr != nil {
+			return res, gerr
+		}
+		if ok {
+			bootedTree, terr := git(ctx, repo, nil, nil, "rev-parse", booted+"^{tree}")
+			if terr != nil {
+				return res, terr
+			}
+			if graft == bootedTree {
+				return upstreamed("the operation's patch, grafted onto the booted base " + booted + ", leaves it unchanged")
+			}
+			grafted, cerr := projectionCommit(ctx, repo, top, booted, graft)
+			if cerr != nil {
+				return res, cerr
+			}
+			res.State, res.Base, res.ServedBase, res.Diverged = StateRematerialized, booted, base, true
+			res.Reason = "the stack's patch on " + base + " is grafted byte-identically onto the booted base " + booted + ": the booted base changed no path the patch touches; the served build is still the stack on " + base
+			err := res.settle(ctx, repo, cur, target{expected: grafted, base: booted, appliedDigest: top.AppliedEventDigest, appliedCommit: commit})
+			return res, err
+		}
+		res.State, res.Base, res.Diverged = StateBaseMoved, base, true
+		res.Reason = "the stack is based on " + base + " but this computer booted " + booted + " and the stack's patch is not in it; " + why
+		err := res.settle(ctx, repo, cur, target{expected: commit, base: base, appliedDigest: top.AppliedEventDigest, appliedCommit: commit})
+		return res, err
+	}
 	res.Base, res.Diverged = base, true
 	switch {
-	case haveBooted && base == booted:
-		res.State = StateProjected
 	case haveBooted:
-		res.State = StateBaseMoved
-		res.Reason = "the stack is based on " + base + " but this computer booted " + booted + " and the stack's patch is not in it"
+		res.State = StateProjected
 	case res.BootedBase == "":
 		res.State = StateProjected
 		res.Reason = "the booted base is unknown"
@@ -339,12 +399,8 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, head 
 		res.State = StateBaseMoved
 		res.Reason = "the stack is based on " + base + " but this computer booted " + res.BootedBase + "; that commit is not in the guest source repository, so the stack cannot be shown to be upstreamed"
 	}
-	changed, repaired, err := ensureHead(ctx, repo, commit, head, haveHead, hadBase, top.AppliedEventDigest, base)
-	if err != nil {
-		return res, err
-	}
-	res.Head, res.Changed, res.Repaired = commit, changed, repaired
-	return res, nil
+	err = res.settle(ctx, repo, cur, target{expected: commit, base: base, appliedDigest: top.AppliedEventDigest, appliedCommit: commit})
+	return res, err
 }
 
 // projectionCommit writes the operation's deterministic commit: tree is the
@@ -383,55 +439,109 @@ func projectionCommit(ctx context.Context, repo string, op *Op, base, tree strin
 	return out, nil
 }
 
-// ensureHead makes expected the attached HEAD with clean tracked files, and
-// sets the base ref (and the applied ref when appliedDigest is set). It
+type headMove struct {
+	changed, repaired bool
+	saved             []Saved
+}
+
+// ensureHead makes t.expected the attached HEAD with clean tracked files, and
+// sets the base ref (and the applied ref when t.appliedDigest is set). It
 // reports whether it moved anything, and whether what it moved was something
-// the projection did not leave (damage).
-func ensureHead(ctx context.Context, repo, expected, head string, haveHead, hadBase bool, appliedDigest, base string) (changed, repaired bool, err error) {
+// the projection did not leave (damage). Before any reset it saves what the
+// reset would lose (S4): the dirty work tree as a commit, and a HEAD no
+// refs/choir/ ref names, each at refs/choir/saved/<commit>, and hands them to
+// cur.onSave; the reset runs only once that has returned nil.
+func ensureHead(ctx context.Context, repo string, cur current, t target) (headMove, error) {
 	dirty, err := workTreeDirty(ctx, repo)
 	if err != nil {
-		return false, false, err
+		return headMove{}, err
 	}
-	moved := !haveHead || head != expected
+	moved := !cur.haveHead || cur.head != t.expected
 	// Read what the projection left before any ref moves: a HEAD that is none
-	// of it was put there by something else (damage).
-	known := true
-	if moved && haveHead && hadBase {
-		if known, err = projectionLeft(ctx, repo, head); err != nil {
-			return false, false, err
+	// of it was put there by something else (damage once the projection has
+	// recorded a base; the creation commit before that).
+	foreign := false
+	if moved && cur.haveHead {
+		left, err := projectionLeft(ctx, repo, cur.head)
+		if err != nil {
+			return headMove{}, err
+		}
+		foreign = !left
+	}
+	if !moved && !dirty {
+		if err := setProjectionRefs(ctx, repo, t); err != nil {
+			return headMove{}, err
+		}
+		return headMove{}, nil
+	}
+	var saved []Saved
+	if cur.haveHead {
+		commit, err := saveWorkTree(ctx, repo, cur.head, t.expected)
+		if err != nil {
+			return headMove{}, fmt.Errorf("save the work tree before the reset: %w", err)
+		}
+		if commit != "" {
+			created, err := createSavedRef(ctx, repo, commit)
+			if err != nil {
+				return headMove{}, err
+			}
+			saved = append(saved, Saved{Ref: RefSavedPrefix + commit, Commit: commit, Kind: SavedDirty, From: cur.head, To: t.expected, Created: created})
+		}
+		if foreign {
+			created, err := createSavedRef(ctx, repo, cur.head)
+			if err != nil {
+				return headMove{}, err
+			}
+			saved = append(saved, Saved{Ref: RefSavedPrefix + cur.head, Commit: cur.head, Kind: SavedHead, From: cur.head, To: t.expected, Created: created})
 		}
 	}
-	if appliedDigest != "" && commitID.MatchString(appliedDigest) {
-		if _, err := git(ctx, repo, nil, nil, "update-ref", RefAppliedPrefix+appliedDigest, expected); err != nil {
-			return false, false, err
+	if len(saved) > 0 && cur.onSave != nil {
+		if err := cur.onSave(ctx, saved); err != nil {
+			return headMove{}, fmt.Errorf("record the saved source before the reset (nothing was reset): %w", err)
+		}
+	}
+	if err := setProjectionRefs(ctx, repo, t); err != nil {
+		return headMove{}, err
+	}
+	if _, err := git(ctx, repo, nil, nil, "update-ref", Branch, t.expected); err != nil {
+		return headMove{}, err
+	}
+	if _, err := git(ctx, repo, nil, nil, "symbolic-ref", "HEAD", Branch); err != nil {
+		return headMove{}, err
+	}
+	if _, err := git(ctx, repo, nil, nil, "reset", "--hard", "--quiet", t.expected); err != nil {
+		return headMove{}, err
+	}
+	return headMove{changed: true, repaired: dirty || (foreign && cur.hadBase), saved: saved}, nil
+}
+
+// setProjectionRefs points the applied, projected and base refs at the
+// target. None of them is a reset: they lose nothing.
+func setProjectionRefs(ctx context.Context, repo string, t target) error {
+	if t.appliedDigest != "" && commitID.MatchString(t.appliedDigest) {
+		applied := t.appliedCommit
+		if applied == "" {
+			applied = t.expected
+		}
+		if cur, ok := resolveCommit(ctx, repo, RefAppliedPrefix+t.appliedDigest); !ok || cur != applied {
+			if _, err := git(ctx, repo, nil, nil, "update-ref", RefAppliedPrefix+t.appliedDigest, applied); err != nil {
+				return err
+			}
 		}
 	}
 	// The last commit the projection set, whether or not an applied event
 	// named it: a HEAD that is this was left by us, not damage.
-	if cur, ok := resolveCommit(ctx, repo, RefProjected); !ok || cur != expected {
-		if _, err := git(ctx, repo, nil, nil, "update-ref", RefProjected, expected); err != nil {
-			return false, false, err
+	if cur, ok := resolveCommit(ctx, repo, RefProjected); !ok || cur != t.expected {
+		if _, err := git(ctx, repo, nil, nil, "update-ref", RefProjected, t.expected); err != nil {
+			return err
 		}
 	}
-	if cur, ok := resolveCommit(ctx, repo, RefBase); !ok || cur != base {
-		if _, err := git(ctx, repo, nil, nil, "update-ref", RefBase, base); err != nil {
-			return false, false, err
+	if cur, ok := resolveCommit(ctx, repo, RefBase); !ok || cur != t.base {
+		if _, err := git(ctx, repo, nil, nil, "update-ref", RefBase, t.base); err != nil {
+			return err
 		}
 	}
-	if !moved && !dirty {
-		return false, false, nil
-	}
-	repaired = dirty || !known
-	if _, err := git(ctx, repo, nil, nil, "update-ref", Branch, expected); err != nil {
-		return false, false, err
-	}
-	if _, err := git(ctx, repo, nil, nil, "symbolic-ref", "HEAD", Branch); err != nil {
-		return false, false, err
-	}
-	if _, err := git(ctx, repo, nil, nil, "reset", "--hard", "--quiet", expected); err != nil {
-		return false, false, err
-	}
-	return true, repaired, nil
+	return nil
 }
 
 // projectionLeft reports whether commit is one the projection left: a commit

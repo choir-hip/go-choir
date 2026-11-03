@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,9 +47,49 @@ func releaseSourceRepo(t *testing.T) (repo, base string) {
 	if err := os.WriteFile(filepath.Join(repo, "frontend", "public", "index.txt"), []byte("one\ntwo\nthree\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// long.txt gives a stack and a moved base room to change one file far
+	// apart, so the base touches a path the stack touches (no S4 graft) and
+	// the change still applies.
+	if err := os.WriteFile(filepath.Join(repo, "frontend", "public", "long.txt"), []byte(longText(nil)), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	releaseGit(t, repo, "add", "-A")
 	releaseGit(t, repo, "commit", "-q", "-m", "base")
 	return repo, releaseGit(t, repo, "rev-parse", "HEAD")
+}
+
+// longText is frontend/public/long.txt: 40 numbered lines, with edits.
+func longText(edits map[int]string) string {
+	var b strings.Builder
+	for i := 1; i <= 40; i++ {
+		if line, ok := edits[i]; ok {
+			b.WriteString(line + "\n")
+			continue
+		}
+		fmt.Fprintf(&b, "long line %02d\n", i)
+	}
+	return b.String()
+}
+
+// The U4 topology: the applied stack adds a.txt and edits long.txt line 5;
+// the moved base adds other.txt and edits long.txt line 35. The base touched a
+// path the stack touches, so the stack is not grafted (stack_base_moved), and a
+// rebase onto the moved base carries both edits.
+func stackChange() map[string]string {
+	return map[string]string{"frontend/public/a.txt": "A\n", "frontend/public/long.txt": longText(map[int]string{5: "stack line 05"})}
+}
+
+func movedBaseChange() map[string]string {
+	return map[string]string{"frontend/public/other.txt": "platform\n", "frontend/public/long.txt": longText(map[int]string{35: "platform line 35"})}
+}
+
+// rebasedChange is the stack's change on the moved base, plus extra files.
+func rebasedChange(extra map[string]string) map[string]string {
+	out := map[string]string{"frontend/public/a.txt": "A\n", "frontend/public/long.txt": longText(map[int]string{5: "stack line 05", 35: "platform line 35"})}
+	for k, v := range extra {
+		out[k] = v
+	}
+	return out
 }
 
 // releasePatch makes a change in a clone of repo and returns its patch and

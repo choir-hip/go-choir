@@ -23,33 +23,10 @@ import (
 // U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section 4.6
 // and its "U1 build notes"): the guest source repository is a projection of
 // the effective release. This file gathers what the projection needs from the
-// tape and the updater, runs sourceproj, and keeps the facts. Everything is
-// behind sourceproj.Enabled (CHOIR_SOURCE_PROJECTION); with the switch off none
-// of it runs.
-
-// configureSourceProjectionSetting reads the owner's per-computer setting at
-// boot (store.source.projection; anything but a stored true is off). The
-// environment switch needs no setting.
-func (rt *Runtime) configureSourceProjectionSetting(ctx context.Context) {
-	if rt == nil || rt.store == nil {
-		return
-	}
-	ownerID := strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
-	sourceproj.SetSetting(rt.computerSettingOn(ctx, ownerID, rt.cfg.ComputerID, store.SettingSourceProjection))
-}
-
-// applySourceProjectionSetting is the owner's setting change at runtime. On
-// reconciles at once, in the background; off stops every entry point, and
-// leaves the repository where it is (the rollback in the design).
-func (rt *Runtime) applySourceProjectionSetting(value bool) {
-	if rt == nil {
-		return
-	}
-	sourceproj.SetSetting(value)
-	if value {
-		go rt.startSourceProjection(context.Background(), "setting")
-	}
-}
+// tape and the updater, runs sourceproj, and keeps the facts. It runs on every
+// computer (capsule overlay S4,
+// docs/design/capsule-overlay-computer-state-2026-11-03.md section 5): no
+// switch, and what a reset would lose is saved and put on the tape first.
 
 // sourceProjectionFactsFile is the guest-local log of projection facts. They
 // are observation only: reconcile recomputes from the tape every time.
@@ -116,7 +93,7 @@ func (rt *Runtime) bootedBaseForJoin() (string, error) {
 // whose release is `current` (the authority the effective identity already
 // uses), its bundle's patch and base, and whether an apply is in flight.
 func (rt *Runtime) sourceProjectionInput(ctx context.Context) sourceproj.Input {
-	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit()}
+	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit(), OnSave: rt.recordSourceProjectionSaved}
 	root := strings.TrimSpace(rt.selfdevUpdaterRoot)
 	if root == "" {
 		return in // no updater: nothing was ever applied here
@@ -220,8 +197,8 @@ func parseOperationTime(value string) time.Time {
 // reason names the trigger (boot, apply, cast). Safe to call from several
 // triggers: sourceproj serializes, and each call recomputes from the tape.
 func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string) (sourceproj.Result, error) {
-	if rt == nil || !sourceproj.Enabled() {
-		return sourceproj.Result{State: sourceproj.StateDisabled}, nil
+	if rt == nil {
+		return sourceproj.Result{State: sourceproj.StateRepoUnavailable, Reason: "no runtime"}, nil
 	}
 	// Gather and reconcile under one lock: an input read before a newer
 	// reconcile must never be applied after it (a boot pass that read an empty
@@ -258,7 +235,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 // reconcileSourceProjectionLogged is the trigger form: a failure is logged and
 // never blocks boot or an apply (the cast gate reconciles again and refuses).
 func (rt *Runtime) reconcileSourceProjectionLogged(ctx context.Context, reason string) {
-	if rt == nil || !sourceproj.Enabled() {
+	if rt == nil {
 		return
 	}
 	if _, err := rt.ReconcileSourceProjection(ctx, reason); err != nil {
@@ -271,7 +248,7 @@ func (rt *Runtime) reconcileSourceProjectionLogged(ctx context.Context, reason s
 // the computer no longer booted, or a projection that cannot be rebuilt. The
 // reason is stable (its first word is the code) and names the bases.
 func (rt *Runtime) sourceProjectionCastGate(ctx context.Context) error {
-	_, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{})
+	_, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, castLedgerRef{})
 	return err
 }
 
@@ -286,13 +263,22 @@ type rebaseSpec struct {
 
 func (s rebaseSpec) set() bool { return strings.TrimSpace(s.Notice) != "" }
 
+// castLedgerRef names the Cast a gate answers, for the ledger warning an
+// admitted Cast on a rematerialized stack carries. The zero value records none.
+type castLedgerRef struct {
+	OwnerID, ComputerID, CastRecordID, ManagementAgentID, TrajectoryID string
+}
+
+// rebaseNeedsRoot is the text a stack_base_moved refusal gains when no root
+// Texture RLM is live to Cast the rebase (capsule overlay S4).
+const rebaseNeedsRoot = "rebase_needs_root: no live root desk to Cast the rebase"
+
 // sourceProjectionCastGateFor is the gate with U4's exception
 // (docs/design/u4-stack-rebase-build-2026-10-26.md, failure mode 6). An
-// ordinary Cast gets the gate unchanged. A Cast whose spec names a rebase
+// ordinary Cast gets the gate: refused at stack_base_moved (with
+// rebase_needs_root when no root desk is live), admitted at
+// stack_rematerialized with a ledger warning. A Cast whose spec names a rebase
 // notice is admitted only when every live fact agrees:
-//   - the three switches are on (source.rebase_offer, source.projection,
-//     texture.root_desk); with one off the ordinary gate answers, so today's
-//     refusal text is unchanged;
 //   - the stack sits on a moved base (stack_base_moved), its operation is the
 //     spec's rebase_of, the booted base is the spec's base, and the booted
 //     base's objects are in the guest repository;
@@ -301,31 +287,25 @@ func (s rebaseSpec) set() bool { return strings.TrimSpace(s.Notice) != "" }
 // It returns the booted base commit the capsule must start from (empty for an
 // ordinary Cast). The store's records admission checks the tape facts (the
 // notice, the root's Cast, the latest attempt) inside the open's transaction.
-func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseSpec) (rebaseBase string, err error) {
-	ordinary := func() error {
-		if !sourceproj.Enabled() {
-			return nil
-		}
+func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseSpec, cast castLedgerRef) (rebaseBase string, err error) {
+	if !spec.set() {
 		rt.waitSourceBaseFetch(ctx)
 		result, err := rt.ReconcileSourceProjection(ctx, "cast")
 		if err != nil {
-			return fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
+			return "", fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 		}
 		if refusal := result.Refusal(); refusal != "" {
-			return errors.New(refusal)
+			if result.State == sourceproj.StateBaseMoved && !rt.rebaseRootLive(ctx) {
+				refusal += "; " + rebaseNeedsRoot
+			}
+			return "", errors.New(refusal)
 		}
-		return nil
-	}
-	if !spec.set() {
-		return "", ordinary()
+		if result.State == sourceproj.StateRematerialized {
+			rt.recordRematerializedCastWarning(ctx, cast, result)
+		}
+		return "", nil
 	}
 	ownerID, computerID := rt.rebaseScope()
-	if !sourceproj.Enabled() || !rt.rebaseOfferOn(ctx, ownerID, computerID) {
-		if err := ordinary(); err != nil {
-			return "", err
-		}
-		return "", errors.New("rebase_offer_off: the Cast names a rebase notice but source.rebase_offer is not on with source.projection and texture.root_desk")
-	}
 	if strings.TrimSpace(spec.RebaseOf) == "" || strings.TrimSpace(spec.Base) == "" {
 		return "", errors.New("rebase_spec_incomplete: a rebase Cast's spec names rebase_notice, rebase_of (the operation) and base (the booted base), all three")
 	}
@@ -361,6 +341,74 @@ func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseS
 	return result.BootedBase, nil
 }
 
+// rebaseRootLive reports whether a root Texture RLM is live to Cast a rebase.
+// A read failure counts as not live: the refusal then says so, which is the
+// truth the owner can act on.
+func (rt *Runtime) rebaseRootLive(ctx context.Context) bool {
+	if rt == nil || rt.store == nil {
+		return false
+	}
+	ownerID, computerID := rt.rebaseScope()
+	if ownerID == "" || computerID == "" {
+		return false
+	}
+	_, _, live, err := rt.rebaseRoot(ctx, ownerID, computerID)
+	return err == nil && live
+}
+
+// rematerializedCastObserverAgentID commits the Cast warning: a
+// system-committed observation, like the admission hold record.
+const rematerializedCastObserverAgentID = "source-projection"
+
+// rematerializedCastWarningID is the warning's deterministic id: one per
+// Cast and grafted stack, so a replayed Cast records nothing new.
+func rematerializedCastWarningID(castRecordID, operationID, bootedBase string) string {
+	return fmt.Sprintf("source-projection:stack_rematerialized:%s:%s:%s", operationID, bootedBase, castRecordID)
+}
+
+// rematerializedCastWarning is the ledger record an admitted Cast on a
+// rematerialized stack carries (design section 5): the served build is still
+// the stack on its old base; the capsule builds on the graft; approving its
+// candidate also approves the graft.
+func rematerializedCastWarning(cast castLedgerRef, result sourceproj.Result, now time.Time) types.CommitmentRecord {
+	stamp := now.UTC().Format(time.RFC3339Nano)
+	return types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    rematerializedCastWarningID(cast.CastRecordID, result.OperationID, result.BootedBase),
+		Discrepancy: types.DiscrepancyUnresolved,
+		Prediction: types.CommitmentPrediction{
+			Hypothesis: fmt.Sprintf("warning: Cast %s builds on the applied change %s grafted onto the booted base %s (stack_rematerialized, commit %s). The served build is still that change on %s. The booted base changed no path the change touches, so the graft is byte-identical at those paths; approving this Cast's candidate also approves the change on %s.",
+				cast.CastRecordID, result.OperationID, result.BootedBase, result.Head, result.ServedBase, result.BootedBase),
+			CommittedAt: stamp,
+		},
+		Observation: types.CommitmentObservation{
+			Excerpt:    fmt.Sprintf("source projection stack_rematerialized: operation %s, served base %s, booted base %s, capsule source %s", result.OperationID, result.ServedBase, result.BootedBase, result.Head),
+			SourceRef:  result.OperationID,
+			ObservedAt: stamp,
+		},
+		Provenance: types.CommitmentProvenance{
+			AgentID:     rematerializedCastObserverAgentID,
+			ContextRef:  cast.TrajectoryID,
+			CommittedAt: stamp,
+		},
+		Addressee:    strings.TrimSpace(cast.ManagementAgentID),
+		ParentID:     cast.CastRecordID,
+		EvidenceRefs: []string{result.OperationID, cast.CastRecordID},
+	}
+}
+
+// recordRematerializedCastWarning writes the warning. It is observational: a
+// ledger failure is logged and the Cast goes on (the state is on /health).
+func (rt *Runtime) recordRematerializedCastWarning(ctx context.Context, cast castLedgerRef, result sourceproj.Result) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(cast.CastRecordID) == "" {
+		return
+	}
+	rec := rematerializedCastWarning(cast, result, time.Now())
+	if _, err := rt.store.AppendCommitmentRecord(ctx, cast.OwnerID, cast.ComputerID, rec); err != nil {
+		log.Printf("source projection: the stack_rematerialized warning for Cast %s: %v", cast.CastRecordID, err)
+	}
+}
+
 type sourceProjectionFact struct {
 	At          string `json:"at"`
 	Kind        string `json:"kind"`
@@ -379,6 +427,8 @@ type sourceProjectionFact struct {
 	// lineage receipt's digest.
 	RebaseOf      string `json:"rebase_of,omitempty"`
 	ReceiptSHA256 string `json:"receipt_sha256,omitempty"`
+	// Saved is set on a source.projection_saved fact (S4).
+	Saved []sourceproj.Saved `json:"saved,omitempty"`
 }
 
 func (rt *Runtime) appendSourceProjectionFact(trigger string, result sourceproj.Result) {
@@ -427,10 +477,9 @@ func (rt *Runtime) appendSourceProjectionFactRecord(fact sourceProjectionFact) {
 }
 
 // sourceProjectionStatus is what /health serves: the last reconcile's result,
-// without running git on the caller's path. Nil when the switch is off or no
-// reconcile has run.
+// without running git on the caller's path. Nil when no reconcile has run.
 func (rt *Runtime) sourceProjectionStatus() *sourceproj.Result {
-	if rt == nil || !sourceproj.Enabled() {
+	if rt == nil {
 		return nil
 	}
 	rt.sourceProjectionMu.Lock()
@@ -444,11 +493,11 @@ func (rt *Runtime) sourceProjectionStatus() *sourceproj.Result {
 
 // composeFreezePatch makes the patch Freeze records the cumulative one: from
 // the stack base, not from the commit the capsule was pinned to. Nothing
-// changes when the switch is off, the capsule was not cast from a projection
-// commit, or the capsule made no source patch. The bundle then names a patch
+// changes when the capsule was not cast from a projection commit, or the
+// capsule made no source patch. The bundle then names a patch
 // corpusd and the host builder already accept ("U1 build notes").
 func composeFreezePatch(ctx context.Context, repo string, staged *capsule.StagedRelease) error {
-	if !sourceproj.Enabled() || staged == nil || strings.TrimSpace(staged.SourcePatchSHA) == "" || strings.TrimSpace(staged.SourceBaseCommit) == "" {
+	if staged == nil || strings.TrimSpace(staged.SourcePatchSHA) == "" || strings.TrimSpace(staged.SourceBaseCommit) == "" {
 		return nil
 	}
 	path := filepath.Join(staged.TemporaryRoot, "source.patch")

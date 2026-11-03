@@ -12,7 +12,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -75,14 +74,10 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 		executor.SetComputerStore(capsuleStoreCopySource{db: db})
 	}
 	// U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section
-	// 4.6): with the source projection on, Freeze reuses the running binary
-	// when no binary-input path differs from the capsule source. The gate is
-	// asked at each Freeze: the per-computer source.projection setting loads
-	// after this executor is built (agentcore Runtime.Start) and can change at
-	// runtime, so reading sourceproj.Enabled() here would miss it
-	// (docs/problems/freeze-replays-a-changed-tree-2026-10-26.md).
-	executor.SetBinaryReuseGate(sourceproj.Enabled)
-	log.Printf("capsule executor: binary reuse by binary-input diff gated on source projection (asked at each freeze)")
+	// 4.6): the source projection runs on every computer (capsule overlay S4),
+	// so Freeze reuses the running binary when no binary-input path differs
+	// between the running binary's commit and the capsule source.
+	executor.SetBinaryReuseByInputDiff(true)
 	// Capsule memory per doctrine (RES-04) is a policy: observe keeps the
 	// MemoryMax shape and records what doctrine would have done.
 	memoryPolicy := capsule.CapsuleMemoryPolicyFromEnv(nil)

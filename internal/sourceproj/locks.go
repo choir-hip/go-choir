@@ -15,8 +15,8 @@ import (
 var processStart = time.Now()
 
 // clearStaleLocks removes git lock files a dead process left in the projection's
-// own paths: index.lock, HEAD.lock and the ref locks under refs/choir,
-// refs/heads/choir. A lock is stale only when it predates this process and no
+// own paths: index.lock, HEAD.lock and the ref locks under refs/choir (the
+// applied, booted and saved refs too), refs/heads/choir. A lock is stale only when it predates this process and no
 // live git process has this repository open (checked through /proc where it
 // exists; where it does not, the age test stands alone and the caller's
 // serialization is the rest of the proof). It never removes a lock of this
@@ -29,6 +29,8 @@ func clearStaleLocks(repo string) ([]string, error) {
 		filepath.Join(gitDir, "refs", "heads", "choir", "*.lock"),
 		filepath.Join(gitDir, "refs", "choir", "*.lock"),
 		filepath.Join(gitDir, "refs", "choir", "applied", "*.lock"),
+		filepath.Join(gitDir, "refs", "choir", "booted", "*.lock"),
+		filepath.Join(gitDir, "refs", "choir", "saved", "*.lock"),
 	} {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {

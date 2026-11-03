@@ -48,9 +48,6 @@ func (rt *Runtime) retryRebaseNotice(ctx context.Context, ownerID string) (rebas
 	if ownerID == "" || computerID == "" {
 		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_unavailable", "the runtime has no store or scope")
 	}
-	if !rt.rebaseOfferOn(ctx, ownerID, computerID) {
-		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_off", "source.rebase_offer, source.projection and texture.root_desk must all be on")
-	}
 	result, err := rt.ReconcileSourceProjection(ctx, rebaseReconcileReason)
 	if err != nil {
 		return rebaseRetryResult{}, fmt.Errorf("reconcile: %w", err)

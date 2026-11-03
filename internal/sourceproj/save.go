@@ -1,0 +1,299 @@
+package sourceproj
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+)
+
+// Capsule overlay S4 (docs/design/capsule-overlay-computer-state-2026-11-03.md
+// section 5, failure modes in
+// docs/design/capsule-overlay-s4-source-failure-modes-2026-11-03.md): reconcile
+// never resets work it has not saved, and a stack whose paths the new base left
+// alone is grafted onto it byte for byte.
+
+// saveWorkTree commits what `git reset --hard <expected>` would lose from the
+// work tree and index on top of head, in a scratch index so the real one is
+// untouched: every tracked change (modified, deleted, staged new), and every
+// untracked file (ignored ones too) at a path expected tracks, or at an
+// ancestor of one. It returns "" when there is nothing to lose. The commit is
+// a function of its tree and head (fixed identity, head's committer date), so
+// the same dirt saves to the same commit.
+func saveWorkTree(ctx context.Context, repo, head, expected string) (string, error) {
+	headTree, err := git(ctx, repo, nil, nil, "rev-parse", head+"^{tree}")
+	if err != nil {
+		return "", err
+	}
+	var tree string
+	err = scratchIndex(ctx, repo, func(env []string) error {
+		index := strings.TrimPrefix(env[0], "GIT_INDEX_FILE=")
+		real := filepath.Join(repo, ".git", "index")
+		if err := copyFile(real, index); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			if _, err := git(ctx, repo, env, nil, "read-tree", head); err != nil {
+				return err
+			}
+		}
+		if _, err := git(ctx, repo, env, nil, "add", "-u", "--", "."); err != nil {
+			return err
+		}
+		clobbered, err := untrackedInTheWay(ctx, repo, env, head, expected)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < len(clobbered); i += 100 {
+			end := i + 100
+			if end > len(clobbered) {
+				end = len(clobbered)
+			}
+			args := []string{"add", "-f", "--"}
+			for _, p := range clobbered[i:end] {
+				args = append(args, ":(literal)"+p)
+			}
+			if _, err := git(ctx, repo, env, nil, args...); err != nil {
+				return err
+			}
+		}
+		out, err := git(ctx, repo, env, nil, "write-tree")
+		if err != nil {
+			return err
+		}
+		if !commitID.MatchString(out) {
+			return fmt.Errorf("git wrote a malformed tree id %q", out)
+		}
+		tree = out
+		return nil
+	})
+	if err != nil || tree == headTree {
+		return "", err
+	}
+	when, err := git(ctx, repo, nil, nil, "log", "-1", "--format=%ct", head)
+	if err != nil {
+		return "", err
+	}
+	date := strings.TrimSpace(when) + " +0000"
+	env := []string{
+		"GIT_AUTHOR_NAME=Choir Projection", "GIT_AUTHOR_EMAIL=projection@choir.local", "GIT_AUTHOR_DATE=" + date,
+		"GIT_COMMITTER_NAME=Choir Projection", "GIT_COMMITTER_EMAIL=projection@choir.local", "GIT_COMMITTER_DATE=" + date,
+	}
+	msg := "choir: saved before the projection reset\n\nChoir-Saved-From: " + head + "\n"
+	out, err := git(ctx, repo, env, []byte(msg), "-c", "commit.gpgsign=false", "commit-tree", tree, "-p", head, "-F", "-")
+	if err != nil {
+		return "", err
+	}
+	if !commitID.MatchString(out) {
+		return "", fmt.Errorf("git wrote a malformed commit id %q", out)
+	}
+	return out, nil
+}
+
+// untrackedInTheWay lists the paths a reset to expected would overwrite that
+// the scratch index does not track: a path expected adds over head that
+// exists in the work tree, or an ancestor of one that is a file there.
+func untrackedInTheWay(ctx context.Context, repo string, env []string, head, expected string) ([]string, error) {
+	raw, err := gitRaw(ctx, repo, nil, nil, "diff-tree", "-r", "--no-renames", "--name-only", "-z", "--diff-filter=A", head, expected)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var candidates []string
+	for _, p := range strings.Split(string(raw), "\x00") {
+		if p == "" {
+			continue
+		}
+		for q := p; q != "." && q != "/" && q != ""; q = path.Dir(q) {
+			info, err := os.Lstat(filepath.Join(repo, filepath.FromSlash(q)))
+			if err != nil {
+				continue
+			}
+			if q != p && info.IsDir() {
+				continue // an ancestor that is a directory is in nobody's way
+			}
+			if !seen[q] {
+				seen[q] = true
+				candidates = append(candidates, q)
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	var out []string
+	for i := 0; i < len(candidates); i += 100 {
+		end := i + 100
+		if end > len(candidates) {
+			end = len(candidates)
+		}
+		args := []string{"ls-files", "-z", "--others", "--"}
+		for _, p := range candidates[i:end] {
+			args = append(args, ":(literal)"+p)
+		}
+		listed, err := gitRaw(ctx, repo, env, nil, args...)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range strings.Split(string(listed), "\x00") {
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out, nil
+}
+
+func copyFile(from, to string) error {
+	src, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	dst, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		return err
+	}
+	return dst.Close()
+}
+
+// createSavedRef creates refs/choir/saved/<commit> at commit, never moving an
+// existing ref: the empty old value makes git refuse a ref that exists. One
+// that already holds commit is success (an earlier attempt made it), and
+// created says which.
+func createSavedRef(ctx context.Context, repo, commit string) (created bool, err error) {
+	if !commitID.MatchString(commit) {
+		return false, fmt.Errorf("saved ref: malformed commit id %q", commit)
+	}
+	ref := RefSavedPrefix + commit
+	if _, err := git(ctx, repo, nil, nil, "update-ref", ref, commit, ""); err == nil {
+		return true, nil
+	} else if got, ok := resolveCommit(ctx, repo, ref); ok && got == commit {
+		return false, nil
+	} else {
+		return false, fmt.Errorf("saved ref %s: %w", ref, err)
+	}
+}
+
+// graftTree is the byte-identical re-materialization of a stack onto a moved
+// base: when no path the patch touches (base to tree) differs between base and
+// booted, the result is booted's tree with the patch's after-image at exactly
+// those paths. ok is false, with the reason, when a touched path differs, or
+// when the after-image cannot be placed in booted's tree (a directory and a
+// file at one path). An error means git failed.
+func graftTree(ctx context.Context, repo, base, booted, tree string) (graft string, ok bool, why string, err error) {
+	touched, err := treeDiffPaths(ctx, repo, base, tree, nil)
+	if err != nil {
+		return "", false, "", err
+	}
+	bootedTree, err := git(ctx, repo, nil, nil, "rev-parse", booted+"^{tree}")
+	if err != nil {
+		return "", false, "", err
+	}
+	if len(touched) == 0 {
+		return bootedTree, true, "", nil
+	}
+	// Literal pathspecs: a directory booted put at a file's path matches it.
+	changed, err := treeDiffPaths(ctx, repo, base, booted, touched)
+	if err != nil {
+		return "", false, "", err
+	}
+	if len(changed) > 0 {
+		shown := changed
+		if len(shown) > 5 {
+			shown = shown[:5]
+		}
+		more := ""
+		if len(changed) > len(shown) {
+			more = fmt.Sprintf(" and %d more", len(changed)-len(shown))
+		}
+		return "", false, "the booted base also changed " + strings.Join(shown, ", ") + more + ", which the patch touches, so it is not grafted", nil
+	}
+	entries, err := treeDiffRaw(ctx, repo, base, tree, touched)
+	if err != nil {
+		return "", false, "", err
+	}
+	var removes, adds []string
+	for _, e := range entries {
+		if strings.Trim(e.b.mode, "0") == "" {
+			removes = append(removes, e.path)
+			continue
+		}
+		adds = append(adds, e.b.mode+","+e.b.oid+","+e.path)
+	}
+	refused := ""
+	err = scratchIndex(ctx, repo, func(env []string) error {
+		if _, err := git(ctx, repo, env, nil, "read-tree", booted); err != nil {
+			return err
+		}
+		for i := 0; i < len(removes); i += 100 {
+			end := i + 100
+			if end > len(removes) {
+				end = len(removes)
+			}
+			if _, err := git(ctx, repo, env, nil, append([]string{"update-index", "--force-remove", "--"}, removes[i:end]...)...); err != nil {
+				return err
+			}
+		}
+		for i := 0; i < len(adds); i += 100 {
+			end := i + 100
+			if end > len(adds) {
+				end = len(adds)
+			}
+			args := []string{"update-index", "--add"}
+			for _, a := range adds[i:end] {
+				args = append(args, "--cacheinfo", a)
+			}
+			if _, err := git(ctx, repo, env, nil, args...); err != nil {
+				// No --replace: a file and a directory at one path is refused,
+				// and that is "not graftable", not a git failure.
+				refused = err.Error()
+				return nil
+			}
+		}
+		out, err := git(ctx, repo, env, nil, "write-tree")
+		if err != nil {
+			return err
+		}
+		if !commitID.MatchString(out) {
+			return fmt.Errorf("git wrote a malformed tree id %q", out)
+		}
+		graft = out
+		return nil
+	})
+	if err != nil {
+		return "", false, "", err
+	}
+	if refused != "" {
+		return "", false, "the patch's after-image does not fit the booted tree (" + refused + "), so it is not grafted", nil
+	}
+	// Byte-identical, checked: at every touched path the graft holds the
+	// after-image, and it differs from booted nowhere else.
+	if differ, err := treeDiffPaths(ctx, repo, tree, graft, touched); err != nil {
+		return "", false, "", err
+	} else if len(differ) > 0 {
+		return "", false, "the graft does not hold the patch's after-image at " + differ[0], nil
+	}
+	outside, err := treeDiffPaths(ctx, repo, bootedTree, graft, nil)
+	if err != nil {
+		return "", false, "", err
+	}
+	in := make(map[string]bool, len(touched))
+	for _, p := range touched {
+		in[p] = true
+	}
+	for _, p := range outside {
+		if !in[p] {
+			return "", false, "the graft changes " + p + ", which the patch does not touch", nil
+		}
+	}
+	return graft, true, "", nil
+}

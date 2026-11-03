@@ -120,10 +120,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applyTelemetryPartitionsSetting(value)
 			case store.SettingTapeGroupCommit:
 				rt.applyTapeGroupCommitSetting(value)
-			case store.SettingSourceProjection:
-				rt.applySourceProjectionSetting(value)
-			case store.SettingSourceRebaseOffer, store.SettingTextureRootDesk:
-				rt.applyRebaseOfferSetting(value)
+			case store.SettingTextureRootDesk:
+				rt.applyTextureRootDeskSetting(value)
 			case store.SettingDispatchWideSlots:
 				rt.applyDispatchSlotsSetting(value)
 			}
@@ -151,11 +149,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		case store.SettingDispatchWideSlots:
 			rt.applyDispatchSlotsSetting(value)
 		}
-		if key == store.SettingSourceProjection {
-			rt.applySourceProjectionSetting(value)
-		}
-		if key == store.SettingSourceRebaseOffer || key == store.SettingTextureRootDesk {
-			rt.applyRebaseOfferSetting(value)
+		if key == store.SettingTextureRootDesk {
+			rt.applyTextureRootDeskSetting(value)
 		}
 		resp := map[string]any{"setting": setting}
 		if value {
