@@ -357,3 +357,17 @@ build. Shift tried: an owner revision on b1ad3952 (13:08:33Z) to wake that Textu
 (attempt 1)", on base 3ab1d5c3 rather than 0de7c5865, so pool likely booted a newer release first and this was a fresh
 stay-up mint with the stack's Texture live. Texture cast it at 13:16:56Z. Whether the live Texture or the reboot made the
 difference is not separable from this evidence.
+
+## Problem 22: a refresh lands while a candidate awaits its decision, and the candidate dies on booted_base_moved (pool, 13:33Z)
+
+Pool's rebase (notice minted 13:16:52Z on base 3ab1d5c3; assignment 13:17:02Z) froze selfdev-ab2912d3185c40206a80bd4d33bc76c9
+at 13:29:02Z; it reached awaiting_approval at 13:32:24Z although the arm is on standing_consensus (generation 6; no consensus
+decision came in the 3+ minutes). 2cd70f606 deployed at 13:21:52Z; pool was rebooted for it at about 13:32:55Z (proxy:
+"computer ... booting was not woken"), between the freeze and FP0's approval. FP0 approved at 13:33:25Z (receipt
+01a1a19d-5691-7ddc-9f28-d93f369c77b2, accepted), and the operation failed the same second: "rebase_content_mismatch:
+booted_base_moved: the computer booted a newer base after this rebase was claimed; the next base gets its own notice". The
+idle-refresh rule (no capsule live, no apply in flight) does not count a frozen candidate awaiting its decision as work, so
+a rebase that took 16 minutes is thrown away by the next deploy, and with expedite deploys every 30-60 minutes the stacked
+arms can loop: notice, rebase, refresh, notice. Fix direction: hold the refresh while an operation is frozen, awaiting
+approval or accepted (or let a rebase finish onto the base it claimed and re-notice after); and say why standing_consensus
+left it at awaiting_approval.
