@@ -385,10 +385,6 @@ func Server(root string) http.Handler {
 			_, _ = io.WriteString(w, `{"error":"not signed in: this is a capture of the static frontend"}`)
 			return
 		}
-		if p == frontListPath {
-			serveFrontFixture(w, r)
-			return
-		}
 		if p == "/api" || strings.HasPrefix(p, "/api/") {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -505,66 +501,4 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
-}
-
-// frontListPath is the one public GET route the signed-out landing page (the
-// Autopaper front) reads, frontend/src/lib/autopaper.ts fetchFrontPage.
-const frontListPath = "/api/platform/publications/front"
-
-// frontFixture is a fixed, labelled sample front list. The capture has no
-// backend, so without it the landing page shows only its error state and a
-// judge can see no layout (docs/problems/
-// selfdev-visual-capture-landing-needs-api-2026-11-02.md). It carries no
-// real publication and is the same on every run, so the capture's inputs
-// stay deterministic.
-var frontFixture = func() []byte {
-	type route struct {
-		Bare      string `json:"bare"`
-		Permalink string `json:"permalink"`
-	}
-	type story struct {
-		PublicationID string `json:"publication_id"`
-		Title         string `json:"title"`
-		Dek           string `json:"dek"`
-		UpdatedAt     string `json:"updated_at"`
-		VersionCount  int    `json:"version_count"`
-		LatestRev     int    `json:"latest_revision"`
-		Route         route  `json:"route"`
-		Importance    int    `json:"importance"`
-		SourceCount   int    `json:"source_count"`
-		Words         int    `json:"words"`
-	}
-	mk := func(i int, title, dek string, importance int) story {
-		slug := fmt.Sprintf("capture-fixture-%d", i)
-		return story{
-			PublicationID: slug, Title: title, Dek: dek,
-			UpdatedAt:    fmt.Sprintf("2026-01-01T%02d:00:00Z", 12-i),
-			VersionCount: 2, LatestRev: 2,
-			Route:      route{Bare: "/pub/texture/" + slug, Permalink: "/pub/texture/" + slug + "/v2"},
-			Importance: importance, SourceCount: 4 + i, Words: 600 + 40*i,
-		}
-	}
-	raw, err := json.Marshal(map[string]any{"stories": []story{
-		mk(1, "Sample lead story for the layout capture", "A fixture dek: one sentence under the headline, as a living story carries.", 9),
-		mk(2, "Sample second story", "A fixture dek for the top tier of the front page.", 7),
-		mk(3, "Sample third story", "A fixture dek for the top tier of the front page.", 7),
-		mk(4, "Sample brief", "A fixture dek for the briefs.", 4),
-		mk(5, "Sample brief, again", "A fixture dek for the briefs.", 3),
-	}, "next_cursor": ""})
-	if err != nil {
-		panic(err)
-	}
-	return raw
-}()
-
-// serveFrontFixture answers the front list: the fixture for the front page,
-// an empty list for a section page (a section page is never an error).
-func serveFrontFixture(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	if r.URL.Query().Get("section") != "" {
-		_, _ = io.WriteString(w, `{"stories":[],"next_cursor":""}`)
-		return
-	}
-	_, _ = w.Write(frontFixture)
 }
