@@ -296,7 +296,7 @@ func (t *deployRefreshTracker) ensure(entry deployRefreshPendingEntry) {
 	if ok && known.Kind == deployRefreshKindWokeBehind {
 		// A computer that woke behind keeps its kind, and so the user-idle
 		// gate: the sweep aims it at the computer's own release.
-		known.Target = entry.Target
+		known.retargetTo(entry.Target, time.Now().UTC())
 		t.pending[key] = known
 		t.saveLocked()
 		return

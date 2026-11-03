@@ -90,6 +90,24 @@ func deployRefreshRetryDue(e deployRefreshPendingEntry, now time.Time) bool {
 	return now.Sub(e.LastAttemptAt) >= gap
 }
 
+// retargetTo aims the entry at a different target. A new target is new work,
+// not a refusal that "does not clear by itself": the attempt count and
+// FirstDeferredAt restart, so the backoff counts refusals of one target only
+// (problem 27: an always-busy arm carried 37 attempts across releases and
+// waited an hour for each new one). An empty or equal target changes nothing.
+func (e *deployRefreshPendingEntry) retargetTo(target string, now time.Time) {
+	if target == "" || e.Target == target {
+		return
+	}
+	if e.Attempts > 0 {
+		log.Printf("vmctl: deploy refresh of %s re-targeted %s -> %s; attempts reset (was %d since %s)",
+			e.VMID, e.Target, target, e.Attempts, e.FirstDeferredAt.Format(time.RFC3339))
+	}
+	e.Target = target
+	e.Attempts = 0
+	e.FirstDeferredAt = now
+}
+
 // deployRefreshKindWokeBehind marks the "resume, then update" entry. Only this
 // kind waits for the user-idle gate.
 const deployRefreshKindWokeBehind = "woke_behind"
@@ -189,12 +207,12 @@ func (t *deployRefreshTracker) enroll(entry deployRefreshPendingEntry) {
 }
 
 // setTarget moves a known entry to a newer target.
-func (t *deployRefreshTracker) setTarget(userID, desktopID, target string) {
+func (t *deployRefreshTracker) setTarget(userID, desktopID, target string, now time.Time) {
 	key := ownershipKey(userID, normalizeDesktopID(desktopID))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if entry, ok := t.pending[key]; ok && entry.Target != target {
-		entry.Target = target
+		entry.retargetTo(target, now)
 		t.pending[key] = entry
 		t.saveLocked()
 	}
@@ -321,6 +339,7 @@ func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefre
 	if !keepKind {
 		entry.Kind, entry.Release = "", ""
 	}
+	entry.retargetTo(req.Target, now)
 	entry.Target = req.Target
 	entry.VMID, entry.ComputerID = resp.VMID, resp.ComputerID
 	entry.LastAttemptAt, entry.LastReason, entry.BusyAllowed = now, resp.Reason, resp.BusyAllowed
@@ -476,7 +495,7 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 				}
 				if commit != "" && commit != entry.Target {
 					entry.Target = commit
-					h.deployRefreshState().setTarget(entry.UserID, entry.DesktopID, commit)
+					h.deployRefreshState().setTarget(entry.UserID, entry.DesktopID, commit, time.Now().UTC())
 				}
 			}
 		}

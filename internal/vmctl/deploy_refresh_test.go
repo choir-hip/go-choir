@@ -476,8 +476,8 @@ func TestDeployRefreshPendingSurvivesVMCTLRestartAndKeepsNewestTarget(t *testing
 		t.Fatal(err)
 	}
 	pending := h2.pendingDeployRefreshes()
-	if len(pending) != 1 || pending[0].Target != "bbbb2222" || pending[0].Attempts != 2 {
-		t.Fatalf("reloaded pending = %+v, want one entry for the newest target with 2 attempts", pending)
+	if len(pending) != 1 || pending[0].Target != "bbbb2222" || pending[0].Attempts != 1 {
+		t.Fatalf("reloaded pending = %+v, want one entry for the newest target with 1 attempt (a new target restarts the count)", pending)
 	}
 
 	// The selection lists it, so an operator sees it without SSH.
