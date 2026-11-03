@@ -159,6 +159,13 @@ func deterministicDocumentAssignmentCapability(assignmentID string, attempt uint
 type assignmentSpawnRequest struct {
 	Objective            string
 	ModelPolicyOverlayID string
+	// Source is the source the request binds on when it moved since the
+	// Cast (problem 28); the bind re-stamps the binding with it.
+	Source *types.EngineeringBindSource
+	// SourceAtBind is set when the source was read at bind: a capsule an
+	// earlier, unbound attempt left behind is replaced, never adopted, since
+	// its source is not known.
+	SourceAtBind bool
 }
 
 // engineeringCastSpec is the spec management passes with a Cast to
@@ -497,9 +504,24 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 	if rt.capsuleExecutor == nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("assigned Engineering capsule authority unavailable")
 	}
-	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
-	if err != nil {
-		return AssignedEngineeringStart{}, fmt.Errorf("preflight resumed assignment subject: %w", err)
+	// Problem 28: the source is captured at bind. A request whose Cast read
+	// HEAD before a planned restart onto a new base binds on what the booted
+	// computer projects now; its candidate would otherwise freeze on a base
+	// the updater refuses (base_moved_since_freeze).
+	preflight, source, atBind := rt.sourceAtBind(ctx, assignment)
+	if atBind {
+		req.Source, req.SourceAtBind = source, true
+		if source != nil {
+			log.Printf("runtime: engineering assignment %s binds on the source the computer projects now: %s (its Cast read %s)",
+				assignment.AssignmentID, source.SourceArtifactRef, source.PriorSourceArtifactRef)
+			assignment.Binding.SourceArtifactRef, assignment.Binding.SubjectDigest = source.SourceArtifactRef, source.SubjectDigest
+		}
+	} else {
+		var err error
+		preflight, err = rt.sourcePreflighter().PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
+		if err != nil {
+			return AssignedEngineeringStart{}, fmt.Errorf("preflight resumed assignment subject: %w", err)
+		}
 	}
 	logAssignmentSagaPhase(assignment.Binding.CapsuleID, assignment.AssignmentID, "resume_preflight", phaseStarted)
 	if preflight.ArtifactRef != assignment.Binding.SourceArtifactRef ||
@@ -511,6 +533,64 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 		return AssignedEngineeringStart{}, fmt.Errorf("resumed assignment capability does not match the committed binding")
 	}
 	return rt.spawnBindActivateAssignment(ctx, assignment, preflight, opaque, req)
+}
+
+// takesSourceAtBind reports whether an unbound request may take its source
+// at bind (problem 28): an ordinary implementation request on management's
+// records route, seeded from HEAD, still open and unbound (no run, so no
+// work done). A rebase round stays on the booted base its notice named, a
+// request seeded from a candidate or a verification stays on its subject. A
+// Cast that cannot be read counts as a rebase: the committed source stands.
+// A capsule left by an earlier attempt that never bound may be on either
+// source, so the saga replaces it (review r1: an interrupted attempt that
+// spawned on Y must not be bound as X).
+func (rt *Runtime) takesSourceAtBind(ctx context.Context, assignment types.EngineeringAssignment) bool {
+	binding := assignment.Binding
+	if rt == nil || rt.store == nil || !binding.Records() || binding.Kind != types.EngineeringAssignmentImplementation ||
+		strings.TrimSpace(binding.SourceCandidateID) != "" || !strings.HasPrefix(binding.SourceArtifactRef, "capsule-source-git:") ||
+		assignment.Disposition != types.EngineeringAssignmentOpen || strings.TrimSpace(assignment.BoundRunID) != "" ||
+		assignment.CapsuleDisposition != types.EngineeringCapsuleUnbound {
+		return false
+	}
+	if rt.assignedCapsule() == nil {
+		return false
+	}
+	cast, err := rt.store.GetCommitmentRecord(ctx, binding.OwnerID, binding.ComputerID, binding.ParentControlID)
+	if err != nil || cast == nil || cast.Directive == nil {
+		return false
+	}
+	if body := strings.TrimSpace(cast.Directive.Body); body != "" && body != "null" {
+		var spec engineeringCastSpec
+		if json.Unmarshal([]byte(body), &spec) != nil || strings.TrimSpace(spec.RebaseNotice) != "" || types.CastRebaseNotice(body) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// sourceAtBind reads the source an eligible request binds on: the guest
+// source HEAD after a reconcile of the source projection, the same read the
+// Cast made. ok is false when the request is not eligible or HEAD cannot be
+// read; the caller then preflights the committed source as before. source is
+// nil when HEAD is still the committed source.
+func (rt *Runtime) sourceAtBind(ctx context.Context, assignment types.EngineeringAssignment) (preflight capsule.SourcePreflight, source *types.EngineeringBindSource, ok bool) {
+	if !rt.takesSourceAtBind(ctx, assignment) {
+		return capsule.SourcePreflight{}, nil, false
+	}
+	rt.reconcileSourceProjectionLogged(ctx, "bind")
+	current, err := rt.sourcePreflighter().PreflightSourceSnapshot(ctx, "")
+	if err != nil || !strings.HasPrefix(current.ArtifactRef, "capsule-source-git:") || strings.TrimSpace(current.SubjectDigest) == "" {
+		log.Printf("runtime: engineering assignment %s: the source at bind could not be read (%v); it binds on its Cast's source", assignment.AssignmentID, err)
+		return capsule.SourcePreflight{}, nil, false
+	}
+	if current.ArtifactRef == assignment.Binding.SourceArtifactRef {
+		return current, nil, true
+	}
+	return current, &types.EngineeringBindSource{
+		PriorSourceArtifactRef: assignment.Binding.SourceArtifactRef,
+		SourceArtifactRef:      current.ArtifactRef,
+		SubjectDigest:          "sha256:" + strings.TrimPrefix(current.SubjectDigest, "sha256:"),
+	}, true
 }
 
 // assignmentObjective is the committed objective of a records assignment:
@@ -625,6 +705,8 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
 	capsuleID := binding.CapsuleID
 	runID := "run:" + assignmentID
+	// The executor in production; a test substitutes it (assignmentRuntime).
+	exec := rt.assignedCapsule()
 	cancelOpen := func(cause error) error {
 		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr == nil && !current.Disposition.Terminal() {
@@ -683,17 +765,25 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	}
 	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "reclaim", phaseStarted)
 	var created *capsule.Capsule
-	if rt.capsuleExecutor.HasCapsule(capsuleID) {
+	if req.SourceAtBind && exec.HasCapsule(capsuleID) {
+		// Problem 28: an unbound attempt's capsule ran no engineer, and it
+		// may sit on another source than this bind's. Replace it.
+		if destroyErr := exec.ForceDestroy(context.Background(), capsuleID); destroyErr != nil || exec.HasCapsule(capsuleID) {
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("replace the unbound capsule %s before binding on the source read at bind: %v", capsuleID, destroyErr))
+		}
+		log.Printf("runtime: engineering assignment %s: replaced unbound capsule %s to bind on %s", assignmentID, capsuleID, preflight.ArtifactRef)
+	}
+	if exec.HasCapsule(capsuleID) {
 		// Resume after a crash between spawn and bind: the capsule already
 		// exists; verify it is still active rather than respawning.
-		diagnostics, diagErr := rt.capsuleExecutor.InspectCapsuleRaw(capsuleID)
+		diagnostics, diagErr := exec.InspectCapsuleRaw(capsuleID)
 		if diagErr != nil || diagnostics == nil {
 			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("resumed assignment capsule is not inspectable: %v", diagErr))
 		}
 		created = &capsule.Capsule{ID: capsuleID, State: capsule.StateActive}
 	} else {
 		var spawnErr error
-		created, spawnErr = rt.capsuleExecutor.Spawn(spawnCtx, spec)
+		created, spawnErr = exec.Spawn(spawnCtx, spec)
 		if spawnErr != nil {
 			spawnErr = fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr)
 			if busy := engineeringHostMemoryWait(assignmentID, spawnErr); busy != nil && rt.kernelMode && rt.scheduleActor != nil {
@@ -734,18 +824,18 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		} else if existing := strings.TrimSpace(current.CapsuleIntentRef); existing != "" {
 			intent = existing
 		}
-		_ = rt.capsuleExecutor.RevokeCapability(runID, opaque)
-		if rt.capsuleExecutor.HasCapsule(capsuleID) {
-			if destroyErr := rt.capsuleExecutor.ForceDestroy(context.Background(), capsuleID); destroyErr != nil {
+		_ = exec.RevokeCapability(runID, opaque)
+		if exec.HasCapsule(capsuleID) {
+			if destroyErr := exec.ForceDestroy(context.Background(), capsuleID); destroyErr != nil {
 				return fmt.Errorf("%w (destroy after pre-bind revoke intent: %v)", cause, destroyErr)
 			}
 		}
-		if rt.capsuleExecutor.HasCapsule(capsuleID) {
+		if exec.HasCapsule(capsuleID) {
 			return fmt.Errorf("%w (pre-bind capsule continued after executor acknowledgement)", cause)
 		}
 		acked := requested
 		if requested.CapsuleDisposition != types.EngineeringCapsuleRevoked {
-			receipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(runID, requested.Binding.CapabilityDigest, capsuleID, intent)
+			receipt, receiptErr := exec.PersistRevocationReceipt(runID, requested.Binding.CapabilityDigest, capsuleID, intent)
 			if receiptErr != nil {
 				return fmt.Errorf("%w (persist structured pre-bind revoke acknowledgement: %v)", cause, receiptErr)
 			}
@@ -790,7 +880,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "spawn", phaseStarted)
 	spawnedAt := time.Now().UTC()
 	slot := "implementation"
-	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleEngineering, capsuleID, opaque, 24*time.Hour, slot)
+	capability, err := exec.MintCapabilityHandle(runID, capsule.RoleEngineering, capsuleID, opaque, 24*time.Hour, slot)
 	grantedAt := time.Now().UTC()
 	if err != nil {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
@@ -843,6 +933,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		CommandID: "engineering-bind:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
 		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: assignment.LifecycleVersion,
 		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID, GrantPolicyAttestation: grantAttestation,
+		Source: req.Source,
 	}
 	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
 	if err != nil {

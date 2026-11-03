@@ -746,6 +746,20 @@ type BindEngineeringAssignmentRequest struct {
 	OpaqueCapability         string                             `json:"-"`
 	CapsuleID                string                             `json:"capsule_id,omitempty"`
 	GrantPolicyAttestation   *EngineeringGrantPolicyAttestation `json:"grant_policy_attestation,omitempty"`
+	// Source, when set, captures the request's source at bind (problem 28):
+	// an unbound implementation request opened before a planned restart
+	// binds on the source the booted computer projects now, not on the one
+	// its Cast read. The store re-stamps the binding only when its committed
+	// source is still PriorSourceArtifactRef.
+	Source *EngineeringBindSource `json:"source,omitempty"`
+}
+
+// EngineeringBindSource is the source an unbound implementation request
+// binds on, read at bind, and the committed source it replaces.
+type EngineeringBindSource struct {
+	PriorSourceArtifactRef string `json:"prior_source_artifact_ref"`
+	SourceArtifactRef      string `json:"source_artifact_ref"`
+	SubjectDigest          string `json:"subject_digest"`
 }
 
 type RecordEngineeringAssignmentReportRequest struct {

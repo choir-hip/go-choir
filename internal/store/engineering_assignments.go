@@ -1517,6 +1517,11 @@ func (s *Store) BindEngineeringAssignment(ctx context.Context, req types.BindEng
 		DigestEngineeringOpaqueCapability(req.OpaqueCapability) != assignment.Binding.CapabilityDigest || req.CapsuleID != assignment.Binding.CapsuleID {
 		return types.EngineeringAssignmentCommandResult{}, ErrEngineeringAssignmentInvalid
 	}
+	if req.Source != nil {
+		if assignment, err = restampEngineeringBindSource(assignment, *req.Source); err != nil {
+			return types.EngineeringAssignmentCommandResult{}, err
+		}
+	}
 	authority, err := s.requireEngineeringAssignmentAuthority(ctx, assignment.Binding)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
@@ -1608,6 +1613,29 @@ func (s *Store) BindEngineeringAssignment(ctx context.Context, req types.BindEng
 	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleBindEngineeringAssignment, types.LifecycleEngineeringAssignmentBound,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "",
 		[]objectgraph.Object{updatedObj, assignedAgentObj, runObj, runClaimObj, capabilityObj, capsuleObj}, conditions, []objectgraph.Edge{runEdge}, nil)
+}
+
+// restampEngineeringBindSource captures an unbound implementation request's
+// source at bind (problem 28): the binding takes the source the booted
+// computer projects now, in the bind's own transaction. Only an ordinary
+// records implementation request seeded from a git source, still open and
+// unbound, whose committed source is the prior the runtime read, is
+// re-stamped; anything else is refused.
+func restampEngineeringBindSource(assignment types.EngineeringAssignment, source types.EngineeringBindSource) (types.EngineeringAssignment, error) {
+	binding := assignment.Binding
+	prior, ref, digest := strings.TrimSpace(source.PriorSourceArtifactRef), strings.TrimSpace(source.SourceArtifactRef), strings.TrimSpace(source.SubjectDigest)
+	if !binding.Records() || binding.Kind != types.EngineeringAssignmentImplementation || strings.TrimSpace(binding.SourceCandidateID) != "" ||
+		assignment.Disposition != types.EngineeringAssignmentOpen || assignment.CapsuleDisposition != types.EngineeringCapsuleUnbound ||
+		strings.TrimSpace(assignment.BoundRunID) != "" || prior != binding.SourceArtifactRef ||
+		!strings.HasPrefix(prior, "capsule-source-git:") || !strings.HasPrefix(ref, "capsule-source-git:") || ref == prior {
+		return assignment, fmt.Errorf("bind source re-stamp: %w", ErrEngineeringAssignmentInvalid)
+	}
+	binding.SourceArtifactRef, binding.SubjectDigest = ref, digest
+	if err := binding.Validate(); err != nil {
+		return assignment, fmt.Errorf("bind source re-stamp: %v: %w", err, ErrEngineeringAssignmentInvalid)
+	}
+	assignment.Binding = binding
+	return assignment, nil
 }
 
 func engineeringReportChangedSubject(report types.EngineeringAssignmentReport, originalDigest string) bool {
