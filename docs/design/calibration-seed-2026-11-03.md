@@ -27,6 +27,23 @@ program." Chosen, all together:
 digest is on, and the A/B split is the experiment. The program keeps
 adding ideas; each is one experiment per desk at a time.
 
+## Engineering is the test bed, not the scope (owner, 2026-11-03)
+
+"we may/should expand the calibration seed to other desks besides eng. the
+eng test is to get evidence to figure out the right way (eg should it be
+injected as an initial prompt? or just optionally accessible in the repl?
+what information is useful? how does this vary across configurations?
+etc." The engineering experiment answers four design questions, then the
+seed widens to management, research, Texture and the app desks:
+1. Delivery: injected at run start against data the desk may read in the
+   REPL (and whether and when it reads it).
+2. Content: which information changes behaviour (aggregate bins, per claim
+   type, per model, recent misses with their why, discrepancies).
+3. Configuration: how the answer varies by model, desk, and computer.
+4. Cost: tokens and latency per run.
+Each arm is one variable at a time; results go to this file before any
+other desk gets the seed.
+
 ## The bridge to progressive delivery (owner, 2026-11-03)
 
 "calibration in particular is the bridge between the 2 missions." A change
