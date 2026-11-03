@@ -62,19 +62,32 @@ step() { # id pass|fail detail
   python3 -c 'import json,sys;print(json.dumps({"step":sys.argv[1],"result":sys.argv[2],"detail":sys.argv[3]}))' "$id" "$res" "$detail" >>"$steps"
   [[ $res == pass ]] || fails=$((fails + 1))
 }
+# logout_retry <stdout-file> <stderr-file>: the auth service limits each
+# address to 10 auth requests a minute, and a run spends about that many
+# signing in, so a logout right after can answer 429; retry past the window.
+logout_retry() {
+  local i
+  for i in 1 2 3 4; do
+    "$out/choir" logout >"$1" 2>"$2" && return 0
+    grep -q 'HTTP 429' "$2" || return 1
+    sleep 30
+  done
+  return 1
+}
 finish() {
   # Every exit path revokes the run's key: a key the run minted but did not
   # log out (a failed C1 or S1, an interrupt) must not outlive it.
   [[ -n "${login_pid:-}" ]] && kill "$login_pid" 2>/dev/null || true
   if [[ -e "${creds:-/nonexistent}" ]]; then
-    if "$out/choir" logout >/dev/null 2>"$out/logs/exit-logout.err"; then
+    if logout_retry /dev/null "$out/logs/exit-logout.err"; then
       echo "exit: revoked the run's key (choir logout)"
     else
-      echo "WARN exit: could not revoke the run's key: $(tail -1 "$out/logs/exit-logout.err")" >&2
+      echo "WARN exit: could not revoke the run's key: $(tail -1 "$out/logs/exit-logout.err"); the credentials file stays at $creds (mode 0600) so it can be revoked" >&2
       fails=$((fails + 1))
     fi
   fi
-  rm -rf "$out/config"
+  # Keep an unrevoked key's file: deleting it would orphan a live key.
+  [[ -e "${creds:-/nonexistent}" ]] || rm -rf "$out/config"
   python3 - "$out" "$backend" "$fails" <<'PY'
 import json, sys, datetime
 out, backend, fails = sys.argv[1], sys.argv[2], int(sys.argv[3])
@@ -184,7 +197,7 @@ fi
 
 # R1: logout revokes.
 old_key="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["api_key"])' "$creds")"
-if "$out/choir" logout >"$out/logout.json" 2>"$out/logs/logout.err" && [[ ! -e "$creds" ]]; then
+if logout_retry "$out/logout.json" "$out/logs/logout.err" && [[ ! -e "$creds" ]]; then
   code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $old_key" "$backend/auth/api-keys")"
   if [[ "$code" == 401 ]]; then
     step R1 pass "choir logout removed the file; the old key answers 401"
