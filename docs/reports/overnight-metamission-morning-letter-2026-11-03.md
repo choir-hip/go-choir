@@ -1,0 +1,35 @@
+# Overnight Metamission Morning Letter 2026-11-03
+
+Written on Tuesday morning, November third, at about half past seven your time. It covers the overnight metamission from about nine last night to now, roughly fourteen hours, across progressive delivery and the self-development arms.
+
+Progressive delivery is built and proved, and the first self-developed app now sits in the Library, but most of the night went to finding and fixing the platform defects that self-development kept walking into.
+
+Here is where things stand. Every release now walks the rings, d@e first and the paper last, and rolls itself back when a health check breaks. A deliberately broken release was stopped at d@e and never reached anyone else. The four test arms count as test computers now, so they take a release about eleven minutes after a deploy, and a blocking fix can be expedited to every computer at once, which is now standing policy, as you asked. On the self-development side, the pool arm's Files app was published to the Library, the first release made by a computer for itself. The Claude and pool arms are blocked on one rebase fix in its last review round, and the DeepSeek arm is stopped until a fix for a costly loop lands. Nothing waits on you. Read on for the decisions you made overnight, which are now in the code and the operating contract.
+
+## The night's first half: delivery
+
+The ring walk landed after two review rounds with both reviewers, then a planted fault proved the rollback: d@e breached its health guard, the walk pinned everyone back, and the test ring never opened. The first real deploy reached three arms in eleven minutes. I then added the expedite path, the test tier for the arms and soaks of minutes for the first two rings, all under one review that took three rounds. The fixes for the stalled self-development rounds were the first expedite in real use: every ring opened at once, and your computer and the paper took the release within a minute.
+
+The lesson of this half was about pushes. Each push to main cancels the CI run in flight, and early on I cancelled my own deploys several times. Worse, one of my squashes reverted about one hundred and ninety files that had landed since its branch point. I caught it before deploy and restored everything in the next commit. I now stage only named files, squash only from the merge base, and batch pushes between deploys.
+
+## Your rulings, now in the code
+
+You made several calls during the night, and each one is now built or being built. Capsules are an overlay over the exact computer state, so an engineer sees the computer's real files and a copy of its store, never a credential and never a write path. The source tree updates itself after every deploy, saving any local edit first. Self-development applies itself, and management chooses the gating per change, from a policy you can change with a prompt; that design is written and waiting for its build, behind an undo screen that has to come first. The Claude delegate runs Claude Code with bypass permissions, and its token now lives only on the host, behind the gateway, as a pre-release arrangement you chose. Blocking fixes are expedited as policy.
+
+## The night's second half: the arms
+
+The Files rounds started slowly, at about fifty minutes each. I had the traces read rather than guessing, and the time was mostly the model writing whole files and rerunning the full screenshot harness after every edit. Edit verbs, a shot helper with single shots, and a parked delegate wait went in, and the pool arm's next round went from request to applied in twenty three minutes.
+
+Then the arms kept hitting the platform. In order: self-development mode was off on every arm; capsules could not see the computer's files, which nobody had ever fixed; the rebase notice went only to a root desk the arms do not run; the Library refused a round whose parent was unpublished; and Texture never heard whether a candidate applied. All of those are fixed and deployed. Since then five more appeared. One was mine: a comment I put on the same line as Luna's reasoning setting reached ChatGPT as part of the value. Three rebase-path defects in one hour triggered the clustering rule, so the builder is treating the notice as a typed record rather than text the models copy. A Texture loop on the DeepSeek arm spent a model call every few seconds, so I stopped that arm. And this morning two races surfaced in CI, one of them in tape compaction, which I am treating as real until the code says otherwise.
+
+What should be different: tooling I ship to engineers needs to run in a real capsule before it lands. The shot helper and the parser both failed on first real use.
+
+## What to remember
+
+The delivery machinery works and is fast now; the self-development loop works end to end at least once, from request to Library release; and what remains is a short list of platform defects, each with a builder.
+
+If I were holding the phone, I would let the rebase fix and the tape race fix land this morning, start the DeepSeek arm after the loop fix, and then look at the undo screen and the doctrine edits that make self-development apply itself.
+
+## Names and receipts
+
+Goal: docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md, with its ledger. Progressive delivery: docs/definitions/choir-progressive-delivery-2026-11-03.md; ring design docs/design/ring-ordered-deploys-2026-11-03.md; rollback artifact docs/evidence/ring-walk-rollback-acceptance-2026-11-03.jsonl. Key commits: 2795b8ee6 ring walk; e6139f198 expedite and test tier; 786225283 overlay, source auto-update and cycle time; 55420cab4 delegate via gateway; eb1fb6408 the expedited blocker fixes; 067cd95e2 the policy parser; 376636a90 the shot helper (CI red on two races). Library release from pool: package files-next, release 0f8733c219d90904c44a86fc7981698a302c0540e9408fa580b3a54bf2698601. Problems: docs/problems/selfdev-arm-rounds-fail-at-freeze-and-capsules-lack-real-content-2026-11-03.md (1 to 18) and docs/problems/selfdev-round-blockers-cluster-2026-11-03.md. Evidence: docs/evidence/selfdev-round-cycle-time-2026-11-03.md, docs/evidence/selfdev-blockers-deployed-proof-2026-11-03.md, the per-arm round docs. Store split closed separately: docs/reports/store-split-closing-2026-11-03.md. Spend by arm, from lane C: pool about $2.0, claude about $3.6, deepseek about $4.0 to $5.2, luna about $0.9. Open: problems 14 and 16 (rebase, review round 3), 17 (Texture loop, review round 2), 19 and 20 (CI races, building); the gating build and its undo screen; the delegate grant as an owner act.
