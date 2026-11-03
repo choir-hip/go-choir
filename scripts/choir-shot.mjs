@@ -78,6 +78,8 @@
 // <name>-<W>x<H>.png for --size. Presets: desktop 1280x800, tablet 820x1180,
 // mobile 390x844. Run single shots while iterating; run the full set once
 // before choir.Freeze (a change no one looks at needs no shot).
+// Each shot starts from a clean desktop (resetDesktop, before the page opens);
+// one shot is one page load plus its single act, so there is no between-step reset.
 //
 // Real content: when /computer/state.db exists (an implementation capsule's
 // private copy of the computer's store), the helper starts an autoputer itself
@@ -572,6 +574,21 @@ export function missingDependencies(frontend, depsModules) {
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
+// resetDesktop empties the owner's persisted desktop (PUT /api/desktop/state with
+// no windows, as the driver; the shell's own save path, the store converges every
+// session on it) so a shot starts from a clean desktop. The shell restores saved
+// windows on load, and the autoputer keeps them across shots, so without this
+// shot N shows the windows of shots 1..N-1. `put` is injectable for the unit test.
+export const DESKTOP_STATE_PATH = '/api/desktop/state';
+export async function resetDesktop(base, put = fetch) {
+  const res = await put(base + DESKTOP_STATE_PATH, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Choir-Driver': 'true' },
+    body: JSON.stringify({ windows: [], active_window_id: '', driver: true }),
+  });
+  if (!res.ok) throw new Error(`desktop reset failed (${res.status})`);
+}
+
 function proxy(req, res) {
   const headers = { ...req.headers, host: `127.0.0.1:${AUTOPUTER_PORT}`, 'x-authenticated-user': AUTOPUTER_USER };
   const up = http.request({ host: '127.0.0.1', port: AUTOPUTER_PORT, method: req.method, path: req.url, headers }, (r) => {
@@ -721,6 +738,7 @@ async function main() {
       try {
         const s = it.shot;
         themeState.preset = it.theme;
+        if (useComputer) await resetDesktop(base);
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         if (s.routes) await s.routes(context, base);
         const page = await context.newPage();

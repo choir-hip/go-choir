@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
-  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine,
+  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -282,3 +282,14 @@ if (process.env.CHOIR_FRONTEND_DEPS && process.env.CHOIR_BROWSER) {
   console.log('choir_shot_test: no CHOIR_FRONTEND_DEPS/CHOIR_BROWSER; skipped the real run');
 }
 console.log('choir_shot_test: ok');
+
+// Each shot starts from a clean desktop: the reset PUTs an empty window list as the driver.
+{
+  const calls = [];
+  await resetDesktop('http://h:1', async (url, init) => { calls.push({ url, init }); return { ok: true, status: 200 }; });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://h:1/api/desktop/state');
+  assert.equal(calls[0].init.method, 'PUT');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { windows: [], active_window_id: '', driver: true });
+  await assert.rejects(resetDesktop('http://h:1', async () => ({ ok: false, status: 500 })), /desktop reset failed \(500\)/);
+}
