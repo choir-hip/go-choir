@@ -344,3 +344,12 @@ theme spec cannot be scoped to one package. The other arms' engineers wrote thei
 not use choir-shot. This revises the luna verdict: luna's last round was stopped by the capsule's tooling, not only
 by the engineer. Fix direction: resolve choir-shot's Vite build and the specs against $CHOIR_FRONTEND_DEPS/node_modules
 (NODE_PATH or a symlinked node_modules), and give theme-contract.spec.js a package filter.
+
+## Problem 19: after 0de7c5865, pool's U4 timer mints no rebase notice ("rebase_needs_root")
+
+Pool refreshed to 0de7c5865 at 12:58Z ("source base fetch (attempt 1): fetched commit=0de7c5865d0c" 12:58:05Z). At
+13:03:04Z, the stay-up mark, the guest logged "rebase notice: none minted: rebase_needs_root: no live root desk to Cast the
+rebase". 524a94bad says a computer with no live root desk sends the notice to the stack operation's own document Texture
+(pool's is b1ad3952, trajectory 5dc6a6ff: live, activation passivated, last turn 10:50:16Z). At 10:45Z the same arm minted
+a notice to that Texture. So the fallback did not take on this boot, and pool's Slides round (doc 023c9d49) still cannot
+build. Shift tried: an owner revision on b1ad3952 (13:10Z) to wake that Texture, then watch for a re-mint.
