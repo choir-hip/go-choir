@@ -66,6 +66,9 @@ type CapsuleToolCtx struct {
 	// (selfdev_screens.go). Nil or empty leaves a screen unsaved.
 	Images    screenAssetStore
 	FilesRoot string
+	// BootedCommit answers the commit this computer booted (its running
+	// build). Freeze names it beside the release base; nil leaves it out.
+	BootedCommit func() string
 	// frozenTree is the executor read a second Freeze on a frozen operation
 	// takes to compare the capsule's tree with the candidate (R9-1); nil
 	// uses Executor. A test substitutes it to drive the replay check
@@ -387,6 +390,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if record.ReleaseBinary != nil {
 		out["release_binary_origin"] = record.ReleaseBinary.Origin
 	}
+	var bootedCommit string
+	if toolCtx.BootedCommit != nil {
+		bootedCommit = toolCtx.BootedCommit()
+	}
+	noteFreezeBase(out, record.SourcePatchBaseCommit, bootedCommit)
 	// Problem 14: the hunks of the applied change this rebase dropped because
 	// the new base already carries them, so the drop is visible.
 	if len(rebaseUpstreamed) > 0 {
@@ -1176,4 +1184,32 @@ func firstString(values []string) string {
 		return ""
 	}
 	return values[0]
+}
+
+// noteFreezeBase adds the commit a Freeze froze on (release_base: the base its
+// source patch is authored against) and the commit the computer booted
+// (booted_commit) to the Freeze result, and a one-line base_note when both are
+// known and differ, so a mismatch shows before the approver runs. It is
+// read-only: nothing here decides, refuses or changes the frozen bundle. An
+// empty value is left out; "local" or a dirty build is a dev build and is
+// reported as is.
+func noteFreezeBase(out map[string]any, releaseBase, bootedCommit string) {
+	releaseBase = strings.ToLower(strings.TrimSpace(releaseBase))
+	bootedCommit = strings.ToLower(strings.TrimSpace(bootedCommit))
+	if releaseBase != "" {
+		out["release_base"] = releaseBase
+	}
+	if bootedCommit != "" {
+		out["booted_commit"] = bootedCommit
+	}
+	if releaseBase != "" && bootedCommit != "" && releaseBase != bootedCommit {
+		out["base_note"] = fmt.Sprintf("release base %s differs from this computer's booted commit %s: the approver may refuse or rebase the release", shortCommit(releaseBase), shortCommit(bootedCommit))
+	}
+}
+
+func shortCommit(c string) string {
+	if len(c) > 12 {
+		return c[:12]
+	}
+	return c
 }
