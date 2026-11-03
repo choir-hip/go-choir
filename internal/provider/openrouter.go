@@ -126,6 +126,13 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 			(resp.StatusCode == http.StatusTooManyRequests && openRouterRateLimitIsQuota(reason)) {
 			return nil, &upstreamQuotaError{provider: "openrouter", status: resp.Status}
 		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			// A short rate limit (the per-minute cap): the guest retries
+			// the same model, and the breaker counts it only in a long
+			// streak, as Synthetic's concurrency 429. The arm pins one
+			// model, so a burst must not open its breaker (review r1b).
+			return nil, &upstreamConcurrencyError{provider: "openrouter", status: resp.Status}
+		}
 		return nil, fmt.Errorf("openrouter: status %s (sanitized)", resp.Status)
 	}
 	if !req.Stream {

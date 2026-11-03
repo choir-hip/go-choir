@@ -44,18 +44,26 @@ const (
 var ErrConcurrencyGateWait = errors.New("call ended while waiting for a synthetic concurrency slot")
 
 // ErrUpstreamConcurrencyLimit: Synthetic answered 429, its account concurrency
-// limit. It is no evidence that the model is unhealthy.
+// limit, or OpenRouter answered a 429 that is a short rate limit (its
+// per-minute cap). It is no evidence that the model is unhealthy.
 var ErrUpstreamConcurrencyLimit = errors.New("upstream concurrency limit")
 
 // upstreamConcurrencyError keeps the sanitized status text the run reads and
 // matches ErrUpstreamConcurrencyLimit.
-type upstreamConcurrencyError struct{ status string }
+type upstreamConcurrencyError struct {
+	status   string
+	provider string // "" is synthetic
+}
 
 // The "concurrency limit" words tell the guest this 429 clears in seconds:
 // it retries the same model instead of failing the run over
 // (docs/design/model-pool-autoroute-2026-11-02.md).
 func (e *upstreamConcurrencyError) Error() string {
-	return fmt.Sprintf("synthetic: status %s (concurrency limit, sanitized)", e.status)
+	provider := e.provider
+	if provider == "" {
+		provider = "synthetic"
+	}
+	return fmt.Sprintf("%s: status %s (concurrency limit, sanitized)", provider, e.status)
 }
 
 func (e *upstreamConcurrencyError) Is(target error) bool {

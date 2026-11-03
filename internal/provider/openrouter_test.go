@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -195,6 +196,9 @@ func TestOpenRouterStatusClassification(t *testing.T) {
 			_, err := p.call(context.Background(), r, func(StreamChunk) {})
 			if err == nil {
 				t.Fatalf("%s stream=%v: no error", tc.name, stream)
+			}
+			if tc.status == http.StatusTooManyRequests && !tc.quota && !errors.Is(err, ErrUpstreamConcurrencyLimit) {
+				t.Fatalf("%s stream=%v: a short 429 is not typed a concurrency limit: %v", tc.name, stream, err)
 			}
 			if IsQuotaExhausted(err) != tc.quota || !strings.Contains(err.Error(), tc.want) || !strings.HasPrefix(err.Error(), "openrouter:") {
 				t.Fatalf("%s stream=%v: err %v quota %v", tc.name, stream, err, IsQuotaExhausted(err))
