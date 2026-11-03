@@ -386,27 +386,14 @@ func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computer
 	// settled trajectory starts a new one for the same document, so the
 	// operation's own trajectory may no longer bind it (problem 21, pool
 	// 13:58Z: b1ad3952 had moved past 5dc6a6ff).
-	docID, err := rt.operationDocumentID(ctx, ownerID, computerID, operation)
+	doc, why, err := rt.operationDocument(ctx, ownerID, computerID, operation)
 	if err != nil {
 		return rebaseAddressee{}, err
 	}
-	if docID == "" {
-		return rebaseAddressee{Why: "its trajectory " + strings.TrimSpace(operation.TrajectoryID) + " names no document"}, nil
+	if why != "" {
+		return rebaseAddressee{Why: why}, nil
 	}
-	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
-	if errors.Is(err, store.ErrNotFound) {
-		return rebaseAddressee{Why: "its document " + docID + " is not on the tape"}, nil
-	}
-	if err != nil {
-		return rebaseAddressee{}, fmt.Errorf("document %s: %w", docID, err)
-	}
-	if doc.ArchivedAt != nil {
-		return rebaseAddressee{Why: "its document " + docID + " is archived"}, nil
-	}
-	trajectoryID := strings.TrimSpace(doc.TrajectoryID)
-	if trajectoryID == "" {
-		return rebaseAddressee{Why: "its document " + docID + " is bound to no trajectory"}, nil
-	}
+	docID, trajectoryID := doc.DocID, strings.TrimSpace(doc.TrajectoryID)
 	agentID := currentTextureAgentID(docID)
 	state, err := rt.rebaseTextureRunState(ctx, ownerID, computerID, trajectoryID, agentID)
 	if err != nil {

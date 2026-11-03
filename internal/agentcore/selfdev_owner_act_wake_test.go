@@ -18,6 +18,9 @@ package agentcore
 //  9. Texture reads a "closure"             -> ...ApproveAndApplyEachWakeOnce (view kind owner_act)
 // 10. (fix 13) the behavior depends on a switch -> ...HasNoSwitch; a failed
 //     live apply wakes nobody -> ...ApplyFailureWakesOnce
+// 11. (problem 21 follow-up) the document moved to a newer trajectory (an
+//     owner revision on its settled trajectory continues it) and the act
+//     wakes nobody -> ...FollowsTheDocumentToItsCurrentTrajectory
 
 import (
 	"context"
@@ -280,6 +283,29 @@ func TestOwnerActWakeRejectWakesOnce(t *testing.T) {
 	if after := ownerActHead(t, f.store, "owner", f.computerID, "doc-reject"); after != headBefore {
 		t.Fatalf("the document head moved %s -> %s without a Texture turn", headBefore, after)
 	}
+}
+
+// Problem 21 follow-up: the operation's document has moved to a newer
+// trajectory since the candidate froze; the act still reaches its Texture.
+func TestOwnerActWakeFollowsTheDocumentToItsCurrentTrajectory(t *testing.T) {
+	f := newP4Fixture(t)
+	ctx := context.Background()
+	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-moved")
+	f.trajectoryID = trajectoryID
+	operation := f.verify(t, f.freeze(t, "owner-act-moved", "owner act moved"))
+	moveDocumentToNewTrajectory(t, f.store, "owner", f.computerID, "doc-moved", trajectoryID, "trajectory-doc-moved-2")
+
+	request := ownerActDecisionRequest(t, f, operation, "reject", "owner-act-moved-key")
+	handler := &APIHandler{rt: f.rt}
+	decided, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, request)
+	if status != http.StatusOK || err != nil || decided.State != selfdev.StateRejected {
+		t.Fatalf("reject answered %d %v: %+v", status, err, decided)
+	}
+	got := ownerActRecords(t, f.store, "owner", f.computerID, inbox)
+	if len(got) != 1 {
+		t.Fatalf("the moved document's Texture holds %d owner-act records, want 1", len(got))
+	}
+	checkOwnerActRecord(t, got[0], inbox, operation.OperationID, types.OwnerActReject)
 }
 
 // An operation whose trajectory binds no document (a generated trajectory,

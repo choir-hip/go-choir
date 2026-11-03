@@ -187,32 +187,52 @@ func TestRebaseNoticeSaysWhyNot(t *testing.T) {
 // next, as an owner revision on a settled document does.
 func continueArmDocument(t *testing.T, f *rebaseFixture, next string) {
 	t.Helper()
+	moveDocumentToNewTrajectory(t, f.s, f.owner, f.computer, "doc-arm", armTrajectory, next)
+}
+
+// moveDocumentToNewTrajectory settles every open work item and the trajectory
+// from, then continues docID onto next, as an owner revision on a settled
+// document does (textureowner continueSettledDocumentForOwner).
+func moveDocumentToNewTrajectory(t *testing.T, s *store.Store, owner, computer, docID, from, next string) {
+	t.Helper()
 	ctx := context.Background()
-	settleArmWork(t, f)
-	snapshot, err := f.s.GetLifecycleSnapshot(ctx, f.owner, f.computer, armTrajectory)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, owner, computer, from)
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, work := range snapshot.WorkItems {
+		if work.Status != types.WorkItemOpen {
+			continue
+		}
+		req := types.SettleLifecycleWorkRequest{OwnerID: owner, ComputerID: computer, CommandID: "settle:" + work.WorkItemID, TrajectoryID: from, WorkItemID: work.WorkItemID, ActingAgentID: work.AssignedAgentID, ResultRef: "evidence://round-done"}
+		req.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(req)
+		if _, err := s.SettleLifecycleWork(ctx, req); err != nil {
+			t.Fatalf("settle %s: %v", work.WorkItemID, err)
+		}
+	}
+	if snapshot, err = s.GetLifecycleSnapshot(ctx, owner, computer, from); err != nil {
+		t.Fatal(err)
+	}
 	settle := types.SettleLifecycleTrajectoryRequest{
-		OwnerID: f.owner, ComputerID: f.computer, CommandID: "settle:" + armTrajectory, TrajectoryID: armTrajectory,
+		OwnerID: owner, ComputerID: computer, CommandID: "settle:" + from, TrajectoryID: from,
 		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
 	}
 	settle.CommandDigest, _ = store.ComputeSettleLifecycleTrajectoryDigest(settle)
-	if _, err := f.s.SettleLifecycleTrajectory(ctx, settle); err != nil {
+	if _, err := s.SettleLifecycleTrajectory(ctx, settle); err != nil {
 		t.Fatalf("settle trajectory: %v", err)
 	}
 	req := types.ContinueLifecycleDocumentRequest{
-		OwnerID: f.owner, ComputerID: f.computer, CommandID: "continue:" + next, TrajectoryID: next,
-		PredecessorTrajectoryID: armTrajectory, DocID: "doc-arm", ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
-		InitialWork: types.WorkItemRecord{WorkItemID: "work:" + next, Objective: "Revise the document for the owner's new request.", AssignedAgentID: "texture:doc-arm", AuthorityProfile: "texture"},
+		OwnerID: owner, ComputerID: computer, CommandID: "continue:" + next, TrajectoryID: next,
+		PredecessorTrajectoryID: from, DocID: docID, ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+		InitialWork: types.WorkItemRecord{WorkItemID: "work:" + next, Objective: "Revise the document for the owner's new request.", AssignedAgentID: "texture:" + docID, AuthorityProfile: "texture"},
 	}
 	req.CommandDigest, _ = store.ComputeContinueLifecycleDocumentDigest(req)
-	if _, err := f.s.ContinueLifecycleDocument(ctx, req); err != nil {
+	if _, err := s.ContinueLifecycleDocument(ctx, req); err != nil {
 		t.Fatalf("continue: %v", err)
 	}
-	doc, err := f.s.GetLifecycleDocument(ctx, f.owner, f.computer, "doc-arm")
+	doc, err := s.GetLifecycleDocument(ctx, owner, computer, docID)
 	if err != nil || doc.TrajectoryID != next {
-		t.Fatalf("doc-arm is on %q (%v), want %s", doc.TrajectoryID, err, next)
+		t.Fatalf("%s is on %q (%v), want %s", docID, doc.TrajectoryID, err, next)
 	}
 }
 

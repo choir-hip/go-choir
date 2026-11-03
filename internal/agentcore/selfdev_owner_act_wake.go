@@ -28,37 +28,46 @@ import (
 // was still pending is closed by the generic crash-boot wake fate.
 
 // ownerActTextureInbox resolves the Texture inbox of the document the
-// operation's trajectory binds, or false when it binds none: a trajectory
-// that is not a lifecycle trajectory (rollback and genesis operations
-// generate theirs), one without a document, a document bound to another
-// trajectory, or an archived document.
+// operation's trajectory names, wherever that document is now (problem 21
+// follow-up: an owner revision on a settled document continues it onto a new
+// trajectory, and the records for later acts on the operation went nowhere),
+// or false when there is none: a trajectory that is not a lifecycle
+// trajectory (rollback and genesis operations generate theirs), one that
+// names no document, or a document gone, archived or bound to no trajectory.
 func (rt *Runtime) ownerActTextureInbox(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (string, bool, error) {
-	docID, bound, err := rt.ownerActTextureDoc(ctx, ownerID, computerID, operation)
-	if err != nil || !bound {
+	doc, why, err := rt.operationDocument(ctx, ownerID, computerID, operation)
+	if err != nil || why != "" {
 		return "", false, err
 	}
-	return currentTextureAgentID(docID), true, nil
+	return currentTextureAgentID(doc.DocID), true, nil
 }
 
-// ownerActTextureDoc is ownerActTextureInbox's document: the id of the
-// document the operation's trajectory binds.
-func (rt *Runtime) ownerActTextureDoc(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (string, bool, error) {
-	trajectoryID := strings.TrimSpace(operation.TrajectoryID)
+// operationDocument is the document the operation's trajectory names, read as
+// it is now: possibly on a newer trajectory than the operation's own. why is
+// non-empty, and says what is missing, when there is no usable document. The
+// rebase notice's fallback and the owner-act records both resolve through it.
+func (rt *Runtime) operationDocument(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (types.Document, string, error) {
 	docID, err := rt.operationDocumentID(ctx, ownerID, computerID, operation)
-	if err != nil || docID == "" {
-		return "", false, err
+	if err != nil {
+		return types.Document{}, "", err
+	}
+	if docID == "" {
+		return types.Document{}, "its trajectory " + strings.TrimSpace(operation.TrajectoryID) + " names no document", nil
 	}
 	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if errors.Is(err, store.ErrNotFound) {
-		return "", false, nil
+		return types.Document{}, "its document " + docID + " is not on the tape", nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("document %s: %w", docID, err)
+		return types.Document{}, "", fmt.Errorf("document %s: %w", docID, err)
 	}
-	if strings.TrimSpace(doc.TrajectoryID) != trajectoryID || doc.ArchivedAt != nil {
-		return "", false, nil
+	if doc.ArchivedAt != nil {
+		return types.Document{}, "its document " + docID + " is archived", nil
 	}
-	return docID, true, nil
+	if strings.TrimSpace(doc.TrajectoryID) == "" {
+		return types.Document{}, "its document " + docID + " is bound to no trajectory", nil
+	}
+	return doc, "", nil
 }
 
 // operationDocumentID is the id of the document the operation's trajectory
