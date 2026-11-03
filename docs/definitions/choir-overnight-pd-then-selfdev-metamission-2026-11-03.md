@@ -114,18 +114,28 @@ metamission:
 
 now:
   status: working
-  slice: lanes A, B, C
+  slice: lanes A, C, E (B done; F designed)
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
     rounds without a stuck computer. Test: morning state per station. Edge:
     resource (review rounds and CI serialize the red work). dO: start every
     review the moment a build freezes.
-  decision: self-development resumes from hold inside this metamission
-  believed_state: docs coherent; nothing of pd built; selfdev branches parked and nearly ready
-  main_uncertainty: whether ring order fits vmctl's deferred-refresh sweep without a new state store
-  next_observation: the lane A builder's reading of the refresh sweep
+  decision: >-
+    docs pushes are batched between deploys (each push to main cancels the
+    CI run in flight); screens-as-files landed with a restore after a bad
+    squash (ledger)
+  believed_state: >-
+    main 4036f0c37 in CI carries screens-as-files, onboarding, texture
+    export, lane B (scheduler deleted, expansion for every user, host fetch
+    and mirrors at d@e). Lane A fixing Devin round 1 (3 blocking-real).
+    Claude arm cold-booted with the delegate. Files rounds orchestrated on
+    the arms once the deploy lands. S4 design revised, round 2 running.
+    Lane F bridge specified in the calibration seed doc. evidence.graph
+    measurement running.
+  main_uncertainty: whether arms hit stack_base_moved or stale open operations after the deploy refreshes them
+  next_observation: staging build identity after CI; first Files Cast per arm
   blocker: none
-  next_action: launch lanes A and B builders; start the screens re-review; land onboarding
+  next_action: on deploy, run the onboarding deployed acceptance; adjudicate S4 round 2 and lane A round 2
 
 receipts: []
