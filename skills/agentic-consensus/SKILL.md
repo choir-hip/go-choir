@@ -97,7 +97,7 @@ did not deliver. `--exclude` stays forgiving.
 ### Retired ids
 
 Removed 2026-10-03. Do not reintroduce without re-probing. Full evidence in
-`docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`.
+`docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`.
 
 Retired because the pin was **broken**:
 
@@ -194,7 +194,7 @@ devin --print [PROMPT]
 Runner contract:
 
 ```bash
-devin --permission-mode dangerous --sandbox --respect-workspace-trust false -p "$PROMPT"
+devin --permission-mode dangerous --respect-workspace-trust false -p "$PROMPT"
 ```
 
 Optional model override:
@@ -205,7 +205,7 @@ Optional model override:
 
 Notes:
 
-- `--permission-mode dangerous --sandbox` (owner, 2026-10-22: "run Devin on dangerous not smart mode then. Smart isn't smart"). `auto` rejected the review's own read commands in non-interactive mode, and `smart` still stopped partway on a confirmation it could not get, so both returned no or half a review. `--sandbox` keeps the run from writing outside its sandbox; give it `--cwd` an empty directory (the reviewed repo is read by absolute path) so a review cannot touch a worktree.
+- `--permission-mode dangerous`, no `--sandbox` (owner, 2026-10-22: "run Devin on dangerous not smart mode then. Smart isn't smart"; owner, 2026-11-03: "The runner should be setup to not use sandbox. It's 'dangerous' mode right"). `auto` rejected the review's own read commands in non-interactive mode, and `smart` still stopped partway on a confirmation it could not get, so both returned no or half a review. `--sandbox` overrides the permission mode ("--sandbox always uses the autonomous permission mode; ignoring --permission-mode dangerous") and blocked a review's own test run on 2026-11-03, so it is not passed. Give it `--cwd` an empty directory (the reviewed repo is read by absolute path) and tell it in the prompt to write only inside its cwd, so a review does not touch a worktree.
 - Help says non-interactive mode disables workspace-trust prompting by default.
 - Devin is unpinned and serves the account default (`swe-2-max` as of 2026-10-08). Panel behavior follows the account default if it changes; pass `--devin-model` only for a deliberate one-off override.
 
