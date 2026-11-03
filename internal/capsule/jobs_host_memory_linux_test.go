@@ -143,3 +143,36 @@ func TestWaitingJobEndsWithItsCapsuleItsMaxWaitOrStartsWhenClear(t *testing.T) {
 		t.Fatalf("W4: %+v", c.Status)
 	}
 }
+
+// The wait text names what this computer's own jobs hold, so a desk can
+// stop one (choir.Stop) instead of parking on a wait it caused.
+func TestJobHoldersNoteNamesRunningJobsNotWaitingOnes(t *testing.T) {
+	now := time.Now()
+	run := func(id, cmd string, mib int, age time.Duration) *capsuleJob {
+		return &capsuleJob{capsuleID: "cap-" + id, done: make(chan struct{}),
+			spec:   capsulejob.Spec{ID: id, Argv: []string{"node", cmd, "--long-argument-that-is-cut"}, MemoryMiB: mib},
+			status: capsulejob.Status{StartedAt: now.Add(-age)}}
+	}
+	self := run("job-self", "self.mjs", 0, 0)
+	self.waiting = true
+	waiting := run("job-queued", "queued.mjs", 0, time.Minute)
+	waiting.waiting = true
+	ended := run("job-ended", "ended.mjs", 0, time.Minute)
+	close(ended.done)
+	jobs := map[string]*capsuleJob{"job-self": self, "job-queued": waiting, "job-ended": ended,
+		"job-shot": run("job-shot", "scripts/choir-shot.mjs", 1500, 7*time.Minute)}
+	note := jobHoldersNote(jobs, self, now)
+	for _, want := range []string{"job-shot", "scripts/choir-shot.mjs", "1500 MiB", "7m", "choir.Stop"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("holders note lacks %q: %s", want, note)
+		}
+	}
+	for _, bad := range []string{"job-self", "job-queued", "job-ended"} {
+		if strings.Contains(note, bad) {
+			t.Fatalf("holders note names %s: %s", bad, note)
+		}
+	}
+	if got := jobHoldersNote(map[string]*capsuleJob{"job-self": self}, self, now); got != "" {
+		t.Fatalf("no holders should be empty, got %q", got)
+	}
+}

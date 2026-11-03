@@ -132,7 +132,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 			e.mu.Lock()
 			job.waiting = true
 			job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
-				Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, Reason: reason}
+				Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, Reason: reason + jobHoldersNote(e.jobs, job, time.Now())}
 			view := jobView(job.status, "", "")
 			e.mu.Unlock()
 			e.persistJobRecord(job)
@@ -236,7 +236,7 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 		reason := HostMemoryWaitReason(facts, fresh)
 		if reason != "" && time.Since(since) < maxWait {
 			e.mu.Lock()
-			job.status.Reason = reason
+			job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
 			e.mu.Unlock()
 			continue
 		}
@@ -257,6 +257,41 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 		log.Printf("capsule: job %s in capsule %s started after waiting %s for host memory", job.spec.ID, job.capsuleID, time.Since(since).Round(time.Second))
 		return
 	}
+}
+
+// jobHoldersNote names the jobs on this computer that run now, so a wait for
+// host memory says what its own computer may be holding: id, command head,
+// declared MiB, age. Waiting and ended jobs hold nothing. The caller holds
+// the executor's mu.
+func jobHoldersNote(jobs map[string]*capsuleJob, self *capsuleJob, now time.Time) string {
+	var held []string
+	for _, j := range jobs {
+		if j == self || j.waiting {
+			continue
+		}
+		select {
+		case <-j.done:
+			continue
+		default:
+		}
+		head := strings.Join(j.spec.Argv, " ")
+		if len(head) > 60 {
+			head = head[:60] + "..."
+		}
+		entry := fmt.Sprintf("%s (%s", j.spec.ID, head)
+		if j.spec.MemoryMiB > 0 {
+			entry += fmt.Sprintf(", %d MiB", j.spec.MemoryMiB)
+		}
+		if !j.status.StartedAt.IsZero() {
+			entry += ", running " + now.Sub(j.status.StartedAt).Round(time.Minute).String()
+		}
+		held = append(held, entry+")")
+	}
+	if len(held) == 0 {
+		return ""
+	}
+	sort.Strings(held)
+	return "; jobs running on this computer now: " + strings.Join(held, ", ") + "; if one is yours and no longer needed, choir.Stop its id"
 }
 
 // StopJob asks the run's job id to stop.

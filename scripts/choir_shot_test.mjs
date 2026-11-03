@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
-  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir,
+  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -19,6 +19,15 @@ throws(() => parseArgs(['--shots', 'x', '--size', '10']), /WIDTHxHEIGHT/);
 throws(() => parseArgs(['--shots', 'x', '--size', '800x600', '--preset', 'mobile']), /exclusive/);
 throws(() => parseArgs(['--shots', 'x', '--bogus']), /unknown flag/);
 throws(() => parseArgs(['--shots']), /needs a value/);
+// --help prints the usage and needs no --shots.
+assert.equal(parseArgs(['--help']).help, true);
+assert.equal(parseArgs(['--shots', 'x', '-h']).help, true);
+assert.match(USAGE, /--shots FILE/);
+const helpRun = spawnSync('node', [new URL('./choir-shot.mjs', import.meta.url).pathname, '--help'], { encoding: 'utf8' });
+assert.equal(helpRun.status, 0, helpRun.stderr);
+assert.match(helpRun.stdout, /usage: node scripts\/choir-shot.mjs/);
+// The autoputer's output goes beside the screens directory (Freeze refuses non-PNG files in it).
+assert.equal(autoputerLogPath('/var/lib/artifact/screens'), '/var/lib/artifact/shot-logs/autoputer.log');
 
 const shots = [{ name: 'home' }, { name: 'detail', path: '/d' }];
 throws(() => plan([], parseArgs(['--shots', 'x'])), /non-empty/);

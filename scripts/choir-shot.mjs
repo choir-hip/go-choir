@@ -128,7 +128,35 @@ function checkThemes(list, known, what) {
   for (const t of list) if (!known.includes(t)) throw new Error(`${what} ${t}: unknown theme preset (have ${known.join(', ')})`);
 }
 
+// USAGE is what --help prints: the flags, and where things go.
+export const USAGE = `usage: node scripts/choir-shot.mjs --shots FILE [options]
+
+  --shots FILE      ES module whose default export is a list of shots (required)
+  --only a,b        take only these shots
+  --preset p,q      desktop (default), tablet, mobile
+  --size WxH        custom viewport, such as 1000x700 (exclusive with --preset)
+  --theme a,b       shell theme preset ids, one shot per preset
+  --contrast SEL    WCAG contrast of every visible text element under SEL
+  --open APP        open a package app in the shell before the shot
+  --out DIR         PNG directory (default /var/lib/artifact/screens)
+  --list            print the file names the run would write and exit
+  --no-computer     mock the backend instead of starting the autoputer over /computer
+  --help            print this usage
+
+The autoputer's stdout and stderr go to autoputerLogPath(out) (default
+/var/lib/artifact/shot-logs/autoputer.log), not to this output; its path is
+printed when the autoputer or a shot fails. Run it as a capsule job (choir.Start).
+The header of scripts/choir-shot.mjs documents the shots file and the options.
+`;
+
+// autoputerLogPath is where the autoputer's output goes: beside the screens
+// directory, since Freeze refuses any file in screens/ that is not a plain .png.
+export function autoputerLogPath(out) {
+  return path.join(path.dirname(path.resolve(out)), 'shot-logs', 'autoputer.log');
+}
+
 export function parseArgs(argv, knownThemes = null) {
+  if (argv.includes('--help') || argv.includes('-h')) return { help: true };
   const o = { shots: '', only: [], presets: [], themes: [], contrast: '', open: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -466,7 +494,10 @@ async function startAutoputer(root, holder) {
     const r = spawnSync('go', ['build', '-o', bin, './cmd/autoputer'], { cwd: root, stdio: 'inherit' });
     if (r.status !== 0) throw new Error(`go build of the autoputer failed (exit ${r.status}); pass --no-computer to mock the backend instead`);
   }
-  const child = spawn(bin, [], { env: autoputerEnv(), stdio: ['ignore', 'inherit', 'inherit'] });
+  fs.mkdirSync(path.dirname(holder.log), { recursive: true });
+  const logFd = fs.openSync(holder.log, 'w');
+  const child = spawn(bin, [], { env: autoputerEnv(), stdio: ['ignore', logFd, logFd] });
+  fs.closeSync(logFd);
   holder.child = child;
   child.on('error', () => {});
   try {
@@ -638,6 +669,10 @@ async function main() {
   try { known = themeIdsFrom(fs.readFileSync(path.join(frontend, 'src', 'lib', 'theme.ts'), 'utf8')); } catch { /* no source to check against */ }
   if (known && known.length === 0) known = null;
   const o = parseArgs(process.argv.slice(2), known);
+  if (o.help) {
+    console.log(USAGE);
+    return 0;
+  }
   const mod = await import(pathToFileURL(path.resolve(o.shots)).href);
   const items = plan(mod.default, o, known);
   if (o.list) {
@@ -654,11 +689,16 @@ async function main() {
   const { chromium } = pw;
   const dist = build(frontend, deps);
   const useComputer = o.computer && fs.existsSync(path.join(COMPUTER_DIR, 'state.db'));
-  const holder = { child: null }; // handlers first: a signal during the build or the wait must not orphan the child
+  const holder = { child: null, log: autoputerLogPath(o.out) }; // handlers first: a signal during the build or the wait must not orphan the child
   const stopAutoputer = () => { if (holder.child && holder.child.exitCode === null) holder.child.kill(); };
   process.on('exit', stopAutoputer);
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopAutoputer(); process.exit(130); });
-  if (useComputer) await startAutoputer(root, holder);
+  if (useComputer) {
+    try { await startAutoputer(root, holder); } catch (e) {
+      console.error(`choir-shot: the autoputer's output is in ${holder.log}`);
+      throw e;
+    }
+  }
   const themeState = { preset: null };
   const { server, base } = await serve(dist, useComputer, themeState);
   const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
@@ -704,6 +744,7 @@ async function main() {
   }
   const have = fs.readdirSync(o.out).filter((f) => f.endsWith('.png')).length;
   if (have > 12) console.warn(`choir-shot: ${have} PNGs in ${o.out}; Freeze takes at most 12`);
+  if (failed.length && useComputer) console.error(`choir-shot: the autoputer's output is in ${holder.log}`);
   console.log(JSON.stringify({ shots: items.length - failed.length, failed, out: o.out }));
   return failed.length ? 1 : 0;
 }
