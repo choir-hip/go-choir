@@ -29,6 +29,20 @@ and vision.pdf). Engineering: gpt-6-luna at high reasoning (main, after problem 
 - 12:29:16Z request (luna/slides-r3.md: one candidate with all twelve shots, image paths listed in the report, the five
   defects above) plus 12:29:25Z the full Slides request as a second revision (failed candidates are not carried).
 
+- 12:48:09Z assignment-3c16d2734e30a6d20b3113c9 (1 min) completed blocked: "The carried patch cannot be applied as
+  directed: /workspace/platform has no .git metadata ... both target files already exist". No operation.
+
+## Rounds 5-7 (same document)
+
+- 13:01:13Z round 5 (choir-shot.mjs and choir-spec.sh work; edit carried files in place). Three assignments, none took a
+  shot: the first found no slides-next in its clean workspace (so "edit in place" had nothing to act on), the last applied
+  the carried patch and built, then stopped. Settled 13:11:55Z.
+- 13:15:19Z round 6 (a step-by-step shots recipe). assignment-a4b65005d6c90a09acb92825 wrote /tmp/shots.mjs and ran
+  scripts/choir-shot.mjs as a capsule job; selfdev-69de017b58a2052a2c591ce7faee5710 froze one 1280x800 shot of the shell's
+  boot screen ("Waiting for computer identity"); judge failed 13:22:10Z. The served frontend had no backend.
+- 13:40:38Z round 7 (main's direction): forward /auth and /api from the shots file to the in-capsule autoputer, which serves
+  the overlay of the computer's real state; mock only what it cannot answer; report the exact error if it is unreachable.
+
 ## Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to decision | Outcome |
