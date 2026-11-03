@@ -75,7 +75,7 @@ boundaries:
   protected_surfaces: [guest store schema, boot path, Texture canonical writes (bodies), replay]
 
 now:
-  status: checkpoint_incomplete  # 2026-11-02T19:00Z: S0-S5, the tier 2 review and the partition follow-ups (deployed in 7c73688b3) landed. Owner 2026-11-02: no reserved observation period; keep developing and observe simultaneously. S6 is judged at 2026-11-03T05:00Z on the meter's running windows, minus the stall and deploy-boot windows. Resume: judge, finalize, write the closing report
+  status: complete  # 2026-11-03T05:30Z: S6 judged on the meter day. The claim holds on read volume (mean -64%, p90 -67%, per model call -68%, retirement pass ~8.5 GB to 0.6-1.3 GB, boot burst ~2.6x lower) and fails on the median minute (4.1 to 46.8 MiB/min), named as a successor problem; .presplit finalized on the paper and the owner's computer
   slice: >-
     S0 measure: on a synthetic SQLite store with the og_objects and
     choir_events shapes and large bodies, count pages read per statement for
@@ -121,10 +121,11 @@ now:
       The migration cost on the paper's store (2.5M events, multi-GB) and
       whether a cheaper column reorder (body last) gets most of the win.
     next_observation: S0 page reads per statement, three layouts; the baseline is the paper's memory meter from 2026-11-01T19:32Z (guest isolation checkpoint numbers)
-  blocker_or_risk: the paper's post-split read rate is still about 30x its pre-split median after three cold boots (149 vs 4.9 MiB/min at 05:00Z), and its early read is confounded; hibernated computers migrate at their wake
-  next_action: S6, the meter day from 2026-11-02T05:00Z, judged at 2026-11-03T05:00Z against the 19:32Z baseline (read_bytes per minute, the retirement pass, the boot burst); then finalize the paper and the owner's computer, and settle with the tier 2 re-review of the partition fix (b80fe36bd)
+  blocker_or_risk: none for this mission; residuals in docs/problems/paper-steady-read-floor-after-split-2026-11-03.md (the median minute rose to a ~40 MiB/min floor; host disk did not return the 22.4 GB the finalize freed inside the guest, since the image is sparse and the guest has not discarded)
+  next_action: none; the successor probe is in the problem doc
 
 receipts:
+  - S6 2026-11-03 (meter day 2026-11-02T05:00Z to 2026-11-03T05:00Z against 2026-11-01T19:32Z to 2026-11-02T04:00Z, /var/lib/go-choir/growth-meter/mem-2026-11.jsonl, paper vm-1669020a): read_bytes per minute, all minutes: baseline median 4.1, mean 193.0, p90 399.7 MiB/min; day median 46.8, mean 69.5, p90 131.6. Excluding 30 min after each boot: baseline 3.1 / 75.8 / 132.7, day 38.7 / 49.4 / 104.5. Paper inference requests: baseline 14,375 (28.3/min), day 46,859 (32.5/min); reads per request 6.7 to 2.1 MiB. Retirement pass: about 8.5 GB before (2026-11-01 ledger); 591 MiB (22:51Z, 7 ops in 1m35s) and 1,268 MiB (00:08Z, 9 ops in 1m18s). Boot burst (first 15 min): baseline 0.7 to 21.6 GiB over 10 boots, median about 5.5; day 1.6 to 5.2 GiB over 15 boots, median about 2.2 (the 207 GiB migration boot at 04:05Z excluded). Guest anon: median 1.41 to 2.32 GiB, p95 6.47 to 3.94, max 7.91 to 4.69. No snapshot producer run appears in the guest logs available (from 2026-11-02 21:40Z); none excluded. Finalize: the paper freed 22,382,874,624 bytes, the owner's computer 473,993,216 (split-finalize, 05:2xZ); host free space unchanged at 143G. Partition fix b80fe36bd re-review: Devin approve (scratchpad review-part). Verdict: holds on volume, fails on the median (successor problem).
   - S5 2026-11-02 (running fleet): the paper (9m39s, 3.41M objects), the owner's computer (8.3s), d@e (2.7s) migrated on 1d33cafce..81f09e677; keep set grew only
   - S4 2026-11-02: d@e copy rung 13/13 green, then d@e migrated and finalized (95.8 MB freed)
   - S3 2026-11-01: paper store copy migrated in 8m33s (22.30 -> 21.31 GB, 3.4M objects); differential green except the intended store_meta schema_version 1 -> 2 row (diff tool now exempts it); ledger 22:45 entry
