@@ -106,6 +106,9 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 					b.WriteString("\n\n" + notice)
 				}
 			}
+			if words := rt.ownerWordsForRun(rec); words != "" {
+				b.WriteString("\n\n" + words)
+			}
 			b.WriteString("\n\n" + capsuleBrowserRecipeFor(kind != string(types.EngineeringAssignmentVerification)))
 		}
 	}

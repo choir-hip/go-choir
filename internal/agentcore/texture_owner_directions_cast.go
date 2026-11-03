@@ -61,6 +61,31 @@ type castOwnerDirection struct {
 	Kind string `json:"kind"`
 	At   string `json:"at,omitempty"`
 	Text string `json:"text"`
+	// Current marks the newest entry: the operative direction. The list is
+	// oldest first, so a desk that indexes it by a round number gets an
+	// older round's words (pool r4 took round 3's for round 4,
+	// docs/problems/owner-words-restated-away-before-engineering-2026-11-03.md).
+	Current bool `json:"current,omitempty"`
+}
+
+// orderOwnerDirections sorts directions oldest first by their time, the
+// request before a direction of the same time and otherwise in the order
+// given, whatever order a Cast named them in, and marks the newest current.
+func orderOwnerDirections(directions []castOwnerDirection) {
+	at := func(d castOwnerDirection) time.Time {
+		t, _ := time.Parse(time.RFC3339Nano, d.At)
+		return t
+	}
+	sort.SliceStable(directions, func(i, j int) bool {
+		ti, tj := at(directions[i]), at(directions[j])
+		if !ti.Equal(tj) {
+			return ti.Before(tj)
+		}
+		return directions[i].Kind == "request" && directions[j].Kind != "request"
+	})
+	for i := range directions {
+		directions[i].Current = i == len(directions)-1
+	}
 }
 
 // ownerRevisionScope is the document whose owner revisions a Texture cell
@@ -185,6 +210,7 @@ func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevis
 			}
 			directions, omitted = append(earlier, directions...), left
 		}
+		orderOwnerDirections(directions)
 		attached, err := marshalVerbatim(directions)
 		if err != nil {
 			return nil, fmt.Errorf("reduce: Texture cast %s: encode owner_directions: %w", in.LocalID, err)
@@ -371,7 +397,9 @@ func ownerDirectionFromRevision(id string, scope ownerRevisionScope, load func(s
 	}
 	direction := castOwnerDirection{RevisionID: id}
 	if !rev.CreatedAt.IsZero() {
-		direction.At = rev.CreatedAt.UTC().Format(time.RFC3339)
+		// To the nanosecond, so two revisions of one second still order
+		// (orderOwnerDirections); a whole second prints as before.
+		direction.At = rev.CreatedAt.UTC().Format(time.RFC3339Nano)
 	}
 	var metadata map[string]any
 	_ = json.Unmarshal(rev.Metadata, &metadata)
