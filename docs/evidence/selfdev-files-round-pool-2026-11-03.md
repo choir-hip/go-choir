@@ -72,6 +72,14 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Library publish 06:43Z refused: package_parent_unpublished (Problem 11): round 1 is the package's parent and
   can never publish.
 - Spend round 2: $0.60, 93 calls (06:20-06:43Z; $1.84 total).
+- Live real-content shots (scratch pool/live-r2, 06:44-06:48Z; all scenes passed, 390px no overflow in three
+  presets): column headers with sort, Markdown/CSV/PDF/Plain text kinds, PDF first-page and video poster tiles,
+  PDF and video previews, search everywhere with scope and kind controls, no desktop sidebar close, no PLACES.
+  Still open: the phone toolbar shows the folder as "D..."; desktop parent crumbs truncate beside a full-width
+  search field; the noir context menu still reads as separate rounded buttons; everywhere results in grid show no
+  folder. Upload, trash and undo, rename, Move to, `?` and the error state are not yet seen on real files (the
+  harness drives browsing only).
+- Round 3 revision written 06:50Z (scratch pool/revise-r3.md); waits for a build slot.
 
 #### Cycle time (UTC, minutes)
 
