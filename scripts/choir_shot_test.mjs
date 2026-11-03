@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { missingDependencies, parseArgs, plan } from './choir-shot.mjs';
+import { autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
 throws(() => parseArgs([]), /--shots FILE is required/);
@@ -24,6 +24,17 @@ throws(() => plan(shots, parseArgs(['--shots', 'x', '--only', 'nope'])), /no suc
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x'])).map((i) => i.file), ['home.png', 'detail.png']);
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x', '--only', 'home', '--preset', 'mobile,desktop'])).map((i) => i.file), ['home-mobile.png', 'home.png']);
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x', '--only', 'detail', '--size', '1000x700'])).map((i) => [i.file, i.viewport.width]), [['detail-1000x700.png', 1000]]);
+
+// The autoputer binary order, the proxy rule, the recipe env and the opt-out.
+assert.equal(pickAutoputerBinary((f) => true), '/var/lib/artifact/release/bin/autoputer');
+assert.equal(pickAutoputerBinary((f) => f === '/tmp/autoputer'), '/tmp/autoputer');
+assert.equal(pickAutoputerBinary(() => false), '');
+assert.ok(isProxied('/api/shell/bootstrap') && isProxied('/api'));
+assert.ok(!isProxied('/apixyz') && !isProxied('/auth/session') && !isProxied('/assets/a.js'));
+const env = autoputerEnv({});
+assert.deepEqual([env.RUNTIME_STORE_PATH, env.AUTOPUTER_FILES_ROOT, env.AUTOPUTER_PORT, env.CHOIR_GUEST_TRUST_LOOPBACK], ['/computer/state', '/computer/files', '8082', '1']);
+assert.equal(parseArgs(['--shots', 'x']).computer, true);
+assert.equal(parseArgs(['--shots', 'x', '--no-computer']).computer, false);
 
 // A locked tree that lacks a package.json dependency is named, not built against.
 {

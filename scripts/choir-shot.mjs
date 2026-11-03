@@ -32,12 +32,24 @@
 // mobile 390x844. Run single shots while iterating; run the full set once
 // before choir.Freeze (a change no one looks at needs no shot).
 //
+// Real content: when /computer/state.db exists (an implementation capsule's
+// private copy of the computer's store), the helper starts an autoputer itself
+// over /computer (RUNTIME_STORE_PATH=/computer/state AUTOPUTER_FILES_ROOT=
+// /computer/files AUTOPUTER_PORT=8082 CHOIR_GUEST_TRUST_LOOPBACK=1) as a child
+// of this process, so it lives exactly as long as the shots, and kills it at
+// exit. The binary is /var/lib/artifact/release/bin/autoputer, else
+// /tmp/autoputer, else built once with go build from /workspace/platform. The
+// served frontend proxies /api/* to it with X-Authenticated-User: owner and
+// answers GET /auth/session as that owner; a shot's routes() (context.route)
+// still wins for any URL it handles. --no-computer keeps the mocked backend.
+//
 // Run it as a capsule job (choir.Start), not a choir.Exec: a first build and a
 // browser start outlast 30 s. It does not touch /workspace/platform (the build runs in a private copy under /tmp).
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -49,9 +61,13 @@ export const PRESETS = {
 };
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
 const STEP_MS = 15000;
+export const COMPUTER_DIR = '/computer';
+export const AUTOPUTER_PORT = 8082;
+export const AUTOPUTER_USER = 'owner';
+const AUTOPUTER_BINARIES = ['/var/lib/artifact/release/bin/autoputer', '/tmp/autoputer'];
 
 export function parseArgs(argv) {
-  const o = { shots: '', only: [], presets: [], size: '', out: '/var/lib/artifact/screens', list: false };
+  const o = { shots: '', only: [], presets: [], size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -64,6 +80,7 @@ export function parseArgs(argv) {
     else if (a === '--size') o.size = val();
     else if (a === '--out') o.out = val();
     else if (a === '--list') o.list = true;
+    else if (a === '--no-computer') o.computer = false;
     else throw new Error(`unknown flag ${a}`);
   }
   if (!o.shots) throw new Error('--shots FILE is required (an ES module whose default export is a list of shots)');
@@ -99,6 +116,71 @@ export function plan(shots, o) {
       out.push({ shot, viewport: { width, height }, device, file: `${shot.name}${v.label === 'desktop' ? '' : '-' + v.label}.png` });
     }
   return out;
+}
+
+// pickAutoputerBinary returns the first existing binary in the fixed order, or
+// '' when none exists and the caller must build one.
+export function pickAutoputerBinary(exists = fs.existsSync) {
+  return AUTOPUTER_BINARIES.find((b) => exists(b)) || '';
+}
+
+// isProxied is the rule for what the served frontend sends to the autoputer:
+// every /api/ URL. /auth/session is answered locally; other /auth URLs 404.
+export function isProxied(pathname) {
+  return pathname === '/api' || pathname.startsWith('/api/');
+}
+
+export function autoputerEnv(base = process.env) {
+  return { ...base, RUNTIME_STORE_PATH: `${COMPUTER_DIR}/state`, AUTOPUTER_FILES_ROOT: `${COMPUTER_DIR}/files`, AUTOPUTER_PORT: String(AUTOPUTER_PORT), CHOIR_GUEST_TRUST_LOOPBACK: '1' };
+}
+
+function portOpen(port) {
+  return new Promise((resolve) => {
+    const sock = net.connect(port, '127.0.0.1');
+    sock.once('connect', () => { sock.destroy(); resolve(true); });
+    sock.once('error', () => { sock.destroy(); resolve(false); });
+  });
+}
+
+function waitForPort(port, child, deadlineMs) {
+  const end = Date.now() + deadlineMs;
+  return new Promise((resolve, reject) => {
+    const tryOnce = () => {
+      if (child.exitCode !== null) return reject(new Error(`the autoputer exited (code ${child.exitCode}) before port ${port} accepted connections`));
+      const sock = net.connect(port, '127.0.0.1');
+      sock.once('connect', () => { sock.destroy(); resolve(); });
+      sock.once('error', () => {
+        sock.destroy();
+        if (Date.now() > end) reject(new Error(`the autoputer did not accept connections on 127.0.0.1:${port} within ${deadlineMs / 1000} s`));
+        else setTimeout(tryOnce, 200);
+      });
+    };
+    tryOnce();
+  });
+}
+
+// startAutoputer starts the autoputer over /computer as a child of this
+// process and returns it once its port accepts connections.
+async function startAutoputer(root, holder) {
+  if (await portOpen(AUTOPUTER_PORT)) throw new Error(`127.0.0.1:${AUTOPUTER_PORT} already accepts connections (an autoputer started by hand?); stop it, since the shots would read its content`);
+  let bin = pickAutoputerBinary();
+  if (!bin) {
+    bin = AUTOPUTER_BINARIES[1];
+    console.log('choir-shot: no autoputer binary found; the first run builds it (go build -o /tmp/autoputer ./cmd/autoputer)');
+    const r = spawnSync('go', ['build', '-o', bin, './cmd/autoputer'], { cwd: root, stdio: 'inherit' });
+    if (r.status !== 0) throw new Error(`go build of the autoputer failed (exit ${r.status}); pass --no-computer to mock the backend instead`);
+  }
+  const child = spawn(bin, [], { env: autoputerEnv(), stdio: ['ignore', 'inherit', 'inherit'] });
+  holder.child = child;
+  child.on('error', () => {});
+  try {
+    await waitForPort(AUTOPUTER_PORT, child, 30000);
+  } catch (e) {
+    child.kill();
+    throw e;
+  }
+  console.log(`choir-shot: autoputer (${bin}) is up on 127.0.0.1:${AUTOPUTER_PORT}`);
+  return child;
 }
 
 function sourceHash(frontend) {
@@ -163,9 +245,45 @@ export function missingDependencies(frontend, depsModules) {
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
-function serve(dist) {
+function proxy(req, res) {
+  const headers = { ...req.headers, host: `127.0.0.1:${AUTOPUTER_PORT}`, 'x-authenticated-user': AUTOPUTER_USER };
+  const up = http.request({ host: '127.0.0.1', port: AUTOPUTER_PORT, method: req.method, path: req.url, headers }, (r) => {
+    res.writeHead(r.statusCode, r.headers);
+    r.pipe(res);
+  });
+  up.on('error', (e) => { if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' }); res.end(`autoputer: ${e.message}`); });
+  res.on('close', () => up.destroy());
+  req.pipe(up);
+}
+
+// tunnel carries a WebSocket upgrade under /api (the live stream) to the
+// autoputer as the owner; anything else is refused.
+function tunnel(req, socket, head) {
+  const u = new URL(req.url, 'http://x').pathname;
+  if (!isProxied(u)) { socket.destroy(); return; }
+  const up = net.connect(AUTOPUTER_PORT, '127.0.0.1', () => {
+    const lines = [`${req.method} ${req.url} HTTP/1.1`];
+    const h = { ...req.headers, host: `127.0.0.1:${AUTOPUTER_PORT}`, 'x-authenticated-user': AUTOPUTER_USER };
+    for (const [k, v] of Object.entries(h)) lines.push(`${k}: ${v}`);
+    up.write(lines.join('\r\n') + '\r\n\r\n');
+    if (head && head.length) up.write(head);
+    up.pipe(socket);
+    socket.pipe(up);
+  });
+  up.on('error', () => socket.destroy());
+  socket.on('error', () => up.destroy());
+  socket.on('close', () => up.destroy());
+}
+
+function serve(dist, computer = false) {
   const server = http.createServer((req, res) => {
     const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (computer && isProxied(u)) return proxy(req, res);
+    if (computer && u === '/auth/session') {
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ authenticated: true, user: { id: AUTOPUTER_USER, username: AUTOPUTER_USER } }));
+      return;
+    }
+    if (computer && u.startsWith('/auth/')) { res.writeHead(404).end('not found'); return; }
     let f = path.join(dist, path.normalize(u));
     if (!f.startsWith(dist)) { res.writeHead(403).end(); return; }
     if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) {
@@ -175,6 +293,7 @@ function serve(dist) {
     res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
     fs.createReadStream(f).pipe(res);
   });
+  if (computer) server.on('upgrade', (req, socket, head) => tunnel(req, socket, head));
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` })));
 }
 
@@ -203,7 +322,13 @@ async function main() {
   try { pw = req('playwright'); } catch { pw = req('@playwright/test'); } // npm hoists playwright; either exports chromium
   const { chromium } = pw;
   const dist = build(frontend, deps);
-  const { server, base } = await serve(dist);
+  const useComputer = o.computer && fs.existsSync(path.join(COMPUTER_DIR, 'state.db'));
+  const holder = { child: null }; // handlers first: a signal during the build or the wait must not orphan the child
+  const stopAutoputer = () => { if (holder.child && holder.child.exitCode === null) holder.child.kill(); };
+  process.on('exit', stopAutoputer);
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopAutoputer(); process.exit(130); });
+  if (useComputer) await startAutoputer(root, holder);
+  const { server, base } = await serve(dist, useComputer);
   fs.mkdirSync(o.out, { recursive: true });
   const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const failed = [];
@@ -234,6 +359,7 @@ async function main() {
   } finally {
     await browser.close();
     server.close();
+    stopAutoputer();
   }
   const have = fs.readdirSync(o.out).filter((f) => f.endsWith('.png')).length;
   if (have > 12) console.warn(`choir-shot: ${have} PNGs in ${o.out}; Freeze takes at most 12`);
