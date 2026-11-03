@@ -56,6 +56,19 @@ type actorHandler struct {
 	// fateDeadline handles an assigned_engineering_fate_deadline wake; nil
 	// is the runtime's handler (a test seam).
 	fateDeadline func(ctx context.Context, ownerID, computerID, agentID, content string) error
+	// undisposed records the Texture triggers whose turn already ended
+	// without disposing them: a later delivery re-checks, never re-runs.
+	undisposed undisposedTriggers
+	// textureExecute runs a Texture activation; nil is the runtime's
+	// ExecuteActivationSyncChecked (a test seam).
+	textureExecute func(ctx context.Context, rec *types.RunRecord) error
+}
+
+func (h *actorHandler) executeTextureActivation(ctx context.Context, rec *types.RunRecord) error {
+	if h.textureExecute != nil {
+		return h.textureExecute(ctx, rec)
+	}
+	return h.rt.ExecuteActivationSyncChecked(ctx, rec)
 }
 
 // applyHoldWindow bounds how long work waits for an apply's checkpoint. It
@@ -821,9 +834,18 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 				return nil, nil // durable foreign source envelope
 			}
 		}
+		triggerKey := textureTriggerKey(occurrence)
 		if fate == textureowner.TextureActorOccurrenceTerminal {
+			h.undisposed.forget(triggerKey)
 			logTextureOccurrenceConsumed(agentID, u, "terminal (disposed, cancelled, late, or head already consumed by a Texture turn)")
 			return nil, nil // explicit Store-owned disposed/cancelled/late outcome
+		}
+		// One trigger, one model turn: after a turn ended without disposing
+		// it, a re-delivery (a deferral coming due, or the same trigger's
+		// other actor update) re-checks and is closed at the bound; it never
+		// runs the model again (problem 17).
+		if hadTurn, closed := h.undisposed.lookup(triggerKey, time.Now().UTC()); hadTurn {
+			return nil, h.recheckUndisposedTextureTrigger(ctx, u, ownerID, computerID, agentID, triggerKey, occurrence, closed)
 		}
 
 		// Reconcile canonical document/head/mutation authority and synchronously
@@ -849,7 +871,8 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		rec.Metadata["actor_reactivate_existing_memory"] = true
 		rec.Metadata["actor_reactivated_from_passivated"] = true
 		rec.Metadata["texture_trigger_occurrence"] = u.Content
-		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
+		turnStart := time.Now().UTC()
+		if err := h.executeTextureActivation(ctx, rec); err != nil {
 			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
 				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
 			}
@@ -862,13 +885,24 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		if post == textureowner.TextureActorOccurrencePending {
 			// A run that reached a terminal state but left the trigger
 			// undisposed can never dispose it on retry: decided-invalid.
-			// A passivated/active run is genuinely parked awaiting its next
-			// wake — the deferral is real, not a live-lock.
 			if rec.State.Terminal() {
+				// The turn was spent: the trigger's other actor update
+				// re-checks it instead of running the model again.
+				h.undisposed.recordTurn(triggerKey, rec.RunID, time.Now().UTC())
 				return nil, fmt.Errorf("%w: actorruntime: Texture activation terminated without disposing exact trigger (run=%s state=%s)", actor.ErrDurableInvalid, rec.RunID, rec.State)
 			}
-			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture activation returned without disposing exact trigger"))
+			// A run that parked idle in this activation had its model turn
+			// on this trigger. Another turn may still dispose it (a sibling
+			// report, a newer owner revision); re-deliveries only re-check
+			// it, so the model is not called again for the same trigger. A
+			// run parked for a runtime failure (the trigger never became
+			// model-visible) keeps the retry.
+			if textureTurnParkedIdleSince(*rec, turnStart) {
+				h.undisposed.recordTurn(triggerKey, rec.RunID, time.Now().UTC())
+			}
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture activation returned without disposing exact trigger (run=%s state=%s)", rec.RunID, rec.State))
 		}
+		h.undisposed.forget(triggerKey)
 		return h.memoryFromRunState(rec)
 	}
 resumeGeneric:

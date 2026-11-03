@@ -364,7 +364,9 @@ func storyTextureDeskLive(snapshot types.LifecycleSnapshot, docID string) bool {
 // textureWorkSettledByDesk reports a live document whose Texture desk
 // completed its latest work item (not refused or cancelled) and which is not
 // engineering-bound. Only this state reopens work on owner input; a refused
-// item still refuses the revise.
+// item still refuses the revise, except work the runtime refused because the
+// desk's turn never disposed its trigger (TriggerNotDisposedReason): the
+// desk did not decide it, so the owner's next revise is new work.
 func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bool {
 	if snapshot.Trajectory.Status != types.TrajectoryLive {
 		return false
@@ -392,7 +394,8 @@ func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bo
 			latest = work
 		}
 	}
-	return latest != nil && latest.Status == types.WorkItemCompleted
+	return latest != nil && (latest.Status == types.WorkItemCompleted ||
+		(latest.Status == types.WorkItemRefused && strings.HasPrefix(strings.TrimSpace(latest.Reason), TriggerNotDisposedReason)))
 }
 
 // textureOwnerReopenObjective is constant so the open-work fingerprint lets

@@ -1558,3 +1558,90 @@ func (rt *Handler) TextureActorOccurrencePostcondition(ctx context.Context, o ag
 		return "", fmt.Errorf("unsupported Texture occurrence kind")
 	}
 }
+
+// TriggerNotDisposedReason prefixes the fate of a Texture trigger whose turn
+// ended without disposing it. Texture work refused with it is closed by the
+// runtime, not by the desk, so the owner's next revise reopens work.
+const TriggerNotDisposedReason = "trigger not disposed"
+
+// CloseUndisposedTextureTrigger gives a Texture trigger whose desk turn ended
+// without disposing it, and whose re-checks found no progress, a visible fate
+// on the trajectory's ledger, so it stops costing model calls
+// (docs/problems/texture-trigger-not-disposed-loop-2026-11-03.md):
+//   - an owner revision: the Texture work it targets is refused with the
+//     reason (a work_refused event); the owner's next revise reopens work;
+//   - a producer report: the report is settled with the reason (an
+//     update_late event), so it is not left pending for a later turn to
+//     consume unread; Texture's work stays open for the owner's revisions.
+//
+// It is idempotent: work or a report already closed is not an error, since
+// the trigger's other actor update may have closed it first.
+func (rt *Handler) CloseUndisposedTextureTrigger(ctx context.Context, o agentcore.TextureActorOccurrence, runID, reason string) error {
+	if rt == nil || rt.Store == nil {
+		return fmt.Errorf("Texture owner store unavailable")
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{o.OwnerID, o.ComputerID, o.TrajectoryID, o.TargetAgentID, o.Kind, o.HeadRevisionID, o.ProducerAgentID, o.ProducerUpdateID}, "\x00")))
+	commandID := "texture-trigger-not-disposed:" + hex.EncodeToString(sum[:16])
+	if o.Kind == agentcore.TextureActorOccurrenceProducerReport {
+		update, err := rt.Store.GetLifecycleUpdate(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID, o.TargetAgentID, o.ProducerAgentID, o.ProducerUpdateID)
+		if err != nil {
+			return fmt.Errorf("load undisposed Texture producer report: %w", err)
+		}
+		if update.Disposition != types.UpdatePending {
+			return nil
+		}
+		req := types.SettleLifecycleProducerReportsRequest{
+			OwnerID: o.OwnerID, ComputerID: o.ComputerID, CommandID: commandID, TrajectoryID: o.TrajectoryID,
+			ReportIDs: []string{update.UpdateID}, Reason: reason, IncludeDeliveredStale: true,
+		}
+		req.CommandDigest, err = store.ComputeSettleLifecycleProducerReportsDigest(req)
+		if err != nil {
+			return err
+		}
+		if _, err := rt.Store.SettleLifecycleProducerReports(ctx, req); err != nil {
+			return fmt.Errorf("settle undisposed Texture producer report %s: %w", update.UpdateID, err)
+		}
+		return nil
+	}
+	workID := strings.TrimSpace(o.ResolvedTargetWorkItemID)
+	if workID == "" {
+		workID = strings.TrimSpace(o.TargetWorkItemID)
+	}
+	if workID == "" {
+		return fmt.Errorf("undisposed Texture trigger lacks its target work")
+	}
+	// A newer owner revision (or a turn that consumed this head) since the
+	// re-check makes the trigger terminal: its work now belongs to the newer
+	// head, so it is not refused (review round 2).
+	snapshot, err := rt.Store.GetLifecycleSnapshot(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID)
+	if err != nil {
+		return fmt.Errorf("load undisposed Texture trigger trajectory: %w", err)
+	}
+	if snapshot.Document.CurrentRevisionID != o.HeadRevisionID || store.TextureTurnConsumedHead(snapshot.Events, o.HeadRevisionID) {
+		return nil
+	}
+	work, err := rt.Store.GetLifecycleWorkItem(ctx, o.OwnerID, o.ComputerID, workID)
+	if err != nil {
+		return fmt.Errorf("load undisposed Texture trigger work: %w", err)
+	}
+	if work.Status != types.WorkItemOpen {
+		return nil
+	}
+	refusalRef := "trigger-not-disposed"
+	if strings.TrimSpace(runID) != "" {
+		refusalRef += ":" + strings.TrimSpace(runID)
+	}
+	req := types.RefuseLifecycleWorkRequest{
+		OwnerID: o.OwnerID, ComputerID: o.ComputerID, CommandID: commandID,
+		TrajectoryID: o.TrajectoryID, WorkItemID: workID, ActingAgentID: o.TargetAgentID,
+		RefusalRef: refusalRef, Reason: reason,
+	}
+	req.CommandDigest, err = store.ComputeRefuseLifecycleWorkDigest(req)
+	if err != nil {
+		return err
+	}
+	if _, err := rt.Store.RefuseLifecycleWork(ctx, req); err != nil {
+		return fmt.Errorf("refuse undisposed Texture trigger work %s: %w", workID, err)
+	}
+	return nil
+}

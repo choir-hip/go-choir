@@ -888,12 +888,59 @@ func daemonSelfTestBinary() string {
 // dedicated desk-worker binary beside it (no Dolt engine, no gRPC; RES-17) if
 // there is an executable regular file, else exe itself, which serves
 // `desk-session` too.
+//
+// A layered release runs the daemon from the updater's private store
+// ($CHOIR_UPDATER_ROOT/store/<name>/...), under a root-only 0700 directory.
+// The worker execs after it drops to the cell uid, which cannot search that
+// directory, so every desk cell failed with EACCES and no Texture turn could
+// commit (docs/problems/texture-trigger-not-disposed-loop-2026-11-03.md).
+// The guest overlays that store onto /nix/store in the daemon's mount
+// namespace, so the same file is at /nix/store/<name>/...; that path is used
+// when it exists.
 func deskWorkerBinaryFor(exe string) string {
 	dedicated := filepath.Join(filepath.Dir(exe), "desk-worker")
-	if st, err := os.Stat(dedicated); err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0 {
-		return dedicated
+	if executableRegularFile(dedicated) {
+		return cellReachablePath(dedicated)
 	}
-	return exe
+	return cellReachablePath(exe)
+}
+
+// deskWorkerNixStoreRoot is where the guest's store overlay presents the
+// updater's private store (a test seam).
+var deskWorkerNixStoreRoot = "/nix/store"
+
+func executableRegularFile(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0
+}
+
+// cellReachablePath returns the overlay alias of a path in the updater's
+// private store when that alias is an executable file, else path unchanged.
+func cellReachablePath(path string) string {
+	if alias := layeredStoreAlias(path); alias != "" && executableRegularFile(alias) {
+		return alias
+	}
+	return path
+}
+
+// layeredStoreAlias maps $CHOIR_UPDATER_ROOT/store/<name>/<rest> to
+// <nix store>/<name>/<rest>. Only one clean store entry name (no dot prefix,
+// so never the updater's .staging- dirs) with a path inside it maps.
+func layeredStoreAlias(path string) string {
+	root := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT"))
+	if root == "" {
+		return ""
+	}
+	storeDir := filepath.Clean(filepath.Join(root, "store")) + string(filepath.Separator)
+	clean := filepath.Clean(path)
+	if !strings.HasPrefix(clean, storeDir) {
+		return ""
+	}
+	name, rest, ok := strings.Cut(strings.TrimPrefix(clean, storeDir), string(filepath.Separator))
+	if !ok || name == "" || rest == "" || strings.HasPrefix(name, ".") {
+		return ""
+	}
+	return filepath.Join(deskWorkerNixStoreRoot, name, rest)
 }
 
 // deskWorkerActivationID identifies the desk activation a worker serves. Run
