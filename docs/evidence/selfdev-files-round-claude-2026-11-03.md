@@ -145,3 +145,18 @@ Claude-arm round is the first one after that cold boot, once observability repor
 | 5 | 07:14:29 | no Cast by 07:25 (Problem 8; Problem 10 behind it) | - | - | - | - | - | blocked |
 
 Live shots plus next request (apply to next revision sent): round 3, 05:35:01 to 06:13:06 = 38.1 min (live harness hardening about 25 min, the full seven-preset run 4 min, then a build-slot wait).
+
+## Rounds 6 and 7 (17:10-18:52Z): applied and published
+
+- Round 6, revise-r6, was the first round after the cold boot (17:09Z). selfdev-5e3fad8e, claude mode, delegate_calls 1
+  and succeeded 1. Rejected at 17:47:52Z: shot 06 missing, and contrast computed from styles rather than pixels.
+- Round 7 was management's own third proof pass, opened 17:50:55Z on trajectory 1ac8f713 before the refresh.
+  Assignment-82187f26 ran in claude mode with delegate_available true but **delegate_calls 0**, so DeepSeek built it
+  alone. selfdev-347ca82ef456662476abfda49b720d57 was created 18:22:07Z and awaiting from 18:23:21Z. Per Texture's
+  turn, all twelve shots were captured, including the Trash undo toast, and every preset reached 4.5:1. Approved as
+  FP0 at 18:51:34Z and applied at 18:51:36Z. The patch touches nothing outside frontend/src/packages/files-next/.
+- Published to the Library at 18:51:48Z: files-next release 5ee74ba79adb64c5acc1256fce957469e144bea6f44053b5fa99cc59aec8bf62.
+- Comparison note: this arm's published Files is a DeepSeek-built result. The delegate made no call in the applied
+  round, and the round where it did make one (r6) was rejected.
+- Cycle: bind 17:50:55Z to candidate 18:22:07Z, 31 min. The candidate then waited 28 min for approval, because my
+  approver had exited.
