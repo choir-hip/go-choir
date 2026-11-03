@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -42,7 +43,7 @@ type CapsuleToolCtx struct {
 	OpenFreezeCandidate func(ctx context.Context, trajectoryID string) (selfdev.Operation, error)
 	// VerifyRebase checks a staged cumulative patch for a rebase round (U4);
 	// nil, or an assignment no pair claim names, checks nothing.
-	VerifyRebase    func(ctx context.Context, staged *capsule.StagedRelease, patch []byte) error
+	VerifyRebase    func(ctx context.Context, staged *capsule.StagedRelease, patch []byte) ([]sourceproj.UpstreamedHunk, error)
 	EventProjection interface {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
@@ -306,14 +307,17 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}
 	// U4: a rebase round's candidate must contain the applied change. The
 	// check is repeated at apply; here it fails before the owner sees it.
+	var rebaseUpstreamed []sourceproj.UpstreamedHunk
 	if toolCtx.VerifyRebase != nil && staged.SourcePatchSHA != "" {
 		stagedPatch, readErr := os.ReadFile(filepath.Join(staged.TemporaryRoot, "source.patch"))
 		if readErr != nil {
 			return nil, fmt.Errorf("read the staged source patch: %w", readErr)
 		}
-		if err := toolCtx.VerifyRebase(ctx, staged, stagedPatch); err != nil {
+		upstreamed, err := toolCtx.VerifyRebase(ctx, staged, stagedPatch)
+		if err != nil {
 			return nil, err
 		}
+		rebaseUpstreamed = upstreamed
 	}
 	sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, handle)
 	if err != nil {
@@ -382,6 +386,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}
 	if record.ReleaseBinary != nil {
 		out["release_binary_origin"] = record.ReleaseBinary.Origin
+	}
+	// Problem 14: the hunks of the applied change this rebase dropped because
+	// the new base already carries them, so the drop is visible.
+	if len(rebaseUpstreamed) > 0 {
+		out["rebase_upstreamed"] = rebaseUpstreamed
 	}
 	// Screens: save the engineer's screenshots as files Texture reads, and
 	// tell the cell where they are.

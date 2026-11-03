@@ -439,6 +439,9 @@ type sourceProjectionFact struct {
 	// lineage receipt's digest.
 	RebaseOf      string `json:"rebase_of,omitempty"`
 	ReceiptSHA256 string `json:"receipt_sha256,omitempty"`
+	// Upstreamed are the hunks a passing rebase dropped as already in the
+	// new base (problem 14).
+	Upstreamed []sourceproj.UpstreamedHunk `json:"upstreamed,omitempty"`
 	// Saved is set on a source.projection_saved fact (S4).
 	Saved []sourceproj.Saved `json:"saved,omitempty"`
 }

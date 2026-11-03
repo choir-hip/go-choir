@@ -87,7 +87,10 @@ type rebaseLineageReceipt struct {
 	Clean                []string `json:"clean"`
 	Resolved             []string `json:"resolved"`
 	Extra                []string `json:"extra"`
-	Verdict              string   `json:"verdict"`
+	// Upstreamed are the hunks of the applied change the candidate lacks
+	// because the new base already carries them (problem 14).
+	Upstreamed []sourceproj.UpstreamedHunk `json:"upstreamed,omitempty"`
+	Verdict    string                      `json:"verdict"`
 }
 
 func rebaseReceiptSHA256(raw []byte) string {
@@ -172,7 +175,7 @@ func (rt *Runtime) verifyRebaseContentForOperation(ctx context.Context, operatio
 	receipt := rebaseLineageReceipt{
 		Schema: rebaseLineageSchema, RebaseOf: lineage.OperationID, NoticeID: lineage.NoticeID, Attempt: lineage.Attempt,
 		StackBase: stackBase, Base: lineage.BootedBase, PatchDigest: sourceproj.SHA256(patch), CandidatePatchDigest: sourceproj.SHA256(candidate),
-		Clean: nonNil(verdict.Clean), Resolved: nonNil(verdict.Resolved), Extra: nonNil(verdict.Extra), Verdict: "pass",
+		Clean: nonNil(verdict.Clean), Resolved: nonNil(verdict.Resolved), Extra: nonNil(verdict.Extra), Upstreamed: verdict.Upstreamed, Verdict: "pass",
 	}
 	raw, err := json.Marshal(receipt)
 	if err != nil {
@@ -184,6 +187,7 @@ func (rt *Runtime) verifyRebaseContentForOperation(ctx context.Context, operatio
 	rt.appendSourceProjectionFactRecord(sourceProjectionFact{
 		At: time.Now().UTC().Format(time.RFC3339Nano), Kind: factRebased, Trigger: "apply", State: "pass",
 		OperationID: operation.OperationID, Base: stackBase, BootedBase: lineage.BootedBase, RebaseOf: lineage.OperationID, ReceiptSHA256: rebaseReceiptSHA256(raw),
+		Upstreamed: verdict.Upstreamed,
 	})
 	return true, nil
 }
@@ -273,36 +277,67 @@ func rebaseReceiptText(receipt rebaseLineageReceipt, sha string) string {
 		}
 		fmt.Fprintf(&b, "; resolved conflicts: %s%s", strings.Join(shown, ", "), more)
 	}
+	if text := upstreamedText(receipt.Upstreamed); text != "" {
+		b.WriteString("; dropped as upstreamed (lines the new base added carry their tokens): " + text)
+	}
 	b.WriteString(".")
 	return b.String()
 }
 
+// upstreamedText names upstreamed hunks for a record: path and hunk header,
+// escaped (the path is guest-influenced) and bounded like resolved paths.
+func upstreamedText(hunks []sourceproj.UpstreamedHunk) string {
+	const limit, perHunk, total = 10, 200, 1200
+	var shown []string
+	size := 0
+	for _, h := range hunks {
+		if len(shown) == limit {
+			break
+		}
+		item := escapeRecordText(h.Path+" "+h.Hunk, perHunk)
+		if size+len(item) > total {
+			break
+		}
+		shown = append(shown, item)
+		size += len(item) + 2
+	}
+	if len(shown) == 0 {
+		return ""
+	}
+	more := ""
+	if n := len(hunks) - len(shown); n > 0 {
+		more = fmt.Sprintf(", and %d more", n)
+	}
+	return strings.Join(shown, ", ") + more
+}
+
 // verifyRebaseAtFreeze is Freeze's call: for a run whose assignment a claim
 // names, the staged cumulative patch must already contain the applied change.
-// It writes nothing.
-func (rt *Runtime) verifyRebaseAtFreeze(ctx context.Context, rec *types.RunRecord, staged *capsule.StagedRelease, patch []byte) error {
+// It writes nothing; it returns the hunks the candidate dropped as already in
+// the new base, so Freeze's result shows them.
+func (rt *Runtime) verifyRebaseAtFreeze(ctx context.Context, rec *types.RunRecord, staged *capsule.StagedRelease, patch []byte) ([]sourceproj.UpstreamedHunk, error) {
 	if rt == nil || rt.store == nil || rec == nil || staged == nil {
-		return nil
+		return nil, nil
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	if assignmentID == "" {
-		return nil
+		return nil, nil
 	}
 	lineage, _, isRebase, err := rt.rebaseLineageOfAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID)
 	if err != nil {
-		return fmt.Errorf("check whether this assignment is a rebase: %w", err)
+		return nil, fmt.Errorf("check whether this assignment is a rebase: %w", err)
 	}
 	if !isRebase {
-		return nil
+		return nil, nil
 	}
 	verdict, _, _, err := rt.checkRebaseCandidate(ctx, lineage, staged.SourceBaseCommit, patch)
 	if err != nil {
-		return fmt.Errorf("Freeze refused: the rebase could not be checked: %w", err)
+		return nil, fmt.Errorf("Freeze refused: the rebase could not be checked: %w", err)
 	}
 	if !verdict.Pass {
-		return &rebaseContentMismatchError{Verdict: verdict}
+		return nil, &rebaseContentMismatchError{Verdict: verdict}
 	}
-	return nil
+	return verdict.Upstreamed, nil
 }
 
 // escapeRecordText makes guest-influenced text safe for a one-line record:

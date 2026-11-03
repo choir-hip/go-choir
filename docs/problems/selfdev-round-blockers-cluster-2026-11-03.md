@@ -171,6 +171,44 @@ publisher, widened within the Library design.
    carries its time and kind, newest governs (the Texture prompt), and the
    order is oldest to newest.
 
+## Clustering assessment 2: the rebase path (problems 10, 14, 16)
+
+Three rebase-path defects in an hour (10: no notice without a root; 14: the
+content check refuses a hunk the new base carries; 16: pool's notice id
+reached engineering admission as
+`rebase-notice:selfdev-rebase:selfdev-c4ac7712…:eb1fb6408…:1`). They do not
+share one cause. 10 was an addressee (fixed). 14 is the content verifier's
+model of a rebase: it knew only "P survives", never "P is already upstream".
+16 is the carry: the notice's identity travels from the notice record to the
+Texture's Cast packet, to management's spec and its objective, and each hop
+is a model copying a string out of prose (the notice body prints the Cast to
+make; the Texture prompt says "copy the notice id exactly"). Admission then
+compares the strings byte for byte, and the timer's answered-check does too,
+so one bad copy refuses the rebase and also hides the answer from the timer,
+which then waits out the 30-minute window. Claude's and deepseek's ids were
+copied correctly; pool's Texture added its sender inbox (`selfdev-rebase:`)
+as a segment. That is a model behavior on a substrate that asks a model to
+carry an identity.
+
+Substrate question: should the notice travel as a typed record id end to
+end? Yes. The notice record is the authority; a desk names it, the runtime
+resolves the naming to the record and writes the record's own id:
+- Texture's Cast: the reducer resolves `rebase_notice` (the last three
+  segments: operation, base, attempt) to a notice record on the tape sent
+  to this Texture, writes that record's id on the packet, and refuses the
+  cell when none matches, so the model learns at once;
+- management's Cast: the runtime takes the notice from the parent Texture
+  Cast when the spec names none, resolves one it does name, and fills
+  rebase_of and base from the record and the id into the objective when
+  missing; nothing a model types has to match byte for byte;
+- admission and the timer compare resolved ids, so a tape that already
+  holds a mangled parent (pool's) is read as the notice it names.
+A refused rebase re-mints promptly: the timer looks again every stay-up
+interval (5 minutes) instead of once per answer window, so a closed
+answering round is followed by the next attempt within minutes.
+14 is not covered by this; it is a separate rule in the verifier and lands
+as its own commit.
+
 ## Problem 8: hypothesis only
 
 The committing cell in each dropped turn called only `choir.Write`
@@ -193,3 +231,4 @@ One line per defect, with its fix.
 - 9 (2026-11-03): problem: engineering read 16 KiB of a Texture request Texture accepted at up to 64 KiB of owner words; evidence: luna assignment-24a775b8 (06:08Z) saw 16,384 of 20,923 bytes and froze a partial build. Fix: one bound, textureCastPacketMax (96 KiB), for a Texture Cast's whole packet at reduce and for engineering's view.
 - 5 (2026-11-03): problem: a Cast naming only the newest owner revision dropped the earlier request with the list; evidence: claude r3 Cast tray-2 (04:41:57Z) named only 27c25e19, not 91b253a0. Fix: the runtime also attaches the trajectory's earlier owner words (no newer than the newest named revision, newest first within 8 revisions and 64 KiB; the rest named under owner_directions_omitted).
 - 15 (2026-11-03): problem: an inline comment after a model-policy value became part of the value; evidence: luna engineering `reasoning = "high"  # owner-edited: ... (2026-11-03)` reached chatgpt as `hig...03)`, 400 on every call 11:22-11:28Z. Fix: the policy parser strips unquoted `#` comments (quotes respected), and a reasoning effort outside none/minimal/low/medium/high/xhigh/max is dropped to the default effort with a log line and a `llm_policy_error` diagnostic.
+- 14 (2026-11-03): problem: a rebase whose candidate drops a hunk the new base already carries fails Freeze with hunk_missing; evidence: claude selfdev-22655878 failed 11:15:12Z on frontend/src/lib/app-sdk.ts (round 3 added the auth and media re-exports; eb1fb6408 carries the same names from e5915e0ca in another shape and place, so the 3-way merge re-adds them and the candidate, correctly, does not). Fix: a missing pure-addition hunk is upstreamed when B' carries its content (all its code tokens are in lines B' added to the path, its string literals are in B', and it brings a word B lacked); the candidate must then pass the conflict rules against P without those hunks, on conflicting and clean paths alike; the hunks are recorded on the verdict, the lineage receipt, the source_projection_rebased fact, the owner's apply record and Freeze's result (`rebase_upstreamed`). Residual: a hunk whose meaning is its place in the file, with every token in lines main added elsewhere, can be dropped (visible on the record).

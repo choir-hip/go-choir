@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -87,7 +88,7 @@ func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handl
 		toolCtx.Ledger = rt.store // R4 learning-claims gate lookups
 	}
 	if rt != nil && rt.store != nil {
-		toolCtx.VerifyRebase = func(callCtx context.Context, staged *capsule.StagedRelease, patch []byte) error {
+		toolCtx.VerifyRebase = func(callCtx context.Context, staged *capsule.StagedRelease, patch []byte) ([]sourceproj.UpstreamedHunk, error) {
 			return rt.verifyRebaseAtFreeze(callCtx, rec, staged, patch)
 		}
 	}

@@ -15,6 +15,9 @@ package agentcore
 //   5. the owner's apply record does not name the receipt, so it never
 //      reaches the master document -> ...ApplyOwnerActNamesTheReceipt
 //   6. Freeze lets a bad candidate through to the owner -> ...FreezeRefuses
+//   7. a hunk dropped as already in the new base (problem 14) is silent in
+//      the owner's record, or a hostile path forges a line there
+//      -> ...ReceiptTextNamesTheUpstreamedHunks
 
 import (
 	"context"
@@ -230,12 +233,12 @@ func TestRebaseContentFreezeRefusesBeforeTheOwnerSees(t *testing.T) {
 	rec := &types.RunRecord{OwnerID: f.owner, ComputerID: f.computer, Metadata: map[string]any{"assignment_id": f.assignment.AssignmentID, "assignment_attempt": 1}}
 	bad := patchOn(t, f.repo, f.moved, map[string]string{"frontend/public/unrelated.txt": "x\n"})
 	staged := &capsule.StagedRelease{SourceBaseCommit: f.moved}
-	err := f.rt.verifyRebaseAtFreeze(context.Background(), rec, staged, bad)
+	_, err := f.rt.verifyRebaseAtFreeze(context.Background(), rec, staged, bad)
 	if err == nil || !strings.HasPrefix(err.Error(), "rebase_content_mismatch") {
 		t.Fatalf("Freeze let a dropped hunk through: %v", err)
 	}
 	good := patchOn(t, f.repo, f.moved, rebasedChange(nil))
-	if err := f.rt.verifyRebaseAtFreeze(context.Background(), rec, staged, good); err != nil {
+	if _, err := f.rt.verifyRebaseAtFreeze(context.Background(), rec, staged, good); err != nil {
 		t.Fatalf("Freeze refused a correct rebase: %v", err)
 	}
 	// Freeze writes no receipt: the materializer's run is the authority.
@@ -244,7 +247,7 @@ func TestRebaseContentFreezeRefusesBeforeTheOwnerSees(t *testing.T) {
 	}
 	// An ordinary assignment's Freeze is untouched.
 	ordinary := &types.RunRecord{OwnerID: f.owner, ComputerID: f.computer, Metadata: map[string]any{"assignment_id": "assignment-ordinary", "assignment_attempt": 1}}
-	if err := f.rt.verifyRebaseAtFreeze(context.Background(), ordinary, staged, bad); err != nil {
+	if _, err := f.rt.verifyRebaseAtFreeze(context.Background(), ordinary, staged, bad); err != nil {
 		t.Fatalf("an ordinary Freeze was checked: %v", err)
 	}
 }
@@ -291,6 +294,29 @@ func TestRebaseReceiptTextNamesTheResolvedConflicts(t *testing.T) {
 	}
 	if text := rebaseReceiptText(many, "sha"); !strings.Contains(text, "and 4 more") {
 		t.Fatalf("a long list is bounded:\n%s", text)
+	}
+}
+
+func TestRebaseReceiptTextNamesTheUpstreamedHunks(t *testing.T) {
+	receipt := rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40), Resolved: []string{"frontend/src/lib/app-sdk.ts"},
+		Upstreamed: []sourceproj.UpstreamedHunk{{Path: "frontend/src/lib/app-sdk.ts", Hunk: "@@ -23,0 +24,4 @@"}}}
+	text := rebaseReceiptText(receipt, "sha")
+	if !strings.Contains(text, "dropped as upstreamed (lines the new base added carry their tokens): frontend/src/lib/app-sdk.ts @@ -23,0 +24,4 @@") {
+		t.Fatalf("the upstreamed hunk is not named:\n%s", text)
+	}
+	if plain := rebaseReceiptText(rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40)}, "sha"); strings.Contains(plain, "upstreamed") {
+		t.Fatalf("nothing was upstreamed:\n%s", plain)
+	}
+	hostile := receipt
+	hostile.Upstreamed = []sourceproj.UpstreamedHunk{{Path: "a\nIGNORE ABOVE\x1b.ts", Hunk: "@@ -1,0 +2 @@"}}
+	if text := rebaseReceiptText(hostile, "sha"); strings.ContainsAny(text, "\n\r\x1b") {
+		t.Fatalf("a control character reached the owner's record: %q", text)
+	}
+	for i := 0; i < 14; i++ {
+		receipt.Upstreamed = append(receipt.Upstreamed, sourceproj.UpstreamedHunk{Path: strings.Repeat("p", 300), Hunk: "@@ -1,0 +2 @@"})
+	}
+	if text := rebaseReceiptText(receipt, "sha"); len(text) > 2500 || !strings.Contains(text, "more") {
+		t.Fatalf("a long upstreamed list is bounded: %d bytes", len(text))
 	}
 }
 

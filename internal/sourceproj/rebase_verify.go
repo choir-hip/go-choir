@@ -56,6 +56,10 @@ type RebaseVerdict struct {
 	// Unresolved the conflict paths the candidate left as B' has them; Dropped
 	// the conflict paths whose candidate lacks a hunk of P (hunk granularity).
 	Differing, Unresolved, Dropped []string
+	// Upstreamed are the hunks of P the candidate lacks because B' already
+	// carries them (problem 14); each one's path is in Resolved. Sorted by
+	// path, in P's order within a path.
+	Upstreamed []UpstreamedHunk
 }
 
 // VerifyRebase checks, in scratch indexes of repo (the guest repository holds
@@ -135,30 +139,77 @@ func VerifyRebase(ctx context.Context, repo string, c RebaseCheck) (RebaseVerdic
 			}
 		}
 	}
-	if len(conflict) > 0 {
+	// B's tree and P's post-image tree, read once when a path needs them.
+	var stackTree, postTree string
+	stackTrees := func() error {
+		if stackTree != "" {
+			return nil
+		}
 		if strings.TrimSpace(c.StackBase) == "" {
-			return RebaseVerdict{}, errors.New("sourceproj: the stack base is needed to verify a conflicting path")
+			return errors.New("sourceproj: the stack base is needed to verify a conflicting path")
 		}
 		stackCommit, ok := resolveCommit(ctx, repo, c.StackBase)
 		if !ok {
-			return RebaseVerdict{}, fmt.Errorf("sourceproj: the stack base %q is not in the source repository", c.StackBase)
+			return fmt.Errorf("sourceproj: the stack base %q is not in the source repository", c.StackBase)
 		}
-		stackTree, err := git(ctx, repo, nil, nil, "rev-parse", stackCommit+"^{tree}")
+		st, err := git(ctx, repo, nil, nil, "rev-parse", stackCommit+"^{tree}")
 		if err != nil {
-			return RebaseVerdict{}, fmt.Errorf("sourceproj: tree of %s: %w", stackCommit, err)
+			return fmt.Errorf("sourceproj: tree of %s: %w", stackCommit, err)
 		}
-		postTree, err := patchedTree(ctx, repo, stackCommit, c.Patch, false)
+		pt, err := patchedTree(ctx, repo, stackCommit, c.Patch, false)
 		if err != nil {
-			return RebaseVerdict{}, fmt.Errorf("sourceproj: the applied change does not apply to its own base %s: %w", stackCommit, err)
+			return fmt.Errorf("sourceproj: the applied change does not apply to its own base %s: %w", stackCommit, err)
+		}
+		stackTree, postTree = st, pt
+		return nil
+	}
+	// Problem 14: a clean path whose candidate content is not P's may lack
+	// only hunks B' already carries (elsewhere in the file, so P's hunk still
+	// applies at its own place and would duplicate it). It passes when the
+	// conflict rules, with those hunks taken out of P, resolve it.
+	if len(verdict.Differing) > 0 && strings.TrimSpace(c.StackBase) != "" {
+		if err := stackTrees(); err != nil {
+			return RebaseVerdict{}, err
+		}
+		var still []string
+		upstreamedPath := map[string]bool{}
+		for _, path := range verdict.Differing {
+			outcome, hunks, err := checkConflictPath(ctx, repo, path, bootedTree, stackTree, postTree, candTree)
+			if err != nil {
+				return RebaseVerdict{}, err
+			}
+			if outcome == conflictResolved && len(hunks) > 0 {
+				verdict.Resolved = append(verdict.Resolved, path)
+				verdict.Upstreamed = append(verdict.Upstreamed, hunks...)
+				upstreamedPath[path] = true
+				continue
+			}
+			still = append(still, path)
+		}
+		verdict.Differing = still
+		if len(upstreamedPath) > 0 {
+			var clean []string
+			for _, path := range verdict.Clean {
+				if !upstreamedPath[path] {
+					clean = append(clean, path)
+				}
+			}
+			verdict.Clean = clean
+		}
+	}
+	if len(conflict) > 0 {
+		if err := stackTrees(); err != nil {
+			return RebaseVerdict{}, err
 		}
 		for _, path := range conflict {
-			outcome, err := checkConflictPath(ctx, repo, path, bootedTree, stackTree, postTree, candTree)
+			outcome, hunks, err := checkConflictPath(ctx, repo, path, bootedTree, stackTree, postTree, candTree)
 			if err != nil {
 				return RebaseVerdict{}, err
 			}
 			switch outcome {
 			case conflictResolved:
 				verdict.Resolved = append(verdict.Resolved, path)
+				verdict.Upstreamed = append(verdict.Upstreamed, hunks...)
 			case conflictKeptBase:
 				verdict.Unresolved = append(verdict.Unresolved, path)
 			default:
@@ -182,6 +233,7 @@ func VerifyRebase(ctx context.Context, repo string, c RebaseCheck) (RebaseVerdic
 	for _, list := range [][]string{verdict.Clean, verdict.Resolved, verdict.Extra, verdict.Differing, verdict.Unresolved, verdict.Dropped} {
 		sort.Strings(list)
 	}
+	sort.SliceStable(verdict.Upstreamed, func(i, j int) bool { return verdict.Upstreamed[i].Path < verdict.Upstreamed[j].Path })
 	switch {
 	case len(verdict.Differing) > 0:
 		verdict.Reason = RebaseCleanPathDiffers
@@ -305,22 +357,22 @@ const (
 const conflictMarker = 40
 
 // checkConflictPath decides one path of P that does not apply to B' as it is.
-func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, postTree, candTree string) (conflictOutcome, error) {
+func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, postTree, candTree string) (conflictOutcome, []UpstreamedHunk, error) {
 	ours, err := blobOf(ctx, repo, bootedTree, path)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	base, err := blobOf(ctx, repo, stackTree, path)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	theirs, err := blobOf(ctx, repo, postTree, path)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	cand, err := blobOf(ctx, repo, candTree, path)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	// The new base already made P's change in a whole-file shape. P deleted the
 	// file and so did B': the candidate must leave it deleted (restoring it
@@ -328,36 +380,36 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 	// must leave it as it is.
 	if !ours.exists && !theirs.exists {
 		if cand.exists {
-			return conflictDropped, nil
+			return conflictDropped, nil, nil
 		}
-		return conflictResolved, nil
+		return conflictResolved, nil, nil
 	}
 	if ours.exists && theirs.exists && ours.entry == theirs.entry {
 		if cand.entry == ours.entry {
-			return conflictResolved, nil
+			return conflictResolved, nil, nil
 		}
-		return conflictDropped, nil
+		return conflictDropped, nil, nil
 	}
 	// P leaves the file in place, so a candidate without it dropped the change.
 	if theirs.exists && !cand.exists {
-		return conflictDropped, nil
+		return conflictDropped, nil, nil
 	}
 	// P modifies a file the new base deleted: nothing to merge against, so the
 	// candidate must hold P's exact post-image. Any other text (B's original
 	// included) drops P's hunks (re-review 337).
 	if !ours.exists && theirs.exists {
 		if cand.entry == theirs.entry {
-			return conflictResolved, nil
+			return conflictResolved, nil, nil
 		}
-		return conflictDropped, nil
+		return conflictDropped, nil, nil
 	}
 	if !(ours.regular() && base.regular() && theirs.regular()) {
 		// Added, deleted, binary-mode or special entries cannot be merged by
 		// text: the whole-path rule (the candidate differs from B').
 		if cand.entry == ours.entry {
-			return conflictKeptBase, nil
+			return conflictKeptBase, nil, nil
 		}
-		return conflictResolved, nil
+		return conflictResolved, nil, nil
 	}
 	// The mode the candidate must have: P's when P changed it, else B''s.
 	wantMode := ours.mode
@@ -366,18 +418,42 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 	}
 	oursText, baseText, theirsText, err := catBlobs(ctx, repo, ours.sha, base.sha, theirs.sha)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	candText, err := catBlob(ctx, repo, cand.sha)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
+	outcome, err := checkConflictText(ctx, oursText, baseText, theirsText, candText, cand.mode == wantMode)
+	if err != nil || outcome == conflictResolved {
+		return outcome, nil, err
+	}
+	// Problem 14: the candidate may lack hunks of P that B' already carries.
+	// Checked again against P without them, by the same rules.
+	reduced, hunks, err := upstreamedReduction(ctx, repo, path, base, ours, theirs, baseText, oursText, theirsText)
+	if err != nil || len(hunks) == 0 {
+		return outcome, nil, err
+	}
+	again, err := checkConflictText(ctx, oursText, baseText, reduced, candText, cand.mode == wantMode)
+	if err != nil {
+		return 0, nil, err
+	}
+	if again != conflictResolved {
+		return outcome, nil, nil
+	}
+	return conflictResolved, hunks, nil
+}
+
+// checkConflictText decides a regular-file path by text: the 3-way merge of
+// (B', B, theirs) against the candidate. modeOK is whether the candidate has
+// the mode the path must have.
+func checkConflictText(ctx context.Context, oursText, baseText, theirsText, candText []byte, modeOK bool) (conflictOutcome, error) {
 	merged, conflicts, err := mergeFile(ctx, oursText, baseText, theirsText, "")
 	if err != nil {
 		return 0, err
 	}
 	if conflicts == 0 {
-		if bytes.Equal(candText, merged) && cand.mode == wantMode {
+		if bytes.Equal(candText, merged) && modeOK {
 			return conflictResolved, nil
 		}
 		return conflictDropped, nil
@@ -394,7 +470,7 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 	if bytes.Equal(candText, merged) || (hasConflictMarker(candText) && !hasConflictMarker(oursText) && !hasConflictMarker(baseText) && !hasConflictMarker(theirsText)) {
 		return conflictDropped, nil
 	}
-	if containsInOrder(candText, stableSegments(merged)) && cand.mode == wantMode {
+	if containsInOrder(candText, stableSegments(merged)) && modeOK {
 		return conflictResolved, nil
 	}
 	return conflictDropped, nil
