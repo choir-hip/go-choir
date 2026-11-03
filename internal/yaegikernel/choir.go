@@ -366,6 +366,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":        func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
 		"WriteFileBT":      func() reflect.Value { return reflect.ValueOf(s.WriteFileBT) },
+		"Edit":             func() reflect.Value { return reflect.ValueOf(s.Edit) },
+		"EditMulti":        func() reflect.Value { return reflect.ValueOf(s.EditMulti) },
 		"Exec":             func() reflect.Value { return reflect.ValueOf(s.Exec) },
 		"Start":            func() reflect.Value { return reflect.ValueOf(s.Start) },
 		"Poll":             func() reflect.Value { return reflect.ValueOf(s.Poll) },
@@ -420,7 +422,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		// WriteFileBT is WriteFile with a placeholder step: it is admitted
 		// by the WriteFile module entry and denied wherever WriteFile is.
 		gate := name
-		if name == "WriteFileBT" {
+		if name == "WriteFileBT" || name == "Edit" || name == "EditMulti" {
 			gate = "WriteFile"
 		}
 		if !s.deskModule(gate) {
