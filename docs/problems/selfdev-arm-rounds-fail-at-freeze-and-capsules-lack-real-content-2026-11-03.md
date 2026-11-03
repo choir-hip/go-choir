@@ -377,3 +377,16 @@ a rebase that took 16 minutes is thrown away by the next deploy, and with expedi
 arms can loop: notice, rebase, refresh, notice. Fix direction: hold the refresh while an operation is frozen, awaiting
 approval or accepted (or let a rebase finish onto the base it claimed and re-notice after); and say why standing_consensus
 left it at awaiting_approval.
+
+## Problem 23: a stack that once touched files outside its package cannot be made publishable (deepseek, 14:21Z)
+
+Deepseek's Files round 7 (selfdev-0edfc337c6eff5455e4b938622c8a178, built 13:26-14:14Z, FP0-approved 14:21:08Z, applied
+14:21:10Z) was asked to be package-only. `choir package publish --package files-next` answered 409: "package_change_not_confined:
+the operation changed paths outside frontend/src/packages/files-next: frontend/src/lib/app-sdk.ts,
+frontend/tests/files-next/file-kinds.spec.js, frontend/tests/files-next/files-next-ui.spec.js". The stack under it (rounds 3 and
+the 11:02Z rebase) already carried an app-sdk.ts edit and two specs outside the package; this round changed them again (its
+cumulative app-sdk hunk adds isOwnLiveEvent and APP_REGISTRY exports and reorders rememberRecentMedia). Even a round that only
+reverts those paths to the base changes paths outside the package, so the publisher's check 1 (the operation's own change is
+confined) refuses every cleanup too. Ways out: let check 1 accept outside paths whose result equals the base (net zero), or
+let the owner publish the package subtree of an applied stack whatever its outside paths, recording them as left behind.
+Interim: the next deepseek request asks for app-sdk.ts and frontend/tests/files-next/ to be restored to the base exactly.
