@@ -33,10 +33,25 @@ import (
 // test can shorten it.
 var jobPollInterval = 2 * time.Second
 
+// A build-class job waits while the host is short of memory (S4,
+// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, point 3): it is
+// recorded waiting, with the reason in its status, and starts when the host
+// facts clear. hostMemoryWaitPoll is how often a waiting job reads them; a
+// job that waited hostMemoryMaxWait ends stopped with the reason, so a stall
+// is visible and never silent. Vars so a test can shorten them.
+var (
+	hostMemoryWaitPoll = 5 * time.Second
+	hostMemoryMaxWait  = 30 * time.Minute
+)
+
 type capsuleJob struct {
 	// boosted says the job's memory need raised its capsule: its lease
 	// share (release) then belongs to that boost, returned by endJobMemory.
-	boosted     bool
+	boosted bool
+	// waiting is true while the job waits for host memory; whoever clears
+	// it (its start, its stop, its capsule's end) owns the job's next step.
+	// Guarded by the executor's mu.
+	waiting     bool
 	agentRunID  string
 	handle      string
 	capsuleID   string
@@ -115,11 +130,42 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	}
 	e.jobs[spec.ID] = job
 	admit := e.jobAdmission
+	hm := e.hostMemory
 	e.mu.Unlock()
-	abandon := func(err error) (yaegikernel.JobView, error) {
+	// A build-class job reads the host facts before it starts (S4): while
+	// the host is under memory pressure or has less than one build's peak
+	// over its floor, it waits, visibly, and starts when that clears.
+	if hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
+		facts, fresh := hm.Facts()
+		if reason := HostMemoryWaitReason(facts, fresh); reason != "" {
+			e.mu.Lock()
+			job.waiting = true
+			job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
+				Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, Reason: reason}
+			view := jobView(job.status, "", "")
+			e.mu.Unlock()
+			e.persistJobRecord(job)
+			log.Printf("capsule: job %s in capsule %s %s", spec.ID, caps.ID, reason)
+			go e.waitForHostMemory(job, hm, time.Now(), hostMemoryWaitPoll, hostMemoryMaxWait)
+			return view, nil
+		}
+	}
+	view, err := e.launchJob(ctx, job, capability, caps, admit)
+	if err != nil {
 		e.mu.Lock()
 		delete(e.jobs, spec.ID)
 		e.mu.Unlock()
+		return yaegikernel.JobView{}, err
+	}
+	return view, nil
+}
+
+// launchJob starts a registered job in its capsule: its memory need, the
+// workspace digest, the broker's start, then its watcher. On error nothing
+// it took is kept; the caller decides what the job becomes.
+func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *Capability, caps *Capsule, admit JobAdmission) (yaegikernel.JobView, error) {
+	spec := job.spec
+	abandon := func(err error) (yaegikernel.JobView, error) {
 		e.returnJobMemory(job)
 		return yaegikernel.JobView{}, err
 	}
@@ -139,6 +185,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 		}
 		job.boosted = true
 	}
+	var err error
 	if job.startDigest, err = digestCapsuleWorktree(ctx, caps); err != nil {
 		return abandon(fmt.Errorf("job %s: digest the workspace: %w", spec.ID, err))
 	}
@@ -154,6 +201,84 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	return jobView(st, "", ""), nil
 }
 
+// claimWaitingJob ends a job's wait: true for the one caller that clears it.
+func (e *Executor) claimWaitingJob(job *capsuleJob) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !job.waiting {
+		return false
+	}
+	job.waiting = false
+	return true
+}
+
+// waitForHostMemory starts a waiting job once the host facts clear, or ends
+// it: stopped when its capsule or its authority ends first, or when it has
+// waited hostMemoryMaxWait; failed when its start fails.
+func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.Time, poll, maxWait time.Duration) {
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+	for range ticker.C {
+		e.mu.RLock()
+		caps := e.capsules[job.capsuleID]
+		waiting := job.waiting
+		e.mu.RUnlock()
+		if !waiting {
+			return // stopped meanwhile
+		}
+		state := StateDestroyed
+		if caps != nil {
+			caps.mu.RLock()
+			state = caps.State
+			caps.mu.RUnlock()
+		}
+		switch state {
+		case StateActive:
+		case StateDestroying, StateDestroyed:
+			if e.claimWaitingJob(job) {
+				e.finishJob(job, nil, capsulejob.StateStopped, "the capsule ended before the job did")
+			}
+			return
+		default:
+			continue // frozen for a Freeze, or quiescing: never start now
+		}
+		capability, err := e.ResolveCapability(job.agentRunID, job.handle)
+		if err != nil {
+			if e.claimWaitingJob(job) {
+				e.finishJob(job, nil, capsulejob.StateStopped, "the assignment's capsule authority ended before the job did")
+			}
+			return
+		}
+		facts, fresh := hm.Facts()
+		reason := HostMemoryWaitReason(facts, fresh)
+		if reason != "" && time.Since(since) < maxWait {
+			e.mu.Lock()
+			job.status.Reason = reason
+			e.mu.Unlock()
+			continue
+		}
+		if !e.claimWaitingJob(job) {
+			return
+		}
+		if reason != "" {
+			e.finishJob(job, nil, capsulejob.StateStopped, fmt.Sprintf("waited %s for host memory and the host stayed short (%s); start it again later", maxWait, reason))
+			return
+		}
+		e.mu.RLock()
+		admit := e.jobAdmission
+		e.mu.RUnlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		_, err = e.launchJob(ctx, job, capability, caps, admit)
+		cancel()
+		if err != nil {
+			e.finishJob(job, nil, capsulejob.StateFailed, "could not start after waiting for host memory: "+err.Error())
+			return
+		}
+		log.Printf("capsule: job %s in capsule %s started after waiting %s for host memory", job.spec.ID, job.capsuleID, time.Since(since).Round(time.Second))
+		return
+	}
+}
+
 // StopJob asks the run's job id to stop.
 func (e *Executor) StopJob(ctx context.Context, agentRunID, handle, id string) (yaegikernel.JobView, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "job_stop")
@@ -165,6 +290,15 @@ func (e *Executor) StopJob(ctx context.Context, agentRunID, handle, id string) (
 	e.mu.RUnlock()
 	if job == nil || job.agentRunID != agentRunID || job.capsuleID != caps.ID {
 		return yaegikernel.JobView{}, fmt.Errorf("no job %q in this capsule", id)
+	}
+	// A job still waiting for host memory never reached the broker: it
+	// ends here.
+	if e.claimWaitingJob(job) {
+		e.finishJob(job, nil, capsulejob.StateStopped, "stopped while waiting for host memory")
+		e.mu.RLock()
+		view := jobView(job.status, "", "")
+		e.mu.RUnlock()
+		return view, nil
 	}
 	st, err := caps.Job(ctx, capability, "job_stop", JobParams{ID: id})
 	if err != nil {

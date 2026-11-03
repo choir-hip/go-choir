@@ -25,6 +25,11 @@ import (
 // Job states.
 const (
 	StateRunning = "running"
+	// StateWaiting is a build-class job the guest's capsule executor has
+	// not started yet because the host is short of memory (S4,
+	// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, point 3):
+	// its Reason says "waiting for host memory" and why. Not terminal.
+	StateWaiting = "waiting"
 	StateDone    = "done"    // the command exited 0
 	StateFailed  = "failed"  // it exited non-zero, died on a signal, or could not start
 	StateTimeout = "timeout" // the wall clock stopped it

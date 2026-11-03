@@ -115,6 +115,10 @@ func (r *rlmCallReduction) commitJobIntent(ctx context.Context, in yaegikernel.S
 		out["started"] = view.State == capsulejob.StateRunning
 		if view.State == capsulejob.StateRunning {
 			out["next"] = "the job runs now; do other work or end your turn: you are woken when it ends, its record arrives in choir.Records(), and choir.Poll(id) shows its receipt_ref"
+		} else if view.State == capsulejob.StateWaiting {
+			// S4: a build job waits for host memory and starts by itself.
+			out["waiting"] = view.Reason
+			out["next"] = "the job is accepted and waits for host memory; it starts by itself when the host has room. Do other work or end your turn: you are woken when it ends, and choir.Poll(id) shows its state"
 		} else if view.Reason != "" {
 			out["error"] = view.Reason
 		}
