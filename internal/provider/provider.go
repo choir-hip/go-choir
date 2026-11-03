@@ -334,6 +334,13 @@ type ProviderConfig struct {
 	// Synthetic is not initialized even if SYNTHETIC_API_KEY is set.
 	SyntheticModels []string
 
+	// OpenRouterModels lists OpenRouter model IDs (e.g.,
+	// "stealth/crouton-alpha"). The first entry seeds the provider instance;
+	// request.Model controls per-call selection. If empty, OpenRouter chat
+	// is not initialized even if OPENROUTER_API_KEY is set (the Jev route
+	// uses the key on its own).
+	OpenRouterModels []string
+
 	// SelectedProvider is the explicitly selected provider for direct autoputer
 	// runtime calls. Empty means no direct provider is selected.
 	SelectedProvider string
@@ -2375,6 +2382,14 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 	tools := map[int]*toolBuffer{}
 	started := false
 	completed := false
+	// The closing message_delta is sent at the end of the stream, not at
+	// the first finish_reason: OpenRouter repeats the finish chunk and puts
+	// usage only on the second, and Synthetic sends its cache report on a
+	// trailing choices:[] chunk. Both reach the guest this way
+	// (docs/problems/openrouter-provider-crouton-alpha-2026-11-03.md).
+	finishReason := ""
+	finishSeen := false
+	var lastUsage openAIChatCompletionUsage
 
 	emitStart := func() {
 		if started {
@@ -2505,20 +2520,22 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 					onChunk(StreamChunk{Type: "content_block_delta", ToolCallDelta: call.Function.Arguments, ToolCallID: tool.callID, ToolCallName: tool.name})
 				}
 			}
-			if choice.FinishReason != "" {
-				finish(choice.FinishReason, payload.Usage)
+			if choice.FinishReason != "" && !finishSeen {
+				finishSeen = true
+				finishReason = choice.FinishReason
 			}
 		}
-		if len(payload.Choices) == 0 && payload.Usage.present() {
-			result.Usage = payload.Usage.usage()
+		if payload.Usage.present() {
+			lastUsage = payload.Usage
 		}
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("%s: read chat completions stream: %w", providerName, err)
 	}
-	if !completed {
-		finish("stop", openAIChatCompletionUsage{})
+	if !finishSeen {
+		finishReason = "stop"
 	}
+	finish(finishReason, lastUsage)
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
 	log.Printf("provider: %s chat completion stream model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
 		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
@@ -3445,6 +3462,14 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		if p, err := NewSyntheticProviderFromEnv(cfg.SyntheticModels[0]); err == nil {
 			mp.Register("synthetic", p)
 			log.Printf("provider: resolved synthetic (seed_model=%s)", p.modelID)
+		}
+	}
+
+	// Try OpenRouter. Register one provider; req.Model selects the model.
+	if os.Getenv("OPENROUTER_API_KEY") != "" && len(cfg.OpenRouterModels) > 0 {
+		if p, err := NewOpenRouterProviderFromEnv(cfg.OpenRouterModels[0]); err == nil {
+			mp.Register("openrouter", p)
+			log.Printf("provider: resolved openrouter (seed_model=%s)", p.modelID)
 		}
 	}
 

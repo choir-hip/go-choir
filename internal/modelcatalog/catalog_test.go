@@ -137,3 +137,26 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatalf("synthetic-luna pool = %v", s)
 	}
 }
+
+// stealth/crouton-alpha on OpenRouter (owner 2026-11-03), from the public
+// models listing and a keyed probe that day: a 1048576-token window, tools,
+// image input answered correctly. In no pool: a test arm pins it.
+func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
+	info, ok := Lookup("openrouter", "stealth/crouton-alpha")
+	if !ok {
+		t.Fatal("openrouter/stealth/crouton-alpha not catalogued")
+	}
+	if info.ContextWindowTokens != 1048576 || info.MaxOutputTokens != 65536 || info.DisplayName != "Crouton Alpha (OpenRouter stealth)" {
+		t.Fatalf("crouton = %+v", info)
+	}
+	if !SupportsImage("stealth/crouton-alpha") {
+		t.Fatal(ImageRefusal("stealth/crouton-alpha"))
+	}
+	for name, members := range Pools() {
+		for _, m := range members {
+			if m.Provider == "openrouter" {
+				t.Fatalf("pool %s carries openrouter member %v", name, m)
+			}
+		}
+	}
+}

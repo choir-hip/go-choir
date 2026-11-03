@@ -174,6 +174,7 @@ func loadProviderConfig() provider.ProviderConfig {
 		},
 		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
 		SyntheticModels:   []string{"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"},
+		OpenRouterModels:  []string{"stealth/crouton-alpha"},
 	}
 
 	// Allow overrides for non-default setups.
@@ -197,6 +198,9 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_SYNTHETIC_MODELS"); v != "" {
 		cfg.SyntheticModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_OPENROUTER_MODELS"); v != "" {
+		cfg.OpenRouterModels = strings.Split(v, ",")
 	}
 
 	return cfg

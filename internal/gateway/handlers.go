@@ -67,8 +67,8 @@ type gatewayCacheHealth struct {
 // to the upstream provider (VAL-GATEWAY-004).
 type ProviderRequest struct {
 	// Provider is the requested provider ("chatgpt", "bedrock", "zai",
-	// "fireworks", "opencode-go", or "opencode-zen"). If empty, the gateway
-	// requires model-based routing.
+	// "fireworks", "opencode-go", "opencode-zen", "synthetic" or
+	// "openrouter"). If empty, the gateway requires model-based routing.
 	Provider string `json:"provider,omitempty"`
 
 	// Model is an optional model override.

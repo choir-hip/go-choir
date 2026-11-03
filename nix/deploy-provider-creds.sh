@@ -157,6 +157,9 @@ done
 # retires this station-owned configuration and its rate-limit buckets.
 if [ -n "${OPENROUTER_API_KEY:-}" ] || has_env_key "OPENROUTER_API_KEY"; then
   ENVS+=("GATEWAY_JEV_JUDGMENTS_ENABLED=${GATEWAY_JEV_JUDGMENTS_ENABLED:-1}")
+  # The OpenRouter chat provider (owner 2026-11-03: a free week of
+  # stealth/crouton-alpha). The gateway defaults to the same list.
+  ENVS+=("GATEWAY_OPENROUTER_MODELS=${GATEWAY_OPENROUTER_MODELS:-stealth/crouton-alpha}")
 fi
 
 if [ -n "${ZAI_API_KEY:-}" ] || has_env_key "ZAI_API_KEY"; then

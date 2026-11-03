@@ -97,6 +97,11 @@ var pricingTable = []ModelPricing{
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.
 	{Provider: "opencode-go", Model: "longcat-2.5-preview-free", InputPerMillion: 0, OutputPerMillion: 0},
 	{Provider: "opencode-go", Model: "cat-jam-free", InputPerMillion: 0, OutputPerMillion: 0},
+	// Crouton Alpha, OpenRouter's stealth model: free for one week from
+	// 2026-11-03 (models listing pricing 0/0; usage.cost 0 in the probe,
+	// docs/problems/openrouter-provider-crouton-alpha-2026-11-03.md).
+	// Revisit when the free window closes, about 2026-11-10.
+	{Provider: "openrouter", Model: "crouton-alpha", InputPerMillion: 0, OutputPerMillion: 0},
 }
 
 // LookupPricing returns the pricing entry for the given model identifier. The

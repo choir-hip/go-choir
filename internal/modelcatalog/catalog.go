@@ -245,6 +245,21 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 524288,
 		},
 
+		// OpenRouter's stealth/crouton-alpha (owner 2026-11-03: free for a
+		// week, a test arm runs every desk on it). Public models listing
+		// and a keyed probe that day: a 1048576-token window (943718 max
+		// completion advertised; the catalog keeps its 65536 ceiling),
+		// tools, mandatory reasoning, and an image named correctly through
+		// an image_url data URI (docs/problems/openrouter-provider-crouton-
+		// alpha-2026-11-03.md). In no pool: the arm pins it.
+		{
+			ID:                  "stealth/crouton-alpha",
+			DisplayName:         "Crouton Alpha (OpenRouter stealth)",
+			Provider:            "openrouter",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 1048576,
+		},
+
 		{
 			ID:                  "gpt-6-luna",
 			DisplayName:         "GPT-6 Luna",
