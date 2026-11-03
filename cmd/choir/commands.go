@@ -271,6 +271,7 @@ func buildRegistry() []*command {
 			scopes: readTexture, readOnly: true,
 			handler: textureShow,
 		},
+		textureExportCommand(),
 		{
 			path: []string{"texture", "watch"}, summary: "Watch durable version/control events as JSONL",
 			params: []param{
