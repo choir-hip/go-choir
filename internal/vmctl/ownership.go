@@ -192,6 +192,12 @@ type VMOwnership struct {
 	MemorySettledRSSBytes uint64 `json:"memory_settled_rss_bytes,omitempty"`
 	// MemorySettledAt is when MemorySettledRSSBytes was captured.
 	MemorySettledAt string `json:"memory_settled_at,omitempty"`
+	// MemorySettledEpoch is the realization (Epoch) MemorySettledRSSBytes
+	// was measured on; 0 is unstamped (an older ownership file). A settled
+	// RSS from another realization (a deploy refresh, a recovery boot) is
+	// re-measured, and a build's idle baseline never trusts it
+	// (docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md).
+	MemorySettledEpoch int64 `json:"memory_settled_epoch,omitempty"`
 	// ReportedRelease is what the computer last reported it runs (P6):
 	// a report, never vmctl authority (reported_release.go).
 	ReportedRelease *ReportedRelease `json:"reported_release,omitempty"`

@@ -23,7 +23,7 @@ import (
 // admitted by no one: four arm builds could add about 12 GB against 17 GB
 // available and nothing refused it. A guest now reports its live build-class
 // capsules here, and the ledger charges each such computer the larger of
-// what it holds now and its idle footprint (its settled RSS) plus its live
+// what it holds now and its idle footprint (buildIdle) plus its live
 // build reservations, clamped to what its ceiling can still grow. That
 // outstanding amount is part of the shared reserved term every start and
 // every build spawn is admitted against.
@@ -110,9 +110,10 @@ type buildReservationSet struct {
 	vmID       string
 	computerID string
 	class      WarmnessClass
-	// idle is the footprint the builds are charged on top of: the settled
-	// RSS, else the RSS when the set was first reported.
-	idle uint64
+	// idle is the footprint the builds are charged on top of, fixed when
+	// the set is created (buildIdle); idleSource says how it was taken.
+	idle       uint64
+	idleSource string
 	// ceiling is the guest's machine memory: the set never charges past it.
 	ceiling    uint64
 	entries    map[string]uint64
@@ -172,6 +173,7 @@ func (l *hostMemoryLedger) buildOutstandingLocked(now time.Time, cfg HostAdmissi
 			VMID: vmID, ComputerID: set.computerID, Class: string(set.class),
 			NeedBytes: set.total(), NeedSource: "capsule_build", OutstandingBytes: out,
 			StartedAt: set.reportedAt.UTC().Format(time.RFC3339),
+			IdleBytes: set.idle, IdleSource: set.idleSource,
 		})
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].VMID < views[j].VMID })
@@ -192,6 +194,57 @@ func hostPressureHigh(sample HostPressureSample, cfg PressureReclaimConfig) bool
 		avg60 = defaultMaxMemorySomeAvg60
 	}
 	return sample.MemorySomeAvg10 > hostPressureHighAvg10 || sample.MemorySomeAvg60 > avg60
+}
+
+// buildIdleSettledMaxAge bounds how long a settled RSS is trusted as a
+// build's idle baseline; an older one is re-measured (the RSS before the
+// capsule) rather than trusted.
+const buildIdleSettledMaxAge = 6 * time.Hour
+
+// settledIdle is a computer's D4 settled RSS with the realization it was
+// measured on and the one it runs now.
+type settledIdle struct {
+	bytes   uint64
+	epoch   int64
+	at      string
+	current int64
+}
+
+// fresh: measured on the realization the computer runs now (a stamped
+// epoch; an unstamped one is from an older vmctl and could be from any
+// boot), within buildIdleSettledMaxAge.
+func (s settledIdle) fresh(now time.Time) bool {
+	if s.bytes == 0 || s.epoch == 0 || s.epoch != s.current {
+		return false
+	}
+	at, err := time.Parse(time.RFC3339, s.at)
+	return err == nil && now.Sub(at) <= buildIdleSettledMaxAge
+}
+
+// buildIdle is the idle baseline a computer's builds are charged on top of
+// (docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md,
+// problem 1). A settled RSS from an earlier realization (a deploy refresh
+// onto a new release) or older than the bound under-reserves a build by
+// whatever the computer's idle has grown since, so:
+//   - with the RSS before any capsule known (preCapsule), it is the
+//     baseline, raised to a fresh settled RSS when that is larger;
+//   - without it (the first report already carries live builds, as after a
+//     vmctl restart), a fresh settled RSS is the baseline, and a stale one
+//     is only trusted as max(settled, rss), whose rss may hold build
+//     growth: conservative, never under.
+func buildIdle(settled settledIdle, rss uint64, preCapsule bool, now time.Time) (uint64, string) {
+	fresh := settled.fresh(now)
+	switch {
+	case preCapsule && rss > 0:
+		if fresh && settled.bytes > rss {
+			return settled.bytes, "settled"
+		}
+		return rss, "pre_capsule_rss"
+	case fresh:
+		return settled.bytes, "settled"
+	default:
+		return max(settled.bytes, rss), "max_settled_rss"
+	}
 }
 
 func validCapsuleReservation(c CapsuleReservation) bool {
@@ -221,7 +274,8 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 		r.mu.RUnlock()
 		return CapsuleReservationResult{}, fmt.Errorf("vmctl: no ownership for computer %s", computerID)
 	}
-	vmID, settled := own.VMID, own.MemorySettledRSSBytes
+	vmID := own.VMID
+	settled := settledIdle{bytes: own.MemorySettledRSSBytes, epoch: own.MemorySettledEpoch, at: own.MemorySettledAt, current: own.Epoch}
 	_, memMib := machineShapeForOwnership(own)
 	class := warmnessClassForOwnership(own, r.warmnessPolicy)
 	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
@@ -245,14 +299,17 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 
 	set := led.builds[vmID]
 	if set == nil {
-		idle := settled
-		if idle == 0 {
-			idle = rss
-		}
-		set = &buildReservationSet{vmID: vmID, computerID: computerID, idle: idle}
+		// A set is created by the report that first carries a live or
+		// admitted build: with no live build reported, the RSS now is the
+		// computer before any capsule.
+		set = &buildReservationSet{vmID: vmID, computerID: computerID}
+		set.idle, set.idleSource = buildIdle(settled, rss, len(report.Reservations) == 0, now)
 		led.builds[vmID] = set
-	} else if settled > 0 {
-		set.idle = settled
+	} else if set.idle == 0 && rss > 0 {
+		// Created before the sampler's first reading of this VM (just
+		// after a vmctl restart): the reading now may hold build growth,
+		// so it only ever raises the baseline.
+		set.idle, set.idleSource = buildIdle(settled, rss, false, now)
 	}
 	set.class, set.ceiling, set.reportedAt = class, ceiling, now
 	set.entries = map[string]uint64{}

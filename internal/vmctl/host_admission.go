@@ -217,6 +217,16 @@ type hostMemoryLedger struct {
 	// builds are each computer's live build-class capsule reservations,
 	// part of the reserved term (capsule_reservations.go). Memory only.
 	builds map[string]*buildReservationSet
+	// resettle watches each running VM whose settled RSS belongs to
+	// another realization (an unadmitted boot: a deploy refresh, a
+	// recovery): the epoch it runs and when the sampler first saw it so.
+	// Memory only: a vmctl restart starts the window again.
+	resettle map[string]resettleWatch
+}
+
+type resettleWatch struct {
+	epoch int64
+	since time.Time
 }
 
 func (l *hostMemoryLedger) initLocked() {
@@ -234,6 +244,9 @@ func (l *hostMemoryLedger) initLocked() {
 	}
 	if l.builds == nil {
 		l.builds = map[string]*buildReservationSet{}
+	}
+	if l.resettle == nil {
+		l.resettle = map[string]resettleWatch{}
 	}
 }
 
@@ -370,6 +383,11 @@ type AdmissionReservationView struct {
 	InFlight         bool   `json:"in_flight"`
 	StartedAt        string `json:"started_at"`
 	SettledAt        string `json:"settled_at,omitempty"`
+	// IdleBytes and IdleSource are a capsule build set's idle baseline
+	// (capsule_reservations.go): pre_capsule_rss, settled, or
+	// max_settled_rss.
+	IdleBytes  uint64 `json:"idle_bytes,omitempty"`
+	IdleSource string `json:"idle_source,omitempty"`
 }
 
 // HostAdmissionSummary is the admission section of vmctl health.
@@ -754,6 +772,17 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 	}
 	readings := reader.VMResidentBytes()
 	now := r.now()
+	// Each live VM's realization and the realization its settled RSS was
+	// measured on, read before the ledger lock (the ledger's mutex is never
+	// held while taking r.mu).
+	epochs := make(map[string]settledEpochs, len(readings))
+	r.mu.RLock()
+	for vmID := range readings {
+		if own := r.vmByID[vmID]; own != nil {
+			epochs[vmID] = settledEpochs{epoch: own.Epoch, settled: own.MemorySettledEpoch}
+		}
+	}
+	r.mu.RUnlock()
 
 	led := &r.admissionLedger
 	led.mu.Lock()
@@ -776,6 +805,7 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 			delete(led.rss, vmID)
 			delete(led.peak, vmID)
 			delete(led.builds, vmID)
+			delete(led.resettle, vmID)
 		}
 	}
 	// Settle windows that ended since the last reading end here, and every
@@ -785,9 +815,10 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 	led.captureExpiredLocked()
 	settled := led.settled
 	led.settled = map[string]uint64{}
+	resettled := led.resettleLocked(now, acfg, readings, epochs, settled)
 	led.mu.Unlock()
 
-	if len(peaks) == 0 && len(settled) == 0 {
+	if len(peaks) == 0 && len(settled) == 0 && len(resettled) == 0 {
 		return
 	}
 	r.mu.Lock()
@@ -802,9 +833,27 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 		old := own.MemorySettledRSSBytes
 		own.MemorySettledRSSBytes = bytes
 		own.MemorySettledAt = stamp
+		if own.MemorySettledEpoch != own.Epoch {
+			changed = true
+		}
+		own.MemorySettledEpoch = own.Epoch
 		if old == 0 || absDiff(old, bytes) >= memoryPeakSaveDelta {
 			changed = true
 		}
+	}
+	for vmID, res := range resettled {
+		own := r.vmByID[vmID]
+		// Only on the realization it was measured on: a boot since the
+		// reading starts its own window.
+		if own == nil || own.Epoch != res.epoch {
+			continue
+		}
+		log.Printf("vmctl: settled RSS of VM %s re-measured on epoch %d after an unadmitted boot: %d MiB (was %d MiB on epoch %d)",
+			vmID, res.epoch, res.bytes>>20, own.MemorySettledRSSBytes>>20, own.MemorySettledEpoch)
+		own.MemorySettledRSSBytes = res.bytes
+		own.MemorySettledAt = stamp
+		own.MemorySettledEpoch = res.epoch
+		changed = true
 	}
 	for vmID, peak := range peaks {
 		own := r.vmByID[vmID]
@@ -821,6 +870,67 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 	if changed {
 		r.saveLocked()
 	}
+}
+
+type settledEpochs struct {
+	epoch   int64 // the realization the VM runs
+	settled int64 // the realization its settled RSS was measured on
+}
+
+type resettledRSS struct {
+	epoch int64
+	bytes uint64
+}
+
+// resettleLocked re-measures the settled RSS of a VM booted without an
+// admission (a deploy refresh, a recovery boot), which D4's capture never
+// sees: a VM whose settled RSS is of another realization is watched from
+// the first pass that sees it so, and once the settle window has passed
+// its reading is the new settled RSS. Not while an admitted start of the
+// VM is open (D4 captures that), nor while it holds a live build (the
+// build's growth is not idle): the first pass after both clear takes it.
+// Callers hold l.mu.
+func (l *hostMemoryLedger) resettleLocked(now time.Time, cfg HostAdmissionConfig, readings map[string]uint64, epochs map[string]settledEpochs, captured map[string]uint64) map[string]resettledRSS {
+	l.initLocked()
+	var out map[string]resettledRSS
+	for vmID, bytes := range readings {
+		e, known := epochs[vmID]
+		if !known || e.epoch == e.settled {
+			delete(l.resettle, vmID)
+			continue
+		}
+		if _, ok := captured[vmID]; ok {
+			delete(l.resettle, vmID) // D4 took it this pass
+			continue
+		}
+		w, watched := l.resettle[vmID]
+		if !watched || w.epoch != e.epoch {
+			l.resettle[vmID] = resettleWatch{epoch: e.epoch, since: now}
+			continue
+		}
+		if now.Sub(w.since) < cfg.Settle || bytes == 0 {
+			continue
+		}
+		if set := l.builds[vmID]; set != nil && len(set.entries) > 0 {
+			continue
+		}
+		open := false
+		for _, res := range l.reservations {
+			if res.vmID == vmID {
+				open = true
+				break
+			}
+		}
+		if open {
+			continue
+		}
+		if out == nil {
+			out = map[string]resettledRSS{}
+		}
+		out[vmID] = resettledRSS{epoch: e.epoch, bytes: bytes}
+		delete(l.resettle, vmID)
+	}
+	return out
 }
 
 func absDiff(a, b uint64) uint64 {
