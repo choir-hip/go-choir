@@ -88,3 +88,69 @@ func (rt *Runtime) recordEngineeringAdmissionHold(ctx context.Context, assignmen
 		log.Printf("runtime: engineering admission: hold record for %s behind %s: %v", assignment.AssignmentID, busy.OperationID, err)
 	}
 }
+
+// engineeringHostMemoryWaitRecordID is the one record of one assignment
+// attempt waiting for host memory (problem 24): the first refusal writes it
+// and later refusals of the same wait append nothing.
+func engineeringHostMemoryWaitRecordID(assignmentID string, attempt uint64) string {
+	return fmt.Sprintf("engineering-admission:%s:%d:waits-for-host-memory", assignmentID, attempt)
+}
+
+// engineeringHostMemoryWaitRecord is the ledger record of a request waiting
+// for host memory: what it waits for, the host's reason, and that it starts
+// by itself or is cancelled at the bound. It is a wait, not a failure: the
+// assignment stays open and nothing is asked of management.
+func engineeringHostMemoryWaitRecord(assignment types.EngineeringAssignment, busy *engineeringAdmissionBusy, since time.Time) types.CommitmentRecord {
+	stamp := since.UTC().Format(time.RFC3339Nano)
+	return types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    engineeringHostMemoryWaitRecordID(assignment.AssignmentID, assignment.Binding.Attempt),
+		Discrepancy: types.DiscrepancyUnresolved,
+		Prediction: types.CommitmentPrediction{
+			Hypothesis: fmt.Sprintf("engineering assignment %s is waiting for host memory: %s. It stays open and starts by itself when the host has room, retrying every 30 to 60 s; if the host still refuses after %s it is cancelled with the host's reason. Nothing needs re-casting.",
+				assignment.AssignmentID, busy.HostMemoryReason, engineeringHostMemoryMaxWait),
+			CommittedAt: stamp,
+		},
+		Observation: types.CommitmentObservation{
+			Excerpt:    fmt.Sprintf("waiting for host memory: %s", busy.HostMemoryReason),
+			SourceRef:  assignment.AssignmentID,
+			ObservedAt: stamp,
+		},
+		Provenance: types.CommitmentProvenance{
+			AgentID:     engineeringHoldObserverAgentID,
+			ContextRef:  assignment.Binding.TrajectoryID,
+			CommittedAt: stamp,
+		},
+		Addressee:    persistentManagementAgentID(assignment.Binding.OwnerID),
+		EvidenceRefs: []string{assignment.AssignmentID},
+	}
+}
+
+// engineeringHostMemoryWaitSince is when the assignment attempt began
+// waiting for host memory: the wait record's time when it has one, else now,
+// writing the record. A record that cannot be read counts as none.
+func (rt *Runtime) engineeringHostMemoryWaitSince(ctx context.Context, assignment types.EngineeringAssignment, busy *engineeringAdmissionBusy, now time.Time) time.Time {
+	if rt != nil && rt.store != nil {
+		rec, err := rt.store.GetCommitmentRecord(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+			engineeringHostMemoryWaitRecordID(assignment.AssignmentID, assignment.Binding.Attempt))
+		if err == nil && rec != nil {
+			if since, parseErr := time.Parse(time.RFC3339Nano, rec.Observation.ObservedAt); parseErr == nil && !since.After(now) {
+				return since
+			}
+		}
+	}
+	rt.recordEngineeringHostMemoryWait(ctx, assignment, busy, now)
+	return now
+}
+
+// recordEngineeringHostMemoryWait writes the wait record. It is
+// observational: a ledger failure is logged and the wait goes on.
+func (rt *Runtime) recordEngineeringHostMemoryWait(ctx context.Context, assignment types.EngineeringAssignment, busy *engineeringAdmissionBusy, since time.Time) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	rec := engineeringHostMemoryWaitRecord(assignment, busy, since)
+	if _, err := rt.store.AppendCommitmentRecord(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, rec); err != nil {
+		log.Printf("runtime: engineering admission: host memory wait record for %s: %v", assignment.AssignmentID, err)
+	}
+}

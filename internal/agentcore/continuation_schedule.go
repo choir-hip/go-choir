@@ -59,6 +59,13 @@ type delegatedAssignmentSpawnDeadline struct {
 	// finds the slot busy again arms nothing, because the request's own retry
 	// chain still runs.
 	Nudge string `json:"nudge,omitempty"`
+	// HostMemorySince is when the request began waiting for host memory
+	// (unix nanoseconds), carried by its retries so the wait is bounded at
+	// engineeringHostMemoryMaxWait (problem 24). Zero when it is not
+	// waiting for host memory; a refusal on a wake without it reads the
+	// start from the attempt's wait record, so the bound runs from the
+	// first refusal across duplicates and a planned boot's resume.
+	HostMemorySince int64 `json:"host_memory_since,omitempty"`
 }
 
 // cellTerminalDeadline is the complete reduction identity needed to terminate

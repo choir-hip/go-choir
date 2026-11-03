@@ -155,10 +155,21 @@ the running-computer charge folded in above).
   admitted against. A set expires after the in-flight TTL without a
   report, and is dropped when the VM stops.
 - **Refusal.** A build spawn the host cannot cover returns
-  `capsule.HostMemoryRefusal`. The assignment open is cancelled with the
-  host's reason, which is visible in the cast's fate. A refused build does
-  not make room (make-room stays a start's). A vmctl that cannot be asked,
-  or one that predates the route, leaves the spawn as before.
+  `capsule.HostMemoryRefusal`. The assignment waits instead of being
+  cancelled (problem 24,
+  docs/problems/build-refused-for-host-memory-cancels-assignment-2026-11-03.md):
+  it stays open and unbound in the engineering admission queue, a ledger
+  record addressed to management says "waiting for host memory: <the
+  host's reason>", and its spawn wake retries every 30 to 60 s. The wait
+  is bounded at 30 minutes from the first refusal (the record's time),
+  matching the job deferral; a build still
+  refused at the bound is cancelled with the host's reason, visible in the
+  cast's fate. A crash boot closes a waiting request as interrupted; a
+  planned boot resumes it once, like any queued request. Protected builds
+  are always admitted, so they never wait. Any other spawn error still
+  cancels the open. A refused build does not make room (make-room stays a
+  start's). A vmctl that cannot be asked, or one that predates the route,
+  leaves the spawn as before.
 - **Deferral.** A build-class job reads the facts before it starts. It
   waits in the new job state `waiting` ("waiting for host memory: ...") in
   two cases: PSI memory some avg10 above 10, or avg60 above the reclaim

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -58,14 +59,47 @@ type engineeringAdmissionBusy struct {
 	// (an older open request goes first), "candidate_pending" (the
 	// trajectory's newest work has an open self-development operation),
 	// "operation_open" (another self-development operation on the computer
-	// is open, so a Freeze would be refused) or "carry_unreadable" (the
-	// carry's history or the operations could not be read).
+	// is open, so a Freeze would be refused), "carry_unreadable" (the
+	// carry's history or the operations could not be read) or "host_memory"
+	// (the host refused the build capsule, engineeringWaitHostMemory).
 	Why string
 	// OperationID, OperationState and OperationCreatedAt name the blocking
 	// self-development operation when Why is "operation_open"; empty otherwise.
 	OperationID        string
 	OperationState     string
 	OperationCreatedAt string
+	// HostMemoryReason is the host's refusal of the build capsule, in full,
+	// when Why is engineeringWaitHostMemory; empty otherwise.
+	HostMemoryReason string
+}
+
+// engineeringWaitHostMemory is the Why of a request whose build capsule the
+// host refused for memory (problem 24,
+// docs/problems/build-refused-for-host-memory-cancels-assignment-2026-11-03.md).
+const engineeringWaitHostMemory = "host_memory"
+
+const (
+	// engineeringHostMemoryMaxWait bounds a request's wait for host memory,
+	// matching a build job's wait (capsule hostMemoryMaxWait). A request
+	// still refused past it is cancelled with the host's reason.
+	engineeringHostMemoryMaxWait = 30 * time.Minute
+	// engineeringHostMemoryRetryMin is the shortest retry while waiting for
+	// host memory: the refusal clears when another computer's build ends,
+	// which this guest cannot see, so it is a timer of 30 to 60 s.
+	engineeringHostMemoryRetryMin = 30 * time.Second
+)
+
+// engineeringHostMemoryWait is the wait a spawn error asks for: a retryable
+// refusal when the error is the host's refusal of the build capsule, nil for
+// any other error (which still cancels the open). A protected computer's
+// build is always admitted by vmctl, so it never waits here.
+func engineeringHostMemoryWait(assignmentID string, err error) *engineeringAdmissionBusy {
+	var refusal *capsule.HostMemoryRefusal
+	if err == nil || !errors.As(err, &refusal) {
+		return nil
+	}
+	return &engineeringAdmissionBusy{AssignmentID: assignmentID, BlockedBy: "host memory", Why: engineeringWaitHostMemory,
+		HostMemoryReason: strings.TrimSpace(refusal.Error())}
 }
 
 func (e *engineeringAdmissionBusy) Error() string {
@@ -224,6 +258,25 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 		return nil
 	}
 	retry := wake.Retry + 1
+	var hostMemorySince int64
+	if busy.Why == engineeringWaitHostMemory {
+		// Problem 24: wait for host memory, bounded. The clock starts at the
+		// first refusal and rides the retries; at the bound the request is
+		// cancelled with the host's reason, as an unwaited refusal was.
+		now := rt.engineeringAdmissionNow()
+		hostMemorySince = wake.HostMemorySince
+		if hostMemorySince == 0 {
+			// The first refusal this chain has seen. The wait's start is
+			// the durable record's: a duplicated or redelivered wake, or a
+			// refusal after another kind of wait, keeps the first
+			// refusal's clock (review 1). Otherwise the wait begins now,
+			// and is put where management and Texture read.
+			hostMemorySince = rt.engineeringHostMemoryWaitSince(ctx, assignment, busy, now).UnixNano()
+		}
+		if waited := now.Sub(time.Unix(0, hostMemorySince)); waited >= engineeringHostMemoryMaxWait {
+			return rt.cancelHostMemoryWait(ctx, assignment, busy, waited)
+		}
+	}
 	if retry >= engineeringHoldRecordAfter && busy.Why == "operation_open" && busy.OperationID != "" {
 		// The hold has outlasted a few retries: it is not a passing wait. Put
 		// the blocker where management and Texture read. The record id names
@@ -236,11 +289,15 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 	}
 	content, err := json.Marshal(delegatedAssignmentSpawnDeadline{
 		AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt, Objective: objective, CandidateID: wake.CandidateID, Retry: retry, Boot: wake.Boot,
+		HostMemorySince: hostMemorySince,
 	})
 	if err != nil {
 		return err
 	}
 	delay := engineeringAdmissionRetryDelay(retry)
+	if hostMemorySince != 0 && delay < engineeringHostMemoryRetryMin {
+		delay = engineeringHostMemoryRetryMin
+	}
 	if err := rt.scheduleActor(ctx, binding.OwnerID, binding.ComputerID, EngineeringAdmissionMailbox,
 		delegatedAssignmentSpawnDeadlineUpdateKind, string(content), binding.TrajectoryID, "", time.Now().UTC().Add(delay)); err != nil {
 		return fmt.Errorf("re-arm the admission retry for %s: %w", assignment.AssignmentID, err)
@@ -331,6 +388,24 @@ func (rt *Runtime) expireOverdueEngineeringRequests(ctx context.Context, assignm
 	if selfExpired {
 		return errEngineeringRequestExpired
 	}
+	return nil
+}
+
+// cancelHostMemoryWait cancels a request the host still refused at the
+// bound of its wait for host memory, through the same cancel as
+// management's Cancel, with the host's reason. It returns nil when the wake
+// is settled, an error (so the dispatcher redelivers it) when the cancel
+// could not be recorded.
+func (rt *Runtime) cancelHostMemoryWait(ctx context.Context, a types.EngineeringAssignment, busy *engineeringAdmissionBusy, waited time.Duration) error {
+	parent := types.RunRecord{
+		RunID: a.Binding.ParentRunID, OwnerID: a.Binding.OwnerID, ComputerID: a.Binding.ComputerID, AgentID: a.Binding.ParentAgentID,
+	}
+	reason := fmt.Sprintf("%s; waited %s for host memory, the bound (%s); the request is cancelled",
+		busy.HostMemoryReason, waited.Round(time.Second), engineeringHostMemoryMaxWait)
+	if _, err := rt.cancelAssignedEngineering(ctx, parent, a.AssignmentID, a.Binding.Attempt, reason); err != nil {
+		return fmt.Errorf("cancel %s at the host memory wait bound: %w", a.AssignmentID, err)
+	}
+	log.Printf("runtime: engineering admission: assignment %s cancelled after waiting %s for host memory", a.AssignmentID, waited.Round(time.Second))
 	return nil
 }
 

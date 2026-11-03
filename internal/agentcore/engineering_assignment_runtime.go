@@ -617,7 +617,8 @@ func castWithholdsNetwork(spec string) bool {
 
 // spawnBindActivateAssignment is the shared post-open saga: spawn the capsule,
 // mint the capability, bind the run, wake the actor. Every failure path cancels
-// the durable open so a stranded assignment never blocks a later cast.
+// the durable open so a stranded assignment never blocks a later cast, except
+// the host's refusal of the build capsule, which waits (problem 24).
 func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment types.EngineeringAssignment, preflight capsule.SourcePreflight, opaque string, req assignmentSpawnRequest) (AssignedEngineeringStart, error) {
 	binding := assignment.Binding
 	ownerID, computerID := binding.OwnerID, binding.ComputerID
@@ -694,7 +695,15 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		var spawnErr error
 		created, spawnErr = rt.capsuleExecutor.Spawn(spawnCtx, spec)
 		if spawnErr != nil {
-			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr))
+			spawnErr = fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr)
+			if busy := engineeringHostMemoryWait(assignmentID, spawnErr); busy != nil && rt.kernelMode && rt.scheduleActor != nil {
+				// Problem 24: the host could not cover the build now. The
+				// request stays open and unbound and waits in the
+				// admission queue, bounded (deferEngineeringAdmission).
+				// A runtime without wakes cannot retry, so it cancels.
+				return AssignedEngineeringStart{}, busy
+			}
+			return AssignedEngineeringStart{}, cancelOpen(spawnErr)
 		}
 	}
 	cleanupCapsule := func(cause error) error {
