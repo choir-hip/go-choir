@@ -473,7 +473,7 @@ func installMCPJSON(path, name string, entry map[string]any, printOnly bool, std
 	servers["choir"] = entry
 	doc["mcpServers"] = servers
 	raw, _ := json.MarshalIndent(doc, "", "  ")
-	if err := writeFileAtomic(path, append(raw, '\n'), mode); err != nil {
+	if err := writeFileAtomicMode(path, append(raw, '\n'), mode); err != nil {
 		fmt.Fprintf(stderr, "choir mcp install: %v\n", err)
 		return 1
 	}
@@ -507,14 +507,14 @@ func installCodexTOML(path, exe string, printOnly bool, stdout, stderr io.Writer
 	if out != "" {
 		out += "\n"
 	}
-	if err := writeFileAtomic(path, []byte(out+section), mode); err != nil {
+	if err := writeFileAtomicMode(path, []byte(out+section), mode); err != nil {
 		fmt.Fprintf(stderr, "choir mcp install: %v\n", err)
 		return 1
 	}
 	return writeJSON(stdout, map[string]any{"installed": "codex", "config": path, "server": "choir"})
 }
 
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+func writeFileAtomicMode(path string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
