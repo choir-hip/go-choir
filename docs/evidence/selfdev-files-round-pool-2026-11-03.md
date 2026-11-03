@@ -69,6 +69,8 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   search layout with result folders, one menu surface, no desktop sidebar close, PDF and video tiles, the phone
   row's second line; build, check-packages, a package-only diff check and DOM checks passed (its own numbers).
   The operation's patch against the base still shows app-sdk.ts, carried from round 1.
+- Texture's document (revision 6a68590f) still said "the candidate is not accepted or materialized ... the owner
+  should apply it" after the operation was applied at 06:43:14Z: Texture does not learn of the apply.
 - Library publish 06:43Z refused: package_parent_unpublished (Problem 11): round 1 is the package's parent and
   can never publish.
 - Spend round 2: $0.60, 93 calls (06:20-06:43Z; $1.84 total).
