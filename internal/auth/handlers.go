@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"net/mail"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,6 +69,9 @@ type Handler struct {
 	numberNudge    chan struct{}
 	numbersMu      sync.Mutex
 	numbersDone    map[string]struct{}
+
+	// Device login (device_login.go): unknown-code misses per user.
+	device deviceState
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -1666,6 +1670,45 @@ var validScopes = map[string]bool{
 // (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F4).
 const OwnerActsScope = "owner:acts"
 
+// retiredScopeSelfDevPropose is accepted but never granted by default.
+const retiredScopeSelfDevPropose = "computer:self_development:propose"
+
+// AllScopes is every scope a full-access key carries, sorted: the registry
+// (validScopes) minus the retired propose scope. A key created with scopes
+// omitted gets this list (docs/design/cli-agent-onboarding-2026-11-03.md);
+// it is the one definition of "all".
+func AllScopes() []string {
+	out := make([]string, 0, len(validScopes))
+	for s := range validScopes {
+		if s != retiredScopeSelfDevPropose {
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// defaultKeyScopes is what a create that omits scopes gets: every scope for
+// the owner's session, and for a Bearer caller what it may delegate (its own
+// scopes, every scope for admin), never owner:acts.
+func defaultKeyScopes(callerKey *APIKey) []string {
+	if callerKey == nil {
+		return AllScopes()
+	}
+	from := callerKey.Scopes
+	if apiKeyHasScope(from, "admin") {
+		from = AllScopes()
+	}
+	out := make([]string, 0, len(from))
+	for _, s := range from {
+		if s != OwnerActsScope && s != retiredScopeSelfDevPropose && validScopes[s] && !apiKeyHasScope(out, s) {
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Listing bounds for GET /auth/api-keys.
 const (
 	defaultAPIKeyListLimit = 100
@@ -1822,6 +1865,7 @@ func validateScopes(scopes []string) error {
 }
 
 // HandleCreateAPIKey handles POST /auth/api-keys.
+// Omitted scopes mean every scope (defaultKeyScopes).
 // Cookie-authenticated owners may create any valid key. Bearer callers require
 // manage:keys or admin and may delegate only a subset of their own scopes.
 // A key with computer-selecting scopes is owner-wide when computer_id is
@@ -1847,6 +1891,11 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	if req.Label == "" {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "label is required"})
 		return
+	}
+	// Omitted scopes (no "scopes" field) mean full access; an explicit empty
+	// list is still refused below.
+	if req.Scopes == nil {
+		req.Scopes = defaultKeyScopes(callerKey)
 	}
 
 	if err := validateScopes(req.Scopes); err != nil {

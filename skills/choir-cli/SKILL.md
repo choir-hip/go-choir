@@ -95,19 +95,31 @@ The binary has no cgo dependencies — it is pure Go and builds quickly.
 
 ## Auth
 
-All commands require an API key:
+Easiest: `choir login` once on the machine. It prints a link and a code;
+the owner opens the link in a browser, signs in with a passkey and approves.
+The CLI then saves a full-access key (every scope, owner acts included) to
+`~/.config/choir/credentials` (mode 0600), and every later command and
+`choir mcp` use it with no flags or env. `choir mcp install claude-code`
+(or `cursor`, `claude-desktop`, `codex`; `--print` to only print) adds the
+MCP server to an agent host. `choir logout` revokes the key and removes the
+file.
 
-- `--api-key` flag, or
-- `$CHOIR_API_KEY` environment variable
+The key is resolved in this order, the same for the CLI and `choir mcp`:
 
-The key must start with `choir_sk_`. Keys are created via the SettingsApp
-"API keys" section in the browser UI, or via `choir api-key create` if you
-already have a key.
+1. `--api-key-file <path>` (mode 0600; `-` reads stdin, not for `choir mcp`)
+2. `$CHOIR_API_KEY`
+3. `$CHOIR_API_KEY_FILE`
+4. the `choir login` credentials file (sent only to the host it was minted for)
+
+The key must start with `choir_sk_`. Keys can also be created in the
+SettingsApp "API keys" section (full access unless narrowed under Advanced),
+or via `choir api-key create` if you already have a key.
 
 ## Host
 
 - `--host` flag, or
-- `$CHOIR_HOST` environment variable (defaults to `https://choir.news`)
+- `$CHOIR_HOST` environment variable, or
+- the `choir login` host, else `https://choir.news`
 
 ## Commands
 

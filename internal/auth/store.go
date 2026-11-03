@@ -158,6 +158,29 @@ CREATE INDEX IF NOT EXISTS idx_email_signin_ip_hash ON email_signin_attempts(ip_
 CREATE INDEX IF NOT EXISTS idx_email_signin_link_token ON email_signin_attempts(link_token_hash);
 CREATE INDEX IF NOT EXISTS idx_email_signin_user ON email_signin_attempts(user_id);
 
+-- Device authorization for choir login (docs/design/cli-agent-onboarding-
+-- 2026-11-03.md). Codes are stored only as hashes; a row yields at most one
+-- key; rows are swept after 24 hours.
+CREATE TABLE IF NOT EXISTS device_authorizations (
+	id                 TEXT PRIMARY KEY,
+	device_code_hash   TEXT NOT NULL UNIQUE,
+	user_code_hash     TEXT NOT NULL,
+	label              TEXT NOT NULL DEFAULT '',
+	user_agent_summary TEXT NOT NULL DEFAULT '',
+	place_summary      TEXT NOT NULL DEFAULT '',
+	ip_hash            TEXT NOT NULL,
+	created_at         DATETIME NOT NULL,
+	expires_at         DATETIME NOT NULL,
+	status             TEXT NOT NULL DEFAULT 'pending',
+	user_id            TEXT REFERENCES users(id) ON DELETE CASCADE,
+	decided_at         DATETIME,
+	consumed_at        DATETIME,
+	api_key_id         TEXT,
+	last_poll_at       DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_device_auth_user_code ON device_authorizations(user_code_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_device_auth_ip ON device_authorizations(ip_hash, created_at);
+
 CREATE TABLE IF NOT EXISTS owner_root_keys (
 	owner_id   TEXT PRIMARY KEY,
 	created_at DATETIME NOT NULL

@@ -59,8 +59,11 @@ type mcpServer struct {
 func runMCP(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir mcp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	if keyFile := strings.TrimSpace(os.Getenv("CHOIR_API_KEY_FILE")); keyFile != "" && !hasFlagArg(args, "api-key-file") {
-		args = append([]string{"--api-key-file", keyFile}, args...)
+	// The key resolves as the CLI's does (resolveCredentials): --api-key-file,
+	// $CHOIR_API_KEY, $CHOIR_API_KEY_FILE, the choir login credentials file.
+	if strings.TrimSpace(os.Getenv(apiKeyFileEnvVar)) == "-" {
+		fmt.Fprintln(stderr, "choir mcp: stdin carries the protocol; pass the key in $CHOIR_API_KEY or a mode-0600 --api-key-file")
+		return 2
 	}
 	for i, a := range args {
 		if strings.TrimLeft(a, "-") == "api-key-file" && i+1 < len(args) && strings.TrimSpace(args[i+1]) == "-" || strings.TrimLeft(a, "-") == "api-key-file=-" {

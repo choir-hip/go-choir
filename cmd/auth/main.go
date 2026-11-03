@@ -57,6 +57,7 @@ func main() {
 	}
 	handler.StartEmailSweeper(context.Background(), 0)
 	handler.StartNumberReconciler(context.Background(), 0)
+	handler.StartDeviceSweeper(context.Background(), 0)
 
 	s := server.NewServer("auth", cfg.Port)
 	registerRoutes(s, handler, rateLimiter)
@@ -81,6 +82,15 @@ func registerRoutes(s authRouteRegistrar, handler *auth.Handler, rateLimiter *au
 	s.HandleFunc("POST /auth/api-keys", limit(handler.HandleCreateAPIKey))
 	s.HandleFunc("GET /auth/api-keys", limit(handler.HandleListAPIKeys))
 	s.HandleFunc("DELETE /auth/api-keys/{id}", limit(handler.HandleRevokeAPIKey))
+
+	// choir login: device authorization (docs/design/cli-agent-onboarding-2026-11-03.md).
+	// Token polls get their own limiter: the global one would refuse a
+	// 5-second poll; slow_down paces each request.
+	tokenLimit := auth.NewIPRateLimiter(auth.DeviceTokenRateLimit, auth.AuthEndpointRateWindow).Wrap
+	s.HandleFunc("POST /auth/device/begin", limit(handler.HandleDeviceBegin))
+	s.HandleFunc("GET /auth/device/lookup", limit(handler.HandleDeviceLookup))
+	s.HandleFunc("POST /auth/device/approve", limit(handler.HandleDeviceApprove))
+	s.HandleFunc("POST /auth/device/token", tokenLimit(handler.HandleDeviceToken))
 
 	// M7: Account recovery, multi-device passkey management, session management.
 	s.HandleFunc("POST /auth/recovery/request", limit(handler.HandleRecoveryRequest))
