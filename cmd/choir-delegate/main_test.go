@@ -84,3 +84,67 @@ func TestStartAndWaitAgainstAServer(t *testing.T) {
 		t.Fatalf("wait with an escaping id: %d %s", code, out.String())
 	}
 }
+
+// Cycle time (docs/evidence/selfdev-round-cycle-time-2026-11-03.md): a claude
+// engineer polled `wait` 31 times, 12 of 47 minutes. A parked wait is one job
+// that returns when the run ends, however long that takes, in one call.
+
+func writeStatus(t *testing.T, root, id, state string) {
+	t.Helper()
+	dir := filepath.Join(root, id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(claudedelegate.Status{ID: id, State: state})
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, filepath.Join(dir, claudedelegate.StatusFile)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestParkedWaitOutlastsTheUnparkedCeilingAndReturnsWhenTheRunEnds(t *testing.T) {
+	root := t.TempDir()
+	writeStatus(t, root, "run1", claudedelegate.StateRunning)
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		writeStatus(t, root, "run1", claudedelegate.StateDone)
+	}()
+	var out bytes.Buffer
+	begin := time.Now()
+	if code := run([]string{"wait", "--id", "run1", "--park"}, &out, "/nonexistent.sock", root); code != 0 {
+		t.Fatalf("code %d %s", code, out.String())
+	}
+	if d := time.Since(begin); d < 600*time.Millisecond || d > 3*time.Second {
+		t.Fatalf("parked wait returned after %v, want about 0.7 s (the run's end)", d)
+	}
+	if !strings.Contains(out.String(), `"state": "done"`) || !strings.Contains(out.String(), "--seconds 0") {
+		t.Fatalf("summary %s", out.String())
+	}
+	if len(out.String()) > 1024 {
+		t.Fatalf("summary is %d bytes; a job tail is 4 KiB", out.Len())
+	}
+}
+
+func TestParkedWaitHonoursItsBoundAndPlainWaitStillCapsAt25(t *testing.T) {
+	root := t.TempDir()
+	writeStatus(t, root, "run2", claudedelegate.StateRunning)
+	var out bytes.Buffer
+	begin := time.Now()
+	if code := run([]string{"wait", "--id", "run2", "--park", "--seconds", "1"}, &out, "/nonexistent.sock", root); code != 0 {
+		t.Fatalf("code %d %s", code, out.String())
+	}
+	if d := time.Since(begin); d < 900*time.Millisecond || d > 3*time.Second {
+		t.Fatalf("bounded park returned after %v", d)
+	}
+	if !strings.Contains(out.String(), `"state": "running"`) || !strings.Contains(out.String(), "park again") {
+		t.Fatalf("summary %s", out.String())
+	}
+	// Without --park the full status prints and --seconds 0 returns at once.
+	out.Reset()
+	if code := run([]string{"wait", "--id", "run2", "--seconds", "0"}, &out, "/nonexistent.sock", root); code != 0 || !strings.Contains(out.String(), `"dir"`) {
+		t.Fatalf("plain wait: %d %s", code, out.String())
+	}
+}

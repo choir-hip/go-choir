@@ -5,10 +5,15 @@
 //	choir-delegate start --spec-json '{"objective":"...","paths":["internal/x"],"test":["go","test","./internal/x/..."]}'
 //	choir-delegate start --spec /tmp/brief.json
 //	choir-delegate wait --id <id> [--seconds 20]
+//	choir-delegate wait --id <id> --park [--seconds 1800]
 //	choir-delegate stop --id <id>
 //
 // It never sees the token: start and stop go to the capsule broker's socket,
-// and wait reads the run's status file, whose lines the broker redacted.
+// wait --park is for a capsule job (choir.Start): it returns when the run ends or
+// after --seconds (default 1800, at most 2700), so one job waits where thirty
+// choir.Exec waits of 25 s each cost a model turn apiece; the engineer is woken
+// when the job ends and reads the result with wait --seconds 0.
+// wait reads the run's status file, whose lines the broker redacted.
 // Every verb prints one JSON object. Exit codes: 0 ok, 1 error, 3 the
 // delegate is unavailable in this capsule.
 package main
@@ -32,7 +37,7 @@ func main() {
 
 func run(args []string, out io.Writer, socket, root string) int {
 	if len(args) == 0 {
-		return emit(out, 1, map[string]any{"error": "usage: choir-delegate status | start --spec-json JSON | start --spec FILE | wait --id ID [--seconds N] | stop --id ID"})
+		return emit(out, 1, map[string]any{"error": "usage: choir-delegate status | start --spec-json JSON | start --spec FILE | wait --id ID [--park] [--seconds N] | stop --id ID"})
 	}
 	verb, rest := args[0], args[1:]
 	fs := flag.NewFlagSet(verb, flag.ContinueOnError)
@@ -40,7 +45,8 @@ func run(args []string, out io.Writer, socket, root string) int {
 	specJSON := fs.String("spec-json", "", "spec as JSON")
 	specFile := fs.String("spec", "", "spec file")
 	id := fs.String("id", "", "run id")
-	seconds := fs.Int("seconds", 20, "wait at most this long (<= 25)")
+	seconds := fs.Int("seconds", -1, "wait at most this long (default 20, <= 25; with --park default 1800, <= 2700)")
+	park := fs.Bool("park", false, "run as a capsule job: wait until the run ends or --seconds, print a one-line summary")
 	if err := fs.Parse(rest); err != nil {
 		return emit(out, 1, map[string]any{"error": err.Error()})
 	}
@@ -78,12 +84,17 @@ func run(args []string, out io.Writer, socket, root string) int {
 		if *id == "" {
 			return emit(out, 1, map[string]any{"error": "wait needs --id"})
 		}
-		limit := *seconds
-		if limit < 0 {
-			limit = 0
+		limit, ceiling, tick := *seconds, claudedelegate.WaitMaxSeconds, time.Second
+		if *park {
+			ceiling, tick = ParkMaxSeconds, 250*time.Millisecond
+			if limit < 0 {
+				limit = ParkDefaultSeconds
+			}
+		} else if limit < 0 {
+			limit = 20
 		}
-		if limit > claudedelegate.WaitMaxSeconds {
-			limit = claudedelegate.WaitMaxSeconds
+		if limit > ceiling {
+			limit = ceiling
 		}
 		deadline := time.Now().Add(time.Duration(limit) * time.Second)
 		for {
@@ -92,9 +103,12 @@ func run(args []string, out io.Writer, socket, root string) int {
 				return emit(out, 1, map[string]any{"error": err.Error()})
 			}
 			if st.State != claudedelegate.StateRunning || !time.Now().Before(deadline) {
+				if *park {
+					return emit(out, 0, parkSummary(st))
+				}
 				return emit(out, 0, st)
 			}
-			time.Sleep(time.Second)
+			time.Sleep(tick)
 		}
 	case "stop":
 		resp, err := claudedelegate.Call(socket, claudedelegate.Request{Op: "stop", ID: *id}, 10*time.Second)
@@ -108,6 +122,34 @@ func run(args []string, out io.Writer, socket, root string) int {
 	default:
 		return emit(out, 1, map[string]any{"error": fmt.Sprintf("unknown verb %q", verb)})
 	}
+}
+
+// Park bounds: a capsule job lives at most 45 minutes (capsulejob), and the
+// delegate's own wall clock is at most 30.
+const (
+	ParkDefaultSeconds = 1800
+	ParkMaxSeconds     = 2700
+)
+
+// parkSummary is what a parked wait prints: a job's output tail is 4 KiB, so
+// the full status (written_files, the final message) is read afterwards with
+// `wait --seconds 0`.
+func parkSummary(st claudedelegate.Status) map[string]any {
+	m := map[string]any{"id": st.ID, "state": st.State, "elapsed_sec": st.ElapsedSec, "progress": st.Progress,
+		"next": "choir-delegate wait --id " + st.ID + " --seconds 0 prints the full status and result"}
+	if st.State == claudedelegate.StateRunning {
+		m["note"] = "still running at the park bound: park again"
+	}
+	if st.Reason != "" {
+		m["reason"] = st.Reason
+	}
+	if st.ExitCode != nil {
+		m["exit_code"] = *st.ExitCode
+	}
+	if st.Result != nil {
+		m["subtype"] = st.Result.Subtype
+	}
+	return m
 }
 
 func emit(out io.Writer, code int, v any) int {
