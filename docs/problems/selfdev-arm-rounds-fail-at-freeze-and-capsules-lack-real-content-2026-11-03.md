@@ -246,3 +246,11 @@ than reject a candidate whose own content is fine; (2) the rejection reason belo
 trajectory, so Texture and the owner can see it without SSH.
 FP0 response: luna returned to propose_only at 07:07Z (generation 3) to protect its in-flight round; the other
 arms keep standing_consensus and get their next round only after their refresh to 29d47c215.
+
+Re-check after the 29d47c215 refresh (07:15Z, main's ask): publish of every applied files-next candidate is still
+refused. pool selfdev-c4ac7712 package_parent_unpublished (parent selfdev-1d052791); pool selfdev-1d052791,
+claude selfdev-40faf6ee and deepseek selfdev-574077b3 package_change_not_confined (app-sdk.ts; deepseek also two
+specs under frontend/tests/files-next/). The re-exports on the base let new rounds be package-only, but each new
+round stacks on an unpublished parent, so Problem 11 still blocks them. All three stacked arms logged
+stack_base_moved again at the 07:07-07:08Z boot (booted=29d47c215b96, "not in the guest source repository"),
+with the base fetched 8-10 s later.
