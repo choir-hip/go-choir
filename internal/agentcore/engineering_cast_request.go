@@ -33,7 +33,11 @@ const (
 	// request on 2026-10-24
 	// (docs/problems/engineering-cast-objective-cut-at-4kib-2026-10-24.md).
 	engineeringRequestObjectiveMax = 16 << 10
-	engineeringRequestBodyMax      = 16 << 10
+	// The body bound is Texture's own packet bound, so a request Texture
+	// committed is read whole (fix 9,
+	// docs/problems/selfdev-round-blockers-cluster-2026-11-03.md: a 20,923 B
+	// request was cut at 16 KiB on 2026-11-03).
+	engineeringRequestBodyMax = textureCastPacketMax
 )
 
 // isTextureCastTo reports whether rec is a Texture's Cast in the inbox of

@@ -339,3 +339,106 @@ func startOwnerCastLifecycle(t *testing.T, s *store.Store, ownerID, computerID, 
 		t.Fatal(err)
 	}
 }
+
+// Fix 5 (docs/problems/selfdev-round-blockers-cluster-2026-11-03.md): a Cast
+// that names only the newest owner revision still carries the owner's earlier
+// words on the trajectory. Ways it can fail, written before the code: an
+// earlier request is dropped; a newer revision, another trajectory's, a
+// Texture revision or an owner edit is attached; the bounds are broken; a
+// replayed cell (with newer revisions on the document since) attaches a
+// different set; what was left out is not named.
+func TestTextureCastCarriesTheTrajectorysEarlierOwnerWords(t *testing.T) {
+	revs := ownerCastRevisions()
+	at := func(id string, minutes int) {
+		rev := revs[id]
+		rev.CreatedAt = time.Date(2026, 11, 3, 4, minutes, 0, 0, time.UTC)
+		revs[id] = rev
+	}
+	at("rev-root", 0)
+	at("rev-texture", 1)
+	at("rev-edit", 2)
+	at("rev-other-trajectory", 3)
+	list91 := ownerCastRevision("rev-shots", types.AuthorUser, "rev-texture", map[string]any{"owner_prompt": "the twelve screenshots: a.png at 1440, b.png at 390"})
+	list91.CreatedAt = time.Date(2026, 11, 3, 4, 10, 0, 0, time.UTC)
+	revs["rev-shots"] = list91
+	at("rev-direction", 20)
+	later := ownerCastRevision("rev-later", types.AuthorUser, "rev-direction", map[string]any{"owner_prompt": "a direction after this Cast"})
+	later.CreatedAt = time.Date(2026, 11, 3, 4, 30, 0, 0, time.UTC)
+	revs["rev-later"] = later
+	list := func() ([]types.Revision, error) {
+		out := make([]types.Revision, 0, len(revs))
+		for _, rev := range revs {
+			out = append(out, rev)
+		}
+		return out, nil
+	}
+	out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","owner_revision":"rev-direction"}`)}, ownerCastScope, ownerCastLoader(revs), list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, directions := castOwnerDirectionsOf(t, out[0].Statement)
+	var ids []string
+	for _, d := range directions {
+		ids = append(ids, d.RevisionID+":"+d.Kind)
+	}
+	if strings.Join(ids, ",") != "rev-root:request,rev-shots:direction,rev-direction:direction" {
+		t.Fatalf("attached %v; want the request, the earlier direction and the named one, oldest first", ids)
+	}
+	if _, ok := spec[castOwnerDirectionsOmittedKey]; ok {
+		t.Fatal("nothing was left out, so nothing is named omitted")
+	}
+	// The cut-off comes from the named revision itself: a listing that lags
+	// (it lacks the named revision) attaches the same set.
+	lagging := func() ([]types.Revision, error) {
+		all, _ := list()
+		var out []types.Revision
+		for _, rev := range all {
+			if rev.RevisionID != "rev-direction" {
+				out = append(out, rev)
+			}
+		}
+		return out, nil
+	}
+	if lag, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","owner_revision":"rev-direction"}`)}, ownerCastScope, ownerCastLoader(revs), lagging); err != nil || lag[0].Statement != out[0].Statement {
+		t.Fatalf("a lagging listing changed the packet (%v)", err)
+	}
+	again, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","owner_revision":"rev-direction"}`)}, ownerCastScope, ownerCastLoader(revs), list)
+	if err != nil || again[0].Statement != out[0].Statement {
+		t.Fatalf("a replay must attach the same bytes (%v)", err)
+	}
+
+	// Over the byte bound: the oldest are left out first, and named.
+	big := revs["rev-shots"]
+	big.Metadata, _ = json.Marshal(map[string]any{"owner_prompt": strings.Repeat("s", castOwnerTextMax-len(ownerDirectionWithCode)-10)})
+	revs["rev-shots"] = big
+	out, err = attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","owner_revision":"rev-direction"}`)}, ownerCastScope, ownerCastLoader(revs), list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, directions = castOwnerDirectionsOf(t, out[0].Statement)
+	if len(directions) != 2 || directions[0].RevisionID != "rev-shots" || string(spec[castOwnerDirectionsOmittedKey]) != `["rev-root"]` {
+		t.Fatalf("over the bound: directions %d, omitted %s", len(directions), spec[castOwnerDirectionsOmittedKey])
+	}
+}
+
+// Fix 9: a Texture Cast over the one carry bound is refused at reduce, and
+// engineering reads that whole bound.
+func TestTextureCastPacketBoundIsEngineeringsBound(t *testing.T) {
+	if engineeringRequestBodyMax != textureCastPacketMax || textureCastPacketMax < castOwnerTextMax {
+		t.Fatalf("engineering reads %d of a Texture packet bounded at %d (owner words %d)", engineeringRequestBodyMax, textureCastPacketMax, castOwnerTextMax)
+	}
+	fits := ownerCast(`{"kind":"execution_request","summary":"` + strings.Repeat("a", textureCastPacketMax-100) + `"}`)
+	if err := refuseOversizedTextureCasts([]yaegikernel.StagedIntent{fits}); err != nil {
+		t.Fatalf("a packet inside the bound: %v", err)
+	}
+	over := ownerCast(`{"kind":"execution_request","summary":"` + strings.Repeat("a", textureCastPacketMax) + `"}`)
+	if err := refuseOversizedTextureCasts([]yaegikernel.StagedIntent{over}); err == nil || !strings.Contains(err.Error(), "at most") {
+		t.Fatalf("a packet over the bound must be refused: %v", err)
+	}
+	// Another desk's Cast keeps its own bound.
+	research := over
+	research.ToDesk = agentprofile.Research
+	if err := refuseOversizedTextureCasts([]yaegikernel.StagedIntent{research}); err != nil {
+		t.Fatalf("a Cast to research is not engineering's to bound: %v", err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,6 +39,18 @@ const (
 	castOwnerTextMax = 64 << 10
 	// castPacketScanDepth bounds the walk for a forged owner_directions.
 	castPacketScanDepth = 32
+	// castOwnerDirectionsOmittedKey lists the trajectory's owner revisions
+	// the runtime left off a Cast to stay inside the bounds (fix 5).
+	castOwnerDirectionsOmittedKey = "owner_directions_omitted"
+	// textureCastPacketMax bounds a Texture Cast's whole packet, owner
+	// directions included, and is the bound engineering reads it to
+	// (engineeringRequestBodyMax): one bound for the whole carry, so a
+	// request Texture commits is never cut one hop later (fix 9,
+	// docs/problems/selfdev-round-blockers-cluster-2026-11-03.md). It leaves
+	// 32 KiB of packet beside the owner's words.
+	textureCastPacketMax = castOwnerTextMax + 32<<10
+	// castOwnerOmittedMax bounds the ids owner_directions_omitted names.
+	castOwnerOmittedMax = 32
 )
 
 // castOwnerDirection is one owner revision's words on a Cast's packet.
@@ -119,6 +132,18 @@ func jsonHasKeyFold(v any, key string, depth int) bool {
 // none is returned unchanged. Revisions are immutable, so a replayed cell
 // attaches the same bytes. The caller's intents are not modified.
 func attachCastOwnerDirections(intents []yaegikernel.StagedIntent, scope ownerRevisionScope, load func(string) (types.Revision, error)) ([]yaegikernel.StagedIntent, error) {
+	return attachCastOwnerHistory(intents, scope, load, nil)
+}
+
+// attachCastOwnerHistory is attachCastOwnerDirections that also carries the
+// owner's earlier words on the same trajectory (fix 5): list returns the
+// document's revisions, and every owner revision of this trajectory that
+// carries owner words and is no newer than the newest named one is attached
+// too, newest first while the bounds allow, the rest named under
+// owner_directions_omitted. The named ones are required, as before. The
+// cut-off is the named revisions' own time, so a replayed cell attaches the
+// same set. A nil list attaches only what is named.
+func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevisionScope, load func(string) (types.Revision, error), list func() ([]types.Revision, error)) ([]yaegikernel.StagedIntent, error) {
 	var out []yaegikernel.StagedIntent
 	for i, in := range intents {
 		if in.Kind != yaegikernel.IntentCast {
@@ -152,11 +177,34 @@ func attachCastOwnerDirections(intents []yaegikernel.StagedIntent, scope ownerRe
 		if textBytes > castOwnerTextMax {
 			return nil, fmt.Errorf("reduce: Texture cast %s: the owner's words in the revisions named are %d bytes; a Cast carries at most %d: name fewer revisions in this Cast and the rest in another", in.LocalID, textBytes, castOwnerTextMax)
 		}
+		var omitted []string
+		if list != nil {
+			earlier, left, err := earlierOwnerDirections(ids, directions, textBytes, scope, load, list)
+			if err != nil {
+				return nil, fmt.Errorf("reduce: Texture cast %s: %w", in.LocalID, err)
+			}
+			directions, omitted = append(earlier, directions...), left
+		}
 		attached, err := marshalVerbatim(directions)
 		if err != nil {
 			return nil, fmt.Errorf("reduce: Texture cast %s: encode owner_directions: %w", in.LocalID, err)
 		}
 		spec[castOwnerDirectionsKey] = attached
+		// Only the runtime names what it left out: a cell's own value goes.
+		delete(spec, castOwnerDirectionsOmittedKey)
+		delete(spec, castOwnerDirectionsOmittedKey+"_count")
+		if len(omitted) > 0 {
+			if len(omitted) > castOwnerOmittedMax {
+				// The newest left out are named; the count is all of them.
+				if spec[castOwnerDirectionsOmittedKey+"_count"], err = marshalVerbatim(len(omitted)); err != nil {
+					return nil, err
+				}
+				omitted = omitted[len(omitted)-castOwnerOmittedMax:]
+			}
+			if spec[castOwnerDirectionsOmittedKey], err = marshalVerbatim(omitted); err != nil {
+				return nil, fmt.Errorf("reduce: Texture cast %s: encode %s: %w", in.LocalID, castOwnerDirectionsOmittedKey, err)
+			}
+		}
 		statement, err := marshalVerbatim(spec)
 		if err != nil {
 			return nil, fmt.Errorf("reduce: Texture cast %s: encode packet: %w", in.LocalID, err)
@@ -170,6 +218,92 @@ func attachCastOwnerDirections(intents []yaegikernel.StagedIntent, scope ownerRe
 		return intents, nil
 	}
 	return out, nil
+}
+
+// earlierOwnerDirections picks the owner's earlier words for a Cast that
+// named ids (whose directions and total size are given): every other owner
+// revision of the scope's document and trajectory that carries owner words
+// and is no newer than the newest named one, newest first while the Cast
+// stays within castOwnerRevisionMax revisions and castOwnerTextMax bytes. It
+// returns them oldest first, and the ids it left out, oldest first.
+func earlierOwnerDirections(ids []string, named []castOwnerDirection, textBytes int, scope ownerRevisionScope, load func(string) (types.Revision, error), list func() ([]types.Revision, error)) ([]castOwnerDirection, []string, error) {
+	// The cut-off is the named revisions' own time, read from the same store
+	// they were checked against, never from the listing (which may lag or
+	// be cut), so a replayed cell computes the same one.
+	seen := map[string]bool{}
+	var cutoff time.Time
+	for _, id := range ids {
+		seen[id] = true
+		rev, err := load(id)
+		if err != nil {
+			return nil, nil, fmt.Errorf("owner_revision %s: read it: %w", id, err)
+		}
+		if rev.CreatedAt.After(cutoff) {
+			cutoff = rev.CreatedAt
+		}
+	}
+	if cutoff.IsZero() {
+		return nil, nil, nil
+	}
+	revisions, err := list()
+	if err != nil {
+		return nil, nil, fmt.Errorf("list the document's revisions: %w", err)
+	}
+	type candidate struct {
+		rev       types.Revision
+		direction castOwnerDirection
+	}
+	var candidates []candidate
+	for _, rev := range revisions {
+		id := strings.TrimSpace(rev.RevisionID)
+		if id == "" || seen[id] || rev.AuthorKind != types.AuthorUser || rev.CreatedAt.After(cutoff) {
+			continue
+		}
+		direction, err := ownerDirectionFromRevision(id, scope, func(string) (types.Revision, error) { return rev, nil })
+		if err != nil {
+			continue // another trajectory's, or an owner edit without words
+		}
+		seen[id] = true
+		candidates = append(candidates, candidate{rev: rev, direction: direction})
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if !candidates[i].rev.CreatedAt.Equal(candidates[j].rev.CreatedAt) {
+			return candidates[i].rev.CreatedAt.After(candidates[j].rev.CreatedAt)
+		}
+		return candidates[i].rev.RevisionID > candidates[j].rev.RevisionID
+	})
+	count := len(named)
+	var kept []castOwnerDirection
+	var omitted []string
+	for _, c := range candidates {
+		if count < castOwnerRevisionMax && textBytes+len(c.direction.Text) <= castOwnerTextMax {
+			kept = append(kept, c.direction)
+			count++
+			textBytes += len(c.direction.Text)
+			continue
+		}
+		omitted = append(omitted, c.direction.RevisionID)
+	}
+	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
+		kept[i], kept[j] = kept[j], kept[i]
+	}
+	for i, j := 0, len(omitted)-1; i < j; i, j = i+1, j-1 {
+		omitted[i], omitted[j] = omitted[j], omitted[i]
+	}
+	return kept, omitted, nil
+}
+
+// refuseOversizedTextureCasts refuses a Texture Cast to management whose
+// packet, with what the runtime attached, is over textureCastPacketMax:
+// engineering, which reads the Texture Cast its assignment serves, reads
+// only that much (fix 9). Casts to other desks keep their own bounds.
+func refuseOversizedTextureCasts(intents []yaegikernel.StagedIntent) error {
+	for _, in := range intents {
+		if in.Kind == yaegikernel.IntentCast && strings.TrimSpace(in.ToDesk) == agentprofile.Management && len(in.Statement) > textureCastPacketMax {
+			return fmt.Errorf("reduce: Texture cast %s: the packet is %d bytes, with any owner words the runtime attached; a Cast to management carries at most %d, which is what engineering reads: shorten the packet, name fewer owner revisions, or point at the request's files in the source tree", in.LocalID, len(in.Statement), textureCastPacketMax)
+		}
+	}
+	return nil
 }
 
 // castOwnerRevisionIDs reads owner_revision: one id or a list of ids, each
@@ -301,10 +435,24 @@ func (r *rlmCallReduction) attachTextureOwnerDirections(ctx context.Context, int
 		}
 		scope.TrajectoryID = strings.TrimSpace(firstNonEmpty(r.rec.TrajectoryID, metadataStringValue(r.rec.Metadata, "trajectory_id")))
 	}
-	return attachCastOwnerDirections(intents, scope, func(id string) (types.Revision, error) {
+	out, err := attachCastOwnerHistory(intents, scope, func(id string) (types.Revision, error) {
 		if r.ledger == nil {
 			return types.Revision{}, fmt.Errorf("no store to read it from")
 		}
 		return r.ledger.GetLifecycleRevision(ctx, scope.OwnerID, scope.ComputerID, id)
+	}, func() ([]types.Revision, error) {
+		if r.ledger == nil || strings.TrimSpace(scope.DocID) == "" {
+			return nil, nil
+		}
+		// No cut: the listing is read whole, so a long document's oldest
+		// owner words are not silently lost (the default keeps 1000).
+		return r.ledger.ListTextureRevisionsByScopeOG(ctx, scope.OwnerID, scope.ComputerID, scope.DocID, 1<<30)
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := refuseOversizedTextureCasts(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

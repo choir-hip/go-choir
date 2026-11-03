@@ -232,7 +232,7 @@ func TestEngineeringRequestRefusedForNonTextureParent(t *testing.T) {
 
 func TestEngineeringRequestIsBoundedAndStillVerifies(t *testing.T) {
 	f := newRequestFixture(t)
-	parent := f.textureCast(t, f.seed.TextureInbox, "big", strings.Repeat("o", 20000), strings.Repeat("é", 20000)) // objective 20000 bytes, body 40000 bytes
+	parent := f.textureCast(t, f.seed.TextureInbox, "big", strings.Repeat("o", 20000), strings.Repeat("é", engineeringRequestBodyMax/2+1000)) // objective 20000 bytes, body over the bound (2 bytes a rune)
 	inbox := f.open(t, &parent, "capability-big", boundDigest(parent))
 	v := f.view(t, f.rt, inbox)
 	if len(v) != 1 || v[0].Request == nil {
