@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -74,6 +75,30 @@ type Manager struct {
 
 	mu        sync.Mutex
 	lastValid map[string]Policy
+	logged    map[string]bool
+}
+
+// logDiagnostic logs a policy diagnostic once per distinct text.
+func (m *Manager) logDiagnostic(text string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.logged == nil {
+		m.logged = map[string]bool{}
+	}
+	if m.logged[text] {
+		return
+	}
+	m.logged[text] = true
+	log.Printf("modelpolicy: %s", text)
+}
+
+func sortedRoleNames(roles map[string]provideriface.LLMSelection) []string {
+	names := make([]string, 0, len(roles))
+	for name := range roles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // NewManager constructs an independent model-policy owner.
@@ -89,6 +114,10 @@ type Policy struct {
 	Defaults provideriface.LLMSelection
 	Roles    map[string]provideriface.LLMSelection
 	Source   string
+	// Diagnostics lists non-fatal problems found while reading the policy
+	// (an unknown reasoning effort, for example); EnrichMetadata reports
+	// them in MetadataPolicyError.
+	Diagnostics []string
 }
 
 type policyOverlay struct {
@@ -97,6 +126,8 @@ type policyOverlay struct {
 	Defaults  provideriface.LLMSelection
 	Roles     map[string]provideriface.LLMSelection
 	Source    string
+
+	Diagnostics []string
 }
 
 // Load returns the current base policy. Invalid policy updates retain the last
@@ -151,9 +182,14 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 	if strings.TrimSpace(role) == "" {
 		role = agentprofile.Conductor
 	}
-	selection, err := m.Resolve(ctx, ownerID, role, metadataString(metadata, MetadataPolicyOverlayID))
+	policy, err := m.loadWithOverlay(ctx, ownerID, metadataString(metadata, MetadataPolicyOverlayID))
+	selection := policy.Resolve(role)
 	if err != nil {
 		metadata[MetadataPolicyError] = err.Error()
+	}
+	for _, diagnostic := range policy.Diagnostics {
+		metadata[MetadataPolicyError] = joinPolicyErrors(metadata, diagnostic)
+		m.logDiagnostic(diagnostic)
 	}
 	thread := ThreadKey(metadata)
 	spec := SpecOf(selection)
@@ -619,8 +655,8 @@ func parsePolicy(raw, source string) (Policy, error) {
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
+		if line == "" {
 			continue
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
@@ -650,6 +686,16 @@ func parsePolicy(raw, source string) (Policy, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		return Policy{}, err
+	}
+	nDiag := len(policy.Diagnostics)
+	sanitizeEffort("defaults", &policy.Defaults, &policy.Diagnostics)
+	if len(policy.Diagnostics) > nDiag {
+		policy.Defaults.ReasoningEffort = fallbackPolicy(provideriface.Config{}).Defaults.ReasoningEffort
+	}
+	for _, role := range sortedRoleNames(policy.Roles) {
+		selection := policy.Roles[role]
+		sanitizeEffort("role "+role, &selection, &policy.Diagnostics)
+		policy.Roles[role] = selection
 	}
 	if !validSelection(policy.Defaults) {
 		return Policy{}, fmt.Errorf("defaults require a pool spec or a provider and model")
@@ -698,8 +744,8 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
+		if line == "" {
 			continue
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
@@ -744,6 +790,12 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 	if err := scanner.Err(); err != nil {
 		return policyOverlay{}, err
 	}
+	sanitizeEffort("overlay defaults", &overlay.Defaults, &overlay.Diagnostics)
+	for _, role := range sortedRoleNames(overlay.Roles) {
+		selection := overlay.Roles[role]
+		sanitizeEffort("overlay role "+role, &selection, &overlay.Diagnostics)
+		overlay.Roles[role] = selection
+	}
 	if pool := unknownPool(overlay.Defaults); pool != "" {
 		return policyOverlay{}, fmt.Errorf("overlay defaults name unknown pool %q", pool)
 	}
@@ -768,7 +820,7 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 }
 
 func applyOverlay(base Policy, overlay policyOverlay) Policy {
-	merged := Policy{Defaults: base.Defaults, Roles: make(map[string]provideriface.LLMSelection, len(base.Roles)+len(overlay.Roles)), Source: base.Source}
+	merged := Policy{Defaults: base.Defaults, Roles: make(map[string]provideriface.LLMSelection, len(base.Roles)+len(overlay.Roles)), Source: base.Source, Diagnostics: append(append([]string(nil), base.Diagnostics...), overlay.Diagnostics...)}
 	for role, selection := range base.Roles {
 		merged.Roles[role] = selection
 	}
@@ -829,8 +881,57 @@ func parseAssignment(line string) (string, string, bool) {
 	if strings.HasPrefix(value, "[") {
 		return key, value, true
 	}
-	value = strings.Trim(value, `"`)
+	value = strings.Trim(value, "\"'")
 	return key, value, key != ""
+}
+
+// stripTOMLComment removes a trailing # comment, leaving a # inside a
+// basic ("...", with backslash escapes) or literal ('...') string alone.
+func stripTOMLComment(line string) string {
+	var quote rune
+	escaped := false
+	for i, r := range line {
+		switch {
+		case quote == '"':
+			if escaped {
+				escaped = false
+			} else if r == '\\' {
+				escaped = true
+			} else if r == '"' {
+				quote = 0
+			}
+		case quote == '\'':
+			if r == '\'' {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == '#':
+			return line[:i]
+		}
+	}
+	return line
+}
+
+// validReasoningEfforts is the provider-accepted effort set. Per-provider
+// mapping or refusal of a member stays with the provider adapters.
+var validReasoningEfforts = map[string]bool{"none": true, "minimal": true, "low": true, "medium": true, "high": true, "xhigh": true, "max": true}
+
+// sanitizeEffort returns the effort to keep for a policy selection. An empty
+// value is unset (the default applies); an unknown one is dropped so the role
+// falls back to the default effort, and a diagnostic names it.
+func sanitizeEffort(where string, selection *provideriface.LLMSelection, diagnostics *[]string) {
+	raw := strings.TrimSpace(selection.ReasoningEffort)
+	if raw == "" {
+		selection.ReasoningEffort = ""
+		return
+	}
+	if effort := strings.ToLower(raw); validReasoningEfforts[effort] {
+		selection.ReasoningEffort = effort
+		return
+	}
+	selection.ReasoningEffort = ""
+	*diagnostics = append(*diagnostics, fmt.Sprintf("model policy %s: unknown reasoning effort %q ignored, using the default effort", where, raw))
 }
 
 func applyValue(selection *provideriface.LLMSelection, key, value string) {
