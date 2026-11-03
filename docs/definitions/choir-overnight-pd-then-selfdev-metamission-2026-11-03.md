@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: lanes A (first real walk at R0 on 9b8ff2432; S4 main e8db56021 in CI; expedite, test-tier arms and minute soaks for R0/R1 queued), C (Files candidates applied on pool and claude; Library publish waits on the app-sdk exports in e8db56021), E (capsule overlay S0-S3 and S4 source building; selfdev auto-apply with management gating designing; round cycle-time trace review running); store split settled complete
+  slice: station 1 (pd) landed and proved; store split settled complete; station 2 (selfdev) rounds running on four test arms with blocker fixes expedited
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
@@ -122,20 +122,22 @@ now:
     resource (review rounds and CI serialize the red work). dO: start every
     review the moment a build freezes.
   decision: >-
-    docs pushes are batched between deploys (each push to main cancels the
-    CI run in flight); screens-as-files landed with a restore after a bad
-    squash (ledger)
+    blocking fixes ship expedited (owner policy); docs pushes batched
+    between deploys; problem 21 rebuilt to need no work item (the notice is
+    the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 42d4ec7e5: screens-as-files, onboarding (deployed acceptance
-    passes all six steps), texture export, lane B, and ring-ordered deploys
-    with automatic rollback (2795b8ee6, tier 2 accepted, baseline recorded).
-    The planted fault b1ce9c6d1 (d@e only) is in CI; its walk should roll
-    back at R0. S4 (selfdev-s4-scheduling 76fc93037, tier 2 accept) lands
-    after that rollback completes. Files rounds sent 03:14Z on the claude
-    and deepseek arms; luna and pool wait for a build slot.
-  main_uncertainty: whether arms hit stack_base_moved or stale open operations after the deploy refreshes them
-  next_observation: staging build identity after CI; first Files Cast per arm
+    staging 2cd70f606 (problem 17 fixed and proved on the deepseek arm:
+    Texture turns commit, no permission denied); 781fcfc46 (problem 21,
+    Devin accept r2, expedited) in CI. deepseek running Files round 7;
+    pool re-noticing after a refresh killed its awaiting rebase (problem
+    22); luna Slides round 6 needs real-content routes for shots; claude
+    arm waits on refresh and rebase. Node B 16 of 31 GiB available, no
+    memory pressure.
+  main_uncertainty: >-
+    whether crash boot closes open lifecycle work items (a reviewer says no;
+    a read-only investigation is running); whether pool applies before the
+    next deploy refreshes it
+  next_observation: 781fcfc46 deployed identity; pool's post-refresh notice reaching engineering without rebase_needs_root
   blocker: none
-  next_action: get e8db56021 deployed and its walk to R1; land the delegate bypass-permissions commit; act on the cycle-time trace findings
-
+  next_action: land the problem 22 hold (refresh waits while a candidate is frozen, awaiting or accepted) through tier 2, expedited; then publish Files from each arm and move arms to Slides
 receipts: []
