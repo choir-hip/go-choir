@@ -50,3 +50,22 @@ and vision.pdf). Engineering: gpt-6-luna at high reasoning (main, after problem 
 | 1a | 11:50:39 | 0.2 | 0.1 | 3.2 | 0.3 | judge failed (no shots) |
 | 1b (re-cast) | 11:54:35 | 0.8 | 0.15 | 26.1 | 0.75 | judge failed (phone shot size) |
 | 2 | 12:23:14 | about 1 | - | about 3 | 0.8 | judge failed (shots not visible to judge) |
+
+## Rounds 10 to 12 with the Claude delegate, and the publish (16:16-18:25Z)
+
+- Round 10, first try (16:16Z): stopped at a wrong `command -v claude` check. That check was wrong by design; the real
+  fault was problem 25, the gateway keying the grant by VM id.
+- Round 10 retry (17:08Z, after the problem 25 fix and a cold boot): capsule in claude mode; the delegate ran 44 turns
+  for $0.77. Rejected for mocked decks: the claude-mode capsule withheld /computer (problem 26).
+- Round 11 (17:53Z, after the problem 26 fix): step 0 found computer_state "provided" (71 real files, the three
+  decks). Two attempts. The first was refused at freeze for 2 unknown paths. The second froze after about 3 minutes
+  with no shots and was rejected.
+- Round 12 (18:05Z): the delegate was given the whole twelve-shot job. selfdev-d3ce7dbc190e4c1441d7c5cc9fad1f65 was
+  created 18:23:11Z, awaiting 18:24:08Z, approved as FP0 18:24:21Z, applied 18:24:24Z. The patch touches five files,
+  all under frontend/src/packages/slides-next/ (App.svelte, FilePicker.svelte, SlideView.svelte, deck.js,
+  choir-package.json).
+- Published to the Library at 18:24:58Z: package slides-next, release 6a2797e7ed04a1d7347c0c6cfc69e064820d3bb524fb0aa53a6085cc7022f4c0, track seq 1.
+
+| Round | Send to bind | Bind to candidate | Judge / approve / apply |
+|---|---|---|---|
+| 12 | about 1-2 min | about 17 min | judge about 1 min; approve 13 s; apply 3 s |
