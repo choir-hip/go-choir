@@ -34,6 +34,7 @@ func TestEngineeringRunContextCarriesTheCapsuleBrowserRecipe(t *testing.T) {
 			"/var/lib/artifact/screens/",
 			"npx playwright install",
 			"context.route",
+			"scripts/choir-shot.mjs",
 		} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("%s engineering run context lacks %q:\n%s", kind, want, got)

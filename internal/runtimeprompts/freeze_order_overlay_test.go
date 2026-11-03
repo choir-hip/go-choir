@@ -26,7 +26,7 @@ func TestEngineeringOverlayStatesTheRoundEndOrder(t *testing.T) {
 func TestOverlaysTeachScreensAsFilesAndNoPlatformCapture(t *testing.T) {
 	for _, opts := range []RLMEngineeringOverlayOptions{{}, {HasSelfDevelopmentOperation: true}, {ClaudeDelegate: true}} {
 		eng := RLMEngineeringOverlay(opts)
-		for _, want := range []string{"/var/lib/artifact/screens/", "Self-development/<operation>/screens/", "$CHOIR_BROWSER", "real content", ".png"} {
+		for _, want := range []string{"/var/lib/artifact/screens/", "Self-development/<operation>/screens/", "$CHOIR_BROWSER", "real content", ".png", "scripts/choir-shot.mjs", "--only", "choir.Edit"} {
 			if !strings.Contains(eng, want) {
 				t.Errorf("engineering overlay %+v lacks %q", opts, want)
 			}
