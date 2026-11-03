@@ -54,9 +54,15 @@ it.
 1. **Size classes at spawn.** A capsule spawns `light` or `build`. The
    request travels with the spawn the guest already admits; `build` reserves
    the peak a frontend build plus Playwright measured, `light` the editing
-   footprint. The guest's capsule budget is sized for one `build` capsule;
-   vmctl already counts that ceiling when the computer starts. No job asks
-   anyone.
+   footprint. No job asks anyone. vmctl's deployed admission is measured
+   (`VMCTL_ADMISSION_MODE=measured`, `NEED=wake`, nix/node-b.nix): a running
+   computer is charged at its settled RSS, not its ceiling, so a capsule's
+   growth is not already counted. The guest therefore reports its live
+   `build` reservations to vmctl over the guest-facts channel, and measured
+   admission charges each computer the larger of its settled RSS and its
+   idle footprint plus live build reservations. A `build` spawn the host
+   cannot cover is refused at spawn, visibly, rather than admitted and
+   killed later.
 2. **CPU by weight.** Capsule and job cgroups get `cpu.weight` (build jobs
    below interactive guest work); no CPU admission anywhere.
 3. **Host pressure published, read locally.** vmctl writes the host's
@@ -66,13 +72,18 @@ it.
    threshold or headroom is under one build's peak, and starts it when it
    clears. A deferred job reports "waiting for host memory" in its status, so
    a stall is visible, never silent. The host floor stays the hard stop.
-4. **A shared content-addressed build cache.** One host cache, read through
-   by every capsule: npm and Vite dependency trees keyed by lockfile digest,
-   built package outputs keyed by the digest of their sources and the
-   toolchain, the Go build cache, the Playwright Chromium layer. Writes go
-   through the host (a capsule never writes another computer's entries); a
-   hit is verified by digest. This shares the capsule mirrors' host path
-   (`choir_capsule_mirrors`), which the switch audit puts on with this work.
+4. **A build cache that cannot be poisoned across computers.** Capsule
+   jobs run arbitrary code and input digests are computable, so no capsule
+   output is ever served to another computer. Shared entries are only
+   downloads the consumer verifies against a digest it computes from
+   content it already trusts: npm tarballs against the lockfile's
+   `integrity` hashes, Go modules against `go.sum` and the checksum
+   database, the Playwright Chromium layer from the Nix store. The host
+   fetches them (the capsule mirrors path, `choir_capsule_mirrors`); a
+   capsule never writes a shared entry. Built outputs (the Go build cache,
+   Vite and package builds) stay per computer: hits across one computer's
+   capsules are fine, and a poisoned entry harms only the computer that
+   wrote it.
 5. **Priority.** The paper and the owner's computer are `protected`;
    self-development arms are `batch`. Under host pressure, vmctl's existing
    make-room order takes batch computers first; a batch capsule's deferred
@@ -87,7 +98,7 @@ Every mechanism is local (weights, the pressure read) or content-addressed
 scheduling load. Concurrency is bounded by idle footprint (about 0.8 GB an
 arm) plus the build peaks the pressure signal admits; most of a round is
 model calls, so many capsules overlap with two or three builds in flight.
-The cache makes the second arm's build of the same tree a hit. Past one
+The shared download cache makes the second arm's install of the same lockfile a hit; build outputs hit within one computer. Past one
 host, the same facts channel and cache sit on whichever host runs the
 computer.
 
@@ -96,14 +107,26 @@ computer.
 - Four arms start a frontend build at once on staging: host MemAvailable
   stays above the floor; at least one job reports waiting, then completes;
   no guest OOM; the paper's model-call rate unchanged.
-- The second arm's build of an unchanged tree is a cache hit (time and
-  bytes recorded).
+- The second arm's install of an unchanged lockfile is a download-cache
+  hit (time and bytes recorded); a capsule on d@e that tries to write a
+  shared entry is refused.
+- With build reservations live, measured admission charges them and
+  refuses a build spawn the host cannot cover.
 - Pressure readings and deferrals in the growth meter beside the arms'
   round timings.
 
 ## Until it lands
 
 At most two arms run a build at once, started by the orchestrator.
+
+## Review
+
+Devin, round 1 (2026-11-03): send_back with two blocking-real findings,
+answered above. Deployed admission is measured, so vmctl does not count the
+ceiling (point 1 now reports build reservations into measured admission).
+A cross-computer cache written by capsules can be poisoned (point 4 now
+shares only consumer-verified, host-fetched downloads and keeps build
+outputs per computer). Round 2 pending.
 
 ## Rollback
 
