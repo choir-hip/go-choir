@@ -11,7 +11,20 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-11-03): self-development, the apps feature-complete on four arms
+## Active goal (2026-11-03): progressive delivery, built
+
+**Goal:** [`definitions/choir-progressive-delivery-2026-11-03.md`](definitions/choir-progressive-delivery-2026-11-03.md)
+(`readiness: executable` on the owner's word). Run it with
+`/goal docs/definitions/choir-progressive-delivery-2026-11-03.md`.
+
+Owner, 2026-11-03: "i hate the pattern of all these switches ... we were
+supposed to build progressive delivery ... put this self-dev mission on
+hold to handle progressive delivery." Every switch walks the rings on
+measured evidence and retires; the off backlog is cleared. Inputs: the
+ratified design [`design/progressive-delivery-2026-10-26.md`](design/progressive-delivery-2026-10-26.md)
+and the audit [`evidence/switch-audit-2026-11-03.md`](evidence/switch-audit-2026-11-03.md).
+
+## On hold (2026-11-03): self-development, the apps feature-complete
 
 **Goal:** [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md)
 (`readiness: executable` on the owner's word). Run it with

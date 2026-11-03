@@ -41,7 +41,7 @@ definition_version: 5
 #   deep enough. So that's something to investigate and understand."
 # - (2026-11-02, carried) "upgrading things should never leave a computer in
 #   a stuck state".
-readiness: executable  # on the owner's word above
+readiness: executable  # on the owner's word above; ON HOLD 2026-11-03 for choir-progressive-delivery-2026-11-03.md (owner: "put this self-dev mission on hold to handle progressive delivery")
 
 review:
   reviewer: none  # executable on the owner's word; each landed change takes its own tier
@@ -230,7 +230,7 @@ slices:
   S7: promote winners per app; deployed acceptance; comparison report across arms
 
 now:
-  status: working
+  status: checkpoint_incomplete  # on hold 2026-11-03; parked branches selfdev-screens-as-files, cli-agent-onboarding unmerged
   slice: S0 + S1 (spec committed; four builds in flight; arms being created)
   source_ref: origin/main 93424c258
   deploy_identity: staging ee34d53c1

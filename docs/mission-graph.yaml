@@ -1165,13 +1165,28 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-progressive-delivery-2026-11-03
+    title: Progressive delivery built — every switch walks the rings on measured evidence, reverts on its own, and retires; the off-switch backlog cleared
+    path: docs/definitions/choir-progressive-delivery-2026-11-03.md
+    ledger: docs/definitions/choir-progressive-delivery-2026-11-03.ledger.md
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: [choir-selfdev-apps-feature-complete-2026-11-03]
+    note: >-
+      Owner 2026-11-03: "i hate the pattern of all these switches ... we
+      were supposed to build progressive delivery ... put this self-dev
+      mission on hold to handle progressive delivery." Design
+      docs/design/progressive-delivery-2026-10-26.md (ratified 2026-10-28).
   - id: choir-selfdev-apps-feature-complete-2026-11-03
     title: Self-development — Files, Slides, Calendar and Podcasts feature-complete on four stock arms (Claude delegate, DeepSeek, gpt-6-luna, pool), with agent onboarding, Texture export and the calibration seed plan
     path: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md
     ledger: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.ledger.md
-    status: working
+    status: on_hold  # 2026-11-03, for choir-progressive-delivery-2026-11-03
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: [choir-store-header-body-split-2026-11-02]
     enables: []
