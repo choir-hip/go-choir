@@ -406,3 +406,14 @@ engineering round. The roughly 50-minute rebase rounds were for stacks that coul
 
 Deepseek's assignment-17a659c2 bound at 14:42:27Z and was cancelled at 15:42:27Z with "context deadline exceeded". The
 capsule was revoked and there was no Report. That deadline bounds every rebase: claude's took 53 minutes, pool's 50.
+
+## Unnumbered (lane C, 16:18Z): after a595321f2 and a cold boot, luna's engineering capsule has no `claude` on PATH
+
+Luna's computer was added to claudeDelegateComputers in a595321f2, which deployed at 16:12Z. It was then cold-booted:
+computer stop at 16:15:48Z (prior epoch 13455), computer start at 16:16:03Z (epoch 13456). Slides round 10
+(trajectory 1068caed) bound assignment-2e71cc31 at 16:17:26Z (capsule-39459806, ecosystem_proxy). Its step 0 was
+`sh -c 'command -v claude; claude --version; command -v choir-delegate'`, which ran with exit 0 and empty stderr. The
+engineer reported claude "not on PATH". Texture's 16:18:17Z turn reads: "the required Claude check failed because the
+executable was absent from PATH". Capsule evidence carries only the stdout digest (sha256:9e10ccd8...), so the literal
+output was not seen. The delegate was never invoked. Open question: whether the binary layer reached the VM and is
+missing only from the capsule's PATH, or never reached the VM at all.
