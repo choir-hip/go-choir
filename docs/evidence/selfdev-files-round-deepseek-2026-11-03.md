@@ -102,3 +102,5 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 1 | 03:14:46 | 0.4 | 0.0 | 50.0 (refused at Freeze, mode off) | - | - | - | blocked |
 | 2 | 04:09:12 | 1.0 | 0.0 | 24.8 + 3.9 Freeze retries | 1.5 | 1.6 (FP0 reject) | - | FP0 rejected |
 | 3 | 05:26:16 | 2.7 | 0.0 | 39.4 | 1.4 | 3.2 | 0.03 | applied |
+
+Live shots plus next request (apply to next revision sent): round 3, 06:12:59 to 06:25:28 = 12.5 min (live run 06:13-06:18Z, review and revision 7 min). Round 4's revision then waited 8.1 min for a Cast (Problem 8; nudge 06:31:31Z, assignment 06:33:36Z).

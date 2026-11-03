@@ -210,3 +210,20 @@ Hypothesis (not confirmed): U4 mints no notice when the stack diverged (the boot
 4036f0c3. Status: claude parked; FP0 does not invent a notice id or roll back the applied round.
 Fix direction (red, source projection): a backward boot either mints a notice the root can carry, or admission
 builds on the computer's effective tree (base plus applied stack) instead of refusing.
+
+## Problem 11: once one applied round touched app-sdk.ts, no later round of that package can publish
+
+Pool arm. Round 2 (selfdev-c4ac7712467862d5b7cd527ed6287034, applied 06:43:14Z) changed only package files
+against the state round 1 left, so confinement passed. `choir package publish --package files-next --operation
+selfdev-c4ac7712...` (06:43Z) answered 409: "package_parent_unpublished: frontend/src/packages/files-next before
+this operation is 8ff6cbc9... (from operation selfdev-1d0527916b182fb513039514188a874d), which is neither the
+base's 4b825dc6... nor the track head's". DraftPackage check 2 (internal/pkgrelease/publisher.go, "own change
+only") requires the package subtree before the operation to be the base's or the published track head's. Round 1
+can never publish (it changed app-sdk.ts, Problem 6), so every round stacked on it inherits an unpublished
+parent. The same holds on claude (round 3 changed app-sdk.ts) and deepseek (round 3 did). Main's re-exports on
+main do not unblock these stacks; they only let a fresh stack start package-only.
+Ways out: (a) the publisher accepts a parent that is an unpublished operation in the same applied stack and
+publishes the cumulative package tree (orange, publisher); (b) per arm, roll back to the state before the first
+files-next round (`choir self-dev rollback`) once the re-exports are on the arm's base, then build one
+package-only round from the base and publish it (an owner act on a test arm; loses nothing the next round does
+not rebuild, but costs a round). FP0 has not rolled back any arm; the choice is main's.

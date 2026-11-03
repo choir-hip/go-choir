@@ -57,8 +57,27 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Round 2 revision written 06:10Z (scratch pool/revise-r2.md): nine defects, package-only scope with "import these
   from app-sdk once it has them; do not edit app-sdk.ts", self-contained. It waits for a build slot.
 
+### Round 2
+
+- 06:20:10Z owner revision 3a707516 (pool/revise-r2.md: nine live defects, package-only scope, self-contained).
+  06:20:31Z Texture forwarded; 06:21:05Z assignment-146c3b6c56aa805f6f60f241 opened, 06:21:06Z bound. No
+  stack_base_moved and no admission refusal (the trace has none).
+- 06:41:38Z Freeze opened selfdev-c4ac7712467862d5b7cd527ed6287034; 06:42:36Z the judge passed it
+  (awaiting_approval). 06:43:12Z FP0 approved as the automatic stand-in (receipt
+  01a1a025-c6ad-71e0-89be-4da8ac936fe6; base ef47c045...; prior effective head 8bbbb219...); 06:43:14Z applied.
+- The engineer's account: kinds, column headers and sorting, breadcrumb priority, no selected preview text,
+  search layout with result folders, one menu surface, no desktop sidebar close, PDF and video tiles, the phone
+  row's second line; build, check-packages, a package-only diff check and DOM checks passed (its own numbers).
+  The operation's patch against the base still shows app-sdk.ts, carried from round 1.
+- Library publish 06:43Z refused: package_parent_unpublished (Problem 11): round 1 is the package's parent and
+  can never publish.
+- Spend round 2: $0.60, 93 calls (06:20-06:43Z; $1.84 total).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 04:37:47 | 0.4 | 0.0 | 47.2 | 2.3 | 0.4 | 0.03 | applied |
+| 2 | 06:20:10 | 0.9 | 0.02 | 20.5 | 1.0 | 0.6 | 0.03 | applied |
+
+Live shots plus next request (apply to next revision sent): round 1, 05:28:08 to 06:20:10 = 52.0 min (first live run 05:40Z; full-preset runs blocked by email sign-in 429s until 06:04Z; then a build-slot wait).

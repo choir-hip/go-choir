@@ -116,3 +116,5 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 1 | 03:14:46 | 1.0 | 0.0 | 45.7 (refused at Freeze, mode off) | - | - | - | blocked |
 | 2 | 04:08:36 | 2.4 | 0.0 | 21.8 | 5.3 | - | - | judge rejected |
 | 3 | 04:39:56 | 2.3 | 0.0 | 46.9 | 3.6 | 1.75 | 0.5 | applied |
+
+Live shots plus next request (apply to next revision sent): round 3, 05:35:01 to 06:13:06 = 38.1 min (live harness hardening about 25 min, the full seven-preset run 4 min, then a build-slot wait).
