@@ -125,6 +125,26 @@ Calendar keeps the owner's events on the computer, not in memory.
   (server-backed, as the playback position already is), never in
   `localStorage`.
 
+## Library
+
+Owner, 2026-11-03: "library should actually be an app, not just cli/mcp."
+The Library is the shelf of package releases made on individual computers
+(design/library-package-propagation-2026-10-26.md); the platform owner
+decides what goes on the base image.
+
+- Browse: releases by package, with title, description, the computer and
+  owner it came from, version, date, and screenshots from its frozen
+  candidate; search and filter by app and kind.
+- Detail: what the release changes (files and a readable diff summary), its
+  review and precommitment record, which computers have adopted it.
+- Install, update and remove on this computer, with a clear statement of
+  what the install changes and a one-act undo.
+- My releases: publish an applied self-development change, share,
+  withdraw, reinstate.
+- For the platform owner: mark a release as a base-image candidate and see
+  what the base image carries.
+- Live: new releases appear without a reload.
+
 ## Desktop background (separate from the theme)
 
 Owner, 2026-11-03: "for themes, i want to separate the desktop background
