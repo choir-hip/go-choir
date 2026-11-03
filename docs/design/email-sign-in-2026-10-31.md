@@ -146,6 +146,59 @@ registration path a person uses. The scoped key the test reads the inbox
 with cannot be minted by an email session (the gate refuses it); it is minted
 once from that passkey session and kept in the developer's gitignored env.
 
+#### Fresh test computers (2026-11-03)
+
+Owner, 2026-11-03: "how can we make this something that you can automate
+fully? ... I have to make a new account and then make an API key, et
+cetera." The same bootstrap makes any number of fresh test computers with
+no person: `scripts/test-computer-create --name <label>` runs
+`frontend/tests/email-signin-bootstrap-deployed.spec.js` (reserve a numbered
+test address, register with a virtual passkey, bind the number, mint a key,
+verify the address, wait for the computer) and writes
+`~/.config/choir-e2e/test-computer-<label>.json`, mode 0600: account id,
+computer id, address and key. It prints only the computer id and the state
+path. A second run with a finished state file reports the computer and does
+nothing; a half-finished one is refused (below).
+
+- **Scopes: all of them** (owner, 2026-11-03: "for now, we should just
+  grant all access"). The key carries every scope in the auth service's
+  registry (`validScopes`, internal/auth/handlers.go), read from the source
+  at run time so it stays complete as scopes are added: `admin`,
+  `owner:acts`, the `computer:self_development:*` set, texture, runtime
+  (files), base, keys, precommit, acceptance and lifecycle. This is for test
+  computers only; nothing else's key minting changes. A passkey session may
+  grant `owner:acts` (`HandleCreateAPIKey` refuses it only when the caller
+  is a key). If the auth service refuses a scope from the passkey session,
+  the run fails and names it; it does not retry with fewer.
+- **The key is the durable credential.** The virtual passkey lives in the
+  browser that registered it and dies with it, so the account can never
+  sign in with a passkey again. Everything after the bootstrap goes through
+  the key; a lost key means a new test computer. This is also why a
+  half-finished state file is refused: its passkey is gone.
+- **Image and switches.** A choir.news address is not an ephemeral-retention
+  domain, so the computer is class `primary` and is never pruned as a test
+  account. It boots the stock single image: a fresh ComputerID is in no
+  per-computer list in nix/node-b.nix (`guestLayeredComputers`,
+  `CHOIR_CLAUDE_DELEGATE_COMPUTERS`, the `*_ONLY` rings). Class-wide
+  selectors (`class:primary`) still apply, the same for every fresh
+  computer, so two arms made this way differ only by what is added later.
+- **Registration cap.** `AUTH_REGISTRATION_CAP` is unset on staging
+  (nix/node-b.nix, 2026-11-03), so registration is open. If a cap is set and
+  reached, registration answers `registration_waitlist` and the run fails
+  saying so; raising the cap is the operator's act.
+- **Auth rate limit.** The auth limiter allows 10 requests per IP per
+  minute (internal/auth/rate_limit.go) and answers 429 before the handler
+  runs. The second of two back-to-back runs (2026-11-03) failed at
+  register/finish with 429, leaving a credential-less user row bound to its
+  reserved number. The spec now replays a 429'd auth request after the
+  window (safe: the handler never ran), so the same user and number finish.
+- **Model policy file.** A fresh computer has no `System/model-policy.toml`
+  until its first policy load writes the platform default; a
+  `GET /api/model-policy/resolve?role=...` is such a load.
+- **Needs:** ssh to node-b (`maildctl reserve-test-number`, `bind-number`),
+  Playwright chromium in `frontend/`. `--dry-run` makes no network call;
+  `scripts/selftest-test-computer-create` checks the script with no network.
+
 ## Data
 
 New table `email_signin_attempts`:
