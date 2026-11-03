@@ -201,6 +201,13 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		resp.CurrentComputer.LookupStatus = "not_found"
 		resp.CurrentComputer.Protection = protectionText(resp.CurrentComputer.WarmnessClass)
 		resp.CurrentComputer.Reclaimable = reclaimableWarmness(resp.CurrentComputer.WarmnessClass)
+		if authResult.AuthMethod == "api_key" && computerTarget == nil && desktopID == vmctl.PrimaryDesktopID {
+			// An owner-wide key on an account with no computer (it signed in
+			// through `choir login` and never opened the desktop): create the
+			// primary computer the way the desktop bootstrap does.
+			h.startFirstComputerForOwnerKey(r.Context(), authResult.UserID)
+			resp.Warnings = append(resp.Warnings, "the account's computer is being created; poll again")
+		}
 		listed, listWarnings := h.visibleComputersForStatus(r.Context(), authResult, resp.CurrentComputer)
 		resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 		h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)

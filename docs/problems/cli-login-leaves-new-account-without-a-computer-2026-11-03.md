@@ -26,3 +26,12 @@ HYPOTHESIS: the right fix is that approving a device login (or the first
 owner-wide key use) resolves the account's primary computer, the same call
 bootstrap makes, so the terminal path is complete on its own; and the
 acceptance script revokes its key on every exit path.
+
+## Fix (branch cli-login-computer)
+
+The first owner-wide API-key read of `/api/compute/status` on an account whose
+primary desktop has no computer starts, in the background, the same vmctl
+resolve the bootstrap makes (`internal/proxy/api_key_first_computer.go`). One
+flight per user; a failure holds off the next attempt 30 s; cookie sessions and
+bound keys are unchanged. The acceptance script revokes its key on every exit
+path and waits 10 minutes for the listing and for the first self-dev answer.

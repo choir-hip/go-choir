@@ -197,6 +197,7 @@ type Handler struct {
 	autoputerURL               *url.URL      // parsed autoputer URL for WS dial derivation
 	vmctlClient                *vmctl.Client // optional vmctl client for VM-backed routing
 	apiKeyWakeMu               sync.Mutex
+	firstComputers             firstComputerGate
 	apiKeyWakes                map[string]*apiKeyWakeFlight // userID\x00computerID -> the one in-flight bearer wake
 	apiKeyTouchSent            sync.Map                     // userID\x00computerID -> time of the last idle-clock touch sent to vmctl
 	lifecycle                  *lifecycleRecorder

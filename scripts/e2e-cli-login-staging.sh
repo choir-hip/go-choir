@@ -15,7 +15,8 @@
 #      account with a virtual passkey, opens the link signed out, signs in on
 #      the page, sees the CLI's label, and approves
 #   L1 choir login exits 0 and writes the credentials file, mode 0600
-#   C1 the account's computer is listed (GET /api/compute/status with the key)
+#   C1 the account's computer is listed (GET /api/compute/status with the key;
+#      the first read by an owner-wide key creates it)
 #   S1 choir self-dev list --computer <id> answers with no key flag or env
 #   R1 choir logout revokes the key and removes the file; the old key now
 #      answers 401
@@ -62,6 +63,17 @@ step() { # id pass|fail detail
   [[ $res == pass ]] || fails=$((fails + 1))
 }
 finish() {
+  # Every exit path revokes the run's key: a key the run minted but did not
+  # log out (a failed C1 or S1, an interrupt) must not outlive it.
+  [[ -n "${login_pid:-}" ]] && kill "$login_pid" 2>/dev/null || true
+  if [[ -e "${creds:-/nonexistent}" ]]; then
+    if "$out/choir" logout >/dev/null 2>"$out/logs/exit-logout.err"; then
+      echo "exit: revoked the run's key (choir logout)"
+    else
+      echo "WARN exit: could not revoke the run's key: $(tail -1 "$out/logs/exit-logout.err")" >&2
+      fails=$((fails + 1))
+    fi
+  fi
   rm -rf "$out/config"
   python3 - "$out" "$backend" "$fails" <<'PY'
 import json, sys, datetime
@@ -75,6 +87,7 @@ PY
   echo "acceptance: $out/acceptance.json"
 }
 trap finish EXIT
+trap 'exit 130' INT TERM
 
 (cd "$repo" && go build -o "$out/choir" ./cmd/choir)
 export XDG_CONFIG_HOME="$out/config"
@@ -129,7 +142,10 @@ fi
 
 # C1: find the account's computer with the saved key (never printed).
 computer=""
-for _ in $(seq 1 60); do
+# A first sign-in creates the computer on the first status read (the proxy
+# starts it in the background); a cold first boot takes minutes, so give the
+# listing and the first answer 10 minutes each.
+for _ in $(seq 1 120); do
   computer="$(python3 - "$creds" <<'PY' || true
 import json, sys, urllib.request
 c = json.load(open(sys.argv[1]))
@@ -147,14 +163,14 @@ PY
   sleep 5
 done
 if [[ -z "$computer" ]]; then
-  step C1 fail "no computer listed for the account within 5 minutes"
+  step C1 fail "no computer listed for the account within 10 minutes"
   exit 1
 fi
 step C1 pass "the account's computer is $computer"
 
 # S1: choir self-dev list with no key flag or env.
 ok=0
-for _ in $(seq 1 24); do
+for _ in $(seq 1 120); do
   if "$out/choir" self-dev list --computer "$computer" >"$out/selfdev-list.json" 2>"$out/logs/selfdev.err"; then
     ok=1; break
   fi
