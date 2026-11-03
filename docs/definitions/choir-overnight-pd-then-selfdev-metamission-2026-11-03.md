@@ -126,20 +126,20 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 70160304a (problems 25 and 26 live and proved; Freeze
-    unknown-path refusals name the paths). First Slides publish: luna
-    slides-next applied 18:24Z and published (release 6a2797e7…), built
-    through the Claude Sonnet delegate on real /computer content. Arms:
-    luna on Calendar round 1 (delegate); claude's management running its
-    own third proof pass to about 18:51Z, then revise-r7; deepseek Slides
-    round 3 (one preset's contrast); pool held after three Slides rounds
-    failed on proof with gpt-6-luna engineering at low. Node B 14 GiB
-    available, PSI 0.
+    staging e4f1c685a (problem 27: the deploy-refresh backoff resets per
+    release; proved by Node B's pending entries resetting to 2 attempts).
+    Published to the Library: luna Slides (through the Claude delegate),
+    claude Files (DeepSeek built it; the delegate made no call), deepseek
+    Slides. Owner 18:58Z: every arm desk off GPT (DeepSeek), except luna's
+    engineering on gpt-6-luna at xhigh to verify delegating to Claude; GPT
+    is kept for the paper. Pool is now a DeepSeek arm. Running: claude
+    Slides r1 (delegate), pool Slides r4, luna Calendar r1, deepseek Files
+    restore round.
   main_uncertainty: >-
-    the owner's answer on GPT draw (pool engineering and the arms' Texture
-    and management on pool:default resolve to gpt-6-luna); default at
-    19:30Z is pool engineering to medium for one round
-  next_observation: luna Calendar judge verdict; claude r7 on real content; deepseek r3 contrast
+    owner's scope for off-GPT beyond the arms (management tasks are
+    hard-wired to gpt-6-luna; the fleet default pool is half gpt-6-luna,
+    and the paper may use it)
+  next_observation: claude Slides r1 delegate_calls and judge verdict; deepseek files-next publish under the net-zero rule
   blocker: none
-  next_action: carry rounds to judged passes and publish; apply the pool default at 19:30Z if the owner has not answered
+  next_action: carry rounds to publishes; then the next apps (Calendar, Podcasts, Library, background picker) per arm
 receipts: []
