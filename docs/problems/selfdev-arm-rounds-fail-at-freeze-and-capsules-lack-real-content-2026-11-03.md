@@ -467,3 +467,19 @@ So an assignment opened on the old boot kept its old release base across the pla
 candidate that could never apply, which wasted about 15 minutes of build and the judge's run. Possible fixes: re-base an
 assignment at bind time after a planned restart, or refuse to bind one whose base differs from the booted base, so a
 fresh open picks up the new base. Not yet checked: which component carried the 2cd70f60 base into the capsule.
+
+## Unnumbered (lane C, 20:12Z): deepseek's files-next publish is refused after the restore round, for two reasons
+
+Deepseek's restore round, selfdev-6be8dc5f25c72c7edfc544c90a881152 (trajectory 78e755eb, assignment-75c292fa), applied
+at 20:09:09Z. The publish of files-next from it was refused: http 409 "package_change_not_confined: the operation
+changed paths outside frontend/src/packages/files-next that differ from the base: frontend/src/lib/app-sdk.ts,
+frontend/src/packages/slides-next/App.svelte, frontend/src/packages/slides-next/Icon.svelte, ...".
+1. The restore did not restore. The applied stack's app-sdk.ts still differs from base e4f1c685: resolveMediaSource is
+   moved above rememberRecentMedia, and the registry line exports APP_REGISTRY. frontend/tests/files-next/ also still
+   appears. The round was approved and applied without its own stated check: a git diff against the base listing only
+   package paths.
+2. The net-zero rule counts another package as outside. slides-next is a separate package on the same stack, already
+   published at 19:16:54Z as release 027dfd29, yet the files-next check lists its paths as "outside
+   frontend/src/packages/files-next". A stack that carries two packages can then never publish either one after the
+   other. Possible fix: exclude other frontend/src/packages/<name>/ subtrees that are themselves package-confined, or
+   that are already published from this stack.
