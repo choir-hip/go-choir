@@ -160,3 +160,13 @@ Live shots plus next request (apply to next revision sent): round 3, 05:35:01 to
   round, and the round where it did make one (r6) was rejected.
 - Cycle: bind 17:50:55Z to candidate 18:22:07Z, 31 min. The candidate then waited 28 min for approval, because my
   approver had exited.
+
+## Slides on the claude arm (19:08Z onward): which rounds were Claude-arm rounds
+
+The Slides request (doc 14dbaff9, trajectory 22bdd242) asked for the delegate to do the build and the twelve shots.
+Management twice picked a network mode that shuts the delegate out:
+- Round 2 was Cast with "network":"forbidden". With no loopback, choir-shot could not start; 4 of 12 shots.
+- Round 3 was Cast as ecosystem_proxy with no delegate. assignment-02df7184 bound at 20:04:32Z on DeepSeek alone.
+Whatever round 3 produces is a DeepSeek-built Slides on this computer, **not a Claude-arm round**. The next round
+(slides-r4-delegate) tells management to Cast with the default network and says the screenshot job is the
+delegate's. The network choice is management's affordance; the round text cannot set it.
