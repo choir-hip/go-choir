@@ -1081,3 +1081,22 @@ func TestRingExpeditedRollbackClosesOtherRings(t *testing.T) {
 		}
 	}
 }
+
+// Round 4 (Devin): the paper absent from the observation set holds R5
+// under expedite; it never closes skipped_empty.
+func TestRingExpediteHoldsR5WhenPaperUnobserved(t *testing.T) {
+	s := newWalkingState(t)
+	s.expedite(rwT0, "x", "owner", "")
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	for i := 1; i <= 60; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+	}
+	if s.Walk.Status != ringWalkWalking || s.Baseline != rwFrom {
+		t.Fatalf("an expedited walk completed with the paper unobserved")
+	}
+	for _, p := range s.Walk.Rings {
+		if p.Ring == ringR5 && !p.ClosedAt.IsZero() {
+			t.Fatalf("R5 closed with the paper unobserved: %+v", p)
+		}
+	}
+}

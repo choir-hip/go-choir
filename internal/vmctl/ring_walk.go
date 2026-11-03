@@ -736,8 +736,10 @@ func (s *ringWalkState) stepExpedited(now time.Time, obs []ringMemberObs) ([]rin
 		// still-pending (busy) member go at its next idle moment.
 		watched := p.Ring == ringR0 || p.Ring == ringR5
 		if len(members) == 0 {
-			if p.Ring == ringR0 {
-				p.Waiting = "expedited: no proof computer observed; R0 holds until d@e runs the release and is seen healthy"
+			if watched {
+				// d@e or the paper not observed (a registry gap, an id drift):
+				// the watched ring holds rather than pass unseen.
+				p.Waiting = fmt.Sprintf("expedited: %s's computer not observed; the ring holds until it runs the release and is seen healthy", p.Ring)
 				open++
 				continue
 			}
