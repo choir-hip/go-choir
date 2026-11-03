@@ -268,6 +268,10 @@ export async function openApp(page, app, ms = STEP_MS) {
   const waitFor = async (sel, state, what) => {
     try { await page.locator(sel).first().waitFor({ state, timeout: ms }); } catch { throw new Error(`--open ${app}: ${what} (${sel}) did not become ${state} within ${ms / 1000} s`); }
   };
+  // The desktop refuses a launch ("Desktop is still connecting" toast, no
+  // window) until its live channel is open and its state is loaded; wait for
+  // that rather than hiding the toast.
+  await waitFor('[data-desktop][data-desktop-ready="true"]', 'visible', 'the desktop connecting (live channel and state)');
   await waitFor('[data-desk-menu-button]', 'visible', 'the app switcher button');
   await page.locator('[data-desk-menu-button]').first().click();
   await waitFor('[data-desk-sheet]', 'visible', 'the launcher sheet after clicking the switcher');

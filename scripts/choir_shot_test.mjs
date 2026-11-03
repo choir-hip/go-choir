@@ -215,7 +215,7 @@ assert.deepEqual(plan([{ name: 'a' }, { name: 'b', open: 'slides' }], parseArgs(
 assert.deepEqual(plan([{ name: 'a' }], parseArgs(['--shots', 'x'])).map((i) => i.open), ['']);
 {
   // A fake page: the launcher lists entries; clicking one adds its window.
-  const fakePage = ({ button = true, sheet = true, entries = [{ id: 'image', title: 'Image' }, { id: 'slides', title: 'Slides' }], window = true } = {}) => {
+  const fakePage = ({ button = true, sheet = true, entries = [{ id: 'image', title: 'Image' }, { id: 'slides', title: 'Slides' }], window = true, ready = true } = {}) => {
     const clicks = [];
     const state = { sheetOpen: false, windows: new Set() };
     const page = {
@@ -224,7 +224,7 @@ assert.deepEqual(plan([{ name: 'a' }], parseArgs(['--shots', 'x'])).map((i) => i
         const loc = {
           first: () => loc,
           async waitFor({ state: st }) {
-            const ok = sel === '[data-desk-menu-button]' ? button : sel === '[data-desk-sheet]' ? sheet && state.sheetOpen : state.windows.has(sel);
+            const ok = sel.startsWith('[data-desktop]') ? ready : sel === '[data-desk-menu-button]' ? button : sel === '[data-desk-sheet]' ? sheet && state.sheetOpen : state.windows.has(sel);
             if (!ok) throw new Error('timeout');
             assert.equal(st, 'visible');
           },
@@ -248,6 +248,7 @@ assert.deepEqual(plan([{ name: 'a' }], parseArgs(['--shots', 'x'])).map((i) => i
   assert.equal(await openApp(p, 'image', 5), 'image');
   assert.deepEqual(p.clicks, ['[data-desk-menu-button]', '[data-desk-sheet-app][data-desk-app-id="image"]']);
   assert.equal(await openApp(fakePage(), 'Slides', 5), 'slides'); // by title, any case
+  await assert.rejects(openApp(fakePage({ ready: false }), 'image', 5), /desktop connecting.*did not become visible/);
   await assert.rejects(openApp(fakePage({ button: false }), 'image', 5), /app switcher button.*did not become visible/);
   await assert.rejects(openApp(fakePage({ sheet: false }), 'image', 5), /launcher sheet/);
   await assert.rejects(openApp(fakePage(), 'trace', 5), /no launcher entry.*has image, slides/);
