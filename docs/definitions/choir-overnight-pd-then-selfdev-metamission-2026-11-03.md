@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: lanes A (round-1 fixes), C (Files rounds, gated on deploy), E (S4 build, evidence.graph measurement); B done; F designed
+  slice: lanes A (planted-fault rollback proof in CI), C (Files rounds running on claude and deepseek), E (S4 built and accepted, queued as the first real ring walk); B done; F designed; onboarding landed and accepted
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
@@ -126,16 +126,16 @@ now:
     CI run in flight); screens-as-files landed with a restore after a bad
     squash (ledger)
   believed_state: >-
-    main 4036f0c37 in CI carries screens-as-files, onboarding, texture
-    export, lane B (scheduler deleted, expansion for every user, host fetch
-    and mirrors at d@e). Lane A fixing Devin round 1 (3 blocking-real).
-    Claude arm cold-booted with the delegate. Files rounds orchestrated on
-    the arms once the deploy lands. S4 design revised, round 2 running.
-    Lane F bridge specified in the calibration seed doc. evidence.graph
-    measurement running.
+    staging 42d4ec7e5: screens-as-files, onboarding (deployed acceptance
+    passes all six steps), texture export, lane B, and ring-ordered deploys
+    with automatic rollback (2795b8ee6, tier 2 accepted, baseline recorded).
+    The planted fault b1ce9c6d1 (d@e only) is in CI; its walk should roll
+    back at R0. S4 (selfdev-s4-scheduling 76fc93037, tier 2 accept) lands
+    after that rollback completes. Files rounds sent 03:14Z on the claude
+    and deepseek arms; luna and pool wait for a build slot.
   main_uncertainty: whether arms hit stack_base_moved or stale open operations after the deploy refreshes them
   next_observation: staging build identity after CI; first Files Cast per arm
   blocker: none
-  next_action: on deploy, run the onboarding deployed acceptance; adjudicate S4 round 2 and lane A round 2
+  next_action: after the rollback proof, land S4 with the logout-retry script fix and push the batched docs; read the first Files candidates
 
 receipts: []
