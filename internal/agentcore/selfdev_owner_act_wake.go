@@ -44,24 +44,9 @@ func (rt *Runtime) ownerActTextureInbox(ctx context.Context, ownerID, computerID
 // document the operation's trajectory binds.
 func (rt *Runtime) ownerActTextureDoc(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (string, bool, error) {
 	trajectoryID := strings.TrimSpace(operation.TrajectoryID)
-	if trajectoryID == "" {
-		return "", false, nil
-	}
-	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
-	if errors.Is(err, store.ErrNotFound) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("trajectory %s: %w", trajectoryID, err)
-	}
-	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
-	if docID == "" {
-		if artifact := strings.TrimSpace(trajectory.SubjectRefs["artifact"]); strings.HasPrefix(artifact, "texture://documents/") {
-			docID = strings.TrimSpace(strings.TrimPrefix(artifact, "texture://documents/"))
-		}
-	}
-	if docID == "" {
-		return "", false, nil
+	docID, err := rt.operationDocumentID(ctx, ownerID, computerID, operation)
+	if err != nil || docID == "" {
+		return "", false, err
 	}
 	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -74,6 +59,31 @@ func (rt *Runtime) ownerActTextureDoc(ctx context.Context, ownerID, computerID s
 		return "", false, nil
 	}
 	return docID, true, nil
+}
+
+// operationDocumentID is the id of the document the operation's trajectory
+// names in its subject refs (doc_id, or a texture://documents/ artifact), or ""
+// when the trajectory is not a lifecycle trajectory or names none. It does not
+// read the document: the document may since have moved to a newer trajectory.
+func (rt *Runtime) operationDocumentID(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (string, error) {
+	trajectoryID := strings.TrimSpace(operation.TrajectoryID)
+	if trajectoryID == "" {
+		return "", nil
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if errors.Is(err, store.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("trajectory %s: %w", trajectoryID, err)
+	}
+	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
+	if docID == "" {
+		if artifact := strings.TrimSpace(trajectory.SubjectRefs["artifact"]); strings.HasPrefix(artifact, "texture://documents/") {
+			docID = strings.TrimSpace(strings.TrimPrefix(artifact, "texture://documents/"))
+		}
+	}
+	return docID, nil
 }
 
 // ownerActBody is the text Texture reads. It is derived only from the act

@@ -17,6 +17,9 @@ package agentcore
 //   4. a live root is passed over -> TestRebaseNoticeFallbackPrefersTheRoot
 //   5. a Cast's refusal still says rebase_needs_root for a settled Texture
 //      -> ...ASettledTextureGetsTheNotice
+//   6. the document moved to a newer trajectory (an owner revision on its
+//      settled trajectory continues it) and the fallback still reads the
+//      operation's old one (pool 13:58Z) -> ...FollowsTheDocumentToItsCurrentTrajectory
 
 import (
 	"context"
@@ -146,7 +149,7 @@ func TestRebaseNoticeSaysWhyNot(t *testing.T) {
 	t.Run("unbound operation", func(t *testing.T) {
 		f := newRebaseFallbackFixture(t, false)
 		out := f.fire(t)
-		if out.Minted != "" || !strings.Contains(out.Reason, "rebase_needs_root") || !strings.Contains(out.Reason, "binds no live document") {
+		if out.Minted != "" || !strings.Contains(out.Reason, "rebase_needs_root") || !strings.Contains(out.Reason, "names no document") {
 			t.Fatalf("%+v", out)
 		}
 	})
@@ -178,4 +181,70 @@ func TestRebaseNoticeSaysWhyNot(t *testing.T) {
 			t.Fatalf("a cancelled trajectory was given work: %+v", open)
 		}
 	})
+}
+
+// continueArmDocument settles the arm trajectory and continues doc-arm onto
+// next, as an owner revision on a settled document does.
+func continueArmDocument(t *testing.T, f *rebaseFixture, next string) {
+	t.Helper()
+	ctx := context.Background()
+	settleArmWork(t, f)
+	snapshot, err := f.s.GetLifecycleSnapshot(ctx, f.owner, f.computer, armTrajectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settle := types.SettleLifecycleTrajectoryRequest{
+		OwnerID: f.owner, ComputerID: f.computer, CommandID: "settle:" + armTrajectory, TrajectoryID: armTrajectory,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+	}
+	settle.CommandDigest, _ = store.ComputeSettleLifecycleTrajectoryDigest(settle)
+	if _, err := f.s.SettleLifecycleTrajectory(ctx, settle); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+	req := types.ContinueLifecycleDocumentRequest{
+		OwnerID: f.owner, ComputerID: f.computer, CommandID: "continue:" + next, TrajectoryID: next,
+		PredecessorTrajectoryID: armTrajectory, DocID: "doc-arm", ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+		InitialWork: types.WorkItemRecord{WorkItemID: "work:" + next, Objective: "Revise the document for the owner's new request.", AssignedAgentID: "texture:doc-arm", AuthorityProfile: "texture"},
+	}
+	req.CommandDigest, _ = store.ComputeContinueLifecycleDocumentDigest(req)
+	if _, err := f.s.ContinueLifecycleDocument(ctx, req); err != nil {
+		t.Fatalf("continue: %v", err)
+	}
+	doc, err := f.s.GetLifecycleDocument(ctx, f.owner, f.computer, "doc-arm")
+	if err != nil || doc.TrajectoryID != next {
+		t.Fatalf("doc-arm is on %q (%v), want %s", doc.TrajectoryID, err, next)
+	}
+}
+
+func TestRebaseNoticeFollowsTheDocumentToItsCurrentTrajectory(t *testing.T) {
+	f := newRebaseFallbackFixture(t, true)
+	continueArmDocument(t, f, "trajectory-arm-2")
+	if err := f.rt.sourceProjectionCastGate(context.Background()); err == nil || strings.Contains(err.Error(), "rebase_needs_root") || !strings.Contains(err.Error(), "texture:doc-arm") {
+		t.Fatalf("the refusal must name the document's Texture: %v", err)
+	}
+	if out := f.fire(t); out.Minted != f.noticeID(1) {
+		t.Fatalf("a document on a newer trajectory got no notice: %+v", out)
+	}
+	if rec := f.notice(t, 1); rec == nil || rec.Inbox != "texture:doc-arm" {
+		t.Fatalf("notice %+v", rec)
+	}
+	// Settled on the newer trajectory too: still the addressee.
+	f2 := newRebaseFallbackFixture(t, true)
+	continueArmDocument(t, f2, "trajectory-arm-2")
+	snapshot, err := f2.s.GetLifecycleSnapshot(context.Background(), f2.owner, f2.computer, "trajectory-arm-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, work := range snapshot.WorkItems {
+		if work.Status == types.WorkItemOpen {
+			req := types.SettleLifecycleWorkRequest{OwnerID: f2.owner, ComputerID: f2.computer, CommandID: "settle:" + work.WorkItemID, TrajectoryID: "trajectory-arm-2", WorkItemID: work.WorkItemID, ActingAgentID: work.AssignedAgentID, ResultRef: "evidence://done"}
+			req.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(req)
+			if _, err := f2.s.SettleLifecycleWork(context.Background(), req); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if out := f2.fire(t); out.Minted != f2.noticeID(1) {
+		t.Fatalf("a settled Texture on the newer trajectory: %+v", out)
+	}
 }
