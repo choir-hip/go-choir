@@ -743,3 +743,19 @@ Each decided switch is deleted; "on" means the code runs everywhere.
   feed the Master as one batched entry an hour instead of a refresh per
   commit.
 - `texture.hold_trajectory`: on everywhere (earlier ruling).
+
+**Group 2, engineering and self-development.**
+- `engineering.progress_to_texture`, `engineering.slots_graph`: on
+  everywhere; the co_super_slots table and its path deleted once the import
+  has run on every computer.
+- `engineering.carry_unfinished`: on everywhere, pruned to the last 3 carries
+  per document, merged with the rejected-candidate carry into one offer (the
+  newest unfinished or rejected tree).
+- `source.projection`, `source.rebase_offer`: owner, "i think we need to
+  accelerate library then this will resolve itself". The Library's package
+  path (design/library-package-propagation-2026-10-26.md S6, package-aware
+  containment and re-materialization) is pulled forward; projection goes on
+  everywhere with it, and the rebase offer is deleted once package changes no
+  longer need it.
+- `dispatch.wide_slots`: the fixed activation cap is deleted; concurrency
+  follows the computer's memory and CPU admission.

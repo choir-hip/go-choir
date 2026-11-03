@@ -109,6 +109,7 @@ slices:
   P0: rulings into the docs (CLAUDE.md and AGENTS.md "No switches; deploys roll out by ring", the design's owner rulings, the audit, the calibration plan).
   P1: the backlog, walked with the owner group by group (Texture, engineering and self-development, store and tape, host, Autopaper and network); each group lands as deletions with its code on everywhere or gone, proved on d@e, then rolled out.
   P2: named rows: delete the gateway model scheduler; make host fetch and capsule mirrors operational everywhere (their proofs run); story expansion for every signed-in user; calibration feedback on with the engineering A/B.
+  P2b: the Library's package path pulled forward (owner: "accelerate library then this will resolve itself"): design/library-package-propagation-2026-10-26.md S6 package-aware containment and re-materialization, so source projection runs everywhere and the rebase offer is deleted.
   P3: ring-ordered refresh (design S5) with soaks; the paper last, automatic.
   P4: automatic code rollback (design S6) with a planted bad release.
   P5: the lint refuses any switch; the registry deleted.
