@@ -57,6 +57,24 @@ for four host rows still off everywhere (`host_fetch_vms`,
 - `appdesk`, `appnet`, `egressgrant`: unwired; doctrine I26 says app desks
   ship with packages, so wire (not a small slice) rather than delete.
 
+**Correction (2026-11-03 01:4x, after a docs review the owner asked for).**
+The chain in group 4 was framed wrongly. (a) The b@c rebase deadlock was
+solved on 2026-10-27: patch-identity containment (lane/patchid-contained,
+reviews 353 and 355, train 34 1ebe74f85) retires a stack already in the base
+as `upstreamed`, and b@c's next citation round was admitted through the cast
+gate on train 34 (consolidate-and-scale ledger, 2026-10-27 11:3x to 15:0x).
+What has not run is a rebase of a change that is *not* already upstream.
+(b) The Library design (`design/library-package-propagation-2026-10-26.md`
+section 2 and 10.3) makes package changes avoid rebase: a package re-
+materializes onto a moved base, and self-development on other paths stays
+open; its package-aware containment (S6) is not built. (c) Owner,
+2026-11-03: `texture.root_desk` "is important for other reasons, to have
+system wide understanding for each user"; it is not a rebase accessory. So:
+root desk ON on its own merit (its F4/F5 excerpt-order failures re-proved
+first); projection ON with root desk; `source.rebase_offer` ON once one
+non-upstreamed rebase is proved on d@e, and package changes move to the
+Library's S6 path. `texture.hold_trajectory` stays on (owner).
+
 **5. Delete.** `intake.event_wakes` and its wait path (failed its false-merge
 bar three times); `store.event_table` setting and writer arming (the table
 stays); `management.serial_tasks`; `store.compact_force`; retired

@@ -111,7 +111,7 @@ slices:
   P2: the hand walk. The ON-NOW rows walked R0 to R4 by hand with the readouts the controller will use; the four 2026-11-04 rows on at d@e first.
   P3: the controller in shadow (design S3a): follow:<id> in selectsComputer, state.json, switches status endpoint and CLI, guards with replayed known-bad fixtures; compared with the hand walk.
   P4: the controller acting (S3b), then the planted-fault acceptance; then live follow for settings and guest env (S4).
-  P5: the chains. The source projection / rebase / root desk chain decided on evidence (including whether the rebase offer belongs to management, which owns computer-wide coherence, rather than a Texture root desk); the gateway scheduler cap against wide slots; evidence.graph's bounded import.
+  P5: the chains. Root desk on its own merit (owner: system-wide understanding for each user), after its F4/F5 excerpt-order failures are re-proved; source projection with it; the rebase offer once one non-upstreamed rebase is proved on d@e (the upstreamed case was solved 2026-10-27 by patch-identity containment, train 34); package changes take the Library's S6 path (design/library-package-propagation-2026-10-26.md 10.3); the gateway scheduler cap against wide slots; evidence.graph's bounded import.
   P6: retire. Every switch at all rings deleted into the code default; the cap ratcheted to 12.
 
 now:
