@@ -52,7 +52,7 @@ type Handler struct {
 	Provider    provideriface.Provider
 
 	textureEditMu sync.Mutex
-	// evidenceSource overrides the visual-evidence listing in tests (station
+	// evidenceSource overrides the screens listing in tests (station
 	// TE); nil reads it from Core.
 	evidenceSource     candidateEvidenceSource
 	textureWakeLocksMu sync.Mutex

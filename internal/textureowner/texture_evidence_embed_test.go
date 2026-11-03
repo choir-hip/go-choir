@@ -1,7 +1,9 @@
 package textureowner
 
-// Station TE (docs/design/texture-evidence-embeds-te-2026-10-25.md): a
-// frozen candidate's captures are embedded in its trajectory's Texture
+// Station TE (docs/design/texture-evidence-embeds-te-2026-10-25.md), now fed
+// by the engineer's own screens, saved as files
+// (docs/problems/selfdev-screens-are-not-files-2026-11-03.md): a frozen
+// candidate's screens are embedded in its trajectory's Texture
 // document by Texture's own package. These tests drive the write on the real
 // store with a seeded lifecycle document; the listing is faked at the seam
 // (the listing itself is tested in agentcore). Ways it could fail, written
@@ -10,8 +12,9 @@ package textureowner
 //     names, or in a document that names another trajectory;
 //   - a digest the listing does not hold is embedded (membership), or more
 //     captures than a bundle can carry (E4);
-//   - the candidate identity that changes (bundle digest, frontend build,
-//     capture receipt, resolvable) is stored in the revision;
+//   - the embed does not name the screen's file in the computer's tree;
+//   - the candidate identity that changes (bundle digest, resolvable) is
+//     stored in the revision;
 //   - a blank capture is not marked blank (E16);
 //   - a second ask writes a second set (E10);
 //   - the digests are not pinned to the revision, or the pin comes after
@@ -46,34 +49,33 @@ import (
 )
 
 type fakeEvidenceSource struct {
-	listing agentcore.VisualEvidenceListing
+	listing agentcore.ScreensListing
 	err     error
 	calls   int
 	// anyComputer answers for any computer, as a broken resolver would.
 	anyComputer bool
 }
 
-func (f *fakeEvidenceSource) CandidateVisualEvidence(_ context.Context, computerID, operationID string) (agentcore.VisualEvidenceListing, error) {
+func (f *fakeEvidenceSource) CandidateScreens(_ context.Context, computerID, operationID string) (agentcore.ScreensListing, error) {
 	f.calls++
 	if f.err != nil {
-		return agentcore.VisualEvidenceListing{}, f.err
+		return agentcore.ScreensListing{}, f.err
 	}
 	if (!f.anyComputer && computerID != f.listing.ComputerID) || operationID != f.listing.OperationID {
-		return agentcore.VisualEvidenceListing{}, errors.New("self-development operation not found")
+		return agentcore.ScreensListing{}, errors.New("self-development operation not found")
 	}
 	return f.listing, nil
 }
 
 func evidenceDigest(c byte) string { return strings.Repeat(string(c), 64) }
 
-func evidenceListing(rec types.RunRecord) agentcore.VisualEvidenceListing {
-	return agentcore.VisualEvidenceListing{
-		OperationID: "selfdev-op-te", TrajectoryID: rec.TrajectoryID, ComputerID: rec.ComputerID, State: "frozen",
-		BundleDigest: evidenceDigest('b'), ManifestSHA256: evidenceDigest('m'), FrontendSHA256: evidenceDigest('f'),
-		CaptureReceipt: "capsule-exec:sha256:" + evidenceDigest('r'),
-		Captures: []agentcore.VisualEvidenceCapture{
-			{Artifact: "artifact:sha256:" + evidenceDigest('1'), Digest: evidenceDigest('1'), Route: "/reader", Width: 1280, Height: 800, Bytes: 10, Resolvable: true},
-			{Artifact: "artifact:sha256:" + evidenceDigest('2'), Digest: evidenceDigest('2'), Route: "/", Width: 1280, Height: 800, Bytes: 9, Blank: true, Resolvable: false},
+func evidenceListing(rec types.RunRecord) agentcore.ScreensListing {
+	return agentcore.ScreensListing{
+		OperationID: "selfdev-op-te", TrajectoryID: rec.TrajectoryID, ComputerID: rec.ComputerID,
+		BundleDigest: evidenceDigest('b'),
+		Screens: []agentcore.ScreenListingRow{
+			{Name: "reader.png", File: "Self-development/selfdev-op-te/screens/reader.png", SHA256: evidenceDigest('1'), Width: 1280, Height: 800, Bytes: 10, Resolvable: true},
+			{Name: "home.png", File: "Self-development/selfdev-op-te/screens/home.png", SHA256: evidenceDigest('2'), Width: 1280, Height: 800, Bytes: 9, Blank: true, Resolvable: false},
 		},
 	}
 }
@@ -140,17 +142,17 @@ func TestFrozenCandidateCapturesAreEmbeddedByTexture(t *testing.T) {
 		t.Fatalf("embeds = %+v", embeds)
 	}
 	for i, e := range embeds {
-		row := source.listing.Captures[i]
-		if e.Kind != texturedoc.EmbedKindCapsuleEvidence || e.Digest != row.Digest || e.OperationID != "selfdev-op-te" ||
-			e.ComputerID != rec.ComputerID || e.Route != row.Route || e.Width != 1280 || e.Height != 800 || e.Blank != row.Blank {
+		row := source.listing.Screens[i]
+		if e.Kind != texturedoc.EmbedKindCapsuleEvidence || e.Digest != row.SHA256 || e.OperationID != "selfdev-op-te" ||
+			e.ComputerID != rec.ComputerID || e.File != row.File || e.Route != "" || e.Width != 1280 || e.Height != 800 || e.Blank != row.Blank {
 			t.Fatalf("embed %d = %+v, want capture %+v", i, e, row)
 		}
 	}
-	if !strings.Contains(embeds[0].Caption, "/reader") || strings.Contains(strings.ToLower(embeds[0].Caption), "blank") ||
+	if !strings.Contains(embeds[0].Caption, "reader.png") || strings.Contains(strings.ToLower(embeds[0].Caption), "blank") ||
 		!strings.Contains(embeds[1].Caption, "Blank screenshot") || embeds[1].Alt == "" {
 		t.Fatalf("captions = %q / %q, alt %q", embeds[0].Caption, embeds[1].Caption, embeds[1].Alt)
 	}
-	for _, unstored := range []string{evidenceDigest('b'), evidenceDigest('f'), evidenceDigest('r'), "resolvable", "bundle_digest", "frontend_sha256", "capture_receipt"} {
+	for _, unstored := range []string{evidenceDigest('b'), "resolvable", "bundle_digest"} {
 		if strings.Contains(string(head.BodyDoc), unstored) {
 			t.Fatalf("the revision stores %q, which re-resolves live", unstored)
 		}
@@ -240,17 +242,18 @@ func TestEvidenceEmbedLandsAfterTheDocumentContinued(t *testing.T) {
 func TestEvidenceEmbedRefusals(t *testing.T) {
 	ctx := context.Background()
 	cases := map[string]func(*fakeEvidenceSource){
-		"listing refused": func(f *fakeEvidenceSource) { f.err = errors.New("the candidate carries no visual evidence") },
+		"listing refused": func(f *fakeEvidenceSource) { f.err = errors.New("the candidate carries no screens") },
 		"other trajectory": func(f *fakeEvidenceSource) {
 			f.listing.TrajectoryID = "trajectory-someone-else"
 		},
-		"malformed digest": func(f *fakeEvidenceSource) { f.listing.Captures[0].Digest = "not-a-digest" },
-		"too many captures": func(f *fakeEvidenceSource) {
-			for len(f.listing.Captures) <= 6 {
-				f.listing.Captures = append(f.listing.Captures, f.listing.Captures[0])
+		"malformed digest": func(f *fakeEvidenceSource) { f.listing.Screens[0].SHA256 = "not-a-digest" },
+		"too many screens": func(f *fakeEvidenceSource) {
+			for len(f.listing.Screens) <= 12 {
+				f.listing.Screens = append(f.listing.Screens, f.listing.Screens[0])
 			}
 		},
-		"no captures": func(f *fakeEvidenceSource) { f.listing.Captures = nil },
+		"no screens":       func(f *fakeEvidenceSource) { f.listing.Screens = nil },
+		"a file elsewhere": func(f *fakeEvidenceSource) { f.listing.Screens[0].File = "Documents/x.png" },
 		"another computer's listing": func(f *fakeEvidenceSource) {
 			f.listing.ComputerID = "computer-elsewhere"
 			f.anyComputer = true
@@ -347,26 +350,6 @@ func TestOwnerRouteCannotAddEvidenceEmbeds(t *testing.T) {
 	}
 	if got := texturedoc.Embeds(bodyOf(t, headOf(t, s, rec))); len(got) != 1 {
 		t.Fatal(fmt.Sprintf("embeds after the owner's delete = %d, want 1", len(got)))
-	}
-}
-
-// Review bunch 231 (Devin): a route Texture interpolates into its words must
-// not trip the authoring rules (a "[12]" is a legacy citation there), or the
-// write refuses and the evidence is lost.
-func TestABracketedRouteIsEmbeddedWithSafeWords(t *testing.T) {
-	h, core, rec, source := evidenceSetup(t, "bracketed")
-	source.listing.Captures[0].Route = "/items[12]/{{source:x}}"
-	if _, err := h.EmbedCandidateEvidence(context.Background(), rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err != nil {
-		t.Fatalf("a bracketed route: %v", err)
-	}
-	embeds := texturedoc.Embeds(bodyOf(t, headOf(t, core.Store(), rec)))
-	if len(embeds) != 2 || embeds[0].Route != "/items[12]/{{source:x}}" {
-		t.Fatalf("embeds = %+v; want the route kept as captured", embeds)
-	}
-	for _, words := range []string{embeds[0].Caption, embeds[0].Alt} {
-		if strings.ContainsAny(words, "[]{}") || !strings.Contains(words, "/items") {
-			t.Fatalf("Texture's words %q carry markup from the route", words)
-		}
 	}
 }
 

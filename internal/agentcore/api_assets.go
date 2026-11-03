@@ -19,7 +19,7 @@ import (
 // Owner-authenticated, HTTP range requests, Content-Type from the stored
 // kind, nosniff, immutable caching, and a re-hash of the bytes on every read.
 // The proxy forwards /api/* to the computer as a reverse proxy, so ranges and
-// validators pass through untouched. Screenshots (visual evidence) are the
+// validators pass through untouched. Screenshots (an engineer's screens) are the
 // first asset; audio and video kinds are typed in imageblob and refused until
 // they land (texture media design T1, T4).
 const assetPathPrefix = "/api/assets/sha256/"

@@ -17,6 +17,7 @@ import {
   allBlankOperations,
   embedProjectionText,
   evidenceIdentityText,
+  evidenceListingPath,
   markEmbedUnresolvable,
   renderEmbedBlockHTML,
   serializeEmbedElement,
@@ -114,15 +115,22 @@ test('the serializer keeps an embed only by its id from the loaded revision', ()
   expect(serializeEmbedElement(element('embed-1'), null)).toBeNull();
 });
 
+test('a screen file embed names its file in the computer tree', () => {
+  const html = renderEmbedBlockHTML(evidence({}, { route: undefined, file: 'Self-development/selfdev-op-1/screens/home.png' }));
+  expect(html).toContain('<code data-texture-embed-file>Self-development/selfdev-op-1/screens/home.png</code>');
+  expect(html).toContain(`src="/api/assets/sha256/${DIGEST}"`);
+  expect(evidenceListingPath('computer-1', 'selfdev-op-1')).toBe('/api/computers/computer-1/self-development/operations/selfdev-op-1');
+});
+
 test('the projection matches the server and the identity line reads the live listing', () => {
   expect(embedProjectionText(evidence())).toBe('[evidence: Screenshot of /reader from candidate selfdev-op-1 (1280x800)]');
   expect(embedProjectionText({ type: 'embed', attrs: { kind: 'image', alt: 'A diagram' } })).toBe('[image: A diagram]');
   expect(embedProjectionText({ type: 'embed', attrs: { kind: 'image', alt: 'A', caption: 'Cap' } })).toBe('[image: Cap]');
   expect(embedProjectionText({ type: 'embed', attrs: { kind: 'video' } })).toBe('[embed]');
-  const line = evidenceIdentityText('selfdev-op-1', { status: 200, listing: { bundle_digest: 'b'.repeat(64), frontend_sha256: 'f'.repeat(64), capture_receipt: 'capsule-exec:sha256:' + 'r'.repeat(64) } });
+  const line = evidenceIdentityText('selfdev-op-1', { status: 200, listing: { bundle_digest: 'b'.repeat(64), state: 'awaiting_approval' } });
   expect(line).toContain('selfdev-op-1');
   expect(line).toContain('bundle bbbbbbbbbbbb');
-  expect(line).toContain('build ffffffffffff');
+  expect(line).toContain('awaiting_approval');
   expect(evidenceIdentityText('selfdev-op-1', { status: 410 })).toContain('no longer retained');
   expect(evidenceIdentityText('selfdev-op-1', { status: 404 })).toContain('no longer retained');
 });

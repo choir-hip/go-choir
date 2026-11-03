@@ -1,9 +1,9 @@
 package capsule
 
 import (
+	"os"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -25,30 +25,43 @@ func BrokerProcessEnv(lookup func(string) (string, bool)) []string {
 	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
 }
 
-// captureBrokerEnv is what the executor adds to a new broker's environment:
-// the Chromium and fontconfig paths when the host granted visual capture to
-// this computer and the image names an executable Chromium, and nothing
-// otherwise (V1). The broker hands them to jobs alone (CaptureJobEnv).
-func captureBrokerEnv(grantDir, browser, fontconfig string) []string {
-	st := visualcapture.ReadGrant(grantDir, browser)
-	if !st.Granted {
+// The store Chromium (docs/problems/selfdev-screens-are-not-files-2026-11-03.md):
+// every computer's image carries it on no PATH, and an engineer's Playwright
+// jobs launch it by path. The executor gives each broker the path and the
+// fontconfig file (so text renders without /etc/fonts); the broker hands them
+// to jobs. No grant: the browser is not a privilege.
+const (
+	// BrowserEnv names the store Chromium's binary in a job's environment.
+	BrowserEnv = "CHOIR_BROWSER"
+	// FontconfigEnv is fontconfig's own variable, so Chromium reads it as is.
+	FontconfigEnv = "FONTCONFIG_FILE"
+)
+
+// browserBrokerEnv is what the executor adds to a new broker's environment:
+// the Chromium and fontconfig paths when the image names an executable
+// Chromium, and nothing otherwise.
+func browserBrokerEnv(browser, fontconfig string) []string {
+	browser = strings.TrimSpace(browser)
+	if browser == "" {
 		return nil
 	}
-	env := []string{visualcapture.BrowserEnv + "=" + st.Browser}
+	info, err := os.Stat(browser)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return nil
+	}
+	env := []string{BrowserEnv + "=" + browser}
 	if fontconfig = strings.TrimSpace(fontconfig); fontconfig != "" {
-		env = append(env, visualcapture.FontconfigEnv+"="+fontconfig)
+		env = append(env, FontconfigEnv+"="+fontconfig)
 	}
 	return env
 }
 
-// CaptureJobEnv is what a broker adds to its jobs' environment for visual
-// capture: the Chromium and fontconfig paths the executor gave it, and only
-// those, when it gave them (a granted computer;
-// docs/design/visual-evidence-slice-2026-10-15.md V1). Cells and direct exec
-// build their environments without them.
-func CaptureJobEnv(lookup func(string) (string, bool)) []string {
+// BrowserJobEnv is what a broker adds to its jobs' environment: the Chromium
+// and fontconfig paths the executor gave it, and only those. Cells and direct
+// exec build their environments without them.
+func BrowserJobEnv(lookup func(string) (string, bool)) []string {
 	var env []string
-	for _, key := range []string{visualcapture.BrowserEnv, visualcapture.FontconfigEnv} {
+	for _, key := range []string{BrowserEnv, FontconfigEnv} {
 		if v, ok := lookup(key); ok && strings.TrimSpace(v) != "" && !strings.ContainsAny(v, "\x00\n") {
 			env = append(env, key+"="+strings.TrimSpace(v))
 		}

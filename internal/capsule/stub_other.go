@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
-	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -269,9 +268,5 @@ func (e *Executor) ClaudeDelegateStatus() ClaudeDelegateStatus {
 }
 func (e *Executor) MemoryBudget() int64 { return 0 }
 
-// Visual capture (visual_capture_linux.go): never granted off the guest
-// kernel.
-func (e *Executor) SetVisualCaptureSource(dir, browser, fontconfig string) {}
-func (e *Executor) VisualCaptureStatus() visualcapture.Status {
-	return visualcapture.Status{Reason: "visual capture requires the Linux guest kernel"}
-}
+// The store browser: capsules need the Linux guest kernel.
+func (e *Executor) SetBrowser(browser, fontconfig string) {}

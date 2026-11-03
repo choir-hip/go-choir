@@ -30,7 +30,8 @@ func TestEngineeringRunContextCarriesTheCapsuleBrowserRecipe(t *testing.T) {
 			"under /tmp",
 			"rm -rf node_modules",
 			"networkless capsule",
-			"bin/chromium",
+			"$CHOIR_BROWSER",
+			"/var/lib/artifact/screens/",
 			"npx playwright install",
 			"context.route",
 		} {

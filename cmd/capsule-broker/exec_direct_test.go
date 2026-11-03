@@ -196,8 +196,8 @@ func TestDirectExecAndWorkerEnvCarryGoBounds(t *testing.T) {
 
 // A job (the long build) gets the bounds from the broker's own environment,
 // as GOMAXPROCS and GOMEMLIMIT, never under the carry names. The job env
-// legitimately carries other CHOIR_ names (the frontend deps, and visual
-// capture on a granted computer); the broker's environment is set here so
+// legitimately carries other CHOIR_ names (the frontend deps and the store
+// browser); the broker's environment is set here so
 // the test does not depend on the one it runs in.
 func TestJobEnvCarriesGoBounds(t *testing.T) {
 	t.Setenv(yaegikernel.CapsuleGoMaxProcsEnv, "1")

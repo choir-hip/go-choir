@@ -2,7 +2,7 @@ package agentcore
 
 // The Freeze's side of station TE
 // (docs/design/texture-evidence-embeds-te-2026-10-25.md section 2): a fresh
-// Freeze that observed captures asks the Texture owner to embed them in the
+// Freeze that saved screens asks the Texture owner to embed them in the
 // operation's document, when texture.evidence_embeds is on. Ways it could
 // fail, written before the code:
 //   - it asks with the switch off, or when the switch cannot be read (E13);
@@ -56,11 +56,7 @@ func TestFreshFreezeWithCapturesAsksTextureToEmbedThemWhenSwitchedOn(t *testing.
 		FromRole: agentprofile.Engineering, OwnerID: owner, ComputerID: computerID,
 	}}
 	freeze := func(fresh bool, captures int) map[string]any {
-		obs := freezeVisualObservation{Receipt: "capsule-exec:sha256:receipt"}
-		for i := 0; i < captures; i++ {
-			obs.Captures = append(obs.Captures, types.VisualCaptureObservation{Route: "/reader", Artifact: "artifact:sha256:" + string(rune('a'+i))})
-		}
-		out := map[string]any{"operation_id": "selfdev-op-1", "bundle_digest": "b1", freezeVisualKey: obs}
+		out := map[string]any{"operation_id": "selfdev-op-1", "bundle_digest": "b1", freezeScreensKey: captures}
 		if fresh {
 			out[freezeSourcePathsKey] = []string{"frontend/src/App.svelte"}
 		}
@@ -68,8 +64,8 @@ func TestFreshFreezeWithCapturesAsksTextureToEmbedThemWhenSwitchedOn(t *testing.
 	}
 	settle := func(out map[string]any) {
 		r.settleFreezePrecommits(context.Background(), yaegikernel.StagedIntent{}, out, "assignment-1", time.Now().UTC())
-		if _, leaked := out[freezeVisualKey]; leaked {
-			t.Fatal("the visual observation key reached the cell")
+		if _, leaked := out[freezeScreensKey]; leaked {
+			t.Fatal("the screens observation key reached the cell")
 		}
 		rt.WaitEvidenceEmbeds()
 	}

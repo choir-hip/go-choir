@@ -121,9 +121,9 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 const capsuleBrowserRecipe = "Capsule browser recipe (authoritative; node, npm and a store Chromium are present, do not probe for alternatives):\n" +
 	"- The workspace has no node_modules. Link them from the frontend deps tree: ln -s $CHOIR_FRONTEND_DEPS/node_modules /workspace/platform/frontend/node_modules, and run Vite from that tree.\n" +
 	"- Use the pinned Playwright from that node_modules (node_modules/.bin/playwright), not npx's fetched one: a bare npx playwright fetches a newer version that cannot find its browser.\n" +
-	"- Launch chromium with executablePath set to the store Chromium's bin/chromium (ls /nix/store/*chromium*/bin/chromium). Never run npx playwright install.\n" +
+	"- Launch chromium with executablePath set to $CHOIR_BROWSER, the store Chromium (a job has it, and FONTCONFIG_FILE, on every computer). Never run npx playwright install.\n" +
 	"- Mock the backend with context.route for signed-in views.\n" +
-	"- Link, run and unlink inside one job, ending as the build job does (s=$?; rm -rf node_modules; exit $s), and write screenshots, JSON and Playwright output under /tmp, never under /workspace/platform: a job that leaves the workspace changed is refused as evidence, and a leftover link freezes into the candidate.\n" +
+	"- Link, run and unlink inside one job, ending as the build job does (s=$?; rm -rf node_modules; exit $s), write the screenshots you want the owner to see as .png files in /var/lib/artifact/screens/ (Freeze saves them as files Texture embeds) and other JSON and Playwright output under /tmp, never under /workspace/platform: a job that leaves the workspace changed is refused as evidence, and a leftover link freezes into the candidate.\n" +
 	"- A browser needs the capsule's loopback, which only an ecosystem_proxy or claude capsule has. In a networkless capsule (every verification capsule) Vite cannot bind: say so in the report instead of probing."
 
 // runContextText renders the run context: the time to the second, then the
