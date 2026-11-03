@@ -121,14 +121,35 @@ type HostMemoryFacts struct {
 // to start it. Facts that are not fresh start it, as before S4; the host
 // floor stays the hard stop.
 func HostMemoryWaitReason(facts HostMemoryFacts, fresh bool) string {
+	return HostMemoryWaitReasonFor(facts, fresh, BuildPeakBytes)
+}
+
+// JobHostNeedBytes is the host headroom a build-class job waits for: what it
+// declared in memory_mib, never more than one build's peak. A job that
+// declares nothing keeps the BuildPeakBytes claim, so a build stays safe; a
+// job that declares its size (a screenshot run, about 1.5 GiB) does not queue
+// behind other computers' builds for memory it does not use.
+func JobHostNeedBytes(memoryMiB int) int64 {
+	if memoryMiB <= 0 {
+		return BuildPeakBytes
+	}
+	if need := int64(memoryMiB) << 20; need < BuildPeakBytes {
+		return need
+	}
+	return BuildPeakBytes
+}
+
+// HostMemoryWaitReasonFor is HostMemoryWaitReason for a job that needs need
+// bytes of host headroom.
+func HostMemoryWaitReasonFor(facts HostMemoryFacts, fresh bool, need int64) string {
 	if !fresh || facts.Protected {
 		return ""
 	}
 	if facts.PressureHigh {
 		return fmt.Sprintf("waiting for host memory: the host is under memory pressure (PSI some avg10 %.1f%%)", facts.MemorySomeAvg10)
 	}
-	if facts.HeadroomBytes < BuildPeakBytes {
-		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor, under one build's %d MiB", facts.HeadroomBytes>>20, BuildPeakBytes>>20)
+	if facts.HeadroomBytes < need {
+		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor, under this job's %d MiB", facts.HeadroomBytes>>20, need>>20)
 	}
 	return ""
 }

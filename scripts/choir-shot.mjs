@@ -662,6 +662,14 @@ async function measureContrast(page, it, decode, out, appId) {
   for (const d of detail) console.log(`choir-shot: ${d}`);
 }
 
+// verdictLine is the one line a run ends with, so a failed run never reads as
+// done when its output is cut or piped: "choir-shot: OK n/n shots" or
+// "choir-shot: FAILED k/n: <first error>".
+export function verdictLine(total, failures) {
+  if (failures.length === 0) return `choir-shot: OK ${total}/${total} shots`;
+  return `choir-shot: FAILED ${failures.length}/${total}: ${failures[0].file}: ${failures[0].error}`;
+}
+
 async function main() {
   const root = process.env.CHOIR_PLATFORM_ROOT || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
   const frontend = path.join(root, 'frontend');
@@ -705,6 +713,7 @@ async function main() {
   fs.mkdirSync(o.out, { recursive: true });
   const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const failed = [];
+  const failures = [];
   try {
     for (const it of items) {
       const t = Date.now();
@@ -731,8 +740,10 @@ async function main() {
         if (it.contrast) await measureContrast(page, it, decode, o.out, appId);
         console.log(`choir-shot: ${it.file} ${((Date.now() - t) / 1000).toFixed(1)} s`);
       } catch (e) {
+        const msg = String(e.message || e).split('\n')[0];
         failed.push(it.file);
-        console.error(`choir-shot: ${it.file} FAILED: ${String(e.message || e).split('\n')[0]}`);
+        failures.push({ file: it.file, error: msg });
+        console.error(`choir-shot: ${it.file} FAILED: ${msg}`);
       } finally {
         await context.close();
       }
@@ -746,9 +757,11 @@ async function main() {
   if (have > 12) console.warn(`choir-shot: ${have} PNGs in ${o.out}; Freeze takes at most 12`);
   if (failed.length && useComputer) console.error(`choir-shot: the autoputer's output is in ${holder.log}`);
   console.log(JSON.stringify({ shots: items.length - failed.length, failed, out: o.out }));
+  const verdict = verdictLine(items.length, failures);
+  console.log(verdict); // stdout, after the JSON summary: the last line of the run
   return failed.length ? 1 : 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  main().then((c) => process.exit(c), (e) => { console.error(`choir-shot: ${e.message}`); process.exit(2); });
+  main().then((c) => process.exit(c), (e) => { console.error(`choir-shot: ${e.message}`); console.error(`choir-shot: FAILED 0/0: ${String(e.message).split('\n')[0]}`); process.exit(2); });
 }

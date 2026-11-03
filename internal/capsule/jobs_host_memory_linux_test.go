@@ -176,3 +176,34 @@ func TestJobHoldersNoteNamesRunningJobsNotWaitingOnes(t *testing.T) {
 		t.Fatalf("no holders should be empty, got %q", got)
 	}
 }
+
+// A job that declares memory_mib waits for that much headroom, not for a
+// whole build's peak; a job that declares none keeps the build claim.
+func TestJobWaitsForItsDeclaredMemoryNotTheBuildPeak(t *testing.T) {
+	headroom := HostMemoryFacts{HeadroomBytes: 2310 << 20}
+	for _, tc := range []struct {
+		name      string
+		memoryMiB int
+		wait      bool
+	}{
+		{"declared 1536 starts in 2310 MiB", 1536, false},
+		{"declared none waits for the build peak", 0, true},
+		{"declared above the peak (4096) is held to the peak and waits", 4096, true},
+	} {
+		f, _, _ := newWaitFixture(t, headroom, true, SizeClassBuild)
+		view, err := f.executor.StartJob(context.Background(), "run-job", "handle-job", JobRequest{ID: "job-x", Argv: []string{"node", "choir-shot.mjs"}, MemoryMiB: tc.memoryMiB})
+		got := "error"
+		if err == nil {
+			got = view.State + ": " + view.Reason
+		}
+		if waiting := strings.HasPrefix(got, "waiting"); waiting != tc.wait {
+			t.Fatalf("%s: wait=%v, got %s (%v)", tc.name, waiting, got, err)
+		}
+	}
+	if got := JobHostNeedBytes(1536); got != 1536<<20 {
+		t.Fatalf("need for 1536 MiB: %d", got)
+	}
+	if got := JobHostNeedBytes(0); got != BuildPeakBytes {
+		t.Fatalf("need for none: %d", got)
+	}
+}

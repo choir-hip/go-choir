@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
-  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath,
+  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -28,6 +28,19 @@ assert.equal(helpRun.status, 0, helpRun.stderr);
 assert.match(helpRun.stdout, /usage: node scripts\/choir-shot.mjs/);
 // The autoputer's output goes beside the screens directory (Freeze refuses non-PNG files in it).
 assert.equal(autoputerLogPath('/var/lib/artifact/screens'), '/var/lib/artifact/shot-logs/autoputer.log');
+
+// The run ends with one verdict line.
+assert.equal(verdictLine(3, []), 'choir-shot: OK 3/3 shots');
+assert.equal(verdictLine(3, [{ file: 'b.png', error: 'selector never appeared' }, { file: 'c.png', error: 'x' }]), 'choir-shot: FAILED 2/3: b.png: selector never appeared');
+{
+  // A run that fails before any shot (no CHOIR_* env) exits non-zero and says FAILED.
+  const f = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-verdict-')) + '/s.mjs';
+  fs.writeFileSync(f, "export default [{ name: 'a' }];");
+  const env2 = { ...process.env }; delete env2.CHOIR_FRONTEND_DEPS; delete env2.CHOIR_BROWSER;
+  const r = spawnSync('node', [new URL('./choir-shot.mjs', import.meta.url).pathname, '--shots', f], { encoding: 'utf8', env: env2 });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /^choir-shot: FAILED 0\/0: .*CHOIR_FRONTEND_DEPS/m);
+}
 
 const shots = [{ name: 'home' }, { name: 'detail', path: '/d' }];
 throws(() => plan([], parseArgs(['--shots', 'x'])), /non-empty/);
@@ -261,6 +274,8 @@ if (process.env.CHOIR_FRONTEND_DEPS && process.env.CHOIR_BROWSER) {
   const both = run();
   assert.equal(both.status, 1);
   assert.match(both.stderr, /broken\.png FAILED/);
+  assert.match(both.stdout.trimEnd().split('\n').pop(), /^choir-shot: FAILED 1\/2: broken\.png: /);
+  assert.match(one.stdout, /^choir-shot: OK 1\/1 shots$/m);
   assert.ok(fs.existsSync(path.join(out, 'shell.png')));
   console.log('choir_shot_test: real run ok');
 } else {

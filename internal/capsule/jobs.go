@@ -124,11 +124,11 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	hm := e.hostMemory
 	e.mu.Unlock()
 	// A build-class job reads the host facts before it starts (S4): while
-	// the host is under memory pressure or has less than one build's peak
-	// over its floor, it waits, visibly, and starts when that clears.
+	// the host is under memory pressure or has less than its own need (a
+	// declared memory_mib, else one build's peak) over its floor, it waits, visibly, and starts when that clears.
 	if hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
 		facts, fresh := hm.Facts()
-		if reason := HostMemoryWaitReason(facts, fresh); reason != "" {
+		if reason := HostMemoryWaitReasonFor(facts, fresh, JobHostNeedBytes(spec.MemoryMiB)); reason != "" {
 			e.mu.Lock()
 			job.waiting = true
 			job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
@@ -233,7 +233,7 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 			return
 		}
 		facts, fresh := hm.Facts()
-		reason := HostMemoryWaitReason(facts, fresh)
+		reason := HostMemoryWaitReasonFor(facts, fresh, JobHostNeedBytes(job.spec.MemoryMiB))
 		if reason != "" && time.Since(since) < maxWait {
 			e.mu.Lock()
 			job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
