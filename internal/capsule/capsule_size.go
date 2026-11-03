@@ -60,6 +60,29 @@ func (c SizeClass) HostReservationBytes() int64 {
 	return 0
 }
 
+// CPU by weight (S4 point 2): CPU is compressible, so there is no CPU
+// admission anywhere, only proportional weights. A build capsule's cgroup
+// (and so its jobs) weighs below a light one, and the capsules aggregate
+// weighs below the guest's own services, so a build slows under contention
+// and the computer's interactive work does not.
+const (
+	lightCPUWeight    = uint64(100) // the cgroup v2 default
+	buildCPUWeight    = uint64(50)
+	capsulesCPUWeight = uint64(50)
+)
+
+// capsulesCPUWeightFile is the capsules aggregate's cpu.weight; a var so a
+// test can point it elsewhere.
+var capsulesCPUWeightFile = "/sys/fs/cgroup/capsule/cpu.weight"
+
+// CPUWeight is the cgroup cpu.weight of a capsule of this class.
+func (c SizeClass) CPUWeight() uint64 {
+	if c.Normalized() == SizeClassBuild {
+		return buildCPUWeight
+	}
+	return lightCPUWeight
+}
+
 // HostMemory is the host's side of capsule heavy work (S4): the guest's
 // report of its live build reservations to vmctl, and the host facts that
 // come back. A nil HostMemory (no vmctl, a test) runs as before: nothing is

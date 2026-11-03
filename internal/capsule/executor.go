@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -771,6 +772,11 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, err
 	}
 	caps.Cgroup = cgroup
+	// The capsules aggregate weighs below the guest's own services (S4);
+	// best effort, as a weight only shares contended CPU.
+	if err := writeCgroupFile(capsulesCPUWeightFile, strconv.FormatUint(capsulesCPUWeight, 10)); err != nil {
+		log.Printf("capsule %s: capsules aggregate cpu.weight: %v", spec.CapsuleID, err)
+	}
 	// Under doctrine no capsule starts without the aggregate bound (review
 	// B5); the deferred cleanup deletes the cgroup just made.
 	if err := e.ensureCapsuleAggregateLocked(); err != nil {

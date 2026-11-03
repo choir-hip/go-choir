@@ -45,7 +45,8 @@ func createCapsuleCgroup(capsuleID string, spec SpawnSpec, memory capsuleMemoryP
 			Swap: &[]int64{0}[0], // no swap
 		},
 		CPU: &cgroup2.CPU{
-			Max: cpuMax,
+			Max:    cpuMax,
+			Weight: &[]uint64{spec.SizeClass.CPUWeight()}[0],
 		},
 		Pids: &cgroup2.Pids{
 			Max: spec.PidsMax,
