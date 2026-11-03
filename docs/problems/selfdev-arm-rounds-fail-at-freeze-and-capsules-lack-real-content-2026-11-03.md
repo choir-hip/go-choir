@@ -82,3 +82,18 @@ blind. Cause is a hypothesis until the delegate's own log is read
 - Problem 1 class fix not landed; arms recovered by hand.
 - Problem 2 open; FP0 judges round 2 on stand-in content and names it.
 - Problem 4 hypothesis; check the delegate log on the next claude round.
+
+## Owner ruling (2026-11-03 ~04:25Z)
+
+On problems 2 and 3: "capsules should be an overlay over the exact computer
+state"; and "computer source tree should auto update." A capsule's lower
+layer is the computer's exact current state (its files, its source tree,
+its data), read-only; the capsule's writes live in its own upper layer and
+reach the computer only through Freeze, verify and apply. This supersedes
+the interim answer above (live-arm screenshots after apply) once built, and
+it supersedes "a read-only grant of named owner paths". The source tree
+stops being a creation-time copy: the overlay's lower is the computer's
+current source, kept current by source projection after every deploy. An
+investigation of the gap (today's capsule root and mounts, the isolation
+boundary that keeps owner data out, consistency of a live store under the
+overlay, secrets that must stay out) is running; the design follows from it.
