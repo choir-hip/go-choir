@@ -186,3 +186,15 @@ func TestRingPinnedResumeIsNotBehind(t *testing.T) {
 		t.Fatalf("a computer on its pinned release was refreshed or kept pending: %v %+v", f.mgr.refreshes, f.h.pendingDeployRefreshes())
 	}
 }
+
+// Review 1 F5: a ring enroll of a computer that woke behind keeps its kind,
+// and so the user-idle gate.
+func TestRingEnsureKeepsWokeBehindKind(t *testing.T) {
+	tr := newDeployRefreshTracker()
+	tr.enroll(deployRefreshPendingEntry{UserID: "u", DesktopID: "primary", Target: "commit-r1", Kind: deployRefreshKindWokeBehind, Release: "r1"})
+	tr.ensure(deployRefreshPendingEntry{UserID: "u", DesktopID: "primary", Target: "commit-r2"})
+	got := tr.list()
+	if len(got) != 1 || got[0].Kind != deployRefreshKindWokeBehind || got[0].Target != "commit-r2" {
+		t.Fatalf("ensure dropped the woke_behind kind: %+v", got)
+	}
+}

@@ -205,10 +205,24 @@ type deployRefreshTracker struct {
 	path     string
 	pending  map[string]deployRefreshPendingEntry
 	inFlight map[string]struct{}
+	// failed is the target of each computer's last failed deploy refresh
+	// (in memory): the ring walk never re-enrolls a computer onto a target
+	// whose refresh failed (no kill loop).
+	failed map[string]string
 }
 
 func newDeployRefreshTracker() *deployRefreshTracker {
-	return &deployRefreshTracker{pending: map[string]deployRefreshPendingEntry{}, inFlight: map[string]struct{}{}}
+	return &deployRefreshTracker{pending: map[string]deployRefreshPendingEntry{}, inFlight: map[string]struct{}{}, failed: map[string]string{}}
+}
+
+// pendingAndFailed reports whether the computer has a pending entry, and the
+// target of its last failed refresh.
+func (t *deployRefreshTracker) pendingAndFailed(userID, desktopID string) (bool, string) {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	_, pending := t.pending[key]
+	return pending, t.failed[key]
 }
 
 func (h *Handler) deployRefreshState() *deployRefreshTracker {
@@ -286,6 +300,12 @@ func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefre
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	entry, known := t.pending[key]
+	switch resp.Outcome {
+	case deployRefreshFailed:
+		t.failed[key] = req.Target
+	case deployRefreshRefreshed:
+		delete(t.failed, key)
+	}
 	if resp.Outcome != deployRefreshDeferred {
 		if known {
 			delete(t.pending, key)

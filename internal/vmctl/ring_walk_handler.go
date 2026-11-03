@@ -139,6 +139,7 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 		if o.Active {
 			o.Release = byVM[own.VMID].GuestRelease
 		}
+		o.Pending, o.FailedTarget = h.deployRefreshState().pendingAndFailed(own.UserID, own.DesktopID)
 		if sample && walking && o.Ring == openRing && o.Active && to.has(o.Release) {
 			health := h.probeRingHealth(ctx, *own)
 			o.Health = &health
@@ -232,14 +233,24 @@ func (h *Handler) ringWake(a ringAction) {
 }
 
 // ensure puts entry in the pending set aimed at its target: a new entry, or a
-// known one moved to the target (its kind cleared and attempts reset, as for
-// a new deploy). An entry already aimed at the target is kept.
+// known one moved to the target (attempts reset, as for a new deploy; a
+// woke_behind entry keeps its kind and user-idle gate). An entry already
+// aimed at the target is kept.
 func (t *deployRefreshTracker) ensure(entry deployRefreshPendingEntry) {
 	entry.DesktopID = normalizeDesktopID(entry.DesktopID)
 	key := ownershipKey(entry.UserID, entry.DesktopID)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if known, ok := t.pending[key]; ok && known.Target == entry.Target && known.Kind == "" {
+	known, ok := t.pending[key]
+	if ok && known.Target == entry.Target {
+		return
+	}
+	if ok && known.Kind == deployRefreshKindWokeBehind {
+		// A computer that woke behind keeps its kind, and so the user-idle
+		// gate: the sweep aims it at the computer's own release.
+		known.Target = entry.Target
+		t.pending[key] = known
+		t.saveLocked()
 		return
 	}
 	t.pending[key] = entry

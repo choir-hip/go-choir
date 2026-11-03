@@ -573,3 +573,102 @@ func TestRingR0ExposedThenHibernatedIsClean(t *testing.T) {
 		t.Fatalf("exposed then hibernated d@e must close R0 clean: %+v", s.Walk.Rings[0])
 	}
 }
+
+// Review 1 F2: R0 with no member observed holds; it never closes skipped.
+func TestRingR0EmptyHolds(t *testing.T) {
+	s := newWalkingState(t)
+	t1 := healthyObs(rwTest1, ringR1, rwTo.Single)
+	for i := 1; i <= 90; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{t1})
+	}
+	if s.Walk.Current != 0 || len(s.Walk.Rings) != 1 || !strings.Contains(s.Walk.Rings[0].Waiting, "no proof computer") {
+		t.Fatalf("R0 with no member must hold: %+v", s.Walk.Rings[0])
+	}
+}
+
+// Review 1 F3: a member whose entry was skipped (held or down at the sweep)
+// and forgotten is enrolled again after the gap; one whose refresh to this
+// target failed is not.
+func TestRingReenrollAfterSkipNotAfterFailure(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		s := newWalkingState(t)
+		de := healthyObs(ringProofComputer, ringR0, rwFrom.Single)
+		now := rwT0.Add(ringR0EnrollGrace)
+		_, acts := s.step(now, []ringMemberObs{de})
+		if len(acts) != 1 || acts[0].Kind != ringActionEnroll {
+			t.Fatalf("first enroll: %+v", acts)
+		}
+		de.Pending = false
+		if failed {
+			de.FailedTarget = rwTo.SingleCommit
+		}
+		var again int
+		for i := 1; i <= 15; i++ {
+			_, acts = s.step(now.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+			for _, a := range acts {
+				if a.Kind == ringActionEnroll {
+					again++
+					if time.Duration(i)*time.Minute < ringReenrollGap {
+						t.Fatalf("re-enrolled before the gap at minute %d", i)
+					}
+				}
+			}
+		}
+		if failed && again != 0 {
+			t.Fatalf("a failed refresh was retried by the walk: %d", again)
+		}
+		if !failed && again != 1 {
+			t.Fatalf("a skipped member must be enrolled again once per gap: %d", again)
+		}
+	}
+}
+
+// Review 1 F8: a crash between the last off-release tick and the first
+// on-release tick (the seconds after the refresh boot) belongs to the release.
+func TestRingCrashRightAfterRefreshAttributed(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwFrom.Single)
+	s.step(rwT0.Add(time.Minute), []ringMemberObs{de})
+	de.Release = rwTo.Single
+	de.Crashes = []CrashRecord{{At: rwT0.Add(90 * time.Second).Format(time.RFC3339Nano), Kind: crashKindUnhealthy, Cause: "exited after boot"}}
+	s.step(rwT0.Add(2*time.Minute), []ringMemberObs{de})
+	if s.Walk.Status != ringWalkRolledBack || s.Walk.Rings[0].Breach.Guard != ringGuardCrash {
+		t.Fatalf("a crash just after the refresh boot escaped the guard: %+v", s.Walk.Rings[0])
+	}
+}
+
+// Review 1 F6: the same release ids with a commit read late do not supersede.
+func TestRingLateCommitDoesNotSupersede(t *testing.T) {
+	s := &ringWalkState{}
+	s.observeRelease(rwFrom, rwT0.Add(-time.Hour))
+	noCommit := rwTo
+	noCommit.SingleCommit = ""
+	s.observeRelease(noCommit, rwT0)
+	id := s.Walk.ID
+	ev := s.observeRelease(rwTo, rwT0.Add(time.Minute))
+	if hasEvent(ev, ringEventWalkSuperseded) || s.Walk.ID != id || s.Walk.To.SingleCommit != rwTo.SingleCommit {
+		t.Fatalf("a late commit restarted the walk: %+v %+v", ev, s.Walk)
+	}
+}
+
+// Review 1 F1: status taken while ticks run is a copy (run with -race).
+func TestRingStatusDoesNotAliasLiveWalk(t *testing.T) {
+	r := newRingWalkRunner()
+	r.observe(rwFrom, rwT0.Add(-time.Hour))
+	r.observe(rwTo, rwT0)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			obs := []ringMemberObs{healthyObs(ringProofComputer, ringR0, rwTo.Single), healthyObs("computer-x"+strings.Repeat("0", i%5), ringR0, rwTo.Single)}
+			r.stepWith(rwT0.Add(time.Duration(i)*time.Second), obs)
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		st := r.status(10)
+		if _, err := json.Marshal(st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-done
+}

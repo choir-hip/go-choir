@@ -100,6 +100,22 @@ moves the guest release.
    `docs/design/calibration-seed-2026-11-03.md`). Settlement is not built.
    `GET /internal/vmctl/ring-walk` serves the state and the history tail.
 
+## Decisions after review 1 (Devin, 2026-11-03)
+
+- **A release that returns to the baseline id ends the walk without rings.**
+  When the current release becomes `last_good` again (a revert that rebuilds
+  the identical image, or a host rollback), the walk ends, pins clear, and
+  the deploy refreshes every active computer onto it as before. Decided, not
+  an accident: that release already finished a walk, and holding computers
+  on a release nothing proved (the rolled-back or superseded target) longer
+  is the worse risk. A revert that produces a new release id walks the
+  rings like any other release.
+- R0 with no member observed holds (never `skipped_empty`); a walk enroll
+  that was skipped (held, down) is re-enrolled at most every 10 minutes,
+  never after a failed refresh to the same target; a crash after the last
+  tick that saw the member off the release counts; walks compare release ids,
+  not commits; a computer that woke behind keeps its user-idle gate.
+
 ## Failure modes
 
 - **A ring skipped silently.** Every skip writes a history line with its
@@ -140,7 +156,8 @@ moves the guest release.
 - Staging acceptance: (1) the deploy that ships this records the baseline;
   (2) a planted bad release (guest `/health` reports an appender wedge on
   d@e only) walks to R0, breaches, rolls d@e back to `from`, and R1 never
-  opens; (3) the revert walks R0 clean and opens R1. The history file is the
-  artifact.
+  opens; (3) the next release with a new id walks R0 clean and opens R1 (a
+  revert that rebuilds the baseline image ends the walk instead, as decided
+  above). The history file is the artifact.
 - Rollback of this change: revert the commits; deploys return to
   refresh-all; the state files are ignored by the old vmctl.
