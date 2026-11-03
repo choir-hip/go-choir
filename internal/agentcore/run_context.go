@@ -106,7 +106,7 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 					b.WriteString("\n\n" + notice)
 				}
 			}
-			b.WriteString("\n\n" + capsuleBrowserRecipe)
+			b.WriteString("\n\n" + capsuleBrowserRecipeFor(kind != string(types.EngineeringAssignmentVerification)))
 		}
 	}
 	return strings.TrimSpace(b.String())
@@ -125,6 +125,20 @@ const capsuleBrowserRecipe = "Capsule browser recipe (authoritative; node, npm a
 	"- Mock the backend with context.route for signed-in views.\n" +
 	"- Link, run and unlink inside one job, ending as the build job does (s=$?; rm -rf node_modules; exit $s), write the screenshots you want the owner to see as .png files in /var/lib/artifact/screens/ (Freeze saves them as files Texture embeds) and other JSON and Playwright output under /tmp, never under /workspace/platform: a job that leaves the workspace changed is refused as evidence, and a leftover link freezes into the candidate.\n" +
 	"- A browser needs the capsule's loopback, which only an ecosystem_proxy or claude capsule has. In a networkless capsule (every verification capsule) Vite cannot bind: say so in the report instead of probing."
+
+// capsuleComputerStateRecipe replaces the mock bullet for an implementation
+// capsule, the only kind with /computer
+// (docs/design/capsule-overlay-computer-state-2026-11-03.md).
+const capsuleComputerStateRecipe = "- Signed-in views show this computer's real content: /computer/files is a point-in-time copy of its files and /computer/state.db a private copy of its store (data, not access; writes there stay in this capsule; /computer/receipt.json says what they hold and leave out). In the same job, before Vite, start an autoputer over them on Vite's /api port: RUNTIME_STORE_PATH=/computer/state AUTOPUTER_FILES_ROOT=/computer/files AUTOPUTER_PORT=8082 CHOIR_GUEST_TRUST_LOOPBACK=1 /var/lib/artifact/release/bin/autoputer & (with no Go change there is no such binary: first build one, go build -o /tmp/autoputer ./cmd/autoputer as its own job, and start /tmp/autoputer instead). It has no gateway token, signer or credential here, so model calls answer from the stub provider; it trusts any caller on the capsule's own loopback, and the capsule's network namespace is that boundary. Send the header X-Authenticated-User with any name through Playwright's extraHTTPHeaders, and mock only /auth with context.route. With no /computer (a copy the receipt says was refused), mock the backend with context.route instead.\n"
+
+// capsuleBrowserRecipeFor is the recipe for an assignment's capsule: an
+// implementation capsule serves real content from its copies.
+func capsuleBrowserRecipeFor(implementation bool) string {
+	if !implementation {
+		return capsuleBrowserRecipe
+	}
+	return strings.Replace(capsuleBrowserRecipe, "- Mock the backend with context.route for signed-in views.\n", capsuleComputerStateRecipe, 1)
+}
 
 // runContextText renders the run context: the time to the second, then the
 // run's facts, if any.

@@ -78,6 +78,14 @@ type SpawnSpec struct {
 	// fails closed when the delegate is unavailable
 	// (docs/design/claude-delegate-slice1-2026-10-14.md).
 	ClaudeDelegate bool
+
+	// ComputerState gives the capsule a read-only, point-in-time copy of the
+	// computer's files at /computer/files
+	// (docs/design/capsule-overlay-computer-state-2026-11-03.md). Trusted-
+	// runtime input set only by the implementation assignment's spawn from
+	// its durable binding; research, desk-tool and verifier spawns never set
+	// it, so verification never depends on /computer.
+	ComputerState bool
 }
 
 type SourcePreflight struct {

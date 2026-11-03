@@ -36,6 +36,15 @@ func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) 
 		if relPath == "." {
 			return nil // skip root
 		}
+		if relPath == "computer" {
+			// The computer-state layer's writes are scratch: nothing below
+			// it is stat'd, hashed or carried, and a whiteout of the whole
+			// layer is not a change either.
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 
 		mt := fileTypeString(info)
 		whiteout, opaque := overlayMarks(path, info)

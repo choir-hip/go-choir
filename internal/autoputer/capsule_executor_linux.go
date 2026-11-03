@@ -11,10 +11,12 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
-func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
+func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error) {
 	broker := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER_PATH"))
 	state := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR"))
 	source := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
@@ -65,6 +67,13 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 		return nil, false, err
 	}
 	configureJobMemory(executor, staticBudget)
+	// An implementation assignment's capsule snapshots the files root at
+	// /computer/files (docs/design/capsule-overlay-computer-state-2026-11-03.md).
+	executor.SetComputerFilesRoot(provideriface.ResolveFilesRoot(os.Getenv("AUTOPUTER_FILES_ROOT")), source)
+	// and gets a private copy of the store at /computer/state.db.
+	if db != nil {
+		executor.SetComputerStore(capsuleStoreCopySource{db: db})
+	}
 	// U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section
 	// 4.6): with the source projection on, Freeze reuses the running binary
 	// when no binary-input path differs from the capsule source. The gate is
@@ -138,4 +147,18 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 		log.Printf("capsule executor: no vmctl route; build capsules reserve nothing on the host")
 	}
 	return executor, true, nil
+}
+
+// capsuleStoreCopySource gives the capsule executor the store copy and
+// nothing else of the store: a file in the capsule's upper, never a handle.
+type capsuleStoreCopySource struct{ db *store.Store }
+
+func (s capsuleStoreCopySource) SnapshotEstimate(ctx context.Context) (int64, error) {
+	return s.db.SnapshotEstimate(ctx)
+}
+
+func (s capsuleStoreCopySource) SnapshotForCapsule(ctx context.Context, dir string) (capsule.ComputerStoreCopy, error) {
+	r, err := s.db.SnapshotTo(ctx, dir)
+	return capsule.ComputerStoreCopy{ComputerID: r.ComputerID, Sequence: r.Sequence, Head: r.Head, Bytes: r.Bytes,
+		CopyMS: r.CopyMS, ScanMS: r.ScanMS, ScannedBytes: r.ScannedBytes, Blanked: r.Blanked, LeftOut: r.LeftOut}, err
 }

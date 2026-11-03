@@ -32,28 +32,31 @@ type Capsule struct {
 	UpperDir             string
 	WorkDir              string
 	SourceSnapshotDigest string
-	MergedDir            string
-	MemoryMax            int64 // the cgroup's memory.max before job boosts
-	MemoryHigh           int64 // the cgroup's memory.high before job boosts; 0 unset (observe)
-	State                CapsuleState
-	CommitEpoch          uint64         // audit metadata (not enforced for exec/read/write)
-	LastManifest         []FileManifest // last committed snapshot
-	OwnerRunID           string
-	StartedAt            time.Time
-	Spec                 SpawnSpec
-	Process              *os.Process
-	Cgroup               capsuleCgroup
-	wait                 func() error
-	listener             net.Listener
-	egress               *EgressProxy // ecosystem_proxy (L2) capsules only
-	egressSink           *egressSink  // the proxy's ledger and log aggregation; closed with it
-	mirrors              []string     // ecosystems routed to the host package mirror (mirror.go)
-	processDone          chan struct{}
-	processErr           error
-	Pinned               bool
-	PinExpiry            *time.Time
-	inflightOps          int
-	inflightMu           sync.Mutex
+	// ComputerState is the receipt of an engineering capsule's
+	// computer-state layer; nil when the spawn did not ask for it.
+	ComputerState *ComputerStateReceipt
+	MergedDir     string
+	MemoryMax     int64 // the cgroup's memory.max before job boosts
+	MemoryHigh    int64 // the cgroup's memory.high before job boosts; 0 unset (observe)
+	State         CapsuleState
+	CommitEpoch   uint64         // audit metadata (not enforced for exec/read/write)
+	LastManifest  []FileManifest // last committed snapshot
+	OwnerRunID    string
+	StartedAt     time.Time
+	Spec          SpawnSpec
+	Process       *os.Process
+	Cgroup        capsuleCgroup
+	wait          func() error
+	listener      net.Listener
+	egress        *EgressProxy // ecosystem_proxy (L2) capsules only
+	egressSink    *egressSink  // the proxy's ledger and log aggregation; closed with it
+	mirrors       []string     // ecosystems routed to the host package mirror (mirror.go)
+	processDone   chan struct{}
+	processErr    error
+	Pinned        bool
+	PinExpiry     *time.Time
+	inflightOps   int
+	inflightMu    sync.Mutex
 
 	// claudeToken is the Claude delegate token a claude-mode capsule was
 	// spawned with, kept in guest-core memory only for Freeze's leak scan.

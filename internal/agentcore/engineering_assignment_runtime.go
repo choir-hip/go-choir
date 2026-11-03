@@ -574,16 +574,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	}
 	// The request is the size chosen above, a Claude capsule's included:
 	// doctrine's memory.high never sits below what the capsule used to get.
-	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
-		MemoryMax: memory, MemoryRequest: memory, CpuQuota: cpu, CpuPeriod: 100000, PidsMax: pids,
-		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
-		// Engineering capsules build (go links, frontend builds,
-		// Playwright): they reserve one build's peak on the host at spawn
-		// (S4, docs/design/capsule-heavy-work-scheduling-2026-11-03.md).
-		SizeClass:         capsule.SizeClassBuild,
-		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
-		Egress:         binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy || claude,
-		ClaudeDelegate: claude}
+	spec := engineeringAssignmentSpawnSpec(capsuleID, runID, binding, preflight, memory, cpu, pids, claude)
 	// P8: the engineering assignment on a release adoption's trajectory
 	// gets the verified patch at /selfdev/adoption, re-verified now (A8);
 	// any other trajectory gets nothing (A9). Bytes that changed since
@@ -838,4 +829,28 @@ func (rt *Runtime) reclaimTerminalAssignmentCapsules(ctx context.Context, parent
 			assignment.AssignmentID, assignment.Binding.CapsuleID, reclaimed.CapsuleDisposition)
 	}
 	return nil
+}
+
+// engineeringAssignmentSpawnSpec is the spawn an assignment's capsule takes,
+// from its durable binding.
+func engineeringAssignmentSpawnSpec(capsuleID, runID string, binding types.EngineeringAssignmentBinding, preflight capsule.SourcePreflight, memory, cpu, pids int64, claude bool) capsule.SpawnSpec {
+	return capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
+		MemoryMax: memory, MemoryRequest: memory, CpuQuota: cpu, CpuPeriod: 100000, PidsMax: pids,
+		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
+		// Engineering capsules build (go links, frontend builds,
+		// Playwright): they reserve one build's peak on the host at spawn
+		// (S4, docs/design/capsule-heavy-work-scheduling-2026-11-03.md).
+		SizeClass:         capsule.SizeClassBuild,
+		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
+		Egress:         binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy || claude,
+		ClaudeDelegate: claude,
+		ComputerState:  engineeringSpawnGetsComputerState(binding)}
+}
+
+// engineeringSpawnGetsComputerState: an implementation assignment's capsule
+// gets a read-only, point-in-time copy of the computer's state at /computer
+// (docs/design/capsule-overlay-computer-state-2026-11-03.md). A verification
+// assignment does not: verification never depends on /computer.
+func engineeringSpawnGetsComputerState(binding types.EngineeringAssignmentBinding) bool {
+	return binding.Kind == types.EngineeringAssignmentImplementation
 }

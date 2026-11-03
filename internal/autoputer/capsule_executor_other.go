@@ -2,6 +2,11 @@
 
 package autoputer
 
-import "github.com/yusefmosiah/go-choir/internal/capsule"
+import (
+	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/store"
+)
 
-func configuredCapsuleExecutor() (*capsule.Executor, bool, error) { return nil, false, nil }
+func configuredCapsuleExecutor(*store.Store) (*capsule.Executor, bool, error) {
+	return nil, false, nil
+}

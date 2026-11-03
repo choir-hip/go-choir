@@ -144,6 +144,11 @@ func NewClassifier() *Classifier {
 			// ledger content and would otherwise reject every such cell's
 			// commit with unknown paths.
 			{Prefix: "/root/.config/go/telemetry"},
+			// The computer-state layer (the files snapshot and the store
+			// copy): a write there is scratch that dies with the capsule,
+			// never carried and never a Freeze rejection
+			// (docs/design/capsule-overlay-computer-state-2026-11-03.md).
+			{Prefix: "/computer/"},
 			{Glob: "*.cache"},
 			{Glob: "*.tmp"},
 			{Glob: "*.log"},

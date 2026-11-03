@@ -60,6 +60,15 @@ type Executor struct {
 	artifactDir       string
 	lowerDir          string
 	sourceDir         string
+	// computerFilesRoot is the files root an engineering capsule's
+	// /computer/files snapshots (SetComputerFilesRoot); empty gives none.
+	computerFilesRoot string
+	// computerFilesLeaveOut are the directories under it the snapshot leaves
+	// out by structure (relative, slash separated), with their reasons.
+	computerFilesLeaveOut map[string]string
+	// computerStore takes the store copy at /computer/state.db
+	// (SetComputerStore); nil gives none.
+	computerStore ComputerStoreSource
 	// commitDigests caches the canonical digest of sourceDir's commits this
 	// process has read in full (commitDigest); see commitDigestKey.
 	commitDigestMu sync.Mutex
@@ -696,11 +705,39 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	timer.phase("selfdev_inputs", fmt.Sprintf("verifier=%t adoption=%t carried=%t", spec.VerifierBundleDir != "", spec.AdoptionDir != "", spec.CarriedPatchDir != ""))
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
+	var computerState *ComputerStateReceipt
+	if spec.ComputerState {
+		// The computer's state as data, between the source and the guest
+		// root (docs/design/capsule-overlay-computer-state-2026-11-03.md).
+		layer, receipt := e.buildComputerStateLayer(ctx, base)
+		computerState = &receipt
+		if layer != "" {
+			lowerLayers = sourceLower + ":" + layer + ":" + e.lowerDir
+		}
+		timer.phase("computer_files", fmt.Sprintf("files=%t linked=%d", receipt.Files, receipt.LinkedFiles))
+	}
 	// The lowest layer is the guest's own root: hide its release tree behind
 	// an empty capsule-owned directory so a build can write the release
 	// (Failure 21, engineering-completion-path-cluster-2026-10-20.md).
 	if err := prepareCapsuleReleaseDir(caps.UpperDir, capsuleNamespaceHostID, capsuleNamespaceHostID); err != nil {
 		return nil, err
+	}
+	if computerState != nil {
+		// The store copy goes straight into the upper, before the mount: a
+		// private file the capsule's SQLite writes in place, one charge.
+		e.writeComputerStoreCopy(ctx, caps.UpperDir, computerState)
+		if err := writeComputerStateReceipt(caps.UpperDir, *computerState); err != nil {
+			// The copies are data, not a precondition: the capsule starts,
+			// and the Capsule and the log keep the receipt.
+			log.Printf("capsule %s: computer state receipt not written: %v", spec.CapsuleID, err)
+		}
+		caps.ComputerState = computerState
+		storeBytes, storeSeq := int64(0), uint64(0)
+		if computerState.Store != nil {
+			storeBytes, storeSeq = computerState.Store.Bytes, computerState.Store.Sequence
+		}
+		log.Printf("capsule %s: computer state files=%t linked=%d bytes=%d left_out=%v lock_held_ms=%d refused=%q store_bytes=%d store_sequence=%d store_refused=%q", spec.CapsuleID, computerState.Files, computerState.LinkedFiles, computerState.LinkedBytes, computerState.LeftOutCounts, computerState.LockHeldMS, computerState.Refused, storeBytes, storeSeq, computerState.StoreRefused)
+		timer.phase("computer_store", fmt.Sprintf("store=%t", computerState.Store != nil))
 	}
 	if err := MountOverlayFS(caps.MergedDir, caps.UpperDir, caps.WorkDir, lowerLayers); err != nil {
 		return nil, err
