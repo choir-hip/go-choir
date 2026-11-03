@@ -121,6 +121,7 @@ type command struct {
 	handler     func(*call) (any, error)
 	render      func(w io.Writer, result any, x *call) int // CLI output override
 	lead        func(result any) string                    // MCP: a text block before the JSON
+	mcpOut      func(result any, x *call) mcpToolResult    // MCP result override (image blocks)
 	legacy      func(args []string, stdout, stderr io.Writer) int
 }
 
@@ -1084,6 +1085,8 @@ type mcpResource struct {
 type mcpContent struct {
 	Type     string       `json:"type"`
 	Text     string       `json:"text,omitempty"`
+	Data     string       `json:"data,omitempty"`     // image: base64 bytes
+	MimeType string       `json:"mimeType,omitempty"` // image: image/png or image/jpeg
 	Resource *mcpResource `json:"resource,omitempty"`
 }
 
@@ -1100,6 +1103,9 @@ func toolError(err error) mcpToolResult {
 // mcpResult turns a handler's output into a tool result: pretty JSON text,
 // and the same JSON as structuredContent when it is an object.
 func (cmd *command) mcpResult(result any, x *call) mcpToolResult {
+	if cmd.mcpOut != nil {
+		return cmd.mcpOut(result, x)
+	}
 	if b, ok := result.(fileBytes); ok {
 		uri := "choir://files/" + strings.TrimPrefix(x.trim("path"), "/")
 		if utf8.Valid(b) {

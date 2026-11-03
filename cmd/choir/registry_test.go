@@ -463,6 +463,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	dropQuery := func(r *capReq) { r.Query = "" }
+	exportDir := filepath.Join(t.TempDir(), "texture-export")
 	cases := map[string]parityCase{
 		"trajectories_list":  {cli: []string{"trajectories"}, mcp: `{}`, reply: `{"trajectories":[{"trajectory_id":"t1"}]}`},
 		"trajectory_get":     {cli: []string{"trajectory", "traj/1"}, mcp: `{"trajectory_id":"traj/1"}`},
@@ -478,6 +479,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"texture_history":   {cli: []string{"texture", "history", "doc-1"}, mcp: `{"doc_id":"doc-1"}`},
 		"texture_revisions": {cli: []string{"texture", "revisions", "doc-1"}, mcp: `{"doc_id":"doc-1"}`},
 		"texture_show":      {cli: []string{"texture", "show", "doc-1"}, mcp: `{"doc_id":"doc-1"}`, reply: `{"current_revision_id":"rev-1","doc_id":"doc-1"}`},
+		"texture_export":    {cli: []string{"texture", "export", "--out", exportDir, "doc-1"}, mcp: `{"doc_id":"doc-1","out":"` + exportDir + `"}`, reply: `{"current_revision_id":"rev-1","doc_id":"doc-1","content":"text"}`},
 		"texture_open_source": {cli: []string{"texture", "open-source", "--revision", "r", "--source-ref", "s", "--source-ref-version", "v", "doc-1"}, mcp: `{"doc_id":"doc-1","revision":"r","source_ref":"s","source_ref_version":"v"}`,
 			reply: `{"schema":"choir.texture_source_open.v1"}`},
 		"search": {cli: []string{"search", "jailer", "launch"}, mcp: `{"query":"jailer launch"}`},
