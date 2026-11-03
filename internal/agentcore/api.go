@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -172,6 +173,10 @@ type runtimeHealthResponse struct {
 	// EffectiveRelease is the release, tree, event head and CodeRef this
 	// computer runs (P6, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
 	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
+	// VerifierKey is the pin state of the key this computer's verifier
+	// presents, as the host last answered it; a mismatch degrades the body
+	// (docs/problems/verifier-key-regenerated-locks-out-checkpoints-2026-11-02.md).
+	VerifierKey *VerifierKeyHealth `json:"verifier_key,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -720,6 +725,14 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		resp.PersistentDisk = &status
 	}
 	resp.EffectiveRelease = &reads.identity
+	if verifier := h.rt.verifierKeyHealth(); verifier != nil {
+		resp.VerifierKey = verifier
+		// The status code stays: a refused key is the owner's act to clear,
+		// and failing health would restart the computer (health_wedge.go).
+		if verifier.Pin == selfdevprotocol.VerifierKeyMismatch && resp.Status == string(types.HealthReady) {
+			resp.Status = string(types.HealthDegraded)
+		}
+	}
 	_ = json.NewEncoder(w).Encode(resp)
 }
 

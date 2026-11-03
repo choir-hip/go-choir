@@ -919,6 +919,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isSelfDevelopmentGuestPath(path):
 		h.HandleSelfDevelopmentGuest(w, r)
 		return
+	case isComputerVerifierRepinPath(path):
+		h.HandleComputerVerifierRepin(w, r)
+		return
 	case isComputerPackagePublishPath(path):
 		h.HandleComputerPackagePublish(w, r)
 		return

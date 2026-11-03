@@ -40,7 +40,15 @@ type Handler struct {
 	computerID string
 	stateRoot  string
 	key        computerevent.SigningKey
+	provenance KeyProvenance
 	now        func() time.Time
+}
+
+// SetProvenance records the key's provenance for the public-key route.
+func (h *Handler) SetProvenance(provenance KeyProvenance) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.provenance = provenance
 }
 
 func NewHandler(mode, computerID, stateRoot string, key computerevent.SigningKey) (*Handler, error) {
@@ -59,7 +67,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/public-key":
 		publicKey := h.key.PrivateKey.Public().(ed25519.PublicKey)
-		writeJSON(w, http.StatusOK, map[string]string{"signer_domain": h.key.SignerDomain, "key_id": h.key.KeyID, "public_key": base64.RawStdEncoding.EncodeToString(publicKey)})
+		h.mu.Lock()
+		provenance := h.provenance
+		h.mu.Unlock()
+		body := map[string]any{"signer_domain": h.key.SignerDomain, "key_id": h.key.KeyID, "public_key": base64.RawStdEncoding.EncodeToString(publicKey)}
+		if provenance.KeyID == h.key.KeyID {
+			if !provenance.GeneratedAt.IsZero() {
+				body["generated_at"] = provenance.GeneratedAt.UTC().Format(time.RFC3339Nano)
+			}
+			if provenance.PriorKeyID != "" {
+				body["prior_key_id"] = provenance.PriorKeyID
+			}
+			body["generated_this_boot"] = provenance.Generated
+		}
+		writeJSON(w, http.StatusOK, body)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/sign-receipt" && h.mode == ModeGuestCore:
 		h.signReceipt(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/sign-verifier-certificate" && h.mode == ModeVerifier:
@@ -237,6 +258,40 @@ func (c *Client) PublicKey(ctx context.Context) (computerevent.SignerRef, ed2551
 		return computerevent.SignerRef{}, nil, fmt.Errorf("receipt signer client: invalid public key")
 	}
 	return computerevent.SignerRef{SignerDomain: result.SignerDomain, KeyID: result.KeyID}, ed25519.PublicKey(publicKey), nil
+}
+
+// PublicKeyProvenance is PublicKey with what the signer reports about the
+// key's origin (zero values from a signer that predates the report).
+func (c *Client) PublicKeyProvenance(ctx context.Context) (computerevent.SignerRef, ed25519.PublicKey, KeyProvenance, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://signer/v1/public-key", nil)
+	if err != nil {
+		return computerevent.SignerRef{}, nil, KeyProvenance{}, err
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return computerevent.SignerRef{}, nil, KeyProvenance{}, err
+	}
+	defer response.Body.Close()
+	var result struct {
+		SignerDomain      string `json:"signer_domain"`
+		KeyID             string `json:"key_id"`
+		PublicKey         string `json:"public_key"`
+		GeneratedAt       string `json:"generated_at"`
+		PriorKeyID        string `json:"prior_key_id"`
+		GeneratedThisBoot bool   `json:"generated_this_boot"`
+	}
+	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result) != nil || result.SignerDomain != c.mode {
+		return computerevent.SignerRef{}, nil, KeyProvenance{}, fmt.Errorf("receipt signer client: public key unavailable")
+	}
+	publicKey, err := base64.RawStdEncoding.DecodeString(result.PublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize || result.KeyID == "" {
+		return computerevent.SignerRef{}, nil, KeyProvenance{}, fmt.Errorf("receipt signer client: invalid public key")
+	}
+	provenance := KeyProvenance{KeyID: result.KeyID, PriorKeyID: result.PriorKeyID, Generated: result.GeneratedThisBoot}
+	if at, parseErr := time.Parse(time.RFC3339Nano, result.GeneratedAt); parseErr == nil {
+		provenance.GeneratedAt = at.UTC()
+	}
+	return computerevent.SignerRef{SignerDomain: result.SignerDomain, KeyID: result.KeyID}, ed25519.PublicKey(publicKey), provenance, nil
 }
 
 func (c *Client) SignReceipt(ctx context.Context, kind, issuer string, fields map[string]any, issuedAt time.Time) (computerevent.Receipt, error) {

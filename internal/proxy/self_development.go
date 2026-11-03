@@ -48,7 +48,7 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		return strings.TrimSpace(decoded), "read", true
 	case "rollbacks":
 		return strings.TrimSpace(decoded), "rollback", true
-	case "kernel-capabilities":
+	case "kernel-capabilities", "verifier-key":
 		return strings.TrimSpace(decoded), "read", true
 	case "adoptions":
 		// P8: GET lists (read); POST adopts a published release (the

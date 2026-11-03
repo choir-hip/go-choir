@@ -452,6 +452,22 @@ func buildRegistry() []*command {
 		computerPost("import-residue-snapshot", "Append current desktop+OG residue as one tape snapshot", "/lifecycle/import-residue-snapshot", nil, false),
 		ownerAct(computerCheckpointed("restore", "Restore VM-local state and served SPA from a checkpoint", "/lifecycle/restore", []string{"vm_local", "computer_surface_frontend"})),
 		ownerAct(computerPost("bootstrap-chain", "Establish a canonical event chain on a pre-genesis computer", "/lifecycle/bootstrap-chain", nil, true)),
+		computerGet("verifier-key", "Read the key this computer's verifier presents and the host's pin state for it", "/self-development/verifier-key", selfDevRead),
+		ownerAct(&command{
+			path:    []string{"computer", "repin-verifier"},
+			summary: "Owner's re-pin: pin the verifier key the computer now presents, replacing a pin it lost with its data disk (--reason)",
+			desc:    "A computer whose data disk was lost (a lost-disk boot, a cold recover) generates a new verifier key at its next boot, and the host refuses every verifier checkpoint it signs, so every approved apply is held. The re-pin revokes the active pin and pins the key the computer's verifier presents now; the proxy reads that key from the computer and checks with the host that another key is pinned before it signs the owner act, so the caller never names a key. The pin and the reason are recorded in the host's key history and on the computer's tape, and a held apply resumes. A computer on a guest release from before the re-pin cannot present its key (the proxy answers 409 and says so): abandon the held operation, refresh the computer onto the current release, then re-pin. An owner act: the key needs owner:acts, which admin does not imply.",
+			params: []param{
+				computerParam(),
+				pStr("reason", "Why the key is re-pinned (recorded with the pin)").req(),
+			},
+			usage:       "--computer and --reason are required",
+			scopes:      lifecycle,
+			destructive: true,
+			handler: func(x *call) (any, error) {
+				return sendRaw(x, http.MethodPost, computerPath(x, "/verifier-key/repin"), map[string]string{"reason": x.trim("reason")})
+			},
+		}),
 		{
 			path: []string{"computer", "producer-reports"}, summary: "List pending producer reports",
 			params: []param{
