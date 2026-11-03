@@ -9,10 +9,10 @@ Problem record: docs/problems/selfdev-round-blockers-cluster-2026-11-03.md. Muta
 | # | Proof | Result |
 |---|-------|--------|
 | 1 | Expedite | PASS for the walk and for d@e, owner, paper, pool; claude, deepseek, luna deferred (hibernated) |
-| 2 | Fix 10 rebase notice | PASS on pool; claude and deepseek NOT EXERCISED (never booted) |
+| 2 | Fix 10 rebase notice | PASS on pool, claude and deepseek |
 | 3 | Fix 11 publish | PASS on pool |
 | 4 | Fix 13 post-Freeze record | NOT EXERCISED (no apply, reject or fail since the deploy) |
-| 5 | Delegate via gateway | NOT EXERCISED (claude has not booted eb1fb6408); baseline recorded |
+| 5 | Delegate via gateway | (a) PASS; (b) and (c) NOT EXERCISED (no delegate run, no capsule) |
 
 ## 1. Expedite
 
@@ -43,7 +43,13 @@ Record: the stack operation's Texture document b1ad3952-5ab4-54e0-80ba-94d312f88
 5dc6a6ff-41d6-5ee6-9025-151c57bb5eff) logged `texture_turn_committed` at 10:45:41.95Z, 2 s after the mint,
 in `choir lifecycle events`. The Texture revision history (`texture history`) had no new revision by then
 (newest 8e1caca8, 07:19:36Z); the answering Cast is in flight or the turn made none. Not checked further.
-claude and deepseek: not booted, so no notice is due; NOT EXERCISED.
+
+Update 10:54Z. The coordinator started claude and deepseek at about 10:50Z (guest-release.json
+s7gylyyw5s4k, launched 10:47:41Z and 10:47:50Z; startup logs 10:47:48Z and 10:47:56Z):
+- claude: `10:52:48 rebase notice: minted rebase-notice:selfdev-40faf6ee056fec39eb534c07226ffb95:eb1fb6408ab8…:1 (attempt 1)`, 306 s after boot. Stack Texture ffb9e093-b523-567d-a48c-ce21357a802c (trajectory b48525f9-60e6-57ac-923e-a842ca7437b3): `texture_turn_committed` 10:52:56Z, `co_super_assignment_opened` 10:53:00Z, `co_super_assignment_bound` 10:53:05Z, so the notice's Cast reached management.
+- deepseek: `10:52:57 rebase notice: minted rebase-notice:selfdev-574077b31eef7feb3d5ce023ad0499ff:eb1fb6408ab8…:1 (attempt 1)`, 307 s after boot. Texture ddbdd1ae-2ae1-5c2d-ab8f-89058f98d6f6 (trajectory 8048fb68-0be2-59b0-b8d8-8b83c8319d4c): turn committed 10:53:03Z, assignment opened 10:53:08Z, bound 10:53:13Z.
+- Both operations are state applied (05:34Z and 06:12Z). No new Texture revision yet on either document (newest 07:16Z and 07:17Z); the follow-on assignment is running.
+Proof 2 therefore PASSES on all three stacked arms.
 
 ## 3. Fix 11 (pool PASS)
 
@@ -57,26 +63,24 @@ refusal was package_parent_unpublished; it no longer occurs.
 
 ## 4. Fix 13
 
+Rechecked 10:54Z: still no apply, reject or fail on any arm since the deploy; the new assignments on claude and deepseek have not decided.
 The only outcome on pool's Texture (b1ad3952) is the 06:43Z apply, before the fix; its newest revision
 is 07:19:36Z. No arm has applied, rejected or failed anything since 10:36Z, and reading the hibernated
 arms' Textures would wake them. NOT EXERCISED; recheck after lane C's queued requests settle.
 
 ## 5. Delegate via gateway (claude)
 
-- (a) Claude is hibernated on its pre-eb1fb6408 boot (09:47:29Z). Host-side file names only, from the
-  credential image with `debugfs -R "ls -l /"` (names and sizes, no reads): claude-delegate.json (153 B),
-  claude-oauth-token (109 B), gateway-token (101 B). That is the BASELINE (old boot, token still on the
-  disk). The proof (neither file after a fresh boot) is NOT EXERCISED. Positive signs: the running
-  vmctl unit no longer carries CHOIR_CLAUDE_DELEGATE_TOKEN_FILE or _EXPIRES (only _COMPUTERS); the
-  gateway unit carries GATEWAY_ANTHROPIC_OAUTH_TOKEN_FILE and the relay identities list including claude.
-- (b) `journalctl -u go-choir-gateway` since 10:36Z has no `anthropic relay` line; no delegate run
+- (a) PASS. After claude's fresh boot (launched 10:47:41Z; credential.img written 10:47:54Z), the host-side
+  names-only listing (`debugfs -R "ls -l /"`, no reads) is: computer-event-envelope (995 B), gateway-token (101 B).
+  No claude-oauth-token and no claude-delegate.json. Baseline on the pre-boot disk had both (153 B and 109 B).
+  The running vmctl unit no longer carries CHOIR_CLAUDE_DELEGATE_TOKEN_FILE or _EXPIRES (only _COMPUTERS, a grant list);
+  the gateway unit carries GATEWAY_ANTHROPIC_OAUTH_TOKEN_FILE and a relay identity list that includes claude.
+- (b) `journalctl -u go-choir-gateway` since 10:47Z has no `anthropic relay` line; no delegate run
   occurred. Not exercised, not forced.
 - (c) No claude-mode capsule log exists on this boot. Not exercised.
 
 ## Needs a fix or a follow-up
 
-1. The ring walk completes while hibernated arms still hold the old release; proofs 2, 4 and 5 need
-   claude and deepseek to wake (lane C's queued requests will do it) and a re-run of this doc then.
-2. The vmctl unit still names CHOIR_CLAUDE_DELEGATE_COMPUTERS; confirm it is only the grant record
-   (the credential image of claude after its fresh boot decides it).
-3. Fix 10: confirm the answering Cast from the stack Texture appears (no new Texture revision yet).
+1. Proof 4 and 5(b), 5(c) wait for a decision and a delegate run or claude-mode capsule on the arms; re-run then.
+2. Luna is still hibernated on the old release.
+3. The ring walk completed while hibernated arms held the old release; "complete" does not mean they run eb1fb6408.
