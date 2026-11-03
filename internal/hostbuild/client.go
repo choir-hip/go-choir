@@ -72,6 +72,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool) {
 		BaseStoreDiskPath:     get("CORPUSD_HOST_BUILD_BASE_STOREDISK", "/var/lib/go-choir/guest/storedisk.erofs"),
 		Installable:           get("CORPUSD_HOST_BUILD_INSTALLABLE", ".#autoputer"),
 		BaseStoreDiskBasePath: get("CORPUSD_HOST_BUILD_BASE_STOREDISK_BASE", ""),
+		ReleasesDir:           get("CORPUSD_HOST_BUILD_RELEASES_DIR", "/var/lib/go-choir/guest-releases"),
 	}
 	if d, err := time.ParseDuration(get("CORPUSD_HOST_BUILD_TIMEOUT", "")); err == nil {
 		cfg.BuildTimeout = d

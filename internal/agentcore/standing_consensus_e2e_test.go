@@ -592,6 +592,11 @@ func TestStandingConsensusEndToEndHostDissentRejects(t *testing.T) {
 	if job := f.hostBuildOf(t, verified); job.State != hostbuild.StateFailed || job.Reason != hostbuild.ReasonBuildFailed {
 		t.Fatalf("host build = %+v, want failed build_failed", job)
 	}
+	// Fix 12: the dissent's reason is on the operation, not only in
+	// corpusd's log.
+	if !strings.Contains(rejected.LastIntentError, "standing consensus dissent") || !strings.Contains(rejected.LastIntentError, hostbuild.ReasonBuildFailed) {
+		t.Fatalf("the rejected operation does not carry the dissent reason: %q", rejected.LastIntentError)
+	}
 	if f.service.restarts != 0 || f.applyCalls.Load() != 0 {
 		t.Fatalf("a rejected candidate applied (%d) or restarted (%d)", f.applyCalls.Load(), f.service.restarts)
 	}

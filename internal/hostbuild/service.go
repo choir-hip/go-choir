@@ -51,6 +51,15 @@ type Config struct {
 	// BaseStoreDiskBasePath is a layered image's base layer; empty for a
 	// single image (BaseStoreDiskPath is then the whole storedisk.erofs).
 	BaseStoreDiskBasePath string
+	// ReleasesDir holds the host's retained guest releases, one directory
+	// each with its guest-image-manifest and storedisk.erofs
+	// (/var/lib/go-choir/guest-releases; the retention rule keeps every
+	// release a running computer needs). A computer that booted a release
+	// older than the deployed image is built on that release, found by its
+	// manifest digest (fix 12,
+	// docs/problems/selfdev-round-blockers-cluster-2026-11-03.md). Empty: only
+	// the deployed image is a base.
+	ReleasesDir string
 
 	MaxQueue           int
 	BuildTimeout       time.Duration
@@ -383,23 +392,82 @@ func (s *Service) refuse(req Request, patch []byte) (string, string) {
 	if reason, detail := RefusePatchPaths(paths); reason != "" {
 		return reason, detail
 	}
-	return s.baseRefusal(req.BaseImageManifestDigest, req.BaseCommit)
+	_, reason, detail := s.baseRefusal(req.BaseImageManifestDigest, req.BaseCommit)
+	return reason, detail
 }
 
-// baseRefusal refuses a build whose booted base is not the host's deployed
-// guest image, or whose patch base is not that image's commit (H4, H19).
-func (s *Service) baseRefusal(bootedBase, baseCommit string) (string, string) {
-	raw, err := os.ReadFile(s.cfg.BaseManifestPath)
-	if err != nil {
-		return ReasonBaseMoved, "the host cannot read its deployed guest image manifest"
+// buildBase is the guest image a build is layered on: its manifest (whose
+// sha256 is the base identity), its store disk, and a layered image's base
+// layer.
+type buildBase struct {
+	ManifestPath, StoreDiskPath, StoreDiskBasePath string
+	manifest                                       []byte
+}
+
+// resolveBase finds the guest image the computer booted, by its manifest
+// digest: the host's deployed image, or else a retained single-image release
+// (a manifest and a storedisk.erofs that is a regular file, links followed:
+// the releases directory is root's, as the deployed image's link is) in
+// ReleasesDir. A layered retained release (no storedisk.erofs), a hidden or
+// temporary entry and anything that is not a directory are passed over; the
+// first match by name is used, so the answer is deterministic (a manifest
+// names one single image; a layered copy of it is the only duplicate on the
+// host). hostBase is the deployed image's digest, for the refusal; ok is
+// false when the computer's base is none of them, and err names a read that
+// failed.
+func (s *Service) resolveBase(bootedBase string) (base buildBase, hostBase string, ok bool, err error) {
+	raw, readErr := os.ReadFile(s.cfg.BaseManifestPath)
+	if readErr == nil {
+		hostBase = sha256Hex(raw)
+		if hostBase == bootedBase {
+			return buildBase{ManifestPath: s.cfg.BaseManifestPath, StoreDiskPath: s.cfg.BaseStoreDiskPath, StoreDiskBasePath: s.cfg.BaseStoreDiskBasePath, manifest: raw}, hostBase, true, nil
+		}
 	}
-	if hostBase := sha256Hex(raw); hostBase != bootedBase {
-		return ReasonBaseMoved, "the computer booted base " + bootedBase + "; the host's deployed guest image is " + hostBase + " (a deploy landed since the computer booted)"
+	dir := strings.TrimSpace(s.cfg.ReleasesDir)
+	if dir == "" {
+		return buildBase{}, hostBase, false, readErr
 	}
-	if commit := manifestBuildCommit(raw); commit != baseCommit {
-		return ReasonBaseCommitMismatch, "the patch was authored against " + baseCommit + "; the booted image was built from " + commit
+	entries, listErr := os.ReadDir(dir)
+	if listErr != nil {
+		return buildBase{}, hostBase, false, errors.Join(readErr, fmt.Errorf("retained guest releases %s: %w", dir, listErr))
 	}
-	return "", ""
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		if info, sErr := os.Stat(filepath.Join(dir, name)); sErr != nil || !info.IsDir() {
+			continue
+		}
+		manifestPath := filepath.Join(dir, name, "guest-image-manifest")
+		manifest, mErr := os.ReadFile(manifestPath)
+		if mErr != nil || sha256Hex(manifest) != bootedBase {
+			continue
+		}
+		disk := filepath.Join(dir, name, "storedisk.erofs")
+		if info, dErr := os.Stat(disk); dErr != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		return buildBase{ManifestPath: manifestPath, StoreDiskPath: disk, manifest: manifest}, hostBase, true, nil
+	}
+	return buildBase{}, hostBase, false, readErr
+}
+
+// baseRefusal refuses a build whose booted base is neither the host's
+// deployed guest image nor a retained release (H4), or whose patch base is
+// not that image's commit (H19). It returns the base to build on otherwise.
+func (s *Service) baseRefusal(bootedBase, baseCommit string) (buildBase, string, string) {
+	base, hostBase, ok, err := s.resolveBase(bootedBase)
+	if !ok {
+		if err != nil {
+			return buildBase{}, ReasonBaseMoved, "the computer booted base " + bootedBase + ", which is not the host's deployed guest image " + hostBase + ", and the host could not read every base it holds: " + err.Error()
+		}
+		return buildBase{}, ReasonBaseMoved, "the computer booted base " + bootedBase + "; the host's deployed guest image is " + hostBase + " and no retained guest release is that base (a deploy landed since the computer booted, and its release is gone)"
+	}
+	if commit := manifestBuildCommit(base.manifest); commit != baseCommit {
+		return buildBase{}, ReasonBaseCommitMismatch, "the patch was authored against " + baseCommit + "; the booted image was built from " + commit
+	}
+	return base, "", ""
 }
 
 // quotaRefusal is H21's bound; the caller holds s.mu.
@@ -541,7 +609,8 @@ func (s *Service) run(ctx context.Context, jobID string) {
 func (s *Service) build(ctx context.Context, job Job, workDir string) (*Result, string, string) {
 	// H19: a deploy may have landed while the job waited; build only against
 	// the base the computer booted.
-	if reason, detail := s.baseRefusal(job.BaseImageManifestDigest, job.BaseCommit); reason != "" {
+	base, reason, detail := s.baseRefusal(job.BaseImageManifestDigest, job.BaseCommit)
+	if reason != "" {
 		return nil, reason, detail
 	}
 	if err := os.MkdirAll(workDir, 0o700); err != nil {
@@ -552,9 +621,9 @@ func (s *Service) build(ctx context.Context, job Job, workDir string) (*Result, 
 	res, err := s.cfg.Build(buildCtx, builder.Request{
 		Installable:           s.cfg.Installable,
 		ResultLink:            filepath.Join(workDir, "result"),
-		BaseManifestPath:      s.cfg.BaseManifestPath,
-		BaseStoreDiskPath:     s.cfg.BaseStoreDiskPath,
-		BaseStoreDiskBasePath: s.cfg.BaseStoreDiskBasePath,
+		BaseManifestPath:      base.ManifestPath,
+		BaseStoreDiskPath:     base.StoreDiskPath,
+		BaseStoreDiskBasePath: base.StoreDiskBasePath,
 		OutDir:                filepath.Join(workDir, "out"),
 		SourceDir:             s.cfg.SourceDir,
 		SourcePatch:           s.patchPath(job.JobID),
@@ -579,7 +648,7 @@ func (s *Service) build(ctx context.Context, job Job, workDir string) (*Result, 
 		return nil, ReasonBuildFailed, "the builder built a different patch or base than the job names"
 	}
 	if res.Base.GuestImageManifestDigest != job.BaseImageManifestDigest {
-		return nil, ReasonBaseMoved, "the builder resolved base " + res.Base.GuestImageManifestDigest + "; the computer booted " + job.BaseImageManifestDigest + " (a deploy landed during the build)"
+		return nil, ReasonBaseMoved, "the builder resolved base " + res.Base.GuestImageManifestDigest + "; the computer booted " + job.BaseImageManifestDigest + " (the base changed during the build)"
 	}
 	if !computerevent.IsSHA256(res.ExportedDigest) || strings.TrimSpace(res.RuntimePath) == "" {
 		return nil, ReasonBuildFailed, "the builder returned no closure"

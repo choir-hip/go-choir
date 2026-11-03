@@ -219,6 +219,13 @@ func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifi
 			decision.IdempotencyKey = "standing-consensus-dissent-" + response.BallotDigests[0]
 			decision.ConsensusDissent = response.BallotDigests[0]
 			decision.Reason = "standing consensus dissent: " + response.Reason
+			// The reason goes on the operation before the reject, so the
+			// owner reads it from the operation, not from corpusd's log
+			// (fix 12, docs/problems/selfdev-round-blockers-cluster-2026-11-03.md);
+			// the reject's owner-act record carries it to Texture.
+			if recordErr := rt.selfdevOperations.RecordIntentError(ctx, computerID, operationID, decision.Reason); recordErr != nil {
+				log.Printf("agentcore: standing consensus %s: record the dissent reason: %v", operationID, recordErr)
+			}
 		case status == http.StatusConflict && response.Pending:
 			// The host's job is not terminal yet; it does not spend an attempt.
 			if waitErr := sleepContext(ctx, rt.standingHostBuildPoll()); waitErr != nil {

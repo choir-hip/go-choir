@@ -684,3 +684,78 @@ func TestJobRecordIsTheWireShape(t *testing.T) {
 		t.Fatal("the job record carries the patch bytes")
 	}
 }
+
+// Fix 12 (docs/problems/selfdev-round-blockers-cluster-2026-11-03.md): a
+// computer that booted a release older than the deployed image is built on
+// that release when the host still retains it. Ways it can fail, written
+// before the code: a build on a base no computer runs or the host cannot
+// verify (digest matched against the manifest bytes), a layered or hidden
+// retained directory used as a single image, a base commit that is not the
+// retained release's, and a refusal that hides the reason.
+func TestBaseIsARetainedReleaseTheComputerBooted(t *testing.T) {
+	h := newHarness(t)
+	releases := filepath.Join(h.dir, "guest-releases")
+	oldCommit := strings.Repeat("7", 40)
+	oldManifest := "contract=choir-guest-image-v1\nbuild_commit=" + oldCommit + "\nold=1\n"
+	write := func(rel, name, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(releases, rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(releases, rel, name), []byte(content), 0o444); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A layered copy (no storedisk.erofs) and a hidden temporary tree carry the
+	// same manifest and sort first; neither is a base.
+	write("aaa-layered", "guest-image-manifest", oldManifest)
+	write("aaa-layered", "storedisk-app.erofs", "app")
+	write(".tmp-zzz", "guest-image-manifest", oldManifest)
+	write(".tmp-zzz", "storedisk.erofs", "tmp")
+	write("bbb-old", "guest-image-manifest", oldManifest)
+	write("bbb-old", "storedisk.erofs", "old-erofs")
+	h.cfg.ReleasesDir = releases
+	var used builder.Request
+	h.build = func(ctx context.Context, req builder.Request) (*builder.ClosureResult, error) {
+		used = req
+		return fakeBuild(req)
+	}
+	svc := h.service()
+
+	req := h.request("computer-a", goPatch)
+	req.BaseImageManifestDigest, req.BaseCommit = sha256Hex([]byte(oldManifest)), oldCommit
+	job, err := svc.Submit(req)
+	if err != nil || job.Terminal() {
+		t.Fatalf("a retained booted base must queue: %+v %v", job, err)
+	}
+	job = waitTerminal(t, svc, "computer-a", job.JobID)
+	if job.State != StateDone || job.Result == nil || job.Result.BaseImageManifestDigest != req.BaseImageManifestDigest {
+		t.Fatalf("build on the retained base = %+v", job)
+	}
+	if used.BaseManifestPath != filepath.Join(releases, "bbb-old", "guest-image-manifest") || used.BaseStoreDiskPath != filepath.Join(releases, "bbb-old", "storedisk.erofs") || used.BaseStoreDiskBasePath != "" {
+		t.Fatalf("the build must layer on the retained single image: %+v", used)
+	}
+
+	// The retained release's own commit is the one a patch must be based on.
+	lagging := h.request("computer-b", goPatch)
+	lagging.BaseImageManifestDigest = sha256Hex([]byte(oldManifest))
+	if job, err := svc.Submit(lagging); err != nil || job.Reason != ReasonBaseCommitMismatch {
+		t.Fatalf("a patch on another commit than the retained base's: %+v %v", job, err)
+	}
+	// A base neither deployed nor retained still refuses, and says so.
+	gone := h.request("computer-c", goPatch)
+	gone.BaseImageManifestDigest = strings.Repeat("e", 64)
+	if job, err := svc.Submit(gone); err != nil || job.Reason != ReasonBaseMoved || !strings.Contains(job.Detail, "no retained guest release") {
+		t.Fatalf("an unknown base: %+v %v", job, err)
+	}
+	// A releases directory the host cannot read is named, not reported as a
+	// release that is gone.
+	h2 := newHarness(t)
+	h2.cfg.ReleasesDir = filepath.Join(h2.dir, "missing")
+	svc2 := h2.service()
+	unread := h2.request("computer-d", goPatch)
+	unread.BaseImageManifestDigest = strings.Repeat("e", 64)
+	if job, err := svc2.Submit(unread); err != nil || job.Reason != ReasonBaseMoved || !strings.Contains(job.Detail, "could not read") {
+		t.Fatalf("an unreadable releases dir: %+v %v", job, err)
+	}
+}
