@@ -115,6 +115,23 @@ type Executor struct {
 	// which every broker hands its jobs (broker_env.go).
 	browser    string
 	fontconfig string
+	// hostMemory reports build capsules' host reservations to vmctl and
+	// reads the host facts back (S4, capsule_size.go); nil runs as before.
+	hostMemory HostMemory
+}
+
+// SetHostMemory installs the host's side of capsule heavy work. It applies
+// to capsules spawned and jobs started afterwards.
+func (e *Executor) SetHostMemory(hm HostMemory) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.hostMemory = hm
+}
+
+func (e *Executor) hostMemoryHook() HostMemory {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.hostMemory
 }
 
 // SetClaudeDelegateSource names the credential directory holding the Claude
@@ -463,6 +480,28 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	// first deferred call runs last, so the total sees the cleanup's error.
 	timer := newSpawnPhaseTimer(spec.CapsuleID)
 	defer func() { timer.done(retErr) }()
+	// A build capsule reserves its peak on the host first, off the executor
+	// lock (S4): a refusal refuses the spawn with the host's reason; a host
+	// that cannot be asked leaves the spawn as before. A spawn that fails
+	// later gives the reservation back, unless the failure was a capsule of
+	// the same id that already holds it.
+	if bytes := spec.SizeClass.HostReservationBytes(); bytes > 0 {
+		if hm := e.hostMemoryHook(); hm != nil && !e.HasCapsule(spec.CapsuleID) {
+			if err := hm.AdmitBuild(ctx, spec.CapsuleID, bytes); err != nil {
+				var refusal *HostMemoryRefusal
+				if errors.As(err, &refusal) {
+					return nil, err
+				}
+				log.Printf("capsule %s: host build reservation not confirmed, spawning as before: %v", spec.CapsuleID, err)
+			}
+			defer func() {
+				if retErr != nil && !e.HasCapsule(spec.CapsuleID) {
+					hm.ReleaseBuild(spec.CapsuleID)
+				}
+			}()
+			timer.phase("host_admission")
+		}
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	timer.phase("executor_lock")
@@ -1031,6 +1070,11 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	caps.State = StateDestroyed
 	delete(e.capsules, id)
 	e.vmMemoryUsed -= caps.admittedMemory()
+	// Its host build reservation ends with it (S4); ReleaseBuild never
+	// blocks.
+	if e.hostMemory != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
+		e.hostMemory.ReleaseBuild(id)
+	}
 	// Job memory boosts end with the capsule (J8): returned to the budget
 	// here, their lease shares released off the executor lock.
 	for _, release := range e.returnMemoryBoostsLocked(caps) {

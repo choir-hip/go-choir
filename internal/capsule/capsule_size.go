@@ -1,6 +1,9 @@
 package capsule
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // Size classes at spawn (station S4,
 // docs/design/capsule-heavy-work-scheduling-2026-11-03.md, point 1).
@@ -55,4 +58,54 @@ func (c SizeClass) HostReservationBytes() int64 {
 		return BuildPeakBytes
 	}
 	return 0
+}
+
+// HostMemory is the host's side of capsule heavy work (S4): the guest's
+// report of its live build reservations to vmctl, and the host facts that
+// come back. A nil HostMemory (no vmctl, a test) runs as before: nothing is
+// reserved and no job waits.
+type HostMemory interface {
+	// AdmitBuild asks the host to reserve bytes for a build capsule about
+	// to spawn. A *HostMemoryRefusal is the host's refusal, which refuses
+	// the spawn; any other error is logged and the spawn goes on.
+	AdmitBuild(ctx context.Context, capsuleID string, bytes int64) error
+	// ReleaseBuild drops a capsule's reservation (its spawn failed or it
+	// ended). It never blocks.
+	ReleaseBuild(capsuleID string)
+	// Facts is the host's latest facts and whether they are fresh enough
+	// to act on.
+	Facts() (HostMemoryFacts, bool)
+}
+
+// HostMemoryRefusal is the host refusing a build spawn, with its reason.
+type HostMemoryRefusal struct{ Reason string }
+
+func (r *HostMemoryRefusal) Error() string {
+	return "host memory refused the build capsule: " + r.Reason
+}
+
+// HostMemoryFacts is what the host publishes for heavy work: MemAvailable
+// over the floor less what is promised to others, and PSI memory pressure.
+type HostMemoryFacts struct {
+	HeadroomBytes   int64
+	MemorySomeAvg10 float64
+	PressureHigh    bool
+	// Protected is the paper or the owner's computer: its jobs never wait.
+	Protected bool
+}
+
+// HostMemoryWaitReason says why a build-class job should wait now, or ""
+// to start it. Facts that are not fresh start it, as before S4; the host
+// floor stays the hard stop.
+func HostMemoryWaitReason(facts HostMemoryFacts, fresh bool) string {
+	if !fresh || facts.Protected {
+		return ""
+	}
+	if facts.PressureHigh {
+		return fmt.Sprintf("waiting for host memory: the host is under memory pressure (PSI some avg10 %.1f%%)", facts.MemorySomeAvg10)
+	}
+	if facts.HeadroomBytes < BuildPeakBytes {
+		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor, under one build's %d MiB", facts.HeadroomBytes>>20, BuildPeakBytes>>20)
+	}
+	return ""
 }

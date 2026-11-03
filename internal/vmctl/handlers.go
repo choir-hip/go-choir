@@ -1488,6 +1488,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/remove", attributedLifecycle(h.HandleRemove))
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
 	s.HandleFunc(effectiveReleaseReportPath, h.HandleEffectiveReleaseReport)
+	s.HandleFunc(capsuleReservationsPath, h.HandleCapsuleReservations)
 	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
 	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
 	s.HandleFunc("/internal/vmctl/deploy-refresh", attributedLifecycle(h.HandleDeployRefresh))

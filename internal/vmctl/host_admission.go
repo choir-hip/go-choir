@@ -214,6 +214,9 @@ type hostMemoryLedger struct {
 	// taken. Memory only, one entry per VM.
 	expired map[string]*admissionReservation
 	recent  []HostAdmissionDecision
+	// builds are each computer's live build-class capsule reservations,
+	// part of the reserved term (capsule_reservations.go). Memory only.
+	builds map[string]*buildReservationSet
 }
 
 func (l *hostMemoryLedger) initLocked() {
@@ -228,6 +231,9 @@ func (l *hostMemoryLedger) initLocked() {
 	}
 	if l.expired == nil {
 		l.expired = map[string]*admissionReservation{}
+	}
+	if l.builds == nil {
+		l.builds = map[string]*buildReservationSet{}
 	}
 }
 
@@ -276,6 +282,11 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 		}
 		views = append(views, view)
 	}
+	// Live capsule builds hold what their computers have not yet grown
+	// into (S4, capsule_reservations.go).
+	buildTotal, _, buildViews := l.buildOutstandingLocked(now, cfg)
+	total += buildTotal
+	views = append(views, buildViews...)
 	sort.Slice(views, func(i, j int) bool {
 		if views[i].ID != views[j].ID {
 			return views[i].ID < views[j].ID
@@ -760,9 +771,11 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 	}
 	for vmID := range led.rss {
 		if _, live := readings[vmID]; !live {
-			// The VM stopped: its next start measures afresh.
+			// The VM stopped: its next start measures afresh, and its
+			// capsules ended with it.
 			delete(led.rss, vmID)
 			delete(led.peak, vmID)
+			delete(led.builds, vmID)
 		}
 	}
 	// Settle windows that ended since the last reading end here, and every
