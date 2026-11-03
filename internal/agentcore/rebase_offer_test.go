@@ -196,3 +196,25 @@ func TestOrdinaryAssignmentNeverCarriesAnAppliedOperation(t *testing.T) {
 		t.Fatalf("something was written for an ordinary assignment: %v", entries)
 	}
 }
+
+// A rebase is not a new change: the notice asks for the checks the change
+// already passed, not screenshots or exploration. Claude's and pool's rebases
+// onto 059763bb (one upstreamed hunk) took 50-53 min, 38 of them in
+// screenshot and spec work the old "re-run the build, tests and checks" line
+// invited.
+func TestRebaseNoticeAsksOnlyForTheChangesOwnChecks(t *testing.T) {
+	for _, offer := range []carriedPatchOffer{
+		{Status: carriedOffered, RebaseNotice: "n", RebaseOf: "op", PatchSHA256: "abc", Files: []string{"frontend/src/packages/files-next/App.svelte"}},
+		{Status: carriedOffered, RebaseNotice: "n", RebaseOf: "op", PatchSHA256: "abc", Files: []string{"frontend/src/lib/app-sdk.ts"}, ConflictPaths: []string{"frontend/src/lib/app-sdk.ts"}},
+	} {
+		got := rebasePatchNotice(offer)
+		for _, want := range []string{"the frontend build job", "the toolchain cell", "the bin/autoputer build job instead", "takes no screenshots", "already has needs no edit"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("notice lacks %q:\n%s", want, got)
+			}
+		}
+		if strings.Contains(got, "Re-run the build, tests and checks") {
+			t.Fatalf("notice still asks for every check:\n%s", got)
+		}
+	}
+}

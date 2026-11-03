@@ -230,7 +230,8 @@ func rebasePatchNotice(offer carriedPatchOffer) string {
 		} else {
 			b.WriteString(" It applies to this base: apply it from /workspace/platform with `git apply /selfdev/carried/source.patch`.")
 		}
-		b.WriteString(" Re-run the build, tests and checks in this capsule after your last write; Freeze judges only this capsule's own diff, and when the candidate is applied the platform checks that it still contains this change.")
+		b.WriteString(" A rejected hunk whose change the new base already has needs no edit: leave it, and Freeze records it as upstreamed; do not read further to confirm it.")
+		b.WriteString(" Then run only the checks this change already had to pass, one job each, which give Freeze its three receipts: the build (the frontend build job; for a patch that touches a Go input, the bin/autoputer build job instead), the test (for a change under frontend/src/packages the theme-contract check for that package, choir-spec.sh with --grep \"package <name> has\"; otherwise the spec or go test that covers the changed file), and the toolchain cell (go version, node --version, npm --version). A rebase takes no screenshots, runs no other specs and explores no code beyond the conflicts: the change was judged when it was first applied. Freeze judges only this capsule's own diff, and when the candidate is applied the platform checks that it still contains this change.")
 	default:
 		fmt.Fprintf(&b, "Rebase request (notice %s): the applied change %s is not mounted in this capsule: %s. /workspace/platform is the newer platform base (%s) with nothing applied; reproduce the change from the objective.",
 			offer.RebaseNotice, offer.RebaseOf, offer.Reason, carriedBaseLabel(offer.RetryBaseRef))
