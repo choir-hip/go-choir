@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: lanes A (planted-fault walk stalled at R0 on a failed d@e wake; fix and owner start), C (Files round 3 on claude and deepseek after FP0 rejections), E (S4 queued; capsule overlay design in review round 2); B done; F designed; onboarding landed
+  slice: lanes A (first real walk at R0 on 9b8ff2432; S4 main e8db56021 in CI; expedite, test-tier arms and minute soaks for R0/R1 queued), C (Files candidates applied on pool and claude; Library publish waits on the app-sdk exports in e8db56021), E (capsule overlay S0-S3 and S4 source building; selfdev auto-apply with management gating designing; round cycle-time trace review running); store split settled complete
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
@@ -136,6 +136,6 @@ now:
   main_uncertainty: whether arms hit stack_base_moved or stale open operations after the deploy refreshes them
   next_observation: staging build identity after CI; first Files Cast per arm
   blocker: none
-  next_action: unblock the R0 walk (d@e wake retry), finish the rollback proof, then land S4, the logout-retry script and the batched docs
+  next_action: get e8db56021 deployed and its walk to R1; land the delegate bypass-permissions commit; act on the cycle-time trace findings
 
 receipts: []
