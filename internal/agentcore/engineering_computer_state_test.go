@@ -42,4 +42,12 @@ func TestBrowserRecipeNamesComputerStateOnlyForImplementation(t *testing.T) {
 	if !strings.Contains(impl, "\n- Link, run and unlink inside one job") {
 		t.Fatal("the bullet after the replacement lost its line break")
 	}
+	// luna Slides round 7: two implementation engineers with a loopback
+	// quoted the networkless line and took no shots.
+	if strings.Contains(impl, "networkless") || !strings.Contains(impl, "it has a loopback") {
+		t.Fatalf("implementation recipe still tells the engineer it may be networkless: %s", impl)
+	}
+	if !strings.Contains(verify, "In a networkless capsule (every verification capsule) Vite cannot bind") {
+		t.Fatalf("verification recipe lost the networkless line: %s", verify)
+	}
 }

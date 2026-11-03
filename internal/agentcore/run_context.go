@@ -126,7 +126,15 @@ const capsuleBrowserRecipe = "Capsule browser recipe (authoritative; node, npm a
 	"- Link, run and unlink inside one job, ending as the build job does (s=$?; rm -rf node_modules; exit $s), write the screenshots you want the owner to see as .png files in /var/lib/artifact/screens/ (Freeze saves them as files Texture embeds) and other JSON and Playwright output under /tmp, never under /workspace/platform: a job that leaves the workspace changed is refused as evidence, and a leftover link freezes into the candidate.\n" +
 	"- A frontend spec (import ... from '@playwright/test') fails with ERR_MODULE_NOT_FOUND in the bare workspace: run it as a job through sh /workspace/platform/scripts/choir-spec.sh tests/<spec>.js [playwright args], which links the locked node_modules, runs playwright test and removes the link. theme-contract.spec.js has a test per first-party package: --grep \"package <name> has\" runs only that package's check. Do not create or leave a frontend/node_modules directory yourself: choir-spec.sh refuses one that is not its link, and choir-shot.mjs builds in a private copy under /tmp and ignores it.\n" +
 	"- Do not hand-write the Playwright script: node /workspace/platform/scripts/choir-shot.mjs --shots /tmp/shots.mjs [--only <name>] [--preset mobile] builds once, serves, waits for idle and a selector, and writes the PNGs to /var/lib/artifact/screens/; run it as a job, one shot while iterating and the whole set once before Freeze.\n" +
-	"- A browser needs the capsule's loopback, which only an ecosystem_proxy or claude capsule has. In a networkless capsule (every verification capsule) Vite cannot bind: say so in the report instead of probing."
+	capsuleNetworklessLine
+
+// capsuleNetworklessLine is the last bullet of the verification recipe. An
+// implementation capsule replaces it: luna's Slides round 7 engineers (two,
+// ecosystem_proxy, /computer provided) quoted it and served nothing, though
+// their capsule had a loopback.
+const capsuleNetworklessLine = "- A browser needs the capsule's loopback, which only an ecosystem_proxy or claude capsule has. In a networkless capsule (every verification capsule) Vite cannot bind: say so in the report instead of probing."
+
+const capsuleImplementationLoopbackLine = "- This is an implementation capsule: it has a loopback, so Vite, the autoputer over /computer and the browser all run here. Serve real content as the bullet above says; when there is no bin/autoputer under /var/lib/artifact/release (a change with no Go input), building /tmp/autoputer first is part of taking the shots, not a reason to skip them."
 
 // capsuleComputerStateRecipe replaces the mock bullet for an implementation
 // capsule, the only kind with /computer
@@ -139,7 +147,8 @@ func capsuleBrowserRecipeFor(implementation bool) string {
 	if !implementation {
 		return capsuleBrowserRecipe
 	}
-	return strings.Replace(capsuleBrowserRecipe, "- Mock the backend with context.route for signed-in views.\n", capsuleComputerStateRecipe, 1)
+	r := strings.Replace(capsuleBrowserRecipe, "- Mock the backend with context.route for signed-in views.\n", capsuleComputerStateRecipe, 1)
+	return strings.Replace(r, capsuleNetworklessLine, capsuleImplementationLoopbackLine, 1)
 }
 
 // runContextText renders the run context: the time to the second, then the
