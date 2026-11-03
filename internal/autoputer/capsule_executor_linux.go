@@ -104,17 +104,13 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 	} else if ok {
 		executor.SetGoModuleProxy(goProxy)
 	}
-	// Claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md):
-	// the grant and token are on the credential disk only for the
-	// allowlisted computer; elsewhere the status reads "not allowlisted".
-	delegateDir := strings.TrimSpace(os.Getenv("CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR"))
-	if delegateDir == "" {
-		delegateDir = capsule.DefaultClaudeDelegateCredentialDir
-	}
-	executor.SetClaudeDelegateSource(delegateDir, os.Getenv(capsule.ClaudeDelegateBrokerBinEnv))
-	if status := executor.ClaudeDelegateStatus(); status.Available {
-		log.Printf("capsule executor: claude delegate %s", status.Reason)
-	}
+	// Claude delegate (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md):
+	// the gateway holds the credential and answers this computer's grant;
+	// a claude-mode capsule reaches the gateway's relay through its egress
+	// proxy, which adds this computer's gateway bearer. No credential is on
+	// this computer's disk for it.
+	executor.SetClaudeDelegateGateway(os.Getenv("RUNTIME_GATEWAY_URL"), provideriface.GatewayToken, os.Getenv(capsule.ClaudeDelegateBrokerBinEnv))
+	log.Printf("capsule executor: claude delegate grant is read from the gateway")
 	// The store Chromium every computer's jobs may launch (Playwright), and
 	// the fontconfig file it renders text with. No grant.
 	executor.SetBrowser(os.Getenv("CHOIR_BROWSER_BIN"), os.Getenv("CHOIR_FONTCONFIG_FILE"))
@@ -128,7 +124,7 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 	}
 	mirrorDir := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_MIRROR_CREDENTIAL_DIR"))
 	if mirrorDir == "" {
-		mirrorDir = capsule.DefaultClaudeDelegateCredentialDir
+		mirrorDir = capsule.DefaultCredentialDir
 	}
 	executor.SetCapsuleMirrors(mirrorAddr, mirrorDir)
 	log.Printf("capsule executor: package mirrors: %s", executor.CapsuleMirrorStatus().Reason)

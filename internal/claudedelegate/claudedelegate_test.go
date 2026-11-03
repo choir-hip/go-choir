@@ -118,13 +118,26 @@ func TestEnvCarriesTheTokenOnlyAndDropsProviderSwitches(t *testing.T) {
 		k, v, _ := strings.Cut(kv, "=")
 		got[k] = append(got[k], v)
 	}
-	for _, banned := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "AWS_BEARER_TOKEN_BEDROCK", "GITHUB_TOKEN", "OPENAI_API_KEY", "CHOIR_CLAUDE_DELEGATE_TOKEN", "MY_SECRET"} {
+	for _, banned := range []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "AWS_BEARER_TOKEN_BEDROCK", "GITHUB_TOKEN", "OPENAI_API_KEY", "CHOIR_CLAUDE_DELEGATE_TOKEN", "MY_SECRET"} {
 		if _, ok := got[banned]; ok {
 			t.Errorf("%s reached the claude environment", banned)
 		}
 	}
 	if v := got[TokenEnv]; len(v) != 1 || v[0] != fakeToken {
 		t.Errorf("%s = %v, want exactly the token once", TokenEnv, len(v))
+	}
+	// The relay route, never the provider directly, and no OAuth variable:
+	// the credential stays on the host.
+	if v := got["ANTHROPIC_BASE_URL"]; len(v) != 1 || v[0] != BaseURL {
+		t.Errorf("ANTHROPIC_BASE_URL = %v, want [%s] once", v, BaseURL)
+	}
+	if _, ok := got["CLAUDE_CODE_OAUTH_TOKEN"]; ok {
+		t.Error("CLAUDE_CODE_OAUTH_TOKEN reached the claude environment")
+	}
+	for _, k := range []string{"ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL"} {
+		if v := got[k]; len(v) != 1 || v[0] != Model {
+			t.Errorf("%s = %v, want [%s]", k, v, Model)
+		}
 	}
 	for k, want := range map[string]string{
 		"HOME": "/tmp/choir-delegate/d1/home", "PATH": "/run/current-system/sw/bin", "GOPROXY": "http://goproxy.choir.internal,off",
@@ -189,9 +202,9 @@ read prompt
 echo "{\"type\":\"system\",\"subtype\":\"init\",\"prompt_seen\":\"$prompt\"}"
 env | sed 's/"/ /g' | while read line; do echo "{\"type\":\"debug\",\"env\":\"$line\"}"; done
 if [ -n "$ANTHROPIC_API_KEY" ]; then echo '{"type":"debug","api_key":"present"}'; else echo '{"type":"debug","api_key":"unset"}'; fi
-echo "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"token is $CLAUDE_CODE_OAUTH_TOKEN\"},{\"type\":\"tool_use\",\"name\":\"Edit\"}]}}"
-echo "leaked to stderr: $CLAUDE_CODE_OAUTH_TOKEN" >&2
-echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"num_turns\":3,\"session_id\":\"123e4567-e89b-12d3-a456-426614174000\",\"total_cost_usd\":0.42,\"usage\":{\"input_tokens\":10},\"modelUsage\":{\"claude-opus-5-5\":{\"inputTokens\":10}},\"permission_denials\":[],\"result\":\"done; by the way $CLAUDE_CODE_OAUTH_TOKEN\"}"
+echo "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"token is $ANTHROPIC_AUTH_TOKEN\"},{\"type\":\"tool_use\",\"name\":\"Edit\"}]}}"
+echo "leaked to stderr: $ANTHROPIC_AUTH_TOKEN" >&2
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"num_turns\":3,\"session_id\":\"123e4567-e89b-12d3-a456-426614174000\",\"total_cost_usd\":0.42,\"usage\":{\"input_tokens\":10},\"modelUsage\":{\"claude-opus-5-5\":{\"inputTokens\":10}},\"permission_denials\":[],\"result\":\"done; by the way $ANTHROPIC_AUTH_TOKEN\"}"
 `
 
 func TestServerRedactsTheTokenFromEveryRunFile(t *testing.T) {
@@ -333,7 +346,7 @@ func TestServerWithoutTokenIsUnavailable(t *testing.T) {
 }
 
 func TestServerRecordsAFailedRun(t *testing.T) {
-	srv := NewServer(t.TempDir(), fakeToken, []string{"PATH=" + os.Getenv("PATH")}, fakeClaude(t, "echo \"error: unknown option '--x' $CLAUDE_CODE_OAUTH_TOKEN\" >&2\nexit 1\n"))
+	srv := NewServer(t.TempDir(), fakeToken, []string{"PATH=" + os.Getenv("PATH")}, fakeClaude(t, "echo \"error: unknown option '--x' $ANTHROPIC_AUTH_TOKEN\" >&2\nexit 1\n"))
 	if _, err := srv.Start(Spec{Objective: "x", MaxTurns: 1, MaxBudgetUSD: 1, WallClockMin: 1}); err != nil {
 		t.Fatal(err)
 	}

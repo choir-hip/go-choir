@@ -12,7 +12,11 @@ Mutation class of any fix: **red** (credential custody, gateway and provider
 calls, the guest credential disk, capsule egress). Problem first; no fix in
 the commit that wrote this record. Status: the gateway half is built and dark
 (station FP7); the guest half and the owner's Console API key are open, so the
-key still sits on the disk (Option T) until both land.
+key still sits on the disk (Option T) until both land. 2026-11-03: the guest
+half is built, and the relay holds the owner's token on the host (or a
+Console key) instead of the guest disk
+([claude-delegate-token-on-three-computers-2026-11-03.md](claude-delegate-token-on-three-computers-2026-11-03.md),
+design section).
 
 ## The problem in one sentence
 

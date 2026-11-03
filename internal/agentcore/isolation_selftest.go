@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -264,18 +265,26 @@ func deskCellSelfTestConfig(computerID string) yaegikernel.DeskCellSelfTestConfi
 		},
 		// Things a desk cell must never read: the owner's files and the
 		// runtime's store (world-readable directories: only Landlock
-		// refuses them), the credential disk's mount (it carries the
-		// Claude delegate's token on an allowlisted computer) and its
-		// gateway token (root 0600), and the guest signer sockets'
-		// directory.
+		// refuses them), the credential disk's mount (the directory of
+		// the gateway token) and the gateway token itself (root 0600), and
+		// the guest signer sockets' directory.
 		ExtraReads: []string{
 			os.Getenv("AUTOPUTER_FILES_ROOT"),
 			os.Getenv("RUNTIME_STORE_PATH"),
-			strings.TrimSpace(os.Getenv("CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR")),
+			credentialDiskDir(os.Getenv("RUNTIME_GATEWAY_TOKEN_FILE")),
 			strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN_FILE")),
 			"/run/choir-signers",
 		},
 	}
+}
+
+// credentialDiskDir is the credential disk's mount: the directory of the
+// gateway token file, or "" without one.
+func credentialDiskDir(tokenFile string) string {
+	if tokenFile = strings.TrimSpace(tokenFile); tokenFile == "" {
+		return ""
+	}
+	return filepath.Dir(tokenFile)
 }
 
 // guestEgressTargets derives the probe set from the gateway URL's host (the

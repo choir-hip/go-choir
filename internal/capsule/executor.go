@@ -106,15 +106,18 @@ type Executor struct {
 	// runningBinary identifies the executable Freeze may reuse as a
 	// release's bin/autoputer; nil means CurrentRunningBinary.
 	runningBinary func() (RunningBinary, error)
-	// claudeDelegateDir and claudeBinary locate the Claude delegate's grant,
-	// token and binary (claude_delegate.go); empty dir means no delegate.
-	claudeDelegateDir string
+	// claudeBinary is the claude binary a claude-mode broker runs;
+	// claudeRelayAddr and claudeRelayBearer are the gateway and this
+	// computer's bearer for the capsule's model relay route
+	// (egress_model_relay.go).
 	claudeBinary      string
-	// claudeDelegateSource is the same pair, readable without e.mu, so
+	claudeRelayAddr   netip.AddrPort
+	claudeRelayBearer func() string
+	// claudeDelegate reads the gateway's grant, without e.mu, so
 	// ClaudeDelegateStatus never waits behind a teardown that holds e.mu
 	// for its whole run (engineering-completion-path-cluster-2026-10-20.md,
 	// failure 9).
-	claudeDelegateSource atomic.Pointer[claudeDelegateSource]
+	claudeDelegate atomic.Pointer[ClaudeDelegateGateway]
 	// jobs are the capsule jobs this process started (jobs.go); jobDone is
 	// the runtime's completion handler. (The per-job memory-lease seam,
 	// JobAdmission, was deleted in S4: a build capsule reserves its peak on
@@ -144,17 +147,18 @@ func (e *Executor) hostMemoryHook() HostMemory {
 	return e.hostMemory
 }
 
-// SetClaudeDelegateSource names the credential directory holding the Claude
-// delegate grant and token, and the claude binary. It applies to capsules
-// spawned afterwards.
-func (e *Executor) SetClaudeDelegateSource(dir, binary string) {
+// SetClaudeDelegateGateway names the gateway that holds the Claude
+// delegate's credential and answers this computer's grant, this computer's
+// gateway bearer, and the claude binary. It applies to capsules spawned
+// afterwards.
+func (e *Executor) SetClaudeDelegateGateway(gatewayURL string, bearer func() string, binary string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.claudeDelegateDir, e.claudeBinary = strings.TrimSpace(dir), strings.TrimSpace(binary)
-	e.claudeDelegateSource.Store(&claudeDelegateSource{dir: e.claudeDelegateDir, binary: e.claudeBinary})
+	e.claudeBinary = strings.TrimSpace(binary)
+	e.claudeRelayAddr, _ = GatewayRouteAddr(gatewayURL)
+	e.claudeRelayBearer = bearer
+	e.claudeDelegate.Store(&ClaudeDelegateGateway{URL: strings.TrimSpace(gatewayURL), Token: bearer, Binary: e.claudeBinary})
 }
-
-type claudeDelegateSource struct{ dir, binary string }
 
 // SetBrowser names the image's Chromium and its fontconfig file. It applies
 // to capsules spawned afterwards.
@@ -165,20 +169,10 @@ func (e *Executor) SetBrowser(browser, fontconfig string) {
 }
 
 // ClaudeDelegateStatus reports whether a claude-mode capsule could be
-// spawned now, and why not. It never returns the token.
+// spawned now, and why not, from the gateway's grant. It never returns a
+// secret.
 func (e *Executor) ClaudeDelegateStatus() ClaudeDelegateStatus {
-	var dir, binary string
-	if source := e.claudeDelegateSource.Load(); source != nil {
-		dir, binary = source.dir, source.binary
-	}
-	_, status := ReadClaudeDelegate(dir, binary, time.Now())
-	return status
-}
-
-// claudeDelegateTokenLocked reads the token for a claude-mode spawn or a
-// Freeze scan. Callers hold e.mu (read or write).
-func (e *Executor) claudeDelegateTokenLocked() (string, ClaudeDelegateStatus) {
-	return ReadClaudeDelegate(e.claudeDelegateDir, e.claudeBinary, time.Now())
+	return e.claudeDelegate.Load().Status()
 }
 
 // MemoryBudget is the guest's capsule memory admission budget in bytes,
@@ -244,10 +238,11 @@ func (e *Executor) capsuleMirrorsLocked() mirrorgrant.Status {
 // egressPolicyLocked is the policy for a new capsule: L2, or the claude
 // mode's model-API-only policy. Both keep the Go module proxy route; only L2
 // takes the package mirror grant.
-func (e *Executor) egressPolicyLocked(claude bool, mirrors mirrorgrant.Status) EgressPolicy {
+func (e *Executor) egressPolicyLocked(claude bool, mirrors mirrorgrant.Status, relaySecret string) EgressPolicy {
 	policy := EcosystemEgressPolicy()
 	if claude {
 		policy = ClaudeEgressPolicy()
+		policy.ModelRelay = &ModelRelayRoute{Addr: e.claudeRelayAddr, Secret: relaySecret, Bearer: e.claudeRelayBearer}
 	}
 	policy.TunnelIdentity = e.tunnelIdentity.normalized()
 	if e.goModuleProxy.IsValid() {
@@ -512,6 +507,13 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			timer.phase("host_admission")
 		}
 	}
+	// The Claude delegate's grant is a network read (up to its timeout),
+	// made before the executor lock so no other spawn or teardown waits on
+	// it.
+	var claudeStatus ClaudeDelegateStatus
+	if spec.ClaudeDelegate {
+		claudeStatus = e.ClaudeDelegateStatus()
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	timer.phase("executor_lock")
@@ -545,17 +547,24 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, fmt.Errorf("capsule state volume has %d MiB free, below the %d MiB floor", free>>20, StateFloorBytes>>20)
 	}
 	timer.phase("admit_checks")
-	// A claude-mode capsule takes the delegate token now, or not at all.
+	// A claude-mode capsule needs the gateway's grant now, and gets its own
+	// relay secret; no credential enters the capsule.
 	var claudeToken string
 	if spec.ClaudeDelegate {
 		if !spec.Egress {
 			return nil, fmt.Errorf("claude-mode capsule requires egress")
 		}
-		token, status := e.claudeDelegateTokenLocked()
-		if !status.Available {
-			return nil, fmt.Errorf("%w: %s", ErrClaudeDelegateUnavailable, status.Reason)
+		if !claudeStatus.Available {
+			return nil, fmt.Errorf("%w: %s", ErrClaudeDelegateUnavailable, claudeStatus.Reason)
 		}
-		claudeToken = token
+		if !e.claudeRelayAddr.IsValid() || e.claudeRelayBearer == nil {
+			return nil, fmt.Errorf("%w: this computer has no gateway route for the model relay", ErrClaudeDelegateUnavailable)
+		}
+		secret, err := NewClaudeRelaySecret()
+		if err != nil {
+			return nil, fmt.Errorf("claude-mode capsule relay secret: %w", err)
+		}
+		claudeToken = secret
 	}
 
 	controlHandle, err := randomOpaque("c-")
@@ -578,6 +587,9 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 
 		memoryAdmitted: memory.Admit,
 		memoryPolicy:   e.memoryPolicy,
+	}
+	if claudeToken != "" {
+		caps.claudeToken = []byte(claudeToken)
 	}
 	if _, err := os.Lstat(base); err == nil {
 		return nil, fmt.Errorf("capsule state %s is quarantined or already exists", spec.CapsuleID)
@@ -834,9 +846,6 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}
 
 	caps.State = StateActive
-	if claudeToken != "" {
-		caps.claudeToken = []byte(claudeToken)
-	}
 	e.capsules[caps.ID] = caps
 	e.controlHandles[capKey{AgentRunID: spec.OwnerRunID, Handle: controlHandle}] = caps.ID
 	e.vmMemoryUsed += caps.admittedMemory()
@@ -874,7 +883,7 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 		}
 	}
 	sink := newEgressSink(ledgerPath, log.Printf, time.Now, egressSinkLogEvery)
-	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate, mirrors), sink.Record)
+	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate, mirrors, string(caps.claudeToken)), sink.Record)
 	caps.egressSink = sink
 	caps.egress = proxy
 	go func() { _ = proxy.Serve(listener) }()
@@ -929,9 +938,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	// workloads (go_bounds.go).
 	cmd.Env = append(cmd.Env, capsuleBrokerGoBoundsEnv(caps)...)
 	if claudeToken != "" {
-		// Claude delegate (claude mode only): the broker reads the token
-		// once, removes it from its environment and hands it to the claude
-		// process alone (cmd/capsule-broker/delegate_linux.go).
+		// Claude delegate (claude mode only): the broker reads the relay
+		// secret once, removes it from its environment and hands it to the
+		// claude process alone (cmd/capsule-broker/delegate.go).
 		cmd.Env = append(cmd.Env, ClaudeDelegateBrokerTokenEnv+"="+claudeToken, ClaudeDelegateBrokerBinEnv+"="+e.claudeBinary)
 	}
 	cmd.Stdout = os.Stdout

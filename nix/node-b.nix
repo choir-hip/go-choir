@@ -50,7 +50,7 @@ let
   guestLayeredComputers = [ "computer-59c902c5d46caecc0a180a8557164e72" ];
   # Guest tool layers (docs/design/guest-tool-layers-2026-10-31.md 4): which
   # heavy tools a layered ring computer gets, per layer. Selectors are the
-  # computer selector tokens plus none and grant:claude-delegate; a layer not
+  # computer selector tokens plus none; a layer not
   # named here is attached for every
   # computer. The ring computer without a matching rule gets the slot's empty
   # placeholder, so the tool is absent from its store (a clear error, never a
@@ -61,8 +61,28 @@ let
   # computer, no grant (owner 2026-11-03: "every computer should have visual
   # capture. That shouldn't be anything special"); an engineer's Playwright
   # uses it (docs/problems/selfdev-screens-are-not-files-2026-11-03.md).
-  # Rollback: browser=grant:claude-delegate narrows it to the delegate list.
-  guestToolProfile = "toolchain=*;office=none;browser=*;delegate=grant:claude-delegate";
+  # Rollback: browser=${claudeDelegateComputers} narrows it to the delegate list.
+  # The Claude binary layer follows the delegate's computers (the list the
+  # gateway's relay serves, below).
+  guestToolProfile = "toolchain=*;office=none;browser=*;delegate=${claudeDelegateComputers}";
+  # Claude delegate grant (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md,
+  # design section). The owner's Claude token stays on the host, in the
+  # gateway; these computers' engineering capsules reach Anthropic through
+  # the gateway's relay (/provider/anthropic), which checks the computer's
+  # bearer and pin, this list, the window and a per-computer daily token cap.
+  # No computer's credential disk carries the token. The list feeds the
+  # gateway (GATEWAY_ANTHROPIC_RELAY_IDENTITIES, the grant authority) and the
+  # tool profile above (the Claude binary layer). Follow-up: an owner act per
+  # computer (owner, switch audit 2026-11-03, group 7) replaces this list.
+  # Grant or revoke: edit the list and deploy; the gateway answers the new
+  # grant at once (no cold boot), the binary layer follows at the next cold
+  # boot. History: one test computer from 2026-10-14 (owner-ratified); off
+  # 2026-10-15 for subscription spend; on again on Sonnet 2026-10-20; b@c's
+  # test computer added 2026-10-25 by owner request; renewed two weeks
+  # 2026-11-02; plus selfdev-arm-claude (computer-a875023a…) 2026-11-03, the
+  # Claude arm of the apps goal.
+  claudeDelegateComputers = "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02";
+  claudeDelegateExpires = "2026-11-17T00:00:00Z";
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
   # commit's copy of scripts/check-guest-security-epoch over deployed..target,
@@ -534,16 +554,15 @@ let
   # observe since D12 showed would_refuse {} and max_seen.model 163 KB
   # against a 160 MiB cap, read 20:4x).
   gatewayBodyCaps = "enforce";
-  # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
-  # owner's setup-token token, root 0400, written by the owner only. Every
-  # unit, vmctl included, keeps the secrets dir hidden; vmctl's start copies
-  # this one file (mode and owner preserved, so vmctl's owner-only check
-  # still sees the original's) into its private runtime dir, which systemd
-  # removes when vmctl stops. A token installed or rotated after vmctl
-  # started is seen at the next vmctl restart (every deploy restarts it).
-  # The copy never echoes the token and never fails the unit.
+  # claude delegate: the owner's setup-token token, root 0400, written by the
+  # owner only. Every unit keeps the secrets dir hidden; the gateway's start
+  # copies this one file (root, mode 0400 preserved) into its private
+  # runtime dir (0700), which systemd removes when the gateway stops. A token
+  # installed or rotated after the gateway started is seen at its next
+  # restart (every deploy restarts it). The copy never echoes the token and
+  # never fails the unit; without it the relay is off.
   claudeDelegateTokenFile = "/var/lib/go-choir/secrets/claude-oauth-token";
-  claudeDelegateTokenCopy = "/run/go-choir/claude-oauth-token";
+  claudeDelegateTokenCopy = "/run/go-choir-gateway/claude-oauth-token";
   claudeDelegateTokenStage = pkgs.writeShellScript "go-choir-claude-delegate-token-stage" ''
     src=${claudeDelegateTokenFile}
     dst=${claudeDelegateTokenCopy}
@@ -1451,9 +1470,6 @@ in
       ExecStartPre = [
         ""  # Reset the ExecStartPre list
         "${pkgs.bash}/bin/bash -c '${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=1 2>/dev/null || true'"
-        # claude delegate: "+" runs outside the sandbox, so it can read the
-        # hidden secrets dir; it never fails the unit.
-        "+${claudeDelegateTokenStage}"
       ];
       # VM state directory for Firecracker VM persistence and epoch tracking.
       # Persistent user data in VMs is stored here and survives stop/resume
@@ -1759,34 +1775,11 @@ in
         "CHOIR_CAPSULE_MIRRORS_ONLY="
         # Host fetch route (SDC NET-01): the grant half. See hostFetchVMs.
         "CHOIR_HOST_FETCH_VMS=${hostFetchVMs}"
-        # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md;
-        # Option T, owner-ratified 2026-10-14). OFF while the list is empty.
-        # To turn it on for one test computer: put its ComputerID in
-        # CHOIR_CLAUDE_DELEGATE_COMPUTERS, keep the expiry within the
-        # experiment window, deploy, then cold-boot that computer (stop and
-        # start; a snapshot resume keeps its old credential disk). The owner
-        # puts the token at ${claudeDelegateTokenFile} (root, 0400).
-        # Rollback: empty the list and deploy; revoke the token.
-        # 2026-10-15 ~04:00 UTC: OFF again by owner request — the owner's
-        # subscription is near its limit and must not be spent by Choir.
-        # The token file stays installed; re-add the test computer
-        # (computer-33594053a05f46e93d80e7e15ce8a0d2) to turn it back on.
-        # 2026-10-20: ON again, on Sonnet, by owner request (owner notes §28;
-        # docs/problems/claude-delegate-resume-sonnet-2026-10-20.md). Two-week
-        # expiry, renewed only by an explicit edit.
-        # The 10-14 test computer is gone (ownership 404); replacement minted 2026-10-20.
-        # 2026-10-25: b@c's test computer added by owner request ("We should
-        # set it up on b@c.com as well"); same token, same expiry. It reads
-        # the grant at its next cold boot.
-        # 2026-11-02: renewed two weeks by owner request ("make sure we have
-        # our Claude and Sonnet delegate working"); same computers, same
-        # token, still Sonnet (internal/claudedelegate/spec.go).
-        # 2026-11-03: plus selfdev-arm-claude (computer-a875023a…), the
-        # Claude arm of the four-arm apps goal
-        # (docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md).
-        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02"
-        "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-17T00:00:00Z"
-        "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
+        # Claude delegate computers (see claudeDelegateComputers). vmctl no
+        # longer writes anything for them; it reads the list only so the
+        # retention sweep keeps naming them as protected
+        # (internal/vmctl/retention_test_class.go, selectorEnvKeyRE).
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=${claudeDelegateComputers}"
         # Density D3: idle computers give memory back in minutes (owner
         # 2026-10-26: "we should consider hibernating before 30 minutes. If
         # we can restore fast we can hibernate idle computers at will").
@@ -2463,6 +2456,13 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       TimeoutStopSec = "11min";
+      # claude delegate relay: the token's private copy lives here; "+" runs
+      # outside the sandbox, so it can read the hidden secrets dir, and it
+      # never fails the unit.
+      RuntimeDirectory = "go-choir-gateway";
+      RuntimeDirectoryMode = "0700";
+      RuntimeDirectoryPreserve = "no";
+      ExecStartPre = [ "+${claudeDelegateTokenStage}" ];
       # B7 review (bunch 88, F1; bunch 109; bunch 116; FP0 round 5): a
       # backstop under the in_flight body bound, the image decode slots and
       # the downscaled output budget, never a bound itself. No measurement
@@ -2558,6 +2558,18 @@ in
         "GATEWAY_AUTOPUTER_TOKEN_TTL=720h"
         "GATEWAY_BEARER_BINDING=${gatewayBearerBindingMode}"
         "GATEWAY_BODY_CAPS=${gatewayBodyCaps}"
+        # Claude delegate relay (see claudeDelegateComputers): the host-held
+        # token, the computers it serves, its window, each computer's daily
+        # token cap (input + output + cache creation; kept across restarts in
+        # the spend file) and calls in flight per computer.
+        "GATEWAY_ANTHROPIC_OAUTH_TOKEN_FILE=${claudeDelegateTokenCopy}"
+        "GATEWAY_ANTHROPIC_RELAY_IDENTITIES=${claudeDelegateComputers}"
+        "GATEWAY_ANTHROPIC_RELAY_EXPIRES=${claudeDelegateExpires}"
+        "GATEWAY_ANTHROPIC_RELAY_DAILY_TOKENS=50000000"
+        "GATEWAY_ANTHROPIC_RELAY_SPEND_FILE=/var/lib/go-choir/anthropic-relay-spend.json"
+        "GATEWAY_ANTHROPIC_RELAY_MAX_INFLIGHT=4"
+        # The delegate's one model (internal/claudedelegate Model).
+        "GATEWAY_ANTHROPIC_RELAY_MODELS=claude-sonnet-5-5"
         # Under MemoryMax 8G (above): the collector runs harder past 6 GiB.
         "GOMEMLIMIT=6GiB"
         # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider

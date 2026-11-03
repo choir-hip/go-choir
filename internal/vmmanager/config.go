@@ -189,7 +189,6 @@ func LoadConfigFromEnv() ManagerConfig {
 
 	cfg.Jailer = loadJailerConfigFromEnv(cfg.FirecrackerBinPath)
 	cfg.FirecrackerNext = loadFirecrackerNextFromEnv(cfg.FirecrackerBinPath, envFlagOn("VM_DATA_DISCARD"))
-	cfg.ClaudeDelegate = loadClaudeDelegateConfig(os.Getenv)
 	cfg.CapsuleMirrors = loadCapsuleMirrorConfig(os.Getenv)
 	cfg.HostFetch = loadHostFetchConfig(os.Getenv)
 	cfg.EventTable = loadEventTableConfig(os.Getenv)

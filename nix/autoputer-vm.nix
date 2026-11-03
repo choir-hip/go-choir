@@ -1098,10 +1098,9 @@ EOF
       RUNTIME_GATEWAY_TOKEN_FILE = "/run/choir-bootstrap/gateway-token";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
       # claude delegate: the binary a claude-mode capsule's broker starts.
-      # The token is not here; it is on the credential disk of the one
-      # allowlisted computer only.
+      # No credential for it is on any computer: the gateway holds it and
+      # answers the grant (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md).
       CHOIR_CLAUDE_CODE_BIN = "${claudeCode}/bin/claude";
-      CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR = "/run/choir-bootstrap";
       # The store browser and fontconfig every computer's capsule jobs get
       # (Playwright), with no grant.
       CHOIR_BROWSER_BIN = "${guestBrowser}/bin/chromium";

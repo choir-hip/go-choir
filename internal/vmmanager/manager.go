@@ -489,10 +489,6 @@ type ManagerConfig struct {
 	// off by default). See confinement.go.
 	Jailer JailerConfig
 
-	// ClaudeDelegate is the Claude delegate allowlist and window
-	// (CHOIR_CLAUDE_DELEGATE_*; empty by default). See claude_delegate.go.
-	ClaudeDelegate ClaudeDelegateConfig
-
 	// GuestDNSPort is the host resolver's loopback port (VMCTL_GUEST_DNS_PORT;
 	// 0, the default, means none). With it set, a guest's DNS to its tap host
 	// address port 53 is DNAT'd there (SEC-10, hostfirewall.go).
@@ -1161,12 +1157,10 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	}
 
 	if cfg.ComputerCredentialEnvelope != "" || strings.TrimSpace(cfg.GatewayToken) != "" {
-		// Claude delegate: an allowlisted computer's disk also carries the
-		// grant, and the owner's token while the window is open.
-		delegateFiles, delegateStatus := m.cfg.ClaudeDelegate.claudeDelegateMaterial(cfg.ComputerID, time.Now())
-		if delegateStatus != "" {
-			log.Printf("vmmanager: claude delegate for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, delegateStatus)
-		}
+		// The host's grants for this computer. The Claude delegate is not
+		// among them: the gateway holds its credential and answers its grant
+		// (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md).
+		var grantFiles map[string][]byte
 		// Capsule package mirrors: a granted computer's disk carries the
 		// ecosystems its L2 capsules use the host mirror for (station FP10).
 		mirrorFiles, mirrorStatus := m.cfg.CapsuleMirrors.capsuleMirrorMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
@@ -1174,10 +1168,10 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: capsule mirrors for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, mirrorStatus)
 		}
 		for name, content := range mirrorFiles {
-			if delegateFiles == nil {
-				delegateFiles = map[string][]byte{}
+			if grantFiles == nil {
+				grantFiles = map[string][]byte{}
 			}
-			delegateFiles[name] = content
+			grantFiles[name] = content
 		}
 		// Host fetch route (SDC NET-01): a granted computer's disk carries
 		// the grant; its guest then fetches through the gateway.
@@ -1186,10 +1180,10 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: host fetch route for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, fetchStatus)
 		}
 		for name, content := range fetchFiles {
-			if delegateFiles == nil {
-				delegateFiles = map[string][]byte{}
+			if grantFiles == nil {
+				grantFiles = map[string][]byte{}
 			}
-			delegateFiles[name] = content
+			grantFiles[name] = content
 		}
 		// Event table (F-c deploy 2): a named computer's disk carries the
 		// grant; its writer then stamps telemetry for choir_events when the
@@ -1199,12 +1193,12 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: event table for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, eventTableStatus)
 		}
 		for name, content := range eventTableFiles {
-			if delegateFiles == nil {
-				delegateFiles = map[string][]byte{}
+			if grantFiles == nil {
+				grantFiles = map[string][]byte{}
 			}
-			delegateFiles[name] = content
+			grantFiles[name] = content
 		}
-		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope, cfg.GatewayToken, delegateFiles)
+		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope, cfg.GatewayToken, grantFiles)
 		if err != nil {
 			return nil, fmt.Errorf("prepare appender credential disk for VM %s: %w", cfg.VMID, err)
 		}

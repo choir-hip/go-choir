@@ -46,6 +46,11 @@ func EgressProxyEnv() []string {
 	}
 }
 
+// DefaultCredentialDir is where the guest mounts the root-only credential
+// disk (nix/autoputer-vm.nix, /run/choir-bootstrap), which carries the host's
+// capsule grants (mirrors).
+const DefaultCredentialDir = "/run/choir-bootstrap"
+
 // GoProxyRouteHost is the name capsule workloads use for the host Go module
 // proxy. It is an egress route, not a DNS name: the executor maps it to the
 // configured host address and the capsule never learns that address
@@ -102,8 +107,11 @@ func hostServiceAddr(explicit, gatewayURL string, port uint16, what string) (add
 // the capsule. TunnelIdentity is how CONNECT tunnels are bound to their name
 // (egress_tls.go); the zero value is observe.
 type EgressPolicy struct {
-	Hosts            []string
-	Routes           map[string]netip.AddrPort
+	Hosts  []string
+	Routes map[string]netip.AddrPort
+	// ModelRelay is a claude-mode capsule's route to the gateway's Anthropic
+	// relay (egress_model_relay.go); nil for every other capsule.
+	ModelRelay       *ModelRelayRoute
 	TunnelIdentity   TunnelIdentityMode
 	MaxUploadBytes   int64
 	MaxDownloadBytes int64
@@ -339,6 +347,12 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 	}
 	_ = client.SetReadDeadline(time.Time{})
 	rec.Method = req.Method
+	// The model relay route is served here, whatever the method: it is the
+	// only route that carries a body (egress_model_relay.go).
+	if requestTargetHost(req) == ModelRelayRouteHost {
+		p.serveModelRelay(client, br, req, &rec, finish, refuse)
+		return
+	}
 
 	var host, port string
 	switch {

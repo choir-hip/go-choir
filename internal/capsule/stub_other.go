@@ -262,7 +262,8 @@ func (f *FileInfo) IsDir() bool        { return f.FiIsDir }
 func (f *FileInfo) Sys() any           { return nil }
 
 // Claude delegate (claude_delegate.go): never available off the guest kernel.
-func (e *Executor) SetClaudeDelegateSource(dir, binary string) {}
+func (e *Executor) SetClaudeDelegateGateway(gatewayURL string, bearer func() string, binary string) {
+}
 func (e *Executor) ClaudeDelegateStatus() ClaudeDelegateStatus {
 	return ClaudeDelegateStatus{Reason: "the Claude delegate requires the Linux guest kernel"}
 }

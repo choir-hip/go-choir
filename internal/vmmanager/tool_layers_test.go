@@ -78,7 +78,7 @@ func writeTestToolRelease(t *testing.T, releases, id, baseID string, p testRelPo
 	}
 }
 
-const toolTestProfile = "toolchain=*;office=none;browser=*;delegate=grant:claude-delegate"
+const toolTestProfile = "toolchain=*;office=none;browser=*;delegate=computer-delegate-test"
 
 // newToolRingFixture: R1 single is the fleet's current; R2 is a schema 2
 // layered release with tool slots and the layered link's target; ring
@@ -101,7 +101,6 @@ func newToolRingFixture(t *testing.T, profile string) *releaseFixture {
 	f.mgr.cfg.GuestLayeredLink = filepath.Join(root, "guest-layered-link")
 	f.mgr.cfg.GuestLayeredComputers = []string{ringComputer}
 	f.mgr.cfg.GuestToolProfile = parseToolProfile(profile)
-	f.mgr.cfg.ClaudeDelegate = ClaudeDelegateConfig{Computers: map[string]bool{}}
 	r.point(t, relR1)
 	r.pointLayered(t, relR2)
 
@@ -201,9 +200,21 @@ func TestToolLayerProfileChoice(t *testing.T) {
 	if got := toolChoice(r.mgr.toolDisksFor(test, rel)); got != "browser=layer,delegate=empty,office=empty,toolchain=layer" {
 		t.Fatalf("class:test computer = %s", got)
 	}
-	r.mgr.cfg.ClaudeDelegate = ClaudeDelegateConfig{Computers: map[string]bool{ringComputer: true}}
+	// The Claude binary layer follows the delegate's computer ids, a plain
+	// selector (the relay's list), not a credential-disk grant.
+	r.mgr.cfg.GuestToolProfile = parseToolProfile("toolchain=*;office=none;browser=*;delegate=computer-delegate-test " + ringComputer)
 	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=layer,delegate=layer,office=empty,toolchain=layer" {
 		t.Fatalf("delegate-listed computer = %s", got)
+	}
+	// The nix value is comma-joined (claudeDelegateComputers).
+	r.mgr.cfg.GuestToolProfile = parseToolProfile("toolchain=*;office=none;browser=*;delegate=computer-a,computer-b," + ringComputer)
+	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=layer,delegate=layer,office=empty,toolchain=layer" {
+		t.Fatalf("comma-joined delegate list = %s", got)
+	}
+	// A leftover grant: token names no computer.
+	r.mgr.cfg.GuestToolProfile = parseToolProfile("toolchain=*;office=none;browser=*;delegate=grant:claude-delegate")
+	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=layer,delegate=empty,office=empty,toolchain=layer" {
+		t.Fatalf("grant:claude-delegate = %s", got)
 	}
 	// Unnamed layers are attached; an empty profile attaches everything.
 	r.mgr.cfg.GuestToolProfile = parseToolProfile("office=none")

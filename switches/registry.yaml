@@ -212,12 +212,12 @@
    "promote": [
     {
      "metric": "tunnel_identity_would_refuse",
-     "bound": "== 0 on the claude-mode capsule pass"
+     "bound": "== 0 over the L2 toolchain pass"
     }
    ],
    "retire": "delete the selector; enforce becomes the image default",
    "gate": {
-    "act": "a Claude-mode capsule's api.anthropic.com pass is recorded"
+    "act": "an L2 capsule toolchain pass is recorded under enforce (claude-mode capsules no longer open CONNECT tunnels: the model API is the gateway relay route, 2026-11-03)"
    },
    "note": "Name computer ids only (nix comment); the image line flips last."
   },
@@ -676,34 +676,33 @@
   },
   {
    "id": "choir_claude_delegate",
-   "kind": "host_selector",
+   "kind": "let_binding",
    "life": "experiment",
    "owner": "selfdev",
    "class": "red",
    "surface": "capsule",
    "introduced": "2026-10-28",
    "nix": [
-    "CHOIR_CLAUDE_DELEGATE_COMPUTERS",
-    "CHOIR_CLAUDE_DELEGATE_EXPIRES"
+    "claudeDelegateComputers"
    ],
    "ladder": [
     "on"
    ],
    "target_ring": "R4",
-   "expires": "2026-11-03",
-   "ring": "ids:2",
-   "nix_value": "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d",
+   "expires": "2026-11-17",
+   "ring": "ids:3",
+   "nix_value": "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02",
    "promote": [
     {
      "metric": "delegate_capsule_runs_ok",
      "bound": "== all in ring"
     }
    ],
-   "retire": "delete the selector and the token path, or renew by edit",
+   "retire": "replace the list with an owner act per computer (grant and revoke, spend cap, recorded on the tape; owner, switch audit 2026-11-03 group 7), then delete the let-binding and GATEWAY_ANTHROPIC_RELAY_IDENTITIES",
    "gate": {
-    "act": "owner renews the nix expiry by edit (not a flip)"
+    "act": "owner grants or revokes a computer by edit (not a flip); the gateway answers the new grant at once"
    },
-   "note": "Its own nix expiry is 2026-11-03T00:00:00Z."
+   "note": "The grant authority is the gateway's relay (GATEWAY_ANTHROPIC_RELAY_IDENTITIES, window claudeDelegateExpires 2026-11-17T00:00:00Z); the token stays on the host (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md). Also feeds the delegate tool layer in guestToolProfile and vmctl's CHOIR_CLAUDE_DELEGATE_COMPUTERS (retention protection only)."
   },
   {
    "id": "proxy_expand_public",

@@ -400,15 +400,3 @@ func TestEgressRefusesAnOversizedFirstRecord(t *testing.T) {
 		t.Fatalf("records = %+v", records)
 	}
 }
-
-// The name check applies to the Claude delegate's policy as well.
-func TestEgressClaudeTunnelIsBoundToItsName(t *testing.T) {
-	h := newEgressHarness(t, enforced(ClaudeEgressPolicy()))
-	h.resolved["api.anthropic.com"] = []netip.Addr{publicAddr}
-	conn, br := connectNoRead(t, h, "api.anthropic.com:443")
-	if _, err := conn.Write(realClientHello(t, "example.com")); err != nil {
-		t.Fatal(err)
-	}
-	expectTunnelClosedWithoutEcho(t, conn, br)
-	expectNothingReachedUpstream(t, h)
-}

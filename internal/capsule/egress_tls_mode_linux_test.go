@@ -14,18 +14,18 @@ import (
 func TestExecutorSetsTheTunnelIdentityModeOnEveryPolicy(t *testing.T) {
 	e := &Executor{}
 	for _, claude := range []bool{false, true} {
-		if got := e.egressPolicyLocked(claude, mirrorgrant.Status{}).TunnelIdentity; got != TunnelIdentityObserve {
+		if got := e.egressPolicyLocked(claude, mirrorgrant.Status{}, "").TunnelIdentity; got != TunnelIdentityObserve {
 			t.Fatalf("claude=%t: default mode %q, want observe", claude, got)
 		}
 	}
 	e.SetEgressTunnelIdentity(TunnelIdentityEnforce)
 	for _, claude := range []bool{false, true} {
-		if got := e.egressPolicyLocked(claude, mirrorgrant.Status{}).TunnelIdentity; got != TunnelIdentityEnforce {
+		if got := e.egressPolicyLocked(claude, mirrorgrant.Status{}, "").TunnelIdentity; got != TunnelIdentityEnforce {
 			t.Fatalf("claude=%t: mode %q, want enforce", claude, got)
 		}
 	}
 	e.SetEgressTunnelIdentity("bogus")
-	if got := e.egressPolicyLocked(false, mirrorgrant.Status{}).TunnelIdentity; got != TunnelIdentityObserve {
+	if got := e.egressPolicyLocked(false, mirrorgrant.Status{}, "").TunnelIdentity; got != TunnelIdentityObserve {
 		t.Fatalf("an unknown mode set %q, want observe", got)
 	}
 }

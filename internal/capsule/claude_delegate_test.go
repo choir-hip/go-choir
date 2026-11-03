@@ -2,98 +2,164 @@ package capsule
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/claudedelegate"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// docs/design/claude-delegate-slice1-2026-10-14.md §5, guest side. Failure
-// modes pinned here:
-//   F1  the grant says the host has no token, yet the guest reports the
-//       delegate available or hands out a token;
-//   F2  no grant (not allowlisted) and the guest reports it available;
-//   F3  the grant's window has closed (a snapshot-resumed disk) and the
-//       guest still hands out the token;
-//   F4  a capsule hop's environment builder carries the delegate token;
-//   F5  a status reason quotes the token or a file's content;
-//   F10 claude-mode egress reaches any host but the model API (GitHub,
-//       npm, PyPI, sign-in hosts, look-alike names), or keeps the 16 MiB
-//       L2 upload budget;
+// docs/design/claude-delegate-slice1-2026-10-14.md §5 and
+// docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md (design
+// section), guest side. Failure modes pinned here:
+//   F1/F2/F3 the gateway withholds the grant (no credential, not listed,
+//       window closed) and the guest reports the delegate available;
+//   20  the grant read hangs, or a failed read says available;
+//   F4  a capsule hop's environment builder carries the relay secret;
+//   F5  a status reason quotes a secret or the gateway's body beyond its
+//       reason;
+//   F10/19 claude-mode egress reaches any host by CONNECT, the model API
+//       included, or keeps the 16 MiB L2 upload budget;
+//   22  the relay secret is predictable;
 //   F17 a 3 GiB claude capsule is requested where the budget cannot hold it.
 
-const testDelegateToken = "sk-ant-oat01-FAKE-guest-token-0123456789abcdefghij"
+const testDelegateToken = "choir-relay-FAKE-guest-secret-0123456789abcdefghij"
 
-func writeDelegateFixture(t *testing.T, grant *ClaudeDelegateGrant, token string) (dir, binary string) {
+func fakeClaudeBinary(t *testing.T) string {
 	t.Helper()
-	dir = t.TempDir()
-	if grant != nil {
-		raw, _ := json.Marshal(grant)
-		if err := os.WriteFile(filepath.Join(dir, ClaudeDelegateGrantFile), raw, 0o400); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if token != "" {
-		if err := os.WriteFile(filepath.Join(dir, ClaudeDelegateTokenFile), []byte(token+"\n"), 0o400); err != nil {
-			t.Fatal(err)
-		}
-	}
-	binary = filepath.Join(t.TempDir(), "claude")
+	binary := filepath.Join(t.TempDir(), "claude")
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return dir, binary
+	return binary
 }
 
-func TestReadClaudeDelegate(t *testing.T) {
-	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
-	future := now.Add(48 * time.Hour).Format(time.RFC3339)
-	past := now.Add(-time.Minute).Format(time.RFC3339)
-	available := &ClaudeDelegateGrant{ComputerID: "computer-1", Status: ClaudeDelegateGrantAvailable, ExpiresAt: future}
+func TestClaudeDelegateGrantFromTheGateway(t *testing.T) {
+	const bearer = "gateway-bearer-FAKE-0123456789"
+	var reply atomic.Value
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/provider/anthropic/grant" || r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer "+bearer {
+			http.Error(w, "no", http.StatusUnauthorized)
+			return
+		}
+		body := reply.Load().(string)
+		if body == "hang" {
+			<-r.Context().Done()
+			return
+		}
+		if body == "500" {
+			http.Error(w, "boom "+bearer, http.StatusInternalServerError)
+			return
+		}
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	binary := fakeClaudeBinary(t)
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	newGW := func(token string) *ClaudeDelegateGateway {
+		return &ClaudeDelegateGateway{URL: srv.URL, Token: func() string { return token }, Binary: binary, Now: func() time.Time { return now }}
+	}
 	cases := []struct {
-		name      string
-		grant     *ClaudeDelegateGrant
-		token     string
-		noBinary  bool
-		available bool
-		reason    string
+		name, reply, token string
+		available          bool
+		reason             string
 	}{
-		{"not allowlisted", nil, "", false, false, "not on the host's Claude delegate allowlist"},
-		{"host has no token", &ClaudeDelegateGrant{ComputerID: "computer-1", Status: "unavailable", Reason: "token file absent on the host", ExpiresAt: future}, "", false, false, "token file absent"},
-		{"window closed", &ClaudeDelegateGrant{ComputerID: "computer-1", Status: ClaudeDelegateGrantAvailable, ExpiresAt: past}, testDelegateToken, false, false, "window closed"},
-		{"no expiry", &ClaudeDelegateGrant{ComputerID: "computer-1", Status: ClaudeDelegateGrantAvailable}, testDelegateToken, false, false, "no valid expiry"},
-		{"grant without token", available, "", false, false, "token is not on the credential disk"},
-		{"malformed token", available, "short", false, false, "not a valid token"},
-		{"binary missing", available, testDelegateToken, true, false, "binary is missing"},
-		{"available", available, testDelegateToken, false, true, "available until"},
+		{"available", `{"available":true,"expires_at":"2026-11-17T00:00:00Z","model":"claude-sonnet-5-5","daily_token_cap":50000000}`, bearer, true, "available through the gateway until 2026-11-17"},
+		{"not listed", `{"available":false,"reason":"this computer has no Claude delegate grant"}`, bearer, false, "withheld the delegate: this computer has no Claude delegate grant"},
+		{"no credential", `{"available":false,"reason":"the gateway holds no Claude credential"}`, bearer, false, "holds no Claude credential"},
+		{"window closed", `{"available":false,"reason":"the Claude delegate window is closed"}`, bearer, false, "window is closed"},
+		{"refused", `{}`, "wrong-bearer", false, "refused the grant read (status 401)"},
+		{"server error", "500", bearer, false, "refused the grant read (status 500)"},
+		{"malformed", `{"available":`, bearer, false, "malformed"},
+		{"no bearer", `{"available":true}`, "", false, "no gateway credential"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir, binary := writeDelegateFixture(t, tc.grant, tc.token)
-			if tc.noBinary {
-				binary = filepath.Join(dir, "absent-claude")
-			}
-			token, status := ReadClaudeDelegate(dir, binary, now)
+			reply.Store(tc.reply)
+			status := newGW(tc.token).Status()
 			if status.Available != tc.available || !strings.Contains(status.Reason, tc.reason) {
 				t.Fatalf("status = %+v, want available=%v reason~%q", status, tc.available, tc.reason)
 			}
-			if tc.available != (token == testDelegateToken) {
-				t.Fatalf("token handed out = %v, available = %v", token != "", tc.available)
-			}
 			raw, _ := json.Marshal(status)
-			if strings.Contains(string(raw), testDelegateToken) || strings.Contains(string(raw), "short") && tc.token == "short" {
-				t.Fatalf("status quotes the token or file content: %s", raw)
+			if strings.Contains(string(raw), bearer) {
+				t.Fatalf("status quotes the gateway bearer: %s", raw)
 			}
 		})
 	}
-	if _, status := ReadClaudeDelegate("", "/bin/sh", now); status.Available {
-		t.Fatal("no credential dir must be unavailable")
+	// The answer is cached: a revoke reaches the guest within the TTL.
+	reply.Store(cases[0].reply)
+	gw := newGW(bearer)
+	before := calls.Load()
+	if !gw.Status().Available || !gw.Status().Available || calls.Load() != before+1 {
+		t.Fatalf("two reads within the TTL made %d calls", calls.Load()-before)
+	}
+	reply.Store(cases[1].reply)
+	now = now.Add(claudeDelegateGrantTTL)
+	if gw.Status().Available {
+		t.Fatal("a revoked grant still reads available after the TTL")
+	}
+	// A hung gateway answers unavailable within the timeout.
+	reply.Store("hang")
+	start := time.Now()
+	if st := newGW(bearer).Status(); st.Available || !strings.Contains(st.Reason, "did not answer") {
+		t.Fatalf("hung gateway: %+v", st)
+	}
+	if time.Since(start) > claudeDelegateGrantTimeout+2*time.Second {
+		t.Fatalf("the grant read took %s", time.Since(start))
+	}
+	// No binary, no URL, a name instead of an address, a nil source.
+	reply.Store(cases[0].reply)
+	missing := newGW(bearer)
+	missing.Binary = filepath.Join(t.TempDir(), "absent")
+	if st := missing.Status(); st.Available || !strings.Contains(st.Reason, "binary is missing") {
+		t.Fatalf("no binary: %+v", st)
+	}
+	named := newGW(bearer)
+	named.URL = "http://gateway.example:8084"
+	if st := named.Status(); st.Available {
+		t.Fatalf("a named gateway URL: %+v", st)
+	}
+	if st := (*ClaudeDelegateGateway)(nil).Status(); st.Available {
+		t.Fatal("a nil source is available")
+	}
+}
+
+func TestGatewayRouteAddr(t *testing.T) {
+	for raw, want := range map[string]string{
+		"http://172.16.0.1:8084":  "172.16.0.1:8084",
+		"http://172.16.0.1":       "172.16.0.1:80",
+		"http://172.16.0.1:8084/": "172.16.0.1:8084",
+	} {
+		if got, ok := GatewayRouteAddr(raw); !ok || got.String() != want {
+			t.Errorf("%s = %v %v, want %s", raw, got, ok, want)
+		}
+	}
+	for _, raw := range []string{"", "https://172.16.0.1:8084", "http://gateway:8084", "http://172.16.0.1:0", "::"} {
+		if _, ok := GatewayRouteAddr(raw); ok {
+			t.Errorf("%q made a route", raw)
+		}
+	}
+}
+
+func TestClaudeRelaySecretIsRandom(t *testing.T) {
+	a, err := NewClaudeRelaySecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := NewClaudeRelaySecret()
+	if a == b || len(a) < 64 || !claudedelegate.ValidToken(a) {
+		t.Fatalf("secrets %q %q", a, b)
 	}
 }
 
@@ -115,20 +181,18 @@ func TestBrokerAndCellEnvironmentsNeverCarryTheDelegateToken(t *testing.T) {
 	}
 }
 
-func TestClaudeEgressReachesOnlyTheModelAPI(t *testing.T) {
+func TestClaudeEgressReachesNoHostByConnect(t *testing.T) {
 	policy := ClaudeEgressPolicy()
 	if policy.MaxUploadBytes < 512<<20 || policy.MaxUploadBytes <= EcosystemEgressPolicy().MaxUploadBytes {
 		t.Fatalf("claude upload budget = %d", policy.MaxUploadBytes)
 	}
 	policy.Routes = map[string]netip.AddrPort{GoProxyRouteHost: goProxyRoute}
 	h := newEgressHarness(t, policy)
-	h.resolved["api.anthropic.com"] = []netip.Addr{publicAddr}
-	_, _, resp := h.connect("api.anthropic.com:443")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("CONNECT api.anthropic.com:443 = %d", resp.StatusCode)
+	if len(policy.Hosts) != 0 {
+		t.Fatalf("claude mode allows CONNECT hosts %v; the model API is the gateway relay", policy.Hosts)
 	}
 	for _, target := range []string{
-		"github.com:443", "codeload.github.com:443", "registry.npmjs.org:443", "pypi.org:443", "proxy.golang.org:443",
+		"api.anthropic.com:443", "github.com:443", "codeload.github.com:443", "registry.npmjs.org:443", "pypi.org:443", "proxy.golang.org:443",
 		"platform.claude.com:443", "claude.ai:443", "statsig.anthropic.com:443", "downloads.claude.ai:443",
 		"api.anthropic.com.evil.com:443", "evilapi.anthropic.com:443", "api.anthropic.com:80", "huggingface.co:443",
 	} {

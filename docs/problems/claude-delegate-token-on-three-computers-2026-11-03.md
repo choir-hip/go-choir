@@ -246,3 +246,94 @@ boot on the new release:
    `anthropic.choir.internal` with outcome `ok`.
 4. A request to the route without the relay secret answers 401 and sends
    nothing to the gateway.
+
+## Design review, round 1 (2026-11-03): APPROVE WITH CHANGES, twice
+
+Panel: Devin and DeepSeek v4.1 flash (tier 2), on the design section and the
+code it changes. Both approved with changes; no finding changed the
+mechanism. Adjudication, with what the code does:
+
+- Cap unset or bad (both): an unset, unreadable or non-positive
+  `GATEWAY_ANTHROPIC_RELAY_DAILY_TOKENS` is the default cap (50 M tokens a
+  UTC day), never no cap. A restart no longer resets the day: the charges
+  are kept in `GATEWAY_ANTHROPIC_RELAY_SPEND_FILE` (atomic rename, per
+  computer, ignored on another day). Check-then-charge can overshoot by the
+  calls in flight (at most 4 per computer); recorded, not closed.
+- Empty secret, no bearer (Devin B): a route with no secret, no bearer or
+  no gateway address refuses every request; the secret is compared in
+  constant time before any byte goes to the gateway.
+- Keep-alive and the CONNECT:80 tunnel (Devin C): one request per
+  connection. The route sends `Connection: close` to the gateway and splices
+  only the answer back, so a second request on the same connection or
+  tunnel is never read, let alone forwarded.
+- Strip list (Devin D, DeepSeek N1): the upstream request is built fresh;
+  only `Content-Type`, `Accept`, `Anthropic-Version`, `Anthropic-Beta`,
+  `User-Agent` and `X-App` cross, each matched to a safe character set, then
+  the computer's bearer and the capsule header (attribution only). The body
+  is read whole up to 32 MiB (not streamed), which bounds it simply.
+- The token copy (Devin E, DeepSeek B2): the gateway runs as root; the
+  `+` stage copies with `cp -p` (root, 0400) into `RuntimeDirectory
+  go-choir-gateway`, mode 0700, `RuntimeDirectoryPreserve=no`. A named
+  token file that is missing, empty or malformed leaves the relay off; it
+  never falls back to a key.
+- Secret leaks (Devin F): the egress ledger records host, method, address
+  and bytes only; refusals quote no header. The gateway never sees the
+  secret (the route strips it).
+- Path shape (Devin G): the client sends `/v1/...`; the route matches the
+  three paths exactly (an encoded or dotted path is refused, `RawPath` must
+  be empty) and maps them to `/provider/anthropic/v1/...`.
+- The two computers not cold-booted (DeepSeek B3): accepted and named.
+  b@c's and the 10-20 test computer's credential disks keep the token
+  until their next cold boot (the epoch raise forces it at their next wake
+  from hibernation). Only rotating the token makes those copies useless:
+  the owner's `claude setup-token`, then the new token at the host path.
+  Recorded as the owner's step after the rollout.
+- `/proc/<pid>/environ` and cell separation (Devin, DeepSeek N3): the
+  separation is the broker's, as before (F13, unverified on the staging
+  kernel); a leaked secret now spends only through that capsule's proxy,
+  bounded by its budgets and the computer's cap, and dies with the capsule.
+- OAuth acceptance (DeepSeek N4, N6): the relay passes Claude Code's
+  `user-agent`, `x-app` and betas and adds the OAuth beta; whether
+  Anthropic accepts the relayed call is the staging proof's to decide. A
+  revoked token answers 401 on every call while the grant still reads
+  available; visible in the run's failure and the gateway journal.
+- `/health` (DeepSeek nit): the credential kind is in the startup log and in
+  each relay log line (`credential=oauth`), not in `/health`.
+- count_tokens is not charged (it is not billed); an aborted stream is
+  charged what it showed.
+
+Found while building, not by the panel: vmctl's retention sweep protects
+every computer a `CHOIR_*_COMPUTERS` selector names
+(`internal/vmctl/retention_test_class.go`). Dropping
+`CHOIR_CLAUDE_DELEGATE_COMPUTERS` from vmctl would have stopped protecting
+the delegate computers. vmctl keeps the variable, fed by the same
+let-binding, for that alone; nothing in vmctl reads it otherwise.
+
+Review numbers: the design round is review 392 (Devin and DeepSeek v4.1
+flash, both APPROVE WITH CHANGES); the code round below is review 393.
+
+## Code review, round 2 (review 393, 2026-11-03): APPROVE WITH CHANGES, twice
+
+No blocking-real finding from either seat. Fixed in the same commit:
+
+- The grant read checks the pin whatever the answer, so a copied bearer
+  learns nothing (both seats).
+- The spawn reads the grant before taking the executor lock (Devin).
+- The gateway's token read refuses a symlink, a file readable by group or
+  others and one another user owns, as vmctl's did (Devin).
+- A caller that goes away before the answer is charged its input as an
+  estimate (four bytes a token), so dropping calls does not dodge the cap
+  (DeepSeek).
+- Forwarded success headers are redacted like error bodies (DeepSeek).
+- `GATEWAY_ANTHROPIC_RELAY_MODELS` is set in nix to the delegate's model
+  (DeepSeek); the grant names the served model.
+- Tests: the comma-joined tool profile the nix produces (Devin's one
+  blocking candidate; the selector parser splits commas, so the layer was
+  attached, and the test now pins it); the capsule's reply and ledger carry
+  neither the bearer nor the secret (DeepSeek).
+
+Left as named residuals: `ClaudeDelegateStatus.ComputerID` is empty (no
+consumer); the spend file is written under the relay's lock; a budget
+refusal mid-route closes the connection without a 429; `Expect:
+100-continue` is not answered (the staging proof decides whether Claude
+Code sends it).

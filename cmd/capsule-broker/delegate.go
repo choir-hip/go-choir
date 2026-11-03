@@ -18,11 +18,13 @@ import (
 )
 
 // Claude delegate, broker side (docs/design/claude-delegate-slice1-2026-10-14.md).
-// The executor puts the token in a claude-mode broker's environment. The
+// The executor puts the capsule's relay secret in a claude-mode broker's
+// environment (the credential itself stays in the host gateway:
+// docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md). The
 // broker takes it out at once, keeps it in memory, and gives it only to the
 // claude process it starts through the delegate-claude stage below. Cells
 // reach the delegate only through the socket (cmd/choir-delegate), which
-// can start and stop a run but never read the token back.
+// can start and stop a run but never read the secret back.
 
 // delegateStage is the isolation stage that becomes the claude process.
 const delegateStage = "delegate-claude"

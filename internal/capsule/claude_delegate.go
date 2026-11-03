@@ -1,126 +1,214 @@
 package capsule
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/claudedelegate"
 )
 
-// Claude delegate, guest side (docs/design/claude-delegate-slice1-2026-10-14.md).
-// vmctl puts a grant record, and for an allowlisted computer with a usable
-// token the token itself, on the root-only credential disk. The executor
-// reads them only when it spawns a claude-mode capsule and hands the token
-// to that capsule's broker; nothing else in the guest core reads them.
+// Claude delegate, guest side
+// (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md,
+// design section; docs/design/claude-delegate-slice1-2026-10-14.md). No
+// computer holds the delegate's credential: the gateway does, and answers
+// whether it serves this computer (its grant read). A claude-mode capsule's
+// claude process reaches the gateway's relay through the capsule's egress
+// proxy (ModelRelayRouteHost, egress_model_relay.go) with a relay secret the
+// executor mints for that capsule; the proxy swaps the secret for this
+// computer's gateway bearer.
 const (
-	// DefaultClaudeDelegateCredentialDir is where the guest mounts the
-	// credential disk (nix/autoputer-vm.nix, /run/choir-bootstrap).
-	DefaultClaudeDelegateCredentialDir = "/run/choir-bootstrap"
-	// ClaudeDelegateGrantFile and ClaudeDelegateTokenFile are the names
-	// vmctl writes (internal/vmmanager/claude_delegate.go).
-	ClaudeDelegateGrantFile = claudedelegate.GrantFile
-	ClaudeDelegateTokenFile = claudedelegate.TokenFile
-	// ClaudeDelegateBrokerTokenEnv carries the token from the executor into
-	// a claude-mode capsule's broker process, which removes it from its
-	// environment as soon as it reads it.
+	// ClaudeDelegateBrokerTokenEnv carries the capsule's relay secret from
+	// the executor into a claude-mode capsule's broker process, which
+	// removes it from its environment as soon as it reads it.
 	ClaudeDelegateBrokerTokenEnv = "CHOIR_CLAUDE_DELEGATE_TOKEN"
 	// ClaudeDelegateBrokerBinEnv names the claude binary for the broker.
 	// The binary is in the guest store but not on any PATH.
 	ClaudeDelegateBrokerBinEnv = "CHOIR_CLAUDE_CODE_BIN"
-	// ClaudeDelegateGrantAvailable is the grant status that admits the mode.
-	ClaudeDelegateGrantAvailable = claudedelegate.GrantAvailable
+	// claudeDelegateGrantPath is the gateway's grant read.
+	claudeDelegateGrantPath = "/provider/anthropic/grant"
+	// claudeDelegateGrantTTL is how long a grant read answers for; a
+	// revoked or closed grant reaches the guest within it, and the gateway
+	// refuses the relay calls at once in any case.
+	claudeDelegateGrantTTL     = 30 * time.Second
+	claudeDelegateGrantTimeout = 3 * time.Second
+	claudeDelegateGrantMax     = 64 << 10
 )
 
-// ClaudeDelegateGrant is the grant record vmctl writes. It never carries the
-// token.
-type ClaudeDelegateGrant = claudedelegate.Grant
-
 // ClaudeDelegateStatus is the delegate's availability on this computer, for
-// the runtime, the prompt and /api/runtime/observability. Never the token.
+// the runtime, the prompt and /api/runtime/observability. Never a secret.
 type ClaudeDelegateStatus struct {
 	Available  bool   `json:"available"`
 	Reason     string `json:"reason"`
 	ComputerID string `json:"computer_id,omitempty"`
 	ExpiresAt  string `json:"expires_at,omitempty"`
 	Model      string `json:"model,omitempty"`
+	// DailyTokenCap and DailyTokensUsed are the gateway's spend cap for this
+	// computer and the day's use.
+	DailyTokenCap   int64 `json:"daily_token_cap,omitempty"`
+	DailyTokensUsed int64 `json:"daily_tokens_used,omitempty"`
 }
 
 // ErrClaudeDelegateUnavailable marks a claude-mode spawn refused because the
 // delegate is not available now.
 var ErrClaudeDelegateUnavailable = errors.New("claude delegate unavailable")
 
-// ReadClaudeDelegate reads the grant and the token from the credential
-// directory. The returned token is empty unless the status is available.
-// Reasons never quote file contents.
-func ReadClaudeDelegate(dir, binary string, now time.Time) (string, ClaudeDelegateStatus) {
-	if strings.TrimSpace(dir) == "" {
-		return "", ClaudeDelegateStatus{Reason: "no credential directory is configured"}
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, ClaudeDelegateGrantFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return "", ClaudeDelegateStatus{Reason: "this computer is not on the host's Claude delegate allowlist (no grant on the credential disk)"}
-	}
-	if err != nil {
-		return "", ClaudeDelegateStatus{Reason: "the delegate grant is unreadable"}
-	}
-	var grant ClaudeDelegateGrant
-	if err := json.Unmarshal(raw, &grant); err != nil {
-		return "", ClaudeDelegateStatus{Reason: "the delegate grant is malformed"}
-	}
-	status := ClaudeDelegateStatus{ComputerID: grant.ComputerID, ExpiresAt: grant.ExpiresAt, Model: claudedelegate.Model}
-	if grant.Status != ClaudeDelegateGrantAvailable {
-		status.Reason = "the host withheld the delegate: " + strings.TrimSpace(grant.Reason)
-		return "", status
-	}
-	expires, err := time.Parse(time.RFC3339, grant.ExpiresAt)
-	if err != nil {
-		status.Reason = "the delegate grant has no valid expiry"
-		return "", status
-	}
-	if !now.Before(expires) {
-		status.Reason = fmt.Sprintf("the delegate window closed at %s", expires.UTC().Format(time.RFC3339))
-		return "", status
-	}
-	tokenBytes, err := os.ReadFile(filepath.Join(dir, ClaudeDelegateTokenFile))
-	if err != nil {
-		status.Reason = "the grant is present but the token is not on the credential disk"
-		return "", status
-	}
-	token := strings.TrimSpace(string(tokenBytes))
-	if !claudedelegate.ValidToken(token) {
-		status.Reason = "the token on the credential disk is not a valid token"
-		return "", status
-	}
-	if strings.TrimSpace(binary) == "" {
-		status.Reason = "the guest image names no claude binary"
-		return "", status
-	}
-	if info, err := os.Stat(binary); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
-		status.Reason = "the claude binary is missing from the guest image"
-		return "", status
-	}
-	status.Available = true
-	status.Reason = "available until " + expires.UTC().Format(time.RFC3339)
-	return token, status
+// ClaudeDelegateGateway reads this computer's delegate grant from the
+// gateway. Its own lock serializes the reads; it never takes the executor's.
+type ClaudeDelegateGateway struct {
+	// URL is the gateway's base URL (RUNTIME_GATEWAY_URL); Token is this
+	// computer's gateway bearer; Binary is the claude binary in the image.
+	URL    string
+	Token  func() string
+	Binary string
+	Client *http.Client
+	Now    func() time.Time
+
+	mu       sync.Mutex
+	cached   ClaudeDelegateStatus
+	cachedAt time.Time
 }
 
-// claudeAPIHosts is everything a claude-mode capsule may reach besides the
-// Go module proxy route. Claude Code needs only the model API once it holds
-// a setup-token token and nonessential traffic is off (UNVERIFIED for
-// startup: the egress ledger records any refused host).
-var claudeAPIHosts = []string{"api.anthropic.com"}
+// relayGrantReply is the gateway's grant read (internal/gateway,
+// handleAnthropicRelayGrant).
+type relayGrantReply struct {
+	Available       bool   `json:"available"`
+	Reason          string `json:"reason"`
+	ExpiresAt       string `json:"expires_at"`
+	Model           string `json:"model"`
+	DailyTokenCap   int64  `json:"daily_token_cap"`
+	DailyTokensUsed int64  `json:"daily_tokens_used"`
+}
 
-// ClaudeEgressPolicy is the claude network mode: the model API only, and a
-// budget sized for an LLM client that resends its whole conversation on
-// every request (the L2 upload budget is 16 MiB).
+// Status is the delegate's availability now. A read that fails for any
+// reason says unavailable, with the reason; it is cached for
+// claudeDelegateGrantTTL either way.
+func (g *ClaudeDelegateGateway) Status() ClaudeDelegateStatus {
+	if g == nil {
+		return ClaudeDelegateStatus{Reason: "this computer has no gateway for the Claude delegate"}
+	}
+	now := time.Now
+	if g.Now != nil {
+		now = g.Now
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.cachedAt.IsZero() && now().Sub(g.cachedAt) < claudeDelegateGrantTTL {
+		return g.cached
+	}
+	g.cached, g.cachedAt = g.read(), now()
+	return g.cached
+}
+
+func (g *ClaudeDelegateGateway) read() ClaudeDelegateStatus {
+	binary := strings.TrimSpace(g.Binary)
+	if binary == "" {
+		return ClaudeDelegateStatus{Reason: "the guest image names no claude binary"}
+	}
+	if info, err := os.Stat(binary); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		return ClaudeDelegateStatus{Reason: "the claude binary is missing from the guest image"}
+	}
+	base := strings.TrimRight(strings.TrimSpace(g.URL), "/")
+	if base == "" {
+		return ClaudeDelegateStatus{Reason: "this computer has no gateway URL"}
+	}
+	if _, ok := GatewayRouteAddr(base); !ok {
+		return ClaudeDelegateStatus{Reason: "the gateway URL is not a literal address the capsule route can use"}
+	}
+	token := ""
+	if g.Token != nil {
+		token = strings.TrimSpace(g.Token())
+	}
+	if token == "" {
+		return ClaudeDelegateStatus{Reason: "this computer has no gateway credential"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), claudeDelegateGrantTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+claudeDelegateGrantPath, nil)
+	if err != nil {
+		return ClaudeDelegateStatus{Reason: "the grant read could not be built"}
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := g.Client
+	if client == nil {
+		client = &http.Client{Transport: &http.Transport{Proxy: nil}}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ClaudeDelegateStatus{Reason: "the gateway did not answer the grant read"}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ClaudeDelegateStatus{Reason: fmt.Sprintf("the gateway refused the grant read (status %d)", resp.StatusCode)}
+	}
+	var grant relayGrantReply
+	if err := json.NewDecoder(io.LimitReader(resp.Body, claudeDelegateGrantMax)).Decode(&grant); err != nil {
+		return ClaudeDelegateStatus{Reason: "the gateway's grant read is malformed"}
+	}
+	status := ClaudeDelegateStatus{ExpiresAt: grant.ExpiresAt, Model: grant.Model, DailyTokenCap: grant.DailyTokenCap, DailyTokensUsed: grant.DailyTokensUsed}
+	if status.Model == "" {
+		status.Model = claudedelegate.Model
+	}
+	if !grant.Available {
+		status.Reason = "the gateway withheld the delegate: " + strings.TrimSpace(grant.Reason)
+		return status
+	}
+	status.Available = true
+	status.Reason = "available through the gateway until " + grant.ExpiresAt
+	return status
+}
+
+// GatewayRouteAddr is the gateway's address for a capsule route: the
+// literal IP and port of its URL (port 80 when the URL names none). A name
+// would need DNS, so it makes no route.
+func GatewayRouteAddr(gatewayURL string) (netip.AddrPort, bool) {
+	u, err := url.Parse(strings.TrimSpace(gatewayURL))
+	if err != nil || u.Scheme != "http" || u.Hostname() == "" {
+		return netip.AddrPort{}, false
+	}
+	ip, err := netip.ParseAddr(u.Hostname())
+	if err != nil {
+		return netip.AddrPort{}, false
+	}
+	port := uint64(80)
+	if p := u.Port(); p != "" {
+		if port, err = strconv.ParseUint(p, 10, 16); err != nil || port == 0 {
+			return netip.AddrPort{}, false
+		}
+	}
+	return netip.AddrPortFrom(ip.Unmap(), uint16(port)), true
+}
+
+// NewClaudeRelaySecret is a claude-mode capsule's relay secret: 32 random
+// bytes, hex. It lets the capsule's egress proxy tell the delegate's claude
+// process from a cell in the same capsule, and dies with the capsule.
+func NewClaudeRelaySecret() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return "choir-relay-" + hex.EncodeToString(b[:]), nil
+}
+
+// ClaudeEgressPolicy is the claude network mode: no host at all by CONNECT
+// (the model API is the gateway's relay, through ModelRelayRouteHost, which
+// the executor adds with the capsule's secret), and a budget sized for an
+// LLM client that resends its whole conversation on every request (the L2
+// upload budget is 16 MiB).
 func ClaudeEgressPolicy() EgressPolicy {
 	return EgressPolicy{
-		Hosts:            append([]string(nil), claudeAPIHosts...),
 		MaxUploadBytes:   512 << 20,
 		MaxDownloadBytes: 1 << 30,
 		MaxConnections:   4096,

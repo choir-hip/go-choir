@@ -10,10 +10,10 @@ import (
 // docs/problems/engineering-completion-path-cluster-2026-10-20.md failure 9:
 // the observability route reads the delegate's status, and a capsule
 // teardown holds e.mu for its whole run. The status must answer while e.mu
-// is held, and still report the source SetClaudeDelegateSource gave it.
+// is held, and still report the source SetClaudeDelegateGateway gave it.
 func TestClaudeDelegateStatusDoesNotWaitForTheExecutorLock(t *testing.T) {
 	e := &Executor{}
-	e.SetClaudeDelegateSource(t.TempDir(), "/nonexistent/claude")
+	e.SetClaudeDelegateGateway("http://127.0.0.1:1", func() string { return "bearer" }, "/nonexistent/claude")
 	want := e.ClaudeDelegateStatus()
 
 	e.mu.Lock()

@@ -2,7 +2,9 @@
 // engineering capsule on the one allowlisted computer of the Claude delegate
 // experiment (docs/design/claude-delegate-slice1-2026-10-14.md, Option T).
 //
-// The capsule broker owns the subscription token and starts runs through
+// The capsule broker owns the capsule's relay secret (the credential itself
+// is on the host, in the gateway: docs/problems/claude-delegate-token-on-
+// three-computers-2026-11-03.md) and starts runs through
 // Server; cells reach it only through cmd/choir-delegate, which talks to the
 // broker's socket and reads the run directory. The flags, the environment and
 // the redaction live here so they are fixed by code, never chosen by a model.
@@ -31,9 +33,15 @@ const (
 	Workdir = "/workspace/platform"
 	// Model is the one model the delegate runs.
 	Model = "claude-sonnet-5-5"
-	// TokenEnv is the variable Claude Code reads a setup-token token from.
-	// It is set on the claude process only, by Env.
-	TokenEnv = "CLAUDE_CODE_OAUTH_TOKEN"
+	// TokenEnv is the variable Claude Code sends as its bearer to the base
+	// URL: the capsule's relay secret, which the capsule's egress proxy
+	// swaps for the computer's gateway bearer. It is set on the claude
+	// process only, by Env.
+	TokenEnv = "ANTHROPIC_AUTH_TOKEN"
+	// BaseURL is the Anthropic base URL the claude process uses: the model
+	// relay route of the capsule's egress proxy
+	// (internal/capsule/egress_model_relay.go, ModelRelayRouteHost).
+	BaseURL = "http://anthropic.choir.internal"
 
 	DefaultMaxTurns     = 40
 	MaxMaxTurns         = 200
@@ -241,12 +249,21 @@ func Env(base []string, home, token string) ([]string, error) {
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
 		"DISABLE_UPDATES=1",
+		// The gateway relay serves the delegate's one model; Claude Code's
+		// background calls use the same one instead of a model the relay
+		// refuses.
+		"ANTHROPIC_MODEL="+Model,
+		"ANTHROPIC_SMALL_FAST_MODEL="+Model,
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL="+Model,
+		"ANTHROPIC_DEFAULT_SONNET_MODEL="+Model,
+		"ANTHROPIC_DEFAULT_OPUS_MODEL="+Model,
+		"ANTHROPIC_BASE_URL="+BaseURL,
 		TokenEnv+"="+token,
 	), nil
 }
 
-// ValidToken reports whether a token is plausibly a setup-token value
-// without saying anything about its content.
+// ValidToken reports whether a secret is plausibly one (printable, 20 to
+// 4096 bytes) without saying anything about its content.
 func ValidToken(token string) bool {
 	if len(token) < 20 || len(token) > 4096 {
 		return false

@@ -13,8 +13,9 @@ package vmmanager
 //	VM_GUEST_TOOL_PROFILE  layer=selector;layer=selector;...
 //
 // A selector is the standard computer selector (computer_select.go: ids,
-// class:<warmness class>, "*"), plus "none" and "grant:claude-delegate" (the
-// delegate allowlist names it). The browser is not a grant: every computer
+// class:<warmness class>, "*"), plus "none". The Claude binary layer is
+// named by the delegate's computer ids (nix/node-b.nix claudeDelegateComputers,
+// the list the gateway's relay serves). The browser is not a grant: every computer
 // gets it (docs/problems/selfdev-screens-are-not-files-2026-11-03.md). A layer the profile does not name is attached
 // for every computer, so an unconfigured or new layer never takes a tool away.
 // The choice is made at a cold boot and recorded in the launch config; a wake
@@ -29,10 +30,9 @@ import (
 )
 
 const (
-	toolLayerFile      = "tool.erofs"
-	toolSelectorNone   = "none"
-	toolSelectorClaude = "grant:claude-delegate"
-	maxToolLayers      = 8
+	toolLayerFile    = "tool.erofs"
+	toolSelectorNone = "none"
+	maxToolLayers    = 8
 )
 
 var toolLayerNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]{0,15}$`)
@@ -132,10 +132,6 @@ func (m *Manager) toolAttached(name string, cfg VMConfig) bool {
 	for _, tok := range rule {
 		switch tok {
 		case toolSelectorNone:
-		case toolSelectorClaude:
-			if id := strings.TrimSpace(cfg.ComputerID); id != "" && m.cfg.ClaudeDelegate.Computers[id] {
-				return true
-			}
 		default:
 			if !strings.HasPrefix(tok, "grant:") {
 				plain = append(plain, tok)

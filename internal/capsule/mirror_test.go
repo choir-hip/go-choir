@@ -196,7 +196,7 @@ func TestExecutorAppliesTheMirrorGrantToL2CapsulesOnly(t *testing.T) {
 	if st := e.CapsuleMirrorStatus(); st.Granted {
 		t.Fatalf("F12: granted with no grant file: %+v", st)
 	}
-	if p := e.egressPolicyLocked(false, e.capsuleMirrorsLocked()); len(p.Routes) != 1 || !p.allowsHost("registry.npmjs.org") {
+	if p := e.egressPolicyLocked(false, e.capsuleMirrorsLocked(), ""); len(p.Routes) != 1 || !p.allowsHost("registry.npmjs.org") {
 		t.Fatalf("F12: ungranted policy = %v %v", p.Routes, p.Hosts)
 	}
 	if err := os.WriteFile(filepath.Join(dir, mirrorgrant.GrantFile), []byte(`{"computer_id":"c","status":"granted","basis":"computer","ecosystems":["npm","git"],"mirrors_only":true}`), 0o400); err != nil {
@@ -206,12 +206,12 @@ func TestExecutorAppliesTheMirrorGrantToL2CapsulesOnly(t *testing.T) {
 	if !st.Granted || !reflect.DeepEqual(st.Ecosystems, []string{"git", "npm"}) {
 		t.Fatalf("status = %+v", st)
 	}
-	p := e.egressPolicyLocked(false, st)
+	p := e.egressPolicyLocked(false, st, "")
 	if p.Routes[MirrorRouteHost] != mirrorRoute || p.Routes[GoProxyRouteHost] != goProxyRoute || p.allowsHost("registry.npmjs.org") || p.allowsHost("github.com") || p.allowsHost("proxy.golang.org") {
 		t.Fatalf("granted policy = %v %v", p.Routes, p.Hosts)
 	}
 	// The Claude delegate's model-API-only policy never takes the mirror.
-	if c := e.egressPolicyLocked(true, st); c.Routes[MirrorRouteHost].IsValid() || !reflect.DeepEqual(c.Hosts, ClaudeEgressPolicy().Hosts) {
+	if c := e.egressPolicyLocked(true, st, ""); c.Routes[MirrorRouteHost].IsValid() || !reflect.DeepEqual(c.Hosts, ClaudeEgressPolicy().Hosts) {
 		t.Fatalf("claude policy = %v %v", c.Routes, c.Hosts)
 	}
 	// No route address (no gateway peer): the grant is not in force.
