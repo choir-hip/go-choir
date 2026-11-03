@@ -127,6 +127,16 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   fresh document 799ed6d2 (11:43:35Z) after main's owner restart (deferrals=14 by 11:49:40Z). Main stopped the arm
   (lifecycle stop, about 11:52Z) until the Problem 17 fix lands. Spend $3.97 at 11:50Z.
 
+### Round 7 (after problem 17's fix, 2cd70f606)
+
+- 13:23:55Z check-in document 82f69ce1: Texture committed a turn at 13:24:11Z; no "permission denied", no "without disposing".
+- 13:24:27Z request (deepseek/request-r7.md) on document d6113ddc-c724-5829-9652-e628c9464566, trajectory 18340d9e. 13:25:54Z
+  Texture forwarded; 13:25:59Z assignment opened.
+- 13:47Z FP0 set propose_only (generation 5) to keep the candidate out of the deploy-window consensus dissent (problems 12, 22).
+- 14:14:44Z selfdev-0edfc337c6eff5455e4b938622c8a178 frozen; 14:21:02Z awaiting_approval; 14:21:08Z FP0 approved; 14:21:10Z applied.
+- Publish refused (14:21Z): package_change_not_confined (app-sdk.ts, frontend/tests/files-next/ two specs). Problem 23.
+- Next app: Slides round 1, document 313ce821-8072-5b9f-adc4-744cf17ca1d6 (trajectory ba8e093a), 14:22:07Z.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
@@ -136,5 +146,8 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 3 | 05:26:16 | 2.7 | 0.0 | 39.4 | 1.4 | 3.2 | 0.03 | applied |
 | 4 | 06:25:28 | 8.1 (Problem 8) | 0.02 | 29.1 | 2.5 (consensus) | - | - | consensus rejected (base_moved) |
 | 5 | 07:14:54 | no Cast by 07:25 (Problem 8; Problem 10 behind it) | - | - | - | - | - | blocked |
+| rebase | 10:52:57 (notice) | 0.2 | 0.1 | 2.3 | about 6.7 (consensus) | - | - | applied 11:02:09 |
+| 6 | 11:20:59 | never (Problem 17) | - | - | - | - | - | blocked |
+| 7 | 13:24:27 | 1.5 | 0.1 | 48.7 | 6.3 | 0.1 | 0.03 | applied, publish refused (23) |
 
 Live shots plus next request (apply to next revision sent): round 3, 06:12:59 to 06:25:28 = 12.5 min (live run 06:13-06:18Z, review and revision 7 min). Round 4's revision then waited 8.1 min for a Cast (Problem 8; nudge 06:31:31Z, assignment 06:33:36Z).
