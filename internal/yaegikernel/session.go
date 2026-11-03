@@ -431,6 +431,9 @@ func (s *Session) ErrorHint(src, msg string) string {
 	if s == nil {
 		return ""
 	}
+	if hint := importRefusalHint(src, msg); hint != "" {
+		return hint
+	}
 	return cellErrorHint(s.choirSurface, src, msg)
 }
 
