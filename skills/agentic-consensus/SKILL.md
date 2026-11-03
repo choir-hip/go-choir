@@ -97,7 +97,7 @@ did not deliver. `--exclude` stays forgiving.
 ### Retired ids
 
 Removed 2026-10-03. Do not reintroduce without re-probing. Full evidence in
-`docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`.
+`docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`.
 
 Retired because the pin was **broken**:
 

@@ -13,7 +13,7 @@ External CLIs use their configured default model unless a --*-model override is 
 Every pinned OMP model was identity-verified with agentic-consensus-model-probe.sh.
 Re-verify with that script after touching this file; a retired model id silently
 fuzzy-matches onto an older generation instead of failing.
-See docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md.
+See docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md.
 
 Required input:
   --prompt TEXT                 Inline prompt.
@@ -149,7 +149,7 @@ OMP_MINIMAX_M31_FLASH_THINKING="high"
 # Self-check: every supported omp-* id must resolve to a pinned model and
 # thinking level under the mechanical name mapping used by build_cmd. This is
 # the guard against the drift class in
-# docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md -- an anchor
+# docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md -- an anchor
 # whose id no longer matches its pin would otherwise run against an empty
 # --model and fuzzy-match onto whatever happened to be closest.
 for _agent in "${SUPPORTED_AGENTS[@]}"; do
@@ -363,7 +363,7 @@ done
 # An unsupported id in --include used to be dropped without a word: the panel
 # quietly ran fewer panelists than asked for and still exited 0. That is the
 # same silent-degradation class as a retired model pin
-# (docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md), so it is a
+# (docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md), so it is a
 # hard error here. --exclude stays forgiving: excluding an absent id is a
 # no-op, not a mistake.
 unknown_included=()
