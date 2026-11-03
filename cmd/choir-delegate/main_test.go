@@ -148,3 +148,12 @@ func TestParkedWaitHonoursItsBoundAndPlainWaitStillCapsAt25(t *testing.T) {
 		t.Fatalf("plain wait: %d %s", code, out.String())
 	}
 }
+
+func TestHelpPrintsUsage(t *testing.T) {
+	for _, a := range []string{"--help", "-h", "help"} {
+		var out bytes.Buffer
+		if code := run([]string{a}, &out, "/nonexistent.sock", t.TempDir()); code != 0 || !strings.Contains(out.String(), "usage: choir-delegate") {
+			t.Errorf("%s: code %d out %s", a, code, out.String())
+		}
+	}
+}

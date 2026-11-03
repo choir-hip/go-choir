@@ -29,6 +29,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/claudedelegate"
 )
 
+const usage = "usage: choir-delegate status | start --spec-json JSON | start --spec FILE | wait --id ID [--park] [--seconds N] | stop --id ID"
+
 const unavailable = "the Claude delegate is not available in this capsule: only a claude-mode engineering capsule on the allowlisted computer has it (choir-delegate status names the reason)"
 
 func main() {
@@ -37,9 +39,13 @@ func main() {
 
 func run(args []string, out io.Writer, socket, root string) int {
 	if len(args) == 0 {
-		return emit(out, 1, map[string]any{"error": "usage: choir-delegate status | start --spec-json JSON | start --spec FILE | wait --id ID [--park] [--seconds N] | stop --id ID"})
+		return emit(out, 1, map[string]any{"error": usage})
 	}
 	verb, rest := args[0], args[1:]
+	if verb == "--help" || verb == "-h" || verb == "help" {
+		fmt.Fprintln(out, usage)
+		return 0
+	}
 	fs := flag.NewFlagSet(verb, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	specJSON := fs.String("spec-json", "", "spec as JSON")
