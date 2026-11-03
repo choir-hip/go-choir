@@ -67,6 +67,8 @@
       const active = document.activeElement as HTMLElement | null;
       returnFocus = value.returnFocus || (active && active !== document.body ? active : null);
       addGlobalListeners();
+    } else if (value.returnFocus) {
+      returnFocus = value.returnFocus;
     }
     await tick();
     if (!rootEl) return;

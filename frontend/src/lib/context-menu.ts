@@ -117,6 +117,10 @@ export function contextMenu(node: HTMLElement, options: ContextMenuOptions) {
   function onContextMenu(event: MouseEvent) {
     // Keyboard-generated contextmenu events carry no pointer position.
     const fromKeyboard = event.button === -1 || (event.clientX === 0 && event.clientY === 0);
+    if (inTextField(event.target)) {
+      event.stopPropagation();
+      return;
+    }
     if (Date.now() < guardUntil || (fromKeyboard && isContextMenuOpen())) {
       event.preventDefault();
       event.stopPropagation();
@@ -134,7 +138,7 @@ export function contextMenu(node: HTMLElement, options: ContextMenuOptions) {
 
   function onKeydown(event: KeyboardEvent) {
     const isMenuKey = event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
-    if (!isMenuKey) return;
+    if (!isMenuKey || inTextField(event.target)) return;
     const point = anchorPoint();
     const focused = document.activeElement as HTMLElement | null;
     if (open(point.x, point.y, node.contains(focused) ? focused : node)) {
@@ -143,8 +147,20 @@ export function contextMenu(node: HTMLElement, options: ContextMenuOptions) {
     }
   }
 
+  // The innermost node with the action owns a press, as stopPropagation makes
+  // it own a right-click: an ancestor's timer must not replace the row's menu.
+  const ownsTarget = (target: EventTarget | null) =>
+    (target as Element | null)?.closest?.('[data-context-menu-bound]') === node;
+
+  // Text fields keep the browser's own menu (paste, spelling).
+  const inTextField = (target: EventTarget | null) => {
+    const field = (target as Element | null)?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+    return Boolean(field && field !== node);
+  };
+
   function onPointerDown(event: PointerEvent) {
     if (!opts.longPress || event.pointerType === 'mouse' || !event.isPrimary) return;
+    if (!ownsTarget(event.target) || inTextField(event.target)) return;
     cancelPress();
     pressStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
     pressTimer = setTimeout(() => {
@@ -177,6 +193,7 @@ export function contextMenu(node: HTMLElement, options: ContextMenuOptions) {
     }
   }
 
+  node.setAttribute('data-context-menu-bound', '');
   node.addEventListener('contextmenu', onContextMenu);
   node.addEventListener('keydown', onKeydown);
   node.addEventListener('pointerdown', onPointerDown);
@@ -191,6 +208,7 @@ export function contextMenu(node: HTMLElement, options: ContextMenuOptions) {
     },
     destroy() {
       cancelPress();
+      node.removeAttribute('data-context-menu-bound');
       node.removeEventListener('contextmenu', onContextMenu);
       node.removeEventListener('keydown', onKeydown);
       node.removeEventListener('pointerdown', onPointerDown);

@@ -47,7 +47,7 @@
   import { mediaRouteForFileName } from './media-utils.js';
   import { contextMenu, type ContextMenuEntry } from './context-menu';
   import { isTextFileName, openersForFile, type FileOpener } from './open-with';
-  import { dropZone, pickAndUploadFiles } from './file-upload';
+  import { dropZone, pickFiles, uploadFiles } from './file-upload';
   import { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from './live-events.js';
   import { previewFiles, previewFolderEntries } from './public-preview-data';
 
@@ -411,7 +411,7 @@
   }
 
   function startRename(entry) {
-    if (!requireAuth()) return;
+    if (!requireAuth() || renaming) return;
     deleteTarget = null;
     renameTarget = entry.name;
     renameValue = entry.name;
@@ -432,7 +432,7 @@
       cancelRename();
       return;
     }
-    if (to.includes('/') || to.includes('\\')) {
+    if (to === '.' || to === '..' || to.includes('/') || to.includes('\\')) {
       renameError = 'Names cannot contain / or \\';
       return;
     }
@@ -478,7 +478,7 @@
   }
 
   async function renameByCopy(fromUrl, toUrl) {
-    const src = await fetchWithRenewal(fromUrl);
+    const src = await fetchWithRenewal(fromUrl, { headers: { 'X-Choir-Device': currentDeviceId() } });
     if (!src.ok) return src;
     const blob = await src.blob();
     const put = await fetchWithRenewal(toUrl, {
@@ -575,9 +575,13 @@
     if (!requireAuth('file_upload')) return;
     uploadError = '';
     uploadStatus = '';
+    // The picker may never report a dismissal (no cancel event in older
+    // browsers), so the busy state starts only once files are chosen.
+    const files = await pickFiles();
+    if (!files.length) return;
     try {
       uploading = true;
-      const paths = await pickAndUploadFiles({ folder: folderSegments.join('/') });
+      const paths = await uploadFiles(files, { folder: folderSegments.join('/') });
       if (!paths.length) return;
       uploadStatus = paths.length === 1 ? `Uploaded ${paths[0]}` : `Uploaded ${paths.length} files`;
       await fetchDirectory(currentPath);
@@ -815,7 +819,7 @@
   class="file-browser"
   data-file-list
   use:contextMenu={{ label: 'Folder actions', items: backgroundMenuItems }}
-  use:dropZone={{ folder: currentPath.join('/'), enabled: () => authenticated, onUploaded: handleDroppedUpload, onError: handleDroppedUploadError }}
+  use:dropZone={{ folder: currentPath.join('/'), enabled: () => authenticated, onDisabledDrop: () => requireAuth('file_upload'), onUploaded: handleDroppedUpload, onError: handleDroppedUploadError }}
 >
   <!-- Toolbar: breadcrumb + actions -->
   <div class="toolbar">
@@ -1088,6 +1092,10 @@
   .rename-input {
     flex: 1;
     min-width: 0;
+  }
+
+  .file-item {
+    -webkit-touch-callout: none;
   }
 
   .file-item:focus-visible {

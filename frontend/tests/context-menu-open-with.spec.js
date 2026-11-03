@@ -294,6 +294,37 @@ test.describe('context menu primitive', () => {
     });
     await expect(menu(page)).toHaveCount(0);
   });
+
+  test('a long press inside a nested target opens the innermost menu, and text fields keep the native menu', async ({ page }) => {
+    await openShell(page);
+    const result = await page.evaluate(async () => {
+      const sdk = await import('/src/lib/app-sdk.ts');
+      const outer = document.createElement('div');
+      Object.assign(outer.style, { position: 'fixed', left: '20px', top: '300px', width: '300px', height: '120px' });
+      const inner = document.createElement('div');
+      Object.assign(inner.style, { width: '200px', height: '40px' });
+      const field = document.createElement('input');
+      inner.appendChild(field);
+      outer.appendChild(inner);
+      document.body.appendChild(outer);
+      sdk.contextMenu(outer, [{ id: 'outer', label: 'Outer' }]);
+      sdk.contextMenu(inner, [{ id: 'inner', label: 'Inner' }]);
+      const at = { clientX: 40, clientY: 310, bubbles: true, pointerType: 'touch', pointerId: 9, isPrimary: true };
+      inner.dispatchEvent(new PointerEvent('pointerdown', at));
+      await new Promise((r) => setTimeout(r, 700));
+      inner.dispatchEvent(new PointerEvent('pointerup', at));
+      const ids = Array.from(document.querySelectorAll('[data-context-menu-item]')).map((el) => el.getAttribute('data-context-menu-item'));
+      sdk.closeContextMenu();
+      await new Promise((r) => setTimeout(r, 50));
+      const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 310 });
+      field.dispatchEvent(ev);
+      await new Promise((r) => setTimeout(r, 50));
+      return { ids, fieldPrevented: ev.defaultPrevented, menus: document.querySelectorAll('[data-context-menu]').length };
+    });
+    expect(result.ids).toEqual(['inner']);
+    expect(result.fieldPrevented).toBe(false);
+    expect(result.menus).toBe(0);
+  });
 });
 
 // ---- shell surfaces wired to it ----
@@ -465,6 +496,25 @@ test.describe('upload helpers', () => {
     expect(result.after).toBe(false);
     expect(result.dropped).toEqual(['Inbox/talk.pptx']);
     expect(puts).toEqual(['/api/files/good.pptx', '/api/files/bad.pptx', '/api/files/Inbox/talk.pptx']);
+  });
+
+  test('a disabled drop zone still swallows the drop, so the browser does not navigate to the file', async ({ page }) => {
+    await openShell(page);
+    const result = await page.evaluate(async () => {
+      const sdk = await import('/src/lib/app-sdk.ts');
+      const zone = document.createElement('div');
+      document.body.appendChild(zone);
+      let disabledDrops = 0;
+      sdk.dropZone(zone, { enabled: () => false, onDisabledDrop: () => { disabledDrops += 1; }, onUploaded: () => { throw new Error('uploaded'); } });
+      const dt = new DataTransfer();
+      dt.items.add(new File(['x'], 'x.pptx'));
+      const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt });
+      zone.dispatchEvent(over);
+      const drop = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
+      zone.dispatchEvent(drop);
+      return { over: over.defaultPrevented, drop: drop.defaultPrevented, disabledDrops };
+    });
+    expect(result).toEqual({ over: true, drop: true, disabledDrops: 1 });
   });
 });
 

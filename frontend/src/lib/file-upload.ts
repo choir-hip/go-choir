@@ -134,6 +134,8 @@ export type DropZoneOptions = {
   onRejected?: (files: File[]) => void;
   /** Return false to refuse a drop (e.g. signed out); the zone then does nothing. */
   enabled?: boolean | (() => boolean);
+  /** Called when files are dropped while the zone is disabled (e.g. ask for sign-in). */
+  onDisabledDrop?: () => void;
   multiple?: boolean;
 };
 
@@ -161,9 +163,19 @@ export function dropZone(node: HTMLElement, options: DropZoneOptions = {}) {
     setActive(true);
   }
 
+  // A disabled zone still swallows the drop: left to the browser, a dropped
+  // file replaces the whole desktop with itself.
   function onDragOver(event: DragEvent) {
-    if (!hasFiles(event) || !enabled()) return;
+    if (!hasFiles(event)) return;
     event.preventDefault();
+    if (!enabled()) {
+      try {
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+      } catch (_err) {
+        // read-only dataTransfer
+      }
+      return;
+    }
     try {
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
     } catch (_err) {
@@ -178,11 +190,15 @@ export function dropZone(node: HTMLElement, options: DropZoneOptions = {}) {
   }
 
   async function onDrop(event: DragEvent) {
-    if (!hasFiles(event) || !enabled()) return;
+    if (!hasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     depth = 0;
     setActive(false);
+    if (!enabled()) {
+      opts.onDisabledDrop?.();
+      return;
+    }
     let files = Array.from(event.dataTransfer?.files || []);
     if (opts.multiple === false) files = files.slice(0, 1);
     const accepted = files.filter((f) => fileMatchesAccept(f, opts.accept));

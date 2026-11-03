@@ -11,7 +11,7 @@
     resolveMediaSource,
   } from './media-utils.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
-  import { dropZone, pickAndUploadFiles } from './file-upload';
+  import { dropZone, pickFiles, uploadFiles } from './file-upload';
 
   export let appContext = {};
   export let windowId = '';
@@ -356,9 +356,12 @@
       dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' });
       return;
     }
+    // Busy only once a file is chosen: a dismissed picker may never report it.
+    const files = await pickFiles({ accept: DECK_ACCEPT, multiple: false });
+    if (!files.length) return;
     try {
       uploadingDeck = true;
-      const [path] = await pickAndUploadFiles({ accept: DECK_ACCEPT, multiple: false });
+      const [path] = await uploadFiles(files);
       if (path) await openUploadedPath(path);
     } catch (err) {
       handleUploadFailure(err);
@@ -444,9 +447,9 @@
   data-slides-app
   tabindex="0"
   on:keydown={handleKeydown}
-  use:dropZone={{ accept: DECK_ACCEPT, multiple: false, enabled: () => authenticated, onUploaded: (paths) => paths[0] && openUploadedPath(paths[0]), onError: handleUploadFailure }}
+  use:dropZone={{ accept: DECK_ACCEPT, multiple: false, enabled: () => authenticated, onDisabledDrop: () => dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' }), onUploaded: (paths) => paths[0] && openUploadedPath(paths[0]), onError: handleUploadFailure }}
 >
-  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">S</span><div><p class="eyebrow">PRESENTATION</p><h1>{item?.title || source.title || 'Slides'}</h1></div></div>{#if slides.length}<div class="top-actions"><button class="control-button" data-slides-upload-top on:click={uploadDeck} disabled={uploadingDeck} aria-label="Upload a deck">Upload</button><span class="deck-count">{slides.length} slides</span><button class="control-button primary" on:click={toggleFullscreen} aria-label={isFullscreen ? 'Exit presentation mode' : 'Present fullscreen'}>Present <span aria-hidden="true">⛶</span></button></div>{/if}</header>
+  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">S</span><div><p class="eyebrow">PRESENTATION</p><h1>{item?.title || source.title || 'Slides'}</h1></div></div>{#if slides.length}<div class="top-actions">{#if uploadError}<span class="upload-error" role="alert" data-slides-upload-error-top>{uploadError}</span>{/if}<button class="control-button" data-slides-upload-top on:click={uploadDeck} disabled={uploadingDeck} aria-label="Upload a deck">Upload</button><span class="deck-count">{slides.length} slides</span><button class="control-button primary" on:click={toggleFullscreen} aria-label={isFullscreen ? 'Exit presentation mode' : 'Present fullscreen'}>Present <span aria-hidden="true">⛶</span></button></div>{/if}</header>
   {#if loading}<div class="state-panel" role="status"><span class="spinner" aria-hidden="true"></span><h2>Preparing your presentation</h2><p>Loading slides…</p></div>
   {:else if error}<div class="state-panel error-panel" role="alert"><span class="state-icon" aria-hidden="true">!</span><h2>Couldn't open this presentation</h2><p>{error}</p><button class="control-button" on:click={loadContentItem}>Try again</button></div>
   {:else if slides.length === 0}<main class="welcome"><div class="welcome-copy"><span class="eyebrow">YOUR PRESENTATION SPACE</span><h2>Make room for the big picture.</h2><p>Upload a PPTX, PDF, or HTML file, drop one here, or open one from Files.</p><button class="control-button primary" data-slides-upload on:click={uploadDeck} disabled={uploadingDeck}>{uploadingDeck ? 'Uploading…' : 'Upload a deck'}</button>{#if uploadError}<p class="upload-error" role="alert" data-slides-upload-error>{uploadError}</p>{/if}</div><div class="recent-panel"><span class="eyebrow">CONTINUE WHERE YOU LEFT OFF</span><h3>Recent presentations</h3>{#if recentFiles.length}<ul class="recent-list">{#each recentFiles as entry}<li><button class="recent-item" on:click={() => openRecentFile(entry)}><span class="file-icon" aria-hidden="true">▤</span><span class="recent-title">{entry.title || entry.fileName || 'Untitled'}</span><span aria-hidden="true">→</span></button></li>{/each}</ul>{:else}<p class="muted">Your recently opened decks will appear here.</p>{/if}</div></main>
