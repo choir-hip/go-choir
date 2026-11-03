@@ -118,6 +118,14 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   07:25Z (Problem 8), and admission would refuse it on the stack anyway (Problem 10). No delegate run this round.
 - Status at 07:25Z: blocked on the platform (Problems 10 and 11). Spend $2.92 total (502 calls).
 
+### Rebase after the blocker fixes (eb1fb6408, 10:37Z)
+
+- 10:52:48Z rebase notice minted (306 s after boot); 10:53:00Z management opened the rebase assignment.
+- selfdev-22655878c3170572dd841124b2538aa4 (created 11:07:32Z) failed 11:15:12Z: "freeze: rebase_content_mismatch:
+  hunk_missing: ... frontend/src/lib/app-sdk.ts". Texture 11:20:55Z: "the already-landed app-sdk hunk blocks it and
+  the merged duplicate exports fail the build". Problem 14, reported to main 11:20Z. Claude cannot build until it
+  is fixed; its Files candidate (round 3) stays applied and unpublished.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |

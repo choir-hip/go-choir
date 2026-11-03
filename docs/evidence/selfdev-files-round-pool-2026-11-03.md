@@ -93,6 +93,15 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   requires a root-desk rebase that is unavailable in this run" (07:15:41Z). Problem 10.
 - Status at 07:25Z: blocked on the platform. Spend $1.92 total (288 calls).
 
+### Published (main, after the blocker fixes)
+
+- 10:44:56Z `choir package publish --package files-next --operation selfdev-c4ac7712...`: release
+  0f8733c219d90904c44a86fc7981698a302c0540e9408fa580b3a54bf2698601, listed/published, parent kind base 2795b8ee,
+  5 files under frontend/src/packages/files-next (docs/evidence/selfdev-blockers-deployed-proof-2026-11-03.md).
+- Next app: Slides. 11:29:36Z request (laneC/slides-request.md) on new document 023c9d49-0237-5fcb-9806-6ef1d90a3115,
+  trajectory a475876b-a9c3-5ebe-974d-05610995992d. Real decks seeded on all four arms at 11:24Z:
+  Documents/Decks/rainfall review 2026.pptx (4 slides, notes), choir in five slides.html, Choir state and vision.pdf.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |

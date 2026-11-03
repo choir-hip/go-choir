@@ -115,6 +115,14 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   document; no Cast by 07:25Z (Problem 8); admission would refuse it on the stack (Problem 10).
 - Status at 07:25Z: blocked on the platform. Spend $5.03 total (617 calls).
 
+### Rebase and round 6 (after eb1fb6408)
+
+- 10:52:57Z rebase notice minted; 10:53:08Z rebase assignment; selfdev-152fe036bf575df9af28820e3132bae7 applied
+  11:02:09Z under standing_consensus. Publish refused (11:19Z): package_change_not_confined (the rebase carries
+  app-sdk.ts and two specs). The arm publishes from its next package-only round.
+- 11:20:59Z round 6 revision 021721b8 (deepseek/revise-r6.md: the round-4 fixes on the new base, contrast, real
+  files, package-only).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
