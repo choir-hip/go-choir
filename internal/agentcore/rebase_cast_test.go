@@ -181,8 +181,13 @@ func TestRebaseCastRefusesWhatIsNotTheMovedStack(t *testing.T) {
 	}{
 		{"wrong base", nil, func(m map[string]string) { m["base"] = f40("c") }, "rebase_base_mismatch"},
 		{"wrong operation", nil, func(m map[string]string) { m["rebase_of"] = "op-zzz" }, "rebase_of_mismatch"},
-		{"spec missing rebase_of", nil, func(m map[string]string) { m["rebase_of"] = "" }, "rebase_spec_incomplete"},
-		{"spec missing base", nil, func(m map[string]string) { m["base"] = "" }, "rebase_spec_incomplete"},
+		// A spec missing rebase_of or base takes them from the notice record
+		// (problem 16): TestRebaseNoticeManagementCastTakesTheNoticeFromItsParent.
+		// A spec naming another notice than its parent's is refused first.
+		{"spec naming another notice", nil, func(m map[string]string) {
+			m["rebase_notice"] = types.StackRebaseNoticeID("op-zzz", f40("e"), 1)
+			m["rebase_of"] = ""
+		}, "rebase_notice_mismatch"},
 		{"stack is projected, not moved", func(t *testing.T, f *rebaseCastFixture) { setBootedBase(t, f.rt, f.base) }, nil, "rebase_not_needed"},
 		{"the booted base's objects are missing", func(t *testing.T, f *rebaseCastFixture) {
 			setBootedBase(t, f.rt, f40("d"))
@@ -208,7 +213,15 @@ func TestRebaseCastRefusesWhatIsNotTheMovedStack(t *testing.T) {
 func f40(c string) string { return strings.Repeat(c, 40) }
 
 func TestRebaseCastWithoutANoticeKeepsTodaysRefusal(t *testing.T) {
-	f := newRebaseCastFixture(t)
+	// The parent is an ordinary Texture request: it names no notice, so
+	// management's Cast is not bound to one (problem 16 binds a Cast to the
+	// notice its parent carries, never to one it does not).
+	f := &rebaseCastFixture{rebaseFixture: newRebaseFixture(t), castID: "cast-root-ordinary"}
+	f.preflight = &fakeSourcePreflight{head: gitHead(t, f.repo)}
+	f.rt.sourcePreflight = f.preflight
+	f.rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
+	f.fire(t)
+	f.rootCast(t, f.castID, "")
 	// An ordinary request at stack_base_moved is refused exactly as before,
 	// even when it carries rebase_of and base but no notice (D3).
 	spec := f.spec(func(m map[string]string) { m["rebase_notice"] = "" })

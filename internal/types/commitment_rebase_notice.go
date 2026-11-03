@@ -76,6 +76,39 @@ func ParseStackRebaseNoticeID(id string) (operationID, bootedBase string, attemp
 	return parts[0], parts[1], n, true
 }
 
+// ResolveStackRebaseNoticeID reads the notice id a desk named, as it copied
+// it, and returns the canonical id it names (problem 16: pool's Texture
+// wrote rebase-notice:selfdev-rebase:<op>:<base>:1, its sender inbox as an
+// extra segment). The last three segments are the operation, the base and the
+// attempt; segments before them are ignored. The result is only a name: the
+// record on the tape under it is the authority, and every caller looks it up.
+func ResolveStackRebaseNoticeID(text string) (string, bool) {
+	rest, found := strings.CutPrefix(strings.TrimSpace(text), rebaseNoticeRecordPrefix)
+	if !found {
+		return "", false
+	}
+	parts := strings.Split(rest, ":")
+	if len(parts) < 3 {
+		return "", false
+	}
+	op, base, attempt := parts[len(parts)-3], parts[len(parts)-2], parts[len(parts)-1]
+	if op == "" || base == "" || strings.ContainsAny(op+base, " \t\r\n") {
+		return "", false
+	}
+	n, err := strconv.Atoi(attempt)
+	if err != nil || n < 1 {
+		return "", false
+	}
+	return StackRebaseNoticeID(op, base, n), true
+}
+
+// SameStackRebaseNotice reports whether two namings resolve to one notice id.
+func SameStackRebaseNotice(a, b string) bool {
+	ra, okA := ResolveStackRebaseNoticeID(a)
+	rb, okB := ResolveStackRebaseNoticeID(b)
+	return okA && okB && ra == rb
+}
+
 // StackRebaseClaimKey is the key of the claim of attempt n of a pair. The
 // automatic attempts (1..RebaseNoticeMaxAttempts) share the pair's one claim;
 // each owner retry (an attempt above the cap) is its own generation with its

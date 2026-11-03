@@ -374,7 +374,9 @@ func TestRebaseNoticeCrashBootMintsTheNextAttemptNotTheOld(t *testing.T) {
 	f := newRebaseFixture(t)
 	f.fire(t) // attempt 1, minted in the previous boot
 	pre := f.notice(t, 1)
-	// A crash: a new boot, markerless. The attempt predates it.
+	// A crash: a new boot, markerless. The attempt predates it, and the
+	// process's in-memory timer is gone with it.
+	f.rt.stopRebaseNotice()
 	f.now = f.now.Add(time.Minute)
 	f.rt.bootedAt = f.now
 	f.rt.bootRestartPlanned = false

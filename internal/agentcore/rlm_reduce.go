@@ -1013,6 +1013,11 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Texture {
 		var folded []yaegikernel.StagedIntent
 		var err error
+		// A Cast that answers a rebase notice carries the notice record's own
+		// id, resolved here from the tape (problem 16).
+		if intents, err = r.resolveTextureRebaseNotices(ctx, intents); err != nil {
+			return err
+		}
 		// A Cast that names the owner's revisions carries their words,
 		// attached here from the store and never typed by the cell.
 		if intents, err = r.attachTextureOwnerDirections(ctx, intents); err != nil {

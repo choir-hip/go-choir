@@ -138,7 +138,7 @@ type rebaseCastSpec struct {
 //   - the notice record exists and passes IsStackRebaseNotice (an agent's
 //     record never does);
 //   - its inbox is the parent Cast's sender, and the parent's packet names
-//     the same notice id (the root made this Cast);
+//     the same notice id, as resolved (the root made this Cast);
 //   - the spec's rebase_of and base equal the notice's subject refs, and the
 //     objective contains the notice id;
 //   - it is the latest attempt of its pair;
@@ -202,7 +202,10 @@ func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.Open
 	if strings.TrimSpace(notice.Inbox) != strings.TrimSpace(parent.SenderInbox) {
 		return nil, nil, refuse("rebase_notice_mismatch", "notice %s was sent to %s, the parent Cast is from %s", noticeID, notice.Inbox, parent.SenderInbox)
 	}
-	if types.CastRebaseNotice(parent.Directive.Body) != noticeID {
+	// The parent's naming is resolved, not compared byte for byte: a
+	// Texture Cast committed before the reducer resolved notice ids may hold
+	// a miscopied form of this id (problem 16).
+	if !types.SameStackRebaseNotice(types.CastRebaseNotice(parent.Directive.Body), noticeID) {
 		return nil, nil, refuse("rebase_notice_mismatch", "the parent Cast does not carry notice %s; the root did not make this request", noticeID)
 	}
 	if strings.TrimSpace(spec.RebaseOf) != operationID || strings.TrimSpace(notice.SubjectRefs["operation_id"]) != operationID {

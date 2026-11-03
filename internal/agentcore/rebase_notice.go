@@ -90,6 +90,16 @@ func (rt *Runtime) rebaseAnswerWindowInterval() time.Duration {
 	return defaultRebaseAnswerWindow
 }
 
+// rebaseRecheckInterval is how often the timer looks again at a live
+// attempt: the stay-up interval, never longer than the answer window.
+func (rt *Runtime) rebaseRecheckInterval() time.Duration {
+	every := rt.rebaseStayUpInterval()
+	if window := rt.rebaseAnswerWindowInterval(); window < every {
+		every = window
+	}
+	return every + rebaseMinDelay
+}
+
 // rebaseScope is the owner and computer the notice is minted for.
 func (rt *Runtime) rebaseScope() (ownerID, computerID string) {
 	if rt == nil {
@@ -298,7 +308,11 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	}
 	out := rebaseNoticeOutcome{Minted: notice.RecordID, Attempt: next}
 	if next < types.RebaseNoticeMaxAttempts {
-		out.Rearm = rt.rebaseAnswerWindowInterval() + rebaseMinDelay
+		// Look again every stay-up interval, not once per answer window: a
+		// round that answered the notice and closed without a claim (the
+		// rebase was refused) is followed by the next attempt within minutes
+		// (problem 16). An unanswered notice still waits out its window.
+		out.Rearm = rt.rebaseRecheckInterval()
 	}
 	return out
 }
@@ -431,7 +445,13 @@ func (rt *Runtime) rebaseAttemptClosed(ctx context.Context, ownerID, computerID 
 	window := rt.rebaseAnswerWindowInterval()
 	if len(casts) == 0 {
 		if remaining := committed.Add(window).Sub(now); remaining > 0 {
-			return false, remaining + rebaseMinDelay, nil
+			// An answer may come and its round close (a refused rebase)
+			// well inside the window: look again by then.
+			wait := remaining + rebaseMinDelay
+			if every := rt.rebaseRecheckInterval(); every < wait {
+				wait = every
+			}
+			return false, wait, nil
 		}
 		return true, 0, nil
 	}
@@ -441,7 +461,7 @@ func (rt *Runtime) rebaseAttemptClosed(ctx context.Context, ownerID, computerID 
 			return false, 0, err
 		}
 		if head.Open && head.Round == cast.Round {
-			return false, window, nil
+			return false, rt.rebaseRecheckInterval(), nil
 		}
 	}
 	return true, 0, nil
@@ -457,7 +477,7 @@ func (rt *Runtime) rebaseNoticeCasts(ctx context.Context, ownerID, computerID st
 	}
 	var out []types.CommitmentRecord
 	for _, rec := range records {
-		if rec.IsCast() && rec.SenderInbox == notice.Inbox && rec.Directive != nil && types.CastRebaseNotice(rec.Directive.Body) == notice.RecordID {
+		if rec.IsCast() && rec.SenderInbox == notice.Inbox && rec.Directive != nil && types.SameStackRebaseNotice(types.CastRebaseNotice(rec.Directive.Body), notice.RecordID) {
 			out = append(out, rec)
 		}
 	}

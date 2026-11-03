@@ -241,3 +241,23 @@ func TestStackRebaseNewerAttemptIDsCoverGaps(t *testing.T) {
 		t.Fatalf("newer than 4: %v", got)
 	}
 }
+
+// Problem 16: a desk's naming of a notice resolves to the record id it names,
+// whatever segments it put before the operation, base and attempt; anything
+// without the three is no naming.
+func TestResolveStackRebaseNoticeID(t *testing.T) {
+	want := StackRebaseNoticeID("selfdev-c4", "eb1f", 1)
+	for _, naming := range []string{want, " " + want + " ", "rebase-notice:selfdev-rebase:selfdev-c4:eb1f:1"} {
+		if got, ok := ResolveStackRebaseNoticeID(naming); !ok || got != want {
+			t.Fatalf("%q resolved to %q %v", naming, got, ok)
+		}
+	}
+	for _, naming := range []string{"", "selfdev-rebase:selfdev-c4", "rebase-notice:selfdev-c4:eb1f", "rebase-notice:selfdev-c4:eb1f:0", "rebase-notice:selfdev-c4:eb1f:x", "rebase-notice::eb1f:1", "rebase-notice:a b:eb1f:1"} {
+		if got, ok := ResolveStackRebaseNoticeID(naming); ok {
+			t.Fatalf("%q resolved to %q", naming, got)
+		}
+	}
+	if !SameStackRebaseNotice("rebase-notice:selfdev-rebase:selfdev-c4:eb1f:1", want) || SameStackRebaseNotice(want, StackRebaseNoticeID("selfdev-c4", "eb1f", 2)) {
+		t.Fatal("SameStackRebaseNotice")
+	}
+}

@@ -249,6 +249,12 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if !isTextureCastTo(parent, management) {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: parent %s is not a Texture's Cast in %s", parentID, management)
 	}
+	// Problem 16: the rebase notice travels as data from the notice record,
+	// not as a string management copies.
+	if spec, in, err = rt.bindCastRebaseNotice(ctx, ownerID, computerID, parent, spec, in); err != nil {
+		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
+	}
+	objective = strings.TrimSpace(in.Objective)
 	head, err := rt.store.ConversationState(ctx, ownerID, computerID, parent.ConversationID)
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: conversation %s: %w", parent.ConversationID, err)
@@ -351,6 +357,71 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	}
 	cast.ParentID = parentID
 	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast, Rebase: rebaseBase != "", SourceWarning: sourceWarning}, nil
+}
+
+// bindCastRebaseNotice binds a management Cast to the rebase notice its
+// request answers (problem 16: pool's notice id was miscopied on the way, and
+// admission refused both the miscopy and the right id). The notice is the one
+// management's spec names or, when it names none, the one the parent Texture
+// Cast carries; either naming is resolved (ResolveStackRebaseNoticeID) and
+// looked up on the tape. When it is a rebase notice, the spec carries that
+// record's own id, rebase_of and base default to the record's subject refs,
+// and the objective names the id. A naming that resolves to no notice is left
+// as it is, and the gate and admission refuse it as before; a spec that
+// disagrees with the record is refused there too.
+func (rt *Runtime) bindCastRebaseNotice(ctx context.Context, ownerID, computerID string, parent *types.CommitmentRecord, spec engineeringCastSpec, in yaegikernel.StagedIntent) (engineeringCastSpec, yaegikernel.StagedIntent, error) {
+	var parentNaming string
+	if parent != nil && parent.Directive != nil {
+		parentNaming = types.CastRebaseNotice(parent.Directive.Body)
+	}
+	named := strings.TrimSpace(spec.RebaseNotice)
+	if named == "" {
+		named = parentNaming
+	} else if parentNaming != "" && !types.SameStackRebaseNotice(named, parentNaming) {
+		// Refused before the preflight, with the reason admission would give
+		// (review r1, DeepSeek F8).
+		return spec, in, fmt.Errorf("rebase_notice_mismatch: the spec names notice %s, the parent Texture Cast answers %s; pass the parent's notice or none (the runtime takes it from the parent)", truncateForError(named), truncateForError(parentNaming))
+	}
+	id, ok := types.ResolveStackRebaseNoticeID(named)
+	if !ok {
+		return spec, in, nil
+	}
+	notice, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, id)
+	if err != nil {
+		return spec, in, fmt.Errorf("rebase notice %s: %w", id, err)
+	}
+	if notice == nil || !types.IsStackRebaseNotice(*notice) {
+		return spec, in, nil
+	}
+	fields := map[string]json.RawMessage{}
+	if raw := strings.TrimSpace(in.Statement); raw != "" && raw != "null" {
+		if err := json.Unmarshal([]byte(raw), &fields); err != nil || fields == nil {
+			return spec, in, nil
+		}
+	}
+	spec.RebaseNotice = notice.RecordID
+	if strings.TrimSpace(spec.RebaseOf) == "" {
+		spec.RebaseOf = strings.TrimSpace(notice.SubjectRefs["operation_id"])
+	}
+	if strings.TrimSpace(spec.Base) == "" {
+		spec.Base = strings.TrimSpace(notice.SubjectRefs["booted_base"])
+	}
+	for key, value := range map[string]string{types.RebaseNoticeCastField: spec.RebaseNotice, "rebase_of": spec.RebaseOf, "base": spec.Base} {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return spec, in, err
+		}
+		fields[key] = raw
+	}
+	statement, err := json.Marshal(fields)
+	if err != nil {
+		return spec, in, err
+	}
+	in.Statement = string(statement)
+	if !strings.Contains(in.Objective, notice.RecordID) {
+		in.Objective = strings.TrimSpace(in.Objective) + " (rebase notice " + notice.RecordID + ")"
+	}
+	return spec, in, nil
 }
 
 // refuseCastOntoOpenAssignment refuses an engineering Cast for a Texture
