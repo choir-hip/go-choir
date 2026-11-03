@@ -97,3 +97,26 @@ current source, kept current by source projection after every deploy. An
 investigation of the gap (today's capsule root and mounts, the isolation
 boundary that keeps owner data out, consistency of a live store under the
 overlay, secrets that must stay out) is running; the design follows from it.
+
+## Problem 5 (hypothesis): management's Cast to engineering drops parts of the request
+
+Claude arm round 3 (assignment-74d314c1d1429249750d8abb). The engineer asked
+management for the twelve-entry screenshot list at 04:43:51Z and again at
+05:12:03Z. Management replied at 04:51Z that "the Texture request packet
+available to management contains only the actions and omits the
+filename-to-preset-to-view/state list". The engineer's report says management
+then read the list from the Texture document's revision 6. If the Cast body
+carries only the actions, every detailed acceptance list in a request (shots,
+features, measurements) reaches engineering secondhand or not at all. Status:
+hypothesis, from the monitor's reading of run events. Not yet checked
+against the Cast record (rlm:cast and the commitment ledger entry for the Cast).
+
+## Problem 6: a Library release cannot carry the app-sdk re-exports its package needs
+
+`choir package publish` for pool selfdev-1d0527916b182fb513039514188a874d
+(05:35Z) answered 409 package_change_not_confined: the operation also changed
+frontend/src/lib/app-sdk.ts. All three candidates so far added re-exports
+there (the request allowed it), because a package may import only app-sdk and
+the file routes, fetchWithRenewal and the registry were not exported. Main's
+fix: the re-exports on main (branch app-sdk-exports), reaching the arms
+through the ring walk; then each arm's next round is package-only and publishes.
