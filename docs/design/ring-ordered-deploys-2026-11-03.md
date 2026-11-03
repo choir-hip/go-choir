@@ -100,6 +100,42 @@ moves the guest release.
    `docs/design/calibration-seed-2026-11-03.md`). Settlement is not built.
    `GET /internal/vmctl/ring-walk` serves the state and the history tail.
 
+## Expedite (owner, 2026-11-03)
+
+Owner: "we should have some way to force changes to all machines instantly.
+Important for key fixes." An expedite skips the soak floors and the ring
+order for one release; it does not skip safety.
+
+- **Triggers.** (a) A commit trailer `Ring-Expedite: <reason>` on any commit
+  in the deploy's range (the deployed commit in the receipt, exclusive, to
+  the deploy commit). `node-b-ci-deploy` reads the range from the gate's
+  checkout (read only, no gate change) and, before it takes the refresh
+  plan, posts the expedite to vmctl with `by: "trailer <sha>"`. (b) An owner
+  or operator act for a release already deployed:
+  `POST /internal/vmctl/ring-walk/expedite {"reason", "by"}` (internal
+  callers only; `by` is required and names who asked).
+- **Effect.** vmctl first reads the current release (so a deploy's new walk
+  exists), then marks that walk expedited: every remaining ring opens at
+  once (the paper included), so no computer is pinned or gated, the CI plan
+  lists every active computer as a candidate, and the walk enrolls every
+  active computer off the release. An expedite with no walk (the release did
+  not change) or on a rolled-back walk is refused (409) and recorded.
+- **Unchanged.** Every refresh is the ordinary planned, marker-backed one;
+  the guest still refuses mid self-development apply, with a live capsule,
+  or on release skew, and a refused computer stays pending and goes at its
+  next idle moment (the paper with allow_busy, never mid apply or with a
+  capsule). The guards keep evaluating every member on the release in every
+  ring, and a breach rolls back every computer that took it (all rings are
+  open, so all are returned).
+- **Closing.** Each ring closes once 10 minutes have passed since the
+  expedite and every active, eligible member that is not still pending is
+  seen healthy on the release (an empty ring is skipped, R0 included: the
+  owner asked for instantly). The walk completes when every ring has closed.
+- **Record.** `expedite` history line with the reason, `by`, and the time;
+  status shows `expedited: true`, `expedite_reason`, `expedited_by`; the
+  CI plan's `ring_walk` carries `expedited`. The morning letter names every
+  expedite from the history.
+
 ## Decisions after review 1 (Devin, 2026-11-03)
 
 - **A release that returns to the baseline id ends the walk without rings.**
