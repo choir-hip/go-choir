@@ -17,6 +17,19 @@ import (
 //	                                  class:<warmness class>): the guest's
 //	                                  elastic ceiling; an id wins over a class
 //	VMCTL_GUEST_MEMORY_CAP_INTERVAL   reconcile interval, default 1m; 0 stops
+//	VMCTL_GUEST_MEMORY_CAP_THROUGH_WORK_COMPUTERS
+//	                                  "id,class:<class>,*": the ceiling acts
+//	                                  while a capsule or a self-development
+//	                                  operation is live (the act's
+//	                                  through_work); others stand aside
+//
+// Through work (2026-11-03,
+// docs/problems/working-guest-cache-held-while-builds-wait-2026-11-03.md):
+// the ceiling had borrowed the restart rule, so a self-development arm kept
+// its page cache for its whole round, while its own build waited for host
+// memory. Dropping clean cache cuts no work and never takes anonymous
+// memory. A guest that predates the field answers 400 once per boot and gets
+// the plain ceiling.
 //
 // Every pass asks each named active computer for a ceiling act (guestmem
 // ModeCeiling): while its used memory is over the ceiling, the guest drops
@@ -75,6 +88,45 @@ func ParseGuestMemoryCaps(raw string) (map[string]int, []string) {
 		out[id] = n
 	}
 	return out, bad
+}
+
+// ParseGuestMemoryCapThroughWork reads "id,class:<class>,*"; "class:" with
+// no name is dropped and named in the second result.
+func ParseGuestMemoryCapThroughWork(raw string) (map[string]bool, []string) {
+	var out map[string]bool
+	var bad []string
+	for _, tok := range strings.Split(raw, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		if tok == guestMemoryCapClassPrefix || strings.ContainsAny(tok, "= ") {
+			bad = append(bad, tok)
+			continue
+		}
+		if out == nil {
+			out = map[string]bool{}
+		}
+		out[tok] = true
+	}
+	return out, bad
+}
+
+// SetGuestMemoryCapThroughWork sets the through-work selector.
+func (r *OwnershipRegistry) SetGuestMemoryCapThroughWork(sel map[string]bool) {
+	r.guestMemoryCapMu.Lock()
+	r.guestMemoryCapThroughWork = sel
+	r.guestMemoryCapMu.Unlock()
+}
+
+// guestMemoryCapThroughWorkFor reports whether the selector names the
+// computer (by VM id, computer id, its class, or "*").
+func guestMemoryCapThroughWorkFor(sel map[string]bool, own *VMOwnership, class WarmnessClass) bool {
+	if len(sel) == 0 {
+		return false
+	}
+	return sel["*"] || sel[own.VMID] || (own.ComputerID != "" && sel[own.ComputerID]) ||
+		(class != "" && sel[guestMemoryCapClassPrefix+string(class)])
 }
 
 // guestMemoryCapClassPrefix names a warmness class in an entry
@@ -158,7 +210,8 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(ctx context.Context, caps m
 					own.ComputerID, own.VMID, res.BeforeMiB, res.AfterMiB)
 			}
 		}
-		ceilingMiB := guestMemoryCapFor(caps, own, r.WarmnessClassForOwnership(own))
+		class := r.WarmnessClassForOwnership(own)
+		ceilingMiB := guestMemoryCapFor(caps, own, class)
 		if ceilingMiB == 0 || cfg.Mode == GuestCacheReturnOff || strings.TrimSpace(own.ComputerURL) == "" || ctx.Err() != nil {
 			continue
 		}
@@ -166,9 +219,30 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(ctx context.Context, caps m
 		if r.cacheReturn.isUnsupported(key, own.Epoch) {
 			continue
 		}
-		status, report, err := r.cacheReturn.callBody(ctx, own, map[string]any{
+		fields := map[string]any{
 			"mode": guestCeilingMode, "scope": "root", "dry_run": cfg.Mode == GuestCacheReturnObserve, "ceiling_mib": ceilingMiB,
-		})
+		}
+		throughKey := cacheReturnUnsupportedKey(own.VMID, guestCeilingThroughWorkMode)
+		throughWork := guestMemoryCapThroughWorkFor(r.guestMemoryCapThroughWork, own, class) && !r.cacheReturn.isUnsupported(throughKey, own.Epoch)
+		if throughWork {
+			fields["through_work"] = true
+		}
+		status, report, err := r.cacheReturn.callBody(ctx, own, fields)
+		if throughWork && err == nil && (status == http.StatusBadRequest || status == http.StatusNotFound) {
+			// Maybe a guest that predates through_work (strict decode): the
+			// plain ceiling now. Only when the plain ask is not refused the
+			// same way is the field the cause; then no through_work until it
+			// boots. A plain 400 or 404 (a bad ceiling, no route) is the
+			// plain ceiling's to mark below (review r1, Devin F1, DeepSeek F1).
+			first := status
+			delete(fields, "through_work")
+			throughWork = false
+			status, report, err = r.cacheReturn.callBody(ctx, own, fields)
+			if err == nil && status != http.StatusBadRequest && status != http.StatusNotFound {
+				r.cacheReturn.markUnsupported(throughKey, own.Epoch)
+				log.Printf("vmctl: guest memory ceiling computer=%s vm=%s through_work unsupported (http %d) until it boots", own.ComputerID, own.VMID, first)
+			}
+		}
 		switch {
 		case err != nil:
 			r.noteGuestMemoryCapErr(own, "ceiling", err.Error())
@@ -190,16 +264,20 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(ctx context.Context, caps m
 			delete(r.guestMemoryCapLastErr, own.VMID)
 			if report.Steps > 0 || report.Outcome == "dry_run" {
 				changed++
-				log.Printf("vmctl: guest memory ceiling computer=%s vm=%s ceiling_mib=%d used_mib=%d outcome=%s target_mib=%d reclaimed_mib=%d ms=%d",
-					own.ComputerID, own.VMID, ceilingMiB, report.UsedBytes>>20, report.Outcome, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.MS)
+				log.Printf("vmctl: guest memory ceiling computer=%s vm=%s ceiling_mib=%d through_work=%t used_mib=%d outcome=%s target_mib=%d reclaimed_mib=%d ms=%d",
+					own.ComputerID, own.VMID, ceilingMiB, throughWork, report.UsedBytes>>20, report.Outcome, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.MS)
 			}
 		}
 	}
 	return changed
 }
 
-// guestCeilingMode is guestmem.ModeCeiling (vmctl does not import guestmem).
-const guestCeilingMode = "ceiling"
+// guestCeilingMode is guestmem.ModeCeiling (vmctl does not import guestmem);
+// guestCeilingThroughWorkMode keys a guest without through_work.
+const (
+	guestCeilingMode            = "ceiling"
+	guestCeilingThroughWorkMode = "ceiling_through_work"
+)
 
 // noteGuestMemoryCapErr logs a failure when it differs from the VM's last.
 // The caller holds guestMemoryCapMu.

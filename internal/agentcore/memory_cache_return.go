@@ -38,6 +38,11 @@ type cacheReturnBody struct {
 	DryRun bool   `json:"dry_run"`
 	// CeilingMiB is ceiling mode's ceiling.
 	CeilingMiB int64 `json:"ceiling_mib,omitempty"`
+	// ThroughWork (ceiling mode only): the ceiling acts while a capsule or a
+	// self-development operation is live, standing aside only for a
+	// hibernate and a store snapshot. vmctl sets it for the computers its
+	// VMCTL_GUEST_MEMORY_CAP_THROUGH_WORK_COMPUTERS selector names.
+	ThroughWork bool `json:"through_work,omitempty"`
 }
 
 // cacheReturnRefusal is the answer when the act did not run.
@@ -76,6 +81,10 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid cache return request"})
+		return
+	}
+	if body.ThroughWork && body.Mode != guestmem.ModeCeiling {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "through_work is ceiling mode's"})
 		return
 	}
 	if body.Scope == "" {
@@ -130,8 +139,19 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 	case guestmem.ModeCeiling:
 		// The elastic cap (S6), asked every minute. busy_cold's busy rule:
 		// while a capsule or a self-development operation is live the
-		// ceiling stands aside and the guest grows as it needs.
-		if refusal := h.rt.cacheReturnBusyColdRefusal(r.Context()); refusal != nil {
+		// ceiling stands aside and the guest grows as it needs. Through
+		// work it does not: dropping clean cache cuts no work and never
+		// takes anonymous memory, so a build still grows to the guest's
+		// full size, and an arm's round no longer holds its cache while its
+		// own build waits for host memory
+		// (docs/problems/working-guest-cache-held-while-builds-wait-2026-11-03.md).
+		var refusal *cacheReturnRefusal
+		if body.ThroughWork {
+			refusal = h.rt.cacheReturnCeilingThroughWorkRefusal()
+		} else {
+			refusal = h.rt.cacheReturnBusyColdRefusal(r.Context())
+		}
+		if refusal != nil {
 			writeAPIJSON(w, http.StatusConflict, refusal)
 			return
 		}
@@ -160,8 +180,8 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 		// ring is read here, as busy_cold's) or one that could not run is a
 		// line.
 		if report.Steps > 0 || report.DryRun || report.Outcome == guestmem.OutcomeUnsupported || report.Outcome == guestmem.OutcomeSwapPresent {
-			h.rt.cacheReturnLogf("agentcore: cache return mode=ceiling scope=%s dry_run=%t outcome=%s ceiling_mib=%d used_mib=%d target_mib=%d reclaimed_mib=%d steps=%d ms=%d detail=%q",
-				report.Scope, report.DryRun, report.Outcome, report.CeilingBytes>>20, report.UsedBytes>>20, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS, report.Detail)
+			h.rt.cacheReturnLogf("agentcore: cache return mode=ceiling scope=%s dry_run=%t through_work=%t outcome=%s ceiling_mib=%d used_mib=%d target_mib=%d reclaimed_mib=%d steps=%d ms=%d detail=%q",
+				report.Scope, report.DryRun, body.ThroughWork, report.Outcome, report.CeilingBytes>>20, report.UsedBytes>>20, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS, report.Detail)
 		}
 	} else if !body.DryRun || body.Mode == guestmem.ModeBusyCold {
 		// busy_cold logs its dry runs too: the paper's console log is where
@@ -259,6 +279,21 @@ func (rt *Runtime) cacheReturnBusyColdRefusal(ctx context.Context) *cacheReturnR
 	case got.work.SnapshotInFlight:
 		// A snapshot streams the whole store through the cache; reclaiming
 		// under it only makes it read again (review of S5, Devin #3).
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "snapshot_in_flight", Error: "a store snapshot is streaming"}
+	}
+	return nil
+}
+
+// cacheReturnCeilingThroughWorkRefusal is the ceiling's busy rule through
+// work: a closed hibernate fence (the snapshot owns the memory) or a store
+// snapshot streaming (reclaiming under it only makes it read again). Live
+// capsules and self-development operations are not busy here, so no store
+// read is needed. nil means the act may run.
+func (rt *Runtime) cacheReturnCeilingThroughWorkRefusal() *cacheReturnRefusal {
+	if rt.hibernate.closed() {
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "hibernating", Error: "a hibernate is in progress"}
+	}
+	if rt.snapshots.inFlight.Load() {
 		return &cacheReturnRefusal{Outcome: "busy", Reason: "snapshot_in_flight", Error: "a store snapshot is streaming"}
 	}
 	return nil

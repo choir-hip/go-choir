@@ -168,3 +168,130 @@ func TestReconcileGuestMemoryCapsOldGuestIsAskedOncePerBoot(t *testing.T) {
 		t.Fatalf("an old guest was asked %d times, want 1", n)
 	}
 }
+
+// Through work (2026-11-03). Ways it can fail, written first:
+//   - a computer the selector does not name is asked through work (the
+//     paper must keep standing aside for its applies);
+//   - a named computer, by id or by class, is asked without it;
+//   - a guest that predates the field (strict decode, 400) gets no ceiling
+//     at all, or is asked through work every minute;
+//   - "class:" alone, or an id=MiB entry, selects anything;
+//   - a new guest's 400 for another reason (a ceiling under its floor) is
+//     read as "predates through_work" (review r1, F1).
+func TestParseGuestMemoryCapThroughWork(t *testing.T) {
+	sel, bad := ParseGuestMemoryCapThroughWork(" computer-a, class:test,,class:,x=1024,*")
+	if want := map[string]bool{"computer-a": true, "class:test": true, "*": true}; !reflect.DeepEqual(sel, want) {
+		t.Fatalf("sel = %v, want %v", sel, want)
+	}
+	if want := []string{"class:", "x=1024"}; !reflect.DeepEqual(bad, want) {
+		t.Fatalf("bad = %v, want %v", bad, want)
+	}
+	if sel, bad := ParseGuestMemoryCapThroughWork(""); sel != nil || bad != nil {
+		t.Fatalf("empty = %v %v", sel, bad)
+	}
+	for _, tc := range []struct {
+		name  string
+		sel   string
+		own   *VMOwnership
+		class WarmnessClass
+		want  bool
+	}{
+		{"by computer id", "computer-a", &VMOwnership{VMID: "vm-a", ComputerID: "computer-a"}, WarmnessClassPrimary, true},
+		{"by vm id", "vm-a", &VMOwnership{VMID: "vm-a", ComputerID: "computer-a"}, "", true},
+		{"by class", "class:test", &VMOwnership{VMID: "vm-b", ComputerID: "computer-b"}, WarmnessClassTest, true},
+		{"another class", "class:test", &VMOwnership{VMID: "vm-p", ComputerID: "computer-p"}, WarmnessClassPrimary, false},
+		{"no class", "class:test", &VMOwnership{VMID: "vm-d"}, "", false},
+		{"every computer", "*", &VMOwnership{VMID: "vm-e"}, "", true},
+		{"empty", "", &VMOwnership{VMID: "vm-a", ComputerID: "computer-a"}, WarmnessClassTest, false},
+	} {
+		sel, _ := ParseGuestMemoryCapThroughWork(tc.sel)
+		if got := guestMemoryCapThroughWorkFor(sel, tc.own, tc.class); got != tc.want {
+			t.Errorf("%s: through work = %t, want %t", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestReconcileGuestMemoryCapsThroughWork(t *testing.T) {
+	mgr := &fakeCapManager{rssVMManager: newRSSVMManager(), calls: map[string]int{}, errs: map[string]error{}}
+	reg, _ := hostCapacityRegistry(t, mgr)
+	reg.SetGuestCacheReturnConfig(GuestCacheReturnConfig{Mode: GuestCacheReturnActive, Scope: "daemon"})
+	sel, _ := ParseGuestMemoryCapThroughWork("computer-a,computer-old")
+	reg.SetGuestMemoryCapThroughWork(sel)
+
+	var mu sync.Mutex
+	asked := map[string][]map[string]any{}
+	guest := func(name string, strict bool) *httptest.Server {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			mu.Lock()
+			asked[name] = append(asked[name], body)
+			mu.Unlock()
+			if _, ok := body["through_work"]; ok && strict {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"outcome": "returned", "steps": 4, "reclaimed_bytes": 1 << 28, "used_bytes": 2 << 30})
+		}))
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	a, p, old := guest("a", false), guest("p", false), guest("old", true)
+	for _, own := range []*VMOwnership{
+		{VMID: "vm-a", ComputerID: "computer-a", UserID: "qa-a", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, ComputerURL: a.URL, Epoch: 1},
+		{VMID: "vm-p", ComputerID: "computer-p", UserID: "qa-p", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, ComputerURL: p.URL, Epoch: 1},
+		{VMID: "vm-old", ComputerID: "computer-old", UserID: "qa-old", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, ComputerURL: old.URL, Epoch: 1},
+	} {
+		addOwnership(reg, own)
+	}
+	caps := map[string]int{"computer-a": 1024, "computer-p": 1024, "computer-old": 1024}
+	if n := reg.reconcileGuestMemoryCaps(context.Background(), caps); n != 3 {
+		t.Fatalf("acts that wrote = %d, want 3 (the old guest's plain ceiling included)", n)
+	}
+	reg.reconcileGuestMemoryCaps(context.Background(), caps)
+	mu.Lock()
+	defer mu.Unlock()
+	for _, body := range asked["a"] {
+		if body["through_work"] != true || body["mode"] != "ceiling" {
+			t.Fatalf("named computer asked %v, want through_work", body)
+		}
+	}
+	for _, body := range asked["p"] {
+		if _, ok := body["through_work"]; ok {
+			t.Fatalf("unnamed computer asked %v, want the plain ceiling", body)
+		}
+	}
+	// The old guest: through work once, then the plain ceiling in the same
+	// pass, then only the plain ceiling until it boots.
+	if got := len(asked["old"]); got != 3 {
+		t.Fatalf("old guest asked %d times, want 3: %v", got, asked["old"])
+	}
+	if asked["old"][0]["through_work"] != true {
+		t.Fatalf("old guest first ask %v", asked["old"][0])
+	}
+	for _, body := range asked["old"][1:] {
+		if _, ok := body["through_work"]; ok || body["ceiling_mib"] != float64(1024) {
+			t.Fatalf("old guest asked %v after its 400, want the plain ceiling", body)
+		}
+	}
+}
+
+func TestReconcileGuestMemoryCapsThroughWorkPlain400IsNotTheField(t *testing.T) {
+	mgr := &fakeCapManager{rssVMManager: newRSSVMManager(), calls: map[string]int{}, errs: map[string]error{}}
+	reg, _ := hostCapacityRegistry(t, mgr)
+	reg.SetGuestCacheReturnConfig(GuestCacheReturnConfig{Mode: GuestCacheReturnActive, Scope: "daemon"})
+	sel, _ := ParseGuestMemoryCapThroughWork("computer-a")
+	reg.SetGuestMemoryCapThroughWork(sel)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	t.Cleanup(srv.Close)
+	addOwnership(reg, &VMOwnership{VMID: "vm-a", ComputerID: "computer-a", UserID: "qa-a", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, ComputerURL: srv.URL, Epoch: 1})
+	reg.reconcileGuestMemoryCaps(context.Background(), map[string]int{"computer-a": 1024})
+	if reg.cacheReturn.isUnsupported(cacheReturnUnsupportedKey("vm-a", guestCeilingThroughWorkMode), 1) {
+		t.Fatal("a plain 400 marked through_work unsupported")
+	}
+	if !reg.cacheReturn.isUnsupported(cacheReturnUnsupportedKey("vm-a", guestCeilingMode), 1) {
+		t.Fatal("a plain 400 did not mark the ceiling unsupported")
+	}
+}

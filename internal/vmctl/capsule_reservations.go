@@ -81,9 +81,14 @@ type HostMemoryFacts struct {
 	MemAvailableBytes uint64 `json:"mem_available_bytes"`
 	FloorBytes        uint64 `json:"floor_bytes"`
 	// ReservedOthersBytes is what starts in flight and other computers'
-	// live builds still hold; HeadroomBytes is MemAvailable less the floor
-	// and that, so a guest never counts memory promised to another.
+	// live builds still hold; BurstPoolBytes is the shared burst pool every
+	// admission keeps above the floor (VMCTL admission headroom; 0 when the
+	// spawn gate is unchecked or the computer is protected); HeadroomBytes is MemAvailable less the
+	// floor, the pool and that, so a guest never counts memory promised to
+	// another, and a job reads the room a build spawn is admitted against
+	// (docs/problems/working-guest-cache-held-while-builds-wait-2026-11-03.md).
 	ReservedOthersBytes uint64  `json:"reserved_others_bytes"`
+	BurstPoolBytes      uint64  `json:"burst_pool_bytes"`
 	HeadroomBytes       uint64  `json:"headroom_bytes"`
 	MemorySomeAvg10     float64 `json:"memory_some_avg10"`
 	MemorySomeAvg60     float64 `json:"memory_some_avg60"`
@@ -263,6 +268,8 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 
 	reserved, views := led.outstandingLocked(now, acfg)
 	floor := memoryFloorBytes(cfg, sample.MemoryTotalBytes)
+	// checked: the spawn gate is in force, and with it the burst pool.
+	checked := cfg.Mode == PressureReclaimModeActive && acfg.Mode == HostAdmissionModeMeasured
 	var result CapsuleReservationResult
 	if admit := report.Admit; admit != nil {
 		if _, held := set.entries[admit.CapsuleID]; held {
@@ -280,7 +287,7 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 			}
 			required := floor + acfg.HeadroomBytes + reserved + increment
 			switch {
-			case cfg.Mode != PressureReclaimModeActive || acfg.Mode != HostAdmissionModeMeasured:
+			case !checked:
 				d.Decision = "admit_build_unchecked" // start admission is off too
 			case protectedWarmnessClass(class):
 				d.Decision = "admit_build_protected"
@@ -323,13 +330,19 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 	if reserved > mine {
 		others = reserved - mine
 	}
+	// The pool is part of the room only where the gate keeps it: a
+	// protected build is always admitted (review r1, DeepSeek F2).
+	pool := uint64(0)
+	if checked && !protectedWarmnessClass(class) {
+		pool = acfg.HeadroomBytes
+	}
 	facts := HostMemoryFacts{
 		SampledAt: now.UTC().Format(time.RFC3339Nano), MemAvailableBytes: sample.MemoryAvailableBytes,
-		FloorBytes: floor, ReservedOthersBytes: others,
+		FloorBytes: floor, ReservedOthersBytes: others, BurstPoolBytes: pool,
 		MemorySomeAvg10: sample.MemorySomeAvg10, MemorySomeAvg60: sample.MemorySomeAvg60,
 		PressureHigh: hostPressureHigh(sample, cfg), Priority: capsulePriority(class),
 	}
-	if spare := floor + others; sample.MemoryAvailableBytes > spare {
+	if spare := floor + pool + others; sample.MemoryAvailableBytes > spare {
 		facts.HeadroomBytes = sample.MemoryAvailableBytes - spare
 	}
 	result.Facts = facts

@@ -108,7 +108,8 @@ func (r *HostMemoryRefusal) Error() string {
 }
 
 // HostMemoryFacts is what the host publishes for heavy work: MemAvailable
-// over the floor less what is promised to others, and PSI memory pressure.
+// over the floor and the burst pool less what is promised to others (the
+// room a build spawn is admitted against), and PSI memory pressure.
 type HostMemoryFacts struct {
 	HeadroomBytes   int64
 	MemorySomeAvg10 float64
@@ -149,7 +150,7 @@ func HostMemoryWaitReasonFor(facts HostMemoryFacts, fresh bool, need int64) stri
 		return fmt.Sprintf("waiting for host memory: the host is under memory pressure (PSI some avg10 %.1f%%)", facts.MemorySomeAvg10)
 	}
 	if facts.HeadroomBytes < need {
-		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor, under this job's %d MiB", facts.HeadroomBytes>>20, need>>20)
+		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor and burst pool, under this job's %d MiB", facts.HeadroomBytes>>20, need>>20)
 	}
 	return ""
 }

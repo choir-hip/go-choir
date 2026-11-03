@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
 )
@@ -19,6 +20,14 @@ import (
 //     flight (it must stand aside, so a build or an apply grows freely);
 //   - a ceiling under the floor is accepted;
 //   - it acts in a scope other than the one asked for.
+// Through work (through_work, the ring VMCTL_GUEST_MEMORY_CAP_THROUGH_WORK_
+// COMPUTERS names):
+//   - it still stands aside for a live capsule or a self-development
+//     operation (an arm's round holds its cache while its build waits);
+//   - it acts through a hibernate (the snapshot owns the memory) or a store
+//     snapshot streaming (it would only make the stream read again);
+//   - it reads the store at all (a slow read would stall the minute's pass);
+//   - another mode accepts the field and silently changes its busy rule.
 
 func ceilingFixture(t *testing.T) *cacheReturnFixture {
 	t.Helper()
@@ -67,5 +76,50 @@ func TestCacheReturnCeilingUnderTheFloorIsRefused(t *testing.T) {
 	code, _ := postCacheReturn(t, f.rt, hostPeer, `{"mode":"ceiling","scope":"root","ceiling_mib":512}`)
 	if code != http.StatusBadRequest || f.writeCount() != 0 {
 		t.Fatalf("a 512 MiB ceiling: %d with %d writes, want 400 and none", code, f.writeCount())
+	}
+}
+
+func TestCacheReturnCeilingThroughWorkActsWhileCapsuleAndSelfdevLive(t *testing.T) {
+	for name, work := range map[string]plannedRestartWork{
+		"a live capsule":           {Running: 1, LiveCapsules: 1},
+		"a self-development apply": {Running: 1, SelfdevActive: 1},
+	} {
+		f := ceilingFixture(t)
+		read := 0
+		f.rt.cacheReturnBusyColdWork = func(context.Context) (plannedRestartWork, error) { read++; return work, nil }
+		code, body := postCacheReturn(t, f.rt, hostPeer, `{"mode":"ceiling","scope":"root","ceiling_mib":3072,"through_work":true}`)
+		if code != http.StatusOK || body["outcome"] != guestmem.OutcomeReturned || body["target_bytes"] != float64(1024<<20) {
+			t.Fatalf("%s through work: %d %v, want 200 returned 1024 MiB", name, code, body)
+		}
+		if read != 0 {
+			t.Fatalf("%s through work: the busy read ran %d times, want none", name, read)
+		}
+	}
+}
+
+func TestCacheReturnCeilingThroughWorkStandsAsideForHibernateAndSnapshot(t *testing.T) {
+	for name, tc := range map[string]struct {
+		reason string
+		set    func(*cacheReturnFixture)
+	}{
+		"the hibernate fence is closed": {"hibernating", func(f *cacheReturnFixture) { f.rt.hibernate.close(time.Minute) }},
+		"a store snapshot streams":      {"snapshot_in_flight", func(f *cacheReturnFixture) { f.rt.snapshots.inFlight.Store(true) }},
+	} {
+		f := ceilingFixture(t)
+		tc.set(f)
+		code, body := postCacheReturn(t, f.rt, hostPeer, `{"mode":"ceiling","scope":"root","ceiling_mib":3072,"through_work":true}`)
+		if code != http.StatusConflict || body["outcome"] != "busy" || body["reason"] != tc.reason || f.writeCount() != 0 {
+			t.Fatalf("%s: %d %v with %d writes, want 409 busy %s and none", name, code, body, f.writeCount(), tc.reason)
+		}
+	}
+}
+
+func TestCacheReturnThroughWorkIsCeilingOnly(t *testing.T) {
+	for _, mode := range []string{"idle", "busy_cold", "hibernate"} {
+		f := ceilingFixture(t)
+		code, _ := postCacheReturn(t, f.rt, hostPeer, `{"mode":"`+mode+`","scope":"daemon","through_work":true}`)
+		if code != http.StatusBadRequest || f.writeCount() != 0 {
+			t.Fatalf("through_work on %s: %d with %d writes, want 400 and none", mode, code, f.writeCount())
+		}
 	}
 }

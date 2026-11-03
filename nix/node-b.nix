@@ -1907,6 +1907,16 @@ in
         # on disk, and 500 MiB/min of rereads is 8.5 MB/s against an NVMe.
         # Rollback: the paper 3072, d@e 2048, the classes dropped.
         "VMCTL_GUEST_MEMORY_CAP_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=1024,computer-1355b83bced1613eb048ee28d66688a8=1024,class:test=1024,class:primary=1024,class:premium_always_on=1024"
+        # Through work (2026-11-03; docs/problems/working-guest-cache-held-
+        # while-builds-wait-2026-11-03.md): the ceiling above stood aside for
+        # a whole self-development round (a live capsule, an open operation),
+        # so an arm kept about 2.5 GiB of page cache while its own build
+        # waited for host memory. Named computers' ceilings act through that
+        # work; it drops clean cache only, never anonymous memory, so a build
+        # still grows to the guest's size. Still standing aside: a hibernate,
+        # a store snapshot. Rings: d@e (R0) and the test arms (R1); not the
+        # paper or the owner's computer. Rollback: delete this line.
+        "VMCTL_GUEST_MEMORY_CAP_THROUGH_WORK_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72,class:test"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"

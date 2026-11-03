@@ -700,6 +700,9 @@ type OwnershipRegistry struct {
 	// so a persistent one is logged once; guestMemoryCapMu serializes passes.
 	guestMemoryCapMu      sync.Mutex
 	guestMemoryCapLastErr map[string]string
+	// guestMemoryCapThroughWork names the computers whose ceiling acts
+	// through a live capsule or self-development operation (guest_balloon.go).
+	guestMemoryCapThroughWork map[string]bool
 
 	// gatewayURL is the URL of the host-side gateway service. When set,
 	// the registry issues gateway tokens for VM autoputeres before booting

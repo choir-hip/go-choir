@@ -307,8 +307,13 @@ func main() {
 				interval = d
 			}
 		}
+		through, badThrough := vmctl.ParseGuestMemoryCapThroughWork(os.Getenv("VMCTL_GUEST_MEMORY_CAP_THROUGH_WORK_COMPUTERS"))
+		for _, b := range badThrough {
+			log.Printf("vmctl: guest memory cap through-work entry %q ignored (want an id, class:<class> or *)", b)
+		}
+		registry.SetGuestMemoryCapThroughWork(through)
 		registry.StartGuestMemoryCapLoop(context.Background(), interval, caps)
-		log.Printf("vmctl: guest memory cap loop interval %s, %d computer(s) capped", interval, len(caps))
+		log.Printf("vmctl: guest memory cap loop interval %s, %d computer(s) capped, %d through-work selector(s)", interval, len(caps), len(through))
 	}
 	// Deferred deploy refreshes are retried until each computer takes the
 	// update (docs/problems/always-busy-computer-never-updates-2026-10-15.md).

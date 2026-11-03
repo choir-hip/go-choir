@@ -23,7 +23,9 @@ import (
 //   - B6 the facts count this computer's own reservation against it, or
 //     miss the reservations promised to other computers;
 //   - B7 a heartbeat of an already admitted capsule is re-admitted (and
-//     refused) after the host filled up.
+//     refused) after the host filled up;
+//   - B8 the facts a job waits on promise room the spawn gate refuses: the
+//     gate keeps the burst pool above the floor, so the facts must too.
 
 func buildFixture(t *testing.T) *admissionFixture {
 	t.Helper()
@@ -154,8 +156,9 @@ func TestCapsuleBuildFactsCountOthersNotSelf(t *testing.T) {
 	f.setAvail(14 * gib)
 	admitBuild(t, f, "computer-a", "cap-a")
 	res := admitBuild(t, f, "computer-b", "cap-b")
-	// For b: 14 - 4 floor - 3 (a's build) = 7 GiB; b's own 3 GiB not taken.
-	if res.Facts.ReservedOthersBytes != 3*gib || res.Facts.HeadroomBytes != 7*gib {
+	// For b: 14 - 4 floor - 1 pool - 3 (a's build) = 6 GiB; b's own 3 GiB
+	// not taken.
+	if res.Facts.ReservedOthersBytes != 3*gib || res.Facts.BurstPoolBytes != gib || res.Facts.HeadroomBytes != 6*gib {
 		t.Fatalf("B6: facts %+v", res.Facts)
 	}
 	// B7: the host fills up; b's heartbeat still carries b, and a retried
@@ -164,6 +167,27 @@ func TestCapsuleBuildFactsCountOthersNotSelf(t *testing.T) {
 	again := admitBuild(t, f, "computer-b", "cap-b", CapsuleReservation{CapsuleID: "cap-b", Bytes: 3 * gib})
 	if !*again.Admitted {
 		t.Fatalf("B7: a held capsule's admit was refused on a heartbeat")
+	}
+}
+
+func TestCapsuleBuildFactsAgreeWithTheSpawnGate(t *testing.T) {
+	// B8: with a's 3 GiB build live, c reads the facts and then asks to
+	// spawn a 3 GiB build. At each availability the facts' headroom covers
+	// the build exactly when the gate admits it.
+	for _, avail := range []uint64{10 * gib, 11 * gib, 11*gib - 1<<20, 12 * gib} {
+		f := buildFixture(t)
+		f.setAvail(avail)
+		admitBuild(t, f, "computer-a", "cap-a")
+		facts, err := f.reg.ReportCapsuleReservations(CapsuleReservationReport{ComputerID: "computer-c"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fits := facts.Facts.HeadroomBytes >= 3*gib
+		res := admitBuild(t, f, "computer-c", "cap-c")
+		if fits != *res.Admitted {
+			t.Fatalf("B8 at %d MiB available: facts headroom %d MiB (fits %t) but the gate admitted=%t (%s)",
+				avail>>20, facts.Facts.HeadroomBytes>>20, fits, *res.Admitted, res.Reason)
+		}
 	}
 }
 
