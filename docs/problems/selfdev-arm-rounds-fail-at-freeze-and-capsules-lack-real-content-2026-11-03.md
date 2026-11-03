@@ -227,3 +227,22 @@ publishes the cumulative package tree (orange, publisher); (b) per arm, roll bac
 files-next round (`choir self-dev rollback`) once the re-exports are on the arm's base, then build one
 package-only round from the base and publish it (an owner act on a test arm; loses nothing the next round does
 not rebuild, but costs a round). FP0 has not rolled back any arm; the choice is main's.
+
+## Problem 12: under standing_consensus, every candidate frozen during a deploy window is rejected, and the reason is invisible
+
+The arms became test tier (main, about 06:55Z); FP0 armed `standing_consensus` (policy reversible-selfdev-v1,
+digest c34ddf07..., expires 2026-11-04T06:00Z) on all four at 07:01-07:02Z (pool generation 6, claude 4, deepseek
+4, luna 2). Deepseek round 4 froze selfdev-4ee90af97baf3ce7093445718aa3da8e at 07:02:42Z: a package-only candidate
+(the engineer: "exactly three files changed, all inside frontend/src/packages/files-next/"). At 07:05:10Z it was
+`rejected`, decision_actor `consensus-dissent:3813a663...`. Neither `self-dev show` nor the trajectory says why,
+and Texture's next turn (07:06:32Z) reported the candidate as "verified and frozen". Node B's corpusd log (read
+once by FP0, 07:06Z) has the reason: "consensus: computer=computer-e80d229b... operation=selfdev-4ee90af9...
+dissent: decision policy: unresolved policy-blocking dissent: host build: base_moved: the computer booted base
+516ec805...; the host's deployed guest image is 235acb42... (a deploy landed since the computer booted)".
+So the host-build seat dissents for any candidate on a computer that has not yet refreshed to the newest deploy;
+with ring walks taking tens of minutes, every round that freezes in that window is thrown away, with its
+capsule time. Two gaps: (1) the dissent should defer (wait for the refresh, or build on the booted base) rather
+than reject a candidate whose own content is fine; (2) the rejection reason belongs on the operation and in the
+trajectory, so Texture and the owner can see it without SSH.
+FP0 response: luna returned to propose_only at 07:07Z (generation 3) to protect its in-flight round; the other
+arms keep standing_consensus and get their next round only after their refresh to 29d47c215.

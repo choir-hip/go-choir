@@ -95,6 +95,18 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Round 4 revision written 06:20Z (scratch deepseek/revise-r4.md): seven defects, package-only scope with
   "import these from app-sdk once it has them; do not edit app-sdk.ts". It waits for a build slot.
 
+### Round 4
+
+- 06:25:28Z owner revision 6633e54e (deepseek/revise-r4.md). 06:27:24Z Texture wrote the document without a Cast
+  (Problem 8); 06:31:31Z nudge; 06:32:17Z forward; 06:33:36Z assignment-45bd487cf07563919ea97a97 opened.
+- 07:01:59Z FP0 armed standing_consensus (generation 4).
+- 07:02:42Z Freeze opened selfdev-4ee90af97baf3ce7093445718aa3da8e: package-only (App.svelte, files-next.css,
+  files-api.js; app-sdk.ts byte-identical), 37 of 37 harness checks against a mocked file list, twelve shots.
+- 07:05:10Z rejected by consensus dissent: the host-build seat's base_moved (a deploy landed since the computer
+  booted). Problem 12. Texture did not see the rejection (07:06:32Z it reported "verified and frozen").
+- The next round waits for this arm's refresh to 29d47c215 (real files in the capsule, choir-shot.mjs, app-sdk
+  re-exports on the base).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
@@ -102,5 +114,6 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 1 | 03:14:46 | 0.4 | 0.0 | 50.0 (refused at Freeze, mode off) | - | - | - | blocked |
 | 2 | 04:09:12 | 1.0 | 0.0 | 24.8 + 3.9 Freeze retries | 1.5 | 1.6 (FP0 reject) | - | FP0 rejected |
 | 3 | 05:26:16 | 2.7 | 0.0 | 39.4 | 1.4 | 3.2 | 0.03 | applied |
+| 4 | 06:25:28 | 8.1 (Problem 8) | 0.02 | 29.1 | 2.5 (consensus) | - | - | consensus rejected (base_moved) |
 
 Live shots plus next request (apply to next revision sent): round 3, 06:12:59 to 06:25:28 = 12.5 min (live run 06:13-06:18Z, review and revision 7 min). Round 4's revision then waited 8.1 min for a Cast (Problem 8; nudge 06:31:31Z, assignment 06:33:36Z).
