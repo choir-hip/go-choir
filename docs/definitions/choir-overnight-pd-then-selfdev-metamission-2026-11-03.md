@@ -126,20 +126,23 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging e4f1c685a (problem 27: the deploy-refresh backoff resets per
-    release; proved by Node B's pending entries resetting to 2 attempts).
-    Published to the Library: luna Slides (through the Claude delegate),
-    claude Files (DeepSeek built it; the delegate made no call), deepseek
-    Slides. Owner 18:58Z: every arm desk off GPT (DeepSeek), except luna's
-    engineering on gpt-6-luna at xhigh to verify delegating to Claude; GPT
-    is kept for the paper. Pool is now a DeepSeek arm. Running: claude
-    Slides r1 (delegate), pool Slides r4, luna Calendar r1, deepseek Files
-    restore round.
+    staging 043b78806 (problem 28: an assignment takes its base at bind).
+    In CI: 5ee5f39dd (problem 29 sibling packages and re-graft parent;
+    Texture Wait-after-Write no-op; choir-shot --open and contrast element
+    naming), then a79c26402 (the owner's words reach the engineer
+    verbatim; OwnerDirections ordered with a current mark). Building: the
+    delegate affordance pass (cluster 2, tier 2 round 2), screens reach the
+    judge, Texture and the CLI. Library: luna Slides, claude Files,
+    deepseek Files and Slides; pool Slides applied, publish waits on 29.
+    Owner rulings this hour: live tracing on every round (three live
+    tracers running); screenshots flow judge -> Texture -> lane C -> main;
+    the Library app pulled forward to next on every arm. Busy arms are
+    refreshed between rounds (the claude arm ran a stale build to 20:37Z).
+    Node B 7.4 GiB available, PSI under 1.
   main_uncertainty: >-
-    owner's scope for off-GPT beyond the arms (management tasks are
-    hard-wired to gpt-6-luna; the fleet default pool is half gpt-6-luna,
-    and the paper may use it)
-  next_observation: claude Slides r1 delegate_calls and judge verdict; deepseek files-next publish under the net-zero rule
+    whether the adopt route accepts an app's call (an owner act); whether
+    delegate rounds pass once the delegate can run builds and shots
+  next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
   blocker: none
-  next_action: carry rounds to publishes; then the next apps (Calendar, Podcasts, Library, background picker) per arm
+  next_action: land 5ee5f39dd and a79c26402, then the delegate and screens builds; start Library rounds as arms free up
 receipts: []
