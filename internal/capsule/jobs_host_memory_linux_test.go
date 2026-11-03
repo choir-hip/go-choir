@@ -240,3 +240,65 @@ func TestStartJobDefaultsCachedShotMemory(t *testing.T) {
 		t.Fatalf("defaulted wait view: %+v", view)
 	}
 }
+
+// usageCgroup is a capsule cgroup whose usage a test sets while a wait polls.
+type usageCgroup struct {
+	mu    sync.Mutex
+	usage int64
+	err   error
+}
+
+func (c *usageCgroup) Current() (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.usage, c.err
+}
+func (c *usageCgroup) Reclaim(int64) error { return nil }
+func (c *usageCgroup) SetMax(int64) error  { return nil }
+
+// C1/C2 on the executor: a build job needs host headroom only for what its
+// own capsule's admitted reservation does not still hold.
+func TestBuildJobSpendsItsOwnCapsuleReservation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		hostOwn int64
+		usage   int64
+		noCG    bool
+		wait    bool
+	}{
+		{"fits in the reservation", 3 << 30, 200 << 20, false, false},
+		{"capsule already grew", 3 << 30, 2560 << 20, false, true},
+		{"older vmctl: no own figure", 0, 200 << 20, false, true},
+		{"no cgroup controls", 3 << 30, 0, true, true},
+	} {
+		f, _, _ := newWaitFixture(t, HostMemoryFacts{HeadroomBytes: 1 << 30, OwnReservedBytes: tc.hostOwn}, true, SizeClassBuild)
+		cg := &usageCgroup{usage: tc.usage}
+		f.executor.cgroupMemoryFor = func(*Capsule) cgroupMemory {
+			if tc.noCG {
+				return nil
+			}
+			return cg
+		}
+		got := startWaitJob(t, f, "job-own")
+		if waiting := strings.HasPrefix(got, "waiting"); waiting != tc.wait {
+			t.Fatalf("%s: wait=%v, got %s", tc.name, waiting, got)
+		}
+	}
+}
+
+// W4 with the credit: a waiting job starts once its capsule's usage falls
+// back inside its reservation.
+func TestWaitingBuildJobStartsWhenItsReservationCoversIt(t *testing.T) {
+	f, _, mu := newWaitFixture(t, HostMemoryFacts{HeadroomBytes: 1 << 30, OwnReservedBytes: 3 << 30}, true, SizeClassBuild)
+	cg := &usageCgroup{usage: 2560 << 20}
+	f.executor.cgroupMemoryFor = func(*Capsule) cgroupMemory { return cg }
+	if got := startWaitJob(t, f, "job-later"); !strings.HasPrefix(got, "waiting") || !strings.Contains(got, "beyond its capsule's reservation") {
+		t.Fatalf("C1: %s", got)
+	}
+	cg.mu.Lock()
+	cg.usage = 200 << 20
+	cg.mu.Unlock()
+	if c := waitCompletion(t, f, mu); c.Status.State != capsulejob.StateFailed || !strings.Contains(c.Status.Reason, "after waiting for host memory") {
+		t.Fatalf("W4: %+v", c.Status)
+	}
+}

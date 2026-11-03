@@ -87,12 +87,19 @@ type HostMemoryFacts struct {
 	// floor, the pool and that, so a guest never counts memory promised to
 	// another, and a job reads the room a build spawn is admitted against
 	// (docs/problems/working-guest-cache-held-while-builds-wait-2026-11-03.md).
-	ReservedOthersBytes uint64  `json:"reserved_others_bytes"`
-	BurstPoolBytes      uint64  `json:"burst_pool_bytes"`
-	HeadroomBytes       uint64  `json:"headroom_bytes"`
-	MemorySomeAvg10     float64 `json:"memory_some_avg10"`
-	MemorySomeAvg60     float64 `json:"memory_some_avg60"`
-	PressureHigh        bool    `json:"pressure_high"`
+	ReservedOthersBytes uint64 `json:"reserved_others_bytes"`
+	BurstPoolBytes      uint64 `json:"burst_pool_bytes"`
+	HeadroomBytes       uint64 `json:"headroom_bytes"`
+	// OwnReservedBytes is what the ledger still holds for this computer's
+	// own live builds (idle + builds - rss): admitted host memory its build
+	// capsules have not yet grown into. A capsule job needs headroom only
+	// beyond its own capsule's share of it
+	// (docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md).
+	// An older vmctl sends none: no credit.
+	OwnReservedBytes uint64  `json:"own_reserved_bytes,omitempty"`
+	MemorySomeAvg10  float64 `json:"memory_some_avg10"`
+	MemorySomeAvg60  float64 `json:"memory_some_avg60"`
+	PressureHigh     bool    `json:"pressure_high"`
 	// Priority is protected (the paper, the owner's computer: never
 	// deferred) or batch.
 	Priority string `json:"priority"`
@@ -380,8 +387,10 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 			mine += v.OutstandingBytes
 		}
 	}
+	ownBuilds := uint64(0)
 	if len(set.entries) > 0 {
-		mine += set.outstanding(rss, 0)
+		ownBuilds = set.outstanding(rss, 0)
+		mine += ownBuilds
 	}
 	others := uint64(0)
 	if reserved > mine {
@@ -395,7 +404,7 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 	}
 	facts := HostMemoryFacts{
 		SampledAt: now.UTC().Format(time.RFC3339Nano), MemAvailableBytes: sample.MemoryAvailableBytes,
-		FloorBytes: floor, ReservedOthersBytes: others, BurstPoolBytes: pool,
+		FloorBytes: floor, ReservedOthersBytes: others, BurstPoolBytes: pool, OwnReservedBytes: ownBuilds,
 		MemorySomeAvg10: sample.MemorySomeAvg10, MemorySomeAvg60: sample.MemorySomeAvg60,
 		PressureHigh: hostPressureHigh(sample, cfg), Priority: capsulePriority(class),
 	}

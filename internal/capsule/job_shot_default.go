@@ -152,8 +152,10 @@ func defaultShotMemory(caps *Capsule, argv []string, cwd string, declared int) (
 // jobWaitReason is the host-memory wait text for a job: the reason, the
 // defaulted-claim note, and, while the job waits on the undeclared full claim,
 // the hint that a smaller job can say so.
-func jobWaitReason(job *capsuleJob, facts HostMemoryFacts, fresh bool) string {
-	reason := HostMemoryWaitReasonFor(facts, fresh, JobHostNeedBytes(job.spec.MemoryMiB))
+// credit is the job's own capsule's unrealised reservation
+// (Executor.capsuleReservationCredit).
+func jobWaitReason(job *capsuleJob, facts HostMemoryFacts, fresh bool, credit int64) string {
+	reason := HostMemoryWaitReasonCredited(facts, fresh, JobHostNeedBytes(job.spec.MemoryMiB), credit)
 	if reason == "" {
 		return ""
 	}

@@ -111,9 +111,12 @@ func (r *HostMemoryRefusal) Error() string {
 // over the floor and the burst pool less what is promised to others (the
 // room a build spawn is admitted against), and PSI memory pressure.
 type HostMemoryFacts struct {
-	HeadroomBytes   int64
-	MemorySomeAvg10 float64
-	PressureHigh    bool
+	HeadroomBytes int64
+	// OwnReservedBytes is what the host still holds for this computer's own
+	// live build capsules (0 from an older vmctl).
+	OwnReservedBytes int64
+	MemorySomeAvg10  float64
+	PressureHigh     bool
 	// Protected is the paper or the owner's computer: its jobs never wait.
 	Protected bool
 }
@@ -143,13 +146,45 @@ func JobHostNeedBytes(memoryMiB int) int64 {
 // HostMemoryWaitReasonFor is HostMemoryWaitReason for a job that needs need
 // bytes of host headroom.
 func HostMemoryWaitReasonFor(facts HostMemoryFacts, fresh bool, need int64) string {
+	return HostMemoryWaitReasonCredited(facts, fresh, need, 0)
+}
+
+// UnrealisedReservation is what a build capsule's admitted host
+// reservation still holds for its jobs: the reservation less the capsule
+// cgroup's usage, floored at 0, and never more than the host says it still
+// holds for this computer's builds (hostOwn; 0 from an older vmctl). A
+// usage that cannot be read gives no credit.
+func UnrealisedReservation(reservation, usage int64, usageOK bool, hostOwn int64) int64 {
+	if !usageOK || reservation <= 0 || hostOwn <= 0 {
+		return 0
+	}
+	credit := reservation - max(usage, 0)
+	return max(min(credit, hostOwn), 0)
+}
+
+// HostMemoryWaitReasonCredited is the wait for a build-class job whose own
+// capsule's admitted reservation still holds credit bytes: that much of its
+// need was admitted against host memory at the capsule's spawn, so the job
+// needs host headroom only for need - credit, floored at 0
+// (docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md,
+// problem 2). Host memory pressure still waits: peaks beyond the admitted
+// reservations are bounded by the floor, that gate and pressure reclaim.
+func HostMemoryWaitReasonCredited(facts HostMemoryFacts, fresh bool, need, credit int64) string {
 	if !fresh || facts.Protected {
 		return ""
 	}
 	if facts.PressureHigh {
 		return fmt.Sprintf("waiting for host memory: the host is under memory pressure (PSI some avg10 %.1f%%)", facts.MemorySomeAvg10)
 	}
-	if facts.HeadroomBytes < need {
+	beyond := need
+	if credit > 0 {
+		beyond = max(need-credit, 0)
+	}
+	if facts.HeadroomBytes < beyond {
+		if credit > 0 {
+			return fmt.Sprintf("waiting for host memory: %d MiB over the host floor and burst pool, under the %d MiB of this job's %d MiB beyond its capsule's reservation (which still holds %d MiB)",
+				facts.HeadroomBytes>>20, beyond>>20, need>>20, credit>>20)
+		}
 		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor and burst pool, under this job's %d MiB", facts.HeadroomBytes>>20, need>>20)
 	}
 	return ""

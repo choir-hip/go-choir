@@ -106,15 +106,15 @@ func TestDefaultShotMemory(t *testing.T) {
 
 func TestJobWaitReasonHintsOnlyOnTheUndeclaredClaim(t *testing.T) {
 	facts := HostMemoryFacts{HeadroomBytes: 1 << 30}
-	plain := jobWaitReason(&capsuleJob{}, facts, true)
+	plain := jobWaitReason(&capsuleJob{}, facts, true, 0)
 	if !strings.HasSuffix(plain, memoryMiBHint) || !strings.Contains(plain, "3072 MiB") {
 		t.Errorf("undeclared wait text: %q", plain)
 	}
-	def := jobWaitReason(&capsuleJob{memoryNote: shotDefaultNote, spec: specMiB(1536)}, HostMemoryFacts{HeadroomBytes: 100 << 20}, true)
+	def := jobWaitReason(&capsuleJob{memoryNote: shotDefaultNote, spec: specMiB(1536)}, HostMemoryFacts{HeadroomBytes: 100 << 20}, true, 0)
 	if !strings.Contains(def, shotDefaultNote) || strings.Contains(def, memoryMiBHint) {
 		t.Errorf("defaulted wait text: %q", def)
 	}
-	if got := jobWaitReason(&capsuleJob{}, HostMemoryFacts{HeadroomBytes: 8 << 30}, true); got != "" {
+	if got := jobWaitReason(&capsuleJob{}, HostMemoryFacts{HeadroomBytes: 8 << 30}, true, 0); got != "" {
 		t.Errorf("no wait expected: %q", got)
 	}
 }

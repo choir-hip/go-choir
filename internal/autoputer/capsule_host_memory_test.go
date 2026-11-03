@@ -52,7 +52,7 @@ func (f *fakeHostReporter) last() vmctl.CapsuleReservationReport {
 }
 
 func TestCapsuleHostMemoryAdmitRefuseRelease(t *testing.T) {
-	client := &fakeHostReporter{facts: vmctl.HostMemoryFacts{HeadroomBytes: 7 << 30, Priority: vmctl.CapsulePriorityBatch}}
+	client := &fakeHostReporter{facts: vmctl.HostMemoryFacts{HeadroomBytes: 7 << 30, OwnReservedBytes: 3 << 30, Priority: vmctl.CapsulePriorityBatch}}
 	h := newCapsuleHostMemory(client, "computer-a")
 	now := time.Date(2026, 11, 3, 1, 0, 0, 0, time.UTC)
 	h.now = func() time.Time { return now }
@@ -69,7 +69,7 @@ func TestCapsuleHostMemoryAdmitRefuseRelease(t *testing.T) {
 	if got := client.last(); len(got.Reservations) != 1 || got.Reservations[0].CapsuleID != "cap-a" || got.Admit.CapsuleID != "cap-b" {
 		t.Fatalf("G1: report %+v", got)
 	}
-	if facts, fresh := h.Facts(); !fresh || facts.HeadroomBytes != 7<<30 || facts.Protected {
+	if facts, fresh := h.Facts(); !fresh || facts.HeadroomBytes != 7<<30 || facts.OwnReservedBytes != 3<<30 || facts.Protected {
 		t.Fatalf("facts %+v fresh=%t", facts, fresh)
 	}
 	h.ReleaseBuild("cap-a")

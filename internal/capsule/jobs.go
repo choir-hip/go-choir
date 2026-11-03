@@ -135,7 +135,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	// declared memory_mib, else one build's peak) over its floor, it waits, visibly, and starts when that clears.
 	if hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
 		facts, fresh := hm.Facts()
-		if reason := jobWaitReason(job, facts, fresh); reason != "" {
+		if reason := jobWaitReason(job, facts, fresh, e.capsuleReservationCredit(caps, facts)); reason != "" {
 			e.mu.Lock()
 			job.waiting = true
 			job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
@@ -191,6 +191,25 @@ func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *C
 	return job.view(st, "", ""), nil
 }
 
+// capsuleReservationCredit is what caps's admitted host reservation still
+// holds for its job: the reservation less the capsule cgroup's usage now,
+// at most what the host still holds for this computer's builds. The
+// cgroup is read here, in the guest, because only it splits the
+// computer's builds by capsule; the host's figure caps it, so a capsule
+// never spends a reservation the host no longer holds.
+func (e *Executor) capsuleReservationCredit(caps *Capsule, facts HostMemoryFacts) int64 {
+	reservation := caps.Spec.SizeClass.HostReservationBytes()
+	if reservation <= 0 || facts.OwnReservedBytes <= 0 {
+		return 0
+	}
+	cg := e.cgroupMemoryOf(caps)
+	if cg == nil {
+		return 0
+	}
+	usage, err := cg.Current()
+	return UnrealisedReservation(reservation, usage, err == nil, facts.OwnReservedBytes)
+}
+
 // claimWaitingJob ends a job's wait: true for the one caller that clears it.
 func (e *Executor) claimWaitingJob(job *capsuleJob) bool {
 	e.mu.Lock()
@@ -240,7 +259,7 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 			return
 		}
 		facts, fresh := hm.Facts()
-		reason := jobWaitReason(job, facts, fresh)
+		reason := jobWaitReason(job, facts, fresh, e.capsuleReservationCredit(caps, facts))
 		if reason != "" && time.Since(since) < maxWait {
 			e.mu.Lock()
 			job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())

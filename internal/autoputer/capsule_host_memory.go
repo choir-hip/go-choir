@@ -91,8 +91,12 @@ func (h *capsuleHostMemory) keepFactsLocked(f vmctl.HostMemoryFacts) {
 	if headroom < 0 { // more than an int64 can hold
 		headroom = int64(^uint64(0) >> 1)
 	}
+	own := int64(f.OwnReservedBytes)
+	if own < 0 {
+		own = int64(^uint64(0) >> 1)
+	}
 	h.facts = capsule.HostMemoryFacts{
-		HeadroomBytes: headroom, MemorySomeAvg10: f.MemorySomeAvg10, PressureHigh: f.PressureHigh,
+		HeadroomBytes: headroom, OwnReservedBytes: own, MemorySomeAvg10: f.MemorySomeAvg10, PressureHigh: f.PressureHigh,
 		Protected: f.Priority == vmctl.CapsulePriorityProtected,
 	}
 	h.factsAt = h.now()
