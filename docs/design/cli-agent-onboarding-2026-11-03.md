@@ -166,12 +166,27 @@ additive and harmless when unused; keys minted by the flow remain ordinary
 keys, revocable in Settings. The scope default reverts with the commit; keys
 minted under it keep their scopes until revoked.
 
+## Where the approve page is served
+
+`/device` is a frontend route. The proxy serves a signed-out visitor the
+host's platform shell (current with every deploy) and a signed-in owner their
+own computer's frontend, which carries the page only once that computer runs
+a guest release built after this change. So the link always works opened
+signed out (the page signs in with the passkey itself), and works signed in
+once the owner's computer has refreshed. Residual: an owner already signed in
+on a computer that has not refreshed sees the desktop instead of the page;
+opening the link in a private window works. Moving auth pages out of the
+computer surface is a separate change.
+
 ## Acceptance
 
-`scripts/e2e-cli-login-staging.sh`: a fresh test account on a test domain,
-registered with a virtual passkey in Playwright; `choir login` against
-staging; the spec opens the printed link, checks the requester label on the
-page and presses Approve; the CLI writes the credentials file; then
-`choir self-dev list` runs with no flags and no env. A second collect of the
-same `device_code` answers `invalid_grant`. The script writes
-`<out>/acceptance.json`.
+`scripts/e2e-cli-login-staging.sh` (dry run: `--dry-run`): a fresh test
+account on example.com, registered with a virtual passkey in Playwright;
+`choir login` against staging with an isolated config directory and no key
+in flags or env; the spec opens the printed link signed out, signs in on the
+page, checks the requester label and presses Approve; the CLI writes the
+credentials file (mode 0600); `choir self-dev list --computer <id>` runs with
+no key flag or env; `choir logout` revokes the key and the old key answers
+401. The script writes `<out>/acceptance.json`. Reuse, denial and expiry are
+proven by the unit tests (internal/auth/device_login_test.go), since the CLI
+never prints its device code.
