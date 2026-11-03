@@ -227,3 +227,22 @@ func TestCapsuleEffectBundleValidateBindsReleaseBinaryProvenance(t *testing.T) {
 		}
 	}
 }
+
+// The refusal names the paths: luna's Slides round 11 froze into "unknown
+// paths rejected at commit time: 2 paths" and neither the engineer nor the
+// operator could see which two.
+func TestUnknownRejectNamesThePaths(t *testing.T) {
+	builder := NewTransactionBuilder(NewClassifier())
+	var changes []capsule.FileChange
+	for _, p := range []string{"/unknown/b.txt", "/unknown/a.txt", "/x/1", "/x/2", "/x/3", "/x/4", "/x/5"} {
+		changes = append(changes, capsule.FileChange{Path: p, Kind: capsule.ChangeAdded, Mode: 0o644})
+	}
+	record, err := builder.BuildBundleFromDiff("capsule-1", changes)
+	if err != nil {
+		t.Fatalf("build transaction: %v", err)
+	}
+	want := "unknown paths rejected at commit time: 7 paths: /unknown/a.txt, /unknown/b.txt, /x/1, /x/2, /x/3 and 2 more"
+	if record.RejectReason != want {
+		t.Fatalf("reason = %q, want %q", record.RejectReason, want)
+	}
+}

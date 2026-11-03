@@ -98,7 +98,7 @@ func (b *TransactionBuilder) BuildBundleFromDiff(capsuleID string, changes []cap
 	}
 	if result.HasUnknown() {
 		record.Rejected = true
-		record.RejectReason = fmt.Sprintf("unknown paths rejected at commit time: %d paths", len(result.Unknown))
+		record.RejectReason = fmt.Sprintf("unknown paths rejected at commit time: %d paths: %s", len(result.Unknown), unknownPathList(result.Unknown))
 	}
 	return record, nil
 }
@@ -197,4 +197,19 @@ func toChangeRecords(changes []capsule.FileChange) []ChangeRecord {
 		}
 	}
 	return records
+}
+
+// unknownPathList names the first five unknown paths in order, so a refused
+// Freeze says which files to remove.
+func unknownPathList(changes []capsule.FileChange) string {
+	paths := make([]string, 0, len(changes))
+	for _, c := range changes {
+		paths = append(paths, c.Path)
+	}
+	sort.Strings(paths)
+	const shown = 5
+	if len(paths) <= shown {
+		return strings.Join(paths, ", ")
+	}
+	return strings.Join(paths[:shown], ", ") + fmt.Sprintf(" and %d more", len(paths)-shown)
 }
