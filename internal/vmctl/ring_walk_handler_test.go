@@ -198,3 +198,20 @@ func TestRingEnsureKeepsWokeBehindKind(t *testing.T) {
 		t.Fatalf("ensure dropped the woke_behind kind: %+v", got)
 	}
 }
+
+// Staging 2026-11-03: the R0 wake must go through the real resolve with the
+// observed VM id; an empty one is refused as "realized VM ownership changed".
+func TestRingWakeResolvesStoppedProofComputer(t *testing.T) {
+	f := newRingHandlerFixture(t)
+	f.reg.mu.Lock()
+	own := f.reg.ownerships[ownershipKey("ring-de", "primary")]
+	own.State = VMStateStopped
+	own.StoppedBy = "idle"
+	vmID := own.VMID
+	f.reg.mu.Unlock()
+	f.h.ringWake(ringAction{Kind: ringActionWake, ComputerID: ringProofComputer, UserID: "ring-de", DesktopID: "primary", VMID: vmID, Reason: "test"})
+	got := f.reg.GetOwnershipForDesktop("ring-de", "primary")
+	if got == nil || got.State != VMStateActive {
+		t.Fatalf("the wake did not start d@e: %+v", got)
+	}
+}

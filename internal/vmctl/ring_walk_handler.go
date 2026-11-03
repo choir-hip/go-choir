@@ -256,7 +256,8 @@ func (h *Handler) applyRingActions(now time.Time, actions []ringAction) {
 }
 
 // ringWake starts a down R0 computer the way a request for it would (route
-// check, then resolve of the existing computer). A refusal (held, crash loop,
+// check, then resolve of the existing computer, naming the VM the walk
+// observed: an empty expected VM is refused as an ownership change). A refusal (held, crash loop,
 // host memory) is logged; R0 then holds and says why.
 func (h *Handler) ringWake(a ringAction) {
 	if h.ringWaker != nil {
@@ -269,7 +270,7 @@ func (h *Handler) ringWake(a ringAction) {
 		log.Printf("vmctl: ring walk: wake of %s refused by the route check: %v", a.ComputerID, err)
 		return
 	}
-	if _, err := h.registry.resolveExistingDesktopContext(ctx, a.UserID, a.DesktopID, ""); err != nil {
+	if _, err := h.registry.resolveExistingDesktopContext(ctx, a.UserID, a.DesktopID, a.VMID); err != nil {
 		log.Printf("vmctl: ring walk: wake of %s failed: %v", a.ComputerID, err)
 		return
 	}
