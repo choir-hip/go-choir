@@ -134,6 +134,12 @@ up the cycle time." A test computer should get a platform fix about 25 to
 
 ## Expedite (owner, 2026-11-03)
 
+Policy (owner, 2026-11-03): "For these blocking fixes we should use expedited
+delivery so changes propagate not blocking on wait. Not just now but as
+policy." A fix that unblocks a loop (self-development rounds, the paper,
+a deploy path) carries `Ring-Expedite: <the defect it unblocks>`; CLAUDE.md
+carries the rule.
+
 Owner: "we should have some way to force changes to all machines instantly.
 Important for key fixes." An expedite skips the soak floors and the ring
 order for one release; it does not skip safety.

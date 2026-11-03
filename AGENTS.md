@@ -359,6 +359,20 @@ divergence of computers. thats the point of this architecture"). A grant
 that spends the owner's money (the Claude delegate) is an owner act on the
 tape, not a switch.
 
+**Blocking fixes are expedited** (owner, 2026-11-03: "For these blocking
+fixes we should use expedited delivery so changes propagate not blocking on
+wait. Not just now but as policy"; earlier: "for stuff related to an
+optimization loop it's important to speed up the cycle time"). A fix that
+unblocks a loop (a self-development round refused or failing on a platform
+defect, the paper not publishing, a deploy or CI path that cannot land)
+carries the trailer `Ring-Expedite: <the defect it unblocks>` on its commit,
+so the release reaches every computer at once instead of after the ring
+soaks (docs/design/ring-ordered-deploys-2026-11-03.md, Expedite). An
+expedite keeps everything else: planned, marker-backed refreshes; the live
+capsule, apply and skew refusals; the health guards and automatic rollback;
+R0 and the paper held until each is seen healthy. Ordinary releases walk
+the rings. Name every expedite in the next report.
+
 **Agent models** (owner, 2026-10-22): Sonnet subagents for following a plan,
 optimizing a metric, and investigations; Opus for design and open-ended
 work.
