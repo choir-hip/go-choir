@@ -10,7 +10,7 @@ import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop,
-  loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge,
+  loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -359,3 +359,15 @@ console.log('choir_shot_test: ok');
   assert.deepEqual(JSON.parse(calls[0].init.body), { windows: [], active_window_id: '', driver: true });
   await assert.rejects(resetDesktop('http://h:1', async () => ({ ok: false, status: 500 })), /desktop reset failed \(500\)/);
 }
+
+// A shot that opens an app fails when no visible, sized, unminimized window of it is on screen.
+assert.equal(windowProblem('library-next', [{ visible: true, minimized: false, w: 900, h: 600 }], true), '');
+assert.match(windowProblem('library-next', [], true), /no window for library-next on screen at capture; no window element; taskbar chip present/);
+assert.match(windowProblem('library-next', [{ visible: false, minimized: true, w: 0, h: 0 }], true), /minimized/);
+assert.match(windowProblem('library-next', [{ visible: true, minimized: false, w: 0, h: 40 }], false), /0x40.*chip absent/);
+{
+  const page = (r) => ({ evaluate: async () => r });
+  await checkAppWindow(page({ wins: [{ visible: true, minimized: false, w: 5, h: 5 }], chip: true }), 'x');
+  await assert.rejects(checkAppWindow(page({ wins: [], chip: true }), 'library-next'), /no window for library-next on screen at capture/);
+}
+console.log('choir-shot: no-window checks ok');

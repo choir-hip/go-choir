@@ -278,6 +278,30 @@ export async function openApp(page, app, ms = STEP_MS) {
   return hit.id;
 }
 
+// windowProblem judges what the page reports about an app's windows: each
+// {visible, minimized, w, h}, plus whether a taskbar chip names the app. It
+// returns '' when one window is visible, not minimized and has a size, else the
+// failure message (the app and what was found).
+export function windowProblem(app, wins, chip) {
+  if (wins.some((w) => w.visible && !w.minimized && w.w > 0 && w.h > 0)) return '';
+  const found = wins.length === 0 ? 'no window element' : `${wins.length} window(s), none visible and sized (${wins.map((w) => (w.minimized ? 'minimized' : !w.visible ? 'hidden' : `${w.w}x${w.h}`)).join(', ')})`;
+  return `no window for ${app} on screen at capture; ${found}; taskbar chip ${chip ? 'present' : 'absent'}. If the act closes the window on purpose, set expect_window: false`;
+}
+
+// checkAppWindow fails a shot that names an app but shows none of its windows.
+export async function checkAppWindow(page, app) {
+  const r = await page.evaluate((id) => {
+    const wins = [...document.querySelectorAll(`[data-window][data-window-app-id="${id}"]`)].map((el) => {
+      const b = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      return { visible: cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0, minimized: el.getAttribute('data-window-mode') === 'minimized', w: Math.round(b.width), h: Math.round(b.height) };
+    });
+    const chip = !!document.querySelector('[data-window-tray-item]'); // a tray chip carries a window id, not an app id
+    return { wins, chip };
+  }, app);
+  const msg = windowProblem(app, r.wins, r.chip);
+  if (msg) throw new Error(msg);
+}
+
 // themeSeedScript is the init script that stores the boot cache before any page
 // script runs, in the shape App.svelte's loadThemeBootCache reads: a JSON
 // string of {schema_version, id} (normalizeThemeConfig fills in the rest).
@@ -702,6 +726,7 @@ function serve(dist, computer = false, themeState = { preset: null }, catalog = 
     if (themed) { res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(themed)); return; }
     const listed = catalogAnswer(catalog, req.method, u, url.search);
     if (listed) {
+      themeState.fixtureServed = true; // the badge rests on this, not on the page's response event
       res.writeHead(listed.status, { 'content-type': 'application/json', 'cache-control': 'no-store', [CATALOG_FIXTURE_HEADER]: 'capsule-catalog' }).end(JSON.stringify(listed.body));
       return;
     }
@@ -805,7 +830,7 @@ async function main() {
       throw e;
     }
   }
-  const themeState = { preset: null };
+  const themeState = { preset: null, fixtureServed: false };
   const catalog = loadCatalogFixture();
   if (!catalog) console.warn(`choir-shot: no catalog fixture at ${CATALOG_FIXTURE_PATH}; /api/catalog/* is unanswered in a capsule`);
   const { server, base } = await serve(dist, useComputer, themeState, catalog);
@@ -817,10 +842,12 @@ async function main() {
   try {
     for (const it of items) {
       const t = Date.now();
+      try { fs.rmSync(path.join(o.out, it.file), { force: true }); } catch { /* none */ }
       const context = await browser.newContext({ viewport: it.viewport, ...it.device });
       try {
         const s = it.shot;
         themeState.preset = it.theme;
+        themeState.fixtureServed = false;
         if (useComputer) await resetDesktop(base);
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         if (s.routes) await s.routes(context, base);
@@ -839,9 +866,10 @@ async function main() {
           await s.act(page);
           await settle(page, s.selector);
         }
-        if (readFixture) await page.evaluate(fixtureBadge, CATALOG_FIXTURE_BADGE);
+        if (appId && s.expect_window !== false) await checkAppWindow(page, appId); // before the screenshot: a failed shot leaves no PNG for Freeze to admit
+        if (readFixture || themeState.fixtureServed) await page.evaluate(fixtureBadge, CATALOG_FIXTURE_BADGE);
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
-        if (readFixture) {
+        if (readFixture || themeState.fixtureServed) {
           await page.evaluate(() => document.querySelectorAll('[data-choir-shot-fixture]').forEach((el) => el.remove()));
           console.log(`choir-shot: ${it.file} shows the catalog fixture (${CATALOG_FIXTURE_PATH}), not the live catalog`);
         }
