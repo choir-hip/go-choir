@@ -60,8 +60,8 @@ func TestArgsArePinnedToTheVerifiedFlagSet(t *testing.T) {
 		}
 		return args[i+1]
 	}
-	if value("--permission-mode") != "dontAsk" || args[len(args)-2] != "--permission-mode" {
-		t.Errorf("permission mode must be dontAsk and last: %v", args[len(args)-2:])
+	if value("--permission-mode") != "bypassPermissions" || args[len(args)-2] != "--permission-mode" {
+		t.Errorf("permission mode must be bypassPermissions and last: %v", args[len(args)-2:])
 	}
 	if value("--output-format") != "stream-json" || !slices.Contains(args, "--verbose") {
 		t.Error("stream-json needs --verbose")
@@ -128,11 +128,14 @@ func TestEnvCarriesTheTokenOnlyAndDropsProviderSwitches(t *testing.T) {
 	}
 	for k, want := range map[string]string{
 		"HOME": "/tmp/choir-delegate/d1/home", "PATH": "/run/current-system/sw/bin", "GOPROXY": "http://goproxy.choir.internal,off",
-		"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1", "DISABLE_UPDATES": "1",
+		"IS_SANDBOX": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1", "DISABLE_UPDATES": "1",
 	} {
 		if v := got[k]; len(v) != 1 || v[0] != want {
 			t.Errorf("%s = %v, want [%s]", k, v, want)
 		}
+	}
+	if v, ok := got["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"]; ok {
+		t.Errorf("the bubblewrap env scrub must stay off in the capsule: %v", v)
 	}
 	if _, err := Env(base, "/h", "  "); err == nil {
 		t.Error("an empty token must refuse")

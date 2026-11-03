@@ -122,10 +122,10 @@ func (s *Spec) Normalize() error {
 // tools, subagents and every other built-in are absent.
 var BuiltinTools = []string{"Read", "Edit", "Write", "Glob", "Grep", "Bash"}
 
-// AllowedTools are the tools that run without a permission prompt; in
-// dontAsk mode everything else is refused. Bash is limited to the Go
-// toolchain and make (the capsule's source tree has no .git, so git has
-// nothing to show).
+// AllowedTools are the tools named to --allowedTools. Under
+// bypassPermissions (see Args) nothing prompts, so this list is inert; it is
+// kept as the statement of what the delegate is meant to run: the Go
+// toolchain and make.
 var AllowedTools = []string{
 	"Read", "Edit", "Write", "Glob", "Grep",
 	"Bash(go:*)", "Bash(gofmt:*)", "Bash(make:*)",
@@ -160,7 +160,9 @@ func Args(spec Spec) []string {
 		args = append(args, "--resume", spec.ResumeSession)
 	}
 	// A single-valued flag last, so no variadic flag sits at the end.
-	return append(args, "--permission-mode", "dontAsk")
+	// bypassPermissions, not dontAsk: Claude Code needs no sandbox of its
+	// own here, the capsule is the sandbox (see Env, IS_SANDBOX).
+	return append(args, "--permission-mode", "bypassPermissions")
 }
 
 // SystemContext is appended to Claude Code's system prompt. The repo's own
@@ -228,7 +230,14 @@ func Env(base []string, home, token string) ([]string, error) {
 	return append(out,
 		"HOME="+home,
 		"TMPDIR=/tmp",
-		"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1",
+		// The capsule (own netns, egress proxy, masks, capability floor) is the
+		// isolation boundary, so Claude Code runs with its own sandbox off:
+		// no CLAUDE_CODE_SUBPROCESS_ENV_SCRUB (it puts every Bash call in
+		// bubblewrap, which needs CAP_SYS_ADMIN the capsule withholds, so no
+		// build could run: docs/archive/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md).
+		// IS_SANDBOX=1 tells Claude Code it already runs in one, which it
+		// requires to accept bypassPermissions as root.
+		"IS_SANDBOX=1",
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
 		"DISABLE_UPDATES=1",
