@@ -228,13 +228,14 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), booted) {
 		return rebaseNoticeOutcome{Reason: "the booted base's objects are missing"}
 	}
-	rootInbox, docID, live, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
+	addr, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
 	if err != nil {
 		return rt.transientRebase("rebase Texture: %v", err)
 	}
-	if !live {
-		return rebaseNoticeOutcome{Reason: rebaseNeedsRoot}
+	if !addr.Live {
+		return rebaseNoticeOutcome{Reason: rebaseNeedsRootBecause(addr)}
 	}
+	rootInbox, docID := addr.Inbox, addr.DocID
 	pair := types.StackRebasePairKey(operationID, booted)
 	if _, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, pair); err == nil {
 		return rebaseNoticeOutcome{Reason: "an assignment claimed the pair"}
@@ -317,6 +318,16 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	return out
 }
 
+// rebaseAddressee is the Texture a rebase notice goes to.
+type rebaseAddressee struct {
+	Inbox, DocID, TrajectoryID string
+	// Live: the Texture can answer the notice.
+	Live bool
+	// Why says, when it is not live, why the operation's Texture cannot take
+	// the notice.
+	Why string
+}
+
 // rebaseTexture resolves the Texture a rebase notice of operationID goes to:
 // the root Texture RLM when one is live, and otherwise the Texture of the
 // document the operation's own trajectory binds
@@ -325,67 +336,121 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 // without the fallback no computer but the root's ever got a notice. The
 // store's admission is unchanged: the notice's inbox must be the sender of the
 // Texture Cast the rebase answers, and the document Texture sends its own.
-func (rt *Runtime) rebaseTexture(ctx context.Context, ownerID, computerID, operationID string) (inbox, docID string, live bool, err error) {
-	inbox, docID, live, err = rt.rebaseRoot(ctx, ownerID, computerID)
-	if err != nil || live {
-		return inbox, docID, live, err
+func (rt *Runtime) rebaseTexture(ctx context.Context, ownerID, computerID, operationID string) (rebaseAddressee, error) {
+	inbox, docID, live, err := rt.rebaseRoot(ctx, ownerID, computerID)
+	if err != nil {
+		return rebaseAddressee{}, err
+	}
+	if live {
+		return rebaseAddressee{Inbox: inbox, DocID: docID, Live: true}, nil
 	}
 	return rt.rebaseOperationTexture(ctx, ownerID, computerID, operationID)
 }
 
+// rebaseNeedsRootBecause is the timer's reason when no Texture can take the
+// notice: rebase_needs_root, and why the operation's own document Texture
+// cannot.
+func rebaseNeedsRootBecause(addr rebaseAddressee) string {
+	if strings.TrimSpace(addr.Why) == "" {
+		return rebaseNeedsRoot
+	}
+	return rebaseNeedsRoot + ", and the applied operation's document Texture cannot take it: " + addr.Why
+}
+
 // rebaseOperationTexture is the fallback: the document the operation's
-// trajectory binds (ownerActTextureInbox: a lifecycle trajectory, a document
+// trajectory binds (ownerActTextureDoc: a lifecycle trajectory, a document
 // bound to it, not archived), live when that trajectory is live and has no
-// cancellation intent. An operation without one (genesis, rollback) has none.
-func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computerID, operationID string) (inbox, docID string, live bool, err error) {
+// cancellation intent, whether or not it has open work or a resident run. The
+// notice is the wake: a Texture turn started (or a passivated run reactivated)
+// for unread records needs no open work item (the records route, B5). Problem
+// 21: the fallback used to require an open work item, which a document Texture
+// settles at the end of each round, so it worked only inside a round (pool's
+// Files Texture settled at 10:50Z, and every fire after logged
+// rebase_needs_root). An operation without a document (genesis, rollback) has
+// none, and the reason says so.
+func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computerID, operationID string) (rebaseAddressee, error) {
 	operationID = strings.TrimSpace(operationID)
-	if rt.selfdevOperations == nil || operationID == "" {
-		return "", "", false, nil
+	if operationID == "" {
+		return rebaseAddressee{Why: "the stack names no operation"}, nil
+	}
+	if rt.selfdevOperations == nil {
+		return rebaseAddressee{Why: "the runtime has no operation store"}, nil
 	}
 	operation, err := rt.selfdevOperations.Get(ctx, computerID, operationID)
 	if err != nil {
 		if errors.Is(err, selfdev.ErrOperationNotFound) || errors.Is(err, sql.ErrNoRows) {
-			return "", "", false, nil
+			return rebaseAddressee{Why: "operation " + operationID + " is not in the operation store"}, nil
 		}
-		return "", "", false, fmt.Errorf("operation %s: %w", operationID, err)
+		return rebaseAddressee{}, fmt.Errorf("operation %s: %w", operationID, err)
 	}
 	docID, bound, err := rt.ownerActTextureDoc(ctx, ownerID, computerID, operation)
-	if err != nil || !bound {
-		return "", "", false, err
+	if err != nil {
+		return rebaseAddressee{}, err
 	}
-	live, err = rt.rebaseTextureTakesRun(ctx, ownerID, computerID, strings.TrimSpace(operation.TrajectoryID), currentTextureAgentID(docID))
-	if err != nil || !live {
-		return "", "", false, err
+	trajectoryID := strings.TrimSpace(operation.TrajectoryID)
+	if !bound {
+		return rebaseAddressee{Why: "its trajectory " + trajectoryID + " binds no live document (none, archived, or bound to another trajectory)"}, nil
 	}
-	return currentTextureAgentID(docID), docID, true, nil
+	agentID := currentTextureAgentID(docID)
+	state, err := rt.rebaseTextureRunState(ctx, ownerID, computerID, trajectoryID, agentID)
+	if err != nil {
+		return rebaseAddressee{}, err
+	}
+	switch state {
+	case rebaseTextureOpen, rebaseTextureSettled:
+		return rebaseAddressee{Inbox: agentID, DocID: docID, TrajectoryID: trajectoryID, Live: true}, nil
+	case rebaseTextureTrajectoryGone:
+		return rebaseAddressee{Why: "its trajectory " + trajectoryID + " is not on the tape"}, nil
+	case rebaseTextureCancelled:
+		return rebaseAddressee{Why: "its trajectory " + trajectoryID + " has a cancellation intent"}, nil
+	default:
+		return rebaseAddressee{Why: "its trajectory " + trajectoryID + " is not live"}, nil
+	}
 }
 
-// rebaseTextureTakesRun reports whether agentID can take a run on
-// trajectoryID now: the trajectory is live, has no cancellation intent, and
-// has an open work item assigned to the agent. A trajectory that is gone is
-// not live, not an error.
-func (rt *Runtime) rebaseTextureTakesRun(ctx context.Context, ownerID, computerID, trajectoryID, agentID string) (bool, error) {
+type rebaseTextureState int
+
+const (
+	rebaseTextureOpen rebaseTextureState = iota
+	rebaseTextureSettled
+	rebaseTextureTrajectoryGone
+	rebaseTextureTrajectoryNotLive
+	rebaseTextureCancelled
+)
+
+// rebaseTextureRunState says whether agentID can take a run on trajectoryID:
+// open (the trajectory is live, has no cancellation intent, and has an open
+// work item assigned to the agent), settled (the same with no open work item),
+// or why not. A trajectory that is gone is a state, not an error.
+func (rt *Runtime) rebaseTextureRunState(ctx context.Context, ownerID, computerID, trajectoryID, agentID string) (rebaseTextureState, error) {
 	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if errors.Is(err, store.ErrNotFound) {
-		return false, nil
+		return rebaseTextureTrajectoryGone, nil
 	}
 	if err != nil {
-		return false, err
+		return rebaseTextureTrajectoryNotLive, err
 	}
 	if snapshot.Trajectory.Status != types.TrajectoryLive {
-		return false, nil
+		return rebaseTextureTrajectoryNotLive, nil
 	}
 	if _, cancelErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); cancelErr == nil {
-		return false, nil
+		return rebaseTextureCancelled, nil
 	} else if !errors.Is(cancelErr, store.ErrNotFound) {
-		return false, cancelErr
+		return rebaseTextureTrajectoryNotLive, cancelErr
 	}
 	for _, work := range snapshot.WorkItems {
 		if work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID {
-			return true, nil
+			return rebaseTextureOpen, nil
 		}
 	}
-	return false, nil
+	return rebaseTextureSettled, nil
+}
+
+// rebaseTextureTakesRun reports whether agentID can take a run on
+// trajectoryID now (the root's check: its standing item is always open).
+func (rt *Runtime) rebaseTextureTakesRun(ctx context.Context, ownerID, computerID, trajectoryID, agentID string) (bool, error) {
+	state, err := rt.rebaseTextureRunState(ctx, ownerID, computerID, trajectoryID, agentID)
+	return err == nil && state == rebaseTextureOpen, err
 }
 
 // rebaseRoot resolves the current root Texture RLM: the marked master's inbox

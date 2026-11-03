@@ -62,13 +62,14 @@ func (rt *Runtime) retryRebaseNotice(ctx context.Context, ownerID string) (rebas
 	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), booted) {
 		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_base_missing", "the booted base's objects are not in the guest repository yet")
 	}
-	rootInbox, docID, live, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
+	addr, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
 	if err != nil {
 		return rebaseRetryResult{}, fmt.Errorf("rebase Texture: %w", err)
 	}
-	if !live {
-		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_no_root", "there is no live root Texture RLM, and no live Texture of the operation's document, to ask")
+	if !addr.Live {
+		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_no_root", "there is no live root Texture RLM, and the operation's document Texture cannot take the notice: %s", addr.Why)
 	}
+	rootInbox, docID := addr.Inbox, addr.DocID
 	// No rebase round of this operation runs, for any base. An assignment that
 	// cannot be read is not known to be finished: fail closed. The commit below
 	// repeats the check under the open path's lock.

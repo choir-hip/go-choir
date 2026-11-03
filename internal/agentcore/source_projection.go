@@ -363,8 +363,8 @@ func (rt *Runtime) rebaseTextureLive(ctx context.Context, operationID string) (s
 	if ownerID == "" || computerID == "" {
 		return "", false
 	}
-	inbox, _, live, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
-	return inbox, err == nil && live
+	addr, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
+	return addr.Inbox, err == nil && addr.Live
 }
 
 // rematerializedCastObserverAgentID commits the Cast warning: a
