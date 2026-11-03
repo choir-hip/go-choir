@@ -60,8 +60,8 @@ func TestTurnVerbsBuildOneTurn(t *testing.T) {
 	if _, err := scope.Write("@delete b1", "again"); err == nil {
 		t.Fatal("a second Write staged")
 	}
-	if _, err := scope.Wait("waiting"); err == nil {
-		t.Fatal("Wait staged after Write")
+	if _, err := scope.Wait("waiting"); err != nil {
+		t.Fatalf("Wait after Write must be a no-op, got %v", err)
 	}
 	if _, err := scope.Done("the request is answered"); err != nil {
 		t.Fatalf("Done: %v", err)

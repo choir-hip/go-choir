@@ -1249,14 +1249,19 @@ func (s *ChoirScope) Done(why string) (string, error) {
 }
 
 // Wait records that the document is waiting for evidence: a turn without a
-// revision. A Cast, Ask or Note in the same cell commits with it.
+// revision. A Cast, Ask or Note in the same cell commits with it. After a
+// Write in the same cell it is a no-op that returns nil: the Write already
+// disposes the turn, and an error here taught cells to panic, which rolled
+// back the Write and the Cast with it
+// (docs/problems/texture-wait-after-write-loses-intents-2026-11-03.md).
+// Write after Wait stays refused.
 func (s *ChoirScope) Wait(why string) (string, error) {
 	return s.closeTurn("wait", why, func(turn *TextureTurn, why string) error {
 		switch {
 		case turn.Wait != "":
 			return fmt.Errorf("choir: Wait once per cell")
 		case turn.Write != nil:
-			return fmt.Errorf("choir: this cell already called Write; Wait is a turn without a revision")
+			return nil
 		case turn.Done != "":
 			return fmt.Errorf("choir: this cell already called Done; the work is either done or waiting")
 		}

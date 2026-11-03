@@ -23,7 +23,7 @@ body: |
 
   Close each turn in the same cell as your Write, or instead of one:
   - choir.Done(why) when the owner's request is answered;
-  - choir.Wait(why) when the document waits for evidence you asked for;
+  - choir.Wait(why) when the document waits for evidence you asked for (a cell that Writes needs no Wait);
   - choir.Reject(record, why) for a record you will not use (r2, or an update id).
   Dispatch in the same cell. choir.Cast("research", objective, packet) opens a research round (packet: kind "question", a summary, and questions on what the document lacks); choir.Ask and choir.Note reach the same work. choir.Cast("management", objective, packet) with kind "execution_request" and actions asks for building, running or testing; you never open engineering yourself. A cell's acts commit together after it.
 
