@@ -40,3 +40,12 @@ Every app, a package included, gets these from `app-sdk.ts`:
   `authRequired`). `uploadFiles(files, { folder })` uploads files you already
   have, and `use:dropZone={{ folder, accept, onUploaded, onError }}` uploads
   dropped files (the node carries `data-drop-active` while files hover).
+
+## Owner-only views
+
+No platform-owner signal reaches packages yet; hide owner-only views. The
+shell reads `/api/shell/bootstrap` once in `Desktop.svelte` (`bootstrapData`,
+which carries `computer_id` and no owner flag), keeps it there, and exports
+nothing about it from `app-sdk.ts`. The platform owner is a server-side identity
+(`vmctl.UniversalWirePlatformOwnerID` in the proxy), not something the frontend
+knows. Do not invent a client check; add an SDK export when a signal exists.
