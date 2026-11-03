@@ -126,20 +126,21 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 059763bb0 (problems 17, 21 live-trajectory, 22 hold, luna
-    recipe); 882c95459 (owner-act records follow the document; app-sdk
-    isOwnLiveEvent) in CI; queued behind it: ec297ef20 (problem 23,
-    publish confinement net-zero, Devin accept) then 57434b1dd (problem 21
-    settled document continues, Devin accept). Arms: deepseek Files r7
-    applied, publish waits on 23; claude rebase build live; pool waits on
-    the settled-trajectory fix; luna Slides r8 lost its autoputer when the
-    job ended and the gpt-6-luna circuit is open. Node B 19 GiB available,
-    PSI near 0.
+    staging 6e4658891 (problems 17, 21 in all three shapes, 22, 23, 24,
+    luna recipe, choir-shot autoputer helper, isOwnLiveEvent export).
+    Problem 21 proved end to end on claude and pool; both rebase builds
+    took 50-53 min (38 min of screenshot and spec work the notice invited;
+    engineering on synthetic DeepSeek-V4.1-Flash at about 70 s a call).
+    The rebase notice is rewritten to ask only for the change's own checks
+    (in Devin review). Arms: claude and pool re-rebasing onto 031dd6839
+    then package rounds; deepseek Files follow-up live, Slides queued,
+    restore round then publish; luna round 9 at 15:46Z. Node B 16 GiB
+    available, PSI under 1.
   main_uncertainty: >-
-    whether the settled-document continue lands pool's notice end to end;
-    whether S4 refusals keep starving the third arm before problem 24's
-    wait lands
-  next_observation: pool's rebase notice minted and cast after 57434b1dd deploys; deepseek publish of files-next after its restore round
+    whether a rebase under the lean notice fits inside the deploy interval;
+    whether the synthetic provider's slowness was load from the gpt-6-luna
+    quota failover (hypothesis: only five 429s in the window)
+  next_observation: the next rebase's duration after the lean notice deploys; the first files-next publish from an arm
   blocker: none
-  next_action: land 23 and 21-continue in one deploy; problem 24 (build spawn waits for host memory, tier 2) and choir-shot autoputer helper (tier 1) building; then publish Files from each arm
+  next_action: land the lean rebase notice on Devin's accept; batch deploys to fewer, larger pushes while arms are rebasing, so each deploy costs one rebase per stacked arm; then publish Files from each arm and move arms to Slides
 receipts: []
