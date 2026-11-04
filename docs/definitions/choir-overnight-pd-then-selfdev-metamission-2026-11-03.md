@@ -149,9 +149,20 @@ now:
   next_observation: modularity CI job result; arms refreshing to 9f3970680 or later
   blocker: none
   next_action: >-
-    once the arms are on 9f3970680+, install a published release at run
-    time on one arm (app opens, no restart, uninstall works), watch the
-    next base move for a platform-clean-rebase decision and for S6
-    re-materialization; wire the modularity contract into clean rebase and
-    S7 probation next
+    owner order (2026-11-04 15:50Z): 1 tie off loose ends, 2 make
+    self-development reliable, 3 app agents, 4 Autopaper as an app agent,
+    5 Autopaper features (op-eds, text-driven personalization). Loose ends
+    now: the owner's account receives platform updates and can install
+    test-account apps from the Library (cross-owner install is refused
+    until S13; find the smallest safe path); self-development single
+    threaded on one test computer with crouton by default, falling back
+    to Synthetic DeepSeek then ChatGPT, with the Claude delegate; quota
+    cancellations recorded; laptop and host storage; worktrees; restore
+    or retire arm policies. Reliability bar (owner): simple apps such as
+    a timer land first time in under 20 minutes, longer for complex ones;
+    modifying an app in place by conversation works; app updates through
+    the Library and rebase work; a forced app update (security) exists;
+    the app layer has its own security model, separate from the base
+    computer. Token budget: about 15% of the week left, so Sonnet over
+    Opus for about 30 hours
 receipts: []
