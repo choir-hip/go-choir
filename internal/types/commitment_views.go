@@ -118,7 +118,7 @@ type ActingPack struct {
 	// Waits is management's view of the computer's engineering assignments
 	// that are waiting or have waited this attempt: the typed wait and the
 	// minutes waited by kind, so "blocked on host memory" reads apart from
-	// "stuck". Management's pack only.
+	// "stuck". Management sees all; an engineer sees its own assignment.
 	Waits []AssignmentWaitView `json:"waits,omitempty"`
 	// ProviderWaits is the computer's desk loops parked on an exhausted
 	// model provider quota (kind provider_quota, class contention): who

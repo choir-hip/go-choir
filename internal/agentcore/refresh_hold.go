@@ -57,6 +57,9 @@ type refreshHoldState struct {
 	mu          sync.Mutex
 	target      string
 	lastAskedAt time.Time
+	// askedSince is when the current episode's first ask arrived: how long
+	// the update has been waiting.
+	askedSince time.Time
 	// heldSince is when the first admission was held for target; zero until
 	// one is.
 	heldSince time.Time
@@ -79,7 +82,7 @@ func (rt *Runtime) noteRefreshAsked(target string, now time.Time) {
 	// A new target, or an ask after the hold lapsed (the host stopped asking
 	// for a while), starts a new episode with an unspent bound (review 1).
 	if h.target != target || h.lastAskedAt.IsZero() || now.Sub(h.lastAskedAt) > refreshAskFresh {
-		h.target, h.heldSince = target, time.Time{}
+		h.target, h.heldSince, h.askedSince = target, time.Time{}, now
 	}
 	h.lastAskedAt = now
 }
@@ -91,7 +94,7 @@ func (rt *Runtime) clearRefreshHold() {
 	}
 	h := &rt.refreshHold
 	h.mu.Lock()
-	h.target, h.lastAskedAt, h.heldSince = "", time.Time{}, time.Time{}
+	h.target, h.lastAskedAt, h.heldSince, h.askedSince = "", time.Time{}, time.Time{}, time.Time{}
 	h.mu.Unlock()
 }
 

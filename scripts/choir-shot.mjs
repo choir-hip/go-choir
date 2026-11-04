@@ -887,9 +887,23 @@ function serve(dist, computer = false, themeState = { preset: null }, catalog = 
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` })));
 }
 
+// selectorTimeoutMessage: a shot's selector that never appears fails the shot
+// (so --fail-fast counts it) naming the selector and what the page shows, so
+// the engineer fixes the selector instead of retrying a 15 s wait.
+export async function selectorTimeoutMessage(page, selector, err, ms = STEP_MS) {
+  let text = '';
+  try { text = String(await page.evaluate(() => (document.body && document.body.innerText) || '')).replace(/\s+/g, ' ').trim().slice(0, 200); } catch { /* page gone */ }
+  const why = /Timeout/i.test(String(err && err.message)) ? `never appeared within ${ms / 1000} s` : String(err && err.message).split('\n')[0];
+  return `selector ${JSON.stringify(selector)} ${why}: check the selector matches the app's DOM; the page shows: ${text || '(no visible text)'}`;
+}
+
 async function settle(page, selector) {
   await page.waitForLoadState('networkidle', { timeout: STEP_MS });
-  if (selector) await page.waitForSelector(selector, { state: 'visible', timeout: STEP_MS });
+  if (selector) {
+    try { await page.waitForSelector(selector, { state: 'visible', timeout: STEP_MS }); } catch (e) {
+      throw new Error(await selectorTimeoutMessage(page, selector, e));
+    }
+  }
   await Promise.race([page.evaluate(() => document.fonts && document.fonts.ready), new Promise((r) => setTimeout(r, STEP_MS))]);
 }
 

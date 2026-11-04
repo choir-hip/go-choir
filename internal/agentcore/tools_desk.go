@@ -1007,6 +1007,10 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	// minutes waited by kind (engineering_waits.go).
 	if agentID == agentprofile.Management || strings.HasPrefix(agentID, agentprofile.Management+":") {
 		pack.Waits = rt.assignmentWaitViews(ownerID, computerID)
+	} else if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
+		// An engineer sees its own assignment's wait, the deferred deploy
+		// refresh included (engineering_refresh_wait.go).
+		pack.Waits = rt.engineerWaitViews(ownerID, computerID, strings.TrimPrefix(agentID, agentprofile.Engineering+":"))
 	}
 	// Every desk sees the computer's loops parked on a provider quota
 	// (provider_quota_wait.go).

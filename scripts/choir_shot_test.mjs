@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
-  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor,
+  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor, selectorTimeoutMessage,
   loadCatalogFixture, catalogAnswer, loadInstallFixture, installAnswer, isInstallPath, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
 } from './choir-shot.mjs';
 
@@ -475,3 +475,18 @@ console.log('choir-shot: no-window checks ok');
   assert.equal(r.skipped, 1);
   assert.match(lines[0], /^choir-shot: shot 1\/2 FAILED x\.png: no window for library-next/);
 }
+
+// A selector that never appears fails the shot naming the selector and the page text, and counts for --fail-fast.
+{
+  const long = 'x'.repeat(300);
+  const page = { evaluate: async () => `Hello   world ${long}` };
+  const m = await selectorTimeoutMessage(page, '#nope', new Error('page.waitForSelector: Timeout 15000ms exceeded.'));
+  assert.match(m, /^selector "#nope" never appeared within 15 s: check the selector matches the app's DOM; the page shows: Hello world x+$/);
+  assert.ok(m.split('the page shows: ')[1].length <= 200);
+  const lines = [];
+  const r = await runShots([{ file: 'x.png' }, { file: 'y.png' }], async () => { throw new Error(m); }, { failFast: true, log: (l) => lines.push(l) });
+  assert.equal(r.skipped, 1);
+  assert.match(lines[0], /FAILED x\.png: selector "#nope" never appeared/);
+  assert.match(await selectorTimeoutMessage({ evaluate: async () => '' }, '.a', new Error('Timeout')), /\(no visible text\)/);
+}
+console.log('choir-shot: selector timeout message ok');

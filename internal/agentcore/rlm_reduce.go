@@ -1569,6 +1569,11 @@ func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikerne
 	// A fresh, successful freeze settles the precommits it decides; this
 	// also removes the internal source-path key from the cell's result.
 	r.settleFreezePrecommits(ctx, in, out, assignmentID, time.Now().UTC())
+	// A deploy refresh deferred behind this candidate is the engineer's to see.
+	// (a rejected freeze froze nothing: no candidate waits on a decision).
+	if rejected, _ := out["rejected"].(bool); !rejected {
+		r.rt().noteFreezeRefreshWait(ctx, r.rec, out)
+	}
 	return out, nil
 }
 
