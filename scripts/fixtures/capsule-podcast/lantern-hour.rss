@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>The Lantern Hour</title>
+    <link>https://feeds.podcast-fixture.choir.invalid/lantern-hour</link>
+    <language>en-us</language>
+    <description>Quiet conversations with people who keep small, old things running. (Fictional show in a fixture; not live.)</description>
+    <itunes:author>Marguerite Voss</itunes:author>
+    <itunes:category text="Society &amp; Culture"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/3000x3000/lantern-hour-cover.jpg?aid=rss_feed"/>
+    <image><url>https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/3000x3000/lantern-hour-cover.jpg?aid=rss_feed</url><title>The Lantern Hour</title><link>https://feeds.podcast-fixture.choir.invalid/lantern-hour</link></image>
+    <item>
+      <title>The clockmaker next door</title>
+      <description>Episode 1 of The Lantern Hour: the clockmaker next door. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 28 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">lantern-hour-ep-1</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/lantern-hour/episodes/1/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>3</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/3000x3000/lantern-hour-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>A harbor light, restored</title>
+      <description>Episode 2 of The Lantern Hour: a harbor light, restored. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 21 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">lantern-hour-ep-2</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/lantern-hour/episodes/2/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>2</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/3000x3000/lantern-hour-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>Why the ferry bell rings twice</title>
+      <description>Episode 3 of The Lantern Hour: why the ferry bell rings twice. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 14 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">lantern-hour-ep-3</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/lantern-hour/episodes/3/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>1</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/3000x3000/lantern-hour-cover.jpg?aid=rss_feed"/>
+    </item>
+  </channel>
+</rss>

@@ -137,6 +137,17 @@
 // patch_does_not_apply, a base mismatch); a release the catalog fixture lacks
 // answers 404 release_not_published.
 //
+// Podcasts: a capsule cannot reach the podcast directory, the feed hosts, or
+// the artwork and audio hosts (libsyn, megaphone, archive.org, itunes: the L2
+// allowlist refuses them), so podcast artwork and audio come from the fixture in
+// scripts/fixtures/capsule-podcast/ (manifest.json lists the shows, their feed,
+// artwork and episode enclosure URLs; clip.mp3 answers every episode, with
+// Range, so the player's -15/+30, speed and progress work). A shot that used it
+// carries a "Podcast fixture, not live" badge. A manifest URL is answered in the
+// browser, whatever app asked; an external image or audio URL it does not list
+// is logged once per host and will show a broken image. Make the app's fixture
+// feed use the manifest's URLs. A shot's routes() still wins.
+//
 // Run it as a capsule job (choir.Start), not a choir.Exec: a first build and a
 // browser start outlast 30 s. It does not touch /workspace/platform (the build runs in a private copy under /tmp).
 import { spawn, spawnSync } from 'node:child_process';
@@ -198,6 +209,10 @@ export const USAGE = `usage: node scripts/choir-shot.mjs --shots FILE [options]
 The autoputer's stdout and stderr go to autoputerLogPath(out) (default
 /var/lib/artifact/shot-logs/autoputer.log), not to this output; its path is
 printed when the autoputer or a shot fails. Run it as a capsule job (choir.Start).
+Podcast artwork and audio inside a capsule come from the fixture in
+scripts/fixtures/capsule-podcast/ (manifest.json: shows, artwork, enclosure URLs;
+one clip answers every episode, with Range); the real hosts are refused there.
+Other external image or audio hosts are logged once and will not load.
 The header of scripts/choir-shot.mjs documents the shots file and the options.
 `;
 
@@ -674,6 +689,103 @@ export function loadInstallFixture(file = INSTALL_FIXTURE_PATH) {
   } catch {
     return null;
   }
+}
+
+// PODCAST_FIXTURE_DIR holds synthetic podcast feeds (3 items
+// each), their artwork (200x200 jpg) and one 20 s audio clip, written on a host
+// by scripts/generate-podcast-fixture.mjs. A capsule's egress is closed (the L2
+// allowlist refuses the artwork and audio hosts: libsyn, megaphone, archive.org,
+// itunes), so its Chromium would show broken-image glyphs and a dead player.
+// choir-shot answers a request for a manifest URL from these files, and logs
+// once per host any other external image or audio request it cannot serve
+// (docs/problems/capsule-cannot-load-podcast-artwork-2026-11-04.md).
+export const PODCAST_FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-podcast');
+export const PODCAST_FIXTURE_BADGE = 'Podcast fixture, not live';
+
+// loadPodcastFixture reads the manifest; null when it is missing or not one.
+export function loadPodcastFixture(dir = PODCAST_FIXTURE_DIR) {
+  try {
+    const fx = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    return fx && fx.fixture === 'capsule-podcast' && Array.isArray(fx.shows) && fx.clip && typeof fx.clip.file === 'string' ? fx : null;
+  } catch {
+    return null;
+  }
+}
+
+const bareUrl = (u) => String(u).replace(/#.*$/, '').replace(/\?.*$/, '');
+
+// podcastIndex maps each manifest URL (exact, then without its query string) to
+// the file that answers it: artwork -> the show's jpg, an episode enclosure ->
+// the clip, a feed URL -> the captured RSS.
+export function podcastIndex(fx) {
+  const exact = new Map();
+  const bare = new Map();
+  const put = (url, entry) => { exact.set(url, entry); if (!bare.has(bareUrl(url))) bare.set(bareUrl(url), entry); };
+  for (const show of (fx && fx.shows) || []) {
+    put(show.feed_url, { file: show.feed_file, type: 'application/rss+xml' });
+    for (const a of show.artwork || []) put(a.url, { file: a.file, type: 'image/jpeg' });
+    for (const e of show.episodes || []) put(e, { file: fx.clip.file, type: fx.clip.type || 'audio/mpeg' });
+  }
+  return { exact, bare };
+}
+
+// podcastAnswer is the fixture's answer to an external URL: { status, headers,
+// body: Buffer } (206 for a Range request, so -15/+30 and a progress bar can
+// seek), or null when the URL is not in the manifest.
+export function podcastAnswer(index, url, range = '', dir = PODCAST_FIXTURE_DIR) {
+  if (!index) return null;
+  const entry = index.exact.get(String(url)) || index.bare.get(bareUrl(url));
+  if (!entry) return null;
+  let body;
+  try { body = fs.readFileSync(path.join(dir, path.basename(entry.file))); } catch { return null; }
+  const headers = { 'content-type': entry.type, 'accept-ranges': 'bytes', 'cache-control': 'no-store', 'access-control-allow-origin': '*', [CATALOG_FIXTURE_HEADER]: 'capsule-podcast' };
+  const m = /^bytes=(\d*)-(\d*)$/.exec(range || '');
+  if (m && (m[1] || m[2])) {
+    const total = body.length;
+    let start = m[1] ? Number(m[1]) : Math.max(0, total - Number(m[2]));
+    let end = m[1] && m[2] ? Number(m[2]) : total - 1;
+    end = Math.min(end, total - 1);
+    if (start > end || start >= total) return { status: 416, headers: { ...headers, 'content-range': `bytes */${total}` }, body: Buffer.alloc(0) };
+    return { status: 206, headers: { ...headers, 'content-range': `bytes ${start}-${end}/${total}` }, body: body.subarray(start, end + 1) };
+  }
+  return { status: 200, headers, body };
+}
+
+const MEDIA_EXT_RE = /\.(?:png|jpe?g|gif|webp|avif|svg|mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4)$/i;
+
+// unservedHostNote: the one-line log for an external image or audio request the
+// fixture cannot answer, once per host (seen is the run's Set); '' otherwise.
+export function unservedHostNote(seen, url, resourceType) {
+  let u;
+  try { u = new URL(url); } catch { return ''; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+  if (!(resourceType === 'image' || resourceType === 'media' || MEDIA_EXT_RE.test(u.pathname))) return '';
+  if (seen.has(u.host)) return '';
+  seen.add(u.host);
+  return `choir-shot: ${u.host} is not reachable from a capsule and the podcast fixture (${PODCAST_FIXTURE_DIR}) has no copy of ${u.origin}${u.pathname}; this ${resourceType || 'media'} will not load. Use a fixture show's artwork and episode URLs (manifest.json), or the screen shows a broken image.`;
+}
+
+// podcastRoute is the context-level handler: a manifest URL is fulfilled from
+// the fixture; a same-origin or non-http request passes; any other external
+// image or audio request is logged once per host and passes on (it fails with
+// no egress, as before). Register it before a shot's routes(), which then win.
+export function podcastRoute(fx, base, state, dir = PODCAST_FIXTURE_DIR, log = console.warn) {
+  const index = podcastIndex(fx);
+  const origin = new URL(base).origin;
+  return async (route) => {
+    const req = route.request();
+    let u;
+    try { u = new URL(req.url()); } catch { return route.fallback(); }
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || u.origin === origin) return route.fallback();
+    const a = podcastAnswer(index, req.url(), req.headers().range || '', dir);
+    if (a) {
+      state.served = true;
+      return route.fulfill({ status: a.status, headers: a.headers, body: a.body });
+    }
+    const note = unservedHostNote(state.seen, req.url(), req.resourceType());
+    if (note) log(note);
+    return route.fallback();
+  };
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -1162,6 +1274,9 @@ async function main() {
   const install = loadInstallFixture();
   if (!install) console.warn(`choir-shot: no install fixture at ${INSTALL_FIXTURE_PATH}; install (self-development/adoptions) is refused in a capsule`);
   const installState = { adoptions: [] };
+  const podcast = loadPodcastFixture();
+  if (!podcast) console.warn(`choir-shot: no podcast fixture at ${PODCAST_FIXTURE_DIR}; podcast artwork and audio will not load in a capsule`);
+  const podcastState = { served: false, seen: new Set() };
   const { server, base } = await serve(dist, useComputer, themeState, catalog, install, installState);
   const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
   fs.mkdirSync(o.out, { recursive: true });
@@ -1187,6 +1302,8 @@ async function main() {
         installState.adoptions.length = 0; // the installed list is per shot, emptied with the desktop
         if (useComputer) await resetDesktop(base);
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
+        podcastState.served = false;
+        if (podcast) await context.route('**/*', podcastRoute(podcast, base, podcastState)); // before s.routes(), which wins for any URL it handles
         if (s.routes) await s.routes(context, base);
         const page = await context.newPage();
         if (recording) {
@@ -1208,8 +1325,10 @@ async function main() {
           await settle(page, s.selector);
         }
         if (appId && s.expect_window !== false) { await waitSettled(page, appId); await checkAppWindow(page, appId); } // before the screenshot: a failed shot leaves no PNG for Freeze to admit
-        if (readFixture || themeState.fixtureServed) await page.evaluate(fixtureBadge, CATALOG_FIXTURE_BADGE);
+        const badgeText = [readFixture || themeState.fixtureServed ? CATALOG_FIXTURE_BADGE : '', podcastState.served ? PODCAST_FIXTURE_BADGE : ''].filter(Boolean).join(' / ');
+        if (badgeText) await page.evaluate(fixtureBadge, badgeText);
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
+        if (podcastState.served) console.log(`choir-shot: ${it.file} shows podcast fixture artwork or audio (${PODCAST_FIXTURE_DIR}), not the live feed hosts`);
         if (readFixture || themeState.fixtureServed) {
           await page.evaluate(() => document.querySelectorAll('[data-choir-shot-fixture]').forEach((el) => el.remove()));
           console.log(`choir-shot: ${it.file} shows a fixture (${CATALOG_FIXTURE_PATH}, ${INSTALL_FIXTURE_PATH}), not the live catalog or computer`);

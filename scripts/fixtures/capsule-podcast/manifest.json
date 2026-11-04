@@ -1,0 +1,140 @@
+{
+ "fixture": "capsule-podcast",
+ "note": "Synthetic shows, artwork and audio written by scripts/generate-podcast-fixture.mjs; fixture data, not live. Hosts end in .invalid.",
+ "clip": {
+  "file": "clip.mp3",
+  "type": "audio/mpeg"
+ },
+ "shows": [
+  {
+   "slug": "lantern-hour",
+   "title": "The Lantern Hour",
+   "author": "Marguerite Voss",
+   "feed_url": "https://feeds.podcast-fixture.choir.invalid/lantern-hour/rss",
+   "feed_file": "lantern-hour.rss",
+   "artwork": [
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/3000x3000/lantern-hour-cover.jpg?aid=rss_feed",
+     "file": "lantern-hour-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/600x600bb.jpg",
+     "file": "lantern-hour-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000001-5a1e-4c0d-9f00-000000000001/100x100bb.jpg",
+     "file": "lantern-hour-1.jpg"
+    }
+   ],
+   "episodes": [
+    "https://media.podcast-fixture.choir.invalid/e/lantern-hour/episodes/1/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/lantern-hour/episodes/2/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/lantern-hour/episodes/3/audio/128/default.mp3?aid=rss_feed"
+   ]
+  },
+  {
+   "slug": "deep-field-notes",
+   "title": "Deep Field Notes",
+   "author": "Ibrahim Okafor-Lind",
+   "feed_url": "https://feeds.podcast-fixture.choir.invalid/deep-field-notes/rss",
+   "feed_file": "deep-field-notes.rss",
+   "artwork": [
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/3000x3000/deep-field-notes-cover.jpg?aid=rss_feed",
+     "file": "deep-field-notes-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/600x600bb.jpg",
+     "file": "deep-field-notes-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/100x100bb.jpg",
+     "file": "deep-field-notes-1.jpg"
+    }
+   ],
+   "episodes": [
+    "https://media.podcast-fixture.choir.invalid/e/deep-field-notes/episodes/1/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/deep-field-notes/episodes/2/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/deep-field-notes/episodes/3/audio/128/default.mp3?aid=rss_feed"
+   ]
+  },
+  {
+   "slug": "ledger-and-loaf",
+   "title": "Ledger & Loaf",
+   "author": "Tamsin Perrault",
+   "feed_url": "https://feeds.podcast-fixture.choir.invalid/ledger-and-loaf/rss",
+   "feed_file": "ledger-and-loaf.rss",
+   "artwork": [
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000003-5a1e-4c0d-9f00-000000000003/3000x3000/ledger-and-loaf-cover.jpg?aid=rss_feed",
+     "file": "ledger-and-loaf-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000003-5a1e-4c0d-9f00-000000000003/600x600bb.jpg",
+     "file": "ledger-and-loaf-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000003-5a1e-4c0d-9f00-000000000003/100x100bb.jpg",
+     "file": "ledger-and-loaf-1.jpg"
+    }
+   ],
+   "episodes": [
+    "https://media.podcast-fixture.choir.invalid/e/ledger-and-loaf/episodes/1/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/ledger-and-loaf/episodes/2/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/ledger-and-loaf/episodes/3/audio/128/default.mp3?aid=rss_feed"
+   ]
+  },
+  {
+   "slug": "night-bus-atlas",
+   "title": "Night Bus Atlas",
+   "author": "Odalys Reinhardt",
+   "feed_url": "https://feeds.podcast-fixture.choir.invalid/night-bus-atlas/rss",
+   "feed_file": "night-bus-atlas.rss",
+   "artwork": [
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/3000x3000/night-bus-atlas-cover.jpg?aid=rss_feed",
+     "file": "night-bus-atlas-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/600x600bb.jpg",
+     "file": "night-bus-atlas-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/100x100bb.jpg",
+     "file": "night-bus-atlas-1.jpg"
+    }
+   ],
+   "episodes": [
+    "https://media.podcast-fixture.choir.invalid/e/night-bus-atlas/episodes/1/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/night-bus-atlas/episodes/2/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/night-bus-atlas/episodes/3/audio/128/default.mp3?aid=rss_feed"
+   ]
+  },
+  {
+   "slug": "field-recordings-club",
+   "title": "Field Recordings Club",
+   "author": "Joaquim Beaumont",
+   "feed_url": "https://feeds.podcast-fixture.choir.invalid/field-recordings-club/rss",
+   "feed_file": "field-recordings-club.rss",
+   "artwork": [
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/3000x3000/field-recordings-club-cover.jpg?aid=rss_feed",
+     "file": "field-recordings-club-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/600x600bb.jpg",
+     "file": "field-recordings-club-1.jpg"
+    },
+    {
+     "url": "https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/100x100bb.jpg",
+     "file": "field-recordings-club-1.jpg"
+    }
+   ],
+   "episodes": [
+    "https://media.podcast-fixture.choir.invalid/e/field-recordings-club/episodes/1/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/field-recordings-club/episodes/2/audio/128/default.mp3?aid=rss_feed",
+    "https://media.podcast-fixture.choir.invalid/e/field-recordings-club/episodes/3/audio/128/default.mp3?aid=rss_feed"
+   ]
+  }
+ ]
+}

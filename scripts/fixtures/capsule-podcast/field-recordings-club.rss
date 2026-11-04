@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Field Recordings Club</title>
+    <link>https://feeds.podcast-fixture.choir.invalid/field-recordings-club</link>
+    <language>en-us</language>
+    <description>Listeners send sounds; we guess what they are, and are often wrong. (Fictional show in a fixture; not live.)</description>
+    <itunes:author>Joaquim Beaumont</itunes:author>
+    <itunes:category text="Music"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/3000x3000/field-recordings-club-cover.jpg?aid=rss_feed"/>
+    <image><url>https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/3000x3000/field-recordings-club-cover.jpg?aid=rss_feed</url><title>Field Recordings Club</title><link>https://feeds.podcast-fixture.choir.invalid/field-recordings-club</link></image>
+    <item>
+      <title>A kettle or a train?</title>
+      <description>Episode 1 of Field Recordings Club: a kettle or a train?. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 28 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">field-recordings-club-ep-1</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/field-recordings-club/episodes/1/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>3</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/3000x3000/field-recordings-club-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>Frogs at the quarry</title>
+      <description>Episode 2 of Field Recordings Club: frogs at the quarry. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 21 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">field-recordings-club-ep-2</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/field-recordings-club/episodes/2/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>2</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/3000x3000/field-recordings-club-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>The sound of a library closing</title>
+      <description>Episode 3 of Field Recordings Club: the sound of a library closing. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 14 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">field-recordings-club-ep-3</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/field-recordings-club/episodes/3/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>1</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000005-5a1e-4c0d-9f00-000000000005/3000x3000/field-recordings-club-cover.jpg?aid=rss_feed"/>
+    </item>
+  </channel>
+</rss>

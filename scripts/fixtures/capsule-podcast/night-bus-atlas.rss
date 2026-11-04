@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Night Bus Atlas</title>
+    <link>https://feeds.podcast-fixture.choir.invalid/night-bus-atlas</link>
+    <language>en-us</language>
+    <description>Short audio postcards recorded on the last bus home, in made-up cities. (Fictional show in a fixture; not live.)</description>
+    <itunes:author>Odalys Reinhardt</itunes:author>
+    <itunes:category text="Arts"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/3000x3000/night-bus-atlas-cover.jpg?aid=rss_feed"/>
+    <image><url>https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/3000x3000/night-bus-atlas-cover.jpg?aid=rss_feed</url><title>Night Bus Atlas</title><link>https://feeds.podcast-fixture.choir.invalid/night-bus-atlas</link></image>
+    <item>
+      <title>Route 9 to nowhere</title>
+      <description>Episode 1 of Night Bus Atlas: route 9 to nowhere. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 28 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">night-bus-atlas-ep-1</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/night-bus-atlas/episodes/1/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>3</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/3000x3000/night-bus-atlas-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>The driver who knew every dog</title>
+      <description>Episode 2 of Night Bus Atlas: the driver who knew every dog. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 21 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">night-bus-atlas-ep-2</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/night-bus-atlas/episodes/2/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>2</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/3000x3000/night-bus-atlas-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>Rain on the upper deck</title>
+      <description>Episode 3 of Night Bus Atlas: rain on the upper deck. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 14 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">night-bus-atlas-ep-3</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/night-bus-atlas/episodes/3/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>1</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000004-5a1e-4c0d-9f00-000000000004/3000x3000/night-bus-atlas-cover.jpg?aid=rss_feed"/>
+    </item>
+  </channel>
+</rss>

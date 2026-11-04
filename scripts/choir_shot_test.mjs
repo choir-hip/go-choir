@@ -12,6 +12,7 @@ import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor, selectorTimeoutMessage,
   loadCatalogFixture, catalogAnswer, loadInstallFixture, installAnswer, isInstallPath, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
+  loadPodcastFixture, podcastIndex, podcastAnswer, unservedHostNote, podcastRoute, PODCAST_FIXTURE_DIR,
   ffmpegShimPlan, videoFileFor, pickVideoItem, videoSizeProblem, VIDEO_MAX_BYTES, VIDEO_MAX_MS,
 } from './choir-shot.mjs';
 
@@ -553,3 +554,56 @@ console.log('choir-shot: selector timeout message ok');
   assert.match(videoSizeProblem((8 << 20) + 1), /8388609 bytes.*8388608-byte cap/);
 }
 console.log('choir-shot: video helpers ok');
+
+// Podcast fixture: artwork and audio hosts a capsule cannot reach are answered from files.
+{
+  const fx = loadPodcastFixture();
+  assert.ok(fx && fx.shows.length >= 3, 'the podcast fixture loads');
+  const idx = podcastIndex(fx);
+  for (const show of fx.shows) {
+    for (const u of [show.feed_url, ...show.artwork.map((a) => a.url), ...show.episodes]) assert.ok(new URL(u).hostname.endsWith('.invalid'), `${u}: a fixture host is reserved .invalid, never a real podcast host`);
+    assert.ok(show.artwork.length > 0 && show.episodes.length > 0, show.slug);
+    assert.ok(!/[\w.+-]+@[\w-]+\.\w/.test(fs.readFileSync(path.join(PODCAST_FIXTURE_DIR, show.feed_file), 'utf8')), `${show.slug}: no email address in the feed`);
+    for (const a of show.artwork) {
+      const r = podcastAnswer(idx, a.url);
+      assert.equal(r.status, 200); assert.equal(r.headers['content-type'], 'image/jpeg');
+      assert.ok(r.body.length > 1000 && r.body.length < 40000, 'small artwork');
+    }
+  }
+  // failure mode 5: a query-string variant of an artwork URL still matches.
+  const art = fx.shows[0].artwork[0].url;
+  assert.equal(podcastAnswer(idx, art.replace(/\?.*$/, '') + '?x=1').status, 200);
+  assert.equal(podcastAnswer(idx, 'https://example.com/none.jpg'), null);
+  assert.equal(podcastAnswer(null, art), null);
+  // failure mode 3: audio answers Range with 206, a suffix range, and 416 past the end.
+  const ep = fx.shows[0].episodes[0];
+  const full = podcastAnswer(idx, ep);
+  assert.equal(full.status, 200); assert.equal(full.headers['accept-ranges'], 'bytes');
+  const part = podcastAnswer(idx, ep, 'bytes=10-19');
+  assert.equal(part.status, 206); assert.equal(part.body.length, 10);
+  assert.equal(part.headers['content-range'], `bytes 10-19/${full.body.length}`);
+  assert.equal(podcastAnswer(idx, ep, 'bytes=-5').body.length, 5);
+  assert.equal(podcastAnswer(idx, ep, `bytes=${full.body.length + 5}-`).status, 416);
+  // failure mode 4: an unmapped image or audio host is logged once; other resources are not.
+  const seen = new Set();
+  assert.match(unservedHostNote(seen, 'https://ssl-static.libsyn.com/p/a.jpg', 'image'), /ssl-static\.libsyn\.com is not reachable/);
+  assert.equal(unservedHostNote(seen, 'https://ssl-static.libsyn.com/p/b.jpg', 'image'), '');
+  assert.match(unservedHostNote(seen, 'https://traffic.libsyn.com/e.mp3', 'fetch'), /traffic\.libsyn\.com/);
+  assert.equal(unservedHostNote(seen, 'https://api.example.com/x', 'fetch'), '');
+  assert.equal(unservedHostNote(seen, 'data:image/png;base64,xx', 'image'), '');
+  // failures 1, 2: the route fulfills a manifest URL, passes same-origin, logs an unmapped image once.
+  const logs = [];
+  const state = { served: false, seen: new Set() };
+  const h = podcastRoute(fx, 'http://127.0.0.1:4000', state, PODCAST_FIXTURE_DIR, (m) => logs.push(m));
+  const fake = (url, type = 'image', headers = {}) => { const o = { out: '' }; o.route = { request: () => ({ url: () => url, resourceType: () => type, headers: () => headers }), fulfill: async (r) => { o.out = 'fulfill'; o.r = r; }, fallback: async () => { o.out = 'fallback'; } }; return o; };
+  let c = fake(art); await h(c.route); assert.equal(c.out, 'fulfill'); assert.equal(state.served, true);
+  c = fake(ep, 'media', { range: 'bytes=0-9' }); await h(c.route); assert.equal(c.r.status, 206);
+  c = fake('http://127.0.0.1:4000/app.js', 'script'); await h(c.route); assert.equal(c.out, 'fallback');
+  c = fake('https://static.megaphone.fm/x.jpg'); await h(c.route); assert.equal(c.out, 'fallback');
+  c = fake('https://static.megaphone.fm/y.jpg'); await h(c.route); assert.equal(logs.length, 1);
+  // the helper wires the route before a shot's routes(), so a shot's own route wins.
+  const src = fs.readFileSync(new URL('./choir-shot.mjs', import.meta.url), 'utf8');
+  assert.ok(src.indexOf("context.route('**/*', podcastRoute") < src.indexOf('await s.routes(context, base)'));
+  assert.match(USAGE, /scripts\/fixtures\/capsule-podcast/);
+}
+console.log('choir-shot: podcast fixture ok');

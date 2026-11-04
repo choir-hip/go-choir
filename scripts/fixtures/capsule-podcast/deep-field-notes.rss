@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Deep Field Notes</title>
+    <link>https://feeds.podcast-fixture.choir.invalid/deep-field-notes</link>
+    <language>en-us</language>
+    <description>A weekly walk through one odd corner of astronomy, in plain words. (Fictional show in a fixture; not live.)</description>
+    <itunes:author>Ibrahim Okafor-Lind</itunes:author>
+    <itunes:category text="Science"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/3000x3000/deep-field-notes-cover.jpg?aid=rss_feed"/>
+    <image><url>https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/3000x3000/deep-field-notes-cover.jpg?aid=rss_feed</url><title>Deep Field Notes</title><link>https://feeds.podcast-fixture.choir.invalid/deep-field-notes</link></image>
+    <item>
+      <title>Counting faint galaxies</title>
+      <description>Episode 1 of Deep Field Notes: counting faint galaxies. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 28 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">deep-field-notes-ep-1</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/deep-field-notes/episodes/1/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>3</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/3000x3000/deep-field-notes-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>The telescope that fit in a van</title>
+      <description>Episode 2 of Deep Field Notes: the telescope that fit in a van. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 21 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">deep-field-notes-ep-2</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/deep-field-notes/episodes/2/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>2</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/3000x3000/deep-field-notes-cover.jpg?aid=rss_feed"/>
+    </item>
+    <item>
+      <title>Dust, and what it hides</title>
+      <description>Episode 3 of Deep Field Notes: dust, and what it hides. A short fictional description written for the fixture.</description>
+      <pubDate>Wed, 14 Oct 2026 06:00:00 GMT</pubDate>
+      <guid isPermaLink="false">deep-field-notes-ep-3</guid>
+      <enclosure url="https://media.podcast-fixture.choir.invalid/e/deep-field-notes/episodes/3/audio/128/default.mp3?aid=rss_feed" length="80370" type="audio/mpeg"/>
+      <itunes:duration>00:00:20</itunes:duration>
+      <itunes:episode>1</itunes:episode>
+      <itunes:image href="https://art.podcast-fixture.choir.invalid/images/00000002-5a1e-4c0d-9f00-000000000002/3000x3000/deep-field-notes-cover.jpg?aid=rss_feed"/>
+    </item>
+  </channel>
+</rss>
