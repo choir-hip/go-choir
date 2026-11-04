@@ -433,7 +433,7 @@ func (r *rlmCallReduction) appendRestatements(ctx context.Context, rt *Runtime, 
 	}
 	assignmentID := records[0].Precommit.Rule.AssignmentID
 	if late == "" && rt.selfdevOperations != nil {
-		op, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computer, store.EngineeringFreezeIdempotencyKey(assignmentID))
+		op, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, computer, assignmentID)
 		if err != nil {
 			return fmt.Errorf("reduce: restate %s: %w", in.LocalID, err)
 		}

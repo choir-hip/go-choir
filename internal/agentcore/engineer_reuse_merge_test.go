@@ -146,3 +146,25 @@ func TestReuseMergeLateReportKeepsTheRetainedCandidate(t *testing.T) {
 		t.Fatalf("retained revision 2 after a late close = %s %q; want frozen", op.State, op.TerminalError)
 	}
 }
+
+// The per-shot review flips management's pass to a fail inside Verify; the
+// waiting engineer resumes as a rejection carrying the per-shot reasons,
+// not as an ended candidate (coordinator, 2026-11-04).
+func TestReuseMergeShotReviewFlipResumesTheEngineerWithItsReasons(t *testing.T) {
+	ctx := context.Background()
+	_, operations, computerID := freezeCandidateTestStore(t)
+	const assignment = "assignment-flip"
+	op := reviewTestFrozen(t, operations, computerID, "trajectory-flip", assignment, strings.Repeat("7", 64))
+	rt := &Runtime{selfdevOperations: operations}
+	rec := &types.RunRecord{RunID: "run-flip"}
+	rt.reviews.Store(rec.RunID, &candidateReview{computerID: computerID, assignmentID: assignment, operationID: op.OperationID, revision: 1})
+	flipped := selfDevelopmentJudgmentRejected + ": " + shotReviewMarker + " rejected 1 of 3 shots: 04-agenda.png Q3 (the week grid is cut off)"
+	reviewTestFail(t, operations, computerID, op, flipped)
+	got, ok, err := rt.engineeringReviewPark(ctx, rec, nil)
+	if err != nil || !ok || got.Reason != reviewParkRejected || got.Terminal {
+		t.Fatalf("park after a flipped pass = %+v ok %v err %v; want a rejection", got, ok, err)
+	}
+	if !strings.Contains(got.Instruction, "04-agenda.png Q3 (the week grid is cut off)") || !strings.Contains(got.Instruction, "Freeze again") {
+		t.Fatalf("resume lacks the per-shot reasons: %q", got.Instruction)
+	}
+}

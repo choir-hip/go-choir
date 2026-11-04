@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -60,7 +59,7 @@ const (
 	verifyOwedNoticeSpacing = 60 * time.Second
 	// verifyOwedChainAfter is when a notice's own re-check fires.
 	verifyOwedChainAfter = 3 * time.Minute
-	verifyOwedEpisode       = "verify-owed"
+	verifyOwedEpisode    = "verify-owed"
 )
 
 // verifyOwed is one Verify management owes.
@@ -99,16 +98,7 @@ func (o verifyOwed) Line() string {
 // idempotency key belongs to: freeze-open:<assignment>, with engineer
 // reuse's ":rev:<n>" suffix on later revisions.
 func freezeKeyAssignment(key string) (string, bool) {
-	rest, ok := strings.CutPrefix(strings.TrimSpace(key), store.EngineeringFreezeIdempotencyKey(""))
-	if !ok || strings.TrimSpace(rest) == "" {
-		return "", false
-	}
-	if i := strings.LastIndex(rest, ":rev:"); i > 0 {
-		if n, err := strconv.Atoi(rest[i+len(":rev:"):]); err == nil && n > 1 {
-			rest = rest[:i]
-		}
-	}
-	return strings.TrimSpace(rest), true
+	return store.EngineeringFreezeAssignmentOf(key)
 }
 
 // verifyOwedOn returns the Verify owed on assignmentID, if any: the states
@@ -146,12 +136,10 @@ func (rt *Runtime) verifyOwedOn(ctx context.Context, ownerID, computerID, assign
 }
 
 // verifyOwedInReview reports whether an open assignment's frozen candidate
-// waits for management's review. Engineer reuse (branch engineer-reuse)
-// adds that state; merging it makes this rt.assignmentInReview(ctx,
-// assignment, operation). Before it, an open assignment's candidate is
-// never Verify's.
-func (rt *Runtime) verifyOwedInReview(_ context.Context, _ types.EngineeringAssignment, _ selfdev.Operation) bool {
-	return false
+// waits for management's review: its engineer is parked on the verdict
+// (engineer_reuse.go).
+func (rt *Runtime) verifyOwedInReview(ctx context.Context, assignment types.EngineeringAssignment, operation selfdev.Operation) bool {
+	return rt.assignmentInReview(ctx, assignment, operation)
 }
 
 // verifyOwedBy lists the Verifies deskAgentID owes on computerID, one per
