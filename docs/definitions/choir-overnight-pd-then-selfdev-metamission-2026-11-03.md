@@ -126,30 +126,27 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 661b75b24. Landed and deployed this hour: package install
-    (b5fa1aa82, software-release adoption deleted), the judge skips U4
-    rebases (5727d3d3d), a rebase may freeze empty when the new base
-    supersedes the change, owner approval names the drop (e272375a1, tier 2
-    Devin and DeepSeek), an install attempt whose work ended without an
-    operation does not block a retry for 2 h (661b75b24, Devin round 2 after
-    a blocking catch). First staging install (luna's calendar-next onto
-    pool, 12:00Z) was refused cleanly: pool is at stack_base_moved too, so
-    it must rebase before it can take any install. The superseded path ran
-    live on crouton: its empty Freeze was refused because the base moved
-    again mid-rebase; a fresh rebase onto e272375a1 is running, and the
-    drop is pre-cleared for approval if its receipt is superseded and names
-    only library-next. Claude and pool rebases wait on their timers. Node
-    B 16 GB available, 148 GB disk free.
+    staging 661b75b24. The owner's Library verifier passed at 13:30:56Z:
+    timer-next built and published on the claude arm (release 16a10f3e),
+    converter-next built and published on the crouton arm (release
+    4bafb76d, third candidate after two correct rejections for blank
+    Temperature units), then each arm installed the other's app; both
+    installs applied with patch_matches_release true, same_base true, no
+    refusal and no base move, and both arms' applied source holds both
+    package folders. Gap: no screenshot of converter-next opened on the
+    claude arm (its install recorded no screens). Building toward apps as
+    a layer, none pushed yet: stack_base_moved waiters woken once the
+    block clears (rebase-wake, Devin approve round 2), S6 package-aware
+    containment (s6-package-lock, no switch, tier 2 review running), clean
+    rebases without approval (clean-rebase, building), S12 runtime install
+    (s12-runtime-install, building).
   main_uncertainty: >-
-    whether the rebases complete on crouton-alpha without another surprise;
-    whether the install applies end to end once pool is rebased
-  next_observation: crouton's superseded rebase reaching approval; pool's rebase notice; the install retry on pool
+    whether S6 and clean-rebase survive tier 2 review without a redesign;
+    whether S12's runtime layer fits in a day or needs a sandbox decision
+  next_observation: S6 tier 2 verdicts; the clean-rebase and S12 builder reports
   blocker: none
   next_action: >-
-    run the owner's Library verifier (owner, 2026-11-04 12:55Z: "build 2
-    separate apps simultaneously on different VMs, publish them both, then
-    install them both so that both VMs have both apps"): timer-next on the
-    claude arm and converter-next on the crouton arm, published, then each
-    installs the other's; code pushes held while it runs so the base stays
-    put
+    land rebase-wake (code pushes unblocked now the verifier passed), then
+    S6 and clean-rebase after tier 2, then S12; run the S6 staging proof on
+    a test computer carrying a package
 receipts: []
