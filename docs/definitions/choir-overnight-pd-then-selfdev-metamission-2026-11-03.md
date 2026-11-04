@@ -126,7 +126,8 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 661b75b24. The owner's Library verifier passed at 13:30:56Z:
+    staging 43745079a (stack_base_moved waiters woken once the block
+    clears, Devin approve r2, deployed 13:44Z). The owner's Library verifier passed at 13:30:56Z:
     timer-next built and published on the claude arm (release 16a10f3e),
     converter-next built and published on the crouton arm (release
     4bafb76d, third candidate after two correct rejections for blank
@@ -134,19 +135,23 @@ now:
     installs applied with patch_matches_release true, same_base true, no
     refusal and no base move, and both arms' applied source holds both
     package folders. Gap: no screenshot of converter-next opened on the
-    claude arm (its install recorded no screens). Building toward apps as
-    a layer, none pushed yet: stack_base_moved waiters woken once the
-    block clears (rebase-wake, Devin approve round 2), S6 package-aware
-    containment (s6-package-lock, no switch, tier 2 review running), clean
-    rebases without approval (clean-rebase, building), S12 runtime install
-    (s12-runtime-install, building).
+    claude arm (its install recorded no screens). Toward apps as a layer,
+    not yet pushed: S6 package-aware containment (tier 2 approve Devin and
+    DeepSeek, non-blocking fixes in progress), clean rebases without
+    approval (corpusd gate, test tier only, tier 2 review running), S12
+    runtime install (packages built to a module outside the source stack,
+    owner's own releases only until S13, epoch 37, tier 2 review running),
+    and the owner's modularity check (2026-11-04: "some verifiable way to
+    assert modularity"; SDK surface lock plus a smoke contract per
+    package, building). Node B 15 GB available, 157 GB disk free.
   main_uncertainty: >-
     whether S6 and clean-rebase survive tier 2 review without a redesign;
     whether S12's runtime layer fits in a day or needs a sandbox decision
   next_observation: S6 tier 2 verdicts; the clean-rebase and S12 builder reports
   blocker: none
   next_action: >-
-    land rebase-wake (code pushes unblocked now the verifier passed), then
-    S6 and clean-rebase after tier 2, then S12; run the S6 staging proof on
-    a test computer carrying a package
+    land S6 after its fixes, then clean-rebase and S12 after tier 2, then
+    the modularity check; prove the stack-base wake live at the next base
+    move on an arm; run the S6 staging proof on a test computer carrying a
+    package
 receipts: []
