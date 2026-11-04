@@ -143,3 +143,27 @@ fidelity event better than chance.
 - Falsifier: AUC below 0.55, or below a success-rate baseline.
 - Hard to measure: few settled material events exist today. Mitigation: report
   n; if n is under 30 events, resolve as unresolved, not as a pass.
+
+## Settlements (2026-11-04 ~20:40 UTC; FP0 writes, the settler is the rule reading docs/evidence/gvisor-desk-capsule-x86-2026-11-04.md unless named)
+
+**R0-01, settled contradicted.** Warm `go build` 0.45 s against 0.1 s native: ratio about 4.5, outside [1.2, 2.5]; log ratio ln(4.5/1.6) = +1.03. Assumption that failed: that a warm build is dominated by compute. A 0.1 s warm build is dominated by cache stat and open calls, the 9x-per-operation class.
+
+**R0-02, settled confirmed.** Cold `go build` 16.3 to 17.1 s against 11.1 s: ratio about 1.5, inside [1.3, 3.5]; log ratio ln(1.5/2.0) = -0.29.
+
+**R0-03, settled confirmed.** Go build, test, git status and commit all ran unmodified. p = 0.80; Brier 0.04.
+
+**R0-04, unresolved, for Devin.** The evidence says gVisor's overlay and namespaces replace the capsule's setup, with cgroup limits, CAP_NET_ADMIN for egress, and result extraction open. Whether the daemon "could drop CAP_SYS_ADMIN for capsules" is Devin's judgment against `internal/capfloor/capfloor.go`.
+
+**R0-05, settled confirmed.** Fixed cost of a sandbox about 49 MiB (sentry 37, launcher 8, gofer 7), inside [25, 90]; log ratio ln(49/45) = +0.09.
+
+**R0-06, void as stated.** "Marginal PSS of each additional sandbox" did not say whether the workload counts: 37 MiB with the worker (inside [15, 70]), about 14 MiB without (just outside). The record is unsettleable as written. No replacement is filed; the question it served (per-desk or shared sandbox) is answered by the evidence directly.
+
+**R0-07, settled contradicted.** runsc cannot run inside Landlock (it denies `mount`), and inside the cell seccomp filter only with about 180 added syscalls. p = 0.50; Brier 0.25. The working order is the reverse (runsc outer), which the record did not consider.
+
+Calibration so far: 80% intervals 2 of 3 covered (R0-02, R0-05; R0-01 missed); probabilities R0-03 and R0-07, mean Brier 0.145.
+
+### Learning entries
+
+- **R0-01 (contradicted).** Short operations are syscall-bound even when the job is "compute". Change: a slowdown prediction names the operation's dominant cost class (compute, metadata, IPC) from a native profile before predicting. Checked by: the capsule pilot's predictions.
+- **R0-06 (void).** The quantity was underspecified. Change: every point estimate states its unit boundary (what is included and excluded). This is improvement 3 of the ledger review (explicit voids, counted).
+- **R0-07 (contradicted).** FP0 predicted one layering order without listing the alternative. Change: when a design choice has a small known set of options, the record covers each option, not the first one considered.
