@@ -89,10 +89,7 @@ func roundPredictionRecords(cast types.CommitmentRecord, assignment types.Engine
 	if err != nil {
 		return nil, err
 	}
-	since := strings.TrimSpace(cast.Provenance.CommittedAt)
-	if _, ok := parseCommitmentStamp(since); !ok {
-		since = assignment.CreatedAt.UTC().Format(time.RFC3339Nano)
-	}
+	since := roundClockAnchor(cast, assignment)
 	var out []types.CommitmentRecord
 	for _, precommit := range predictions.Precommits() {
 		rule := *precommit.Rule
@@ -124,6 +121,18 @@ func roundPredictionRecords(cast types.CommitmentRecord, assignment types.Engine
 		stampRulePrecommitStatement(&out[len(out)-1], "cast", since, "")
 	}
 	return out, nil
+}
+
+// roundClockAnchor is the instant a round's minutes count from: the Cast
+// record's committed_at, else the assignment's creation. The freeze_minutes
+// settlement and the engineer's clock (engineer_clock.go) both read it, so
+// the numbers agree.
+func roundClockAnchor(cast types.CommitmentRecord, assignment types.EngineeringAssignment) string {
+	since := strings.TrimSpace(cast.Provenance.CommittedAt)
+	if _, ok := parseCommitmentStamp(since); !ok {
+		since = assignment.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return since
 }
 
 // parseCommitmentStamp parses a record's RFC 3339 stamp.

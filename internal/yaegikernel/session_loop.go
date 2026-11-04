@@ -61,6 +61,27 @@ type SessionFrame struct {
 	// docs/design/calibration-wiring-permutations-2026-11-04.md); nil when
 	// it has none to read.
 	Calibration *types.CalibrationDigest `json:"calibration,omitempty"`
+	// Clock is the engineer's elapsed and budget minutes at cell start, read
+	// through choir.Context(); nil when the run has no clock.
+	Clock *CellClock `json:"clock,omitempty"`
+}
+
+// CellClock is an engineer round's clock as the host measured it at cell
+// start (docs/problems/engineer-has-no-clock-2026-11-04.md). Elapsed runs
+// from the same anchor the freeze_minutes settlement uses. It carries no
+// prediction: management's forecast stays out of the acting context.
+type CellClock struct {
+	ElapsedSec int64 `json:"elapsed_sec"`
+	BudgetSec  int64 `json:"budget_sec"`
+	// AnchorUnixMS is the anchor instant itself. The kernel runs on the
+	// host's machine, so it counts from it directly and the broker queue
+	// and transit time between the host's read and the cell's start are
+	// counted too; the larger of the two readings wins (under-reporting
+	// would show more budget than exists).
+	AnchorUnixMS int64 `json:"anchor_unix_ms,omitempty"`
+	// Revision is the assignment's revision once engineer reuse lands; 0
+	// is absent.
+	Revision int `json:"revision,omitempty"`
 }
 
 // DocSnapshot is the bound Texture document as the cell's frame showed it:

@@ -66,6 +66,9 @@ var ErrPreGenesis = errors.New("computer is pre-genesis")
 // the store so that run handles and events survive autoputer process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
+	// engineerClockFired holds the assignments whose budget line has been
+	// shown (assignment id:attempt:revision -> struct{}); engineer_clock.go.
+	engineerClockFired sync.Map
 	// recordsRunStart holds each running desk run's cursor at its first
 	// cell (run id -> int64): choir.Records() shows the run every record
 	// past it (B13).

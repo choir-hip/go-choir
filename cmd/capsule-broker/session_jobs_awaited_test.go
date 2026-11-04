@@ -38,7 +38,7 @@ func TestSessionWorkerReportsAwaitedJobsEndToEnd(t *testing.T) {
 		t.Fatalf("import choir: %s", res.Error)
 	}
 	res, err := w.eval(`st, _ := choir.Poll("job-build")
-println(st.State)`, nil, nil, nil, []yaegikernel.JobView{{ID: "job-build", State: capsulejob.StateRunning}}, nil, 60*time.Second)
+println(st.State)`, nil, nil, nil, []yaegikernel.JobView{{ID: "job-build", State: capsulejob.StateRunning}}, nil, nil, 60*time.Second)
 	if err != nil || res.Error != "" {
 		t.Fatalf("eval: %v %s", err, res.Error)
 	}

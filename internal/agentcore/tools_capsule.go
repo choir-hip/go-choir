@@ -951,6 +951,11 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: bounds.brokerTimeoutMS(input.TimeoutMS)}
 			execCtx := toolregistry.ExecutionContextFrom(ctx)
 			req.Calibration = rt.calibrationDigestForRun(ctx, execCtx.RunRecord)
+			clockStart := time.Now()
+			clock := rt.engineerClockForRun(ctx, execCtx.RunRecord, clockStart)
+			if clock != nil {
+				req.Clock = clock.cell()
+			}
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
 				req.Records = reduction.records.view
@@ -1020,6 +1025,9 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				// still running (capsule_jobs.go, cellJobPark).
 				result.JobPark = cellJobPark(result)
 			}
+			// The budget line rides the first result past budget minus 20
+			// minutes, once (engineer_clock.go).
+			result.ClockNote = rt.takeEngineerClockLine(clock, clockStart)
 			return toolregistry.ResultJSON(result)
 		},
 	}

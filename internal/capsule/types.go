@@ -186,6 +186,9 @@ type GoEvalRequest struct {
 	// Calibration is the record choir.Calibration() returns in the cell
 	// (C6); nil when the run has none to read.
 	Calibration *types.CalibrationDigest `json:"calibration,omitempty"`
+	// Clock is the engineer round's elapsed and budget at cell start, read
+	// through choir.Context(); nil when the run has none.
+	Clock *yaegikernel.CellClock `json:"clock,omitempty"`
 }
 
 // GoEvalResult is the result of evaluating Go source in the capsule. Intents
@@ -213,6 +216,9 @@ type GoEvalResult struct {
 	// JobsAwaited are the jobs a choir.Poll in the cell returned unfinished
 	// (the kernel's SessionResult.JobsAwaited, carried by the broker).
 	JobsAwaited []string `json:"jobs_awaited,omitempty"`
+	// ClockNote is the one harness line the engineer's clock adds when the
+	// round crosses its budget minus 20 minutes (set by the host, once).
+	ClockNote string `json:"clock_note,omitempty"`
 	// JobPark is the job this turn waits on, set by guest core after
 	// reduction (agentcore cellJobPark): the tool loop calls no model until
 	// the job ends, then resumes the turn with its outcome.

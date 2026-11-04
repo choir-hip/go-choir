@@ -72,6 +72,11 @@ type ChoirScope struct {
 	// calibrationRead whether the bound cell called it (C6).
 	calibration     *types.CalibrationDigest
 	calibrationRead atomic.Bool
+	// clock is the cell-start engineer clock and clockAt the kernel's own
+	// monotonic time at cell start, so Context() reports elapsed time as of
+	// the call without trusting a host/guest wall-clock match.
+	clock   *CellClock
+	clockAt time.Time
 	// updates is the cell-start snapshot of pending update_coagent records
 	// (RLM prompt-as-variable): read via Updates(). The wake turn in chat
 	// carries only update ids; the payload lives here.
@@ -213,6 +218,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.analysis = frame.Analysis
 			s.calibration = frame.Calibration
 			s.calibrationRead.Store(false)
+			s.clock, s.clockAt = frame.Clock, time.Now()
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.emits = append([]PendingEmit(nil), frame.Emits...)
 			s.records = append([]InboxRecord(nil), frame.Records...)
@@ -232,6 +238,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.pack = nil
 			s.analysis = nil
 			s.calibration = nil
+			s.clock = nil
 			s.updates = nil
 			s.emits = nil
 			s.records = nil
@@ -1150,11 +1157,33 @@ func (s *ChoirScope) Context() map[string]string {
 	if s == nil {
 		return map[string]string{}
 	}
-	return map[string]string{
+	out := map[string]string{
 		"computer_id":   s.computerID,
 		"activation_id": s.activationID,
 		"co_super_slot": s.slot,
 	}
+	if c := s.clock; c != nil && c.BudgetSec > 0 {
+		elapsed := c.ElapsedSec + int64(time.Since(s.clockAt)/time.Second)
+		if c.AnchorUnixMS > 0 {
+			if byAnchor := time.Now().UnixMilli()/1000 - c.AnchorUnixMS/1000; byAnchor > elapsed {
+				elapsed = byAnchor
+			}
+		}
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		left := c.BudgetSec - elapsed
+		if left < 0 {
+			left = 0
+		}
+		out["elapsed_min"] = strconv.FormatInt(elapsed/60, 10)
+		out["budget_min"] = strconv.FormatInt(c.BudgetSec/60, 10)
+		out["budget_left_min"] = strconv.FormatInt(left/60, 10)
+		if c.Revision > 0 {
+			out["revision"] = strconv.Itoa(c.Revision)
+		}
+	}
+	return out
 }
 
 // ReadDoc returns the bound Texture document as the cell's frame showed it:
