@@ -14,8 +14,9 @@ import (
 // Entries are derived from the cumulative patch and three subtree ids; there
 // is no lock record to keep.
 
-// PackagesRoot is the directory whose children are package roots (the same
-// root internal/pkgrelease publishes from).
+// PackagesRoot is the directory whose children are package roots: the same
+// root as pkgrelease.PackagesRoot, which imports this package, so the
+// constant is repeated here.
 const PackagesRoot = "frontend/src/packages"
 
 // PackageState is one entry's answer.
@@ -147,7 +148,7 @@ func packageGraft(ctx context.Context, repo, base, booted, tree string) (graft s
 			e.State = PackageBehindBase
 			changed, err := treeDiffPaths(ctx, repo, base, booted, byRoot[root])
 			if err != nil {
-				return "", nil, false, "", err
+				return "", entries, false, "", err
 			}
 			if len(changed) > 0 {
 				e.Conflict = true
@@ -191,7 +192,7 @@ func packageGraft(ctx context.Context, repo, base, booted, tree string) (graft s
 				continue
 			}
 			if _, err := git(ctx, repo, env, nil, "read-tree", "--prefix="+e.Root+"/", e.Tree); err != nil {
-				refused = err.Error()
+				refused = "the stack's package at " + e.Root + " does not fit the booted tree (" + err.Error() + "), so it is not placed"
 				return nil
 			}
 		}
@@ -200,7 +201,7 @@ func packageGraft(ctx context.Context, repo, base, booted, tree string) (graft s
 			return err
 		}
 		if why != "" {
-			refused = why
+			refused = "the patch's after-image does not fit the booted tree (" + why + "), so it is not grafted"
 			return nil
 		}
 		out, err := git(ctx, repo, env, nil, "write-tree")
@@ -217,7 +218,7 @@ func packageGraft(ctx context.Context, repo, base, booted, tree string) (graft s
 		return "", entriesOut, false, "", err
 	}
 	if refused != "" {
-		return "", entriesOut, false, "the patch's after-image does not fit the booted tree (" + refused + "), so it is not grafted", nil
+		return "", entriesOut, false, refused, nil
 	}
 	// Checked: the grafted paths hold the after-image, each whole root holds
 	// R, and nothing else differs from booted.
@@ -245,7 +246,8 @@ func packageGraft(ctx context.Context, repo, base, booted, tree string) (graft s
 		return "", entriesOut, false, "", err
 	}
 	for _, p := range outside {
-		if !in[p] && !wholeRoot[PackageRootOf(p)] {
+		// A whole root's own path differs too when booted had a file there.
+		if !in[p] && !wholeRoot[PackageRootOf(p)] && !wholeRoot[p] {
 			return "", entriesOut, false, "the graft changes " + p + ", which the patch does not touch", nil
 		}
 	}

@@ -235,3 +235,40 @@ func TestDraftDoesNotGraftWhereTheBaseMovedAtAChangedPath(t *testing.T) {
 	})
 	wantReason(t, err, ReasonChangeNotConfined)
 }
+
+// S6 (K12, docs/design/s6-package-lock-build-2026-11-04.md): the source
+// projection may keep an earlier round's package whole over a base that moved
+// the same root (package_behind_base). Measured from the base, that earlier
+// round would publish as this operation's change, so the draft refuses
+// rather than guesses.
+func TestDraftRefusesWhenTheBaseMovedInsideThePackageTheEarlierRoundChanged(t *testing.T) {
+	f := newFixture(t)
+	oldBase := f.tree(map[string]entry{testRoot + "/App.svelte": {"100644", "<p>old reader</p>\n"}})
+	round1 := f.tree(map[string]entry{testRoot + "/App.svelte": {"100644", "<p>ours v1</p>\n"}})
+	round2 := f.tree(changed("<p>ours v2</p>\n"))
+	_, err := DraftPackage(context.Background(), DraftInput{
+		Repo: f.repo, Name: "reader", Base: f.base, Patch: f.fullDiff(f.base, round2),
+		Before: round1, BeforeLabel: "the previous round", Stack: []string{round1}, BeforeBase: oldBase,
+	})
+	wantReason(t, err, ReasonParentUnpublished)
+	if !strings.Contains(err.Error(), testRoot+"/App.svelte") {
+		t.Fatalf("the refusal must name the path: %v", err)
+	}
+}
+
+// The same move, where the base took the earlier round verbatim (an export):
+// from the base the earlier round is not this operation's change, so the
+// draft goes ahead.
+func TestDraftAllowsABaseThatTookTheEarlierRoundsPackage(t *testing.T) {
+	f := newFixture(t)
+	oldBase := f.tree(map[string]entry{testRoot + "/App.svelte": {"100644", "<p>old reader</p>\n"}})
+	round1 := f.tree(map[string]entry{testRoot + "/App.svelte": {"100644", "<p>reader</p>\n"}})
+	round2 := f.tree(changed("<p>reader v2</p>\n"))
+	source, err := DraftPackage(context.Background(), DraftInput{
+		Repo: f.repo, Name: "reader", Base: f.base, Patch: f.fullDiff(f.base, round2),
+		Before: round1, BeforeLabel: "the previous round", Stack: []string{round1}, BeforeBase: oldBase,
+	})
+	if err != nil || strings.Join(source.Paths, ",") != testRoot+"/App.svelte" {
+		t.Fatalf("%+v %v", source.Paths, err)
+	}
+}

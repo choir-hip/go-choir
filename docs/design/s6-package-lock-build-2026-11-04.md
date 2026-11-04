@@ -106,10 +106,10 @@ the next pass from the same inputs (saved refs first, as S4).
 | K5 | The placed subtree is not R | the root's tree id is compared after the write; a mismatch is not graftable (`stack_base_moved`) | byte-identity test |
 | K6 | The re-materialized commit is not reproducible | the commit is a function of the operation and the tree | rebuild gives the same id |
 | K7 | A crash between apply and projection leaves a stale HEAD or dirty tree | reconcile from inputs; S4 saves first | stale HEAD + dirty file |
-| K9 | The stack deletes a package, or the base deletes it | an absent subtree is the empty tree; R absent placed means removed | delete case |
-| K10 | A directory/file clash at the root | the index write fails: not graftable, `stack_base_moved` | covered by S4's clash test |
+| K9 | The stack deletes a package, or the base deletes it | an absent subtree is the empty tree. The stack's deletion: R absent, the root is removed. The base's deletion of a package the stack changed: a conflict, and R is kept whole (`conflict: true`) | both delete cases |
+| K10 | A directory/file clash | below a root or on a shell path, the index write fails: not graftable, `stack_base_moved` (S4's clash test). A file at the root's own path on the base is a conflict: R is kept whole | root typechange test |
 | K11 | The placed package fails to build on a base whose SDK moved (L18) | the capsule build fails; nothing is applied | residual (S12 removes it) |
-| K12 | A publisher draft of an operation cast on a package-placed projection | the draft's own graft refuses rather than guesses | residual |
+| K12 | A publisher draft of an operation cast on a package-placed projection publishes the earlier round's package as this operation's change | `graftBefore` refuses `package_parent_unpublished` when the base moved, inside the package's root, a path the earlier round changed and the base does not already hold the earlier round's version there | pkgrelease draft tests |
 
 ## Not in this slice
 

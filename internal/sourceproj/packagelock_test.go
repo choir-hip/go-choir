@@ -342,3 +342,49 @@ func TestPackageRootOf(t *testing.T) {
 		}
 	}
 }
+
+// The base deletes a package this computer changed: R is kept whole, as a
+// conflict (the base's deletion is a change at every path the stack touched).
+func TestPackageLockTheBaseDeletesThePackage(t *testing.T) {
+	repo, base := pkgRepo(t)
+	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, imageRoot+"/App.svelte", 5, "adopted") })
+	moved := platformMoved(t, repo, base, func(r string) {
+		if err := os.RemoveAll(filepath.Join(r, filepath.FromSlash(imageRoot))); err != nil {
+			t.Fatal(err)
+		}
+	})
+	in := lockOp("op-image", base, patch)
+	in.Repo, in.BootedBase = repo, moved
+	res := reconcile(t, in)
+	e := entryOf(t, res, imageRoot)
+	if res.State != StateRematerialized || e.State != PackageBehindBase || !e.Conflict || e.BaseTree != "" {
+		t.Fatalf("%+v %+v", res, e)
+	}
+	if subtree(t, repo, "HEAD", imageRoot) != e.Tree || !strings.Contains(show(t, repo, "HEAD", imageRoot+"/App.svelte"), "adopted") {
+		t.Fatal("R must be kept whole")
+	}
+}
+
+// A file at the root's own path on the base (a typechange) is a conflict, not
+// stack_base_moved: the root's own path is part of the whole root.
+func TestPackageLockAFileAtTheRootOnTheBaseIsAConflict(t *testing.T) {
+	repo, base := pkgRepo(t)
+	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, imageRoot+"/App.svelte", 5, "adopted") })
+	moved := platformMoved(t, repo, base, func(r string) {
+		if err := os.RemoveAll(filepath.Join(r, filepath.FromSlash(imageRoot))); err != nil {
+			t.Fatal(err)
+		}
+		write(t, r, imageRoot, "now a file\n")
+	})
+	in := lockOp("op-image", base, patch)
+	in.Repo, in.BootedBase = repo, moved
+	res := reconcile(t, in)
+	e := entryOf(t, res, imageRoot)
+	if res.State != StateRematerialized || e.State != PackageBehindBase || !e.Conflict {
+		t.Fatalf("%+v %+v", res, e)
+	}
+	if subtree(t, repo, "HEAD", imageRoot) != e.Tree {
+		t.Fatal("R must be kept whole at the root")
+	}
+	mustClean(t, repo)
+}

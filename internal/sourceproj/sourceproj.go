@@ -61,17 +61,17 @@ const (
 	// StatePending: an apply is in flight; nothing was touched.
 	StatePending State = "pending"
 	// StateBaseMoved: a live stack on a base that is not the booted one, and
-	// not upstreamed, and the booted base changed a path the stack's patch
-	// touches. The projection is kept; casting refuses until a rebase.
+	// not upstreamed, and the booted base changed a shell path (one outside
+	// every package root) the stack's patch touches, or the graft could not
+	// be placed. The projection is kept; casting refuses until a rebase.
 	StateBaseMoved State = "stack_base_moved"
 	// StateRematerialized: a live stack on a base that is not the booted one,
-	// where the booted base left every path the patch touches unchanged. HEAD
-	// is the booted base with the patch's after-image at those paths, byte for
-	// byte; casting is admitted (the served build is still the stack on its
-	// own base, which the Cast's ledger warning says). With the package lock
-	// (S6) a package root the booted base also changed is no bar: its entry
-	// (Result.Packages) is retired, grafted, or holds this computer's version
-	// whole; only a shell path the booted base changed is stack_base_moved.
+	// where the booted base left every shell path the patch touches
+	// unchanged. HEAD is the booted base with the patch's after-image at those
+	// paths, byte for byte, and each package root per its entry
+	// (Result.Packages, S6): retired, grafted path by path, or holding this
+	// computer's version whole. Casting is admitted (the served build is still
+	// the stack on its own base, which the Cast's ledger warning says).
 	StateRematerialized State = "stack_rematerialized"
 	// StateBaseObjectsMissing: the booted base's objects are not in the
 	// guest repository (residual R3), so it can neither be moved to nor shown

@@ -300,7 +300,9 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	// when the base moved at none of the paths Before changed; otherwise the
 	// source before falls back to Base itself.
 	if in.BeforeBase != "" && !strings.EqualFold(in.BeforeBase, in.Base) {
-		before = graftBefore(ctx, s, in, before)
+		if before, err = graftBefore(ctx, s, in, before); err != nil {
+			return DraftSource{}, err
+		}
 	}
 	// The operation's own change, against the source just before it.
 	opPaths, err := diffPaths(ctx, s, before, after)
@@ -459,35 +461,69 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 // graftBefore is the tree of Base with the change BeforeBase..before applied,
 // the source before the operation seen on the operation's own base. It
 // returns Base when the base moved at a path that change touches or the
-// change does not apply, which is the old behavior (the stack restarted).
-func graftBefore(ctx context.Context, s *scratch, in DraftInput, before string) string {
+// change does not apply, which is the old behavior (the stack restarted),
+// except inside this package's root: there the source projection may have
+// kept the earlier round's package whole over the base's (S6,
+// package_behind_base), and measuring from Base would publish that earlier
+// round as this operation's change. That refuses package_parent_unpublished.
+func graftBefore(ctx context.Context, s *scratch, in DraftInput, before string) (string, error) {
+	root := Root(in.Name)
 	fallback := in.Base
 	touched, err := diffPaths(ctx, s, in.BeforeBase, before)
 	if err != nil {
-		return fallback
+		return fallback, nil
 	}
 	moved, err := diffPaths(ctx, s, in.BeforeBase, in.Base)
 	if err != nil {
-		return fallback
+		return fallback, nil
 	}
 	movedSet := make(map[string]bool, len(moved))
 	for _, p := range moved {
 		movedSet[p] = true
 	}
+	// A path in the root where Base already holds what before holds (the
+	// earlier round was exported to the base) is no ambiguity: from Base it
+	// is not this operation's change either way.
+	stillDiffers, err := diffPaths(ctx, s, before, in.Base)
+	if err != nil {
+		return "", err
+	}
+	differs := make(map[string]bool, len(stillDiffers))
+	for _, p := range stillDiffers {
+		differs[p] = true
+	}
+	var movedInRoot []string
 	for _, p := range touched {
-		if movedSet[p] {
-			return fallback
+		if movedSet[p] && differs[p] && strings.HasPrefix(p, root+"/") {
+			movedInRoot = append(movedInRoot, p)
 		}
+	}
+	if len(movedInRoot) > 0 {
+		return "", refuse(ReasonParentUnpublished, "the base moved under %s at %s, which %s also changed on its older stack base %s: the package before this operation cannot be shown, so the release cannot be shown to carry only this operation's change",
+			root, movedInRoot[0], in.BeforeLabel, in.BeforeBase)
+	}
+	if anyIn(touched, movedSet) {
+		return fallback, nil
 	}
 	patch, err := gitRun(ctx, s.dir, s.env, nil, "diff-tree", "-p", "-r", "--binary", "--full-index", "--no-renames", "--no-color", in.BeforeBase, before)
 	if err != nil {
-		return fallback
+		return fallback, nil
 	}
 	tree, err := s.apply(ctx, in.Base, append(patch, '\n'))
 	if err != nil {
-		return fallback
+		return fallback, nil
 	}
-	return tree
+	return tree, nil
+}
+
+// anyIn reports whether any of paths is in set.
+func anyIn(paths []string, set map[string]bool) bool {
+	for _, p := range paths {
+		if set[p] {
+			return true
+		}
+	}
+	return false
 }
 
 // diffPaths lists the paths that differ between two tree-ishes, sorted.

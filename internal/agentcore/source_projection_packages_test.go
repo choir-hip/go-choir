@@ -62,3 +62,27 @@ func TestPackageLockAdmitsAnOrdinaryCastWhenTheBaseTakesAnotherVersionOfThePacka
 		t.Fatalf("rebase: %v", err)
 	}
 }
+
+// The Cast warning names every package_behind_base root, says which kind
+// each is, and claims byte-identity only for the shell when a package entry
+// is live (tier 2 review, finding 1).
+func TestRematerializedGraftDetailNamesEveryPackageEntry(t *testing.T) {
+	const conflict, merged, placed = "frontend/src/packages/a", "frontend/src/packages/b", "frontend/src/packages/c"
+	detail := rematerializedGraftDetail(sourceproj.Result{Packages: []sourceproj.PackageEntry{
+		{Root: conflict, State: sourceproj.PackageBehindBase, Conflict: true},
+		{Root: merged, State: sourceproj.PackageBehindBase},
+		{Root: placed, State: sourceproj.PackageBaseMoved},
+		{Root: "frontend/src/packages/d", State: sourceproj.PackageUpstreamed},
+	}})
+	for _, want := range []string{conflict + " (package_behind_base, conflict)", "over the base's version", merged + " than this change did (package_behind_base, merged)", placed + " are unchanged"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("missing %q in %s", want, detail)
+		}
+	}
+	if strings.Contains(detail, "packages/d") || strings.Contains(detail, "Elsewhere") || strings.Contains(detail, "changed no path the change touches, so the graft is byte-identical") {
+		t.Errorf("false or extra clause: %s", detail)
+	}
+	if got := rematerializedGraftDetail(sourceproj.Result{Packages: []sourceproj.PackageEntry{{Root: "frontend/src/packages/d", State: sourceproj.PackageUpstreamed}}}); !strings.Contains(got, "byte-identical at those paths") {
+		t.Errorf("no live entry: %s", got)
+	}
+}

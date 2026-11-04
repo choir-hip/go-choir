@@ -553,26 +553,41 @@ func composeFreezePatch(ctx context.Context, repo string, staged *capsule.Staged
 	return nil
 }
 
-// rematerializedGraftDetail says what the graft kept, for the Cast warning:
-// byte-identical at every path, or, for a package root the booted base also
-// changed (S6, package_behind_base), this computer's version kept whole.
+// rematerializedGraftDetail says what the graft holds, for the Cast warning
+// (S6): byte-identical at every path when no package entry is live; else one
+// sentence per kind of package entry, naming every package_behind_base root.
 func rematerializedGraftDetail(result sourceproj.Result) string {
-	var conflicts []string
+	var conflicts, merged, placed []string
 	for _, e := range result.Packages {
-		if e.Conflict {
+		switch {
+		case e.State == sourceproj.PackageBehindBase && e.Conflict:
 			conflicts = append(conflicts, e.Root)
+		case e.State == sourceproj.PackageBehindBase:
+			merged = append(merged, e.Root)
+		case e.State == sourceproj.PackageBaseMoved:
+			placed = append(placed, e.Root)
 		}
 	}
-	if len(conflicts) == 0 {
+	if len(conflicts)+len(merged)+len(placed) == 0 {
 		return "The booted base changed no path the change touches, so the graft is byte-identical at those paths"
 	}
-	return "The booted base also changed the package roots " + strings.Join(conflicts, ", ") +
-		" (package_behind_base): the capsule source keeps this computer's version of each whole, so approving this Cast's candidate keeps it over the base's version (to take the base's, restore the root to the base in the candidate). Elsewhere the graft is byte-identical"
+	parts := []string{"Outside the package roots, the booted base changed no path the change touches, and those paths are grafted byte-identically"}
+	if len(placed) > 0 {
+		parts = append(parts, "The package roots "+strings.Join(placed, ", ")+" are unchanged on the booted base, so this computer's version of each is placed byte-identically (package_base_moved)")
+	}
+	if len(merged) > 0 {
+		parts = append(parts, "The booted base changed other files of the package roots "+strings.Join(merged, ", ")+" than this change did (package_behind_base, merged): each holds the base's version with this change's files grafted onto it, a combination no build has checked yet")
+	}
+	if len(conflicts) > 0 {
+		parts = append(parts, "The booted base also changed files this change touches in the package roots "+strings.Join(conflicts, ", ")+" (package_behind_base, conflict): the capsule source keeps this computer's version of each whole, over the base's version, so approving this Cast's candidate keeps it (to take the base's, restore the root to the base in the candidate)")
+	}
+	return strings.Join(parts, ". ")
 }
 
-// annotatePackageReleases names the package install whose release tree each
-// entry holds (store.ReleaseAdoption, kind package). It is provenance for
-// /health only; a read failure leaves the entries unnamed.
+// annotatePackageReleases names the package install (store.ReleaseAdoption,
+// kind package, action install) whose release tree is each entry's R, the
+// stack's subtree (a merged entry's projection differs from R). It is
+// provenance for /health only; a read failure leaves the entries unnamed.
 func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourceproj.Result) {
 	if rt == nil || rt.store == nil || result == nil || len(result.Packages) == 0 {
 		return
@@ -588,7 +603,7 @@ func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourcepr
 	for i := range result.Packages {
 		e := &result.Packages[i]
 		for _, install := range installs { // newest first
-			if install.Kind == "package" && install.Action != "uninstall" && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
+			if install.Kind == "package" && install.Action == "install" && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
 				e.ReleaseID = install.ReleaseID
 				break
 			}

@@ -1485,12 +1485,14 @@ Build plan, reconciled with package install and the deletion of P8:
 
 **Scope:**
 
-- `internal/sourceproj`: package entries derived from the S5 trailers;
-  `upstreamed`, `package_base_moved` and `package_behind_base` per
+- `internal/sourceproj`: package entries derived from tree ids, the
+  stack base's, the stack's and the booted base's subtree at each package
+  root the cumulative patch touches (no S5 trailers exist; see the build
+  plan); `upstreamed`, `package_base_moved` and `package_behind_base` per
   package; casts admitted during a re-materialization (a hard
   requirement);
 - `/health` `effective_release.packages`;
-- the vmctl list column.
+- the vmctl list column: deferred, not in this slice.
 
 **Tests first:**
 
@@ -1501,7 +1503,8 @@ Build plan, reconciled with package install and the deletion of P8:
 - a crash between the apply and the projection is reconciled;
 - per-entry retirement with another unpromoted entry present.
 
-**Rollback:** `packages.lock` off, which brings back today's behaviour.
+**Rollback:** a git revert. There is no switch and no `packages.lock`
+(owner, 2026-11-03: rollout by ring, rollback by revert).
 
 **Proof:**
 
