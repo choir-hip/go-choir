@@ -6,6 +6,12 @@
 // do not reach past it. This is the start of the "platform API range" a lock
 // entry declares later.
 
+// The SDK's version, which an installed package's requires_sdk is checked
+// against, and the signal that the installed package set changed (the Library
+// sends it after an install or uninstall, so the launcher updates in place).
+export { SDK_VERSION, sdkSatisfies } from './sdk-version';
+export { notifyPackagesChanged } from './apps/packages';
+
 // Media and file helpers (the shell's auth-renewing fetch and its upload live
 // behind these).
 export {

@@ -237,7 +237,7 @@
     const item = installOf(releaseId);
     if (!item) return '';
     const state = installState(item);
-    if (item.action === 'uninstall') return state === 'done' ? '' : 'warn';
+    if (item.action === 'uninstall' || state === 'replaced') return state === 'done' || state === 'replaced' ? '' : 'warn';
     return state === 'done' ? 'ok' : 'warn';
   }
 
@@ -250,6 +250,7 @@
       return state === 'failed' ? 'Uninstall failed' : 'Uninstalling';
     }
     if (state === 'done') return 'Installed';
+    if (state === 'replaced') return '';
     if (state === 'failed') return 'Install failed';
     if (state === 'approve') return 'Waiting for your approval';
     return 'Installing';
@@ -260,6 +261,7 @@
     const state = installState(item);
     const uninstall = item.action === 'uninstall';
     if (state === 'done') return { tone: 'ok', text: uninstall ? 'Uninstalled' : 'Installed' };
+    if (state === 'replaced') return { tone: '', text: 'Replaced' };
     if (state === 'failed') return { tone: 'warn', text: uninstall ? 'Uninstall failed' : 'Install failed' };
     if (state === 'approve') return { tone: 'warn', text: 'Waiting for your approval' };
     return { tone: 'warn', text: uninstall ? 'Uninstalling' : 'Installing' };
@@ -271,13 +273,13 @@
     const rel = installNames[String(item.release_id || '')] || { release_id: item.release_id, record: null, listing: {} };
     try {
       const result = await installRelease(computerId, String(item.release_id || ''), null, 'uninstall');
+      const removed = installState(result.body) === 'done';
       outcome = {
         tone: 'ok',
-        title: result.status === 201 ? 'Uninstall started' : 'Uninstall already under way',
-        text:
-          'This computer\'s desks are removing ' +
-          installTitle(item) +
-          '. When the change is ready, approve it in Texture; the app then leaves the launcher.',
+        title: removed ? 'Uninstalled' : result.status === 201 ? 'Uninstall started' : 'Uninstall already under way',
+        text: removed
+          ? installTitle(item) + ' is uninstalled and has left the launcher.'
+          : 'This computer is removing ' + installTitle(item) + '.',
         facts: [{ label: 'Install id', value: shortId(result.body.adoption_id, 24) || 'not recorded' }],
         release: rel,
       };
@@ -481,10 +483,7 @@
     outcome = {
       tone: 'ok',
       title: result && result.status === 201 ? 'Install started' : 'Install already under way',
-      text:
-        'This computer\'s desks are building ' +
-        releaseLabel(rel) +
-        ' into this computer. When the change is ready, approve it in Texture; the app then appears in the launcher.',
+      text: 'This computer is installing ' + releaseLabel(rel) + '.',
       facts,
       release: rel,
     };

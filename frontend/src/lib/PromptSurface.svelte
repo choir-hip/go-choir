@@ -9,6 +9,7 @@
     restoreWindow,
     focusWindow,
     LAUNCHER_APPS,
+    registryRevision,
     liveStatus as desktopLiveStatus,
     showDesktopMode,
   } from './stores/desktop.js';
@@ -43,7 +44,12 @@
   let choiceDocId = '';
   let choiceRouting = false;
 
-  const launcherApps = LAUNCHER_APPS;
+  // registryRevision: installed packages join the launcher at run time.
+  $: launcherApps = launcherAppsAt($registryRevision);
+
+  function launcherAppsAt(_revision: number) {
+    return [...LAUNCHER_APPS];
+  }
   const publicTicker = [
   ];
 

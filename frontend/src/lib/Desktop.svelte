@@ -73,6 +73,7 @@
     normalizeAppId,
   } from './stores/desktop.js';
   import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
+  import { refreshInstalledPackages } from './apps/packages';
   import { canOpenWith } from './open-with';
   import {
     createOverviewPreviewDecisions,
@@ -161,6 +162,7 @@
     lastAuthenticated = authenticated;
     if (authenticated) {
       startAuthenticatedDesktop();
+      void refreshInstalledPackages();
     } else {
       if (wasAuthenticated) {
         void flushDesktopState({ keepalive: true, allowSignedOutTransition: true });

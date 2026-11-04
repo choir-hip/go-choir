@@ -27,11 +27,12 @@ import {
   getAppWindowPreference,
   isHeavyAppId,
   normalizeAppId,
+  registryRevision,
 } from '../apps/registry';
 
 // ---- App registry ----
 
-export { APP_REGISTRY, LAUNCHER_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId, normalizeAppId };
+export { APP_REGISTRY, LAUNCHER_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId, normalizeAppId, registryRevision };
 
 // ---- Window counter ----
 

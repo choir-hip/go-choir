@@ -1,5 +1,7 @@
 import type { ComponentType } from 'svelte';
-import { loadPackageApps } from './packages';
+import { writable } from 'svelte/store';
+import { installedPackages, loadPackageApps, runtimeAppDefinition, type InstalledPackageRecord } from './packages';
+import { sdkSatisfies } from '../sdk-version';
 
 export type AppPreviewPolicy = 'public-preview' | 'public-readonly' | 'private';
 export type AppSurfaceKind = 'standard' | 'document' | 'media';
@@ -266,6 +268,40 @@ export const DESKTOP_ICON_APPS = APP_REGISTRY
   .sort((a, b) => a.launcher.order - b.launcher.order);
 
 export const HEAVY_APP_IDS = new Set(APP_REGISTRY.filter((app) => app.window.heavy).map((app) => app.id));
+
+// Runtime install (S12): the installed packages join the registry when the
+// computer's installed set is read, and leave it on uninstall. The arrays
+// above are updated in place, and registryRevision counts the changes, so a
+// component that lists apps reads `$registryRevision` to follow them.
+// DESKTOP_ICON_APPS stays the boot set (installed packages are launcher-only).
+export const registryRevision = writable(0);
+const BUILT_IN: ChoirAppDefinition[] = [...APP_REGISTRY];
+const STATIC_IDS = new Set(STATIC_APPS.map((app) => app.id));
+
+export function applyInstalledPackages(records: InstalledPackageRecord[]): void {
+  const runtime = new Map<string, ChoirAppDefinition>();
+  for (const record of records) {
+    // A static app is never replaced; an in-tree package is, unless the
+    // shell's SDK is out of the installed package's range (the base wins).
+    if (STATIC_IDS.has(record.name) || runtime.has(record.name)) continue;
+    const base = BUILT_IN.some((app) => app.id === record.name);
+    if (base && !sdkSatisfies(record.requires_sdk)) continue;
+    const app = runtimeAppDefinition(record);
+    if (app) runtime.set(record.name, app);
+  }
+  const next = [...BUILT_IN.filter((app) => !runtime.has(app.id)), ...runtime.values()];
+  APP_REGISTRY.splice(0, APP_REGISTRY.length, ...next);
+  LAUNCHER_APPS.splice(0, LAUNCHER_APPS.length, ...next.filter((app) => app.launcher.menu).sort((a, b) => a.launcher.order - b.launcher.order));
+  HEAVY_APP_IDS.clear();
+  next.filter((app) => app.window.heavy).forEach((app) => HEAVY_APP_IDS.add(app.id));
+  registryRevision.update((n) => n + 1);
+}
+
+installedPackages.subscribe((records) => {
+  // The first call (the empty initial set) changes nothing.
+  if (records.length === 0 && APP_REGISTRY.length === BUILT_IN.length && APP_REGISTRY.every((app, i) => app === BUILT_IN[i])) return;
+  applyInstalledPackages(records);
+});
 
 export function getAppDefinition(appId: string): ChoirAppDefinition | null {
   const canonicalAppId = normalizeAppId(appId);

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import AppSurface from './apps/AppSurface.svelte';
-  import { getAppDefinition, type ChoirAppDefinition } from './apps/registry';
+  import { getAppDefinition, registryRevision, type ChoirAppDefinition } from './apps/registry';
   import type { ComponentType } from 'svelte';
   import { handoffToComputerSurfaceIfStale, isDynamicImportError } from './computer-surface-handoff.js';
   import { writable } from 'svelte/store';
@@ -14,12 +14,17 @@
 
   const dispatch = createEventDispatcher();
 
-  let loadedAppId = '';
+  let loadedApp: ChoirAppDefinition | null = null;
   let Component: ComponentType | null = null;
   let loadError = '';
   let loadToken = 0;
 
-  $: app = getAppDefinition(win?.appId || '');
+  // registryRevision: an installed package joins or leaves the registry at run time.
+  $: app = appFor($registryRevision, win?.appId || '');
+
+  function appFor(_revision: number, appId: string): ChoirAppDefinition | null {
+    return getAppDefinition(appId);
+  }
   $: appContext = { ...(win?.appContext || {}), appId: win?.appId || '' };
 
   // getLaunchFile() / launchFileStore() in the app read the window's context.
@@ -27,13 +32,13 @@
   provideLaunchContext(launchContext);
   $: launchContext.set(appContext);
   $: shellAttrs = app?.theme.shellDataAttr ? { [app.theme.shellDataAttr]: '' } : {};
-  $: if (app && app.id !== loadedAppId) {
+  $: if (app && app !== loadedApp) {
     void loadComponent(app);
   }
 
   async function loadComponent(definition: ChoirAppDefinition) {
     const token = ++loadToken;
-    loadedAppId = definition.id;
+    loadedApp = definition;
     Component = null;
     loadError = '';
     try {

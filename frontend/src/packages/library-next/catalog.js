@@ -1,7 +1,7 @@
 // Library (new) data layer: the published package catalog, one release, and
 // this computer's installs. Every request goes through the shell's renewing
 // fetch; nothing here hard-codes a computer id.
-import { AuthRequiredError, fetchWithRenewal } from '../../lib/app-sdk';
+import { AuthRequiredError, fetchWithRenewal, notifyPackagesChanged } from '../../lib/app-sdk';
 
 export class CatalogError extends Error {
   constructor(message, status = 0, reason = '') {
@@ -38,6 +38,12 @@ export function plainReason(reason, status = 0) {
       return 'The Library does not hold this release\'s files, so it cannot be installed. Nothing changed on this computer.';
     case 'desks_unavailable':
       return 'This computer\'s desks did not take the install. Nothing changed on this computer. Try again in a moment.';
+    case 'cross_owner_before_frame':
+      return 'Another owner published this release. Their apps open only in a sandboxed window, which this computer does not have yet, so it was not installed. Nothing changed on this computer.';
+    case 'package_build_failed':
+      return 'This computer could not build the release, so it was not installed. Nothing changed on this computer.';
+    case 'install_unavailable':
+      return 'This computer cannot install apps right now. Nothing changed on this computer. Try again in a moment.';
     case 'release_not_published':
       return 'That release is no longer published, so it cannot be installed. Nothing changed on this computer.';
     case 'release_id_invalid':
@@ -126,6 +132,7 @@ export async function installRelease(computerId, releaseId, record, action = 'in
   } catch (_err) {
     body = null;
   }
+  if (res.status === 200 || res.status === 201) notifyPackagesChanged();
   if (res.status !== 200 && res.status !== 201) {
     const reason = body && typeof body.reason === 'string' ? body.reason : '';
     throw new CatalogError(plainReason(reason, res.status), res.status, reason);
@@ -279,14 +286,17 @@ export function sortedByNewest(releases) {
   return list;
 }
 
-// installState names where one install record stands: 'done' when this
-// computer's source holds the release (or, for an uninstall, holds nothing
-// under its name), 'failed' when its operation failed, was rejected or was
-// rolled back, 'approve' while the change waits for the owner's approval,
-// and 'working' otherwise.
+// installState names where one install record stands: 'done' when it is in
+// force (a runtime install is the package's current install, an uninstall its
+// latest record), 'replaced' when a later install or uninstall of the package
+// superseded it, and, for a source install from before runtime install,
+// 'failed' when its operation failed, was rejected or was rolled back,
+// 'approve' while the change waits for the owner's approval, and 'working'
+// otherwise.
 export function installState(item) {
   if (!item) return '';
   if (item.patch_matches_release === true) return 'done';
+  if (item.state === 'replaced') return 'replaced';
   const state = String((item.operation && item.operation.state) || '');
   if (state === 'failed' || state === 'rejected' || state === 'rolled_back') return 'failed';
   if (state === 'applied') return 'failed';
