@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -232,6 +233,15 @@ func supersededBaseOf(binary *capsule.ReleaseBinaryProvenance) string {
 	return strings.ToLower(strings.TrimSpace(binary.SourceBaseCommit))
 }
 
+// supersededPaths is every path of the applied change a superseded candidate
+// drops: those the new base replaced (Unresolved) and those it already
+// carries (Resolved), sorted.
+func supersededPaths(verdict sourceproj.RebaseVerdict) []string {
+	out := append(append([]string{}, verdict.Unresolved...), verdict.Resolved...)
+	sort.Strings(out)
+	return out
+}
+
 func nonNil(list []string) []string {
 	if list == nil {
 		return []string{}
@@ -287,9 +297,12 @@ func (rt *Runtime) rebaseReceiptSentence(operationID string) string {
 func rebaseReceiptText(receipt rebaseLineageReceipt, sha string) string {
 	var b strings.Builder
 	if receipt.Verdict == rebaseVerdictSuperseded {
-		fmt.Fprintf(&b, " This candidate drops applied change %s: rebased onto base %s, it changes no source, because the new base supersedes the change; its lineage receipt (sha256 %s) records that the new base replaced every path of it with its own version", receipt.RebaseOf, carriedBaseLabel(receipt.Base), sha)
+		fmt.Fprintf(&b, " This candidate drops applied change %s: rebased onto base %s, it changes no source, because the new base supersedes the change; its lineage receipt (sha256 %s) records it", receipt.RebaseOf, carriedBaseLabel(receipt.Base), sha)
 		if text := boundedRecordPaths(receipt.Superseded); text != "" {
-			b.WriteString(": " + text)
+			b.WriteString("; the new base's own version replaces it at: " + text)
+		}
+		if text := boundedRecordPaths(receipt.Resolved); text != "" {
+			b.WriteString("; the new base already carries it at: " + text)
 		}
 		fmt.Fprintf(&b, ". Approving it gives up %s; a rollback to %s restores it on its old base.", receipt.RebaseOf, receipt.RebaseOf)
 		return b.String()
@@ -374,9 +387,12 @@ type rebaseFreezeVerdict struct {
 	// Upstreamed are the hunks the candidate dropped as already in the new
 	// base (problem 14).
 	Upstreamed []sourceproj.UpstreamedHunk
-	// Superseded names, for an empty candidate that passed, the paths where
-	// the new base's version replaces the applied change.
-	Superseded []string
+	// SupersededPass is set when an empty candidate passed as superseded
+	// (the verdict's own flag, the one the apply gate admits on); Superseded
+	// names the paths of the change it drops: those the new base replaced
+	// with its own version and those it already carries.
+	SupersededPass bool
+	Superseded     []string
 }
 
 // verifyRebaseAtFreeze is Freeze's call: for a run whose assignment a claim
@@ -415,7 +431,7 @@ func (rt *Runtime) verifyRebaseAtFreeze(ctx context.Context, rec *types.RunRecor
 	}
 	out := rebaseFreezeVerdict{Rebase: true, Upstreamed: verdict.Upstreamed}
 	if verdict.Superseded {
-		out.Superseded = nonNil(verdict.Unresolved)
+		out.SupersededPass, out.Superseded = true, supersededPaths(verdict)
 	}
 	return out, nil
 }

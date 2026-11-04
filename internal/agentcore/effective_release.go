@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -200,6 +201,14 @@ func (rt *Runtime) computeEffectiveTree(ctx context.Context, releaseDigest, mark
 		if operation, ok := rt.appliedOperationForRelease(ctx, releaseDigest); ok {
 			entry := effectiveTreeEntry{final: true, operationID: operation.OperationID}
 			base, patch, err := rt.boundSourcePatch(operation)
+			if errors.Is(err, errNoSourcePatch) {
+				// No source change (a superseded rebase): the tree is the
+				// commit its reused running binary is bound to, the
+				// capsule's pinned source, when the bundle names one.
+				if pinned := rt.supersededCandidateBase(operation); looksLikeGitCommit(pinned) {
+					base, patch, err = pinned, nil, nil
+				}
+			}
 			if err != nil {
 				entry.treeError = err.Error()
 				return entry

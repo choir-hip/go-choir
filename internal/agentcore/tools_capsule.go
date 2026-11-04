@@ -318,7 +318,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 				return nil, err
 			}
 		}
-		if !check.Rebase || len(check.Superseded) == 0 {
+		if !check.Rebase || !check.SupersededPass {
 			if err := freezeSourceChangeError(staged); err != nil {
 				return nil, err
 			}

@@ -19,6 +19,10 @@ package agentcore
 //      -> ...ApplyGatePassesAndWritesTheReceipt
 //   6. once applied the stack stays stack_base_moved and Casts stay refused
 //      -> ...AppliedLeavesTheStackOnTheBase
+//   7. (review r1) Freeze and apply admit on different rules, a mixed verdict
+//      (some paths replaced, some already carried) under-reports what is
+//      dropped, and the effective tree errors after the apply
+//      -> ...MixedVerdictNamesEveryDroppedPath, ...AppliedLeavesTheStackOnTheBase
 
 import (
 	"context"
@@ -97,7 +101,7 @@ func TestSupersededRebaseFreezeAdmitsTheEmptyCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Freeze refused a superseded rebase: %v", err)
 	}
-	if !got.Rebase || strings.Join(got.Superseded, ",") != "frontend/public/a.txt,frontend/public/long.txt" {
+	if !got.Rebase || !got.SupersededPass || strings.Join(got.Superseded, ",") != "frontend/public/a.txt,frontend/public/long.txt" {
 		t.Fatalf("verdict %+v", got)
 	}
 	// Freeze writes nothing: the materializer is the authority.
@@ -200,5 +204,35 @@ func TestSupersededRebaseAppliedLeavesTheStackOnTheBase(t *testing.T) {
 	}
 	if err := f.rt.sourceProjectionCastGate(ctx); err != nil {
 		t.Fatalf("an ordinary Cast is still refused: %v", err)
+	}
+	// The effective tree is the booted base's, not a tree error.
+	op, err := f.rt.selfdevOperations.Get(ctx, f.computer, "op-r")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := f.rt.computeEffectiveTree(ctx, op.ReleaseDigest, "selfdev-op-r", "")
+	if entry.treeError != "" || entry.treeHash != releaseGit(t, f.repo, "rev-parse", f.moved+"^{tree}") || entry.sourceBaseCommit != f.moved || entry.operationID != "op-r" {
+		t.Fatalf("effective tree after a superseded apply = %+v", entry)
+	}
+}
+
+func TestSupersededRebaseMixedVerdictNamesEveryDroppedPath(t *testing.T) {
+	// The moved base ships its own a.txt and already carries the stack's
+	// long.txt line 5 (plus an edit of its own, so the stack is not upstreamed).
+	f := newRebaseContentFixtureOn(t, map[string]string{
+		"frontend/public/a.txt":    "PLATFORM A\n",
+		"frontend/public/long.txt": longText(map[int]string{5: "stack line 05", 35: "platform line 35"}),
+	})
+	got, err := f.rt.verifyRebaseAtFreeze(context.Background(), f.rebaseRun(), reusedOn(f.moved), nil)
+	if err != nil || !got.SupersededPass || strings.Join(got.Superseded, ",") != "frontend/public/a.txt,frontend/public/long.txt" {
+		t.Fatalf("Freeze on a mixed superseded verdict: %+v %v", got, err)
+	}
+	op := f.emptyOperation(t, "op-r", reusedOn(f.moved).Binary, selfdev.StateAccepted)
+	if err := f.rt.rebaseContentGate(context.Background(), op, false); err != nil {
+		t.Fatalf("the apply gate refused it: %v", err)
+	}
+	sentence := f.rt.rebaseReceiptSentence(op.OperationID)
+	if !strings.Contains(sentence, "replaces it at: frontend/public/a.txt") || !strings.Contains(sentence, "already carries it at: frontend/public/long.txt") {
+		t.Fatalf("the owner's record under-reports the drop: %q", sentence)
 	}
 }

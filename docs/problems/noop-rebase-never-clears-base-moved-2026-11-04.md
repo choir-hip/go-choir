@@ -128,3 +128,5 @@ deploys, the owner's `rebase-retry` (POST
 /api/computers/<id>/self-development/rebase-retry, an owner act) re-opens the
 spent pair with one notice; the round's engineer can then Freeze the empty
 capsule as superseded.
+
+Review r1 residuals (Devin nits 3 and 5): a superseded Freeze proves its base only through a reused running binary, so a no-source capsule that stages its own `bin/autoputer` (the autoputer build job run for a receipt) is refused `base_mismatch`, and one whose running build is not B' with differing binary inputs fails earlier at staging (`PlanReleaseBinaryReuseWith`), the same wedge as before; the common shape, a computer already running B', needs no proof.
