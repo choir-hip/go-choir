@@ -457,11 +457,20 @@ func (h *Handler) relayPackageMedia(w http.ResponseWriter, r *http.Request, upst
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the package store answered a media item that is not one"})
 		return
 	}
+	// Revalidated on every use: a withdrawn release's media turns private,
+	// and a cached copy must not outlive that. Visibility was just decided
+	// upstream; the ETag is the digest, so a revalidation of bytes the
+	// browser holds answers 304 with no body.
+	etag := `"` + computerevent.DigestBytes(raw) + `"`
+	w.Header().Set("Cache-Control", "private, no-cache, must-revalidate")
+	w.Header().Set("ETag", etag)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// Content addressed, so immutable; private, as it is read signed in.
-	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(raw)
 }

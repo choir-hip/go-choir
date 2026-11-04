@@ -268,4 +268,26 @@ func TestVideoBoundsAgreeAcrossMirrors(t *testing.T) {
 	if yaegikernel.MountedVideoMaxBytes != capsule.MaxVideoBytes {
 		t.Fatalf("mirror %d, capsule %d", yaegikernel.MountedVideoMaxBytes, capsule.MaxVideoBytes)
 	}
+	// Every field of capsule.VideoFile set: the mirror's strict decode reads
+	// it (a field the mirror lacks would fail every inspection).
+	video := []byte("\x1a\x45\xdf\xa3 shape")
+	root, _ := mountedScreensBundle(t, func(b *CapsuleEffectBundle) {
+		b.Video = &capsule.VideoFile{Name: "v.webm", SHA256: sha256Hex(video), Bytes: int64(len(video))}
+	})
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(capsule.BundleScreensDir), "v.webm"), video, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(capsule.VideoFile{Name: "v.webm", SHA256: sha256Hex(video), Bytes: int64(len(video))})
+	var fields map[string]any
+	_ = json.Unmarshal(raw, &fields)
+	out, err := yaegikernel.InspectMountedBundleAt(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, _ := out["video"].(map[string]any)
+	for k := range fields {
+		if _, ok := row[k]; !ok {
+			t.Fatalf("the mirror does not report capsule.VideoFile field %q", k)
+		}
+	}
 }

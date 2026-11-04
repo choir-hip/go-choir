@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/png"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -111,11 +112,20 @@ func TestPackageMediaReadIsTheAuthenticatedOwnersAndTyped(t *testing.T) {
 
 	rec := env.send(t, http.MethodGet, "/api/catalog/releases/"+id+"/media/"+digest+"?owner_id=evil", "", reader)
 	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), shot) || rec.Header().Get("Content-Type") != pkgrelease.MediaTypePNG ||
-		rec.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.Contains(rec.Header().Get("Cache-Control"), "private") {
+		rec.Header().Get("X-Content-Type-Options") != "nosniff" || rec.Header().Get("Cache-Control") != "private, no-cache, must-revalidate" || rec.Header().Get("ETag") != `"`+digest+`"` {
 		t.Fatalf("media read = %d %v", rec.Code, rec.Header())
 	}
 	if want := "corpusd GET /internal/platform/packages/releases/" + id + "/media/" + digest + " internal=true query=owner_id=" + env.user; !strings.Contains(env.joined(), want) || strings.Contains(env.joined(), "evil") {
 		t.Fatalf("P2 calls %v; want %q", env.joined(), want)
+	}
+	// A revalidation of held bytes is 304, decided after corpusd answered.
+	cond := httptest.NewRequest(http.MethodGet, "/api/catalog/releases/"+id+"/media/"+digest, nil)
+	cond.Header.Set("Authorization", "Bearer "+reader)
+	cond.Header.Set("If-None-Match", `"`+digest+`"`)
+	condRec := httptest.NewRecorder()
+	env.handler.HandleAPI(condRec, cond)
+	if condRec.Code != http.StatusNotModified || condRec.Body.Len() != 0 {
+		t.Fatalf("revalidation = %d (%d bytes), want 304", condRec.Code, condRec.Body.Len())
 	}
 	// P2: a type corpusd did not mean is never relayed.
 	if rec := env.send(t, http.MethodGet, "/api/catalog/releases/"+id+"/media/"+html, "", reader); rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "<script>") {
