@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -14,7 +15,7 @@ import (
 
 // testRoundPredictions is a valid predictions block for tests that Cast
 // engineering.
-const testRoundPredictions = `{"verify_pass": 0.8, "judge_accepts": 0.7, "freeze_minutes": {"estimate": 20, "low": 10, "high": 40, "p": 0.75}}`
+const testRoundPredictions = `{"verify_pass": 0.8, "judge_accepts": 0.7, "owner_approves": 0.6, "freeze_minutes": {"estimate": 20, "low": 10, "high": 40, "p": 0.75}, "approval_minutes": {"estimate": 90, "low": 40, "high": 240, "p": 0.6}}`
 
 // withTestRoundPredictions adds the test predictions block to a JSON spec
 // that states none.
@@ -43,9 +44,9 @@ func TestEngineeringCastWithoutPredictionsIsRefusedWithTheShape(t *testing.T) {
 	for name, spec := range map[string]string{
 		"none":    f.spec(nil),
 		"missing": withTestRoundPredictions(t, strings.TrimSuffix(f.spec(nil), "}")+`,"predictions":{"verify_pass":0.8,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.7}}}`),
-		"typo":    strings.TrimSuffix(f.spec(nil), "}") + `,"predictions":{"verify_pass":0.8,"judge_accept":0.7,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.7}}}`,
-		"dogma":   strings.TrimSuffix(f.spec(nil), "}") + `,"predictions":{"verify_pass":1,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.7}}}`,
-		"inverse": strings.TrimSuffix(f.spec(nil), "}") + `,"predictions":{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":60,"low":10,"high":40,"p":0.7}}}`,
+		"typo":    strings.TrimSuffix(f.spec(nil), "}") + `,"predictions":{"verify_pass":0.8,"judge_accept":0.7,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.7}}}`,
+		"dogma":   strings.TrimSuffix(f.spec(nil), "}") + `,"predictions":{"verify_pass":1,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.7}}}`,
+		"inverse": strings.TrimSuffix(f.spec(nil), "}") + `,"predictions":{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":60,"low":10,"high":40,"p":0.7}}}`,
 	} {
 		_, err := f.planRaw(t, spec, f.rebaseObjective())
 		if err == nil || !strings.Contains(err.Error(), "states its predictions before the capsule starts") || !strings.Contains(err.Error(), types.RoundPredictionsHow) {
@@ -125,6 +126,19 @@ func TestRoundPredictionsAreStatedAtTheOpenAndSettledByTheRuntime(t *testing.T) 
 			}
 		}
 	}
+	// The owner's approval settles owner_approves and approval_minutes,
+	// naming the actor (S1).
+	op := selfdev.Operation{OperationID: "op-1", ComputerID: f.computer, IdempotencyKey: store.EngineeringFreezeIdempotencyKey(plan.AssignmentID), DecisionActor: f.owner}
+	f.rt.settleOwnerActPrecommits(ctx, f.owner, op, types.OwnerActApprove)
+	for _, kind := range []types.PrecommitRuleKind{types.PrecommitRuleOwnerApproves, types.PrecommitRuleApprovalMinutes} {
+		resolve, err := f.s.GetCommitmentRecord(ctx, f.owner, f.computer, types.RuleResolveRecordID(kinds[kind].RecordID))
+		if err != nil || resolve == nil || resolve.Resolve == nil || resolve.SubjectRefs[types.RuleRefDelegated] != "false" || resolve.SubjectRefs[types.RuleRefDecisionActor] != f.owner {
+			t.Fatalf("%s: resolve %+v, %v", kind, resolve, err)
+		}
+		if kind == types.PrecommitRuleOwnerApproves && resolve.Resolve.Verdict != "yes" {
+			t.Fatalf("owner_approves: %s", resolve.Resolve.Verdict)
+		}
+	}
 	// The calibration digest counts them on engineering's record.
 	all, err := f.s.ListCommitmentRecords(ctx, f.owner, f.computer, "", 1000)
 	if err != nil {
@@ -137,9 +151,11 @@ func TestRoundPredictionsAreStatedAtTheOpenAndSettledByTheRuntime(t *testing.T) 
 			got[o.ClaimType] = o.Y == 1
 		}
 	}
+	// Approved at once, outside the 40-240 minute interval: settled "no".
+	want := map[string]bool{"verify_pass": true, "judge_accepts": true, "owner_approves": true, "freeze_minutes": true, "approval_minutes": false}
 	for _, kind := range types.RoundPredictionsMandatory {
-		if !got[string(kind)] {
-			t.Fatalf("engineering observations %v lack a settled %s", got, kind)
+		if y, ok := got[string(kind)]; !ok || y != want[string(kind)] {
+			t.Fatalf("engineering observations %v: %s settled %v (present %v)", got, kind, y, ok)
 		}
 	}
 }

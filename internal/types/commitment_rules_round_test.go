@@ -14,9 +14,9 @@ func freezeMinutesRule(since time.Time) PrecommitRule {
 }
 
 func TestParseRoundPredictionsIsStrict(t *testing.T) {
-	ok := `{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`
+	ok := `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`
 	p, err := ParseRoundPredictions([]byte(ok))
-	if err != nil || len(p.Precommits()) != 3 {
+	if err != nil || len(p.Precommits()) != 5 {
 		t.Fatalf("valid block: %v", err)
 	}
 	for i, pc := range p.Precommits() {
@@ -26,15 +26,15 @@ func TestParseRoundPredictionsIsStrict(t *testing.T) {
 	}
 	for name, raw := range map[string]string{
 		"absent":   ``,
-		"trailing": `{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}} {}`,
+		"trailing": `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}} {}`,
 		"null":     `null`,
 		"missing":  `{"verify_pass":0.8,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`,
-		"unknown":  `{"verify_pass":0.8,"judge_accepts":0.7,"judge":0.1,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`,
-		"clockkey": `{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75,"max":90}}`,
-		"dogmatic": `{"verify_pass":0.99,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`,
-		"outside":  `{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":5,"low":10,"high":40,"p":0.75}}`,
-		"zero":     `{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":0,"low":0,"high":40,"p":0.75}}`,
-		"toolong":  `{"verify_pass":0.8,"judge_accepts":0.7,"freeze_minutes":{"estimate":20,"low":10,"high":5000,"p":0.75}}`,
+		"unknown":  `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"judge":0.1,"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`,
+		"clockkey": `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75,"max":90}}`,
+		"dogmatic": `{"verify_pass":0.99,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":40,"p":0.75}}`,
+		"outside":  `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":5,"low":10,"high":40,"p":0.75}}`,
+		"zero":     `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":0,"low":0,"high":40,"p":0.75}}`,
+		"toolong":  `{"verify_pass":0.8,"judge_accepts":0.7,"owner_approves":0.6,"approval_minutes":{"estimate":90,"low":40,"high":240,"p":0.6},"freeze_minutes":{"estimate":20,"low":10,"high":5000,"p":0.75}}`,
 	} {
 		if _, err := ParseRoundPredictions([]byte(raw)); err == nil {
 			t.Fatalf("%s: accepted", name)
@@ -170,5 +170,85 @@ func TestPrecommitAcceptsTheYesNoShorthand(t *testing.T) {
 	}
 	if _, err := ParseRoundPredictions([]byte(strings.TrimPrefix(RoundPredictionsExample, `"predictions": `))); err != nil {
 		t.Fatalf("the round example does not parse: %v", err)
+	}
+}
+
+// R18: the owner's act settles owner_approves and approval_minutes, with
+// the actor and the delegated mark on the settlement.
+func TestOwnerActSettlesApprovalClaims(t *testing.T) {
+	cast := time.Date(2026, 11, 4, 1, 0, 0, 0, time.UTC)
+	approves := PrecommitRule{Kind: PrecommitRuleOwnerApproves, Since: cast.Format(time.RFC3339Nano)}
+	minutes := PrecommitRule{Kind: PrecommitRuleApprovalMinutes, EstimateMinutes: 90, LowMinutes: 40, HighMinutes: 240, Since: cast.Format(time.RFC3339Nano)}
+	for _, c := range []struct {
+		act               string
+		after             time.Duration
+		approved, inside  string
+		censored, decided bool
+	}{
+		{OwnerActApprove, time.Hour, "yes", "yes", false, true},
+		{OwnerActApply, 5 * time.Hour, "yes", "no", false, true},
+		{OwnerActReject, time.Hour, "no", "no", true, true},
+		{OwnerActAbandon, time.Hour, "no", "no", true, true},
+		{"rollback", time.Hour, "", "", false, false},
+	} {
+		obs := EngineeringOwnerActObservation{Act: c.act, OperationID: "op", DecisionAt: cast.Add(c.after), Actor: "consensus:x", Delegated: true}
+		a, okA := SettleRuleOnOwnerAct(approves, obs)
+		m, okM := SettleRuleOnOwnerAct(minutes, obs)
+		if okA != c.decided || okM != c.decided {
+			t.Fatalf("%s decided %v %v", c.act, okA, okM)
+		}
+		if !c.decided {
+			continue
+		}
+		if a.Answer != c.approved || m.Answer != c.inside || m.Timing == nil || m.Timing.Censored != c.censored || a.Refs[RuleRefDelegated] != "true" || a.Refs[RuleRefDecisionActor] != "consensus:x" {
+			t.Fatalf("%s: approves %+v minutes %+v", c.act, a, m)
+		}
+	}
+	// A failed judgment ends both before the owner sees the candidate.
+	if s, ok := SettleRuleOnVerify(approves, EngineeringVerifyObservation{OperationState: "failed", At: cast.Add(time.Hour)}); !ok || s.Answer != "no" {
+		t.Fatalf("judged out: %+v", s)
+	}
+	if s, ok := SettleRuleOnVerify(minutes, EngineeringVerifyObservation{OperationState: "failed", At: cast.Add(time.Hour)}); !ok || s.Answer != "no" || !s.Timing.Censored {
+		t.Fatalf("judged out minutes: %+v", s)
+	}
+	if _, ok := SettleRuleOnVerify(approves, EngineeringVerifyObservation{OperationState: "awaiting_approval"}); ok {
+		t.Fatal("a passed judgment decided owner_approves")
+	}
+	// The approval clock's resolve record names the decision, not a Freeze.
+	pc := CommitmentRecord{RecordID: "p", Precommit: &CommitmentPrecommit{Question: "q", Distribution: map[string]float64{"yes": 0.6, "no": 0.4}, Resolver: "rule", Rule: &minutes}}
+	m, _ := SettleRuleOnOwnerAct(minutes, EngineeringOwnerActObservation{Act: OwnerActApprove, DecisionAt: cast.Add(time.Hour)})
+	rec := NewRuleResolveRecord(pc, m, cast.Add(time.Hour))
+	if rec.SubjectRefs[RuleRefDecisionAt] == "" || rec.SubjectRefs[RuleRefFreezeAt] != "" || rec.SubjectRefs[RuleRefActualS] != "3600" {
+		t.Fatalf("approval resolve refs %v", rec.SubjectRefs)
+	}
+}
+
+// R19: approved_within_rounds counts Freezes from the Cast across rounds.
+func TestApprovedWithinRoundsCountsFreezes(t *testing.T) {
+	rule := PrecommitRule{Kind: PrecommitRuleApprovedWithinRounds, WithinRounds: 2}
+	if err := rule.validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		obs    EngineeringRequestObservation
+		answer string
+		ok     bool
+	}{
+		{EngineeringRequestObservation{FreezesSince: 1}, "", false},
+		{EngineeringRequestObservation{FreezesSince: 2, Approved: true, FreezesToApproval: 2}, "yes", true},
+		{EngineeringRequestObservation{FreezesSince: 3, Approved: true, FreezesToApproval: 3}, "no", true},
+		{EngineeringRequestObservation{FreezesSince: 3}, "no", true},
+		{EngineeringRequestObservation{FreezesSince: 1, Abandoned: true}, "no", true},
+	} {
+		s, ok := SettleRuleOnRequest(rule, c.obs)
+		if ok != c.ok || s.Answer != c.answer {
+			t.Fatalf("%+v: %+v %v", c.obs, s, ok)
+		}
+	}
+	if err := (PrecommitRule{Kind: PrecommitRuleApprovedWithinRounds}).validate(); err == nil {
+		t.Fatal("within_rounds 0 accepted")
+	}
+	if err := (PrecommitRule{Kind: PrecommitRuleOwnerApproves, WithinRounds: 2}).validate(); err == nil {
+		t.Fatal("owner_approves took within_rounds")
 	}
 }

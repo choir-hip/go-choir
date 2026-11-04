@@ -124,6 +124,21 @@ const (
 	// point estimate the log ratio scores (R13). p(yes) is the stated chance
 	// of landing inside the interval.
 	PrecommitRuleFreezeMinutes PrecommitRuleKind = "freeze_minutes"
+	// PrecommitRuleOwnerApproves: the owner's act approves the candidate
+	// (approve, or an apply that implies it); a reject, a failed judgment or
+	// a round with no candidate is "no". The settlement names the decision
+	// actor and whether the act was delegated (R18).
+	PrecommitRuleOwnerApproves PrecommitRuleKind = "owner_approves"
+	// PrecommitRuleApprovalMinutes: the approving act lands between
+	// LowMinutes and HighMinutes after the Cast; any other end is "no",
+	// censored (the clock twin of owner_approves).
+	PrecommitRuleApprovalMinutes PrecommitRuleKind = "approval_minutes"
+	// PrecommitRuleApprovedWithinRounds: the request (the trajectory the
+	// Cast serves) reaches an approved candidate within WithinRounds
+	// Freezes, counted from the Cast: this round's Freezes (a reused
+	// engineer's re-Freezes are each one) and every later round's on the
+	// same trajectory (R19).
+	PrecommitRuleApprovedWithinRounds PrecommitRuleKind = "approved_within_rounds"
 	// precommitRuleVisualCapturedRetired read the platform capture, which is
 	// removed (docs/problems/selfdev-screens-are-not-files-2026-11-03.md). A
 	// new one is refused; one already on a tape settles unresolved.
@@ -135,11 +150,17 @@ func retiredRuleSettlement(rule PrecommitRule) RuleSettlement {
 	return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "the " + string(rule.Kind) + " rule is retired: the platform capture it read was removed", EvidenceRefs: nonEmpty("assignment:" + strings.TrimSpace(rule.AssignmentID))}
 }
 
+// clock reports a kind with an estimate and an interval in minutes.
+func (k PrecommitRuleKind) clock() bool {
+	return k == PrecommitRuleFreezeMinutes || k == PrecommitRuleApprovalMinutes
+}
+
 // PrecommitRuleKinds lists the vocabulary in a stable order.
 var PrecommitRuleKinds = []PrecommitRuleKind{
 	PrecommitRuleTestsPass, PrecommitRuleFreezeWithin, PrecommitRulePathsConfined,
 	PrecommitRuleVerifyPass, PrecommitRuleCompletes, PrecommitRuleJudgeAccepts,
-	PrecommitRuleFreezeMinutes,
+	PrecommitRuleFreezeMinutes, PrecommitRuleOwnerApproves, PrecommitRuleApprovalMinutes,
+	PrecommitRuleApprovedWithinRounds,
 }
 
 const (
@@ -158,7 +179,11 @@ const (
 	PrecommitRuleMinP             = 0.02
 	PrecommitRuleMaxP             = 0.98
 	PrecommitRuleMaxWithinMinutes = 24 * 60
-	PrecommitRuleMaxPaths         = 32
+	// PrecommitRuleMaxApprovalMinutes bounds approval_minutes: an owner's
+	// decision may wait days.
+	PrecommitRuleMaxApprovalMinutes = 14 * 24 * 60
+	PrecommitRuleMaxWithinRounds    = 20
+	PrecommitRuleMaxPaths           = 32
 )
 
 // PrecommitRule is the typed settlement rule a rule precommit carries.
@@ -168,10 +193,12 @@ type PrecommitRule struct {
 	WithinMinutes int               `json:"within_minutes,omitempty"`
 	// EstimateMinutes, LowMinutes and HighMinutes are freeze_minutes'
 	// point estimate and interval.
-	EstimateMinutes int      `json:"estimate_minutes,omitempty"`
-	LowMinutes      int      `json:"low_minutes,omitempty"`
-	HighMinutes     int      `json:"high_minutes,omitempty"`
-	Paths           []string `json:"paths,omitempty"`
+	EstimateMinutes int `json:"estimate_minutes,omitempty"`
+	LowMinutes      int `json:"low_minutes,omitempty"`
+	HighMinutes     int `json:"high_minutes,omitempty"`
+	// WithinRounds is approved_within_rounds' bound, in Freezes.
+	WithinRounds int      `json:"within_rounds,omitempty"`
+	Paths        []string `json:"paths,omitempty"`
 	// Routes is read only from a retired visual_captured record.
 	Routes       []string `json:"routes,omitempty"`
 	AssignmentID string   `json:"assignment_id,omitempty"`
@@ -211,16 +238,34 @@ func (r PrecommitRule) validate() error {
 		return fmt.Errorf("precommit rule %s takes no routes", r.Kind)
 	}
 	interval := r.EstimateMinutes != 0 || r.LowMinutes != 0 || r.HighMinutes != 0
-	if interval && r.Kind != PrecommitRuleFreezeMinutes {
+	if interval && !r.Kind.clock() {
 		return fmt.Errorf("precommit rule %s takes no estimate_minutes, low_minutes or high_minutes", r.Kind)
 	}
+	if r.WithinRounds != 0 && r.Kind != PrecommitRuleApprovedWithinRounds {
+		return fmt.Errorf("precommit rule %s takes no within_rounds", r.Kind)
+	}
 	switch r.Kind {
-	case PrecommitRuleFreezeMinutes:
+	case PrecommitRuleFreezeMinutes, PrecommitRuleApprovalMinutes:
 		if r.WithinMinutes != 0 || len(r.Paths) != 0 {
-			return fmt.Errorf("precommit rule freeze_minutes takes no within_minutes or paths")
+			return fmt.Errorf("precommit rule %s takes no within_minutes or paths", r.Kind)
 		}
-		if r.LowMinutes < 1 || r.LowMinutes > r.EstimateMinutes || r.EstimateMinutes > r.HighMinutes || r.HighMinutes > PrecommitRuleMaxWithinMinutes {
-			return fmt.Errorf("precommit rule freeze_minutes: whole minutes with 1 <= low <= estimate <= high <= %d (got low %d, estimate %d, high %d)", PrecommitRuleMaxWithinMinutes, r.LowMinutes, r.EstimateMinutes, r.HighMinutes)
+		bound := PrecommitRuleMaxWithinMinutes
+		if r.Kind == PrecommitRuleApprovalMinutes {
+			bound = PrecommitRuleMaxApprovalMinutes
+		}
+		if r.LowMinutes < 1 || r.LowMinutes > r.EstimateMinutes || r.EstimateMinutes > r.HighMinutes || r.HighMinutes > bound {
+			return fmt.Errorf("precommit rule %s: whole minutes with 1 <= low <= estimate <= high <= %d (got low %d, estimate %d, high %d)", r.Kind, bound, r.LowMinutes, r.EstimateMinutes, r.HighMinutes)
+		}
+	case PrecommitRuleApprovedWithinRounds:
+		if r.WithinMinutes != 0 || len(r.Paths) != 0 {
+			return fmt.Errorf("precommit rule approved_within_rounds takes no within_minutes or paths")
+		}
+		if r.WithinRounds < 1 || r.WithinRounds > PrecommitRuleMaxWithinRounds {
+			return fmt.Errorf("precommit rule approved_within_rounds: within_rounds must be 1..%d Freezes", PrecommitRuleMaxWithinRounds)
+		}
+	case PrecommitRuleOwnerApproves:
+		if r.WithinMinutes != 0 || len(r.Paths) != 0 {
+			return fmt.Errorf("precommit rule owner_approves takes no within_minutes or paths")
 		}
 	case PrecommitRuleFreezeWithin:
 		if r.WithinMinutes < 1 || r.WithinMinutes > PrecommitRuleMaxWithinMinutes {
@@ -315,6 +360,91 @@ type EngineeringVerifyObservation struct {
 	// (awaiting_approval or failed): judge_accepts reads the state.
 	OperationID    string
 	OperationState string
+	// At is when the verdict landed (a failed judgment ends a clock claim).
+	At time.Time
+}
+
+// EngineeringOwnerActObservation is an owner act on the assignment's
+// candidate. DecisionAt is the decision's time: the approve act's record
+// when there was one (an apply follows it), else the act itself, as the
+// round receipt reads it. Delegated marks an act not made by the
+// computer's owner in person (R18).
+type EngineeringOwnerActObservation struct {
+	Act         string
+	OperationID string
+	DecisionAt  time.Time
+	Actor       string
+	Delegated   bool
+}
+
+// SettleRuleOnOwnerAct decides owner_approves and approval_minutes from an
+// owner act (R18).
+func SettleRuleOnOwnerAct(rule PrecommitRule, obs EngineeringOwnerActObservation) (RuleSettlement, bool) {
+	if rule.Kind != PrecommitRuleOwnerApproves && rule.Kind != PrecommitRuleApprovalMinutes {
+		return RuleSettlement{}, false
+	}
+	refs := nonEmpty("selfdev-operation:"+strings.TrimSpace(obs.OperationID), "owner-act:"+strings.TrimSpace(obs.Act))
+	actRefs := map[string]string{RuleRefDecisionActor: strings.TrimSpace(obs.Actor), RuleRefDelegated: strconv.FormatBool(obs.Delegated)}
+	var s RuleSettlement
+	switch obs.Act {
+	case OwnerActApprove, OwnerActApply, OwnerActFail:
+		// An apply, or a failed apply, follows an approval.
+		if rule.Kind == PrecommitRuleApprovalMinutes {
+			var ok bool
+			if s, ok = settleClock(rule, obs.DecisionAt, "approved", refs); !ok {
+				return s, false
+			}
+		} else {
+			s = RuleSettlement{Answer: PrecommitAnswerYes, Excerpt: "the candidate was approved (" + obs.Act + ")", EvidenceRefs: refs}
+		}
+	case OwnerActReject, OwnerActAbandon:
+		why := "the candidate was not approved (" + obs.Act + ")"
+		if rule.Kind == PrecommitRuleApprovalMinutes {
+			s = missedClock(rule, obs.DecisionAt, "approval", why, refs)
+		} else {
+			s = RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: why, EvidenceRefs: refs}
+		}
+	default:
+		return RuleSettlement{}, false
+	}
+	s.Refs = actRefs
+	return s, true
+}
+
+// EngineeringRequestObservation is the request's state for
+// approved_within_rounds (R19): the successful Freezes on its trajectory
+// since the claim's Cast, whether one was approved, after how many Freezes,
+// and whether the request was abandoned.
+type EngineeringRequestObservation struct {
+	At                  time.Time
+	FreezesSince        int
+	Approved            bool
+	FreezesToApproval   int
+	Abandoned           bool
+	ApprovedOperationID string
+}
+
+// SettleRuleOnRequest decides approved_within_rounds (R19).
+func SettleRuleOnRequest(rule PrecommitRule, obs EngineeringRequestObservation) (RuleSettlement, bool) {
+	if rule.Kind != PrecommitRuleApprovedWithinRounds {
+		return RuleSettlement{}, false
+	}
+	refs := nonEmpty("selfdev-operation:" + strings.TrimSpace(obs.ApprovedOperationID))
+	switch {
+	case obs.Approved && obs.FreezesToApproval <= rule.WithinRounds:
+		return RuleSettlement{Answer: PrecommitAnswerYes, EvidenceRefs: refs, Refs: map[string]string{RuleRefFreezes: strconv.Itoa(obs.FreezesToApproval)},
+			Excerpt: fmt.Sprintf("the request reached an approved candidate at Freeze %d of at most %d", obs.FreezesToApproval, rule.WithinRounds)}, true
+	case obs.Approved:
+		return RuleSettlement{Answer: PrecommitAnswerNo, EvidenceRefs: refs, Refs: map[string]string{RuleRefFreezes: strconv.Itoa(obs.FreezesToApproval)},
+			Excerpt: fmt.Sprintf("the request reached an approved candidate only at Freeze %d, past %d", obs.FreezesToApproval, rule.WithinRounds)}, true
+	case obs.FreezesSince > rule.WithinRounds:
+		return RuleSettlement{Answer: PrecommitAnswerNo, Refs: map[string]string{RuleRefFreezes: strconv.Itoa(obs.FreezesSince)},
+			Excerpt: fmt.Sprintf("%d Freezes without an approved candidate, past %d", obs.FreezesSince, rule.WithinRounds)}, true
+	case obs.Abandoned:
+		return RuleSettlement{Answer: PrecommitAnswerNo, Refs: map[string]string{RuleRefFreezes: strconv.Itoa(obs.FreezesSince)},
+			Excerpt: fmt.Sprintf("the request was abandoned after %d Freezes without an approved candidate", obs.FreezesSince)}, true
+	}
+	return RuleSettlement{}, false
 }
 
 // EngineeringTerminalObservation is the assignment's terminal disposition.
@@ -341,6 +471,9 @@ type RuleSettlement struct {
 	// Timing is set by a clock rule (freeze_minutes): the anchor, the end
 	// and the elapsed seconds, written on the resolve record (R15, R16).
 	Timing *RuleTiming
+	// Refs join the resolve record's subject refs (the decision actor and
+	// the delegated mark of an owner act, R18).
+	Refs map[string]string
 }
 
 // RuleTiming is a clock rule's measured span. Censored marks a span that
@@ -359,26 +492,51 @@ const (
 	RuleRefEndAt    = "end_at"
 	RuleRefActualS  = "actual_s"
 	RuleRefCensored = "censored"
+	// RuleRefDecisionAt names the decision a clock rule ended at.
+	RuleRefDecisionAt = "decision_at"
+	// RuleRefDecisionActor and RuleRefDelegated describe the act that
+	// settled owner_approves (R18).
+	RuleRefDecisionActor = "decision_actor"
+	RuleRefDelegated     = "delegated"
+	RuleRefFreezes       = "freezes"
 )
 
 // settleFreezeMinutes decides a freeze_minutes claim at a Freeze (R14).
 func settleFreezeMinutes(rule PrecommitRule, frozenAt time.Time, refs []string) (RuleSettlement, bool) {
+	return settleClock(rule, frozenAt, "froze", refs)
+}
+
+// settleClock decides a clock claim whose event happened at end (R13-R15).
+func settleClock(rule PrecommitRule, end time.Time, verb string, refs []string) (RuleSettlement, bool) {
 	since, ok := parseRuleTime(rule.Since)
 	if !ok {
 		return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "the precommit carries no Cast anchor", EvidenceRefs: refs}, true
 	}
-	if frozenAt.Before(since) {
+	if end.Before(since) {
 		return RuleSettlement{}, false
 	}
-	elapsed := frozenAt.Sub(since)
-	timing := &RuleTiming{Since: since, End: frozenAt, ActualS: int64(elapsed / time.Second)}
+	elapsed := end.Sub(since)
+	timing := &RuleTiming{Since: since, End: end, ActualS: int64(elapsed / time.Second)}
 	minutes := elapsed.Minutes()
 	answer, where := PrecommitAnswerYes, "inside"
 	if minutes < float64(rule.LowMinutes) || minutes > float64(rule.HighMinutes) {
 		answer, where = PrecommitAnswerNo, "outside"
 	}
 	return RuleSettlement{Answer: answer, EvidenceRefs: refs, Timing: timing,
-		Excerpt: fmt.Sprintf("froze %s after the Cast, %s the %d-%dm interval (estimate %dm)", roundMinutes(elapsed), where, rule.LowMinutes, rule.HighMinutes, rule.EstimateMinutes)}, true
+		Excerpt: fmt.Sprintf("%s %s after the Cast, %s the %d-%dm interval (estimate %dm)", verb, roundMinutes(elapsed), where, rule.LowMinutes, rule.HighMinutes, rule.EstimateMinutes)}, true
+}
+
+// missedClock settles a clock claim whose event will not happen: "no", the
+// span to at censored (R16).
+func missedClock(rule PrecommitRule, at time.Time, what, why string, refs []string) RuleSettlement {
+	since, ok := parseRuleTime(rule.Since)
+	if !ok {
+		return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "the precommit carries no Cast anchor; " + why, EvidenceRefs: refs}
+	}
+	elapsed := max(at.Sub(since), 0)
+	return RuleSettlement{Answer: PrecommitAnswerNo, EvidenceRefs: refs,
+		Timing:  &RuleTiming{Since: since, End: at, ActualS: int64(elapsed / time.Second), Censored: true},
+		Excerpt: fmt.Sprintf("no %s within %s of the Cast (interval %d-%dm, estimate %dm); %s", what, roundMinutes(elapsed), rule.LowMinutes, rule.HighMinutes, rule.EstimateMinutes, why)}
 }
 
 // SettleRuleOnFreeze decides the claims a successful Freeze settles:
@@ -455,6 +613,17 @@ func SettleRuleOnVerify(rule PrecommitRule, obs EngineeringVerifyObservation) (R
 		}
 		return RuleSettlement{}, false
 	}
+	if rule.Kind == PrecommitRuleOwnerApproves || rule.Kind == PrecommitRuleApprovalMinutes {
+		// A candidate the judgment rejected never reaches the owner.
+		if strings.TrimSpace(obs.OperationState) != "failed" {
+			return RuleSettlement{}, false
+		}
+		why := "the independent judgment rejected the candidate, so the owner never decided"
+		if rule.Kind == PrecommitRuleApprovalMinutes {
+			return missedClock(rule, obs.At, "approval", why, refs), true
+		}
+		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: why, EvidenceRefs: refs}, true
+	}
 	if rule.Kind != PrecommitRuleVerifyPass {
 		return RuleSettlement{}, false
 	}
@@ -488,15 +657,16 @@ func SettleRuleAtTerminal(rule PrecommitRule, obs EngineeringTerminalObservation
 		if obs.CandidateFrozen {
 			return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "a candidate froze but its freeze observation was not recorded; " + ended, EvidenceRefs: refs}, true
 		}
-		since, ok := parseRuleTime(rule.Since)
-		if !ok {
-			return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "the precommit carries no Cast anchor; " + ended, EvidenceRefs: refs}, true
-		}
-		elapsed := max(obs.At.Sub(since), 0)
 		// R16: no Freeze is a miss, and the span is a lower bound.
-		return RuleSettlement{Answer: PrecommitAnswerNo, EvidenceRefs: refs,
-			Timing:  &RuleTiming{Since: since, End: obs.At, ActualS: int64(elapsed / time.Second), Censored: true},
-			Excerpt: fmt.Sprintf("no Freeze within %s of the Cast (interval %d-%dm, estimate %dm); %s", roundMinutes(elapsed), rule.LowMinutes, rule.HighMinutes, rule.EstimateMinutes, ended)}, true
+		return missedClock(rule, obs.At, "Freeze", ended, refs), true
+	case PrecommitRuleOwnerApproves, PrecommitRuleApprovalMinutes:
+		if obs.CandidateFrozen && obs.Disposition == EngineeringAssignmentCompleted {
+			return RuleSettlement{}, false // the judgment and the owner decide
+		}
+		if rule.Kind == PrecommitRuleApprovalMinutes {
+			return missedClock(rule, obs.At, "approval", "no completed candidate to approve; "+ended, refs), true
+		}
+		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: "no completed candidate to approve; " + ended, EvidenceRefs: refs}, true
 	case PrecommitRuleFreezeWithin, PrecommitRuleTestsPass, PrecommitRulePathsConfined:
 		if obs.CandidateFrozen {
 			// R5: the freeze happened but its settlement is missing.
@@ -555,16 +725,23 @@ func NewRuleResolveRecord(precommit CommitmentRecord, s RuleSettlement, at time.
 		sourceRef = s.EvidenceRefs[0]
 	}
 	subjectRefs := precommit.SubjectRefs
-	if t := s.Timing; t != nil {
-		subjectRefs = make(map[string]string, len(precommit.SubjectRefs)+4)
+	if s.Timing != nil || len(s.Refs) > 0 {
+		subjectRefs = make(map[string]string, len(precommit.SubjectRefs)+len(s.Refs)+4)
 		for k, v := range precommit.SubjectRefs {
 			subjectRefs[k] = v
 		}
+		for k, v := range s.Refs {
+			subjectRefs[k] = v
+		}
+	}
+	if t := s.Timing; t != nil {
 		subjectRefs[RuleRefCastAt] = t.Since.UTC().Format(time.RFC3339Nano)
 		subjectRefs[RuleRefActualS] = strconv.FormatInt(t.ActualS, 10)
 		if t.Censored {
 			subjectRefs[RuleRefEndAt] = t.End.UTC().Format(time.RFC3339Nano)
 			subjectRefs[RuleRefCensored] = "true"
+		} else if kind == string(PrecommitRuleApprovalMinutes) {
+			subjectRefs[RuleRefDecisionAt] = t.End.UTC().Format(time.RFC3339Nano)
 		} else {
 			subjectRefs[RuleRefFreezeAt] = t.End.UTC().Format(time.RFC3339Nano)
 		}
@@ -647,7 +824,7 @@ type sayDoAccumulator struct {
 // addClock adds a clock claim's sharpness and, when its span was
 // measured, its log ratio (R13).
 func (a *sayDoAccumulator) addClock(rule PrecommitRule, settlement *CommitmentRecord) {
-	if rule.Kind != PrecommitRuleFreezeMinutes || rule.LowMinutes < 1 || rule.HighMinutes < rule.LowMinutes {
+	if !rule.Kind.clock() || rule.LowMinutes < 1 || rule.HighMinutes < rule.LowMinutes {
 		return
 	}
 	a.sumLW += math.Log(float64(rule.HighMinutes) / float64(rule.LowMinutes))
@@ -813,14 +990,25 @@ const RoundPredictionsField = "predictions"
 const RoundPredictionsHow = RoundPredictionsExample
 
 // RoundPredictionsMandatory are the claims every round states.
-var RoundPredictionsMandatory = []PrecommitRuleKind{PrecommitRuleVerifyPass, PrecommitRuleJudgeAccepts, PrecommitRuleFreezeMinutes}
+var RoundPredictionsMandatory = []PrecommitRuleKind{PrecommitRuleVerifyPass, PrecommitRuleJudgeAccepts, PrecommitRuleOwnerApproves, PrecommitRuleFreezeMinutes, PrecommitRuleApprovalMinutes}
 
 // RoundPredictions is the predictions block: each p is the stater's chance
 // in [0.02, 0.98] that the claim holds; minutes run from the Cast.
 type RoundPredictions struct {
-	VerifyPass    *float64              `json:"verify_pass"`
-	JudgeAccepts  *float64              `json:"judge_accepts"`
-	FreezeMinutes *RoundClockPrediction `json:"freeze_minutes"`
+	VerifyPass      *float64              `json:"verify_pass"`
+	JudgeAccepts    *float64              `json:"judge_accepts"`
+	OwnerApproves   *float64              `json:"owner_approves"`
+	FreezeMinutes   *RoundClockPrediction `json:"freeze_minutes"`
+	ApprovalMinutes *RoundClockPrediction `json:"approval_minutes"`
+	// ApprovedWithinRounds is optional.
+	ApprovedWithinRounds *RoundCountPrediction `json:"approved_within_rounds,omitempty"`
+}
+
+// RoundCountPrediction is approved_within_rounds: the bound in Freezes and
+// the chance the request is approved within it.
+type RoundCountPrediction struct {
+	Freezes int     `json:"freezes"`
+	P       float64 `json:"p"`
 }
 
 // RoundClockPrediction is a clock claim: a point estimate in whole minutes,
@@ -856,8 +1044,14 @@ func ParseRoundPredictions(raw json.RawMessage) (RoundPredictions, error) {
 	if out.JudgeAccepts == nil {
 		missing = append(missing, string(PrecommitRuleJudgeAccepts))
 	}
+	if out.OwnerApproves == nil {
+		missing = append(missing, string(PrecommitRuleOwnerApproves))
+	}
 	if out.FreezeMinutes == nil {
 		missing = append(missing, string(PrecommitRuleFreezeMinutes))
+	}
+	if out.ApprovalMinutes == nil {
+		missing = append(missing, string(PrecommitRuleApprovalMinutes))
 	}
 	if len(missing) > 0 {
 		return out, fmt.Errorf("predictions: missing %s", strings.Join(missing, ", "))
@@ -885,11 +1079,27 @@ func (r RoundPredictions) Precommits() []CommitmentPrecommit {
 		out = append(out, CommitmentPrecommit{Question: "The independent judgment accepts this round's candidate, so it reaches the owner's decision.",
 			Distribution: binary(*r.JudgeAccepts), Resolver: PrecommitRuleResolver, Rule: &PrecommitRule{Kind: PrecommitRuleJudgeAccepts}})
 	}
+	if r.OwnerApproves != nil {
+		out = append(out, CommitmentPrecommit{Question: "The owner approves this round's candidate.",
+			Distribution: binary(*r.OwnerApproves), Resolver: PrecommitRuleResolver, Rule: &PrecommitRule{Kind: PrecommitRuleOwnerApproves}})
+	}
 	if c := r.FreezeMinutes; c != nil {
 		out = append(out, CommitmentPrecommit{
 			Question:     fmt.Sprintf("The round's Freeze lands %d to %d minutes after the Cast (estimate %d).", c.Low, c.High, c.Estimate),
 			Distribution: binary(c.P), Resolver: PrecommitRuleResolver,
 			Rule: &PrecommitRule{Kind: PrecommitRuleFreezeMinutes, EstimateMinutes: c.Estimate, LowMinutes: c.Low, HighMinutes: c.High}})
+	}
+	if c := r.ApprovalMinutes; c != nil {
+		out = append(out, CommitmentPrecommit{
+			Question:     fmt.Sprintf("The candidate is approved %d to %d minutes after the Cast (estimate %d).", c.Low, c.High, c.Estimate),
+			Distribution: binary(c.P), Resolver: PrecommitRuleResolver,
+			Rule: &PrecommitRule{Kind: PrecommitRuleApprovalMinutes, EstimateMinutes: c.Estimate, LowMinutes: c.Low, HighMinutes: c.High}})
+	}
+	if c := r.ApprovedWithinRounds; c != nil {
+		out = append(out, CommitmentPrecommit{
+			Question:     fmt.Sprintf("The request reaches an approved candidate within %d Freezes from this Cast.", c.Freezes),
+			Distribution: binary(c.P), Resolver: PrecommitRuleResolver,
+			Rule: &PrecommitRule{Kind: PrecommitRuleApprovedWithinRounds, WithinRounds: c.Freezes}})
 	}
 	return out
 }
@@ -901,7 +1111,7 @@ const (
 	PrecommitShapeExample       = `{"question": "The build passes on its first run.", "p": 0.7, "resolver": "research"}`
 	RulePrecommitJudgeExample   = `{"question": "The independent judgment accepts my candidate.", "p": 0.6, "resolver": "rule", "rule": {"kind": "judge_accepts"}}`
 	RulePrecommitClockExample   = `{"question": "My Freeze lands 15 to 45 minutes after the assignment opened.", "p": 0.7, "resolver": "rule", "rule": {"kind": "freeze_minutes", "estimate_minutes": 25, "low_minutes": 15, "high_minutes": 45}}`
-	RoundPredictionsExample     = `"predictions": {"verify_pass": 0.8, "judge_accepts": 0.7, "freeze_minutes": {"estimate": 25, "low": 15, "high": 45, "p": 0.7}}`
+	RoundPredictionsExample     = `"predictions": {"verify_pass": 0.8, "judge_accepts": 0.7, "owner_approves": 0.6, "freeze_minutes": {"estimate": 25, "low": 15, "high": 45, "p": 0.7}, "approval_minutes": {"estimate": 90, "low": 40, "high": 240, "p": 0.6}, "approved_within_rounds": {"freezes": 2, "p": 0.6}}`
 	precommitShapeErrorTemplate = "; the shape is %s (\"p\" is your chance of yes, short for \"distribution\": {\"yes\": p, \"no\": 1-p})"
 )
 

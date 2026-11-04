@@ -1678,6 +1678,7 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	// operation settles judge_accepts.
 	verdict := types.EngineeringVerifyObservation{Decision: in.Decision, BundleDigest: operation.BundleDigest, VerifierRefs: trimNonEmptyStrings(in.VerifierRefs), OperationID: operation.OperationID}
 	verdict.OperationState, _ = out["state"].(string)
+	verdict.At = time.Now().UTC()
 	rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, "verify", time.Now().UTC(),
 		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
 			return types.SettleRuleOnVerify(rule, verdict)
