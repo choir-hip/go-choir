@@ -156,9 +156,12 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   assert.equal(appended.length, 1);
   assert.equal(el.text, CATALOG_FIXTURE_BADGE);
   assert.equal(el.dataset.choirShotFixture, 'capsule-catalog');
-  // At the top edge: never over the taskbar or prompt bar at the bottom.
+  // At the top-left edge: never over the taskbar or prompt bar at the bottom,
+  // nor over a window's controls at its top right.
   assert.equal(el.style.top, '2px');
+  assert.equal(el.style.left, '8px');
   assert.equal(el.style.bottom, undefined);
+  assert.equal(el.style.right, undefined);
 }
 
 // The install fixture: adoptions are the owner's act on the real computer, so a

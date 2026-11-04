@@ -547,7 +547,7 @@ export function pickAutoputerBinary(exists = fs.existsSync) {
 // CATALOG_FIXTURE_PATH is the catalog fixture beside this script.
 export const CATALOG_FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-catalog.json');
 export const CATALOG_FIXTURE_HEADER = 'x-choir-fixture';
-export const CATALOG_FIXTURE_BADGE = 'Catalog fixture, not the live catalog (scripts/fixtures/capsule-catalog.json, capsule-install.json)';
+export const CATALOG_FIXTURE_BADGE = 'Catalog fixture, not live';
 
 // loadCatalogFixture reads the fixture; null when it is missing or not one.
 export function loadCatalogFixture(file = CATALOG_FIXTURE_PATH) {
@@ -663,14 +663,17 @@ export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
 }
 
 // fixtureBadge runs in the page: a fixed label on any shot that read the
-// fixture, so the screen says what it shows. It sits at the top-right edge,
-// never over the taskbar or prompt bar at the bottom of a phone-size shot.
+// fixture, so the screen says what it shows. It sits at the top-left edge:
+// never over the taskbar or prompt bar at the bottom of a phone-size shot, and
+// never over a window's minimize, maximize and close at its top right (a judge
+// rejected every desktop shot of claude Library r2 for that, 2026-11-04). New
+// windows open clear of the desktop icons there (getNewWindowGeometry).
 export function fixtureBadge(text) {
   const el = document.createElement('div');
   el.dataset.choirShotFixture = 'capsule-catalog';
   el.textContent = text;
   Object.assign(el.style, {
-    position: 'fixed', top: '2px', right: '8px', maxWidth: 'calc(100vw - 16px)', zIndex: '2147483647', pointerEvents: 'none',
+    position: 'fixed', top: '2px', left: '8px', maxWidth: '40vw', zIndex: '2147483647', pointerEvents: 'none',
     font: '600 12px/1.3 system-ui, sans-serif', color: '#111', background: '#ffd84d', border: '1px solid #111',
     borderRadius: '4px', padding: '3px 7px',
   });
