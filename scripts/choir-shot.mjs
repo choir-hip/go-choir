@@ -1030,6 +1030,15 @@ async function settle(page, selector) {
     }
   }
   await Promise.race([page.evaluate(() => document.fonts && document.fonts.ready), new Promise((r) => setTimeout(r, STEP_MS))]);
+  // A step that opens an overlay (a larger view, a dialog) starts a fade or
+  // slide the window-level waitSettled never sees: wait, bounded, for every
+  // finite running animation on the page to finish, so the shot is not taken
+  // half-transparent (pool Library r4 shot 05, 2026-11-04).
+  await page.evaluate(async (ms) => {
+    const finite = (a) => a.playState === 'running' && Number.isFinite(a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming().endTime : Infinity);
+    const anims = document.getAnimations().filter(finite);
+    if (anims.length) await Promise.race([Promise.all(anims.map((a) => a.finished.catch(() => {}))), new Promise((r) => setTimeout(r, ms))]);
+  }, SETTLE_MS).catch(() => {});
 }
 
 // loadPng decodes a PNG with pngjs from the locked tree (or beside this
