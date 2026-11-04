@@ -245,23 +245,6 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 	return rec, handoff, err
 }
 
-// SubmitOwnerPrompt submits a request the computer makes on its owner's
-// behalf, after the owner's act, through the prompt bar's own path (a
-// release adoption, P8: docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
-// The commit outlives the caller's context like the prompt bar's does.
-func (h *Handler) SubmitOwnerPrompt(ctx context.Context, ownerID, text, commandID string) (agentcore.PromptSubmission, error) {
-	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptBarCommitTimeout)
-	defer cancel()
-	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, "", strings.TrimSpace(text), strings.TrimSpace(commandID), false)
-	if err != nil {
-		return agentcore.PromptSubmission{}, err
-	}
-	if strings.TrimSpace(handoff.Conductor.TrajectoryID) == "" {
-		return agentcore.PromptSubmission{}, errors.New("prompt submit returned no trajectory")
-	}
-	return agentcore.PromptSubmission{SubmissionID: rec.RunID, TrajectoryID: handoff.Conductor.TrajectoryID, DocID: handoff.Conductor.DocID}, nil
-}
-
 // HandlePromptBarSubmission returns product-level state for one owner-scoped submission.
 func (h *Handler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

@@ -66,9 +66,8 @@ func releasePrecommitment(precommit types.CommitmentRecord, resolve *types.Commi
 	return out
 }
 
-
-// handleReleaseAdoptions serves the Library's package installs
-// (docs/design/package-install-2026-11-04.md):
+// handleReleaseAdoptions serves the Library's package installs, runtime
+// installs since S12 (docs/design/s12-runtime-install-build-2026-11-04.md):
 //
 //	POST /api/computers/<id>/self-development/adoptions        install or uninstall (owner act; the proxy supplies the tree)
 //	GET  /api/computers/<id>/self-development/adoptions        list
@@ -100,19 +99,16 @@ func (h *APIHandler) handleReleaseAdoptions(w http.ResponseWriter, r *http.Reque
 		}
 		writeAPIJSON(w, status, view)
 	case adoption == "" && r.Method == http.MethodGet:
-		list, err := h.rt.store.ListReleaseAdoptions(r.Context(), ownerID, computerID)
+		// Newest first; a P8 software-release adoption from before its
+		// deletion is not an install.
+		list, err := h.rt.packageInstalls(r.Context(), ownerID, computerID)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "adoptions unreadable"})
 			return
 		}
 		views := make([]ReleaseAdoptionView, 0, len(list))
 		for _, item := range list {
-			// A P8 software-release adoption from before its deletion is
-			// not an install.
-			if item.Kind != adoptionKindPackage {
-				continue
-			}
-			views = append(views, h.rt.adoptionView(r.Context(), item))
+			views = append(views, h.rt.adoptionView(item, list))
 		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{"adoptions": views})
 	case adoption != "" && r.Method == http.MethodGet:
@@ -125,7 +121,12 @@ func (h *APIHandler) handleReleaseAdoptions(w http.ResponseWriter, r *http.Reque
 			writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "adoption unreadable"})
 			return
 		}
-		writeAPIJSON(w, http.StatusOK, h.rt.adoptionView(r.Context(), item))
+		list, err := h.rt.packageInstalls(r.Context(), ownerID, computerID)
+		if err != nil || item.Kind != adoptionKindPackage {
+			writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "adoption not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, h.rt.adoptionView(item, list))
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, releaseAPIError{Error: "method not allowed"})
 	}

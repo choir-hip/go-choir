@@ -1,57 +1,71 @@
 {
   "fixture": "capsule-install",
-  "note": "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. Modelled simply: the owner and times are fixed, a new package (same_base), and a release is installed or refused (package_name_taken) by its package, not by a tree.",
+  "note": "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. Modelled simply: the owner and times are fixed, every install is a runtime install in force (state installed), and a release is installed or refused (cross_owner_before_frame) by its package, not by its publisher.",
   "refusal_package": "slides-next",
   "created": {
     "status": 201,
     "body": {
       "action": "install",
-      "adopter_base_commit": "b424c928d97ba3236a4bf9bc62ec4a1611ee1187",
-      "adopter_tree_hash": "eab5af6187add2b79570f260c7a5873243580979",
-      "adoption_id": "install-e135dafc0640b6a76f825844",
+      "adopter_base_commit": "",
+      "adopter_tree_hash": "",
+      "adoption_id": "install-798634ae787971713a8fa106",
       "attempt": 1,
       "computer_id": "computer-b",
-      "doc_id": "doc-adopt-1",
       "kind": "package",
+      "manifest": {
+        "name": "demo-next"
+      },
+      "mode": "runtime",
+      "module_abi": "choir.app-frontend/module/v1",
+      "module_available": true,
+      "module_sha256": "6e000185aaff21f6366731e90e56904d4cebaee91117b2fccc74219532e0822b",
       "owner_id": "owner-b",
       "package": "demo-next",
-      "patch_matches_release": false,
+      "patch_matches_release": true,
       "patch_sha256": "4d25da2fac34cb40a404ac8dd5e4548e04d06255d6dd7f44bb9e076a17f7fd9b",
-      "publisher_computer_id": "computer-track-a",
-      "publisher_operation_id": "op-track-a",
-      "release_base_commit": "b424c928d97ba3236a4bf9bc62ec4a1611ee1187",
-      "release_id": "82dc1ebf81b38cd723122e55bb549caa48d89bd8eba544bc44063cc58ba6f9ce",
+      "publisher_computer_id": "computer-owner-b",
+      "publisher_operation_id": "op-owner-b",
+      "release_base_commit": "c74cb0643795e46558a2e6269b40d5811b77360d",
+      "release_id": "c04b4ab2be26c3aed1bbb7bbe7babd7fae3afa941213f9f2c604b3497a5edb7a",
       "release_tree_hash": "3df9477d4c93e7a1874be575fc401cac228ebd1a",
       "requested_at": "2026-11-03T03:00:00Z",
+      "requires_sdk": "^1.0",
       "same_base": true,
-      "submission_id": "submission-1",
-      "trajectory_id": "traj-adopt-1"
+      "state": "installed",
+      "trajectory_id": ""
     }
   },
   "repeat": {
     "status": 200,
     "body": {
       "action": "install",
-      "adopter_base_commit": "b424c928d97ba3236a4bf9bc62ec4a1611ee1187",
-      "adopter_tree_hash": "eab5af6187add2b79570f260c7a5873243580979",
-      "adoption_id": "install-e135dafc0640b6a76f825844",
+      "adopter_base_commit": "",
+      "adopter_tree_hash": "",
+      "adoption_id": "install-798634ae787971713a8fa106",
       "attempt": 1,
       "computer_id": "computer-b",
-      "doc_id": "doc-adopt-1",
       "kind": "package",
+      "manifest": {
+        "name": "demo-next"
+      },
+      "mode": "runtime",
+      "module_abi": "choir.app-frontend/module/v1",
+      "module_available": true,
+      "module_sha256": "6e000185aaff21f6366731e90e56904d4cebaee91117b2fccc74219532e0822b",
       "owner_id": "owner-b",
       "package": "demo-next",
-      "patch_matches_release": false,
+      "patch_matches_release": true,
       "patch_sha256": "4d25da2fac34cb40a404ac8dd5e4548e04d06255d6dd7f44bb9e076a17f7fd9b",
-      "publisher_computer_id": "computer-track-a",
-      "publisher_operation_id": "op-track-a",
-      "release_base_commit": "b424c928d97ba3236a4bf9bc62ec4a1611ee1187",
-      "release_id": "82dc1ebf81b38cd723122e55bb549caa48d89bd8eba544bc44063cc58ba6f9ce",
+      "publisher_computer_id": "computer-owner-b",
+      "publisher_operation_id": "op-owner-b",
+      "release_base_commit": "c74cb0643795e46558a2e6269b40d5811b77360d",
+      "release_id": "c04b4ab2be26c3aed1bbb7bbe7babd7fae3afa941213f9f2c604b3497a5edb7a",
       "release_tree_hash": "3df9477d4c93e7a1874be575fc401cac228ebd1a",
       "requested_at": "2026-11-03T03:00:00Z",
+      "requires_sdk": "^1.0",
       "same_base": true,
-      "submission_id": "submission-1",
-      "trajectory_id": "traj-adopt-1"
+      "state": "installed",
+      "trajectory_id": ""
     }
   },
   "list": {
@@ -60,35 +74,42 @@
       "adoptions": [
         {
           "action": "install",
-          "adopter_base_commit": "b424c928d97ba3236a4bf9bc62ec4a1611ee1187",
-          "adopter_tree_hash": "eab5af6187add2b79570f260c7a5873243580979",
-          "adoption_id": "install-e135dafc0640b6a76f825844",
+          "adopter_base_commit": "",
+          "adopter_tree_hash": "",
+          "adoption_id": "install-798634ae787971713a8fa106",
           "attempt": 1,
           "computer_id": "computer-b",
-          "doc_id": "doc-adopt-1",
           "kind": "package",
+          "manifest": {
+            "name": "demo-next"
+          },
+          "mode": "runtime",
+          "module_abi": "choir.app-frontend/module/v1",
+          "module_available": true,
+          "module_sha256": "6e000185aaff21f6366731e90e56904d4cebaee91117b2fccc74219532e0822b",
           "owner_id": "owner-b",
           "package": "demo-next",
-          "patch_matches_release": false,
+          "patch_matches_release": true,
           "patch_sha256": "4d25da2fac34cb40a404ac8dd5e4548e04d06255d6dd7f44bb9e076a17f7fd9b",
-          "publisher_computer_id": "computer-track-a",
-          "publisher_operation_id": "op-track-a",
-          "release_base_commit": "b424c928d97ba3236a4bf9bc62ec4a1611ee1187",
-          "release_id": "82dc1ebf81b38cd723122e55bb549caa48d89bd8eba544bc44063cc58ba6f9ce",
+          "publisher_computer_id": "computer-owner-b",
+          "publisher_operation_id": "op-owner-b",
+          "release_base_commit": "c74cb0643795e46558a2e6269b40d5811b77360d",
+          "release_id": "c04b4ab2be26c3aed1bbb7bbe7babd7fae3afa941213f9f2c604b3497a5edb7a",
           "release_tree_hash": "3df9477d4c93e7a1874be575fc401cac228ebd1a",
           "requested_at": "2026-11-03T03:00:00Z",
+          "requires_sdk": "^1.0",
           "same_base": true,
-          "submission_id": "submission-1",
-          "trajectory_id": "traj-adopt-1"
+          "state": "installed",
+          "trajectory_id": ""
         }
       ]
     }
   },
   "refusal": {
-    "status": 409,
+    "status": 403,
     "body": {
-      "error": "this computer holds its own package of that name; it is never overwritten",
-      "reason": "package_name_taken"
+      "error": "this release was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet",
+      "reason": "cross_owner_before_frame"
     }
   }
 }

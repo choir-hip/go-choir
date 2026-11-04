@@ -304,7 +304,6 @@ type EngineeringInputs struct {
 	ExpectedSubjectDigest string
 	VerifierBundleDir     string
 	VerifierBinding       string
-	AdoptionDir           string
 	CarriedPatchDir       string
 	Egress                bool
 	ClaudeDelegate        bool
@@ -320,7 +319,6 @@ func RefuseEngineeringInputs(in EngineeringInputs) error {
 		"expected subject digest": in.ExpectedSubjectDigest != "",
 		"verifier bundle":         in.VerifierBundleDir != "",
 		"verifier binding":        in.VerifierBinding != "",
-		"adoption":                in.AdoptionDir != "",
 		"carried patch":           in.CarriedPatchDir != "",
 		"egress":                  in.Egress,
 		"claude delegate":         in.ClaudeDelegate,

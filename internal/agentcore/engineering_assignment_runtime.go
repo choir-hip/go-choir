@@ -861,16 +861,6 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	// The request is the size chosen above, a Claude capsule's included:
 	// doctrine's memory.high never sits below what the capsule used to get.
 	spec := engineeringAssignmentSpawnSpec(capsuleID, runID, binding, preflight, memory, cpu, pids, claude)
-	// P8: the engineering assignment on a release adoption's trajectory
-	// gets the verified patch at /selfdev/adoption, re-verified now (A8);
-	// any other trajectory gets nothing (A9). Bytes that changed since
-	// verification refuse the spawn.
-	adoptionDir, adoptionErr := rt.adoptionInputDir(ctx, ownerID, computerID, binding.TrajectoryID)
-	if adoptionErr != nil {
-		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("adoption input: %w", adoptionErr))
-	}
-	spec.AdoptionDir = adoptionDir
-	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "adoption_input", phaseStarted)
 	// Option A (failure 15, problem 1): an earlier failed round's work on this
 	// trajectory is offered as an inert patch the engineer may apply in this
 	// fresh capsule. Never fatal: a refusal is recorded and the capsule starts

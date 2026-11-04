@@ -740,15 +740,6 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, err
 		}
 	}
-	if spec.AdoptionDir != "" {
-		adoptionTarget := filepath.Join(sourceLower, "selfdev", "adoption")
-		if err := copyCanonicalSubjectTree(ctx, spec.AdoptionDir, adoptionTarget); err != nil {
-			return nil, fmt.Errorf("capsule adoption input copy: %w", err)
-		}
-		if err := makeSubjectTreeReadOnly(adoptionTarget); err != nil {
-			return nil, err
-		}
-	}
 	if spec.CarriedPatchDir != "" {
 		carriedTarget := filepath.Join(sourceLower, "selfdev", "carried")
 		if err := copyCanonicalSubjectTree(ctx, spec.CarriedPatchDir, carriedTarget); err != nil {
@@ -758,7 +749,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, err
 		}
 	}
-	timer.phase("selfdev_inputs", fmt.Sprintf("verifier=%t adoption=%t carried=%t", spec.VerifierBundleDir != "", spec.AdoptionDir != "", spec.CarriedPatchDir != ""))
+	timer.phase("selfdev_inputs", fmt.Sprintf("verifier=%t carried=%t", spec.VerifierBundleDir != "", spec.CarriedPatchDir != ""))
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
 	var computerState *ComputerStateReceipt
@@ -828,25 +819,8 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, fmt.Errorf("capsule harden verifier bundle mount: %w", err)
 		}
 	}
-	if spec.AdoptionDir != "" {
-		// Like the verifier bundle: the verified adoption input must not be
-		// shadowable through the overlay upper (A8), so the lower copy is
-		// bound read-only over the merged path.
-		adoptionMount := filepath.Join(caps.MergedDir, "selfdev", "adoption")
-		adoptionSource := filepath.Join(sourceLower, "selfdev", "adoption")
-		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
-			return unix.Mount(adoptionSource, adoptionMount, "", unix.MS_BIND, "")
-		}); err != nil {
-			return nil, fmt.Errorf("capsule bind adoption input: %w", err)
-		}
-		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
-			return unix.Mount("", adoptionMount, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
-		}); err != nil {
-			return nil, fmt.Errorf("capsule harden adoption input mount: %w", err)
-		}
-	}
 	if spec.CarriedPatchDir != "" {
-		// Like the adoption input: the carried patch must not be shadowable
+		// Like the verifier bundle: the carried patch must not be shadowable
 		// through the overlay upper, so the lower copy is bound read-only
 		// over the merged path.
 		carriedMount := filepath.Join(caps.MergedDir, "selfdev", "carried")

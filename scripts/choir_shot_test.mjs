@@ -248,7 +248,7 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   // The refusal release answers the real refusal and installs nothing.
   const before = state.adoptions.length;
   const refused = post(refusedId);
-  assert.deepEqual([refused.status, refused.body.reason, Object.keys(refused.body).sort()], [409, 'package_name_taken', ['error', 'reason']]);
+  assert.deepEqual([refused.status, refused.body.reason, Object.keys(refused.body).sort()], [403, 'cross_owner_before_frame', ['error', 'reason']]);
   assert.equal(state.adoptions.length, before);
   // Unknown, malformed and wrong-method requests are refused in the handler's words.
   assert.deepEqual([post('0'.repeat(64)).status, post('0'.repeat(64)).body.reason], [404, 'release_not_published']);

@@ -49,13 +49,6 @@ type SpawnSpec struct {
 	VerifierBundleDir string
 	VerifierBinding   string
 
-	// AdoptionDir is a trusted-runtime input: the host-side directory of a
-	// verified release adoption (release.json and source.patch, re-verified
-	// by the runtime just before spawn) installed read-only at
-	// /selfdev/adoption for the engineering assignment on the adoption's
-	// trajectory (P8, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
-	AdoptionDir string
-
 	// CarriedPatchDir is a trusted-runtime input: the host-side directory of
 	// a failed earlier round's carried source patch (source.patch and
 	// carried.json, staged content-addressed and re-verified by the runtime

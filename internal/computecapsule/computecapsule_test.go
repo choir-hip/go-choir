@@ -187,7 +187,6 @@ func TestRefuseEngineeringInputs(t *testing.T) {
 		"subject digest":   {ExpectedSubjectDigest: "sha256:" + hexA},
 		"verifier bundle":  {VerifierBundleDir: "/x"},
 		"verifier binding": {VerifierBinding: "{}"},
-		"adoption":         {AdoptionDir: "/x"},
 		"carried patch":    {CarriedPatchDir: "/x"},
 		"egress":           {Egress: true},
 		"delegate":         {ClaudeDelegate: true},

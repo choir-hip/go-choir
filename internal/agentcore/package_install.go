@@ -6,48 +6,94 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
-	"github.com/yusefmosiah/go-choir/internal/release"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Package install (docs/design/package-install-2026-11-04.md). The owner's
-// install of a published package release arrives on the P8 adoption route
-// the Library already calls, with the release's tree_patch the proxy read
-// and verified from the catalog. The computer verifies the record and the
-// bytes again, plans the change against its own tree (three-way: L its own
-// package root, P the release's parent, R the release), and, only when
-// every rung holds, stages the install patch and asks its own desks through
-// the owner's prompt path. The change lands as any self-development
-// operation does: engineering's capsule build and Freeze, management's
-// Verify, the owner's decision, the materializer, and its rollback.
+// Package install is runtime install (Library S12, app packages P5;
+// docs/design/s12-runtime-install-build-2026-11-04.md). The owner's install
+// of a published package release arrives on the adoption route the Library
+// calls, with the release's tree_patch the proxy read and verified from the
+// catalog. The computer verifies the record and the bytes again, builds the
+// package into one module/v1 ES module with its own locked dependencies,
+// puts the module in its module store (outside the source tree) and records
+// the install on its tape. The shell lists installed packages from
+// GET /api/packages/installed and loads each module by digest. No source
+// changes, no self-development apply, no SPA build and no restart; an
+// uninstall is one more record. The earlier source-patch install (the
+// desks applied the patch in a capsule) is deleted: this is the one path.
 
 const (
 	adoptionKindPackage    = "package"
 	packageActionInstall   = "install"
 	packageActionUninstall = "uninstall"
-	// packageInstallQuietWindow is how long an attempt with no operation
-	// yet counts as live. A desk run a crash closed before it froze leaves
-	// no operation; after this window the owner may try again.
-	packageInstallQuietWindow = 2 * time.Hour
-	// packageInstallMaxAttempts bounds the attempts of one release and
+	// packageInstallMaxAttempts bounds the records of one release and
 	// action on one computer.
 	packageInstallMaxAttempts = 50
+
+	installStateInstalled   = "installed"
+	installStateReplaced    = "replaced"
+	installStateUninstalled = "uninstalled"
+	installStateSource      = "source"
 )
 
 // adoptionRequestMaxBytes bounds the adoption body: a package record, its
 // tree_patch in base64, and room.
 const adoptionRequestMaxBytes = pkgrelease.MaxRecordBytes + (pkgrelease.MaxBlobBytes/3+1)*4 + (64 << 10)
 
+// PackageModuleBuilder builds a verified release into a module/v1 module
+// (pkgruntime.Builder on a computer; a fake in tests).
+type PackageModuleBuilder interface {
+	Build(ctx context.Context, rec pkgrelease.Record, treePatch []byte) (pkgruntime.Module, error)
+}
+
+// adoptReleaseRequest is the body the proxy forwards.
+type adoptReleaseRequest struct {
+	ReleaseID string          `json:"release_id"`
+	Record    json.RawMessage `json:"record"`
+	// TreePatch is the release's tree_patch the proxy read from the
+	// catalog; Action is install (the default) or uninstall.
+	TreePatch []byte `json:"tree_patch,omitempty"`
+	Action    string `json:"action,omitempty"`
+}
+
+// ReleaseAdoptionView is an install record and where it stands now.
+type ReleaseAdoptionView struct {
+	store.ReleaseAdoption
+	// State: installed (this record is the package's current install),
+	// replaced (a later install or uninstall of the package superseded it),
+	// uninstalled (this uninstall is the package's latest record), or
+	// source (a source-patch install from before runtime install).
+	State string `json:"state"`
+	// PatchMatchesRelease is true when the record is in force: an install
+	// is the package's current install, an uninstall is its latest record.
+	// (The Library reads this name; it predates runtime install.)
+	PatchMatchesRelease bool `json:"patch_matches_release"`
+	// ModuleAvailable: the install's module is in this computer's store.
+	ModuleAvailable bool `json:"module_available,omitempty"`
+}
+
+// adoptionRefusal is a typed refusal: an HTTP status and a reason code.
+type adoptionRefusal struct {
+	status int
+	reason string
+	detail string
+}
+
+func (r *adoptionRefusal) Error() string { return r.reason + ": " + r.detail }
+
+func refuseAdoption(status int, reason, format string, args ...any) *adoptionRefusal {
+	return &adoptionRefusal{status: status, reason: reason, detail: fmt.Sprintf(format, args...)}
+}
+
 // isPackageReleaseRecord reports whether raw is a package release record
-// (by its schema); anything else is a P8 software release.
+// (by its schema).
 func isPackageReleaseRecord(raw json.RawMessage) bool {
 	var probe struct {
 		Schema string `json:"schema"`
@@ -60,11 +106,11 @@ func packageInstallID(computerID, releaseID, action string, attempt int) string 
 	return "install-" + computerevent.DigestBytes([]byte(key))[:24]
 }
 
-// installPackage runs the install ladder. created is false when an existing
-// install answers the request.
+// installPackage installs or uninstalls a release at run time. created is
+// false when the computer already holds what was asked.
 func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID string, request adoptReleaseRequest) (ReleaseAdoptionView, bool, *adoptionRefusal) {
-	if rt.promptSubmitter == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.releaseRepo()) == "" {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "adoption_unavailable", "this computer has no prompt path, update root or source repository")
+	if rt.store == nil || rt.packageBuilder == nil || strings.TrimSpace(rt.packageModules.Dir) == "" {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "install_unavailable", "this computer has no package builder or module store")
 	}
 	releaseID := strings.ToLower(strings.TrimSpace(request.ReleaseID))
 	if !computerevent.IsSHA256(releaseID) {
@@ -87,220 +133,171 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if err := pkgrelease.VerifyID(rec, releaseID); err != nil {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "release_digest_mismatch", "%v", err)
 	}
-	// 2. The release's tree, which only the proxy supplies, read from the
-	// catalog as this owner.
-	if len(request.TreePatch) == 0 {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "patch_unavailable", "the install carries no release tree; an install reaches this computer through the Library")
-	}
-	// 3-4. The bytes are the record's, the content checks hold, and the
-	// change is planned against this computer's own tree.
-	repo := rt.releaseRepo()
-	head, err := release.Head(ctx, repo)
-	if err != nil {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "source_unavailable", "%v", err)
-	}
-	plan, err := pkgrelease.PlanInstall(ctx, repo, head, rec, request.TreePatch, uninstall)
-	if err != nil {
-		switch pkgrelease.ReasonOf(err) {
-		case pkgrelease.ReasonBlobMismatch, pkgrelease.ReasonBlobTooLarge:
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "patch_digest_mismatch", "%v", err)
-		case pkgrelease.ReasonSecretFound:
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "patch_secret_refused", "%v", err)
-		case "":
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "source_unavailable", "%v", err)
-		default:
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "package_content_invalid", "%v", err)
-		}
+	// 2. Same-origin code is the owner's own until the sandboxed frame
+	// (S13): a release another owner published never installs here. An
+	// uninstall removes code, so it is never refused for this.
+	if !uninstall && strings.TrimSpace(rec.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusForbidden, "cross_owner_before_frame", "release %s was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet", releaseID)
 	}
 
+	rt.packageInstallMu.Lock()
+	defer rt.packageInstallMu.Unlock()
 	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
 	if err != nil {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
 	}
-	var latest *store.ReleaseAdoption
-	for i := range prior {
-		if prior[i].ReleaseID == releaseID && prior[i].Action == action && (latest == nil || prior[i].Attempt > latest.Attempt) {
-			latest = &prior[i]
-		}
-	}
-	done := (!uninstall && plan.LocalPresent && plan.Local == rec.Source.Tree) || (uninstall && !plan.LocalPresent)
-	if latest != nil && (done || rt.packageInstallLive(ctx, *latest)) {
-		return rt.adoptionView(ctx, *latest), false, nil
-	}
-	if done {
-		if uninstall {
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_not_installed", "this computer holds no %s", rec.Source.Root)
-		}
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_already_present", "this computer already holds this release's tree at %s", rec.Source.Root)
-	}
-	// The three-way: never overwrite a first-party package or a local change.
+	current := currentPackageInstalls(prior)[rec.Package.Name]
+
 	if uninstall {
-		if !plan.LocalPresent || plan.Local != rec.Source.Tree {
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_not_installed", "this computer's %s is not this release's tree, so uninstalling it would remove something else", rec.Source.Root)
+		if current == nil || current.ReleaseID != releaseID {
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_not_installed", "this computer has no runtime install of release %s of %s", releaseID, rec.Package.Name)
 		}
-	} else if plan.LocalPresent && plan.Local != rec.Parent.Tree && !installedTree(prior, rec.Package.Name, plan.Local) {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_name_taken", "this computer's %s holds a package that is neither this release's parent nor one the Library installed; it is never overwritten", rec.Source.Root)
-	}
-	// 5. The patch applies to this computer's own tree, checked without
-	// writing to the repository, and adds no secret.
-	if kinds := sourcePatchAddedSecrets(plan.Patch); len(kinds) > 0 {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "patch_secret_refused", "added lines carry secret content (%s)", strings.Join(kinds, ", "))
-	}
-	tree, err := release.PatchedTree(ctx, repo, head, plan.Patch)
-	if errors.Is(err, release.ErrPatchDoesNotApply) {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "patch_does_not_apply", "%v", err)
-	}
-	if err != nil {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "source_unavailable", "%v", err)
+		record := rt.newPackageInstallRecord(ownerID, computerID, releaseID, rec, action, prior)
+		if record.Attempt > packageInstallMaxAttempts {
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "install_attempts_exhausted", "%d uninstalls of this release already", packageInstallMaxAttempts)
+		}
+		if err := rt.store.PutReleaseAdoption(ctx, record); err != nil {
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
+		}
+		return rt.adoptionView(record, append([]store.ReleaseAdoption{record}, prior...)), true, nil
 	}
 
-	// Every rung held. Stage, ask the desks, record.
-	attempt := 1
-	if latest != nil {
-		attempt = latest.Attempt + 1
+	// 3. Already installed, with its module in the store: nothing to do.
+	if current != nil && current.ReleaseID == releaseID {
+		if _, err := rt.packageModules.Read(current.ModuleSHA256); err == nil {
+			return rt.adoptionView(*current, prior), false, nil
+		}
+		// The module is gone (a restore onto a fresh store): rebuild it below.
 	}
-	if attempt > packageInstallMaxAttempts {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "install_attempts_exhausted", "%d attempts of this %s already", packageInstallMaxAttempts, action)
+	if len(request.TreePatch) == 0 {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "patch_unavailable", "the install carries no release tree; an install reaches this computer through the Library")
 	}
-	id := packageInstallID(computerID, releaseID, action, attempt)
-	canonical, err := rec.Canonical()
+	// 4. Verify and build: the bytes are the record's, confined to the
+	// package root, carry no secret and a valid manifest; then the module.
+	module, err := rt.packageBuilder.Build(ctx, rec, request.TreePatch)
 	if err != nil {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_stage", "%v", err)
+		switch reason := pkgrelease.ReasonOf(err); {
+		case reason == pkgrelease.ReasonBlobMismatch || reason == pkgrelease.ReasonBlobTooLarge:
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "patch_digest_mismatch", "%v", err)
+		case reason == pkgrelease.ReasonSecretFound:
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "patch_secret_refused", "%v", err)
+		case reason != "":
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "package_content_invalid", "%v", err)
+		case errors.Is(err, pkgruntime.ErrBuild):
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "package_build_failed", "%v", err)
+		default:
+			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "install_unavailable", "%v", err)
+		}
 	}
-	if _, err := rt.stageAdoptionAt(id, releaseID, canonical, plan.Patch); err != nil {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_stage", "%v", err)
+	if module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0 {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "package_build_failed", "the builder returned no module/v1 module")
 	}
-	patchSHA := computerevent.DigestBytes(plan.Patch)
-	submission, err := rt.promptSubmitter(ctx, ownerID, packageInstallRequestText(releaseID, rec, action, plan, patchSHA), id)
+	sha, err := rt.packageModules.Put(module.Bytes)
 	if err != nil {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusBadGateway, "desks_unavailable", "the install request did not reach this computer's desks: %v", err)
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "module_store", "%v", err)
 	}
-	adoption := store.ReleaseAdoption{
-		AdoptionID: id, OwnerID: ownerID, ComputerID: computerID, ReleaseID: releaseID,
-		PublisherComputerID: rec.Publisher.ComputerID, PublisherOperationID: rec.Operation.OperationID,
-		PatchSHA256: patchSHA, ReleaseBaseCommit: rec.Source.BuiltOn, ReleaseTreeHash: rec.Source.Tree,
-		AdopterBaseCommit: head, AdopterTreeHash: tree,
-		SameBase:     !plan.LocalPresent || plan.Local == rec.Parent.Tree || uninstall,
-		TestCommand:  rec.Declarations.TestCommand,
-		TrajectoryID: submission.TrajectoryID, DocID: submission.DocID, SubmissionID: submission.SubmissionID,
-		RequestedAt: time.Now().UTC(),
-		Kind:        adoptionKindPackage, Package: rec.Package.Name, Action: action, Attempt: attempt,
+	// 5. Record it. The record is the install: it is written after the
+	// module is stored, so a crash before it leaves only an unreferenced
+	// module, never an install whose module is missing.
+	record := rt.newPackageInstallRecord(ownerID, computerID, releaseID, rec, action, prior)
+	if record.Attempt > packageInstallMaxAttempts {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "install_attempts_exhausted", "%d installs of this release already", packageInstallMaxAttempts)
 	}
-	if err := rt.store.PutReleaseAdoption(ctx, adoption); err != nil {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "the request reached the desks (trajectory %s) but the install was not recorded: %v", submission.TrajectoryID, err)
+	record.PatchSHA256 = computerevent.DigestBytes(request.TreePatch)
+	record.ModuleSHA256, record.ModuleABI, record.RequiresSDK, record.Manifest = sha, module.ABI, module.RequiresSDK, module.Manifest
+	if err := rt.store.PutReleaseAdoption(ctx, record); err != nil {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
 	}
-	return rt.adoptionView(ctx, adoption), true, nil
+	return rt.adoptionView(record, append([]store.ReleaseAdoption{record}, prior...)), true, nil
 }
 
-// packageInstalls lists this computer's package installs and uninstalls.
+func (rt *Runtime) newPackageInstallRecord(ownerID, computerID, releaseID string, rec pkgrelease.Record, action string, prior []store.ReleaseAdoption) store.ReleaseAdoption {
+	attempt := 1
+	for _, item := range prior {
+		if item.ReleaseID == releaseID && item.Action == action && item.Attempt >= attempt {
+			attempt = item.Attempt + 1
+		}
+	}
+	now := time.Now().UTC()
+	// Records order by RequestedAt; never let a new one sort before the
+	// newest one already written (a coarse or stepped-back clock).
+	for _, item := range prior {
+		if !item.RequestedAt.Before(now) {
+			now = item.RequestedAt.Add(time.Microsecond)
+		}
+	}
+	return store.ReleaseAdoption{
+		AdoptionID: packageInstallID(computerID, releaseID, action, attempt), OwnerID: ownerID, ComputerID: computerID, ReleaseID: releaseID,
+		PublisherComputerID: rec.Publisher.ComputerID, PublisherOperationID: rec.Operation.OperationID,
+		ReleaseBaseCommit: rec.Source.BuiltOn, ReleaseTreeHash: rec.Source.Tree, SameBase: true,
+		RequestedAt: now, Kind: adoptionKindPackage, Package: rec.Package.Name, Action: action, Attempt: attempt,
+		Mode: store.ReleaseAdoptionModeRuntime,
+	}
+}
+
+// packageInstalls lists this computer's package install records, newest
+// first.
 func (rt *Runtime) packageInstalls(ctx context.Context, ownerID, computerID string) ([]store.ReleaseAdoption, error) {
 	list, err := rt.store.ListReleaseAdoptions(ctx, ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}
-	out := list[:0]
+	out := make([]store.ReleaseAdoption, 0, len(list))
 	for _, item := range list {
 		if item.Kind == adoptionKindPackage {
 			out = append(out, item)
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].RequestedAt.After(out[j].RequestedAt) })
 	return out, nil
 }
 
-// installedTree reports whether tree is the release tree of an earlier
-// Library install of package name on this computer: the owner may replace
-// it with another release (another track's, for review).
-func installedTree(prior []store.ReleaseAdoption, name, tree string) bool {
-	for _, item := range prior {
-		if item.Package == name && item.Action == packageActionInstall && item.ReleaseTreeHash == tree {
-			return true
+// currentPackageInstalls folds runtime records (newest first) into the
+// installed set: per package, its latest runtime record, when that is an
+// install. Source-patch records from before runtime install are not part
+// of it: what they did is in the source tree.
+func currentPackageInstalls(records []store.ReleaseAdoption) map[string]*store.ReleaseAdoption {
+	out := map[string]*store.ReleaseAdoption{}
+	seen := map[string]bool{}
+	for i := range records {
+		item := &records[i]
+		if item.Mode != store.ReleaseAdoptionModeRuntime || seen[item.Package] {
+			continue
+		}
+		seen[item.Package] = true
+		if item.Action == packageActionInstall {
+			out[item.Package] = item
 		}
 	}
-	return false
+	return out
 }
 
-// packageInstallLive reports whether an attempt still answers a repeat: its
-// operation is in flight or applied, or it has none yet and is recent.
-func (rt *Runtime) packageInstallLive(ctx context.Context, adoption store.ReleaseAdoption) bool {
-	view := rt.adoptionView(ctx, adoption)
-	if view.Operation == nil {
-		// An attempt whose desks already ended its work without an
-		// operation (a refused Cast, say) is over: the owner may retry
-		// at once rather than after the quiet window.
-		if rt.installWorkEnded(ctx, adoption) {
-			return false
-		}
-		return time.Since(adoption.RequestedAt) < packageInstallQuietWindow
+// adoptionView says where one record stands among all of the computer's
+// records (newest first).
+func (rt *Runtime) adoptionView(item store.ReleaseAdoption, all []store.ReleaseAdoption) ReleaseAdoptionView {
+	view := ReleaseAdoptionView{ReleaseAdoption: item}
+	if item.Mode != store.ReleaseAdoptionModeRuntime {
+		view.State = installStateSource
+		return view
 	}
-	switch view.Operation.State {
-	case selfdev.StateFailed, selfdev.StateRejected, selfdev.StateRolledBack, selfdev.StateApplied:
-		return false
-	}
-	return true
-}
-
-// installWorkEnded reports whether the attempt's trajectory has work items
-// and none is open. An install trajectory is a lifecycle trajectory
-// (StartLifecycle), so it is read from the lifecycle snapshot; a lookup
-// failure, no trajectory or no work items reads as not ended.
-func (rt *Runtime) installWorkEnded(ctx context.Context, adoption store.ReleaseAdoption) bool {
-	if rt.store == nil || strings.TrimSpace(adoption.TrajectoryID) == "" {
-		return false
-	}
-	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, adoption.OwnerID, adoption.ComputerID, adoption.TrajectoryID)
-	if err != nil || len(snapshot.WorkItems) == 0 {
-		return false
-	}
-	for _, item := range snapshot.WorkItems {
-		if item.Status == types.WorkItemOpen {
-			return false
+	var latest *store.ReleaseAdoption
+	for i := range all {
+		if all[i].Mode == store.ReleaseAdoptionModeRuntime && all[i].Package == item.Package {
+			latest = &all[i]
+			break
 		}
 	}
-	return true
-}
-
-// packageInstalledNow is the artifact check of an install: this computer's
-// source HEAD holds the release's tree at the package root (an uninstall:
-// holds nothing there).
-func (rt *Runtime) packageInstalledNow(ctx context.Context, adoption store.ReleaseAdoption) bool {
-	repo := rt.releaseRepo()
-	if repo == "" || adoption.Package == "" || !objectgraph.ValidPackageName(adoption.Package) {
-		return false
-	}
-	tree, present, err := pkgrelease.Subtree(ctx, repo, "HEAD", pkgrelease.Root(adoption.Package))
-	if err != nil {
-		return false
-	}
-	if adoption.Action == packageActionUninstall {
-		return !present
-	}
-	return present && tree == adoption.ReleaseTreeHash
-}
-
-// packageInstallRequestText is the owner's request to this computer's desks.
-func packageInstallRequestText(releaseID string, rec pkgrelease.Record, action string, plan pkgrelease.InstallPlan, patchSHA string) string {
-	root := rec.Source.Root
-	what := fmt.Sprintf("Install app package %s from Library release package:%s on this computer", rec.Package.Name, releaseID)
-	change := fmt.Sprintf("The patch writes the release's tree into %s/ and changes nothing outside it.", root)
+	inForce := latest != nil && latest.AdoptionID == item.AdoptionID
 	switch {
-	case action == packageActionUninstall:
-		what = fmt.Sprintf("Uninstall app package %s (Library release package:%s) from this computer", rec.Package.Name, releaseID)
-		change = fmt.Sprintf("The patch removes %s/ and changes nothing outside it.", root)
-	case plan.LocalPresent:
-		change = fmt.Sprintf("The patch replaces this computer's %s/ with the release's tree and changes nothing outside it.", root)
+	case inForce && item.Action == packageActionInstall:
+		view.State = installStateInstalled
+		_, err := rt.packageModules.Read(item.ModuleSHA256)
+		view.ModuleAvailable = err == nil
+	case inForce:
+		view.State = installStateUninstalled
+	default:
+		view.State = installStateReplaced
 	}
-	// The publisher's declared test command is never run here: the desks
-	// apply the verified tree and run the build, nothing the release names.
-	check := "git apply --check --reverse /selfdev/adoption/source.patch (it succeeds only when the patch is applied)"
-	return strings.Join([]string{
-		what + ": change this computer itself by applying the verified install patch, and change nothing else. This is the owner's install from the Library; do not edit the package.",
-		fmt.Sprintf("The release was published by computer %s (track %s) from its operation %s. The install patch (sha256 %s) was planned against this computer's own tree. %s", rec.Publisher.ComputerID, rec.Track, rec.Operation.OperationID, patchSHA, change),
-		"Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision, and incorporate management's answer when it arrives.",
-		"Management: Cast it to engineering verbatim; then Verify the frozen bundle that engineering's final Report names, and answer this request.",
-		"Engineering: the verified patch is mounted read only in your capsule at /selfdev/adoption/source.patch, with the release record at /selfdev/adoption/release.json.",
-		"From /workspace/platform run: git apply /selfdev/adoption/source.patch. If it does not apply, report the conflict and do not Freeze.",
-		"Then run the frontend build (npm run build in frontend, which runs scripts/check-packages.mjs). If the package check or the build fails, report its message and do not Freeze: nothing is installed.",
-		"Deterministic check, to run in the capsule before freezing: " + check + ".",
-		"Then freeze the candidate with choir.Freeze and complete.",
-	}, " ")
+	view.PatchMatchesRelease = inForce
+	return view
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"log"
 	"net/http"
 	"os"
@@ -492,7 +493,11 @@ type Runtime struct {
 	sourceBaseFetchInflight chan struct{}
 	sourceBaseFetchLast     *sourceproj.FetchResult
 	sourceBaseFetchTune     *sourceBaseFetchTuning
-	promptSubmitter         PromptSubmitter
+	// Runtime install (S12, package_install.go): the module builder, the
+	// per-computer module store, and one install or uninstall at a time.
+	packageBuilder   PackageModuleBuilder
+	packageModules   pkgruntime.Store
+	packageInstallMu sync.Mutex
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex
@@ -1032,6 +1037,15 @@ func WithSelfDevelopmentControl(credentials *selfdev.GuestCredentials) RuntimeOp
 // WithOwnerRecoveryControl wires platform-control credentials for owner-recovery
 // checkpoint publication only. It does not enable the effects mode/materializer
 // surface that WithSelfDevelopmentControl gates.
+// WithPackageRuntime binds runtime install (S12): the module builder and
+// the module store directory, outside the source tree.
+func WithPackageRuntime(builder PackageModuleBuilder, storeDir string) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.packageBuilder = builder
+		rt.packageModules = pkgruntime.Store{Dir: strings.TrimSpace(storeDir)}
+	}
+}
+
 func WithOwnerRecoveryControl(credentials *selfdev.GuestCredentials) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.ownerRecoveryControl = credentials

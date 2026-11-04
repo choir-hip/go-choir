@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -54,7 +55,22 @@ type ReleaseAdoption struct {
 	Package string `json:"package,omitempty"`
 	Action  string `json:"action,omitempty"`
 	Attempt int    `json:"attempt,omitempty"`
+	// Runtime install (S12, docs/design/s12-runtime-install-build-2026-11-04.md):
+	// Mode is "runtime" for an install or uninstall that changed the
+	// computer's installed package set, not its source; such a record is
+	// written only after the change is done, and it has no trajectory.
+	// ModuleSHA256 names the built module in the computer's module store,
+	// RequiresSDK the shell SDK range it needs, and Manifest the package's
+	// manifest bytes, from which the shell lists the app.
+	Mode         string          `json:"mode,omitempty"`
+	ModuleSHA256 string          `json:"module_sha256,omitempty"`
+	ModuleABI    string          `json:"module_abi,omitempty"`
+	RequiresSDK  string          `json:"requires_sdk,omitempty"`
+	Manifest     json.RawMessage `json:"manifest,omitempty"`
 }
+
+// ReleaseAdoptionModeRuntime marks a runtime install record (S12).
+const ReleaseAdoptionModeRuntime = "runtime"
 
 func releaseAdoptionKey(computerID, adoptionID string) string {
 	return strings.TrimSpace(computerID) + "\x00" + strings.TrimSpace(adoptionID)
@@ -64,8 +80,11 @@ func releaseAdoptionKey(computerID, adoptionID string) string {
 // is written once (a repeat request reads the first).
 func (s *Store) PutReleaseAdoption(ctx context.Context, adoption ReleaseAdoption) error {
 	if strings.TrimSpace(adoption.OwnerID) == "" || strings.TrimSpace(adoption.ComputerID) == "" || strings.TrimSpace(adoption.AdoptionID) == "" ||
-		strings.TrimSpace(adoption.ReleaseID) == "" || strings.TrimSpace(adoption.TrajectoryID) == "" {
-		return fmt.Errorf("release adoption: owner, computer, adoption, release and trajectory are required")
+		strings.TrimSpace(adoption.ReleaseID) == "" {
+		return fmt.Errorf("release adoption: owner, computer, adoption and release are required")
+	}
+	if adoption.Mode != ReleaseAdoptionModeRuntime && strings.TrimSpace(adoption.TrajectoryID) == "" {
+		return fmt.Errorf("release adoption: a trajectory is required")
 	}
 	if _, err := s.GetReleaseAdoption(ctx, adoption.OwnerID, adoption.ComputerID, adoption.AdoptionID); err == nil {
 		return fmt.Errorf("release adoption %s already recorded", adoption.AdoptionID)
@@ -112,25 +131,6 @@ func (s *Store) GetReleaseAdoption(ctx context.Context, ownerID, computerID, ado
 // ListReleaseAdoptions returns the computer's adoptions, newest first.
 func (s *Store) ListReleaseAdoptions(ctx context.Context, ownerID, computerID string) ([]ReleaseAdoption, error) {
 	return s.listReleaseAdoptions(ctx, ownerID, []objectgraph.JSONFieldMatch{{JSONPath: "$.computer_id", Value: strings.TrimSpace(computerID)}})
-}
-
-// ReleaseAdoptionForTrajectory returns the adoption whose request opened the
-// trajectory, or ErrNotFound.
-func (s *Store) ReleaseAdoptionForTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string) (ReleaseAdoption, error) {
-	if strings.TrimSpace(trajectoryID) == "" {
-		return ReleaseAdoption{}, ErrNotFound
-	}
-	list, err := s.listReleaseAdoptions(ctx, ownerID, []objectgraph.JSONFieldMatch{
-		{JSONPath: "$.computer_id", Value: strings.TrimSpace(computerID)},
-		{JSONPath: "$.trajectory_id", Value: strings.TrimSpace(trajectoryID)},
-	})
-	if err != nil {
-		return ReleaseAdoption{}, err
-	}
-	if len(list) == 0 {
-		return ReleaseAdoption{}, ErrNotFound
-	}
-	return list[0], nil
 }
 
 func (s *Store) listReleaseAdoptions(ctx context.Context, ownerID string, matches []objectgraph.JSONFieldMatch) ([]ReleaseAdoption, error) {

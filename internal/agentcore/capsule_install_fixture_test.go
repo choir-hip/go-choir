@@ -41,41 +41,25 @@ type capsuleInstallFixture struct {
 
 func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 	t.Helper()
-	const computerID = "computer-b"
-	rt, _, _ := releaseTestRuntime(t, computerID)
-	repo, base := releaseSourceRepo(t)
-	rt.releaseSourceDir = repo
-	_, id, raw, treePatch := publishedPackage(t, repo, base, "track-a", map[string]string{
+	e := newInstallEnv(t)
+	_, id, raw, treePatch := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
 		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
 	})
-	submitter := &fakePromptSubmitter{}
-	rt.SetPromptSubmitter(submitter.submit)
-	h := NewAPIHandler(rt)
-	adoptions := "/api/computers/" + computerID + "/self-development/adoptions"
+	adoptions := "/api/computers/" + e.computer + "/self-development/adoptions"
 	call := func(method string, body []byte) capsuleInstallAnswer {
-		w := releaseRouterCall(t, h, method, adoptions, "owner-b", computerID, body)
+		w := releaseRouterCall(t, e.h, method, adoptions, e.owner, e.computer, body)
 		return capsuleInstallAnswer{Status: w.Code, Body: json.RawMessage(w.Body.Bytes())}
 	}
-	body := installBody(t, id, raw, treePatch, "")
-
-	// A name taken: this computer holds its own package of that name.
-	taken := t.TempDir()
-	releaseGit(t, taken, "clone", "-q", repo, ".")
-	dir := filepath.Join(taken, "frontend", "src", "packages", installName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "App.svelte"), []byte("<p>mine</p>\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	releaseGit(t, taken, "add", "-A")
-	releaseGit(t, taken, "commit", "-q", "-m", "mine")
-	rt.releaseSourceDir = taken
-	refusal := call(http.MethodPost, body)
-	rt.releaseSourceDir = repo
-	if refusal.Status != http.StatusConflict {
+	// The refusal: another owner's release (runtime install runs the app in
+	// the shell origin, so only the owner's own releases install before S13).
+	_, otherID, otherRaw, otherTree := publishedPackage(t, e.repo, e.base, "owner-x", map[string]string{
+		"choir-package.json": installManifest("Theirs"), "App.svelte": "<p>theirs</p>\n",
+	})
+	refusal := call(http.MethodPost, installBody(t, otherID, otherRaw, otherTree, ""))
+	if refusal.Status != http.StatusForbidden {
 		t.Fatalf("refusal = %d %s", refusal.Status, refusal.Body)
 	}
+	body := installBody(t, id, raw, treePatch, "")
 	created := call(http.MethodPost, body)
 	repeat := call(http.MethodPost, body)
 	list := call(http.MethodGet, nil)
@@ -109,14 +93,14 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		}
 	})
 	refusal = norm(refusal, func(v map[string]any) {
-		v["error"] = "this computer holds its own package of that name; it is never overwritten"
+		v["error"] = "this release was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet"
 	})
 	return capsuleInstallFixture{
 		Fixture: "capsule-install",
 		Note: "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go " +
 			"(CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. " +
 			"Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. " +
-			"Modelled simply: the owner and times are fixed, a new package (same_base), and a release is installed or refused (package_name_taken) by its package, not by a tree.",
+			"Modelled simply: the owner and times are fixed, every install is a runtime install in force (state installed), and a release is installed or refused (cross_owner_before_frame) by its package, not by its publisher.",
 		RefusalPackage: "slides-next",
 		Created:        created, Repeat: repeat, List: list, Refusal: refusal,
 	}
@@ -203,7 +187,7 @@ func TestCapsuleInstallFixtureMatchesAdoptionHandler(t *testing.T) {
 		Error, Reason string
 	}
 	_ = json.Unmarshal(held.Refusal.Body, &refusal)
-	if refusal.Reason != "package_name_taken" {
+	if refusal.Reason != "cross_owner_before_frame" {
 		t.Fatalf("refusal = %s", held.Refusal.Body)
 	}
 }

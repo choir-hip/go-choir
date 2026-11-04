@@ -103,18 +103,18 @@ func (e *installProxyEnv) send(t *testing.T, body, secret string) *httptest.Resp
 	return response
 }
 
-func installRecord(t *testing.T, tree []byte) (pkgrelease.Record, string, []byte) {
+func installRecord(t *testing.T, tree []byte, publisherOwner string) (pkgrelease.Record, string, []byte) {
 	t.Helper()
 	blob := pkgrelease.Blob{SHA256: computerevent.DigestBytes(tree), Bytes: len(tree)}
 	rec := pkgrelease.Record{
-		Schema: pkgrelease.Schema, Package: pkgrelease.Package{Name: "demo-next", ManifestVersion: "1.0.0"}, Track: "track-a",
+		Schema: pkgrelease.Schema, Package: pkgrelease.Package{Name: "demo-next", ManifestVersion: "1.0.0"}, Track: publisherOwner,
 		Parent: pkgrelease.Parent{Kind: pkgrelease.ParentBase, Commit: strings.Repeat("1", 40), Tree: pkgrelease.EmptyTree},
 		Source: pkgrelease.Source{
 			Root: pkgrelease.Root("demo-next"), Tree: strings.Repeat("2", 40), TreePatch: blob, ReviewPatch: blob,
 			ChangedPaths: []string{pkgrelease.Root("demo-next") + "/App.svelte"}, BuiltOn: strings.Repeat("1", 40),
 		},
 		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("3", 64), ABI: "choir.app-frontend/svelte-inline/v1"},
-		Publisher: pkgrelease.Publisher{OwnerID: "track-a", ComputerID: "computer-p"},
+		Publisher: pkgrelease.Publisher{OwnerID: publisherOwner, ComputerID: "computer-p"},
 		Operation: pkgrelease.Operation{OperationID: "op-1", BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
 	}
 	id, err := rec.ReleaseID()
@@ -131,7 +131,7 @@ func installRecord(t *testing.T, tree []byte) (pkgrelease.Record, string, []byte
 func TestPackageInstallIsTheOwnersActAndCarriesOnlyTheStoresVerifiedRelease(t *testing.T) {
 	env := newInstallProxyEnv(t)
 	tree := []byte("diff --git a/frontend/src/packages/demo-next/App.svelte b/frontend/src/packages/demo-next/App.svelte\n")
-	_, id, raw := installRecord(t, tree)
+	_, id, raw := installRecord(t, tree, env.user)
 	state := pkgrelease.StateListed
 	env.view = func() (int, []byte) {
 		out, _ := json.Marshal(map[string]any{"release_id": id, "record": json.RawMessage(raw), "listing": map[string]any{"state": state}})
@@ -168,12 +168,27 @@ func TestPackageInstallIsTheOwnersActAndCarriesOnlyTheStoresVerifiedRelease(t *t
 		return http.StatusOK, out
 	}
 	// F1: a supplied record that does not hash to the id.
-	tampered := strings.Replace(string(raw), `"track":"track-a"`, `"track":"track-z"`, 1)
+	tampered := strings.Replace(string(raw), `"operation_id":"op-1"`, `"operation_id":"op-z"`, 1)
 	refused("F1", `{"release_id":"`+id+`","record":`+tampered+`}`, http.StatusUnprocessableEntity, "release_digest_mismatch")
 	// F3: the store's tree bytes are not the record's.
 	env.blob = func() (int, []byte) { return http.StatusOK, append(append([]byte{}, tree...), 'x') }
 	refused("F3", body, http.StatusConflict, "patch_digest_mismatch")
 	env.blob = func() (int, []byte) { return http.StatusOK, tree }
+
+	// S12: another owner's release runs in the shell origin only after the
+	// sandboxed frame (S13); its install is refused here, its uninstall is not.
+	_, otherID, otherRaw := installRecord(t, tree, "someone-else")
+	viewOf := env.view
+	env.view = func() (int, []byte) {
+		out, _ := json.Marshal(map[string]any{"release_id": otherID, "record": json.RawMessage(otherRaw), "listing": map[string]any{"state": state}})
+		return http.StatusOK, out
+	}
+	refused("S12 cross owner", `{"release_id":"`+otherID+`"}`, http.StatusForbidden, "cross_owner_before_frame")
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+otherID+`","action":"uninstall"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
+		t.Fatalf("S12 cross-owner uninstall = %d %s", rec.Code, rec.Body.String())
+	}
+	env.view = viewOf
 
 	// P1: installed, with the store's record and verified tree, read as the
 	// authenticated owner.

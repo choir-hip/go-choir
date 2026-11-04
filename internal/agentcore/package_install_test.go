@@ -11,29 +11,34 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime/runtimetest"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Package install (docs/design/package-install-2026-11-04.md), failure
-// modes written before the code:
+// Runtime install (docs/design/s12-runtime-install-build-2026-11-04.md),
+// failure modes written before the code:
 //
 //	F1  a record whose bytes do not hash to the id is installed;
-//	F3  tree bytes that are not the record's are staged;
-//	F6  a first-party package or a local change is overwritten;
-//	F10 a crash-closed attempt answers "already installed" forever;
-//	F11 an uninstall removes something that is not the release;
-//	F12 an install without the proxy's tree reaches the desks;
-//	I5  a refusal leaves a trace: a prompt, an install record, a staging;
-//	I6  the staged patch, applied to the computer's tree, is not the
-//	    release's tree at the root, or touches anything else;
-//	I7  "installed" is reported before the tree holds the release;
-//	I8  another track's release of the same package cannot replace an
-//	    earlier Library install (the owner's review of several tracks).
+//	F3  tree bytes that are not the record's are built;
+//	S1  another owner's release runs in the shell origin (before S13's frame);
+//	S2  an install changes the source tree, asks the desks, or records an
+//	    install before its module is stored;
+//	S3  a repeat install builds and records again;
+//	S4  another track's release of the same package does not replace the
+//	    earlier one, or the earlier record still reads as in force;
+//	S5  an uninstall removes a release that is not the one in force, or
+//	    leaves the package listed or its module served;
+//	S6  an install whose module left the store (a restore onto a fresh
+//	    store) reads as installed and is never rebuilt;
+//	S7  a failed build leaves a record or a module;
+//	S8  a computer without a builder or store half-installs;
+//	S9  the module route serves bytes no install in force names, or bytes
+//	    that do not match their digest;
+//	S10 the installed list or a module is served without the owner.
 
 const installName = "demo-next"
 
@@ -57,7 +62,8 @@ func installManifest(title string) string {
 }
 
 // publishedPackage is a new-package release of demo-next whose files are
-// files, on track, built on base in repo, the way a publisher makes one.
+// files, on track (its publisher's owner id), built on base in repo, the way
+// a publisher makes one.
 func publishedPackage(t *testing.T, repo, base, track string, files map[string]string) (pkgrelease.Record, string, json.RawMessage, []byte) {
 	t.Helper()
 	ctx := context.Background()
@@ -66,8 +72,6 @@ func publishedPackage(t *testing.T, repo, base, track string, files map[string]s
 	for name, content := range files {
 		full[root+"/"+name] = content
 	}
-	// The package tree's objects, written into repo the way a publisher's
-	// own repository holds them; no work tree or ref changes.
 	env := []string{"GIT_INDEX_FILE=" + filepath.Join(t.TempDir(), "index")}
 	gitIn(t, repo, env, "", "read-tree", "--empty")
 	for path, content := range full {
@@ -137,13 +141,15 @@ func releaseRouterCall(t *testing.T, h *APIHandler, method, path, owner, compute
 	return w
 }
 
-type fakePromptSubmitter struct {
-	calls []string
-}
-
-func (f *fakePromptSubmitter) submit(_ context.Context, ownerID, text, commandID string) (PromptSubmission, error) {
-	f.calls = append(f.calls, text)
-	return PromptSubmission{SubmissionID: "submission-1", TrajectoryID: "traj-adopt-1", DocID: "doc-adopt-1"}, nil
+func packagesCall(t *testing.T, h *APIHandler, path, owner string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, path, nil)
+	if owner != "" {
+		r.Header.Set("X-Authenticated-User", owner)
+	}
+	w := httptest.NewRecorder()
+	h.HandlePackages(w, r)
+	return w
 }
 
 func installBody(t *testing.T, id string, record json.RawMessage, treePatch []byte, action string) []byte {
@@ -162,233 +168,278 @@ func installBody(t *testing.T, id string, record json.RawMessage, treePatch []by
 	return raw
 }
 
-// commitStaged applies a staged install patch to repo and commits it: what
-// the self-development apply and the source projection leave.
-func commitStaged(t *testing.T, repo, staged string) {
+// fakeModuleBuilder verifies the release as the real builder does and
+// returns a module naming the release tree, without node.
+type fakeModuleBuilder struct {
+	builds int
+	fail   error
+}
+
+func (f *fakeModuleBuilder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []byte) (pkgruntime.Module, error) {
+	if err := pkgrelease.VerifyContent(ctx, rec, treePatch); err != nil {
+		return pkgruntime.Module{}, err
+	}
+	if f.fail != nil {
+		return pkgruntime.Module{}, f.fail
+	}
+	f.builds++
+	raw := []byte("export const abi='choir.app-frontend/module/v1';export const requires_sdk='^1.0';export const sdk_imports=[];export function mount(){} // " + rec.Source.Tree + "\n")
+	return pkgruntime.Module{SHA256: computerevent.DigestBytes(raw), Size: len(raw), ABI: pkgruntime.ModuleABI, RequiresSDK: "^1.0", Manifest: json.RawMessage(`{"name":"` + rec.Package.Name + `"}`), Bytes: raw}, nil
+}
+
+type installEnv struct {
+	rt       *Runtime
+	h        *APIHandler
+	repo     string
+	base     string
+	builder  *fakeModuleBuilder
+	computer string
+	owner    string
+}
+
+func newInstallEnv(t *testing.T) *installEnv {
 	t.Helper()
-	releaseGit(t, repo, "apply", filepath.Join(staged, "source.patch"))
-	releaseGit(t, repo, "add", "-A")
-	releaseGit(t, repo, "commit", "-q", "-m", "applied")
-}
-
-func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *testing.T) {
-	const computerID, owner = "computer-b", "owner-b"
-	rt, _, updaterRoot := releaseTestRuntime(t, computerID)
-	repo, base := releaseSourceRepo(t)
-	rt.releaseSourceDir = repo
-	submitter := &fakePromptSubmitter{}
-	rt.SetPromptSubmitter(submitter.submit)
-	h := NewAPIHandler(rt)
-	route := "/api/computers/" + computerID + "/self-development/adoptions"
-	root := pkgrelease.Root(installName)
-
-	rec, id, raw, treePatch := publishedPackage(t, repo, base, "track-a", map[string]string{
-		"choir-package.json": installManifest("Demo A"), "App.svelte": "<p>a</p>\n",
-	})
-	call := func(body []byte) (*ReleaseAdoptionView, int, string) {
-		t.Helper()
-		w := releaseRouterCall(t, h, http.MethodPost, route, owner, computerID, body)
-		var got struct {
-			ReleaseAdoptionView
-			Reason string `json:"reason"`
-		}
-		_ = json.Unmarshal(w.Body.Bytes(), &got)
-		return &got.ReleaseAdoptionView, w.Code, got.Reason
-	}
-	noTrace := func(leg string) {
-		t.Helper()
-		list, _ := rt.store.ListReleaseAdoptions(context.Background(), owner, computerID)
-		entries, _ := os.ReadDir(filepath.Join(updaterRoot, "adoptions"))
-		if len(submitter.calls) != 0 || len(list) != 0 || len(entries) != 0 {
-			t.Fatalf("I5 %s: prompts %d, records %d, staged %d", leg, len(submitter.calls), len(list), len(entries))
-		}
-	}
-	refused := func(leg string, body []byte, status int, reason string) {
-		t.Helper()
-		if _, code, got := call(body); code != status || got != reason {
-			t.Fatalf("%s = %d %s, want %d %s", leg, code, got, status, reason)
-		}
-		noTrace(leg)
-	}
-
-	// F1: one field changed, the id kept.
-	tampered := rec
-	tampered.Track = "track-z"
-	tamperedRaw, _ := tampered.Canonical()
-	refused("F1", installBody(t, id, tamperedRaw, treePatch, ""), http.StatusUnprocessableEntity, "release_digest_mismatch")
-	// F12: no tree from the proxy.
-	refused("F12", installBody(t, id, raw, nil, ""), http.StatusConflict, "patch_unavailable")
-	// F3: other bytes.
-	refused("F3", installBody(t, id, raw, append(append([]byte{}, treePatch...), '\n'), ""), http.StatusConflict, "patch_digest_mismatch")
-	// F11: nothing to uninstall.
-	refused("F11 absent", installBody(t, id, raw, treePatch, "uninstall"), http.StatusConflict, "package_not_installed")
-	// A software release no longer installs (P8 is deleted).
-	refused("software release", installBody(t, strings.Repeat("a", 64), json.RawMessage(`{"schema":"choir.software_release.v1"}`), nil, ""), http.StatusUnprocessableEntity, "release_record_invalid")
-
-	// F6: a package of that name this computer holds that is not the
-	// release's parent, nor a Library install.
-	local := t.TempDir()
-	releaseGit(t, local, "clone", "-q", repo, ".")
-	if err := os.MkdirAll(filepath.Join(local, filepath.FromSlash(root)), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(local, filepath.FromSlash(root), "App.svelte"), []byte("<p>mine</p>\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	releaseGit(t, local, "add", "-A")
-	releaseGit(t, local, "commit", "-q", "-m", "first party")
-	rt.releaseSourceDir = local
-	refused("F6", installBody(t, id, raw, treePatch, ""), http.StatusConflict, "package_name_taken")
-	rt.releaseSourceDir = repo
-
-	// Installed: staged once, the desks asked once, recorded as a package
-	// install; not yet "in place" (I7).
-	view, code, reason := call(installBody(t, id, raw, treePatch, ""))
-	if code != http.StatusCreated || view.Kind != "package" || view.Package != installName || view.Action != "install" || view.Attempt != 1 || !view.SameBase || view.PatchMatchesRelease {
-		t.Fatalf("install = %d %s %+v", code, reason, view)
-	}
-	if len(submitter.calls) != 1 || !strings.Contains(submitter.calls[0], "package:"+id) || !strings.Contains(submitter.calls[0], "check-packages.mjs") {
-		t.Fatalf("desks' request = %q", submitter.calls)
-	}
-	staged := rt.stagedInstallDir(view.AdoptionID)
-	stagedRecord, _ := os.ReadFile(filepath.Join(staged, "release.json"))
-	if computerevent.DigestBytes(stagedRecord) != id {
-		t.Fatal("staged record is not the release")
-	}
-	if dir, err := rt.adoptionInputDir(context.Background(), owner, computerID, view.TrajectoryID); err != nil || dir != staged {
-		t.Fatalf("capsule input = %q %v", dir, err)
-	}
-	// A9: another trajectory gets nothing.
-	if other, err := rt.adoptionInputDir(context.Background(), owner, computerID, "traj-other"); err != nil || other != "" {
-		t.Fatalf("A9: another trajectory got %q, %v", other, err)
-	}
-	// A repeat answers the same install and asks nobody.
-	if again, code, _ := call(installBody(t, id, raw, treePatch, "")); code != http.StatusOK || again.AdoptionID != view.AdoptionID || len(submitter.calls) != 1 {
-		t.Fatalf("repeat = %d %+v prompts %d", code, again, len(submitter.calls))
-	}
-
-	// I6: the staged patch makes the release's tree at the root and nothing
-	// else; then the install reads as in place (I7).
-	before := releaseGit(t, repo, "rev-parse", "HEAD")
-	commitStaged(t, repo, staged)
-	if tree, present, _ := pkgrelease.Subtree(context.Background(), repo, "HEAD", root); !present || tree != rec.Source.Tree {
-		t.Fatalf("I6: root = %s present %v, want %s", tree, present, rec.Source.Tree)
-	}
-	if paths, _ := pkgrelease.DiffPaths(context.Background(), repo, before, "HEAD"); len(pkgrelease.OutsideRoot(paths, root)) != 0 {
-		t.Fatalf("I6: paths outside the root: %v", paths)
-	}
-	w := releaseRouterCall(t, h, http.MethodGet, route, owner, computerID, nil)
-	var listed struct {
-		Adoptions []ReleaseAdoptionView `json:"adoptions"`
-	}
-	if json.Unmarshal(w.Body.Bytes(), &listed) != nil || len(listed.Adoptions) != 1 || !listed.Adoptions[0].PatchMatchesRelease {
-		t.Fatalf("I7: list = %s", w.Body.String())
-	}
-
-	// I8: another track's demo-next replaces the Library install.
-	recB, idB, rawB, treePatchB := publishedPackage(t, repo, base, "track-b", map[string]string{
-		"choir-package.json": installManifest("Demo B"), "App.svelte": "<p>b</p>\n",
-	})
-	viewB, code, reason := call(installBody(t, idB, rawB, treePatchB, ""))
-	if code != http.StatusCreated || viewB.SameBase {
-		t.Fatalf("I8: install B = %d %s %+v", code, reason, viewB)
-	}
-	commitStaged(t, repo, rt.stagedInstallDir(viewB.AdoptionID))
-	if tree, _, _ := pkgrelease.Subtree(context.Background(), repo, "HEAD", root); tree != recB.Source.Tree {
-		t.Fatalf("I8: root = %s, want B's %s", tree, recB.Source.Tree)
-	}
-
-	// F11: A is no longer what the computer holds, so uninstalling A is
-	// refused; uninstalling B removes the root.
-	refusedCalls := len(submitter.calls)
-	if _, code, reason := call(installBody(t, id, raw, treePatch, "uninstall")); code != http.StatusConflict || reason != "package_not_installed" || len(submitter.calls) != refusedCalls {
-		t.Fatalf("F11 = %d %s", code, reason)
-	}
-	un, code, reason := call(installBody(t, idB, rawB, treePatchB, "uninstall"))
-	if code != http.StatusCreated || un.Action != "uninstall" {
-		t.Fatalf("uninstall = %d %s", code, reason)
-	}
-	commitStaged(t, repo, rt.stagedInstallDir(un.AdoptionID))
-	if _, present, _ := pkgrelease.Subtree(context.Background(), repo, "HEAD", root); present {
-		t.Fatal("uninstall left the root")
-	}
-
-	// F10: an attempt with no operation that a crash left long ago does not
-	// block a new one.
-	stale := store.ReleaseAdoption{
-		AdoptionID: packageInstallID(computerID, id, "install", 2), OwnerID: owner, ComputerID: computerID, ReleaseID: id,
-		TrajectoryID: "traj-crashed", RequestedAt: time.Now().Add(-3 * time.Hour),
-		Kind: "package", Package: installName, Action: "install", Attempt: 2, ReleaseTreeHash: rec.Source.Tree,
-	}
-	if err := rt.store.PutReleaseAdoption(context.Background(), stale); err != nil {
-		t.Fatal(err)
-	}
-	retry, code, reason := call(installBody(t, id, raw, treePatch, ""))
-	if code != http.StatusCreated || retry.Attempt != 3 {
-		t.Fatalf("F10: retry = %d %s attempt %d", code, reason, retry.Attempt)
-	}
-
-	// F10b: a recent attempt whose desks ended its work without an operation
-	// (pool, 2026-11-04: the Cast was refused at stack_base_moved) does not
-	// wait out the quiet window. Attempt 3's trajectory is a lifecycle one,
-	// as a real install's is (StartLifecycle), with one Texture work item.
-	ctx := context.Background()
-	textureAgent := currentTextureAgentID("install-doc")
-	now := time.Now().UTC()
-	start := types.StartLifecycleRequest{
-		OwnerID: owner, ComputerID: computerID, CommandID: "install-start", TrajectoryID: retry.TrajectoryID, Kind: types.TrajectoryKindTask,
-		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		SubjectRefs:     map[string]string{"artifact": "texture://documents/install-doc", "doc_id": "install-doc"},
-		InitialWork:     types.WorkItemRecord{WorkItemID: "install-work", Objective: "install", AssignedAgentID: textureAgent},
-		InitialDocument: types.Document{DocID: "install-doc", Title: "Install"},
-		InitialRevision: types.Revision{RevisionID: "install-rev", AuthorKind: types.AuthorUser, AuthorLabel: owner, Content: "Install."},
-		Agent:           types.AgentRecord{AgentID: textureAgent, OwnerID: owner, ComputerID: computerID, Profile: "texture", Role: "texture", ChannelID: "install-doc", CreatedAt: now, UpdatedAt: now},
-	}
-	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	if _, err := rt.store.StartLifecycle(ctx, start); err != nil {
-		t.Fatalf("start lifecycle: %v", err)
-	}
-	if _, code, reason := call(installBody(t, id, raw, treePatch, "")); code == http.StatusCreated {
-		t.Fatalf("F10b: an open work item must keep the attempt live, got %d %s", code, reason)
-	}
-	settle := types.SettleLifecycleWorkRequest{
-		OwnerID: owner, ComputerID: computerID, CommandID: "install-settle", TrajectoryID: retry.TrajectoryID,
-		WorkItemID: "install-work", ActingAgentID: textureAgent, ResultRef: "evidence://refused",
-	}
-	settle.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settle)
-	if _, err := rt.store.SettleLifecycleWork(ctx, settle); err != nil {
-		t.Fatalf("settle: %v", err)
-	}
-	again, code, reason := call(installBody(t, id, raw, treePatch, ""))
-	if code != http.StatusCreated || again.Attempt != 4 {
-		t.Fatalf("F10b: retry after ended work = %d %s attempt %d", code, reason, again.Attempt)
-	}
-}
-
-// A8: the capsule input is refused once the staged bytes change.
-func TestPackageInstallCapsuleInputRefusesTamperedStaging(t *testing.T) {
 	const computerID, owner = "computer-b", "owner-b"
 	rt, _, _ := releaseTestRuntime(t, computerID)
 	repo, base := releaseSourceRepo(t)
-	rt.releaseSourceDir = repo
-	submitter := &fakePromptSubmitter{}
-	rt.SetPromptSubmitter(submitter.submit)
-	_, id, raw, treePatch := publishedPackage(t, repo, base, "track-a", map[string]string{
+	builder := &fakeModuleBuilder{}
+	rt.packageBuilder = builder
+	rt.packageModules = pkgruntime.Store{Dir: t.TempDir()}
+	return &installEnv{rt: rt, h: NewAPIHandler(rt), repo: repo, base: base, builder: builder, computer: computerID, owner: owner}
+}
+
+func (e *installEnv) post(t *testing.T, body []byte) (int, ReleaseAdoptionView, string) {
+	t.Helper()
+	w := releaseRouterCall(t, e.h, http.MethodPost, "/api/computers/"+e.computer+"/self-development/adoptions", e.owner, e.computer, body)
+	var view ReleaseAdoptionView
+	var refusal releaseAPIError
+	_ = json.Unmarshal(w.Body.Bytes(), &view)
+	_ = json.Unmarshal(w.Body.Bytes(), &refusal)
+	return w.Code, view, refusal.Reason
+}
+
+func (e *installEnv) list(t *testing.T) []ReleaseAdoptionView {
+	t.Helper()
+	w := releaseRouterCall(t, e.h, http.MethodGet, "/api/computers/"+e.computer+"/self-development/adoptions", e.owner, e.computer, nil)
+	var body struct {
+		Adoptions []ReleaseAdoptionView `json:"adoptions"`
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &body) != nil {
+		t.Fatalf("list = %d %s", w.Code, w.Body.String())
+	}
+	return body.Adoptions
+}
+
+func (e *installEnv) installed(t *testing.T) []InstalledPackage {
+	t.Helper()
+	w := packagesCall(t, e.h, packagesInstalledPath, e.owner)
+	var body struct {
+		Packages []InstalledPackage `json:"packages"`
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &body) != nil {
+		t.Fatalf("installed = %d %s", w.Code, w.Body.String())
+	}
+	return body.Packages
+}
+
+func (e *installEnv) records(t *testing.T) int {
+	t.Helper()
+	list, err := e.rt.packageInstalls(context.Background(), e.owner, e.computer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(list)
+}
+
+func TestRuntimeInstallInstallsReplacesUninstallsAndReinstalls(t *testing.T) {
+	e := newInstallEnv(t)
+	head := releaseGit(t, e.repo, "rev-parse", "HEAD")
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
 		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
 	})
-	w := releaseRouterCall(t, NewAPIHandler(rt), http.MethodPost, "/api/computers/"+computerID+"/self-development/adoptions", owner, computerID, installBody(t, id, raw, treePatch, ""))
-	var view ReleaseAdoptionView
-	if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &view) != nil {
-		t.Fatalf("install = %d %s", w.Code, w.Body.String())
+
+	// F1: a record that does not hash to the id.
+	tampered := strings.Replace(string(raw), `"op-owner-b"`, `"op-owner-z"`, 1)
+	if code, _, reason := e.post(t, installBody(t, id, json.RawMessage(tampered), tree, "")); code != http.StatusUnprocessableEntity || reason != "release_digest_mismatch" {
+		t.Fatalf("F1 = %d %s", code, reason)
 	}
-	patch := filepath.Join(rt.stagedInstallDir(view.AdoptionID), "source.patch")
-	if err := os.Chmod(patch, 0o644); err != nil {
+	// F3: other bytes.
+	if code, _, reason := e.post(t, installBody(t, id, raw, append(append([]byte{}, tree...), 'x'), "")); code != http.StatusConflict || reason != "patch_digest_mismatch" {
+		t.Fatalf("F3 = %d %s", code, reason)
+	}
+	// S1: another owner's release.
+	_, otherID, otherRaw, otherTree := publishedPackage(t, e.repo, e.base, "owner-x", map[string]string{
+		"choir-package.json": installManifest("Theirs"), "App.svelte": "<p>theirs</p>\n",
+	})
+	if code, _, reason := e.post(t, installBody(t, otherID, otherRaw, otherTree, "")); code != http.StatusForbidden || reason != "cross_owner_before_frame" {
+		t.Fatalf("S1 = %d %s", code, reason)
+	}
+	// S7: a failed build.
+	e.builder.fail = errorsJoinBuild()
+	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusUnprocessableEntity || reason != "package_build_failed" {
+		t.Fatalf("S7 = %d %s", code, reason)
+	}
+	e.builder.fail = nil
+	if n := e.records(t); n != 0 {
+		t.Fatalf("refusals left %d records", n)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(e.rt.packageModules.Dir, "modules")); len(entries) != 0 {
+		t.Fatalf("refusals left modules %v", entries)
+	}
+
+	// S2: installed, with no source change.
+	code, view, _ := e.post(t, installBody(t, id, raw, tree, ""))
+	if code != http.StatusCreated || view.State != installStateInstalled || !view.PatchMatchesRelease || !view.ModuleAvailable || view.Mode != store.ReleaseAdoptionModeRuntime || view.TrajectoryID != "" {
+		t.Fatalf("S2 = %d %+v", code, view)
+	}
+	if got := releaseGit(t, e.repo, "rev-parse", "HEAD"); got != head {
+		t.Fatalf("S2: the source moved %s -> %s", head, got)
+	}
+	pkgs := e.installed(t)
+	if len(pkgs) != 1 || pkgs[0].Name != installName || pkgs[0].ReleaseID != id || !pkgs[0].Available || pkgs[0].RequiresSDK != "^1.0" ||
+		pkgs[0].Module.ABI != pkgruntime.ModuleABI || pkgs[0].Module.URL != packageModulesPrefix+view.ModuleSHA256+".js" {
+		t.Fatalf("S2 installed = %+v", pkgs)
+	}
+	w := packagesCall(t, e.h, pkgs[0].Module.URL, e.owner)
+	if w.Code != http.StatusOK || computerevent.DigestBytes(w.Body.Bytes()) != view.ModuleSHA256 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/javascript") {
+		t.Fatalf("S2 module = %d %s", w.Code, w.Header())
+	}
+
+	// S3: a repeat answers the install, with no new build or record.
+	code, again, _ := e.post(t, installBody(t, id, raw, tree, ""))
+	if code != http.StatusOK || again.AdoptionID != view.AdoptionID || e.builder.builds != 1 || e.records(t) != 1 {
+		t.Fatalf("S3 = %d %s builds %d", code, again.AdoptionID, e.builder.builds)
+	}
+
+	// S4: another release of the same package replaces it.
+	_, id2, raw2, tree2 := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": installManifest("Demo two"), "App.svelte": "<p>demo two</p>\n",
+	})
+	code, view2, _ := e.post(t, installBody(t, id2, raw2, tree2, ""))
+	if code != http.StatusCreated || view2.State != installStateInstalled {
+		t.Fatalf("S4 = %d %+v", code, view2)
+	}
+	list := e.list(t)
+	if len(list) != 2 || list[0].ReleaseID != id2 || list[0].State != installStateInstalled || list[1].State != installStateReplaced || list[1].PatchMatchesRelease {
+		t.Fatalf("S4 list = %+v", list)
+	}
+	if pkgs := e.installed(t); len(pkgs) != 1 || pkgs[0].ReleaseID != id2 {
+		t.Fatalf("S4 installed = %+v", pkgs)
+	}
+	// S9: the replaced module is no longer served.
+	if w := packagesCall(t, e.h, packageModulesPrefix+view.ModuleSHA256+".js", e.owner); w.Code != http.StatusNotFound {
+		t.Fatalf("S9: a replaced module = %d", w.Code)
+	}
+
+	// S5: uninstall only what is in force.
+	if code, _, reason := e.post(t, installBody(t, id, raw, nil, "uninstall")); code != http.StatusConflict || reason != "package_not_installed" {
+		t.Fatalf("S5 replaced = %d %s", code, reason)
+	}
+	code, un, _ := e.post(t, installBody(t, id2, raw2, nil, "uninstall"))
+	if code != http.StatusCreated || un.State != installStateUninstalled || !un.PatchMatchesRelease {
+		t.Fatalf("S5 = %d %+v", code, un)
+	}
+	if pkgs := e.installed(t); len(pkgs) != 0 {
+		t.Fatalf("S5 installed = %+v", pkgs)
+	}
+	if w := packagesCall(t, e.h, packageModulesPrefix+view2.ModuleSHA256+".js", e.owner); w.Code != http.StatusNotFound {
+		t.Fatalf("S5: an uninstalled module = %d", w.Code)
+	}
+
+	// Reinstall: a new attempt, in force again.
+	code, re, _ := e.post(t, installBody(t, id2, raw2, tree2, ""))
+	if code != http.StatusCreated || re.Attempt != 2 || re.State != installStateInstalled {
+		t.Fatalf("reinstall = %d %+v", code, re)
+	}
+
+	// S6: the module left the store; the repeat rebuilds it.
+	if err := os.RemoveAll(e.rt.packageModules.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(patch, []byte("tampered"), 0o644); err != nil {
+	if pkgs := e.installed(t); len(pkgs) != 1 || pkgs[0].Available {
+		t.Fatalf("S6 installed = %+v", pkgs)
+	}
+	code, rebuilt, _ := e.post(t, installBody(t, id2, raw2, tree2, ""))
+	if code != http.StatusCreated || rebuilt.State != installStateInstalled || !rebuilt.ModuleAvailable {
+		t.Fatalf("S6 = %d %+v", code, rebuilt)
+	}
+}
+
+func errorsJoinBuild() error {
+	return errors.Join(pkgruntime.ErrBuild, errors.New("vite: x"))
+}
+
+func TestRuntimeInstallNeedsItsBuilderAndOwner(t *testing.T) {
+	e := newInstallEnv(t)
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
+	})
+	// S8
+	e.rt.packageBuilder = nil
+	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusServiceUnavailable || reason != "install_unavailable" {
+		t.Fatalf("S8 = %d %s", code, reason)
+	}
+	e.rt.packageBuilder = e.builder
+	if code, _, _ := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusCreated {
+		t.Fatalf("install = %d", code)
+	}
+	// S10
+	if w := packagesCall(t, e.h, packagesInstalledPath, ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("S10 list = %d", w.Code)
+	}
+	pkgs := e.installed(t)
+	if w := packagesCall(t, e.h, pkgs[0].Module.URL, ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("S10 module = %d", w.Code)
+	}
+	// Another owner of this computer's store sees none of it.
+	w := packagesCall(t, e.h, packagesInstalledPath, "owner-x")
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), installName) {
+		t.Fatalf("another owner = %d %s", w.Code, w.Body.String())
+	}
+	// S9: a stored module whose bytes changed is not served.
+	path := filepath.Join(e.rt.packageModules.Dir, "modules", pkgs[0].Module.SHA256+".js")
+	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.adoptionInputDir(context.Background(), owner, computerID, view.TrajectoryID); !errors.Is(err, errAdoptionStagedTampered) {
-		t.Fatalf("A8: tampered staged bytes = %v", err)
+	if err := os.WriteFile(path, []byte("alert(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if w := packagesCall(t, e.h, pkgs[0].Module.URL, e.owner); w.Code != http.StatusNotFound {
+		t.Fatalf("S9 tampered = %d", w.Code)
+	}
+	if w := packagesCall(t, e.h, packageModulesPrefix+"../../etc/passwd", e.owner); w.Code != http.StatusNotFound {
+		t.Fatalf("S9 path = %d", w.Code)
+	}
+}
+
+// TestRuntimeInstallWithTheRealBuilder runs install to served module with the
+// computer's builder (node and the frontend's locked dependencies), when they
+// are installed: the module the shell fetches is the module/v1 build of the
+// release.
+func TestRuntimeInstallWithTheRealBuilder(t *testing.T) {
+	deps := runtimetest.DepsDir(t)
+	builder := pkgruntime.Builder{DepsDir: deps}
+	if deps == "" || builder.Available() != nil {
+		t.Skip("frontend/node_modules is not installed (npm ci in frontend)")
+	}
+	e := newInstallEnv(t)
+	e.rt.packageBuilder = builder
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": installManifest("Demo"),
+		"App.svelte":         "<script>\n  import { appTitle } from '../../lib/app-sdk';\n</script>\n<p data-demo>{appTitle('demo')}</p>\n",
+	})
+	code, view, reason := e.post(t, installBody(t, id, raw, tree, ""))
+	if code != http.StatusCreated || view.State != installStateInstalled || view.RequiresSDK != "^1.0" {
+		t.Fatalf("install = %d %s %+v", code, reason, view)
+	}
+	pkgs := e.installed(t)
+	if len(pkgs) != 1 || !pkgs[0].Available {
+		t.Fatalf("installed = %+v", pkgs)
+	}
+	w := packagesCall(t, e.h, pkgs[0].Module.URL, e.owner)
+	body := w.Body.String()
+	if w.Code != http.StatusOK || computerevent.DigestBytes(w.Body.Bytes()) != pkgs[0].Module.SHA256 ||
+		!strings.Contains(body, `"choir.app-frontend/module/v1"`) || !strings.Contains(body, `["appTitle"]`) {
+		t.Fatalf("module = %d (%d bytes)", w.Code, len(body))
 	}
 }

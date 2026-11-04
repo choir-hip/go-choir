@@ -134,8 +134,8 @@
 // same x-choir-fixture header and badge. An install of a catalog fixture release
 // answers the real 201 view (a repeat 200), and the installed list holds what this
 // shot installed; the state is per shot, emptied with the desktop reset. The
-// earliest release of the fixture's refusal_package answers the real refusal (409
-// package_name_taken: the computer holds its own package of that name); a release the catalog fixture lacks
+// earliest release of the fixture's refusal_package answers the real refusal (403
+// cross_owner_before_frame: another owner's release, before the sandboxed frame); a release the catalog fixture lacks
 // answers 404 release_not_published.
 //
 // Podcasts: a capsule cannot reach the podcast directory, the feed hosts, or
@@ -912,9 +912,9 @@ export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
     adoption_id: adoptionId, computer_id: computerId, release_id: releaseId,
     publisher_computer_id: (rec.publisher || {}).computer_id || '', publisher_operation_id: (rec.operation || {}).operation_id || '',
     patch_sha256: (src.tree_patch || {}).sha256 || '', release_base_commit: src.built_on || '', release_tree_hash: src.tree || '',
-    adopter_base_commit: src.built_on || '', adopter_tree_hash: src.tree || '', same_base: true,
-    package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
-    trajectory_id: `traj-adopt-${n}`, submission_id: `submission-${n}`, doc_id: `doc-adopt-${n}`,
+    same_base: true, package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
+    // A runtime install (S12) is in force when it answers: a distinct module per install.
+    module_sha256: createHash('sha256').update(`module\0${releaseId}\0${n}`).digest('hex'),
   });
   state.adoptions.unshift(view); // newest first, as the store lists
   return { status: ifx.created.status, body: clone(view) };

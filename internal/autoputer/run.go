@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"log"
 	"net/http"
 	"os"
@@ -543,6 +544,10 @@ func Run() {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development updater root wired")
 	}
+	if opt, ok := packageRuntimeOption(); ok {
+		coreOpts = append(coreOpts, opt)
+		log.Printf("autoputer: runtime package install wired")
+	}
 	if opt, ok, err := selfDevelopmentRouteOption(); err != nil {
 		boot.fatalf("autoputer: configure self-development route: %v", err)
 	} else if ok {
@@ -656,9 +661,6 @@ func Run() {
 	}
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
-	// P8: a release adoption reaches this computer's desks through the
-	// prompt bar's own submit path, as the owner's request.
-	rt.Runtime.SetPromptSubmitter(textureHandler.SubmitOwnerPrompt)
 	if err := rt.BindTextureOwner(textureHandler); err != nil {
 		boot.fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}
@@ -1025,6 +1027,26 @@ func selfDevelopmentUpdaterOption() (agentcore.RuntimeOption, bool, error) {
 		strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")),
 		strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID")),
 	), true, nil
+}
+
+// packageRuntimeOption wires runtime install (S12,
+// docs/design/s12-runtime-install-build-2026-11-04.md): the module builder
+// runs node with this computer's locked frontend dependencies
+// ($CHOIR_FRONTEND_DEPS), and the module store is CHOIR_PACKAGE_STORE, or
+// <CHOIR_UPDATER_ROOT>/packages: persistent, and outside the source tree
+// and the served release. Without both, installs answer install_unavailable.
+func packageRuntimeOption() (agentcore.RuntimeOption, bool) {
+	dir := strings.TrimSpace(os.Getenv("CHOIR_PACKAGE_STORE"))
+	if dir == "" {
+		if root := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")); root != "" {
+			dir = filepath.Join(root, "packages")
+		}
+	}
+	deps := strings.TrimSpace(os.Getenv("CHOIR_FRONTEND_DEPS"))
+	if dir == "" || deps == "" {
+		return nil, false
+	}
+	return agentcore.WithPackageRuntime(pkgruntime.Builder{DepsDir: deps}, dir), true
 }
 
 // selfDevelopmentRouteOption mounts signed computer-version route reads for
