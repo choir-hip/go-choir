@@ -104,6 +104,8 @@ One delivery per computer, each against no seed:
   marked late when the candidate froze, when (engineer, clock kind) the run
   started a build or shot job, or when it comes more than 15 minutes after
   the Cast (management); a late p1 is kept and excluded from the primary.
+  A restatement of a first statement that already settled is refused: its
+  p1 would never settle.
 - F3 The two arms differ in more than the record (the second look itself
   moves p). -> both arms are asked to restate; the arm decides only whether
   the record is shown.

@@ -423,7 +423,8 @@ func restatementRecord(p0 types.CommitmentRecord, p1 types.CommitmentPrecommit, 
 }
 
 // appendRestatements writes the p1 records once each (F4), marking them
-// late when the candidate froze, p0 already settled, or late says so (F2).
+// late when the candidate froze or late says so (F2), and refusing them when a
+// p0 already settled.
 // A replayed cell finds its own records and passes.
 func (r *rlmCallReduction) appendRestatements(ctx context.Context, rt *Runtime, in yaegikernel.StagedIntent, records []types.CommitmentRecord, shown bool, late string, engineer bool) error {
 	owner, computer := r.scope.OwnerID, r.scope.ComputerID
@@ -462,17 +463,27 @@ func (r *rlmCallReduction) appendRestatements(ctx context.Context, rt *Runtime, 
 	if !anyMissing {
 		return fmt.Errorf("reduce: restate %s: %s was already restated; a prediction is restated once (F4)", in.LocalID, records[0].SubjectRefs[types.RuleRefRestates])
 	}
+	// A first statement already settled leaves nothing to restate: its p1
+	// would never settle (a stale Cast id, review r3), so it is refused.
+	for i := range records {
+		if !missing[i] {
+			continue
+		}
+		p0 := records[i].SubjectRefs[types.RuleRefRestates]
+		settled, err := rt.store.CommitmentRecordExists(ctx, owner, computer, types.RuleResolveRecordID(p0))
+		if err != nil {
+			return fmt.Errorf("reduce: restate %s: %w", in.LocalID, err)
+		}
+		if settled {
+			return fmt.Errorf("reduce: restate %s: %s has already settled; restate only the current round's predictions, before its outcome is known (F2)", in.LocalID, p0)
+		}
+	}
 	for i := range records {
 		rec := &records[i]
 		if !missing[i] {
 			continue
 		}
 		reason := late
-		if reason == "" {
-			if settled, err := rt.store.CommitmentRecordExists(ctx, owner, computer, types.RuleResolveRecordID(rec.SubjectRefs[types.RuleRefRestates])); err == nil && settled {
-				reason = "restated after the first statement settled"
-			}
-		}
 		if reason != "" {
 			rec.SubjectRefs[types.RuleRefLate] = "true"
 			rec.SubjectRefs[types.RuleRefLateReason] = reason

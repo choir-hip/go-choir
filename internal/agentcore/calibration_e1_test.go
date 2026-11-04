@@ -241,3 +241,36 @@ func TestEngineerRestatementIsAskedOnceAndRecordedBesideP0(t *testing.T) {
 		t.Fatalf("twice: %v", err)
 	}
 }
+
+// Review r3: a restatement of a first statement that already settled (a
+// stale Cast id) is refused, never written to stay open for ever.
+func TestRestatementOfASettledClaimIsRefused(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer := "user-alice", rt.TextureComputerID()
+	run := &types.RunRecord{RunID: "run-eng", AgentID: "engineering:a1", AgentProfile: agentprofile.Engineering, OwnerID: owner, ComputerID: computer, Metadata: map[string]any{"assignment_id": "a1"}}
+	p0 := types.CommitmentRecord{SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-1:precommit:p1", Kind: types.CommitmentKindPrecommit, EmitterKind: types.CommitmentEmitterAgent,
+		Precommit: &types.CommitmentPrecommit{Question: "q", Distribution: map[string]float64{"yes": 0.8, "no": 0.2}, Resolver: types.PrecommitRuleResolver,
+			Rule: &types.PrecommitRule{Kind: types.PrecommitRuleTestsPass, AssignmentID: "a1", Since: "2026-11-04T01:00:00Z"}},
+		Provenance: types.CommitmentProvenance{AgentID: "engineering:a1", CommittedAt: "2026-11-04T01:00:00Z"}, ComputerID: computer,
+		SubjectRefs: map[string]string{"assignment": "a1", types.RuleRefStatedBy: "precommit", types.RuleRefStage: types.RuleStageFirst}}
+	settled := types.NewRuleResolveRecord(p0, types.RuleSettlement{Answer: "yes"}, time.Now())
+	for _, rec := range []types.CommitmentRecord{p0, settled} {
+		if _, err := s.AppendCommitmentRecord(ctx, owner, computer, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingCalibrationE1TwoStage, Value: true}); err != nil {
+		t.Fatal(err)
+	}
+	r := &rlmCallReduction{active: true, mb: rt, st: s, ledger: s, rec: run,
+		scope: ReductionScope{FromAgentID: "engineering:a1", OwnerID: owner, ComputerID: computer, RunID: run.RunID, CellID: "cell-2"}, restateKinds: []restateAsk{{kind: "tests_pass", p0: p0.RecordID}}}
+	rt.engineerRestateNotice(ctx, r)
+	in := yaegikernel.StagedIntent{LocalID: "r1", Kind: yaegikernel.IntentRestate, TargetRef: "tests_pass", Body: `{"p": 0.6}`}
+	if _, err := r.commitRestateIntent(ctx, in); err == nil || !strings.Contains(err.Error(), "already settled") {
+		t.Fatalf("restating a settled claim: %v", err)
+	}
+	if ok, _ := s.CommitmentRecordExists(ctx, owner, computer, p0.RecordID+":restate"); ok {
+		t.Fatal("a p1 was written for a settled p0")
+	}
+}
