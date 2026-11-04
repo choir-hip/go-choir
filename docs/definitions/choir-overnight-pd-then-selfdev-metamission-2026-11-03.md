@@ -126,24 +126,27 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 3d46b0b04 (04:06Z): quota park (7efaaeae2), refresh hold as a
-    typed wait. Queued in CI: 30f617c01 (OpenRouter serves the DeepSeek
-    1017 snapshot; Devin r2 approve after r1 blocked on vision and effort
-    evidence) and 496610447 (per-round phase receipt). Synthetic refused
-    again from 03:36Z (trip 4, half-open 05:20Z), stalling claude, pool,
-    deepseek and luna's desks; their policy files move to OpenRouter on
-    deploy, then lane C re-sends. crouton (OpenRouter) is the live arm:
-    Calendar r3 in flight with the first staged predictions (freeze_within
-    40 min p=0.6, verify_pass 0.85, tests_pass 0.8). Ready to push after:
-    stall watchdog 60c8953ff (180 s first byte, 75 s between). Building:
-    calibration cut 1 (clock time, judge_accepts, mandatory at Cast,
-    expedited tier 1), frozen candidate survives the engineer's deadline,
-    engineer reuse after rejection, Library screenshots and video, hang
-    bounds. Node B: 18.7 GB available, 21 jobs admitted, 0 refused.
+    staging 7c36347ff (05:45Z): calibration cut 1 (every Cast states
+    verify_pass, judge_accepts and freeze_minutes; runtime-settled), per-
+    round phase receipt, OpenRouter route for the DeepSeek 1017 snapshot
+    (four arms moved off Synthetic at 05:10), stall watchdog, no-op spin
+    detector, frozen candidate retained past the engineer's deadline,
+    fixture badge off the window controls. In CI: quota park keeps its
+    deadline and follows policy changes; Library release screenshots and
+    video in the catalog; byte ranges for the video. First settled cut-1
+    predictions: crouton r4 freeze_minutes 38 [25,45] settled no (13.4
+    min), judge_accepts 0.45 no; engineering digests over-confident (crouton
+    n=30 mean p 0.78 vs 0.67; claude n=49 Brier 0.211). Rounds judged since
+    03:00: 7, all rejected on real defects (no app applied this window);
+    the 14-shot requests against a 12-screen Freeze cap and the badge were
+    platform faults, withdrawn from the engineers' records. Building:
+    engineer reuse after rejection (the main remaining waste: every judge
+    reject ends the assignment), calibration cut 2 (late claims flagged,
+    per-claim read, record durability check, desk of record).
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
   next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
   blocker: none
-  next_action: deploy 496610447, switch the four arms to OpenRouter and re-send their rounds; push the stall watchdog; land calibration cut 1 the moment Devin approves
+  next_action: deploy 6472fab6f; send claude Library r3 and pool r4 on it; land engineer reuse and cut 2 as each is approved; prove a judge reject returns to the same engineer
 receipts: []
