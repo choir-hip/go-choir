@@ -101,9 +101,19 @@
 // x-choir-fixture: capsule-catalog. A shot whose page read it carries a visible
 // "catalog fixture" badge and logs a line saying so. A listing act (PATCH)
 // answers 409 capsule_fixture, any other write 405 as at the proxy; history
-// paging (limit, before_seq) is not modelled; install (POST .../self-development/adoptions)
-// is the owner's act on the real computer, and the autoputer here refuses it.
-// A shot's routes() still wins for any catalog URL it handles.
+// paging (limit, before_seq) is not modelled. A shot's routes() still wins for any
+// catalog URL it handles.
+//
+// Install: POST/GET /api/computers/<id>/self-development/adoptions[/<aid>] is the
+// owner's act on the real computer, which the autoputer here refuses. The helper
+// answers it from scripts/fixtures/capsule-install.json, written from the real
+// adoption handler by internal/agentcore/capsule_install_fixture_test.go, with the
+// same x-choir-fixture header and badge. An install of a catalog fixture release
+// answers the real 201 view (a repeat 200), and the installed list holds what this
+// shot installed; the state is per shot, emptied with the desktop reset. The
+// earliest release of the fixture's refusal_package answers the real refusal (409
+// patch_does_not_apply, a base mismatch); a release the catalog fixture lacks
+// answers 404 release_not_published.
 //
 // Run it as a capsule job (choir.Start), not a choir.Exec: a first build and a
 // browser start outlast 30 s. It does not touch /workspace/platform (the build runs in a private copy under /tmp).
@@ -537,13 +547,28 @@ export function pickAutoputerBinary(exists = fs.existsSync) {
 // CATALOG_FIXTURE_PATH is the catalog fixture beside this script.
 export const CATALOG_FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-catalog.json');
 export const CATALOG_FIXTURE_HEADER = 'x-choir-fixture';
-export const CATALOG_FIXTURE_BADGE = 'Catalog fixture, not the live catalog (scripts/fixtures/capsule-catalog.json)';
+export const CATALOG_FIXTURE_BADGE = 'Catalog fixture, not the live catalog (scripts/fixtures/capsule-catalog.json, capsule-install.json)';
 
 // loadCatalogFixture reads the fixture; null when it is missing or not one.
 export function loadCatalogFixture(file = CATALOG_FIXTURE_PATH) {
   try {
     const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
     return fx && fx.fixture === 'capsule-catalog' && fx.packages && Array.isArray(fx.packages.packages) && Array.isArray(fx.history) && Array.isArray(fx.releases) ? fx : null;
+  } catch {
+    return null;
+  }
+}
+
+// INSTALL_FIXTURE_PATH is the install fixture beside this script.
+export const INSTALL_FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-install.json');
+
+// loadInstallFixture reads the install fixture; null when it is missing or not one.
+export function loadInstallFixture(file = INSTALL_FIXTURE_PATH) {
+  try {
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const ok = (a) => a && Number.isInteger(a.status) && a.body && typeof a.body === 'object';
+    return fx && fx.fixture === 'capsule-install' && typeof fx.refusal_package === 'string' && ok(fx.created) && ok(fx.repeat) && ok(fx.list) && ok(fx.refusal)
+      && Array.isArray(fx.list.body.adoptions) ? fx : null;
   } catch {
     return null;
   }
@@ -579,6 +604,62 @@ export function catalogAnswer(fx, method, pathname, search) {
     return found ? { status: 200, body: found } : { status: 404, body: { error: 'package release not published' } };
   }
   return { status: 404, body: { error: 'not found' } };
+}
+
+const INSTALL_PATH_RE = /^\/api\/computers\/([^/]+)\/self-development\/adoptions(?:\/([^/]+))?\/?$/;
+
+// isInstallPath: is this URL path an adoptions route (the install fixture's)?
+export function isInstallPath(pathname) { return INSTALL_PATH_RE.test(pathname); }
+
+// refusalRelease is the catalog fixture release the install fixture refuses: the
+// earliest published of refusal_package.
+function refusalRelease(ifx, cfx) {
+  const of = cfx.releases.filter((r) => r.record && r.record.package && r.record.package.name === ifx.refusal_package);
+  of.sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)));
+  return of.length ? of[0].release_id : '';
+}
+
+// installAnswer is the install fixture's answer to an adoptions request, as the
+// proxy relays the computer's: { status, body }, or null for a path that is not
+// the adoptions route (or no fixture). bodyText is the request body. state is
+// the shot's { adoptions: [] }, appended to by an install and emptied per shot.
+export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
+  const m = INSTALL_PATH_RE.exec(pathname);
+  if (!ifx || !cfx || !m) return null;
+  const computerId = m[1]; // pathname arrives decoded once, as the proxy's router sees it
+  const aid = m[2] || '';
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+  if (method === 'GET' && !aid) return { status: ifx.list.status, body: { ...clone(ifx.list.body), adoptions: clone(state.adoptions.filter((a) => a.computer_id === computerId)) } };
+  if (method === 'GET') {
+    const found = state.adoptions.find((a) => a.adoption_id === aid && a.computer_id === computerId);
+    return found ? { status: ifx.repeat.status, body: clone(found) } : { status: 404, body: { error: 'adoption not found' } };
+  }
+  if (method !== 'POST' || aid) return { status: 405, body: { error: 'method not allowed' } };
+  let req;
+  try { req = JSON.parse(bodyText || ''); } catch { req = null; }
+  if (!req || typeof req !== 'object' || Array.isArray(req)) return { status: 400, body: { error: 'invalid adoption request', reason: 'request_invalid' } };
+  const releaseId = String(req.release_id || '').trim().toLowerCase();
+  if (!SHA256_RE.test(releaseId)) return { status: 400, body: { error: 'release_id must be a sha256', reason: 'release_id_invalid' } };
+  const adoptionId = 'adoption-' + createHash('sha256').update(`${computerId}\0${releaseId}`).digest('hex').slice(0, 24);
+  const existing = state.adoptions.find((a) => a.adoption_id === adoptionId);
+  if (existing) return { status: ifx.repeat.status, body: clone(existing) };
+  const rel = cfx.releases.find((r) => r.release_id === releaseId);
+  if (!rel) return { status: 404, body: { error: `the host has no published release ${releaseId}`, reason: 'release_not_published' } };
+  if (releaseId === refusalRelease(ifx, cfx)) return { status: ifx.refusal.status, body: clone(ifx.refusal.body) };
+  const n = state.adoptions.length + 1;
+  const rec = rel.record || {};
+  const src = rec.source || {};
+  const view = clone(ifx.created.body);
+  Object.assign(view, {
+    adoption_id: adoptionId, computer_id: computerId, release_id: releaseId,
+    publisher_computer_id: (rec.publisher || {}).computer_id || '', publisher_operation_id: (rec.operation || {}).operation_id || '',
+    patch_sha256: (src.tree_patch || {}).sha256 || '', release_base_commit: src.built_on || '', release_tree_hash: src.tree || '',
+    adopter_base_commit: src.built_on || '', adopter_tree_hash: src.tree || '', same_base: true,
+    staged_dir: `/var/lib/choir/updater/adoptions/${releaseId}`,
+    trajectory_id: `traj-adopt-${n}`, submission_id: `submission-${n}`, doc_id: `doc-adopt-${n}`,
+  });
+  state.adoptions.unshift(view); // newest first, as the store lists
+  return { status: ifx.created.status, body: clone(view) };
 }
 
 // fixtureBadge runs in the page: a fixed label on any shot that read the
@@ -765,7 +846,7 @@ function tunnel(req, socket, head) {
   socket.on('close', () => up.destroy());
 }
 
-function serve(dist, computer = false, themeState = { preset: null }, catalog = null) {
+function serve(dist, computer = false, themeState = { preset: null }, catalog = null, install = null, installState = { adoptions: [] }) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     const u = decodeURIComponent(url.pathname);
@@ -775,6 +856,16 @@ function serve(dist, computer = false, themeState = { preset: null }, catalog = 
     if (listed) {
       themeState.fixtureServed = true; // the badge rests on this, not on the page's response event
       res.writeHead(listed.status, { 'content-type': 'application/json', 'cache-control': 'no-store', [CATALOG_FIXTURE_HEADER]: 'capsule-catalog' }).end(JSON.stringify(listed.body));
+      return;
+    }
+    if (install && catalog && isInstallPath(u)) {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        const a = installAnswer(install, catalog, installState, req.method, u, Buffer.concat(chunks).toString('utf8'));
+        themeState.fixtureServed = true;
+        res.writeHead(a.status, { 'content-type': 'application/json', 'cache-control': 'no-store', [CATALOG_FIXTURE_HEADER]: 'capsule-install' }).end(JSON.stringify(a.body));
+      });
       return;
     }
     if (computer && isProxied(u)) return proxy(req, res);
@@ -915,7 +1006,10 @@ async function main() {
   const themeState = { preset: null, fixtureServed: false };
   const catalog = loadCatalogFixture();
   if (!catalog) console.warn(`choir-shot: no catalog fixture at ${CATALOG_FIXTURE_PATH}; /api/catalog/* is unanswered in a capsule`);
-  const { server, base } = await serve(dist, useComputer, themeState, catalog);
+  const install = loadInstallFixture();
+  if (!install) console.warn(`choir-shot: no install fixture at ${INSTALL_FIXTURE_PATH}; install (self-development/adoptions) is refused in a capsule`);
+  const installState = { adoptions: [] };
+  const { server, base } = await serve(dist, useComputer, themeState, catalog, install, installState);
   const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
   fs.mkdirSync(o.out, { recursive: true });
   const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
@@ -930,6 +1024,7 @@ async function main() {
         const s = it.shot;
         themeState.preset = it.theme;
         themeState.fixtureServed = false;
+        installState.adoptions.length = 0; // the installed list is per shot, emptied with the desktop
         if (useComputer) await resetDesktop(base);
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         if (s.routes) await s.routes(context, base);
@@ -953,7 +1048,7 @@ async function main() {
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
         if (readFixture || themeState.fixtureServed) {
           await page.evaluate(() => document.querySelectorAll('[data-choir-shot-fixture]').forEach((el) => el.remove()));
-          console.log(`choir-shot: ${it.file} shows the catalog fixture (${CATALOG_FIXTURE_PATH}), not the live catalog`);
+          console.log(`choir-shot: ${it.file} shows a fixture (${CATALOG_FIXTURE_PATH}, ${INSTALL_FIXTURE_PATH}), not the live catalog or computer`);
         }
         if (it.contrast) await measureContrast(page, it, decode, o.out, appId);
       } finally {

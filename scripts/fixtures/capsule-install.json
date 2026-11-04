@@ -1,0 +1,88 @@
+{
+  "fixture": "capsule-install",
+  "note": "Not the live computer. Generated from the real adoption handler by internal/agentcore/capsule_install_fixture_test.go (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. Modelled simply: the owner and times are fixed, the adopter's base is the release's (same_base), and a release is installed or refused by its package, not by a tree.",
+  "refusal_package": "slides-next",
+  "created": {
+    "status": 201,
+    "body": {
+      "adopter_base_commit": "7b8d0f35123d7edbe03fbcb3cfbb77ec5fc3e771",
+      "adopter_tree_hash": "9db5115e0d3b0672376fe028999f9b1d76e7cd3a",
+      "adoption_id": "adoption-aec40c18947712ed06e3e98c",
+      "computer_id": "computer-b",
+      "doc_id": "doc-adopt-1",
+      "owner_id": "owner-b",
+      "patch_matches_release": false,
+      "patch_sha256": "4a63ae7334fc494a78c83f53f48dac5ff6ec2b0180b0137f8e24faf7030d36e1",
+      "publisher_computer_id": "computer-a",
+      "publisher_operation_id": "op-a",
+      "release_base_commit": "7b8d0f35123d7edbe03fbcb3cfbb77ec5fc3e771",
+      "release_id": "c0bedecd405603bc3450b27f7654215c112e9f0a252cee49f022ea78c108b7f0",
+      "release_tree_hash": "9db5115e0d3b0672376fe028999f9b1d76e7cd3a",
+      "requested_at": "2026-11-03T03:00:00Z",
+      "same_base": true,
+      "staged_dir": "/var/lib/choir/updater/adoptions/c0bedecd405603bc3450b27f7654215c112e9f0a252cee49f022ea78c108b7f0",
+      "submission_id": "submission-1",
+      "test_command": "test -f frontend/public/drill.txt",
+      "trajectory_id": "traj-adopt-1"
+    }
+  },
+  "repeat": {
+    "status": 200,
+    "body": {
+      "adopter_base_commit": "7b8d0f35123d7edbe03fbcb3cfbb77ec5fc3e771",
+      "adopter_tree_hash": "9db5115e0d3b0672376fe028999f9b1d76e7cd3a",
+      "adoption_id": "adoption-aec40c18947712ed06e3e98c",
+      "computer_id": "computer-b",
+      "doc_id": "doc-adopt-1",
+      "owner_id": "owner-b",
+      "patch_matches_release": false,
+      "patch_sha256": "4a63ae7334fc494a78c83f53f48dac5ff6ec2b0180b0137f8e24faf7030d36e1",
+      "publisher_computer_id": "computer-a",
+      "publisher_operation_id": "op-a",
+      "release_base_commit": "7b8d0f35123d7edbe03fbcb3cfbb77ec5fc3e771",
+      "release_id": "c0bedecd405603bc3450b27f7654215c112e9f0a252cee49f022ea78c108b7f0",
+      "release_tree_hash": "9db5115e0d3b0672376fe028999f9b1d76e7cd3a",
+      "requested_at": "2026-11-03T03:00:00Z",
+      "same_base": true,
+      "staged_dir": "/var/lib/choir/updater/adoptions/c0bedecd405603bc3450b27f7654215c112e9f0a252cee49f022ea78c108b7f0",
+      "submission_id": "submission-1",
+      "test_command": "test -f frontend/public/drill.txt",
+      "trajectory_id": "traj-adopt-1"
+    }
+  },
+  "list": {
+    "status": 200,
+    "body": {
+      "adoptions": [
+        {
+          "adopter_base_commit": "7b8d0f35123d7edbe03fbcb3cfbb77ec5fc3e771",
+          "adopter_tree_hash": "9db5115e0d3b0672376fe028999f9b1d76e7cd3a",
+          "adoption_id": "adoption-aec40c18947712ed06e3e98c",
+          "computer_id": "computer-b",
+          "doc_id": "doc-adopt-1",
+          "owner_id": "owner-b",
+          "patch_matches_release": false,
+          "patch_sha256": "4a63ae7334fc494a78c83f53f48dac5ff6ec2b0180b0137f8e24faf7030d36e1",
+          "publisher_computer_id": "computer-a",
+          "publisher_operation_id": "op-a",
+          "release_base_commit": "7b8d0f35123d7edbe03fbcb3cfbb77ec5fc3e771",
+          "release_id": "c0bedecd405603bc3450b27f7654215c112e9f0a252cee49f022ea78c108b7f0",
+          "release_tree_hash": "9db5115e0d3b0672376fe028999f9b1d76e7cd3a",
+          "requested_at": "2026-11-03T03:00:00Z",
+          "same_base": true,
+          "staged_dir": "/var/lib/choir/updater/adoptions/c0bedecd405603bc3450b27f7654215c112e9f0a252cee49f022ea78c108b7f0",
+          "submission_id": "submission-1",
+          "test_command": "test -f frontend/public/drill.txt",
+          "trajectory_id": "traj-adopt-1"
+        }
+      ]
+    }
+  },
+  "refusal": {
+    "status": 409,
+    "body": {
+      "error": "the patch does not apply to this computer's source tree (its base differs from the release's)",
+      "reason": "patch_does_not_apply"
+    }
+  }
+}

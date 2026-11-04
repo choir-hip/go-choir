@@ -10,7 +10,7 @@ import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor,
-  loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
+  loadCatalogFixture, catalogAnswer, loadInstallFixture, installAnswer, isInstallPath, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -159,6 +159,63 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   // At the top edge: never over the taskbar or prompt bar at the bottom.
   assert.equal(el.style.top, '2px');
   assert.equal(el.style.bottom, undefined);
+}
+
+// The install fixture: adoptions are the owner's act on the real computer, so a
+// capsule answers them from the fixture the Go test writes from the real handler.
+{
+  const cfx = loadCatalogFixture();
+  const ifx = loadInstallFixture();
+  assert.equal(ifx.fixture, 'capsule-install');
+  assert.match(ifx.note, /^Not the live computer/);
+  const route = '/api/computers/computer-x/self-development/adoptions';
+  assert.equal(isInstallPath(route), true);
+  assert.equal(isInstallPath(`${route}/adoption-1`), true);
+  assert.equal(isInstallPath('/api/computers/c/self-development/approve'), false);
+  assert.equal(installAnswer(ifx, cfx, { adoptions: [] }, 'GET', '/api/files', ''), null);
+  assert.equal(installAnswer(null, cfx, { adoptions: [] }, 'GET', route, ''), null);
+  const refusedId = cfx.releases.filter((r) => r.record.package.name === ifx.refusal_package).sort((a, b) => a.published_at.localeCompare(b.published_at))[0].release_id;
+  const okId = cfx.releases.find((r) => r.release_id !== refusedId && r.record.package.name !== ifx.refusal_package).release_id;
+  const state = { adoptions: [] };
+  const post = (id) => installAnswer(ifx, cfx, state, 'POST', route, JSON.stringify({ release_id: id, record: {} }));
+  // Nothing installed yet.
+  assert.deepEqual(installAnswer(ifx, cfx, state, 'GET', route, '').body, { adoptions: [] });
+  // An install answers the real 201 view, with this release's fields; a repeat 200 and the same adoption.
+  const made = post(okId);
+  assert.equal(made.status, 201);
+  assert.deepEqual(Object.keys(made.body).sort(), Object.keys(ifx.created.body).sort());
+  assert.equal(made.body.release_id, okId);
+  assert.equal(made.body.computer_id, 'computer-x');
+  assert.match(made.body.adoption_id, /^adoption-[0-9a-f]{24}$/);
+  const again = post(okId.toUpperCase());
+  assert.deepEqual([again.status, again.body.adoption_id], [200, made.body.adoption_id]);
+  assert.equal(state.adoptions.length, 1);
+  // The list holds it; the one-read route finds it.
+  const listed = installAnswer(ifx, cfx, state, 'GET', route, '');
+  assert.deepEqual([listed.status, listed.body.adoptions.map((a) => a.release_id)], [200, [okId]]);
+  assert.equal(installAnswer(ifx, cfx, state, 'GET', `${route}/${made.body.adoption_id}`, '').body.release_id, okId);
+  assert.equal(installAnswer(ifx, cfx, state, 'GET', `${route}/adoption-nope`, '').status, 404);
+  // A second install lists newest first.
+  const other = cfx.releases.find((r) => r.release_id !== refusedId && r.release_id !== okId).release_id;
+  post(other);
+  assert.deepEqual(installAnswer(ifx, cfx, state, 'GET', route, '').body.adoptions.map((a) => a.release_id), [other, okId]);
+  // The refusal release answers the real refusal and installs nothing.
+  const before = state.adoptions.length;
+  const refused = post(refusedId);
+  assert.deepEqual([refused.status, refused.body.reason, Object.keys(refused.body).sort()], [409, 'patch_does_not_apply', ['error', 'reason']]);
+  assert.equal(state.adoptions.length, before);
+  // Unknown, malformed and wrong-method requests are refused in the handler's words.
+  assert.deepEqual([post('0'.repeat(64)).status, post('0'.repeat(64)).body.reason], [404, 'release_not_published']);
+  assert.deepEqual([post('nope').status, post('nope').body.reason], [400, 'release_id_invalid']);
+  assert.deepEqual([installAnswer(ifx, cfx, state, 'POST', route, 'not json').status, installAnswer(ifx, cfx, state, 'POST', route, 'not json').body.reason], [400, 'request_invalid']);
+  assert.equal(installAnswer(ifx, cfx, state, 'DELETE', route, '').status, 405);
+  // Per-shot state: choir-shot empties it with the desktop reset (an independent state starts empty).
+  state.adoptions.length = 0;
+  assert.deepEqual(installAnswer(ifx, cfx, state, 'GET', route, '').body, { adoptions: [] });
+  // The source resets it where it resets the desktop, and tags every install answer.
+  const src = fs.readFileSync(new URL('./choir-shot.mjs', import.meta.url), 'utf8');
+  assert.match(src, /installState\.adoptions\.length = 0;[^\n]*\n\s*if \(useComputer\) await resetDesktop\(base\)/);
+  assert.match(src, /\[CATALOG_FIXTURE_HEADER\]: 'capsule-install'/);
 }
 
 // Contrast: colors, the background walk, ratios and pixel fallback.
