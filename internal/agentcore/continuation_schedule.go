@@ -352,8 +352,9 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 		RunID: assignment.Binding.ParentRunID, OwnerID: assignment.Binding.OwnerID,
 		ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
 	}
-	result, err := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
-		fmt.Sprintf("assignment deadline expired after %s from bind; the assignment is cancelled", assignedEngineeringDeadline()))
+	// The build's clock ended the round (retained_candidate.go).
+	result, err := rt.cancelAssignedEngineering(withBuildBudgetEnd(ctx), parent, assignment.AssignmentID, assignment.Binding.Attempt,
+		fmt.Sprintf("%s%s from bind; the assignment is cancelled", assignmentDeadlineExpiredPrefix, assignedEngineeringDeadline()))
 	if err != nil {
 		return fmt.Errorf("cancel expired assignment %s: %w", assignment.AssignmentID, err)
 	}
@@ -384,7 +385,7 @@ func (rt *Runtime) HandleActivationBudgetDeadline(ctx context.Context, ownerID, 
 	if err != nil || !matched || rec.State.Terminal() {
 		return err
 	}
-	if err := rt.terminalizeRun(ctx, rec.RunID, rec.OwnerID, "activation budget exceeded: progress deadline reached"); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
+	if err := rt.terminalizeRun(withBuildBudgetEnd(ctx), rec.RunID, rec.OwnerID, activationBudgetExceededReason); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
 		return err
 	}
 	return nil

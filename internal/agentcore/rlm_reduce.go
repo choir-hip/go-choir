@@ -1619,8 +1619,8 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if assignment.Binding.ParentAgentID != strings.TrimSpace(r.scope.DeskAgentID) {
 		return nil, fmt.Errorf("reduce: verify %s: assignment %s was not cast by this desk", in.LocalID, assignmentID)
 	}
-	if assignment.Disposition != types.EngineeringAssignmentCompleted {
-		return nil, fmt.Errorf("reduce: verify %s: assignment %s is %s; only a completed assignment's candidate is verified", in.LocalID, assignmentID, assignment.Disposition)
+	if assignment.Disposition != types.EngineeringAssignmentCompleted && assignment.Disposition != types.EngineeringAssignmentCancelled {
+		return nil, fmt.Errorf("reduce: verify %s: assignment %s is %s; only a completed assignment's candidate, or one retained frozen when its build's budget ended, is verified", in.LocalID, assignmentID, assignment.Disposition)
 	}
 	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, r.scope.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
 	if err != nil {
@@ -1628,6 +1628,19 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	}
 	if !found {
 		return nil, fmt.Errorf("reduce: verify %s: assignment %s froze no candidate", in.LocalID, assignmentID)
+	}
+	// A cancelled round's candidate is verified only when the runtime
+	// retained it when the build's clock ended (retained_candidate.go): its
+	// record names this assignment and bundle. Every other cancellation
+	// failed it, and one whose best-effort close did not land stays
+	// unverifiable (review r1). The operation's state is left to the
+	// verdict path, so a replayed Verify still replays (review r1, F2).
+	retention, retained := retainedCandidate{}, false
+	if assignment.Disposition == types.EngineeringAssignmentCancelled {
+		if retention, retained = rt.retainedFor(operation, assignmentID); !retained {
+			return nil, fmt.Errorf("reduce: verify %s: assignment %s is cancelled and its candidate %s was not retained; only a completed assignment's candidate, or one retained frozen when its build's budget ended, is verified",
+				in.LocalID, assignmentID, operation.OperationID)
+		}
 	}
 	stamp := func(reason string) {
 		writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1657,6 +1670,9 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	}
 	if operation.LastIntentError != "" {
 		stamp("")
+	}
+	if retained {
+		rt.endRetainedCandidateWait(ctx, retention, in.Decision)
 	}
 	// Management's verdict settles verify_pass, and where it left the
 	// operation settles judge_accepts.

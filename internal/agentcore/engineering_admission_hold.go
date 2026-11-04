@@ -33,6 +33,8 @@ func engineeringHoldSettlingActs(operationID, state string) string {
 	switch state {
 	case "awaiting_approval":
 		return "It waits for the owner's decision; the owner acts that settle it are " + reject + " (withdraw it) and " + abandon + " (close it as failed)."
+	case "frozen":
+		return "It is a frozen candidate waiting for management's Verify, on a decision budget of its own; management settles it with choir.Verify, and the owner act that closes it is " + abandon + "."
 	case "degraded":
 		return "It was applied with an unsettled tail (checkpoint, route) the materializer could not finish; the installed release stays live. The owner act that closes it is " + abandon + ", which records it applied (or rolled back) without the tail."
 	case "materializing", "rollback_pending":

@@ -83,19 +83,31 @@ round, but only if a later round is cast, and the decision is still lost.
 ## Fix shape
 
 - Freeze ends the build budget. When the build's run ends by its
-  activation budget or the assignment deadline and its operation is
-  `frozen`, the operation is retained (not failed); the assignment is
-  cancelled with a reason that names the retained candidate and its
+  activation budget or the assignment deadline (a context mark the
+  runtime sets on those two paths, never a reason text) and its operation
+  is `frozen`, the operation is retained (not failed): a runtime-written
+  record (`<updater root>/retained/<operation>.json`) names it, the
+  assignment is cancelled with a reason that names the candidate and its
   bundle, and that reason is the final Report management receives.
-- management's Verify admits a retained candidate (a cancelled
-  assignment whose operation is still `frozen`).
+- management's Verify admits a cancelled assignment's candidate only when
+  its retention record names that assignment and bundle; the round's
+  `verify_pass` precommit stays open for it.
 - The wait for the decision is a typed wait (`candidate_decision`) with
   its own budget, in management's pack and as a Note to the Texture the
   round serves. When the budget runs out the candidate stays frozen and
   retained; the wait says so ("at its bound").
-- A crash restart closes a retained candidate (the restart rule).
+- A crash restart fails every retained candidate still frozen, from the
+  records (the restart rule).
 
 ## Residuals
+
+- At the decision budget's bound the candidate stays frozen (by design)
+  and keeps holding engineering admission for the computer until
+  management verifies it or the owner abandons it; the bound is rendered,
+  not enforced by a timer.
+- The deploy-refresh hold on a parked candidate counts from the
+  operation's last transition (the Freeze), the decision budget from the
+  retention; the hold can end first.
 
 - A provider call can still hang for the gateway's full 10 minutes;
   that is a separate wait (the gateway bound), not addressed here.

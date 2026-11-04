@@ -91,6 +91,11 @@ const (
 	// WaitKindProviderQuota is a desk loop parked on an exhausted model
 	// provider quota (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 	WaitKindProviderQuota WaitKind = "provider_quota"
+	// WaitKindCandidateDecision is a frozen candidate waiting for its
+	// decision (management's Verify, then the gate) after its build ended,
+	// on a budget of its own
+	// (docs/problems/frozen-candidate-dies-with-build-deadline-2026-11-04.md).
+	WaitKindCandidateDecision WaitKind = "candidate_decision"
 )
 
 // Label is the kind in words.
@@ -116,6 +121,8 @@ func (k WaitKind) Label() string {
 		return "a next actor"
 	case WaitKindProviderQuota:
 		return "provider quota"
+	case WaitKindCandidateDecision:
+		return "a frozen candidate's decision"
 	}
 	return strings.ReplaceAll(string(k), "_", " ")
 }
