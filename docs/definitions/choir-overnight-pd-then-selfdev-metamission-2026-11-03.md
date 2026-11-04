@@ -126,22 +126,23 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 751eb988a (02:43Z): per-job host memory leases (4a6ab66bf; since
-    02:09Z every job admitted, zero refusals, zero spawn waits, MemAvailable
-    14-18 GB, against 58 refused builds in the 10 hours before) and the
-    typed wait record rendered to engineering, management and Texture with
-    minutes waited by kind. In CI: the capsule install fixture and the
-    Texture next-actor guard (a turn cannot leave an owner request
-    unattended; backstop banner). Building: provider quota as a parked,
-    resumable, typed wait; bounding the nine hang-risk waits. Synthetic
-    subscription quota exhausted since 02:35Z: DeepSeek arms paused, the
-    paper on chatgpt unaffected, crouton on OpenRouter running Library r2.
-    Owner decision open: raise the Synthetic limit, move the DeepSeek arms
-    to OpenRouter or crouton tonight, or wait for the reset (default).
+    staging e095686f0 (03:06Z): per-job leases (51 admitted, 1 refused in
+    the last hour), typed wait record, capsule install fixture, Texture
+    next-actor guard. In CI: 7efaaeae2, provider quota as a parked,
+    resumable provider_quota wait (Devin r3 approve after r2 BLOCK). The
+    Synthetic quota reset at 03:07Z; claude and pool rounds resumed on
+    their own, deepseek Calendar r2 lost to the quota and re-sent. Four
+    builds live (claude Library r2, pool repair, crouton Calendar r1,
+    deepseek Calendar r2). New loss: luna Calendar r2 froze a good
+    candidate at minute 48 and died with the 60-minute assignment deadline
+    before the judge decided; requests now say freeze by minute 40, and a
+    builder is separating the decision budget from the build deadline.
+    Ready next: waits-visible-2 369b1d8be (refresh hold as a typed wait,
+    selector fail-fast; Devin r2 nits only). Building: bound hang waits.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
   next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
   blocker: none
-  next_action: land 5ee5f39dd and a79c26402, then the delegate and screens builds; start Library rounds as arms free up
+  next_action: prove the quota park on staging; land 369b1d8be, then the hang bounds and the decision-deadline fix
 receipts: []
