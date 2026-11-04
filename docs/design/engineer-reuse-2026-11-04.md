@@ -430,6 +430,10 @@ inert data a reverted runtime never reads. There is no runtime switch (the
 - R9. The divert-to-pass spine (a real Complete diverted, then a pass
   committing the kept Complete through the terminal saga) has no unit test;
   the staging proof is its check.
+- R10. freeze_minutes is anchored at the Cast and settles at the first
+  successful Freeze; a re-Freeze after a rejection carries no minutes
+  prediction of its own. The rework's minutes show on the round receipt
+  only.
 - R7. A computer that runs both this and the retained-candidate fix needs
   the A6 merge rules; until the second lands, its own tests are the check.
 
@@ -477,3 +481,36 @@ Report, with no second Cast and no second capsule
 Phase B: two requests about one app, a week apart in intent but minutes
 apart on staging; the second engineer's first model input contains "Prior
 work on <app>" naming the first assignment's run id.
+
+## Merge with the retained-candidate fix and the calibration cuts
+
+Applied on main `8a9050b80` (A6): `retained_candidate.go`'s
+`frozenCandidateOf` resolves the current revision; the crash-boot orphan
+sweep, the round receipt and the owner-act settlement parse keys with
+`store.EngineeringFreezeAssignmentOf`; the claims read resolves the
+current revision; Verify admits completed, retained-cancelled or in
+review. Calibration: a rejection in review settles nothing; a pass
+settles `verify_pass` and `judge_accepts`; a round that ends on an
+in-review rejection settles them (and `owner_approves`,
+`approval_minutes`) at the assignment's end as that final rejection
+(`settleEngineeringPrecommitsAtTerminal`). `approved_within_rounds`
+counts operations with a bundle, so each revision's Freeze once. The
+spin detector resets across a review wait, and the review-request cell is
+never observed as a no-op.
+
+Merge review (Devin accept_with_nits; DeepSeek revise, one blocking: A6
+rule 4 was not applied, so a late report on a cancelled assignment closed
+its retained candidate). Fixed, with the test; also fixed: the owner's
+claims stay open for a candidate that passed review and awaits the owner
+when its run ends. Named residuals:
+
+- R11. A crash boot that closes a retained candidate does not settle its
+  `verify_pass`/`judge_accepts` (inherited from the retained-candidate
+  fix); they stay open.
+- R12. The retention decision and the fail are two reads of the current
+  revision; a rework Freeze landing between them is failed, not retained
+  (milliseconds wide).
+- R13. A current revision that ends decided-not-frozen (owner rejected, or
+  failed for another cause) on an assignment that still completes leaves
+  `verify_pass`/`judge_accepts` open; and a kept Complete that commits
+  inside a Verify's write window can leave them open. Open, never wrong.
