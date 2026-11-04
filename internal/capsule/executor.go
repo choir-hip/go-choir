@@ -133,6 +133,8 @@ type Executor struct {
 	// which every broker hands its jobs (broker_env.go).
 	browser    string
 	fontconfig string
+	// ffmpeg is the image's ffmpeg (choir-shot --video).
+	ffmpeg string
 	// hostMemory reports build capsules' baselines and their jobs' leases
 	// to vmctl (capsule_size.go); nil runs as before.
 	hostMemory HostMemory
@@ -201,6 +203,14 @@ func (e *Executor) SetBrowser(browser, fontconfig string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.browser, e.fontconfig = strings.TrimSpace(browser), strings.TrimSpace(fontconfig)
+}
+
+// SetFfmpeg names the image's ffmpeg for choir-shot --video. It applies to
+// capsules spawned afterwards.
+func (e *Executor) SetFfmpeg(ffmpeg string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.ffmpeg = strings.TrimSpace(ffmpeg)
 }
 
 // ClaudeDelegateStatus reports whether a claude-mode capsule could be
@@ -966,7 +976,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	cmd.Env = BrokerProcessEnv(os.LookupEnv)
 	// The store Chromium for the jobs' Playwright, on every computer.
-	cmd.Env = append(cmd.Env, browserBrokerEnv(e.browser, e.fontconfig)...)
+	cmd.Env = append(cmd.Env, browserBrokerEnv(e.browser, e.fontconfig, e.ffmpeg)...)
 	// Package mirrors: the granted ecosystems, for the broker's workload
 	// client settings (mirror.go); nothing on an ungranted computer.
 	cmd.Env = append(cmd.Env, mirrorBrokerEnv(caps.mirrors)...)
@@ -2337,9 +2347,14 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if err != nil {
 		return nil, err
 	}
+	video, err := e.stageVideo(ctx, rootFD, changes, temporary)
+	if err != nil {
+		return nil, err
+	}
 	cleanup = false
 	return &StagedRelease{
 		Screens:          screens,
+		Video:            video,
 		Files:            files,
 		Binary:           binary,
 		SourcePatch:      patch,

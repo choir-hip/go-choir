@@ -273,3 +273,4 @@ func (e *Executor) MemoryBudget() int64 { return 0 }
 
 // The store browser: capsules need the Linux guest kernel.
 func (e *Executor) SetBrowser(browser, fontconfig string) {}
+func (e *Executor) SetFfmpeg(ffmpeg string)               {}

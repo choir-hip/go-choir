@@ -357,6 +357,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	record.RuntimeFiles = files
 	record.ReleaseBinary = staged.Binary
 	record.Screens = staged.Screens
+	record.Video = staged.Video
 	record.ContentDigest, err = record.ComputeContentDigest()
 	if err != nil || record.Validate(false) != nil {
 		return nil, fmt.Errorf("complete capsule effect bundle draft unavailable")

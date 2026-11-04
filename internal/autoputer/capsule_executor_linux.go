@@ -114,6 +114,7 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 	// The store Chromium every computer's jobs may launch (Playwright), and
 	// the fontconfig file it renders text with. No grant.
 	executor.SetBrowser(os.Getenv("CHOIR_BROWSER_BIN"), os.Getenv("CHOIR_FONTCONFIG_FILE"))
+	executor.SetFfmpeg(os.Getenv("CHOIR_FFMPEG_BIN"))
 	// Package mirrors (station FP10): L2 capsules use the host package
 	// mirror only when the host put a grant on the credential disk; the
 	// route address is the guest's tap peer unless set explicitly.

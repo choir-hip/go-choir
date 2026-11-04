@@ -22,6 +22,23 @@
 //   node ... --shots /tmp/shots.mjs --theme futuristic-noir,london-salmon   # presets
 //   node ... --shots /tmp/shots.mjs --contrast '.window'                    # WCAG
 //   node ... --shots /tmp/shots.mjs --open image                            # a package app
+//   node ... --shots /tmp/shots.mjs --video [--video-shot NAME]             # one walkthrough WebM
+//
+// --video records ONE shot (the first planned, or --video-shot NAME, or the
+// first shot whose file sets `video: true`; a warning names any other) with
+// Playwright's recordVideo in its own browser context, sized to the shot's
+// viewport. The recording ends when the shot is done (after at most 2 s more so
+// the settled state shows) and nothing past 20 s from the page's creation is
+// kept (a longer recording is cut to 20 s by ffmpeg stream copy); the shot's
+// PNG is taken as usual. The file
+// is <shot file stem>.webm beside the PNGs, at most 8 MiB (over it the shot
+// fails, naming the size and the cap); a stale *.webm in the output directory is
+// removed before the run, because Freeze admits at most one and stages it as the
+// bundle's video. Playwright encodes with ffmpeg, which the guest image does not
+// download: the browser layer carries ffmpeg-headless and a capsule job gets its
+// path as $CHOIR_FFMPEG, which choir-shot links into a private
+// PLAYWRIGHT_BROWSERS_PATH (ffmpeg-<revision>/ffmpeg-linux) before it requires
+// Playwright. Only the recorded shot pays for ffmpeg (-threads 1, realtime).
 //
 // --open <app> (or a shot's `open` field) opens a package app in the shell
 // before the shot, the way a person does: it clicks the app switcher
@@ -122,6 +139,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -163,6 +181,8 @@ export const USAGE = `usage: node scripts/choir-shot.mjs --shots FILE [options]
   --theme a,b       shell theme preset ids, one shot per preset
   --contrast SEL    WCAG contrast of every visible text element under SEL
   --open APP        open a package app in the shell before the shot
+  --video           record one shot as <name>.webm beside the PNGs (20 s, 8 MiB cap; needs CHOIR_FFMPEG)
+  --video-shot N    which shot to record (default: the first planned, or one with video: true)
   --out DIR         PNG directory (default /var/lib/artifact/screens)
   --list            print the file names the run would write and exit
   --fail-fast       stop at the first failed shot (the default for a run without --only)
@@ -184,7 +204,7 @@ export function autoputerLogPath(out) {
 
 export function parseArgs(argv, knownThemes = null) {
   if (argv.includes('--help') || argv.includes('-h')) return { help: true };
-  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', open: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true, failFast: undefined };
+  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', open: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true, failFast: undefined, video: false, videoShot: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -203,10 +223,13 @@ export function parseArgs(argv, knownThemes = null) {
     else if (a === '--fail-fast') o.failFast = true;
     else if (a === '--keep-going') o.failFast = false;
     else if (a === '--no-computer') o.computer = false;
+    else if (a === '--video') o.video = true;
+    else if (a === '--video-shot') o.videoShot = val();
     else throw new Error(`unknown flag ${a}`);
   }
   if (!o.shots) throw new Error('--shots FILE is required (an ES module whose default export is a list of shots)');
   if (a0(argv, '--fail-fast') && a0(argv, '--keep-going')) throw new Error('--fail-fast and --keep-going are exclusive');
+  if (o.videoShot && !o.video) throw new Error('--video-shot needs --video');
   if (o.size && o.presets.length) throw new Error('--size and --preset are exclusive');
   if (o.size && !/^\d{2,5}x\d{2,5}$/.test(o.size)) throw new Error(`--size ${o.size}: want WIDTHxHEIGHT, such as 1000x700`);
   for (const p of o.presets) if (!PRESETS[p]) throw new Error(`--preset ${p}: want one of ${Object.keys(PRESETS).join(', ')}`);
@@ -268,6 +291,76 @@ export function plan(shots, o, knownThemes = null) {
         out.push({ shot, theme, contrast, open, viewport: { width, height }, device, file: `${stem}.png`, contrastFile: contrast ? `${stem}.contrast.json` : '' });
       }
   return out;
+}
+
+export const VIDEO_MAX_BYTES = 8 << 20;
+export const VIDEO_MAX_MS = 20000;
+export const VIDEO_SETTLE_MS = 2000;
+const VIDEO_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.webm$/;
+
+// videoFileFor is the WebM name for a shot's PNG file: the same stem.
+export function videoFileFor(shotFile) {
+  const name = String(shotFile).replace(/\.png$/, '') + '.webm';
+  if (!VIDEO_NAME_RE.test(name)) throw new Error(`${name} is not a valid video name (letters, digits, '.', '-', '_'; at most 96 characters before .webm)`);
+  return name;
+}
+
+// ffmpegShimPlan is what to create under a private PLAYWRIGHT_BROWSERS_PATH so
+// Playwright's registry finds ffmpeg: ffmpeg-<revision>/ffmpeg-linux (and
+// ffmpeg-mac on darwin) linking to the real binary.
+export function ffmpegShimPlan(rev, ffmpegPath, platform) {
+  if (!/^[0-9]+$/.test(String(rev))) throw new Error(`ffmpeg revision ${JSON.stringify(rev)}: want digits`);
+  if (!path.isAbsolute(String(ffmpegPath))) throw new Error(`CHOIR_FFMPEG ${JSON.stringify(ffmpegPath)}: want an absolute path`);
+  const names = platform === 'darwin' ? ['ffmpeg-linux', 'ffmpeg-mac'] : ['ffmpeg-linux'];
+  return { dir: `ffmpeg-${rev}`, links: names.map((name) => ({ name, target: ffmpegPath })) };
+}
+
+// pickVideoItem chooses the one planned shot to record, or null without --video.
+export function pickVideoItem(items, o) {
+  if (!o.video) return null;
+  if (o.videoShot) {
+    const item = items.find((it) => it.shot.name === o.videoShot);
+    if (!item) throw new Error(`--video-shot ${o.videoShot}: no such planned shot (have ${[...new Set(items.map((it) => it.shot.name))].join(', ')})`);
+    return { item, warnings: [] };
+  }
+  const flagged = items.filter((it) => it.shot.video === true);
+  const item = flagged[0] || items[0];
+  const warnings = flagged.slice(1).map((it) => `${it.file} also sets video: true; only ${item.file} is recorded (one video per run)`);
+  return { item, warnings };
+}
+
+export function videoSizeProblem(bytes) {
+  return bytes > VIDEO_MAX_BYTES ? `video is ${bytes} bytes, over the ${VIDEO_MAX_BYTES}-byte cap (8 MiB)` : '';
+}
+
+// prepareFfmpeg points Playwright's registry at an ffmpeg before Playwright is
+// required: an existing PLAYWRIGHT_BROWSERS_PATH with one for the revision is
+// left alone, else CHOIR_FFMPEG is linked into a private directory.
+export function prepareFfmpeg(deps, env = process.env, platform = process.platform) {
+  const rev = String(JSON.parse(fs.readFileSync(path.join(path.dirname(createRequire(path.join(deps, 'package.json')).resolve('playwright-core/package.json')), 'browsers.json'), 'utf8')).browsers.find((b) => b.name === 'ffmpeg')?.revision || '');
+  if (!rev) throw new Error('--video: playwright-core/browsers.json has no ffmpeg entry');
+  if (env.PLAYWRIGHT_BROWSERS_PATH) {
+    const have = path.join(env.PLAYWRIGHT_BROWSERS_PATH, `ffmpeg-${rev}`, platform === 'darwin' ? 'ffmpeg-mac' : 'ffmpeg-linux');
+    if (fs.existsSync(have)) return have;
+  }
+  const bin = env.CHOIR_FFMPEG;
+  let ok = false;
+  try { ok = !!bin && fs.statSync(bin).isFile(); if (ok) fs.accessSync(bin, fs.constants.X_OK); } catch { ok = false; }
+  if (!ok) throw new Error('--video needs ffmpeg: CHOIR_FFMPEG is unset (an image with the browser layer has it)');
+  const plan = ffmpegShimPlan(rev, bin, platform);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'choir-shot-pw-'));
+  fs.mkdirSync(path.join(root, plan.dir));
+  for (const l of plan.links) fs.symlinkSync(l.target, path.join(root, plan.dir, l.name));
+  env.PLAYWRIGHT_BROWSERS_PATH = root;
+  return bin;
+}
+
+// trimVideo cuts a recording to VIDEO_MAX_MS by stream copy (no re-encode).
+export function trimVideo(ffmpeg, file) {
+  const tmp = file + '.trim.webm';
+  const r = spawnSync(ffmpeg, ['-v', 'error', '-y', '-i', file, '-t', String(VIDEO_MAX_MS / 1000), '-c', 'copy', tmp], { encoding: 'utf8' });
+  if (r.status !== 0) { fs.rmSync(tmp, { force: true }); throw new Error(`could not cut the video to ${VIDEO_MAX_MS / 1000} s: ${String(r.stderr || r.error).trim().split('\n')[0]}`); }
+  fs.renameSync(tmp, file);
 }
 
 // openApp opens a package app the way a person does: the app switcher button,
@@ -1004,6 +1097,11 @@ async function main() {
   if (!deps) throw new Error('CHOIR_FRONTEND_DEPS is not set (a capsule job has it)');
   const exe = process.env.CHOIR_BROWSER;
   if (!exe) throw new Error('CHOIR_BROWSER is not set (a capsule job has the store Chromium)');
+  const video = pickVideoItem(items, o);
+  if (video) {
+    video.ffmpeg = prepareFfmpeg(deps); // before Playwright is required: it reads PLAYWRIGHT_BROWSERS_PATH at load
+    for (const w of video.warnings) console.warn(`choir-shot: ${w}`);
+  }
   const req = createRequire(path.join(deps, 'package.json'));
   let pw;
   try { pw = req('playwright'); } catch { pw = req('@playwright/test'); } // npm hoists playwright; either exports chromium
@@ -1034,9 +1132,15 @@ async function main() {
   let skipped = 0;
   // A PNG from an earlier run is never left for a shot that fails or is not run (--fail-fast): Freeze would admit it.
   for (const it of items) { try { fs.rmSync(path.join(o.out, it.file), { force: true }); } catch { /* none */ } }
+  // Freeze admits at most one .webm: none from an earlier run stays.
+  for (const f of fs.readdirSync(o.out)) { if (f.endsWith('.webm')) { try { fs.rmSync(path.join(o.out, f), { force: true }); } catch { /* none */ } } }
   try {
     ({ failures, skipped } = await runShots(items, async (it) => {
-      const context = await browser.newContext({ viewport: it.viewport, ...it.device });
+      const recording = !!video && video.item === it;
+      const videoDir = recording ? fs.mkdtempSync(path.join(os.tmpdir(), 'choir-shot-video-')) : '';
+      const context = await browser.newContext({ viewport: it.viewport, ...it.device, ...(recording ? { recordVideo: { dir: videoDir, size: it.viewport } } : {}) });
+      let startedAt = 0;
+      let pageVideo = null;
       try {
         const s = it.shot;
         themeState.preset = it.theme;
@@ -1046,6 +1150,10 @@ async function main() {
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         if (s.routes) await s.routes(context, base);
         const page = await context.newPage();
+        if (recording) {
+          startedAt = Date.now();
+          pageVideo = page.video();
+        }
         let readFixture = false;
         page.on('response', (r) => { if (r.headers()[CATALOG_FIXTURE_HEADER]) readFixture = true; });
         if (s.before) await s.before(page, base);
@@ -1068,8 +1176,23 @@ async function main() {
           console.log(`choir-shot: ${it.file} shows a fixture (${CATALOG_FIXTURE_PATH}, ${INSTALL_FIXTURE_PATH}), not the live catalog or computer`);
         }
         if (it.contrast) await measureContrast(page, it, decode, o.out, appId);
+        if (recording) {
+          const left = Math.min(VIDEO_SETTLE_MS, VIDEO_MAX_MS - (Date.now() - startedAt));
+          if (left > 0) await page.waitForTimeout(left); // the video shows the settled state
+        }
       } finally {
         await context.close();
+      }
+      if (recording) {
+        const name = videoFileFor(it.file);
+        const dest = path.join(o.out, name);
+        await pageVideo.saveAs(dest);
+        fs.rmSync(videoDir, { recursive: true, force: true });
+        if (Date.now() - startedAt > VIDEO_MAX_MS) trimVideo(video.ffmpeg, dest); // the hard cap: nothing past 20 s is kept
+        const size = fs.statSync(dest).size;
+        const problem = videoSizeProblem(size);
+        if (problem) { fs.rmSync(dest, { force: true }); throw new Error(`${name}: ${problem}`); }
+        console.log(`choir-shot: ${name} ${size} bytes, ${((Date.now() - startedAt) / 1000).toFixed(1)} s`);
       }
     }, { failFast: failFastFor(o) }));
   } finally {
@@ -1079,6 +1202,8 @@ async function main() {
   }
   const have = fs.readdirSync(o.out).filter((f) => f.endsWith('.png')).length;
   if (have > 12) console.warn(`choir-shot: ${have} PNGs in ${o.out}; Freeze takes at most 12`);
+  const webms = fs.readdirSync(o.out).filter((f) => f.endsWith('.webm')).length;
+  if (webms > 1) console.warn(`choir-shot: ${webms} WebM files in ${o.out}; Freeze takes at most 1`);
   const failed = failures.map((f) => f.file);
   if (failed.length && useComputer) console.error(`choir-shot: the autoputer's output is in ${holder.log}`);
   console.log(JSON.stringify({ shots: items.length - failed.length - skipped, failed, skipped, out: o.out }));

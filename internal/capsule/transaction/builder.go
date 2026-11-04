@@ -69,6 +69,11 @@ type CapsuleEffectBundle struct {
 	// sha256. omitempty, so a bundle with none canonicalizes as before
 	// (docs/problems/selfdev-screens-are-not-files-2026-11-03.md).
 	Screens []capsule.ScreenFile `json:"screens,omitempty"`
+	// Video is the one walkthrough video Freeze staged beside the screens
+	// (evidence/screens/<name>.webm), bound by sha256. omitempty, so a
+	// bundle with none canonicalizes as before
+	// (docs/problems/library-releases-have-no-screenshots-2026-11-04.md).
+	Video *capsule.VideoFile `json:"video,omitempty"`
 }
 
 // ChangeRecord is a single file change in the transaction record.
@@ -129,6 +134,9 @@ func (r CapsuleEffectBundle) Validate(final bool) error {
 		return fmt.Errorf("capsule effect bundle: %w", err)
 	}
 	if err := capsule.ValidateScreens(r.Screens); err != nil {
+		return fmt.Errorf("capsule effect bundle: %w", err)
+	}
+	if err := capsule.ValidateVideo(r.Video); err != nil {
 		return fmt.Errorf("capsule effect bundle: %w", err)
 	}
 	if final && !validImmutableRefs(r.VerifierReceipts) {

@@ -35,33 +35,40 @@ const (
 	BrowserEnv = "CHOIR_BROWSER"
 	// FontconfigEnv is fontconfig's own variable, so Chromium reads it as is.
 	FontconfigEnv = "FONTCONFIG_FILE"
+	// FfmpegEnv names the store ffmpeg (ffmpeg-headless, VP8) that choir-shot
+	// --video links into Playwright's registry; the image has no downloaded one.
+	FfmpegEnv = "CHOIR_FFMPEG"
 )
+
+func executableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+}
 
 // browserBrokerEnv is what the executor adds to a new broker's environment:
 // the Chromium and fontconfig paths when the image names an executable
-// Chromium, and nothing otherwise.
-func browserBrokerEnv(browser, fontconfig string) []string {
-	browser = strings.TrimSpace(browser)
-	if browser == "" {
-		return nil
+// Chromium, the ffmpeg path when it names an executable ffmpeg, and nothing
+// otherwise.
+func browserBrokerEnv(browser, fontconfig, ffmpeg string) []string {
+	var env []string
+	if browser = strings.TrimSpace(browser); browser != "" && executableFile(browser) {
+		env = append(env, BrowserEnv+"="+browser)
+		if fontconfig = strings.TrimSpace(fontconfig); fontconfig != "" {
+			env = append(env, FontconfigEnv+"="+fontconfig)
+		}
 	}
-	info, err := os.Stat(browser)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return nil
-	}
-	env := []string{BrowserEnv + "=" + browser}
-	if fontconfig = strings.TrimSpace(fontconfig); fontconfig != "" {
-		env = append(env, FontconfigEnv+"="+fontconfig)
+	if ffmpeg = strings.TrimSpace(ffmpeg); ffmpeg != "" && executableFile(ffmpeg) {
+		env = append(env, FfmpegEnv+"="+ffmpeg)
 	}
 	return env
 }
 
-// BrowserJobEnv is what a broker adds to its jobs' environment: the Chromium
-// and fontconfig paths the executor gave it, and only those. Cells and direct
+// BrowserJobEnv is what a broker adds to its jobs' environment: the Chromium,
+// fontconfig and ffmpeg paths the executor gave it, and only those. Cells and direct
 // exec build their environments without them.
 func BrowserJobEnv(lookup func(string) (string, bool)) []string {
 	var env []string
-	for _, key := range []string{BrowserEnv, FontconfigEnv} {
+	for _, key := range []string{BrowserEnv, FontconfigEnv, FfmpegEnv} {
 		if v, ok := lookup(key); ok && strings.TrimSpace(v) != "" && !strings.ContainsAny(v, "\x00\n") {
 			env = append(env, key+"="+strings.TrimSpace(v))
 		}

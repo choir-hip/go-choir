@@ -26,6 +26,10 @@
         # The store browser: full Chromium, on no PATH; every computer's
         # capsule jobs get its path (CHOIR_BROWSER) for Playwright.
         chromium = pick "chromium" pkgs.chromium;
+        # ffmpeg-headless (VP8) for choir-shot --video: Playwright's own
+        # ffmpeg is a download the image does not have; capsule jobs get the
+        # path (CHOIR_FFMPEG) and link it into a private browsers path.
+        ffmpeg = pick "ffmpeg" pkgs.ffmpeg-headless;
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md):
         # pinned Claude Code, on no PATH; only the allowlisted computer's
         # claude-mode capsule broker runs it.
@@ -41,7 +45,7 @@
     {
       inherit packages;
       layers = {
-        browser = [ packages.chromium ];
+        browser = [ packages.chromium packages.ffmpeg ];
         delegate = [ packages.claudeCode ];
         office = [ packages.libreoffice ];
         toolchain = [ packages.gcc packages.binutils packages.go ];
