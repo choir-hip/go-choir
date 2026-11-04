@@ -23,24 +23,27 @@ const ogKindReleaseAdoption = objectgraph.ObjectKind("choir.release_adoption")
 // ReleaseAdoption is what the owner asked this computer to adopt and what
 // the computer verified before asking its desks.
 type ReleaseAdoption struct {
-	AdoptionID           string    `json:"adoption_id"`
-	OwnerID              string    `json:"owner_id"`
-	ComputerID           string    `json:"computer_id"`
-	ReleaseID            string    `json:"release_id"`
-	PublisherComputerID  string    `json:"publisher_computer_id"`
-	PublisherOperationID string    `json:"publisher_operation_id"`
-	PatchSHA256          string    `json:"patch_sha256"`
-	ReleaseBaseCommit    string    `json:"release_base_commit"`
-	ReleaseTreeHash      string    `json:"release_tree_hash"`
-	AdopterBaseCommit    string    `json:"adopter_base_commit"`
-	AdopterTreeHash      string    `json:"adopter_tree_hash"`
-	SameBase             bool      `json:"same_base"`
-	TestCommand          string    `json:"test_command,omitempty"`
-	StagedDir            string    `json:"staged_dir"`
-	TrajectoryID         string    `json:"trajectory_id"`
-	DocID                string    `json:"doc_id,omitempty"`
-	SubmissionID         string    `json:"submission_id,omitempty"`
-	RequestedAt          time.Time `json:"requested_at"`
+	AdoptionID           string `json:"adoption_id"`
+	OwnerID              string `json:"owner_id"`
+	ComputerID           string `json:"computer_id"`
+	ReleaseID            string `json:"release_id"`
+	PublisherComputerID  string `json:"publisher_computer_id"`
+	PublisherOperationID string `json:"publisher_operation_id"`
+	PatchSHA256          string `json:"patch_sha256"`
+	ReleaseBaseCommit    string `json:"release_base_commit"`
+	ReleaseTreeHash      string `json:"release_tree_hash"`
+	AdopterBaseCommit    string `json:"adopter_base_commit"`
+	AdopterTreeHash      string `json:"adopter_tree_hash"`
+	SameBase             bool   `json:"same_base"`
+	TestCommand          string `json:"test_command,omitempty"`
+	// StagedDir is never stored or served: a package install's staging is
+	// <updater root>/adoptions/<install id> (stagedInstallDir), so the
+	// updater path does not reach the install views.
+	StagedDir    string    `json:"-"`
+	TrajectoryID string    `json:"trajectory_id"`
+	DocID        string    `json:"doc_id,omitempty"`
+	SubmissionID string    `json:"submission_id,omitempty"`
+	RequestedAt  time.Time `json:"requested_at"`
 	// Package install (docs/design/package-install-2026-11-04.md): Kind is
 	// "package" for an install or uninstall of a package release (empty for
 	// a P8 software release), Package its name, Action install or

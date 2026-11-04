@@ -106,14 +106,20 @@ the readiness and consolidate ledgers, `docs/reports/choir-cli-mcp-parity`.
      reviews several tracks of one app in turn.
    - otherwise (a first-party package, or a local change): refused
      `package_name_taken`. The computer's tree is never overwritten.
+   The L = P case trusts the record's declared `parent.tree`: that lineage
+   is the publisher's assertion (corpusd checks it at publish), and the
+   owner's act is still required to install.
 5. **Install patch.** The computer computes the patch from L to R at full
-   paths (to the empty tree for uninstall), checks it applies to HEAD
-   without writing (`release.PatchedTree`) and that the result's subtree is R.
+   paths (to the empty tree for uninstall) and checks it applies to HEAD
+   without writing (`release.PatchedTree`). The result holds R at the root
+   by construction (the patch is the diff to R); the code checks that the
+   apply succeeds, not a separate subtree compare.
 6. **Stage and ask.** As P8: `release.json` and `source.patch` read-only
    under `<updater root>/adoptions/<install id>/`, mounted in engineering's
    capsule at `/selfdev/adoption/`; one owner request to the desks asks
    engineering to `git apply` it, run the frontend build (which runs
-   `check-packages.mjs`), freeze, and change nothing else. The install
+   `check-packages.mjs`), freeze, and change nothing else. A publisher's
+   declared test command is never run. The install
    record (kind `package`, package, action, release tree) is written.
 7. **Build, verify, decide, apply.** Engineering's capsule builds; management
    verifies; the owner approves the candidate in Texture; the materializer

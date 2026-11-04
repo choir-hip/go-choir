@@ -166,8 +166,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if err != nil {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_stage", "%v", err)
 	}
-	staged, err := rt.stageAdoptionAt(id, releaseID, canonical, plan.Patch)
-	if err != nil {
+	if _, err := rt.stageAdoptionAt(id, releaseID, canonical, plan.Patch); err != nil {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_stage", "%v", err)
 	}
 	patchSHA := computerevent.DigestBytes(plan.Patch)
@@ -180,8 +179,8 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 		PublisherComputerID: rec.Publisher.ComputerID, PublisherOperationID: rec.Operation.OperationID,
 		PatchSHA256: patchSHA, ReleaseBaseCommit: rec.Source.BuiltOn, ReleaseTreeHash: rec.Source.Tree,
 		AdopterBaseCommit: head, AdopterTreeHash: tree,
-		SameBase:    !plan.LocalPresent || plan.Local == rec.Parent.Tree || uninstall,
-		TestCommand: rec.Declarations.TestCommand, StagedDir: staged,
+		SameBase:     !plan.LocalPresent || plan.Local == rec.Parent.Tree || uninstall,
+		TestCommand:  rec.Declarations.TestCommand,
 		TrajectoryID: submission.TrajectoryID, DocID: submission.DocID, SubmissionID: submission.SubmissionID,
 		RequestedAt: time.Now().UTC(),
 		Kind:        adoptionKindPackage, Package: rec.Package.Name, Action: action, Attempt: attempt,
@@ -263,10 +262,9 @@ func packageInstallRequestText(releaseID string, rec pkgrelease.Record, action s
 	case plan.LocalPresent:
 		change = fmt.Sprintf("The patch replaces this computer's %s/ with the release's tree and changes nothing outside it.", root)
 	}
+	// The publisher's declared test command is never run here: the desks
+	// apply the verified tree and run the build, nothing the release names.
 	check := "git apply --check --reverse /selfdev/adoption/source.patch (it succeeds only when the patch is applied)"
-	if cmd := strings.TrimSpace(rec.Declarations.TestCommand); cmd != "" && action == packageActionInstall {
-		check = cmd + ", and git apply --check --reverse /selfdev/adoption/source.patch"
-	}
 	return strings.Join([]string{
 		what + ": change this computer itself by applying the verified install patch, and change nothing else. This is the owner's install from the Library; do not edit the package.",
 		fmt.Sprintf("The release was published by computer %s (track %s) from its operation %s. The install patch (sha256 %s) was planned against this computer's own tree. %s", rec.Publisher.ComputerID, rec.Track, rec.Operation.OperationID, patchSHA, change),

@@ -83,8 +83,8 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		t.Fatalf("created %d, repeat %d, list %d", created.Status, repeat.Status, list.Status)
 	}
 
-	// Normalize what the test's temp dirs and clock put in: the staging dir
-	// and the request time, and the refusal's detail (git's words, a temp path).
+	// Normalize what the test's clock puts in (the request time) and the
+	// refusal's detail.
 	norm := func(a capsuleInstallAnswer, f func(map[string]any)) capsuleInstallAnswer {
 		var v map[string]any
 		if err := json.Unmarshal(a.Body, &v); err != nil {
@@ -99,7 +99,6 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		return a
 	}
 	view := func(v map[string]any) {
-		v["staged_dir"] = "/var/lib/choir/updater/adoptions/" + id
 		v["requested_at"] = "2026-11-03T03:00:00Z"
 	}
 	created = norm(created, view)

@@ -914,7 +914,6 @@ export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
     patch_sha256: (src.tree_patch || {}).sha256 || '', release_base_commit: src.built_on || '', release_tree_hash: src.tree || '',
     adopter_base_commit: src.built_on || '', adopter_tree_hash: src.tree || '', same_base: true,
     package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
-    staged_dir: `/var/lib/choir/updater/adoptions/${adoptionId}`,
     trajectory_id: `traj-adopt-${n}`, submission_id: `submission-${n}`, doc_id: `doc-adopt-${n}`,
   });
   state.adoptions.unshift(view); // newest first, as the store lists

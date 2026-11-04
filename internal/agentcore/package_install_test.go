@@ -249,7 +249,7 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	if len(submitter.calls) != 1 || !strings.Contains(submitter.calls[0], "package:"+id) || !strings.Contains(submitter.calls[0], "check-packages.mjs") {
 		t.Fatalf("desks' request = %q", submitter.calls)
 	}
-	staged := view.StagedDir
+	staged := rt.stagedInstallDir(view.AdoptionID)
 	stagedRecord, _ := os.ReadFile(filepath.Join(staged, "release.json"))
 	if computerevent.DigestBytes(stagedRecord) != id {
 		t.Fatal("staged record is not the release")
@@ -292,7 +292,7 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	if code != http.StatusCreated || viewB.SameBase {
 		t.Fatalf("I8: install B = %d %s %+v", code, reason, viewB)
 	}
-	commitStaged(t, repo, viewB.StagedDir)
+	commitStaged(t, repo, rt.stagedInstallDir(viewB.AdoptionID))
 	if tree, _, _ := pkgrelease.Subtree(context.Background(), repo, "HEAD", root); tree != recB.Source.Tree {
 		t.Fatalf("I8: root = %s, want B's %s", tree, recB.Source.Tree)
 	}
@@ -307,7 +307,7 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	if code != http.StatusCreated || un.Action != "uninstall" {
 		t.Fatalf("uninstall = %d %s", code, reason)
 	}
-	commitStaged(t, repo, un.StagedDir)
+	commitStaged(t, repo, rt.stagedInstallDir(un.AdoptionID))
 	if _, present, _ := pkgrelease.Subtree(context.Background(), repo, "HEAD", root); present {
 		t.Fatal("uninstall left the root")
 	}
@@ -316,7 +316,7 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	// block a new one.
 	stale := store.ReleaseAdoption{
 		AdoptionID: packageInstallID(computerID, id, "install", 2), OwnerID: owner, ComputerID: computerID, ReleaseID: id,
-		TrajectoryID: "traj-crashed", StagedDir: staged, RequestedAt: time.Now().Add(-3 * time.Hour),
+		TrajectoryID: "traj-crashed", RequestedAt: time.Now().Add(-3 * time.Hour),
 		Kind: "package", Package: installName, Action: "install", Attempt: 2, ReleaseTreeHash: rec.Source.Tree,
 	}
 	if err := rt.store.PutReleaseAdoption(context.Background(), stale); err != nil {
@@ -344,7 +344,7 @@ func TestPackageInstallCapsuleInputRefusesTamperedStaging(t *testing.T) {
 	if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &view) != nil {
 		t.Fatalf("install = %d %s", w.Code, w.Body.String())
 	}
-	patch := filepath.Join(view.StagedDir, "source.patch")
+	patch := filepath.Join(rt.stagedInstallDir(view.AdoptionID), "source.patch")
 	if err := os.Chmod(patch, 0o644); err != nil {
 		t.Fatal(err)
 	}

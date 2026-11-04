@@ -153,10 +153,20 @@ func (rt *Runtime) adoptionInputDir(ctx context.Context, ownerID, computerID, tr
 	if err != nil {
 		return "", err
 	}
-	if err := verifyStagedAdoption(adoption.StagedDir, adoption.ReleaseID, adoption.PatchSHA256); err != nil {
+	if adoption.Kind != adoptionKindPackage {
+		// A P8 adoption from before its deletion mounts nothing.
+		return "", nil
+	}
+	dir := rt.stagedInstallDir(adoption.AdoptionID)
+	if err := verifyStagedAdoption(dir, adoption.ReleaseID, adoption.PatchSHA256); err != nil {
 		return "", fmt.Errorf("%w (%s): %v", errAdoptionStagedTampered, adoption.AdoptionID, err)
 	}
-	return adoption.StagedDir, nil
+	return dir, nil
+}
+
+// stagedInstallDir is where an install's record and patch are staged.
+func (rt *Runtime) stagedInstallDir(installID string) string {
+	return filepath.Join(rt.selfdevUpdaterRoot, "adoptions", installID)
 }
 
 // adoptionView derives the operation on the adoption's trajectory and
