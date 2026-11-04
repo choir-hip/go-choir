@@ -119,11 +119,25 @@ export function validateContract(c) {
       if (!isObject(a)) return problems.push(`allow_unanswered[${i}] must be an object`);
       for (const k of Object.keys(a)) if (!['request', 'reason'].includes(k)) problems.push(`allow_unanswered[${i}]: unknown field "${k}"`);
       if (typeof a.request !== 'string' || !/^(GET|POST|PUT|PATCH|DELETE) \/api\/\S*$/.test(a.request)) problems.push(`allow_unanswered[${i}].request must be "METHOD /api/path", with * for any run of characters`);
+      else if (!allowEntryNarrow(a.request)) problems.push(`allow_unanswered[${i}].request ${JSON.stringify(a.request)} is too broad: name at least two path segments after /api/ before any *, and use * only as a whole last segment`);
       if (typeof a.reason !== 'string' || a.reason.trim().length < 10) problems.push(`allow_unanswered[${i}].reason must say why (10 characters or more)`);
     });
   }
   if (c.note !== undefined && typeof c.note !== 'string') problems.push('note must be a string');
   return problems;
+}
+
+/**
+ * allowEntryNarrow: an allow_unanswered request may not be a blanket excuse.
+ * At least two literal segments after /api/, and * only as a whole last
+ * segment ("GET /api/catalog/releases/*", never "GET /api/*" or "GET /api/catalog*").
+ */
+export function allowEntryNarrow(request) {
+  const segments = request.slice(request.indexOf(' ') + 1).split('/').slice(2); // after "", "api"
+  const star = segments.findIndex((seg) => seg.includes('*'));
+  if (star >= 0 && (star !== segments.length - 1 || segments[star] !== '*')) return false;
+  const literal = (star >= 0 ? segments.slice(0, star) : segments).filter(Boolean);
+  return literal.length >= 2;
 }
 
 /** treeDigest: sha256 over every regular file's relative path and bytes, sorted. */

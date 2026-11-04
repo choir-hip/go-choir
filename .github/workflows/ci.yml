@@ -881,10 +881,23 @@ jobs:
       - name: Install Chromium
         run: cd frontend && pnpm exec playwright install --with-deps chromium
 
+      # The base's copy of the checker runs as well as the head's, as the
+      # guest-epoch check does, so a change cannot loosen the rules it is
+      # judged by in the same push.
       - name: SDK surface against its lock and the lock history
+        shell: bash
         env:
           LOCK_BASE: ${{ steps.lockbase.outputs.base }}
-        run: cd frontend && node scripts/sdk-surface.mjs --base "$LOCK_BASE"
+        run: |
+          set -euo pipefail
+          cd frontend
+          if git cat-file -e "$LOCK_BASE:frontend/scripts/sdk-surface.mjs" 2>/dev/null; then
+            git show "$LOCK_BASE:frontend/scripts/sdk-surface.mjs" > scripts/.base-sdk-surface.mjs
+            node scripts/.base-sdk-surface.mjs --base "$LOCK_BASE"
+          else
+            echo "The base has no frontend/scripts/sdk-surface.mjs; the head's copy runs alone"
+          fi
+          node scripts/sdk-surface.mjs --base "$LOCK_BASE"
 
       - name: Package contracts and the modularity receipt
         env:

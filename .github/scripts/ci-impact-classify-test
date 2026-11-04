@@ -40,6 +40,9 @@ assert_output frontend-change $'frontend/src/routes/+page.svelte\n' \
 assert_output modularity-gate $'frontend/scripts/sdk-surface.mjs\ninternal/pkgruntime/build-module.mjs\n' \
   'frontend=true' 'go=true'
 
+assert_output boundary-plugin $'frontend/scripts/package-boundary-plugin.mjs\n' \
+  'frontend=true' 'go=true'
+
 assert_output modularity-spec $'frontend/tests/package-modularity.spec.js\n' \
   'frontend=true' 'go=false' 'sbom=false'
 

@@ -117,6 +117,14 @@ else
         ;;
     esac
 
+    # internal/pkgruntime embeds a byte copy of the boundary plugin; its Go test
+    # (TestEmbeddedBoundaryPluginIsTheFrontends) must run when the frontend copy changes.
+    case "$path" in
+      frontend/scripts/package-boundary-plugin.mjs)
+        mark go "$path -> pkgruntime embeds a byte copy"
+        ;;
+    esac
+
     case "$path" in
       frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/pnpm-lock.yaml|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
         mark frontend "$path -> frontend build"

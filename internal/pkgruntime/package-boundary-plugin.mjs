@@ -70,6 +70,7 @@ function runtimeProblems(ast, { checkMeta }) {
     } else if (
       (node.type === 'Identifier' && node.name === SDK_GLOBAL)
       || (node.type === 'Literal' && typeof node.value === 'string' && node.value.includes(SDK_GLOBAL))
+      || (node.type === 'TemplateElement' && String(node.value?.cooked ?? node.value?.raw ?? '').includes(SDK_GLOBAL))
     ) {
       // The module/v1 shim's fallback global holds the whole SDK; a package
       // that read it would use names its sdk_imports never lists, so the

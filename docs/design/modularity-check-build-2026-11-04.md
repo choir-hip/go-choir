@@ -74,6 +74,8 @@ module digest, and pass or fail per mode with the errors seen.
 | L9 | a package imports a name that is not in the lock | `sdk_imports` must be a subset of the current lock |
 | L10 | a package's `requires_sdk` admits a shell that lacks a name it imports | the lowest version `requires_sdk` admits must hold every `sdk_imports` name |
 | L12 | a lock is deleted and written again with a smaller surface; with one lock there is no previous step to catch it (review B1) | `--base REF`: every lock that exists at merge-base(REF, HEAD) must be unchanged in the working tree; only new locks may be added; a base that cannot be read fails. CI passes the pull request's base, or on main the live staging commit |
+| L13 | a fabricated intermediate lock already holds a break, so the last step reads as no change, or a new lock is slotted below a released one (review 2, M1) | every adjacent pair of locks is step-checked like the last step; a lock added since the merge base must sort above every lock the base holds |
+| L14 | a change loosens the checker or repoints its base in the same push (review 2, M2) | CI runs the base's copy of `sdk-surface.mjs` as well as the head's (as the guest-epoch check does); the workflow contract test pins the base step's case arms, its inputs and `LOCK_BASE` |
 | L11 | the guard itself is wrong (says minor for a removal) | negative tests on synthetic surfaces: removal, incompatible change, widening, addition, rewording |
 
 ### The contracts
@@ -117,7 +119,9 @@ module digest, and pass or fail per mode with the errors seen.
   package raises later than that (a slow timer, a retry) is not seen; a
   loaded runner makes the window shorter in effect.
 - **The SDK global by a computed name.** The boundary refuses
-  `__choirAppSdk` written as an identifier or in a string; a name built at
+  `__choirAppSdk` written as an identifier, in a string or in template-literal
+  text, and `allow_unanswered` refuses blanket entries (fewer than two path
+  segments, or a `*` that is not a whole last segment); a name built at
   run time (`globalThis['__choir' + 'AppSdk']`) gets past it. The boundary is
   architectural, not a security one (the package runs same-origin), and the
   fallback itself belongs to S12.
@@ -125,7 +129,12 @@ module digest, and pass or fail per mode with the errors seen.
   lays out the build directory the way `internal/pkgruntime/pkgruntime.go`
   does and runs the same two embedded scripts. A change to the scripts reruns
   the gate; a change only to the Go layout or invocation does not, and the
-  gate would not see the drift. The Go tests cover the Go side.
+  gate would not see the drift. The Go tests cover the Go side, and a change
+  to the frontend's boundary plugin now selects the Go lane too, so the
+  byte-copy test runs (the spec also asserts the two copies are equal).
+- **The base's checker on the first landing.** The base's copy of
+  `sdk-surface.mjs` runs only once the base has one; the push that lands it
+  is judged by its own copy alone.
 - **A real backend.** Contracts run against a stub that answers the boot
   routes; an app's data paths are exercised only as far as a contract stubs
   them (its `api` field).

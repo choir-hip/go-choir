@@ -134,14 +134,20 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       const rules = {
         same_version_changed: verdict(withVersion(added, '1.0.0')),
         patch_for_addition: (lock(withVersion(added, '1.0.1')), verdict(withVersion(added, '1.0.1'))),
-        minor_for_addition: (lock(withVersion(added, '1.1.0')), verdict(withVersion(added, '1.1.0'))),
+        minor_for_addition: (fs.rmSync(path.join(dir, '1.0.1.json')), lock(withVersion(added, '1.1.0')), verdict(withVersion(added, '1.1.0'))),
         backwards: verdict(withVersion(surface, '0.9.0')),
         no_lock_for_version: verdict(withVersion(added, '1.2.0')),
         floor: verdict(withVersion({ ...surface, names: { SDK_VERSION: surface.names.SDK_VERSION } }, '1.1.0')),
         types_floor: verdict(withVersion({ ...added, types: {} }, '1.1.0')),
       };
-      fs.rmSync(path.join(dir, '1.0.1.json'));
       fs.rmSync(path.join(dir, '1.1.0.json'));
+      // M1: a fabricated intermediate lock that already holds the break
+      // (1.0.5 = removed) cannot carry it into 1.0.6 as "no change".
+      lock(withVersion(removed, '1.0.5'));
+      lock(withVersion(removed, '1.0.6'));
+      rules.fabricated_intermediate = verdict(withVersion(removed, '1.0.6'));
+      fs.rmSync(path.join(dir, '1.0.5.json'));
+      fs.rmSync(path.join(dir, '1.0.6.json'));
       rules.minor_for_removal = (lock(withVersion(removed, '1.1.0')), verdict(withVersion(removed, '1.1.0')));
       fs.rmSync(path.join(dir, '1.1.0.json'));
       rules.major_for_removal = (lock(withVersion(removed, '2.0.0')), verdict(withVersion(removed, '2.0.0')));
@@ -154,6 +160,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       expect(rules.types_floor).toMatch(/references 0 local types \(floor 1\)/);
       expect(rules.minor_for_removal).toMatch(/is a minor bump, but the surface change needs major: removed clampNumber/);
       expect(rules.major_for_removal).toBe('ok');
+      expect(rules.fabricated_intermediate).toMatch(/locks 1\.0\.0 -> 1\.0\.5 are a patch bump, but their surfaces differ by a major change: removed clampNumber/);
 
       // L10, against these locks: a name added in 1.1.0 needs ^1.1.
       lock(withVersion(added, '1.1.0'));
@@ -204,6 +211,9 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       fs.writeFileSync(path.join(dir, '1.0.1.json'), '{"v":"1.0.0"}\n');
       cases.renamed = verdict();
       reset();
+      fs.writeFileSync(path.join(dir, '0.9.0.json'), '{"v":"0.9.0"}\n');
+      cases.added_below_base = verdict();
+      reset();
       cases.unreadable_base = lockHistory({ base: 'no-such-ref', dir }).problems.join(' / ');
       expect(cases.unchanged).toBe('ok');
       expect(cases.added).toBe('ok');
@@ -211,6 +221,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       expect(cases.modified_committed).toMatch(/1\.0\.0\.json existed at .* and is modified/);
       expect(cases.deleted).toMatch(/1\.0\.0\.json existed at .* and is deleted/);
       expect(cases.renamed).toMatch(/1\.0\.0\.json existed at .* and is deleted \(or renamed\)/);
+      expect(cases.added_below_base).toMatch(/the new lock 0\.9\.0\.json sorts below 1\.0\.0\.json/);
       expect(cases.unreadable_base).toMatch(/cannot find the merge base of no-such-ref/);
       parts.checks.lock_history = { pass: true, cases };
     } finally {
@@ -230,6 +241,12 @@ test.describe('modularity: the SDK lock and every package contract', () => {
     expect(validateContract({ ...good, schema: 'v0' })).toEqual([expect.stringMatching(/schema must be/)]);
     expect(validateContract({ ...good, api: [{ method: 'GET', path: '/elsewhere' }] })).toContain('api[0].path must start with /api/');
     expect(validateContract({ ...good, allow_console: ['('] })).toContain('allow_console[0] must be a regular expression');
+    for (const broad of ['GET /api/*', 'GET /api/catalog/*', 'GET /api/catalog*', 'GET /api/a/*/b']) {
+      expect(validateContract({ ...good, allow_unanswered: [{ request: broad, reason: 'a good long reason' }] }), broad).toEqual([expect.stringMatching(/is too broad/)]);
+    }
+    expect(validateContract({ ...good, allow_unanswered: [{ request: 'GET /api/catalog/releases/*', reason: 'a good long reason' }] })).toEqual([]);
+    // L1: the computer's module build embeds a byte copy of the boundary plugin.
+    expect(fs.readFileSync(path.join(frontendRoot, 'scripts/package-boundary-plugin.mjs')).equals(fs.readFileSync(path.join(frontendRoot, '../internal/pkgruntime/package-boundary-plugin.mjs'))), 'internal/pkgruntime/package-boundary-plugin.mjs must be a byte copy of frontend/scripts/package-boundary-plugin.mjs').toBe(true);
     expect(validateContract({ ...good, allow_unanswered: [{ request: 'GET /api/x' }] })).toContain('allow_unanswered[0].reason must say why (10 characters or more)');
     expect(validateContract({ ...good, allow_unanswered: [{ request: '/api/x', reason: 'a good long reason' }] })).toEqual([expect.stringMatching(/request must be "METHOD \/api\/path"/)]);
     expect(validateContract({ ...good, expect: [{ selector: 'a', count: -1 }] })).toContain('expect[0].count must be a whole number');
@@ -288,9 +305,10 @@ test.describe('modularity: the SDK lock and every package contract', () => {
     fixture('fx-future-sdk', GOOD, { extra: { requires_sdk: '^9.0' } });
     const FETCHES = `<script>import { onMount } from 'svelte'; import { fetchWithRenewal } from '../../lib/app-sdk'; onMount(() => { fetchWithRenewal('/api/fixture/data').catch(() => {}); });</script>\n<section data-fixture-app><p data-fixture-title>Fixture</p></section>\n`;
     fixture('fx-unanswered', FETCHES);
-    fixture('fx-allowed', FETCHES, { more: { allow_unanswered: [{ request: 'GET /api/fixture/*', reason: 'the fixture renders without its data' }] } });
+    fixture('fx-allowed', FETCHES, { more: { allow_unanswered: [{ request: 'GET /api/fixture/data', reason: 'the fixture renders without its data' }] } });
     fixture('fx-stubbed', FETCHES, { more: { api: [{ method: 'GET', path: '/api/fixture/data', status: 200, json: { ok: true } }] } });
     fixture('fx-sdk-global', `<script>const t = globalThis.__choirAppSdk.appTitle('fixture');</script>\n<section data-fixture-app><p data-fixture-title>Fixture {t}</p></section>\n`);
+    fixture('fx-sdk-template', '<script>const t = globalThis[`__choirAppSdk`].appTitle(\'fixture\');</script>\n<section data-fixture-app><p data-fixture-title>Fixture {t}</p></section>\n');
     try {
       // The probation path: trees from elsewhere, installed mode only.
       const rows = await checkPackages({ browser, base: server.base, packages: loadPackages(dir), modes: ['installed'] });
@@ -300,7 +318,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       expect(by['fx-allowed'].modes.installed.allowed_unanswered).toContain('GET /api/fixture/data');
       expect(problems('fx-unanswered')).toMatch(/unanswered: GET \/api\/fixture\/data \(stub it/);
       // The SDK global would let a package use names its sdk_imports never lists: the build refuses it.
-      expect(by['fx-sdk-global'].problems.join(' / ')).toMatch(/module\/v1 build failed.*__choirAppSdk is the shell's, not a package's/);
+      for (const n of ['fx-sdk-global', 'fx-sdk-template']) expect(by[n].problems.join(' / '), n).toMatch(/module\/v1 build failed.*__choirAppSdk is the shell's, not a package's/);
       expect(problems('fx-vacuous')).toMatch(/ready selector "\[data-desk-menu-button\]" did not show inside the fx-vacuous window/);
       expect(problems('fx-missing')).toMatch(/ready selector "\[data-never-there\]" did not show/);
       expect(problems('fx-throws')).toMatch(/did not mount the installed module \(state failed\).*fixture throws on mount/);

@@ -38,6 +38,14 @@ for pattern in \
   "if: needs.plan.outputs.frontend == 'true'" \
   'fetch-depth: 0' \
   'node scripts/sdk-surface.mjs --base "$LOCK_BASE"' \
+  'LOCK_BASE: ${{ steps.lockbase.outputs.base }}' \
+  'PR_BASE: ${{ github.event.pull_request.base.sha }}' \
+  'PLAN_BASE: ${{ needs.plan.outputs.base }}' \
+  'PUSH_BEFORE: ${{ github.event.before }}' \
+  'pull_request) base="$PR_BASE" ;;' \
+  'push) base="${PLAN_BASE:-$PUSH_BEFORE}" ;;' \
+  'git show "$LOCK_BASE:frontend/scripts/sdk-surface.mjs" > scripts/.base-sdk-surface.mjs' \
+  'node scripts/.base-sdk-surface.mjs --base "$LOCK_BASE"' \
   'CHOIR_MODULARITY_BASE: ${{ steps.lockbase.outputs.base }}' \
   'pnpm exec playwright test tests/package-modularity.spec.js'; do
   if ! grep -Fq -- "$pattern" <<<"$modularity_segment"; then

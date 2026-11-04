@@ -359,6 +359,18 @@ export function checkLock({ frontendRoot = DEFAULT_ROOT, dir = lockDir(frontendR
   } else {
     problems.push(`no lock for SDK_VERSION ${version}; run node scripts/sdk-surface.mjs --write`);
   }
+  // M1: every adjacent pair of locks is a step too, so a fabricated
+  // intermediate lock that already holds a break cannot launder it into a
+  // patch: v_i -> v_{i+1} must bump at least what its own diff needs.
+  for (let i = 0; i + 1 < locks.length; i++) {
+    const a = locks[i];
+    const b = locks[i + 1];
+    const pair = compareSurfaces(a.surface, b.surface, { frontendRoot });
+    const kind = bumpKind(a.version, b.version);
+    if (RANK[kind] < RANK[pair.required]) {
+      problems.push(`locks ${a.version} -> ${b.version} are a ${kind} bump, but their surfaces differ by a ${pair.required} change: ${describeDiff(pair)}`);
+    }
+  }
   if (previous) {
     const stepDiff = compareSurfaces(previous.surface, surface, { frontendRoot });
     bump = bumpKind(previous.version, version);
@@ -429,6 +441,20 @@ export function lockHistory({ base, dir = lockDir() }) {
     if (status !== 'A') {
       const what = status === 'D' ? 'deleted (or renamed)' : status === 'M' ? 'modified' : `changed (${status})`;
       out.problems.push(`lock history: ${file} existed at ${out.merge_base.slice(0, 12)} and is ${what}; a lock is never changed once it exists. Bump SDK_VERSION and write a new lock instead`);
+    }
+  }
+  // M1: a new lock sorts above every lock the merge base holds; a lock slotted
+  // in below a released one would rewrite the history the steps are judged on.
+  const listed = git('ls-tree', '--name-only', out.merge_base, '--', `:(top)${rel}/`);
+  const versionOf = (f) => (/(\d+\.\d+\.\d+)\.json$/.exec(f) || [])[1];
+  const atBase = listed.status === 0 ? listed.stdout.split('\n').map(versionOf).filter(Boolean) : [];
+  const now = existsSync(dir) ? readdirSync(dir).map(versionOf).filter(Boolean) : [];
+  const newestAtBase = atBase.sort(compareVersions).at(-1);
+  if (newestAtBase) {
+    for (const v of now.filter((x) => !atBase.includes(x))) {
+      if (compareVersions(v, newestAtBase) <= 0) {
+        out.problems.push(`lock history: the new lock ${v}.json sorts below ${newestAtBase}.json, which the merge base already holds; a new lock goes above every released one`);
+      }
     }
   }
   return out;
