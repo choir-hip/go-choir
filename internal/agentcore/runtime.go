@@ -97,6 +97,10 @@ type Runtime struct {
 	// reviewsEnded names, per run, the candidate whose review timed out or
 	// whose kept Complete failed, so its next Complete is not diverted.
 	reviewsEnded sync.Map
+	// lineageNotices holds each engineering run's lineage brief (run id ->
+	// string), computed once so the run context stays the same across its
+	// turns (engineer_lineage.go).
+	lineageNotices sync.Map
 	// jobTable overrides the executor's job view for the completion guard
 	// (tests).
 	jobTable capsuleJobTable

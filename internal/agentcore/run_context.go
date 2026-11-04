@@ -105,6 +105,10 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 				if notice := rt.carriedPatchNoticeForRun(rec); notice != "" {
 					b.WriteString("\n\n" + notice)
 				}
+				// The app's last engineer's handoff (engineer_lineage.go).
+				if notice := rt.lineageNoticeForRun(rec); notice != "" {
+					b.WriteString("\n\n" + notice)
+				}
 			}
 			if words := rt.ownerWordsForRun(rec); words != "" {
 				b.WriteString("\n\n" + words)

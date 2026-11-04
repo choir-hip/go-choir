@@ -1813,6 +1813,9 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 	result, err := rt.store.RecordEngineeringAssignmentReport(ctx, req)
 	if err == nil && !result.Replay && result.Assignment.Disposition.Terminal() {
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, string(report.Result)+": "+report.Summary)
+		// The app's next engineer starts from this one's handoff
+		// (engineer_lineage.go); written before the next request wakes.
+		rt.recordEngineeringLineage(ctx, result.Assignment, report)
 		rt.wakeNextQueuedEngineeringRequest(ctx, result.Assignment)
 	}
 	if err == nil {
