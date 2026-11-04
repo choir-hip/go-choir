@@ -168,6 +168,10 @@ type textureDocumentResponse struct {
 	// AgentRevisionInterrupted: the latest Texture turn was cut off by a
 	// restart and will not resume on its own.
 	AgentRevisionInterrupted bool `json:"agent_revision_interrupted,omitempty"`
+	// AgentRequestUnattended: the owner's latest request was closed because
+	// nothing was working on it (UnattendedRequestReason); the value is the
+	// reason. The owner's next revise reopens work.
+	AgentRequestUnattended string `json:"agent_request_unattended,omitempty"`
 }
 
 // textureDocumentStreamEvent is the hidden transport envelope sent over the
@@ -1011,6 +1015,10 @@ func (h *Handler) handleTextureGetDocument(w http.ResponseWriter, r *http.Reques
 	} else if interruptedRunID := h.textureTurnInterruptedByRestart(r.Context(), doc); interruptedRunID != "" {
 		resp.AgentRevisionInterrupted = true
 		resp.AgentRevisionRunID = interruptedRunID
+	} else if trajectoryID := strings.TrimSpace(doc.TrajectoryID); trajectoryID != "" && h.Store != nil {
+		if snapshot, err := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, trajectoryID); err == nil {
+			resp.AgentRequestUnattended = textureRequestUnattended(snapshot, docID)
+		}
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }

@@ -156,7 +156,7 @@ func TestWriteCommitsACitedParagraphAndKeepsUntouchedBlocks(t *testing.T) {
 	h, s, rec := cellAuthorSetup(t, "write")
 	ctx := context.Background()
 	base := headOf(t, s, rec)
-	first := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+	first := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the regulator's appeal", Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.",
 		Why:   "state the ruling",
 	}})
@@ -172,7 +172,7 @@ func TestWriteCommitsACitedParagraphAndKeepsUntouchedBlocks(t *testing.T) {
 		t.Fatalf("replay = %q, %v; want the first receipt", again, err)
 	}
 
-	second := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Write: &yaegikernel.TextureWrite{
+	second := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Wait: "the court's schedule", Write: &yaegikernel.TextureWrite{
 		Edits: "@insert after b2\nThe regulator appealed {{cite https://example.org/court \"appeal was filed on Monday\"}}.",
 		Why:   "add the appeal",
 	}})

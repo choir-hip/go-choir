@@ -20,7 +20,7 @@ func TestWriteSelfScoreReachesTheCitationCheck(t *testing.T) {
 	rec.Metadata["provider"], rec.Metadata["model"] = "chatgpt", "gpt-6-luna"
 	base := headOf(t, s, rec)
 	p := 0.8
-	body := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+	body := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{
 		Edits:      "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.",
 		Why:        "state the ruling",
 		PSupported: &p,

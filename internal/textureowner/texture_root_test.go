@@ -138,7 +138,13 @@ func (rh *rootHarness) activeRun(docID string) (types.RunRecord, bool) {
 func (rh *rootHarness) write(h *Handler, run *types.RunRecord, identity, text, done string) {
 	rh.t.Helper()
 	base := headOf(rh.t, rh.s, *run)
-	turn := turnBody(rh.t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: done, Write: &yaegikernel.TextureWrite{Edits: "@all\n# " + identity + "\n\n" + text, Why: "report " + identity}})
+	// A Write that leaves its request open says what it waits on
+	// (texture_next_actor.go); these documents wait on the next report.
+	wait := ""
+	if done == "" {
+		wait = "the next report"
+	}
+	turn := turnBody(rh.t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: done, Wait: wait, Write: &yaegikernel.TextureWrite{Edits: "@all\n# " + identity + "\n\n" + text, Why: "report " + identity}})
 	if _, err := h.CommitCellTextureAuthor(rh.t.Context(), run, turn, identity); err != nil {
 		rh.t.Fatalf("Write %s: %v", identity, err)
 	}

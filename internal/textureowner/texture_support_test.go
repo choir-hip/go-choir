@@ -102,7 +102,7 @@ func TestCommitListsNewPairsAndJevJudgesThemOffTheCommit(t *testing.T) {
 	ctx := context.Background()
 	base := headOf(t, s, rec)
 	management, texture := managementInbox(rec), rec.AgentID
-	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the merger may proceed\"}}, and the regulator appealed {{cite https://example.org/court \"appeal was filed on Monday\"}}.",
 		Why:   "state the ruling and the appeal",
 	}})
@@ -185,7 +185,7 @@ func TestCommitListsNewPairsAndJevJudgesThemOffTheCommit(t *testing.T) {
 	}
 
 	// A later commit that leaves the pairs unchanged asks Jev nothing.
-	other := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Write: &yaegikernel.TextureWrite{Edits: "@replace b3\nA new closing line.", Why: "close"}})
+	other := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{Edits: "@replace b3\nA new closing line.", Why: "close"}})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, other, "support-2"); err != nil {
 		t.Fatalf("unrelated Write: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestCommitListsNewPairsAndJevJudgesThemOffTheCommit(t *testing.T) {
 
 	// Editing the citing sentence makes a new pair, judged on its own.
 	v2 := headOf(t, s, rec)
-	edit := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v2.RevisionID, Write: &yaegikernel.TextureWrite{
+	edit := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v2.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b2\nThe court said the merger may proceed {{cite https://example.org/court \"the merger may proceed\"}}.", Why: "tighten",
 	}})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, edit, "support-3"); err != nil {
@@ -245,7 +245,7 @@ func TestNotCapturedCitationIsCheckedButNeverMemoized(t *testing.T) {
 	h.createAgentMutationForRun(context.Background(), &rec)
 	ctx := context.Background()
 	base := headOf(t, s, rec)
-	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b3\nThe merger may proceed {{cite https://example.org/court \"the merger may proceed\"}}.", Why: "cite the ruling",
 	}})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, write, "uncaptured-1"); err != nil {

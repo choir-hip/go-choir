@@ -187,7 +187,7 @@ func TestFrozenCandidateCapturesAreEmbeddedByTexture(t *testing.T) {
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, stale, "stale-1"); err == nil || !strings.Contains(err.Error(), "changed since your frame") {
 		t.Fatalf("a Write on the old head: %v", err)
 	}
-	fresh := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Write: &yaegikernel.TextureWrite{Edits: "@insert after b2\nThe screenshots follow.", Why: "introduce the evidence"}})
+	fresh := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Wait: "the owner's decision on the candidate", Write: &yaegikernel.TextureWrite{Edits: "@insert after b2\nThe screenshots follow.", Why: "introduce the evidence"}})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, fresh, "fresh-1"); err != nil {
 		t.Fatalf("a Write around the embeds: %v", err)
 	}

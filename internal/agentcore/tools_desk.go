@@ -1128,6 +1128,16 @@ func (rt *Runtime) takeTextureActivationCells(runID string) (textureActivationCe
 	return cells, ok
 }
 
+// The runtime's Idle turn says which of two activations it answers. With
+// TextureIdleNoActReason the activation staged nothing, so a Texture request
+// it leaves open has no next actor unless something else works on it; the
+// commit then gives that request a visible fate
+// (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
+const (
+	TextureIdleNoActReason  = "desk activation completed with no authoring act; consuming the owner revision"
+	TextureIdleOffDocReason = "desk activation committed an act off the texture doc (no revision needed); consuming the owner revision"
+)
+
 // answerIdleTextureTrigger disposes the activation's trigger when its cells
 // completed but none authored a Texture turn. Without it the owner-revision
 // trigger never consumes: texture_turn_committed needs an artifactRefs[1] ==
@@ -1177,9 +1187,9 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 	if doc.CurrentRevisionID == "" {
 		return nil
 	}
-	reason := "desk activation completed with no authoring act; consuming the owner revision"
+	reason := TextureIdleNoActReason
 	if cells.staged {
-		reason = "desk activation committed an act off the texture doc (no revision needed); consuming the owner revision"
+		reason = TextureIdleOffDocReason
 	}
 	body, err := json.Marshal(yaegikernel.TextureTurn{BaseRevisionID: doc.CurrentRevisionID, Idle: reason})
 	if err != nil {

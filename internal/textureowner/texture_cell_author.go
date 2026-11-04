@@ -53,21 +53,33 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 	// committed turn already recorded on the durable run tape instead of
 	// re-committing — ApplyTextureTurn is head-pinned, so a second dispatch
 	// would CAS-conflict on the head the first commit advanced.
-	if receipt, ok := h.cellAuthorReceipt(ctx, rec, revisionIdentity); ok {
-		return receipt, nil
-	}
 	var turn yaegikernel.TextureTurn
 	dec := json.NewDecoder(strings.NewReader(bodyJSON))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&turn); err != nil {
 		return "", fmt.Errorf("texture cell author: decode turn: %w", err)
 	}
-	receipt, err := h.commitTextureTurn(ctx, rec, turn, strings.TrimSpace(revisionIdentity))
-	if err != nil {
-		return "", err
+	receipt, ok := h.cellAuthorReceipt(ctx, rec, revisionIdentity)
+	if !ok {
+		var err error
+		if receipt, err = h.commitTextureTurn(ctx, rec, turn, strings.TrimSpace(revisionIdentity)); err != nil {
+			return "", err
+		}
+		h.recordCellAuthorReceipt(ctx, rec, revisionIdentity, receipt)
 	}
-	h.recordCellAuthorReceipt(ctx, rec, revisionIdentity, receipt)
+	// The backstop runs on a replay too: an Idle turn whose request close
+	// failed after the turn committed closes it on the retry.
+	if turn.Idle != "" {
+		if err := h.closeUnattendedRequest(ctx, rec, textureTurnDocID(rec), turn); err != nil {
+			return "", fmt.Errorf("texture cell author: %w", err)
+		}
+	}
 	return receipt, nil
+}
+
+// textureTurnDocID is the document a Texture run's turn commits on.
+func textureTurnDocID(rec *types.RunRecord) string {
+	return strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID))
 }
 
 // cellAuthorReceiptKind marks the durable receipt a committed cell-author turn
@@ -146,9 +158,6 @@ func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, t
 	if turn.Write == nil && turn.Done == "" && turn.Wait == "" && len(turn.Rejects) == 0 && turn.Idle == "" {
 		return "", fmt.Errorf("texture cell author: the turn has no Write, Done, Wait or Reject")
 	}
-	if turn.Write != nil && turn.Wait != "" {
-		return "", fmt.Errorf("texture cell author: a turn either Writes or Waits")
-	}
 	computerID := strings.TrimSpace(rec.ComputerID)
 	mutation, err := h.Store.GetAgentMutationByRun(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	if err != nil {
@@ -216,6 +225,11 @@ func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, t
 		if doc.TrajectoryID == "" || rec.AgentID != currentTextureAgentID(docID) {
 			return "", fmt.Errorf("texture turn requires the exact lifecycle Texture caller")
 		}
+		// A turn that leaves the owner's request open names its next
+		// actor, or nothing commits (texture_next_actor.go).
+		if err := h.refuseUnattendedTurn(ctx, rec, doc, turn); err != nil {
+			return "", err
+		}
 		result, err := h.applyTextureLifecycleTurn(ctx, rec, doc, args, outcome, types.Revision{}, store.TextureSourceGraphWriteSet{}, reason)
 		if err != nil {
 			return "", fmt.Errorf("apply atomic Texture turn: %w", err)
@@ -272,6 +286,14 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	content := strings.TrimSpace(projection.Text)
 	if content == "" {
 		return "", fmt.Errorf("choir.Write refused, nothing committed: the document would have no text")
+	}
+	// After the Write's own checks, so a script error is named first: a
+	// Write that leaves the owner's request open names its next actor, or
+	// nothing commits (texture_next_actor.go).
+	if durableLifecycle {
+		if err := h.refuseUnattendedTurn(ctx, rec, doc, turn); err != nil {
+			return "", err
+		}
 	}
 	if strings.TrimSpace(doc.TrajectoryID) == "" {
 		if err := h.canonicalizeAliasedTextureDocumentTitle(ctx, rec.OwnerID, &doc, time.Now().UTC()); err != nil {

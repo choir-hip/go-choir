@@ -1042,6 +1042,18 @@ func (s *Store) OpenRoundsAddressedTo(ctx context.Context, ownerID, computerID, 
 	}, func(head types.ConversationHead) bool { return head.RecipientInbox == inbox })
 }
 
+// OpenRoundsCastBy returns the open rounds inbox cast, sorted by
+// conversation id, read from the conversation heads like
+// OpenRoundsAddressedTo. Each is work another desk owes inbox a Report for:
+// the Texture next-actor check reads it at a turn commit
+// (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
+func (s *Store) OpenRoundsCastBy(ctx context.Context, ownerID, computerID, inbox string) ([]types.ConversationHead, error) {
+	inbox = strings.TrimSpace(inbox)
+	return s.openConversationHeads(ctx, ownerID, computerID, func(conversationID string) bool {
+		return strings.HasPrefix(conversationID, "conv:"+inbox+"|") || strings.HasSuffix(conversationID, "|"+inbox)
+	}, func(head types.ConversationHead) bool { return head.CasterInbox == inbox })
+}
+
 // OpenConversationHeads returns every open round of the computer, sorted by
 // conversation id, read from the conversation heads. It is the crash boot's
 // read (closeOpenRoundsAfterCrash): RebuildInboxHeads folds every inbox

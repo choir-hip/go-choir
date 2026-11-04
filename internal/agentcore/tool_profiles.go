@@ -490,6 +490,14 @@ func deskSurfacePrompt(profile string, rec *types.RunRecord, hidden ...string) s
 	}
 }
 
+// LiveSelfDevelopmentOperation returns the trajectory's live
+// self-development operation and its state, or "" when it has none. The
+// runtime runs a live operation, so it is a next actor for the Texture
+// request the trajectory serves.
+func (rt *Runtime) LiveSelfDevelopmentOperation(computerID, trajectoryID string) (operationID, state string) {
+	return textureRunSelfDevelopmentOperation(rt, &types.RunRecord{ComputerID: computerID, TrajectoryID: trajectoryID})
+}
+
 // textureRunSelfDevelopmentOperation names the self-development operation a
 // Texture run's trajectory supervises and its state, or "" when there is none.
 // Only an operation still in flight is supervised: when every operation on the

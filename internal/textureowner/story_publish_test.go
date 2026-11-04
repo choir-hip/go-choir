@@ -392,7 +392,7 @@ func TestStoryIsTitledByTexturesHeadlineAndAHeadlinelessRevisionIsHeld(t *testin
 	// An owner's document is not a story: its heading does not retitle it.
 	dh, ds, docRec := cellAuthorSetup(t, "not-a-story")
 	docBase := headOf(t, ds, docRec)
-	edit := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: docBase.RevisionID, Write: &yaegikernel.TextureWrite{
+	edit := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: docBase.RevisionID, Wait: "the owner's next edit", Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b1\n# Merger approved", Why: "retitle the section",
 	}})
 	if _, err := dh.CommitCellTextureAuthor(ctx, &docRec, edit, "write-doc"); err != nil {

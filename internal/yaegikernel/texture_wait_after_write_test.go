@@ -16,6 +16,10 @@ import (
 //   - the Cast or the Write is missing from the shipped intents;
 //   - the Wait overwrites the Write's turn (the revision is lost);
 //   - Write after Wait stops being refused (a turn still Writes or Waits).
+//
+// Since docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md
+// the Wait after a Write records its why with the revision (it names what the
+// open request waits on), and a Done after both supersedes the Wait.
 func TestTextureCellCastWriteWaitPanicOnErrKeepsCastAndWrite(t *testing.T) {
 	scope, _ := textureTurnScope(t)
 	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
@@ -51,8 +55,31 @@ if err != nil { panic(err) }`
 	if err := json.Unmarshal([]byte(turn.Body), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Write == nil || got.Wait != "" {
-		t.Fatalf("turn = %+v, want the Write kept and no Wait recorded", got)
+	if got.Write == nil || got.Wait != "waiting on the build" {
+		t.Fatalf("turn = %+v, want the Write kept and the Wait's why recorded", got)
+	}
+
+	// Write, Wait, Done: the revision answers the request, so Done
+	// supersedes the Wait and nothing is left waiting.
+	hooks = scope.BindCell()
+	source = `_, _ = choir.Write("@replace b1\nnew body", "rewrite")
+_, _ = choir.Wait("waiting")
+_, err := choir.Done("the revision answers it")
+if err != nil { panic(err) }`
+	out, err = serveCell(sess, SessionFrame{ID: "c-done", Source: source, Doc: doc}, nil, &hooks)
+	if err != nil || out.Error != "" {
+		t.Fatalf("write, wait, done = %v %s", err, out.Error)
+	}
+	got = TextureTurn{}
+	for _, in := range out.Intents {
+		if in.Kind == IntentTextureTurn {
+			if err := json.Unmarshal([]byte(in.Body), &got); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if got.Write == nil || got.Done != "the revision answers it" || got.Wait != "" {
+		t.Fatalf("turn = %+v, want the Write and Done, no Wait", got)
 	}
 
 	// Write after Wait is still refused: a turn either Writes or Waits.

@@ -97,6 +97,9 @@
   let submitting = false;
   let agentPending = false;
   let agentRunId = '';
+  // The owner's latest request was closed because nothing was working on it
+  // (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
+  let requestUnattended = '';
   let error = '';
   let saveStatus = '';
   let currentDoc = null;
@@ -516,9 +519,26 @@
 
   $: followPromptBarContinue(appContext?.promptBarContinue);
 
+  const UNATTENDED_REQUEST_REASON = 'no one is working on this request';
+
+  // unattendedRequestReason reads the backstop's fate from a lifecycle
+  // snapshot: the document's latest Texture work item, refused because
+  // nothing was working on it.
+  function unattendedRequestReason(snapshot, docId) {
+    const agentId = `texture:${docId}`;
+    let latest = null;
+    for (const work of snapshot?.work_items || []) {
+      if (work?.assigned_agent_id !== agentId || work?.authority_profile !== 'texture') continue;
+      if (!latest || String(work.updated_at || '') > String(latest.updated_at || '')) latest = work;
+    }
+    const reason = String(latest?.reason || '').trim();
+    return latest?.status === 'refused' && reason.startsWith(UNATTENDED_REQUEST_REASON) ? reason : '';
+  }
+
   function applyDocumentWorkState(doc) {
     agentPending = !!doc?.agent_revision_pending;
     agentRunId = doc?.agent_revision_run_id || '';
+    requestUnattended = agentPending ? '' : String(doc?.agent_request_unattended || '');
     if (agentPending) {
       saveStatus = synthStatusLabel();
     } else if (doc?.agent_revision_interrupted) {
@@ -546,6 +566,7 @@
     latestHeadRevisionId = nextHead || latestHeadRevisionId;
     agentPending = snapshot.activation?.state === 'pending' || snapshot.activation?.state === 'running' || snapshot.activation?.state === 'blocked';
     agentRunId = snapshot.activation?.run_id || '';
+    requestUnattended = agentPending ? '' : unattendedRequestReason(snapshot, currentDoc?.doc_id || '');
     if (agentPending) saveStatus = synthStatusLabel();
     if (nextHead && currentRevision?.revision_id !== nextHead) {
       await applyHeadChange(nextHead);
@@ -2026,6 +2047,12 @@
         {#if agentRunId}
           <span class="work-run">{shortHash(agentRunId)}</span>
         {/if}
+      </div>
+    {/if}
+
+    {#if !agentPending && requestUnattended}
+      <div class="work-banner" data-texture-request-unattended role="status" aria-live="polite" title={requestUnattended}>
+        <span class="work-copy">No one is working on this request. Revise again to continue.</span>
       </div>
     {/if}
 

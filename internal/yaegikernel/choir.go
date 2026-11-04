@@ -1240,27 +1240,35 @@ func (s *ChoirScope) Done(why string) (string, error) {
 			return fmt.Errorf("choir: Done refused, nothing staged: this cell's Write was refused (%s); fix the script and call Write again, then Done", s.tray.writeRefused)
 		case turn.Done != "":
 			return fmt.Errorf("choir: Done once per cell")
-		case turn.Wait != "":
+		case turn.Wait != "" && turn.Write == nil:
 			return fmt.Errorf("choir: this cell already called Wait; the work is either done or waiting")
 		}
+		// After a Write, Done supersedes a Wait in the same cell: the
+		// revision answers the request, so nothing is left to wait on.
+		turn.Wait = ""
 		turn.Done = why
 		return nil
 	})
 }
 
-// Wait records that the document is waiting for evidence: a turn without a
-// revision. A Cast, Ask or Note in the same cell commits with it. After a
-// Write in the same cell it is a no-op that returns nil: the Write already
-// disposes the turn, and an error here taught cells to panic, which rolled
-// back the Write and the Cast with it
+// Wait records that the document is waiting for evidence, and why. Alone it
+// is a turn without a revision; a Cast, Ask or Note in the same cell commits
+// with it. After a Write in the same cell it returns nil and the why commits
+// with the revision: the request stays open and the Wait names what it waits
+// on, which a Write that leaves the owner's request open with nothing
+// working on it must do
+// (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
+// It never errors after a Write: an error there taught cells to panic, which
+// rolled back the Write and the Cast with it
 // (docs/problems/texture-wait-after-write-loses-intents-2026-11-03.md).
-// Write after Wait stays refused.
+// Write after Wait stays refused, and after Done a Wait is refused.
 func (s *ChoirScope) Wait(why string) (string, error) {
 	return s.closeTurn("wait", why, func(turn *TextureTurn, why string) error {
 		switch {
 		case turn.Wait != "":
 			return fmt.Errorf("choir: Wait once per cell")
-		case turn.Write != nil:
+		case turn.Done != "" && turn.Write != nil:
+			// The revision already completes the request; nothing waits.
 			return nil
 		case turn.Done != "":
 			return fmt.Errorf("choir: this cell already called Done; the work is either done or waiting")
