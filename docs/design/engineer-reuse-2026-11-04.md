@@ -123,9 +123,8 @@ screens note attached) and commits it as a **progress Report**
   replayed cell replays the same Report and Verify can find it (A2).
 
 The full terminal report and its intent identity are kept in memory on
-the runtime, keyed by the run, for the park (A3). The cell's output says
-the candidate is under review and carries `review_park: <op>`; the cell
-is not terminal.
+the runtime, keyed by the run, for the park (A3); the batch wait parks
+when the run has a kept review. The cell is not terminal.
 
 `refusePartialCompleteAfterFreeze` is unchanged: the engineer never
 stages a partial after a Freeze; only the platform converts its
@@ -166,8 +165,7 @@ pass replays).
 ### A3. The verdict park (engineering tool loop)
 
 The engineering batch wait runs the review park before the job park. When
-the batch's `capsule_go_eval` output carries `review_park: <op>`, the park
-waits, with no model call, until one of:
+the run has a kept review (A1), the park waits, with no model call, until one of:
 
 | outcome | how it is read | what the park does |
 |---|---|---|
@@ -280,19 +278,24 @@ app's last engineer, and older ones stay reachable through their own
 assignments on the tape. The operation's state is not copied: the brief
 reads it live from the operation store (single authority).
 
-Apps are derived from the candidate's changed paths
-(`frontend/src/packages/<app>/...`); a change touching no package writes no
-lineage.
+Apps are derived from the candidate's changed paths: a package
+(`frontend/src/packages/<app>/...`) or a first-party app component
+(`frontend/src/lib/<App>App.svelte`, the app being the lowercased name);
+a change touching neither writes no lineage. A rebase round writes none:
+it adds no work of its own.
 
 The engineering prompt asks every Complete summary to end with a
 "Handoff:" paragraph: the decisions made and the open issues.
 
 ### B3. The resume
 
-At the spawn of a new implementation assignment, after the carry, the
-runtime looks up the lineage of the apps the request names: the Cast
-spec's `"app"` field when management sets it, else the package names that
-have a lineage record and appear as words in the request and objective.
+When a new implementation assignment's run context is built, after the
+carry notice, the runtime looks up the lineage of the apps the request
+names: the app names that have a lineage record and appear as words in
+the run's objective and the opening Cast's objective and body ("calendar",
+"Calendar app", "CalendarApp"). Management's prompt asks it to name the
+app in the objective. The brief is computed once per run, so the run
+context stays the same across its turns (the prompt cache).
 Each record found (at most two) adds a "Prior work on <app>" section to the
 engineer's notice, built like the carry notice: who built it and when,
 the operation's current state, the files, the summary and handoff, the run
@@ -414,11 +417,19 @@ inert data a reverted runtime never reads. There is no runtime switch (the
   asked to keep (the conversation and the capsule). The durable form is
   the run's passivation, with the verdict delivered to its inbox; named
   for the later step with R3.
-- R5. Phase B's app match is a word match unless management names the app
-  (the Cast spec gains an `"app"` field in phase B).
+- R5. Phase B's app match is a word match over the request and objective;
+  management is asked to name the app. No typed Cast `"app"` field is
+  added: the cast spec stays as it is.
 - R6. The Texture rejection line rides the progress relay's gate
   (`engineering.progress_to_texture`, default on): a computer that stored
   it off gets no line, as for every relay.
+- R8. An assignment cancelled (not its trajectory) after its candidate
+  passed review leaves that candidate `awaiting_approval`, an open state
+  that holds the computer's one-open-operation rule until the owner decides
+  it, as a completed assignment's candidate does today (A4, 7c).
+- R9. The divert-to-pass spine (a real Complete diverted, then a pass
+  committing the kept Complete through the terminal saga) has no unit test;
+  the staging proof is its check.
 - R7. A computer that runs both this and the retained-candidate fix needs
   the A6 merge rules; until the second lands, its own tests are the check.
 
@@ -442,6 +453,14 @@ Devin (revise) and DeepSeek v4.1 flash (revise), on revision 1:
   rejection test was a string prefix (plus the verification event, A4);
   the Texture line's gate is named (R6); the Cast has no `"app"` field yet
   (phase B adds it).
+
+## Code review, phase A
+
+Devin and DeepSeek v4.1 flash, round 1 on the phase A commit: both
+accept_with_nits, no blocking finding. Folded in: admission includes
+`verified`; a stranded terminal saga is not diverted; the timeout re-reads
+the operation before it commits; the "ended" resume names an owner
+rejection; the commit-failure resume says how to end. Named: R8, R9.
 
 ## Staging proof
 
