@@ -133,6 +133,25 @@ module digest, and pass or fail per mode with the errors seen.
   contract (it is in the release tree, which `pkgrelease.Materialize`
   writes).
 
+## Findings
+
+- **F1 (2026-11-04, the first run of the installed mode): a page load with a
+  live session never reads the installed set.** `Desktop.svelte` calls
+  `refreshInstalledPackages()` only in the reactive block that fires when
+  `authenticated` changes after mount. A page load whose session is already
+  live mounts with `authenticated` true, so `onMount` takes the
+  `startAuthenticatedDesktop()` branch and the installed set is never read:
+  `GET /api/packages/installed` is not requested, the launcher shows the
+  in-tree packages only, and an installed package appears only after the
+  Library's change signal or a sign-in in that tab. Evidence: the runner's
+  request log for the installed mode shows `/api/shell/bootstrap`,
+  `/api/preferences/theme` and `/api/desktop/state` and no
+  `/api/packages/installed`; every package failed "the window does not host
+  the installed module". `runtime-install.spec.js` tests the loader in
+  isolation and could not see it. Fix: read the installed set in the
+  signed-in branch of `onMount` too (one line, on this branch; it belongs on
+  `s12-runtime-install`).
+
 ## Built
 
 (filled in as the slices land)
