@@ -15,13 +15,11 @@ public, 2026-11-03; the owner's word is install, not adopt).
 - The host-only blob read `GET /internal/platform/packages/releases/<id>/blobs/<sha>?owner_id=`
   lands on branch `package-export` (with the public catalog route). This
   work calls it and must land after it.
-- P8 source adoption (`internal/agentcore/release_adoption.go`, route
-  `POST|GET /api/computers/<id>/self-development/adoptions`) verifies a
-  software release, stages its patch read-only, and asks this computer's
-  desks, through the owner's prompt path, to apply it in an engineering
-  capsule. Freeze, management's Verify, the owner's decision, materialization,
-  the planned restart and rollback are the self-development machinery,
-  unchanged. Nothing installs a package release today.
+- P8 source adoption (`release_adoption.go`) staged a software release's
+  patch and asked the desks, through the owner's prompt path, to apply it in
+  an engineering capsule. Install keeps that half: the capsule, Freeze,
+  Verify, the owner's decision, the materializer, its planned restart and
+  rollback, unchanged.
 - The published Library UI (`library-next`, pool's release `8810c72d…`)
   already calls `POST /api/computers/<id>/self-development/adoptions` with
   `{release_id, record}` and lists installs from `GET` on the same route
@@ -30,9 +28,56 @@ public, 2026-11-03; the owner's word is install, not adopt).
   `operation.state`). Today that POST answers `release_record_invalid` for a
   package record. So the backend takes the route the UI already calls.
 
-Install is P8's ladder generalized to a package record. No parallel apply
-path: the only way code changes on a computer stays a frozen, verified,
-owner-decided self-development operation.
+Install replaces P8 (owner ruling, 2026-11-04: "If the existing adoption
+endpoint isn't actually working, then get rid of it"). The adoptions route
+keeps its path, because the Library UI, the capsule install fixture
+(`scripts/choir-shot.mjs`, `scripts/fixtures/capsule-install.json`) and the
+fixture parity test already call it; it now takes package releases only.
+Renaming it is a later UI change. No parallel apply path: the only way code
+changes on a computer stays a frozen, verified, owner-decided
+self-development operation.
+
+### Did software-release adoption ever work? (evidence)
+
+- Once, in a drill: adopt-1400 (2026-10-15, same owner, both computers made
+  by `scripts/reeng_tracer.mjs --scenario adopt`) reached `applied`; its
+  serve and identity checks read false
+  (docs/archive/problems/adopt-1400-adopter-applied-served-and-identity-read-too-early-2026-10-15.md).
+- adopt-1418 the same day: 201, then the desks finished with no operation
+  (docs/archive/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md).
+- The only real use, 2026-10-27: the owner's `release adopt` of release
+  4320be52… answered 404 (cross-owner reads), and the owner paused release
+  adoption for a design pass
+  (docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md).
+- Staging today: `choir release list` answers `count: 0` for the owner; the
+  keep-set accounting counts 4 `choir.software_release` records
+  (docs/evidence/keep-set-accounting-2026-10-29.md), none in the keep set.
+- Callers besides the Library UI: `choir release publish/adopt/adoptions`
+  and `reeng_tracer.mjs --scenario adopt`. No desk, no nix unit, no CI job.
+
+Verdict: not working, unused, superseded by the Library. Deleted in its
+own commits: software-release publish and adoption end to end.
+
+### Deletion citers (standing question: deletion citers)
+
+Code: `internal/agentcore/release_adoption.go`, `release_source.go`,
+`api_release.go` (release draft, adoptions handler), `effective_release.go`
+(`adopted_release_id`), `api_self_development.go` (routes),
+`engineering_assignment_runtime.go` (capsule input, kept for installs),
+`runtime.go`, `run_context.go` (fixture text, kept), `internal/autoputer/run.go`
+(`WithReleaseSource`), `internal/computerevent/release_client.go`,
+`internal/proxy/releases.go` (publish, `/api/releases`),
+`internal/proxy/self_development.go` (adoptions), `internal/platform/releases.go`
+(corpusd routes), `internal/vmctl/reported_release.go` (`adopted_release_id`),
+`internal/store/release_adoption.go` (kept: the install record),
+`internal/objectgraph/registry.go` (kind kept: install records use it),
+`cmd/choir/release.go`, `cmd/choir/registry_test.go`, and every `_test.go`
+beside them. Scripts: `scripts/reeng_tracer.mjs` (adopt scenario),
+`scripts/choir-shot.mjs` and its test (kept: they fixture the install route).
+Docs: `skills/choir-cli/SKILL.md` (release rows), and history that stays as
+history: the Library design, `release-adoption-is-model-mediated`,
+`release-reads-not-owner-scoped`, `release-carries-the-cumulative-stack`,
+the readiness and consolidate ledgers, `docs/reports/choir-cli-mcp-parity`.
 
 ## The path, end to end
 
@@ -87,14 +132,12 @@ self-development rollback of its operation, unchanged.
 
 ## Restarts (CLAUDE.md, "Restarts End Work")
 
-- A crash before the owner's decision fails the operation "interrupted by a
-  restart" (`closeSelfDevelopmentOperationsAfterCrash`). The install record
-  stays. Pressing Install again opens a new attempt: a repeat returns the
-  existing install only while its operation is live or applied, or while
-  it has none yet and is under two hours old.
-- A crash during materialization is settled from the updater journal, as for
-  any operation. A planned restart (the apply's own) resumes.
-- No boot-time resumer is added.
+A crash before the decision fails the operation "interrupted by a restart"
+(`closeSelfDevelopmentOperationsAfterCrash`); the install record stays, and
+Install again opens a new attempt (a repeat returns the existing install
+only while its operation is live or applied, or it has none yet and is under
+two hours old). A crash in materialization settles from the updater journal;
+the apply's own planned restart resumes. No boot-time resumer is added.
 
 ## Names and origins
 
