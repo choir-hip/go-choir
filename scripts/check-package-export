@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# A package export commit carries the release tree verbatim
+# (docs/design/library-package-propagation-2026-10-26.md 10.2).
+#
+# For every commit in RANGE with a Choir-Package-Release trailer, the commit
+# must change paths under exactly one frontend/src/packages/<name>/, and the
+# git tree of that directory at the commit must equal the Choir-Tree trailer
+# (the release's source.tree). It fails when:
+#   - the commit has a Choir-Package-Release trailer and no Choir-Tree,
+#   - the commit touches paths outside one package directory,
+#   - the package directory's tree differs from Choir-Tree (an edit after
+#     the export, or an export that is not the release tree).
+# Commits without the trailer are not checked.
+#
+#   scripts/check-package-export [RANGE]    (default: origin/main..HEAD)
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+range=${1:-origin/main..HEAD}
+packages=frontend/src/packages
+fail=0
+checked=0
+
+for commit in $(git rev-list "$range"); do
+	release=$(git log -1 --format='%(trailers:key=Choir-Package-Release,valueonly)' "$commit" | sed -n 1p | tr -d '[:space:]')
+	[ -n "$release" ] || continue
+	checked=$((checked + 1))
+	short=$(git rev-parse --short "$commit")
+	want=$(git log -1 --format='%(trailers:key=Choir-Tree,valueonly)' "$commit" | sed -n 1p | tr -d '[:space:]')
+	if [ -z "$want" ]; then
+		echo "package-export: FAIL: $short names release $release and no Choir-Tree" >&2
+		fail=1
+		continue
+	fi
+	dirs=$(git diff-tree --no-commit-id --name-only -r --root "$commit" |
+		awk -v p="$packages/" 'index($0, p) == 1 { split(substr($0, length(p) + 1), a, "/"); print p a[1]; next } { print "OUTSIDE:" $0 }' |
+		sort -u)
+	if [ "$(printf '%s\n' "$dirs" | grep -c .)" -ne 1 ] || printf '%s\n' "$dirs" | grep -q '^OUTSIDE:'; then
+		echo "package-export: FAIL: $short must change exactly one $packages/<name>/ and nothing else; it changes:" >&2
+		printf '%s\n' "$dirs" | sed 's/^OUTSIDE:/  /; s/^\([^ ]\)/  \1/' >&2
+		fail=1
+		continue
+	fi
+	got=$(git rev-parse --verify --quiet "$commit:$dirs" || echo missing)
+	if [ "$got" != "$want" ]; then
+		echo "package-export: FAIL: $short $dirs is tree $got; Choir-Tree (release $release) says $want" >&2
+		fail=1
+		continue
+	fi
+	echo "package-export: ok $short $dirs = $want (release $release)"
+done
+
+if [ "$fail" -ne 0 ]; then
+	exit 1
+fi
+echo "package-export: $checked export commit(s) in $range verified"
