@@ -200,3 +200,19 @@ Library and Slides requests and rounds in lane C the parser finds exactly
 no numbered list, it finds none. Residual: a later round whose newest owner
 revision restates only the fixes, not the list, is not checked for missing
 shots.
+
+## Follow-up: question 3 failed ellipsis truncation in a month cell (2026-11-04)
+
+Claude calendar-next r1, candidate 1 (release 4cf05e4d0): the judge counted
+month-cell labels truncated with an ellipsis ("17:00 Monthl…") as a "no" on
+question 3. Ellipsis truncation in a dense cell is normal calendar and list
+practice. Question 3 now says truncation ending in an ellipsis inside a
+dense cell, chip or list row is fine. Text cut mid-word or mid-number without
+an ellipsis, overprint, clipping by a container edge, or a placeholder or
+escape is a "no". The management overlay mirrors it.
+
+Check (OpenRouter, synthetic 1280x800 month views): chips "17:00 Monthl…" and
+"09:30 Standup…" against the same view with "09:30 Standu" cut at the chip
+edge. deepseek-v4.1-flash-1017 and gpt-6-luna, three runs each: the ellipsis
+view passed every question 6/6 and the cut view failed question 3 6/6. The
+calendar and modal sets above gave the same answers as before (one run each).

@@ -96,7 +96,7 @@ func TestShotReviewJudgesEveryShotInBoundedBatches(t *testing.T) {
 		t.Fatalf("cost = %d in, %d out, models %v", review.InputTokens, review.OutputTokens, review.Models)
 	}
 	for _, p := range judge.prompts {
-		for _, want := range []string{"opaque", "OUTSIDE the focused surface", "a modal over a scrim passes", "INSIDE the focused surface's bounds", "dimmed behind the backdrop is out of focus", "overprint", "mid-word", "styled as a control", "secondary"} {
+		for _, want := range []string{"opaque", "ends in an ellipsis", "without an ellipsis", "OUTSIDE the focused surface", "a modal over a scrim passes", "INSIDE the focused surface's bounds", "dimmed behind the backdrop is out of focus", "overprint", "mid-word", "styled as a control", "secondary"} {
 			if !strings.Contains(p, want) {
 				t.Fatalf("prompt misses %q", want)
 			}
