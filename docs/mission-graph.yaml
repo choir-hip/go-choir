@@ -1168,9 +1168,10 @@ nodes:
   - id: choir-overnight-pd-then-selfdev-metamission-2026-11-03
     title: Overnight metamission — progressive delivery, then self-development, in concurrent lanes, with calibration as the bridge
     path: docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md
-    status: working
+    ledger: docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md
+    status: superseded  # 2026-11-04; successor choir-modular-architecture-2026-11-04
     kind: metamission
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: []
     enables: []
@@ -1178,6 +1179,20 @@ nodes:
       Owner 2026-11-03: "a metamission that runs progressive delivery then
       the self-dev mission overnight. and with any concurrency possible";
       "calibration in particular is the bridge between the 2 missions".
+  - id: choir-modular-architecture-2026-11-04
+    title: Modular architecture — every app and desk a package, small kernels, a locked desk protocol, the Library for every package kind; then self-development restarts
+    path: docs/definitions/choir-modular-architecture-2026-11-04.md
+    ledger: docs/definitions/choir-modular-architecture-2026-11-04.ledger.md
+    status: working
+    kind: metamission
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: [choir-selfdev-apps-feature-complete-2026-11-03]
+    note: >-
+      Owner 2026-11-04: "This is a whole mission here. Let's supersede the
+      current metamission and make this a new throughline." Supersedes
+      choir-overnight-pd-then-selfdev-metamission-2026-11-03.
   - id: choir-progressive-delivery-2026-11-03
     title: Progressive delivery built — every switch walks the rings on measured evidence, reverts on its own, and retires; the off-switch backlog cleared
     path: docs/definitions/choir-progressive-delivery-2026-11-03.md
@@ -1197,7 +1212,7 @@ nodes:
     title: Self-development — Files, Slides, Calendar and Podcasts feature-complete on four stock arms (Claude delegate, DeepSeek, gpt-6-luna, pool), with agent onboarding, Texture export and the calibration seed plan
     path: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md
     ledger: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.ledger.md
-    status: working  # resumed 2026-11-03 under the overnight metamission
+    status: paused  # owner order 2026-11-04; resumed by wave W8 of choir-modular-architecture-2026-11-04
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator

@@ -113,7 +113,7 @@ metamission:
     agents VM.
 
 now:
-  status: working
+  status: superseded  # 2026-11-04 by docs/definitions/choir-modular-architecture-2026-11-04.md
   slice: station 2 (selfdev) paused by owner order 20:05Z; first the architecture for maximal modularity (plugin research, system services, forced modularity), built with Sonnet builders, pushed and expedited; then self-development rounds resume (Files and context menus first)
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
@@ -165,4 +165,11 @@ now:
     the app layer has its own security model, separate from the base
     computer. Token budget: about 15% of the week left, so Sonnet over
     Opus for about 30 hours
-receipts: []
+receipts:
+  - id: superseded-by-modular-architecture
+    boundary: terminal
+    identity: docs/definitions/choir-modular-architecture-2026-11-04.md (origin/main 93706d53c at authoring)
+    proof_refs: ["owner 2026-11-04 ~20:55Z: 'This is a whole mission here. Let's supersede the current metamission and make this a new throughline.'"]
+    rollback_ref: revert the superseding commit
+    disposition: superseded; pd and the Library, quota, clean-rebase, screens and Files work it ran have landed; the selfdev station (choir-selfdev-apps-feature-complete-2026-11-03.md) stays paused and is resumed by wave W8 of the successor
+    landing: {source_commit: not_applicable, ci_ref: not_applicable, deploy_ref: not_applicable, environment_identity: not_applicable, deployed_acceptance: not_applicable}

@@ -11,11 +11,19 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active metamission (2026-11-03, overnight): progressive delivery, then self-development
+## Active goal (2026-11-04): the modular architecture
 
-**Goal:** [`definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`](definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md).
-Run it with `/goal docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`.
-Two stations in concurrent lanes; calibration is the bridge (owner).
+**Goal:** [`definitions/choir-modular-architecture-2026-11-04.md`](definitions/choir-modular-architecture-2026-11-04.md)
+(`readiness: drafted`, working; reviewed after the Devin review of the design). Run it with
+`/goal docs/definitions/choir-modular-architecture-2026-11-04.md`.
+
+Owner, 2026-11-04: "more modular is better"; every app and every desk is a
+package, the kernels stay small, the desk protocol is locked; "This is a whole
+mission here. Let's supersede the current metamission and make this a new
+throughline." Supersedes the 2026-11-03 overnight metamission
+(`definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`,
+superseded). Self-development is paused until the architecture has landed
+(wave W8 resumes it).
 
 ## Active goal (2026-11-03): progressive delivery, built
 
@@ -30,7 +38,9 @@ measured evidence and retires; the off backlog is cleared. Inputs: the
 ratified design [`design/progressive-delivery-2026-10-26.md`](design/progressive-delivery-2026-10-26.md)
 and the audit [`evidence/switch-audit-2026-11-03.md`](evidence/switch-audit-2026-11-03.md).
 
-## Station 2 (2026-11-03): self-development, the apps feature-complete
+## Paused (2026-11-04): self-development, the apps feature-complete
+
+Paused by owner order until the modular architecture lands; resumed by wave W8 of the modular-architecture goal.
 
 **Goal:** [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md)
 (`readiness: executable` on the owner's word). Run it with
