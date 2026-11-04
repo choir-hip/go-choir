@@ -67,6 +67,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R2 | 2026-11-04 | "More modular is better." Maximal modularity serves self-development and, above all, security. | whole plan |
 | R3 | 2026-11-04 | "we should aim to make all desks modular. Better to make the kernel small and make every desk function the same way. No special system desks or apps." | Phases 2, 4, 5 |
 | R4 | 2026-11-04 | "A locked, versioned protocol between desks (casts, delegation, the commitment ledger)." Amended by R5: the lock must not record MessageTargets. | MA1.4 |
+| MA1.5 | Every sub-RLM call is a Cast carrying the parent's precommitment (section 4.4): delete the raw `choir.Research` result path, so research children are Casts to a `research_child` role whose Reports are records; give `Delegate` Casts typed questions with probabilities and make the task's final Report a scored observation; add the rule kinds `report_schema_valid` and `citations_resolve`; the kernel judge service as settler (blind System 1 question, batched per fan-out); self-score records and the self-favor gap view; management sampling of material disagreements; the weight floor from grants and the weight-zero audit sample | `internal/yaegikernel/choir.go:580-634`, `broker_protocol.go:32-34, 163-188`, `internal/agentcore/{tools_desk.go:1336,research_children.go,management_tasks.go:316+,inbox_records.go:640-650,system1_verb.go}`, `internal/types/{commitment.go,commitment_rules.go,management_task.go:136-139}` | MA1.3 | red / 2 (tape type, reducer, judge as settler) | every child call produces a Cast with at least one typed question unless marked weight zero, and a Report record; a fan-out of N children is scored by one judge call; a rule failure (a citation that does not resolve) contradicts regardless of the judge; a parent cannot settle its own record (negative test); the self-favor gap is computed on replayed d@e records; the research acceptance (Texture asks, research answers) unchanged | revert; records written stay decodable |
 | R5 | 2026-11-04 | "Desks all need to message each other, but only via the PSA protocol." Delete MessageTargets allowlists (app desk default-empty, management-only). Any desk may message any desk; every message is a PSA record (request with precommitment, typed, settled by rule or by the recipient), never free text or a call. Authority never travels with a message: the recipient acts on its own grants; untrusted-origin requests carry provenance and need admission for privileged effects. | Phase 1 |
 | R6 | 2026-11-04 | Roadmap: "remove raw messaging/allowlists ASAP". | Phase 1 first |
 | R7 | 2026-11-04 | Progressive delivery closed (done, cb1a6cba9). | none |
@@ -88,6 +89,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R25 | 2026-11-04 | (Q9) The router is the conductor. "the key is to make it a system which is learning via PSA ... you can figure this one out yourself, how to make sure the system one model is getting increasingly calibrated over time ... we'll dogfood it and calibrate it ourselves ... good enough for users when we really launch." | MA4.8, section 9.2 |
 | R26 | 2026-11-04 | (Q10) Each desk has its own least-privilege yaegi import set; all desks import the precommitment-records protocol, math and similar; most import nothing with effects. The point is code mode: tool calling as code, loops, fan-out, a hundred tool calls in one cell with one model round trip. Yaegi runs inside gVisor, performance permitting; engineering already runs in capsules. Third-party Go modules are allowed in principle, since generated code is no different from third-party code, but: "if you import a million lines of code but then don't review that, that's a huge vulnerability surface". | MA2.3, MA6.5, open questions 2 and 9 |
 | R27 | 2026-11-04 | Security process: defense in depth first; then agentic red teaming from the inside once the functionality is satisfying; then iterate. *(recorded summary)* | section 12.2 |
+| R28 | 2026-11-04 | "the sub RLM calls shouldn't be raw. They should also be wrapped in the PSA protocol. So when you're making a sub RLM call, you're making a pre-commitment as to the results that you get from it. And then that pre-commitment needs to be scored at some point ... any kind of sub-agent delegation needs to be through PSA." The owner is unsure who scores: management, the parent itself, or a self-score that is in turn scored. | MA1.5, section 4.4, open question 16 |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -148,7 +150,7 @@ Supersedes: nothing. Keeps: the desks design 1.3 account of confinement.
 
 ## 4. Phase 1: precommitment records are the only inter-desk channel
 
-Goal: after this phase a desk reaches another desk only by a typed request record
+Goal: after this phase every sub-agent call is a Cast with a precommitment (R28) and a desk reaches another desk only by a typed request record
 record, every request carries probability of success, materiality weight and
 provenance, and protocol 1.0.0 is locked without any address allowlist.
 
@@ -217,6 +219,38 @@ Raw channels and allowlists:
   probability or weight on a Cast, Ask, Report or Escalate, and no origin or
   label on provenance.
 
+- **Sub-agent paths that are not precommitment records today (verified).**
+  Of the verbs on `ChoirScope`, only two spawn agents; the rest are acts, reads
+  or the judge:
+  - `choir.Research(children)` (`internal/yaegikernel/choir.go:580`) sends
+    `ActionResearch` (`broker_protocol.go:34`) and the host serves it with
+    `runResearchChildren` (`internal/agentcore/tools_desk.go:1336`,
+    `internal/agentcore/research_children.go:132`). It is **raw**: a child is a
+    `research_child` desk loop whose ledger reduction is "inert (no run record,
+    no channel)", it "reports" nothing, and its result is a return value,
+    `ResearchChildResult{Objective, Model, Findings, Error, ...}`
+    (`broker_protocol.go:177-188`). The parent states no prediction about the
+    result and nothing scores it. Children share the computer-wide call spacer
+    (`research_children.go:93-106`, `runtime.go:3841-3843`).
+  - `choir.Delegate` (`choir.go:838`) stages `IntentDelegate`; the reducer
+    plans one management task and one Cast into the task's inbox per group
+    (`inbox_records.go:640-650`, `management_tasks.go:316-320`). This is
+    already a Cast record (the task is a bounded sub-RLM of management,
+    `internal/types/management_task.go:11`), but the Cast carries an objective
+    and leased captures only (`management_tasks.go` near `:413-418`, no
+    hypotheses or probabilities), and the task's final Report is minted by the
+    host from its dispositions under a system provenance
+    (`management_task.go:136-139`): no prediction was made, so none is scored.
+  - Neighbours that are not agent spawns and stay as they are: `choir.System1`
+    is a judge call, not an agent; capsule `IntentJob` (`internal/yaegikernel/jobs.go`)
+    starts a process; the Claude delegate (`internal/claudedelegate/spec.go:1-13`,
+    reached through `cmd/choir-delegate`) is an experiment that is deleted with
+    the experiment; if it survives it is a sub-agent call and takes the rule.
+  - I found no `llm_query`-style verb in the cell surface, and the reducer
+    (`rlm_reduce.go`) turns staged intents into acts; it spawns no agent
+    except through the Delegate branch above (hypothesis: only the verb list
+    and the reducer's intent switch were read for this).
+
 ### 4.2 Design
 
 **A message is a request record.** The act set is closed and typed: cast
@@ -274,6 +308,92 @@ documents). This fixes Devin's B1 non-desk routing item.
 | MA1.2 | One data-driven address resolver; delete `MessageTargets`, `Addresses`, `CanMessage`, `AllowedMessageTargets`, `recordsDesk`/`recordsRoute` sender switch, the Texture cast restriction. Non-desk inbox classes become registrations. Engineering casts from non-holders forward to management | `deskmanifest/manifest.go:136-141, 214-307, 338-339, 512, 591`; `internal/agentprofile/agentprofile.go:32, 56-57, 119-135`; `internal/agentcore/prompts.go:44, 61`; `inbox_records.go:33-120`; `texture_dispatch_fold.go:46-58`; `rlm_reduce.go:2285`; `tools_worker_update.go:168` | MA1.1 | red / 2 (routing, concurrency, ledger) | contract test: every desk to every desk resolves to its registered inbox; a request to an unregistered name is refused; a cast to engineering from research lands in management's inbox, not as an assignment; the existing Texture, research, management and engineering product-path acceptance unchanged on d@e | revert |
 | MA1.3 | The request record: required `p_success`, `weight` and `settlement` on requests; reducer-stamped provenance with an origin class; delete Note and the `note` directive subtype; `Decline` and `Feed` as typed request kinds | `internal/yaegikernel/intent.go:44-48, 521, 543`; `choir.go:1431-1462, 1532`; `internal/types/commitment.go:43-65, 162-175, 572`; `rlm_reduce.go:237, 262, 404, 1218, 1265, 1297, 1357`; `inbox_records.go:391, 442, 595`; `tools_desk.go:1178`; `commitment_rules.go:107-170` | MA1.2 | red / 2 (tape type, reducer) | golden fixtures for every request kind; the reducer refuses a request with missing or out-of-range `p_success`; provenance cannot be set by a cell (negative test); a precommit with `weight` 0 on an I1+ class is refused | revert; tape records written stay decodable (new fields optional on read, required on write) |
 | MA1.4 | Re-cut D0: lock protocol 1.0.0 without allowlists. Cherry-pick the extractor, checker, contract tests and the transition table from the `d0-protocol` branch; remove `MessageTargets`/`Addresses` from the surface (`internal/deskprotocol/surface.go:77-78, 277-278` on that branch) and the `note` and `emit` golden fixtures; re-capture the corpus after MA1.3; add the roots below | `internal/deskprotocol/**`, `cmd/deskprotocol-lock`, `.github/workflows/ci.yml` (job `desk-protocol`), `internal/store/lifecycle.go` and `engineering_assignments.go` (transition table reads, from commit e63e2f536) | MA1.3 | yellow tooling, orange reducer table / 1 | the checker passes against its own lock; negative tests (field removed, required field added, enum value added to a closed type) classify correctly; the transition contract test runs against current store behaviour (every transition the store performs today is in the table), not only table-versus-store symmetry; a build with a deliberately breaking change fails the job | revert |
+
+### 4.4 Sub-RLM calls are Casts, and who scores them (R28)
+
+**Rule.** Any call that makes a child agent do work for a desk is a Cast. That
+covers research children, management's delegated tasks and any other desk's
+sub-call, present or future, including the Claude delegate if it stays. There
+is no raw sub-agent verb. A Cast to a child carries the parent's **precommitment
+about the result**: one or more typed questions with probabilities
+(`TypedQuestion{Probabilities, Weight}`, `internal/types/commitment.go:78-85`)
+and, where the parent has them, hypotheses (`CastHypothesis{Statement,
+Probability, Kind, Criterion}`, `commitment.go:330-345`; precommitment-records
+4.4), for example: "will the child find a primary source for X (yes/no, p=0.7)";
+"how many independent sources (0, 1 or 2, 3 or more)". The child's **Report** is
+the observation (precommitment-records 4.2); it names the hypotheses it bears
+on. The child is a desk or role of the registry, so the existing address
+resolver (MA1.2) and the request fields of MA1.3 apply unchanged: `p_success`,
+`weight`, `settlement` and reducer-stamped provenance. The reducer links the
+child's records to the parent's by the existing nested-commitment edges
+(`ParentID`/`ChildIDs`, `commitment.go:257`). The child's lease and grants are
+the role's (section 6, B1; section 8.6): the Cast cannot widen them.
+
+**Scoring** follows precommitment-records 5.1 and 5.2: the committer never
+settles its own record; scorers are several and each is scored. Layers, in
+order:
+
+1. **Rules first, where the result is checkable.** Schema well-formedness of
+   the Report; every cited source resolves to a capture or evidence record;
+   tests pass for engineering-style children. The rule vocabulary is the
+   closed `PrecommitRuleKind` set (`internal/types/commitment_rules.go:107-170`,
+   engineering-oriented today); research-style checks (`report_schema_valid`,
+   `citations_resolve`) are added to it, a minor bump of the lock (MA1.5).
+   A rule settlement is final for the facts it covers.
+2. **A blind System 1 typed question as the default independent scorer.** The
+   judge (Jev, `system1_verb.go:20-40`) is asked, blind to who asserted and to
+   the parent's probabilities (the Jev row of precommitment-records 5.2): did the
+   report answer the question, and is each prediction confirmed, qualified or
+   contradicted. The settler identity is the kernel judge service, not a desk,
+   so no desk is a bottleneck. Calibrate per question type and pinned model
+   (5.3).
+3. **Downstream settlement.** When the parent's own output that relied on the
+   child is later confirmed or contradicted (a Texture revision, a Report to
+   management, an owner approval), that outcome flows back along the
+   `ParentID`/`ChildIDs` edges and the reliance recorded in the report refs
+   (report packets already carry source refs, `yaegikernel/report_packet.go`),
+   and re-scores the child's prediction as downstream evidence. Credit is split
+   by recorded reliance; where reliance is not recorded the flow-back is skipped
+   rather than guessed (hypothesis: reliance is recorded for Texture's evidence
+   sources, `textureowner/texture_evidence_sources.go:147-157`, unverified).
+4. **The parent self-scores as a learning signal.** The parent writes its own
+   score of each child result; it never settles. The **self-favor gap**,
+   the self-score against the independent score, is computed and tracked per
+   agent and model: that is the self-score being scored (5.2). A self-score
+   never gates.
+5. **Management is not the default scorer**, because of cost and bottleneck. It
+   takes the **material disagreements** between the self-score and the
+   independent score, sampled and weighted by materiality, as the third
+   opinion (5.2: "Material disagreements go to a third opinion").
+
+**Cost.** One System 1 call per child is the upper bound. Batching helps the
+call count, not the tokens: the judge request already carries many questions
+(`system1_verb.go:516-546`, `intake_labels.go` `callIntakeJudge`), so one fan-out
+of N children is scored in one call with N questions; input tokens still scale
+with the bounded report text. Judge price is about $0.042 per million input
+tokens at the 2026-10-11 measurement, and its rate limit is about 60 calls a
+minute per computer (precommitment-records 5.3, to be rechecked), shared with
+the intake labeller and the support judge; children themselves queue on the
+40-per-minute sub-RLM spacer (`research_children.go:31-37`). There is no spend
+ceiling (R8); the cost is attributed per desk and watched. Scoring runs after
+the report is delivered and is not on the critical path of the cell.
+
+**Trivial sub-calls.** A sub-call whose materiality is zero (relevance zero or
+impact class I0: a lookup, a format, a computation) skips independent scoring,
+and **the record is kept** with its prediction, report and weight zero, so the
+track record exists and can be audited. A kept record earns no trust evidence
+(trust draft 3.2: I0 earns nothing). Two guards against a parent declaring
+weight zero to dodge scoring: the kernel sets a floor on `weight` from the
+child's grants (a child that holds a lease or `world.read`, or whose report is
+later cited, is at least I1), and a small random fraction of weight-zero
+records is scored anyway as the scorer audit (the fraction is a starting
+parameter committed in the Phase 1 ledger round).
+
+**Who scores is not fully settled.** The owner is unsure whether management,
+the parent or a scored self-score. This plan implements the layering above
+(rules, then blind judge, then downstream outcome, with the scored self-score
+and management on disagreements) because it needs no desk to be the scorer; the
+remaining choice is open question 16.
 
 Roots added to the lock (Devin's D0 amendments): `IntentJob` and `JobOp*`
 (`internal/yaegikernel/jobs.go`), `PendingUpdate` and `types.SourcePacket`
@@ -692,7 +812,7 @@ which reads only the submitted text (inventory X11).
 |---|---|---|---|
 | X1 | Research corpus search over all Texture documents: `researchtools.go:71` calls `Store.SearchDocuments` (`store/texture.go:125`), which lists every owner Texture document (`searchableTextureDocuments`, `:143-158`) and uses the in-memory head index (`store/search_index.go:15-29`) | **Decided (Q3): a `texture.search` lease held by a Texture sub-RLM of research**, section 8.6. The capture, event and published parts of the same tool are shared world content (E4) and stay | MA3.7 |
 | X2 | `System1` context ref `story:<rev>` reads any revision of the owner: `agentcore/system1_verb.go:461-475` | the cell passes the text, or the call carries `text`; the ref form is deleted | MA3.7 |
-| X3 | `StoryAnalysis` preloads a story's head (`agentcore/story_analysis.go:142, 200-220`, unverified line numbers) | Texture supplies the text in the Cast or a Texture-owned export; research never reads the revision | MA4.6 | Research as a package (D6) with the fan-out of section 8.6: a research parent and two child roles, `research_web` (holds `world.read`, no lease) and `research_texture` (holds the `texture.search` lease, no `world.read`); children report to the parent as precommitment records | `internal/agentcore/research_children.go` (existing child mechanism: `runResearchChildren` serves `choir.Research`, children are `research_child` desks with read-only world verbs, no further `choir.Research`, no messaging, reporting or writes, an inert ledger reduction, one level of fan-out, `:132-145`), `internal/deskmanifest/manifest.go:287-298` (the `research_child` role row), `internal/yaegikernel/{search_store.go,system1.go,relate*.go,story_analysis.go}`, `internal/agentcore/desk_search.go` (unverified) | MA4.5, MA3.4, MA3.7 | red / 2 | the deployed Texture acceptance unchanged (research answers its casts); a run in which one child tries the other's grant is refused at the frame check; the web child's transcript contains no Texture-derived text; a third-party manifest asking `world.read` is refused | revert |
+| X3 | `StoryAnalysis` preloads a story's head (`agentcore/story_analysis.go:142, 200-220`, unverified line numbers) | Texture supplies the text in the Cast or a Texture-owned export; research never reads the revision | MA4.6 | Research as a package (D6) with the fan-out of section 8.6: a research parent and two child roles, `research_web` (holds `world.read`, no lease) and `research_texture` (holds the `texture.search` lease, no `world.read`); children report to the parent as precommitment records | `internal/agentcore/research_children.go` (existing child mechanism: `runResearchChildren` serves `choir.Research`, children are `research_child` desks with read-only world verbs, no further `choir.Research`, no messaging, reporting or writes, an inert ledger reduction, one level of fan-out, `:132-145`), `internal/deskmanifest/manifest.go:287-298` (the `research_child` role row), `internal/yaegikernel/{search_store.go,system1.go,relate*.go,story_analysis.go}`, `internal/agentcore/desk_search.go` (unverified) | MA4.5, MA3.4, MA3.7, MA1.5 | red / 2 | the deployed Texture acceptance unchanged (research answers its casts); each child call is a Cast with the parent's typed prediction and its Report is scored (MA1.5); a run in which one child tries the other's grant is refused at the frame check; the web child's transcript contains no Texture-derived text; a third-party manifest asking `world.read` is refused | revert |
 | X4 | Engineering run context re-reads owner words each render (`agentcore/engineering_owner_words.go:152-165`) | read the data attached to the Cast record (the record is the precommitment-record substrate) | MA4.10 |
 | X5 | Reducer attaches `owner_directions` to a Cast (`agentcore/texture_owner_directions_cast.go:466-478`) | E3: the reducer acts as Texture's agent for this one read, or Texture's turn writes the words | MA3.7 |
 | X6 | Capsule store copy and files tree: `capsule/computer_state_linux.go:135-177`, `autoputer/capsule_executor_linux.go:144-156` | a lease: kinds chosen per assignment; default excludes mail (already carved out at `capsule/computer_state.go:45`) and Texture bodies | MA3.4 |
@@ -768,9 +888,10 @@ head index `store/search_index.go:15-29`).
   can reach a web query. Each child returns a **Report precommitment record**
   (claims, excerpts, source refs, `p_success`, provenance, labels), and the
   parent receives only those. This changes the present child contract (results
-  as return values, no reporting): a child's single permitted act becomes a
-  Report addressed to its parent, stamped by the reducer, and everything else in
-  the child contract stays.
+  as return values, no reporting): each child call becomes a Cast carrying the
+  parent's precommitment about the result (section 4.4, R28), and a child's
+  single permitted act becomes a Report addressed to its parent, stamped by the
+  reducer and scored; everything else in the child contract stays.
 - The Texture child's report carries `owner_private:texture`, so the parent
   run now carries that label (MA3.5). Any later outbound act by the parent,
   including spawning another web child with an objective it wrote after reading
@@ -1066,7 +1187,7 @@ Per the trust draft, with the revisions of section 10. The act gate comes last.
 | Slice | Work | Class / tier | Deps | Proof |
 |---|---|---|---|---|
 | MA7.1 | Amend the draft: lease policy, ceiling wording, provider calls not I3, impact table as locked data (BT1: every grant mapped to an impact class) | yellow / 0 | MA3.4 | the table has a row for every catalogue grant |
-| MA7.2 | Evidence extraction E1 to E8 and the derived trust view per subject and class, never stored (BT2) | orange / 1 | MA1.3, MA3.5 | replay on d@e's settled records reproduces a view; excluded classes (crash-closed, self-fulfilling, same-publisher scorer) excluded |
+| MA7.2 | Evidence extraction E1 to E8 (settled sub-RLM casts of MA1.5 are E1 and E5 evidence for the parent and the child role) and the derived trust view per subject and class, never stored (BT2) | orange / 1 | MA1.3, MA3.5 | replay on d@e's settled records reproduces a view; excluded classes (crash-closed, self-fulfilling, same-publisher scorer) excluded |
 | MA7.3 | Hierarchical prior and change discount from the behaviour-surface hash (BT3) | orange / 1 | MA2.3 | hash change moves `d` as specified |
 | MA7.4 | Lease policy: duration and scope from the posterior's lower bound inside the ceiling; revocation by the breaker | red / 2 | MA3.4, MA7.2 | a strong-record fixture gets a durable lease that renews; a thin one stays per-task; a fidelity event revokes at once |
 | MA7.5 | Install review pipeline with reviewer precommitments (BT5): mechanical checks, then seats sized by risk (Devin, DeepSeek; never luna) | orange / 1 | MA2.3 | a package with a widened ceiling cannot install without the verdict |
@@ -1102,7 +1223,7 @@ serialize. Review runs in the background while the next slice builds.
 | Phase | Run at once | Then | Hot-file collisions |
 |---|---|---|---|
 | 0 | MA0.1, MA0.2 harness; MA0.3 | MA0.4, MA0.5 | none |
-| 1 | MA1.1 (alone first); the D0 tooling cherry-pick (extractor, checker, contract harness) can run beside MA1.1 | MA1.2, then MA1.3, then MA1.4 | `deskmanifest/manifest.go`, `agentcore/inbox_records.go`, `rlm_reduce.go`, `yaegikernel/intent.go`, `choir.go`, `types/commitment.go`, `.github/workflows/ci.yml` |
+| 1 | MA1.1 (alone first); the D0 tooling cherry-pick (extractor, checker, contract harness) can run beside MA1.1 | MA1.2, then MA1.3, then MA1.5, then MA1.4 | `deskmanifest/manifest.go`, `agentcore/inbox_records.go`, `rlm_reduce.go`, `yaegikernel/intent.go`, `choir.go`, `types/commitment.go`, `.github/workflows/ci.yml` |
 | 2 | MA2.1, MA2.2, MA2.3, MA2.4 | MA2.5 after MA1.2 and MA2.1/MA2.3 | `check-packages.mjs` (MA2.3 then S2, S3, S5, S6, S7, U1), `ci.yml` (kernel gates, desk-names gate, desk-protocol job: serialize edits), `objectgraph/registry.go` (MA2.4 kind rename then MA3.1) |
 | 3 | MA3.1, then MA3.2 and MA3.3 in sequence (shared `writer.go`, `sql_store.go`); MA3.8 beside MA3.3 after MA3.2; MA3.5 beside MA3.3 | MA3.4, MA3.6, MA3.7, MA3.9, MA3.10 | `objectgraph/{registry,writer}.go`, `store/**`, `agentcore/{tools_desk,tools_product_api,system1_verb}.go`, `rlm_reduce.go` |
 | 4 | MA4.1, then MA4.2 to MA4.4 in sequence (shared `appdesk.go`, boot path), MA4.5 | MA4.6 and MA4.7 in parallel; MA4.8 beside them after MA3.6; MA4.9; MA4.10; MA4.11 | `deskmanifest/manifest.go`, `agentcore/{runtime,tool_profiles,tools_desk,inbox_records}.go`, `store/engineering_assignments.go` |
@@ -1265,3 +1386,16 @@ Go-module scope), plus what the plan found.
     D6 to D9 are unverified at this commit and must be re-grepped by each
     slice's first step; the desktop focus and input signals the router's
     settlement rule needs are a hypothesis until MA4.8's first step.
+16. **Who scores sub-RLM Casts (R28).** The owner is unsure: management, the
+    parent itself, or a self-score that is in turn scored. **Recommended:**
+    layered scoring, as in section 4.4: rules first, then a blind System 1
+    judge as the default independent scorer, then downstream settlement, with
+    the parent's self-score as a learning signal whose gap against the
+    independent score is tracked (the scored self-score), and management only
+    for sampled material disagreements. Parameters to set in the Phase 1 ledger
+    round: the fraction of weight-zero records scored as an audit, the sampling
+    rate and materiality weighting for management's third opinion, and the
+    judge-call budget per fan-out (batched; one call per fan-out, N questions).
+    Also open: the judge's per-computer rate limit (about 60 calls a minute,
+    shared with intake labelling and support judging) against fan-outs of many
+    children.
