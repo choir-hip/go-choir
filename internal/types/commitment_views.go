@@ -115,6 +115,11 @@ type ActingPack struct {
 	// run is in the experiment's digest arm
 	// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 	Calibration *CalibrationDigest `json:"calibration,omitempty"`
+	// Waits is management's view of the computer's engineering assignments
+	// that are waiting or have waited this attempt: the typed wait and the
+	// minutes waited by kind, so "blocked on host memory" reads apart from
+	// "stuck". Management's pack only.
+	Waits []AssignmentWaitView `json:"waits,omitempty"`
 }
 
 // SupervisionPackItem is the supervising surface's full per-act view: the

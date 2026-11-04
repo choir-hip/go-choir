@@ -1,0 +1,341 @@
+package types
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+)
+
+// WaitState is the one typed record of a self-development wait
+// (docs/problems/selfdev-waits-untyped-and-invisible-2026-11-04.md). Every
+// wait point that stays, contention or policy, produces one, and the same
+// record reaches engineering (a job's view, the Start and Poll results),
+// management (its cell frame) and Texture (a progress Note), so each can
+// tell "blocked on host memory" from "stuck" and decide what to do.
+type WaitState struct {
+	Kind  WaitKind  `json:"kind"`
+	Class WaitClass `json:"class"`
+	// Subject is what waits: "job j-…", "assignment a-…".
+	Subject string `json:"subject,omitempty"`
+	// Resource is what it waits for, in words: "host memory", "the
+	// engineering slot", "the platform update to <sha>".
+	Resource string `json:"resource"`
+	// Need and Have are the wait's figures in words, when not bytes.
+	Need string `json:"need,omitempty"`
+	Have string `json:"have,omitempty"`
+	// NeedBytes and HaveBytes are a memory wait's figures; HasHave says
+	// HaveBytes was measured (0 free is a fact, not an absence).
+	NeedBytes int64        `json:"need_bytes,omitempty"`
+	HaveBytes int64        `json:"have_bytes,omitempty"`
+	HasHave   bool         `json:"has_have,omitempty"`
+	Holders   []WaitHolder `json:"holders,omitempty"`
+	// Since is when this wait began; Until is when it gives up (its bound),
+	// zero when only an outer deadline bounds it.
+	Since time.Time `json:"since"`
+	Until time.Time `json:"until,omitempty"`
+	// CheckEverySec is how often the wait is re-checked; 0 when it is
+	// woken instead.
+	CheckEverySec int `json:"check_every_s,omitempty"`
+	// Detail is the wait point's own text (the host's reason, the
+	// operation's settling acts).
+	Detail string `json:"detail,omitempty"`
+	// Sentence is the record rendered at StampedAt (Stamp), for readers
+	// that do not render it themselves.
+	Sentence  string    `json:"sentence,omitempty"`
+	StampedAt time.Time `json:"stamped_at,omitempty"`
+}
+
+// WaitHolder is one holder of the resource a wait needs.
+type WaitHolder struct {
+	Who   string    `json:"who"`
+	What  string    `json:"what,omitempty"`
+	Bytes int64     `json:"bytes,omitempty"`
+	Since time.Time `json:"since,omitempty"`
+}
+
+// WaitClass separates true resource contention from a policy wait.
+type WaitClass string
+
+const (
+	WaitClassContention WaitClass = "contention"
+	WaitClassPolicy     WaitClass = "policy"
+)
+
+// WaitKind names the cause of a wait; the tally sums time by it.
+type WaitKind string
+
+const (
+	WaitKindHostMemory       WaitKind = "host_memory"
+	WaitKindEngineeringSlot  WaitKind = "engineering_slot"
+	WaitKindQueuedAhead      WaitKind = "queued_ahead"
+	WaitKindCandidatePending WaitKind = "candidate_pending"
+	WaitKindSelfdevOperation WaitKind = "selfdev_operation"
+	WaitKindPlatformUpdate   WaitKind = "platform_update"
+	WaitKindSourceSettling   WaitKind = "source_settling"
+	WaitKindReadError        WaitKind = "read_error"
+)
+
+// Label is the kind in words.
+func (k WaitKind) Label() string {
+	switch k {
+	case WaitKindHostMemory:
+		return "host memory"
+	case WaitKindEngineeringSlot:
+		return "engineering slot"
+	case WaitKindQueuedAhead:
+		return "queue"
+	case WaitKindCandidatePending:
+		return "pending candidate"
+	case WaitKindSelfdevOperation:
+		return "open self-development operation"
+	case WaitKindPlatformUpdate:
+		return "platform update"
+	case WaitKindSourceSettling:
+		return "source settling"
+	case WaitKindReadError:
+		return "unreadable state"
+	}
+	return strings.ReplaceAll(string(k), "_", " ")
+}
+
+// Active reports whether w is a wait.
+func (w *WaitState) Active() bool { return w != nil && w.Kind != "" }
+
+// Stamp fills Sentence as rendered at now.
+func (w *WaitState) Stamp(now time.Time) {
+	if !w.Active() {
+		return
+	}
+	w.StampedAt = now.UTC()
+	w.Sentence = w.SentenceAt(now)
+}
+
+// Clone is a deep copy (nil for nil).
+func (w *WaitState) Clone() *WaitState {
+	if w == nil {
+		return nil
+	}
+	c := *w
+	c.Holders = append([]WaitHolder(nil), w.Holders...)
+	return &c
+}
+
+// SentenceAt renders the wait as one plain sentence: what it waits for,
+// the figures, the holders, the cadence, how long so far and its bound.
+func (w *WaitState) SentenceAt(now time.Time) string {
+	if !w.Active() {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("waiting for ")
+	b.WriteString(firstNonEmptyString(w.Resource, w.Kind.Label()))
+	if w.Class == WaitClassPolicy {
+		b.WriteString(" (policy)")
+	}
+	var parts []string
+	subject := "this " + firstNonEmptyString(subjectNoun(w.Subject), "work")
+	switch {
+	case w.NeedBytes > 0:
+		parts = append(parts, fmt.Sprintf("%s needs %d MiB", subject, w.NeedBytes>>20))
+	case w.Need != "":
+		parts = append(parts, subject+" needs "+w.Need)
+	}
+	switch {
+	case w.HasHave && w.Kind == WaitKindHostMemory:
+		parts = append(parts, fmt.Sprintf("%d MiB is free beyond the floor", max(w.HaveBytes, 0)>>20))
+	case w.HasHave:
+		parts = append(parts, fmt.Sprintf("%d MiB is free", max(w.HaveBytes, 0)>>20))
+	case w.Have != "":
+		parts = append(parts, w.Have)
+	}
+	if len(w.Holders) > 0 {
+		held := make([]string, 0, len(w.Holders))
+		for _, h := range w.Holders {
+			held = append(held, h.render(now))
+		}
+		parts = append(parts, "held by "+joinAnd(held))
+	}
+	if w.CheckEverySec > 0 {
+		parts = append(parts, fmt.Sprintf("checking every %ds", w.CheckEverySec))
+	}
+	if !w.Since.IsZero() {
+		parts = append(parts, "waited "+shortDuration(now.Sub(w.Since)))
+	}
+	if !w.Until.IsZero() {
+		if left := w.Until.Sub(now); left > 0 {
+			parts = append(parts, "gives up in "+shortDuration(left))
+		} else {
+			parts = append(parts, "at its bound")
+		}
+	}
+	if len(parts) > 0 {
+		b.WriteString(": ")
+		b.WriteString(strings.Join(parts, "; "))
+	}
+	return b.String()
+}
+
+// TextureLine is the owner-facing line: "Waiting 4 min for host memory,
+// held by luna's build".
+func (w *WaitState) TextureLine(now time.Time) string {
+	if !w.Active() {
+		return ""
+	}
+	minutes := int(now.Sub(w.Since).Round(time.Minute) / time.Minute)
+	if w.Since.IsZero() || minutes < 1 {
+		minutes = 1
+	}
+	line := fmt.Sprintf("Waiting %d min for %s", minutes, firstNonEmptyString(w.Resource, w.Kind.Label()))
+	if len(w.Holders) > 0 {
+		held := make([]string, 0, len(w.Holders))
+		for _, h := range w.Holders {
+			if h.What != "" {
+				held = append(held, h.Who+" ("+h.What+")")
+			} else {
+				held = append(held, h.Who)
+			}
+		}
+		line += ", held by " + joinAnd(held)
+	}
+	return line
+}
+
+func (h WaitHolder) render(now time.Time) string {
+	var in []string
+	if h.What != "" {
+		in = append(in, h.What)
+	}
+	if h.Bytes > 0 {
+		in = append(in, fmt.Sprintf("%d MiB", h.Bytes>>20))
+	}
+	if !h.Since.IsZero() {
+		in = append(in, shortDuration(now.Sub(h.Since)))
+	}
+	if len(in) == 0 {
+		return h.Who
+	}
+	return h.Who + " (" + strings.Join(in, ", ") + ")"
+}
+
+// WaitTally sums time waited by kind: a round's "minutes waited by kind".
+type WaitTally struct {
+	Seconds map[string]int64 `json:"seconds,omitempty"`
+}
+
+// Add counts d against kind; a non-positive d counts nothing.
+func (t *WaitTally) Add(kind WaitKind, d time.Duration) {
+	if t == nil || kind == "" || d <= 0 {
+		return
+	}
+	if t.Seconds == nil {
+		t.Seconds = map[string]int64{}
+	}
+	t.Seconds[string(kind)] += int64(d.Round(time.Second) / time.Second)
+}
+
+// Total is the time waited across kinds.
+func (t WaitTally) Total() time.Duration {
+	var s int64
+	for _, v := range t.Seconds {
+		s += v
+	}
+	return time.Duration(s) * time.Second
+}
+
+// Clone is a copy.
+func (t WaitTally) Clone() WaitTally {
+	if len(t.Seconds) == 0 {
+		return WaitTally{}
+	}
+	c := WaitTally{Seconds: make(map[string]int64, len(t.Seconds))}
+	for k, v := range t.Seconds {
+		c.Seconds[k] = v
+	}
+	return c
+}
+
+// Minutes is the tally in whole minutes by kind, rounded (for frames and
+// records).
+func (t WaitTally) Minutes() map[string]int64 {
+	if len(t.Seconds) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(t.Seconds))
+	for k, v := range t.Seconds {
+		out[k] = (v + 30) / 60
+	}
+	return out
+}
+
+// Summary renders the tally: "waited 13 min: host memory 10 min, platform
+// update 3 min", largest first; "" when nothing was waited.
+func (t WaitTally) Summary() string {
+	total := t.Total()
+	if total <= 0 {
+		return ""
+	}
+	kinds := make([]string, 0, len(t.Seconds))
+	for k, v := range t.Seconds {
+		if v > 0 {
+			kinds = append(kinds, k)
+		}
+	}
+	sort.Slice(kinds, func(i, j int) bool {
+		if t.Seconds[kinds[i]] != t.Seconds[kinds[j]] {
+			return t.Seconds[kinds[i]] > t.Seconds[kinds[j]]
+		}
+		return kinds[i] < kinds[j]
+	})
+	parts := make([]string, 0, len(kinds))
+	for _, k := range kinds {
+		parts = append(parts, fmt.Sprintf("%s %s", WaitKind(k).Label(), minutesText(t.Seconds[k])))
+	}
+	return fmt.Sprintf("waited %s: %s", minutesText(int64(total/time.Second)), strings.Join(parts, ", "))
+}
+
+func minutesText(seconds int64) string {
+	if seconds < 60 {
+		return fmt.Sprintf("%d s", seconds)
+	}
+	return fmt.Sprintf("%d min", (seconds+30)/60)
+}
+
+// shortDuration renders d at minute grain past a minute, second grain below.
+func shortDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Minute {
+		return d.Round(time.Second).String()
+	}
+	s := strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
+func subjectNoun(subject string) string {
+	noun, _, _ := strings.Cut(strings.TrimSpace(subject), " ")
+	return noun
+}
+
+func joinAnd(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
+}
