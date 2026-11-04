@@ -218,13 +218,23 @@ func (h *APIHandler) handleReleaseAdoptions(w http.ResponseWriter, r *http.Reque
 	switch {
 	case adoption == "" && r.Method == http.MethodPost:
 		var request adoptReleaseRequest
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, release.MaxRecordBytes+(64<<10)))
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, adoptionRequestMaxBytes))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&request); err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, releaseAPIError{Error: "invalid adoption request", Reason: "request_invalid"})
 			return
 		}
-		view, created, refusal := h.rt.adoptRelease(r.Context(), ownerID, computerID, request)
+		var (
+			view    ReleaseAdoptionView
+			created bool
+			refusal *adoptionRefusal
+		)
+		if isPackageReleaseRecord(request.Record) {
+			// A package release: the owner's install from the Library.
+			view, created, refusal = h.rt.installPackage(r.Context(), ownerID, computerID, request)
+		} else {
+			view, created, refusal = h.rt.adoptRelease(r.Context(), ownerID, computerID, request)
+		}
 		if refusal != nil {
 			writeAPIJSON(w, refusal.status, releaseAPIError{Error: refusal.detail, Reason: refusal.reason})
 			return

@@ -104,6 +104,11 @@ func refuseAdoption(status int, reason, format string, args ...any) *adoptionRef
 type adoptReleaseRequest struct {
 	ReleaseID string          `json:"release_id"`
 	Record    json.RawMessage `json:"record"`
+	// TreePatch and Action are a package install's (package_install.go):
+	// the release's tree_patch the proxy read from the catalog, and install
+	// (the default) or uninstall. A software release carries neither.
+	TreePatch []byte `json:"tree_patch,omitempty"`
+	Action    string `json:"action,omitempty"`
 }
 
 func adoptionID(computerID, releaseID string) string {
@@ -114,6 +119,9 @@ func adoptionID(computerID, releaseID string) string {
 // holds, stages, asks the desks and records. created is false for a repeat
 // of an existing adoption (A12).
 func (rt *Runtime) adoptRelease(ctx context.Context, ownerID, computerID string, request adoptReleaseRequest) (ReleaseAdoptionView, bool, *adoptionRefusal) {
+	if len(request.TreePatch) != 0 || strings.TrimSpace(request.Action) != "" {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusBadRequest, "request_invalid", "tree_patch and action belong to a package install")
+	}
 	if rt.releaseSource == nil || rt.promptSubmitter == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.releaseRepo()) == "" {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "adoption_unavailable", "this computer has no release source, prompt path, update root or source repository")
 	}
@@ -219,16 +227,23 @@ func (rt *Runtime) adoptRelease(ctx context.Context, ownerID, computerID string,
 // <updater root>/adoptions/<release id>/, read only. An existing staging
 // is kept when it verifies and replaced when it does not.
 func (rt *Runtime) stageAdoption(releaseID string, record release.Record, patch []byte) (string, error) {
+	canonical, err := record.Canonical()
+	if err != nil {
+		return "", err
+	}
+	return rt.stageAdoptionAt(releaseID, releaseID, canonical, patch)
+}
+
+// stageAdoptionAt stages a canonical record that hashes to releaseID and a
+// patch under <updater root>/adoptions/<name>/, read only (a package install
+// names its install id, so each attempt and an uninstall stage apart).
+func (rt *Runtime) stageAdoptionAt(name, releaseID string, canonical, patch []byte) (string, error) {
 	root := filepath.Join(rt.selfdevUpdaterRoot, "adoptions")
-	target := filepath.Join(root, releaseID)
-	if verifyStagedAdoption(target, releaseID, record.Source.PatchSHA256) == nil {
+	target := filepath.Join(root, name)
+	if verifyStagedAdoption(target, releaseID, computerevent.DigestBytes(patch)) == nil {
 		return target, nil
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return "", err
-	}
-	canonical, err := record.Canonical()
-	if err != nil {
 		return "", err
 	}
 	tmp, err := os.MkdirTemp(root, ".stage-")
@@ -311,6 +326,12 @@ func (rt *Runtime) adoptedReleaseForTrajectory(ctx context.Context, trajectoryID
 // whether its frozen patch is the release's.
 func (rt *Runtime) adoptionView(ctx context.Context, adoption store.ReleaseAdoption) ReleaseAdoptionView {
 	view := ReleaseAdoptionView{ReleaseAdoption: adoption}
+	if adoption.Kind == adoptionKindPackage {
+		// A package install is in place when the computer's tree holds the
+		// release at the package root, whatever the bundle's cumulative
+		// patch carries.
+		view.PatchMatchesRelease = rt.packageInstalledNow(ctx, adoption)
+	}
 	if rt.selfdevOperations == nil {
 		return view
 	}
@@ -324,7 +345,9 @@ func (rt *Runtime) adoptionView(ctx context.Context, adoption store.ReleaseAdopt
 		bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation)
 		if err == nil {
 			view.Operation.SourcePatchSHA256 = bundle.SourcePatchSHA256
-			view.PatchMatchesRelease = bundle.SourcePatchSHA256 != "" && bundle.SourcePatchSHA256 == adoption.PatchSHA256
+			if adoption.Kind != adoptionKindPackage {
+				view.PatchMatchesRelease = bundle.SourcePatchSHA256 != "" && bundle.SourcePatchSHA256 == adoption.PatchSHA256
+			}
 		}
 	}
 	return view

@@ -41,6 +41,16 @@ type ReleaseAdoption struct {
 	DocID                string    `json:"doc_id,omitempty"`
 	SubmissionID         string    `json:"submission_id,omitempty"`
 	RequestedAt          time.Time `json:"requested_at"`
+	// Package install (docs/design/package-install-2026-11-04.md): Kind is
+	// "package" for an install or uninstall of a package release (empty for
+	// a P8 software release), Package its name, Action install or
+	// uninstall, and Attempt counts the tries of one release and action on
+	// this computer (a crash-closed try does not block the next).
+	// ReleaseTreeHash is then the release's tree at the package root.
+	Kind    string `json:"kind,omitempty"`
+	Package string `json:"package,omitempty"`
+	Action  string `json:"action,omitempty"`
+	Attempt int    `json:"attempt,omitempty"`
 }
 
 func releaseAdoptionKey(computerID, adoptionID string) string {
