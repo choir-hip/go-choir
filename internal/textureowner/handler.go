@@ -52,6 +52,9 @@ type Handler struct {
 	Provider    provideriface.Provider
 
 	textureEditMu sync.Mutex
+	// rejectedRoundOf overrides the rejected-round read in tests
+	// (texture_sendback.go); nil reads it from Core.
+	rejectedRoundOf func(ctx context.Context, ownerID, computerID, trajectoryID string) (agentcore.RejectedRound, bool)
 	// evidenceSource overrides the screens listing in tests (station
 	// TE); nil reads it from Core.
 	evidenceSource     candidateEvidenceSource

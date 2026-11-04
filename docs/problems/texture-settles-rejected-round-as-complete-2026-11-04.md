@@ -36,3 +36,31 @@ management turn that wrote the settle and check whether the operation fate
 Whether a round's settle line must be derived from, or checked against, the
 operation fate before Texture records it. The crouton-with-delegate arm
 (claude r3) ended the same way; check whether its settle was honest.
+
+## Root cause (code path, 2026-11-04, read from code; not yet confirmed on a staging ledger)
+
+The send-back loop exists inside one engineering assignment
+(`internal/agentcore/engineer_reuse.go`): a rejected candidate resumes the
+live engineer with the reasons, for candidates 1 to
+`store.EngineeringFreezeMaxRevisions` (6). The sixth candidate takes the old
+order: the engineer's Complete commits, the round reads as complete, and
+management's later Verify fail changes only the operation. Nothing joined the
+operation's fate to Texture's turn: Texture's `Done` (`commitTextureTurn` in
+`internal/textureowner/texture_cell_author.go`) completes the work item and
+the trajectory settles. The model's account of the work was the only source of
+the settle text. The same hole covers an owner or consensus reject.
+
+## Fix (owner ruling 2026-11-04: "Rejected rounds don't complete but get sent back")
+
+`agentcore.RejectedRoundOf` reads the trajectory's operations. A `Done` on a
+trajectory whose last candidate was rejected, with nothing live, is refused:
+with attempts left it carries the reasons and says to Cast engineering again;
+with the budget (6) spent, the work item is refused with the fate "rejected
+after N attempts: reasons". A crash close and an owner abandon fail an
+operation with no verdict, so they are not rejections; nothing dispatches, so
+a restart never re-dispatches.
+
+## Residual
+
+The send-back after an early engineer exit (attempts left, engineer gone) is
+a forced Cast by the Texture desk, not an automatic new assignment.
