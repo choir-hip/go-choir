@@ -113,3 +113,30 @@ items are non-blocking (an in-flight failure extends the open window and
 refusals past the reset read as a 15 s estimate; the announce timer path
 has no direct test).
 
+
+## Staging defect after 7efaaeae2 (live8, 2026-11-04)
+
+The management nudge loops on claude (trajectory f7f736ee) and pool
+(d98fb630) parked on the Synthetic quota until 05:20:42Z (delay 1800000 ms),
+then ended with `loop.cancelled` "activation budget exceeded: progress
+deadline reached" at 05:04:46 and 05:05:27: the activation's progress
+deadline kept running during the park, so the park became a cancel and the
+work was lost (the residual named above). At 05:10 main moved those arms'
+policy files from Synthetic to OpenRouter for the same model; a parked loop
+keeps the model it resolved before the park and would not have seen it.
+
+Fix: a park suspends the activation's progress deadline (the time parked is
+not charged; the deadline moves out by it), bounded by the activation's
+hard wall (6 h from its start, RUNTIME_ACTIVATION_HARD_WALL), where the run
+ends with a fate naming the quota and its expected reset. The durable
+deadline continuation re-arms at the moved deadline for a live activation
+and closes a run with none (a crash still closes it at boot). A park
+re-reads the run's model from the computer's policy every 30 s and at each
+wake; a role whose spec changed ends the park on the new model.
+
+Policy re-read is strict (review r1 Devin residual; owner rule, a pinned
+model fails rather than falls back): a park moves a run only when the policy
+file was read and parsed and names another model for the role
+(modelpolicy.ResolveStrict, which neither falls back nor writes the file); a
+missing, unreadable or unparsable file, a bad overlay, or an unknown pool
+keeps the run on its model and logs once per distinct error.

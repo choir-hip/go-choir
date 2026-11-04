@@ -183,10 +183,58 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 		role = agentprofile.Conductor
 	}
 	policy, err := m.loadWithOverlay(ctx, ownerID, metadataString(metadata, MetadataPolicyOverlayID))
-	selection := policy.Resolve(role)
 	if err != nil {
 		metadata[MetadataPolicyError] = err.Error()
 	}
+	return m.stampResolved(policy, role, metadata)
+}
+
+// ResolveStrict resolves role into a copy of metadata from the policy file
+// exactly as it stands: it must exist, be readable and parse, its overlay
+// (if the metadata names one) must load, and the role must not name an
+// unknown pool. Unlike EnrichMetadata it never falls back to a cached or
+// platform policy and never writes the file; any of those failures is the
+// error. A parked run re-reads its model with it, so a policy it cannot read
+// keeps the run on its model instead of moving it to a default (owner rule:
+// a pinned model fails rather than falls back).
+func (m *Manager) ResolveStrict(ownerID, role string, metadata map[string]any) (map[string]any, error) {
+	path := strings.TrimSpace(m.config.PolicyPath)
+	if path == "" {
+		return nil, fmt.Errorf("model policy path is not configured")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read model policy: %w", err)
+	}
+	policy, err := parsePolicy(string(raw), path)
+	if err != nil {
+		return nil, fmt.Errorf("parse model policy: %w", err)
+	}
+	out := make(map[string]any, len(metadata)+8)
+	for k, v := range metadata {
+		out[k] = v
+	}
+	if overlayID := metadataString(out, MetadataPolicyOverlayID); overlayID != "" {
+		overlay, err := m.loadOverlay(overlayID)
+		if err != nil {
+			return nil, fmt.Errorf("model policy overlay %q: %w", overlayID, err)
+		}
+		policy = applyOverlay(policy, overlay)
+	}
+	if strings.TrimSpace(role) == "" {
+		role = agentprofile.Conductor
+	}
+	out = m.stampResolved(policy, role, out)
+	if metadataString(out, MetadataAssignment) == AssignmentUnknownPool {
+		return nil, fmt.Errorf("model policy names unknown pool %q for role %s", strings.TrimPrefix(metadataString(out, MetadataSpec), modelcatalog.PoolSpecPrefix), role)
+	}
+	return out, nil
+}
+
+// stampResolved resolves role from policy and writes the selection into
+// metadata (EnrichMetadata's and ResolveStrict's shared tail).
+func (m *Manager) stampResolved(policy Policy, role string, metadata map[string]any) map[string]any {
+	selection := policy.Resolve(role)
 	for _, diagnostic := range policy.Diagnostics {
 		metadata[MetadataPolicyError] = joinPolicyErrors(metadata, diagnostic)
 		m.logDiagnostic(diagnostic)

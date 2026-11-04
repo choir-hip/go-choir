@@ -216,6 +216,9 @@ type Runtime struct {
 	// providerQuotaWaits is each desk loop parked on an exhausted provider
 	// quota (provider_quota_wait.go).
 	providerQuotaWaits providerWaitTracker
+	// liveActivations is each running activation's deadline, which a
+	// provider quota park suspends (activation_deadline.go).
+	liveActivations liveActivations
 
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
@@ -625,7 +628,12 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 // lifecycle.
 func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunRecord) {
 	runRec := *rec
-	runCtx, cancel := context.WithTimeout(ctx, rt.activationBudgetForRun(rec))
+	// The progress deadline is suspended while the run parks on a provider
+	// quota, up to the activation's hard wall (activation_deadline.go).
+	deadlineCtx, cancel := newActivationDeadline(ctx, rt.activationBudgetForRun(rec))
+	var runCtx context.Context = deadlineCtx
+	rt.liveActivations.put(rec.RunID, deadlineCtx)
+	defer rt.liveActivations.drop(rec.RunID, deadlineCtx)
 
 	rt.runningMu.Lock()
 	stored, err := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID)
@@ -3938,6 +3946,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A provider quota parks the loop, published as a typed wait
 	// (provider_quota_wait.go).
 	toolLoopOptions = append(toolLoopOptions, toolregistry.WithProviderWait(rt.providerQuotaWaitHook(rec)))
+	if reselect := rt.modelReselectForRun(rec); reselect != nil {
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithModelReselect(reselect))
+	}
 	if isManagementTaskRun(rec) {
 		// A task ends when its Done commits (R2-8), and no model call may
 		// take its whole deadline (R2-9).
@@ -4871,7 +4882,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 	if ctx.Err() != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			err = errors.New(activationBudgetExceededReason)
+			err = errors.New(activationFate(ctx))
 		}
 		// Context cancellation means the runtime is shutting down or the
 		// run was cancelled, not a provider failure. Treat as cancelled.

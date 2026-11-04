@@ -160,3 +160,47 @@ func TestCancelledRunLeavesThePark(t *testing.T) {
 		t.Fatalf("waits = %v ends %v, want the park ended as the loop's end, not a reset", r.waits, r.ends)
 	}
 }
+
+// 2026-11-04 live8: main moved the arms' policy from Synthetic to OpenRouter
+// while their loops stayed parked on Synthetic's quota. A park re-reads the
+// policy while it waits; a policy that names another model ends the park on
+// that model. Failure modes: the park keeps the model it resolved before;
+// an unchanged policy reads as a change and moves the run; the park's end
+// is told as a quota reset.
+func TestPolicyChangeEndsTheParkOnTheNewModel(t *testing.T) {
+	shortenQuotaPark(t)
+	prev := providerQuotaPolicyCheck
+	providerQuotaPolicyCheck = 5 * time.Millisecond
+	t.Cleanup(func() { providerQuotaPolicyCheck = prev })
+
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErr(time.Now().Add(time.Hour))}}}
+	r := &quotaRun{}
+	var mu sync.Mutex
+	checks := 0
+	reselect := func(context.Context) (provideriface.LLMSelection, []provideriface.LLMSelection, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		checks++
+		if checks < 3 {
+			return synthMember, nil, true // unchanged
+		}
+		return provideriface.LLMSelection{Provider: "openrouter", Model: "deepseek/deepseek-v4.1-flash"}, nil, true
+	}
+	r.phases = map[string]int{}
+	emit := func(_ types.EventKind, name string, _ json.RawMessage) { mu.Lock(); r.phases[name]++; mu.Unlock() }
+	text, _, err := RunToolLoop(context.Background(), p, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hello"}`)}, "system", 0, emit, nil,
+		WithToolLoopLLMConfig(synthMember), WithToolLoopConversationID("run-1"), WithProviderWait(r.record), WithModelReselect(reselect))
+	if err != nil || text != "done by openrouter" {
+		t.Fatalf("run = %q, %v; want it to go on with the policy's new model", text, err)
+	}
+	if r.phases["model_policy_changed"] != 1 || r.phases["provider_quota"] != 1 || len(r.ends) != 1 || r.ends[0] != ProviderWaitModelChanged {
+		t.Fatalf("phases %v ends %v", r.phases, r.ends)
+	}
+	if checks < 3 {
+		t.Fatalf("the policy was read %d times, want it re-read while parked", checks)
+	}
+	last := p.requests[len(p.requests)-1]
+	if last.Provider != "openrouter" || last.ConversationID == "run-1" {
+		t.Fatalf("last request = %s/%s conversation %q, want the new model on its own conversation", last.Provider, last.Model, last.ConversationID)
+	}
+}

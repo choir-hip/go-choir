@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -125,6 +127,8 @@ func (rt *Runtime) providerQuotaWaitHook(rec *types.RunRecord) toolregistry.Tool
 	return func(ctx context.Context, w *types.WaitState, ended string) {
 		t := rt.providerWaits()
 		if !w.Active() {
+			// The progress deadline runs again, moved out by the park.
+			activationDeadlineFrom(ctx).resume()
 			t.mu.Lock()
 			e := t.entries[runID]
 			delete(t.entries, runID)
@@ -145,6 +149,9 @@ func (rt *Runtime) providerQuotaWaitHook(rec *types.RunRecord) toolregistry.Tool
 			}
 			return
 		}
+		// Waiting on the quota is not a stall: the park suspends the
+		// activation's progress deadline, up to its hard wall.
+		activationDeadlineFrom(ctx).suspend(w)
 		seq.Lock()
 		parkEnded = false
 		seq.Unlock()
@@ -215,4 +222,69 @@ func shortWaitDuration(d time.Duration) string {
 		return d.Round(time.Second).String()
 	}
 	return strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
+}
+
+// modelReselectForRun re-reads rec's model from the computer's current
+// model policy, as the run was resolved at its start (modelpolicy
+// EnrichMetadata with the same role, overlay and thread), so a provider
+// quota park ends when the owner or main moves the role to another model
+// (2026-11-04: live8's policy moved the arms to OpenRouter at 05:10 while
+// their loops stayed parked on Synthetic). A run whose model the policy did
+// not choose (no llm_policy_source: the caller's explicit selection) is not
+// re-read.
+func (rt *Runtime) modelReselectForRun(rec *types.RunRecord) toolregistry.ToolLoopModelReselectFunc {
+	if rt == nil || rec == nil || rt.modelPolicy == nil || metadataStringValue(rec.Metadata, modelpolicy.MetadataPolicySource) == "" {
+		return nil
+	}
+	ownerID := rec.OwnerID
+	base := cloneMetadata(rec.Metadata)
+	for _, key := range []string{modelpolicy.MetadataProvider, modelpolicy.MetadataModel, modelpolicy.MetadataReasoningEffort,
+		modelpolicy.MetadataMaxTokens, modelpolicy.MetadataPolicySource, modelpolicy.MetadataPolicyError, modelpolicy.MetadataSpec,
+		modelpolicy.MetadataAssignment, modelpolicy.MetadataFallbacks} {
+		delete(base, key)
+	}
+	role := firstNonEmptyString(metadataStringValue(rec.Metadata, runMetadataAgentRole), metadataStringValue(rec.Metadata, runMetadataAgentProfile))
+	if role == "" {
+		role = agentProfileForRun(rec)
+	}
+	// The policy changed for this run when the spec it names for the role
+	// changed: comparing specs, not assignments, keeps a pool's hash of a
+	// thread-less run (a random key) from reading as a change.
+	var specMu sync.Mutex
+	lastSpec := metadataStringValue(rec.Metadata, modelpolicy.MetadataSpec)
+	var rejectMu sync.Mutex
+	lastReject := ""
+	runID := rec.RunID
+	return func(ctx context.Context) (provideriface.LLMSelection, []provideriface.LLMSelection, bool) {
+		// Strict: only a policy file that was read and parsed, and names the
+		// role's model, may move the run. A missing, unreadable or invalid
+		// file, a bad overlay, or an unknown pool keeps the run on its model
+		// (owner rule: a pinned model fails rather than falls back).
+		meta, err := rt.modelPolicy.ResolveStrict(ownerID, role, base)
+		if err != nil {
+			rejectMu.Lock()
+			first := err.Error() != lastReject
+			lastReject = err.Error()
+			rejectMu.Unlock()
+			if first {
+				log.Printf("runtime: run %s keeps its model while parked: model policy not usable: %v", runID, err)
+			}
+			return provideriface.LLMSelection{}, nil, false
+		}
+		spec := metadataStringValue(meta, modelpolicy.MetadataSpec)
+		specMu.Lock()
+		same := spec == lastSpec
+		specMu.Unlock()
+		if same {
+			return provideriface.LLMSelection{}, nil, false
+		}
+		primary := provideriface.ResolvedLLMConfigFromMetadata(meta)
+		if primary.Provider == "" || primary.Model == "" {
+			return provideriface.LLMSelection{}, nil, false
+		}
+		specMu.Lock()
+		lastSpec = spec
+		specMu.Unlock()
+		return primary, provideriface.FallbackLLMConfigsFromMetadata(meta, primary), true
+	}
 }

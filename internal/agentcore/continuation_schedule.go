@@ -385,7 +385,20 @@ func (rt *Runtime) HandleActivationBudgetDeadline(ctx context.Context, ownerID, 
 	if err != nil || !matched || rec.State.Terminal() {
 		return err
 	}
-	if err := rt.terminalizeRun(withBuildBudgetEnd(ctx), rec.RunID, rec.OwnerID, activationBudgetExceededReason); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
+	fate := activationBudgetExceededReason
+	if live := rt.liveActivations.get(rec.RunID); live != nil {
+		// A provider quota park moved the live activation's deadline: re-arm
+		// at it instead of closing a run that is waiting, not stalled
+		// (activation_deadline.go). An activation no park moved, and a run
+		// with no live activation (a crash ended it), close as before.
+		if at, over, moved := live.endsAt(); moved && !over && time.Now().Before(at) {
+			rt.scheduleContinuation(context.WithoutCancel(ctx), ownerID, computerID, agentID,
+				activationBudgetDeadlineUpdateKind, runID, metadataStringValue(rec.Metadata, runMetadataTrajectoryID), "", at)
+			return nil
+		}
+		fate = live.fate()
+	}
+	if err := rt.terminalizeRun(withBuildBudgetEnd(ctx), rec.RunID, rec.OwnerID, fate); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
 		return err
 	}
 	return nil

@@ -112,6 +112,7 @@ type toolLoopOptions struct {
 	parkWaiter             ToolLoopParkWaiterFunc
 	batchWait              ToolLoopBatchWaitFunc
 	providerWait           ToolLoopProviderWaitFunc
+	modelReselect          ToolLoopModelReselectFunc
 }
 
 type pendingRequiredTool struct {
@@ -343,11 +344,72 @@ func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
 // while parked). It must not call the provider.
 type ToolLoopProviderWaitFunc func(ctx context.Context, w *types.WaitState, ended string)
 
+// ToolLoopModelReselectFunc reads the run's model from the computer's
+// current model policy: the primary and its failover order. ok is false when
+// the run's model is not the policy's to change (a caller's explicit
+// selection) or the policy cannot be read.
+type ToolLoopModelReselectFunc func(ctx context.Context) (primary provideriface.LLMSelection, fallbacks []provideriface.LLMSelection, ok bool)
+
+// WithModelReselect lets a provider quota park follow the computer's model
+// policy: a park re-reads it every providerQuotaPolicyCheck and at each
+// wake, and a policy that now names another model ends the park on it.
+func WithModelReselect(fn ToolLoopModelReselectFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.modelReselect = fn
+	}
+}
+
+// providerQuotaPolicyCheck is how often a park re-reads the model policy.
+// A var so a test can shorten it.
+var providerQuotaPolicyCheck = 30 * time.Second
+
+// sameSelections reports whether two failover orders serve the same models.
+func sameSelections(a, b []provideriface.LLMSelection) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !sameServingSelection(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// waitQuotaPark sleeps a park's delay, re-reading the model policy every
+// providerQuotaPolicyCheck and at the end. It returns the policy's new
+// selection when it no longer matches the run's (primary and fallbacks).
+func waitQuotaPark(ctx context.Context, delay time.Duration, reselect ToolLoopModelReselectFunc, primary provideriface.LLMSelection, fallbacks []provideriface.LLMSelection) (provideriface.LLMSelection, []provideriface.LLMSelection, bool, error) {
+	end := time.Now().Add(delay)
+	for {
+		left := time.Until(end)
+		step := left
+		if reselect != nil && step > providerQuotaPolicyCheck {
+			step = providerQuotaPolicyCheck
+		}
+		if err := sleepContext(ctx, step); err != nil {
+			return provideriface.LLMSelection{}, nil, false, err
+		}
+		if reselect != nil {
+			if next, nextFallbacks, ok := reselect(ctx); ok && strings.TrimSpace(next.Model) != "" &&
+				(!sameServingSelection(next, primary) || !sameSelections(nextFallbacks, fallbacks)) {
+				return next, nextFallbacks, true, nil
+			}
+		}
+		if !time.Now().Before(end) {
+			return provideriface.LLMSelection{}, nil, false, nil
+		}
+	}
+}
+
 // How a provider quota park ended (review r1 DeepSeek B3: a cancelled park
 // is not a reset).
 const (
 	ProviderWaitResumed   = "the provider quota reset"
 	ProviderWaitLoopEnded = "the run ended while it waited for the quota"
+	// ProviderWaitModelChanged: the computer's model policy now names
+	// another model, and the run goes on with it.
+	ProviderWaitModelChanged = "the model policy changed"
 )
 
 // WithProviderWait lets the runtime publish a provider quota park
@@ -731,8 +793,41 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					})
 					emit(types.EventRunRetry, "provider_quota", payload)
 				}
-				if sleepErr := sleepContext(ctx, delay); sleepErr != nil {
+				next, nextFallbacks, changed, sleepErr := waitQuotaPark(ctx, delay, options.modelReselect, options.llmConfig, options.fallbackLLMConfigs)
+				if sleepErr != nil {
 					return "", totalUsage, fmt.Errorf("tool loop iteration %d: parked on %s: %w", i, wait.Sentence, sleepErr)
+				}
+				if changed {
+					// The policy moved the run to another model: the park
+					// ends and the run goes on with the policy's selection.
+					from := activeLLMConfig
+					if next.Source == "" {
+						next.Source = "model_policy"
+					}
+					options.llmConfig, options.fallbackLLMConfigs = next, nextFallbacks
+					activeLLMConfig, nextFallback, skippedRetryRounds, transientAttempts = next, 0, 0, 0
+					if baseConversationID != "" {
+						options.conversationID = baseConversationID + "#policy-" + shortSHA256(servingSelectionID(next))[:6]
+					}
+					if baseCacheKey != "" {
+						cacheKey = failoverCacheKey(baseCacheKey, provideriface.LLMSelection{}, activeLLMConfig)
+					}
+					messages = stripProviderReplay(messages)
+					if options.providerWait != nil {
+						options.providerWait(ctx, nil, ProviderWaitModelChanged)
+					}
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"reason":        "model_policy_changed",
+							"from_provider": from.Provider,
+							"from_model":    from.Model,
+							"to_provider":   activeLLMConfig.Provider,
+							"to_model":      activeLLMConfig.Model,
+							"parks":         quotaParks,
+						})
+						emit(types.EventRunRetry, "model_policy_changed", payload)
+					}
+					quotaWait, quotaSince, quotaParks = nil, time.Time{}, 0
 				}
 				continue
 			}
