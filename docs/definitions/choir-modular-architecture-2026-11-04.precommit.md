@@ -222,3 +222,5 @@ options, the record covers each (R0-07 lesson).
 **R0b-08.** Phase 1 needs at least one rollback or hotfix on staging (ring-expedited releases included).
 - p = 0.50.
 - Materiality: medium (calibrates the expedite policy). Trigger: Phase 1 closed. Settler: rule (deploy history).
+
+**R0b-01, settled confirmed.** Devin's goal-file review returned ACCEPT, 0 blocking findings, 8 non-blocking amendments (folded). p = 0.70; Brier 0.09.

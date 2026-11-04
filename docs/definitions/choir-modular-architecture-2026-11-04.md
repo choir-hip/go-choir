@@ -1,5 +1,5 @@
 ---
-definition_version: 5
+definition_version: 4
 
 # Modular architecture: every app and every desk is a package with privilege
 # only from grants, the kernels are small and structurally gated,
@@ -14,23 +14,24 @@ definition_version: 5
 # stays paused; Phase 8 resumes it.
 #
 # THE PLAN is docs/design/modular-architecture-plan-2026-11-04.md (branch
-# modplan; phases 0 to 8, slices MA*, the decisions table R1 to R37, open
+# modplan; phases 0 to 8, slices MA*, the decisions table R1 to R38, open
 # questions). This file does not restate it. Where this file and the plan
 # disagree on a slice, the plan wins; where they disagree on authority,
 # boundaries or the finish, this file wins.
 #
 # Rewritten 2026-11-04 ~21:30Z (the morning version planned "waves W0 to W8"
 # from the sysmod and appdesk designs; the consolidated plan replaced them).
-readiness: drafted  # moves to reviewed after a Devin review of this file
+readiness: reviewed  # not executable: executable needs the owner's MA0.5 sign-off
 
 review:
-  reviewer: none yet for this file. The plan it points at was reviewed by Devin (one seat), verdict ACCEPT, 0 blocking, 7 non-blocking amendments (precommit R0-08 and R0-09 settled at modplan 9f32a1a90)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: Devin (one seat)
+  frozen_ref: 84b99adbc
+  verdict: accept  # 0 blocking findings; 8 non-blocking amendments, folded
+  evidence_ref: "Devin goal-file review 2026-11-04 (scratchpad review-goal/devin.out)"
 
 metamission:
-  # Stations are the plan's phases. One file carries them; a phase gets its
+  # Stations are the plan's phases. stations[].path is a plan locator (a plan
+  # section), not a goal-file path. One file carries them; a phase gets its
   # own goal file only when it needs more than its plan section.
   stations:
     - {id: P0_evidence, path: "plan section 3", readiness: drafted, status: working, depends_on: []}
@@ -108,7 +109,7 @@ finish:
     restarts on it.
   artifact:
     - kernels internal/kernel and frontend/src/lib/kernel with the three structural gates (imports, names, responsibility list) in the repo gates and CI (R1 replaced the line budgets)
-    - desk protocol 1.0.0 locked with no address allowlist, the required CI job desk-protocol, emit and message channels deleted, every request carrying p_success, weight, settlement and reducer-stamped provenance
+    - desk protocol 1.0.0 locked with no address allowlist, the required CI job desk-protocol, emit and message channels deleted, every request carrying p_success, weight, settlement, reducer-stamped provenance and a materiality_procedure ref (custodian catalogue, frozen and hashed; required by MA1.3)
     - manifest v2 with typed capability ceilings, publishing levels, behaviour-surface hash; v1 reader and adopt deleted
     - every WriterRuntime kind with one custodian; writer and reader gates enforcing; leases on the tape; labels propagating; the disclosure path
     - every desk a desk package; CHOIR_APP_DESKS, app_packages.objects and the System 1 caps deleted; the desk-names gate at zero after Texture moves
@@ -139,7 +140,7 @@ finish:
     - action: "P5 on choir.news by a fresh test account, no SSH: plugins state lists the defaults; install a context-menu provider from the Library and see its menu on a file in Files; make it throw and see it un-ranked with the base menu served; yank it (platform break-glass) and see the fallback; uninstall and reinstall Calendar with its data intact; Texture app and desk land as one package and the names gate reads zero"
       proves: the modular path works end to end, including failure, yank, data survival and the desk lifecycle, with no special-cased system app
       evidence_class: deployed acceptance with before and after screenshots and the plugin-state snapshot
-    - action: "P6 on d@e: a hostile fixture app in the iframe cannot read the shell DOM, the session or another app's routes; broker fuzz corpus in CI; the worker sandbox's cell benchmark within the owner's accepted ratio and its boot selftest visible through health; only then a non-first-party desk package installs"
+    - action: "P6 on d@e: a hostile fixture app in the iframe cannot read the shell DOM, the session or another app's routes; broker fuzz corpus in CI; the worker sandbox's cell benchmark within the owner's accepted ratio and its boot selftest visible through the product API (POST /api/runtime/isolation-selftest); only then a non-first-party desk package installs"
       proves: isolation precedes community desks (R24)
       evidence_class: adversarial drill on d@e plus CI
     - action: "P7 on d@e: replay reproduces the trust view and a later outcome leaves a settled score unchanged; a strong-record fixture gets a durable lease and a thin one stays per-task; a planted-bad package is gated; the MA7.9 harness reports the pre-registered tests"
@@ -148,7 +149,7 @@ finish:
     - action: "P8: the plan section 14 entry criteria hold; then one Files and one context-menu self-development round land as in-place updates with before and after screenshots"
       proves: self-development works on the modular base
       evidence_class: deployed acceptance and round receipts
-  rollback: per-slice revert (each slice table names its rollback); M2 and M3 revert together; MA4.7's two halves revert together; MA6.4 lowers isolation only by an owner act; tape records written stay decodable; planned-restart markers for any deploy-time restart
+  rollback: per-slice revert (each slice table names its rollback); M2 and M3 revert together; revert C13 first if it has landed (MA4.7's desk and UI halves are split); MA6.4 lowers isolation only by an owner act; tape records written stay decodable; planned-restart markers for any deploy-time restart
   landing:
     required: true
     environment: staging (choir.news), d@e first, then by ring per the tempo rules below
@@ -197,7 +198,7 @@ boundaries:
       - Unchanged - one-way migrations and data deletes are proved on d@e before merge (CLAUDE.md); the keep set; the restart rules; the cheap gates run first on every slice.
     provenance_note: the hinge was written by the orchestrator and put to the owner on 2026-11-04; the owner confirmed it ("Sounds good", 2026-11-04)
   authority_sources:
-    - the owner rulings R1 to R37 in plan section 1 (quoted rulings are owner authority; rows marked "recorded summary" are owner authority as summarized, and a quote supersedes them)
+    - the owner rulings R1 to R38 in plan section 1 (quoted rulings are owner authority; rows marked "recorded summary" are owner authority as summarized, and a quote supersedes them)
     - the operating_tempo ruling above
     - docs/design/modular-architecture-plan-2026-11-04.md as the build plan, Devin-accepted; ratified by the owner at MA0.5 (pending)
     - docs/choir-doctrine.md, CLAUDE.md, docs/standing-questions.md
@@ -240,7 +241,7 @@ now:
     amendment 1 lists; bump ProtocolVersion). The d0-protocol branch is not
     merged; MA1.4 re-cuts it without MessageTargets or Addresses after MA1.3,
     MA1.5 and MA1.6, and its tooling may be cherry-picked beside MA1.1.
-  source_ref: origin/main 9b5eb066b; plan at modplan 9f32a1a90 (unpushed)
+  source_ref: origin/main 9b5eb066b; modplan HEAD 84b99adbc (unpushed)
   deploy_identity: staging 93706d53c1cbd170529a50466add51f8a586599e
   candidate:
     id: none
@@ -294,8 +295,9 @@ now:
     owner_ratification_ref: pending MA0.5 (R12 - no landings without the owner's walkthrough); direction already ratified by R2, R3, R5, R17
   belief:
     believed_state: >-
-      The plan is complete and Devin-accepted with 7 non-blocking amendments
-      not yet folded. The gVisor evidence is in (runsc outer, cold builds
+      The plan is accepted by Devin (R0-08) with all amendments and structural
+      fixes folded (5b61fea72, 48d47ba83); this goal file is accepted by Devin
+      (R0b-01) with its amendments folded. The gVisor evidence is in (runsc outer, cold builds
       1.5x). Nothing is built; d0-protocol bakes the deleted allowlists.
       Staging runs 93706d53c; self-development is paused.
     main_uncertainty: >-
@@ -305,12 +307,11 @@ now:
       MA2.1 and MA3.6 exists
     next_observation: the owner's MA0.5 sign-off; the MA0.7 round 1 records; MA1.1's citer grep
   blocker_or_risk: >-
-    MA0.5 owner sign-off (R12) gates every landing. The plan has editing
-    defects to fix before landing on main (see the file's Notes). Token
+    MA0.5 owner sign-off (R12) gates every landing. The plan's editing
+    defects are fixed (the file's Notes are historical). Token
     budget: Sonnet builders, Opus orchestrates.
   next_action: >-
-    Fold Devin's 7 amendments and the plan's editing defects into the plan;
-    land modplan on main; get the owner's MA0.5 sign-off recorded here;
+    Land modplan on main (docs-only); owner MA0.5 sign-off recorded here;
     commit MA0.6 and MA0.7; then a Sonnet builder runs MA1.1 in its own
     worktree, starting with a grep of every citer of the deleted names
     across code, docs, specs and skills.
@@ -352,61 +353,51 @@ proposal put to the owner.
 
 **2. Settled-decision conformance.** The plan conforms to no switches (it
 deletes CHOIR_APP_DESKS, app_packages.objects and the System 1 caps), the
-restart rules (MA4.2, MA4.4) and the keep set. Gaps: doctrine I26 and the
-CLAUDE.md Desk Ontology still name "system desks", against R3. The plan has
-no slice to amend them, so MA8.0 must carry the doctrine amendment, or an
-earlier green slice. `docs/precommitment-records.md` 3.1 contradicts R32
-until MA8.0, so it needs an erratum pointer now (Devin amendment 5).
+restart rules (MA4.2, MA4.4) and the keep set. Gaps covered: the doctrine I26 and CLAUDE.md "system desks" amendment is
+carried by MA8.0 (or an earlier green slice); the `docs/precommitment-records.md`
+3.1 erratum pointer to R32 is in the plan (erratum, covered).
 
 **3. Deletion citers.** MA1.1, MA1.2, MA2.4 and MA4.11 carry grep gates for
-code names. MA1.1's list misses the emit receive path (Devin amendment 1).
-None of the slices greps docs, specs or skills. Each deletion slice's first
-step greps all four and repairs citers in the same commit. Known doc citers:
-doctrine I26, `docs/ACTIVE.md` ("wave W8"), the sysmod and appdesk designs
-(superseded, plan section 2).
+code names. MA1.1's list now covers the emit receive path (MA1.7). Residual
+obligation: each deletion slice's first step greps all four surfaces (code,
+docs, specs, skills) and repairs citers in the same commit. Known doc citers
+to repair: doctrine I26, `docs/ACTIVE.md` ("wave W8"),
+`docs/mission-graph.yaml:1215` ("resumed by wave W8"), the sysmod and appdesk
+designs (superseded, plan section 2).
 
 **4. Single state authority.** The tape is the authority for records,
 leases, labels and install events. The trust view is derived and never stored
 (MA7.2). Desired desk state is the fold of install events plus the
-image's required set (MA4.4). Gap: MA3.1 both declares the custodian in the
-objectgraph registry and makes the manifest's `OwnedKinds` "the source".
-MA3.1 must name one winner. During Phase 5, `registry.ts` rows and installed
+image's required set (MA4.4). Gap covered: MA3.1 names one winner for the custodian declaration. During Phase 5, `registry.ts` rows and installed
 packages coexist per app until each C slice. Each C slice deletes its row,
 so no app is served by both.
 
 **5. Artifact-verified success.** Each phase closes on the deployed
 observations in `finish.acceptance`, read through the product API, never on
-a builder's report. Gap: Phase 1's plan proofs are mostly "unchanged"
-acceptance. The positive artifact (a request record on the d@e tape with
-p_success and provenance, fetched back) is named here and must be added to
-MA1.3's proof.
+a builder's report. Gap covered: the positive artifact (a request record on the d@e tape with
+p_success and provenance, fetched back) is in MA1.3's proof.
 
 **6. Fate-sharing.** The prompt router fate-shares with the System 1 judge.
 The plan handles that: a judge failure or timeout takes the default route
-(section 9.2). MA1.5 makes the judge the settler of sub-RLM casts. Gap: the
-plan does not say whether a fan-out's completion waits on the judge.
-Settlement must be asynchronous, so research answers do not fate-share with
-the judge. MA1.5 must state this, together with Devin amendment 3 (the role
-gate and caps of `system1_verb.go`).
+(section 9.2). MA1.5 makes the judge the settler of sub-RLM casts. Gap covered (MA1.5): settlement is asynchronous, so research answers do not
+fate-share with the judge; the role gate and caps of `system1_verb.go` are stated.
 
 **7. Restart durability.** Kernels rebuild activation at boot and never
 persist a pending call (MA2.1 boot fold). MA4.2 closes open obligations in one
-pass. MA4.4 re-seeds the required set. Leases are tape records. Gaps: MA3.4
-must state that a per-task lease ends when a crash closes its run, and that a
+pass. MA4.4 re-seeds the required set. Leases are tape records. Gap covered (MA3.4): a per-task lease ends when a crash closes its run; a
 durable lease (MA7.4) survives a restart only as a tape record re-validated at
-boot. Open question 11 (a planned-restart tray carrying a retired message
+boot. Residual: open question 11 (a planned-restart tray carrying a retired message
 intent) must be checked before MA1.1 lands.
 
 **8. No-SSH operability.** `GET /api/plugins/state`, the derived desk set in
 health, the owner lease view and the per-desk cost view are product paths.
-Gaps: MA3.2's "counters read zero over a recorded day" and MA6.4's boot
-selftest name no API. Both slices must expose their readings through the
-product API or CLI. The Phase 0 gVisor measurement was done over SSH on
+Gaps covered (MA3.2, MA6.4): the counters and the boot selftest are exposed
+through the product API. The Phase 0 gVisor measurement was done over SSH on
 choir-agents. That is acceptable as evidence, not as an operation.
 
 **9. Registry hygiene.** `docs/ACTIVE.md` and `docs/mission-graph.yaml`
 point at this file. `docs/doc-authority-manifest.yaml` has no entry for it,
-nor for the plan. ACTIVE.md still speaks of waves. The landing of modplan on
+nor for the plan. ACTIVE.md and `docs/mission-graph.yaml:1215` still speak of waves. The landing of modplan on
 main updates all three. MA8.0 repoints them again at Phase 8.
 
 ## Notes: plan defects found while writing this file
