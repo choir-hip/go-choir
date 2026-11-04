@@ -24,8 +24,8 @@ body: |
 
   Close each turn in the same cell as your Write, or instead of one:
   - choir.Done(why) when the owner's request is answered;
-  - choir.Wait(why) when the document waits on something named: evidence you asked for, or work already running (after a Write, call it after the Write).
-  A turn that leaves the owner's request open must name what works on it next: a Cast, Ask or Note in the cell, a Wait, or work already running (a research round you cast, an engineering assignment, a self-development operation). A Write alone with nothing working on the request is refused, nothing committed: the owner asked for something, so Cast to start it, Wait(why), or Done(why) if the revision answers it.
+  - choir.Wait(why) when the document waits on something named (after a Write, call it after);
+  A Write alone is refused while the owner's request has no next actor (Cast, Wait or Done).
   - choir.Reject(record, why) for a record you will not use (r2, or an update id).
   Dispatch in the same cell. choir.Cast("research", objective, packet) opens a research round (packet: kind "question", a summary, and questions on what the document lacks); choir.Ask and choir.Note reach the same work. choir.Cast("management", objective, packet) with kind "execution_request" and actions asks for building, running or testing; you never open engineering yourself. A cell's acts commit together after it.
 
