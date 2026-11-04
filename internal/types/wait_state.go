@@ -74,6 +74,11 @@ const (
 	WaitKindPlatformUpdate   WaitKind = "platform_update"
 	WaitKindSourceSettling   WaitKind = "source_settling"
 	WaitKindReadError        WaitKind = "read_error"
+	// WaitKindNoNextActor is an owner request nothing works on: the Texture
+	// desk left it open with no Cast, Wait or Done, and no round,
+	// assignment or operation serves it, so it waits on the owner's next
+	// revise (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
+	WaitKindNoNextActor WaitKind = "no_next_actor"
 )
 
 // Label is the kind in words.
@@ -95,6 +100,8 @@ func (k WaitKind) Label() string {
 		return "source settling"
 	case WaitKindReadError:
 		return "unreadable state"
+	case WaitKindNoNextActor:
+		return "a next actor"
 	}
 	return strings.ReplaceAll(string(k), "_", " ")
 }

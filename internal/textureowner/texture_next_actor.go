@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -171,7 +172,8 @@ func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunReco
 		return fmt.Errorf("refuse unattended Texture request %s: %w", work.WorkItemID, err)
 	}
 	if owner := strings.TrimSpace(rec.OwnerID); owner != "" {
-		body := fmt.Sprintf("No one is working on the owner's request on document %s (Texture work %s, %q): %s.", doc.DocID, work.WorkItemID, work.Objective, reason)
+		wait := unattendedRequestWait(work, reason, time.Now())
+		body := fmt.Sprintf("No one is working on the owner's request on document %s (Texture work %s, %q): %s. Wait record: %s.", doc.DocID, work.WorkItemID, work.Objective, reason, wait.Sentence)
 		notice := types.NewUnattendedRequestNotice(agentprofile.Management+":"+owner, doc.ComputerID, doc.DocID, doc.TrajectoryID, work.WorkItemID, runID, body)
 		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: doc.ComputerID, CommandID: "unattended-notice:" + key, Records: []types.CommitmentRecord{notice}}
 		if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
@@ -188,9 +190,32 @@ func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunReco
 	return nil
 }
 
-// textureRequestUnattended returns the reason when the document's latest
-// Texture work item was closed by the backstop, or "".
-func textureRequestUnattended(snapshot types.LifecycleSnapshot, docID string) string {
+// unattendedRequestWait renders an unattended request through the typed
+// wait record (types.WaitState): a policy wait of kind no_next_actor, since
+// the request opened, that only the owner's next revise ends.
+func unattendedRequestWait(work types.WorkItemRecord, reason string, now time.Time) *types.WaitState {
+	wait := &types.WaitState{
+		Kind: types.WaitKindNoNextActor, Class: types.WaitClassPolicy,
+		Subject:  "request " + work.WorkItemID,
+		Resource: "the owner's next revise; no one is working on this request",
+		Need:     "a Cast, a Wait naming what it waits on, or Done from the Texture desk",
+		Since:    work.CreatedAt, Detail: strings.TrimSpace(reason),
+	}
+	wait.Stamp(now)
+	return wait
+}
+
+// textureRequestUnattendedWait is textureRequestUnattended as the typed wait
+// record, or nil.
+func textureRequestUnattendedWait(snapshot types.LifecycleSnapshot, docID string, now time.Time) *types.WaitState {
+	work, ok := latestTextureWork(snapshot, docID)
+	if !ok || work.Status != types.WorkItemRefused || !strings.HasPrefix(strings.TrimSpace(work.Reason), UnattendedRequestReason) {
+		return nil
+	}
+	return unattendedRequestWait(work, work.Reason, now)
+}
+
+func latestTextureWork(snapshot types.LifecycleSnapshot, docID string) (types.WorkItemRecord, bool) {
 	textureAgentID := agentprofile.Texture + ":" + docID
 	var latest *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
@@ -202,8 +227,18 @@ func textureRequestUnattended(snapshot types.LifecycleSnapshot, docID string) st
 			latest = work
 		}
 	}
-	if latest != nil && latest.Status == types.WorkItemRefused && strings.HasPrefix(strings.TrimSpace(latest.Reason), UnattendedRequestReason) {
-		return strings.TrimSpace(latest.Reason)
+	if latest == nil {
+		return types.WorkItemRecord{}, false
+	}
+	return *latest, true
+}
+
+// textureRequestUnattended returns the reason when the document's latest
+// Texture work item was closed by the backstop, or "".
+func textureRequestUnattended(snapshot types.LifecycleSnapshot, docID string) string {
+	work, ok := latestTextureWork(snapshot, docID)
+	if ok && work.Status == types.WorkItemRefused && strings.HasPrefix(strings.TrimSpace(work.Reason), UnattendedRequestReason) {
+		return strings.TrimSpace(work.Reason)
 	}
 	return ""
 }

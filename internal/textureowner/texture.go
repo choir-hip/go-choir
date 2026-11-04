@@ -172,6 +172,9 @@ type textureDocumentResponse struct {
 	// nothing was working on it (UnattendedRequestReason); the value is the
 	// reason. The owner's next revise reopens work.
 	AgentRequestUnattended string `json:"agent_request_unattended,omitempty"`
+	// AgentRequestWait is the same state as the typed wait record (kind
+	// no_next_actor, class policy).
+	AgentRequestWait *types.WaitState `json:"agent_request_wait,omitempty"`
 }
 
 // textureDocumentStreamEvent is the hidden transport envelope sent over the
@@ -1018,6 +1021,7 @@ func (h *Handler) handleTextureGetDocument(w http.ResponseWriter, r *http.Reques
 	} else if trajectoryID := strings.TrimSpace(doc.TrajectoryID); trajectoryID != "" && h.Store != nil {
 		if snapshot, err := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, trajectoryID); err == nil {
 			resp.AgentRequestUnattended = textureRequestUnattended(snapshot, docID)
+			resp.AgentRequestWait = textureRequestUnattendedWait(snapshot, docID, time.Now())
 		}
 	}
 	writeAPIJSON(w, http.StatusOK, resp)

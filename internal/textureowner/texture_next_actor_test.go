@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -167,6 +168,10 @@ func TestIdleTurnWithTheOwnersRequestUnattendedClosesItVisibly(t *testing.T) {
 	if got := textureRequestUnattended(snapshot, rec.ChannelID); !strings.HasPrefix(got, UnattendedRequestReason) {
 		t.Fatalf("document unattended state = %q", got)
 	}
+	if wait := textureRequestUnattendedWait(snapshot, rec.ChannelID, time.Now()); wait == nil || wait.Kind != types.WaitKindNoNextActor ||
+		wait.Class != types.WaitClassPolicy || !strings.Contains(wait.Sentence, "no one is working on this request") {
+		t.Fatalf("document wait record = %+v, want a no_next_actor policy wait", wait)
+	}
 	if !textureWorkSettledByDesk(snapshot, rec.ChannelID) {
 		t.Fatal("an unattended request does not let the owner's next revise reopen work")
 	}
@@ -177,7 +182,7 @@ func TestIdleTurnWithTheOwnersRequestUnattendedClosesItVisibly(t *testing.T) {
 	}
 	notices := 0
 	for _, r := range records {
-		if types.IsUnattendedRequestNotice(r) && strings.Contains(r.Directive.Body, w.WorkItemID) {
+		if types.IsUnattendedRequestNotice(r) && strings.Contains(r.Directive.Body, w.WorkItemID) && strings.Contains(r.Directive.Body, "Wait record: waiting for the owner's next revise") {
 			notices++
 			if store.RecordWakesReader(r) {
 				t.Fatal("the notice wakes management")
