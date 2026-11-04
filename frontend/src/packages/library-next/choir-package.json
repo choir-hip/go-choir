@@ -1,0 +1,35 @@
+{
+  "schema": "choir.app-package/v1",
+  "name": "library-next",
+  "version": "1.0.0",
+  "origin": "first_party",
+  "display": {
+    "title": "Library (new)",
+    "icon": "📚",
+    "description": "Browse published app releases and install one on this computer"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": { "menu": true, "desktopIcon": false, "order": 12 },
+    "window": {
+      "singleton": false,
+      "heavy": true,
+      "desktop": { "width": 1100, "height": 750, "minWidth": 480, "minHeight": 420 },
+      "compact": { "minWidth": 280, "minHeight": 420 }
+    },
+    "auth": { "preview": "private" },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-library-next-window",
+      "contentClass": "library-next-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "desk": null,
+  "backend": null,
+  "grants": []
+}
