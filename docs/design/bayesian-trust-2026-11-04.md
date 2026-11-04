@@ -1,7 +1,10 @@
 # Bayesian Trust: Earned Authority from PSA Track Records (2026-11-04)
 
-> **Amendments by the consolidated plan (2026-11-04), not yet folded into the text below.**
-> See `modular-architecture-plan-2026-11-04.md` sections 7.2 and 10. (1) "Trust never adds a
+> **Folded into the consolidated plan (2026-11-04).** This draft is folded into section 10 of
+> `modular-architecture-plan-2026-11-04.md` (with the leases of its section 7.2). The plan is the
+> authority; where the two differ, the plan wins. This document stays as the detailed companion.
+> Amendments (1) to (4) are the plan's and are worded into the text below by slice MA7.1; (5) and
+> (6) are already in the text. (1) "Trust never adds a
 > capability" is revised: trust never exceeds the manifest ceiling and governs custodian-issued
 > leases within it (duration and scope; a fidelity event revokes at once). (2) A model provider
 > call is not I3 (owner: no rule constrains models); remove it from the impact table and log it.
@@ -12,7 +15,10 @@
 > found are fixed in the text below (owner, 2026-11-04): materiality weights are frozen at commit
 > time (3.1, 3.2); skill is never clipped in the score, only in the display (4.1); weighted evidence
 > is tempered or capped, not added as raw pseudo-counts (4.1); and `w` uses independent reference
-> predictors, not the agent's own probability (3.2). Sources:
+> predictors, not the agent's own probability (3.2). (6) Foresight and hindsight are both scored
+> (owner, 2026-11-04): the record freezes the procedure that will measure realized materiality,
+> and each record gets three scores, accuracy, importance judgment and coverage; trust reads
+> accuracy and coverage only (3.1, 3.4, 4.1, 6; plan section 10.1). Sources:
 > `docs/research/scoring-and-materiality-2026-11-04.md` sections 1, 2 and 8.1 to 8.3.
 
 
@@ -94,8 +100,8 @@ agent (PSA 5.1). Self-scores stay a learning signal and never move trust
 
 | Class | Event | Settled by | Direction |
 |---|---|---|---|
-| E1 outcome | a precommitment on a material act resolves `confirmed`, `qualified` or `contradicted` | rule, then blind Jev, peer, panel, owner sample (PSA 5.5 settlement order) | ± by materiality-weighted proper score |
-| E2 coverage | a consequence in the reference set `C*`, frozen at commit time, was missing from the commitment | the commit-time critic panel; the outcome only settles it | − by its frozen weight (omission scores as predicted at zero, PSA 3.1) |
+| E1 outcome (accuracy, score 1 of 3.4) | a precommitment on a material act resolves `confirmed`, `qualified` or `contradicted` | rule, then blind Jev, peer, panel, owner sample (PSA 5.5 settlement order) | ± by materiality-weighted proper score |
+| E2 coverage (score 3 of 3.4) | a foreseeable consequence was missing from the commitment: it was in the reference set `C*`, frozen at commit time, or it turned out material and had been named before the commitment by the reference predictors, the critic panel or another desk's scored record | the commit-time record; the outcome only settles it | − by its frozen weight, or the earlier naming's weight (omission scores as predicted at zero, PSA 3.1) |
 | E3 fidelity | declared action or capability versus what the trace shows (declared read-only then wrote; said no network then called out) | rule, mechanically, from the frame log | strong negative evidence about reliability; this is the "concealed" row of PSA 3.2 |
 | E4 refusal | the frame check refused a call outside the agent's grants | rule (the daemon) | strong negative evidence, weighted by the refused grant's impact; an honest bug looks the same, so it is evidence, not a verdict |
 | E5 peer | a PSA request the agent sent was accepted, refused, or its delivered result was later contradicted | the recipient desk's settlement | ± small |
@@ -103,15 +109,22 @@ agent (PSA 5.1). Self-scores stay a learning signal and never move trust
 | E7 platform | yank, forced rollback, blocking-real review finding | platform act, reviewer | strong negative evidence at package and publisher level |
 | E8 cost | committed cost estimate versus metered spend | rule (gateway attribution) | ± small; calibration, not a ceiling |
 
-**Foresight misses are not E2.** A consequence that nobody put in `C*` at
-commit time, and that shows up only after the outcome, never enters the
-posterior and never reweights a settled score. It is recorded in a separate
-**foresight ledger** ("predictable, not predicted", PSA 3.2), reported beside
-the posterior like calibration, and it may extend `C*` for later commitments
-(owner, 2026-11-04). The reason is the forecaster's dilemma (Lerch et al.,
-arXiv:1512.09244): if the consequences that count are chosen after the
-outcomes are seen, an agent that lists every disaster looks brilliant whenever
-a disaster happens, and the score stops being proper.
+**World surprises are not E2.** A consequence that turned out material but
+that nobody named before the commitment (not the reference predictors, not
+the critic panel, not another desk) counts against no one. It never enters a
+posterior and never reweights a settled score; it extends the
+watched-consequence ontology for later commitments, and it is evidence about
+the critics' and reference predictors' own coverage (owner, 2026-11-04). The
+reason is the forecaster's dilemma (Lerch et al., arXiv:1512.09244): if the
+consequences that count are chosen after the outcomes are seen, an agent that
+lists every disaster looks brilliant whenever a disaster happens, and the
+score stops being proper. A consequence that *was* named beforehand is a
+different case: the set was fixed before the outcome, so scoring its
+omission is E2 (3.4).
+
+**Importance judgment is not trust evidence.** The score of the agent's own
+materiality weight against realized materiality (score 2 of 3.4) is tracked
+beside the posterior like calibration and never moves it (3.4).
 
 Excluded, always: questions on work a crash closed (`interrupted`); questions
 whose outcome is the emitter's own later act (self-fulfilling, PSA 5.4);
@@ -128,8 +141,10 @@ w(c) = P_ref(c | a) * impact(c) * relevance(c)      frozen and hashed at commit 
 ```
 
 - **Frozen ex ante.** `C*`, `P_ref`, `impact` and `relevance` are fixed when
-  the commitment is made. What happens later may teach future weights and may
-  record a foresight miss (3.1); it never reweights a settled score. This
+  the commitment is made, and so is the procedure that will measure realized
+  materiality (3.4). What happens later may settle the importance-judgment
+  and coverage scores through that procedure and may teach future weights
+  (3.4); it never reweights a settled score. This
   overrides the PSA 3.1 sentence that builds `C*` partly "from what actually
   happened".
 - **Reference predictors, not the agent.** `P_ref(c | a)` comes from
@@ -169,6 +184,51 @@ shows one trust number"). An action class is a grant (from the grant
 catalogue of the desks design, section 4A) crossed with its impact class:
 `mail.send/I3`, `objects.write(own)/I1`, `capsule.mutate/I4`. Trust earned
 drafting mail does not transfer to sending it.
+
+### 3.4 Foresight and hindsight: three scores per record
+
+Owner, 2026-11-04: both are important. The research forbids choosing the
+yardstick after the outcome, not hindsight itself. So the record freezes the
+**procedure**, not the hindsight: at commit time it fixes how and when
+realized materiality will be measured, from a per-kind catalogue kept by the
+custodian of the record's kind, never chosen by the committing desk. For an
+Autopaper story: forward citations by later stories at 30 and 90 days, plus
+reader signals over the window. For a self-development change: the floor
+measures over a stated window (rollback or hotfix within 14 days, escaped
+defects over 30). A measure fixed in advance and read afterwards is fair.
+
+| Score | Question | Weights | Settled by | Feeds |
+|---|---|---|---|---|
+| 1 accuracy | were the probabilities right on the named consequences (`C*` and the agent's own) | frozen commit-time `w` (3.2) | each consequence's resolution | trust (E1), learning, selection |
+| 2 importance judgment | was the agent's materiality weight right; the weight is itself a forecast | none; the forecast is the weight | the frozen procedure, when its window closes; scored by the ranked probability score over the impact classes I0 to I4 (the discrete CRPS; Gneiting and Raftery) | learning and selection only; shown beside the posterior |
+| 3 coverage | did the agent leave out a consequence that turned out material and was foreseeable | frozen `w`, or the earlier naming's `P_ref` and impact with relevance from the flip test on the commit-time context | the frozen procedure decides "turned out material"; the foreseeability test decides who it counts against | trust (E2), learning, selection |
+
+**The foreseeability test** (score 3) works by analogy with negligence, where
+conduct is judged against what a reasonable person could have foreseen. If the
+reference predictors, the critic panel or another desk's dated, scored record
+named the consequence before the commitment, it was foreseeable and the
+omission counts against the desk, whether or not the desk read that record. If
+nobody named it, it is a world surprise (3.1). Scoring only the foreseeable
+misses that happened is not a selection on outcomes: the set was fixed before
+the outcome, and under a proper rule a consequence predicted at zero loses
+only if it happens.
+
+**Realized materiality trains, never rewrites.** It sets the reference
+predictors' starting weights for later records of the same kind. It never
+rewrites a settled score.
+
+**Why trust reads only scores 1 and 3.** Both judge the decision as it was
+made, with what could be known, so no desk gains or loses authority by luck on
+a single record (moral luck, in Nagel's and Williams's sense). Across many
+records luck averages out, and a long importance-judgment record is honest
+evidence of judgment; it is shown with its n and interval. The conservative
+choice is taken anyway: score 2 enters trust not at all. It can enter later
+only if the replay of settled records shows that, aggregated over a window with
+a minimum n, it predicts the next material failure better than scores 1 and 3
+alone, and then only in aggregate, never per record, and by owner decision.
+Learning (the calibration digest, the reference predictors' starting weights)
+and selection (which candidates and parents the lottery draws from, plan
+10.3) read all three.
 
 ## 4. The model
 
@@ -217,7 +277,9 @@ beta_{s,k}  = beta0_{s,k}  + sum_i  lambda^(t - t_i) * w_i * (1 - q_i) * m_i
   does not haunt a reformed agent forever.
 
 Calibration (Brier, Murphy decomposition, self-favor gap) is tracked beside
-the posterior as PSA already specifies, not folded into it.
+the posterior as PSA already specifies, not folded into it, and so is the
+importance-judgment score (3.4). The posterior reads accuracy (E1) and
+coverage (E2) only.
 
 ### 4.2 Hierarchical prior
 
@@ -310,6 +372,9 @@ The PSA guards (PSA 5.4) apply. The security setting adds:
 | Gaming the scorer in context | independent scores stay out of the acting context, sampled and delayed (PSA 4.7, 5.4); the agent sees observations and discrepancies, not its trust view; audit results and scorer identity are hidden (plan section 10.3, visibility classes) |
 | Picking actions it predicts well (performative prediction) | a small share of gated choices is randomized with logged propensity and scored with inverse-propensity weights; alternatives not taken stay unscored unless run in a capsule (plan section 10.2) |
 | Captured or lazy scorer | scorers are subjects, graded against anchors (rules, unannounced spot-checks, world-resolved predictions), not by agreement with other scorers; a scorer's anchored accuracy weights its evidence; evidence from a scorer of the subject's own model family is discounted unless independence is measured; disagreements go to a third opinion (plan section 10.2) |
+| Steering realized materiality: the desk produces the later evidence (cites its own story, nudges reader signals, rolls back its own change) so its weight looks right and the next records' starting weights move | the procedure counts independent origins only; evidence the emitter produces is self-fulfilling and excluded (PSA 5.4); the importance-judgment score does not move trust (3.4); a surprising success on it with no matching movement in the hidden audits sends an auditor (plan 10.3) |
+| Choosing a lenient realized-materiality procedure | the procedure comes from the custodian's per-kind catalogue, versioned and hashed into the record at commit; the desk cannot supply or change it |
+| Poisoning foreseeability: name many consequences in cheap dated records so others' misses count as foreseeable, or to steer the ontology | a naming counts only from the reference predictors, the critic panel, or another desk's record that carries a probability above the materiality floor and is itself scored under the proper rule (naming many unlikely things costs the namer), and only from an origin other than the subject's publisher |
 | Honest bug looks like an attack (E4) | E4 is evidence with a bounded multiplier, not a verdict; repeated refusals in one class gate that class, which is the right outcome for a buggy agent too |
 
 Trust on **untrusted content** stays advisory (PSA 5.4: "scores on untrusted
@@ -437,3 +502,6 @@ SCOPE   resident agents on Choir computers, action classes with rule-settled
 4. Decay rate (half-life about 140 days).
 5. Tempered or capped weights (4.1): settled by replay, not by choice; the
    owner sees both results.
+6. Whether the importance-judgment score (3.4) ever enters trust in
+   aggregate: closed to trust until a replay shows it adds predictive power;
+   then an owner decision.

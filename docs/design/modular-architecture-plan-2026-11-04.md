@@ -68,7 +68,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R2 | 2026-11-04 | "More modular is better." Maximal modularity serves self-development and, above all, security. | whole plan |
 | R3 | 2026-11-04 | "we should aim to make all desks modular. Better to make the kernel small and make every desk function the same way. No special system desks or apps." | Phases 2, 4, 5 |
 | R4 | 2026-11-04 | "A locked, versioned protocol between desks (casts, delegation, the commitment ledger)." Amended by R5: the lock must not record MessageTargets. | MA1.4 |
-| MA1.5 | Every sub-RLM call is a Cast carrying the parent's precommitment (section 4.4): delete the raw `choir.Research` result path, so research children are Casts to a `research_child` role whose Reports are records; give `Delegate` Casts typed questions with probabilities and make the task's final Report a scored observation; add the rule kinds `report_schema_valid` and `citations_resolve`; the kernel judge service as settler (blind System 1 question, batched per fan-out); self-score records and the self-favor gap view; management sampling of material disagreements; the weight floor from grants. No sub-call is exempt from scoring (R29) | `internal/yaegikernel/choir.go:580-634`, `broker_protocol.go:32-34, 163-188`, `internal/agentcore/{tools_desk.go:1336,research_children.go,management_tasks.go:316+,inbox_records.go:640-650,system1_verb.go}`, `internal/types/{commitment.go,commitment_rules.go,management_task.go:136-139}` | MA1.3 | red / 2 (tape type, reducer, judge as settler) | every child call produces a Cast with at least one typed question unless marked weight zero, and a Report record; a fan-out of N children is scored by one judge call; a rule failure (a citation that does not resolve) contradicts regardless of the judge; a parent cannot settle its own record (negative test); the self-favor gap is computed on replayed d@e records; the research acceptance (Texture asks, research answers) unchanged | revert; records written stay decodable |
+| MA1.5 | Every sub-RLM call is a Cast carrying the parent's precommitment (section 4.4): delete the raw `choir.Research` result path, so research children are Casts to a `research_child` role whose Reports are records; give `Delegate` Casts typed questions with probabilities and make the task's final Report a scored observation; add the rule kinds `report_schema_valid` and `citations_resolve`; the kernel judge service as settler (blind System 1 question, batched per fan-out), through a host-side settler entry point that does not go through the System 1 cell verb, so it inherits neither the verb's research-only role gate (`system1_verb.go:36`) nor its off-until-configured caps (`:38-41`); MA3.6 later generalises the verb and removes the caps, and MA1.5 does not wait for it; self-score records and the self-favor gap view; management sampling of material disagreements; the weight floor from grants. No sub-call is exempt from scoring (R29) | `internal/yaegikernel/choir.go:580-634`, `broker_protocol.go:32-34, 163-188`, `internal/agentcore/{tools_desk.go:1337,research_children.go,management_tasks.go:316+,inbox_records.go:640-650,system1_verb.go}`, `internal/types/{commitment.go,commitment_rules.go,management_task.go:136-139}` | MA1.3 | red / 2 (tape type, reducer, judge as settler) | every child call produces a Cast with at least one typed question unless marked weight zero, and a Report record; a fan-out of N children is scored by one judge call; a rule failure (a citation that does not resolve) contradicts regardless of the judge; a parent cannot settle its own record (negative test); settlement runs on d@e with the System 1 caps unset and the research.system1 setting off (negative test that the settler does not depend on them); the self-favor gap is computed on replayed d@e records; the research acceptance (Texture asks, research answers) unchanged | revert; records written stay decodable |
 | MA1.6 | Inertness detection and measurement (section 4.4, R29): the commit-time rule detector (base-rate probability, near-certain answer set, missing falsifier or decision dependency, below-floor weight, known-trivial template); an optional `inert` flag set on the record; the sampled System 1 question "could any plausible outcome have contradicted this prediction"; inert-precommitment and inert-delegation rates per desk, model and prompt version; the inert count fed into `choir.Calibration()` ("N of your last M precommitments were uninformative"); the short material-precommitment statement with one good and one inert example in each desk prompt, worded after the baseline; no Cast is refused for being inert | `internal/types/{commitment.go,calibration_digest.go:81-95}`, `internal/agentcore/{calibration_feedback.go,rlm_reduce.go,system1_verb.go}`, `internal/yaegikernel/choir.go:1403`, `internal/runtimeprompts/prompts.go` | MA1.3, MA1.5 | orange / 1 (a flag, a metric, prompt text; no refusal) | fixtures for each rule flag; a replay of d@e records yields per-desk rates; the digest shows the inert count; the judge sample is scored against the rules; the Phase 1 ledger round with the baseline rates is committed before any prompt change | revert; the optional field stays decodable |
 | R5 | 2026-11-04 | "Desks all need to message each other, but only via the PSA protocol." Delete MessageTargets allowlists (app desk default-empty, management-only). Any desk may message any desk; every message is a PSA record (request with precommitment, typed, settled by rule or by the recipient), never free text or a call. Authority never travels with a message: the recipient acts on its own grants; untrusted-origin requests carry provenance and need admission for privileged effects. | Phase 1 |
 | R6 | 2026-11-04 | Roadmap: "remove raw messaging/allowlists ASAP". | Phase 1 first |
@@ -95,12 +95,13 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R29 | 2026-11-04 | "It seems odd to just let those be ... inert pre-commitments are ... a waste of attention. It kind of shows that the model doesn't get it ... at minimum, we should be counting and scoring how many of these that we do. Like, maybe we have to tune the system against them rather than try to solve it in advance." | MA1.6, section 4.4 |
 | R30 | 2026-11-04 | "no punishments. Like, if we're keeping score of things, then there's no need for a punishment ... if your field goal percentage is high, that's good. If it's low, you don't get punished for that. You just have a low score ... It doesn't need to be punitive. It's just accountability." | section 0 item 9, sections 4.4 and 10, the trust doc |
 | R31 | 2026-11-04 | "We should have some indicator in the prompt bar of the focus (as we sometimes currently do, eg to continue a texture; this should be generalized and redesigned/streamlined)." Related rulings the same day: response kinds are irrelevant to the user, the prompt bar and the conductor, because desks decide them; no focus goes to the conductor. | MA4.8, H3 (section 11.1) |
-| R32 | 2026-11-04 | Materiality weights are frozen ex ante, at commit time. Outcomes may inform future weights and record a foresight miss in a separate ledger; they never reweight a settled score. *(recorded summary; the owner agreed to the defaults of the scoring report)* | section 10.1, the trust draft 3.1 and 3.2 |
+| R32 | 2026-11-04 | Materiality weights are frozen ex ante, at commit time. Outcomes may inform future weights and record a foresight miss in a separate ledger; they never reweight a settled score. *(recorded summary; the owner agreed to the defaults of the scoring report)* Refined by R38: the separate foresight ledger becomes the coverage score. | section 10.1, the trust draft 3.1 and 3.2 |
 | R33 | 2026-11-04 | Relevance is measured by the decision flip rate: ask the deciding desk with and without the consequence revealed, and count flips. *(recorded summary)* | section 10.1, MA1.3 |
 | R34 | 2026-11-04 | Fix the four flaws of the trust draft: frozen weights; skill clipped only in the display, never in the score; materiality weights tempered or capped, chosen by replay; weights from independent reference predictors, not the agent's own probability. *(recorded summary)* | section 10 item 5, the trust draft 3.2 and 4.1 |
 | R35 | 2026-11-04 | Floors as proposed in the scoring report: for self-development, rollback or hotfix share, escaped defects, time to restore, honest predictions and a sampled mergeability audit; every throughput number beside its counter-measure. Autopaper floors belong to the later Autopaper unit. *(recorded summary)* | section 10.3, Phase 8 |
 | R36 | 2026-11-04 | The lead hypothesis is "satisfice, then diversify": floors first, then a diversity-weighted lottery among the candidates that pass. *(recorded summary)* | section 10.3, MA0.6 |
 | R37 | 2026-11-04 | All Autopaper work, even small items, is postponed until after the modularity mission; work units are kept together. *(recorded summary)* | sections 8.2, 11, 14, 15 |
+| R38 | 2026-11-04 | Foresight and hindsight: "both are important." The record freezes the procedure that will measure realized materiality, not the hindsight itself. Three scores per record: accuracy (foresight, frozen weights), importance judgment (the weight as a forecast, settled by the frozen procedure), coverage (a foreseeability test: a miss counts only if someone named the consequence beforehand). Trust reads accuracy and coverage; learning and selection read all three. *(recorded summary; the owner agreed to this design)* | section 10.1, the trust draft 3.1 to 3.4, 4.1 and 6 |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -120,7 +121,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | modular 8 decisions 1 to 12 | kept, except 7 (iframe) which is Phase 6 and decision 3 which stands as written | |
 | modular 4 app migration table | kept (Phase 5), with C13 Mail moved to MA4.7 | R18 |
 | trust draft "Trust never adds a capability" | revised: trust never exceeds the ceiling and governs leases within it (section 10) | R20 |
-| precommitment-records 3.1, "`C*` is built ... from what actually happened" | superseded for scoring: `C*` is frozen at commit time; later discoveries go to the foresight ledger (section 10.1). The theory doc of MA8.0 carries the change | R32 |
+| precommitment-records 3.1, "`C*` is built ... from what actually happened" | superseded for scoring: `C*` is frozen at commit time; what happens later settles the importance-judgment and coverage scores through procedures frozen at commit (section 10.1). An erratum in that doc points here; the theory doc of MA8.0 carries the change | R32, R38 |
 | trust draft 3.2 and 4.1 (outcome-built `C*`, the agent's own `P` in `w`, skill clipped at 0, raw weighted pseudo-counts) | fixed in the draft's text (section 10 item 5) | R34 |
 
 ## 3. Phase 0: evidence
@@ -194,7 +195,7 @@ Raw channels and allowlists:
   - **The emit channel.** `choir.Emit(toDesk, kind, body)` is a retired verb
     that returns an error (`internal/yaegikernel/choir.go:538-556`), but the
     host side is intact: `BrokerAction` `emit` (`broker_protocol.go:20`),
-    `EmitPayload`/`EmitResult` (`:143-151`), a dedicated stream pair
+    `EmitPayload`/`EmitResult` (`:143-161`), a dedicated stream pair
     (`internal/yaegikernel/transport.go:41-45`), the worker sidecar sender
     (`sidecar.go:140-154`), the host handler `deskEmitSignal`
     (`internal/agentcore/tools_desk.go:1085-1119`), which writes a free-text
@@ -237,7 +238,7 @@ Raw channels and allowlists:
   or the judge:
   - `choir.Research(children)` (`internal/yaegikernel/choir.go:580`) sends
     `ActionResearch` (`broker_protocol.go:34`) and the host serves it with
-    `runResearchChildren` (`internal/agentcore/tools_desk.go:1336`,
+    `runResearchChildren` (`internal/agentcore/tools_desk.go:1337`,
     `internal/agentcore/research_children.go:132`). It is **raw**: a child is a
     `research_child` desk loop whose ledger reduction is "inert (no run record,
     no channel)", it "reports" nothing, and its result is a return value,
@@ -278,7 +279,9 @@ resolver), reply, escalate, precommit, resolve, disagreement. Each *request*
   above. The sender's figure is a prediction that gets scored, not the weight
   its score uses: the scoring weight is computed at commit time from
   independent reference predictors and the decision flip rate, and frozen
-  (section 10.1, R32, R33);
+  (section 10.1, R32, R33). The sender's figure is scored later against
+  realized materiality, measured by a procedure frozen with the record
+  (score 2 of section 10.1, R38);
 - `settlement`: how it settles, a rule kind from the closed vocabulary
   (`commitment_rules.go:107-170`) or "recipient";
 - `provenance`: stamped by the reducer, never supplied by a cell (agent, model,
@@ -311,7 +314,13 @@ inbox shape comes from the recipient's declared `instance` (per owner, per
 subject, per run). The non-desk inboxes `recordsRoute` serves today
 (`captureSourceDesk:<subject>`, `inbox_records.go:77-83, 107-110`, and the
 open-new-subject address `texture:new`, `:113`) become registered inbox
-classes owned by the service that reads them, and "open a new subject" becomes
+classes owned by the service that reads them, as do desk-less system inboxes
+such as `job:<id>` (`internal/yaegikernel/intent.go:224-226`). The resolver must
+carry every rule `recordsRoute` encodes that the manifest does not: the
+open-subject address, the management task's routes to stories and sources
+(`inbox_records.go:99-117`), the capture-source inbox in both directions
+(`:78-81, :107-110`) and the system inboxes. A resolver derived from manifests
+alone would drop them silently, and "open a new subject" becomes
 a request kind that the custodian of the subject kind handles (Texture opens
 documents). This fixes Devin's B1 non-desk routing item.
 
@@ -319,9 +328,9 @@ documents). This fixes Devin's B1 non-desk routing item.
 
 | Slice | Work | Files (verified) | Deps | Class / tier | Proof | Rollback |
 |---|---|---|---|---|---|---|
-| MA1.1 | Delete the emit and message channels: `ActionEmit`, `ActionMessage`, `EmitPayload`, `EmitResult`, `StreamBrokerEmit` and its result stream, the sidecar sender, the host `deskEmitSignal`, the `emit` envelope kind, the `Emit` and `Message` stubs, `IntentMessage` and its three reducer branches. Bump `ProtocolVersion` | `internal/yaegikernel/broker_protocol.go:9, 20, 143-151, 326`; `transport.go:41-45`; `sidecar.go:140-154`; `desk_session_worker.go:55-56, 448-451`; `worker_mux.go:78`; `frame_selftest.go:31, 96, 170, 195`; `choir.go:538-556`; `intent.go:22, 407`; `internal/agentcore/tools_desk.go:515-519, 869, 1085-1119`; `rlm_reduce.go:138, 388, 1127` | none | orange / 1 (deletes unreachable code; one-act revert) | frame self-test asserts every action in the new set and none else; a grep gate for the deleted names; a test that a manifest naming `emit` is refused at validation; the existing D0 branch corpus is re-captured | revert |
-| MA1.2 | One data-driven address resolver; delete `MessageTargets`, `Addresses`, `CanMessage`, `AllowedMessageTargets`, `recordsDesk`/`recordsRoute` sender switch, the Texture cast restriction. Non-desk inbox classes become registrations. Engineering casts from non-holders forward to management | `deskmanifest/manifest.go:136-141, 214-307, 338-339, 512, 591`; `internal/agentprofile/agentprofile.go:32, 56-57, 119-135`; `internal/agentcore/prompts.go:44, 61`; `inbox_records.go:33-120`; `texture_dispatch_fold.go:46-58`; `rlm_reduce.go:2285`; `tools_worker_update.go:168` | MA1.1 | red / 2 (routing, concurrency, ledger) | contract test: every desk to every desk resolves to its registered inbox; a request to an unregistered name is refused; a cast to engineering from research lands in management's inbox, not as an assignment; the existing Texture, research, management and engineering product-path acceptance unchanged on d@e | revert |
-| MA1.3 | The request record: required `p_success`, `weight` and `settlement` on requests; reducer-stamped provenance with an origin class; delete Note and the `note` directive subtype; `Decline` and `Feed` as typed request kinds | `internal/yaegikernel/intent.go:44-48, 521, 543`; `choir.go:1431-1462, 1532`; `internal/types/commitment.go:43-65, 162-175, 572`; `rlm_reduce.go:237, 262, 404, 1218, 1265, 1297, 1357`; `inbox_records.go:391, 442, 595`; `tools_desk.go:1178`; `commitment_rules.go:107-170` | MA1.2 | red / 2 (tape type, reducer) | golden fixtures for every request kind; the reducer refuses a request with missing or out-of-range `p_success`; provenance cannot be set by a cell (negative test); a precommit with `weight` 0 on an I1+ class is refused | revert; tape records written stay decodable (new fields optional on read, required on write) |
+| MA1.1 | Delete the emit and message channels: `ActionEmit`, `ActionMessage`, `EmitPayload`, `EmitResult`, `StreamBrokerEmit` and its result stream, the sidecar sender, the host `deskEmitSignal`, the `emit` envelope kind, the `Emit` and `Message` stubs, `IntentMessage` and its three reducer branches; and the receive path: `PendingEmit`, `SessionFrame.Emits`, the scope's `emits` binding and `choir.Emits`, the host drain (`pendingCellEmits`, `pendingEmitsForRun`, the `EvalCell` emits parameter and frame field), the worker's `EmitHandler` field and `serviceEmit`, the mux case, `MessagePayload`/`MessageResult`, and `TestCellBindingEmits`. Bump `ProtocolVersion` | `internal/yaegikernel/broker_protocol.go:9, 20, 130-161, 326`; `transport.go:41-45`; `sidecar.go:140-154`; `desk_session_worker.go:55-59, 448-452, 517-535`; `worker_mux.go:78`; `frame_selftest.go:31, 96, 170, 195`; `choir.go:87, 223, 538-556, 1118-1127`; `intent.go:22, 310-323, 407`; `intent_test.go:121+`; `session_loop.go:45-49`; `internal/agentcore/tools_desk.go:414-415, 515-519, 612, 646, 831-894, 869, 1085-1119`; `rlm_reduce.go:138, 388, 1127` | none | orange / 1 (deletes unreachable code; one-act revert) | frame self-test asserts every action in the new set and none else; a grep gate for the deleted names; a test that a manifest naming `emit` is refused at validation; the existing D0 branch corpus is re-captured | revert |
+| MA1.2 | One data-driven address resolver; delete `MessageTargets`, `Addresses`, `CanMessage`, `AllowedMessageTargets`, `recordsDesk`/`recordsRoute` sender switch, the Texture cast restriction. Non-desk inbox classes become registrations, and the resolver carries the route rules no manifest states (`texture:new`, management task to story and source, capture source both ways, `job:<id>` and the other system inboxes; section 4.2). Engineering casts from non-holders forward to management | `deskmanifest/manifest.go:136-141, 214-307, 338-339, 512, 591`; `internal/agentprofile/agentprofile.go:32, 56-57, 119-135`; `internal/agentcore/prompts.go:44, 61`; `inbox_records.go:33-120`; `texture_dispatch_fold.go:46-58`; `rlm_reduce.go:2285`; `tools_worker_update.go:168`; `internal/yaegikernel/intent.go:224-226` | MA1.1 | red / 2 (routing, concurrency, ledger) | contract test: every desk to every desk resolves to its registered inbox; each non-manifest rule resolves as `recordsRoute` resolves it today (a `texture:new` cast opens a subject, a management task reaches its story and source inboxes, a capture-source record routes both ways, a `job:<id>` address resolves), checked against the old switch on the same inputs before it is deleted; a request to an unregistered name is refused; a cast to engineering from research lands in management's inbox, not as an assignment; the existing Texture, research, management and engineering product-path acceptance unchanged on d@e | revert |
+| MA1.3 | The request record: required `p_success`, `weight` and `settlement` on requests; a `materiality_procedure` ref from the custodian's per-kind catalogue, hashed with the frozen weights (section 10.1); reducer-stamped provenance with an origin class; delete Note and the `note` directive subtype; `Decline` and `Feed` as typed request kinds | `internal/yaegikernel/intent.go:44-48, 521, 543`; `choir.go:1431-1462, 1532`; `internal/types/commitment.go:43-65, 162-175, 572`; `rlm_reduce.go:237, 262, 404, 1218, 1265, 1297, 1357`; `inbox_records.go:391, 442, 595`; `tools_desk.go:1178`; `commitment_rules.go:107-170` | MA1.2 | red / 2 (tape type, reducer) | golden fixtures for every request kind; the reducer refuses a request with missing or out-of-range `p_success`; provenance cannot be set by a cell (negative test); a precommit with `weight` 0 on an I1+ class is refused | revert; tape records written stay decodable (new fields optional on read, required on write) |
 | MA1.4 | Re-cut D0: lock protocol 1.0.0 without allowlists. Cherry-pick the extractor, checker, contract tests and the transition table from the `d0-protocol` branch; remove `MessageTargets`/`Addresses` from the surface (`internal/deskprotocol/surface.go:77-78, 277-278` on that branch) and the `note` and `emit` golden fixtures; re-capture the corpus after MA1.3; add the roots below | `internal/deskprotocol/**`, `cmd/deskprotocol-lock`, `.github/workflows/ci.yml` (job `desk-protocol`), `internal/store/lifecycle.go` and `engineering_assignments.go` (transition table reads, from commit e63e2f536) | MA1.3, MA1.5, MA1.6 | yellow tooling, orange reducer table / 1 | the checker passes against its own lock; negative tests (field removed, required field added, enum value added to a closed type) classify correctly; the transition contract test runs against current store behaviour (every transition the store performs today is in the table), not only table-versus-store symmetry; a build with a deliberately breaking change fails the job | revert |
 
 ### 4.4 Sub-RLM calls are Casts, and who scores them (R28)
@@ -588,7 +597,7 @@ vmmanager uses of "adopt a surviving VM" are a different concept and stay.
 | MA2.1 | Go kernel: scope, effects (LIFO, awaited), provider and inject, supervisor with restart intensity, snapshot, `GET /api/plugins/state`; structural gates (imports, names, responsibility list) in the repo gates and CI. Registers no existing service. (G0, with R1 replacing the size limit) | `internal/kernel/**` (new), `internal/apihandler/routes.go`, `scripts/check-kernel-*`, `.github/workflows/ci.yml` | MA0.5 | orange / 1 | Go tests: scope cancel, effect order, supervisor intensity (two crashes in a window close with the cause), boot-fold rebuild with no occurrence replayed; the three gates, with a negative fixture each; `GET /api/plugins/state` on d@e with no SSH | revert |
 | MA2.2 | Front-end kernel: same five responsibilities; gates as above; K0 leak differential. The d@e renderer-swap drill moves to S4 because it needs the S4 slot (Devin amendment 4) | `frontend/src/lib/kernel/**`, `frontend/scripts/check-kernel.mjs`, `frontend/tests/kernel.spec.js` | MA0.5 | orange / 1 | contract tests for scope disposal order, swap ordering, ranking and failover; the leak differential (install, activate, exercise, uninstall; `snapshot()` equals baseline) | revert |
 | MA2.3 | Manifest v2 and validators: `contributes.desks` decoded, typed capability list with levels, namespaced grants, behaviour-surface hash, source-only release record, kind inference. Rewrite every in-tree manifest; delete the v1 reader in the same slice (no shim; the exposure is published v1 releases, section 18 item 12). Includes P0 | `internal/apppackage/{manifest,schema}.go`, testdata, `frontend/scripts/{check-packages,gen-package-kinds}.mjs`, every `frontend/src/packages/*/choir-package.json`, `internal/pkgrelease/{listing,record}.go` | none | red / 2 (install path) | Go tests for strict unknown-key refusal, path containment, publisher-declared refusal, kind inference, each privileged grant refused from a non-first-party origin, hash stability and change on each covered input; `check-packages` on all in-tree packages; `runtime-install.spec.js` unchanged | revert |
-| MA2.4 | Delete adopt (M1). Brings the kind rename `release_adoption` to `install` with its tape conversion as designed in forced modularity | files above plus `cmd/choir/package.go`, `frontend/src/packages/library-next/**`, `scripts` | none (disjoint from kernels) | orange / 1 | the forced-modularity M1 proof; a grep gate for `adopt` outside the vmctl exceptions | revert |
+| MA2.4 | Delete adopt (M1). Brings the kind rename `release_adoption` to `install` with its tape conversion as designed in forced modularity. Ordering: MA2.4 lands before any Phase 5 slice that edits `frontend/src/packages/library-next/**` (F1, then L1 to L4); those slices are written against the install name and never against adopt | files above plus `cmd/choir/package.go`, `frontend/src/packages/library-next/**`, `scripts` | none (disjoint from kernels) | orange / 1 | the forced-modularity M1 proof; a grep gate for `adopt` outside the vmctl exceptions | revert |
 | MA2.5 | Grant-driven desk registry (D1): desk becomes a data type loaded through `Register`; the closed lists become lookups (F1 to F6, F11, F12 of the desks design); `scripts/check-desk-names` gate with an allowlist that must reach zero; fix `deskModuleSets` excluding `KindApp` (`internal/yaegikernel/choir.go:328-331`); fix `isTextureAgentID`'s duplicated check (`internal/agentcore/tool_profiles.go:170-173`) and the `management-task`/`management_task` dual spelling (`internal/types/management_task.go:20`) | `internal/deskmanifest/manifest.go`, `agentprofile/agentprofile.go:86-115`, `modelpolicy/model_policy.go:519-531, 639-662`, `promptstore/store.go`, `runtimeprompts/prompts.go:57-123`, `agentcore/{tool_profiles,runtime,tools_desk,inbox_records}.go`, `yaegikernel/choir.go`, `capsule/roles.go` (all unverified beyond the spot checks above; re-grep) | MA1.2, MA2.1, MA2.3 | red / 2 | the parity tests pin each row unchanged; a test asserts every built-in desk's computed verb set equals today's literal byte for byte; all four desks run an ordinary day on d@e with identical routing; the names gate passes with the allowlist at its starting size | revert |
 
 Parallel group: MA2.1, MA2.2, MA2.3, MA2.4 share no files. MA2.5 follows them
@@ -697,7 +706,8 @@ propagate; the disclosure path; app UIs reading only their own desk's kinds.
 - Mail never touches the guest store; maild is a host process with per-owner
   mailbox databases (inventory 1.1, 2.1). The guest Maildir route
   `POST /api/mail/inbound` has no caller found, and the Files route lists
-  `mail/` without a carve-out (`internal/autoputer/files.go:607-608`).
+  `mail/` without a carve-out (`internal/autoputer/files.go:182-192, 271-272`,
+  the root listing and directory read; the routes are registered at `:607-608`).
 
 ### 7.2 Design
 
@@ -818,11 +828,11 @@ ceiling that MA3.6 removes.
 |---|---|---|---|---|---|---|
 | MA3.1 | Assign a custodian to every `WriterRuntime` kind (section 8.2); declare it in the registry; `OwnedKinds` becomes the source and gets a consumer; kernel-owned `system:kernel` writer for the commons | `internal/objectgraph/registry.go` (52 lines), `deskmanifest/manifest.go:147-149`, `internal/store/*` write sites | MA2.5 | red / 2 | a registry test: no kind has `WriterRuntime`; every kind has exactly one custodian; a drill writing each kind from its custodian succeeds and from another desk is counted | revert |
 | MA3.2 | Writer gate to enforce: declare the writer at the reducer from the run record (not the cell) for package kinds from day one; built-in kinds after the d@e counters read zero; delete the env default | `internal/objectgraph/writer.go:134-156, 204-216`; `store/{texture_turn.go:323,graph_home.go:90,file_object.go:388,app_package_objects.go:66}` | MA3.1 | red / 2 (tape, store) | a wrong-writer write is refused; counters zero over a recorded d@e day before the default flips | revert |
-| MA3.3 | Reader gate and scoped store handles: `CheckReadAs`, per-kind reader rules, `store.As(custodian)`, `check-store-handles` gate; convert services in the order of 8.4 | `internal/objectgraph/{writer.go,sql_store.go}`, `internal/store/**`, `internal/agentcore/**`, `internal/textureowner/**` | MA3.1 | red / 2 | per-kind negative tests (a non-custodian read is refused); the gate fails on an unscoped import; the desks run an ordinary day | revert |
-| MA3.4 | Leases: the `lease_request` kind, the custodian-issued lease record on the tape, owner view and revoke, frame-layer and store-layer enforcement, revocation on uninstall, yank and retirement; every lease per-task until Phase 7. Converts the capsule store copy to a lease | new `internal/lease/**`; `internal/capsule/computer_state.go:13-16, 42-52`, `computer_state_linux.go:135-177`; `internal/autoputer/capsule_executor_linux.go:144-156`; frame handlers in `tools_desk.go` | MA3.3, MA1.3 | red / 2 | a desk without a lease is refused; a lease expires at its run's end; the owner revokes and the next read fails; a lease request is a scored precommitment record; a hostile fixture cannot read a kind outside the ceiling even with a lease for another | revert |
+| MA3.3 | Reader gate and scoped store handles: `CheckReadAs`, per-kind reader rules, `store.As(custodian)`, `check-store-handles` gate; convert services in the order of 8.4. `choir.ReadCapture` (`internal/yaegikernel/broker_protocol.go:270-276`, `choir.go:659-674`) is named in this gate: it fetches any capture by id and sits in `appDeskVerbs` (`deskmanifest/manifest.go:471-475`), so it is the widest by-id read an app desk inherits. Its frame handler resolves the capture's labels from the capture record, never from the cell; a world capture (E4) is served under `captures.read`; a capture carrying an owner-private label is served only to its custodian or against a lease (MA3.4) | `internal/objectgraph/{writer.go,sql_store.go}`, `internal/store/**`, `internal/agentcore/**`, `internal/textureowner/**` | MA3.1 | red / 2 | per-kind negative tests (a non-custodian read is refused); the gate fails on an unscoped import; the desks run an ordinary day | revert |
+| MA3.4 | Leases: the `lease_request` kind, the custodian-issued lease record on the tape, owner view and revoke, frame-layer and store-layer enforcement, revocation on uninstall, yank and retirement; every lease per-task until Phase 7. Converts the capsule store copy to a lease. A lease scope may name captures by id or label, and `choir.ReadCapture` checks it (MA3.3) | new `internal/lease/**`; `internal/capsule/computer_state.go:13-16, 42-52`, `computer_state_linux.go:135-177`; `internal/autoputer/capsule_executor_linux.go:144-156`; frame handlers in `tools_desk.go` | MA3.3, MA1.3 | red / 2 | a desk without a lease is refused; a lease expires at its run's end; the owner revokes and the next read fails; a lease request is a scored precommitment record; a hostile fixture cannot read a kind outside the ceiling even with a lease for another; an app desk calling `choir.ReadCapture` with the id of an owner-private capture it holds no lease for is refused, and with a world capture's id is served | revert |
 | MA3.5 | Provenance labels that propagate: label set on records and objects, per-run accumulator, reducer stamping, context framing | `internal/types/commitment.go:162-175`, `internal/agentcore/{rlm_reduce.go,run_context.go}`, run record | MA1.3 | red / 2 | a run that reads an owner-private capture carries the label into every act it commits; a derived summary carries the union; a cell cannot clear or set a label | revert |
 | MA3.6 | The disclosure path: kernel rules table, System 1 as a kernel service (generalised from research-only; caps and switch removed), custodian-model and owner-tap steps | `internal/agentcore/system1_verb.go`, `internal/yaegikernel/system1.go` (unverified), kernel service, owner act surface | MA3.5, MA2.1 | red / 2 (authority path) | a labelled run attempting each sink gets the table's decision; an `ask` reaches System 1 and the distribution is recorded; the owner tap is a tape fact; model calls log provider and labels | revert |
-| MA3.7 | Custody resolutions (section 8.4): the `texture.search` surface, Texture story index for management, self-scoped `RunMemoryEntry`, `Mail` carve-out from the Files route, ProductAPI narrowing | `internal/researchtools/researchtools.go:71`; `store/texture.go:125-160`; `agentcore/{system1_verb.go:461-475,tools_evidence.go:57,intake_view.go:67,tools_product_api.go:196-222}`; `autoputer/files.go:607-608` | MA3.3, MA3.4 | red / 2 | each former cross read has a test: before, it worked by raw store access; after, it works through its fate or is refused | revert |
+| MA3.7 | Custody resolutions (section 8.4): the `texture.search` surface, Texture story index for management, self-scoped `RunMemoryEntry`, `Mail` carve-out from the Files route, ProductAPI narrowing | `internal/researchtools/researchtools.go:71`; `store/texture.go:125-160`; `agentcore/{system1_verb.go:461-475,tools_evidence.go:57,intake_view.go:67,tools_product_api.go:196-222}`; `autoputer/files.go:182-192, 271-272, 607-608` | MA3.3, MA3.4 | red / 2 | each former cross read has a test: before, it worked by raw store access; after, it works through its fate or is refused | revert |
 | MA3.8 | Object verbs and the reducer-set writer for package desks (`Put`, `Get`, `List`, `Retract`; `IntentObjectPut`), schema versions per kind | `internal/yaegikernel/{intent.go,choir.go}`, `deskmanifest`, `rlm_reduce.go`, `internal/apppackage/register.go`, `objectgraph/package_kinds.go` | MA3.2 | red / 2 | the desks design D2 proofs: a cell cannot supply a writer; wrong kind, oversize body, schema violation and another desk's kind are refused; protocol minor bump | revert |
 | MA3.9 | Per-desk write and storage quotas at the reducer, wake and schedule rate bounds, and cost attribution and monitoring per desk (no ceiling, R8) | `rlm_reduce.go`, `internal/llmcost`, gateway attribution | MA3.8 | orange / 1 | a desk past its object quota is refused; the owner view groups spend by desk and package | revert |
 | MA3.10 | App UIs read only their own desk's kinds: route-to-kind table, app identity check (advisory until Phase 6), Texture projections endpoints | `internal/apihandler/routes.go`, `internal/agentcore/api_trajectory.go`, `internal/textureowner/router.go`, front-end calls above | MA3.7 | red / 2 | a route test per app; the Texture UI works against the projection endpoints; Files no longer lists `mail/` | revert |
@@ -907,7 +917,7 @@ which reads only the submitted text (inventory X11).
 | 6.2-8 | Management `ProductAPI` `/api/autopaper/` write path touches source schedules (no desk custodian; allowlist `tools_product_api.go:221`) | management is custodian of source schedules (8.2) and the write ban at `:199-204` is extended to `/api/autopaper/` for kinds it is not custodian of | MA3.7 |
 | 6.2-9 | `/diagnosis`, `/api/trajectories`, `/api/inboxes/*` join kinds | E1 owner root; keep | none |
 | 6.2-10 | Every `WriterRuntime` kind lacks a custodian | table 8.2 | MA3.1 |
-| Files/mail | The Files route lists `mail/` (`autoputer/files.go:607-608`); the inbound route has no caller | carve-out; delete the route if no caller exists at build time | MA3.10 |
+| Files/mail | The Files route lists `mail/` (`autoputer/files.go:182-192, 271-272`; routes at `:607-608`); the inbound route has no caller | carve-out; delete the route if no caller exists at build time | MA3.10 |
 | UI | Texture UI reads lifecycle and engineering evidence kinds | Texture-custodian projection endpoints | MA3.10 |
 | Proxy | Proxy to the paper computer's Texture HTTP (`proxy/platform_expand.go:407, 450, 597`, unverified) | already a request to the custodian | none |
 
@@ -1184,9 +1194,10 @@ track record in the action class `route/I1`, and a destination desk may use it.
 
 ## 10. Trust and scoring: how the plan revises the draft
 
-The draft [bayesian-trust-2026-11-04.md](bayesian-trust-2026-11-04.md) is copied
-in with a header note and with the scoring fixes of item 5 made in its text.
-The plan changes five things in it, and sections 10.1 to 10.3 set the scoring
+The draft [bayesian-trust-2026-11-04.md](bayesian-trust-2026-11-04.md) is folded
+into this section: this plan is the authority, and the draft stays as the
+detailed companion, with the scoring fixes of item 5 and the three scores of
+10.1 made in its text. The plan changes five things in it, and sections 10.1 to 10.3 set the scoring
 rules that trust and every other score in this plan rest on. They come from two
 citation-checked surveys,
 [scoring and materiality](../research/scoring-and-materiality-2026-11-04.md)
@@ -1229,7 +1240,8 @@ The owner agreed to their defaults (R32 to R36).
    where the draft's arithmetic was not honest. Each fix is in the draft's
    text:
    - (a) materiality weights depended on outcomes (the forecaster's dilemma):
-     now frozen at commit time (draft 3.1, 3.2);
+     now frozen at commit time, and hindsight enters only through a
+     measurement procedure frozen with them (10.1; draft 3.1, 3.2, 3.4);
    - (b) negative skill was clipped at zero, which makes overconfident guessing
      free: now unclipped in the score, its negative part counted as evidence
      against; clipping only in the display (draft 4.1);
@@ -1241,17 +1253,129 @@ The owner agreed to their defaults (R32 to R36).
      the weight on what it would rather not be judged on: now `P_ref` from
      independent reference predictors (draft 3.2).
 
-### 10.1 Materiality: frozen weights and the flip rate (R32, R33)
+### 10.1 Materiality: foresight and hindsight as three scores (R32, R33, R38)
 
-**Weights are frozen ex ante.** At commit time the reducer stores and hashes
-the reference consequence set `C*`, and for each consequence its `P_ref`,
-`impact` and `relevance`. Nothing that happens later changes them. An outcome
-may do two things only: teach the weights of *later* commitments, and record a
-**foresight miss** (a consequence that was predictable but nobody listed) in a
-separate ledger that is reported beside the score and never summed into it.
-Reason: if what counts is chosen after the outcome, the agents that list every
-disaster look best whenever a disaster happens, and the score is no longer
-proper (Lerch et al., the forecaster's dilemma).
+**Freeze the procedure, not the hindsight.** The research forbids choosing
+the yardstick after the outcome: if what counts is picked once the outcome is
+known, the agents that list every disaster look best whenever a disaster
+happens, and the score is no longer proper (Lerch et al., the forecaster's
+dilemma). It does not forbid hindsight. A measure of what turned out to matter
+is fair if the way it is measured was fixed before the outcome. The owner
+ruled that both are important (R38). So at commit time the reducer stores and
+hashes, with the record:
+
+- the reference consequence set `C*`, and for every consequence in it or named
+  by the agent, its `P_ref`, `impact` and `relevance` (the weights);
+- the full output of the reference predictors and the critic panel, including
+  consequences they named that fell below the floor and stayed out of `C*`;
+- the **realized-materiality procedure**: how and when realized materiality
+  will be measured. It comes from a per-kind catalogue kept by the custodian
+  of the record's kind (section 8.2), not from the committing desk. For an
+  Autopaper story: forward citations by later stories at 30 and 90 days, plus
+  reader signals over the same window. For a self-development change: the
+  floor measures (10.3) over a stated window, for example rollback or hotfix
+  within 14 days (F1) and escaped defects over 30 days (F2). A kind with no
+  procedure in the catalogue gets no importance score (below); the record says
+  so, and it is not scored as zero.
+
+Nothing that happens later changes any of these. A measure fixed in advance
+and read afterwards is hindsight, and it is fair.
+
+**Three scores per record.**
+
+1. **Accuracy (foresight).** Were the probabilities right on the named
+   consequences? The proper score (Brier or log) of the agent's probabilities
+   on `C*` and on every consequence it named itself, each weighted by its
+   frozen `w(c) = P_ref(c) * impact(c) * relevance(c)`. A consequence in `C*`
+   that the agent left out scores as predicted at zero (PSA 3.1). Nothing in it
+   depends on the outcome except which way each question resolved. It settles
+   when the consequences resolve.
+2. **Importance judgment (hindsight enters here).** The agent's materiality
+   weight, the `weight` on its request (section 4.2) and the impact class it
+   gave each consequence, is itself a forecast: a forecast of the realized
+   materiality that the frozen procedure will measure. When the procedure's
+   window closes, the measured value is binned into the impact classes I0 to
+   I4 and the forecast is scored by a proper rule for an ordered outcome (the
+   ranked probability score, the discrete form of the CRPS; Gneiting and
+   Raftery). A single class given as a point counts as a distribution with all
+   its mass on that class. Realized materiality also trains the reference
+   predictors: later records of the same kind start from weights that reflect
+   what turned out to matter. It never rewrites a settled score, its own record's
+   accuracy weights included.
+3. **Coverage (a foreseeability test).** Consequences that turned out material
+   (the frozen procedure measured them above the floor) but that the agent did
+   not list. The test is the one negligence law uses, by analogy: conduct is
+   judged against what a reasonable predictor could have foreseen, not against
+   what happened.
+   - If, before the commitment, the reference predictors, the critic panel or
+     another desk's dated, scored record named the consequence, it was
+     foreseeable, and the miss counts against the desk. It scores as predicted
+     at zero, with the weight the earlier naming gives it: the namer's `P_ref`
+     and impact as stated then, and relevance sampled by the flip test (below)
+     on the commit-time context, which does not depend on the outcome. The
+     desk need not have read that record; the test is what a reasonable
+     predictor could foresee, not what this desk saw.
+   - If nobody named it, it is a **world surprise**. It counts against no
+     desk. It extends the watched-consequence ontology (the critic panel's
+     consequence classes and the reference predictors' inputs) for later
+     commitments, and it is evidence about the critics' and reference
+     predictors' own coverage, which enters their scorer profile (10.2).
+
+   Scoring only the foreseeable misses that happened is not a selection on
+   outcomes. The set was fixed before the outcome (it was named beforehand), and
+   a consequence predicted at zero loses under a proper rule only if it
+   happens, so this is the same arithmetic as an omission inside `C*`.
+
+**Who reads which score.** Trust (leases, autonomy, request order, review
+depth) reads scores 1 and 3 only. Both judge the decision as it was made, with
+what could be known, so a desk is not credited or blamed for luck on a single
+record (moral luck, Nagel and Williams: a story that turns out to matter
+because of next month's news says little about the desk that filed it).
+Learning and selection read all three: the in-context calibration digest,
+the reference predictors' starting weights, and which candidates and parents
+the lottery of 10.3 draws from.
+
+Across many records luck averages out, so a long importance-judgment record is
+honest evidence too: a desk whose weights keep matching realized materiality
+over a hundred stories judges importance well. The plan still takes the more
+conservative choice: **score 2 does not enter trust at all.** It is shown
+beside the posterior with its n and interval, like calibration. It may enter
+trust later only if the replay of settled records (MA7.2, as for H-C1) shows
+that, aggregated over a window with a minimum n, it predicts the next material
+failure better than scores 1 and 3 alone, and then only in aggregate, never per
+record, and by an owner decision. Reasons: it adds no route to authority that
+foresight-scored evidence has not earned, it keeps every authority input fair
+to the decision as made at any n, and its procedures (citations, reader
+signals) are the easiest of the three to steer (below).
+
+**Gaming.**
+
+- *Shrinking the weights* fails: scores 1 and 3 use weights from the
+  reference predictors; the agent's own weight is only scored (score 2), never
+  used to weight anything.
+- *Padding the list with unlikely consequences* costs: every consequence the
+  agent names is scored under the proper rule, and a trivial one has zero
+  relevance, so it earns nothing.
+- *Steering realized materiality* (new with score 2). A desk that also
+  produces the later evidence (a newsroom desk citing its own story, nudging
+  reader signals, or quietly rolling back its own change) can move the
+  measured materiality toward its forecast, and through it the next records'
+  starting weights. Mitigation: the procedure counts only independent origins
+  (citations by other desks and computers, readers who are not agents), and
+  evidence the emitter itself produces is excluded as self-fulfilling (PSA
+  5.4); score 2 does not move trust; and a surprising success on score 2 with
+  no matching movement in the hidden audits sends an auditor (10.3).
+- *Choosing a lenient procedure* (new). Mitigation: the procedure comes from
+  the custodian's catalogue, versioned and hashed into the record; the
+  committing desk cannot supply or change it.
+- *Poisoning foreseeability* (new with score 3). A desk, or two desks of one
+  publisher, could name many consequences in cheap dated records so that
+  others' misses count as foreseeable, or to steer the ontology. Mitigation: a
+  naming counts only if it comes from the reference predictors or the critic
+  panel, or from another desk's record that carries a probability above the
+  materiality floor and is itself scored under the proper rule (so naming
+  many unlikely things costs the namer), and only from an origin other than the
+  subject's publisher (the same exclusion as the trust draft 3.1).
 
 **`C*` and `P_ref` come from outside the agent.** A critic panel proposes `C*`
 at commit time; `P_ref` comes from reference predictors (a base rate for the
@@ -1565,7 +1689,7 @@ Per the trust draft, with the revisions of section 10. The act gate comes last.
 | Slice | Work | Class / tier | Deps | Proof |
 |---|---|---|---|---|
 | MA7.1 | Amend the draft: lease policy, ceiling wording, provider calls not I3, impact table as locked data (BT1: every grant mapped to an impact class). The four scoring fixes (section 10 item 5) are already in its text | yellow / 0 | MA3.4 | the table has a row for every catalogue grant |
-| MA7.2 | Evidence extraction E1 to E8 (settled sub-RLM casts of MA1.5 are E1 and E5 evidence for the parent and the child role) and the derived trust view per subject and class, never stored (BT2); weights read frozen from the record (10.1); foresight misses in their own ledger; the tempered and capped candidates both computed, and the replay picks one | orange / 1 | MA1.3, MA3.5 | replay on d@e's settled records reproduces a view; excluded classes (crash-closed, self-fulfilling, same-publisher scorer) excluded; a settled score is unchanged by a later outcome (negative test); the replay reports both candidates' calibration and AUC on next failure |
+| MA7.2 | Evidence extraction E1 to E8 (settled sub-RLM casts of MA1.5 are E1 and E5 evidence for the parent and the child role) and the derived trust view per subject and class, never stored (BT2); weights read frozen from the record (10.1); the three scores of 10.1, accuracy and coverage into the posterior, importance judgment settled by the frozen procedure when its window closes and shown beside the posterior, world surprises recorded against no one; the tempered and capped candidates both computed, and the replay picks one | orange / 1 | MA1.3, MA3.5 | replay on d@e's settled records reproduces a view; excluded classes (crash-closed, self-fulfilling, same-publisher scorer) excluded; a settled score is unchanged by a later outcome (negative test); a changed procedure after commit fails the record's hash (negative test); a material consequence that nobody named before the commitment moves no desk's posterior (negative test); an importance-judgment score moves no posterior or lease (negative test); the replay reports both candidates' calibration and AUC on next failure |
 | MA7.3 | Hierarchical prior and change discount from the behaviour-surface hash (BT3) | orange / 1 | MA2.3 | hash change moves `d` as specified |
 | MA7.4 | Lease policy: duration and scope from the posterior's lower bound inside the ceiling; revocation by the breaker | red / 2 | MA3.4, MA7.2 | a strong-record fixture gets a durable lease that renews; a thin one stays per-task; a fidelity event revokes at once |
 | MA7.5 | Install review pipeline with reviewer precommitments (BT5): mechanical checks, then seats sized by risk (Devin, DeepSeek; never luna) | orange / 1 | MA2.3 | a package with a widened ceiling cannot install without the verdict |
@@ -1663,7 +1787,7 @@ written after this plan is signed off (MA0.5), not before:
    as earned authority (ceiling in the manifest, leases within it, trust sets
    duration and scope); messages as predictions; generated code equals stranger
    code (one trust model); frozen materiality weights, the flip rate and the
-   foresight ledger (10.1), replacing the outcome-built `C*` of
+   three scores of foresight and hindsight (10.1), replacing the outcome-built `C*` of
    precommitment-records 3.1; anchors and the two-level cap on scoring the
    scorers (10.2); the four tiers, the visibility classes and "satisfice, then
    diversify" (10.3); the hypotheses H4 and the trust conjecture and what

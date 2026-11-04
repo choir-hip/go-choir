@@ -308,6 +308,12 @@ observed consequences sharpen it), and this is a proposed design, not a
 validated formula. **Materiality completeness** trains adversarially: critics
 hunt for omissions and consequential ones are penalized heavily.
 
+> **Erratum (2026-11-04).** The sentence above that builds `C*` partly "from what actually
+> happened" is superseded for scoring. `C*`, its weights and the procedure that will measure
+> realized materiality are frozen at commit time; hindsight enters only through that frozen
+> procedure, as three scores per record (accuracy, importance judgment, coverage by a
+> foreseeability test). See `design/modular-architecture-plan-2026-11-04.md` section 10.1.
+
 ### 3.2 From alignment problems to capability problems
 
 If an action predictably leads to harm, its commitment should say so, and that
