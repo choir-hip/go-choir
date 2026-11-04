@@ -59,6 +59,11 @@ const (
 	// IntentPrecommit freezes a machine-scoreable prediction on the
 	// commitment ledger.
 	IntentPrecommit = "precommit"
+	// IntentRestate restates a prediction once (calibration experiment E1,
+	// docs/design/calibration-experiment-e1-2026-11-04.md): TargetRef names
+	// what it restates (management: the Cast record id; engineering: the
+	// rule kind of its own Precommit), Body the new statement as JSON.
+	IntentRestate = "restate"
 	// IntentReport asserts a typed claim with evidence and names its
 	// resolver; it resolves when that resolver's acceptance lands.
 	IntentReport = "report"
@@ -611,6 +616,15 @@ func (t *Tray) Precommit(precommitJSON string) (string, error) {
 		return "", fmt.Errorf("tray: precommit requires a typed precommit body")
 	}
 	return t.stage(StagedIntent{Kind: IntentPrecommit, Precommit: precommitJSON})
+}
+
+// Restate stages one restatement (E1). target and bodyJSON are checked by
+// the reducer, which alone knows the statement restated.
+func (t *Tray) Restate(target, bodyJSON string) (string, error) {
+	if strings.TrimSpace(target) == "" || strings.TrimSpace(bodyJSON) == "" {
+		return "", fmt.Errorf("tray: restate requires what it restates and the new statement")
+	}
+	return t.stage(StagedIntent{Kind: IntentRestate, TargetRef: strings.TrimSpace(target), Body: bodyJSON})
 }
 
 // Report asserts a typed claim with evidence refs and names its resolver.

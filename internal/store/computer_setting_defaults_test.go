@@ -46,6 +46,13 @@ var heldDefaults = []string{
 	SettingTapeGroupCommit,       // owner ruled delete (crash-lossy window)
 	SettingEventTable,            // owner ruled delete; needs a host grant too
 	SettingIntakeEventWakes,      // failed its false-merge bar three times
+	// Experiment arms, not features: none held is the shipped behaviour and
+	// E1's comparator (docs/design/calibration-experiment-e1-2026-11-04.md).
+	SettingCalibrationE1Restate,
+	SettingCalibrationE1Pull,
+	SettingCalibrationE1Stub,
+	SettingCalibrationE1TwoStage,
+	SettingCalibrationE1Baseline,
 }
 
 func TestFeatureSettingsDefaultOn(t *testing.T) {

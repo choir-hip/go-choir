@@ -182,7 +182,7 @@ func calibrationCensoredCounts(records []types.CommitmentRecord) map[string]map[
 	}
 	out := map[string]map[string]int{}
 	for _, rec := range records {
-		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil || types.LateRulePrecommit(rec) {
+		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil || types.LateRulePrecommit(rec) || calibrationRestatement(rec) {
 			continue
 		}
 		res, ok := settled[rec.RecordID]
@@ -375,8 +375,8 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 		model := strings.TrimSpace(rec.Provenance.ModelID)
 		committed := strings.TrimSpace(rec.Provenance.CommittedAt)
 		if rec.Precommit != nil && rec.Precommit.Rule != nil && rec.Resolve == nil {
-			if desk != agentprofile.Engineering || types.LateRulePrecommit(rec) {
-				continue // R20: a late claim is never scored
+			if desk != agentprofile.Engineering || types.LateRulePrecommit(rec) || calibrationRestatement(rec) {
+				continue // R20: a late claim is never scored; E1 F1: a restatement is no second claim
 			}
 			p := rec.Precommit.YesProbability()
 			claim := string(rec.Precommit.Rule.Kind)
@@ -400,7 +400,8 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 			}
 			o := calibration.Observation{Desk: desk, ClaimType: claim, Thread: thread,
 				ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: p, Y: y, Scorers: []string{types.RuleScorerPrefix + claim},
-				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID), Arm: rec.SubjectRefs[calibrationArmRef]}
+				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID), Arm: rec.SubjectRefs[calibrationArmRef],
+				StatedBy: rec.SubjectRefs[types.RuleRefStatedBy]}
 			// C5: a clock claim's estimate and its measured span.
 			if rule := rec.Precommit.Rule; types.ClockRule(rule.Kind) && rule.EstimateMinutes > 0 && settlement.SubjectRefs[types.RuleRefCensored] != "true" {
 				if actual, err := strconv.ParseInt(settlement.SubjectRefs[types.RuleRefActualS], 10, 64); err == nil {
@@ -550,9 +551,15 @@ func (rt *Runtime) calibrationArmOfThread(ctx context.Context, computerID, threa
 
 // calibrationPushedToRun reports whether a run reads its desk's digest: its
 // desk is in the push experiment and its thread in the digest arm.
+//
+// An engineering run on a computer in another E1-E delivery is never pushed
+// the digest (calibration_e1.go).
 func (rt *Runtime) calibrationPushedToRun(ctx context.Context, rec *types.RunRecord) bool {
 	desk := calibrationDeskOfRun(rec)
-	return desk != "" && calibrationPushDesks[desk] && rt.calibrationArmOfRun(ctx, rec) == calibration.ArmDigest
+	if desk == "" || !calibrationPushDesks[desk] || rt.calibrationArmOfRun(ctx, rec) != calibration.ArmDigest {
+		return false
+	}
+	return desk != agentprofile.Engineering || rt.calibrationDeliveryOfRun(ctx, rec) == calibrationDeliveryPush
 }
 
 // calibrationDigestForRun returns the digest a run reads, or nil: the run's
@@ -610,7 +617,25 @@ func lastCalibrationDigestText(history []json.RawMessage) string {
 // read it and it differs from the last one this run read (experiment P1,
 // P2): at the activation's start, and after a tool batch when a refresh
 // changed it. Nil for runs that never read a digest.
+//
+// A stub-delivery engineering run (E1-E) gets the stub headline instead,
+// built from the same record, every run.
 func (rt *Runtime) calibrationDigestInjector(rec *types.RunRecord, history []json.RawMessage) toolregistry.InjectUserTurnsFunc {
+	if rt != nil && rt.store != nil && rt.calibrationDeliveryOfRun(context.Background(), rec) == calibrationDeliveryStub {
+		last := lastCalibrationDigestText(history)
+		return func(bool) ([]json.RawMessage, error) {
+			digest := rt.calibrationComputedDigest(context.Background(), rec)
+			if digest == nil {
+				return nil, nil
+			}
+			stub := calibration.Stub(*digest)
+			if stub == "" || stub == last {
+				return nil, nil
+			}
+			last = stub
+			return []json.RawMessage{calibrationDigestMessage(stub)}, nil
+		}
+	}
 	if rt == nil || rt.store == nil || !rt.calibrationPushedToRun(context.Background(), rec) {
 		return nil
 	}
@@ -639,7 +664,7 @@ type CalibrationLateShare struct {
 func calibrationLateShares(records []types.CommitmentRecord) map[string]CalibrationLateShare {
 	out := map[string]CalibrationLateShare{}
 	for _, rec := range records {
-		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil {
+		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil || calibrationRestatement(rec) {
 			continue
 		}
 		desk, _, _ := strings.Cut(strings.TrimSpace(rec.Provenance.AgentID), ":")

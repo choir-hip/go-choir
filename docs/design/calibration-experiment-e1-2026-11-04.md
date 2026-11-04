@@ -64,7 +64,7 @@ choir.Restate("<cast record id>", map[string]any{"verify_pass": <p>, ..., "freez
 ```
 
 The restatement takes the Cast's predictions block, strictly decoded
-(every mandatory kind). It is recorded as p1, `<cast>:restate:<kind>`, with
+(every mandatory kind). It is recorded as p1, `<p0 record id>:restate` (so `<cast>:predict:<kind>:restate`), with
 the same rule, assignment and clock anchor as p0, so the rule scorer settles
 p0 and p1 from the same event. The arm is the Cast's (C2: salted hash of the
 Cast record id), so it is independent per Cast and of the engineer's arm.
@@ -85,7 +85,7 @@ One delivery per computer, each against no seed:
 - **(c) stub** (pool): a short headline pushed at activation start, built
   from the same record, naming `choir.Calibration()` for the rest. Every
   run is treated.
-- **(d3) two-stage** (luna): the engineer's rule Precommits are p0. The
+- **(d3) two-stage** (luna): the engineer's rule Precommits are p0 (`calibration_stage=p0`). The
   result of the cell that first commits them carries a restatement
   request; in the record arm (by the engineer's thread hash) it shows the
   engineer's own record for those kinds, in the blind arm nothing. The

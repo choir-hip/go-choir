@@ -594,14 +594,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			egressLog := &cellEgressLog{}
 			evalCtx = withCellEgressLog(evalCtx, egressLog)
 			evalStart := time.Now()
-			var shownCalibration *types.CalibrationDigest
-			if pack != nil {
-				shownCalibration = pack.Calibration
-			}
+			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
 				Updates: updates, Emits: emits, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
 			if res.CalibrationRead {
-				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, calibrationDeliveryPush)
+				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, delivery)
 			}
 			elapsed := time.Since(evalStart)
 			// The cell's own bound fired, not the run's cancellation or the
@@ -702,6 +699,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				"diag":     result.DiagKind,
 				"receipts": result.Receipts,
 				"intents":  len(result.Intents),
+			}
+			if reduction.active && reduction.restateNotice != "" {
+				cell["calibration_restate"] = reduction.restateNotice
 			}
 			// One count line per async search with new arrivals: the only
 			// push of search arrivals to the model.

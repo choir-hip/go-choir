@@ -765,6 +765,9 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		// The Cast states the round's predictions: the run has predicted
 		// (calibration read marks, C6).
 		rt.noteCalibrationPredicted(r.scope.RunID, time.Now())
+		if !opened.Replay {
+			r.restateNotice = rt.castRestateNotice(ctx, r.scope.OwnerID, r.scope.ComputerID, castPlan.Cast.RecordID)
+		}
 		// The spawn obligation is atomic with the open commit (the
 		// lifecycle outbox mints delegated_assignment_spawn_deadline), so
 		// kernel mode needs no post-commit arm. Runtimes without the wake

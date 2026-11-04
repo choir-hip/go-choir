@@ -65,6 +65,10 @@ type Observation struct {
 	// (not censored), the actual seconds (C5).
 	EstimateMinutes int    `json:"estimate_minutes,omitempty"`
 	ActualS         *int64 `json:"actual_s,omitempty"`
+	// StatedBy is where a rule claim was stated ("cast" for a Cast's
+	// predictions, "precommit" for a desk's own); E1's per-kind record
+	// shows a stater its own claims only.
+	StatedBy string `json:"stated_by,omitempty"`
 }
 
 // Options bound a digest.
@@ -402,4 +406,53 @@ func nounOf(claimType string) string {
 		return n
 	}
 	return claimType
+}
+
+// KindRecord renders a stater's own record for the claim kinds it is about
+// to restate (calibration experiment E1, the record arm): per kind, n, the
+// mean stated p against the share that held, Brier, and for a clock kind
+// the median of estimate over actual minutes. Built from settled, shown
+// (not held-out) observations whose StatedBy is statedBy; a kind under
+// minN settled claims says so rather than show noise. Pure: the text has no
+// time and depends only on the observations.
+func KindRecord(obs []Observation, desk, statedBy string, kinds []string, minN int) string {
+	if minN <= 0 {
+		minN = DefaultOptions.MinBin
+	}
+	by := map[string][]Observation{}
+	for _, o := range obs {
+		if o.Desk != desk || o.HeldOut || o.StatedBy != statedBy {
+			continue
+		}
+		by[o.ClaimType] = append(by[o.ClaimType], o)
+	}
+	var b strings.Builder
+	for _, k := range kinds {
+		mine := by[k]
+		if len(mine) < minN {
+			fmt.Fprintf(&b, "- %s: %d settled, too few to show.\n", k, len(mine))
+			continue
+		}
+		st := Measure(mine)
+		fmt.Fprintf(&b, "- %s (n=%d): you said %.2f on average and %.2f held; Brier %.3f, resolution %.3f", k, st.N, st.MeanP, st.Observed, st.Brier, st.Resolution)
+		if n, ratio := estimateRatio(mine, minN); ratio != nil {
+			fmt.Fprintf(&b, "; your estimates were a median %.1fx the actual minutes (n=%d)", *ratio, n)
+		}
+		b.WriteString(".\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// Stub is the hybrid delivery's headline (E1-E (c)): about 35 tokens, the
+// record's direction and its least calibrated kind, and where the rest is.
+// "" when the digest has no text (under MinN).
+func Stub(d types.CalibrationDigest) string {
+	if d.Text == "" {
+		return ""
+	}
+	line := fmt.Sprintf("Your calibration record (n=%d): you said %.2f on average, %.2f held", d.N, d.MeanP, d.Observed)
+	if d.Worst != "" && len(d.ClaimTypes) > 1 {
+		line += "; least calibrated: " + d.Worst
+	}
+	return line + ". choir.Calibration() has the record by claim type."
 }

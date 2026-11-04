@@ -431,6 +431,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Delegate":         func() reflect.Value { return reflect.ValueOf(s.Delegate) },
 		"CancelTask":       func() reflect.Value { return reflect.ValueOf(s.CancelTask) },
 		"Calibration":      func() reflect.Value { return reflect.ValueOf(s.Calibration) },
+		"Restate":          func() reflect.Value { return reflect.ValueOf(s.Restate) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -1508,6 +1509,23 @@ func (s *ChoirScope) Precommit(precommit any) (string, error) {
 		return "", err
 	}
 	return t.Precommit(precommitJSON)
+}
+
+// Restate states a prediction a second time, once, when the runtime asked
+// for it (calibration experiment E1): management passes the Cast record id
+// and the Cast's predictions block, engineering the rule kind of its own
+// Precommit and {"p": ...} (a clock kind may restate its minutes). The
+// first statement stays; both are scored on the same outcome.
+func (s *ChoirScope) Restate(target string, statement any) (string, error) {
+	t, err := s.boundTray("restate")
+	if err != nil {
+		return "", err
+	}
+	body, err := jsonCellArg(statement)
+	if err != nil {
+		return "", err
+	}
+	return t.Restate(target, body)
 }
 
 // Report asserts a typed claim with evidence refs and a named resolver.

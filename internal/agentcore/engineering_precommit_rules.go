@@ -159,11 +159,15 @@ func (r *rlmCallReduction) commitEngineeringPrecommit(ctx context.Context, in ya
 	stampRulePrecommitStatement(&rec, "precommit", rec.Provenance.CommittedAt, lateReason)
 	rec.SubjectRefs[calibrationArmRef] = rt.calibrationArmOfThread(ctx, r.scope.ComputerID, assignment.Binding.AssignedAgentID)
 	rec.SubjectRefs[calibrationArmUnitRef] = calibrationArmUnitThread
+	rt.stampEngineerDelivery(ctx, &rec, r.scope.OwnerID, r.scope.ComputerID)
 	rt.stampCalibrationRead(&rec, r.scope.RunID)
 	if _, err := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); err != nil {
 		return 0, fmt.Errorf("reduce: precommit %s: %w", in.LocalID, err)
 	}
 	rt.noteCalibrationPredicted(r.scope.RunID, time.Now())
+	if lateReason == "" {
+		r.restateKinds = append(r.restateKinds, string(rec.Precommit.Rule.Kind))
+	}
 	return 0, nil
 }
 

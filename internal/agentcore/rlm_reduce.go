@@ -179,6 +179,18 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.Body) == "" {
 				return fmt.Errorf("reduce: texture_turn %s missing its body", in.LocalID)
 			}
+		case yaegikernel.IntentRestate:
+			if fromDesk != agentprofile.Management && fromDesk != agentprofile.Engineering {
+				return fmt.Errorf("reduce: restate %s: only management and engineering restate", in.LocalID)
+			}
+			if strings.TrimSpace(in.TargetRef) == "" || strings.TrimSpace(in.Body) == "" {
+				return fmt.Errorf("reduce: restate %s names no target or statement", in.LocalID)
+			}
+			for _, other := range intents {
+				if other.Kind == yaegikernel.IntentFreeze || other.Kind == yaegikernel.IntentComplete {
+					return fmt.Errorf("reduce: restate %s: restate before the evidence, not in the cell that stages %s", in.LocalID, other.Kind)
+				}
+			}
 		case yaegikernel.IntentDelegate, yaegikernel.IntentCancelTask, yaegikernel.IntentTaskDone:
 			// Management delegation (S2a): the records route reduces them;
 			// a desk off that route has no arm for them.
@@ -651,6 +663,11 @@ type rlmCallReduction struct {
 	verifyResult map[string]any
 	// jobResults carry what became of the cell's job starts and stops.
 	jobResults []map[string]any
+	// restateKinds are the rule kinds the cell's engineer Precommits stated
+	// first, and restateNotice a management Cast's restatement request
+	// (calibration experiment E1, calibration_e1.go).
+	restateKinds  []string
+	restateNotice string
 }
 
 // rlmReductionForCall assembles the cell-start inbox snapshot from the durable
@@ -1090,6 +1107,8 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			if err == nil {
 				r.verifyResult = out
 			}
+		case yaegikernel.IntentRestate:
+			seq, err = r.commitRestateIntent(ctx, in)
 		case yaegikernel.IntentPrecommit:
 			// Engineering's precommits are rule-settled and ledger-only;
 			// every other desk's take the semantic-act path.

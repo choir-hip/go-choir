@@ -80,9 +80,16 @@ type calibrationClaim struct {
 	DecisionActor string `json:"decision_actor,omitempty"`
 	// ReadAt is the run's first choir.Calibration() read before it stated
 	// this claim, and Reads its reads by then (C6); empty: it never read.
-	ReadAt    string `json:"calibration_read_at,omitempty"`
-	Reads     string `json:"calibration_reads,omitempty"`
-	Delegated bool   `json:"delegated,omitempty"`
+	ReadAt string `json:"calibration_read_at,omitempty"`
+	Reads  string `json:"calibration_reads,omitempty"`
+	// E1: the statement's stage (p0, p1), the p0 a p1 restates, the
+	// delivery an engineer's claim got and whether a p1's request showed
+	// the record.
+	Stage       string `json:"calibration_stage,omitempty"`
+	Restates    string `json:"restates,omitempty"`
+	Delivery    string `json:"calibration_delivery,omitempty"`
+	RecordShown string `json:"record_shown,omitempty"`
+	Delegated   bool   `json:"delegated,omitempty"`
 }
 
 // calibrationClaimOf joins a rule precommit with its rule settlement.
@@ -97,6 +104,7 @@ func calibrationClaimOf(rec types.CommitmentRecord, resolve *types.CommitmentRec
 		StatedAt: firstNonEmpty(refs[types.RuleRefStatedAt], rec.Provenance.CommittedAt),
 		Late:     types.LateRulePrecommit(rec), LateReason: refs[types.RuleRefLateReason], Arm: refs[calibrationArmRef], ArmUnit: refs[calibrationArmUnitRef],
 		ReadAt: refs[calibrationReadAtRef], Reads: refs[calibrationReadsRef],
+		Stage: refs[types.RuleRefStage], Restates: refs[types.RuleRefRestates], Delivery: refs[calibrationDeliveryRef], RecordShown: refs[calibrationRecordShownRef],
 		Assignment: rule.AssignmentID, Cast: refs["cast"],
 	}
 	if resolve != nil && resolve.Resolve != nil {

@@ -209,7 +209,7 @@ var system = []Desk{
 		// never fetches the world.
 		Verbs: []string{"Cast", "Ask", "Note", "Reply",
 			"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-			"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask", "Calibration"},
+			"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask", "Calibration", "Restate"},
 		CapsuleVerbs:   []string{},
 		MessageTargets: []string{Texture, Research},
 		Addresses:      []string{Texture, Engineering},
@@ -257,7 +257,7 @@ var system = []Desk{
 		// Engineering mutates inside its capsule, converses with
 		// management on records, and ends its assignment with Complete,
 		// freezing a candidate first.
-		Verbs: []string{"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note", "Calibration"},
+		Verbs: []string{"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note", "Calibration", "Restate"},
 		CapsuleVerbs: []string{"exec", "read_file", "write_file", "list_dir", "stat", "mkdir", "remove",
 			"kill_session", "go_eval", "init_session", "close_session", "job_start", "job_status", "job_stop"},
 		MessageTargets: []string{Management},

@@ -173,6 +173,7 @@ func (rt *Runtime) stateRoundPredictions(ctx context.Context, assignment types.E
 		}
 		records[i].SubjectRefs[calibrationArmRef] = arm
 		records[i].SubjectRefs[calibrationArmUnitRef] = calibrationArmUnitCast
+		records[i].SubjectRefs[types.RuleRefStage] = types.RuleStageFirst
 	}
 	for _, rec := range records {
 		exists, err := rt.store.CommitmentRecordExists(ctx, b.OwnerID, b.ComputerID, rec.RecordID)

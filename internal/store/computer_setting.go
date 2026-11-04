@@ -207,6 +207,26 @@ const SettingTapeGroupCommit = "tape.group_commit"
 // again.
 const SettingCompactForce = "store.compact_force"
 
+// The calibration experiment E1's arm assignments
+// (docs/design/calibration-experiment-e1-2026-11-04.md). Each is an
+// experiment arm a computer holds, not a feature switch: a computer that
+// holds none runs the shipped behaviour (engineering's digest pushed to half
+// its rounds, one statement of a Cast's predictions), which is E1's
+// comparator. Off by default for that reason; the owner's act sets the arms
+// once the precondition window has passed, and clearing them ends E1.
+//
+// SettingCalibrationE1Restate is E1-M: management restates each engineering
+// Cast's predictions once, shown its own record for half the Casts.
+// SettingCalibrationE1Pull, ...Stub, ...TwoStage and ...Baseline are E1-E's
+// engineering deliveries (pull, stub, two-stage, no seed); none on is push.
+const (
+	SettingCalibrationE1Restate  = "calibration.e1_restate"
+	SettingCalibrationE1Pull     = "calibration.e1_pull"
+	SettingCalibrationE1Stub     = "calibration.e1_stub"
+	SettingCalibrationE1TwoStage = "calibration.e1_two_stage"
+	SettingCalibrationE1Baseline = "calibration.e1_baseline"
+)
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -231,6 +251,11 @@ var KnownComputerSettings = map[string]bool{
 	SettingTelemetryPartitions:          false,
 	SettingTapeGroupCommit:              false,
 	SettingCompactForce:                 false,
+	SettingCalibrationE1Restate:         false,
+	SettingCalibrationE1Pull:            false,
+	SettingCalibrationE1Stub:            false,
+	SettingCalibrationE1TwoStage:        false,
+	SettingCalibrationE1Baseline:        false,
 }
 
 // ComputerSetting is one switch's value on one computer.

@@ -213,6 +213,10 @@ type GoEvalResult struct {
 	RecordsShown int64 `json:"records_shown,omitempty"`
 	// CalibrationRead says the cell called choir.Calibration() (C6).
 	CalibrationRead bool `json:"calibration_read,omitempty"`
+	// CalibrationRestate is guest core's restatement request after the
+	// cell's first rule Precommits on a two-stage computer (E1-E), set
+	// after reduction; the broker never sets it.
+	CalibrationRestate string `json:"calibration_restate,omitempty"`
 	// JobsAwaited are the jobs a choir.Poll in the cell returned unfinished
 	// (the kernel's SessionResult.JobsAwaited, carried by the broker).
 	JobsAwaited []string `json:"jobs_awaited,omitempty"`

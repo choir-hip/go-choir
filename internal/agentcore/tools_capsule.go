@@ -950,7 +950,8 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			// The broker's own cell bound always ends inside the host's.
 			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: bounds.brokerTimeoutMS(input.TimeoutMS)}
 			execCtx := toolregistry.ExecutionContextFrom(ctx)
-			req.Calibration = rt.calibrationDigestForRun(ctx, execCtx.RunRecord)
+			var delivery string
+			req.Calibration, delivery = rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			clockStart := time.Now()
 			clock := rt.engineerClockForRun(ctx, execCtx.RunRecord, clockStart)
 			if clock != nil {
@@ -992,7 +993,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				return "", err
 			}
 			if result.CalibrationRead {
-				rt.noteCalibrationRead(ctx, execCtx, req.Calibration, calibrationDeliveryPush)
+				rt.noteCalibrationRead(ctx, execCtx, req.Calibration, delivery)
 			}
 			if reduction.active && result.Error != "" {
 				fate := cellFateFailure
@@ -1015,6 +1016,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 					rt.noteDelegateCell(metadataStringValue(reduction.rec.Metadata, "assignment_id"), uint64(metadataIntValue(reduction.rec.Metadata, "assignment_attempt")),
 						input.Source, result.Stdout, len(reduction.freezeResult) > 0)
 				}
+				result.CalibrationRestate = rt.engineerRestateNotice(ctx, reduction)
 				result.FateTerminal = reduction.fateTerminal
 				result.FreezeResult = reduction.freezeResult
 				result.VerifyResult = reduction.verifyResult

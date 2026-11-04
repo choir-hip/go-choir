@@ -523,6 +523,23 @@ func ClockRule(k PrecommitRuleKind) bool {
 	return k == PrecommitRuleFreezeWithin || k.clock()
 }
 
+// Calibration experiment E1 (docs/design/calibration-experiment-e1-2026-11-04.md):
+// a restatement is a second statement of a claim already stated, recorded
+// as its own rule precommit (stage p1) that names the first (p0) and is
+// settled by the same event. It is no second claim: every score but the
+// experiment's paired readout leaves it out (E1 F1).
+const (
+	RuleRefStage      = "calibration_stage"
+	RuleRefRestates   = "restates"
+	RuleStageFirst    = "p0"
+	RuleStageRestated = "p1"
+)
+
+// RestatementRulePrecommit reports a restatement (stage p1).
+func RestatementRulePrecommit(rec CommitmentRecord) bool {
+	return rec.SubjectRefs[RuleRefStage] == RuleStageRestated
+}
+
 // LateRulePrecommit reports a precommit marked late (R20): kept on the
 // tape, excluded from the digest and the scores.
 func LateRulePrecommit(rec CommitmentRecord) bool {
@@ -976,6 +993,9 @@ func RulePrecommitSayDo(records []CommitmentRecord, agentPrefix string) SayDoRec
 		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil ||
 			!strings.HasPrefix(rec.Provenance.AgentID, agentPrefix) {
 			continue
+		}
+		if RestatementRulePrecommit(rec) {
+			continue // E1 F1: a restatement is no second claim
 		}
 		if LateRulePrecommit(rec) {
 			out.Late++ // R20: counted, never scored

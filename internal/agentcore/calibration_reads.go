@@ -36,10 +36,6 @@ import (
 //	   crash ends the run, so it is never needed across a restart.
 //	M5 The mark fails the cell -> it is best effort and logs.
 
-// calibrationDeliveryPush names how a run's record reaches it: today every
-// run that reads one is in the push arm (E1-E adds the others).
-const calibrationDeliveryPush = "push"
-
 // Claim refs a rule precommit carries when its run read its record first.
 const (
 	calibrationReadAtRef = "calibration_read_at"
@@ -52,6 +48,9 @@ type calibrationRunReads struct {
 	firstReadAt time.Time
 	reads       int
 	predictedAt time.Time
+	// restateAsked are the rule kinds a two-stage engineer was asked to
+	// restate (E1-E), each once.
+	restateAsked map[string]bool
 }
 
 func (rt *Runtime) calibrationReadsOf(runID string) *calibrationRunReads {

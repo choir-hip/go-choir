@@ -2207,6 +2207,116 @@
    "retire": "keep: a proof lever for the compact copy on a store under the 1 GiB layout trigger; review_by only",
    "off_ok": "off is the normal state: the freelist and layout triggers decide; on is a proof lever for d@e",
    "note": "Makes the daily compact copy due whatever the store's size and age, so the copy and its swap at a planned restart are proved on d@e before the paper (internal/store/compact.go, docs/design/paper-compaction-2026-10-31.md). A fresh staged copy is still kept. Off is the rollback."
+  },
+  {
+   "id": "calibration_e1_restate",
+   "kind": "setting",
+   "life": "experiment",
+   "owner": "calibration",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-11-04",
+   "settings": [
+    "calibration.e1_restate"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R1",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "grandfathered_off_until": "2026-11-18",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md)",
+   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "note": "E1-M: management restates each engineering Cast's predictions once (p1), shown its own per-kind record for the Casts in the record arm (salted hash of the Cast id). Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
+  },
+  {
+   "id": "calibration_e1_pull",
+   "kind": "setting",
+   "life": "experiment",
+   "owner": "calibration",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-11-04",
+   "settings": [
+    "calibration.e1_pull"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R1",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "grandfathered_off_until": "2026-11-18",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md)",
+   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "note": "E1-E (b) pull: no digest turn; choir.Calibration() returns the record to every engineer run. Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
+  },
+  {
+   "id": "calibration_e1_stub",
+   "kind": "setting",
+   "life": "experiment",
+   "owner": "calibration",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-11-04",
+   "settings": [
+    "calibration.e1_stub"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R1",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "grandfathered_off_until": "2026-11-18",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md)",
+   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "note": "E1-E (c) stub: a short headline pushed at activation start naming choir.Calibration(). Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
+  },
+  {
+   "id": "calibration_e1_two_stage",
+   "kind": "setting",
+   "life": "experiment",
+   "owner": "calibration",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-11-04",
+   "settings": [
+    "calibration.e1_two_stage"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R1",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "grandfathered_off_until": "2026-11-18",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md)",
+   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "note": "E1-E (d3) two-stage: the engineer restates its first Precommits once, shown its record in the record arm. Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
+  },
+  {
+   "id": "calibration_e1_baseline",
+   "kind": "setting",
+   "life": "experiment",
+   "owner": "calibration",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-11-04",
+   "settings": [
+    "calibration.e1_baseline"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R1",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "grandfathered_off_until": "2026-11-18",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md)",
+   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "note": "E1-E no seed: nothing pushed, nothing to pull. Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
   }
  ]
 }
