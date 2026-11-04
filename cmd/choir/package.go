@@ -20,6 +20,10 @@ import (
 // track, a search, and one release verified against its id. Share is
 // retired: it sends nothing and says why.
 
+// releaseApprove is the scope of the package owner acts (publish, withdraw,
+// reinstate, install).
+const releaseApprove = "computer:self_development:approve"
+
 type packageReleaseView struct {
 	ReleaseID   string          `json:"release_id"`
 	CanonicalID string          `json:"canonical_id,omitempty"`

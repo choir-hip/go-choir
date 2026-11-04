@@ -480,7 +480,6 @@ type Runtime struct {
 	sourceBaseFetchInflight chan struct{}
 	sourceBaseFetchLast     *sourceproj.FetchResult
 	sourceBaseFetchTune     *sourceBaseFetchTuning
-	releaseSource           ReleaseSource
 	promptSubmitter         PromptSubmitter
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).

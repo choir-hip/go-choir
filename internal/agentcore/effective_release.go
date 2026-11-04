@@ -52,13 +52,11 @@ type EffectiveRelease struct {
 	SourcePatchSHA256 string `json:"source_patch_sha256,omitempty"`
 	// TreeHash is the git tree of the effective source: the operation's base
 	// commit plus its patch, or the build commit's tree for a base release.
-	TreeHash    string `json:"tree_hash,omitempty"`
-	TreePending bool   `json:"tree_pending,omitempty"`
-	TreeError   string `json:"tree_error,omitempty"`
-	// AdoptedReleaseID names the published release the operation adopted.
-	AdoptedReleaseID string              `json:"adopted_release_id,omitempty"`
-	EventHead        *EffectiveEventHead `json:"event_head,omitempty"`
-	ManifestError    string              `json:"manifest_error,omitempty"`
+	TreeHash      string              `json:"tree_hash,omitempty"`
+	TreePending   bool                `json:"tree_pending,omitempty"`
+	TreeError     string              `json:"tree_error,omitempty"`
+	EventHead     *EffectiveEventHead `json:"event_head,omitempty"`
+	ManifestError string              `json:"manifest_error,omitempty"`
 	// Diverged and SourceProjection are U1's (section 4.6): divergence is a
 	// live stack, derived from the tape; a retired (upstreamed) stack is not
 	// divergence. Both are absent while the switch is off or before the first
@@ -89,7 +87,6 @@ type effectiveTreeEntry struct {
 	sourcePatchSHA256 string
 	treeHash          string
 	treeError         string
-	adoptedReleaseID  string
 }
 
 const effectiveTreeRetry = 30 * time.Second
@@ -147,7 +144,7 @@ func (rt *Runtime) EffectiveRelease(ctx context.Context) EffectiveRelease {
 	entry := rt.effectiveTree(out.ReleaseDigest, out.Marker, out.BuildCommit)
 	out.TreePending = entry.pending
 	out.OperationID, out.SourceBaseCommit, out.SourcePatchSHA256 = entry.operationID, entry.sourceBaseCommit, entry.sourcePatchSHA256
-	out.TreeHash, out.TreeError, out.AdoptedReleaseID = entry.treeHash, entry.treeError, entry.adoptedReleaseID
+	out.TreeHash, out.TreeError = entry.treeHash, entry.treeError
 	if projection := rt.sourceProjectionStatus(); projection != nil {
 		diverged := projection.Diverged
 		out.Diverged, out.SourceProjection = &diverged, projection
@@ -202,7 +199,6 @@ func (rt *Runtime) computeEffectiveTree(ctx context.Context, releaseDigest, mark
 	if releaseDigest != "" && rt.selfdevOperations != nil {
 		if operation, ok := rt.appliedOperationForRelease(ctx, releaseDigest); ok {
 			entry := effectiveTreeEntry{final: true, operationID: operation.OperationID}
-			entry.adoptedReleaseID = rt.adoptedReleaseForTrajectory(ctx, operation.TrajectoryID)
 			base, patch, err := rt.boundSourcePatch(operation)
 			if err != nil {
 				entry.treeError = err.Error()
@@ -369,7 +365,7 @@ func (rt *Runtime) reportEffectiveReleaseAsync(reason string) {
 		}
 		report := vmctl.ReportedRelease{
 			ReleaseDigest: identity.ReleaseDigest, CodeRef: identity.CodeRef, TreeHash: identity.TreeHash,
-			BuildCommit: identity.BuildCommit, OperationID: identity.OperationID, AdoptedReleaseID: identity.AdoptedReleaseID,
+			BuildCommit: identity.BuildCommit, OperationID: identity.OperationID,
 			Layered: identity.Layered, CodeCommit: identity.CodeCommit,
 		}
 		if head := identity.EventHead; head != nil {

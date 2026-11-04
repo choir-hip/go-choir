@@ -60,7 +60,7 @@ func TestEffectiveReleaseReportIsTapBoundReportOnlyAndPersisted(t *testing.T) {
 	registry, handler, ids := reportedReleaseRegistry(t, path)
 	report := ReportedRelease{
 		ReleaseDigest: strings.Repeat("a", 64), CodeRef: "code:sha256:" + strings.Repeat("b", 64), TreeHash: strings.Repeat("c", 40),
-		BuildCommit: strings.Repeat("d", 40), OperationID: "op-1", AdoptedReleaseID: strings.Repeat("e", 64),
+		BuildCommit: strings.Repeat("d", 40), OperationID: "op-1",
 		EventHeadSequence: 9, CanonicalEventHead: strings.Repeat("f", 64), EffectiveEventHead: strings.Repeat("1", 64),
 	}
 	// I7: computer A's guest names B; an unbound address names A.

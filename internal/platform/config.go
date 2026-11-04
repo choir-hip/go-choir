@@ -67,11 +67,6 @@ type Config struct {
 	// front list attaches its scores read-only; a missing or bad file
 	// leaves the list unchanged.
 	FrontImportancePath string
-	// ReleaseReadsRaw is CHOIR_RELEASE_READS (Library S1): owner (the
-	// default, also when unset) serves a release only to the owner who
-	// published it; an explicit open serves any release to any reader
-	// (ParseReleaseReads).
-	ReleaseReadsRaw string
 }
 
 func LoadConfig() (*Config, error) {
@@ -98,7 +93,6 @@ func LoadConfig() (*Config, error) {
 		OpinionListingRaw:     os.Getenv("CORPUSD_OPINION_LISTING"),
 		OpinionDailyLimitRaw:  os.Getenv("CORPUSD_OPINION_DAILY_LIMIT"),
 		FrontImportancePath:   envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
-		ReleaseReadsRaw:       os.Getenv(EnvReleaseReads),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

@@ -122,8 +122,9 @@ func DefaultRegistry() *Registry {
 		// The event layer's V1 (docs/reports/event-layer-at-ingestion-design-2026-10-16.md).
 		{Kind: "choir.world_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.WorldEvent"},
 		{Kind: "choir.event_membership", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EventMembership"},
-		// An owner-requested source adoption of a published release (P8,
-		// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
+		// An owner's install or uninstall of a Library package release
+		// (docs/design/package-install-2026-11-04.md). P8 software-release
+		// adoptions written under this kind before its deletion stay readable.
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ReleaseAdoption"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file
 		// with a stable id and its plaintext digest, and the path view from a
@@ -209,9 +210,9 @@ func DefaultRegistry() *Registry {
 		// evidence and stoplist state. Written by corpusd from the export.
 		{Kind: "choir.entity_review", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityReviewRow"},
 		{Kind: "choir.entity_stopword", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityStopwordRow"},
-		// A published software release record (P7,
-		// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
-		// executable bytes; the patch lives in the host content store.
+		// A published software release record (P7). Retired: its routes are
+		// deleted and nothing writes one (docs/design/package-install-2026-11-04.md);
+		// the records it left stay readable.
 		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "release.Record"},
 		// The Choir Library (S2, docs/design/library-package-propagation-2026-10-26.md
 		// section 13): a package release, one package's own change as source,

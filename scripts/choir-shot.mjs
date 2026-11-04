@@ -130,12 +130,12 @@
 // Install: POST/GET /api/computers/<id>/self-development/adoptions[/<aid>] is the
 // owner's act on the real computer, which the autoputer here refuses. The helper
 // answers it from scripts/fixtures/capsule-install.json, written from the real
-// adoption handler by internal/agentcore/capsule_install_fixture_test.go, with the
+// package install handler by internal/agentcore/capsule_install_fixture_test.go, with the
 // same x-choir-fixture header and badge. An install of a catalog fixture release
 // answers the real 201 view (a repeat 200), and the installed list holds what this
 // shot installed; the state is per shot, emptied with the desktop reset. The
 // earliest release of the fixture's refusal_package answers the real refusal (409
-// patch_does_not_apply, a base mismatch); a release the catalog fixture lacks
+// package_name_taken: the computer holds its own package of that name); a release the catalog fixture lacks
 // answers 404 release_not_published.
 //
 // Podcasts: a capsule cannot reach the podcast directory, the feed hosts, or
@@ -897,7 +897,8 @@ export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
   if (!req || typeof req !== 'object' || Array.isArray(req)) return { status: 400, body: { error: 'invalid adoption request', reason: 'request_invalid' } };
   const releaseId = String(req.release_id || '').trim().toLowerCase();
   if (!SHA256_RE.test(releaseId)) return { status: 400, body: { error: 'release_id must be a sha256', reason: 'release_id_invalid' } };
-  const adoptionId = 'adoption-' + createHash('sha256').update(`${computerId}\0${releaseId}`).digest('hex').slice(0, 24);
+  // The install id of a first attempt, as the computer names it.
+  const adoptionId = 'install-' + createHash('sha256').update(`${computerId}\0${releaseId}\x00install\x001`).digest('hex').slice(0, 24);
   const existing = state.adoptions.find((a) => a.adoption_id === adoptionId);
   if (existing) return { status: ifx.repeat.status, body: clone(existing) };
   const rel = cfx.releases.find((r) => r.release_id === releaseId);
@@ -912,7 +913,8 @@ export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
     publisher_computer_id: (rec.publisher || {}).computer_id || '', publisher_operation_id: (rec.operation || {}).operation_id || '',
     patch_sha256: (src.tree_patch || {}).sha256 || '', release_base_commit: src.built_on || '', release_tree_hash: src.tree || '',
     adopter_base_commit: src.built_on || '', adopter_tree_hash: src.tree || '', same_base: true,
-    staged_dir: `/var/lib/choir/updater/adoptions/${releaseId}`,
+    package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
+    staged_dir: `/var/lib/choir/updater/adoptions/${adoptionId}`,
     trajectory_id: `traj-adopt-${n}`, submission_id: `submission-${n}`, doc_id: `doc-adopt-${n}`,
   });
   state.adoptions.unshift(view); // newest first, as the store lists

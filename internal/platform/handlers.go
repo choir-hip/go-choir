@@ -31,7 +31,6 @@ type Handler struct {
 	keyEscrow            *keyEscrowRuntime
 	guestLookup          guestOwnershipLookup
 	hostBuild            *hostbuild.Service
-	releaseReads         ReleaseReadsMode
 	// Library S2: the base-parent object store, its health detail, the
 	// publish's owner-act policy, and the lock that serializes a track's
 	// head and seq.
@@ -616,8 +615,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/platform-updates/blob/", h.HandlePlatformUpdateBlob)
 	s.HandleFunc(hostbuild.Route, h.HandleHostBuilds)
 	s.HandleFunc(hostbuild.Route+"/", h.HandleHostBuilds)
-	s.HandleFunc(releasesRoute, h.HandleReleases)
-	s.HandleFunc(releasesRoute+"/", h.HandleReleases)
 	s.HandleFunc(packagesRoute+"/", h.HandlePackages)
 	s.HandleFunc(listingsRoute+"/", h.HandleListings)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)

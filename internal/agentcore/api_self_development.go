@@ -237,13 +237,6 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.exportSelfDevelopmentSourcePatch(w, r, computerID, strings.TrimSpace(parts[3]))
-	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "release-draft":
-		// P7: the release record this computer would publish; read only.
-		if r.Method != http.MethodGet {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		h.releaseDraft(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 5 && parts[1] == "packages" && parts[2] == "operations" && parts[4] == "release-draft":
 		// Library S2: the package release this computer would publish; read
 		// only.
@@ -269,7 +262,7 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		}
 		h.releaseWitness(w, r, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "adoptions":
-		// P8: adopt a published release as source; list adoptions.
+		// The Library: install or uninstall a package release; list installs.
 		h.handleReleaseAdoptions(w, r, ownerID, computerID, "")
 	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "adoptions":
 		h.handleReleaseAdoptions(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))

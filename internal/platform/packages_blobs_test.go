@@ -108,3 +108,6 @@ func TestPackageBlobsServeTheRecordsPatchesUnderItsVisibility(t *testing.T) {
 		}
 	}
 }
+
+// guestTap is a guest's address on its tap: a caller the host-only routes refuse.
+const guestTap = "10.200.1.2:40000"

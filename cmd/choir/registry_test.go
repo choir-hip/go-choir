@@ -59,7 +59,7 @@ var wantCLIOnly = []string{
 	"package publish", "package reinstate", "package share", "package withdraw",
 	"precommit import-ledger",
 	// Owner acts (P7/P8): publishing and adopting a release; abandoning an open operation.
-	"release adopt", "release publish", "self-dev abandon", "self-dev approve",
+	"self-dev abandon", "self-dev approve",
 	// Owner act: rolling an applied operation back.
 	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace tail", "version",
 }
@@ -514,9 +514,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_patch":                   {cli: []string{"self-dev", "patch", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: sourcePatchReply("op-1", "c1", []byte(testSourcePatch), "")},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"release_list":                     {cli: []string{"release", "list", "--limit", "5", "--publisher", "c9"}, mcp: `{"limit":5,"publisher":"c9"}`},
-		"release_show":                     {cli: []string{"release", "show", "--release", testReleaseID(t)}, mcp: `{"release":"` + testReleaseID(t) + `"}`, reply: testReleaseReply(t)},
-		"release_adoptions":                {cli: []string{"release", "adoptions", "--computer", "c1", "--adoption", "adoption-1"}, mcp: `{"computer":"c1","adoption":"adoption-1"}`},
 		"package_search":                   {cli: []string{"package", "search", "--query", "read"}, mcp: `{"query":"read"}`},
 		"package_history":                  {cli: []string{"package", "history", "--package", "reader"}, mcp: `{"package":"reader"}`},
 		"package_show":                     {cli: []string{"package", "show", "--release", testPackageID(t)}, mcp: `{"release":"` + testPackageID(t) + `"}`, reply: testPackageReply(t)},

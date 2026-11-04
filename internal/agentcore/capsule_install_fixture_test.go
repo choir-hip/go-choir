@@ -12,12 +12,12 @@ import (
 )
 
 // The capsule install fixture (docs/problems/capsule-library-catalog-404-2026-11-03.md).
-// Installing a release (POST /api/computers/<id>/self-development/adoptions)
+// Installing a package release (POST /api/computers/<id>/self-development/adoptions)
 // and reading the installed list are the owner's acts on the real computer,
 // and a capsule has no route to them. scripts/choir-shot.mjs answers them in a
 // capsule from scripts/fixtures/capsule-install.json, labelled, so a Library
 // shot can show an install outcome. This test writes the fixture from the
-// real adoption handler (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1) and otherwise
+// real install handler (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1) and otherwise
 // holds it to the handler's answer shapes, so the fixture cannot drift.
 
 const capsuleInstallFixturePath = "../../scripts/fixtures/capsule-install.json"
@@ -45,9 +45,9 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 	rt, _, _ := releaseTestRuntime(t, computerID)
 	repo, base := releaseSourceRepo(t)
 	rt.releaseSourceDir = repo
-	patch, wantTree := releasePatch(t, repo, map[string]string{"frontend/public/drill.txt": "token\n"})
-	record, id, raw := publisherRecord(t, base, wantTree, patch)
-	rt.releaseSource = &fakeReleaseSource{records: map[string]json.RawMessage{id: raw}, blobs: map[string][]byte{record.Source.PatchSHA256: patch}}
+	_, id, raw, treePatch := publishedPackage(t, repo, base, "track-a", map[string]string{
+		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
+	})
 	submitter := &fakePromptSubmitter{}
 	rt.SetPromptSubmitter(submitter.submit)
 	h := NewAPIHandler(rt)
@@ -56,22 +56,28 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		w := releaseRouterCall(t, h, method, adoptions, "owner-b", computerID, body)
 		return capsuleInstallAnswer{Status: w.Code, Body: json.RawMessage(w.Body.Bytes())}
 	}
+	body := installBody(t, id, raw, treePatch, "")
 
-	// A base mismatch: the adopter's own tree diverged where the patch lands.
-	divergedRepo, _ := releaseSourceRepo(t)
-	if err := os.WriteFile(filepath.Join(divergedRepo, "frontend", "public", "drill.txt"), []byte("mine\n"), 0o644); err != nil {
+	// A name taken: this computer holds its own package of that name.
+	taken := t.TempDir()
+	releaseGit(t, taken, "clone", "-q", repo, ".")
+	dir := filepath.Join(taken, "frontend", "src", "packages", installName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	releaseGit(t, divergedRepo, "add", "-A")
-	releaseGit(t, divergedRepo, "commit", "-q", "-m", "diverged")
-	rt.releaseSourceDir = divergedRepo
-	refusal := call(http.MethodPost, adoptBody(t, id, raw))
+	if err := os.WriteFile(filepath.Join(dir, "App.svelte"), []byte("<p>mine</p>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	releaseGit(t, taken, "add", "-A")
+	releaseGit(t, taken, "commit", "-q", "-m", "mine")
+	rt.releaseSourceDir = taken
+	refusal := call(http.MethodPost, body)
 	rt.releaseSourceDir = repo
 	if refusal.Status != http.StatusConflict {
 		t.Fatalf("refusal = %d %s", refusal.Status, refusal.Body)
 	}
-	created := call(http.MethodPost, adoptBody(t, id, raw))
-	repeat := call(http.MethodPost, adoptBody(t, id, raw))
+	created := call(http.MethodPost, body)
+	repeat := call(http.MethodPost, body)
 	list := call(http.MethodGet, nil)
 	if created.Status != http.StatusCreated || repeat.Status != http.StatusOK || list.Status != http.StatusOK {
 		t.Fatalf("created %d, repeat %d, list %d", created.Status, repeat.Status, list.Status)
@@ -104,14 +110,14 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		}
 	})
 	refusal = norm(refusal, func(v map[string]any) {
-		v["error"] = "the patch does not apply to this computer's source tree (its base differs from the release's)"
+		v["error"] = "this computer holds its own package of that name; it is never overwritten"
 	})
 	return capsuleInstallFixture{
 		Fixture: "capsule-install",
-		Note: "Not the live computer. Generated from the real adoption handler by internal/agentcore/capsule_install_fixture_test.go " +
+		Note: "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go " +
 			"(CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. " +
 			"Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. " +
-			"Modelled simply: the owner and times are fixed, the adopter's base is the release's (same_base), and a release is installed or refused by its package, not by a tree.",
+			"Modelled simply: the owner and times are fixed, a new package (same_base), and a release is installed or refused (package_name_taken) by its package, not by a tree.",
 		RefusalPackage: "slides-next",
 		Created:        created, Repeat: repeat, List: list, Refusal: refusal,
 	}
@@ -198,7 +204,7 @@ func TestCapsuleInstallFixtureMatchesAdoptionHandler(t *testing.T) {
 		Error, Reason string
 	}
 	_ = json.Unmarshal(held.Refusal.Body, &refusal)
-	if refusal.Reason != "patch_does_not_apply" {
+	if refusal.Reason != "package_name_taken" {
 		t.Fatalf("refusal = %s", held.Refusal.Body)
 	}
 }

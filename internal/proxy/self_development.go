@@ -51,8 +51,9 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	case "kernel-capabilities", "verifier-key":
 		return strings.TrimSpace(decoded), "read", true
 	case "adoptions":
-		// P8: GET lists (read); POST adopts a published release (the
-		// owner's act). The method picks the action.
+		// The Library: GET lists installs (read); POST installs or
+		// uninstalls a package release (the owner's act). The method
+		// picks the action.
 		return strings.TrimSpace(decoded), "adoptions", true
 	case "abandonments":
 		// The owner closes an open operation that will not settle. POST only,
@@ -70,7 +71,7 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "decision" {
 		return strings.TrimSpace(decoded), "approve", true
 	}
-	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch" || parts[2] == "release-draft" || parts[2] == "release-witness") {
+	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch" || parts[2] == "release-witness") {
 		return strings.TrimSpace(decoded), "read", true
 	}
 	if len(parts) == 2 && parts[0] == "adoptions" && strings.TrimSpace(parts[1]) != "" {
@@ -467,7 +468,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		requiredScope = "computer:self_development:approve"
 	}
 	if action == "adopt" {
-		// Adopting a release is an approval-class act (P8): the approve
+		// Installing a package is an approval-class act: the approve
 		// scope plus the owner-act gate below.
 		requiredScope = releasePublishScope
 	}

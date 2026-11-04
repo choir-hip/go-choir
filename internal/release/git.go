@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -122,3 +123,6 @@ func gitOutput(ctx context.Context, repo string, env []string, stdin []byte, arg
 	}
 	return strings.TrimSpace(stdout.String()), nil
 }
+
+// gitObjectID is a git object id, SHA-1 or SHA-256.
+var gitObjectID = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)

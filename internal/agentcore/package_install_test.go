@@ -3,7 +3,9 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,6 +122,29 @@ func gitIn(t *testing.T, dir string, env []string, stdin string, args ...string)
 	return strings.TrimSpace(string(out))
 }
 
+// releaseRouterCall sends one request through the computer's router as the
+// proxy does, with the authenticated owner and computer headers.
+func releaseRouterCall(t *testing.T, h *APIHandler, method, path, owner, computer string, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(method, path, strings.NewReader(string(body)))
+	if owner != "" {
+		r.Header.Set("X-Authenticated-User", owner)
+	}
+	r.Header.Set("X-Authenticated-Computer", computer)
+	w := httptest.NewRecorder()
+	h.HandleComputersRouter(w, r)
+	return w
+}
+
+type fakePromptSubmitter struct {
+	calls []string
+}
+
+func (f *fakePromptSubmitter) submit(_ context.Context, ownerID, text, commandID string) (PromptSubmission, error) {
+	f.calls = append(f.calls, text)
+	return PromptSubmission{SubmissionID: "submission-1", TrajectoryID: "traj-adopt-1", DocID: "doc-adopt-1"}, nil
+}
+
 func installBody(t *testing.T, id string, record json.RawMessage, treePatch []byte, action string) []byte {
 	t.Helper()
 	body := map[string]any{"release_id": id, "record": record}
@@ -196,8 +221,8 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	refused("F3", installBody(t, id, raw, append(append([]byte{}, treePatch...), '\n'), ""), http.StatusConflict, "patch_digest_mismatch")
 	// F11: nothing to uninstall.
 	refused("F11 absent", installBody(t, id, raw, treePatch, "uninstall"), http.StatusConflict, "package_not_installed")
-	// A software-release body may not carry the package fields.
-	refused("mixed", installBody(t, strings.Repeat("a", 64), json.RawMessage(`{"schema":"choir.software_release.v1"}`), treePatch, ""), http.StatusBadRequest, "request_invalid")
+	// A software release no longer installs (P8 is deleted).
+	refused("software release", installBody(t, strings.Repeat("a", 64), json.RawMessage(`{"schema":"choir.software_release.v1"}`), nil, ""), http.StatusUnprocessableEntity, "release_record_invalid")
 
 	// F6: a package of that name this computer holds that is not the
 	// release's parent, nor a Library install.
@@ -231,6 +256,10 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	}
 	if dir, err := rt.adoptionInputDir(context.Background(), owner, computerID, view.TrajectoryID); err != nil || dir != staged {
 		t.Fatalf("capsule input = %q %v", dir, err)
+	}
+	// A9: another trajectory gets nothing.
+	if other, err := rt.adoptionInputDir(context.Background(), owner, computerID, "traj-other"); err != nil || other != "" {
+		t.Fatalf("A9: another trajectory got %q, %v", other, err)
 	}
 	// A repeat answers the same install and asks nobody.
 	if again, code, _ := call(installBody(t, id, raw, treePatch, "")); code != http.StatusOK || again.AdoptionID != view.AdoptionID || len(submitter.calls) != 1 {
@@ -296,5 +325,33 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	retry, code, reason := call(installBody(t, id, raw, treePatch, ""))
 	if code != http.StatusCreated || retry.Attempt != 3 {
 		t.Fatalf("F10: retry = %d %s attempt %d", code, reason, retry.Attempt)
+	}
+}
+
+// A8: the capsule input is refused once the staged bytes change.
+func TestPackageInstallCapsuleInputRefusesTamperedStaging(t *testing.T) {
+	const computerID, owner = "computer-b", "owner-b"
+	rt, _, _ := releaseTestRuntime(t, computerID)
+	repo, base := releaseSourceRepo(t)
+	rt.releaseSourceDir = repo
+	submitter := &fakePromptSubmitter{}
+	rt.SetPromptSubmitter(submitter.submit)
+	_, id, raw, treePatch := publishedPackage(t, repo, base, "track-a", map[string]string{
+		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
+	})
+	w := releaseRouterCall(t, NewAPIHandler(rt), http.MethodPost, "/api/computers/"+computerID+"/self-development/adoptions", owner, computerID, installBody(t, id, raw, treePatch, ""))
+	var view ReleaseAdoptionView
+	if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &view) != nil {
+		t.Fatalf("install = %d %s", w.Code, w.Body.String())
+	}
+	patch := filepath.Join(view.StagedDir, "source.patch")
+	if err := os.Chmod(patch, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(patch, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.adoptionInputDir(context.Background(), owner, computerID, view.TrajectoryID); !errors.Is(err, errAdoptionStagedTampered) {
+		t.Fatalf("A8: tampered staged bytes = %v", err)
 	}
 }

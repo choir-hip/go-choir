@@ -898,7 +898,7 @@ func buildRegistry() []*command {
 			},
 		},
 	}
-	return append(append(cmds, releaseCommands()...), packageCommands()...)
+	return append(cmds, packageCommands()...)
 }
 
 const cliVersion = "choir v0 (Phase 1: existing /api/ routes)"

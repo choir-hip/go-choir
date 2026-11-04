@@ -925,12 +925,6 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isCatalogPath(path):
 		h.HandleCatalog(w, r)
 		return
-	case isComputerReleasePublishPath(path):
-		h.HandleComputerReleasePublish(w, r)
-		return
-	case isReleasesPath(path):
-		h.HandleReleases(w, r)
-		return
 	case strings.HasPrefix(path, "/api/computers/") && strings.Contains(path, "/self-development/"):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development effects are disabled"})
 		return

@@ -655,17 +655,11 @@ func TestPackageKindsAreRegisteredForCorpusd(t *testing.T) {
 }
 
 // L33, the skip test (design 13): rows of the new kinds are inert to the
-// routes an older binary serves. Its release list, single read and the
-// generic object list answer as before, and the store opens with them.
+// routes an older binary serves: the generic object list answers as before,
+// and the store opens with them. (The software release routes are deleted.)
 func TestPackageRowsAreInertToTheReleaseRoutes(t *testing.T) {
 	w := newPkgWorld(t)
 	w.published(w.build("<p>v2</p>\n", "owner-a", nil))
-	if rec := (releaseCall{method: http.MethodGet, path: "/internal/platform/releases?limit=50", internal: true}).do(w.h); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"count":0`) {
-		t.Fatalf("the release list beside package rows = %d %s", rec.Code, rec.Body.String())
-	}
-	if rec := (releaseCall{method: http.MethodGet, path: "/internal/platform/releases/" + strings.Repeat("0", 64) + "?computer_id=host", internal: true}).do(w.h); rec.Code != http.StatusNotFound {
-		t.Fatalf("a release read beside package rows = %d", rec.Code)
-	}
 	objects, err := w.h.releaseStore().ListObjects(context.Background(), objectgraph.ListFilter{OwnerID: "owner-a", Limit: 50})
 	if err != nil || len(objects) < 2 {
 		t.Fatalf("the generic list beside package rows = %d %v", len(objects), err)
@@ -773,4 +767,11 @@ func TestPackageListingThatIsNotStoredIsNoPublish(t *testing.T) {
 	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a"); rec.Code != http.StatusNotFound {
 		t.Fatalf("a listing that was not stored heads the track: %d %s", rec.Code, rec.Body.String())
 	}
+}
+
+// newReleaseHandler is a corpusd handler over a fresh test store.
+func newReleaseHandler(t *testing.T) (*Handler, string) {
+	t.Helper()
+	store, root := openTestPlatformStore(t)
+	return NewHandler(NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "signing-key"))), root
 }

@@ -119,11 +119,6 @@ func main() {
 	log.Printf("corpusd: receipt compaction: %s", receiptPolicy)
 	platform.NewReceiptCompactor(store).Start(context.Background())
 	handler := platform.NewHandler(svc)
-	// Library S1: release reads are owner-scoped unless CHOIR_RELEASE_READS=open
-	// (a missing or unknown value is owner); read once, here.
-	releaseReads := platform.ParseReleaseReads(cfg.ReleaseReadsRaw)
-	handler.SetReleaseReads(releaseReads)
-	log.Printf("corpusd: release reads: %s", releaseReads)
 	if cfg.VmctlURL != "" {
 		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))
 		if err := handler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {

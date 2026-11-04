@@ -232,7 +232,7 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   assert.deepEqual(Object.keys(made.body).sort(), Object.keys(ifx.created.body).sort());
   assert.equal(made.body.release_id, okId);
   assert.equal(made.body.computer_id, 'computer-x');
-  assert.match(made.body.adoption_id, /^adoption-[0-9a-f]{24}$/);
+  assert.match(made.body.adoption_id, /^install-[0-9a-f]{24}$/);
   const again = post(okId.toUpperCase());
   assert.deepEqual([again.status, again.body.adoption_id], [200, made.body.adoption_id]);
   assert.equal(state.adoptions.length, 1);
@@ -248,7 +248,7 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   // The refusal release answers the real refusal and installs nothing.
   const before = state.adoptions.length;
   const refused = post(refusedId);
-  assert.deepEqual([refused.status, refused.body.reason, Object.keys(refused.body).sort()], [409, 'patch_does_not_apply', ['error', 'reason']]);
+  assert.deepEqual([refused.status, refused.body.reason, Object.keys(refused.body).sort()], [409, 'package_name_taken', ['error', 'reason']]);
   assert.equal(state.adoptions.length, before);
   // Unknown, malformed and wrong-method requests are refused in the handler's words.
   assert.deepEqual([post('0'.repeat(64)).status, post('0'.repeat(64)).body.reason], [404, 'release_not_published']);

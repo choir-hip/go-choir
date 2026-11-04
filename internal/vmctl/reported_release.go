@@ -26,7 +26,6 @@ type ReportedRelease struct {
 	TreeHash           string `json:"tree_hash,omitempty"`
 	BuildCommit        string `json:"build_commit,omitempty"`
 	OperationID        string `json:"operation_id,omitempty"`
-	AdoptedReleaseID   string `json:"adopted_release_id,omitempty"`
 	Layered            bool   `json:"layered,omitempty"`
 	CodeCommit         string `json:"code_commit,omitempty"`
 	EventHeadSequence  uint64 `json:"event_head_sequence,omitempty"`
@@ -47,9 +46,9 @@ func (r ReportedRelease) validate() error {
 	if !computerevent.IsSHA256(r.ReleaseDigest) {
 		return fmt.Errorf("release_digest must be a sha256")
 	}
-	for _, v := range []string{r.CanonicalEventHead, r.EffectiveEventHead, r.AdoptedReleaseID} {
+	for _, v := range []string{r.CanonicalEventHead, r.EffectiveEventHead} {
 		if v != "" && !computerevent.IsSHA256(v) {
-			return fmt.Errorf("event heads and adopted_release_id must be sha256 digests")
+			return fmt.Errorf("event heads must be sha256 digests")
 		}
 	}
 	for _, v := range []string{r.CodeRef, r.TreeHash, r.BuildCommit, r.OperationID, r.CodeCommit} {
