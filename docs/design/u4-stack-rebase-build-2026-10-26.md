@@ -992,6 +992,15 @@ owner's 2026-11-04 ruling", and the ordinary materializer applies it. A
 conflict, a failed build, a second base move or a wedged decided attempt
 (older than twice the attempt budget) mints the notice as before.
 
+The rebase path also acts at `stack_rematerialized` when the served base
+is not the booted base (`rebaseStackBase`; problem
+[rematerialized-stack-never-served](../problems/rematerialized-stack-never-served-2026-11-04.md)):
+the timer arms, the clean rebase is tried first, and a patch that does not
+apply, a failed build or a package kept whole over the base's change
+(`package_behind_base`, conflict) mints the ordinary notice. The rebase Cast
+gate and the owner retry accept that stack. A stack whose served base is the
+booted base is never acted on. One attempt per (operation, booted base).
+
 Scope: test-tier computers only (ring R1). A platform computer (the paper)
 never applies a clean rebase without the owner.
 

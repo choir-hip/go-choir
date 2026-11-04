@@ -57,9 +57,11 @@ func TestPackageLockAdmitsAnOrdinaryCastWhenTheBaseTakesAnotherVersionOfThePacka
 	if e := identity.Packages[0]; e.Root != root || e.State != sourceproj.PackageBehindBase || !e.Conflict || e.ReleaseID != "release-ours" || e.Tree != r {
 		t.Fatalf("/health entry: %+v", e)
 	}
-	// A rebase Cast is not needed: the stack is not stranded.
-	if _, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-library", Base: exported}, cast); err == nil || !strings.Contains(err.Error(), "rebase_not_needed") {
-		t.Fatalf("rebase: %v", err)
+	// The served build is still on the old base, so the rebase path owns this
+	// stack (docs/problems/rematerialized-stack-never-served-2026-11-04.md): a
+	// rebase Cast is admitted, onto the booted base, to answer the notice.
+	if base, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-library", Base: exported}, cast); err != nil || base != exported {
+		t.Fatalf("rebase: %q %v", base, err)
 	}
 }
 

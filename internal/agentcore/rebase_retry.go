@@ -53,10 +53,11 @@ func (rt *Runtime) retryRebaseNotice(ctx context.Context, ownerID string) (rebas
 	if err != nil {
 		return rebaseRetryResult{}, fmt.Errorf("reconcile: %w", err)
 	}
-	if result.State != sourceproj.StateBaseMoved {
+	stackBase, behind := rebaseStackBase(result)
+	if !behind {
 		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_not_moved", "the applied stack is %s, not on a moved base; there is nothing to rebase", result.State)
 	}
-	booted, stackBase, operationID := strings.TrimSpace(result.BootedBase), strings.TrimSpace(result.Base), strings.TrimSpace(result.OperationID)
+	booted, operationID := strings.TrimSpace(result.BootedBase), strings.TrimSpace(result.OperationID)
 	if booted == "" || stackBase == "" || operationID == "" || strings.HasPrefix(operationID, "genesis-") {
 		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_not_moved", "the stack names no source operation to rebase")
 	}

@@ -335,7 +335,7 @@ func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseS
 	if err != nil {
 		return "", nil, fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 	}
-	if result.State != sourceproj.StateBaseMoved {
+	if _, behind := rebaseStackBase(result); !behind {
 		if refusal := result.Refusal(); refusal != "" {
 			return "", nil, errors.New(refusal)
 		}

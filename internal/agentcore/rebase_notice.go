@@ -109,11 +109,46 @@ func (rt *Runtime) rebaseScope() (ownerID, computerID string) {
 	return firstNonEmpty(strings.TrimSpace(rt.selfdevRouteOwnerID), strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))), strings.TrimSpace(rt.cfg.ComputerID)
 }
 
+// rebaseStackBase is the base the applied stack's patch is on when the served
+// build is behind the booted base, and whether the rebase path acts on this
+// result. Two states qualify: stack_base_moved (the projection stayed on the
+// old base; Result.Base is it) and stack_rematerialized whose served base is
+// not the booted one (the projection moved to the booted base but the served
+// build did not; Result.ServedBase is the old base). A stack whose served base
+// is the booted base is never acted on: that is the loop guard
+// (docs/problems/rematerialized-stack-never-served-2026-11-04.md).
+func rebaseStackBase(result sourceproj.Result) (string, bool) {
+	switch result.State {
+	case sourceproj.StateBaseMoved:
+		base := strings.TrimSpace(result.Base)
+		return base, base != ""
+	case sourceproj.StateRematerialized:
+		served, booted := strings.TrimSpace(result.ServedBase), strings.TrimSpace(result.BootedBase)
+		return served, served != "" && booted != "" && !strings.EqualFold(served, booted)
+	}
+	return "", false
+}
+
+// rebasePackageConflict reports a package entry the projection kept whole over
+// a change in the booted base. The clean rebase never decides that for the
+// owner: such a stack goes to the notice.
+func rebasePackageConflict(result sourceproj.Result) bool {
+	for _, entry := range result.Packages {
+		if entry.Conflict {
+			return true
+		}
+	}
+	return false
+}
+
 // armRebaseNotice is called after a reconcile. It arms the one timer when the
 // stack sits on a moved base; it never mints, so it is safe at boot. A timer
 // already armed is left as it is.
 func (rt *Runtime) armRebaseNotice(ctx context.Context, result sourceproj.Result) {
-	if rt == nil || result.State != sourceproj.StateBaseMoved {
+	if rt == nil {
+		return
+	}
+	if _, ok := rebaseStackBase(result); !ok {
 		return
 	}
 	ownerID, computerID := rt.rebaseScope()
@@ -219,10 +254,11 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if err != nil {
 		return rt.transientRebase("reconcile failed: %v", err)
 	}
-	if result.State != sourceproj.StateBaseMoved {
-		return rebaseNoticeOutcome{Reason: "the stack is " + string(result.State) + ", not stack_base_moved"}
+	stackBase, behind := rebaseStackBase(result)
+	if !behind {
+		return rebaseNoticeOutcome{Reason: "the stack is " + string(result.State) + ", not stack_base_moved (nor stack_rematerialized behind the booted base)"}
 	}
-	booted, stackBase, operationID := strings.TrimSpace(result.BootedBase), strings.TrimSpace(result.Base), strings.TrimSpace(result.OperationID)
+	booted, operationID := strings.TrimSpace(result.BootedBase), strings.TrimSpace(result.OperationID)
 	if booted == "" || stackBase == "" || operationID == "" || strings.HasPrefix(operationID, "genesis-") {
 		return rebaseNoticeOutcome{Reason: "the stack names no source operation to rebase"}
 	}
@@ -232,7 +268,11 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	// Owner ruling 2026-11-04: a change that re-applies cleanly and builds
 	// applies without an owner act (clean_rebase.go). Only when it does not,
 	// or the attempt fails, does the notice go to Texture.
-	if hold, why := rt.cleanRebaseBeforeNotice(ctx, ownerID, computerID, operationID, stackBase, booted); hold {
+	// A rematerialized stack that keeps a package whole over the base's change
+	// is the owner's to decide: the notice, never the clean rebase.
+	if result.State == sourceproj.StateRematerialized && rebasePackageConflict(result) {
+		log.Printf("rebase notice: no clean rebase of %s onto %s: the projection keeps a package whole over the base's change (package_behind_base)", operationID, booted)
+	} else if hold, why := rt.cleanRebaseBeforeNotice(ctx, ownerID, computerID, operationID, stackBase, booted); hold {
 		return rebaseNoticeOutcome{Reason: why, Rearm: rt.rebaseRecheckInterval()}
 	} else if why != "" {
 		log.Printf("rebase notice: no clean rebase of %s onto %s: %s", operationID, booted, why)

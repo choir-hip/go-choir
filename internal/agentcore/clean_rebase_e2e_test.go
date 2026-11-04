@@ -53,6 +53,9 @@ type cleanRebaseE2E struct {
 	b1, prior string // the base the prior change was approved on; its operation
 	manifest  string
 	owner     string
+	// pkg, when set, is a package file (under frontend/src/packages/) that B1
+	// holds and the prior change edits with long.txt.
+	pkg string
 }
 
 func cleanLong(edits map[int]string) string {
@@ -119,11 +122,17 @@ func (f *cleanRebaseE2E) tape(computerID string, ns tapestore.NS, digest string)
 // newCleanRebaseE2E applies a prior change (a 40-line file edited at line 5,
 // approved by standing consensus) on base B1, with a root Texture so a
 // notice can be minted, and the computer in the test tier.
-func newCleanRebaseE2E(t *testing.T) *cleanRebaseE2E {
+func newCleanRebaseE2E(t *testing.T) *cleanRebaseE2E { return newCleanRebaseE2EWith(t, "") }
+
+func newCleanRebaseE2EWith(t *testing.T, pkg string) *cleanRebaseE2E {
 	t.Helper()
-	f := &cleanRebaseE2E{p4Fixture: newP4Fixture(t), owner: "owner"}
+	f := &cleanRebaseE2E{p4Fixture: newP4Fixture(t), owner: "owner", pkg: pkg}
 	f.manifest = f.rt.selfdevGuestImageManifest
-	f.b1 = f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(nil)})
+	b1Files := map[string]string{"frontend/public/long.txt": cleanLong(nil)}
+	if pkg != "" {
+		b1Files[pkg] = cleanLong(nil)
+	}
+	f.b1 = f.commitPlatform(t, b1Files)
 	f.history.base = f.b1
 	f.boot(t, f.b1)
 	f.guestRepo = t.TempDir()
@@ -171,6 +180,11 @@ func (f *cleanRebaseE2E) longPatch(t *testing.T, edits map[int]string) []byte {
 	path := filepath.Join(f.history.dir, "frontend", "public", "long.txt")
 	if err := os.WriteFile(path, []byte(cleanLong(edits)), 0o644); err != nil {
 		t.Fatal(err)
+	}
+	if f.pkg != "" {
+		if err := os.WriteFile(filepath.Join(f.history.dir, filepath.FromSlash(f.pkg)), []byte(cleanLong(edits)), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	gitRun(t, f.history.dir, "add", "-A")
 	patch := gitRun(t, f.history.dir, "diff", "--cached", "--binary") + "\n"
@@ -387,5 +401,177 @@ func TestCleanRebaseEndToEndWedgedDecidedAttemptFallsThroughToTheNotice(t *testi
 		if hold, why := f.rt.cleanRebaseExisting(context.Background(), "k", wedged); hold || !strings.Contains(why, "wedged") {
 			t.Fatalf("%s past the bound held: %v %s", state, hold, why)
 		}
+	}
+}
+
+// The rematerialized stack (docs/problems/rematerialized-stack-never-served-
+// 2026-11-04.md). Ways it can fail, written before the tests:
+//   1. the served build stays on the old base while the projection moves ->
+//      a stack_rematerialized stack with a clean patch is rebuilt and applied
+//      with no owner act (...RematerializedCleanAppliesWithoutAnOwnerAct)
+//   2. a package kept whole over the base's change is applied silently ->
+//      it goes to the notice, no operation opens
+//      (...RematerializedPackageConflictMintsTheNotice)
+//   3. a loop: a computer whose served build is the booted base is acted on
+//      again -> nothing is armed, opened or minted (...ServedEqualsBootedDoesNothing)
+//   4. a second attempt for the pair -> the second fire opens nothing and
+//      mints nothing (...RematerializedSecondFireMakesNoSecondAttempt)
+
+func (f *cleanRebaseE2E) requireRematerialized(t *testing.T, booted string) sourceproj.Result {
+	t.Helper()
+	result, err := f.rt.ReconcileSourceProjection(context.Background(), rebaseReconcileReason)
+	if err != nil || result.State != sourceproj.StateRematerialized || result.ServedBase != f.b1 || result.Base != booted {
+		t.Fatalf("the deploy did not rematerialize the stack: %+v %v", result, err)
+	}
+	return result
+}
+
+func TestCleanRebaseEndToEndRematerializedCleanAppliesWithoutAnOwnerAct(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	ctx := context.Background()
+	restarts := f.service.restarts
+	// The deploy changes a file the patch does not touch: a graft, not a move.
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "a platform change\n"})
+	f.boot(t, b2)
+	result := f.requireRematerialized(t, b2)
+	f.rt.armRebaseNotice(ctx, result)
+	if _, armed := f.rt.rebaseNoticeDueAt(); !armed {
+		t.Fatal("a rematerialized stack behind the booted base did not arm the timer")
+	}
+	f.rt.stopRebaseNotice()
+
+	out := f.fire(t)
+	if out.Minted != "" || f.noticeMinted(t, b2) {
+		t.Fatalf("a clean rebase minted a notice: %+v", out)
+	}
+	op, found := f.cleanOp(t, b2)
+	if !found {
+		t.Fatalf("no clean rebase operation: %+v", out)
+	}
+	applied := f.waitForState(t, op.OperationID, selfdev.StateApplied)
+	decision := f.decisionEvent(t, applied.OperationID)
+	if _, ok := selfdevprotocol.CleanRebaseReceiptDigestFromAuthority(decision.AuthorityRef); !ok || applied.DecisionActor != decision.AuthorityRef {
+		t.Fatalf("decision %q actor %q", decision.AuthorityRef, applied.DecisionActor)
+	}
+	for _, record := range f.cas.snapshot() {
+		if strings.HasPrefix(record.Request.Event.AuthorityRef, "external-owner:") {
+			t.Fatalf("an owner authority reached the chain: %+v", record.Request.Event)
+		}
+	}
+	if f.service.restarts != restarts+1 {
+		t.Fatalf("restarts %d -> %d, want one planned restart", restarts, f.service.restarts)
+	}
+	// The served build is now the booted base's: projected, not rematerialized.
+	after, err := f.rt.ReconcileSourceProjection(ctx, rebaseReconcileReason)
+	if err != nil || after.State != sourceproj.StateProjected || after.OperationID != applied.OperationID || after.Base != b2 {
+		t.Fatalf("after the clean rebase the stack is %+v %v", after, err)
+	}
+	if again := f.fire(t); again.Minted != "" || !strings.Contains(again.Reason, "not stack_base_moved") {
+		t.Fatalf("second fire = %+v", again)
+	}
+}
+
+func TestCleanRebaseEndToEndRematerializedPackageConflictMintsTheNotice(t *testing.T) {
+	const pkg = "frontend/src/packages/lib-next/app.txt"
+	f := newCleanRebaseE2EWith(t, pkg)
+	// The deploy edits the same package file the stack edited: the projection
+	// keeps the stack's package whole (package_behind_base, conflict).
+	b2 := f.commitPlatform(t, map[string]string{pkg: cleanLong(map[int]string{35: "platform package line 35"})})
+	f.boot(t, b2)
+	result := f.requireRematerialized(t, b2)
+	if !rebasePackageConflict(result) {
+		t.Fatalf("expected a package conflict: %+v", result.Packages)
+	}
+	out := f.fire(t)
+	if _, found := f.cleanOp(t, b2); found {
+		t.Fatal("a package conflict opened a clean rebase operation")
+	}
+	if out.Minted == "" || !f.noticeMinted(t, b2) {
+		t.Fatalf("a package conflict did not mint the notice: %+v", out)
+	}
+	// The notice can be answered: the rebase Cast gate accepts the stack.
+	spec := rebaseSpec{Notice: types.StackRebaseNoticeID(f.prior, b2, 1), RebaseOf: f.prior, Base: b2}
+	if base, _, err := f.rt.sourceProjectionCastGateFor(context.Background(), spec, castLedgerRef{}); err != nil || base != b2 {
+		t.Fatalf("the rebase Cast gate on a rematerialized stack: %q %v", base, err)
+	}
+}
+
+func TestCleanRebaseEndToEndRematerializedIneligibleComputerMintsTheNotice(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	// An ineligible computer (a platform computer) never rebases on its own:
+	// the stack stays rematerialized and the notice is the path, as at
+	// stack_base_moved.
+	f.configure(func(rt *Runtime) {
+		rt.cleanRebaseTier = func(string) (bool, string) { return false, "a platform computer" }
+	})
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "a platform change\n"})
+	f.boot(t, b2)
+	f.requireRematerialized(t, b2)
+	out := f.fire(t)
+	if _, found := f.cleanOp(t, b2); found || out.Minted == "" {
+		t.Fatalf("an ineligible computer on a rematerialized stack: %+v", out)
+	}
+}
+
+func TestCleanRebaseEndToEndServedEqualsBootedDoesNothing(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	ctx := context.Background()
+	// No deploy: the served build is the booted base.
+	result, err := f.rt.ReconcileSourceProjection(ctx, rebaseReconcileReason)
+	if err != nil || result.State != sourceproj.StateProjected {
+		t.Fatalf("the stack is %+v %v", result, err)
+	}
+	if _, behind := rebaseStackBase(result); behind {
+		t.Fatalf("a stack on the booted base is behind: %+v", result)
+	}
+	f.rt.armRebaseNotice(ctx, result)
+	if _, armed := f.rt.rebaseNoticeDueAt(); armed {
+		t.Fatal("the timer armed on a stack that is on the booted base")
+	}
+	// The same for a rematerialized result that names the booted base as served.
+	same := sourceproj.Result{State: sourceproj.StateRematerialized, ServedBase: result.Base, BootedBase: result.Base, Base: result.Base}
+	if _, behind := rebaseStackBase(same); behind {
+		t.Fatal("served == booted counts as behind")
+	}
+	restarts := f.service.restarts
+	if out := f.fire(t); out.Minted != "" {
+		t.Fatalf("fire minted: %+v", out)
+	}
+	if _, found := f.cleanOp(t, f.b1); found || f.noticeMinted(t, f.b1) || f.service.restarts != restarts {
+		t.Fatal("a stack on the booted base was acted on")
+	}
+}
+
+func TestCleanRebaseEndToEndRematerializedSecondFireMakesNoSecondAttempt(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	ctx := context.Background()
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "a platform change\n"})
+	f.boot(t, b2)
+	f.requireRematerialized(t, b2)
+	// The host's build fails: the pair's one attempt ends failed.
+	if err := os.WriteFile(filepath.Join(f.history.dir, "frontend", "public", "long.txt"), []byte(cleanLong(map[int]string{5: "host-side drift"})), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := f.fire(t); out.Minted != "" {
+		t.Fatalf("the first fire minted beside a clean attempt: %+v", out)
+	}
+	op, found := f.cleanOp(t, b2)
+	if !found || op.State != selfdev.StateFailed {
+		t.Fatalf("the attempt did not fail: %+v", op)
+	}
+	if out := f.fire(t); out.Minted == "" {
+		t.Fatalf("the failed pair did not go to the notice: %+v", out)
+	}
+	restarts := f.service.restarts
+	f.fire(t)
+	again, _ := f.cleanOp(t, b2)
+	if again.OperationID != op.OperationID || again.State != selfdev.StateFailed {
+		t.Fatalf("a second attempt opened: %+v", again)
+	}
+	if open, isOpen, err := f.operations.OpenOperation(ctx, f.computerID); err != nil || isOpen {
+		t.Fatalf("an operation is open after the second fire: %+v %v", open, err)
+	}
+	if f.service.restarts != restarts {
+		t.Fatal("a second fire restarted the computer")
 	}
 }
