@@ -126,26 +126,31 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 4cf05e4d0 (08:39Z): engineer reuse (a rejection, including a
-    per-shot judge flip, returns to the same engineer for up to 3
-    candidates; an app's next engineer starts from the last one's handoff),
-    the judge asks six questions of every shot (modal over a scrim passes;
-    management quotes vision answers verbatim), management verify-owed
-    guard, engineer clock, London Salmon buttons fixed, calibration cuts 1
-    and 2 plus C2-C11, E1 mechanisms (not started: the protocol needs a
-    quiet 12-hour window and the owner's act on the arm settings). Applied
-    and published this window: luna calendar-next, claude library-next r3
-    and r4, pool library-next r6. Judge false negatives found and fixed
-    (scrim modal; misquoted vision answer). Calibration: management
-    over-estimates freeze minutes on small rounds (14 to 22 min against 35
-    to 38 stated) and over-states verify_pass (about 0.7 stated, under 0.5
-    held). Building: claude and pool calendar-next r1, luna files-next r1,
-    crouton library r5; queued: reuse proof rounds (crouton Calendar r7,
-    deepseek Calendar r6).
+    staging e2634dd4f (09:45Z): engineer reuse proven live on four rounds
+    (claude and pool Calendar r1 each froze three candidates under one
+    assignment with no new Cast, resume 9 to 12 s, fixes 1.5 to 9 min;
+    deepseek Calendar r6 took a mid-run owner note into its live assignment
+    word for word); the candidate cap is now six (three ended two
+    converging runs one fix short), and a visual rejection tells the
+    engineer to re-shoot every named shot and look at each before it
+    Freezes. Judge: ellipsis rule (Q3), missing and phone-size shots, scrim
+    and verbatim quote fixes; the per-shot review caught a defect
+    management's Verify passed (pool r1 candidate 3). Hang waits bounded
+    (7603b5b1f). In CI: f20398247 (a malformed shot-review answer is asked
+    once more). In review: a retained candidate arms the verify-owed
+    re-check (luna files-next r1 sat unverified five minutes; problem
+    record updated). Calendar's dominant defect is a 15-minute card's
+    min-height overrunning the next event (Standup over Rainfall), not a
+    real overlap; every open round has the correction. Calibration on
+    claude: engineering n=65, Brier 0.237, mean p 0.70 vs 0.63 observed;
+    pool n=79, Brier 0.218. Building: claude and pool calendar-next r2,
+    crouton Calendar r7, deepseek Calendar r6 (candidate 2); luna
+    files-next r1 waiting on Verify; deepseek Podcasts r2 queued.
   main_uncertainty: >-
-    whether the adopt route accepts an app's call (an owner act); whether
-    delegate rounds pass once the delegate can run builds and shots
-  next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
+    whether six candidates plus the re-shoot rule turn converging reuse
+    runs into passes; whether the adopt route accepts an app's call (an
+    owner act)
+  next_observation: first round on e2634dd4f that reaches candidate 4; luna files Verify after the nudge
   blocker: none
-  next_action: prove engineer reuse on the two proof rounds (rejection, rev:2 Freeze, no new Cast); keep four arms building; start E1 after a quiet 12-hour window with the owner act
+  next_action: land the retained-candidate verify-owed arm after review; keep four arms building; start E1 after a quiet 12-hour window with the owner act
 receipts: []
