@@ -126,28 +126,25 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 62b0d4174 (10:44Z), ff5377018 in CI. Landed this hour: fix
-    time (review waits do not charge the build budget; at least 20 min to
-    fix after a rejection, afc343285); the shot-review JSON retry
-    (f20398247); the judge reads owner notes written after the Cast
-    (1c10e2971); judge Q3 passes rows cut at a scroll edge (ff5377018);
-    OpenRouter serves only crouton-alpha for model policies, DeepSeek off
-    it by owner ruling after it drained the credit (62b0d4174; Jev keeps
-    its own route). Arms: claude is crouton plus the Claude delegate,
-    crouton is crouton alone, both on Calendar (claude r3, crouton r8);
-    deepseek, pool and luna wound down, back on Synthetic, in-flight
-    rounds may finish. Reuse: 0 passes in 6 re-candidates on 4cf05e4d0,
-    converging each time; the cap ended them. Judge false negatives: 12
-    of 17 failed shots today (scroll edges, off-by-one dates, an ambiguous
-    request line). Library: pool's library-next release 8810c72d chosen;
-    the catalog blob route, choir package export and the export commit
-    are built (branch package-export) and in Devin review; package install
-    is being built to replace software-release adoption, which the owner
-    rules deleted if it does not work.
+    staging 8d78b7e78 (Library (new) export, 11:04Z); e6fe4b1fe in CI
+    (Freeze refuses screens older than the newest source change, Devin
+    approve); choir-shot honors a shot's own preset or size and refuses a
+    phone-named shot without a portrait view (eed2104f4, ad8fbb21a).
+    Package install: tier 2 approve (Devin, DeepSeek, no blocking-real);
+    two nits being applied (drop the publisher test_command from the
+    install prompt, hide staged_dir); it deletes software-release adoption,
+    which never worked for real. Crouton pair, Calendar, one full round
+    each, 0 of 6 passes on both: with the delegate the best candidate had 1
+    fault and zones and phone sizes were right from candidate 1; without
+    it the best had about 5 and the zone bug was never fixed. Crouton's
+    Texture settled its rejected round 8 as complete (problem doc). Next
+    rounds: claude r4, crouton r9 on the same request. Node B 15 GB
+    available, 150 GB disk free. Laptop disk 88 percent, Go build cache
+    132 GB (report 4692943fc).
   main_uncertainty: >-
-    whether package install can reuse the apply and rollback path cleanly;
-    whether crouton-alpha's vision is good enough to judge
-  next_observation: the package-export review; the install builder's evidence on release adoption; the first crouton Calendar candidates with and without the delegate
+    whether install through the Library works on staging on the first try;
+    whether the calendar layout faults are the app's or the engineers'
+  next_observation: the install branch's nit commit; e6fe4b1fe deploy; claude r4 and crouton r9 first candidates
   blocker: none
-  next_action: land the Library export, then package install, then review apps through the Library and run publish and install rounds
+  next_action: land package install, prove an install from the Library on d@e on staging, then review apps through the Library and run publish and install rounds
 receipts: []
