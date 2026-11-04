@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: station 1 (pd) landed and proved; store split settled complete; station 2 (selfdev) rounds running on four test arms with blocker fixes expedited
+  slice: station 1 (pd) landed and proved; station 2 (selfdev) wound down to two crouton arms (with and without the Claude delegate) by owner ruling 10:40Z; priority now the Library working end to end (browse, install), then reviewing apps through it and publish-and-pull self-development
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
@@ -126,31 +126,28 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging e2634dd4f (09:45Z): engineer reuse proven live on four rounds
-    (claude and pool Calendar r1 each froze three candidates under one
-    assignment with no new Cast, resume 9 to 12 s, fixes 1.5 to 9 min;
-    deepseek Calendar r6 took a mid-run owner note into its live assignment
-    word for word); the candidate cap is now six (three ended two
-    converging runs one fix short), and a visual rejection tells the
-    engineer to re-shoot every named shot and look at each before it
-    Freezes. Judge: ellipsis rule (Q3), missing and phone-size shots, scrim
-    and verbatim quote fixes; the per-shot review caught a defect
-    management's Verify passed (pool r1 candidate 3). Hang waits bounded
-    (7603b5b1f). In CI: f20398247 (a malformed shot-review answer is asked
-    once more). In review: a retained candidate arms the verify-owed
-    re-check (luna files-next r1 sat unverified five minutes; problem
-    record updated). Calendar's dominant defect is a 15-minute card's
-    min-height overrunning the next event (Standup over Rainfall), not a
-    real overlap; every open round has the correction. Calibration on
-    claude: engineering n=65, Brier 0.237, mean p 0.70 vs 0.63 observed;
-    pool n=79, Brier 0.218. Building: claude and pool calendar-next r2,
-    crouton Calendar r7, deepseek Calendar r6 (candidate 2); luna
-    files-next r1 waiting on Verify; deepseek Podcasts r2 queued.
+    staging 62b0d4174 (10:44Z), ff5377018 in CI. Landed this hour: fix
+    time (review waits do not charge the build budget; at least 20 min to
+    fix after a rejection, afc343285); the shot-review JSON retry
+    (f20398247); the judge reads owner notes written after the Cast
+    (1c10e2971); judge Q3 passes rows cut at a scroll edge (ff5377018);
+    OpenRouter serves only crouton-alpha for model policies, DeepSeek off
+    it by owner ruling after it drained the credit (62b0d4174; Jev keeps
+    its own route). Arms: claude is crouton plus the Claude delegate,
+    crouton is crouton alone, both on Calendar (claude r3, crouton r8);
+    deepseek, pool and luna wound down, back on Synthetic, in-flight
+    rounds may finish. Reuse: 0 passes in 6 re-candidates on 4cf05e4d0,
+    converging each time; the cap ended them. Judge false negatives: 12
+    of 17 failed shots today (scroll edges, off-by-one dates, an ambiguous
+    request line). Library: pool's library-next release 8810c72d chosen;
+    the catalog blob route, choir package export and the export commit
+    are built (branch package-export) and in Devin review; package install
+    is being built to replace software-release adoption, which the owner
+    rules deleted if it does not work.
   main_uncertainty: >-
-    whether six candidates plus the re-shoot rule turn converging reuse
-    runs into passes; whether the adopt route accepts an app's call (an
-    owner act)
-  next_observation: first round on e2634dd4f that reaches candidate 4; luna files Verify after the nudge
+    whether package install can reuse the apply and rollback path cleanly;
+    whether crouton-alpha's vision is good enough to judge
+  next_observation: the package-export review; the install builder's evidence on release adoption; the first crouton Calendar candidates with and without the delegate
   blocker: none
-  next_action: land the retained-candidate verify-owed arm after review; keep four arms building; start E1 after a quiet 12-hour window with the owner act
+  next_action: land the Library export, then package install, then review apps through the Library and run publish and install rounds
 receipts: []
