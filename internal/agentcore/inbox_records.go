@@ -760,6 +760,9 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			return nil, fmt.Errorf("reduce: engineering cast admission returned no records receipt")
 		}
 		committed = *opened.Records
+		// The Cast states the round's predictions: the run has predicted
+		// (calibration read marks, C6).
+		rt.noteCalibrationPredicted(r.scope.RunID, time.Now())
 		// The spawn obligation is atomic with the open commit (the
 		// lifecycle outbox mints delegated_assignment_spawn_deadline), so
 		// kernel mode needs no post-commit arm. Runtimes without the wake
@@ -1176,6 +1179,9 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	}
 	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
 		rt.storyLibraryShown.Delete(rec.RunID)
+	}
+	if rec != nil && rec.State.Terminal() {
+		rt.dropCalibrationReads(rec.RunID)
 	}
 	if rt == nil || rt.store == nil || rec == nil || !(rec.State.Terminal() || parked) || rec.Error == runFateInterruptedByRestart {
 		return

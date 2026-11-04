@@ -78,7 +78,11 @@ type calibrationClaim struct {
 	Unscored      bool   `json:"censored_unscored,omitempty"`
 	SettledAt     string `json:"settled_at,omitempty"`
 	DecisionActor string `json:"decision_actor,omitempty"`
-	Delegated     bool   `json:"delegated,omitempty"`
+	// ReadAt is the run's first choir.Calibration() read before it stated
+	// this claim, and Reads its reads by then (C6); empty: it never read.
+	ReadAt    string `json:"calibration_read_at,omitempty"`
+	Reads     string `json:"calibration_reads,omitempty"`
+	Delegated bool   `json:"delegated,omitempty"`
 }
 
 // calibrationClaimOf joins a rule precommit with its rule settlement.
@@ -92,6 +96,7 @@ func calibrationClaimOf(rec types.CommitmentRecord, resolve *types.CommitmentRec
 		Estimate: rule.EstimateMinutes, Low: rule.LowMinutes, High: rule.HighMinutes, Within: rule.WithinMinutes, WithinFrz: rule.WithinRounds,
 		StatedAt: firstNonEmpty(refs[types.RuleRefStatedAt], rec.Provenance.CommittedAt),
 		Late:     types.LateRulePrecommit(rec), LateReason: refs[types.RuleRefLateReason], Arm: refs[calibrationArmRef], ArmUnit: refs[calibrationArmUnitRef],
+		ReadAt: refs[calibrationReadAtRef], Reads: refs[calibrationReadsRef],
 		Assignment: rule.AssignmentID, Cast: refs["cast"],
 	}
 	if resolve != nil && resolve.Resolve != nil {

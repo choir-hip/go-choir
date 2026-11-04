@@ -127,3 +127,45 @@ func TestDoneAfterARefusedWriteIsRefused(t *testing.T) {
 		t.Fatalf("Wait staged %d intents, want one", len(got))
 	}
 }
+
+// C6: choir.Calibration() returns the frame's record and marks the cell as
+// having read it; a cell that never calls it carries no mark (M1), a cell
+// that reads and then fails still does (M3), and the next cell starts
+// unmarked. Engineering and management have the verb; Texture does not.
+func TestCalibrationVerbMarksTheRead(t *testing.T) {
+	broker, issuer, _, _ := testChoirFixture(t)
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-eng", 1, "management", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	digest := &types.CalibrationDigest{Desk: "engineering", N: 30, Text: "record"}
+	out, err := serveCell(sess, SessionFrame{ID: "c1", Source: "fmt.Println(choir.Pack().Items)", Calibration: digest}, nil, &hooks)
+	if err != nil || out.Error != "" || out.CalibrationRead {
+		t.Fatalf("a cell that read the pack only: %v %s read=%v", err, out.Error, out.CalibrationRead)
+	}
+	out, _ = serveCell(sess, SessionFrame{ID: "c3", Source: "fmt.Println(choir.Calibration().Text)"}, nil, &hooks)
+	if !out.CalibrationRead || !strings.Contains(out.Stdout, "No calibration record is shown") {
+		t.Fatalf("no record: %q read=%v", out.Stdout, out.CalibrationRead)
+	}
+	out, _ = serveCell(sess, SessionFrame{ID: "c4", Source: "fmt.Println(1)"}, nil, &hooks)
+	if out.CalibrationRead {
+		t.Fatal("the mark carried into the next cell")
+	}
+	out, _ = serveCell(sess, SessionFrame{ID: "c2", Source: "c := choir.Calibration()\nfmt.Println(c.N, c.Text)\npanic(\"after the read\")", Calibration: digest}, nil, &hooks)
+	if out.Error == "" || !out.CalibrationRead || !strings.Contains(out.Stdout, "30 record") {
+		t.Fatalf("a failed cell that read: %q %q read=%v", out.Stdout, out.Error, out.CalibrationRead)
+	}
+	texture, err := NewChoirScope(broker, issuer, "computer-choir", "activation-tex", 1, "texture", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := texture.ChoirExports()["choir/choir"]["Calibration"]; ok {
+		t.Fatal("texture has choir.Calibration")
+	}
+}

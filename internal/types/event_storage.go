@@ -39,6 +39,7 @@ var eventStorage = map[EventKind]EventStorage{
 	EventToolInvoked:                  StorageEventTable,
 	EventToolResult:                   StorageEventTable,
 	EventDeskCell:                     StorageEventTable,
+	EventCalibrationRead:              StorageEventTable,
 	EventDeskEgress:                   StorageEventTable,
 	EventTextureAgentRevisionProgress: StorageEventTable,
 

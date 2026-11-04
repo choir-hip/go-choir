@@ -217,6 +217,13 @@ const (
 	// run's cell (Cut 0, docs/reports/reeng-trace-bundle-format-2026-10-12.md).
 	EventDeskCell EventKind = "desk.cell"
 
+	// EventCalibrationRead is a run's read mark of its calibration record
+	// through choir.Calibration() (C6 of
+	// docs/design/calibration-wiring-permutations-2026-11-04.md): when, the
+	// how-manyth read, and whether it came before the run's first
+	// prediction.
+	EventCalibrationRead EventKind = "calibration.read"
+
 	// EventDeskEgress records one host-mediated choir.* call a cell made: the
 	// request id the worker minted, the id on the result frame, the verb and
 	// the worker process, so a bundle shows which caller got which answer.

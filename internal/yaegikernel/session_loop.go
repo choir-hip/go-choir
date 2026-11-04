@@ -56,6 +56,11 @@ type SessionFrame struct {
 	// Analysis carries a story research desk's entity analysis, read
 	// through choir.StoryAnalysis() (story_analysis.go).
 	Analysis *StoryAnalysis `json:"analysis,omitempty"`
+	// Calibration carries the record the desk may read through
+	// choir.Calibration() (C6 of
+	// docs/design/calibration-wiring-permutations-2026-11-04.md); nil when
+	// it has none to read.
+	Calibration *types.CalibrationDigest `json:"calibration,omitempty"`
 }
 
 // DocSnapshot is the bound Texture document as the cell's frame showed it:
@@ -106,6 +111,9 @@ type SessionResult struct {
 	// (running, or starting: staged in the cell). The host parks the turn
 	// on them (problems/engineering-busy-polls-its-own-job-2026-10-24.md).
 	JobsAwaited []string `json:"jobs_awaited,omitempty"`
+	// CalibrationRead says a choir.Calibration() call in the cell read the
+	// desk's record: the host writes the read mark (C6).
+	CalibrationRead bool `json:"calibration_read,omitempty"`
 	// SlotToken is set on the worker's ready handshake only (ARCH-07): the
 	// per-spawn token the host generated, proving the process on the socket
 	// is the one it started.
@@ -170,6 +178,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	}
 	if hooks != nil && hooks.JobsAwaited != nil {
 		out.JobsAwaited = hooks.JobsAwaited()
+	}
+	if hooks != nil && hooks.CalibrationRead != nil {
+		out.CalibrationRead = hooks.CalibrationRead()
 	}
 	var staged []StagedIntent
 	if hooks != nil && hooks.End != nil {

@@ -68,6 +68,10 @@ type ChoirScope struct {
 	pack *types.ActingPack
 	// analysis is a story research desk's entity analysis (story_analysis.go).
 	analysis *StoryAnalysis
+	// calibration is the cell-start record choir.Calibration() returns, and
+	// calibrationRead whether the bound cell called it (C6).
+	calibration     *types.CalibrationDigest
+	calibrationRead atomic.Bool
 	// updates is the cell-start snapshot of pending update_coagent records
 	// (RLM prompt-as-variable): read via Updates(). The wake turn in chat
 	// carries only update ids; the payload lives here.
@@ -207,6 +211,8 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.doc = frame.Doc
 			s.pack = frame.Pack
 			s.analysis = frame.Analysis
+			s.calibration = frame.Calibration
+			s.calibrationRead.Store(false)
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.emits = append([]PendingEmit(nil), frame.Emits...)
 			s.records = append([]InboxRecord(nil), frame.Records...)
@@ -225,16 +231,18 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.doc = nil
 			s.pack = nil
 			s.analysis = nil
+			s.calibration = nil
 			s.updates = nil
 			s.emits = nil
 			s.records = nil
 			s.jobs = nil
 			return out
 		},
-		Refusals:     s.takeRefusals,
-		SearchCounts: s.searchCountLines,
-		RecordsShown: s.recordsShown.Load,
-		JobsAwaited:  s.takeAwaited,
+		Refusals:        s.takeRefusals,
+		SearchCounts:    s.searchCountLines,
+		RecordsShown:    s.recordsShown.Load,
+		JobsAwaited:     s.takeAwaited,
+		CalibrationRead: s.calibrationRead.Load,
 	}
 }
 
@@ -415,6 +423,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Verify":           func() reflect.Value { return reflect.ValueOf(s.Verify) },
 		"Delegate":         func() reflect.Value { return reflect.ValueOf(s.Delegate) },
 		"CancelTask":       func() reflect.Value { return reflect.ValueOf(s.CancelTask) },
+		"Calibration":      func() reflect.Value { return reflect.ValueOf(s.Calibration) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -1345,6 +1354,31 @@ func (s *ChoirScope) Pack() types.ActingPack {
 		return types.ActingPack{Items: []types.ActingPackItem{}}
 	}
 	return *s.pack
+}
+
+// Calibration returns the desk's calibration record as the cell's frame
+// carries it, and marks the cell as having read it (C6 of
+// docs/design/calibration-wiring-permutations-2026-11-04.md): the host
+// writes a read mark (run, time, whether it came before the run's first
+// prediction), so whether a desk reads its record before it predicts is
+// measured, not guessed. Ways it can fail, written first:
+//   - the read is invisible because choir.Pack() is read for other reasons
+//     -> a verb of its own, marked only when called;
+//   - a cell that reads and then fails loses the mark -> the mark rides the
+//     result of every cell, failed ones included;
+//   - a desk with no record reads a zero value as a perfect record -> Text
+//     says none is shown, N is 0.
+//
+// Side-effect-free inside the cell; an unbound scope reads no record.
+func (s *ChoirScope) Calibration() types.CalibrationDigest {
+	if s == nil {
+		return types.CalibrationDigest{}
+	}
+	s.calibrationRead.Store(true)
+	if s.calibration == nil {
+		return types.CalibrationDigest{Text: "No calibration record is shown to this run."}
+	}
+	return *s.calibration
 }
 
 // --- Semantic-act verbs (mission R2). Each delegates to the bound tray;

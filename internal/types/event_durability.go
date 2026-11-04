@@ -46,6 +46,7 @@ var eventDurability = map[EventKind]EventDurability{
 	EventToolInvoked:                  DurabilityBatched,
 	EventToolResult:                   DurabilityBatched,
 	EventDeskCell:                     DurabilityBatched,
+	EventCalibrationRead:              DurabilityBatched,
 	EventDeskEgress:                   DurabilityBatched,
 	EventTextureAgentRevisionProgress: DurabilityBatched,
 

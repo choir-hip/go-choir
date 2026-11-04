@@ -594,8 +594,15 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			egressLog := &cellEgressLog{}
 			evalCtx = withCellEgressLog(evalCtx, egressLog)
 			evalStart := time.Now()
+			var shownCalibration *types.CalibrationDigest
+			if pack != nil {
+				shownCalibration = pack.Calibration
+			}
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Emits: emits, Records: reduction.records.view, Analysis: analysis})
+				Updates: updates, Emits: emits, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
+			if res.CalibrationRead {
+				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, calibrationDeliveryPush)
+			}
 			elapsed := time.Since(evalStart)
 			// The cell's own bound fired, not the run's cancellation or the
 			// activation's deadline.

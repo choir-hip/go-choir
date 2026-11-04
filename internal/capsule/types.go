@@ -4,6 +4,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -182,6 +183,9 @@ type GoEvalRequest struct {
 	// Jobs carries the run's capsule jobs at cell start, read through
 	// choir.Poll; the executor fills it (jobs.go).
 	Jobs []yaegikernel.JobView `json:"jobs,omitempty"`
+	// Calibration is the record choir.Calibration() returns in the cell
+	// (C6); nil when the run has none to read.
+	Calibration *types.CalibrationDigest `json:"calibration,omitempty"`
 }
 
 // GoEvalResult is the result of evaluating Go source in the capsule. Intents
@@ -204,6 +208,8 @@ type GoEvalResult struct {
 	// RecordsShown is the highest record seq a choir.Records() call in the
 	// cell showed (C1e B1): the cell marks read only what it was shown.
 	RecordsShown int64 `json:"records_shown,omitempty"`
+	// CalibrationRead says the cell called choir.Calibration() (C6).
+	CalibrationRead bool `json:"calibration_read,omitempty"`
 	// JobsAwaited are the jobs a choir.Poll in the cell returned unfinished
 	// (the kernel's SessionResult.JobsAwaited, carried by the broker).
 	JobsAwaited []string `json:"jobs_awaited,omitempty"`

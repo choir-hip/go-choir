@@ -281,7 +281,7 @@ func Compute(desk string, obs []Observation, opts Options) types.CalibrationDige
 				line.Bins = append(line.Bins, b)
 			}
 		}
-		line.Timed, line.EstimateRatio = estimateRatio(byType[k], opts.MinBin)
+		line.Measured, line.EstimateRatio = estimateRatio(byType[k], opts.MinBin)
 		d.ClaimTypes = append(d.ClaimTypes, line)
 		if st.ECE > worst {
 			worst, d.Worst = st.ECE, k
@@ -373,7 +373,7 @@ func Render(d types.CalibrationDigest) string {
 			fmt.Fprintf(&b, "; you said %.2f, %.2f held (n=%d)", bin.MeanP, bin.Observed, bin.N)
 		}
 		if st.EstimateRatio != nil {
-			fmt.Fprintf(&b, "; your estimates were a median %.1fx the actual minutes (n=%d)", *st.EstimateRatio, st.Timed)
+			fmt.Fprintf(&b, "; your estimates were a median %.1fx the actual minutes (n=%d)", *st.EstimateRatio, st.Measured)
 		}
 		if st.Censored > 0 {
 			fmt.Fprintf(&b, "; %d more ended before the interval closed and are not scored", st.Censored)

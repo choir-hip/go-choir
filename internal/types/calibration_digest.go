@@ -59,11 +59,11 @@ type CalibrationStat struct {
 	Resolution float64 `json:"resolution"`
 	// Bins are this claim type's own bins (C4: never pooled across types).
 	Bins []CalibrationBin `json:"bins,omitempty"`
-	// Clock kinds: Timed counts the claims with a measured span,
+	// Clock kinds: Measured counts the claims with a measured span,
 	// EstimateRatio is the median of the stated estimate over the actual
 	// minutes (above 1 the estimates ran long), and Censored counts the
 	// claims whose round ended before the interval closed, left out (C5, C7).
-	Timed         int      `json:"timed,omitempty"`
+	Measured      int      `json:"measured,omitempty"`
 	EstimateRatio *float64 `json:"estimate_ratio,omitempty"`
 	Censored      int      `json:"censored,omitempty"`
 }

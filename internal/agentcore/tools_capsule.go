@@ -949,6 +949,8 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			}
 			// The broker's own cell bound always ends inside the host's.
 			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: bounds.brokerTimeoutMS(input.TimeoutMS)}
+			execCtx := toolregistry.ExecutionContextFrom(ctx)
+			req.Calibration = rt.calibrationDigestForRun(ctx, execCtx.RunRecord)
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
 				req.Records = reduction.records.view
@@ -983,6 +985,9 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 					}
 				}
 				return "", err
+			}
+			if result.CalibrationRead {
+				rt.noteCalibrationRead(ctx, execCtx, req.Calibration, calibrationDeliveryPush)
 			}
 			if reduction.active && result.Error != "" {
 				fate := cellFateFailure

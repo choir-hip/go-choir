@@ -237,7 +237,7 @@ func TestComputeShowsResolutionAndTheClockBias(t *testing.T) {
 			clock = &d.ClaimTypes[i]
 		}
 	}
-	if clock == nil || clock.EstimateRatio == nil || !near(*clock.EstimateRatio, 3) || clock.Timed != 10 || clock.Censored != 3 {
+	if clock == nil || clock.EstimateRatio == nil || !near(*clock.EstimateRatio, 3) || clock.Measured != 10 || clock.Censored != 3 {
 		t.Fatalf("clock line %+v", clock)
 	}
 	for _, want := range []string{"resolution", "estimates were a median 3.0x the actual minutes (n=10)", "3 more ended before the interval closed"} {
@@ -248,7 +248,7 @@ func TestComputeShowsResolutionAndTheClockBias(t *testing.T) {
 	few := Compute("engineering", obs[:4], Options{MinN: 1})
 	for _, st := range few.ClaimTypes {
 		if st.EstimateRatio != nil {
-			t.Fatalf("a ratio from %d timed claims: %+v", st.Timed, st)
+			t.Fatalf("a ratio from %d timed claims: %+v", st.Measured, st)
 		}
 	}
 }
