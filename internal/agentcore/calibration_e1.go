@@ -219,6 +219,8 @@ func (rt *Runtime) engineerRestateNotice(ctx context.Context, r *rlmCallReductio
 	threadArm := ""
 	if p0, err := rt.store.GetCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, firstP0); err == nil && p0 != nil {
 		threadArm = p0.SubjectRefs[calibrationArmRef]
+	} else {
+		log.Printf("calibration: run %s: p0 %s unreadable for the restatement request (shown blind): %v", r.scope.RunID, firstP0, err)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Restate each of these predictions once, before your first build: choir.Restate(\"<kind>\", map[string]any{\"p\": <p>}) for %s (a clock kind may add estimate_minutes, low_minutes and high_minutes). You may repeat or change the numbers; your first statement stays on the record and both are scored on the same outcome.", strings.Join(kinds, ", "))
@@ -280,10 +282,10 @@ func (r *rlmCallReduction) commitCastRestatement(ctx context.Context, rt *Runtim
 	if err := r.refuseSecondRestateInCell(in); err != nil {
 		return err
 	}
-	if r.replayedRestatement(ctx, rt, roundPredictionRecordID(castID, types.PrecommitRuleVerifyPass)+":restate") {
-		return nil // a replayed cell: its records stand
-	}
-	if !rt.computerSettingOn(ctx, owner, computer, store.SettingCalibrationE1Restate) {
+	// A replayed cell skips the gate and completes its own set in
+	// appendRestatements (review r2: a half-written set is finished).
+	replay := r.replayedRestatement(ctx, rt, roundPredictionRecordID(castID, types.PrecommitRuleVerifyPass)+":restate")
+	if !replay && !rt.computerSettingOn(ctx, owner, computer, store.SettingCalibrationE1Restate) {
 		return fmt.Errorf("reduce: restate %s: no restatement is asked on this computer", in.LocalID)
 	}
 	if strings.HasPrefix(castID, r.scope.CellID+":") {
@@ -330,7 +332,7 @@ func (r *rlmCallReduction) commitEngineerRestatement(ctx context.Context, rt *Ru
 		state.mu.Unlock()
 	}
 	if p0ID != "" && r.replayedRestatement(ctx, rt, p0ID+":restate") {
-		return nil // a replayed cell: its record stands
+		return nil // a replayed cell: its one record stands
 	}
 	if rt.calibrationDeliveryFor(ctx, owner, computer) != calibrationDeliveryTwoStage {
 		return fmt.Errorf("reduce: restate %s: no restatement is asked on this computer", in.LocalID)
@@ -341,7 +343,7 @@ func (r *rlmCallReduction) commitEngineerRestatement(ctx context.Context, rt *Ru
 	// The ask names this run's own first statement (F4, review r1: never
 	// another attempt's claim of the same kind).
 	p0, err := rt.store.GetCommitmentRecord(ctx, owner, computer, p0ID)
-	if err != nil || p0 == nil || p0.Precommit == nil || p0.Precommit.Rule == nil {
+	if err != nil || p0 == nil || p0.Precommit == nil || p0.Precommit.Rule == nil || string(p0.Precommit.Rule.Kind) != kind {
 		return fmt.Errorf("reduce: restate %s: the Precommit %s it restates is not readable (F4): %v", in.LocalID, p0ID, err)
 	}
 	if strings.HasPrefix(p0.RecordID, r.scope.CellID+":") {
@@ -441,15 +443,21 @@ func (r *rlmCallReduction) appendRestatements(ctx context.Context, rt *Runtime, 
 	// A prediction is restated once (F4). A set some of whose records an
 	// earlier cell wrote before failing is completed, not refused for ever;
 	// a set wholly written is refused.
+	// A record this same cell wrote is a replay's and stands.
 	missing := make([]bool, len(records))
-	anyMissing := false
+	anyMissing, ownWritten := false, false
 	for i := range records {
-		exists, err := rt.store.CommitmentRecordExists(ctx, owner, computer, records[i].RecordID)
+		existing, err := rt.store.GetCommitmentRecord(ctx, owner, computer, records[i].RecordID)
 		if err != nil {
 			return fmt.Errorf("reduce: restate %s: %w", in.LocalID, err)
 		}
+		exists := existing != nil
 		missing[i] = !exists
 		anyMissing = anyMissing || !exists
+		ownWritten = ownWritten || (exists && existing.SubjectRefs[calibrationRestateCellRef] == r.scope.CellID)
+	}
+	if !anyMissing && ownWritten {
+		return nil // a replayed cell whose set is whole
 	}
 	if !anyMissing {
 		return fmt.Errorf("reduce: restate %s: %s was already restated; a prediction is restated once (F4)", in.LocalID, records[0].SubjectRefs[types.RuleRefRestates])
