@@ -22,6 +22,22 @@ export function plainReason(reason, status = 0) {
   switch (String(reason || '')) {
     case 'patch_does_not_apply':
       return 'The release was built on a different base, so its patch does not apply to this computer. Nothing changed on this computer. Install a release built on this computer\'s base, or wait for the publisher to publish one.';
+    case 'package_name_taken':
+      return 'This computer already has its own app by that name, which an install never overwrites. Nothing changed on this computer.';
+    case 'package_already_present':
+      return 'This computer already holds exactly this release. Nothing changed.';
+    case 'package_not_installed':
+      return 'This release is not what this computer holds under that name, so there is nothing of it to uninstall. Nothing changed on this computer.';
+    case 'package_content_invalid':
+    case 'patch_secret_refused':
+    case 'patch_digest_mismatch':
+    case 'release_digest_mismatch':
+    case 'published_record_digest_mismatch':
+      return 'The release did not verify on this computer, so it was not installed. Nothing changed on this computer.';
+    case 'patch_unavailable':
+      return 'The Library does not hold this release\'s files, so it cannot be installed. Nothing changed on this computer.';
+    case 'desks_unavailable':
+      return 'This computer\'s desks did not take the install. Nothing changed on this computer. Try again in a moment.';
     case 'release_not_published':
       return 'That release is no longer published, so it cannot be installed. Nothing changed on this computer.';
     case 'release_id_invalid':
@@ -85,9 +101,12 @@ export async function loadInstalls(computerId) {
   return requestJSON(path, { headers: { accept: 'application/json' } });
 }
 
-// installRelease sends the release's record exactly as the catalog returned it.
-// 201 is a new install, 200 an install this computer already had.
-export async function installRelease(computerId, releaseId, record) {
+// installRelease asks this computer to install a release (action "install")
+// or remove one it installed ("uninstall"). The platform reads the release
+// and its files from the Library itself; the record, when sent, must be the
+// one the catalog returned. 201 is a new request, 200 one already under way
+// or done.
+export async function installRelease(computerId, releaseId, record, action = 'install') {
   const path = '/api/computers/' + encodeURIComponent(computerId) + '/self-development/adoptions';
   let res;
   try {
@@ -95,7 +114,7 @@ export async function installRelease(computerId, releaseId, record) {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ release_id: releaseId, record }),
+      body: JSON.stringify(record ? { release_id: releaseId, record, action } : { release_id: releaseId, action }),
     });
   } catch (err) {
     if (err && err.name === 'AuthRequiredError') throw err;
@@ -258,6 +277,21 @@ export function sortedByNewest(releases) {
     return String((b && b.published_at) || '').localeCompare(String((a && a.published_at) || ''));
   });
   return list;
+}
+
+// installState names where one install record stands: 'done' when this
+// computer's source holds the release (or, for an uninstall, holds nothing
+// under its name), 'failed' when its operation failed, was rejected or was
+// rolled back, 'approve' while the change waits for the owner's approval,
+// and 'working' otherwise.
+export function installState(item) {
+  if (!item) return '';
+  if (item.patch_matches_release === true) return 'done';
+  const state = String((item.operation && item.operation.state) || '');
+  if (state === 'failed' || state === 'rejected' || state === 'rolled_back') return 'failed';
+  if (state === 'applied') return 'failed';
+  if (state === 'awaiting_approval') return 'approve';
+  return 'working';
 }
 
 // adoptionsOf is the installed list, always an array.

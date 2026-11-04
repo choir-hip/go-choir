@@ -12,6 +12,7 @@
     changedPathsOf,
     formatWhen,
     installRelease,
+    installState,
     isPhoneShot,
     isVideo,
     kindLabel,
@@ -235,13 +236,58 @@
   function installedTone(releaseId) {
     const item = installOf(releaseId);
     if (!item) return '';
-    return item.patch_matches_release === false ? 'warn' : 'ok';
+    const state = installState(item);
+    if (item.action === 'uninstall') return state === 'done' ? '' : 'warn';
+    return state === 'done' ? 'ok' : 'warn';
   }
 
   function installedLabel(releaseId) {
     const item = installOf(releaseId);
     if (!item) return '';
-    return item.patch_matches_release === false ? 'Installed, patch differs' : 'Installed';
+    const state = installState(item);
+    if (item.action === 'uninstall') {
+      if (state === 'done') return '';
+      return state === 'failed' ? 'Uninstall failed' : 'Uninstalling';
+    }
+    if (state === 'done') return 'Installed';
+    if (state === 'failed') return 'Install failed';
+    if (state === 'approve') return 'Waiting for your approval';
+    return 'Installing';
+  }
+
+  // installTag is the tag an install row shows.
+  function installTag(item) {
+    const state = installState(item);
+    const uninstall = item.action === 'uninstall';
+    if (state === 'done') return { tone: 'ok', text: uninstall ? 'Uninstalled' : 'Installed' };
+    if (state === 'failed') return { tone: 'warn', text: uninstall ? 'Uninstall failed' : 'Install failed' };
+    if (state === 'approve') return { tone: 'warn', text: 'Waiting for your approval' };
+    return { tone: 'warn', text: uninstall ? 'Uninstalling' : 'Installing' };
+  }
+
+  async function doUninstall(item) {
+    if (!item || actionBusy || !computerId) return;
+    actionBusy = true;
+    const rel = installNames[String(item.release_id || '')] || { release_id: item.release_id, record: null, listing: {} };
+    try {
+      const result = await installRelease(computerId, String(item.release_id || ''), null, 'uninstall');
+      outcome = {
+        tone: 'ok',
+        title: result.status === 201 ? 'Uninstall started' : 'Uninstall already under way',
+        text:
+          'This computer\'s desks are removing ' +
+          installTitle(item) +
+          '. When the change is ready, approve it in Texture; the app then leaves the launcher.',
+        facts: [{ label: 'Install id', value: shortId(result.body.adoption_id, 24) || 'not recorded' }],
+        release: rel,
+      };
+      await refreshInstalls();
+    } catch (err) {
+      if (err && err.name === 'AuthRequiredError') reportAuth('install');
+      refusedSheet = { title: 'The uninstall was refused', text: messageOf(err), release: rel };
+    } finally {
+      actionBusy = false;
+    }
   }
 
   function installTitle(item) {
@@ -253,7 +299,8 @@
   function installLine(item) {
     const bits = [];
     const when = formatWhen(item.requested_at);
-    bits.push(when ? 'installed ' + when : 'install time not recorded');
+    const verb = item.action === 'uninstall' ? 'uninstall asked ' : 'install asked ';
+    bits.push(when ? verb + when : 'time not recorded');
     bits.push('from ' + publisherLabel(item.publisher_computer_id, computerId));
     bits.push(item.same_base === false ? 'a different base' : 'the same base');
     const state = item.operation && item.operation.state ? String(item.operation.state) : '';
@@ -404,43 +451,40 @@
 
   function showOutcome(rel, result) {
     const body = (result && result.body) || {};
-    const matches = body.patch_matches_release === true;
-    const sameBase = body.same_base !== false;
+    const state = installState(body);
     const facts = [
       { label: 'Install id', value: shortId(body.adoption_id, 24) || 'not recorded' },
       { label: 'Release', value: releaseLabel(rel) },
-      { label: 'Same base', value: sameBase ? 'Yes' : 'No' },
-      { label: 'Patch matches the release', value: matches ? 'Yes' : 'No' },
     ];
-    const state = body.operation && body.operation.state ? String(body.operation.state) : '';
-    if (state) facts.push({ label: 'Operation', value: state });
-    if (result && result.status === 200) {
+    const op = body.operation && body.operation.state ? String(body.operation.state) : '';
+    if (op) facts.push({ label: 'Operation', value: op });
+    if (state === 'done') {
       outcome = {
         tone: 'ok',
-        title: 'Already installed',
-        text: 'This computer already had ' + releaseLabel(rel) + '. Nothing changed.',
+        title: 'Installed',
+        text: releaseLabel(rel) + ' is installed on this computer. Open it from the launcher.',
         facts,
         release: rel,
       };
       return;
     }
-    if (matches && sameBase) {
+    if (state === 'failed') {
       outcome = {
-        tone: 'ok',
-        title: 'Installed',
-        text: releaseLabel(rel) + ' is installed on this computer.',
+        tone: 'warn',
+        title: 'The last install did not finish',
+        text: 'The install of ' + releaseLabel(rel) + ' ended without changing this computer (operation ' + (op || 'closed') + '). Press Install again to retry.',
         facts,
         release: rel,
       };
       return;
     }
     outcome = {
-      tone: 'warn',
-      title: 'Install did not match the release',
+      tone: 'ok',
+      title: result && result.status === 201 ? 'Install started' : 'Install already under way',
       text:
-        'This computer accepted a patch that is not the one ' +
+        'This computer\'s desks are building ' +
         releaseLabel(rel) +
-        ' carries, so the release is not in place as published and nothing here reads as a successful install. Nothing else on this computer changed. Try the install again, or choose a release built for this computer.',
+        ' into this computer. When the change is ready, approve it in Texture; the app then appears in the launcher.',
       facts,
       release: rel,
     };
@@ -866,10 +910,13 @@
                     <span class="lib-row-meta">{installLine(item)}</span>
                   </span>
                   <span class="lib-row-side">
-                    {#if item.patch_matches_release === false}
-                      <span class="lib-tag lib-tag-warn">Patch does not match</span>
-                    {:else}
-                      <span class="lib-tag lib-tag-ok">Patch matches</span>
+                    <span class="lib-tag" class:lib-tag-ok={installTag(item).tone === 'ok'} class:lib-tag-warn={installTag(item).tone === 'warn'} data-install-state>
+                      {installTag(item).text}
+                    </span>
+                    {#if item.action !== 'uninstall' && installState(item) === 'done'}
+                      <button class="lib-btn lib-btn-quiet" data-uninstall-button disabled={actionBusy || !computerId} on:click={() => doUninstall(item)}>
+                        Uninstall
+                      </button>
                     {/if}
                   </span>
                 </li>
