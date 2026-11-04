@@ -183,11 +183,19 @@ func TestEngineerRestatementIsAskedOnceAndRecordedBesideP0(t *testing.T) {
 		Provenance:  types.CommitmentProvenance{AgentID: "engineering:a1", CommittedAt: time.Now().UTC().Format(time.RFC3339Nano)},
 		ComputerID:  computer,
 		SubjectRefs: map[string]string{"assignment": "a1", types.RuleRefStatedBy: "precommit", types.RuleRefStage: types.RuleStageFirst}}
-	if _, err := s.AppendCommitmentRecord(ctx, owner, computer, p0); err != nil {
-		t.Fatal(err)
+	// An earlier attempt's claim of the same kind, older: the restatement
+	// never binds to it (review r1).
+	older := p0
+	older.RecordID = "cell-0:precommit:p1"
+	older.Provenance.CommittedAt = "2026-11-04T00:00:00Z"
+	older.SubjectRefs = map[string]string{"assignment": "a1", types.RuleRefStatedBy: "precommit", types.RuleRefStage: types.RuleStageFirst}
+	for _, rec := range []types.CommitmentRecord{older, p0} {
+		if _, err := s.AppendCommitmentRecord(ctx, owner, computer, rec); err != nil {
+			t.Fatal(err)
+		}
 	}
 	r := &rlmCallReduction{active: true, mb: rt, st: s, ledger: s, rec: run,
-		scope: ReductionScope{FromAgentID: "engineering:a1", OwnerID: owner, ComputerID: computer, RunID: run.RunID, CellID: "cell-2", ModelID: "m/x"}, restateKinds: []string{"tests_pass"}}
+		scope: ReductionScope{FromAgentID: "engineering:a1", OwnerID: owner, ComputerID: computer, RunID: run.RunID, CellID: "cell-2", ModelID: "m/x"}, restateKinds: []restateAsk{{kind: "tests_pass", p0: p0.RecordID}}}
 	if notice := rt.engineerRestateNotice(ctx, r); notice != "" {
 		t.Fatalf("a push computer was asked: %q", notice)
 	}
@@ -210,6 +218,12 @@ func TestEngineerRestatementIsAskedOnceAndRecordedBesideP0(t *testing.T) {
 	if _, err := r.commitRestateIntent(ctx, in); err != nil {
 		t.Fatalf("restate: %v", err)
 	}
+	if _, err := r.commitRestateIntent(ctx, in); err == nil || !strings.Contains(err.Error(), "this cell already restated") {
+		t.Fatalf("a second Restate in one cell: %v", err)
+	}
+	if ok, _ := s.CommitmentRecordExists(ctx, owner, computer, older.RecordID+":restate"); ok {
+		t.Fatal("the restatement bound to another attempt's claim")
+	}
 	p1, err := s.GetCommitmentRecord(ctx, owner, computer, p0.RecordID+":restate")
 	if err != nil || p1 == nil {
 		t.Fatalf("p1: %v", err)
@@ -218,8 +232,12 @@ func TestEngineerRestatementIsAskedOnceAndRecordedBesideP0(t *testing.T) {
 		p1.SubjectRefs[calibrationDeliveryRef] != calibrationDeliveryTwoStage || p1.SubjectRefs[calibrationRecordShownRef] == "" {
 		t.Fatalf("p1 %+v refs %v", p1.Precommit, p1.SubjectRefs)
 	}
-	r.scope.CellID = "cell-3"
-	if _, err := r.commitRestateIntent(ctx, in); err == nil || !strings.Contains(err.Error(), "restated once") {
+	replay := &rlmCallReduction{active: true, mb: rt, st: s, ledger: s, rec: run, scope: r.scope}
+	if _, err := replay.commitRestateIntent(ctx, in); err != nil {
+		t.Fatalf("a replayed cell: %v", err)
+	}
+	replay.scope.CellID = "cell-3"
+	if _, err := replay.commitRestateIntent(ctx, in); err == nil || !strings.Contains(err.Error(), "restated once") {
 		t.Fatalf("twice: %v", err)
 	}
 }

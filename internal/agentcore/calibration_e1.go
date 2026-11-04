@@ -49,6 +49,13 @@ const (
 // later is late (F2), since the engineer's work has started to show.
 const calibrationRestateWindow = 15 * time.Minute
 
+// restateAsk is one first statement a two-stage engineer may restate: its
+// kind and its own p0 record.
+type restateAsk struct {
+	kind string
+	p0   string
+}
+
 // calibrationRestatement reports a p1 record (F1).
 func calibrationRestatement(rec types.CommitmentRecord) bool {
 	return types.RestatementRulePrecommit(rec)
@@ -188,14 +195,18 @@ func (rt *Runtime) engineerRestateNotice(ctx context.Context, r *rlmCallReductio
 		return ""
 	}
 	var kinds []string
+	firstP0 := ""
 	state.mu.Lock()
 	if state.restateAsked == nil {
-		state.restateAsked = map[string]bool{}
+		state.restateAsked = map[string]string{}
 	}
-	for _, k := range r.restateKinds {
-		if !state.restateAsked[k] {
-			state.restateAsked[k] = true
-			kinds = append(kinds, k)
+	for _, ask := range r.restateKinds {
+		if _, asked := state.restateAsked[ask.kind]; !asked {
+			state.restateAsked[ask.kind] = ask.p0
+			kinds = append(kinds, ask.kind)
+			if firstP0 == "" {
+				firstP0 = ask.p0
+			}
 		}
 	}
 	state.mu.Unlock()
@@ -203,7 +214,12 @@ func (rt *Runtime) engineerRestateNotice(ctx context.Context, r *rlmCallReductio
 		return ""
 	}
 	sort.Strings(kinds)
-	threadArm := rt.calibrationArmOfThread(ctx, r.scope.ComputerID, agentIDForRun(r.rec))
+	// The arm is the one stamped on the claims (never recomputed from a
+	// thread that might differ).
+	threadArm := ""
+	if p0, err := rt.store.GetCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, firstP0); err == nil && p0 != nil {
+		threadArm = p0.SubjectRefs[calibrationArmRef]
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Restate each of these predictions once, before your first build: choir.Restate(\"<kind>\", map[string]any{\"p\": <p>}) for %s (a clock kind may add estimate_minutes, low_minutes and high_minutes). You may repeat or change the numbers; your first statement stays on the record and both are scored on the same outcome.", strings.Join(kinds, ", "))
 	if threadArm == calibration.ArmDigest {
@@ -240,18 +256,33 @@ func (r *rlmCallReduction) commitRestateIntent(ctx context.Context, in yaegikern
 	if rt == nil || rt.store == nil || r.ledger == nil || r.rec == nil {
 		return 0, fmt.Errorf("reduce: restate %s without ledger authority", in.LocalID)
 	}
+	var err error
 	switch strings.TrimSpace(r.rec.AgentProfile) {
 	case agentprofile.Management:
-		return 0, r.commitCastRestatement(ctx, rt, in)
+		err = r.commitCastRestatement(ctx, rt, in)
 	case agentprofile.Engineering:
-		return 0, r.commitEngineerRestatement(ctx, rt, in)
+		err = r.commitEngineerRestatement(ctx, rt, in)
+	default:
+		return 0, fmt.Errorf("reduce: restate %s: only management and engineering restate", in.LocalID)
 	}
-	return 0, fmt.Errorf("reduce: restate %s: only management and engineering restate", in.LocalID)
+	if err == nil {
+		if r.restated == nil {
+			r.restated = map[string]bool{}
+		}
+		r.restated[strings.TrimSpace(in.TargetRef)] = true
+	}
+	return 0, err
 }
 
 // commitCastRestatement restates a Cast's predictions block (E1-M).
 func (r *rlmCallReduction) commitCastRestatement(ctx context.Context, rt *Runtime, in yaegikernel.StagedIntent) error {
 	owner, computer, castID := r.scope.OwnerID, r.scope.ComputerID, strings.TrimSpace(in.TargetRef)
+	if err := r.refuseSecondRestateInCell(in); err != nil {
+		return err
+	}
+	if r.replayedRestatement(ctx, rt, roundPredictionRecordID(castID, types.PrecommitRuleVerifyPass)+":restate") {
+		return nil // a replayed cell: its records stand
+	}
 	if !rt.computerSettingOn(ctx, owner, computer, store.SettingCalibrationE1Restate) {
 		return fmt.Errorf("reduce: restate %s: no restatement is asked on this computer", in.LocalID)
 	}
@@ -273,7 +304,7 @@ func (r *rlmCallReduction) commitCastRestatement(ctx context.Context, rt *Runtim
 		}
 		stated = append(stated, restatementRecord(*p0, p1, r.scope, "restate"))
 	}
-	shown := rt.calibrationArmOfCast(ctx, computer, castID) == calibration.ArmDigest
+	shown := len(stated) > 0 && stated[0].SubjectRefs[calibrationArmRef] == calibration.ArmDigest
 	late := ""
 	if len(stated) > 0 {
 		since, ok := parseCommitmentStamp(stated[0].Precommit.Rule.Since)
@@ -288,34 +319,30 @@ func (r *rlmCallReduction) commitCastRestatement(ctx context.Context, rt *Runtim
 // Precommits (E1-E two-stage).
 func (r *rlmCallReduction) commitEngineerRestatement(ctx context.Context, rt *Runtime, in yaegikernel.StagedIntent) error {
 	owner, computer, kind := r.scope.OwnerID, r.scope.ComputerID, strings.TrimSpace(in.TargetRef)
+	if err := r.refuseSecondRestateInCell(in); err != nil {
+		return err
+	}
+	state := rt.calibrationReadsOf(r.scope.RunID)
+	p0ID := ""
+	if state != nil {
+		state.mu.Lock()
+		p0ID = state.restateAsked[kind]
+		state.mu.Unlock()
+	}
+	if p0ID != "" && r.replayedRestatement(ctx, rt, p0ID+":restate") {
+		return nil // a replayed cell: its record stands
+	}
 	if rt.calibrationDeliveryFor(ctx, owner, computer) != calibrationDeliveryTwoStage {
 		return fmt.Errorf("reduce: restate %s: no restatement is asked on this computer", in.LocalID)
 	}
-	state := rt.calibrationReadsOf(r.scope.RunID)
-	asked := false
-	if state != nil {
-		state.mu.Lock()
-		asked = state.restateAsked[kind]
-		state.mu.Unlock()
-	}
-	if !asked {
+	if p0ID == "" {
 		return fmt.Errorf("reduce: restate %s: no restatement of %q was asked of this run", in.LocalID, kind)
 	}
-	assignmentID := metadataStringValue(r.rec.Metadata, "assignment_id")
-	listed, err := rt.store.ListRulePrecommitRecords(ctx, owner, computer, assignmentID)
-	if err != nil {
-		return fmt.Errorf("reduce: restate %s: %w", in.LocalID, err)
-	}
-	var p0 *types.CommitmentRecord
-	for i := range listed {
-		rec := listed[i]
-		if string(rec.Precommit.Rule.Kind) == kind && rec.SubjectRefs[types.RuleRefStatedBy] == "precommit" && !calibrationRestatement(rec) {
-			p0 = &listed[i] // the first statement: the list is oldest first
-			break
-		}
-	}
-	if p0 == nil {
-		return fmt.Errorf("reduce: restate %s: no Precommit of %s to restate (F4)", in.LocalID, kind)
+	// The ask names this run's own first statement (F4, review r1: never
+	// another attempt's claim of the same kind).
+	p0, err := rt.store.GetCommitmentRecord(ctx, owner, computer, p0ID)
+	if err != nil || p0 == nil || p0.Precommit == nil || p0.Precommit.Rule == nil {
+		return fmt.Errorf("reduce: restate %s: the Precommit %s it restates is not readable (F4): %v", in.LocalID, p0ID, err)
 	}
 	if strings.HasPrefix(p0.RecordID, r.scope.CellID+":") {
 		return fmt.Errorf("reduce: restate %s: restate in a later cell than the Precommit, after its result asked", in.LocalID)
@@ -323,8 +350,8 @@ func (r *rlmCallReduction) commitEngineerRestatement(ctx context.Context, rt *Ru
 	dec := json.NewDecoder(strings.NewReader(in.Body))
 	dec.DisallowUnknownFields()
 	var body restatementBody
-	if err := dec.Decode(&body); err != nil || body.P == nil {
-		return fmt.Errorf("reduce: restate %s: the statement is {\"p\": <p>} (a clock kind may add estimate_minutes, low_minutes, high_minutes): %v", in.LocalID, err)
+	if err := dec.Decode(&body); err != nil || body.P == nil || dec.More() {
+		return fmt.Errorf("reduce: restate %s: the statement is {\"p\": <p>} (a clock kind may add estimate_minutes, low_minutes, high_minutes)", in.LocalID)
 	}
 	p1 := *p0.Precommit
 	rule := *p1.Rule
@@ -347,7 +374,7 @@ func (r *rlmCallReduction) commitEngineerRestatement(ctx context.Context, rt *Ru
 	if err := types.ValidateRulePrecommit(p1); err != nil {
 		return fmt.Errorf("reduce: restate %s: %w", in.LocalID, err)
 	}
-	shown := rt.calibrationArmOfThread(ctx, computer, agentIDForRun(r.rec)) == calibration.ArmDigest
+	shown := p0.SubjectRefs[calibrationArmRef] == calibration.ArmDigest
 	late := ""
 	if types.ClockRule(rule.Kind) && r.runStartedBuildOrShot() {
 		late = "a clock claim restated after the run's first build or shot job"
@@ -411,14 +438,26 @@ func (r *rlmCallReduction) appendRestatements(ctx context.Context, rt *Runtime, 
 			late = "restated after the candidate froze"
 		}
 	}
+	// A prediction is restated once (F4). A set some of whose records an
+	// earlier cell wrote before failing is completed, not refused for ever;
+	// a set wholly written is refused.
+	missing := make([]bool, len(records))
+	anyMissing := false
+	for i := range records {
+		exists, err := rt.store.CommitmentRecordExists(ctx, owner, computer, records[i].RecordID)
+		if err != nil {
+			return fmt.Errorf("reduce: restate %s: %w", in.LocalID, err)
+		}
+		missing[i] = !exists
+		anyMissing = anyMissing || !exists
+	}
+	if !anyMissing {
+		return fmt.Errorf("reduce: restate %s: %s was already restated; a prediction is restated once (F4)", in.LocalID, records[0].SubjectRefs[types.RuleRefRestates])
+	}
 	for i := range records {
 		rec := &records[i]
-		existing, err := rt.store.GetCommitmentRecord(ctx, owner, computer, rec.RecordID)
-		if err == nil && existing != nil {
-			if existing.SubjectRefs[calibrationRestateCellRef] == r.scope.CellID {
-				continue // a replayed cell
-			}
-			return fmt.Errorf("reduce: restate %s: %s was already restated; a prediction is restated once (F4)", in.LocalID, rec.SubjectRefs[types.RuleRefRestates])
+		if !missing[i] {
+			continue
 		}
 		reason := late
 		if reason == "" {
@@ -439,4 +478,22 @@ func (r *rlmCallReduction) appendRestatements(ctx context.Context, rt *Runtime, 
 		}
 	}
 	return nil
+}
+
+// refuseSecondRestateInCell refuses a second Restate of one target in a
+// cell (F4); a replayed cell is told apart by its records, not by this.
+func (r *rlmCallReduction) refuseSecondRestateInCell(in yaegikernel.StagedIntent) error {
+	target := strings.TrimSpace(in.TargetRef)
+	if r.restated[target] {
+		return fmt.Errorf("reduce: restate %s: %s is restated once, and this cell already restated it (F4)", in.LocalID, target)
+	}
+	return nil
+}
+
+// replayedRestatement reports a p1 this same cell already wrote: a replay
+// passes before any gate, so clearing an arm mid-flight never fails a cell
+// that committed (E1 review r1).
+func (r *rlmCallReduction) replayedRestatement(ctx context.Context, rt *Runtime, p1ID string) bool {
+	existing, err := rt.store.GetCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, p1ID)
+	return err == nil && existing != nil && existing.SubjectRefs[calibrationRestateCellRef] == r.scope.CellID
 }

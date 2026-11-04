@@ -666,8 +666,11 @@ type rlmCallReduction struct {
 	// restateKinds are the rule kinds the cell's engineer Precommits stated
 	// first, and restateNotice a management Cast's restatement request
 	// (calibration experiment E1, calibration_e1.go).
-	restateKinds  []string
+	restateKinds  []restateAsk
 	restateNotice string
+	// restated are the targets this cell's Restate intents named, so a
+	// second one in the cell is refused, not taken for a replay.
+	restated map[string]bool
 }
 
 // rlmReductionForCall assembles the cell-start inbox snapshot from the durable

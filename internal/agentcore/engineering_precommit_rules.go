@@ -166,7 +166,7 @@ func (r *rlmCallReduction) commitEngineeringPrecommit(ctx context.Context, in ya
 	}
 	rt.noteCalibrationPredicted(r.scope.RunID, time.Now())
 	if lateReason == "" {
-		r.restateKinds = append(r.restateKinds, string(rec.Precommit.Rule.Kind))
+		r.restateKinds = append(r.restateKinds, restateAsk{kind: string(rec.Precommit.Rule.Kind), p0: rec.RecordID})
 	}
 	return 0, nil
 }

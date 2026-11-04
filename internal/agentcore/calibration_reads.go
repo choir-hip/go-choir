@@ -48,9 +48,10 @@ type calibrationRunReads struct {
 	firstReadAt time.Time
 	reads       int
 	predictedAt time.Time
-	// restateAsked are the rule kinds a two-stage engineer was asked to
-	// restate (E1-E), each once.
-	restateAsked map[string]bool
+	// restateAsked maps each rule kind a two-stage engineer was asked to
+	// restate (E1-E), once, to the p0 record of this run it restates (E1
+	// review r1: never another attempt's claim of the same kind).
+	restateAsked map[string]string
 }
 
 func (rt *Runtime) calibrationReadsOf(runID string) *calibrationRunReads {

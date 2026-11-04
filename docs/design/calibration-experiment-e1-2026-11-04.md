@@ -54,9 +54,9 @@ Mechanism. Management's engineering Cast states the round's predictions
 `calibration.e1_restate`, the cell result that committed the Cast carries a
 restatement request. In the **record** arm it shows management's own record
 for each claim kind it stated (from its Cast claims only, held-out
-excluded): n, mean stated p against the share that held, Brier, and for the
-two clock kinds the median of estimate over actual minutes and the
-interval's coverage. In the **blind** arm the request has no record. Both
+excluded): n, mean stated p against the share that held (for a clock kind, the share
+whose interval held), Brier, resolution, and for the two clock kinds the
+median of estimate over actual minutes. In the **blind** arm the request has no record. Both
 arms ask for exactly one restatement:
 
 ```go
@@ -196,6 +196,8 @@ read marks (`calibration_reads`) per trajectory, for audit.
 
 ## Stopping E1
 
-Clearing the settings ends it; the claims stay on the tape with their
+Clearing the settings ends it (the rollback); a code revert of the E1
+commits must keep the p1 filter in the digest readers, or the p1 records
+already on the tape would count as second claims (F1). Once cleared, the claims stay on the tape with their
 stage and delivery marks. A stopped arm's computer runs the default from
 its next activation.
