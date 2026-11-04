@@ -157,6 +157,62 @@ only way for an app to exist on its builder's own computer, a setting that
 can refuse it is a switch that breaks the model. Delete it (the owner
 forbids new switches; this one is old, and ruling 3 makes it contradictory).
 
+### 1a. Building a new version of an existing app: the overlay, and before and after
+
+Owner, 2026-11-04: "For anything which is modifying anything that already
+exists, like making an updated version of an app, you should take a
+screenshot before and after. Or we should think about, while it's being
+built, it should be built as like an overlay so that both of them exist. And
+then on freeze and publication, that's where it would supplant it. But
+regardless, in order to publish, you should need to show before and after."
+
+Both halves fit M3. They are one rule: an update to an existing app never
+replaces the installed version while it is being built, and never publishes
+without before and after.
+
+- **The candidate runs beside the installed version.** When a package
+  operation changes a package the computer already has installed (or ships in
+  the base), the capsule's `module/v1` build is installed locally as a
+  *candidate instance*: an install record with a candidate marker, a distinct
+  launcher name (`<name> (candidate)`), and its own module digest. The
+  installed set is already a fold of per-computer records and the shell
+  already keys runtime definitions on `install_id|sha256`, so two
+  definitions of one package coexist without a remount of the first
+  (`s12-...md` D4 and "Review round 1"). Installs are per computer, so the
+  candidate is visible only to the owner by construction; no sharing, no
+  catalog listing. The installed version is untouched and keeps serving.
+  A first version of a new app has nothing to sit beside, so it needs no
+  overlay and no "before" screen (it still shows its "after").
+- **Freeze and publication supplant.** On freeze the candidate is a frozen
+  tree; on approval the effect is the one in section 1: publish the release
+  on the computer's track, install it as the real package (this is what
+  replaces the installed version, through the ordinary install-replaces-track
+  rule), then remove the candidate instance. The candidate record is never
+  a published fact; a restore to a head before the supplant folds to the old
+  version, with the candidate gone or present as the tape says.
+- **Before and after are required to publish an update.** A publish of a
+  release whose parent is an existing release or base package (not the empty
+  tree, `pkgrelease.Parent`) must carry before and after screens of the
+  package; the host refuses it otherwise. The release already binds up to
+  screenshots and one video by sha256 (`internal/pkgrelease/media.go`,
+  `Record.Media`, `record.go:84`). The requirement at freeze is another
+  builder's work and is referenced here, not designed: M3 only guarantees the
+  two things that work needs. The before screen is taken from the installed
+  version and the after screen from the candidate, which is why both must
+  exist at once; and the draft route reads the package operation's frozen
+  tree and its media, not an applied stack operation.
+
+Failure modes: the candidate replaces the installed version early (it is a
+separate record and name; the supplant is only the approval's effect);
+the candidate leaks to another user (installs are per computer and the
+candidate is never published); a crash leaves a candidate (it is closed at
+boot as "interrupted by a restart", never resumed, and the installed version
+stands); a publish of an update with no before screen (refused by the host
+and by freeze). Proof on staging, added to M3's: on d@e a candidate of
+`image` runs beside the installed `image`, both open in the launcher, the
+update refuses to publish without a before screen and publishes with one, and
+after approval only the new version remains.
+
 ### 2. Enforcement, both directions
 
 Three layers on the stack side, so a path cannot get in by any door:
@@ -479,9 +535,9 @@ one change and freezes refused with both lists; a hand-made bundle with a
 package patch is refused at corpusd; the host build refuses it at
 `AdmitPatchedTree`. Rollback: revert; the stack accepts package paths again.
 
-**M3. Package operations and the migration (red, tier 2).**
+**M3. Package operations, the candidate overlay and the migration (red, tier 2).**
 Package-only freeze: no host build, publish then install as the effect;
-draft reads the frozen tree; boot one-shot migration; `packages.publish`
+draft reads the frozen tree; candidate overlay and before/after screens for updates (section 1a); boot one-shot migration; `packages.publish`
 setting deleted. Packages: `internal/agentcore`, `internal/capsule/transaction`,
 `internal/selfdev`, `internal/platform`. Staging proof: on a test arm, an
 engineer builds an app change end to end; the operation reaches `applied`
