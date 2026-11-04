@@ -125,9 +125,11 @@ else
 
     # The package modularity gate (docs/design/modularity-check-build-2026-11-04.md)
     # also reads the frontend's build scripts, its own spec and the computer's
-    # module build; a change to any of them reruns the frontend lane.
+    # module build; a change to any of them reruns the frontend lane. So does a
+    # change to the workflow or this classifier, which could otherwise switch
+    # the gate off on a run that does not select it.
     case "$path" in
-      frontend/scripts/*|frontend/tests/package-modularity.spec.js|frontend/playwright.config.js|internal/pkgruntime/*.mjs)
+      frontend/scripts/*|frontend/tests/package-modularity.spec.js|frontend/playwright.config.js|internal/pkgruntime/*.mjs|.github/workflows/ci.yml|.github/scripts/ci-impact-classify)
         mark frontend "$path -> package modularity gate"
         ;;
     esac

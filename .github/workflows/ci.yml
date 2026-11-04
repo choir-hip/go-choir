@@ -837,6 +837,33 @@ jobs:
     if: needs.plan.outputs.frontend == 'true'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # The lock-history check diffs against a merge base.
+          fetch-depth: 0
+
+      # A lock that exists at the base is never changed, deleted or renamed
+      # (only new locks may be added). The base: the pull request's base, or
+      # on main the live staging commit plan chose, else the push's before.
+      - name: Pick the lock-history base
+        id: lockbase
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PLAN_BASE: ${{ needs.plan.outputs.base }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="${PLAN_BASE:-$PUSH_BEFORE}" ;;
+            *) base="" ;;
+          esac
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then base="origin/main"; fi
+          git rev-parse --verify --quiet "${base}^{commit}" >/dev/null || git fetch --no-tags origin "$base"
+          git rev-parse --verify "${base}^{commit}" >/dev/null
+          echo "Lock-history base: $base"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
@@ -854,12 +881,15 @@ jobs:
       - name: Install Chromium
         run: cd frontend && pnpm exec playwright install --with-deps chromium
 
-      - name: SDK surface against its lock
-        run: cd frontend && node scripts/sdk-surface.mjs
+      - name: SDK surface against its lock and the lock history
+        env:
+          LOCK_BASE: ${{ steps.lockbase.outputs.base }}
+        run: cd frontend && node scripts/sdk-surface.mjs --base "$LOCK_BASE"
 
       - name: Package contracts and the modularity receipt
         env:
           CHOIR_MODULARITY_RECEIPT: ${{ runner.temp }}/modularity/modularity-receipt.json
+          CHOIR_MODULARITY_BASE: ${{ steps.lockbase.outputs.base }}
         run: cd frontend && pnpm exec playwright test tests/package-modularity.spec.js --reporter=line --output="$RUNNER_TEMP/modularity/results"
 
       - name: Upload the modularity receipt

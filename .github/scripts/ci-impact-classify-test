@@ -44,7 +44,10 @@ assert_output modularity-spec $'frontend/tests/package-modularity.spec.js\n' \
   'frontend=true' 'go=false' 'sbom=false'
 
 assert_output workflow-only $'.github/workflows/ci.yml\n' \
-  'non_docs=true' 'go=true' 'sbom=true' 'high_risk_race=true' 'flakehub=false' 'ci=true'
+  'non_docs=true' 'go=true' 'sbom=true' 'high_risk_race=true' 'flakehub=false' 'ci=true' 'frontend=true'
+
+assert_output classifier-only $'.github/scripts/ci-impact-classify\n' \
+  'ci=true' 'frontend=true'
 
 assert_output go-cache-action $'.github/actions/setup-go-build-cache/action.yml\n' \
   'non_docs=true' 'go=true' 'sbom=false' 'high_risk_race=true' 'flakehub=false' 'ci=true'

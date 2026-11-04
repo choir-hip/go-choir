@@ -24,6 +24,44 @@ reject() {
 }
 
 require "$ci" 'race_selected: ${{ steps.select-race.outputs.race_selected }}'
+
+# The package modularity gate (docs/design/modularity-check-build-2026-11-04.md)
+# is present, runs whenever the frontend lane is selected (a change to this
+# workflow or the classifier selects it), checks the lock history against a
+# base, runs the spec without continue-on-error, and check requires it.
+modularity_segment="$(sed -n '/^  package-modularity:/,/^  [a-z][a-z0-9-]*:$/p' "$ci")"
+if [[ -z "$modularity_segment" ]]; then
+  echo "ci.yml has no package-modularity job" >&2
+  exit 1
+fi
+for pattern in \
+  "if: needs.plan.outputs.frontend == 'true'" \
+  'fetch-depth: 0' \
+  'node scripts/sdk-surface.mjs --base "$LOCK_BASE"' \
+  'CHOIR_MODULARITY_BASE: ${{ steps.lockbase.outputs.base }}' \
+  'pnpm exec playwright test tests/package-modularity.spec.js'; do
+  if ! grep -Fq -- "$pattern" <<<"$modularity_segment"; then
+    echo "package-modularity job is missing: $pattern" >&2
+    exit 1
+  fi
+done
+if grep -Eq 'continue-on-error' <<<"$modularity_segment"; then
+  echo "package-modularity must not set continue-on-error" >&2
+  exit 1
+fi
+modularity_check_segment="$(sed -n '/^  check:/,/^  sbom-candidate:/p' "$ci")"
+if ! grep -F 'needs:' <<<"$modularity_check_segment" | grep -Eq '[ ,\[]package-modularity[],]'; then
+  echo "check must need package-modularity" >&2
+  exit 1
+fi
+if ! grep -Fq 'require_success "${{ needs.plan.outputs.frontend }}" package-modularity "${{ needs.package-modularity.result }}"' <<<"$modularity_check_segment"; then
+  echo "check must require package-modularity when the frontend lane is selected" >&2
+  exit 1
+fi
+if ! grep -Fq '.github/workflows/ci.yml|.github/scripts/ci-impact-classify)' "$root/.github/scripts/ci-impact-classify"; then
+  echo "a change to ci.yml or the classifier must select the frontend lane (the modularity gate)" >&2
+  exit 1
+fi
 require "$ci" 'HIGH_RISK_RACE: ${{ steps.classify.outputs.high_risk_race }}'
 require "$ci" 'SAMPLED_RACE: ${{ steps.classify.outputs.sampled_race }}'
 require "$ci" 'RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}'
