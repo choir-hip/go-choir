@@ -262,3 +262,10 @@ func TestInBundleInspectionReadsAndRehashesTheVideo(t *testing.T) {
 		t.Fatal("a malformed video validated")
 	}
 }
+
+// The verifier's mirror and the media bounds stay the producer's.
+func TestVideoBoundsAgreeAcrossMirrors(t *testing.T) {
+	if yaegikernel.MountedVideoMaxBytes != capsule.MaxVideoBytes {
+		t.Fatalf("mirror %d, capsule %d", yaegikernel.MountedVideoMaxBytes, capsule.MaxVideoBytes)
+	}
+}

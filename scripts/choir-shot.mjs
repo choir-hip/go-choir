@@ -364,7 +364,7 @@ export function prepareFfmpeg(deps, env = process.env, platform = process.platfo
 export function trimVideo(ffmpeg, file) {
   const tmp = file + '.trim.webm';
   const r = spawnSync(ffmpeg, ['-v', 'error', '-y', '-i', file, '-t', String(VIDEO_MAX_MS / 1000), '-c', 'copy', tmp], { encoding: 'utf8' });
-  if (r.status !== 0) { fs.rmSync(tmp, { force: true }); throw new Error(`could not cut the video to ${VIDEO_MAX_MS / 1000} s: ${String(r.stderr || r.error).trim().split('\n')[0]}`); }
+  if (r.status !== 0) { fs.rmSync(tmp, { force: true }); fs.rmSync(file, { force: true }); throw new Error(`could not cut the video to ${VIDEO_MAX_MS / 1000} s: ${String(r.stderr || r.error).trim().split('\n')[0]}`); }
   fs.renameSync(tmp, file);
 }
 
