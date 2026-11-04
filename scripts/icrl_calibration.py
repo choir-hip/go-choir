@@ -3,9 +3,9 @@
 (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md; precommitment §3).
 
 Subcommands:
-  selftest   the arm and held-out rules agree with internal/calibration
-             (values pinned in calibration_test.go), and the metric code
-             reproduces E6a's management ECE (0.144) from its bins.
+  selftest   the metric code reproduces E6a's management ECE (0.144) from
+             its bins. (The arm and held-out marks come from the computer's
+             view: they hash with its secret salt.)
   baseline   recompute E6a's management numbers from e6a-raw.json (the
              metric code's reproducibility check), written to
              docs/archive/evidence/icrl-calibration/baseline.json.
@@ -35,7 +35,6 @@ usage:
 import argparse
 import collections
 import datetime as dt
-import hashlib
 import json
 import math
 import os
@@ -66,14 +65,9 @@ BOOT = 2000
 SEED = 20261014
 
 
-# ---- the rules shared with internal/calibration ----
-
-def arm(thread):
-    return "digest" if hashlib.sha256(("choir-icrl-v1:" + thread.strip()).encode()).digest()[0] % 2 == 0 else "control"
-
-
-def held_out(key):
-    return hashlib.sha256(("choir-icrl-heldout-v1:" + key).encode()).digest()[0] % 10 == 0
+# The arm and held-out rules hash with each computer's secret salt
+# (internal/calibration, 2026-11-04), so the script never recomputes them: it
+# reads each observation's "arm" and "held_out" from the computer's view.
 
 
 def bin_of(p):
@@ -164,17 +158,12 @@ def load_view(args):
 # ---- subcommands ----
 
 def cmd_selftest(_):
-    pinned = {"texture:doc-1": "digest", "management-task:t-1": "digest", "research:doc-1": "control", "management:owner-1": "control"}
-    for t, want in pinned.items():
-        assert arm(t) == want, (t, arm(t), want)
-    for k, want in {"rec-1#H1": False, "rec-2#H1": True, "sp-abc": False}.items():
-        assert held_out(k) == want, (k, want)
     rows = []
     for n, p, y in [(57, 0.373, 0.623), (250, 0.569, 0.752), (176, 0.744, 0.844), (67, 0.878, 0.903), (9, 0.964, 0.833)]:
         rows += [(p, y)] * n
     m = measure(rows)
     assert m["n"] == 559 and round(m["ece"], 3) == 0.144, m
-    print("selftest: arm and held-out rules match internal/calibration; E6a ECE 0.144 reproduced")
+    print("selftest: E6a ECE 0.144 reproduced")
 
 
 def cmd_baseline(args):
@@ -305,9 +294,8 @@ def cmd_measure(args):
     obs = [o for o in view.get("observations") or [] if (o.get("committed_at") or "") >= args.since
            and (not args.until or (o.get("committed_at") or "") < args.until)]
     for o in obs:
-        o["arm"] = o.get("arm") or arm(o["thread"])
-        if o["arm"] != arm(o["thread"]):
-            raise SystemExit(f"arm mismatch for {o['key']}: guest {o['arm']}, script {arm(o['thread'])}")
+        if o.get("arm") not in ("digest", "control"):
+            raise SystemExit(f"observation {o['key']} carries no arm: read the view with ?detail=1 from a computer that salts its split")
     groups = collections.defaultdict(list)
     for o in obs:
         groups[(o["desk"], o["claim_type"], o["arm"])].append(o)

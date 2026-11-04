@@ -3,7 +3,9 @@ package computerevent
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -141,6 +143,23 @@ func (c *PrivateArtifactCipher) ExportKeyForEscrow(ctx context.Context, computer
 	out := make([]byte, chacha20poly1305.KeySize)
 	copy(out, material.key[:])
 	return out, nil
+}
+
+// DeriveSecret returns a 32-byte secret for one named use, derived from the
+// computer's current guest key by HMAC-SHA256 over a domain-separated label.
+// The key itself never leaves the keyring, and distinct labels give
+// independent secrets. A rotated key derives a different secret.
+func (c *PrivateArtifactCipher) DeriveSecret(ctx context.Context, computerID, label string) ([]byte, error) {
+	if c == nil || c.keys == nil || strings.TrimSpace(label) == "" {
+		return nil, fmt.Errorf("privacy keyring: derive: a keyring and a label are required")
+	}
+	material, err := c.keys.current(ctx, computerID)
+	if err != nil {
+		return nil, fmt.Errorf("privacy keyring: derive: %w", err)
+	}
+	mac := hmac.New(sha256.New, material.key[:])
+	mac.Write([]byte("choir-derived-secret-v1\x00" + label))
+	return mac.Sum(nil), nil
 }
 
 // LoadGuestPrivateArtifactCipher loads the root guest-owned per-computer key.

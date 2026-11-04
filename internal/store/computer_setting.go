@@ -28,15 +28,6 @@ const SettingIntakeLabels = "intake.labels"
 // cancelled.
 const SettingManagementSerialTasks = "management.serial_tasks"
 
-// SettingCalibrationFeedback turns on the in-context calibration digest
-// of the ICRL experiment (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md):
-// desks in the digest arm read their own settled calibration as a user
-// turn and in choir.Pack(). Off by default, held: engineering is not yet a
-// digest desk and the other desks wait for its results
-// (docs/design/calibration-seed-2026-11-03.md); off computes and shows nothing,
-// and turning it off is the rollback.
-const SettingCalibrationFeedback = "calibration.feedback"
-
 // SettingTelemetryBatch turns on run-telemetry batching for the computer: the
 // ten high-volume trace event kinds are sealed in small windows instead of one
 // acknowledged tape write each, and a crash may lose the open window
@@ -222,7 +213,6 @@ const SettingCompactForce = "store.compact_force"
 var KnownComputerSettings = map[string]bool{
 	SettingIntakeLabels:                 true,
 	SettingManagementSerialTasks:        false,
-	SettingCalibrationFeedback:          false,
 	SettingTelemetryBatch:               true,
 	SettingResearchSystem1:              true,
 	SettingResearchRelatedStory:         false,

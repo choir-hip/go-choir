@@ -151,6 +151,7 @@ func (r *rlmCallReduction) commitEngineeringPrecommit(ctx context.Context, in ya
 	if err != nil {
 		return 0, err
 	}
+	rec.SubjectRefs[calibrationArmRef] = rt.calibrationArmOfThread(ctx, r.scope.ComputerID, assignment.Binding.AssignedAgentID)
 	if _, err := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); err != nil {
 		return 0, fmt.Errorf("reduce: precommit %s: %w", in.LocalID, err)
 	}

@@ -2094,36 +2094,6 @@
    "note": "2026-10-31: R7 is deleted and telemetry rides the one tape in sealed batches (docs/design/one-tape-durability-2026-10-31.md). On for d@e by stored setting; the default flips to on once d@e shows it."
   },
   {
-   "id": "calibration_feedback",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "orange",
-   "surface": "settings-texture",
-   "introduced": "2026-10-28",
-   "settings": [
-    "calibration.feedback"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete",
-   "note": "Owner 2026-10-24: stays off; the ICRL design replaces it. Default off, held 2026-11-03: engineering is not a digest desk yet and the other desks wait for its results (docs/design/calibration-seed-2026-11-03.md)."
-  },
-  {
    "id": "management_serial_tasks",
    "kind": "setting",
    "life": "ops",

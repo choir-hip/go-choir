@@ -17,6 +17,7 @@
 package calibration
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
 	"math"
@@ -88,23 +89,42 @@ func BinOf(p float64) int {
 // calibrated rather than over- or under-confident.
 const calibratedBand = 0.03
 
-// HeldOut reports whether an observation key is in the 10% held out of
-// every digest: those outcomes are measured but never shown.
-func HeldOut(key string) bool {
-	sum := sha256.Sum256([]byte("choir-icrl-heldout-v1:" + key))
-	return sum[0]%10 == 0
+// SaltBytes is the length of a computer's secret salt.
+const SaltBytes = 32
+
+// A computer's held-out set and experiment arms hash with its own secret
+// salt (docs/problems/selfdev-rounds-record-no-predictions-2026-11-04.md):
+// a desk that reads the source cannot tell which of its records are held
+// out, or which arm it is in. The runtime derives the salt from the guest
+// key; the readout takes the arm and held-out mark from the records and the
+// view, never by recomputing them.
+func saltedByte(salt []byte, domain, value string) byte {
+	mac := hmac.New(sha256.New, salt)
+	mac.Write([]byte(domain + "\x00" + value))
+	return mac.Sum(nil)[0]
 }
 
-// Arm names the experiment arm of a desk thread (a run's agent id):
-// "digest" or "control", fixed for the thread
-// (sha256("choir-icrl-v1:" + thread), first byte even is digest).
-func Arm(thread string) string {
-	sum := sha256.Sum256([]byte("choir-icrl-v1:" + strings.TrimSpace(thread)))
-	if sum[0]%2 == 0 {
-		return "digest"
-	}
-	return "control"
+// HeldOut reports whether an observation key is in the 10% held out of
+// every digest: those outcomes are measured but never shown.
+func HeldOut(salt []byte, key string) bool {
+	return saltedByte(salt, "choir-calibration-heldout-v2", key)%10 == 0
 }
+
+// Arm names the experiment arm of a desk thread (a run's agent id; an
+// engineering round's is engineering:<assignment>): "digest" or "control",
+// fixed for the thread on its computer.
+func Arm(salt []byte, thread string) string {
+	if saltedByte(salt, "choir-calibration-arm-v2", strings.TrimSpace(thread))%2 == 0 {
+		return ArmDigest
+	}
+	return ArmControl
+}
+
+// The two arms.
+const (
+	ArmDigest  = "digest"
+	ArmControl = "control"
+)
 
 // Stats is calibration over a set of observations.
 type Stats struct {

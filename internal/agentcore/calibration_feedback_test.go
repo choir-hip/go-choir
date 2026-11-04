@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,8 +14,8 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -93,7 +94,8 @@ func TestCollectCalibrationTakesOnlySettledSelfScores(t *testing.T) {
 		{Value: types.SupportVerdict{Key: "sp-2", Verdict: types.SupportUnsupported, Judge: "jev:m"}},
 		{Value: types.SupportVerdict{Key: "sp-4", Verdict: types.SupportSupported, Judge: "jev:m"}},
 	}
-	obs, pending := collectCalibration(records, checks, verdicts)
+	salt := bytes.Repeat([]byte{7}, calibration.SaltBytes)
+	obs, pending := collectCalibration(salt, records, checks, verdicts)
 
 	byKey := map[string]calibration.Observation{}
 	for _, o := range obs {
@@ -118,7 +120,7 @@ func TestCollectCalibrationTakesOnlySettledSelfScores(t *testing.T) {
 		if !ok || o.Desk != w.desk || o.ClaimType != w.claim || o.Thread != w.thread || o.P != w.p || o.Y != w.y {
 			t.Errorf("%s = %+v, want %+v", key, o, w)
 		}
-		if o.HeldOut != calibration.HeldOut(key) {
+		if o.HeldOut != calibration.HeldOut(salt, key) {
 			t.Errorf("%s held-out flag %v", key, o.HeldOut)
 		}
 	}
@@ -206,20 +208,31 @@ func TestCalibrationScoreRecordNeverReadsAsAVerdictInThePack(t *testing.T) {
 func digestObservations(n int) []calibration.Observation {
 	out := make([]calibration.Observation, n)
 	for i := range out {
-		out[i] = calibration.Observation{Desk: "management", ClaimType: types.CalibrationClaimHypothesis, Thread: "management-task:x",
+		out[i] = calibration.Observation{Desk: "engineering", ClaimType: string(types.PrecommitRuleJudgeAccepts), Thread: "engineering:assignment-x",
 			Key: fmt.Sprintf("k%d", i), P: 0.55, Y: 0.8, CommittedAt: "2026-10-15T10:00:00Z"}
 	}
 	return out
 }
 
-// management-task:t-1 is in the digest arm and management:owner-1 in
-// control (calibration.TestArmAndHeldOutAreTheScriptsRules).
+// calibrationRuns returns an engineering run in the digest arm and one in
+// the control arm of the runtime's salted split.
 func calibrationRuns(rt *Runtime) (digestRun, controlRun *types.RunRecord) {
 	computer := rt.cfg.ComputerID
-	digestRun = &types.RunRecord{RunID: "run-d", OwnerID: calOwner, ComputerID: computer, AgentProfile: agentprofile.Management,
-		AgentRole: agentprofile.ManagementTask, AgentID: "management-task:t-1", Metadata: map[string]any{"llm_provider": "opencode-go", "llm_model": "deepseek-v4.1-flash"}}
-	controlRun = &types.RunRecord{RunID: "run-c", OwnerID: calOwner, ComputerID: computer, AgentProfile: agentprofile.Management,
-		AgentID: "management:owner-1"}
+	for i := 0; digestRun == nil || controlRun == nil; i++ {
+		thread := fmt.Sprintf("engineering:assignment-%d", i)
+		run := &types.RunRecord{RunID: fmt.Sprintf("run-%d", i), OwnerID: calOwner, ComputerID: computer, AgentProfile: agentprofile.Engineering,
+			AgentRole: agentprofile.Engineering, AgentID: thread, Metadata: map[string]any{"llm_provider": "opencode-go", "llm_model": "deepseek-v4.1-flash"}}
+		switch rt.calibrationArmOfThread(context.Background(), computer, thread) {
+		case calibration.ArmDigest:
+			if digestRun == nil {
+				digestRun = run
+			}
+		default:
+			if controlRun == nil {
+				controlRun = run
+			}
+		}
+	}
 	return digestRun, controlRun
 }
 
@@ -229,39 +242,23 @@ func seedCalibrationSnapshot(rt *Runtime, obs []calibration.Observation) {
 	rt.calibration.byComputer = map[string]*calibrationSnapshot{calOwner + "\x00" + rt.cfg.ComputerID: {At: time.Now(), Observations: obs}}
 }
 
-// P3 and the setting: off by default, an owner act, and only the digest
-// arm reads it, in the turn and in choir.Pack().
-func TestCalibrationDigestFollowsTheSettingAndTheArm(t *testing.T) {
+// The digest is not a switch (owner 2026-11-03): an engineering run in the
+// digest arm reads it, one in the control arm does not, and a desk outside
+// the push experiment reads none whatever its arm.
+func TestCalibrationDigestIsPushedToEngineeringByTheSaltedArm(t *testing.T) {
 	ctx := context.Background()
-	rt, s := testRuntime(t)
-	if def, known := store.KnownComputerSettings[store.SettingCalibrationFeedback]; !known || def {
-		t.Fatalf("calibration.feedback known=%v default=%v, want a known setting, off", known, def)
+	rt, _ := testRuntime(t)
+	if _, known := store.KnownComputerSettings["calibration.feedback"]; known {
+		t.Fatal("calibration.feedback is still a setting")
 	}
 	seedCalibrationSnapshot(rt, digestObservations(30))
 	digestRun, controlRun := calibrationRuns(rt)
-	if d := rt.calibrationDigestForRun(ctx, digestRun); d != nil {
-		t.Fatalf("setting off, digest = %+v", d)
-	}
-	if inject := rt.calibrationDigestInjector(digestRun, nil); inject != nil {
-		if turns, _ := inject(false); len(turns) != 0 {
-			t.Fatalf("setting off, injected %d turns", len(turns))
-		}
-	}
-	handler := &APIHandler{rt: rt}
-	req := httptest.NewRequest(http.MethodPost, "/api/computer-settings", strings.NewReader(`{"key":"calibration.feedback","value":true}`))
-	req.Header.Set("X-Authenticated-User", calOwner)
-	rec := httptest.NewRecorder()
-	handler.HandleComputerSettings(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("set calibration.feedback = %d %s", rec.Code, rec.Body)
-	}
-	if got, err := s.GetComputerSetting(ctx, calOwner, rt.cfg.ComputerID, store.SettingCalibrationFeedback); err != nil || !got.Value {
-		t.Fatalf("stored setting = %+v %v", got, err)
-	}
-
 	d := rt.calibrationDigestForRun(ctx, digestRun)
 	if d == nil || d.N != 30 || d.Direction != "under-confident" || !strings.Contains(d.Text, "Under-confident") {
 		t.Fatalf("digest arm digest = %+v", d)
+	}
+	if inject := rt.calibrationDigestInjector(digestRun, nil); inject == nil {
+		t.Fatal("digest arm has no injector")
 	}
 	if d := rt.calibrationDigestForRun(ctx, controlRun); d != nil {
 		t.Fatalf("control arm read a digest: %+v", d)
@@ -269,16 +266,12 @@ func TestCalibrationDigestFollowsTheSettingAndTheArm(t *testing.T) {
 	if inject := rt.calibrationDigestInjector(controlRun, nil); inject != nil {
 		t.Fatal("control arm has an injector")
 	}
-	execCtx := func(run *types.RunRecord) toolregistry.ExecutionContext {
-		return toolregistry.ExecutionContext{AgentID: run.AgentID, OwnerID: calOwner, ComputerID: rt.cfg.ComputerID, RunRecord: run}
+	for i := 0; i < 40; i++ {
+		run := &types.RunRecord{RunID: "run-m", OwnerID: calOwner, ComputerID: rt.cfg.ComputerID, AgentProfile: agentprofile.Management, AgentID: fmt.Sprintf("management-task:t-%d", i)}
+		if d := rt.calibrationDigestForRun(ctx, run); d != nil {
+			t.Fatalf("management, outside the push experiment, read a digest: %+v", d)
+		}
 	}
-	if pack := actingCommitmentPackForDesk(ctx, rt, execCtx(digestRun)); pack == nil || pack.Calibration == nil || pack.Calibration.Text != d.Text {
-		t.Fatalf("digest arm pack calibration = %+v", pack)
-	}
-	if pack := actingCommitmentPackForDesk(ctx, rt, execCtx(controlRun)); pack == nil || pack.Calibration != nil {
-		t.Fatalf("control arm pack calibration = %+v", pack)
-	}
-
 	// Under 20 settled observations there is nothing to read (P5).
 	seedCalibrationSnapshot(rt, digestObservations(19))
 	if d := rt.calibrationDigestForRun(ctx, digestRun); d != nil {
@@ -286,11 +279,31 @@ func TestCalibrationDigestFollowsTheSettingAndTheArm(t *testing.T) {
 	}
 }
 
+// The salt is the computer's own, stable across calls, never the public
+// prefix: a second runtime's random salt splits differently.
+func TestCalibrationSaltIsPerComputerAndStable(t *testing.T) {
+	ctx := context.Background()
+	rt, _ := testRuntime(t)
+	a := rt.calibrationSalt(ctx, "computer-a")
+	if len(a) != calibration.SaltBytes || !bytes.Equal(a, rt.calibrationSalt(ctx, "computer-a")) || bytes.Equal(a, rt.calibrationSalt(ctx, "computer-b")) {
+		t.Fatal("salt not per computer or not stable")
+	}
+	key := make([]byte, 32)
+	cipher, err := computerevent.NewPrivateArtifactCipher("computer-a", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyed := &Runtime{privateArtifactCipher: cipher}
+	again := &Runtime{privateArtifactCipher: cipher}
+	if s1, s2 := keyed.calibrationSalt(ctx, "computer-a"), again.calibrationSalt(ctx, "computer-a"); !bytes.Equal(s1, s2) {
+		t.Fatal("the guest-key salt differs across runtimes (restarts)")
+	}
+}
+
 // P1 and P2: the digest is a user turn after the history, appended once
 // per change; the system prompt is byte-identical with it on or off.
 func TestCalibrationDigestIsALateUserTurnAndTheSystemPromptIsUnchanged(t *testing.T) {
-	ctx := context.Background()
-	rt, s := testRuntime(t)
+	rt, _ := testRuntime(t)
 	digestRun, controlRun := calibrationRuns(rt)
 	texture := &types.RunRecord{RunID: "run-t", OwnerID: calOwner, ComputerID: rt.cfg.ComputerID, AgentProfile: agentprofile.Texture, AgentID: "texture:doc-1"}
 	research := &types.RunRecord{RunID: "run-r", OwnerID: calOwner, ComputerID: rt.cfg.ComputerID, AgentProfile: agentprofile.Research, AgentID: "research:doc-1"}
@@ -308,13 +321,10 @@ func TestCalibrationDigestIsALateUserTurnAndTheSystemPromptIsUnchanged(t *testin
 	}
 	off := prompts()
 	seedCalibrationSnapshot(rt, digestObservations(30))
-	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: calOwner, ComputerID: rt.cfg.ComputerID, Key: store.SettingCalibrationFeedback, Value: true}); err != nil {
-		t.Fatal(err)
-	}
 	on := prompts()
 	for i := range off {
 		if off[i] != on[i] {
-			t.Fatalf("system prompt %d changed with calibration.feedback on", i)
+			t.Fatalf("system prompt %d changed with a digest to read", i)
 		}
 		if strings.Contains(on[i], calibrationDigestHeader) || strings.Contains(on[i], "Your track record") {
 			t.Fatalf("system prompt %d carries the digest", i)
@@ -433,7 +443,7 @@ func TestCalibrationSettlementRoute(t *testing.T) {
 	got := map[string]float64{}
 	for _, o := range view.Observations {
 		got[o.Key] = o.Y
-		if o.Arm != calibration.Arm(o.Thread) {
+		if o.Arm != calibration.Arm(rt.calibrationSalt(ctx, computer), o.Thread) {
 			t.Fatalf("observation %s arm %s, thread %s", o.Key, o.Arm, o.Thread)
 		}
 	}

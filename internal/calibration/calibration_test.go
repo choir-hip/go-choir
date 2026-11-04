@@ -1,6 +1,7 @@
 package calibration
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
 
 // E6a's management bins (box-score.json, calibration_resolved): the digest's
 // ECE over them must be the experiment's preregistered baseline, 0.144.
@@ -154,29 +154,34 @@ func TestRenderIsStable(t *testing.T) {
 	}
 }
 
-// The arm and held-out rules are fixed and mirrored by
-// scripts/icrl_calibration.py; these values were computed there.
-func TestArmAndHeldOutAreTheScriptsRules(t *testing.T) {
-	for thread, want := range map[string]string{"texture:doc-1": "digest", "management-task:t-1": "digest", "research:doc-1": "control", "management:owner-1": "control"} {
-		if got := Arm(thread); got != want {
-			t.Errorf("Arm(%s) = %s, want %s", thread, got, want)
-		}
-	}
-	for key, want := range map[string]bool{"rec-1#H1": false, "rec-2#H1": true, "sp-abc": false} {
-		if got := HeldOut(key); got != want {
-			t.Errorf("HeldOut(%s) = %v, want %v", key, got, want)
-		}
-	}
-	digest, held := 0, 0
+// The arm and held-out sets depend on the computer's secret salt: two salts
+// split differently, one salt splits the same way every time, and the shares
+// are about a half and a tenth.
+func TestArmAndHeldOutHashWithTheSalt(t *testing.T) {
+	a, b := bytes.Repeat([]byte{1}, SaltBytes), bytes.Repeat([]byte{2}, SaltBytes)
+	digest, held, armDiffers, heldDiffers := 0, 0, 0, 0
 	for i := 0; i < 2000; i++ {
-		if Arm(fmt.Sprintf("texture:doc-%d", i)) == "digest" {
+		thread, key := fmt.Sprintf("engineering:assignment-%d", i), fmt.Sprintf("rec-%d", i)
+		if Arm(a, thread) != Arm(a, thread) || HeldOut(a, key) != HeldOut(a, key) {
+			t.Fatal("one salt split two ways")
+		}
+		if Arm(a, thread) == ArmDigest {
 			digest++
 		}
-		if HeldOut(fmt.Sprintf("rec-%d", i)) {
+		if HeldOut(a, key) {
 			held++
+		}
+		if Arm(a, thread) != Arm(b, thread) {
+			armDiffers++
+		}
+		if HeldOut(a, key) != HeldOut(b, key) {
+			heldDiffers++
 		}
 	}
 	if digest < 900 || digest > 1100 || held < 150 || held > 250 {
 		t.Fatalf("digest arm %d/2000, held out %d/2000: want about half and a tenth", digest, held)
+	}
+	if armDiffers < 800 || heldDiffers < 200 {
+		t.Fatalf("another salt moved %d arms and %d held-out marks of 2000: the split does not depend on the salt", armDiffers, heldDiffers)
 	}
 }

@@ -46,7 +46,6 @@ var heldDefaults = []string{
 	SettingTapeGroupCommit,       // owner ruled delete (crash-lossy window)
 	SettingEventTable,            // owner ruled delete; needs a host grant too
 	SettingIntakeEventWakes,      // failed its false-merge bar three times
-	SettingCalibrationFeedback,   // engineering is not in the digest yet; other desks wait for it
 }
 
 func TestFeatureSettingsDefaultOn(t *testing.T) {

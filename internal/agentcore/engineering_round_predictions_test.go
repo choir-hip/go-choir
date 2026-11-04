@@ -83,6 +83,9 @@ func TestRoundPredictionsAreStatedAtTheOpenAndSettledByTheRuntime(t *testing.T) 
 	kinds := map[types.PrecommitRuleKind]types.CommitmentRecord{}
 	for _, rec := range stated {
 		kinds[rec.Precommit.Rule.Kind] = rec
+		if want := f.rt.calibrationArmOfThread(ctx, f.computer, "engineering:"+plan.AssignmentID); rec.SubjectRefs[calibrationArmRef] != want {
+			t.Fatalf("record %s arm %q, want %q", rec.RecordID, rec.SubjectRefs[calibrationArmRef], want)
+		}
 		if rec.Precommit.Rule.Since != cast.Provenance.CommittedAt || rec.Provenance.AgentID != f.management || rec.SubjectRefs["cast"] != cast.RecordID {
 			t.Fatalf("record %s: since %s (cast %s), author %s, refs %v", rec.RecordID, rec.Precommit.Rule.Since, cast.Provenance.CommittedAt, rec.Provenance.AgentID, rec.SubjectRefs)
 		}
@@ -127,7 +130,7 @@ func TestRoundPredictionsAreStatedAtTheOpenAndSettledByTheRuntime(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	obs, _ := collectCalibration(all, nil, nil)
+	obs, _ := collectCalibration(f.rt.calibrationSalt(ctx, f.computer), all, nil, nil)
 	got := map[string]bool{}
 	for _, o := range obs {
 		if o.Desk == "engineering" && o.Thread == "engineering:"+plan.AssignmentID {

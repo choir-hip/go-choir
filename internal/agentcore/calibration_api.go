@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -80,21 +80,22 @@ func (h *APIHandler) HandleCalibration(w http.ResponseWriter, r *http.Request) {
 		digests[desk] = d
 	}
 	resp := map[string]any{
-		"setting":      map[string]any{"key": store.SettingCalibrationFeedback, "value": rt.calibrationFeedbackOn(ctx, ownerID, computerID)},
+		"push_desks":   sortedPushDesks(),
 		"computed_at":  snap.At.Format(time.RFC3339),
 		"digests":      digests,
 		"observations": len(snap.Observations),
 		"pending":      len(snap.Pending),
-		"arm_rule":     `sha256("choir-icrl-v1:" + thread), first byte even = digest`,
+		"arm_rule":     "HMAC-SHA256 of the thread under the computer's secret salt, first byte even = digest; each observation carries its arm",
 	}
 	if r.URL.Query().Get("detail") == "1" {
 		type armed struct {
 			calibration.Observation
 			Arm string `json:"arm"`
 		}
+		salt := rt.calibrationSalt(ctx, computerID)
 		detail := make([]armed, 0, len(snap.Observations))
 		for _, o := range snap.Observations {
-			detail = append(detail, armed{Observation: o, Arm: calibration.Arm(o.Thread)})
+			detail = append(detail, armed{Observation: o, Arm: calibration.Arm(salt, o.Thread)})
 		}
 		resp["observations"] = detail
 		resp["pending"] = snap.Pending
@@ -242,4 +243,14 @@ func (rt *Runtime) dropCalibrationSnapshot(ownerID, computerID string) {
 	rt.calibration.mu.Lock()
 	defer rt.calibration.mu.Unlock()
 	delete(rt.calibration.byComputer, strings.TrimSpace(ownerID)+"\x00"+strings.TrimSpace(computerID))
+}
+
+// sortedPushDesks lists the desks whose digest-arm runs read their digest.
+func sortedPushDesks() []string {
+	out := make([]string, 0, len(calibrationPushDesks))
+	for desk := range calibrationPushDesks {
+		out = append(out, desk)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -32,10 +33,16 @@ import (
 //     states and engineering's own Precommits), settled by the rule scorer
 //     from the events the runtime records.
 //
-// While the computer's calibration.feedback setting is on, a run in the
-// experiment's digest arm reads its desk's digest as a user turn appended
-// after its history (never the system prompt or tools, so the cached
-// prefix holds) and in choir.Pack(). Off, nothing is computed.
+// The digest is not a switch (owner, 2026-11-03: "calibration.feedback stops
+// being a switch"; the setting is retired). A run of a desk in the push
+// experiment (calibrationPushDesks: engineering first, one experiment per
+// desk at a time) reads its desk's digest when its thread is in the digest
+// arm of the within-desk A/B, split by a hash with the computer's secret salt
+// (calibrationSalt); a control-arm run reads none. The digest is a user turn
+// appended after its history (never the system prompt or tools, so the
+// cached prefix holds) and in choir.Pack(). Each round's prediction records
+// carry their arm (calibrationArmRef), so the readout splits them without
+// the salt.
 
 const (
 	// calibrationRefresh is how long a computer's snapshot is reused.
@@ -46,10 +53,60 @@ const (
 	calibrationDigestHeader = "Calibration digest:"
 )
 
-// calibrationCache holds one snapshot per computer.
+// calibrationCache holds one snapshot and one salt per computer.
 type calibrationCache struct {
 	mu         sync.Mutex
 	byComputer map[string]*calibrationSnapshot
+	saltMu     sync.Mutex
+	salts      map[string][]byte
+}
+
+// calibrationPushDesks are the desks whose digest-arm runs read their digest
+// (docs/design/calibration-seed-2026-11-03.md, "The sequence": engineering
+// first; another desk joins when engineering's experiment has read out).
+var calibrationPushDesks = map[string]bool{agentprofile.Engineering: true}
+
+// calibrationArmRef is the subject-ref key of a round record's arm.
+const calibrationArmRef = "calibration_arm"
+
+// calibrationSaltLabel names the derived secret the salt is.
+const calibrationSaltLabel = "calibration-salt-v2"
+
+// calibrationSalt is the computer's secret salt for the held-out set and
+// the arms: derived from the guest key, so it is stable across restarts,
+// never stored and never shown to a desk. Without a guest key (a test
+// runtime, a host without one) it is random per process and logged: the
+// split is then unstable, never public.
+func (rt *Runtime) calibrationSalt(ctx context.Context, computerID string) []byte {
+	if rt == nil {
+		return nil
+	}
+	computerID = strings.TrimSpace(computerID)
+	rt.calibration.saltMu.Lock()
+	defer rt.calibration.saltMu.Unlock()
+	if salt := rt.calibration.salts[computerID]; salt != nil {
+		return salt
+	}
+	var salt []byte
+	if rt.privateArtifactCipher != nil {
+		derived, err := rt.privateArtifactCipher.DeriveSecret(ctx, computerID, calibrationSaltLabel)
+		if err == nil {
+			salt = derived
+		} else {
+			log.Printf("calibration: computer %s: no salt from the guest key (%v); using a per-process salt", computerID, err)
+		}
+	}
+	if salt == nil {
+		salt = make([]byte, calibration.SaltBytes)
+		if _, err := rand.Read(salt); err != nil {
+			log.Printf("calibration: computer %s: random salt: %v", computerID, err)
+		}
+	}
+	if rt.calibration.salts == nil {
+		rt.calibration.salts = map[string][]byte{}
+	}
+	rt.calibration.salts[computerID] = salt
+	return salt
 }
 
 // calibrationSnapshot is a computer's settled self-scores, and the
@@ -162,7 +219,7 @@ func (a *settlementAcc) mean() float64 {
 // claims from the tape. Pure: the snapshot and the tests call it.
 // Only settled items become observations (experiment P4); several
 // scorers' outcomes on one item are averaged.
-func collectCalibration(records []types.CommitmentRecord, checks []store.SupportMemo[types.CitationCheck], verdicts []store.SupportMemo[types.SupportVerdict]) ([]calibration.Observation, []CalibrationPending) {
+func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []store.SupportMemo[types.CitationCheck], verdicts []store.SupportMemo[types.SupportVerdict]) ([]calibration.Observation, []CalibrationPending) {
 	hypSettled := map[string]*settlementAcc{}  // record#hyp, and conv|hyp for protocol
 	doneSettled := map[string]*settlementAcc{} // report record id
 	withdrawn := map[string]bool{}             // conv|hyp
@@ -256,7 +313,7 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 			}
 			obs = append(obs, calibration.Observation{Desk: desk, ClaimType: claim, Thread: thread,
 				ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: p, Y: y, Scorers: []string{types.RuleScorerPrefix + claim},
-				CommittedAt: committed, HeldOut: calibration.HeldOut(rec.RecordID)})
+				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID)})
 			continue
 		}
 		if rec.Cast != nil && rec.IsCast() {
@@ -283,7 +340,7 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 				}
 				obs = append(obs, calibration.Observation{Desk: desk, ClaimType: types.CalibrationClaimHypothesis, Thread: thread, Story: rec.Inbox,
 					ModelID: model, RecordID: rec.RecordID, Key: key, P: h.Probability, Y: settled.mean(), Scorers: settled.scorers,
-					CommittedAt: committed, HeldOut: calibration.HeldOut(key)})
+					CommittedAt: committed, HeldOut: calibration.HeldOut(salt, key)})
 			}
 			continue
 		}
@@ -298,7 +355,7 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 			if p != nil {
 				obs = append(obs, calibration.Observation{Desk: desk, ClaimType: types.CalibrationClaimCompleted, Thread: thread, Story: rec.Inbox,
 					ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: *p, Y: settled.mean(), Scorers: settled.scorers,
-					CommittedAt: committed, HeldOut: calibration.HeldOut(rec.RecordID)})
+					CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID)})
 			}
 		}
 	}
@@ -328,14 +385,9 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 		obs = append(obs, calibration.Observation{Desk: agentprofile.Texture, ClaimType: types.CalibrationClaimCitationSupport, Thread: thread, Story: thread,
 			ModelID: check.ModelID, RecordID: check.Pair.RevisionID, Key: check.Pair.Key, P: *check.SelfP, Y: y,
 			Scorers: []string{firstNonEmptyString(v.Judge, types.SupportSystemAgentID)}, CommittedAt: c.At.UTC().Format(time.RFC3339Nano),
-			HeldOut: calibration.HeldOut(check.Pair.Key)})
+			HeldOut: calibration.HeldOut(salt, check.Pair.Key)})
 	}
 	return obs, pending
-}
-
-// calibrationFeedbackOn reports the computer's calibration.feedback setting.
-func (rt *Runtime) calibrationFeedbackOn(ctx context.Context, ownerID, computerID string) bool {
-	return rt.computerSettingOn(ctx, ownerID, computerID, store.SettingCalibrationFeedback)
 }
 
 // calibrationSnapshotFor returns the computer's snapshot, rebuilt when
@@ -362,7 +414,7 @@ func (rt *Runtime) calibrationSnapshotFor(ctx context.Context, ownerID, computer
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list support verdicts: %w", err)
 	}
-	obs, pending := collectCalibration(records, checks, verdicts)
+	obs, pending := collectCalibration(rt.calibrationSalt(ctx, computerID), records, checks, verdicts)
 	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending}
 	if rt.calibration.byComputer == nil {
 		rt.calibration.byComputer = map[string]*calibrationSnapshot{}
@@ -379,19 +431,30 @@ func calibrationDeskOfRun(rec *types.RunRecord) string {
 	return calibrationDeskOfThread(agentIDForRun(rec))
 }
 
-// calibrationArmOfRun is the run's experiment arm, by its desk thread.
-func calibrationArmOfRun(rec *types.RunRecord) string {
-	return calibration.Arm(agentIDForRun(rec))
+// calibrationArmOfRun is the run's experiment arm, by its desk thread and
+// the computer's salt.
+func (rt *Runtime) calibrationArmOfRun(ctx context.Context, rec *types.RunRecord) string {
+	if rec == nil {
+		return ""
+	}
+	return calibration.Arm(rt.calibrationSalt(ctx, rec.ComputerID), agentIDForRun(rec))
 }
 
-// calibrationDigestForRun returns the digest a run reads, or nil: the
-// setting is off, the run is in the control arm, its desk has no digest,
-// or the record is too small to show (experiment P3, P5).
-func (rt *Runtime) calibrationDigestForRun(ctx context.Context, rec *types.RunRecord) *types.CalibrationDigest {
+// calibrationPushedToRun reports whether a run reads its desk's digest: its
+// desk is in the push experiment and its thread in the digest arm.
+func (rt *Runtime) calibrationPushedToRun(ctx context.Context, rec *types.RunRecord) bool {
 	desk := calibrationDeskOfRun(rec)
-	if desk == "" || calibrationArmOfRun(rec) != "digest" || !rt.calibrationFeedbackOn(ctx, rec.OwnerID, rec.ComputerID) {
+	return desk != "" && calibrationPushDesks[desk] && rt.calibrationArmOfRun(ctx, rec) == calibration.ArmDigest
+}
+
+// calibrationDigestForRun returns the digest a run reads, or nil: the run's
+// desk is not in the push experiment, the run is in the control arm, or the
+// record is too small to show (experiment P3, P5).
+func (rt *Runtime) calibrationDigestForRun(ctx context.Context, rec *types.RunRecord) *types.CalibrationDigest {
+	if rt == nil || rt.store == nil || !rt.calibrationPushedToRun(ctx, rec) {
 		return nil
 	}
+	desk := calibrationDeskOfRun(rec)
 	snap, err := rt.calibrationSnapshotFor(ctx, rec.OwnerID, rec.ComputerID, calibrationRefresh)
 	if err != nil {
 		log.Printf("calibration: %s: %v", rec.RunID, err)
@@ -442,7 +505,7 @@ func lastCalibrationDigestText(history []json.RawMessage) string {
 // P2): at the activation's start, and after a tool batch when a refresh
 // changed it. Nil for runs that never read a digest.
 func (rt *Runtime) calibrationDigestInjector(rec *types.RunRecord, history []json.RawMessage) toolregistry.InjectUserTurnsFunc {
-	if rt == nil || rt.store == nil || calibrationDeskOfRun(rec) == "" || calibrationArmOfRun(rec) != "digest" {
+	if rt == nil || rt.store == nil || !rt.calibrationPushedToRun(context.Background(), rec) {
 		return nil
 	}
 	last := lastCalibrationDigestText(history)

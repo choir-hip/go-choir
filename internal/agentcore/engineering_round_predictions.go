@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -152,6 +153,12 @@ func (rt *Runtime) stateRoundPredictions(ctx context.Context, assignment types.E
 	if err != nil {
 		return fmt.Errorf("round predictions: cast %s: %w", castID, err)
 	}
+	// The round's arm of the within-desk A/B, so the readout splits the
+	// records without the salt.
+	arm := rt.calibrationArmOfThread(ctx, b.ComputerID, b.AssignedAgentID)
+	for i := range records {
+		records[i].SubjectRefs[calibrationArmRef] = arm
+	}
 	for _, rec := range records {
 		exists, err := rt.store.CommitmentRecordExists(ctx, b.OwnerID, b.ComputerID, rec.RecordID)
 		if err != nil {
@@ -181,4 +188,9 @@ func (rt *Runtime) ensureRoundPredictionsFor(ctx context.Context, ownerID, compu
 	if err := rt.stateRoundPredictions(ctx, assignment); err != nil {
 		log.Printf("runtime: assignment %s %v", assignmentID, err)
 	}
+}
+
+// calibrationArmOfThread is a thread's arm on its computer.
+func (rt *Runtime) calibrationArmOfThread(ctx context.Context, computerID, thread string) string {
+	return calibration.Arm(rt.calibrationSalt(ctx, computerID), thread)
 }

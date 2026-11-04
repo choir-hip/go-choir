@@ -111,8 +111,8 @@ type ActingPack struct {
 	IssuerTallies []CommitmentAccrual `json:"issuer_tallies,omitempty"`
 	// Calibration is the desk's calibration digest: aggregate calibration
 	// of its own settled self-scores, never a per-item verdict. Present
-	// only while the computer's calibration.feedback setting is on and the
-	// run is in the experiment's digest arm
+	// only when the run's desk is in the push experiment and its thread in
+	// the digest arm of the salted A/B
 	// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 	Calibration *CalibrationDigest `json:"calibration,omitempty"`
 	// Waits is management's view of the computer's engineering assignments
