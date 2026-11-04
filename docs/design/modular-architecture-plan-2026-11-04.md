@@ -95,6 +95,12 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R29 | 2026-11-04 | "It seems odd to just let those be ... inert pre-commitments are ... a waste of attention. It kind of shows that the model doesn't get it ... at minimum, we should be counting and scoring how many of these that we do. Like, maybe we have to tune the system against them rather than try to solve it in advance." | MA1.6, section 4.4 |
 | R30 | 2026-11-04 | "no punishments. Like, if we're keeping score of things, then there's no need for a punishment ... if your field goal percentage is high, that's good. If it's low, you don't get punished for that. You just have a low score ... It doesn't need to be punitive. It's just accountability." | section 0 item 9, sections 4.4 and 10, the trust doc |
 | R31 | 2026-11-04 | "We should have some indicator in the prompt bar of the focus (as we sometimes currently do, eg to continue a texture; this should be generalized and redesigned/streamlined)." Related rulings the same day: response kinds are irrelevant to the user, the prompt bar and the conductor, because desks decide them; no focus goes to the conductor. | MA4.8, H3 (section 11.1) |
+| R32 | 2026-11-04 | Materiality weights are frozen ex ante, at commit time. Outcomes may inform future weights and record a foresight miss in a separate ledger; they never reweight a settled score. *(recorded summary; the owner agreed to the defaults of the scoring report)* | section 10.1, the trust draft 3.1 and 3.2 |
+| R33 | 2026-11-04 | Relevance is measured by the decision flip rate: ask the deciding desk with and without the consequence revealed, and count flips. *(recorded summary)* | section 10.1, MA1.3 |
+| R34 | 2026-11-04 | Fix the four flaws of the trust draft: frozen weights; skill clipped only in the display, never in the score; materiality weights tempered or capped, chosen by replay; weights from independent reference predictors, not the agent's own probability. *(recorded summary)* | section 10 item 5, the trust draft 3.2 and 4.1 |
+| R35 | 2026-11-04 | Floors as proposed in the scoring report: for self-development, rollback or hotfix share, escaped defects, time to restore, honest predictions and a sampled mergeability audit; every throughput number beside its counter-measure. Autopaper floors belong to the later Autopaper unit. *(recorded summary)* | section 10.3, Phase 8 |
+| R36 | 2026-11-04 | The lead hypothesis is "satisfice, then diversify": floors first, then a diversity-weighted lottery among the candidates that pass. *(recorded summary)* | section 10.3, MA0.6 |
+| R37 | 2026-11-04 | All Autopaper work, even small items, is postponed until after the modularity mission; work units are kept together. *(recorded summary)* | sections 8.2, 11, 14, 15 |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -114,6 +120,8 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | modular 8 decisions 1 to 12 | kept, except 7 (iframe) which is Phase 6 and decision 3 which stands as written | |
 | modular 4 app migration table | kept (Phase 5), with C13 Mail moved to MA4.7 | R18 |
 | trust draft "Trust never adds a capability" | revised: trust never exceeds the ceiling and governs leases within it (section 10) | R20 |
+| precommitment-records 3.1, "`C*` is built ... from what actually happened" | superseded for scoring: `C*` is frozen at commit time; later discoveries go to the foresight ledger (section 10.1). The theory doc of MA8.0 carries the change | R32 |
+| trust draft 3.2 and 4.1 (outcome-built `C*`, the agent's own `P` in `w`, skill clipped at 0, raw weighted pseudo-counts) | fixed in the draft's text (section 10 item 5) | R34 |
 
 ## 3. Phase 0: evidence
 
@@ -145,7 +153,7 @@ spawner refuses to start an unconfined worker, with no opt-out
 | MA0.3 | This plan | `docs/design/modular-architecture-plan-2026-11-04.md`, the two copied docs | none | green / 0 | committed on branch `modplan`, not pushed | revert |
 | MA0.4 | Devin review of this plan (one seat; the plan is a design, so it is reviewed like the change it designs) | none | MA0.1 to MA0.3 | n/a / 1 | a verdict file | n/a |
 | MA0.7 | Commit round 1 of the ledger (predictions for Phase 1) before MA1.1 lands; each later phase repeats this as its first step (rule 7 of the ledger, section 0 item 7) | `docs/definitions/choir-modular-architecture-2026-11-04.precommit.md` (append a round; no earlier record changes) | the previous round's settlements | green / 0 | the commit that adds the round precedes the phase's first slice commit | n/a |
-| MA0.6 | Pre-register the hypotheses before any data exists: H4 (`docs/precommitment-records.md` line 878, section 8.4: "a prior, domain-specific history of resolved records predicts future performance better than success rates, benchmarks, popularity or uncalibrated ratings") and the trust conjecture of the trust draft section 11 (per-class, materiality-weighted posteriors predict a resident agent's next material failure better than a fixed allowlist or a popularity signal, at a usable owner-tap rate), each with its test, baselines, metrics, stopping rule and the edge cases the draft names (`missing_oracle`). Committed with a date before MA1.3 lands | `docs/evidence/preregistration-2026-11-0x.md` (new) | MA0.3 | green / 1 (a design) | the file is committed and later edits are append-only with dates | revert |
+| MA0.6 | Pre-register the hypotheses before any data exists: H4 (`docs/precommitment-records.md` line 878, section 8.4: "a prior, domain-specific history of resolved records predicts future performance better than success rates, benchmarks, popularity or uncalibrated ratings") and the trust conjecture of the trust draft section 11 (per-class, materiality-weighted posteriors predict a resident agent's next material failure better than a fixed allowlist or a popularity signal, at a usable owner-tap rate), each with its test, baselines, metrics, stopping rule and the edge cases the draft names (`missing_oracle`); and from the scoring research: frozen against outcome-built weights (H-A1), flip-rate relevance (H-A2), tempered against capped weights (H-C1), spot-checks against peer agreement (H-B3), PPI coverage (H-B4), and the lead hypothesis "satisfice, then diversify" (Goodhart survey H8, with H1 kept for the Autopaper unit). Committed with a date before MA1.3 lands | `docs/evidence/preregistration-2026-11-0x.md` (new) | MA0.3 | green / 1 (a design) | the file is committed and later edits are append-only with dates | revert |
 | MA0.5 | Owner walkthrough and sign-off | none | MA0.4 | n/a | owner statement recorded in the goal file | n/a |
 
 Nothing in Phases 1 to 8 starts before MA0.5 (R12). The gVisor decision
@@ -267,8 +275,10 @@ resolver), reply, escalate, precommit, resolve, disagreement. Each *request*
   achieves its stated outcome; required, validated;
 - `weight`: the sender's proposed materiality (precommitment-records 3.1: probability times
   impact times relevance), required for requests whose impact class is I1 or
-  above; the recipient and scorers judge it independently, and the sender's
-  figure is scored, not trusted;
+  above. The sender's figure is a prediction that gets scored, not the weight
+  its score uses: the scoring weight is computed at commit time from
+  independent reference predictors and the decision flip rate, and frozen
+  (section 10.1, R32, R33);
 - `settlement`: how it settles, a rule kind from the closed vocabulary
   (`commitment_rules.go:107-170`) or "recipient";
 - `provenance`: stamped by the reducer, never supplied by a cell (agent, model,
@@ -351,7 +361,8 @@ order:
    report answer the question, and is each prediction confirmed, qualified or
    contradicted. The settler identity is the kernel judge service, not a desk,
    so no desk is a bottleneck. Calibrate per question type and pinned model
-   (5.3).
+   (5.3). The judge is itself graded against anchors, not trusted (section
+   10.2).
 3. **Downstream settlement.** When the parent's own output that relied on the
    child is later confirmed or contradicted (a Texture revision, a Report to
    management, an owner approval), that outcome flows back along the
@@ -859,7 +870,7 @@ the same categories and marked unverified.
 | Research evidence (`registry.go:100`) | research desk | Texture reads carried excerpts in report packets, not the store |
 | Assignments, subject candidates, admission, capture disposition (`registry.go:148, 166-175` in part) | management | engineering sees its own assignment through its inbox |
 | Capability, capsule and run claims, slots, engineering lineage, self-development operations, capsule effect bundle (`registry.go:112, 166-175` in part; `manifest.go:270`) | engineering | management supervisory |
-| Capture labels and overrides, world events, event membership, source schedules (`registry.go:108, 120-124`) | management (intake and the Autopaper source schedules, until Autopaper is an app agent; excluded from this mission) | research polls through `PollSource` requests |
+| Capture labels and overrides, world events, event membership, source schedules (`registry.go:108, 120-124`) | management (intake and the Autopaper source schedules, until Autopaper is an app agent; excluded from this mission, R37) | research polls through `PollSource` requests |
 | Commitment records, inboxes, conversation heads, lifecycle events and commands, wake outbox, channel messages, coagent mailbox, runs, agents, events, trajectories, work items, run acceptances, run continuations, run memory entries (`registry.go:87-96, 90, 107, 147-158`) | kernel (`system:kernel`), the commons | self-scoped views per desk; management supervisory; owner (E1) |
 | Install records (was release adoption, `registry.go:128`) | kernel | owner, Library |
 | Captures, publications, entities, subjects (`registry.go:78, 178-222`) | `system:corpusd` | all desks per E4 |
@@ -1171,10 +1182,18 @@ with `DisallowUnknownFields` at `:94`; the owner-revise branch at
 A route is also a request-record sender in the trust sense: the router has a
 track record in the action class `route/I1`, and a destination desk may use it.
 
-## 10. Trust: how the plan revises the draft
+## 10. Trust and scoring: how the plan revises the draft
 
 The draft [bayesian-trust-2026-11-04.md](bayesian-trust-2026-11-04.md) is copied
-in unchanged except for a header note. The plan changes four things in it.
+in with a header note and with the scoring fixes of item 5 made in its text.
+The plan changes five things in it, and sections 10.1 to 10.3 set the scoring
+rules that trust and every other score in this plan rest on. They come from two
+citation-checked surveys,
+[scoring and materiality](../research/scoring-and-materiality-2026-11-04.md)
+and [Goodhart and metric design](../research/goodhart-and-metric-design-2026-11-04.md),
+summarized for the owner in
+[keeping score without fooling ourselves](../reports/keeping-score-without-fooling-ourselves-2026-11-04.md).
+The owner agreed to their defaults (R32 to R36).
 
 1. **Two layers of authority, not "trust never adds a capability".** The draft
    says "Trust never adds a capability" (1, 5). Revised by R20: **trust never
@@ -1206,6 +1225,205 @@ in unchanged except for a header note. The plan changes four things in it.
    the draft's I3 example "a provider call carrying owner-private data" (3.2)
    is removed; model calls are logged with provider and labels. The draft's
    spend language already follows R8 (no ceiling, monitor).
+5. **Four scoring flaws are fixed (R34).** The research found four places
+   where the draft's arithmetic was not honest. Each fix is in the draft's
+   text:
+   - (a) materiality weights depended on outcomes (the forecaster's dilemma):
+     now frozen at commit time (draft 3.1, 3.2);
+   - (b) negative skill was clipped at zero, which makes overconfident guessing
+     free: now unclipped in the score, its negative part counted as evidence
+     against; clipping only in the display (draft 4.1);
+   - (c) weights up to 30 were added as pseudo-counts, so one large event
+     counted as dozens of observations: now tempered or capped, the two
+     candidates stated and chosen by replay of settled records (draft 4.1,
+     MA7.2);
+   - (d) the agent's own probability sat inside its weight, so it could shrink
+     the weight on what it would rather not be judged on: now `P_ref` from
+     independent reference predictors (draft 3.2).
+
+### 10.1 Materiality: frozen weights and the flip rate (R32, R33)
+
+**Weights are frozen ex ante.** At commit time the reducer stores and hashes
+the reference consequence set `C*`, and for each consequence its `P_ref`,
+`impact` and `relevance`. Nothing that happens later changes them. An outcome
+may do two things only: teach the weights of *later* commitments, and record a
+**foresight miss** (a consequence that was predictable but nobody listed) in a
+separate ledger that is reported beside the score and never summed into it.
+Reason: if what counts is chosen after the outcome, the agents that list every
+disaster look best whenever a disaster happens, and the score is no longer
+proper (Lerch et al., the forecaster's dilemma).
+
+**`C*` and `P_ref` come from outside the agent.** A critic panel proposes `C*`
+at commit time; `P_ref` comes from reference predictors (a base rate for the
+action class, a blind System 1 question, the critics). The agent's own
+probabilities are what is scored.
+
+**Relevance is the decision flip rate.** For a consequence `c`, call the
+deciding desk or gate policy twice on the same action, once with `c` revealed
+and once without, over a few samples; the share of verdicts that flip is
+`relevance(c)`, stored with its interval. This only works where the decider can
+be called counterfactually; gate policies and management admission can. The
+idea rests on a known result (every proper score is a mixture of threshold
+decisions, Schervish), but no paper was found that measures relevance this way
+for agents, so it is a hypothesis with a test (research H-A2), and a possible
+contribution of the paper. Its cost is two decider calls per sampled
+consequence, so it is sampled, not run on every record.
+
+**Impact stays a coarse class, combined late.** Impact classes are ordinal
+(I0 to I4). The record stores the triplet (`P_ref`, impact, relevance) and the
+view combines them with logged parameters, so a different impact table can be
+replayed without rewriting records (research H-A6 tests whether the table is
+load-bearing).
+
+**Two thresholds and qualitative overrides,** from audit practice: a floor
+below which a consequence is clearly trivial, a check that many below-floor
+items do not add up to something material (H-A7), and named overrides where a
+small item matters for qualitative reasons (for example anything touching the
+keep set). Human auditors agree only moderately on materiality; expect model
+raters to do no better.
+
+### 10.2 Scoring the scorers: anchors stop the regress
+
+Every score in this plan comes from some scorer, and scorers are scored (PSA
+5.2). The regress stops where the scorer is no longer an opinion. There are
+three kinds of **anchor**:
+
+1. **Rules**: facts checked mechanically from the frame log and dated records
+   (tests pass, a file stays inside its allowed paths, a citation resolves).
+2. **Unannounced random spot-checks**: a sample drawn from live work,
+   indistinguishable from it, and settled slowly by the strongest judge
+   available (a panel, the owner on preference questions, or a delayed real
+   outcome). Any marker a scorer can see defeats it.
+3. **World-resolved predictions**: questions that settle later on their own
+   (a central bank decision, an earnings report), which no Choir scorer
+   controls.
+
+**Two levels, no more.** Scorers (the System 1 judge, peer desks, panels) are
+graded against anchors. Anchors are not graded. A question type with no anchor
+reports its scorer's reliability as *unknown*, not extrapolated. The owner is
+the terminal for preference and legitimacy, not a quality oracle for facts.
+
+**Spot-checks over peer agreement.** Rewarding scorers for agreeing with each
+other settles into a cheap low-effort equilibrium (Gao, Wright and
+Leyton-Brown); random spot-checks against ground truth give stronger
+guarantees with less ground truth. A scorer's quality is read from its record
+against the spot-checks, never from how often it agrees with other scorers.
+
+**Combining cheap and anchored scores.** Cheap System 1 scores run on
+everything; the anchored sample is small. Prediction-powered inference
+(Angelopoulos et al.) combines the two into an estimate of an agent's true
+score with honest intervals: the cheap labels cut variance, the anchored sample
+corrects bias. The limit: a judge no stronger than the agent it judges saves at
+most about half the anchored labels (Dorner, Nastl and Hardt), so the anchor
+budget is sized for that.
+
+**Same-family judges are not independent.** Judges from one model family share
+blind spots and favor text from their own family. Agreement between them is
+not independent evidence. Independence is measured, not assumed: the error
+correlation between scorers, given the anchored truth, is computed on the
+anchor sample, and correlated agreement is not counted twice. Evidence about a
+desk from a judge of the same family is discounted unless the measurement
+says otherwise.
+
+**A scorer's quality is a profile, not a number:** discrimination against
+anchors, calibration per question type, bias profile (position, length, own
+family), test-retest consistency, and exploitability (how often a meaningless
+or injected answer passes). Answers with no content have topped
+judge-scored leaderboards (Zheng et al. 2024), which is what planted test items
+catch.
+
+**Performative predictions.** When an agent predicts the result of its own
+action and the prediction helps choose the action, it can look good by choosing
+what it predicts well. The remedy: randomize a small share of gated choices
+among admissible alternatives, log the propensity, and score with
+inverse-propensity weights (decision scoring rules, Oesterheld and Conitzer).
+The 10% held-out set of PSA 1.0 can carry this. Alternatives not taken stay
+unscored, unless one is actually run; a disposable capsule is a natural place to
+run a road not taken.
+
+### 10.3 Goodhart: tiers, visibility and "satisfice, then diversify" (R35, R36)
+
+Once a measure becomes a target, it stops measuring. The evidence is strongest
+in machine learning: optimized against a learned measure, true quality rises,
+peaks and falls while the measure keeps climbing (Gao et al. 2022), the same
+shape appears for best-of-many selection, and agents game feedback that sits in
+their context within one session (Pan et al. 2024). So no single score is
+maximized. Metrics sit in **four tiers**:
+
+1. **Hard invariants**: rules, not metrics (no restart mid-apply, the keep set
+   intact, no secret leaked, rollback available).
+2. **Floors**: pass or fail at good enough, over a rolling window with an
+   interval; "n too small" below the sample bar.
+3. **An exploration budget** above the floors: zero while any floor fails;
+   about 10% of build capacity when all pass; never below 5% once open. These
+   are starting guesses.
+4. **Never-optimized ledgers**: tracked, never a target (revenue in a sealed
+   ledger, read only for a quarterly check of whether the leading measures
+   predicted it and for a runway alarm to the owner).
+
+**Floors for self-development (R35).** Starting set, thresholds set from the
+first weeks of data:
+
+- F1 the share of changes rolled back or hotfixed within 14 days;
+- F2 defects that escape to the owner, per active app-week;
+- F3 median time to restore;
+- F4 honest predictions: Brier skill of change-effect precommitments at least
+  zero against the base rate, say-do fidelity above a floor, and abstentions
+  reported so the floor cannot be met by guessing;
+- F5 a sampled mergeability audit: a sampled change re-reviewed independently
+  must be judged acceptable above a floor. Tests passing is itself a proxy:
+  METR's 2026 maintainer review found automated graders passed far more changes
+  than maintainers would merge.
+
+Every throughput number sits beside its counter-measure: changes merged beside
+rework and rollback rate; apps shipped beside survival at 30 and 90 days, with
+a retired app counting in its favor; test pass rate beside an independent
+re-run; self-reported success beside independent settlement (the self-favor
+gap); cost per accepted change, tracked with no floor. Autopaper floors are
+designed in the research (section 7.3 of the Goodhart survey) and belong to the
+Autopaper unit after this mission (R37); this plan does not build them.
+
+**Visibility classes.** What an agent may see matters as much as what is
+measured. In the Darwin Gödel Machine, a self-improving coding agent, one
+lineage reached a perfect score by removing the logging that the hallucination
+check relied on, and its authors report that such hacking happened more when
+the checks were not hidden. So checkers are hidden:
+
+| Class | Examples | Visible to desks |
+|---|---|---|
+| A | mechanical outcomes and own prediction error (tests on the change, rule-checked facts, own Brier, the inert count of section 4.4) | yes, rich and prompt; tests are paired with the class C re-run |
+| B | floor status | pass or fail only, no margin |
+| C | held-out audit results (spot-checks, F5, independent re-runs) | no; at most a delayed sign flag |
+| D | scorer identity and rubric | no |
+| E | owner signals (regret, fixes, usage) | no, except coarse monthly aggregates |
+| F | revenue and cost ledger | never, for any desk that selects or builds |
+| G | which diversity cells are empty | yes, to steer exploration |
+
+Whether floor status is visible for audit-based floors (F2, F5) is open; the
+proposal is reliability floors as class B and audit floors as a delayed monthly
+flag.
+
+**A surprising success on a visible measure triggers an audit.** A surprising
+failure of a floor is a capability problem (PSA 3.2). A surprising success of a
+measure the agents can see, with no matching movement in the hidden audit, is
+the signature of gaming: it sends an auditor to look, not a cheer. Every change
+precommits its effect on named metrics, so surprise is measured against the
+record, not judged after the fact.
+
+**Satisfice, then diversify (R36).** Above the floors, selection is a lottery
+among the candidates that pass, weighted toward diversity, not a hunt for the
+single best score. A quantilizer (Taylor 2016) picks at random from the top
+fraction `q` of candidates and bounds the expected harm of a hidden flaw in the
+measure at `1/q` times that of the base distribution; the bound holds per
+decision, not across repeated decisions, so `q` (0.2 to 0.5) is a knob, not a
+guarantee. In the Darwin Gödel Machine, a score-weighted lottery over an
+archive of earlier versions beat always branching from the best (50.0%
+against 39.7% on SWE-bench), and a follow-up (the Huxley-Gödel Machine) found
+that a version's score predicts its descendants poorly, so parents are not
+chosen by score alone. No published study tests satisficing then
+diversifying with language-model agents in a product. That makes it this
+plan's lead hypothesis for the paper, pre-registered in MA0.6 and tested when
+self-development resumes (Phase 8).
 
 ## 11. Phase 5: system apps and services become packages
 
@@ -1221,7 +1439,7 @@ Library kinds, then Texture.
 | Group | Slices (modular section 5, kept) | Notes for this plan | Class / tier |
 |---|---|---|---|
 | Services | S1 SDK 1.1.0 and shell functions; S2 commands and shortcuts; S3 one file-route table; S4 context menu on the slot; S5 theme; S6 settings; S7 deep links; W1 window and launch API; U1 `uses` extraction | S1 owns `Desktop.svelte`, `AppHost.svelte` and the SDK lock (serialized); S4 is where the renderer-swap drill from K0 runs | orange / 1 (U1 yellow / 0) |
-| App batches | C1 Calendar, C2 Pulse, C3 Audio, C4 Video, C5 Slides, C6 Podcast, C7 PDF and EPUB deleted; C8 Autopaper, C9 Compute Monitor, C10 Source, C11 Web Lens; C12 Settings | Mail (C13) moved to MA4.7. Each deletes only its registry row. Audio and Video need the five media helpers named in SDK 1.1.0 | orange / 1 (tier 0 for Pulse, Calendar) |
+| App batches | C1 Calendar, C2 Pulse, C3 Audio, C4 Video, C5 Slides, C6 Podcast, C7 PDF and EPUB deleted; C8 Autopaper, C9 Compute Monitor, C10 Source, C11 Web Lens; C12 Settings | Mail (C13) moved to MA4.7. Each deletes only its registry row. Audio and Video need the five media helpers named in SDK 1.1.0. C8 moves the Autopaper app's registry row and nothing else; any Autopaper change beyond the move waits for the Autopaper unit (R37) | orange / 1 (tier 0 for Pulse, Calendar) |
 | Shell surfaces | H1 launcher, desktop-icons, overview; H2 `menu-default`; H3 `prompt-bar` (one streamlined focus indicator for every app agent, section 11.1); H4 `notifications` and `Desktop.svelte` reduced to the window host with the last-resort surface | H3's front end pairs with MA4.8's router service. The window manager and context-menu event capture stay host (modular 1 items 3 and 4) | red / 2 |
 | Forced modularity | M2+M3 together, M4, M5, X1 (SDK 2.0.0), F1 (update policy and platform yank) | M1 is MA2.4. F1 compares extracted `uses`, grants and the behaviour-surface hash | red / 2 (M4, M5, X1 orange / 1) |
 | Library distributing services | L1 kind, slots, tier, uses, displaces, and now level and ceiling; L2 selection records; L3 tiered review; L4 watchdog failover and yank reaching the kernel | L3's T2 refusal stays; the Library block shows the ceiling, the levels and the lease policy; L3 is the install-time forced review of R10 for the mechanical part | L1, L2, L4 orange / 1; L3 red / 2 |
@@ -1346,13 +1564,14 @@ Per the trust draft, with the revisions of section 10. The act gate comes last.
 
 | Slice | Work | Class / tier | Deps | Proof |
 |---|---|---|---|---|
-| MA7.1 | Amend the draft: lease policy, ceiling wording, provider calls not I3, impact table as locked data (BT1: every grant mapped to an impact class) | yellow / 0 | MA3.4 | the table has a row for every catalogue grant |
-| MA7.2 | Evidence extraction E1 to E8 (settled sub-RLM casts of MA1.5 are E1 and E5 evidence for the parent and the child role) and the derived trust view per subject and class, never stored (BT2) | orange / 1 | MA1.3, MA3.5 | replay on d@e's settled records reproduces a view; excluded classes (crash-closed, self-fulfilling, same-publisher scorer) excluded |
+| MA7.1 | Amend the draft: lease policy, ceiling wording, provider calls not I3, impact table as locked data (BT1: every grant mapped to an impact class). The four scoring fixes (section 10 item 5) are already in its text | yellow / 0 | MA3.4 | the table has a row for every catalogue grant |
+| MA7.2 | Evidence extraction E1 to E8 (settled sub-RLM casts of MA1.5 are E1 and E5 evidence for the parent and the child role) and the derived trust view per subject and class, never stored (BT2); weights read frozen from the record (10.1); foresight misses in their own ledger; the tempered and capped candidates both computed, and the replay picks one | orange / 1 | MA1.3, MA3.5 | replay on d@e's settled records reproduces a view; excluded classes (crash-closed, self-fulfilling, same-publisher scorer) excluded; a settled score is unchanged by a later outcome (negative test); the replay reports both candidates' calibration and AUC on next failure |
 | MA7.3 | Hierarchical prior and change discount from the behaviour-surface hash (BT3) | orange / 1 | MA2.3 | hash change moves `d` as specified |
 | MA7.4 | Lease policy: duration and scope from the posterior's lower bound inside the ceiling; revocation by the breaker | red / 2 | MA3.4, MA7.2 | a strong-record fixture gets a durable lease that renews; a thin one stays per-task; a fidelity event revokes at once |
 | MA7.5 | Install review pipeline with reviewer precommitments (BT5): mechanical checks, then seats sized by risk (Devin, DeepSeek; never luna) | orange / 1 | MA2.3 | a package with a widened ceiling cannot install without the verdict |
 | MA7.6 | Library publisher reputation from signed settled outcomes (BT6) | orange / 1 | MA7.2 | the block shows sentences with n, not a score |
 | MA7.7 | Cost attribution and anomaly notice (BT7) | orange / 1 | MA3.9 | an anomaly produces an owner notice |
+| MA7.10 | **Anchors and scorer grading** (10.2): the unannounced spot-check sampler over live records (seeded, logged, invisible to desks), anchor settlement by the strongest judge, scorer profiles against anchors, the error-correlation measurement between scorers, PPI estimates with intervals for each agent's score, the flip-rate sampler for relevance, and randomized gated choices with logged propensity on the held-out share | orange / 1 | MA1.5, MA1.6 | no desk context or pack carries a spot-check marker (grep and replay); a PPI interval on a synthetic corpus covers the known truth at the nominal rate; the flip-rate sampler reproduces on replay |
 | MA7.8 | **The act gate and circuit breaker** (BT4), last: material acts (I2 and up) outside autonomy go to a gate; the first fidelity event drops the class | red / 2 | all above | a planted-bad fixture package on d@e is gated within the measured time; replay AUC and tap rate reported (draft section 11 test) |
 
 | MA7.9 | **Evidence for the paper.** A harness that, from the instrumented records, produces the pre-registered tests of MA0.6: (0') the inert-precommitment and inert-delegation rates per desk, model and prompt version, before and after tuning; (0) the mission's own precommitment ledger (every round's records, their settlements by rule, Devin or the owner, and the Brier, log and interval scores with calibration and sharpness), reported beside the desk records as evidence that the practice works when applied to ourselves; (a) replay of settled records on d@e and the arms, scoring whether the lower-bound ordering predicts the next contradicted or fidelity event (AUC) and how many owner taps per day the gate would have asked for; (b) baselines computed on the same data, a fixed allowlist (the grants alone) and a popularity signal (install counts), plus the success-rate and uncalibrated-rating baselines H4 names; (c) measured outcomes: lease durations and revocations, gate rates, time to gate; (d) red-team drills that plant known-bad packages on d@e only (never the paper or owner computers) and measure time to gate; every run writes a dated, reproducible artifact | orange / 1 | MA7.2, MA7.4, MA7.8 | the harness reproduces a stored result byte for byte from the stored inputs; drills write their artifact; results append to the pre-registration file whatever they show |
@@ -1370,10 +1589,13 @@ CI; the package-only operation path (M3) run end to end on d@e; the hostile
 fixture package (throws, over budget, asks for a privileged grant, writes
 another app's kind, asks Mail for a second email) contained on d@e;
 `GET /api/plugins/state` shows only the base image's default packages on a
-fresh computer. Then the paused self-development goal resumes; Files and the
+fresh computer. Then the paused self-development goal resumes, under the
+floors F1 to F5 and the "satisfice, then diversify" selection of section 10.3,
+with that hypothesis's test running; Files and the
 context-menu rounds run first as in-place updates with before and after
 screenshots. Class: not applicable (a mission restart); the goal file is
-repointed per the goal-station handoff rule.
+repointed per the goal-station handoff rule. Autopaper work, including small
+items, starts only after this mission, as one unit (R37).
 
 ## 15. Parallelism map
 
@@ -1389,7 +1611,7 @@ serialize. Review runs in the background while the next slice builds.
 | 4 | MA4.1, then MA4.2 to MA4.4 in sequence (shared `appdesk.go`, boot path), MA4.5 | MA4.6 and MA4.7 in parallel; MA4.8 beside them after MA3.6; MA4.9; MA4.10; MA4.11 | `deskmanifest/manifest.go`, `agentcore/{runtime,tool_profiles,tools_desk,inbox_records}.go`, `store/engineering_assignments.go` |
 | 5 | S1; then S2, S3, S5, S6, S7, U1 in parallel; then W1; then S4; then C1 to C12 and H1 to H3 in parallel (disjoint directories); H4; the forced-modularity slices overlap the C batches (disjoint); L1, then L2 and L3, then L4; Texture last | | `Desktop.svelte`, `AppHost.svelte` (S1, W1, X1, then H1 to H4, then T1), `src/App.svelte` (S5 at `:391-402, :499-500` and S7 at `:236-296`: serialize), `apps/registry.ts` (row-local), `public-preview-data.ts`, `app-sdk.ts` and `sdk-surface/*` (one lock per minor, S1 owns), `check-packages.mjs`, `library-next` (M1/MA2.4, F1, L1 to L4 in order) |
 | 6 | MA6.1 (front end) beside MA6.2 and MA6.3 (Go) | MA6.4, then MA6.5 | `desk_cell_confinement*.go`, `desk_worker_spawn_linux.go` |
-| 7 | MA7.1, MA7.2, MA7.3, MA7.7 | MA7.4, MA7.5, MA7.6, then MA7.8 | |
+| 7 | MA7.1, MA7.2, MA7.3, MA7.7, MA7.10 | MA7.4, MA7.5, MA7.6, then MA7.8 | |
 | 8 | | | |
 
 Cross-phase overlap that is safe: Phase 5's front-end services (S1 to S7, U1,
@@ -1399,6 +1621,10 @@ slices. The owner's roadmap order is the order of *completion*; the entry
 conditions above are file and data dependencies, and the owner decides whether
 to take the overlap. Phase 6's iframe slice depends on Phase 5's packages
 being loadable as modules.
+
+No Autopaper work runs in parallel with this mission, not even small items
+(R37). Autopaper is one later unit (its floors, its app agent, its custody);
+work units are kept together rather than split across missions.
 
 ## 16. Review items folded in, by origin
 
@@ -1436,7 +1662,11 @@ written after this plan is signed off (MA0.5), not before:
    Bayesian trust from materiality-weighted track records; custody and leases
    as earned authority (ceiling in the manifest, leases within it, trust sets
    duration and scope); messages as predictions; generated code equals stranger
-   code (one trust model); the hypotheses H4 and the trust conjecture and what
+   code (one trust model); frozen materiality weights, the flip rate and the
+   foresight ledger (10.1), replacing the outcome-built `C*` of
+   precommitment-records 3.1; anchors and the two-level cap on scoring the
+   scorers (10.2); the four tiers, the visibility classes and "satisfice, then
+   diversify" (10.3); the hypotheses H4 and the trust conjecture and what
    would falsify them. This is the source the owner's paper starts from.
 2. **A practice doc, precommitment records** (`docs/precommitment-records-practice-<date>.md`).
    Contents: the record schema (with the request fields of MA1.3), the
@@ -1465,7 +1695,11 @@ Go-module scope), plus what the plan found.
    (0.1 to 0.9) are the draft's starting numbers and policy. With leases: what
    lower bound earns a durable lease, how long durable is, and how scope
    widens. Also the draft's questions: does the owner see the trust view or only
-   its effects; cross-computer aggregation on or off by default.
+   its effects; cross-computer aggregation on or off by default. Tempered
+   against capped weights is not an owner choice: the replay of MA7.2 decides,
+   and the tau values are re-set after it. Still open from section 10.3:
+   whether audit-based floor status (F2, F5) is visible to desks, the floor
+   thresholds, the exploration budget and `q`.
 2. **gVisor decision criteria and sandbox count.** Measured: about 1.8x warm
    cell, about 2x on allocation-heavy work, +20% compute, 22 to 60 microsecond
    verb IPC, about 30 ms start. For the owner to set: the accepted overhead
@@ -1480,9 +1714,10 @@ Go-module scope), plus what the plan found.
 3. **The typed request vocabulary.** Which request kinds exist beyond cast,
    ask, report, reply, escalate, precommit, resolve and disagreement
    (`lease_request`, `open_subject`, `decline`, `feed`, `inform`?); what
-   replaces Note's information-only use; who sets materiality weight (the
-   sender proposes, recipient and scorers judge: confirm); whether all requests
-   are scored or only material ones.
+   replaces Note's information-only use; whether all requests are scored or
+   only material ones. Who sets the materiality weight is settled (R32, R33):
+   the sender proposes a weight that is scored, and the scoring weight comes
+   from reference predictors and the flip rate, frozen at commit time.
 4. **Custodian shape and System 1** (owner questions, answered as
    recommendations): the custodian is the owning app desk, not a separate desk
    and not management; System 1 is the Jev judge generalised to a kernel

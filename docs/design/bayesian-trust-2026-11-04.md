@@ -8,7 +8,12 @@
 > (3) Terms: PSA is the theory; precommitment records are the practice. (4) Scores are accountability
 > statistics, not punishments (owner): negative weights above are evidence strengths, and the
 > decisions that read them (lease duration, autonomy, request order, review depth) are selection on a
-> public record, not penalties. Slice MA7.1 folds these in.
+> public record, not penalties. Slice MA7.1 folds these in. (5) The four flaws the scoring research
+> found are fixed in the text below (owner, 2026-11-04): materiality weights are frozen at commit
+> time (3.1, 3.2); skill is never clipped in the score, only in the display (4.1); weighted evidence
+> is tempered or capped, not added as raw pseudo-counts (4.1); and `w` uses independent reference
+> predictors, not the agent's own probability (3.2). Sources:
+> `docs/research/scoring-and-materiality-2026-11-04.md` sections 1, 2 and 8.1 to 8.3.
 
 
 Status: **design, green.** No code. It inherits [Choir Doctrine](../choir-doctrine.md)
@@ -90,13 +95,23 @@ agent (PSA 5.1). Self-scores stay a learning signal and never move trust
 | Class | Event | Settled by | Direction |
 |---|---|---|---|
 | E1 outcome | a precommitment on a material act resolves `confirmed`, `qualified` or `contradicted` | rule, then blind Jev, peer, panel, owner sample (PSA 5.5 settlement order) | ± by materiality-weighted proper score |
-| E2 coverage | a consequence that happened, or that a critic surfaced, was missing from the commitment | observed consequences, critics | − by its weight (omission scores as predicted at zero, PSA 3.1) |
+| E2 coverage | a consequence in the reference set `C*`, frozen at commit time, was missing from the commitment | the commit-time critic panel; the outcome only settles it | − by its frozen weight (omission scores as predicted at zero, PSA 3.1) |
 | E3 fidelity | declared action or capability versus what the trace shows (declared read-only then wrote; said no network then called out) | rule, mechanically, from the frame log | strong negative evidence about reliability; this is the "concealed" row of PSA 3.2 |
 | E4 refusal | the frame check refused a call outside the agent's grants | rule (the daemon) | strong negative evidence, weighted by the refused grant's impact; an honest bug looks the same, so it is evidence, not a verdict |
 | E5 peer | a PSA request the agent sent was accepted, refused, or its delivered result was later contradicted | the recipient desk's settlement | ± small |
 | E6 owner | owner approve, reject, revert, uninstall with a reason | owner act | ± by the act's impact |
 | E7 platform | yank, forced rollback, blocking-real review finding | platform act, reviewer | strong negative evidence at package and publisher level |
 | E8 cost | committed cost estimate versus metered spend | rule (gateway attribution) | ± small; calibration, not a ceiling |
+
+**Foresight misses are not E2.** A consequence that nobody put in `C*` at
+commit time, and that shows up only after the outcome, never enters the
+posterior and never reweights a settled score. It is recorded in a separate
+**foresight ledger** ("predictable, not predicted", PSA 3.2), reported beside
+the posterior like calibration, and it may extend `C*` for later commitments
+(owner, 2026-11-04). The reason is the forecaster's dilemma (Lerch et al.,
+arXiv:1512.09244): if the consequences that count are chosen after the
+outcomes are seen, an agent that lists every disaster looks brilliant whenever
+a disaster happens, and the score stops being proper.
 
 Excluded, always: questions on work a crash closed (`interrupted`); questions
 whose outcome is the emitter's own later act (self-fulfilling, PSA 5.4);
@@ -105,11 +120,31 @@ evidence settled by a scorer from the same publisher as the subject
 
 ### 3.2 Materiality
 
-Materiality is the PSA formula, unchanged (PSA 3.1):
+Materiality is the PSA formula (PSA 3.1), with three rules the scoring
+research made explicit (owner, 2026-11-04):
 
 ```text
-w(c) = P(c | a) * impact(c) * relevance(c)
+w(c) = P_ref(c | a) * impact(c) * relevance(c)      frozen and hashed at commit time
 ```
+
+- **Frozen ex ante.** `C*`, `P_ref`, `impact` and `relevance` are fixed when
+  the commitment is made. What happens later may teach future weights and may
+  record a foresight miss (3.1); it never reweights a settled score. This
+  overrides the PSA 3.1 sentence that builds `C*` partly "from what actually
+  happened".
+- **Reference predictors, not the agent.** `P_ref(c | a)` comes from
+  predictors independent of the committing agent: a base rate for the action
+  class, a blind System 1 question, or the critic panel that proposes `C*`.
+  The agent's own `P(c | a)` is what gets scored; if it also set the weight,
+  the agent could shrink the weight on consequences it would rather not be
+  judged on.
+- **Relevance is the decision flip rate.** `relevance(c)` is measured by
+  asking the deciding desk (or gate policy) for its verdict twice, once with
+  `c` revealed and once without, over a few samples, and counting how often
+  the verdict flips; it is stored with its interval. This rests on Schervish's
+  result that a proper score is a mixture of threshold decisions; no paper was
+  found that measures relevance this way for agents, so it is a hypothesis to
+  test (H-A2 of the research), not a settled method.
 
 `impact` is the governance scale. This design fixes its first version so the
 memo's open question (PSA 8.3 item 6, "material action classes") closes:
@@ -150,14 +185,33 @@ beta_{s,k}  = beta0_{s,k}  + sum_i  lambda^(t - t_i) * w_i * (1 - q_i) * m_i
 
 - `w_i` is the materiality weight of the settled evidence (3.2).
 - `q_i` in [0, 1] is the settled quality: 1 for confirmed within envelope,
-  the proper-score skill for a probabilistic forecast (Brier skill against the
-  base rate, clipped at 0, so copying the base rate earns nothing, PSA 5.4),
-  0 for contradicted.
+  0 for contradicted. For a probabilistic forecast the evidence is the
+  **unclipped** skill against the base rate, `d_i = S_ref - S_i` (Brier, so in
+  [-1, 1]): in place of `q_i` and `1 - q_i`, the `alpha` increment uses
+  `max(d_i, 0)` and the `beta` increment uses `max(-d_i, 0)`. Copying the base rate earns zero (PSA 5.4), and
+  a forecast worse than the base rate counts as evidence against, as a proper
+  score requires. Clipping at 0 is allowed only in the display, never in the
+  score (owner, 2026-11-04): clipping would make overconfident guessing free.
 - `m_i` is the **evidence-strength multiplier** for negative evidence: 1 for E1 and E5,
   5 for E2 omissions, 20 for E3 fidelity and E7 platform evidence, 5 to 20
   for E4 by refused grant impact. A concealed or out-of-envelope act is far
   stronger evidence about reliability than an honest miss, which matches PSA 3.2: an honest miss is a
   capability failure, a concealment is a fidelity failure.
+- **Weights are tempered or capped, never raw pseudo-counts** (owner,
+  2026-11-04). Added as raw counts, one I4 event (`w` up to 30, times `m` up
+  to 20) would count as hundreds of observations and make the posterior far
+  too confident. Two candidates, chosen by replay of settled records on d@e
+  (the research's H-C1: which one better predicts the next failure, scored by
+  calibration and AUC):
+  - **tempered**: each increment uses `w_i * m_i / W`, where `W` is the mean
+    of `w * m` over the subject's class history, and the whole likelihood is
+    raised to a power `eta` in (0, 1] fitted on the replay (a power
+    posterior), so weights set the share of the evidence, not its count;
+  - **capped**: each increment uses `min(w_i * m_i, k)` with a cap `k`
+    (starting at 3), so no single event counts as more than `k` observations.
+  The replay also checks that the lower-bound decisions (4.3) are stable when
+  `impact` moves within plausible bounds. The tau values below are re-set
+  after the choice, because both candidates lower the counts.
 - `lambda` is a decay per day (starting at 0.995, about a 140-day half-life),
   so a long good record does not shield a recent turn, and an old mistake
   does not haunt a reformed agent forever.
@@ -249,12 +303,13 @@ The PSA guards (PSA 5.4) apply. The security setting adds:
 |---|---|
 | Farm trust with many easy predictions, then defect on a big act | trust is per class and materiality-weighted; I0 earns nothing; I3 and I4 autonomy needs evidence *in that class*; the circuit breaker fires on the first fidelity event |
 | Treacherous turn after a long clean record | grants bound the damage; I4 is never third-party; decay keeps the record recent; high-impact classes need tau near 1, so most agents stay gated there forever, which is the point |
-| Strategic omission: commit narrowly, act broadly | E2 coverage scores omitted consequences at zero with a 5x multiplier; E3 fidelity is mechanical from the frame log |
+| Strategic omission: commit narrowly, act broadly | E2 coverage scores omissions from the commit-time `C*` at zero with a 5x multiplier; `w` comes from reference predictors, so the agent cannot shrink the weight of what it leaves out; E3 fidelity is mechanical from the frame log |
 | Vague commitments that cannot be contradicted | skill against the base rate; specificity tracked (PSA 5.3); an unresolvable self-written question scores as a miss in the statistic (PSA 5.4) |
 | Sybil publishers | a new publisher identity starts at the platform base; publisher identity is a numbered maild address bound to an account; making identities buys nothing |
 | Collusion: two packages from one publisher vouch for each other | evidence settled by a same-publisher scorer is excluded; peer evidence counts distinct origins |
-| Gaming the scorer in context | independent scores stay out of the acting context, sampled and delayed (PSA 4.7, 5.4); the agent sees observations and discrepancies, not its trust view |
-| Captured or lazy scorer | scorers are subjects; a scorer's settled accuracy weights its evidence; disagreements go to a third opinion |
+| Gaming the scorer in context | independent scores stay out of the acting context, sampled and delayed (PSA 4.7, 5.4); the agent sees observations and discrepancies, not its trust view; audit results and scorer identity are hidden (plan section 10.3, visibility classes) |
+| Picking actions it predicts well (performative prediction) | a small share of gated choices is randomized with logged propensity and scored with inverse-propensity weights; alternatives not taken stay unscored unless run in a capsule (plan section 10.2) |
+| Captured or lazy scorer | scorers are subjects, graded against anchors (rules, unannounced spot-checks, world-resolved predictions), not by agreement with other scorers; a scorer's anchored accuracy weights its evidence; evidence from a scorer of the subject's own model family is discounted unless independence is measured; disagreements go to a third opinion (plan section 10.2) |
 | Honest bug looks like an attack (E4) | E4 is evidence with a bounded multiplier, not a verdict; repeated refusals in one class gate that class, which is the right outcome for a buggy agent too |
 
 Trust on **untrusted content** stays advisory (PSA 5.4: "scores on untrusted
@@ -380,3 +435,5 @@ SCOPE   resident agents on Choir computers, action classes with rule-settled
 3. Cross-computer aggregation (8): publishing settled outcomes, without
    content, from every computer that installs a package. On by default?
 4. Decay rate (half-life about 140 days).
+5. Tempered or capped weights (4.1): settled by replay, not by choice; the
+   owner sees both results.
