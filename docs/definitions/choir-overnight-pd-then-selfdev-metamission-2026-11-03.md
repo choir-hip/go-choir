@@ -126,19 +126,18 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging cc54f06d4 (shot memory default 1536 when cached, per-shot
-    lines, fail-fast; no-window shot fails; refresh between rounds; relay
-    attestation wait; problem 30 stack base at bind; realistic catalog
-    fixture). In CI: 062c669da (engineering cell wall clock 5 min, broker
-    read deadline 60 s; crouton lost a round to a 46-min Poll on a silent
-    broker), behind it e0d043110 (Freeze names release base and booted
-    commit, import refusal hint, scope-check script) and 0280581aa (shots
-    wait for the desktop to connect). Applied tonight: Slides (claude,
-    pool), Library (luna, deepseek, claude). Judge strengthened to a
-    per-shot six-question table. Host memory accounting confirmed correct
-    (3-4 building arms fit); cap lowered to two; building: stale idle
-    baseline and job-within-own-reservation fix, broker in its own cgroup
-    (root cause of the silent broker, unconfirmed).
+    staging 5539de53a (00:32Z): engineering cell wall clock and broker read
+    deadline, Freeze names its base, choir-shot waits for a connected
+    desktop and a settled window, fails windowless shots, defaults shot
+    memory to 1536 when cached; new windows open clear of the desktop
+    icons. Rounds paused since about 00:15Z: the capsule broker is killed
+    when a host thread that forked it exits (Pdeathsig follows the thread;
+    the cache-return reclaim ends locked threads and ran through live
+    capsules after ab1e95c04), which lost crouton twice and deepseek once.
+    Fix in tier-2 review; rounds resume when it deploys. Also in review:
+    stale idle baseline plus jobs within their own reservation. Published
+    tonight: Library (luna r2 and r3, deepseek, claude), Slides (claude,
+    pool). Judge is per-shot; stale screens and stacked windows reject.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
