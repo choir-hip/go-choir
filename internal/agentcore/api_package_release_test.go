@@ -131,7 +131,20 @@ func (w *draftWorld) setting(on bool) {
 
 // operation records an operation in state whose frozen bundle carries the
 // base-relative patch of files, created after every earlier one.
+// operation records an operation; an applied one carries one accepted
+// screenshot in its frozen bundle, since a release is drafted only with one.
 func (w *draftWorld) operation(id, state string, files map[string]string) []byte {
+	w.t.Helper()
+	if state == selfdev.StateApplied {
+		w.mediaOperation(id, files, map[string][]byte{"home.png": mediaPNG(w.t, 64, 40, 3, false)}, nil)
+		patch, _ := releasePatch(w.t, w.repo, files)
+		return patch
+	}
+	return w.bareOperation(id, state, files)
+}
+
+// bareOperation is an operation whose bundle names no screens.
+func (w *draftWorld) bareOperation(id, state string, files map[string]string) []byte {
 	w.t.Helper()
 	patch, _ := releasePatch(w.t, w.repo, files)
 	digest := releaseFrozenBundle(w.t, w.updaterRoot, draftComputer, id, w.base, patch)

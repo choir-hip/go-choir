@@ -47,6 +47,9 @@ func hostPNG(t *testing.T, w, h int, seed uint8) []byte {
 	return buf.Bytes()
 }
 
+// defaultShot is the screenshot every test release carries.
+func defaultShot(t *testing.T) []byte { return hostPNG(t, 16, 16, 7) }
+
 func hostWebM() []byte {
 	head := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm', 0x42, 0x87, 0x81, 0x04, 0x42, 0x85, 0x81, 0x02}
 	return append(head, bytes.Repeat([]byte{5}, 256)...)
@@ -198,14 +201,20 @@ func TestPackageMediaUploadCap(t *testing.T) {
 	}
 }
 
-func TestPackageWithoutMediaHasAnEmptyMediaArray(t *testing.T) {
+// H4: a release that names no screenshot is refused with its reason and
+// stored nowhere; a video alone is no screenshot.
+func TestPackageWithoutAScreenshotIsRefusedAndNotStored(t *testing.T) {
 	w := newPkgWorld(t)
-	b := w.build("<p>v2</p>\n", "owner-a", nil)
-	rec := w.publish(b)
-	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"media":[]`) {
-		t.Fatalf("H4 publish without media = %d %s", rec.Code, rec.Body.String())
+	none := w.withMedia(w.build("<p>v2</p>\n", "owner-a", nil))
+	wantPkgRefusal(t, w.publish(none), http.StatusUnprocessableEntity, pkgrelease.ReasonScreenshotRequired)
+	if rec := w.read(packagesRoute + "/releases/" + none.id + "?owner_id=owner-a"); rec.Code != http.StatusNotFound {
+		t.Fatalf("H4 a refused release was stored: %d", rec.Code)
 	}
-	if rec := w.read(packagesRoute + "/catalog?owner_id=owner-b"); !strings.Contains(rec.Body.String(), `"head_media":[]`) {
-		t.Fatalf("H4 catalog without media = %s", rec.Body.String())
+	video := hostWebM()
+	w.do(pkgCall{method: http.MethodPut, path: packagesRoute + "/media/" + computerevent.DigestBytes(video), internal: true, body: video})
+	only := w.withMedia(w.build("<p>v3</p>\n", "owner-a", nil), mediaVideo(video))
+	wantPkgRefusal(t, w.publish(only), http.StatusUnprocessableEntity, pkgrelease.ReasonScreenshotRequired)
+	if rec := w.read(packagesRoute + "/catalog?owner_id=owner-b"); !strings.Contains(rec.Body.String(), `"packages":[]`) {
+		t.Fatalf("H4 the catalog lists a refused release: %s", rec.Body.String())
 	}
 }

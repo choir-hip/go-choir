@@ -195,6 +195,8 @@ func (w *pkgWorld) build(content, owner string, parent *built) built {
 		Manifest:  manifest,
 		Publisher: pkgrelease.Publisher{OwnerID: owner, ComputerID: computerOf(owner)},
 		Operation: pkgrelease.Operation{OperationID: "op-" + content[:4], BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
+		// Every release carries one screenshot: the store lists none without.
+		Media: []pkgrelease.Media{mediaShot("home.png", defaultShot(t), 16, 16)},
 	}
 	if parent != nil {
 		record.Parent = pkgrelease.Parent{Kind: pkgrelease.ParentRelease, ReleaseID: parent.id, Tree: parentTree}
@@ -244,6 +246,10 @@ func (w *pkgWorld) do(c pkgCall) *httptest.ResponseRecorder {
 
 func (w *pkgWorld) putBlobs(b built) {
 	w.t.Helper()
+	shot := defaultShot(w.t)
+	if rec := w.do(pkgCall{method: http.MethodPut, path: packagesRoute + "/media/" + computerevent.DigestBytes(shot), internal: true, body: shot}); rec.Code != http.StatusCreated {
+		w.t.Fatalf("default screenshot upload = %d %s", rec.Code, rec.Body.String())
+	}
 	for _, raw := range [][]byte{b.blobs.TreePatch, b.blobs.ReviewPatch, b.blobs.ParentPatch} {
 		if raw == nil {
 			continue

@@ -95,11 +95,19 @@ func TestPackagePublishCarriesTheVerifiedMedia(t *testing.T) {
 		}
 	}
 
-	// P3: no media, no media call.
-	env.draft = func(string) []byte { return packageDraftFor(t, env.user, nil, false) }
-	reset()
-	if rec := env.send(t, http.MethodPost, path, body, owner); rec.Code != http.StatusCreated || strings.Contains(env.joined(), "/media/") {
-		t.Fatalf("P3 publish without media = %d, calls:\n%s", rec.Code, env.joined())
+	// P3: no screenshot, no listing: refused with the reason before any
+	// media or write reaches corpusd. A video alone is no screenshot.
+	for name, mutate := range map[string]func(*pkgrelease.Record){
+		"no media":   func(r *pkgrelease.Record) { r.Media = nil },
+		"video only": func(r *pkgrelease.Record) { r.Media = []pkgrelease.Media{items[1]} },
+	} {
+		env.draft = func(string) []byte { return packageDraftFor(t, env.user, mutate, false) }
+		reset()
+		rec := env.send(t, http.MethodPost, path, body, owner)
+		if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), pkgrelease.ReasonScreenshotRequired) ||
+			strings.Contains(env.joined(), "corpusd PUT") || strings.Contains(env.joined(), "corpusd POST") {
+			t.Fatalf("P3 publish with %s = %d %s, calls:\n%s", name, rec.Code, rec.Body.String(), env.joined())
+		}
 	}
 }
 

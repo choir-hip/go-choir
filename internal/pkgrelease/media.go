@@ -163,3 +163,24 @@ func (r Record) MediaItem(digest string) (Media, bool) {
 	}
 	return Media{}, false
 }
+
+// HasScreenshot says the record names at least one screenshot.
+func (r Record) HasScreenshot() bool {
+	for _, m := range r.Media {
+		if m.Kind == MediaKindScreenshot {
+			return true
+		}
+	}
+	return false
+}
+
+// RequireScreenshot refuses a release with no screenshot: the Library is an
+// app store, and an app is listed only with a picture of it (owner,
+// 2026-11-04). Records published before the rule stay stored; they are not
+// listed. Validate does not call it, so those records still decode.
+func RequireScreenshot(r Record) error {
+	if r.HasScreenshot() {
+		return nil
+	}
+	return refuse(ReasonScreenshotRequired, "a release needs at least one screenshot to be listed in the Library; the round that made it accepted none, so run the app and have the round capture its screens before publishing")
+}

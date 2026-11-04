@@ -184,6 +184,13 @@ func (h *Handler) HandleComputerPackagePublish(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// A release is listed only with a screenshot; refuse before the owner's
+	// publish stores anything.
+	if err := pkgrelease.RequireScreenshot(record); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error(), "reason": pkgrelease.ReasonScreenshotRequired})
+		return
+	}
+
 	// The release's screenshots and video: each fetched from the
 	// publisher computer, which answers only the items its bound frozen
 	// bundle carries, and verified against the record before any is stored
@@ -357,6 +364,9 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
 		return
+	}
+	if status == http.StatusOK {
+		raw = h.decoratePublisherEmail(raw, authResult.UserID)
 	}
 	relayJSON(w, status, raw)
 }

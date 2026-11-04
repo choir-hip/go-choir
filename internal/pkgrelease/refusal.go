@@ -21,6 +21,9 @@ const (
 	ReasonKindsNeedPlatform  = "package_kinds_need_platform"
 	ReasonUnchanged          = "package_unchanged"
 	ReasonTrackMoved         = "track_moved"
+	// ReasonScreenshotRequired: a release is listed only with at least one
+	// screenshot of the app it ships (owner, 2026-11-04: an app store).
+	ReasonScreenshotRequired = "screenshot_required"
 	// ReasonRecordUnlisted: the record was stored and its listing was not
 	// (a crash between the two writes), and the track has since moved, so
 	// it can no longer be listed where it would have been.

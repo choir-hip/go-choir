@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
@@ -54,6 +55,10 @@ type packageProxyEnv struct {
 	corpusdMedia map[string][2]string
 	// corpusdBlobs answers corpusd's release blob read (bytes and type).
 	corpusdBlobs map[string][2]string
+	// answer is corpusd's body for a catalog or release read; "" is the
+	// empty catalog.
+	answer string
+	store  *auth.Store
 }
 
 func (e *packageProxyEnv) record(call string) {
@@ -83,6 +88,7 @@ func (e *packageProxyEnv) send(t *testing.T, method, path, body, secret string) 
 func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 	t.Helper()
 	env := &packageProxyEnv{}
+	env.guestMedia = map[string][]byte{computerevent.DigestBytes(defaultProxyShot(t)): defaultProxyShot(t)}
 	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		env.record("guest " + r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery + " owner=" + r.Header.Get("X-Authenticated-User") + " computer=" + r.Header.Get("X-Authenticated-Computer"))
 		if _, digest, ok := strings.Cut(r.URL.Path, "/media/"); ok {
@@ -152,6 +158,8 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 				return
 			}
 			_, _ = w.Write([]byte(env.head))
+		case env.answer != "":
+			_, _ = w.Write([]byte(env.answer))
 		default:
 			_, _ = w.Write([]byte(`{"packages":[]}`))
 		}
@@ -164,6 +172,7 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 		t.Fatal(err)
 	}
 	env.user = user.ID
+	env.store = store
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID,
@@ -192,6 +201,15 @@ var (
 	proxyParentPatch = []byte("diff --git a/frontend/src/packages/reader/App.svelte b/frontend/src/packages/reader/App.svelte\nparent\n")
 )
 
+// defaultProxyShot is the screenshot every test draft names; the guest
+// serves it unless a test replaces guestMedia.
+func defaultProxyShot(t *testing.T) []byte { return proxyPNG(t, 4, 4) }
+
+func defaultProxyShotItem(t *testing.T) pkgrelease.Media {
+	raw := defaultProxyShot(t)
+	return pkgrelease.Media{Kind: pkgrelease.MediaKindScreenshot, Name: "home.png", MediaType: pkgrelease.MediaTypePNG, SHA256: computerevent.DigestBytes(raw), Bytes: len(raw), Width: 4, Height: 4}
+}
+
 func blobRef(raw []byte) pkgrelease.Blob {
 	return pkgrelease.Blob{SHA256: computerevent.DigestBytes(raw), Bytes: len(raw)}
 }
@@ -217,6 +235,8 @@ func packageDraftFor(t *testing.T, owner string, mutate func(*pkgrelease.Record)
 		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), ABI: "choir.app-frontend/svelte-inline/v1"},
 		Publisher: pkgrelease.Publisher{OwnerID: owner, ComputerID: "computer-a"},
 		Operation: pkgrelease.Operation{OperationID: "op-1", BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
+		// Every release carries a screenshot; a test of the gate clears it.
+		Media: []pkgrelease.Media{defaultProxyShotItem(t)},
 	}
 	if mutate != nil && !after {
 		mutate(&record)
@@ -546,4 +566,54 @@ func TestPackageHistoryForwardsTheTrackAndThePage(t *testing.T) {
 			t.Fatalf("history calls %v lack %q", calls, want)
 		}
 	}
+}
+
+// The app store shows who made an app by the account's email address (owner,
+// 2026-11-04). The proxy resolves the publisher's owner id to the address
+// from the auth store and adds it to the catalog, history and release
+// answers as display-only fields; an owner it cannot resolve gets none.
+func TestCatalogAnswersCarryThePublishersEmailAndNoOwnerIDIsNeededToShowIt(t *testing.T) {
+	env := newPackageProxyEnv(t)
+	reader := env.secret(t, "computer:self_development:read")
+	maker, err := env.store.CreateUser("maker", "maker@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := strings.Repeat("a", 64)
+	env.answer = `{"count":2,"reader":"` + env.user + `","packages":[{"package":"reader","track":"` + maker.ID + `","releases":1},{"package":"reader","track":"` + env.user + `","releases":1},{"package":"gone","track":"no-such-owner","releases":1}]}`
+	rec := env.send(t, http.MethodGet, "/api/catalog/packages", "", reader)
+	var catalog struct {
+		Packages []struct {
+			Track          string `json:"track"`
+			PublisherEmail string `json:"publisher_email"`
+			Own            bool   `json:"own"`
+		} `json:"packages"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &catalog) != nil || len(catalog.Packages) != 3 {
+		t.Fatalf("catalog = %d %s", rec.Code, rec.Body.String())
+	}
+	want := []struct {
+		email string
+		own   bool
+	}{{"maker@example.com", false}, {"package@example.com", true}, {"", false}}
+	for i, w := range want {
+		if got := catalog.Packages[i]; got.PublisherEmail != w.email || got.Own != w.own {
+			t.Fatalf("catalog entry %d = %+v, want email %q own %v", i, got, w.email, w.own)
+		}
+	}
+
+	// A release: by its record's publisher.
+	env.answer = `{"release_id":"` + id + `","record":{"publisher":{"owner_id":"` + maker.ID + `","computer_id":"computer-x"}},"media":[]}`
+	rec = env.send(t, http.MethodGet, "/api/catalog/releases/"+id, "", reader)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"publisher_email":"maker@example.com"`) || !strings.Contains(rec.Body.String(), `"own":false`) {
+		t.Fatalf("release = %d %s", rec.Code, rec.Body.String())
+	}
+	// A history: by its track.
+	env.answer = `{"package":"reader","track":"` + maker.ID + `","releases":[],"count":0}`
+	rec = env.send(t, http.MethodGet, "/api/catalog/packages/reader/releases?track="+maker.ID, "", reader)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"publisher_email":"maker@example.com"`) {
+		t.Fatalf("history = %d %s", rec.Code, rec.Body.String())
+	}
+	// A refusal is relayed untouched.
+	env.answer = ""
 }

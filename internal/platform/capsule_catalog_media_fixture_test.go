@@ -130,7 +130,13 @@ func (w *pkgWorld) fixtureReleaseMedia(fr fixtureRelease, seq int, out map[strin
 		add(pkgrelease.Media{Kind: pkgrelease.MediaKindScreenshot, Name: name, MediaType: pkgrelease.MediaTypePNG,
 			SHA256: computerevent.DigestBytes(raw), Bytes: len(raw), Width: width, Height: height}, raw)
 	}
-	for i := 0; i < fr.desktop; i++ {
+	// The store lists no release without a screenshot: one that names none
+	// gets a single desktop shot.
+	desktop := fr.desktop
+	if desktop == 0 && fr.phone == 0 {
+		desktop = 1
+	}
+	for i := 0; i < desktop; i++ {
 		shot(fr.pkg+"-desktop-"+string(rune('1'+i))+".png", i, 1280, 800)
 	}
 	for i := 0; i < fr.phone; i++ {
@@ -169,8 +175,8 @@ func writeFixtureMedia(t *testing.T, media map[string][]byte) {
 
 // checkFixtureMedia holds the fixture to its files: every item a held
 // release names has its file, hashing to its name and verifying as the
-// item; the media directory holds nothing else; some releases carry
-// screenshots, one a video, and some none.
+// item; the media directory holds nothing else; every release carries
+// screenshots and one a video.
 func checkFixtureMedia(t *testing.T, held capsuleCatalogFixture) {
 	t.Helper()
 	named := map[string]bool{}
@@ -203,8 +209,8 @@ func checkFixtureMedia(t *testing.T, held capsuleCatalogFixture) {
 			named[m.SHA256+ext] = true
 		}
 	}
-	if withMedia == 0 || without == 0 || videos == 0 {
-		t.Fatalf("the fixture needs releases with screenshots (%d), without (%d), and a video (%d)", withMedia, without, videos)
+	if withMedia == 0 || without != 0 || videos == 0 {
+		t.Fatalf("every fixture release needs a screenshot (%d with, %d without), and one a video (%d)", withMedia, without, videos)
 	}
 	entries, err := os.ReadDir(capsuleCatalogMediaDir)
 	if err != nil {

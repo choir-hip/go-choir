@@ -189,3 +189,19 @@ func TestVerifyMediaRefusesOtherBytes(t *testing.T) {
 		}
 	}
 }
+
+// The app store lists no release without a screenshot: none, or a video
+// alone, is refused with screenshot_required; Validate still decodes it, so
+// records published before the rule stay readable.
+func TestRequireScreenshotRefusesNoneAndVideoOnly(t *testing.T) {
+	shot := Media{Kind: MediaKindScreenshot, Name: "a.png"}
+	video := Media{Kind: MediaKindVideo, Name: "a.webm"}
+	for name, media := range map[string][]Media{"none": nil, "video only": {video}} {
+		if err := RequireScreenshot(Record{Media: media}); ReasonOf(err) != ReasonScreenshotRequired {
+			t.Fatalf("%s = %v, want screenshot_required", name, err)
+		}
+	}
+	if err := RequireScreenshot(Record{Media: []Media{video, shot}}); err != nil {
+		t.Fatalf("a screenshot and a video = %v", err)
+	}
+}

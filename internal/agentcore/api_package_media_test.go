@@ -266,6 +266,14 @@ func TestPackageDraftOfAnUpdateNeedsABeforeAfterPair(t *testing.T) {
 	}
 }
 
+// R4: a round that accepted no screens cannot be published: the draft
+// refuses with its reason before the owner is asked to confirm anything.
+func TestPackageDraftWithoutScreensIsRefused(t *testing.T) {
+	w := newDraftWorld(t)
+	w.bareOperation("op-plain", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
+	wantDraftReason(t, w.draft("op-plain", nil), http.StatusUnprocessableEntity, pkgrelease.ReasonScreenshotRequired)
+}
+
 // Review r1 F1: two bound screens with the same bytes name the digest once,
 // and the draft still drafts; F7: the release's video bound is Freeze's.
 func TestPackageDraftNamesARepeatedScreenOnce(t *testing.T) {

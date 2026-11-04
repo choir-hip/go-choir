@@ -603,6 +603,10 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		// that item, or the release is not listed.
 		err = h.verifyPackageMedia(record)
 	}
+	if err == nil {
+		// No screenshot, no listing (owner, 2026-11-04).
+		err = pkgrelease.RequireScreenshot(record)
+	}
 	if err != nil {
 		writePackageRefusal(w, err)
 		return
@@ -839,6 +843,10 @@ type PackageCatalogEntry struct {
 	// HeadMedia is the head release's screenshots and video, so a gallery
 	// grid needs no second read; empty for a head with none.
 	HeadMedia []PackageMediaView `json:"head_media"`
+	// HeadPublishedAt and HeadDescription feed the app card: the date the
+	// head was published and the manifest's one-line description.
+	HeadPublishedAt string `json:"head_published_at,omitempty"`
+	HeadDescription string `json:"head_description,omitempty"`
 }
 
 func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
@@ -884,11 +892,20 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			writeListingsError(w, err)
 			return
 		}
+		// A release is listed in the app store only with a screenshot;
+		// older releases without one stay stored and drop out here.
 		visible := map[string]pkgrelease.Listing{}
+		records := map[string]objectgraph.Object{}
+		decoded := map[string]pkgrelease.Record{}
 		for id, listing := range listings {
-			if h.listingVisible(listing, reader) {
-				visible[id] = listing
+			if !h.listingVisible(listing, reader) {
+				continue
 			}
+			obj, record, err := h.readPackageRecord(ctx, key.track, id)
+			if err != nil || !record.HasScreenshot() {
+				continue
+			}
+			visible[id], records[id], decoded[id] = listing, obj, record
 		}
 		if len(visible) == 0 {
 			continue
@@ -897,9 +914,10 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 		entry := PackageCatalogEntry{Package: key.pkg, Track: key.track, Releases: len(visible), HeadMedia: []PackageMediaView{}}
 		if found {
 			entry.HeadReleaseID, entry.HeadSeq = head.RecordID, head.Seq
-			if _, record, err := h.readPackageRecord(ctx, key.track, head.RecordID); err == nil {
-				entry.HeadMedia = mediaViews(head.RecordID, record)
-			}
+			record := decoded[head.RecordID]
+			entry.HeadMedia = mediaViews(head.RecordID, record)
+			entry.HeadDescription = record.Description
+			entry.HeadPublishedAt = packageView(records[head.RecordID], head.RecordID, head).PublishedAt
 		}
 		entries = append(entries, entry)
 	}
@@ -963,6 +981,13 @@ func (h *Handler) packageHistory(w http.ResponseWriter, r *http.Request, name st
 		visible := []pkgrelease.Listing{}
 		for _, listing := range listings {
 			if h.listingVisible(listing, reader) && (before == 0 || listing.Seq < before) {
+				// Another publisher's releases without a screenshot are not
+				// in the store; a publisher still sees (and can withdraw) its own.
+				if track != reader {
+					if _, record, err := h.readPackageRecord(r.Context(), track, listing.RecordID); err != nil || !record.HasScreenshot() {
+						continue
+					}
+				}
 				visible = append(visible, listing)
 			}
 		}

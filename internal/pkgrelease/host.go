@@ -158,6 +158,9 @@ func VerifyHost(ctx context.Context, in HostInput) error {
 	if err != nil {
 		return err
 	}
+	if err := checkDescription(rec, raw); err != nil {
+		return err
+	}
 	if summary != rec.Manifest || version != rec.Package.ManifestVersion {
 		return refuse(ReasonManifestInvalid, "the record's manifest summary %+v (version %s) is not the bytes' %+v (version %s)", rec.Manifest, rec.Package.ManifestVersion, summary, version)
 	}

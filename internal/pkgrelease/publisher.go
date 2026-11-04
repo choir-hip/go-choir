@@ -119,6 +119,25 @@ func ReadFile(ctx context.Context, repo, tree, path string) ([]byte, error) {
 	return raw, nil
 }
 
+// ManifestDescription is the manifest's display description, trimmed; "" when
+// the bytes do not parse (CheckManifest refuses those first).
+func ManifestDescription(raw []byte) string {
+	manifest, err := apppackage.ParseManifest(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(manifest.Display.Description)
+}
+
+// checkDescription requires a record's description to be the manifest's, or
+// absent.
+func checkDescription(rec Record, raw []byte) error {
+	if rec.Description != "" && rec.Description != ManifestDescription(raw) {
+		return refuse(ReasonManifestInvalid, "the record's description is not the manifest's")
+	}
+	return nil
+}
+
 // CheckManifest validates the package's choir-package.json bytes for a
 // release of package name: the manifest parses, names the package, and
 // declares no kinds before S12 (package_kinds_need_platform). It returns
@@ -255,6 +274,8 @@ type DraftSource struct {
 	Blobs           Blobs
 	Manifest        Manifest
 	ManifestVersion string
+	// Description is the manifest's display description.
+	Description string
 }
 
 // DraftPackage runs the publisher-side checks of design 3.2 and builds the
@@ -455,7 +476,7 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	if err != nil {
 		return DraftSource{}, err
 	}
-	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version}, nil
+	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version, Description: ManifestDescription(raw)}, nil
 }
 
 // graftBefore is the tree of Base with the change BeforeBase..before applied,

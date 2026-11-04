@@ -5,8 +5,20 @@
     "count": 7,
     "packages": [
       {
-        "head_media": [],
-        "head_release_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+        "head_media": [
+          {
+            "bytes": 4832,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "files-next-desktop-1.png",
+            "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+            "url": "/api/catalog/releases/c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+            "width": 1280
+          }
+        ],
+        "head_published_at": "2026-11-04T16:46:24.086334Z",
+        "head_release_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
         "head_seq": 1,
         "package": "files-next",
         "releases": 1,
@@ -25,6 +37,7 @@
             "width": 1280
           }
         ],
+        "head_published_at": "2026-11-04T16:46:24.911411Z",
         "head_release_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47",
         "head_seq": 2,
         "package": "files-next",
@@ -64,6 +77,7 @@
             "width": 390
           }
         ],
+        "head_published_at": "2026-11-04T16:46:25.99724Z",
         "head_release_id": "a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e",
         "head_seq": 3,
         "package": "files-next",
@@ -71,8 +85,20 @@
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
       {
-        "head_media": [],
-        "head_release_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+        "head_media": [
+          {
+            "bytes": 4832,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "library-next-desktop-1.png",
+            "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+            "url": "/api/catalog/releases/0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+            "width": 1280
+          }
+        ],
+        "head_published_at": "2026-11-04T16:46:33.095977Z",
+        "head_release_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
         "head_seq": 1,
         "package": "library-next",
         "releases": 1,
@@ -119,6 +145,7 @@
             "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
           }
         ],
+        "head_published_at": "2026-11-04T16:46:33.858038Z",
         "head_release_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e",
         "head_seq": 2,
         "package": "library-next",
@@ -168,6 +195,7 @@
             "width": 390
           }
         ],
+        "head_published_at": "2026-11-04T16:46:28.921017Z",
         "head_release_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
         "head_seq": 2,
         "package": "slides-next",
@@ -175,8 +203,20 @@
         "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
       },
       {
-        "head_media": [],
-        "head_release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+        "head_media": [
+          {
+            "bytes": 4829,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "slides-next-desktop-1.png",
+            "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+            "url": "/api/catalog/releases/da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+            "width": 1280
+          }
+        ],
+        "head_published_at": "2026-11-04T16:46:30.259433Z",
+        "head_release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
         "head_seq": 2,
         "package": "slides-next",
         "releases": 3,
@@ -811,10 +851,10 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
           "listing": {
             "package": "files-next",
-            "record_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+            "record_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -831,7 +871,18 @@
             "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492",
             "version": 1
           },
-          "media": [],
+          "media": [
+            {
+              "bytes": 4832,
+              "height": 800,
+              "kind": "screenshot",
+              "media_type": "image/png",
+              "name": "files-next-desktop-1.png",
+              "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+              "url": "/api/catalog/releases/c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+              "width": 1280
+            }
+          ],
           "published_at": "2026-11-02T20:03:00.000000Z",
           "record": {
             "declarations": {},
@@ -841,6 +892,17 @@
               "opens_count": 0,
               "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
             },
+            "media": [
+              {
+                "bytes": 4832,
+                "height": 800,
+                "kind": "screenshot",
+                "media_type": "image/png",
+                "name": "files-next-desktop-1.png",
+                "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+                "width": 1280
+              }
+            ],
             "operation": {
               "bundle_digest": "f4fbe7a6677aa0c1e210b4cabdfde6c9c44005bcb90d97d787592274b0b175d0",
               "decision_event": "3ca075ff95b468e10f945e013892a57f871c9cb20e3e92dd90a9b1cc35e2ddfd",
@@ -893,7 +955,7 @@
             },
             "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
           },
-          "release_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175"
+          "release_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48"
         }
       ],
       "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
@@ -1186,11 +1248,11 @@
       "package": "slides-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+          "canonical_id": "obj:choir.package_release:b3duZXI:0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
           "listing": {
             "package": "slides-next",
-            "prev_version_digest": "8ee110f1257126167dcfdb2fc8b6b1c57437627c0421c4b3a1d9356373821756",
-            "record_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+            "prev_version_digest": "6ce82a9647645e81707a7eb696773fa253bc20a5610fa2cc63f45425b7bcdb73",
+            "record_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1207,7 +1269,18 @@
             "track": "owner",
             "version": 2
           },
-          "media": [],
+          "media": [
+            {
+              "bytes": 4995,
+              "height": 800,
+              "kind": "screenshot",
+              "media_type": "image/png",
+              "name": "slides-next-desktop-1.png",
+              "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+              "url": "/api/catalog/releases/0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+              "width": 1280
+            }
+          ],
           "published_at": "2026-11-03T00:50:00.000000Z",
           "record": {
             "declarations": {},
@@ -1217,6 +1290,17 @@
               "opens_count": 0,
               "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
             },
+            "media": [
+              {
+                "bytes": 4995,
+                "height": 800,
+                "kind": "screenshot",
+                "media_type": "image/png",
+                "name": "slides-next-desktop-1.png",
+                "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+                "width": 1280
+              }
+            ],
             "operation": {
               "bundle_digest": "d7e8db386cdb51801f19a6848eddc3c98aec30ef8105825736ae814778a6d0e5",
               "decision_event": "1884f4bdd8d883cd4dd4edafd7df1fbf99936a2a0f152b46076c3008d6a861bf",
@@ -1229,7 +1313,7 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+              "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
               "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8"
             },
             "precommitments": [
@@ -1263,13 +1347,13 @@
             },
             "track": "owner"
           },
-          "release_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc"
+          "release_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f"
         },
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+          "canonical_id": "obj:choir.package_release:b3duZXI:da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
           "listing": {
             "package": "slides-next",
-            "record_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+            "record_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1286,7 +1370,18 @@
             "track": "owner",
             "version": 1
           },
-          "media": [],
+          "media": [
+            {
+              "bytes": 4829,
+              "height": 800,
+              "kind": "screenshot",
+              "media_type": "image/png",
+              "name": "slides-next-desktop-1.png",
+              "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+              "url": "/api/catalog/releases/da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+              "width": 1280
+            }
+          ],
           "published_at": "2026-11-03T00:09:00.000000Z",
           "record": {
             "declarations": {},
@@ -1296,6 +1391,17 @@
               "opens_count": 0,
               "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
             },
+            "media": [
+              {
+                "bytes": 4829,
+                "height": 800,
+                "kind": "screenshot",
+                "media_type": "image/png",
+                "name": "slides-next-desktop-1.png",
+                "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+                "width": 1280
+              }
+            ],
             "operation": {
               "bundle_digest": "81d9942b43d85d6cca8e5a8212c5cb34918e8005512a5ddb1afbf0276c3c7cad",
               "decision_event": "0ab8d41d09041af1c01be53cdead9d495f4b97719dc7fee3567f2cb7e8ad67f8",
@@ -1308,7 +1414,7 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+              "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
               "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60"
             },
             "precommitments": [
@@ -1344,13 +1450,13 @@
             },
             "track": "owner"
           },
-          "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628"
+          "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9"
         },
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+          "canonical_id": "obj:choir.package_release:b3duZXI:77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
           "listing": {
             "package": "slides-next",
-            "record_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+            "record_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1367,7 +1473,18 @@
             "track": "owner",
             "version": 1
           },
-          "media": [],
+          "media": [
+            {
+              "bytes": 4995,
+              "height": 800,
+              "kind": "screenshot",
+              "media_type": "image/png",
+              "name": "slides-next-desktop-1.png",
+              "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+              "url": "/api/catalog/releases/77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+              "width": 1280
+            }
+          ],
           "published_at": "2026-11-02T22:47:00.000000Z",
           "record": {
             "declarations": {},
@@ -1377,6 +1494,17 @@
               "opens_count": 0,
               "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
             },
+            "media": [
+              {
+                "bytes": 4995,
+                "height": 800,
+                "kind": "screenshot",
+                "media_type": "image/png",
+                "name": "slides-next-desktop-1.png",
+                "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+                "width": 1280
+              }
+            ],
             "operation": {
               "bundle_digest": "2f08cb8bfb3aa732ba3fd07a9f5fa2a4cee3799eb1e07cc66763a3c89f9b0990",
               "decision_event": "7b17690574dd9cc76544b61de64734ca8f20e40b1d313f4bf89224c56c728c57",
@@ -1429,7 +1557,7 @@
             },
             "track": "owner"
           },
-          "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f"
+          "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4"
         }
       ],
       "track": "owner"
@@ -1727,10 +1855,10 @@
       "package": "library-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
           "listing": {
             "package": "library-next",
-            "record_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+            "record_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1747,7 +1875,18 @@
             "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85",
             "version": 1
           },
-          "media": [],
+          "media": [
+            {
+              "bytes": 4832,
+              "height": 800,
+              "kind": "screenshot",
+              "media_type": "image/png",
+              "name": "library-next-desktop-1.png",
+              "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+              "url": "/api/catalog/releases/0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+              "width": 1280
+            }
+          ],
           "published_at": "2026-11-03T02:12:00.000000Z",
           "record": {
             "declarations": {},
@@ -1757,6 +1896,17 @@
               "opens_count": 0,
               "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
             },
+            "media": [
+              {
+                "bytes": 4832,
+                "height": 800,
+                "kind": "screenshot",
+                "media_type": "image/png",
+                "name": "library-next-desktop-1.png",
+                "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+                "width": 1280
+              }
+            ],
             "operation": {
               "bundle_digest": "29cd5b47a280ab977946f0d05aacf935c478cc6f6c1360f430b6e767ff069d02",
               "decision_event": "c41c1bf2c4e51866d2f79d4e72b1c29d1af248e0af86dc85a6e72e626d111015",
@@ -1809,7 +1959,7 @@
             },
             "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
           },
-          "release_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284"
+          "release_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5"
         }
       ],
       "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
@@ -1972,10 +2122,10 @@
       "release_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e"
     },
     {
-      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
       "listing": {
         "package": "library-next",
-        "record_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+        "record_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -1992,7 +2142,18 @@
         "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85",
         "version": 1
       },
-      "media": [],
+      "media": [
+        {
+          "bytes": 4832,
+          "height": 800,
+          "kind": "screenshot",
+          "media_type": "image/png",
+          "name": "library-next-desktop-1.png",
+          "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+          "url": "/api/catalog/releases/0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+          "width": 1280
+        }
+      ],
       "published_at": "2026-11-03T02:12:00.000000Z",
       "record": {
         "declarations": {},
@@ -2002,6 +2163,17 @@
           "opens_count": 0,
           "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
         },
+        "media": [
+          {
+            "bytes": 4832,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "library-next-desktop-1.png",
+            "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+            "width": 1280
+          }
+        ],
         "operation": {
           "bundle_digest": "29cd5b47a280ab977946f0d05aacf935c478cc6f6c1360f430b6e767ff069d02",
           "decision_event": "c41c1bf2c4e51866d2f79d4e72b1c29d1af248e0af86dc85a6e72e626d111015",
@@ -2054,7 +2226,7 @@
         },
         "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
       },
-      "release_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284"
+      "release_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5"
     },
     {
       "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
@@ -2183,11 +2355,11 @@
       "release_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+      "canonical_id": "obj:choir.package_release:b3duZXI:0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
       "listing": {
         "package": "slides-next",
-        "prev_version_digest": "8ee110f1257126167dcfdb2fc8b6b1c57437627c0421c4b3a1d9356373821756",
-        "record_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+        "prev_version_digest": "6ce82a9647645e81707a7eb696773fa253bc20a5610fa2cc63f45425b7bcdb73",
+        "record_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2204,7 +2376,18 @@
         "track": "owner",
         "version": 2
       },
-      "media": [],
+      "media": [
+        {
+          "bytes": 4995,
+          "height": 800,
+          "kind": "screenshot",
+          "media_type": "image/png",
+          "name": "slides-next-desktop-1.png",
+          "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+          "url": "/api/catalog/releases/0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+          "width": 1280
+        }
+      ],
       "published_at": "2026-11-03T00:50:00.000000Z",
       "record": {
         "declarations": {},
@@ -2214,6 +2397,17 @@
           "opens_count": 0,
           "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
         },
+        "media": [
+          {
+            "bytes": 4995,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "slides-next-desktop-1.png",
+            "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+            "width": 1280
+          }
+        ],
         "operation": {
           "bundle_digest": "d7e8db386cdb51801f19a6848eddc3c98aec30ef8105825736ae814778a6d0e5",
           "decision_event": "1884f4bdd8d883cd4dd4edafd7df1fbf99936a2a0f152b46076c3008d6a861bf",
@@ -2226,7 +2420,7 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+          "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
           "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8"
         },
         "precommitments": [
@@ -2260,13 +2454,13 @@
         },
         "track": "owner"
       },
-      "release_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc"
+      "release_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+      "canonical_id": "obj:choir.package_release:b3duZXI:da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
       "listing": {
         "package": "slides-next",
-        "record_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+        "record_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2283,7 +2477,18 @@
         "track": "owner",
         "version": 1
       },
-      "media": [],
+      "media": [
+        {
+          "bytes": 4829,
+          "height": 800,
+          "kind": "screenshot",
+          "media_type": "image/png",
+          "name": "slides-next-desktop-1.png",
+          "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+          "url": "/api/catalog/releases/da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+          "width": 1280
+        }
+      ],
       "published_at": "2026-11-03T00:09:00.000000Z",
       "record": {
         "declarations": {},
@@ -2293,6 +2498,17 @@
           "opens_count": 0,
           "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
         },
+        "media": [
+          {
+            "bytes": 4829,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "slides-next-desktop-1.png",
+            "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+            "width": 1280
+          }
+        ],
         "operation": {
           "bundle_digest": "81d9942b43d85d6cca8e5a8212c5cb34918e8005512a5ddb1afbf0276c3c7cad",
           "decision_event": "0ab8d41d09041af1c01be53cdead9d495f4b97719dc7fee3567f2cb7e8ad67f8",
@@ -2305,7 +2521,7 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+          "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
           "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60"
         },
         "precommitments": [
@@ -2341,7 +2557,7 @@
         },
         "track": "owner"
       },
-      "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628"
+      "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9"
     },
     {
       "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
@@ -2513,10 +2729,10 @@
       "release_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+      "canonical_id": "obj:choir.package_release:b3duZXI:77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
       "listing": {
         "package": "slides-next",
-        "record_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+        "record_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2533,7 +2749,18 @@
         "track": "owner",
         "version": 1
       },
-      "media": [],
+      "media": [
+        {
+          "bytes": 4995,
+          "height": 800,
+          "kind": "screenshot",
+          "media_type": "image/png",
+          "name": "slides-next-desktop-1.png",
+          "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+          "url": "/api/catalog/releases/77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+          "width": 1280
+        }
+      ],
       "published_at": "2026-11-02T22:47:00.000000Z",
       "record": {
         "declarations": {},
@@ -2543,6 +2770,17 @@
           "opens_count": 0,
           "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
         },
+        "media": [
+          {
+            "bytes": 4995,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "slides-next-desktop-1.png",
+            "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+            "width": 1280
+          }
+        ],
         "operation": {
           "bundle_digest": "2f08cb8bfb3aa732ba3fd07a9f5fa2a4cee3799eb1e07cc66763a3c89f9b0990",
           "decision_event": "7b17690574dd9cc76544b61de64734ca8f20e40b1d313f4bf89224c56c728c57",
@@ -2595,7 +2833,7 @@
         },
         "track": "owner"
       },
-      "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f"
+      "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4"
     },
     {
       "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
@@ -2947,10 +3185,10 @@
       "release_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47"
     },
     {
-      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
       "listing": {
         "package": "files-next",
-        "record_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+        "record_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2967,7 +3205,18 @@
         "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492",
         "version": 1
       },
-      "media": [],
+      "media": [
+        {
+          "bytes": 4832,
+          "height": 800,
+          "kind": "screenshot",
+          "media_type": "image/png",
+          "name": "files-next-desktop-1.png",
+          "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+          "url": "/api/catalog/releases/c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+          "width": 1280
+        }
+      ],
       "published_at": "2026-11-02T20:03:00.000000Z",
       "record": {
         "declarations": {},
@@ -2977,6 +3226,17 @@
           "opens_count": 0,
           "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
         },
+        "media": [
+          {
+            "bytes": 4832,
+            "height": 800,
+            "kind": "screenshot",
+            "media_type": "image/png",
+            "name": "files-next-desktop-1.png",
+            "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+            "width": 1280
+          }
+        ],
         "operation": {
           "bundle_digest": "f4fbe7a6677aa0c1e210b4cabdfde6c9c44005bcb90d97d787592274b0b175d0",
           "decision_event": "3ca075ff95b468e10f945e013892a57f871c9cb20e3e92dd90a9b1cc35e2ddfd",
@@ -3029,7 +3289,7 @@
         },
         "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
       },
-      "release_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175"
+      "release_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48"
     },
     {
       "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",

@@ -159,7 +159,7 @@ func TestPublishedReleaseIsVisibleToEveryOwner(t *testing.T) {
 		t.Fatalf("L4 owner-b's view names owners: %+v", view.Listing)
 	}
 	raw := strings.ToLower(string(shareJSON(t, view)))
-	for _, banned := range []string{"screenshot", "capture", "evidence", "visual"} {
+	for _, banned := range []string{"capture", "evidence", "visual"} {
 		if strings.Contains(raw, banned) {
 			t.Fatalf("L21 a public view carries %q: %s", banned, raw)
 		}
