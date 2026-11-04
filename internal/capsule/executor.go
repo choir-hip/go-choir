@@ -127,6 +127,8 @@ type Executor struct {
 	// the host at spawn and its jobs read the host facts instead.)
 	jobs    map[string]*capsuleJob
 	jobDone func(JobCompletion)
+	// jobWait is the runtime's handler for job waits (job_wait_state.go).
+	jobWait func(JobWaitEvent)
 	// browser and fontconfig are the image's Chromium and fontconfig file,
 	// which every broker hands its jobs (broker_env.go).
 	browser    string

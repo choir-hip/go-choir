@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -60,6 +61,12 @@ type capsuleJob struct {
 	leased     bool
 	clamped    bool
 	memoryWait *yaegikernel.MemoryWait
+	// wait is memoryWait as the typed record (HostMemoryWaitState) since
+	// waitSince; waitedFor is how long the job waited before it started.
+	// Guarded by the executor's mu.
+	wait      *types.WaitState
+	waitSince time.Time
+	waitedFor time.Duration
 	// waiting is true while the job waits for host memory; whoever clears
 	// it (its start, its stop, its capsule's end) owns the job's next step.
 	// Guarded by the executor's mu.
@@ -91,6 +98,57 @@ type jobRecord struct {
 	FinishedAt string   `json:"finished_at,omitempty"`
 	ReceiptRef string   `json:"receipt_ref,omitempty"`
 	Reason     string   `json:"reason,omitempty"`
+}
+
+// SetJobWaitHandler installs the runtime's handler for job waits.
+func (e *Executor) SetJobWaitHandler(handler func(JobWaitEvent)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.jobWait = handler
+}
+
+// noteJobWaitLocked records a refusal on a waiting job as its typed wait.
+// The caller holds the executor's mu.
+func noteJobWaitLocked(job *capsuleJob, now time.Time) {
+	if job.waitSince.IsZero() {
+		job.waitSince = now
+	}
+	job.wait = HostMemoryWaitState("job "+job.spec.ID, job.memoryWait, job.status.Reason, job.waitSince, hostMemoryWaitPoll, hostMemoryMaxWait)
+}
+
+// emitJobWait hands the runtime the job's current wait. The caller must not
+// hold the executor's mu.
+func (e *Executor) emitJobWait(job *capsuleJob) {
+	e.mu.RLock()
+	wait := job.wait.Clone()
+	e.mu.RUnlock()
+	if wait != nil {
+		e.emitJobWaitOf(job, wait, false, "")
+	}
+}
+
+// takeJobWait clears the job's wait record and returns it: the one caller
+// that takes it non-nil emits the wait's end.
+func (e *Executor) takeJobWait(job *capsuleJob) *types.WaitState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	w := job.wait
+	job.wait = nil
+	if w != nil && job.waitedFor == 0 {
+		job.waitedFor = time.Since(job.waitSince)
+	}
+	return w
+}
+
+func (e *Executor) emitJobWaitOf(job *capsuleJob, wait *types.WaitState, ended bool, outcome string) {
+	e.mu.RLock()
+	handler := e.jobWait
+	ev := JobWaitEvent{AgentRunID: job.agentRunID, JobID: job.spec.ID, Notify: job.notify, Wait: wait,
+		Ended: ended, Waited: job.waitedFor, Outcome: outcome}
+	e.mu.RUnlock()
+	if handler != nil {
+		handler(ev)
+	}
 }
 
 // SetJobCompletionHandler installs the runtime's handler for ended jobs.
@@ -141,7 +199,9 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	}
 	e.jobs[spec.ID] = job
 	hm := e.hostMemory
-	leasing := hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0
+	// A pure waiter (choir-delegate wait, sleep) with no memory_mib holds no
+	// build's memory: it leases nothing and never waits (PureWaitJob).
+	leasing := hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 && !(PureWaitJob(spec.Argv) && spec.MemoryMiB == 0)
 	if leasing {
 		// Waiting from its registration, in the same critical section, so
 		// no stop sees it running before the ask (review r2).
@@ -169,9 +229,11 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 			}
 			job.memoryWait = refusal.Wait
 			job.status.Reason = jobWaitReason(job, refusal.Reason) + jobHoldersNote(e.jobs, job, time.Now())
+			noteJobWaitLocked(job, time.Now())
 			view := job.view(job.status, "", "")
 			e.mu.Unlock()
 			e.persistJobRecord(job)
+			e.emitJobWait(job)
 			log.Printf("capsule: job %s in capsule %s %s", spec.ID, caps.ID, view.Reason)
 			go e.waitForHostMemory(job, hm, time.Now(), hostMemoryWaitPoll, hostMemoryMaxWait)
 			return view, nil
@@ -368,7 +430,9 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 				}
 				job.memoryWait = refusal.Wait
 				job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
+				noteJobWaitLocked(job, time.Now())
 				e.mu.Unlock()
+				e.emitJobWait(job)
 				continue
 			}
 		}
@@ -388,6 +452,9 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 		if err != nil {
 			e.finishJob(job, nil, capsulejob.StateFailed, "could not start after waiting for host memory: "+err.Error())
 			return
+		}
+		if w := e.takeJobWait(job); w != nil {
+			e.emitJobWaitOf(job, w, true, "started")
 		}
 		log.Printf("capsule: job %s in capsule %s started after waiting %s for host memory", job.spec.ID, job.capsuleID, time.Since(since).Round(time.Second))
 		return
@@ -586,6 +653,10 @@ func (e *Executor) finishJob(job *capsuleJob, caps *Capsule, state, reason strin
 	e.mu.Lock()
 	st := job.status
 	e.mu.Unlock()
+	if w := e.takeJobWait(job); w != nil {
+		// The job ends without starting: its wait ends with it.
+		e.emitJobWaitOf(job, w, true, state)
+	}
 	if caps == nil {
 		st.State, st.Reason = state, reason
 		if st.FinishedAt.IsZero() {
@@ -780,6 +851,11 @@ func (j *capsuleJob) view(st capsulejob.Status, receiptRef, logRef string) yaegi
 	v.MemoryMiB, v.MemoryNote = j.spec.MemoryMiB, j.memoryNote
 	if st.State == capsulejob.StateWaiting {
 		v.MemoryWait = j.memoryWait
+		if j.wait != nil {
+			v.Wait = j.wait.Clone()
+			v.Wait.Stamp(time.Now())
+		}
 	}
+	v.WaitedSec = int64(j.waitedFor / time.Second)
 	return v
 }

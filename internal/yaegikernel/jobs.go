@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Capsule jobs, in-cell (docs/design/capsule-long-exec-2026-10-15.md): a
@@ -55,6 +56,15 @@ type JobView struct {
 	LogRef string `json:"log_ref,omitempty"`
 	// MemoryWait is why a waiting job waits for host memory, as data.
 	MemoryWait *MemoryWait `json:"memory_wait,omitempty"`
+	// Wait is the same wait as the one typed record every wait uses
+	// (types.WaitState): what it waits for, need and room, who holds it,
+	// how often it is checked and when it gives up, in one line
+	// (Wait.Sentence). The choice is yours: wait (end your turn; you are
+	// woken when the job ends), choir.Stop it and do other work, or start
+	// it again smaller.
+	Wait *types.WaitState `json:"wait,omitempty"`
+	// WaitedSec is how long the job waited before it started.
+	WaitedSec int64 `json:"waited_sec,omitempty"`
 }
 
 // MemoryWait is a job waiting for host memory: what its lease needs, the
