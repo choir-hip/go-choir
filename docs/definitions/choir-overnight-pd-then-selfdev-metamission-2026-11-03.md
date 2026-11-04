@@ -126,18 +126,17 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 5539de53a (00:32Z): engineering cell wall clock and broker read
-    deadline, Freeze names its base, choir-shot waits for a connected
-    desktop and a settled window, fails windowless shots, defaults shot
-    memory to 1536 when cached; new windows open clear of the desktop
-    icons. Rounds paused since about 00:15Z: the capsule broker is killed
-    when a host thread that forked it exits (Pdeathsig follows the thread;
-    the cache-return reclaim ends locked threads and ran through live
-    capsules after ab1e95c04), which lost crouton twice and deepseek once.
-    Fix in tier-2 review; rounds resume when it deploys. Also in review:
-    stale idle baseline plus jobs within their own reservation. Published
-    tonight: Library (luna r2 and r3, deepseek, claude), Slides (claude,
-    pool). Judge is per-shot; stale screens and stacked windows reject.
+    staging fef74e749 (01:44Z): the capsule broker no longer dies (every
+    Pdeathsig child forks from a held thread; broker exit watched and named;
+    pids.max 1024), the reservation idle baseline is per boot, shots wait
+    for a settled window and new windows open clear of the desktop icons.
+    Rounds resumed at 01:45Z, two building (claude Library r2 with the
+    delegate, pool Library r2 with the carried patch). Owner ruling 01:02Z:
+    eradicate waiting except true contention, and expose what remains to
+    engineering, management and Texture. In tier-2 review: per-job memory
+    leases (a capsule no longer holds 3 GiB while its agent thinks) and one
+    typed wait record rendered to all three. A live tracer times every
+    wait, true or artificial.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
