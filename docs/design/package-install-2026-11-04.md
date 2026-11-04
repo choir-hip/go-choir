@@ -1,5 +1,11 @@
 # Package install: an owner installs a Library release on their computer (2026-11-04)
 
+**Superseded by [S12 runtime install](s12-runtime-install-build-2026-11-04.md)
+(same day):** the route, the proxy's fetch and verification, and the record
+stay; the staging, the desks, the capsule build and the apply below are
+deleted. An install now builds a module on the computer and changes no
+source. Kept as history.
+
 Status: design note, red (it changes a computer's running code). Owner
 request, 2026-11-04: "Make library actually work now. Backend included.
 Then I'll review the other apps through it." It builds on
