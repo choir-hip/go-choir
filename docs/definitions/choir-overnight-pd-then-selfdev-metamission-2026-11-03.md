@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: station 1 (pd) landed and proved; station 2 (selfdev) wound down to two crouton arms (with and without the Claude delegate) by owner ruling 10:40Z; priority now the Library working end to end (browse, install), then reviewing apps through it and publish-and-pull self-development
+  slice: station 1 (pd) landed and proved; station 2 (selfdev) wound down to two crouton arms (with and without the Claude delegate) by owner ruling 10:40Z; priority now the Library as an app store on every computer (owner, 16:30Z), then reviewing apps through it and publish-and-pull self-development
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
@@ -126,28 +126,27 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 755617851 (deployed 15:39Z, security epoch 38, main green,
-    first expedited ring walk under the owner's hill-climbing-loop policy,
-    c35e24ca6). Apps as a layer is on main: stack_base_moved
-    waiters woken once the block clears (43745079a), S6 package-aware
-    containment without a switch (6b61e3660, tier 2), clean rebases apply
-    without an owner act on test-tier computers with a corpusd gate bound
-    to the applied change and the deployed base (3c48a7ac2, tier 2, Devin
-    round 2 after a blocking catch), S12 runtime install, packages built to
-    a module outside the source stack, owner's own releases only until S13
-    (9f3970680, tier 2, Devin round 2 after a blocking uninstall catch),
-    and the owner's modularity check: an SDK surface lock per version
-    judged by the TypeScript checker plus a smoke contract per package run
-    bundled and installed, a required CI job and a receipt (9858baf1e,
-    Devin round 2). The owner's Library verifier passed at 13:30Z. None of
-    the four runtime pieces is proven on a live computer yet. Patch Watch
-    failed at 9f3970680 because govulncheck did not run (report-only).
-    Node B 18 GB available, 160 GB disk free, load 3.2.
+    staging 8e695263c (deployed 16:44Z, security epoch 39, main green):
+    open install, any signed-in user installs any listed Library release,
+    by owner ruling, no switch; the crouton-synthetic-luna pool (005d77300)
+    is the claude arm's policy for every role, read back matching. Apps as
+    a layer is on main (43745079a, 6b61e3660, 3c48a7ac2, 9f3970680,
+    9858baf1e). The owner reviewed the Library on their phone at about
+    16:30Z: it lists computer ids, track hashes and duplicate packages,
+    hides screenshots behind a second drill down and buries them under a
+    metadata panel. A Sonnet builder is rebuilding it as an app store
+    (screenshots required to list, publisher shown by account email, one
+    card per app, one app page with screenshots, install and
+    precommitments, no hex). remat-serve (the pool serving its rebased
+    build) got SEND BACK from both tier 2 seats (a stale test assertion,
+    an open operation spending a notice attempt, stale contract text); a
+    Sonnet fixer is on it, then one Devin seat. Node B 18 GB available,
+    171 GB disk free, load 2.3.
   main_uncertainty: >-
-    whether runtime install works on a live arm once R1 refreshes; whether
-    the first clean rebase happens at the next base move; whether the
-    modularity job is fast and stable in CI
-  next_observation: modularity CI job result; arms refreshing to 9f3970680 or later
+    whether the app store rebuild lands clean through review and reaches
+    the owner's computer the same day; whether remat-serve's re-review
+    clears in one round
+  next_observation: the Library builder's report; remat-serve fixes and Devin re-review
   blocker: none
   next_action: >-
     owner order (2026-11-04 15:50Z): 1 tie off loose ends, 2 make
