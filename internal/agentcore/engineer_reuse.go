@@ -34,6 +34,14 @@ import (
 // the park commits the engineer's Complete and the old order takes over.
 var reviewParkMax = 20 * time.Minute
 
+// reviewFixAllowance is the least build time a rejected candidate's
+// engineer has left when it resumes. The verdict park suspends the
+// activation's progress deadline (waiting on management is not the
+// engineer's stall), and a rejection grants at least this much: deepseek
+// Calendar r6 (2026-11-04) froze its second candidate at minute 60 and
+// ended at the budget with no fix time.
+var reviewFixAllowance = 20 * time.Minute
+
 // reviewParkRecheck is the park's re-read of the operation between wakes.
 // A Verify signals the wake; an owner act or a close on the operation does
 // not, so the re-read bounds how long the park can miss one.
@@ -322,6 +330,11 @@ func (rt *Runtime) engineeringReviewPark(ctx context.Context, rec *types.RunReco
 	emitJobPark(emit, "candidate_review_park", map[string]any{"operation_id": review.operationID, "revision": review.revision,
 		"deadline": time.Now().Add(reviewParkMax).UTC().Format(time.RFC3339)})
 	started := time.Now()
+	deadline := activationDeadlineFrom(ctx)
+	deadline.suspend(&types.WaitState{Kind: types.WaitKindVerifyOwed, Class: types.WaitClassPolicy,
+		Subject: "assignment " + review.assignmentID, Resource: "management's verdict on candidate " + review.operationID,
+		Since: started, Until: started.Add(reviewParkMax)})
+	defer deadline.resume()
 	timer := time.NewTimer(reviewParkMax)
 	defer timer.Stop()
 	recheck := time.NewTicker(reviewParkRecheck)
@@ -344,6 +357,8 @@ func (rt *Runtime) engineeringReviewPark(ctx context.Context, rec *types.RunReco
 				// Still under review.
 			case judgmentRejected(op):
 				end(reviewParkRejected)
+				deadline.resume()
+				deadline.grantAtLeast(reviewFixAllowance)
 				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reviewParkRejected,
 					Instruction: withActivationBudget(ctx, reviewRejectedInstruction(review, op))}, true, nil
 			case reviewPassed(op.State):
@@ -353,6 +368,8 @@ func (rt *Runtime) engineeringReviewPark(ctx context.Context, rec *types.RunReco
 				// Failed for another cause, rejected by the owner, degraded,
 				// rolled back: the candidate ended without this round's pass.
 				end(reviewParkEnded)
+				deadline.resume()
+				deadline.grantAtLeast(reviewFixAllowance)
 				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reviewParkEnded,
 					Instruction: withActivationBudget(ctx, reviewEndedInstruction(op))}, true, nil
 			}
@@ -401,6 +418,8 @@ func (rt *Runtime) commitKeptComplete(ctx context.Context, rec *types.RunRecord,
 			return toolregistry.ToolLoopCompletionGuardResult{}, false, err
 		}
 		log.Printf("selfdev: commit the kept Complete of assignment %s after %s: %v", review.assignmentID, reason, err)
+		activationDeadlineFrom(ctx).resume()
+		activationDeadlineFrom(ctx).grantAtLeast(reviewFixAllowance)
 		return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reason,
 			Instruction: withActivationBudget(ctx, fmt.Sprintf("Management's review of candidate %s ended (%s), and committing your Complete failed: %v. Send the same choir.Complete(result=\"completed\", ...) again in a cell of its own; if it fails again, end with choir.Complete(result=\"failed\", ...) naming this error.", review.operationID, reason, err))}, true, nil
 	}

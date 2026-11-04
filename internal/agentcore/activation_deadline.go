@@ -16,8 +16,10 @@ import (
 // "a quota park is cancelled by the activation deadline before the reset").
 //
 // An activation's progress deadline is its budget from its start. A loop
-// parked on an exhausted provider quota makes no progress by design, so the
-// park suspends the deadline: the time parked is not charged, and the
+// parked on an exhausted provider quota, or an engineer parked for
+// management's verdict on its candidate (engineer_reuse.go), makes no
+// progress by design, so the park suspends the deadline (one park at a
+// time: both run on the run's one tool-loop goroutine): the time parked is not charged, and the
 // deadline moves out by it when the park ends. The suspension is bounded by
 // the activation's hard wall (activationHardWall from its start): a loop
 // still parked there ends with a fate that names the quota it waited for.
@@ -64,6 +66,8 @@ type activationDeadline struct {
 	done        chan struct{}
 	err         error
 	hitWall     bool
+	// granted is set when a grant moved the deadline out (grantAtLeast).
+	granted bool
 }
 
 func newActivationDeadline(parent context.Context, budget time.Duration) (*activationDeadline, context.CancelFunc) {
@@ -158,8 +162,12 @@ func (a *activationDeadline) suspend(w *types.WaitState) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.err != nil {
+		// An ended activation keeps the wait it ended on, for its fate.
+		return
+	}
 	a.parked = w.Clone()
-	if !a.parkedSince.IsZero() || a.err != nil {
+	if !a.parkedSince.IsZero() {
 		return
 	}
 	now := time.Now()
@@ -190,13 +198,37 @@ func (a *activationDeadline) resume() {
 	a.armLocked(now)
 }
 
+// grantAtLeast leaves at least d before the deadline from now, never past
+// the hard wall: a candidate's rejection returns its engineer to fix work
+// that the build's original budget may no longer hold.
+func (a *activationDeadline) grantAtLeast(d time.Duration) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.err != nil || !a.parkedSince.IsZero() {
+		return
+	}
+	now := time.Now()
+	want := now.Add(d)
+	if want.After(a.hardWall) {
+		want = a.hardWall
+	}
+	if !want.After(a.deadline) {
+		return
+	}
+	a.deadline, a.granted = want, true
+	a.armLocked(now)
+}
+
 // endsAt is when the activation ends if nothing changes, whether it is
-// over, and whether a park moved its deadline (it parks now or has parked):
-// only a moved deadline is re-armed by the durable continuation.
+// over, and whether a park or a grant moved its deadline: only a moved
+// deadline is re-armed by the durable continuation.
 func (a *activationDeadline) endsAt() (time.Time, bool, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.effectiveLocked(), a.err != nil, !a.parkedSince.IsZero() || a.suspended > 0
+	return a.effectiveLocked(), a.err != nil, !a.parkedSince.IsZero() || a.suspended > 0 || a.granted
 }
 
 // fate is the run's error when the activation ended at its deadline or wall.

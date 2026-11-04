@@ -215,3 +215,43 @@ func TestModelReselectKeepsTheModelWhenThePolicyIsNotUsable(t *testing.T) {
 		t.Fatalf("a readable policy naming another model: %+v ok=%v", next, ok)
 	}
 }
+
+func TestGrantAtLeastLeavesFixTimeBoundedByTheWall(t *testing.T) {
+	withHardWall(t, 2*time.Second)
+	ctx, cancel := newActivationDeadline(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	a := activationDeadlineFrom(ctx)
+	a.grantAtLeast(time.Second)
+	if d, _ := ctx.Deadline(); time.Until(d) < 900*time.Millisecond {
+		t.Fatalf("after a 1 s grant the deadline is %s away", time.Until(d))
+	}
+	if _, _, moved := a.endsAt(); !moved {
+		t.Fatal("a granted deadline is not marked moved, so the durable continuation would close the run at the old one")
+	}
+	a.grantAtLeast(time.Hour)
+	if d, _ := ctx.Deadline(); d.After(a.hardWall) {
+		t.Fatalf("a grant passed the hard wall: %s > %s", d, a.hardWall)
+	}
+	before, _ := ctx.Deadline()
+	a.grantAtLeast(time.Millisecond)
+	if after, _ := ctx.Deadline(); !after.Equal(before) {
+		t.Fatal("a smaller grant pulled the deadline in")
+	}
+}
+
+func TestReviewWaitIsNotChargedToTheBuild(t *testing.T) {
+	withHardWall(t, time.Hour)
+	ctx, cancel := newActivationDeadline(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	a := activationDeadlineFrom(ctx)
+	a.suspend(&types.WaitState{Kind: types.WaitKindVerifyOwed, Class: types.WaitClassPolicy, Resource: "management's verdict", Since: time.Now()})
+	time.Sleep(400 * time.Millisecond)
+	if ctx.Err() != nil {
+		t.Fatalf("the activation ended while it waited on management's verdict: %v", ctx.Err())
+	}
+	a.resume()
+	a.grantAtLeast(300 * time.Millisecond)
+	if d, _ := ctx.Deadline(); time.Until(d) < 250*time.Millisecond {
+		t.Fatalf("after a rejection the engineer has %s", time.Until(d))
+	}
+}
