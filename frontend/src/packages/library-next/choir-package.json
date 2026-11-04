@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "origin": "first_party",
   "display": {
-    "title": "Library (new)",
+    "title": "Library",
     "icon": "📚",
-    "description": "Browse published app releases and install one on this computer"
+    "description": "An app store: browse published apps with screenshots and install one on this computer"
   },
   "app": {
     "entry": "App.svelte",

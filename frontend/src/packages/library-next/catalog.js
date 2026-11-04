@@ -1,4 +1,4 @@
-// Library (new) data layer: the published package catalog, one release, and
+// Library data layer: the published package catalog, one release, and
 // this computer's installs. Every request goes through the shell's renewing
 // fetch; nothing here hard-codes a computer id.
 import { AuthRequiredError, fetchWithRenewal, notifyPackagesChanged } from '../../lib/app-sdk';
@@ -309,4 +309,61 @@ export function installState(item) {
 export function adoptionsOf(body) {
   const list = body && body.adoptions;
   return Array.isArray(list) ? list.filter(Boolean) : [];
+}
+
+// ---- the app store's plain words ----
+
+// formatDay is a date in plain words ("Nov 4"; the year only when it is not
+// this one), in UTC, the catalog's own clock.
+export function formatDay(iso, now = new Date()) {
+  const raw = String(iso || '');
+  if (!raw) return '';
+  const at = new Date(raw);
+  if (Number.isNaN(at.getTime())) return '';
+  const text = (MONTHS[at.getUTCMonth()] || '') + ' ' + at.getUTCDate();
+  return at.getUTCFullYear() === now.getUTCFullYear() ? text : text + ', ' + at.getUTCFullYear();
+}
+
+// versionLabel names a release for a person: "Version 3, Nov 4".
+export function versionLabel(release, now = new Date()) {
+  const seq = seqOf(release);
+  const day = formatDay(release && release.published_at, now);
+  const name = seq > 0 ? 'Version ' + seq : 'Version';
+  return day ? name + ', ' + day : name;
+}
+
+// descriptionOf is the manifest's one-line description the publisher
+// recorded, or ''.
+export function descriptionOf(release) {
+  const record = (release && release.record) || {};
+  return String(record.description || '').trim();
+}
+
+// predictionLabel and outcomeLabel say a precommitment in words, never as a
+// raw number or id: "Predicted 88% likely", "Came true".
+export function predictionLabel(precommit) {
+  const n = Number(precommit && precommit.p_yes_permille);
+  if (!Number.isFinite(n)) return 'No prediction recorded';
+  return 'Predicted ' + Math.round(n / 10) + '% likely';
+}
+
+export function outcomeLabel(precommit) {
+  const settled = String((precommit && precommit.settled) || '').trim().toLowerCase();
+  if (!settled) return { tone: '', text: 'Not settled yet' };
+  if (settled === 'yes') return { tone: 'ok', text: 'Came true' };
+  if (settled === 'no') return { tone: 'warn', text: 'Did not come true' };
+  return { tone: '', text: 'Settled' };
+}
+
+// installedFor finds the install in force for a package on this computer: a
+// finished install that is not an uninstall.
+export function installedFor(installs, name) {
+  const list = Array.isArray(installs) ? installs : [];
+  return list.find((item) => item && item.package === name && item.action !== 'uninstall' && installState(item) === 'done') || null;
+}
+
+// inFlightFor finds an install or uninstall of the package still working.
+export function inFlightFor(installs, name) {
+  const list = Array.isArray(installs) ? installs : [];
+  return list.find((item) => item && item.package === name && installState(item) === 'working') || null;
 }

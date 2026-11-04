@@ -1,6 +1,6 @@
 {
   "schema": "choir.package-contract/v1",
-  "note": "The Library opens on its list view and lists the catalog it is given.",
+  "note": "The Library opens on its shelf of apps and lists the catalog it is given: one card per app and its maker, by the maker's email address.",
   "ready": "[data-library-app][data-view=\"list\"]",
   "api": [
     {
@@ -16,7 +16,11 @@
             "head_release_id": "0000000000000000000000000000000000000000000000000000000000000001",
             "head_seq": 1,
             "releases": 1,
-            "head_media": []
+            "head_media": [],
+            "head_description": "Read the news",
+            "head_published_at": "2026-11-04T06:27:00Z",
+            "publisher_email": "maker@example.com",
+            "own": false
           }
         ]
       }
@@ -38,12 +42,14 @@
     {
       "selector": "[data-package-row][data-package=\"reader\"]",
       "text": "reader"
-    }
-  ],
-  "allow_unanswered": [
+    },
     {
-      "request": "GET /api/catalog/releases/*",
-      "reason": "each listed package's head release detail; the list row renders from the catalog listing without it"
+      "selector": "[data-card-publisher]",
+      "text": "maker@example.com"
+    },
+    {
+      "selector": "[data-card-desc]",
+      "text": "Read the news"
     }
   ]
 }
