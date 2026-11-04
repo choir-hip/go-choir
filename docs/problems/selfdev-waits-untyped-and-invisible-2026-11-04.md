@@ -147,8 +147,9 @@ WaitState{
 
 `WaitState.Sentence()` renders it as one plain sentence. For example:
 "waiting for host memory: this job needs 3072 MiB; 600 MiB is free beyond
-the floor; held by job j-1 (go test ./..., 1536 MiB, 4m) and other
-computers' builds (6144 MiB); checking every 5s; gives up at 01:42Z".
+the floor; held by job j-1 (job_lease, 1536 MiB) and another computer
+(job_lease, batch, 3072 MiB); checking every 5s; waited 4m; gives up in
+26m".
 
 `types.WaitTally` sums the time waited by kind. It renders as "waited
 12 min: host memory 9 min, platform update 3 min".
@@ -199,8 +200,10 @@ surfaces in three places.
 - Bounded (c): a park on a job still waiting for host memory gets a
   deadline that covers the wait bound plus the job's wall clock.
 - Left alone, and rendered through WaitState instead:
-  - The whole-life build reservation and its arithmetic. Branch
-    reserve-per-job owns that.
+  - The whole-life build reservation. Branch reserve-per-job has since
+    replaced it with per-job leases (098468166). The job wait record now
+    renders vmctl's lease refusal (`memory_wait`) and derives nothing
+    itself.
   - The broker lifecycle. Branch broker-own-cgroup owns that.
   - The refresh hold. Its expected wait is one vmctl sweep (one minute),
     and the 20-minute bound fires only when a refresh fails to land.
@@ -213,6 +216,11 @@ surfaces in three places.
     steps, but nothing records who holds them. The next slice gives them
     a holder record.
   - The three `time.Sleep` loops that ignore shutdown.
-  - Naming other computers' build holders individually. vmctl gives the
-    guest only totals, and the guest renders them as one anonymous
-    holder. Another owner's computer is never named to a guest.
+  - Another computer's holders are rendered as "another computer"
+    with their kind, class and bytes, as vmctl sends them. No id is
+    included.
+  - When a new attempt of an assignment starts, one in-flight job-wait
+    event can be attributed to the wrong attempt. Separately, an
+    assignment's close can race an admission observation, which can
+    leave a stale entry. That entry is reaped after 6 h. Both are review
+    round 2, F1 and F3.
