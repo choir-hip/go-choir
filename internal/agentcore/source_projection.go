@@ -93,7 +93,7 @@ func (rt *Runtime) bootedBaseForJoin() (string, error) {
 // whose release is `current` (the authority the effective identity already
 // uses), its bundle's patch and base, and whether an apply is in flight.
 func (rt *Runtime) sourceProjectionInput(ctx context.Context) sourceproj.Input {
-	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit(), OnSave: rt.recordSourceProjectionSaved}
+	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit(), OnSave: rt.recordSourceProjectionSaved, PackageLock: rt.packageLockOn(ctx)}
 	root := strings.TrimSpace(rt.selfdevUpdaterRoot)
 	if root == "" {
 		return in // no updater: nothing was ever applied here
@@ -211,6 +211,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 		return result, err
 	}
 	result.Reason = rt.withBaseFetchReason(result)
+	rt.annotatePackageReleases(ctx, &result)
 	rt.sourceProjectionMu.Lock()
 	previous := rt.sourceProjectionLast
 	copied := result
@@ -398,8 +399,8 @@ func rematerializedCastWarning(cast castLedgerRef, result sourceproj.Result, now
 		RecordID:    rematerializedCastWarningID(cast.CastRecordID, result.OperationID, result.BootedBase),
 		Discrepancy: types.DiscrepancyUnresolved,
 		Prediction: types.CommitmentPrediction{
-			Hypothesis: fmt.Sprintf("warning: Cast %s builds on the applied change %s grafted onto the booted base %s (stack_rematerialized, commit %s). The served build is still that change on %s. The booted base changed no path the change touches, so the graft is byte-identical at those paths; approving this Cast's candidate also approves the change on %s.",
-				cast.CastRecordID, result.OperationID, result.BootedBase, result.Head, result.ServedBase, result.BootedBase),
+			Hypothesis: fmt.Sprintf("warning: Cast %s builds on the applied change %s grafted onto the booted base %s (stack_rematerialized, commit %s). The served build is still that change on %s. %s; approving this Cast's candidate also approves the change on %s.",
+				cast.CastRecordID, result.OperationID, result.BootedBase, result.Head, result.ServedBase, rematerializedGraftDetail(result), result.BootedBase),
 			CommittedAt: stamp,
 		},
 		Observation: types.CommitmentObservation{
@@ -550,4 +551,58 @@ func composeFreezePatch(ctx context.Context, repo string, staged *capsule.Staged
 	}
 	staged.SourcePatchSHA, staged.SourceBaseCommit = sourceproj.SHA256(cumulative), base
 	return nil
+}
+
+// rematerializedGraftDetail says what the graft kept, for the Cast warning:
+// byte-identical at every path, or, for a package root the booted base also
+// changed (S6, package_behind_base), this computer's version kept whole.
+func rematerializedGraftDetail(result sourceproj.Result) string {
+	var conflicts []string
+	for _, e := range result.Packages {
+		if e.Conflict {
+			conflicts = append(conflicts, e.Root)
+		}
+	}
+	if len(conflicts) == 0 {
+		return "The booted base changed no path the change touches, so the graft is byte-identical at those paths"
+	}
+	return "The booted base also changed the package roots " + strings.Join(conflicts, ", ") +
+		" (package_behind_base): the capsule source keeps this computer's version of each whole, so approving this Cast's candidate keeps it over the base's version (to take the base's, restore the root to the base in the candidate). Elsewhere the graft is byte-identical"
+}
+
+// packageLockOn reads the packages.lock setting (S6). With no owner or
+// computer scope, or no store, it is the declared default; a read error is
+// off, which is the whole-stack S4 graft: it only refuses more.
+func (rt *Runtime) packageLockOn(ctx context.Context) bool {
+	ownerID, computerID := rt.rebaseScope()
+	if rt == nil || rt.store == nil || ownerID == "" || computerID == "" {
+		return store.KnownComputerSettings[store.SettingPackagesLock]
+	}
+	return rt.computerSettingOn(ctx, ownerID, computerID, store.SettingPackagesLock)
+}
+
+// annotatePackageReleases names the package install whose release tree each
+// entry holds (store.ReleaseAdoption, kind package). It is provenance for
+// /health only; a read failure leaves the entries unnamed.
+func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourceproj.Result) {
+	if rt == nil || rt.store == nil || result == nil || len(result.Packages) == 0 {
+		return
+	}
+	ownerID, computerID := rt.rebaseScope()
+	if ownerID == "" || computerID == "" {
+		return
+	}
+	installs, err := rt.store.ListReleaseAdoptions(ctx, ownerID, computerID)
+	if err != nil {
+		return
+	}
+	for i := range result.Packages {
+		e := &result.Packages[i]
+		for _, install := range installs { // newest first
+			if install.Kind == "package" && install.Action != "uninstall" && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
+				e.ReleaseID = install.ReleaseID
+				break
+			}
+		}
+	}
 }

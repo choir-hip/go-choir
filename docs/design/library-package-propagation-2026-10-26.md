@@ -1480,6 +1480,9 @@ F2).
 
 ### S6. The package lock and package-aware containment (red, tier 2)
 
+Build plan, reconciled with package install and the deletion of P8:
+[s6-package-lock-build-2026-11-04.md](s6-package-lock-build-2026-11-04.md).
+
 **Scope:**
 
 - `internal/sourceproj`: package entries derived from the S5 trailers;

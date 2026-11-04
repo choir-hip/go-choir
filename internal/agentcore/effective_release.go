@@ -64,6 +64,9 @@ type EffectiveRelease struct {
 	// reconcile.
 	Diverged         *bool              `json:"diverged,omitempty"`
 	SourceProjection *sourceproj.Result `json:"source_projection,omitempty"`
+	// Packages are the package roots under the applied stack, each with its
+	// lock answer (S6, docs/design/s6-package-lock-build-2026-11-04.md).
+	Packages []sourceproj.PackageEntry `json:"packages,omitempty"`
 }
 
 // EffectiveEventHead is the computer's event chain head as the guest store
@@ -149,6 +152,7 @@ func (rt *Runtime) EffectiveRelease(ctx context.Context) EffectiveRelease {
 	if projection := rt.sourceProjectionStatus(); projection != nil {
 		diverged := projection.Diverged
 		out.Diverged, out.SourceProjection = &diverged, projection
+		out.Packages = projection.Packages
 	}
 	return out
 }

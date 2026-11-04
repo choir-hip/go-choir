@@ -297,47 +297,18 @@ func graftTree(ctx context.Context, repo, base, booted, tree string) (graft stri
 		}
 		return "", false, "the booted base also changed " + strings.Join(shown, ", ") + more + ", which the patch touches, so it is not grafted", nil
 	}
-	entries, err := treeDiffRaw(ctx, repo, base, tree, touched)
-	if err != nil {
-		return "", false, "", err
-	}
-	var removes, adds []string
-	for _, e := range entries {
-		if strings.Trim(e.b.mode, "0") == "" {
-			removes = append(removes, e.path)
-			continue
-		}
-		adds = append(adds, e.b.mode+","+e.b.oid+","+e.path)
-	}
 	refused := ""
 	err = scratchIndex(ctx, repo, func(env []string) error {
 		if _, err := git(ctx, repo, env, nil, "read-tree", booted); err != nil {
 			return err
 		}
-		for i := 0; i < len(removes); i += 100 {
-			end := i + 100
-			if end > len(removes) {
-				end = len(removes)
-			}
-			if _, err := git(ctx, repo, env, nil, append([]string{"update-index", "--force-remove", "--"}, removes[i:end]...)...); err != nil {
-				return err
-			}
+		why, err := placeAfterImage(ctx, repo, env, base, tree, touched)
+		if err != nil {
+			return err
 		}
-		for i := 0; i < len(adds); i += 100 {
-			end := i + 100
-			if end > len(adds) {
-				end = len(adds)
-			}
-			args := []string{"update-index", "--add"}
-			for _, a := range adds[i:end] {
-				args = append(args, "--cacheinfo", a)
-			}
-			if _, err := git(ctx, repo, env, nil, args...); err != nil {
-				// No --replace: a file and a directory at one path is refused,
-				// and that is "not graftable", not a git failure.
-				refused = err.Error()
-				return nil
-			}
+		if why != "" {
+			refused = why
+			return nil
 		}
 		out, err := git(ctx, repo, env, nil, "write-tree")
 		if err != nil {
@@ -376,4 +347,59 @@ func graftTree(ctx context.Context, repo, base, booted, tree string) (graft stri
 		}
 	}
 	return graft, true, "", nil
+}
+
+// updateIndexRemove removes paths from the index env names.
+func updateIndexRemove(ctx context.Context, repo string, env, paths []string) error {
+	for i := 0; i < len(paths); i += 100 {
+		end := i + 100
+		if end > len(paths) {
+			end = len(paths)
+		}
+		if _, err := git(ctx, repo, env, nil, append([]string{"update-index", "--force-remove", "--"}, paths[i:end]...)...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// placeAfterImage writes tree's entry (base to tree) at each of paths into the
+// index env names: a path the patch deletes is removed, any other gets the
+// after-image's mode and blob. why is set, with nothing returned as an error,
+// when an entry does not fit the index (a file and a directory at one path).
+func placeAfterImage(ctx context.Context, repo string, env []string, base, tree string, paths []string) (why string, err error) {
+	if len(paths) == 0 {
+		return "", nil
+	}
+	entries, err := treeDiffRaw(ctx, repo, base, tree, paths)
+	if err != nil {
+		return "", err
+	}
+	var removes, adds []string
+	for _, e := range entries {
+		if strings.Trim(e.b.mode, "0") == "" {
+			removes = append(removes, e.path)
+			continue
+		}
+		adds = append(adds, e.b.mode+","+e.b.oid+","+e.path)
+	}
+	if err := updateIndexRemove(ctx, repo, env, removes); err != nil {
+		return "", err
+	}
+	for i := 0; i < len(adds); i += 100 {
+		end := i + 100
+		if end > len(adds) {
+			end = len(adds)
+		}
+		args := []string{"update-index", "--add"}
+		for _, a := range adds[i:end] {
+			args = append(args, "--cacheinfo", a)
+		}
+		if _, err := git(ctx, repo, env, nil, args...); err != nil {
+			// No --replace: a file and a directory at one path is refused,
+			// and that is "not graftable", not a git failure.
+			return err.Error(), nil
+		}
+	}
+	return "", nil
 }

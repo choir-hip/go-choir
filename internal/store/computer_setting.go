@@ -160,6 +160,16 @@ const SettingTextureRootDesk = "texture.root_desk"
 // rollback, and releases already listed stay readable and inert.
 const SettingPackagesPublish = "packages.publish"
 
+// SettingPackagesLock makes the source projection treat each package root
+// under the applied stack as its own entry (S6,
+// docs/design/s6-package-lock-build-2026-11-04.md): a deploy that changes a
+// package this computer also changed re-materializes the stack with this
+// computer's package kept, and ordinary Casts stay admitted, instead of the
+// whole stack going stack_base_moved. On by default (owner, 2026-11-03:
+// nothing is off by default); a stored off is the rollback to the whole
+// stack path graft (S4), read at the next reconcile, no restart.
+const SettingPackagesLock = "packages.lock"
+
 // SettingDispatchWideSlots raises the dispatcher's shared slots from 8 to
 // 12 at once, without a restart (the owner for the paper, 2026-10-27: "I
 // have the tokens for it"; docs/problems/related-stories-not-showing-on-the-paper-2026-10-27.md
@@ -246,6 +256,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureHoldTrajectory:        true,
 	SettingTextureRootDesk:              false,
 	SettingPackagesPublish:              true,
+	SettingPackagesLock:                 true,
 	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,

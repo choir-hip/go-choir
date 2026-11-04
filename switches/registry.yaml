@@ -1784,6 +1784,36 @@
    "note": "Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback. The b@c first-publish gate is superseded by the owner rulings of 2026-11-03 (nothing is off by default; a published release is public, 8e2814b6f); publishing stays an owner act with its --confirm-paths preview and needs an applied operation."
   },
   {
+   "id": "packages_lock",
+   "kind": "setting",
+   "life": "release",
+   "owner": "library",
+   "class": "red",
+   "surface": "sourceproj",
+   "introduced": "2026-11-04",
+   "settings": [
+    "packages.lock"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-12-04",
+   "ring": "all",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its reader once a test computer has carried a package through a deploy that moved that package (the S6 proof); the package-aware graft is then the only path",
+   "note": "S6 package lock (docs/design/s6-package-lock-build-2026-11-04.md): package roots under the applied stack are entries with their own answer when the base moves, so ordinary Casts stay admitted. Default ON for every computer (owner 2026-11-03: nothing is off by default; 2026-11-04: an export of library-next refused every Cast on three test computers for about 90 minutes). A stored off is the rollback to S4's whole-stack graft, read at the next reconcile."
+  },
+  {
    "id": "intake_events",
    "kind": "setting",
    "life": "release",
