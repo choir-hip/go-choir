@@ -25,7 +25,9 @@ throughline." Supersedes the 2026-11-03 overnight metamission
 superseded). Self-development is paused until the architecture has landed
 (wave W8 resumes it).
 
-## Active goal (2026-11-03): progressive delivery, built
+## Complete (2026-11-04): progressive delivery, built
+
+Closed on the owner's word, 2026-11-04: "Yes, close pd. It works." Leftovers carry into the modular-architecture goal.
 
 **Goal:** [`definitions/choir-progressive-delivery-2026-11-03.md`](definitions/choir-progressive-delivery-2026-11-03.md)
 (`readiness: executable` on the owner's word). Run it with

@@ -1197,7 +1197,7 @@ nodes:
     title: Progressive delivery built — every switch walks the rings on measured evidence, reverts on its own, and retires; the off-switch backlog cleared
     path: docs/definitions/choir-progressive-delivery-2026-11-03.md
     ledger: docs/definitions/choir-progressive-delivery-2026-11-03.ledger.md
-    status: working
+    status: complete
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator

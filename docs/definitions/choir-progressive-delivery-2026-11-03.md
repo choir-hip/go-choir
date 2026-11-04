@@ -115,7 +115,13 @@ slices:
   P6: the lint refuses any switch; the registry deleted.
 
 now:
-  status: working
+  status: complete
+  settled: 2026-11-04, owner: "Yes, close pd. It works."
+  residuals: >-
+    P3 to P6 leftovers (remaining backlog batches, the lint that refuses any
+    switch, deleting the switch registry) carry into the modular-architecture
+    goal, docs/definitions/choir-modular-architecture-2026-11-04.md; P5's
+    Library work landed there already.
   slice: P3
   conjecture: >-
     C1: if every switch is deleted into on-everywhere code and releases
