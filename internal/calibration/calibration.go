@@ -123,6 +123,18 @@ func Arm(salt []byte, thread string) string {
 	return ArmControl
 }
 
+// ArmOfCast names the arm of one management Cast (C2 of
+// docs/design/calibration-wiring-permutations-2026-11-04.md): management
+// has one long-lived thread per computer, so a split by thread puts every
+// management act on a computer in one arm. The unit is the Cast record id,
+// in its own hash domain, so a Cast's arm is independent of its engineer's.
+func ArmOfCast(salt []byte, castRecordID string) string {
+	if saltedByte(salt, "choir-calibration-arm-cast-v1", strings.TrimSpace(castRecordID))%2 == 0 {
+		return ArmDigest
+	}
+	return ArmControl
+}
+
 // The two arms.
 const (
 	ArmDigest  = "digest"

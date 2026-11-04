@@ -154,14 +154,16 @@ func (rt *Runtime) stateRoundPredictions(ctx context.Context, assignment types.E
 	if err != nil {
 		return fmt.Errorf("round predictions: cast %s: %w", castID, err)
 	}
-	// The round's arm of the within-desk A/B, so the readout splits the
+	// The Cast's arm (C2): management stated these records, so its unit
+	// is the Cast, not the engineer's thread; the readout splits the
 	// records without the salt.
-	arm := rt.calibrationArmOfThread(ctx, b.ComputerID, b.AssignedAgentID)
+	arm := rt.calibrationArmOfCast(ctx, b.ComputerID, cast.RecordID)
 	for i := range records {
 		if records[i].SubjectRefs == nil {
 			records[i].SubjectRefs = map[string]string{}
 		}
 		records[i].SubjectRefs[calibrationArmRef] = arm
+		records[i].SubjectRefs[calibrationArmUnitRef] = calibrationArmUnitCast
 	}
 	for _, rec := range records {
 		exists, err := rt.store.CommitmentRecordExists(ctx, b.OwnerID, b.ComputerID, rec.RecordID)

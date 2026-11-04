@@ -87,8 +87,9 @@ func TestRoundPredictionsAreStatedAtTheOpenAndSettledByTheRuntime(t *testing.T) 
 	kinds := map[types.PrecommitRuleKind]types.CommitmentRecord{}
 	for _, rec := range stated {
 		kinds[rec.Precommit.Rule.Kind] = rec
-		if want := f.rt.calibrationArmOfThread(ctx, f.computer, "engineering:"+plan.AssignmentID); rec.SubjectRefs[calibrationArmRef] != want {
-			t.Fatalf("record %s arm %q, want %q", rec.RecordID, rec.SubjectRefs[calibrationArmRef], want)
+		// C2: management's arm is the Cast's, never the engineer's thread.
+		if want := f.rt.calibrationArmOfCast(ctx, f.computer, cast.RecordID); rec.SubjectRefs[calibrationArmRef] != want || want == "" || rec.SubjectRefs[calibrationArmUnitRef] != calibrationArmUnitCast {
+			t.Fatalf("record %s arm %q unit %q, want %q by cast", rec.RecordID, rec.SubjectRefs[calibrationArmRef], rec.SubjectRefs[calibrationArmUnitRef], want)
 		}
 		if rec.Precommit.Rule.Since != cast.Provenance.CommittedAt || rec.Provenance.AgentID != f.management || rec.SubjectRefs["cast"] != cast.RecordID {
 			t.Fatalf("record %s: since %s (cast %s), author %s, refs %v", rec.RecordID, rec.Precommit.Rule.Since, cast.Provenance.CommittedAt, rec.Provenance.AgentID, rec.SubjectRefs)

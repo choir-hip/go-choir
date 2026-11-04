@@ -69,6 +69,33 @@ var calibrationPushDesks = map[string]bool{agentprofile.Engineering: true}
 // calibrationArmRef is the subject-ref key of a round record's arm.
 const calibrationArmRef = "calibration_arm"
 
+// calibrationArmUnitRef names the unit the arm was drawn for (C2):
+// calibrationArmUnitCast for a Cast's predictions (management's unit is the
+// Cast), calibrationArmUnitThread for an engineer's own (its assignment
+// thread).
+//
+// Failure modes, written before the code (C2):
+//   - every management Cast on a computer lands in one arm, because its
+//     thread is one inbox -> the arm hashes the Cast record id;
+//   - a Cast's records carry the engineer's arm, which management never saw
+//     -> they carry the Cast's arm and say so (unit "cast");
+//   - the Cast arm correlates with the engineer's -> its own hash domain.
+const (
+	calibrationArmUnitRef    = "calibration_arm_unit"
+	calibrationArmUnitCast   = "cast"
+	calibrationArmUnitThread = "thread"
+)
+
+// calibrationArmOfCast is a management Cast's arm on its computer; "" when
+// the computer has no salt.
+func (rt *Runtime) calibrationArmOfCast(ctx context.Context, computerID, castRecordID string) string {
+	salt := rt.calibrationSalt(ctx, computerID)
+	if salt == nil {
+		return ""
+	}
+	return calibration.ArmOfCast(salt, castRecordID)
+}
+
 // calibrationSaltLabel names the derived secret the salt is.
 const calibrationSaltLabel = "calibration-salt-v2"
 

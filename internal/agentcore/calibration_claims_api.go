@@ -64,6 +64,7 @@ type calibrationClaim struct {
 	Late       bool    `json:"late"`
 	LateReason string  `json:"late_reason,omitempty"`
 	Arm        string  `json:"arm,omitempty"`
+	ArmUnit    string  `json:"arm_unit,omitempty"`
 	Assignment string  `json:"assignment"`
 	Operation  string  `json:"operation,omitempty"`
 	Cast       string  `json:"cast,omitempty"`
@@ -87,7 +88,7 @@ func calibrationClaimOf(rec types.CommitmentRecord, resolve *types.CommitmentRec
 		Kind: string(rule.Kind), Question: rec.Precommit.Question, P: rec.Precommit.YesProbability(),
 		Estimate: rule.EstimateMinutes, Low: rule.LowMinutes, High: rule.HighMinutes, Within: rule.WithinMinutes, WithinFrz: rule.WithinRounds,
 		StatedAt: firstNonEmpty(refs[types.RuleRefStatedAt], rec.Provenance.CommittedAt),
-		Late:     types.LateRulePrecommit(rec), LateReason: refs[types.RuleRefLateReason], Arm: refs[calibrationArmRef],
+		Late:     types.LateRulePrecommit(rec), LateReason: refs[types.RuleRefLateReason], Arm: refs[calibrationArmRef], ArmUnit: refs[calibrationArmUnitRef],
 		Assignment: rule.AssignmentID, Cast: refs["cast"],
 	}
 	if resolve != nil && resolve.Resolve != nil {
