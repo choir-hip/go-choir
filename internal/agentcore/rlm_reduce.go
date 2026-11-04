@@ -124,7 +124,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		}
 		// Engineering reaches Texture only through management (Cut 1
 		// routing, invariant 6).
-		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); fromDesk == agentprofile.Engineering && toDesk == agentprofile.Texture {
+		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); fromDesk == agentprofile.Engineering && canonicalDeskName(toDesk) == agentprofile.Texture {
 			return fmt.Errorf("reduce: %s %s: engineering reaches Texture only through management; address management", in.Kind, in.LocalID)
 		}
 		// Engineering's Precommits are rule-settled; no other desk's may
@@ -2121,16 +2121,6 @@ func directiveTargetAgentID(scope ReductionScope, addressee string) (string, err
 		return "", fmt.Errorf("reduce: directive addressee %q needs a channel document scope", addressee)
 	}
 	return profile + ":" + docID, nil
-}
-
-// castOpensEngineeringAssignment reports whether a Cast's addressee is the
-// engineering desk, the only desk a Cast admits work to through the
-// delegated-cast step (protocol P2d1). A Cast to any other desk commits its
-// record and packet only.
-func castOpensEngineeringAssignment(toDesk string) bool {
-	profile, _, _ := strings.Cut(strings.TrimSpace(toDesk), ":")
-	canonical, err := agentprofile.Canonical(profile)
-	return err == nil && canonical == agentprofile.Engineering
 }
 
 // commitLifecycleActIntent commits one desk-authored act through the

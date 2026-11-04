@@ -7,6 +7,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // The contract of the address resolver (MA1.2). The resolver replaced
@@ -34,9 +35,8 @@ func TestResolveAddressEveryDeskToEveryDesk(t *testing.T) {
 	for _, from := range desks {
 		for _, to := range desks {
 			if from == to {
-				r := contractRoute(t, from+":x", contractOwner, to)
-				if r.OnRoute {
-					t.Errorf("%s addresses itself: routed to %q", from, r.Inbox)
+				if r, err := ResolveAddress(from+":x", contractOwner, to); err == nil {
+					t.Errorf("%s addresses itself: %+v", from, r)
 				}
 				continue
 			}
@@ -114,8 +114,8 @@ func TestResolveAddressKeepsTheRoutesRecordsRouteHad(t *testing.T) {
 		{"conductor:x", contractOwner, "texture:d1"},
 		{"management-task", contractOwner, "texture:d1"},
 	} {
-		if r := contractRoute(t, c.from, c.owner, c.to); r.OnRoute {
-			t.Errorf("%s -> %s (owner %q): routed to %q", c.from, c.to, c.owner, r.Inbox)
+		if r, err := ResolveAddress(c.from, c.owner, c.to); err == nil {
+			t.Errorf("%s -> %s (owner %q): resolved to %+v, want a refusal", c.from, c.to, c.owner, r)
 		}
 	}
 }
@@ -146,8 +146,8 @@ func TestResolveAddressRefusals(t *testing.T) {
 func TestResolveAddressRegisteredClassesNameTheirSenders(t *testing.T) {
 	for _, from := range []string{"texture:d1", "research:d1", "engineering:a1"} {
 		for _, to := range []string{"source:s1", types.StoryOpenInbox} {
-			if r := contractRoute(t, from, contractOwner, to); r.OnRoute {
-				t.Errorf("%s -> %s routed to %q", from, to, r.Inbox)
+			if r, err := ResolveAddress(from, contractOwner, to); err == nil {
+				t.Errorf("%s -> %s resolved to %+v, want a refusal", from, to, r)
 			}
 		}
 	}
@@ -185,8 +185,8 @@ func TestResolveAddressEngineeringCastFromNonHolderForwardsToManagement(t *testi
 // and it is not on the records path either.
 func TestResolveAddressDeskWithoutInbox(t *testing.T) {
 	for _, to := range []string{"conductor", "email", "verifier"} {
-		if r := contractRoute(t, "texture:d1", contractOwner, to); r.OnRoute {
-			t.Errorf("texture -> %s routed to %q", to, r.Inbox)
+		if r, err := ResolveAddress("texture:d1", contractOwner, to); err == nil {
+			t.Errorf("texture -> %s resolved to %+v, want a refusal", to, r)
 		}
 	}
 	if !isRecordsDesk(agentprofile.Engineering) || isRecordsDesk(agentprofile.Conductor) || isRecordsDesk("") || isRecordsDesk("app:x") {
@@ -194,5 +194,113 @@ func TestResolveAddressDeskWithoutInbox(t *testing.T) {
 	}
 	if _, err := ResolveAddress("texture:d1", contractOwner, strings.Repeat("x", 3)); err == nil {
 		t.Error("an unregistered name resolved")
+	}
+}
+
+// "TEXTURE" is the Texture: names are normalised before lookup and before
+// invariant 6.
+func TestResolveAddressNormalisesDeskNames(t *testing.T) {
+	r := contractRoute(t, "research:d1", contractOwner, "TEXTURE")
+	if !r.OnRoute || r.Inbox != "texture:d1" {
+		t.Errorf("research -> TEXTURE: %+v", r)
+	}
+	r = contractRoute(t, "texture:d1", contractOwner, " Engineering ")
+	if !r.Forwarded || r.Inbox != "management:"+contractOwner {
+		t.Errorf("texture -> Engineering: %+v", r)
+	}
+	err := validateCellIntents(ReductionScope{FromRole: agentprofile.Engineering}, []yaegikernel.StagedIntent{
+		{LocalID: "n1", Kind: yaegikernel.IntentNote, ToDesk: "TEXTURE", Body: "x"}})
+	if err == nil {
+		t.Error("engineering -> TEXTURE evaded invariant 6")
+	}
+}
+
+// A forwarded request of any kind says in its text that it was aimed at
+// engineering.
+func TestMarkForwardedNamesTheOriginalAddressee(t *testing.T) {
+	for _, in := range []yaegikernel.StagedIntent{
+		{Kind: yaegikernel.IntentCast, Objective: "o"}, {Kind: yaegikernel.IntentNote, Body: "o"},
+		{Kind: yaegikernel.IntentReply, Answer: "o"},
+		{Kind: yaegikernel.IntentReport, Claim: "o"},
+	} {
+		in.ToDesk = "engineering"
+		out := markForwarded(in, "research:d1")
+		if !strings.Contains(out.Objective+out.Body+out.Answer+out.Claim, "aimed at engineering by research:d1") {
+			t.Errorf("%s not marked: %+v", in.Kind, out)
+		}
+	}
+}
+
+// The off-route inputs that used to commit silently on the packet path
+// (CanMessage was their only gate) are refusals, by the resolver and by the
+// reducer.
+func TestOffRouteRecordsIntentsAreRefused(t *testing.T) {
+	for _, c := range []struct{ from, to string }{
+		{"research:docA", "research:docB"},
+		{"engineering:a1", "engineering:a2"},
+		{"management:" + contractOwner, "management-task:t1"},
+	} {
+		if r, err := ResolveAddress(c.from, contractOwner, c.to); err == nil {
+			t.Errorf("%s -> %s resolved to %+v", c.from, c.to, r)
+		}
+	}
+}
+
+// The old-versus-new matrix, reconstructed as a literal table from the
+// differential that ran recordsRoute against ResolveAddress: a sender, a
+// recipient, and the old and new answers. "off" is the old silent
+// fall-through to the packet path; "refuse" an error; "forward" a landing in
+// management's inbox. Rows marked changed are the intended differences.
+func TestAddressMatrixOldVersusNew(t *testing.T) {
+	o := contractOwner
+	for _, c := range []struct {
+		from, to, old, new string
+	}{
+		// Unchanged routes.
+		{"texture:d1", "research", "research:d1", "research:d1"},
+		{"texture:d1", "management", "management:" + o, "management:" + o},
+		{"research:d1", "texture", "texture:d1", "texture:d1"},
+		{"management:" + o, "texture:d2", "texture:d2", "texture:d2"},
+		{"management:" + o, "engineering:a1", "engineering:a1", "engineering:a1"},
+		{"management:" + o, "source:s1", "source:s1", "source:s1"},
+		{"management:" + o, "texture:new", "texture:new", "texture:new"},
+		{"engineering:a1", "management", "management:" + o, "management:" + o},
+		{"management-task:t1", "source:s1", "source:s1", "source:s1"},
+		{"management-task:t1", "texture:d3", "texture:d3", "texture:d3"},
+		{"management-task:t1", "texture:new", "texture:new", "texture:new"},
+		// Unchanged refusals.
+		{"management:" + o, "texture", "refuse", "refuse"},
+		{"management:" + o, "engineering", "refuse", "refuse"},
+		{"management-task:t1", "texture", "refuse", "refuse"},
+		{"management-task:t1", "engineering:a1", "refuse", "refuse"},
+		// Changed: allowlist refusals removed.
+		{"research:d1", "management", "off", "management:" + o},
+		{"engineering:a1", "research:d2", "off", "research:d2"},
+		{"engineering:a1", "texture:d2", "off", "texture:d2"}, // validateCellIntents still refuses it (invariant 6)
+		{"management:" + o, "research:d2", "off", "research:d2"},
+		// Changed: forwarded to management.
+		{"research:d1", "engineering", "off", "forward:management:" + o},
+		{"texture:d1", "engineering:a1", "off", "forward:management:" + o},
+		// Changed: the silent fall-through is a refusal.
+		{"research:d1", "research:d2", "off", "refuse"},
+		{"engineering:a1", "engineering:a2", "off", "refuse"},
+		{"management:" + o, "management-task:t1", "off", "refuse"},
+		{"research:d1", "job:j1", "off", "refuse"},
+		{"research:d1", "no-such-desk", "off", "refuse"},
+		{"texture:d1", "conductor", "off", "refuse"},
+		{"texture:d1", "source:s1", "off", "refuse"},
+		{"management:" + o, "management:", "off", "refuse"},
+	} {
+		r, err := ResolveAddress(c.from, o, c.to)
+		got := r.Inbox
+		switch {
+		case err != nil:
+			got = "refuse"
+		case r.Forwarded:
+			got = "forward:" + r.Inbox
+		}
+		if got != c.new {
+			t.Errorf("%s -> %s: got %q, want %q (old: %s)", c.from, c.to, got, c.new, c.old)
+		}
 	}
 }

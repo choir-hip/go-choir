@@ -30,7 +30,7 @@ import (
 // engineering desk: from management it opens a new assignment (C1e D4).
 func engineeringCastIntent(in yaegikernel.StagedIntent) bool {
 	desk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":")
-	return in.Kind == yaegikernel.IntentCast && desk == agentprofile.Engineering
+	return in.Kind == yaegikernel.IntentCast && canonicalDeskName(desk) == agentprofile.Engineering
 }
 
 // cellRecords is the range of a desk's inbox one cell reads.
@@ -582,11 +582,17 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, routeErr)
 		}
 		toInbox, onRoute := route.Inbox, route.OnRoute
-		if route.Forwarded && in.Kind == yaegikernel.IntentCast {
+		if recordsIntent(in) && strings.TrimSpace(in.ToDesk) != "" && !onRoute {
+			return nil, fmt.Errorf("reduce: %s: %q is not on the records path from %s", in.LocalID, in.ToDesk, r.scope.DeskAgentID)
+		}
+		if route.Forwarded && in.Kind == yaegikernel.IntentAsk {
+			return nil, fmt.Errorf("reduce: %s: an Ask aimed at %s cannot be forwarded to its admission; Cast to it (a Cast reaches management as an admission request) or ask management", in.LocalID, strings.TrimSpace(in.ToDesk))
+		}
+		if route.Forwarded {
 			// An engineering Cast from a desk that does not hold the
 			// assignment kind is an admission request in the holder's inbox;
 			// the holder decides on its own grants.
-			in.Objective = "Admission request, a Cast aimed at " + strings.TrimSpace(in.ToDesk) + " by " + sender + ": " + in.Objective
+			in = markForwarded(in, sender)
 		}
 		if strings.HasPrefix(strings.TrimSpace(in.ToDesk), captureSourceDesk+":") && !onRoute {
 			return nil, fmt.Errorf("reduce: %s: only management declines a source's captures", in.LocalID)

@@ -17,7 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-func TestCommitTrayLifecycleProducerReportMintsRecordNativePacket(t *testing.T) {
+func TestCommitTrayRefusesOffRouteProducerReport(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
@@ -64,35 +64,22 @@ func TestCommitTrayLifecycleProducerReportMintsRecordNativePacket(t *testing.T) 
 	}
 	packetJSON, _ := json.Marshal(packet)
 
-	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+	// A Report to another subject's Texture is off the records path: since
+	// MA1.2 that is a visible refusal, not a packet that CanMessage once
+	// gated (the research agent here is research:control-report, the
+	// Texture texture:doc-control-report).
+	err = reduction.commitTray(ctx, []yaegikernel.StagedIntent{
 		{LocalID: "report-1", Kind: yaegikernel.IntentReport, ToDesk: textureAgentID, Packet: string(packetJSON), Claim: "report-path finding"},
-	}, 1); err != nil {
-		t.Fatalf("commitTray lifecycle producer report failed: %v", err)
+	}, 1)
+	if err == nil || !strings.Contains(err.Error(), "reaches only its own subject") {
+		t.Fatalf("a cross-subject report was not refused: %v", err)
 	}
-
-	pending, err := s.ListAllPendingLifecycleUpdates(ctx, run.OwnerID, run.ComputerID, textureAgentID)
-	if err != nil {
-		t.Fatal(err)
+	pending, perr := s.ListAllPendingLifecycleUpdates(ctx, run.OwnerID, run.ComputerID, textureAgentID)
+	if perr != nil {
+		t.Fatal(perr)
 	}
-	if len(pending) != 1 {
-		t.Fatalf("lifecycle producer report did not queue: pending=%d", len(pending))
-	}
-	if pending[0].ProducerUpdateID == "" || pending[0].WorkItemID != fixture.workID ||
-		pending[0].Direction != types.LifecyclePacketDirectionProducerReport ||
-		pending[0].SourceRecordID != "cell-report:report:report-1" {
-		t.Fatalf("record-native report packet malformed: %+v", pending[0])
-	}
-	messages, err := s.ListChannelMessages(ctx, run.OwnerID, run.ChannelID, 0, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, message := range messages {
-		if strings.Contains(message.Content, "report-path finding") {
-			t.Fatalf("record-native report leaked channel envelope: %+v", message)
-		}
-	}
-	if !reduction.receipt.Committed || len(reduction.receipt.Intents) != 1 {
-		t.Fatalf("reduction receipt = %+v", reduction.receipt)
+	if len(pending) != 0 {
+		t.Fatalf("a refused report queued %d packet(s)", len(pending))
 	}
 }
 
@@ -450,18 +437,6 @@ func TestCommitTrayLifecycleCastToResearchOpensNoAssignment(t *testing.T) {
 	}
 	if len(assignments) != 0 {
 		t.Fatalf("a Cast to research opened %d engineering assignment(s)", len(assignments))
-	}
-}
-
-func TestCastOpensEngineeringAssignmentOnlyForEngineering(t *testing.T) {
-	for desk, want := range map[string]bool{
-		"engineering": true, "engineering:doc-1": true, " Engineering ": true,
-		"research": false, "research:doc-1": false, "management": false,
-		"texture:doc-1": false, "": false, "not-a-desk": false,
-	} {
-		if got := castOpensEngineeringAssignment(desk); got != want {
-			t.Errorf("castOpensEngineeringAssignment(%q) = %v, want %v", desk, got, want)
-		}
 	}
 }
 

@@ -456,3 +456,26 @@ func TestManifestNamingRetiredVerbIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestInstanceIsValidatedAndExactlyOneDeskHoldsAssignments(t *testing.T) {
+	bad := Desk{Name: "x", Kind: KindSystem, Carrier: CarrierNone, Taint: TaintPrivileged, Restart: RestartContract, Instance: "subjct"}
+	if validateStructure(bad) == nil {
+		t.Error("a misspelt instance validated")
+	}
+	role := Desk{Name: "x", Kind: KindRole, Carrier: CarrierNone, Taint: TaintPrivileged, Restart: RestartContract, Instance: InstanceOwner}
+	if validateStructure(role) == nil {
+		t.Error("a role with an inbox validated")
+	}
+	holders := 0
+	for _, n := range Names() {
+		d, _ := Lookup(n)
+		for _, k := range d.OwnedKinds {
+			if k == "assignment" {
+				holders++
+			}
+		}
+	}
+	if holders != 1 {
+		t.Errorf("%d desks own the assignment kind, want exactly 1", holders)
+	}
+}

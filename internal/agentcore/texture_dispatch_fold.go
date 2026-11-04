@@ -16,7 +16,7 @@ const textureFoldedTurnLocalID = "tray-turn"
 
 // foldTextureDispatch is how a Texture cell dispatches (protocol P2a,
 // docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md). Texture's
-// staged Cast, Ask and Note to research or management fold into the cell's
+// staged Cast, Ask and Note to a desk the address resolver reaches fold into the cell's
 // one turn, so each dispatch commits with it; a cell that dispatched with
 // no turn verb commits as a Wait. The returned intents exclude the folded
 // ones; folded lists them for the receipt.
@@ -52,8 +52,11 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 		}
 		toInbox := route.Inbox
 		desk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":")
-		if route.Forwarded && in.Kind == yaegikernel.IntentCast {
-			in.Objective = "Admission request, a Cast aimed at " + strings.TrimSpace(in.ToDesk) + " by " + scope.DeskAgentID + ": " + in.Objective
+		if route.Forwarded && in.Kind == yaegikernel.IntentAsk {
+			return nil, nil, fmt.Errorf("reduce: Texture %s: an Ask aimed at %s cannot be forwarded to its admission; Cast to it or ask management", in.LocalID, strings.TrimSpace(in.ToDesk))
+		}
+		if route.Forwarded {
+			in = markForwarded(in, scope.DeskAgentID)
 		}
 		if in.Kind == yaegikernel.IntentNote && strings.TrimSpace(in.Body) == "" {
 			return nil, nil, fmt.Errorf("reduce: Texture %s: a note to %s needs a body", in.LocalID, desk)

@@ -46,7 +46,7 @@ func PolicyFor(profile string) (Policy, error) {
 	case "processor", "reconciler":
 		return Policy{}, UnknownProfileError{Input: profile}
 	}
-	return Policy{Profile: strings.TrimSpace(profile)}, nil
+	return Policy{Profile: canonical}, nil
 }
 
 // UnknownProfileError reports a profile token outside the V2 live vocabulary.

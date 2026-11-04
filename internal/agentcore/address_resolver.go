@@ -9,6 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // The address resolver (modular architecture MA1.2, R5): one data-driven
@@ -115,6 +116,7 @@ func InboxClasses() []InboxClass {
 	defer inboxClassMu.RUnlock()
 	out := make([]InboxClass, 0, len(inboxClasses))
 	for _, c := range inboxClasses {
+		c.Senders = append([]string(nil), c.Senders...)
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -165,22 +167,27 @@ func assignmentHolder() (deskmanifest.Desk, bool) {
 	return deskmanifest.Desk{}, false
 }
 
-// ResolveAddress is the inbox a request lands in. fromAgentID is the
+// ResolveAddress is the inbox a request lands in. Every address but the empty
+// one either resolves or is refused; there is no silent off-route.
+// fromAgentID is the
 // sender's agent id (<desk>:<subject>), ownerID the computer's owner, toDesk
 // the recipient name or inbox the cell staged. An error is a refusal the
-// sender should read; OnRoute false with no error is an address that is not
-// on the records path.
+// sender should read. The empty address is the only one that is not on the
+// records path and not refused: a ledger-only act names no recipient.
 func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	fromDesk, fromSubject, _ := strings.Cut(strings.TrimSpace(fromAgentID), ":")
 	to := strings.TrimSpace(toDesk)
 	toName, toSubject, hasSubject := strings.Cut(to, ":")
 	toSubject = strings.TrimSpace(toSubject)
+	if canonical, err := agentprofile.Canonical(toName); err == nil {
+		toName = canonical
+	}
 	named := hasSubject && toSubject != ""
 	owner := strings.TrimSpace(ownerID)
 	isTask := fromDesk == types.ManagementTaskDesk
 
 	if isTask && fromSubject == "" {
-		return Route{}, nil
+		return Route{}, fmt.Errorf("a management task's agent id %q names no task", fromAgentID)
 	}
 	if to == "" && !isTask {
 		return Route{}, nil
@@ -191,14 +198,19 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 		if !class.Addressable {
 			return Route{}, fmt.Errorf("%q is a system inbox the system writes; a desk does not address it", to)
 		}
-		if class.accepts(fromDesk) && (class.Fixed || named) {
+		if class.accepts(fromDesk) {
 			if class.Fixed {
 				return Route{Inbox: class.Name, OnRoute: true}, nil
 			}
-			return Route{Inbox: class.Name + ":" + toSubject, OnRoute: true}, nil
+			if named {
+				return Route{Inbox: class.Name + ":" + toSubject, OnRoute: true}, nil
+			}
+			if !isTask {
+				return Route{}, fmt.Errorf("%q names no %s; address %s:<id>", to, class.Name, class.Name)
+			}
 		}
 		if !isTask {
-			return Route{}, nil
+			return Route{}, fmt.Errorf("%q does not take requests from %s (it names its senders: %s)", to, fromDesk, strings.Join(class.Senders, ", "))
 		}
 	}
 
@@ -221,23 +233,20 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 		recipient, ok = deskmanifest.Lookup(toName)
 	}
 	if !ok {
-		if _, err := agentprofile.Canonical(toName); err == nil {
-			return Route{}, nil
-		}
 		return Route{}, fmt.Errorf("%q is not a registered desk or inbox", to)
 	}
 	if recipient.Instance == deskmanifest.InstanceNone {
-		return Route{}, nil
+		return Route{}, fmt.Errorf("%q has no records inbox", to)
 	}
 	sender, ok := deskmanifest.Lookup(fromDesk)
 	if !ok || sender.Instance == deskmanifest.InstanceNone {
-		return Route{}, nil
+		return Route{}, fmt.Errorf("%q has no records inbox to send from", fromAgentID)
 	}
 	if (sender.Instance == deskmanifest.InstanceSubject || sender.Instance == deskmanifest.InstanceAssignment) && fromSubject == "" {
-		return Route{}, nil
+		return Route{}, fmt.Errorf("%q names no %s instance to send from", fromAgentID, fromDesk)
 	}
-	if fromDesk == toName {
-		return Route{}, nil
+	if fromDesk == recipient.Name {
+		return Route{}, fmt.Errorf("%s does not address another %s; a desk reaches the other desks", fromDesk, recipient.Name)
 	}
 
 	// An assignment opens only at the holder's admission: a request to the
@@ -246,7 +255,7 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	if recipient.Instance == deskmanifest.InstanceAssignment && !holdsAssignments(sender) {
 		holder, ok := assignmentHolder()
 		if !ok || holder.Instance != deskmanifest.InstanceOwner || owner == "" {
-			return Route{}, nil
+			return Route{}, fmt.Errorf("no %s inbox to forward %q to", holder.Name, to)
 		}
 		return Route{Inbox: holder.Name + ":" + owner, OnRoute: true, Forwarded: true}, nil
 	}
@@ -254,14 +263,14 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	switch recipient.Instance {
 	case deskmanifest.InstanceOwner:
 		if owner == "" || (hasSubject && toSubject != owner) {
-			return Route{}, nil
+			return Route{}, fmt.Errorf("%q is not this computer's %s inbox (%s:<owner>)", to, recipient.Name, recipient.Name)
 		}
 		return Route{Inbox: recipient.Name + ":" + owner, OnRoute: true}, nil
 	case deskmanifest.InstanceSubject:
 		if sender.Instance == deskmanifest.InstanceSubject {
 			// A subject desk talks to its subject's other desks.
 			if hasSubject && toSubject != fromSubject {
-				return Route{}, nil
+				return Route{}, fmt.Errorf("%s:%s reaches only its own subject's %s, not %q", sender.Name, fromSubject, recipient.Name, to)
 			}
 			return Route{Inbox: recipient.Name + ":" + fromSubject, OnRoute: true}, nil
 		}
@@ -269,7 +278,7 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 			if sender.Instance == deskmanifest.InstanceOwner {
 				return Route{}, fmt.Errorf("%s addresses a %s by its inbox: pass the record's from (%s:<doc>), not %q", sender.Name, recipient.Name, recipient.Name, to)
 			}
-			return Route{}, nil
+			return Route{}, fmt.Errorf("%s names the %s inbox it means (%s:<doc>), not %q", sender.Name, recipient.Name, recipient.Name, to)
 		}
 		return Route{Inbox: recipient.Name + ":" + toSubject, OnRoute: true}, nil
 	case deskmanifest.InstanceAssignment:
@@ -281,7 +290,24 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 		}
 		return Route{Inbox: recipient.Name + ":" + toSubject, OnRoute: true}, nil
 	}
-	return Route{}, nil
+	return Route{}, fmt.Errorf("desk %s declares the unknown instance %q", recipient.Name, recipient.Instance)
+}
+
+// markForwarded says in the request's own text that it was aimed at another
+// desk and forwarded to the assignment holder.
+func markForwarded(in yaegikernel.StagedIntent, sender string) yaegikernel.StagedIntent {
+	prefix := "Admission request, a " + string(in.Kind) + " aimed at " + strings.TrimSpace(in.ToDesk) + " by " + sender + ": "
+	switch in.Kind {
+	case yaegikernel.IntentCast:
+		in.Objective = prefix + in.Objective
+	case yaegikernel.IntentReply:
+		in.Answer = prefix + in.Answer
+	case yaegikernel.IntentReport:
+		in.Claim = prefix + in.Claim
+	default:
+		in.Body = prefix + in.Body
+	}
+	return in
 }
 
 func holdsAssignments(d deskmanifest.Desk) bool {
@@ -301,4 +327,13 @@ func holdsAssignments(d deskmanifest.Desk) bool {
 func isRecordsDesk(profile string) bool {
 	d, ok := deskmanifest.Lookup(strings.TrimSpace(profile))
 	return ok && d.Instance != deskmanifest.InstanceNone
+}
+
+// canonicalDeskName is the canonical spelling of a desk name, or the name
+// unchanged when it is not a profile (the caller then compares unequal).
+func canonicalDeskName(name string) string {
+	if c, err := agentprofile.Canonical(name); err == nil {
+		return c
+	}
+	return strings.TrimSpace(name)
 }

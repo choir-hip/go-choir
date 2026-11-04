@@ -160,7 +160,9 @@ type Desk struct {
 	Memory  Memory
 
 	// OwnedKinds are the object kinds the desk is the only writer of.
-	// Declared and parity-pinned; no consumer reads it yet (ARCH-04).
+	// Declared and parity-pinned. The address resolver reads the
+	// "assignment" kind: its single holder admits engineering work and
+	// receives forwarded engineering requests (a test pins one holder).
 	OwnedKinds []string
 	// ModelRole is the modelpolicy role key. Declared; no consumer yet.
 	ModelRole string
@@ -447,6 +449,14 @@ func validateStructure(d Desk) error {
 	}
 	if d.Taint == "" {
 		return fmt.Errorf("desk %s: no taint class", d.Name)
+	}
+	switch d.Instance {
+	case InstanceNone, InstanceOwner, InstanceSubject, InstanceAssignment:
+	default:
+		return fmt.Errorf("desk %s: instance %q is not none, owner, subject or assignment", d.Name, d.Instance)
+	}
+	if d.Kind == KindRole && d.Instance != InstanceNone {
+		return fmt.Errorf("desk %s: a role has no inbox of its own", d.Name)
 	}
 	for _, v := range d.Verbs {
 		if v == "" {
