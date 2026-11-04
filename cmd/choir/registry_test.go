@@ -54,6 +54,8 @@ var wantCLIOnly = []string{
 	"computer resume-checkpoints", "help", "login", "logout", "mcp", "mcp install",
 	// Owner acts (Library S2, S3): publishing a package release, and
 	// sharing, withdrawing or reinstating it.
+	// Writes a commit into a local git worktree (Library 10.2).
+	"package export",
 	"package publish", "package reinstate", "package share", "package withdraw",
 	"precommit import-ledger",
 	// Owner acts (P7/P8): publishing and adopting a release; abandoning an open operation.

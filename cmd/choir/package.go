@@ -140,6 +140,7 @@ func packageCommands() []*command {
 				return map[string]any{"shared": false, "reason": pkgrelease.ReasonShareRetired, "message": pkgrelease.ShareRetiredDetail}, nil
 			},
 		}),
+		packageExportCommand(),
 		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: nobody else sees it any more; it stays in your own history (owner act)"),
 		packageStateAct("reinstate", pkgrelease.StateListed, "Reinstate a withdrawn or suspended package release while it can still head its track (owner act)"),
 	}
