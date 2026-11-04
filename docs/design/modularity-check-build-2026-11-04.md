@@ -154,4 +154,54 @@ module digest, and pass or fail per mode with the errors seen.
 
 ## Built
 
-(filled in as the slices land)
+- `frontend/scripts/sdk-surface.mjs`: extracts the surface with the
+  TypeScript checker (56 names, 17 referenced local types at 1.0.0), checks
+  it against `frontend/src/lib/sdk-surface/<version>.json`, and writes a lock
+  with `--write` only when the bump is enough. A lock is never rewritten.
+  Values that differ are judged by assignability (new to old: a widening,
+  minor); types must be equivalent both ways, or the change is major; texts
+  that differ only in how the printer wrote them (union order) need nothing.
+- `frontend/src/lib/sdk-surface/1.0.0.json`: the lock for SDK 1.0.0, digest
+  `sha256:20757fc2...a867`.
+- `frontend/scripts/package-contracts.mjs`: the contract schema, the stub
+  backend, the runner (in-tree and installed modes), the receipt, and a CLI
+  (`--dist`, `--packages-dir`, `--only`, `--modes`, `--receipt`) for the
+  seams.
+- `choir-contract.json` for image, reader and library-next.
+- `frontend/tests/package-modularity.spec.js`: five tests (the lock; the lock
+  rules on synthetic surfaces and temp locks; the contract schema; every
+  package in both modes with L9 and L10; the runner and the shell on eight
+  fixture packages: a good one, a vacuous selector, a missing selector, a
+  throw on mount, a console error, a late uncaught throw, an SDK name the
+  shell lacks, and `requires_sdk ^9.0`).
+- CI: the `Package Modularity` job (Chromium, the lock check, the spec, the
+  receipt uploaded as `modularity-receipt-<sha>`); `check` requires it when
+  the frontend lane is selected, and the lane now also covers
+  `frontend/scripts/*`, the spec, `frontend/playwright.config.js` and
+  `internal/pkgruntime/*.mjs`.
+- Finding F1 fixed (`Desktop.svelte`, one line).
+
+Measured locally: the whole spec in about 70 s (shell build 5 s, three
+packages in two modes about 16 s, the fixture block most of the rest, two of
+its cases waiting out the 10 s ready bound on purpose).
+
+## More residuals found while building
+
+- **An added optional parameter reads as no change.** TypeScript holds
+  `(kind: any, extra?: number) => string` and `(kind: any) => string`
+  assignable both ways, so the lock accepts it without a bump. It cannot
+  break an installed package (an older shell ignores the argument), but a
+  package that relies on the new parameter gets no version signal.
+- **Union order is printer order.** TypeScript prints union members in
+  creation order, so an unrelated file can reorder one. The equivalence check
+  makes that need no bump, but the extracted digest can then differ from the
+  lock's digest while the check passes. The receipt carries both.
+- **First-party release trees moved.** Each first-party package directory
+  now holds `choir-contract.json`, so its tree differs from a release
+  published before this change (upstreamed detection, `Choir-Tree`
+  comparisons). Any edit to a package does the same; it is named because
+  this one touches all three at once.
+- **Pre-existing, not from this branch:** `app-packages.spec.js` case
+  `extension-clash-static` expects `pdf` to be a static route, which it no
+  longer is since Reader became a package; it fails on this base without
+  these changes.
