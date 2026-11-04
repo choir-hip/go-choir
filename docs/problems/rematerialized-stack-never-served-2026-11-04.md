@@ -132,3 +132,5 @@ C. Leave it and wait for an approved candidate (the S6 plan). Rejected by the
   package content. No corruption, but the product does not say which path
   the owner should use. Open decision, to settle before the rebase Cast is
   offered at a package conflict as the preferred path.
+
+Residual R1 (Devin, round 2): the open-operation hold covers only the first mint. A notice already on the tape can still be claimed while an operation is open, the package-conflict path mints without the hold, and re-mints of attempts 2 and 3 proceed while an operation is open. Each ends with the Freeze refused and the claim standing; the owner retry recovers it. Pre-existing in kind at stack_base_moved.
