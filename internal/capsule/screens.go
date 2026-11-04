@@ -133,8 +133,13 @@ type screenInput interface {
 // path (the Linux executor opens beneath the capsule root). The zero time
 // means there is no source change.
 func newestSourceChange(changes []FileChange, modTime func(path string) (time.Time, error)) (time.Time, string, error) {
-	var newest time.Time
-	var path string
+	_, newest, path, err := sourceChangeTimes(changes, modTime)
+	return newest, path, err
+}
+
+// sourceChangeTimes is newestSourceChange with the earliest time too: a
+// before shot must predate the first source edit.
+func sourceChangeTimes(changes []FileChange, modTime func(path string) (time.Time, error)) (oldest, newest time.Time, path string, err error) {
 	for _, change := range changes {
 		p := change.Path
 		if !strings.HasPrefix(p, "/") {
@@ -144,15 +149,45 @@ func newestSourceChange(changes []FileChange, modTime func(path string) (time.Ti
 		if !ok || change.Kind == ChangeDeleted || change.Mode.IsDir() || change.Mode&os.ModeSymlink != 0 || carriedExcludedPrefix(rel) != "" || notScreenSource(rel) {
 			continue
 		}
-		t, err := modTime(change.Path)
-		if err != nil {
-			return time.Time{}, "", fmt.Errorf("capsule freeze: source change %q is unavailable: %w", change.Path, err)
+		t, terr := modTime(change.Path)
+		if terr != nil {
+			return time.Time{}, time.Time{}, "", fmt.Errorf("capsule freeze: source change %q is unavailable: %w", change.Path, terr)
+		}
+		if oldest.IsZero() || t.Before(oldest) {
+			oldest = t
 		}
 		if t.After(newest) {
 			newest, path = t, rel
 		}
 	}
-	return newest, path, nil
+	return oldest, newest, path, nil
+}
+
+// refuseLateBeforeShots refuses a before shot modified after the first
+// source edit: it would show the candidate, not the base build. Equal times
+// pass; a zero oldest (no source edit) skips the check.
+func refuseLateBeforeShots(names []string, oldest time.Time, modTime func(name string) (time.Time, error)) error {
+	if oldest.IsZero() {
+		return nil
+	}
+	var late []string
+	for _, name := range names {
+		if role, _ := ScreenRole(name); role != ScreenBefore {
+			continue
+		}
+		t, err := modTime(name)
+		if err != nil {
+			return fmt.Errorf("capsule freeze: screen %q is unavailable: %w", name, err)
+		}
+		if t.After(oldest) {
+			late = append(late, name)
+		}
+	}
+	if len(late) > 0 {
+		sort.Strings(late)
+		return fmt.Errorf("capsule freeze: %s: %d before screens were shot after the first source edit (%s): a before shot is the base build, taken before you edit; re-shoot the base build in a clean copy or restore the file, shoot, then redo the edit: %s", BeforeAfterRequiredReason, len(late), oldest.UTC().Format("15:04:05Z"), strings.Join(late, ", "))
+	}
+	return nil
 }
 
 // notScreenSource is a change no screen can show that an engineer writes
@@ -206,7 +241,9 @@ func stageScreenFiles(ctx context.Context, names []string, open func(name string
 			_ = input.Close()
 			return nil, fmt.Errorf("capsule freeze: screen %q is not a regular file", name)
 		}
-		if !notBefore.IsZero() && info.ModTime().Before(notBefore) {
+		// A before shot is the base build, older than the edit by design
+		// (refuseLateBeforeShots checks it against the first edit).
+		if role, _ := ScreenRole(name); role != ScreenBefore && !notBefore.IsZero() && info.ModTime().Before(notBefore) {
 			stale = append(stale, name)
 		}
 		data, err := io.ReadAll(io.LimitReader(input, MaxScreenBytes+1))

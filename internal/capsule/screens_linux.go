@@ -17,7 +17,7 @@ func (e *Executor) stageScreens(ctx context.Context, rootFD int, changes []FileC
 		return nil, err
 	}
 	// A screen older than the newest source change shows an older build.
-	newest, source, err := newestSourceChange(changes, func(path string) (time.Time, error) {
+	statTime := func(path string) (time.Time, error) {
 		in, err := openBeneath(rootFD, strings.TrimPrefix(path, "/"))
 		if err != nil {
 			return time.Time{}, err
@@ -28,8 +28,12 @@ func (e *Executor) stageScreens(ctx context.Context, rootFD int, changes []FileC
 			return time.Time{}, err
 		}
 		return info.ModTime(), nil
-	})
+	}
+	oldest, newest, source, err := sourceChangeTimes(changes, statTime)
 	if err != nil {
+		return nil, err
+	}
+	if err := refuseLateBeforeShots(names, oldest, func(name string) (time.Time, error) { return statTime(ScreensPrefix + name) }); err != nil {
 		return nil, err
 	}
 	return stageScreenFiles(ctx, names, func(name string) (screenInput, error) {

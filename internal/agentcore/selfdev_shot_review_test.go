@@ -455,3 +455,56 @@ func TestShotReviewOwnerNotesReachThePromptNotTheShotList(t *testing.T) {
 		t.Fatalf("missing = %v", review.Missing)
 	}
 }
+
+// The owner's rule (2026-11-04): a change to something that exists shows the
+// same view before and after, so the review must see each pair in one call
+// and fail a regression in the after shot.
+func TestShotReviewKeepsBeforeAfterPairsTogetherAndFailsARegression(t *testing.T) {
+	shot := func(name string, i int) capsule.ScreenFile {
+		return capsule.ScreenFile{Name: name, SHA256: strings.Repeat(fmt.Sprintf("%x", i), 64), Width: 1280, Height: 800, Bytes: 100}
+	}
+	// Three singles first would split the pair across the batch of four if
+	// pairs were not kept whole.
+	screens := []capsule.ScreenFile{
+		shot("01-a.png", 1), shot("02-b.png", 2), shot("03-c.png", 3),
+		shot("04-before-home.png", 4), shot("04-after-home.png", 5),
+	}
+	judge := &scriptedJudge{answer: func(name string) string {
+		if strings.HasPrefix(name, "04-after-home.png") {
+			return `"q1":"yes","q2":"no","q3":"yes","q4":"n/a","q6":"yes","why":"the toolbar from the before shot is gone"`
+		}
+		return allYes
+	}}
+	review, err := reviewShots(context.Background(), judge.call, screens, nil, always(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	together := false
+	for _, p := range judge.prompts {
+		if strings.Contains(p, "04-before-home.png") && strings.Contains(p, "04-after-home.png") {
+			together = true
+			if !strings.Contains(p, beforeAfterMarker) || !strings.Contains(p, "may regress") && !strings.Contains(p, "regress") {
+				t.Fatalf("a pair's prompt lacks the comparison rule: %s", p)
+			}
+		} else if strings.Contains(p, "04-before-home.png") || strings.Contains(p, "04-after-home.png") {
+			t.Fatalf("a pair was split across calls: %s", p)
+		}
+	}
+	if !together {
+		t.Fatal("no call carried the pair")
+	}
+	if !review.rejected() {
+		t.Fatalf("a regression in the after shot passed: %+v", review)
+	}
+	if !strings.Contains(review.reason(""), "04-after-home.png") {
+		t.Fatalf("the failure does not name the after shot: %s", review.reason(""))
+	}
+	// A candidate with no pair keeps the old prompt.
+	plain := &scriptedJudge{answer: func(string) string { return allYes }}
+	if _, err := reviewShots(context.Background(), plain.call, shotFixture(2), nil, always(true)); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plain.prompts[0], "before/after pair of one view") {
+		t.Fatal("the pair rule leaked into a prompt with no pair")
+	}
+}

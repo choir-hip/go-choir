@@ -2321,6 +2321,10 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if err != nil {
 		return nil, err
 	}
+	// A change to the UI needs at least one screen (screens_required.go).
+	if err := requireScreens(changes, screens); err != nil {
+		return nil, err
+	}
 	video, err := e.stageVideo(ctx, rootFD, changes, temporary)
 	if err != nil {
 		return nil, err

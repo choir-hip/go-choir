@@ -65,6 +65,10 @@ func TestStageGrantedReleaseReusesRunningBinaryForANonGoChange(t *testing.T) {
 		for rel, content := range l.sourceFiles {
 			write("workspace/platform/"+rel, content, 0o644)
 		}
+		if len(l.sourceFiles) > 0 {
+			// Every candidate carries a screen (screens_required.go).
+			write("var/lib/artifact/screens/home.png", string(testPNG(t, 1100, 750, false)), 0o644)
+		}
 		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatal(err)
