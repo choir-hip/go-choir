@@ -399,7 +399,7 @@ func TestJobHoldersNoteNamesRunningJobsNotWaitingOnes(t *testing.T) {
 	}
 }
 
-// A shot job with a cached build is defaulted to 1536 MiB and leases that;
+// A shot job with a cached build is defaulted to 2048 MiB and leases that;
 // the view says so. An uncached one keeps the claim and, refused, waits
 // with the memory_mib hint.
 func TestStartJobDefaultsCachedShotMemory(t *testing.T) {
@@ -411,7 +411,7 @@ func TestStartJobDefaultsCachedShotMemory(t *testing.T) {
 	if view.State == capsulejob.StateWaiting {
 		t.Fatalf("an admitted shot waited: %+v", view)
 	}
-	if j := f.executor.jobs["job-cached"]; j != nil && j.spec.MemoryMiB != 1536 {
+	if j := f.executor.jobs["job-cached"]; j != nil && j.spec.MemoryMiB != 2048 {
 		t.Fatalf("spec memory %d", j.spec.MemoryMiB)
 	}
 	if hm.jobAsks != 1 {
@@ -428,7 +428,7 @@ func TestStartJobDefaultsCachedShotMemory(t *testing.T) {
 	f3, _, _ := newWaitFixture(t, hostRefusal(), SizeClassBuild)
 	f3.caps.MergedDir = cached.MergedDir
 	view, _ = f3.executor.StartJob(context.Background(), "run-job", "handle-job", JobRequest{ID: "job-short", Argv: argv})
-	if view.State != capsulejob.StateWaiting || view.MemoryMiB != 1536 || !strings.Contains(view.Reason, shotDefaultNote) || view.MemoryNote != shotDefaultNote {
+	if view.State != capsulejob.StateWaiting || view.MemoryMiB != 2048 || !strings.Contains(view.Reason, shotDefaultNote) || view.MemoryNote != shotDefaultNote {
 		t.Fatalf("defaulted wait view: %+v", view)
 	}
 }

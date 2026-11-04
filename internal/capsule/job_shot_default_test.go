@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// A choir-shot job with its build cached claims 1536 MiB, not the build
+// A choir-shot job with its build cached claims 2048 MiB, not the build
 // peak. Failure modes pinned:
 //   - D1 a cached shot run, direct or through sh -c, keeps the 3072 claim;
 //   - D2 an uncached run (first run builds with vite) is defaulted down and
@@ -59,10 +59,10 @@ func TestDefaultShotMemory(t *testing.T) {
 		declared int
 		want     int
 	}{
-		{"cached direct", true, []string{"node", script, "--shots", "/tmp/s.mjs"}, 0, 1536},
-		{"cached relative script", true, []string{"node", "scripts/choir-shot.mjs"}, 0, 1536},
-		{"cached sh -c", true, []string{"sh", "-c", "node " + script + " --shots /tmp/s.mjs --only a"}, 0, 1536},
-		{"cached sh -c quoted", true, []string{"/bin/sh", "-c", "node '" + script + "' --only a"}, 0, 1536},
+		{"cached direct", true, []string{"node", script, "--shots", "/tmp/s.mjs"}, 0, 2048},
+		{"cached relative script", true, []string{"node", "scripts/choir-shot.mjs"}, 0, 2048},
+		{"cached sh -c", true, []string{"sh", "-c", "node " + script + " --shots /tmp/s.mjs --only a"}, 0, 2048},
+		{"cached sh -c quoted", true, []string{"/bin/sh", "-c", "node '" + script + "' --only a"}, 0, 2048},
 		{"cd then relative script", true, []string{"sh", "-c", "cd /workspace/platform && node scripts/choir-shot.mjs"}, 0, 0},
 		{"cd then absolute script", true, []string{"sh", "-c", "cd /tmp && node " + script}, 0, 0},
 		{"git pull then shot", true, []string{"sh", "-c", "git pull; node " + script}, 0, 0},
@@ -73,7 +73,7 @@ func TestDefaultShotMemory(t *testing.T) {
 		{"script suffix", true, []string{"node", script + ".bak"}, 0, 0},
 		{"script suffix sh", true, []string{"sh", "-c", "node " + script + ".bak"}, 0, 0},
 		{"wrapper executable", true, []string{"sh", "-c", "ninja node " + script}, 0, 0},
-		{"piped to tail", true, []string{"sh", "-c", "node " + script + " | tail -3"}, 0, 1536},
+		{"piped to tail", true, []string{"sh", "-c", "node " + script + " | tail -3"}, 0, 2048},
 		{"uncached", false, []string{"node", script}, 0, 0},
 		{"uncached sh -c", false, []string{"sh", "-c", "node " + script}, 0, 0},
 		{"explicit wins", true, []string{"node", script}, 2048, 2048},
@@ -109,7 +109,7 @@ func TestJobWaitReasonHintsOnlyOnTheUndeclaredClaim(t *testing.T) {
 	if !strings.HasPrefix(plain, "waiting for host memory: this job needs 3072 MiB") || !strings.HasSuffix(plain, memoryMiBHint) {
 		t.Errorf("undeclared wait text: %q", plain)
 	}
-	def := jobWaitReason(&capsuleJob{memoryNote: shotDefaultNote, spec: specMiB(1536)}, "short")
+	def := jobWaitReason(&capsuleJob{memoryNote: shotDefaultNote, spec: specMiB(2048)}, "short")
 	if !strings.Contains(def, shotDefaultNote) || strings.Contains(def, memoryMiBHint) {
 		t.Errorf("defaulted wait text: %q", def)
 	}

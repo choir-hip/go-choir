@@ -12,16 +12,20 @@ import (
 	"strings"
 )
 
-// A choir-shot run with its build cached needs about 1.5 GiB; the first run
+// A choir-shot run with its build cached needs about 1.5 GiB, and a heavy one
+// (five pages, two of them full-page) peaked at 1,684 MiB
+// (docs/reports/playwright-in-capsules-memory-2026-10-15.md). Since a job's
+// cgroup is held to its lease (capsule_size.go), the default is 2048 MiB so
+// the heavy run fits. The first run
 // in a capsule builds with vite and needs about 3 GiB. Engineers on three
 // arms never passed memory_mib, so every shot job claimed the full build
 // peak and parked 2 to 14 minutes for host memory (live trace 2026-11-03).
 // StartJob therefore defaults the claim when the job is a choir-shot run
 // and the build it would reuse is already on disk.
 const (
-	shotDefaultMemoryMiB = 1536
-	shotDefaultNote      = "memory_mib 1536 (defaulted for a cached choir-shot)"
-	memoryMiBHint        = "if this job needs less, restart it with memory_mib (choir-shot with a cached build: 1536)"
+	shotDefaultMemoryMiB = 2048
+	shotDefaultNote      = "memory_mib 2048 (defaulted for a cached choir-shot)"
+	memoryMiBHint        = "if this job needs less, restart it with memory_mib (choir-shot with a cached build: 2048)"
 )
 
 var (
