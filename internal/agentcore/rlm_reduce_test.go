@@ -245,7 +245,7 @@ func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "outbound"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentNote, ToDesk: "management", Body: "outbound"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func TestCommitSkipsInboxCursorEntryWhenCursorDidNotMove(t *testing.T) {
 		sc.Cursor = cursor
 		r := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: sc, highWater: highWater}
 		if err := r.commit(ctx, []yaegikernel.StagedIntent{
-			{LocalID: localID, Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: localID},
+			{LocalID: localID, Kind: yaegikernel.IntentNote, ToDesk: "management", Body: localID},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -675,5 +675,18 @@ func TestPartialCommitRecoveryStillReadsTheAgentCursor(t *testing.T) {
 	}
 	if matched != 1 {
 		t.Fatalf("recovered envelope count = %d, want 1", matched)
+	}
+}
+
+// The staged message intent was deleted with the message channel (MA1.1). A
+// record that still names that kind decodes as an ordinary string and, if it
+// ever reached a reduction, is refused by name (a visible failed cell), never
+// reduced and never a crash.
+func TestReduceRefusesTheDeletedMessageIntentKind(t *testing.T) {
+	err := validateCellIntents(ReductionScope{FromRole: "management"}, []yaegikernel.StagedIntent{
+		{LocalID: "old-1", Kind: "message", ToDesk: "research", Body: "from a retired tray"},
+	})
+	if err == nil || !strings.Contains(err.Error(), `unknown intent kind "message"`) {
+		t.Fatalf("deleted message intent kind = %v, want an unknown-kind refusal", err)
 	}
 }

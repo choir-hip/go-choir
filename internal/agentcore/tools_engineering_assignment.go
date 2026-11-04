@@ -184,7 +184,7 @@ func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent t
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("report load durable run memory: %w", err)
 	}
-	memorySeen, _, _ := lifecycleInjectionIDsFromRunMemory(&parent, memoryEntries)
+	memorySeen, _ := lifecycleInjectionIDsFromRunMemory(&parent, memoryEntries)
 	authenticatedDelivered := make([]types.CoagentSourcePacket, 0, len(delivered))
 	consumedDeliveryIDs := make([]string, 0, len(delivered))
 	allControls := make([]types.CoagentSourcePacket, 0, len(delivered))

@@ -135,13 +135,6 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			}
 		}
 		switch in.Kind {
-		case yaegikernel.IntentMessage:
-			if in.ToDesk == "" {
-				return fmt.Errorf("reduce: message %s missing destination", in.LocalID)
-			}
-			if len(in.Body) > yaegikernel.MaxIntentBody {
-				return fmt.Errorf("reduce: message %s exceeds body quota", in.LocalID)
-			}
 		case yaegikernel.IntentComplete:
 			complete++
 			// Complete commits terminal fate; any intent after it could fail
@@ -385,9 +378,6 @@ func intentIdempotencyKey(scope ReductionScope, localID, to, content string) str
 // idempotency key a stable witness of whether an interrupted act was mailed.
 func stagedIntentEnvelope(scope ReductionScope, in yaegikernel.StagedIntent) (to, content string, mailed bool, err error) {
 	switch in.Kind {
-	case yaegikernel.IntentMessage:
-		to = in.ToDesk
-		content = encodeEnvelope(rlmEnvelope{Kind: "message", MsgKind: in.MsgKind, Body: in.Body, From: scope.FromAgentID})
 	case yaegikernel.IntentComplete:
 		to = scope.ReturnTo
 		content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
@@ -1124,21 +1114,6 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 					r.rt().noteCalibrationPredicted(r.scope.RunID, time.Now())
 				}
 			}
-		case yaegikernel.IntentMessage:
-			// Every staged message on an assigned desk or lifecycle producer
-			// run carries the update_coagent authority contract. Other
-			// lifecycle-bound callers mint the packet record-natively through
-			// CommitLifecycleAct (RN4 — the envelope is the retired carrier;
-			// persistent-Management targets are channel-less and cannot take
-			// the authority arm at all). Non-lifecycle callers keep the
-			// envelope path.
-			if r.isAssignedDesk() {
-				seq, err = r.commitMessageIntent(ctx, in)
-			} else if r.lifecycleBound() || r.isLifecycleProducer() {
-				seq, err = r.commitLifecycleMessageIntent(ctx, in)
-			} else {
-				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
-			}
 		case yaegikernel.IntentTextureTurn:
 			// A Texture turn: no mailbox envelope — commit it through
 			// ApplyTextureTurn via the bound owner.
@@ -1504,31 +1479,6 @@ func (r *rlmCallReduction) isLifecycleProducer() bool {
 	return false
 }
 
-// lifecycleBound reports whether this reduction's caller run lives on the
-// lifecycle store (texture desk, bound desks, lifecycle producers). These
-// callers' addressed acts are lifecycle packets, never channel mail — the
-// record-native cutover (RN3/RN4) retires the envelope for them.
-func (r *rlmCallReduction) lifecycleBound() bool {
-	if r == nil {
-		return false
-	}
-	rt := r.rt()
-	if rt == nil || rt.store == nil {
-		return false
-	}
-	runID := strings.TrimSpace(r.scope.RunID)
-	ownerID := strings.TrimSpace(r.scope.OwnerID)
-	computerID := strings.TrimSpace(r.scope.ComputerID)
-	if computerID == "" {
-		computerID = rt.TextureComputerID()
-	}
-	if runID == "" || ownerID == "" || computerID == "" {
-		return false
-	}
-	_, err := rt.store.GetLifecycleRun(context.Background(), ownerID, computerID, runID)
-	return err == nil
-}
-
 // requesterIsLifecycle reports whether the run's requesting agent is a
 // lifecycle desk — the target of the complete-fate notice. When true, the
 // ReturnTo envelope is suppressed: recordAssignedEngineeringReport already
@@ -1790,16 +1740,6 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	return out, nil
 }
 
-// commitMessageIntent reduces one staged Message intent on an assigned desk
-// or lifecycle producer run through the update_coagent authority path: the
-// intent body is the SourcePacket JSON, the desk is the
-// explicit target agent, and the same durable update + wake sequence the
-// retired tool ran executes here. It returns the channel sequence of the
-// emitted message event.
-func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
-	return r.commitAddressedPacketIntent(ctx, in, in.Body, in.MsgKind, "message")
-}
-
 // commitAddressedPacketIntent decodes packetJSON as the coagent source
 // packet body for one staged addressed intent (message body or report
 // packet) and drives it through the shared update_coagent authority +
@@ -2015,18 +1955,6 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 		rt.releaseAssignmentSaga(assignmentID, attempt)
 	}
 	return result != types.EngineeringResultPartial, nil
-}
-
-// commitLifecycleMessageIntent routes a lifecycle-bound Message through the
-// record-native act: the message mints as a note-subtype directive record
-// (messages carry no stake — they ARE notices) addressed to ToDesk, with the
-// authored packet body preserved verbatim in the record body. The desk-to-desk
-// carrier replaces the retired channel envelope for lifecycle callers (RN4).
-func (r *rlmCallReduction) commitLifecycleMessageIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
-	rec := commitmentRecordForIntent(r.scope, in)
-	rec.Kind = types.CommitmentKindDirective
-	rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: strings.TrimSpace(in.Body)}
-	return r.commitLifecycleActIntent(ctx, in, rec)
 }
 
 func (r *rlmCallReduction) rt() *Runtime {

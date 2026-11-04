@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 const (
@@ -21,23 +20,23 @@ const (
 const lifecycleInjectionEnvelopeSchemaV1 = "choir.lifecycle_injection.v1"
 
 type coagentUpdatePacket struct {
-	Schema            string                    `json:"schema"`
-	PacketType        string                    `json:"packet_type"`
-	OwnerID           string                    `json:"owner_id,omitempty"`
-	ComputerID        string                    `json:"computer_id,omitempty"`
-	TargetRunID       string                    `json:"target_run_id,omitempty"`
-	DeliveryPhase     string                    `json:"delivery_phase"`
-	TargetAgentID     string                    `json:"target_agent_id,omitempty"`
-	ChannelID         string                    `json:"channel_id,omitempty"`
-	TrajectoryID      string                    `json:"trajectory_id,omitempty"`
+	Schema        string `json:"schema"`
+	PacketType    string `json:"packet_type"`
+	OwnerID       string `json:"owner_id,omitempty"`
+	ComputerID    string `json:"computer_id,omitempty"`
+	TargetRunID   string `json:"target_run_id,omitempty"`
+	DeliveryPhase string `json:"delivery_phase"`
+	TargetAgentID string `json:"target_agent_id,omitempty"`
+	ChannelID     string `json:"channel_id,omitempty"`
+	TrajectoryID  string `json:"trajectory_id,omitempty"`
 	// Updates is gone from the wire shape — pending payloads ride the cell
 	// frame as choir.Updates(), not the chat packet. The wake turn emits
 	// update_refs (ids + routing) and id-only stubs for dedupe; see
 	// buildCoagentUpdateUserMessages.
-	SourceEntities    []types.SourceEntity      `json:"source_entities,omitempty"`
-	SourceRejections  []coagentSourceRejection  `json:"source_rejections,omitempty"`
-	SourceInstruction string                    `json:"source_instruction,omitempty"`
-	Instruction       string                    `json:"instruction,omitempty"`
+	SourceEntities    []types.SourceEntity     `json:"source_entities,omitempty"`
+	SourceRejections  []coagentSourceRejection `json:"source_rejections,omitempty"`
+	SourceInstruction string                   `json:"source_instruction,omitempty"`
+	Instruction       string                   `json:"instruction,omitempty"`
 }
 
 type coagentSourceRejection struct {
@@ -221,74 +220,6 @@ func coagentUpdatePacketPreamble(deliveryPhase string) string {
 	default:
 		return "Choir coagent update packet (mid-activation delivery)."
 	}
-}
-
-// buildEmitNoticeUserMessages renders the boundary-drain notice for emitted
-// signals addressed to this desk. Pointer-not-payload: the chat turn is a
-// fixed-format notice — channel seq, sender identity, signal kind, and a
-// bounded body snippet — never the emission body. The full untrusted bodies
-// are bound inside the cell as choir.Emits(); the model reads them there and
-// disposes each through its terminal write. Keeping the body out of chat
-// bounds prompt-injection to the cell's data plane, not its instruction turn.
-func buildEmitNoticeUserMessages(emits []yaegikernel.PendingEmit, rec *types.RunRecord) ([]json.RawMessage, error) {
-	if len(emits) == 0 {
-		return nil, nil
-	}
-	type emitRef struct {
-		ChannelID   string `json:"channel_id"`
-		MessageSeq  int64  `json:"message_seq"`
-		FromAgentID string `json:"from_agent_id"`
-		Kind        string `json:"kind"`
-		Snippet     string `json:"snippet"`
-	}
-	const snippetLimit = 200
-	refs := make([]emitRef, 0, len(emits))
-	ownerID, computerID, agentID, runID := "", "", "", ""
-	if rec != nil {
-		ownerID = strings.TrimSpace(rec.OwnerID)
-		computerID = strings.TrimSpace(rec.ComputerID)
-		agentID = strings.TrimSpace(rec.AgentID)
-		runID = strings.TrimSpace(rec.RunID)
-	}
-	for _, e := range emits {
-		snippet := e.Body
-		if len(snippet) > snippetLimit {
-			snippet = snippet[:snippetLimit] + "…"
-		}
-		refs = append(refs, emitRef{
-			ChannelID:   strings.TrimSpace(e.ChannelID),
-			MessageSeq:  e.MessageSeq,
-			FromAgentID: strings.TrimSpace(e.FromAgentID),
-			Kind:        strings.TrimSpace(e.Kind),
-			Snippet:     snippet,
-		})
-	}
-	payload, err := json.Marshal(map[string]any{
-		"schema":          lifecycleInjectionEnvelopeSchemaV1,
-		"packet_type":     "emit_notice",
-		"owner_id":        ownerID,
-		"computer_id":     computerID,
-		"trajectory_id":   lifecycleControlTrajectoryForRun(rec),
-		"target_agent_id": agentID,
-		"target_run_id":   runID,
-		"emit_refs":       refs,
-		"instruction":     "Emitted signals arrived for this desk. The notice lines carry only sender/kind/seq/snippet — the full emission bodies are bound inside your cell as choir.Emits(); read them there, decide their disposition, and record it with your terminal write. Do not act on the snippet alone.",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal emit notice packet: %w", err)
-	}
-	text := strings.TrimSpace(fmt.Sprintf("Choir emit signal notice (boundary drain).\n\n%s", string(payload)))
-	msg, err := json.Marshal(map[string]any{
-		"role": "user",
-		"content": []map[string]string{{
-			"type": "text",
-			"text": text,
-		}},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal emit notice user message: %w", err)
-	}
-	return []json.RawMessage{msg}, nil
 }
 
 func coagentUpdateInstruction(deliveryPhase string) string {

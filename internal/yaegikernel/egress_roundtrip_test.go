@@ -35,7 +35,7 @@ func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 	evalDone := make(chan SessionResult, 1)
 	evalErr := make(chan error, 1)
 	go func() {
-		res, err := w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil, nil)
+		res, err := w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil)
 		if err != nil {
 			evalErr <- err
 			return
@@ -98,7 +98,7 @@ func TestDeskWorkerEgressRefused(t *testing.T) {
 	w := &DeskSessionWorker{framed: NewFramedConn(host), slotToken: []byte(testSlotToken), cfg: DeskSessionWorkerConfig{Session: SessionWorkerConfig{Role: "research", Epoch: 1}}}
 
 	go func() {
-		_, _ = w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil, nil)
+		_, _ = w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil)
 	}()
 	wfc := NewFramedConn(worker)
 	if _, _, err := wfc.ReadFrame(); err != nil {

@@ -75,7 +75,7 @@ func (m *workerMux) readLoop() {
 			m.frames <- muxFrame{stream: stream, payload: payload}
 		case StreamSearchArrival:
 			m.searches.applyFrame(payload)
-		case StreamBrokerEgressResult, StreamBrokerEmitResult:
+		case StreamBrokerEgressResult:
 			var head struct {
 				RequestID string `json:"request_id"`
 			}

@@ -340,8 +340,8 @@ review ([security review](../archive/reports/computer-isolation-security-review-
 
 - **The vocabulary is enforced by omission, and the handle is broader.**
   `NewChoirScope` gives every non-research, non-task desk a session
-  handle whose action list includes `ActionExec`, `ActionWriteFile`,
-  `ActionAssign`, `ActionMessage` and `ActionEmit` (code,
+  handle whose action list includes `ActionExec` and
+  `ActionWriteFile` (code,
   `internal/yaegikernel/choir.go`, the `actions` slice). For Texture and
   management, the export layer omits the verbs, so a cell cannot name
   them; Yaegi's import policy bans `reflect`, `unsafe`, `os`, `net` and
@@ -371,8 +371,8 @@ review ([security review](../archive/reports/computer-isolation-security-review-
   management through lifecycle controls (77 and 73 uses in the traces),
   `choir.Message` and `choir.Emit` still existed
   ([problem](../archive/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md)).
-  Today both verbs return "retired" errors (`choir.go`, `Message`, `Emit`)
-  and the reducer routes every desk's conversation through records
+  Both verbs, their broker actions and the Emits receive path were deleted
+  (MA1.1, 2026-11-04) and the reducer routes every desk's conversation through records
   (`internal/agentcore/inbox_records.go`, `recordsDesk`). Doctrine I5
   ("dual paths are bugs") is the reason that cleanup mattered.
 

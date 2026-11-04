@@ -291,7 +291,7 @@ loc, lerr := time.LoadLocation("UTC")
 fmt.Println(string(b), hex.EncodeToString(b)[:4], rand.IntN(10) < 10, time.Now().In(loc).Year() > 2000, lerr, regexp.MustCompile("a+").MatchString("caab"))`, `{"a":1} 7b22 true true <nil> true`},
 	}
 	for _, c := range cells {
-		res, err := w.EvalCell(ctx, c.src, nil, nil, nil, nil, nil, nil)
+		res, err := w.EvalCell(ctx, c.src, nil, nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("cell %s: transport: %v (stderr=%q)", c.name, err, w.stderr.String())
 		}
@@ -406,7 +406,7 @@ func TestDeskCellWorkerRunsAsTheDeskUser(t *testing.T) {
 	defer cancel()
 	res, err := w.EvalCell(ctx, `import ("fmt"; "choir")
 r, err := choir.SearchWireCorpus("choir", 2)
-fmt.Println(r, err)`, nil, nil, nil, nil, nil, nil)
+fmt.Println(r, err)`, nil, nil, nil, nil, nil)
 	if err != nil || res.Error != "" || !strings.Contains(res.Stdout, "host answered") || egressCalls != 1 {
 		t.Fatalf("egress frame from a confined worker: err=%v res=%+v calls=%d", err, res, egressCalls)
 	}

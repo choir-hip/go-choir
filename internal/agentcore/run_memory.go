@@ -361,7 +361,7 @@ func (m *runMemoryManager) afterAppendMessage(ctx context.Context, role string, 
 	if role == types.RunMemoryRoleRuntimeInjection && m.rec != nil {
 		// Preserve the legacy observational metadata only after the durable
 		// append succeeds. Injection dedupe and report authority never trust it.
-		seen, _, _ := lifecycleInjectionIDsFromRunMemory(m.rec, []types.RunMemoryEntry{{
+		seen, _ := lifecycleInjectionIDsFromRunMemory(m.rec, []types.RunMemoryEntry{{
 			RunID: m.rec.RunID, OwnerID: m.rec.OwnerID, AgentID: m.rec.AgentID,
 			Kind: types.RunMemoryEntryMessage, Role: role, Message: msg,
 		}})

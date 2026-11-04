@@ -83,17 +83,6 @@ func TestChoirParityJailbreakRefused(t *testing.T) {
 	}
 }
 
-// TestChoirParityMessageRetired is corpus cell 5: the retired Message verb
-// refuses on the symbol surface (the dead Assign verb is deleted).
-func TestChoirParityMessageRetired(t *testing.T) {
-	_, _, scope, _ := testChoirFixture(t)
-	// Message is retired (protocol P2c): the symbol still resolves and
-	// refuses, naming the acts to use.
-	if _, err := scope.Message("activation-choir", "note", "hi"); err == nil || !strings.Contains(err.Error(), "choir.ReportPacket") {
-		t.Fatalf("retired message = %v, want a refusal naming ReportPacket", err)
-	}
-}
-
 // TestChoirSymbolsEnforceScopes proves a handle without a scope refuses the
 // matching symbol call (fail closed per action).
 func TestChoirSymbolsEnforceScopes(t *testing.T) {
@@ -225,9 +214,9 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 			t.Fatalf("researcher missing message authority %s", sym)
 		}
 	}
-	// Emit + the host-mediated egress verbs export: research's signal plane and
-	// world evidence surface ride the broker, not filesystem mutation (M-SUB /
-	// M0a). read-only denies WriteFile/Exec only — messaging stays open.
+	// The host-mediated egress verbs export: research's world evidence
+	// surface rides the broker, not filesystem mutation. read-only denies
+	// WriteFile/Exec only.
 	for _, sym := range []string{"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture",
 		"SearchWireCorpus", "SaveEvidence", "ReadEvidence",
 		"ListEvidence", "RunMemoryEntry"} {
@@ -259,14 +248,6 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 	if _, err := scope.Exec("echo", nil); err == nil {
 		t.Fatal("researcher Exec allowed")
-	}
-	// Messaging is NOT denied for research: Emit must reach the broker (failing
-	// on the nil host handler), never the read-only gate — the gap that
-	// silently blocked research findings on the M-SUB plane.
-	if _, err := scope.Emit("texture", "evidence", "found"); err == nil {
-		t.Fatal("Emit unexpectedly succeeded with nil host handler")
-	} else if strings.Contains(err.Error(), "read-only") {
-		t.Fatalf("Emit denied for read-only role — messaging authority broken: %v", err)
 	}
 	if _, err := scope.ReadFile("missing.txt"); err == nil {
 		t.Fatal("researcher ReadFile unexpectedly succeeded on missing file")

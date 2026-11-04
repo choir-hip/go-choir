@@ -38,7 +38,7 @@ func TestUnknownDeskHasNoAuthority(t *testing.T) {
 		if _, ok := Lookup(name); ok {
 			t.Errorf("Lookup(%q) found a desk the manifest does not name", name)
 		}
-		for _, action := range []string{"read", "product_api", "exec", "read_capture", "emit"} {
+		for _, action := range []string{"read", "product_api", "exec", "read_capture"} {
 			if FrameAllowed(name, action) {
 				t.Errorf("FrameAllowed(%q,%q) served an unknown desk", name, action)
 			}
@@ -47,7 +47,7 @@ func TestUnknownDeskHasNoAuthority(t *testing.T) {
 }
 
 // Failure mode: a desk added with exec or write_file by omission. Only
-// engineering holds them; no desk holds the retired emit and message.
+// engineering holds them.
 func TestOnlyEngineeringHoldsExecAndWriteFile(t *testing.T) {
 	for _, name := range Names() {
 		d, _ := Lookup(name)
@@ -57,8 +57,6 @@ func TestOnlyEngineeringHoldsExecAndWriteFile(t *testing.T) {
 				if name != Engineering {
 					t.Errorf("desk %s holds %s; only engineering may", name, a)
 				}
-			case "emit", "message":
-				t.Errorf("desk %s holds the retired %s action", name, a)
 			}
 		}
 		for _, a := range d.FrameActions() {
@@ -431,5 +429,28 @@ func TestAppSpecRoundTrips(t *testing.T) {
 	other.Verbs = append(other.Verbs, "Cast")
 	if other.Equal(d) {
 		t.Fatal("Equal ignores verbs")
+	}
+}
+
+// A manifest that names a verb deleted with the emit and message channels
+// is refused at validation, for every desk kind.
+func TestManifestNamingRetiredVerbIsRefused(t *testing.T) {
+	for _, verb := range []string{"Emit", "Emits", "Message"} {
+		d := Desk{Name: "probe", Restart: RestartContract, Taint: TaintPrivileged, Verbs: []string{"Cast", verb}}
+		if err := validateStructure(d); err == nil || !strings.Contains(err.Error(), verb) {
+			t.Errorf("validateStructure accepted a desk naming %s: %v", verb, err)
+		}
+		spec := goodApp()
+		spec.Verbs = append(spec.Verbs, verb)
+		if _, err := NewAppDesk(spec); err == nil {
+			t.Errorf("NewAppDesk accepted an app desk naming %s", verb)
+		}
+	}
+	for _, action := range []string{"emit", "message"} {
+		for _, name := range append(Names(), "") {
+			if FrameAllowed(name, action) {
+				t.Errorf("FrameAllowed(%q,%q) served a deleted action", name, action)
+			}
+		}
 	}
 }

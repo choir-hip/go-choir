@@ -32,7 +32,7 @@ var pinnedFrameActions = map[string][]BrokerAction{
 }
 
 var allBrokerActions = []BrokerAction{
-	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
+	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
 	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI,
@@ -48,7 +48,6 @@ type frameHarness struct {
 	w        *DeskSessionWorker
 	wfc      *FramedConn
 	egress   atomic.Int32
-	emit     atomic.Int32
 	mu       sync.Mutex
 	refusals []FrameRefusal
 	evalDone chan error
@@ -71,10 +70,6 @@ func newFrameHarness(t *testing.T, role string) *frameHarness {
 				h.egress.Add(1)
 				return json.RawMessage(`{"ok":true}`), nil
 			},
-			Emit: func(ctx context.Context, p EmitPayload) (EmitResult, error) {
-				h.emit.Add(1)
-				return EmitResult{Seq: 7}, nil
-			},
 			Refused: func(ctx context.Context, r FrameRefusal) {
 				h.mu.Lock()
 				h.refusals = append(h.refusals, r)
@@ -83,7 +78,7 @@ func newFrameHarness(t *testing.T, role string) *frameHarness {
 		},
 	}
 	go func() {
-		_, err := h.w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil, nil)
+		_, err := h.w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil)
 		h.evalDone <- err
 	}()
 	if _, _, err := h.wfc.ReadFrame(); err != nil { // the cell request
@@ -147,19 +142,6 @@ func TestFrameRoleTableEveryDeskEveryAction(t *testing.T) {
 			role, action := role, action
 			t.Run(role+"/"+string(action), func(t *testing.T) {
 				h := newFrameHarness(t, role)
-				if action == ActionEmit {
-					// Emit has its own stream; it is in no desk's table.
-					resp := h.send(StreamBrokerEmit, h.request(action, func(r *BrokerRequest) {
-						r.Payload = json.RawMessage(`{"to_desk":"research","kind":"k","body":"b"}`)
-					}))
-					if resp.Success || h.emit.Load() != 0 {
-						t.Fatalf("%s emitted (success=%v handler calls=%d); no desk may emit", role, resp.Success, h.emit.Load())
-					}
-					if !strings.Contains(resp.Error, "may not") {
-						t.Fatalf("emit refusal is not visible: %q", resp.Error)
-					}
-					return
-				}
 				resp := h.send(StreamBrokerEgress, h.request(action, nil))
 				if allowed(role, action) {
 					if !resp.Success || h.egress.Load() != 1 {
@@ -281,7 +263,7 @@ func TestFrameEpochAndProtocolVersion(t *testing.T) {
 	if resp := h.send(StreamBrokerEgress, h.request(ActionRead, func(r *BrokerRequest) { r.Epoch = 9 })); resp.Success {
 		t.Fatal("stale epoch served")
 	}
-	if resp := h.send(StreamBrokerEgress, h.request(ActionRead, func(r *BrokerRequest) { r.ProtocolVersion = 2 })); resp.Success {
+	if resp := h.send(StreamBrokerEgress, h.request(ActionRead, func(r *BrokerRequest) { r.ProtocolVersion = ProtocolVersion + 1 })); resp.Success {
 		t.Fatal("unknown protocol version served")
 	}
 	if h.egress.Load() != 0 {
@@ -290,16 +272,6 @@ func TestFrameEpochAndProtocolVersion(t *testing.T) {
 	// The worker is still usable after a refused (not forged) frame.
 	if resp := h.send(StreamBrokerEgress, h.request(ActionRead, nil)); !resp.Success {
 		t.Fatalf("a refusal must not poison the worker: %q", resp.Error)
-	}
-}
-
-// An emit-stream frame that names another action is refused, not handed to
-// the emit handler. Failure mode F5.
-func TestEmitStreamCarryingOtherActionRefused(t *testing.T) {
-	h := newFrameHarness(t, "research")
-	resp := h.send(StreamBrokerEmit, h.request(ActionProductAPI, nil))
-	if resp.Success || h.emit.Load() != 0 || h.egress.Load() != 0 {
-		t.Fatalf("emit stream served another action: success=%v emit=%d egress=%d", resp.Success, h.emit.Load(), h.egress.Load())
 	}
 }
 

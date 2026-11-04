@@ -59,7 +59,7 @@ func TestManagementTaskRoleReverseParity(t *testing.T) {
 	// past the export map is refused at the broker.
 	for _, action := range scope.actions {
 		switch action {
-		case ActionExec, ActionWriteFile, ActionProductAPI, ActionMessage, ActionEmit, ActionResearch:
+		case ActionExec, ActionWriteFile, ActionProductAPI, ActionResearch:
 			t.Errorf("a management task's handle authorizes %s", action)
 		}
 	}

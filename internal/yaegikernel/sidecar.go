@@ -49,7 +49,7 @@ type SessionWorkerConfig struct {
 // the spawner distinguishes a live worker from a process that started and
 // died (spawn success is not readiness).
 func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
-	sess, broker, scope := buildSessionWorker(cfg)
+	sess, _, scope := buildSessionWorker(cfg)
 	ready, err := json.Marshal(SessionResult{ID: "ready"})
 	if err != nil {
 		os.Exit(2)
@@ -60,7 +60,7 @@ func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
 	hooks := cellHooks(scope, cfg)
 	if err := RunSessionLoopWithDrainAndHooks(os.Stdin, os.Stdout, func() (*Session, error) {
 		return sess, nil
-	}, broker.DrainReceipts, &hooks); err != nil {
+	}, nil, &hooks); err != nil {
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -135,26 +135,6 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 		os.Exit(2)
 	}
 	mux := newWorkerMux(fc, scope.searches)
-	// Emit crosses the socket so the host performs the durable channel write
-	// and recipient wake.
-	broker.SetEmit(func(ctx context.Context, payload EmitPayload) (EmitResult, error) {
-		raw, err := json.Marshal(payload)
-		if err != nil {
-			return EmitResult{}, fmt.Errorf("emit marshal: %w", err)
-		}
-		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: newReceiptID(),
-			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: ActionEmit, Payload: raw, SlotToken: cfg.SlotToken}
-		resp, err := mux.roundTrip(ctx, StreamBrokerEmit, StreamBrokerEmitResult, req)
-		if err != nil {
-			return EmitResult{}, fmt.Errorf("emit: %w", err)
-		}
-		if !resp.Success {
-			return EmitResult{}, fmt.Errorf("emit: %s", resp.Error)
-		}
-		var out EmitResult
-		_ = json.Unmarshal(resp.Result, &out)
-		return out, nil
-	})
 	// Egress verbs ride one generic frame round trip; the host resolves the
 	// action against its search/HTTP/content deps.
 	broker.SetEgress(func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
@@ -172,7 +152,7 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 	hooks := cellHooks(scope, cfg)
 	if err := runSessionLoopMux(mux, fc, func() (*Session, error) {
 		return sess, nil
-	}, broker.DrainReceipts, &hooks); err != nil {
+	}, nil, &hooks); err != nil {
 		os.Exit(1)
 	}
 	os.Exit(0)

@@ -392,7 +392,7 @@ func (d Desk) LocalActions() []string {
 
 // FrameActions are the actions the daemon serves from this desk's worker
 // over the frame protocol (SEC-02): exactly the host-served actions its
-// verbs dispatch. Never emit, never message.
+// verbs dispatch.
 func (d Desk) FrameActions() []string {
 	seen := map[string]bool{}
 	var out []string
@@ -429,6 +429,10 @@ func FrameAllowed(name, action string) bool {
 	return ok && d.AllowsFrame(action)
 }
 
+// retiredVerbs are verbs deleted with the emit and message channels (MA1.1).
+// A manifest naming one is refused at validation.
+var retiredVerbs = map[string]bool{"Emit": true, "Emits": true, "Message": true}
+
 func validateStructure(d Desk) error {
 	if d.Name == "" {
 		return fmt.Errorf("a desk has no name")
@@ -442,6 +446,9 @@ func validateStructure(d Desk) error {
 	for _, v := range d.Verbs {
 		if v == "" {
 			return fmt.Errorf("desk %s: empty verb", d.Name)
+		}
+		if retiredVerbs[v] {
+			return fmt.Errorf("desk %s: verb %s was deleted with the emit and message channels; reach another desk with a record (Cast, Ask, Note, ReportPacket)", d.Name, v)
 		}
 	}
 	if d.Carrier == CarrierDeskWorker {

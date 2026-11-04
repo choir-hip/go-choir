@@ -512,13 +512,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				// Workers get a clean environment; an operator's worker
 				// GOMEMLIMIT override is the one memory setting passed through.
 				ExtraEnv: gomemlimit.WorkerEnv(os.Getenv),
-				// Emit is a durable host write: the worker's ActionEmit crosses
-				// the session socket and lands here. Scope is derived per-call
-				// from the evaluating ctx (a worker persists across cells, so
-				// spawn-time capture would bind a stale channel/agent).
-				Emit: func(emitCtx context.Context, payload yaegikernel.EmitPayload) (yaegikernel.EmitResult, error) {
-					return rt.deskEmitSignal(emitCtx, payload)
-				},
 				// A refused frame (outside the desk's table, a forged token, a
 				// stale epoch) is a trace event, not only a model-visible
 				// error: the refusal is evidence (SEC-02).
@@ -609,7 +602,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// frame so choir.Updates() exposes them inside the cell. The chat
 			// wake turn carries only ids.
 			updates := pendingCellUpdates(ctx, rt, execCtx)
-			emits := pendingCellEmits(ctx, rt, execCtx)
 			// A story's research desk reads its story's entity analysis,
 			// built at the run's first cell (slice c0 §4).
 			analysis := rt.storyAnalysisFor(ctx, deskRole, execCtx)
@@ -643,7 +635,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			evalStart := time.Now()
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Emits: emits, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
+				Updates: updates, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
 			if res.CalibrationRead {
 				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, delivery)
 			}
@@ -828,81 +820,6 @@ func cellUpdateVisible(rec *types.RunRecord, u types.CoagentSourcePacket) bool {
 	return true
 }
 
-// pendingCellEmits drains emitted signals addressed to this desk's agent,
-// after the desk's inbox cursor. Emits travel on the *sender's* channel with
-// to_agent_id set, so the desk's own-channel ChannelRead never sees them;
-// this is the boundary-drain read for choir.Emits(). The cell gets the full
-// untrusted body; the chat boundary turn carries only a fixed-format notice.
-// pendingCellEmits is the cell-frame adapter: drains addressed emissions for
-// the run's desk agent into the bound choir.Emits() snapshot.
-func pendingCellEmits(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingEmit {
-	if execCtx.RunRecord == nil {
-		return nil
-	}
-	return pendingEmitsForRun(ctx, rt, execCtx.RunRecord, nil)
-}
-
-// pendingEmitsForRun drains emitted signals addressed to this desk's agent.
-// Emits travel on the *sender's* channel with to_agent_id set, so the desk's
-// own-channel ChannelRead never sees them; this is the boundary-drain read.
-// The cell gets the full untrusted body (choir.Emits()); the chat boundary
-// turn carries only a fixed-format notice (sender/kind/seq/snippet).
-func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord, seen map[string]bool) []yaegikernel.PendingEmit {
-	if rt == nil || rt.store == nil || rec == nil {
-		return nil
-	}
-	ownerID := strings.TrimSpace(rec.OwnerID)
-	agentID := strings.TrimSpace(rec.AgentID)
-	if ownerID == "" || agentID == "" || !runSupportsCoagentUpdateInjection(rec) {
-		return nil
-	}
-	// Drain addressed emissions. Emit bodies are bound per-cell; the desk
-	// consumes them by terminal write so a cursor the cell never processed
-	// re-surfaces — drain from zero is safe (idempotent re-read) and lets the
-	// desk decide disposition.
-	msgs, err := rt.store.ListChannelMessagesTo(ctx, ownerID, agentID, 0, 200)
-	if err != nil || len(msgs) == 0 {
-		return nil
-	}
-	out := make([]yaegikernel.PendingEmit, 0, len(msgs))
-	for _, m := range msgs {
-		// Only ActionEmit envelopes are emissions: a message written through
-		// the emit path always carries rlmEnvelopeV1 with Kind="emit". Plain
-		// channel traffic (coagent updates, packets, legacy writes) is NOT an
-		// emission — defaulting unenveloped content to emit re-delivers the
-		// update payload as a notice snippet and inlines it into the wake
-		// turn (the leak the warm-update test catches).
-		kind, body := "", ""
-		if rest, ok := strings.CutPrefix(m.Content, rlmEnvelopeV1); ok {
-			var env rlmEnvelope
-			if jerr := json.Unmarshal([]byte(rest), &env); jerr == nil {
-				if env.Kind != "" {
-					kind = env.Kind
-					if kind == "message" && env.MsgKind != "" {
-						kind = env.MsgKind
-					}
-				}
-				body = env.Body
-			}
-		}
-		if kind != "emit" {
-			continue // only emission envelopes drain here; packets/other kinds use their own path
-		}
-		if seen != nil && seen[emitSeenKey(m.ChannelID, m.Seq)] {
-			continue // already delivered at a prior boundary — suppress re-notification
-		}
-		out = append(out, yaegikernel.PendingEmit{
-			ChannelID:   strings.TrimSpace(m.ChannelID),
-			MessageSeq:  m.Seq,
-			FromAgentID: strings.TrimSpace(m.FromAgentID),
-			FromRole:    strings.TrimSpace(m.Role),
-			Kind:        kind,
-			Body:        body,
-		})
-	}
-	return out
-}
-
 // deskWorkerBinary is the executable the session worker re-executes as
 // `autoputer desk-session` — normally the daemon's own os.Executable. The
 // override lets tests point at a real compiled autoputer instead of the test
@@ -1075,82 +992,6 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	// (provider_quota_incident.go).
 	pack.ProviderWaits = rt.providerWaitViews(ownerID, computerID)
 	return &pack
-}
-
-// deskEmitSignal performs the host-side durable write for a desk cell's
-// choir.Emit call. Emits bypass the cell tray: the host mails the emit
-// envelope on the desk's channel and wakes the recipient before the blocked
-// cell resumes. The envelope kind stays "emit" with the caller's signal kind
-// preserved as msg_kind so the receiving desk sees the typed signal.
-func (rt *Runtime) deskEmitSignal(ctx context.Context, payload yaegikernel.EmitPayload) (yaegikernel.EmitResult, error) {
-	if rt == nil || rt.store == nil {
-		return yaegikernel.EmitResult{}, fmt.Errorf("emit: store unavailable")
-	}
-	execCtx := toolregistry.ExecutionContextFrom(ctx)
-	to := strings.TrimSpace(payload.ToDesk)
-	if to == "" {
-		return yaegikernel.EmitResult{}, fmt.Errorf("emit: destination desk required")
-	}
-	channel := channelIDForRun(execCtx.RunRecord)
-	if channel == "" {
-		channel = strings.TrimSpace(execCtx.ChannelID)
-	}
-	if channel == "" || strings.TrimSpace(execCtx.RunID) == "" {
-		return yaegikernel.EmitResult{}, fmt.Errorf("emit: no bound channel for desk cell")
-	}
-	from := strings.TrimSpace(execCtx.AgentID)
-	role := strings.TrimSpace(execCtx.Role)
-	if role == "" && execCtx.RunRecord != nil {
-		role = agentProfileForRun(execCtx.RunRecord)
-	}
-	content := encodeEnvelope(rlmEnvelope{Kind: "emit", MsgKind: strings.TrimSpace(payload.Kind), Body: payload.Body, From: from})
-	// A deterministic idempotency key makes a re-emitted identical signal
-	// collapse to the already-written record rather than duplicate it.
-	sum := sha256.Sum256([]byte(to + "\x1f" + payload.Kind + "\x1f" + payload.Body + "\x1f" + execCtx.RunID))
-	seq, err := rt.CastEnvelope(ctx, channel, to, from, role, content, "rlm-emit:"+hex.EncodeToString(sum[:8]))
-	if err != nil {
-		return yaegikernel.EmitResult{}, fmt.Errorf("emit: %w", err)
-	}
-	// Advisory piggyback: the newest emission seq addressed to the *calling*
-	// desk, not the recipient — a mid-cell emit returns a watermark the cell
-	// can compare against its consumed high-water. Non-fatal: a drain failure
-	// degrades to no advisory rather than refusing the emit.
-	advisory := rt.newestEmissionSeqTo(ctx, execCtx)
-	return yaegikernel.EmitResult{Seq: seq, AdvisorySeq: advisory}, nil
-}
-
-// newestEmissionSeqTo returns the highest channel seq of emissions addressed
-// to the calling desk — the advisory watermark riding an emit's s.call
-// response. Read-only and non-fatal: the caller desk is resolved the same
-// way the reduction resolves its cursor identity (run record's bound agent,
-// else exec context agent). Returns 0 when the desk can't be resolved or the
-// drain fails.
-func (rt *Runtime) newestEmissionSeqTo(ctx context.Context, execCtx toolregistry.ExecutionContext) uint64 {
-	if rt == nil || rt.store == nil {
-		return 0
-	}
-	ownerID := ""
-	agentID := strings.TrimSpace(execCtx.AgentID)
-	if execCtx.RunRecord != nil {
-		ownerID = strings.TrimSpace(execCtx.RunRecord.OwnerID)
-		if id := strings.TrimSpace(execCtx.RunRecord.AgentID); id != "" {
-			agentID = id
-		}
-	}
-	if agentID == "" {
-		return 0
-	}
-	msgs, err := rt.store.ListChannelMessagesTo(ctx, ownerID, agentID, 0, 1)
-	if err != nil || len(msgs) == 0 {
-		return 0
-	}
-	var max uint64
-	for _, m := range msgs {
-		if uint64(m.Seq) > max {
-			max = uint64(m.Seq)
-		}
-	}
-	return max
 }
 
 // textureActivationCells is what one Texture activation's completed cells

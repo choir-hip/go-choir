@@ -17,9 +17,6 @@ import (
 	"time"
 )
 
-// EmitHandler performs the host-side durable write for ActionEmit.
-type EmitHandler func(context.Context, EmitPayload) (EmitResult, error)
-
 // DefaultExecTimeout bounds one choir.Exec when the broker is given no
 // timeout; a command still running then is killed and reports exit code -1.
 // The engineering overlay states it (runtimeprompts tests pin the number).
@@ -32,12 +29,6 @@ type BrokerConfig struct {
 	AllowedRoot    string
 	MaxOutputBytes int64
 	DefaultTimeout time.Duration
-	// EmitRefused is the rollback gate. It refuses new emissions but never
-	// affects records already durably delivered by the host.
-	EmitRefused bool
-	// Emit performs the host-side durable channel write and recipient wake.
-	// A nil handler refuses emits rather than retaining an in-worker receipt.
-	Emit EmitHandler
 	// Egress is the generic host-mediated research boundary (research phase 1):
 	// the worker binds it to a StreamBrokerEgress frame round-trip so the host
 	// resolves any egress action (search_start/read/
@@ -48,10 +39,9 @@ type BrokerConfig struct {
 
 // Broker executes authorized operations requested by untrusted Yaegi activations.
 type Broker struct {
-	mu       sync.Mutex
-	cfg      BrokerConfig
-	handles  *HandleIssuer
-	messages map[string]MessagePayload
+	mu      sync.Mutex
+	cfg     BrokerConfig
+	handles *HandleIssuer
 }
 
 // NewBroker creates a new trusted broker instance.
@@ -76,9 +66,8 @@ func NewBroker(cfg BrokerConfig, handles *HandleIssuer) (*Broker, error) {
 	}
 
 	return &Broker{
-		cfg:      cfg,
-		handles:  handles,
-		messages: make(map[string]MessagePayload),
+		cfg:     cfg,
+		handles: handles,
 	}, nil
 }
 
@@ -89,15 +78,6 @@ func (b *Broker) SetEpoch(epoch uint64) {
 	b.cfg.CurrentEpoch = epoch
 }
 
-// SetEmit installs the durable-write handler for ActionEmit. The session
-// socket is only available after the worker's framed conn exists, so the
-// handler is bound post-construction rather than in BrokerConfig.
-func (b *Broker) SetEmit(h EmitHandler) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.cfg.Emit = h
-}
-
 // SetEgress installs the generic host-mediated research boundary. Bound
 // post-construction for the same reason as Emit: the session socket only
 // exists after the worker's framed conn is up.
@@ -105,31 +85,6 @@ func (b *Broker) SetEgress(h func(context.Context, BrokerAction, json.RawMessage
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.cfg.Egress = h
-}
-
-// SetEmitRefused toggles the rollback gate for new emissions.
-func (b *Broker) SetEmitRefused(refused bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.cfg.EmitRefused = refused
-}
-
-// DrainReceipts returns worker-local message entries recorded since
-// the last drain and clears them, so the session loop surfaces each receipt
-// to the host exactly once in SessionResult. Entries are host-reconciled,
-// never trusted as durable; undrained entries die with the worker.
-func (b *Broker) DrainReceipts() []string {
-	if b == nil {
-		return nil
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	var out []string
-	for id, p := range b.messages {
-		out = append(out, "message/"+id+"/"+p.Kind)
-		delete(b.messages, id)
-	}
-	return out
 }
 
 // HandleRequest authenticates the handle and executes the requested action.
@@ -163,10 +118,6 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleWriteFile(ctx, req, receiptID, start)
 	case ActionListDir:
 		return b.handleListDir(ctx, req, receiptID, start)
-	case ActionMessage:
-		return b.handleMessage(ctx, req, receiptID, start)
-	case ActionEmit:
-		return b.handleEmit(ctx, req, receiptID, start)
 	case ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI:
@@ -334,63 +285,6 @@ func (b *Broker) handleListDir(ctx context.Context, req *BrokerRequest, receiptI
 	}
 
 	resp, err := NewSuccessResponse(req.RequestID, ListDirResult{Entries: names}, receiptID, time.Since(start))
-	if err != nil {
-		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
-	}
-	return resp
-}
-
-func (b *Broker) handleMessage(ctx context.Context, req *BrokerRequest, receiptID string, start time.Time) *BrokerResponse {
-	var payload MessagePayload
-	if err := json.Unmarshal(req.Payload, &payload); err != nil {
-		return NewErrorResponse(req.RequestID, fmt.Sprintf("unmarshal message payload: %v", err), time.Since(start))
-	}
-
-	msgID := newReceiptID()
-	b.mu.Lock()
-	b.messages[msgID] = payload
-	b.mu.Unlock()
-
-	result := MessageResult{
-		MessageID:   msgID,
-		DeliveredAt: time.Now().UTC().Format(time.RFC3339),
-	}
-
-	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
-	if err != nil {
-		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
-	}
-	return resp
-}
-
-func (b *Broker) handleEmit(ctx context.Context, req *BrokerRequest, receiptID string, start time.Time) *BrokerResponse {
-	var payload EmitPayload
-	if err := json.Unmarshal(req.Payload, &payload); err != nil {
-		return NewErrorResponse(req.RequestID, fmt.Sprintf("unmarshal emit payload: %v", err), time.Since(start))
-	}
-	if strings.TrimSpace(payload.ToDesk) == "" {
-		return NewErrorResponse(req.RequestID, "emit requires a destination desk", time.Since(start))
-	}
-	if strings.TrimSpace(payload.Kind) == "" {
-		return NewErrorResponse(req.RequestID, "emit requires a kind", time.Since(start))
-	}
-	if len(payload.Body) > MaxIntentBody {
-		return NewErrorResponse(req.RequestID, fmt.Sprintf("emit body %d bytes exceeds egress budget %d", len(payload.Body), MaxIntentBody), time.Since(start))
-	}
-	b.mu.Lock()
-	refused, emit := b.cfg.EmitRefused, b.cfg.Emit
-	b.mu.Unlock()
-	if refused {
-		return NewErrorResponse(req.RequestID, "emit refused by gate", time.Since(start))
-	}
-	if emit == nil {
-		return NewErrorResponse(req.RequestID, "emit host unavailable", time.Since(start))
-	}
-	result, err := emit(ctx, payload)
-	if err != nil {
-		return NewErrorResponse(req.RequestID, fmt.Sprintf("emit: %v", err), time.Since(start))
-	}
-	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
 	if err != nil {
 		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
 	}

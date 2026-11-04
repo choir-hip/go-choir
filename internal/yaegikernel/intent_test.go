@@ -8,12 +8,12 @@ import (
 )
 
 // TestTrayStagesWithoutBlocking proves in-cell orchestration never touches
-// the network: Message and Complete return in microseconds with no broker
+// the network: Note and Complete return in microseconds with no broker
 // roundtrip.
 func TestTrayStagesWithoutBlocking(t *testing.T) {
 	var tray Tray
 	start := time.Now()
-	msgID, err := tray.Message("research", "look at x")
+	msgID, err := tray.Note("research", "look at x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,15 +38,15 @@ func TestTrayStagesWithoutBlocking(t *testing.T) {
 func TestTrayQuotas(t *testing.T) {
 	var tray Tray
 	for range MaxIntentsPerCell {
-		if _, err := tray.Message("peer", "x"); err != nil {
+		if _, err := tray.Note("peer", "x"); err != nil {
 			t.Fatalf("quota fill: %v", err)
 		}
 	}
-	if _, err := tray.Message("peer", "one too many"); err == nil {
+	if _, err := tray.Note("peer", "one too many"); err == nil {
 		t.Fatal("17th intent must exceed quota")
 	}
 	var big Tray
-	if _, err := big.Message("peer", strings.Repeat("b", MaxIntentBody+1)); err == nil {
+	if _, err := big.Note("peer", strings.Repeat("b", MaxIntentBody+1)); err == nil {
 		t.Fatal("oversize body must be rejected")
 	}
 	var twice Tray
@@ -111,28 +111,6 @@ func TestCellBindingUpdates(t *testing.T) {
 	hooks.End()
 	if len(scope.Updates()) != 0 {
 		t.Fatal("updates must clear at cell end")
-	}
-}
-
-// TestCellBindingEmits proves the same prompt-as-variable contract for the
-// boundary-drained emission plane: Begin installs addressed emissions as an
-// isolated cell snapshot, scope.Emits() exposes them inside the cell, and
-// End clears them so a post-cell call never replays a stale body.
-func TestCellBindingEmits(t *testing.T) {
-	_, _, scope, _ := testChoirFixture(t)
-	hooks := scope.BindCell()
-	frame := SessionFrame{ID: "cell-3", Emits: []PendingEmit{
-		{ChannelID: "ch-sender", MessageSeq: 7, FromAgentID: "research:doc-1", Kind: "emit", Body: "typed signal body"},
-	}}
-	hooks.Begin(frame)
-	frame.Emits[0].Body = "mutated after inject"
-	got := scope.Emits()
-	if len(got) != 1 || got[0].MessageSeq != 7 || got[0].Body != "typed signal body" {
-		t.Fatalf("emits snapshot not bound/isolated: %+v", got)
-	}
-	hooks.End()
-	if len(scope.Emits()) != 0 {
-		t.Fatal("emits must clear at cell end")
 	}
 }
 

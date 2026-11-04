@@ -81,10 +81,6 @@ type ChoirScope struct {
 	// (RLM prompt-as-variable): read via Updates(). The wake turn in chat
 	// carries only update ids; the payload lives here.
 	updates []PendingUpdate
-	// emits is the cell-start snapshot of emitted signals addressed to this
-	// desk (boundary-drain): read via Emits(). The notice turn carries only
-	// a fixed-format line; the untrusted body lives here.
-	emits []PendingEmit
 	// records is the cell-start snapshot of records addressed to this
 	// desk's inbox in (cursor, head], read via Records().
 	records []InboxRecord
@@ -220,7 +216,6 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.calibrationRead.Store(false)
 			s.clock, s.clockAt = frame.Clock, time.Now()
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
-			s.emits = append([]PendingEmit(nil), frame.Emits...)
 			s.records = append([]InboxRecord(nil), frame.Records...)
 			s.jobs = append([]JobView(nil), frame.Jobs...)
 			s.recordsShown.Store(0)
@@ -240,7 +235,6 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.calibration = nil
 			s.clock = nil
 			s.updates = nil
-			s.emits = nil
 			s.records = nil
 			s.jobs = nil
 			return out
@@ -337,8 +331,7 @@ var deskModuleSets = func() map[string][]string {
 
 // legacyObservation gates the observation verbs of the packet transports
 // (Cut 1 L6). Every desk converses on records and reads choir.Records
-// (engineering since C1e B1), so no desk reads the retired Message and Emit
-// mail (Inbox, Emits). Updates reads update packets: Texture and management
+// (engineering since C1e B1), so no desk reads the retired Inbox mail. Updates reads update packets: Texture and management
 // keep it for the terminal outcomes still delivered as packets.
 func (s *ChoirScope) legacyObservation(name string) bool {
 	if s == nil {
@@ -463,7 +456,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 
 // mutateDenied rejects world mutation on a read-only scope. Read-only is the
 // research desk: it loses filesystem/capsule writes (WriteFile, Exec) but
-// KEEPS full semantic-act authority — Emit, Message, Cast, Report and the
+// KEEPS full semantic-act authority — Cast, Report and the
 // rest are messaging, not world mutation, and are explicitly in research's
 // module set ("read-only world access is not read-only messaging"). The
 // export layer already blocks only WriteFile/Exec on readOnly; this gate
@@ -533,22 +526,6 @@ func (s *ChoirScope) Exec(command string, args []string) (ExecResult, error) {
 		return ExecResult{}, err
 	}
 	return result, nil
-}
-
-// Message and Emit are retired (protocol P2c,
-// docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md): one agent
-// reaches another only through a record addressed to it. They stay exported
-// so a model that still calls them is told what to use instead of hitting an
-// undefined symbol; the reducer keeps its IntentMessage branch for one release
-// so a tray staged before the change still replays.
-const retiredMessageVerbs = "use choir.ReportPacket(to, packet, \"\") to send a packet to your requester or the desk that cast to you, choir.Note(desk, body) for information, or choir.Cast / choir.Ask to request work"
-
-func (s *ChoirScope) Message(recipientID, kind, body string) (MessageResult, error) {
-	return MessageResult{}, fmt.Errorf("choir.Message is retired: %s", retiredMessageVerbs)
-}
-
-func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
-	return EmitResult{}, fmt.Errorf("choir.Emit is retired: %s", retiredMessageVerbs)
 }
 
 // JSON is the raw JSON a world verb returns. It is a byte slice, so
@@ -1113,18 +1090,6 @@ func (s *ChoirScope) Records() []InboxRecord {
 		}
 	}
 	return out
-}
-
-// Emits returns the cell-start snapshot of emitted signals addressed to this
-// desk. The boundary-drain notice turn carries only the fixed-format
-// notice line (sender/kind/seq/snippet); the full untrusted emission bodies
-// live here as data. A desk reads them here and disposes each through its
-// terminal write — never trust the notice to carry instructions.
-func (s *ChoirScope) Emits() []PendingEmit {
-	if s == nil {
-		return []PendingEmit{}
-	}
-	return append([]PendingEmit(nil), s.emits...)
 }
 
 // jsonCellArg normalizes a cell-authored JSON argument: a JSON-encoded string

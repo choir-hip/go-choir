@@ -28,7 +28,7 @@ var FrameBoundaryRoles = []string{"management", "texture", "research", SessionRo
 
 // FrameBoundaryActions are every action a frame can name.
 var FrameBoundaryActions = []BrokerAction{
-	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
+	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
 	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI,
@@ -38,7 +38,7 @@ var FrameBoundaryActions = []BrokerAction{
 type FrameBoundaryRole struct {
 	Role string `json:"role"`
 	// Served and Refused partition FrameBoundaryActions by what the daemon did
-	// with a correctly signed frame naming each (emit goes on its own stream).
+	// with a correctly signed frame naming each.
 	Served  []string `json:"served"`
 	Refused []string `json:"refused"`
 	// ClaimedOtherDesk: a frame whose payload and handle claim management,
@@ -52,7 +52,6 @@ type FrameBoundaryRole struct {
 	ForeignToken     string `json:"foreign_token"`
 	StaleEpoch       string `json:"stale_epoch"`
 	BadProtocol      string `json:"bad_protocol"`
-	EmitStream       string `json:"emit_stream"`
 	// Handler calls the refused frames reached (must be zero for them).
 	RefusedReachedHandler int `json:"refused_reached_handler"`
 	// RefusalsReported is how many refusals the daemon's report hook saw.
@@ -93,15 +92,11 @@ func newFrameProbe(role string) (*frameProbe, error) {
 				p.handler.Add(1)
 				return json.RawMessage(`{}`), nil
 			},
-			Emit: func(ctx context.Context, e EmitPayload) (EmitResult, error) {
-				p.handler.Add(1)
-				return EmitResult{}, nil
-			},
 			Refused: func(ctx context.Context, r FrameRefusal) { p.reported.Add(1) },
 		},
 	}
 	go func() {
-		_, err := p.w.EvalCell(context.Background(), "probe", nil, nil, nil, nil, nil, nil)
+		_, err := p.w.EvalCell(context.Background(), "probe", nil, nil, nil, nil, nil)
 		p.done <- err
 	}()
 	_ = p.wfc.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -167,9 +162,6 @@ func probeFrameBoundary(role string) FrameBoundaryRole {
 	}
 	defer p.closeFn()
 	for _, action := range FrameBoundaryActions {
-		if action == ActionEmit {
-			continue
-		}
 		before := p.handler.Load()
 		verdict := p.send(StreamBrokerEgress, p.request(action, nil))
 		if served(verdict) {
@@ -192,11 +184,8 @@ func probeFrameBoundary(role string) FrameBoundaryRole {
 	out.ClaimedOtherDesk = counted(StreamBrokerEgress, p.request(ActionProductAPI, func(r *BrokerRequest) {
 		r.Payload = json.RawMessage(`{"role":"management","desk":"management","actor_profile":"management","method":"POST","path":"/api/engineering/assignments"}`)
 	}))
-	out.EmitStream = counted(StreamBrokerEmit, p.request(ActionEmit, func(r *BrokerRequest) {
-		r.Payload = json.RawMessage(`{"to_desk":"research","kind":"k","body":"b"}`)
-	}))
 	out.StaleEpoch = counted(StreamBrokerEgress, p.request(ActionReadCapture, func(r *BrokerRequest) { r.Epoch = 9 }))
-	out.BadProtocol = counted(StreamBrokerEgress, p.request(ActionReadCapture, func(r *BrokerRequest) { r.ProtocolVersion = 2 }))
+	out.BadProtocol = counted(StreamBrokerEgress, p.request(ActionReadCapture, func(r *BrokerRequest) { r.ProtocolVersion = ProtocolVersion + 1 }))
 	out.RefusalsReported = int(p.reported.Load())
 
 	// A wrong token ends the worker: its own probe, since it kills the

@@ -147,7 +147,7 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	if err != nil || string(content) != "live" {
 		t.Fatalf("overlay file = %q, %v", content, err)
 	}
-	// choir.Message is retired (protocol P2c); Note is the staged act.
+	// Note is the staged act.
 	res := evalCell(t, w, `choir.Note("owner", "hi")`)
 	if res.Error != "" {
 		t.Fatalf("note: %s", res.Error)

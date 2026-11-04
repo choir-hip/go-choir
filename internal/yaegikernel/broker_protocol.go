@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 // BrokerAction defines the operation verb requested by an interpreted Go activation.
 type BrokerAction string
@@ -16,8 +16,6 @@ const (
 	ActionReadFile  BrokerAction = "read_file"
 	ActionWriteFile BrokerAction = "write_file"
 	ActionListDir   BrokerAction = "list_dir"
-	ActionMessage   BrokerAction = "message"
-	ActionEmit      BrokerAction = "emit"
 	// ActionSearchStart starts an async search on the host; its arrivals come
 	// back on StreamSearchArrival frames (search_store.go).
 	ActionSearchStart BrokerAction = "search_start"
@@ -125,39 +123,6 @@ type ListDirPayload struct {
 // ListDirResult defines the result for ActionListDir.
 type ListDirResult struct {
 	Entries []string `json:"entries"`
-}
-
-// MessagePayload defines the parameters for ActionMessage (inter-agent typed message).
-type MessagePayload struct {
-	RecipientID string `json:"recipient_id"`
-	Kind        string `json:"kind"`
-	Body        string `json:"body"`
-}
-
-// MessageResult defines the result for ActionMessage.
-type MessageResult struct {
-	MessageID   string `json:"message_id"`
-	DeliveredAt string `json:"delivered_at"`
-}
-
-// EmitPayload defines the parameters for ActionEmit. Emits bypass the
-// cell tray: the host durably mails an rlm "emit" envelope immediately.
-type EmitPayload struct {
-	ToDesk string `json:"to_desk"`
-	Kind   string `json:"kind"`
-	Body   string `json:"body"`
-}
-
-// EmitResult identifies the durable channel record written by ActionEmit.
-type EmitResult struct {
-	Seq uint64 `json:"seq"`
-	// AdvisorySeq is the advisory piggyback on the s.call response: the newest
-	// channel seq of emissions addressed to the *calling* desk at emit time.
-	// A cell that already consumed up to its cell-start watermark sees
-	// AdvisorySeq > that mark when a new emission landed mid-activation — so
-	// delivery does not have to wait for the next injectUserTurns boundary.
-	// Zero means no advisory available (non-desk caller, drain read failed).
-	AdvisorySeq uint64 `json:"advisory_seq,omitempty"`
 }
 
 // ResearchPayload defines the parameters for ActionResearch: the child
@@ -323,7 +288,7 @@ func (r *BrokerRequest) Validate() error {
 		return fmt.Errorf("broker protocol: action is required")
 	}
 	switch r.Action {
-	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
+	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI:

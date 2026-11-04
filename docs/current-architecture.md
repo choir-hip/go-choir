@@ -891,8 +891,8 @@ commitment record (a scored failure), never a silently lost envelope. The
 `channel_message` row is retained only as an ephemeral wake hint to the
 recipient mailbox — it is never persisted as the delivery vehicle and is a
 no-op on `texture:*` targets. Channel mail addressed to `texture:*` rejects
-at reduce time (authority layer), not as a durable dead letter. `choir.Message`
-and `choir.ReportPacket` mint record-native packets for lifecycle-bound desks;
+at reduce time (authority layer), not as a durable dead letter. `choir.ReportPacket` mints
+record-native packets for lifecycle-bound desks (`choir.Message` was deleted, MA1.1);
 the envelope carrier is retired. The retired raw-messaging surface
 (`Message`/`Outcome`/`Spawn` envelope paths, `EscalateActions`,
 controls-inside-`ApplyTexture`) is refused, not bypassed.

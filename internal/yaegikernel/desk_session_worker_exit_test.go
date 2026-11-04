@@ -45,7 +45,7 @@ func TestDeskSessionWorkerDeadlineKillRecordsHostKill(t *testing.T) {
 	_, err = w.EvalCell(ctx, `n := 0
 for {
 	n++
-}`, nil, nil, nil, nil, nil, nil)
+}`, nil, nil, nil, nil, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("busy cell under a deadline: err = %v, want deadline exceeded", err)
 	}
@@ -75,7 +75,7 @@ func TestDeskSessionWorkerSelfExitRecordsItsOwnCause(t *testing.T) {
 	}
 	defer w.Close()
 	_, err = w.EvalCell(context.Background(), `import "time"
-time.Sleep(10 * time.Second)`, nil, nil, nil, nil, nil, nil)
+time.Sleep(10 * time.Second)`, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("a cell whose worker died returned no error")
 	}

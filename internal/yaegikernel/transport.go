@@ -38,11 +38,8 @@ const (
 	// tolerate and ignore them.
 	StreamStdout = 2
 	StreamStderr = 3
-	// StreamBrokerEmit carries one synchronous ActionEmit call from the
-	// isolated cell worker to its host; StreamBrokerEmitResult returns its
-	// durable sequence or refusal before cell evaluation continues.
-	StreamBrokerEmit       = 4
-	StreamBrokerEmitResult = 5
+	// Stream numbers 4 and 5 carried the retired emit call and its result;
+	// they stay unassigned.
 	// StreamBrokerEgress carries one synchronous host-mediated network call
 	// (search_start / read / read_capture) from the cell worker to its
 	// host; StreamBrokerEgressResult returns the bounded result. One generic

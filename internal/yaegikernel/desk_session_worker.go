@@ -52,11 +52,6 @@ type DeskSessionWorkerConfig struct {
 	// ExtraEnv appends worker-readable environment (test markers, child
 	// selectors) after the sanitized PATH/TMPDIR and session config vars.
 	ExtraEnv []string
-	// Emit services StreamBrokerEmit frames the worker sends mid-cell for
-	// ActionEmit. It performs the durable channel write + recipient wake on
-	// host authority. Nil refuses emits rather than recording an in-worker
-	// receipt that a cell death would silently lose.
-	Emit EmitHandler
 	// Egress services StreamBrokerEgress frames the worker sends mid-cell
 	// for host-mediated network verbs (search_start / read /
 	// read_capture). The host resolves the call against its deps and
@@ -404,15 +399,15 @@ func (w *DeskSessionWorker) Eval(ctx context.Context, source string) (SessionRes
 // session frame so choir.Inbox() inside the cell reads delivered acts
 // without a network roundtrip — the desk analogue of GoEvalRequest.Inbox.
 func (w *DeskSessionWorker) EvalInbox(ctx context.Context, source string, inbox []IncomingMessage) (SessionResult, error) {
-	return w.EvalCell(ctx, source, inbox, nil, nil, nil, nil, nil)
+	return w.EvalCell(ctx, source, inbox, nil, nil, nil, nil)
 }
 
 // EvalCell runs one cell with the full frame payload: the inbox snapshot,
 // the acting desk's score-free commitment pack (R4, choir.Pack()), the
 // pending update_coagent records (choir.Updates()), and for a texture desk
 // the bound document's head (R3d, choir.ReadDoc()).
-func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox []IncomingMessage, doc *DocSnapshot, pack *types.ActingPack, updates []PendingUpdate, emits []PendingEmit, records []InboxRecord) (SessionResult, error) {
-	return w.EvalFrame(ctx, SessionFrame{Source: source, Inbox: inbox, Doc: doc, Pack: pack, Updates: updates, Emits: emits, Records: records})
+func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox []IncomingMessage, doc *DocSnapshot, pack *types.ActingPack, updates []PendingUpdate, records []InboxRecord) (SessionResult, error) {
+	return w.EvalFrame(ctx, SessionFrame{Source: source, Inbox: inbox, Doc: doc, Pack: pack, Updates: updates, Records: records})
 }
 
 // EvalFrame runs one cell with a frame the caller filled; the worker gives
@@ -444,16 +439,6 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 			if err != nil {
 				ch <- result{err: err}
 				return
-			}
-			// A mid-cell ActionEmit arrives on its own stream; the host performs
-			// the durable channel write + recipient wake, then answers and keeps
-			// waiting for the cell's StreamCell result.
-			if stream == StreamBrokerEmit {
-				if forged := w.serviceEmit(ctx, payload); forged {
-					ch <- result{err: errForgedFrame}
-					return
-				}
-				continue
 			}
 			// Mid-cell host-mediated network verbs (search_start / read /
 			// read_capture) ride the shared egress stream; the host resolves
@@ -512,52 +497,6 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 		w.killLocked()
 		return SessionResult{}, ctx.Err()
 	}
-}
-
-// serviceEmit answers one StreamBrokerEmit frame. The worker sent a
-// BrokerRequest carrying an EmitPayload; the host performs the durable
-// channel write + recipient wake via cfg.Emit (host authority, never the
-// worker's in-memory tray), then replies on StreamBrokerEmitResult so the
-// blocked cell resumes.
-func (w *DeskSessionWorker) serviceEmit(ctx context.Context, payload []byte) (forged bool) {
-	var req BrokerRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit decode request: %w", err))
-		return false
-	}
-	if reason, forged := w.admitFrame(ctx, StreamBrokerEmit, req); reason != "" {
-		w.writeEmitResult(req.RequestID, nil, errors.New(reason))
-		return forged
-	}
-	var emit EmitPayload
-	if err := json.Unmarshal(req.Payload, &emit); err != nil {
-		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit decode payload: %w", err))
-		return false
-	}
-	handler := w.cfg.Emit
-	if handler == nil {
-		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit host unavailable"))
-		return false
-	}
-	res, err := handler(ctx, emit)
-	w.writeEmitResult(req.RequestID, &res, err)
-	return false
-}
-
-func (w *DeskSessionWorker) writeEmitResult(requestID string, res *EmitResult, cause error) {
-	resp := NewErrorResponse(requestID, "", 0)
-	if cause != nil {
-		resp.Error = cause.Error()
-	} else if ok, serr := NewSuccessResponse(requestID, res, "", 0); serr == nil {
-		resp = ok
-	} else {
-		resp.Error = serr.Error()
-	}
-	raw, err := json.Marshal(resp)
-	if err != nil {
-		return
-	}
-	_ = w.framed.WriteFrame(StreamBrokerEmitResult, raw)
 }
 
 // serviceEgress answers one StreamBrokerEgress frame. The worker sent a
@@ -621,9 +560,6 @@ func (w *DeskSessionWorker) admitFrame(ctx context.Context, stream byte, req Bro
 	}
 	if req.Epoch != w.cfg.Session.Epoch {
 		return refuse(fmt.Sprintf("refused: epoch %d is not this worker's epoch %d", req.Epoch, w.cfg.Session.Epoch), false)
-	}
-	if stream == StreamBrokerEmit && req.Action != ActionEmit {
-		return refuse(fmt.Sprintf("refused: the emit stream carries only %s, not %s", ActionEmit, req.Action), false)
 	}
 	role := w.cfg.Session.Role
 	if !deskmanifest.FrameAllowed(role, string(req.Action)) {

@@ -24,8 +24,7 @@ func newTestBroker(t *testing.T) (*Broker, *HandleIssuer) {
 }
 
 // SEC-02 failure mode 5: ActionExec and ActionWriteFile leave every handle but
-// engineering's; ActionMessage and ActionEmit (retired verbs) leave all of
-// them. The handle scopes below are what a worker's own broker will honor.
+// engineering's. The handle scopes below are what a worker's own broker will honor.
 //
 // Written independently of internal/deskmanifest: this table is the authority
 // the batch must not widen, and it is the narrowing it applies.

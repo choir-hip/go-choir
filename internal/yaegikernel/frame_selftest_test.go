@@ -41,7 +41,7 @@ func TestFrameBoundarySelfTestReceipt(t *testing.T) {
 			}
 		}
 		for name, v := range map[string]string{"wrong_token": r.WrongToken, "missing_token": r.MissingToken,
-			"foreign_token": r.ForeignToken, "stale_epoch": r.StaleEpoch, "bad_protocol": r.BadProtocol, "emit_stream": r.EmitStream, "bad_version_header": r.BadVersionHeader} {
+			"foreign_token": r.ForeignToken, "stale_epoch": r.StaleEpoch, "bad_protocol": r.BadProtocol, "bad_version_header": r.BadVersionHeader} {
 			if !strings.HasPrefix(v, "refused") {
 				t.Errorf("%s: %s = %q, want a refusal", r.Role, name, v)
 			}
@@ -54,6 +54,43 @@ func TestFrameBoundarySelfTestReceipt(t *testing.T) {
 		}
 		if r.RefusalsReported == 0 {
 			t.Errorf("%s: no refusal was reported to the host", r.Role)
+		}
+	}
+}
+
+// The frame probe names every action a frame can carry and none other: the
+// emit and message actions were deleted with their channels (MA1.1), so a
+// frame naming one fails protocol validation, not only the role table.
+func TestFrameBoundaryActionsAreTheLiveSetOnly(t *testing.T) {
+	want := map[BrokerAction]bool{}
+	for _, a := range allBrokerActions {
+		want[a] = true
+	}
+	got := map[BrokerAction]bool{}
+	for _, a := range FrameBoundaryActions {
+		if got[a] {
+			t.Errorf("FrameBoundaryActions names %s twice", a)
+		}
+		got[a] = true
+		if !want[a] {
+			t.Errorf("FrameBoundaryActions names %s, which the pinned set does not", a)
+		}
+	}
+	for a := range want {
+		if !got[a] {
+			t.Errorf("FrameBoundaryActions omits %s", a)
+		}
+	}
+	for _, deleted := range []BrokerAction{"emit", "message"} {
+		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "r", HandleRef: "h", Epoch: 1, Action: deleted}
+		if err := req.Validate(); err == nil {
+			t.Errorf("a frame naming the deleted action %q passed validation", deleted)
+		}
+	}
+	for _, a := range allBrokerActions {
+		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "r", HandleRef: "h", Epoch: 1, Action: a}
+		if err := req.Validate(); err != nil {
+			t.Errorf("live action %s failed validation: %v", a, err)
 		}
 	}
 }

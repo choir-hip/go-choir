@@ -230,7 +230,7 @@ FRAME_ALLOWED = {
     "research_child": {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},
     "management_task": {"read_capture", "stories"},
 }
-FRAME_ACTIONS = {"exec", "read_file", "write_file", "list_dir", "message", "search_start", "read", "search_wire_corpus",
+FRAME_ACTIONS = {"exec", "read_file", "write_file", "list_dir", "search_start", "read", "search_wire_corpus",
                  "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "product_api", "research",
                  "poll_source", "read_capture", "stories", "system1", "relate_stories", "relate", "source_api"}
 
@@ -254,7 +254,7 @@ def judge_frames(fb):
                 sorted(served), sorted(allowed), sorted(served - allowed), sorted(allowed - served)))
         if (served | refused) != FRAME_ACTIONS or (served & refused):
             fails.append(p + "served and refused do not partition the actions: %r %r" % (sorted(served), sorted(refused)))
-        for case in ("wrong_token", "missing_token", "foreign_token", "stale_epoch", "bad_protocol", "emit_stream", "bad_version_header"):
+        for case in ("wrong_token", "missing_token", "foreign_token", "stale_epoch", "bad_protocol", "bad_version_header"):
             if not str(r.get(case, "")).startswith("refused"):
                 fails.append(p + "%s = %r, want a refusal" % (case, r.get(case)))
         if role != "management" and not str(r.get("claimed_other_desk", "")).startswith("refused"):
