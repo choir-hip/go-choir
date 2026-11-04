@@ -112,18 +112,41 @@ func (r *rlmCallReduction) commitJobIntent(ctx context.Context, in yaegikernel.S
 	}
 	out["state"] = view.State
 	if in.JobOp == yaegikernel.JobOpStart {
-		out["started"] = view.State == capsulejob.StateRunning
-		if view.State == capsulejob.StateRunning {
-			out["next"] = "the job runs now; do other work or end your turn: you are woken when it ends, its record arrives in choir.Records(), and choir.Poll(id) shows its receipt_ref"
-		} else if view.State == capsulejob.StateWaiting {
-			// S4: a build job waits for host memory and starts by itself.
-			out["waiting"] = view.Reason
-			out["next"] = "the job is accepted and waits for host memory; it starts by itself when the host has room. Do other work or end your turn: you are woken when it ends, and choir.Poll(id) shows its state"
-		} else if view.Reason != "" {
-			out["error"] = view.Reason
-		}
+		jobStartFields(out, view)
 	}
 	return out
+}
+
+// jobStartFields is a job start's result for the cell: started, and for a
+// job that waits, its typed wait (view.Wait) and that wait in one sentence,
+// so the engineer can choose to wait, stop it, or do other work.
+func jobStartFields(out map[string]any, view yaegikernel.JobView) {
+	out["started"] = view.State == capsulejob.StateRunning
+	switch {
+	case view.State == capsulejob.StateRunning:
+		out["next"] = "the job runs now; do other work or end your turn: you are woken when it ends, its record arrives in choir.Records(), and choir.Poll(id) shows its receipt_ref"
+	case view.State == capsulejob.StateWaiting:
+		// S4: a build job waits for host memory and starts by itself.
+		out["waiting"] = view.Reason
+		if view.Wait.Active() {
+			out["wait"] = view.Wait
+			out["waiting"] = firstNonEmpty(view.Wait.Sentence, view.Wait.SentenceAt(time.Now()))
+		}
+		out["next"] = "the job is accepted and waits for host memory (wait says what it needs, what is free and who holds it); it starts by itself when the host has room. Choose: end your turn (you are woken when it ends; choir.Poll(id) shows its wait), do other work meanwhile, or choir.Stop(id) and start it again with a smaller memory_mib if it needs less"
+	case view.Reason != "":
+		out["error"] = view.Reason
+	}
+}
+
+// jobParkUntil is when a turn parked on view stops waiting for it,
+// before jobWaitSlack: the job's deadline, or, for a job still waiting for
+// host memory, its wait's bound plus its wall clock, so the park does not
+// end before the job has started.
+func jobParkUntil(view yaegikernel.JobView, deadline, now time.Time) time.Time {
+	if view.State != capsulejob.StateWaiting || view.Wait == nil || !view.Wait.Until.After(now) {
+		return deadline
+	}
+	return view.Wait.Until.Add(time.Duration(view.WallClockSec) * time.Second)
 }
 
 // jobStartRequest is the executor's start request for a staged job start,
@@ -442,7 +465,13 @@ func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord,
 		}
 		return none, false, nil
 	}
-	emitJobPark(emit, "capsule_job_park", map[string]any{"job_id": jobID, "cause": cause, "deadline": deadline.Add(jobWaitSlack).UTC().Format(time.RFC3339)})
+	deadline = jobParkUntil(view, deadline, time.Now())
+	park := map[string]any{"job_id": jobID, "cause": cause, "deadline": deadline.Add(jobWaitSlack).UTC().Format(time.RFC3339)}
+	if view.Wait.Active() {
+		// The park says what the job waits for, not only that it waits.
+		park["wait"] = view.Wait
+	}
+	emitJobPark(emit, "capsule_job_park", park)
 	started := time.Now()
 	ended, reason, err := rt.waitJobEnd(ctx, jobs, rec.RunID, view, deadline)
 	emitJobPark(emit, "capsule_job_park_ended", map[string]any{"job_id": jobID, "reason": reason, "state": ended.State, "waited_ms": time.Since(started).Milliseconds()})

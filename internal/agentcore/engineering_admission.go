@@ -336,6 +336,9 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 	}
 	log.Printf("runtime: engineering admission: assignment %s waits behind %s (%s); retry %d in %s",
 		assignment.AssignmentID, busy.BlockedBy, busy.Why, retry, delay)
+	// The wait as a typed record, for management and Texture
+	// (engineering_waits.go).
+	rt.observeAdmissionWait(ctx, assignment, busy, rt.engineeringAdmissionNow(), delay)
 	return nil
 }
 

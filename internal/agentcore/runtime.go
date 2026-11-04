@@ -210,6 +210,9 @@ type Runtime struct {
 	// admission holds new engineering until the refresh lands between rounds
 	// (refresh_hold.go).
 	refreshHold refreshHoldState
+	// assignmentWaits is each engineering assignment's typed wait and
+	// its minutes waited by kind (engineering_waits.go).
+	assignmentWaits assignmentWaitTracker
 
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
@@ -914,6 +917,7 @@ func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
 			// A capsule job's end commits its record and wakes its run
 			// (capsule_jobs.go).
 			executor.SetJobCompletionHandler(rt.handleCapsuleJobDone)
+			executor.SetJobWaitHandler(rt.handleCapsuleJobWait)
 		}
 	}
 }

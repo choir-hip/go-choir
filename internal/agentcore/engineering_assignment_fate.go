@@ -255,6 +255,7 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 		rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
 		rt.wakeNextQueuedEngineeringRequest(ctx, cancelled.Assignment)
+		rt.closeAssignmentWaits(ctx, cancelled.Assignment)
 	}
 	return cancelled, nil
 }
@@ -1769,6 +1770,10 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 // for an assignment's or a trajectory's cancellation, also closes
 // awaiting_approval.
 func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, assignment types.EngineeringAssignment) {
+	if rt != nil && assignment.Disposition.Terminal() {
+		// The attempt's waits end with it (engineering_waits.go).
+		rt.closeAssignmentWaits(ctx, assignment)
+	}
 	if rt == nil || rt.selfdevOperations == nil || !assignment.Disposition.Terminal() {
 		return
 	}

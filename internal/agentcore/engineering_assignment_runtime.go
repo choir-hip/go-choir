@@ -552,7 +552,15 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 	if store.DigestEngineeringOpaqueCapability(opaque) != assignment.Binding.CapabilityDigest {
 		return AssignedEngineeringStart{}, fmt.Errorf("resumed assignment capability does not match the committed binding")
 	}
-	return rt.spawnBindActivateAssignment(ctx, assignment, preflight, opaque, req)
+	started, err := rt.spawnBindActivateAssignment(ctx, assignment, preflight, opaque, req)
+	if err == nil {
+		// The request is admitted and bound: its admission wait ends.
+		// This is spawnBindActivateAssignment's only caller, so every
+		// admission ends its wait here; a missed end is still reaped by
+		// assignmentWaitViews after waitTrackerIdleForget.
+		rt.endAdmissionWait(ctx, assignment.AssignmentID, assignment.Binding.Attempt, "the round started")
+	}
+	return started, err
 }
 
 // takesSourceAtBind reports whether an unbound request may take its source
@@ -796,7 +804,11 @@ func (rt *Runtime) cancelUnboundAssignment(assignment types.EngineeringAssignmen
 		cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("engineering-open-failed:%s:%d", assignmentID, attempt), OwnerID: ownerID, ComputerID: computerID,
 			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
-		if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
+		cancelled, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel)
+		if cancelErr == nil {
+			rt.closeAssignmentWaits(context.Background(), cancelled.Assignment)
+		}
+		if cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
 			// A concurrent reconciler already cancelled or advanced the
 			// assignment; terminal/adopted state is convergence.
 			if reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt); reloadErr == nil && reloaded.Disposition.Terminal() {

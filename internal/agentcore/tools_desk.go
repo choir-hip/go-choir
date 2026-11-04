@@ -1003,6 +1003,11 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	// The desk's calibration digest, under the same setting and arm rule
 	// as the digest turn (icrl-calibration-experiment-2026-10-14 P3).
 	pack.Calibration = rt.calibrationDigestForRun(ctx, execCtx.RunRecord)
+	// Management sees each engineering assignment's typed wait and its
+	// minutes waited by kind (engineering_waits.go).
+	if agentID == agentprofile.Management || strings.HasPrefix(agentID, agentprofile.Management+":") {
+		pack.Waits = rt.assignmentWaitViews(ownerID, computerID)
+	}
 	return &pack
 }
 
