@@ -210,34 +210,3 @@ func TestCapsuleReservationsHandlerBindsTheGuest(t *testing.T) {
 		t.Fatalf("host caller: %d %s", rec.Code, rec.Body.String())
 	}
 }
-
-// B9: the facts carry what the ledger still holds for this computer's own
-// builds, so a job in a build capsule needs host headroom only beyond its
-// capsule's unrealised reservation (problem 2 of
-// docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md).
-func TestCapsuleBuildFactsCarryOwnOutstanding(t *testing.T) {
-	f := buildFixture(t)
-	f.setAvail(14 * gib)
-	res := admitBuild(t, f, "computer-a", "cap-a")
-	if res.Facts.OwnReservedBytes != 3*gib {
-		t.Fatalf("B9: own reserved %d MiB, want 3072", res.Facts.OwnReservedBytes>>20)
-	}
-	// The build grows 2 GiB: the ledger holds 1 GiB more for it.
-	f.mgr.setRSS("vm-a", 2848<<20)
-	f.reg.sampleVMMemory()
-	beat, err := f.reg.ReportCapsuleReservations(CapsuleReservationReport{ComputerID: "computer-a",
-		Reservations: []CapsuleReservation{{CapsuleID: "cap-a", Bytes: 3 * gib}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if beat.Facts.OwnReservedBytes != gib {
-		t.Fatalf("B9: own reserved %d MiB after 2 GiB of growth, want 1024", beat.Facts.OwnReservedBytes>>20)
-	}
-	other, err := f.reg.ReportCapsuleReservations(CapsuleReservationReport{ComputerID: "computer-b"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if other.Facts.OwnReservedBytes != 0 {
-		t.Fatalf("B9: a computer with no build is told it holds %d MiB", other.Facts.OwnReservedBytes>>20)
-	}
-}

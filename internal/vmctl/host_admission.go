@@ -797,6 +797,13 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 		delete(led.peakReset, vmID)
 		led.peak[vmID] = peak
 		peaks[vmID] = peak
+		// A capsule set reported from an earlier realization of a VM that
+		// rebooted held nothing past that boot: dropped here, without
+		// waiting for the new guest's first report (review r1, deepseek B2).
+		if set, e := led.builds[vmID], epochs[vmID]; set != nil && e.epoch != 0 && set.epoch != e.epoch {
+			log.Printf("vmctl: capsule reservations of VM %s dropped: reported from epoch %d, the VM now runs epoch %d", vmID, set.epoch, e.epoch)
+			delete(led.builds, vmID)
+		}
 	}
 	for vmID := range led.rss {
 		if _, live := readings[vmID]; !live {

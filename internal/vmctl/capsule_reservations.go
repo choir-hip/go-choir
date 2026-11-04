@@ -16,7 +16,11 @@ import (
 )
 
 // Live build reservations (station S4,
-// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, points 1, 3, 5).
+// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, points 1, 3, 5),
+// held per job since
+// docs/problems/build-capsule-holds-peak-while-agent-thinks-2026-11-04.md:
+// a build capsule holds only its baseline (what its idle processes use, as
+// its guest measures it), and each job a lease for its need while it runs.
 //
 // Measured admission charges a running computer at its settled resident
 // memory, so the growth a capsule build adds inside the guest's ceiling was
@@ -28,17 +32,21 @@ import (
 // outstanding amount is part of the shared reserved term every start and
 // every build spawn is admitted against.
 //
-// A build spawn is admitted here, at placement, on the same rule a start is
-// (MemAvailable >= floor + headroom + reserved + this build's increment), or
-// refused with a visible reason; its jobs then never ask. Protected
-// computers (the paper, the owner's computer) are always admitted, and
-// their reservations still count against everyone else.
+// A build spawn's baseline and a job's lease are admitted here, on the same
+// rule a start is (MemAvailable >= floor + headroom + reserved + this
+// increment), or refused with a visible reason and the refusal as data
+// (CapsuleMemoryWait: need, room, holders). A job lease also waits while
+// the host is under memory pressure. Protected computers (the paper, the
+// owner's computer) are always admitted, and their reservations still
+// count against everyone else.
 //
 // A guest re-reports its whole live set every few seconds while it holds
-// any; a set not reported for the in-flight TTL expires, and a computer that
-// stops loses its set at the sampler's next pass. The reply carries the host
-// facts (MemAvailable over the floor, PSI memory averages) the guest's
-// capsule executor reads before it starts a build-class job.
+// any; a set not reported for the in-flight TTL expires, a set reported
+// from an earlier realization (epoch) of its VM is dropped, and a computer
+// that stops loses its set at the sampler's next pass. The reply still
+// carries the host facts (MemAvailable over the floor, PSI memory
+// averages) that a guest from before per-job leases reads before it starts
+// a build-class job.
 //
 // The reservations are the guest's claim: bounded per computer by its own
 // machine size, never trusted for anything but this charge. Nothing here is
@@ -48,8 +56,9 @@ import (
 const (
 	capsuleReservationsPath = "/internal/vmctl/computers/capsule-reservations"
 
-	// maxCapsuleReservations bounds one computer's live set.
-	maxCapsuleReservations = 16
+	// maxCapsuleReservations bounds one computer's live set: capsules and
+	// their job leases (one job runs at a time in a capsule).
+	maxCapsuleReservations = 32
 
 	// hostPressureHighAvg10 is the PSI memory some avg10 over which the
 	// host reads as under memory pressure for deferring heavy work; avg60
@@ -61,14 +70,22 @@ const (
 	CapsulePriorityBatch     = "batch"
 )
 
-// CapsuleReservation is one live build-class capsule's host reservation.
+// CapsuleReservation is one live build-class capsule's baseline, or, with
+// JobID, the lease of the job running in it.
 type CapsuleReservation struct {
 	CapsuleID string `json:"capsule_id"`
+	JobID     string `json:"job_id,omitempty"`
 	Bytes     uint64 `json:"bytes"`
 }
 
+// reservationKey is a set entry: a capsule's baseline (job "") or a job's
+// lease.
+type reservationKey struct{ capsule, job string }
+
+func (c CapsuleReservation) key() reservationKey { return reservationKey{c.CapsuleID, c.JobID} }
+
 // CapsuleReservationReport is a guest's report: its whole live set, and at
-// most one new build spawn to admit.
+// most one new capsule baseline or job lease to admit.
 type CapsuleReservationReport struct {
 	ComputerID   string               `json:"computer_id"`
 	Reservations []CapsuleReservation `json:"reservations"`
@@ -91,11 +108,8 @@ type HostMemoryFacts struct {
 	BurstPoolBytes      uint64 `json:"burst_pool_bytes"`
 	HeadroomBytes       uint64 `json:"headroom_bytes"`
 	// OwnReservedBytes is what the ledger still holds for this computer's
-	// own live builds (idle + builds - rss): admitted host memory its build
-	// capsules have not yet grown into. A capsule job needs headroom only
-	// beyond its own capsule's share of it
-	// (docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md).
-	// An older vmctl sends none: no credit.
+	// own capsules and jobs. Only a guest from before per-job leases reads
+	// it (its job credit, 67f9ec664); delete once no such guest runs.
 	OwnReservedBytes uint64  `json:"own_reserved_bytes,omitempty"`
 	MemorySomeAvg10  float64 `json:"memory_some_avg10"`
 	MemorySomeAvg60  float64 `json:"memory_some_avg60"`
@@ -105,26 +119,116 @@ type HostMemoryFacts struct {
 	Priority string `json:"priority"`
 }
 
-// CapsuleReservationResult is the reply. Admitted and Reason answer Admit.
+// CapsuleReservationResult is the reply. Admitted, Reason and Wait answer
+// Admit.
 type CapsuleReservationResult struct {
-	Admitted *bool           `json:"admitted,omitempty"`
-	Reason   string          `json:"reason,omitempty"`
-	Facts    HostMemoryFacts `json:"facts"`
+	Admitted *bool  `json:"admitted,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	// Wait is a refusal as data, for the guest to show its desks.
+	Wait  *CapsuleMemoryWait `json:"wait,omitempty"`
+	Facts HostMemoryFacts    `json:"facts"`
 }
 
-// buildReservationSet is one computer's live builds in the ledger.
+// CapsuleMemoryWait is a refused admission: what it needs, the room the
+// host has for it (MemAvailable less the floor, the burst pool and what is
+// promised), and who holds what is promised. A wait is true contention:
+// the memory is promised to a start in flight or a running job, or the
+// host is under memory pressure.
+type CapsuleMemoryWait struct {
+	NeedBytes      uint64                `json:"need_bytes"`
+	RoomBytes      uint64                `json:"room_bytes"`
+	AvailableBytes uint64                `json:"available_bytes"`
+	FloorBytes     uint64                `json:"floor_bytes"`
+	PoolBytes      uint64                `json:"pool_bytes"`
+	ReservedBytes  uint64                `json:"reserved_bytes"`
+	PressureHigh   bool                  `json:"pressure_high,omitempty"`
+	Holders        []CapsuleMemoryHolder `json:"holders,omitempty"`
+}
+
+// CapsuleMemoryHolder is one holder of promised host memory: a start in
+// flight, a job lease, or capsule baselines not yet resident. Another
+// computer's holder carries its kind, class and bytes, never its ids.
+type CapsuleMemoryHolder struct {
+	Kind      string `json:"kind"` // start, job, capsule
+	Own       bool   `json:"own,omitempty"`
+	Class     string `json:"class,omitempty"`
+	CapsuleID string `json:"capsule_id,omitempty"`
+	JobID     string `json:"job_id,omitempty"`
+	Bytes     uint64 `json:"bytes"`
+}
+
+// String names the holder for a reason text.
+func (h CapsuleMemoryHolder) String() string {
+	who := "another computer"
+	if h.Own {
+		who = "this computer"
+	}
+	if h.Class != "" && !h.Own {
+		who = "another " + h.Class + " computer"
+	}
+	switch h.Kind {
+	case "start":
+		return fmt.Sprintf("a start in flight on %s (%d MiB)", who, h.Bytes>>20)
+	case "job":
+		if h.Own {
+			return fmt.Sprintf("job %s in capsule %s on this computer (%d MiB)", h.JobID, h.CapsuleID, h.Bytes>>20)
+		}
+		return fmt.Sprintf("a running job on %s (%d MiB)", who, h.Bytes>>20)
+	}
+	return fmt.Sprintf("capsules not yet resident on %s (%d MiB)", who, h.Bytes>>20)
+}
+
+// buildReservationSet is one computer's live build capsules and job leases
+// in the ledger.
 type buildReservationSet struct {
 	vmID       string
 	computerID string
-	class      WarmnessClass
+	// epoch is the realization the set was reported from: a set from an
+	// earlier boot of the VM is dropped, never inherited.
+	epoch int64
+	class WarmnessClass
 	// idle is the footprint the builds are charged on top of, fixed when
 	// the set is created (buildIdle); idleSource says how it was taken.
 	idle       uint64
 	idleSource string
 	// ceiling is the guest's machine memory: the set never charges past it.
 	ceiling    uint64
-	entries    map[string]uint64
+	entries    map[reservationKey]uint64
 	reportedAt time.Time
+}
+
+// holders attributes the set's outstanding to its job leases first, then to
+// its capsules' baselines. own reveals the ids.
+func (s *buildReservationSet) holders(out uint64, own bool) []CapsuleMemoryHolder {
+	keys := make([]reservationKey, 0, len(s.entries))
+	for k := range s.entries {
+		if k.job != "" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if s.entries[keys[i]] != s.entries[keys[j]] {
+			return s.entries[keys[i]] > s.entries[keys[j]]
+		}
+		return keys[i].capsule+"/"+keys[i].job < keys[j].capsule+"/"+keys[j].job
+	})
+	var hs []CapsuleMemoryHolder
+	for _, k := range keys {
+		if out == 0 {
+			break
+		}
+		b := min(s.entries[k], out)
+		out -= b
+		h := CapsuleMemoryHolder{Kind: "job", Own: own, Class: string(s.class), Bytes: b}
+		if own {
+			h.CapsuleID, h.JobID = k.capsule, k.job
+		}
+		hs = append(hs, h)
+	}
+	if out > 0 {
+		hs = append(hs, CapsuleMemoryHolder{Kind: "capsule", Own: own, Class: string(s.class), Bytes: out})
+	}
+	return hs
 }
 
 func (s *buildReservationSet) total() uint64 {
@@ -264,13 +368,45 @@ func buildIdle(settled settledIdle, rss uint64, preCapsule bool, now time.Time) 
 	}
 }
 
-func validCapsuleReservation(c CapsuleReservation) bool {
-	id := strings.TrimSpace(c.CapsuleID)
-	return id != "" && id == c.CapsuleID && len(id) <= 128 && !strings.ContainsAny(id, "\x00\n\r") && c.Bytes > 0
+func validReservationID(id string, optional bool) bool {
+	if id == "" {
+		return optional
+	}
+	return strings.TrimSpace(id) == id && len(id) <= 128 && !strings.ContainsAny(id, "\x00\n\r")
 }
 
-// ReportCapsuleReservations records a computer's live build set and admits
-// its new build spawn, if any.
+func validCapsuleReservation(c CapsuleReservation) bool {
+	return validReservationID(c.CapsuleID, false) && validReservationID(c.JobID, true) && c.Bytes > 0
+}
+
+// memoryHoldersLocked is every holder of promised memory, largest first;
+// vmID's own are named. Callers hold l.mu and have just run
+// outstandingLocked.
+func (l *hostMemoryLedger) memoryHoldersLocked(vmID string, views []AdmissionReservationView) []CapsuleMemoryHolder {
+	var hs []CapsuleMemoryHolder
+	for _, v := range views {
+		if v.OutstandingBytes == 0 {
+			continue
+		}
+		if v.NeedSource != "capsule_build" {
+			hs = append(hs, CapsuleMemoryHolder{Kind: "start", Own: v.VMID == vmID, Class: v.Class, Bytes: v.OutstandingBytes})
+			continue
+		}
+		if set := l.builds[v.VMID]; set != nil {
+			hs = append(hs, set.holders(v.OutstandingBytes, v.VMID == vmID)...)
+		}
+	}
+	sort.SliceStable(hs, func(i, j int) bool { return hs[i].Bytes > hs[j].Bytes })
+	return hs
+}
+
+// ReportCapsuleReservations records a computer's live set of build capsule
+// baselines and job leases, and admits its new one, if any.
+//
+// An admission is decided under the ledger lock with a host sample taken
+// inside it, as a start's is, and an admitted lease joins the reserved term
+// before the lock is released: two guests starting jobs in the same second
+// are decided one after the other, and the second sees the first's lease.
 func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationReport) (CapsuleReservationResult, error) {
 	computerID := strings.TrimSpace(report.ComputerID)
 	if len(report.Reservations) > maxCapsuleReservations {
@@ -292,6 +428,7 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 		return CapsuleReservationResult{}, fmt.Errorf("vmctl: no ownership for computer %s", computerID)
 	}
 	vmID := own.VMID
+	epoch := own.Epoch
 	settled := settledIdle{bytes: own.MemorySettledRSSBytes, epoch: own.MemorySettledEpoch, at: own.MemorySettledAt, current: own.Epoch}
 	_, memMib := machineShapeForOwnership(own)
 	class := warmnessClassForOwnership(own, r.warmnessPolicy)
@@ -315,11 +452,18 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 	rss := led.rss[vmID].bytes
 
 	set := led.builds[vmID]
+	if set != nil && set.epoch != epoch {
+		// Reported from an earlier realization of the VM: whatever its
+		// capsules and jobs held died with that boot.
+		log.Printf("vmctl: capsule reservations of VM %s dropped: reported from epoch %d, the VM now runs epoch %d", vmID, set.epoch, epoch)
+		delete(led.builds, vmID)
+		set = nil
+	}
 	if set == nil {
 		// A set is created by the report that first carries a live or
-		// admitted build: with no live build reported, the RSS now is the
-		// computer before any capsule.
-		set = &buildReservationSet{vmID: vmID, computerID: computerID}
+		// admitted capsule: with none reported, the RSS now is the computer
+		// before any capsule.
+		set = &buildReservationSet{vmID: vmID, computerID: computerID, epoch: epoch}
 		set.idle, set.idleSource = buildIdle(settled, rss, len(report.Reservations) == 0, now)
 		led.builds[vmID] = set
 	} else if set.idle == 0 && rss > 0 {
@@ -329,7 +473,7 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 		set.idle, set.idleSource = buildIdle(settled, rss, false, now)
 	}
 	set.class, set.ceiling, set.reportedAt = class, ceiling, now
-	set.entries = map[string]uint64{}
+	set.entries = map[reservationKey]uint64{}
 	clamp := func(b uint64) uint64 {
 		if ceiling > 0 && b > ceiling {
 			return ceiling
@@ -337,49 +481,77 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 		return b
 	}
 	for _, c := range report.Reservations {
-		set.entries[c.CapsuleID] = clamp(c.Bytes)
+		set.entries[c.key()] = clamp(c.Bytes)
 	}
 
 	reserved, views := led.outstandingLocked(now, acfg)
 	floor := memoryFloorBytes(cfg, sample.MemoryTotalBytes)
 	// checked: the spawn gate is in force, and with it the burst pool.
 	checked := cfg.Mode == PressureReclaimModeActive && acfg.Mode == HostAdmissionModeMeasured
+	pressure := hostPressureHigh(sample, cfg)
+	// The pool is part of the room only where the gate keeps it: a
+	// protected computer is always admitted (review r1, DeepSeek F2).
+	pool := uint64(0)
+	if checked && !protectedWarmnessClass(class) {
+		pool = acfg.HeadroomBytes
+	}
 	var result CapsuleReservationResult
 	if admit := report.Admit; admit != nil {
-		if _, held := set.entries[admit.CapsuleID]; held {
+		if _, held := set.entries[admit.key()]; held {
 			yes := true
 			result.Admitted = &yes
 		} else {
 			bytes := clamp(admit.Bytes)
 			before := set.outstanding(rss, 0)
 			increment := set.outstanding(rss, bytes) - before
+			job := admit.JobID != ""
+			what, source := "build", "capsule_build"
+			if job {
+				what, source = "job", "capsule_job"
+			}
 			d := HostAdmissionDecision{
 				At: now.UTC().Format(time.RFC3339), Mode: acfg.Mode, VMID: vmID, ComputerID: computerID,
-				Class: string(class), NeedBytes: increment, NeedSource: "capsule_build",
+				Class: string(class), NeedBytes: increment, NeedSource: source,
 				AvailableBytes: sample.MemoryAvailableBytes, ReservedBytes: reserved,
 				FloorBytes: floor, HeadroomBytes: acfg.HeadroomBytes,
 			}
 			required := floor + acfg.HeadroomBytes + reserved + increment
 			switch {
 			case !checked:
-				d.Decision = "admit_build_unchecked" // start admission is off too
+				d.Decision = "admit_" + what + "_unchecked" // start admission is off too
 			case protectedWarmnessClass(class):
-				d.Decision = "admit_build_protected"
+				d.Decision = "admit_" + what + "_protected"
 			case sample.MemoryAvailableBytes == 0:
-				d.Decision = "admit_build_unknown_sample"
+				d.Decision = "admit_" + what + "_unknown_sample"
+			case job && pressure:
+				// A job is where memory is used: under host memory
+				// pressure it waits even when the arithmetic fits.
+				d.Decision = "refuse_job"
+				d.Reason = fmt.Sprintf("the host is under memory pressure (PSI some avg10 %.1f%%, avg60 %.1f%%)", sample.MemorySomeAvg10, sample.MemorySomeAvg60)
 			case sample.MemoryAvailableBytes >= required:
-				d.Decision = "admit_build"
+				d.Decision = "admit_" + what
 			default:
-				d.Decision = "refuse_build"
-				d.Reason = fmt.Sprintf("host memory available %d MiB; %d MiB reserved for starts in flight and live builds; this build needs %d MiB above the %d MiB floor and %d MiB headroom",
-					d.AvailableBytes>>20, d.ReservedBytes>>20, d.NeedBytes>>20, d.FloorBytes>>20, d.HeadroomBytes>>20)
+				d.Decision = "refuse_" + what
+				d.Reason = fmt.Sprintf("host memory available %d MiB; %d MiB reserved for starts in flight and running jobs; this %s needs %d MiB above the %d MiB floor and %d MiB headroom",
+					d.AvailableBytes>>20, d.ReservedBytes>>20, what, d.NeedBytes>>20, d.FloorBytes>>20, d.HeadroomBytes>>20)
+			}
+			admitted := !strings.HasPrefix(d.Decision, "refuse_")
+			if !admitted {
+				wait := &CapsuleMemoryWait{NeedBytes: increment, AvailableBytes: sample.MemoryAvailableBytes, FloorBytes: floor,
+					PoolBytes: pool, ReservedBytes: reserved, PressureHigh: pressure, Holders: led.memoryHoldersLocked(vmID, views)}
+				if spare := floor + pool + reserved; sample.MemoryAvailableBytes > spare {
+					wait.RoomBytes = sample.MemoryAvailableBytes - spare
+				}
+				if len(wait.Holders) > 0 {
+					d.Reason += "; the largest holder is " + wait.Holders[0].String()
+				}
+				result.Wait = wait
 			}
 			led.recordLocked(d)
 			logAdmissionDecision(d)
-			admitted := d.Decision != "refuse_build"
 			result.Admitted = &admitted
 			if admitted {
-				set.entries[admit.CapsuleID] = bytes
+				set.entries[admit.key()] = bytes
 				reserved += increment
 			} else {
 				result.Reason = d.Reason
@@ -390,7 +562,7 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 		delete(led.builds, vmID)
 	}
 	// What this computer itself holds (its own start in flight and its
-	// builds) is not promised to another (review r1, deepseek).
+	// capsules and jobs) is not promised to another (review r1, deepseek).
 	mine := uint64(0)
 	for _, v := range views {
 		if v.VMID == vmID && v.NeedSource != "capsule_build" {
@@ -406,17 +578,11 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 	if reserved > mine {
 		others = reserved - mine
 	}
-	// The pool is part of the room only where the gate keeps it: a
-	// protected build is always admitted (review r1, DeepSeek F2).
-	pool := uint64(0)
-	if checked && !protectedWarmnessClass(class) {
-		pool = acfg.HeadroomBytes
-	}
 	facts := HostMemoryFacts{
 		SampledAt: now.UTC().Format(time.RFC3339Nano), MemAvailableBytes: sample.MemoryAvailableBytes,
 		FloorBytes: floor, ReservedOthersBytes: others, BurstPoolBytes: pool, OwnReservedBytes: ownBuilds,
 		MemorySomeAvg10: sample.MemorySomeAvg10, MemorySomeAvg60: sample.MemorySomeAvg60,
-		PressureHigh: hostPressureHigh(sample, cfg), Priority: capsulePriority(class),
+		PressureHigh: pressure, Priority: capsulePriority(class),
 	}
 	if spare := floor + pool + others; sample.MemoryAvailableBytes > spare {
 		facts.HeadroomBytes = sample.MemoryAvailableBytes - spare

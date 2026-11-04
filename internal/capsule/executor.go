@@ -131,17 +131,47 @@ type Executor struct {
 	// which every broker hands its jobs (broker_env.go).
 	browser    string
 	fontconfig string
-	// hostMemory reports build capsules' host reservations to vmctl and
-	// reads the host facts back (S4, capsule_size.go); nil runs as before.
+	// hostMemory reports build capsules' baselines and their jobs' leases
+	// to vmctl (capsule_size.go); nil runs as before.
 	hostMemory HostMemory
 }
 
-// SetHostMemory installs the host's side of capsule heavy work. It applies
-// to capsules spawned and jobs started afterwards.
+// SetHostMemory installs the host's side of capsule heavy work and gives it
+// the capsules' measured baselines. It applies to capsules spawned and jobs
+// started afterwards.
 func (e *Executor) SetHostMemory(hm HostMemory) {
+	if hm != nil {
+		hm.SetBaselineReader(e.capsuleBaseline)
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.hostMemory = hm
+}
+
+// capsuleBaseline is a live capsule's cgroup usage: its baseline while none
+// of its jobs holds a lease. The reporter calls it without its own lock.
+func (e *Executor) capsuleBaseline(capsuleID string) (int64, bool) {
+	e.mu.RLock()
+	caps := e.capsules[capsuleID]
+	e.mu.RUnlock()
+	if caps == nil {
+		return 0, false
+	}
+	caps.mu.RLock()
+	active := caps.State == StateActive
+	caps.mu.RUnlock()
+	if !active {
+		return 0, false
+	}
+	cg := e.cgroupMemoryOf(caps)
+	if cg == nil {
+		return 0, false
+	}
+	usage, err := cg.Current()
+	if err != nil || usage <= 0 {
+		return 0, false
+	}
+	return usage, true
 }
 
 func (e *Executor) hostMemoryHook() HostMemory {
@@ -488,8 +518,8 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	// first deferred call runs last, so the total sees the cleanup's error.
 	timer := newSpawnPhaseTimer(spec.CapsuleID)
 	defer func() { timer.done(retErr) }()
-	// A build capsule reserves its peak on the host first, off the executor
-	// lock (S4): a refusal refuses the spawn with the host's reason; a host
+	// A build capsule reserves its baseline on the host first, off the
+	// executor lock (S4): a refusal refuses the spawn with the host's reason; a host
 	// that cannot be asked leaves the spawn as before. A spawn that fails
 	// later gives the reservation back, unless the failure was a capsule of
 	// the same id that already holds it.
@@ -1135,8 +1165,8 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	e.brokerLogs.end(id, caps.brokerDeath())
 	delete(e.capsules, id)
 	e.vmMemoryUsed -= caps.admittedMemory()
-	// Its host build reservation ends with it (S4); ReleaseBuild never
-	// blocks.
+	// Its host baseline and its jobs' leases end with it; ReleaseBuild
+	// never blocks.
 	if e.hostMemory != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
 		e.hostMemory.ReleaseBuild(id)
 	}

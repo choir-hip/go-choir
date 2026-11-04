@@ -3,18 +3,23 @@ package capsule
 import (
 	"context"
 	"fmt"
+
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Size classes at spawn (station S4,
-// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, point 1).
+// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, point 1), held
+// per job (docs/problems/build-capsule-holds-peak-while-agent-thinks-2026-11-04.md).
 //
-// CPU is compressible and memory is not, so heavy work is reserved once, at
-// placement, against a declared class, and the capsule's jobs spend that
-// reservation locally: no job asks anyone. A light capsule's editing
-// footprint is already in its computer's settled resident memory, so it
-// reserves nothing on the host. A build capsule reserves BuildPeakBytes on
-// the host for its life (HostMemory.AdmitBuild), and a build spawn the host
-// cannot cover is refused at spawn with the host's reason.
+// CPU is compressible and memory is not, so heavy work is reserved on the
+// host. It is reserved while it can be used: a build capsule's spawn
+// reserves its baseline (what its idle processes use, measured from its
+// cgroup while no job runs), and each of its jobs leases its need from
+// vmctl when it starts and gives it back when it ends. A job's capsule
+// cgroup is held to its usage at the start plus the lease while it runs,
+// so a job cannot grow past what the host admitted. A light capsule's
+// editing footprint is already in its computer's settled resident memory,
+// so it reserves nothing and its jobs lease nothing.
 
 // SizeClass is a capsule's heavy-work class.
 type SizeClass string
@@ -27,12 +32,19 @@ const (
 	SizeClassBuild SizeClass = "build"
 )
 
-// BuildPeakBytes is the guest growth one build-class capsule's heavy work
-// was measured to add: a frontend build plus Playwright used about 3 GB of
-// a 7.9 GB guest (docs/problems/capsule-frontend-build-hangs-b-c-runtime-2026-10-27.md),
+// BuildPeakBytes is the guest growth one build-class job was measured to
+// add, the lease a job that declares no memory_mib takes: a frontend build
+// plus Playwright used about 3 GB of a 7.9 GB guest
+// (docs/problems/capsule-frontend-build-hangs-b-c-runtime-2026-10-27.md),
 // and four concurrent arm builds added about 12 GB on Node B
 // (2026-11-03 00:46Z, docs/design/capsule-heavy-work-scheduling-2026-11-03.md).
 const BuildPeakBytes = int64(3 << 30)
+
+// BuildBaselineBytes is what a build capsule reserves at its spawn, before
+// it has processes to measure: a capsule cgroup at rest, its broker and a
+// shell, held 43 to 95 MiB (docs/reports/playwright-in-capsules-memory-2026-10-15.md).
+// From its first report on, the capsule's measured usage replaces it.
+const BuildBaselineBytes = int64(128 << 20)
 
 // Normalized is the class with the empty value read as light.
 func (c SizeClass) Normalized() SizeClass {
@@ -52,10 +64,11 @@ func (c SizeClass) Validate() error {
 	return fmt.Errorf("capsule size class %q is not light or build", string(c))
 }
 
-// HostReservationBytes is what a capsule of this class reserves on the host.
+// HostReservationBytes is what a capsule of this class reserves on the host
+// at its spawn: a build capsule's baseline, nothing for a light one.
 func (c SizeClass) HostReservationBytes() int64 {
 	if c.Normalized() == SizeClassBuild {
-		return BuildPeakBytes
+		return BuildBaselineBytes
 	}
 	return 0
 }
@@ -83,109 +96,48 @@ func (c SizeClass) CPUWeight() uint64 {
 	return lightCPUWeight
 }
 
-// HostMemory is the host's side of capsule heavy work (S4): the guest's
-// report of its live build reservations to vmctl, and the host facts that
-// come back. A nil HostMemory (no vmctl, a test) runs as before: nothing is
-// reserved and no job waits.
+// HostMemory is the host's side of capsule heavy work: the guest's report
+// of its live build capsules' baselines and their jobs' leases to vmctl. A
+// nil HostMemory (no vmctl, a test) runs as before: nothing is reserved and
+// no job waits.
 type HostMemory interface {
-	// AdmitBuild asks the host to reserve bytes for a build capsule about
-	// to spawn. A *HostMemoryRefusal is the host's refusal, which refuses
+	// AdmitBuild asks the host to reserve a build capsule's baseline before
+	// it spawns. A *HostMemoryRefusal is the host's refusal, which refuses
 	// the spawn; any other error is logged and the spawn goes on.
-	AdmitBuild(ctx context.Context, capsuleID string, bytes int64) error
-	// ReleaseBuild drops a capsule's reservation (its spawn failed or it
-	// ended). It never blocks.
+	AdmitBuild(ctx context.Context, capsuleID string, baseline int64) error
+	// ReleaseBuild drops a capsule's baseline and every lease of its jobs
+	// (its spawn failed or it ended). It never blocks.
 	ReleaseBuild(capsuleID string)
-	// Facts is the host's latest facts and whether they are fresh enough
-	// to act on.
-	Facts() (HostMemoryFacts, bool)
+	// AdmitJob asks the host for a job's lease, synchronously, with its
+	// capsule's baseline measured now (0: keep the last). A
+	// *HostMemoryRefusal is the host's refusal: the job waits. Any other
+	// error is logged and the job starts.
+	AdmitJob(ctx context.Context, capsuleID, jobID string, baseline, lease int64) error
+	// ReleaseJob gives a job's lease back. It never blocks.
+	ReleaseJob(capsuleID, jobID string)
+	// SetBaselineReader installs how the reporter measures a capsule's
+	// baseline (its cgroup usage) while none of its jobs holds a lease.
+	SetBaselineReader(func(capsuleID string) (int64, bool))
 }
 
-// HostMemoryRefusal is the host refusing a build spawn, with its reason.
-type HostMemoryRefusal struct{ Reason string }
+// HostMemoryRefusal is the host refusing a build spawn or a job lease, with
+// its reason, and, for the waits a desk is shown, the refusal as data.
+type HostMemoryRefusal struct {
+	Reason string
+	Wait   *yaegikernel.MemoryWait
+}
 
 func (r *HostMemoryRefusal) Error() string {
 	return "host memory refused the build capsule: " + r.Reason
 }
 
-// HostMemoryFacts is what the host publishes for heavy work: MemAvailable
-// over the floor and the burst pool less what is promised to others (the
-// room a build spawn is admitted against), and PSI memory pressure.
-type HostMemoryFacts struct {
-	HeadroomBytes int64
-	// OwnReservedBytes is what the host still holds for this computer's own
-	// live build capsules (0 from an older vmctl).
-	OwnReservedBytes int64
-	MemorySomeAvg10  float64
-	PressureHigh     bool
-	// Protected is the paper or the owner's computer: its jobs never wait.
-	Protected bool
-}
-
-// HostMemoryWaitReason says why a build-class job should wait now, or ""
-// to start it. Facts that are not fresh start it, as before S4; the host
-// floor stays the hard stop.
-func HostMemoryWaitReason(facts HostMemoryFacts, fresh bool) string {
-	return HostMemoryWaitReasonFor(facts, fresh, BuildPeakBytes)
-}
-
-// JobHostNeedBytes is the host headroom a build-class job waits for: what it
-// declared in memory_mib, never more than one build's peak. A job that
-// declares nothing keeps the BuildPeakBytes claim, so a build stays safe; a
-// job that declares its size (a screenshot run, about 1.5 GiB) does not queue
-// behind other computers' builds for memory it does not use.
+// JobHostNeedBytes is what a build-class job leases on the host: what it
+// declared in memory_mib, or one build's peak when it declares nothing, so
+// a build stays safe and a job that declares its size (a screenshot run,
+// about 1.5 GiB) does not wait for memory it does not use.
 func JobHostNeedBytes(memoryMiB int) int64 {
 	if memoryMiB <= 0 {
 		return BuildPeakBytes
 	}
-	if need := int64(memoryMiB) << 20; need < BuildPeakBytes {
-		return need
-	}
-	return BuildPeakBytes
-}
-
-// HostMemoryWaitReasonFor is HostMemoryWaitReason for a job that needs need
-// bytes of host headroom.
-func HostMemoryWaitReasonFor(facts HostMemoryFacts, fresh bool, need int64) string {
-	return HostMemoryWaitReasonCredited(facts, fresh, need, 0)
-}
-
-// UnrealisedReservation is what a build capsule's admitted host
-// reservation still holds for its jobs: the reservation less the capsule
-// cgroup's usage, floored at 0, and never more than the host says it still
-// holds for this computer's builds (hostOwn; 0 from an older vmctl). A
-// usage that cannot be read gives no credit.
-func UnrealisedReservation(reservation, usage int64, usageOK bool, hostOwn int64) int64 {
-	if !usageOK || reservation <= 0 || hostOwn <= 0 {
-		return 0
-	}
-	credit := reservation - max(usage, 0)
-	return max(min(credit, hostOwn), 0)
-}
-
-// HostMemoryWaitReasonCredited is the wait for a build-class job whose own
-// capsule's admitted reservation still holds credit bytes: that much of its
-// need was admitted against host memory at the capsule's spawn, so the job
-// needs host headroom only for need - credit, floored at 0
-// (docs/problems/capsule-reservation-idle-baseline-and-job-double-gate-2026-11-03.md,
-// problem 2). Host memory pressure still waits: peaks beyond the admitted
-// reservations are bounded by the floor, that gate and pressure reclaim.
-func HostMemoryWaitReasonCredited(facts HostMemoryFacts, fresh bool, need, credit int64) string {
-	if !fresh || facts.Protected {
-		return ""
-	}
-	if facts.PressureHigh {
-		return fmt.Sprintf("waiting for host memory: the host is under memory pressure (PSI some avg10 %.1f%%)", facts.MemorySomeAvg10)
-	}
-	beyond := need
-	if credit > 0 {
-		beyond = max(need-credit, 0)
-	}
-	if facts.HeadroomBytes < beyond {
-		if credit > 0 {
-			return fmt.Sprintf("waiting for host memory: %d MiB over the host floor and burst pool, under the %d MiB of this job's %d MiB beyond its capsule's reservation (which still holds %d MiB)",
-				facts.HeadroomBytes>>20, beyond>>20, need>>20, credit>>20)
-		}
-		return fmt.Sprintf("waiting for host memory: %d MiB over the host floor and burst pool, under this job's %d MiB", facts.HeadroomBytes>>20, need>>20)
-	}
-	return ""
+	return int64(memoryMiB) << 20
 }

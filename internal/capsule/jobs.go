@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,12 +34,14 @@ import (
 // test can shorten it.
 var jobPollInterval = 2 * time.Second
 
-// A build-class job waits while the host is short of memory (S4,
-// docs/design/capsule-heavy-work-scheduling-2026-11-03.md, point 3): it is
-// recorded waiting, with the reason in its status, and starts when the host
-// facts clear. hostMemoryWaitPoll is how often a waiting job reads them; a
-// job that waited hostMemoryMaxWait ends stopped with the reason, so a stall
-// is visible and never silent. Vars so a test can shorten them.
+// A build-class job leases its memory need from the host when it starts
+// (docs/problems/build-capsule-holds-peak-while-agent-thinks-2026-11-04.md).
+// A lease vmctl refuses (jobs elsewhere hold the memory, or the host is
+// under memory pressure) leaves the job waiting, with the reason in its
+// status and the refusal as data in its view, and the job asks again every
+// hostMemoryWaitPoll; a job that waited hostMemoryMaxWait ends stopped with
+// the reason, so a stall is visible and never silent. Vars so a test can
+// shorten them.
 var (
 	hostMemoryWaitPoll = 5 * time.Second
 	hostMemoryMaxWait  = 30 * time.Minute
@@ -48,6 +51,15 @@ type capsuleJob struct {
 	// boosted says the job's memory need raised its capsule, returned by
 	// endJobMemory.
 	boosted bool
+	// lease is the host memory lease the job asks for (0: none), leased
+	// says the reporter holds it, and clamped says launchJob held the
+	// capsule's memory.max to its usage plus the lease; all three are given
+	// back by returnJobMemory. memoryWait is the host's last refusal while
+	// the job waits. Guarded by the executor's mu once the job is shared.
+	lease      int64
+	leased     bool
+	clamped    bool
+	memoryWait *yaegikernel.MemoryWait
 	// waiting is true while the job waits for host memory; whoever clears
 	// it (its start, its stop, its capsule's end) owns the job's next step.
 	// Guarded by the executor's mu.
@@ -129,22 +141,47 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	}
 	e.jobs[spec.ID] = job
 	hm := e.hostMemory
+	leasing := hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0
+	if leasing {
+		// Waiting from its registration, in the same critical section, so
+		// no stop sees it running before the ask (review r2).
+		job.waiting = true
+		job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
+			Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, Reason: "waiting for host memory: asking the host for this job's lease"}
+	}
 	e.mu.Unlock()
-	// A build-class job reads the host facts before it starts (S4): while
-	// the host is under memory pressure or has less than its own need (a
-	// declared memory_mib, else one build's peak) over its floor, it waits, visibly, and starts when that clears.
-	if hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
-		facts, fresh := hm.Facts()
-		if reason := jobWaitReason(job, facts, fresh, e.capsuleReservationCredit(caps, facts)); reason != "" {
+	// A build-class job leases its need from the host before it starts:
+	// refused, it waits, visibly, and asks again until the host admits it.
+	//
+	// The job reads as waiting from before the ask (a synchronous round
+	// trip to vmctl), so a stop or its capsule's end during the ask claims
+	// it, and the ask's answer never revives a job that ended meanwhile
+	// (review r1, deepseek B1).
+	if leasing {
+		refusal := e.leaseJobMemory(ctx, hm, job, caps)
+		if refusal != nil {
 			e.mu.Lock()
-			job.waiting = true
-			job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
-				Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, Reason: reason + jobHoldersNote(e.jobs, job, time.Now())}
+			if !job.waiting {
+				// Stopped during the ask: it already ended.
+				view := job.view(job.status, job.receiptRef, job.logRef)
+				e.mu.Unlock()
+				return view, nil
+			}
+			job.memoryWait = refusal.Wait
+			job.status.Reason = jobWaitReason(job, refusal.Reason) + jobHoldersNote(e.jobs, job, time.Now())
 			view := job.view(job.status, "", "")
 			e.mu.Unlock()
 			e.persistJobRecord(job)
-			log.Printf("capsule: job %s in capsule %s %s", spec.ID, caps.ID, reason)
+			log.Printf("capsule: job %s in capsule %s %s", spec.ID, caps.ID, view.Reason)
 			go e.waitForHostMemory(job, hm, time.Now(), hostMemoryWaitPoll, hostMemoryMaxWait)
+			return view, nil
+		}
+		if !e.claimWaitingJob(job) {
+			// Stopped during the ask: give back the lease it may hold.
+			e.returnJobMemory(job)
+			e.mu.RLock()
+			view := job.view(job.status, job.receiptRef, job.logRef)
+			e.mu.RUnlock()
 			return view, nil
 		}
 	}
@@ -175,6 +212,7 @@ func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *C
 		}
 		job.boosted = true
 	}
+	e.clampJobMemory(job, caps)
 	var err error
 	if job.startDigest, err = digestCapsuleWorktree(ctx, caps); err != nil {
 		return abandon(fmt.Errorf("job %s: digest the workspace: %w", spec.ID, err))
@@ -191,23 +229,84 @@ func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *C
 	return job.view(st, "", ""), nil
 }
 
-// capsuleReservationCredit is what caps's admitted host reservation still
-// holds for its job: the reservation less the capsule cgroup's usage now,
-// at most what the host still holds for this computer's builds. The
-// cgroup is read here, in the guest, because only it splits the
-// computer's builds by capsule; the host's figure caps it, so a capsule
-// never spends a reservation the host no longer holds.
-func (e *Executor) capsuleReservationCredit(caps *Capsule, facts HostMemoryFacts) int64 {
-	reservation := caps.Spec.SizeClass.HostReservationBytes()
-	if reservation <= 0 || facts.OwnReservedBytes <= 0 {
-		return 0
+// jobLeaseFor is a build-class job's lease and its capsule's usage now:
+// its need (JobHostNeedBytes), never more than its capsule's cgroup can
+// still grow while it runs (memory.max with the job's own boost, less the
+// usage). usage is 0 when the cgroup cannot be read; the need is then
+// leased whole.
+func (e *Executor) jobLeaseFor(job *capsuleJob, caps *Capsule) (usage, lease int64) {
+	lease = JobHostNeedBytes(job.spec.MemoryMiB)
+	cg := e.cgroupMemoryOf(caps)
+	if cg == nil {
+		return 0, lease
+	}
+	current, err := cg.Current()
+	if err != nil || current < 0 {
+		return 0, lease
+	}
+	e.mu.RLock()
+	limit := caps.MemoryMax + boostedBytesLocked(caps)
+	e.mu.RUnlock()
+	if job.spec.MemoryMiB > 0 {
+		limit += int64(job.spec.MemoryMiB) << 20 // the boost launchJob takes
+	}
+	return current, max(min(lease, limit-current), 0)
+}
+
+// leaseJobMemory asks the host for job's lease. It returns the host's
+// refusal, or nil when the job may start: admitted, a lease of nothing (its
+// cgroup cannot grow), or a host that could not be asked (logged; the job
+// starts as before).
+func (e *Executor) leaseJobMemory(ctx context.Context, hm HostMemory, job *capsuleJob, caps *Capsule) *HostMemoryRefusal {
+	usage, lease := e.jobLeaseFor(job, caps)
+	e.mu.Lock()
+	job.lease = lease
+	e.mu.Unlock()
+	if lease <= 0 {
+		return nil
+	}
+	err := hm.AdmitJob(ctx, caps.ID, job.spec.ID, usage, lease)
+	var refusal *HostMemoryRefusal
+	if errors.As(err, &refusal) {
+		return refusal
+	}
+	if err != nil {
+		log.Printf("capsule: job %s in capsule %s: host memory lease of %d MiB not confirmed, starting as before: %v", job.spec.ID, caps.ID, lease>>20, err)
+	}
+	e.mu.Lock()
+	job.leased, job.memoryWait = true, nil
+	e.mu.Unlock()
+	return nil
+}
+
+// clampJobMemory holds a leased job's capsule cgroup to its usage now plus
+// the lease, so the job cannot grow past what the host admitted; a limit
+// already at or under that is left. Raised back by returnJobMemory.
+func (e *Executor) clampJobMemory(job *capsuleJob, caps *Capsule) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if job.lease <= 0 || caps.State != StateActive {
+		return
 	}
 	cg := e.cgroupMemoryOf(caps)
 	if cg == nil {
-		return 0
+		return
 	}
-	usage, err := cg.Current()
-	return UnrealisedReservation(reservation, usage, err == nil, facts.OwnReservedBytes)
+	current, err := cg.Current()
+	if err != nil || current < 0 {
+		return
+	}
+	limit := caps.MemoryMax + boostedBytesLocked(caps)
+	target := current + job.lease
+	if target >= limit {
+		return
+	}
+	if err := cg.SetMax(target); err != nil {
+		log.Printf("capsule: job %s: hold capsule %s memory.max to its %d MiB lease: %v", job.spec.ID, caps.ID, job.lease>>20, err)
+		return
+	}
+	job.clamped = true
+	log.Printf("capsule: job %s in capsule %s leases %d MiB: memory.max %d MiB (usage %d MiB) until it ends", job.spec.ID, caps.ID, job.lease>>20, target>>20, current>>20)
 }
 
 // claimWaitingJob ends a job's wait: true for the one caller that clears it.
@@ -258,15 +357,25 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 			}
 			return
 		}
-		facts, fresh := hm.Facts()
-		reason := jobWaitReason(job, facts, fresh, e.capsuleReservationCredit(caps, facts))
-		if reason != "" && time.Since(since) < maxWait {
-			e.mu.Lock()
-			job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
-			e.mu.Unlock()
-			continue
+		reason := ""
+		if refusal := e.leaseJobMemory(context.Background(), hm, job, caps); refusal != nil {
+			reason = jobWaitReason(job, refusal.Reason)
+			if time.Since(since) < maxWait {
+				e.mu.Lock()
+				if !job.waiting {
+					e.mu.Unlock()
+					return // stopped during the ask
+				}
+				job.memoryWait = refusal.Wait
+				job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
+				e.mu.Unlock()
+				continue
+			}
 		}
 		if !e.claimWaitingJob(job) {
+			// Stopped while the lease was asked for: give back what the
+			// host may just have admitted.
+			e.returnJobMemory(job)
 			return
 		}
 		if reason != "" {
@@ -527,11 +636,30 @@ func (e *Executor) finishJob(job *capsuleJob, caps *Capsule, state, reason strin
 	}
 }
 
-// returnJobMemory returns a job's capsule boost, if it took one.
-// endJobMemory is idempotent.
+// returnJobMemory gives back what a job took: its capsule's memory.max is
+// raised from the lease's hold, its boost returned, and its host lease
+// released. Each step is idempotent.
 func (e *Executor) returnJobMemory(job *capsuleJob) {
-	if job.boosted {
+	e.mu.Lock()
+	clamped, leased, boosted := job.clamped, job.leased, job.boosted
+	job.clamped, job.leased = false, false
+	hm := e.hostMemory
+	if clamped {
+		if caps := e.capsules[job.capsuleID]; caps != nil && caps.State == StateActive {
+			if cg := e.cgroupMemoryOf(caps); cg != nil {
+				// Raising is always safe.
+				if err := cg.SetMax(caps.MemoryMax + boostedBytesLocked(caps)); err != nil {
+					log.Printf("capsule: job %s: raise capsule %s memory.max from its lease: %v", job.spec.ID, job.capsuleID, err)
+				}
+			}
+		}
+	}
+	e.mu.Unlock()
+	if boosted {
 		e.endJobMemory(job.capsuleID, job.spec.ID)
+	}
+	if leased && hm != nil {
+		hm.ReleaseJob(job.capsuleID, job.spec.ID)
 	}
 }
 
@@ -650,5 +778,8 @@ func (e *Executor) closeInterruptedJobs() []string {
 func (j *capsuleJob) view(st capsulejob.Status, receiptRef, logRef string) yaegikernel.JobView {
 	v := jobView(st, receiptRef, logRef)
 	v.MemoryMiB, v.MemoryNote = j.spec.MemoryMiB, j.memoryNote
+	if st.State == capsulejob.StateWaiting {
+		v.MemoryWait = j.memoryWait
+	}
 	return v
 }

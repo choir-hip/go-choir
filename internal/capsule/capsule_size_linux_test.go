@@ -22,8 +22,18 @@ type fakeHostMemory struct {
 	admitted []string
 	released []string
 	refuse   bool
-	facts    HostMemoryFacts
-	fresh    bool
+	// refuseJobs is the host's answer to a job lease while set; jobErr a
+	// host that cannot be asked.
+	refuseJobs *HostMemoryRefusal
+	jobErr     error
+	leases     map[string]int64 // capsule/job -> bytes
+	baselines  map[string]int64
+	jobAsks    int
+	jobsFreed  []string
+	reader     func(string) (int64, bool)
+	asked      []int64 // lease bytes, per ask
+	// gate, when set, holds AdmitJob until it is closed.
+	gate chan struct{}
 }
 
 func (f *fakeHostMemory) AdmitBuild(_ context.Context, id string, bytes int64) error {
@@ -42,10 +52,55 @@ func (f *fakeHostMemory) ReleaseBuild(id string) {
 	f.released = append(f.released, id)
 }
 
-func (f *fakeHostMemory) Facts() (HostMemoryFacts, bool) {
+func (f *fakeHostMemory) AdmitJob(_ context.Context, capsuleID, jobID string, baseline, lease int64) error {
+	f.mu.Lock()
+	gate := f.gate
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.facts, f.fresh
+	f.jobAsks++
+	f.asked = append(f.asked, lease)
+	if f.baselines == nil {
+		f.baselines = map[string]int64{}
+	}
+	f.baselines[capsuleID] = baseline
+	if f.refuseJobs != nil {
+		return f.refuseJobs
+	}
+	if f.leases == nil {
+		f.leases = map[string]int64{}
+	}
+	f.leases[capsuleID+"/"+jobID] = lease
+	return f.jobErr
+}
+
+func (f *fakeHostMemory) ReleaseJob(capsuleID, jobID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.leases, capsuleID+"/"+jobID)
+	f.jobsFreed = append(f.jobsFreed, capsuleID+"/"+jobID)
+}
+
+func (f *fakeHostMemory) SetBaselineReader(r func(string) (int64, bool)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reader = r
+}
+
+func (f *fakeHostMemory) setRefusal(r *HostMemoryRefusal) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refuseJobs = r
+}
+
+func (f *fakeHostMemory) lease(key string) (int64, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b, ok := f.leases[key]
+	return b, ok
 }
 
 func sizeSpec(id string, class SizeClass) SpawnSpec {

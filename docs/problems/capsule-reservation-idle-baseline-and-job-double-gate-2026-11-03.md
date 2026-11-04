@@ -37,6 +37,10 @@ Cause, from the code:
 
 ## Problem 2: a build capsule's jobs are gated twice (owner decision: fix)
 
+Superseded 2026-11-04: a job now leases its need from vmctl and a capsule
+holds only its baseline, so there is one gate and the credit is deleted
+(docs/problems/build-capsule-holds-peak-while-agent-thinks-2026-11-04.md).
+
 A build capsule's spawn is admitted against host memory for its whole
 reservation (3 GiB). Each of its jobs then waits until the host facts'
 headroom covers the job's whole need (`HostMemoryWaitReasonFor`,

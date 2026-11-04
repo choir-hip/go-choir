@@ -128,12 +128,12 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 	}
 	executor.SetCapsuleMirrors(mirrorAddr, mirrorDir)
 	log.Printf("capsule executor: package mirrors: %s", executor.CapsuleMirrorStatus().Reason)
-	// Heavy capsule work (S4): build capsules reserve their peak on the
-	// host through vmctl, and build jobs read the host facts it returns.
+	// Heavy capsule work: build capsules reserve their measured baseline on
+	// the host through vmctl, and each build job leases its need there.
 	if hostMemory := configuredCapsuleHostMemory(); hostMemory != nil {
 		executor.SetHostMemory(hostMemory)
 		go hostMemory.run(context.Background())
-		log.Printf("capsule executor: build capsules reserve %d MiB on the host through vmctl", capsule.BuildPeakBytes>>20)
+		log.Printf("capsule executor: build capsules reserve their baseline (%d MiB at spawn) and each build job leases its need (%d MiB undeclared) on the host through vmctl", capsule.BuildBaselineBytes>>20, capsule.BuildPeakBytes>>20)
 	} else {
 		log.Printf("capsule executor: no vmctl route; build capsules reserve nothing on the host")
 	}

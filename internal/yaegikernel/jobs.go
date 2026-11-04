@@ -53,6 +53,34 @@ type JobView struct {
 	ReceiptRef string `json:"receipt_ref,omitempty"`
 	// LogRef names the job's whole log, stored by content address.
 	LogRef string `json:"log_ref,omitempty"`
+	// MemoryWait is why a waiting job waits for host memory, as data.
+	MemoryWait *MemoryWait `json:"memory_wait,omitempty"`
+}
+
+// MemoryWait is a job waiting for host memory: what its lease needs, the
+// room the host has for it, and who holds what is promised (vmctl's
+// refusal; docs/problems/build-capsule-holds-peak-while-agent-thinks-2026-11-04.md).
+// Another computer's holder carries its kind, class and bytes, never ids.
+type MemoryWait struct {
+	NeedBytes      uint64         `json:"need_bytes"`
+	RoomBytes      uint64         `json:"room_bytes"`
+	AvailableBytes uint64         `json:"available_bytes"`
+	FloorBytes     uint64         `json:"floor_bytes"`
+	PoolBytes      uint64         `json:"pool_bytes"`
+	ReservedBytes  uint64         `json:"reserved_bytes"`
+	PressureHigh   bool           `json:"pressure_high,omitempty"`
+	Holders        []MemoryHolder `json:"holders,omitempty"`
+}
+
+// MemoryHolder is one holder of promised host memory: a start in flight, a
+// running job's lease, or capsules not yet resident.
+type MemoryHolder struct {
+	Kind      string `json:"kind"`
+	Own       bool   `json:"own,omitempty"`
+	Class     string `json:"class,omitempty"`
+	CapsuleID string `json:"capsule_id,omitempty"`
+	JobID     string `json:"job_id,omitempty"`
+	Bytes     uint64 `json:"bytes"`
 }
 
 // String prints the job as JSON, so println(st) shows its fields.

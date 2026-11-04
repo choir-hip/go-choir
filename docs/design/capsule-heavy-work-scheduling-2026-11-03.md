@@ -190,6 +190,39 @@ the running-computer charge folded in above).
   capsule mirrors path that lane B turned on at d@e. Widening the mirrors
   and the "capsule cannot write a shared entry" check are that lane's.
 
+## Held per job (2026-11-04)
+
+The reservation's unit moved from the capsule to the job
+(docs/problems/build-capsule-holds-peak-while-agent-thinks-2026-11-04.md):
+a build capsule held 3 GiB from spawn to destroy while its agent thought.
+Point 2 of "Practice it follows" (reserve at placement) is replaced, for
+memory, by a lease per job.
+
+- **Spawn.** A build capsule reserves `BuildBaselineBytes` (128 MiB) at
+  spawn. Each heartbeat re-reports a capsule that holds no lease at its
+  cgroup's `memory.current`, so its entry is what it uses.
+- **Job.** A build-class job asks vmctl for a lease when it starts: its
+  `memory_mib`, else `BuildPeakBytes`, never more than its capsule's cgroup
+  can still grow. The ask carries the capsule's usage as its baseline. vmctl
+  decides it under the ledger lock with a sample taken inside it, so of two
+  guests asking in the same second the second sees the first's lease.
+  Admitted, the capsule's `memory.max` is held to usage plus lease until the
+  job ends; then it is raised back and the lease released.
+- **Refused.** The job waits in `waiting` and asks again every 5 s. Its view
+  carries `memory_wait` (need, room, floor, pool, reserved, pressure,
+  holders); another computer's holder has kind, class and bytes, never ids.
+  A lease also waits while host PSI is high; a baseline does not.
+- **Release.** At job end, a failed start, a stop while waiting (the
+  lease just admitted is given back), the capsule's destroy, the guest's
+  next boot (its first report is empty), a new VM epoch, the VM's stop, and
+  the in-flight TTL.
+- **Deleted.** The job's own-reservation credit (`UnrealisedReservation`)
+  and the guest's facts gate. The facts, with `own_reserved_bytes`, stay in
+  the reply only for guests from before this change, which still read them.
+- **Order.** vmctl deploys before guests refresh: an older vmctl refuses a
+  report that carries `job_id`, and the guest then runs uncoordinated, as
+  before S4, until its host updates.
+
 ## Rollback
 
 Revert. Size classes default to the current request; with no pressure facts
