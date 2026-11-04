@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,6 +149,56 @@ type calibrationSnapshot struct {
 	Pending      []CalibrationPending      `json:"pending"`
 	// Late is each stating desk's late share (R20).
 	Late map[string]CalibrationLateShare `json:"late,omitempty"`
+	// Censored counts each digest desk's clock claims, by kind, left out
+	// because the round ended before the interval closed (C5, C7).
+	Censored map[string]map[string]int `json:"censored,omitempty"`
+}
+
+// digestOptions are a desk's digest bounds with its censored counts and
+// its own late share (C5, C11).
+func (s *calibrationSnapshot) digestOptions(desk, modelID string) calibration.Options {
+	opts := calibration.DefaultOptions
+	opts.ModelID = modelID
+	if s == nil {
+		return opts
+	}
+	opts.Censored = s.Censored[desk]
+	if late, ok := s.Late[desk]; ok && late.Stated > 0 {
+		opts.Late = &types.CalibrationLate{Stated: late.Stated, Late: late.Late}
+	}
+	return opts
+}
+
+// calibrationCensoredCounts counts each digest desk's clock claims whose
+// settlement is censored before the interval closed (C7), by kind.
+func calibrationCensoredCounts(records []types.CommitmentRecord) map[string]map[string]int {
+	settled := map[string]types.CommitmentRecord{}
+	for _, rec := range records {
+		if rec.Resolve != nil && rec.Provenance.AgentID == types.RuleScorerAgentID && strings.TrimSpace(rec.ParentID) != "" {
+			if _, seen := settled[rec.ParentID]; !seen {
+				settled[rec.ParentID] = rec
+			}
+		}
+	}
+	out := map[string]map[string]int{}
+	for _, rec := range records {
+		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil || types.LateRulePrecommit(rec) {
+			continue
+		}
+		res, ok := settled[rec.RecordID]
+		if !ok || !types.ClockCensoredUninformative(*rec.Precommit.Rule, res.SubjectRefs) {
+			continue
+		}
+		desk := calibrationDeskOfThread(calibrationThreadOfRecord(rec))
+		if desk == "" {
+			continue
+		}
+		if out[desk] == nil {
+			out[desk] = map[string]int{}
+		}
+		out[desk][string(rec.Precommit.Rule.Kind)]++
+	}
+	return out
 }
 
 // CalibrationPending is a claim no independent scorer has settled yet:
@@ -347,9 +398,16 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 			default:
 				continue // unresolved: the rule could not decide
 			}
-			obs = append(obs, calibration.Observation{Desk: desk, ClaimType: claim, Thread: thread,
+			o := calibration.Observation{Desk: desk, ClaimType: claim, Thread: thread,
 				ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: p, Y: y, Scorers: []string{types.RuleScorerPrefix + claim},
-				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID), Arm: rec.SubjectRefs[calibrationArmRef]})
+				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID), Arm: rec.SubjectRefs[calibrationArmRef]}
+			// C5: a clock claim's estimate and its measured span.
+			if rule := rec.Precommit.Rule; types.ClockRule(rule.Kind) && rule.EstimateMinutes > 0 && settlement.SubjectRefs[types.RuleRefCensored] != "true" {
+				if actual, err := strconv.ParseInt(settlement.SubjectRefs[types.RuleRefActualS], 10, 64); err == nil {
+					o.EstimateMinutes, o.ActualS = rule.EstimateMinutes, &actual
+				}
+			}
+			obs = append(obs, o)
 			continue
 		}
 		if rec.Cast != nil && rec.IsCast() {
@@ -455,7 +513,7 @@ func (rt *Runtime) calibrationSnapshotFor(ctx context.Context, ownerID, computer
 		return nil, fmt.Errorf("calibration: computer %s has no salt", computerID)
 	}
 	obs, pending := collectCalibration(salt, records, checks, verdicts)
-	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending, Late: calibrationLateShares(records)}
+	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending, Late: calibrationLateShares(records), Censored: calibrationCensoredCounts(records)}
 	if rt.calibration.byComputer == nil {
 		rt.calibration.byComputer = map[string]*calibrationSnapshot{}
 	}
@@ -510,9 +568,7 @@ func (rt *Runtime) calibrationDigestForRun(ctx context.Context, rec *types.RunRe
 		log.Printf("calibration: %s: %v", rec.RunID, err)
 		return nil
 	}
-	opts := calibration.DefaultOptions
-	opts.ModelID = recordModelID(ctx, rec)
-	digest := calibration.Compute(desk, snap.Observations, opts)
+	digest := calibration.Compute(desk, snap.Observations, snap.digestOptions(desk, recordModelID(ctx, rec)))
 	if digest.Text == "" {
 		return nil
 	}

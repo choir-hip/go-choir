@@ -12,6 +12,19 @@
 //     [0,1], qualified as 0.5; ECE over E6a's five bins), so the digest and
 //     the offline measurement disagree.
 //
+// Added with the wiring changes of
+// docs/design/calibration-wiring-permutations-2026-11-04.md, written first:
+//   - pooled bins mix easy and hard claim types (Simpson), and near-certain
+//     filler pads n (C4) -> bins per claim type; paths_confined is left out
+//     of the digest;
+//   - a desk gets calibrated by turning vague (C5) -> resolution beside
+//     Brier, overall and per type;
+//   - the clock's bias is invisible behind "inside the interval" (C5) -> a
+//     clock kind's line carries the median of estimate over actual minutes
+//     from at least MinBin timed claims, and the censored count it left out;
+//   - a desk that states late reads a record that looks fine (C11) -> its
+//     own late share is a line of its digest.
+//
 // The package has no store, clock or context: the runtime collects the
 // observations and passes them in.
 package calibration
@@ -48,6 +61,10 @@ type Observation struct {
 	// Arm is the A/B arm stamped on the record when it was stated, when
 	// it carries one (an engineering round's predictions).
 	Arm string `json:"stated_arm,omitempty"`
+	// A clock claim's stated estimate and, when its span was measured
+	// (not censored), the actual seconds (C5).
+	EstimateMinutes int    `json:"estimate_minutes,omitempty"`
+	ActualS         *int64 `json:"actual_s,omitempty"`
 }
 
 // Options bound a digest.
@@ -62,7 +79,16 @@ type Options struct {
 	// ModelID is the model of the run reading the digest; its own line is
 	// shown when it has at least MinN observations.
 	ModelID string
+	// Censored counts, per claim type, the desk's clock claims left out
+	// because their round ended before the interval closed (C5, C7).
+	Censored map[string]int
+	// Late is the desk's own late share (C11).
+	Late *types.CalibrationLate
 }
+
+// DigestExcluded are the claim types left out of every digest (C4):
+// paths_confined held 96% of the time, so it pads n and flatters Brier.
+var DigestExcluded = map[string]bool{string(types.PrecommitRulePathsConfined): true}
 
 // DefaultOptions are the experiment's preregistered bounds.
 var DefaultOptions = Options{Window: 400, MinN: 20, MinBin: 5}
@@ -148,7 +174,10 @@ type Stats struct {
 	ECE      float64
 	MeanP    float64
 	Observed float64
-	Bins     []types.CalibrationBin
+	// Resolution is Murphy's: sum over bins of n_k/N (observed_k -
+	// observed)^2.
+	Resolution float64
+	Bins       []types.CalibrationBin
 }
 
 // Measure computes Brier, ECE (n-weighted |mean p - observed| over Bins),
@@ -183,6 +212,7 @@ func Measure(obs []Observation) Stats {
 		}
 		mp, my := b.sp/float64(b.n), b.sy/float64(b.n)
 		s.ECE += float64(b.n) / n * math.Abs(mp-my)
+		s.Resolution += float64(b.n) / n * (my - s.Observed) * (my - s.Observed)
 		s.Bins = append(s.Bins, types.CalibrationBin{Label: Bins[i].Label, N: b.n, MeanP: mp, Observed: my})
 	}
 	return s
@@ -204,7 +234,7 @@ func Compute(desk string, obs []Observation, opts Options) types.CalibrationDige
 	d := types.CalibrationDigest{Desk: desk}
 	var shown []Observation
 	for _, o := range obs {
-		if o.Desk != desk {
+		if o.Desk != desk || DigestExcluded[o.ClaimType] {
 			continue
 		}
 		if o.HeldOut {
@@ -223,7 +253,7 @@ func Compute(desk string, obs []Observation, opts Options) types.CalibrationDige
 		shown = shown[:opts.Window]
 	}
 	all := Measure(shown)
-	d.N, d.Brier, d.ECE, d.MeanP, d.Observed = all.N, all.Brier, all.ECE, all.MeanP, all.Observed
+	d.N, d.Brier, d.ECE, d.MeanP, d.Observed, d.Resolution = all.N, all.Brier, all.ECE, all.MeanP, all.Observed, all.Resolution
 	for _, b := range all.Bins {
 		if b.N >= opts.MinBin {
 			d.Bins = append(d.Bins, b)
@@ -245,7 +275,14 @@ func Compute(desk string, obs []Observation, opts Options) types.CalibrationDige
 		if st.N < opts.MinBin {
 			continue
 		}
-		d.ClaimTypes = append(d.ClaimTypes, types.CalibrationStat{Key: k, N: st.N, Brier: st.Brier, ECE: st.ECE, MeanP: st.MeanP, Observed: st.Observed})
+		line := types.CalibrationStat{Key: k, N: st.N, Brier: st.Brier, ECE: st.ECE, MeanP: st.MeanP, Observed: st.Observed, Resolution: st.Resolution, Censored: opts.Censored[k]}
+		for _, b := range st.Bins {
+			if b.N >= opts.MinBin {
+				line.Bins = append(line.Bins, b)
+			}
+		}
+		line.Timed, line.EstimateRatio = estimateRatio(byType[k], opts.MinBin)
+		d.ClaimTypes = append(d.ClaimTypes, line)
 		if st.ECE > worst {
 			worst, d.Worst = st.ECE, k
 		}
@@ -263,10 +300,36 @@ func Compute(desk string, obs []Observation, opts Options) types.CalibrationDige
 	}
 	// Under MinN the record is noise (P5): the digest is computed, for the
 	// owner's view, but has no text for a desk to read.
+	if opts.Late != nil && opts.Late.Stated > 0 {
+		late := *opts.Late
+		d.Late = &late
+	}
 	if d.N >= opts.MinN {
 		d.Text = Render(d)
 	}
 	return d
+}
+
+// estimateRatio is the median of estimate over actual minutes across the
+// timed clock claims, and their count; nil under minN timed claims (C5).
+func estimateRatio(obs []Observation, minN int) (int, *float64) {
+	var ratios []float64
+	for _, o := range obs {
+		if o.ActualS == nil || o.EstimateMinutes < 1 {
+			continue
+		}
+		actual := math.Max(float64(*o.ActualS)/60, 1.0/60)
+		ratios = append(ratios, float64(o.EstimateMinutes)/actual)
+	}
+	if len(ratios) == 0 || len(ratios) < minN {
+		return len(ratios), nil
+	}
+	sort.Float64s(ratios)
+	m := ratios[len(ratios)/2]
+	if len(ratios)%2 == 0 {
+		m = (ratios[len(ratios)/2-1] + ratios[len(ratios)/2]) / 2
+	}
+	return len(ratios), &m
 }
 
 func direction(meanP, observed float64) string {
@@ -294,7 +357,7 @@ func Render(d types.CalibrationDigest) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Your track record (%s desk): your %d most recent self-scored predictions that independent settlement has scored since you made them.\n", d.Desk, d.N)
-	fmt.Fprintf(&b, "- Brier %.3f (0 is perfect); calibration error %.3f.\n", d.Brier, d.ECE)
+	fmt.Fprintf(&b, "- Brier %.3f (0 is perfect); resolution %.3f (higher means your probabilities separate the claims that held from those that did not); calibration error %.3f.\n", d.Brier, d.Resolution, d.ECE)
 	switch d.Direction {
 	case "under-confident":
 		fmt.Fprintf(&b, "- Under-confident: your mean probability was %.2f and %.2f of these held.\n", d.MeanP, d.Observed)
@@ -303,12 +366,19 @@ func Render(d types.CalibrationDigest) string {
 	default:
 		fmt.Fprintf(&b, "- Calibrated on average: mean probability %.2f, %.2f held.\n", d.MeanP, d.Observed)
 	}
-	if len(d.Bins) > 0 {
-		parts := make([]string, 0, len(d.Bins))
-		for _, bin := range d.Bins {
-			parts = append(parts, fmt.Sprintf("you said %.2f, %.2f held (n=%d)", bin.MeanP, bin.Observed, bin.N))
+	// C4: each claim type with its own bins, never pooled.
+	for _, st := range d.ClaimTypes {
+		fmt.Fprintf(&b, "- %s (n=%d): Brier %.3f, resolution %.3f", nounOf(st.Key), st.N, st.Brier, st.Resolution)
+		for _, bin := range st.Bins {
+			fmt.Fprintf(&b, "; you said %.2f, %.2f held (n=%d)", bin.MeanP, bin.Observed, bin.N)
 		}
-		b.WriteString("- By stated probability: " + strings.Join(parts, "; ") + ".\n")
+		if st.EstimateRatio != nil {
+			fmt.Fprintf(&b, "; your estimates were a median %.1fx the actual minutes (n=%d)", *st.EstimateRatio, st.Timed)
+		}
+		if st.Censored > 0 {
+			fmt.Fprintf(&b, "; %d more ended before the interval closed and are not scored", st.Censored)
+		}
+		b.WriteString(".\n")
 	}
 	if len(d.ClaimTypes) > 1 && d.Worst != "" {
 		for _, st := range d.ClaimTypes {
@@ -316,8 +386,9 @@ func Render(d types.CalibrationDigest) string {
 				fmt.Fprintf(&b, "- Least calibrated: %s (said %.2f, %.2f held, n=%d).\n", nounOf(st.Key), st.MeanP, st.Observed, st.N)
 			}
 		}
-	} else if len(d.ClaimTypes) == 1 {
-		fmt.Fprintf(&b, "- Scored: %s.\n", nounOf(d.ClaimTypes[0].Key))
+	}
+	if d.Late != nil && d.Late.Late > 0 {
+		fmt.Fprintf(&b, "- Late: %d of your %d claims were stated late, after the work visibly progressed; they are kept and never scored.\n", d.Late.Late, d.Late.Stated)
 	}
 	if d.Model != nil {
 		fmt.Fprintf(&b, "- Your model (%s): said %.2f, %.2f held, Brier %.3f (n=%d).\n", d.Model.Key, d.Model.MeanP, d.Model.Observed, d.Model.Brier, d.Model.N)

@@ -53,6 +53,26 @@ type CalibrationStat struct {
 	ECE      float64 `json:"ece"`
 	MeanP    float64 `json:"mean_p"`
 	Observed float64 `json:"observed"`
+	// Resolution is Murphy's resolution over the bins: how far the share
+	// that held in each bin lies from the overall share (higher separates
+	// claims that held from those that did not, so vagueness cannot win).
+	Resolution float64 `json:"resolution"`
+	// Bins are this claim type's own bins (C4: never pooled across types).
+	Bins []CalibrationBin `json:"bins,omitempty"`
+	// Clock kinds: Timed counts the claims with a measured span,
+	// EstimateRatio is the median of the stated estimate over the actual
+	// minutes (above 1 the estimates ran long), and Censored counts the
+	// claims whose round ended before the interval closed, left out (C5, C7).
+	Timed         int      `json:"timed,omitempty"`
+	EstimateRatio *float64 `json:"estimate_ratio,omitempty"`
+	Censored      int      `json:"censored,omitempty"`
+}
+
+// CalibrationLate is a desk's late share (R20) as its digest shows it: the
+// rule claims it stated and how many were marked late (C11).
+type CalibrationLate struct {
+	Stated int `json:"stated"`
+	Late   int `json:"late"`
 }
 
 // CalibrationDigest is one desk's track record as the digest shows it.
@@ -66,10 +86,11 @@ type CalibrationDigest struct {
 	HeldOut int `json:"held_out"`
 	// Brier is the mean squared error of stated p against the outcome;
 	// ECE the n-weighted mean |mean p - observed| over the bins.
-	Brier    float64 `json:"brier"`
-	ECE      float64 `json:"ece"`
-	MeanP    float64 `json:"mean_p"`
-	Observed float64 `json:"observed"`
+	Brier      float64 `json:"brier"`
+	ECE        float64 `json:"ece"`
+	Resolution float64 `json:"resolution"`
+	MeanP      float64 `json:"mean_p"`
+	Observed   float64 `json:"observed"`
 	// Direction is "under-confident", "over-confident" or "calibrated".
 	Direction  string            `json:"direction"`
 	Bins       []CalibrationBin  `json:"bins"`
@@ -78,7 +99,9 @@ type CalibrationDigest struct {
 	Worst string `json:"worst,omitempty"`
 	// Model is the line for the model the reading run is on, when it has
 	// enough settled observations of its own.
-	Model      *CalibrationStat `json:"model,omitempty"`
+	Model *CalibrationStat `json:"model,omitempty"`
+	// Late is the desk's own late share, when it states rule claims (C11).
+	Late       *CalibrationLate `json:"late,omitempty"`
 	ComputedAt string           `json:"computed_at,omitempty"`
 	Text       string           `json:"text"`
 }

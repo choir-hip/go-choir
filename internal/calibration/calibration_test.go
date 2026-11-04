@@ -185,3 +185,83 @@ func TestArmAndHeldOutHashWithTheSalt(t *testing.T) {
 		t.Fatalf("another salt moved %d arms and %d held-out marks of 2000: the split does not depend on the salt", armDiffers, heldDiffers)
 	}
 }
+
+// C4: bins are per claim type, never pooled (two types with opposite errors
+// pool into a calibrated-looking bin), and paths_confined, near-certain
+// filler, is left out of the digest entirely.
+func TestComputeBinsPerClaimTypeAndLeavesOutPathsConfined(t *testing.T) {
+	obs := append(obsN("engineering", "tests_pass", "m", 20, 0.8, 0.4, "a"), obsN("engineering", "completes", "m", 20, 0.8, 1, "b")...)
+	obs = append(obs, obsN("engineering", "paths_confined", "m", 40, 0.95, 1, "c")...)
+	d := Compute("engineering", obs, DefaultOptions)
+	if d.N != 40 {
+		t.Fatalf("N = %d, want 40: paths_confined is out of the digest", d.N)
+	}
+	for _, st := range d.ClaimTypes {
+		if st.Key == "paths_confined" {
+			t.Fatalf("paths_confined has a line: %+v", st)
+		}
+		if len(st.Bins) != 1 || st.Bins[0].N != 20 {
+			t.Fatalf("%s bins %+v, want its own one bin of 20", st.Key, st.Bins)
+		}
+	}
+	if strings.Contains(d.Text, "paths_confined") || strings.Contains(d.Text, "By stated probability:") {
+		t.Fatalf("text shows filler or pooled bins:\n%s", d.Text)
+	}
+	if !strings.Contains(d.Text, "tests_pass (n=20)") || !strings.Contains(d.Text, "you said 0.80, 0.40 held (n=20)") {
+		t.Fatalf("text has no per-type bins:\n%s", d.Text)
+	}
+}
+
+// C5: resolution is reported beside Brier, overall and per type, and a
+// clock kind's line carries the median ratio of the stated estimate to the
+// actual minutes and the censored count; a ratio needs MinBin timed claims.
+func TestComputeShowsResolutionAndTheClockBias(t *testing.T) {
+	var obs []Observation
+	for i := 0; i < 10; i++ {
+		y := 0.0
+		if i%2 == 0 {
+			y = 1
+		}
+		actual := int64(600) // 10 minutes against an estimate of 30: 3x
+		obs = append(obs, Observation{Desk: "engineering", ClaimType: "freeze_minutes", P: 0.7, Y: y, Key: fmt.Sprintf("f%d", i), EstimateMinutes: 30, ActualS: &actual})
+	}
+	obs = append(obs, obsN("engineering", "verify_pass", "m", 6, 0.9, 1, "v")...)
+	obs = append(obs, obsN("engineering", "verify_pass", "m", 6, 0.3, 0, "w")...)
+	d := Compute("engineering", obs, Options{MinN: 20, Censored: map[string]int{"freeze_minutes": 3}})
+	if d.Resolution <= 0 {
+		t.Fatalf("resolution %v, want > 0 (verify_pass separates)", d.Resolution)
+	}
+	var clock *types.CalibrationStat
+	for i := range d.ClaimTypes {
+		if d.ClaimTypes[i].Key == "freeze_minutes" {
+			clock = &d.ClaimTypes[i]
+		}
+	}
+	if clock == nil || clock.EstimateRatio == nil || !near(*clock.EstimateRatio, 3) || clock.Timed != 10 || clock.Censored != 3 {
+		t.Fatalf("clock line %+v", clock)
+	}
+	for _, want := range []string{"resolution", "estimates were a median 3.0x the actual minutes (n=10)", "3 more ended before the interval closed"} {
+		if !strings.Contains(d.Text, want) {
+			t.Fatalf("text lacks %q:\n%s", want, d.Text)
+		}
+	}
+	few := Compute("engineering", obs[:4], Options{MinN: 1})
+	for _, st := range few.ClaimTypes {
+		if st.EstimateRatio != nil {
+			t.Fatalf("a ratio from %d timed claims: %+v", st.Timed, st)
+		}
+	}
+}
+
+// C11: the desk's own late share is in its digest, when it has stated
+// enough claims; a desk with none late reads no line.
+func TestComputeShowsTheLateShare(t *testing.T) {
+	obs := obsN("engineering", "tests_pass", "m", 25, 0.7, 1, "a")
+	d := Compute("engineering", obs, Options{Late: &types.CalibrationLate{Stated: 30, Late: 6}})
+	if !strings.Contains(d.Text, "6 of your 30 claims were stated late") {
+		t.Fatalf("no late line:\n%s", d.Text)
+	}
+	if d := Compute("engineering", obs, Options{Late: &types.CalibrationLate{Stated: 30}}); strings.Contains(d.Text, "stated late") {
+		t.Fatalf("a late line with none late:\n%s", d.Text)
+	}
+}
