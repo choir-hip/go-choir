@@ -50,9 +50,13 @@ func HostMemoryWaitState(subject string, mw *yaegikernel.MemoryWait, reason stri
 			holder.Who = "this computer"
 		default:
 			holder.Who = "another computer"
-			if h.Class != "" {
-				holder.What = strings.TrimSpace(h.Kind + ", " + h.Class)
+			var parts []string
+			for _, part := range []string{h.Kind, h.Class} {
+				if strings.TrimSpace(part) != "" {
+					parts = append(parts, strings.TrimSpace(part))
+				}
 			}
+			holder.What = strings.Join(parts, ", ")
 		}
 		w.Holders = append(w.Holders, holder)
 	}
@@ -82,7 +86,7 @@ func PureWaitJob(argv []string) bool {
 			return false
 		}
 		cmd := argv[2]
-		if strings.ContainsAny(cmd, ";&|\n`<>") || strings.Contains(cmd, "$(") {
+		if strings.ContainsAny(cmd, ";&|\n`<>$") {
 			return false
 		}
 		return pureWaitArgv(strings.Fields(cmd))

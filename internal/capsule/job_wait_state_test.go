@@ -12,8 +12,8 @@ import (
 // Failure modes written before the code:
 //  1. the record drops the host's own reason, so nothing the old text said
 //     is lost only when Detail keeps it;
-//  2. need is the full peak when the capsule's reservation credit covers
-//     part of it (the model would be told it needs more than it waits for);
+//  2. need, room or holders are re-derived instead of taken from vmctl's
+//     refusal (the model would be told figures the host did not decide on);
 //  3. other computers' holdings are named (another owner's computer must
 //     never reach this guest) or are lost when only their total is known;
 //  4. a pressure wait renders headroom figures as if headroom were the cause;
@@ -82,6 +82,7 @@ func TestPureWaitJob(t *testing.T) {
 		{"sh", "-c", "choir-delegate wait --id d1 --park && make"},
 		{"sh", "-c", "sleep 5 | go build ./..."},
 		{"sh", "-c", "sleep $(go build ./...)"},
+		{"sh", "-c", "sleep ${X}"},
 		{"go", "test", "./..."},
 		{"sleep"},
 		{},

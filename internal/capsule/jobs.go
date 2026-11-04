@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -67,6 +68,10 @@ type capsuleJob struct {
 	wait      *types.WaitState
 	waitSince time.Time
 	waitedFor time.Duration
+	// waitEmitMu orders the job's wait events: a begin is read and
+	// handed to the runtime under it, and so is the end, so no begin is
+	// ever delivered after the end (review r3 F1). Taken before e.mu.
+	waitEmitMu sync.Mutex
 	// waiting is true while the job waits for host memory; whoever clears
 	// it (its start, its stop, its capsule's end) owns the job's next step.
 	// Guarded by the executor's mu.
@@ -109,35 +114,46 @@ func (e *Executor) SetJobWaitHandler(handler func(JobWaitEvent)) {
 
 // noteJobWaitLocked records a refusal on a waiting job as its typed wait.
 // The caller holds the executor's mu.
-func noteJobWaitLocked(job *capsuleJob, now time.Time) {
+func noteJobWaitLocked(job *capsuleJob, now time.Time, poll, maxWait time.Duration) {
 	if job.waitSince.IsZero() {
 		job.waitSince = now
 	}
-	job.wait = HostMemoryWaitState("job "+job.spec.ID, job.memoryWait, job.status.Reason, job.waitSince, hostMemoryWaitPoll, hostMemoryMaxWait)
+	job.wait = HostMemoryWaitState("job "+job.spec.ID, job.memoryWait, job.status.Reason, job.waitSince, poll, maxWait)
 }
 
 // emitJobWait hands the runtime the job's current wait. The caller must not
 // hold the executor's mu.
 func (e *Executor) emitJobWait(job *capsuleJob) {
+	job.waitEmitMu.Lock()
+	defer job.waitEmitMu.Unlock()
 	e.mu.RLock()
-	wait := job.wait.Clone()
+	var wait *types.WaitState
+	if job.wait != nil {
+		wait = job.wait.Clone()
+	}
 	e.mu.RUnlock()
 	if wait != nil {
+		wait.Stamp(time.Now())
 		e.emitJobWaitOf(job, wait, false, "")
 	}
 }
 
-// takeJobWait clears the job's wait record and returns it: the one caller
-// that takes it non-nil emits the wait's end.
-func (e *Executor) takeJobWait(job *capsuleJob) *types.WaitState {
+// endJobWait clears the job's wait record and, when it had one, hands the
+// runtime the wait's end, under the job's emit order: the one caller that
+// takes it non-nil emits the end, and no begin follows it.
+func (e *Executor) endJobWait(job *capsuleJob, outcome string) {
+	job.waitEmitMu.Lock()
+	defer job.waitEmitMu.Unlock()
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	w := job.wait
 	job.wait = nil
 	if w != nil && job.waitedFor == 0 {
 		job.waitedFor = time.Since(job.waitSince)
 	}
-	return w
+	e.mu.Unlock()
+	if w != nil {
+		e.emitJobWaitOf(job, w, true, outcome)
+	}
 }
 
 func (e *Executor) emitJobWaitOf(job *capsuleJob, wait *types.WaitState, ended bool, outcome string) {
@@ -229,7 +245,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 			}
 			job.memoryWait = refusal.Wait
 			job.status.Reason = jobWaitReason(job, refusal.Reason) + jobHoldersNote(e.jobs, job, time.Now())
-			noteJobWaitLocked(job, time.Now())
+			noteJobWaitLocked(job, time.Now(), hostMemoryWaitPoll, hostMemoryMaxWait)
 			view := job.view(job.status, "", "")
 			e.mu.Unlock()
 			e.persistJobRecord(job)
@@ -430,7 +446,7 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 				}
 				job.memoryWait = refusal.Wait
 				job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
-				noteJobWaitLocked(job, time.Now())
+				noteJobWaitLocked(job, time.Now(), poll, maxWait)
 				e.mu.Unlock()
 				e.emitJobWait(job)
 				continue
@@ -453,9 +469,7 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 			e.finishJob(job, nil, capsulejob.StateFailed, "could not start after waiting for host memory: "+err.Error())
 			return
 		}
-		if w := e.takeJobWait(job); w != nil {
-			e.emitJobWaitOf(job, w, true, "started")
-		}
+		e.endJobWait(job, "started")
 		log.Printf("capsule: job %s in capsule %s started after waiting %s for host memory", job.spec.ID, job.capsuleID, time.Since(since).Round(time.Second))
 		return
 	}
@@ -653,10 +667,8 @@ func (e *Executor) finishJob(job *capsuleJob, caps *Capsule, state, reason strin
 	e.mu.Lock()
 	st := job.status
 	e.mu.Unlock()
-	if w := e.takeJobWait(job); w != nil {
-		// The job ends without starting: its wait ends with it.
-		e.emitJobWaitOf(job, w, true, state)
-	}
+	// A job that ends without starting: its wait ends with it.
+	e.endJobWait(job, state)
 	if caps == nil {
 		st.State, st.Reason = state, reason
 		if st.FinishedAt.IsZero() {
