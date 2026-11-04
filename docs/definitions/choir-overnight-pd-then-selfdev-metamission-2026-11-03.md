@@ -126,25 +126,22 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 8d78b7e78 (Library (new) export, 11:04Z); e6fe4b1fe in CI
-    (Freeze refuses screens older than the newest source change, Devin
-    approve); choir-shot honors a shot's own preset or size and refuses a
-    phone-named shot without a portrait view (eed2104f4, ad8fbb21a).
-    Package install: tier 2 approve (Devin, DeepSeek, no blocking-real);
-    two nits being applied (drop the publisher test_command from the
-    install prompt, hide staged_dir); it deletes software-release adoption,
-    which never worked for real. Crouton pair, Calendar, one full round
-    each, 0 of 6 passes on both: with the delegate the best candidate had 1
-    fault and zones and phone sizes were right from candidate 1; without
-    it the best had about 5 and the zone bug was never fixed. Crouton's
-    Texture settled its rejected round 8 as complete (problem doc). Next
-    rounds: claude r4, crouton r9 on the same request. Node B 15 GB
-    available, 150 GB disk free. Laptop disk 88 percent, Go build cache
-    132 GB (report 4692943fc).
+    staging b5fa1aa82 (package install, 11:39Z; software-release adoption
+    deleted); 5727d3d3d in CI (a U4 rebase skips the per-shot review, Devin
+    approve). e6fe4b1fe deployed (Freeze refuses stale screens). The Library
+    export (8d78b7e78) collided with the arms' own library-next changes:
+    claude's rebase re-applied and was failed by the judge for 0 of 12 shots
+    (fixed by 5727d3d3d); crouton's base supersedes its change and U4 had no
+    outcome for that, so it is wedged at stack_base_moved (problem doc;
+    the superseded-rebase fix on branch noop-rebase is in tier 2 review,
+    then an owner rebase-retry). Pool and luna rounds cancelled on Synthetic
+    quota (their Texture recorded no quota hold, so the quota watch missed
+    them). Install proof waits for pool (R1, now on crouton-alpha) to take
+    b5fa1aa82 when its ring opens. Node B 12 GB available, 147 GB disk free.
   main_uncertainty: >-
-    whether install through the Library works on staging on the first try;
-    whether the calendar layout faults are the app's or the engineers'
-  next_observation: the install branch's nit commit; e6fe4b1fe deploy; claude r4 and crouton r9 first candidates
+    whether the superseded-rebase fix passes tier 2; whether the first
+    staging install applies through self-development on the first try
+  next_observation: the noop-rebase review; pool's refresh to b5fa1aa82 and the install; claude r4 Cast after 5727d3d3d reaches it
   blocker: none
-  next_action: land package install, prove an install from the Library on d@e on staging, then review apps through the Library and run publish and install rounds
+  next_action: land the superseded-rebase fix and unwedge crouton; prove a Library install on pool on staging; then review apps through the Library and run publish and install rounds
 receipts: []
