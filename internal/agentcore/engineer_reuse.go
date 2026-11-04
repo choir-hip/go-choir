@@ -221,9 +221,11 @@ func (r *rlmCallReduction) commitReviewRequest(ctx context.Context, op selfdev.O
 // terminal, op is frozen, and the review Report for op exists.
 func (rt *Runtime) assignmentInReview(ctx context.Context, assignment types.EngineeringAssignment, op selfdev.Operation) bool {
 	// Awaiting approval too: a repeated pass on the open assignment while
-	// the park commits the Complete replays instead of being refused.
+	// the park commits the Complete replays instead of being refused; and a
+	// rejected candidate, so a replayed pass the per-shot review failed
+	// answers from the operation (commitVerifyIntent) instead of erroring.
 	if rt == nil || rt.store == nil || assignment.Disposition.Terminal() || strings.TrimSpace(assignment.BoundRunID) == "" ||
-		(op.State != selfdev.StateFrozen && op.State != selfdev.StateVerified && op.State != selfdev.StateAwaitingApproval) {
+		(op.State != selfdev.StateFrozen && op.State != selfdev.StateVerified && op.State != selfdev.StateAwaitingApproval && !judgmentRejected(op)) {
 		return false
 	}
 	id := partialReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.BoundRunID, assignment.AssignmentID,
