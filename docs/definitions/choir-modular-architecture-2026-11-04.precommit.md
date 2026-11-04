@@ -167,3 +167,5 @@ Calibration so far: 80% intervals 2 of 3 covered (R0-02, R0-05; R0-01 missed); p
 - **R0-01 (contradicted).** Short operations are syscall-bound even when the job is "compute". Change: a slowdown prediction names the operation's dominant cost class (compute, metadata, IPC) from a native profile before predicting. Checked by: the capsule pilot's predictions.
 - **R0-06 (void).** The quantity was underspecified. Change: every point estimate states its unit boundary (what is included and excluded). This is improvement 3 of the ledger review (explicit voids, counted).
 - **R0-07 (contradicted).** FP0 predicted one layering order without listing the alternative. Change: when a design choice has a small known set of options, the record covers each option, not the first one considered.
+
+**Correction (2026-11-04 19:35 UTC).** The settlements heading above says "~20:40 UTC"; the settlements were written at about 19:32 UTC (commit 1876a56da is the witness). The heading is left as committed.
