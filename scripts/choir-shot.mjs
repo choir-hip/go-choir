@@ -134,8 +134,8 @@
 // same x-choir-fixture header and badge. An install of a catalog fixture release
 // answers the real 201 view (a repeat 200), and the installed list holds what this
 // shot installed; the state is per shot, emptied with the desktop reset. The
-// earliest release of the fixture's refusal_package answers the real refusal (403
-// cross_owner_before_frame: another owner's release, before the sandboxed frame); a release the catalog fixture lacks
+// earliest release of the fixture's refusal_package answers the real refusal (422
+// release_digest_mismatch: a forged record); a release the catalog fixture lacks
 // answers 404 release_not_published.
 //
 // Podcasts: a capsule cannot reach the podcast directory, the feed hosts, or

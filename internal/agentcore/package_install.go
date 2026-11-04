@@ -138,12 +138,6 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if err := pkgrelease.VerifyID(rec, releaseID); err != nil {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "release_digest_mismatch", "%v", err)
 	}
-	// 2. Same-origin code is the owner's own until the sandboxed frame
-	// (S13): a release another owner published never installs here.
-	if strings.TrimSpace(rec.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusForbidden, "cross_owner_before_frame", "release %s was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet", releaseID)
-	}
-
 	rt.packageInstallMu.Lock()
 	defer rt.packageInstallMu.Unlock()
 	prior, err := rt.packageInstalls(ctx, ownerID, computerID)

@@ -109,13 +109,11 @@ func (h *Handler) packageInstallBody(ctx context.Context, ownerID string, raw []
 			return nil, &installRefusal{http.StatusUnprocessableEntity, "release_digest_mismatch", err.Error()}
 		}
 	}
-	// Runtime install (S12) runs the app in the shell's origin, so until the
-	// sandboxed frame (S13) only the owner's own releases install (uninstall
-	// returned above). corpusd's owner-scoped read answers 404 for another
-	// owner's release first; this is the second wall.
-	if strings.TrimSpace(published.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
-		return nil, &installRefusal{http.StatusForbidden, "cross_owner_before_frame", "release " + releaseID + " was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet"}
-	}
+	// Any signed-in owner may install any listed release (owner, 2026-11-04:
+	// the Library is an app store). The listed-state check above is the
+	// gate; corpusd's read already answers 404 for a release this owner may
+	// not see. The installed module runs same-origin with the installer's
+	// session: the accepted app-store risk (S12 D6).
 	canonical, err := published.Canonical()
 	if err != nil {
 		return nil, &installRefusal{http.StatusBadGateway, "published_record_digest_mismatch", err.Error()}

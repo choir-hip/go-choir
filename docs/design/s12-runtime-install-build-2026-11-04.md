@@ -18,7 +18,7 @@ and verifies the listed release and its `tree_patch` from the catalog as that
 owner, as before. The computer then:
 
 1. verifies the record against the id and the bytes against the record;
-2. refuses another owner's release (`cross_owner_before_frame`, below);
+2. installs the release whoever published it (D6);
 3. builds the package into one ES module (ABI `choir.app-frontend/module/v1`)
    with its own locked dependencies, offline (`internal/pkgruntime`);
 4. writes the module to its module store by SHA-256;
@@ -150,18 +150,28 @@ this stay listed with `state: source`; what they did is in the source tree.
 No switch: rollout is by deploy ring (d@e first), rollback is a revert
 (owner, 2026-11-03).
 
-### D6. Security: same origin, owner's own releases only, until S13
+### D6. Security: same origin, any listed release (owner ruling, 2026-11-04)
 
-A module runs in the shell's origin with the owner's session: it can call
-every `/api` route the owner can. `PackageAppFrame` is not a sandbox; it is a
-mount point with verified bytes. The replan's P5 and the Library design (7,
-L14) already decided this: same origin for the owner's own code; another
-owner's code only in the S13 sandboxed frame. So:
+A module runs in the shell's origin with the installer's session: it can call
+every `/api` route the installer can. `PackageAppFrame` is not a sandbox; it is a
+mount point with verified bytes. The earlier decision (replan P5, Library
+design 7, L14) kept another owner's code out until the S13 sandboxed frame,
+behind `403 cross_owner_before_frame`. The owner overruled it on 2026-11-04:
+"No, I don't want it to work only for me!!! Installing published apps is the
+essential feature. And I don't want more switches!!!" and "The whole point is
+to enable the library as an app store ... realistically, this is the same risk
+as GitHub." So:
 
-- the proxy and the computer both refuse an install whose release's
-  publisher is another owner (`403 cross_owner_before_frame`). Behind corpusd's
-  owner-scoped read this is a second wall: corpusd answers 404 first, so the
-  Library says "not available to install" for both;
+- **Any signed-in user can install any listed release.** Releases are already
+  public (`Listing.VisibleTo`). The cross-owner refusal is deleted from the
+  proxy and the computer. This is a widening of the guest surface
+  (`security_epoch` 39), by ruling, with no switch, no setting and no
+  confirmation flag, and the forwarded body gains no field (an unrefreshed
+  guest decodes with `DisallowUnknownFields`);
+- everything else holds: the release must be listed (a withdrawn, suspended or
+  yanked release is refused for install), the record must hash to its id, the
+  bytes to the record, the module must build offline inside the package
+  boundary, `requires_sdk` must be met;
 - an uninstall never depends on the catalog: the proxy forwards only
   `{release_id, action}`, with no listing gate and no blob fetch, and the
   computer derives the package from its own in-force install record. A
@@ -169,14 +179,20 @@ owner's code only in the S13 sandboxed frame. So:
 - the module that runs is exactly the module verified (digest at fetch,
   import from a `blob:` URL of those bytes). This bounds the module graph,
   not what the module does at run time: same-origin code can still inject a
-  `<script>` element or fetch anything the owner can, which is why another
-  owner's code waits for S13's frame and its CSP;
-- the build is source only, on the owner's own computer.
+  `<script>` element or fetch anything the installer can. That is the accepted
+  app-store risk, the same as running code from GitHub;
+- the Library's install dialog names who published the release (owner and
+  computer) as ordinary store information. There is no warning gate;
+- the build is source only, on the installer's own computer.
 
-This narrows what the source-patch install allowed (any listed release, after
-an approval in Texture). The sandboxed frame (opaque-origin iframe and an
-`ctx.sdk` bridge over `postMessage`) is S13, more than a day, and not built
-here.
+Planned mitigations, none built, are in
+[library-app-store-security-intent-2026-11-04.md](library-app-store-security-intent-2026-11-04.md):
+publisher attestation, a security review on the installer's computer before
+install, precommitment records per release, and yank and ban remediation. The
+S13 sandboxed frame (opaque-origin iframe and an `ctx.sdk` bridge over
+`postMessage`, more than a day) is another, and would narrow what an installed
+module can reach. Until they land the wall is gone: the installer's trust in the
+publisher is the control.
 
 ## Failure modes (written before the code; tests named)
 
@@ -255,7 +271,7 @@ Residuals, recorded and not fixed here:
 ## Built, and deferred
 
 Built: D1 to D6, the Library's answers (`installed`, `replaced`,
-`uninstalled`; refusals `cross_owner_before_frame`, `package_build_failed`,
+`uninstalled`; refusals `package_build_failed`,
 `install_unavailable`), the capsule install fixture regenerated from the
 handler, and `choir-shot.mjs` serving it.
 
@@ -268,7 +284,7 @@ Deferred, each a named residual:
   `PACKAGE_MEDIA_ROUTES`, and it gets no desktop icon.
 - **Host build** (one module per release) and the build receipt bound into
   the release record (`build: { module_digest, builder_receipt_digest }`).
-- **The sandboxed frame** (S13), which lifts `cross_owner_before_frame`.
+- **The sandboxed frame** (S13), which narrows what an installed module can reach (the cross-owner wall itself is gone, D6).
 - **Upstreamed runtime installs.** When a base ships a package whose tree is
   an installed release's tree, the install could retire itself; today the
   installed module keeps winning until the owner uninstalls it.

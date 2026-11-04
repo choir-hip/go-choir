@@ -50,13 +50,15 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		w := releaseRouterCall(t, e.h, method, adoptions, e.owner, e.computer, body)
 		return capsuleInstallAnswer{Status: w.Code, Body: json.RawMessage(w.Body.Bytes())}
 	}
-	// The refusal: another owner's release (runtime install runs the app in
-	// the shell origin, so only the owner's own releases install before S13).
+	// The refusal: a record that does not hash to the release id (a forged
+	// record). Another owner's listed release is no longer refused (owner,
+	// 2026-11-04: the Library is an app store).
 	_, otherID, otherRaw, otherTree := publishedPackage(t, e.repo, e.base, "owner-x", map[string]string{
 		"choir-package.json": installManifest("Theirs"), "App.svelte": "<p>theirs</p>\n",
 	})
-	refusal := call(http.MethodPost, installBody(t, otherID, otherRaw, otherTree, ""))
-	if refusal.Status != http.StatusForbidden {
+	forged := strings.Replace(string(otherRaw), `"op-owner-x"`, `"op-owner-z"`, 1)
+	refusal := call(http.MethodPost, installBody(t, otherID, json.RawMessage(forged), otherTree, ""))
+	if refusal.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("refusal = %d %s", refusal.Status, refusal.Body)
 	}
 	body := installBody(t, id, raw, treePatch, "")
@@ -93,14 +95,14 @@ func generateCapsuleInstallFixture(t *testing.T) capsuleInstallFixture {
 		}
 	})
 	refusal = norm(refusal, func(v map[string]any) {
-		v["error"] = "this release was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet"
+		v["error"] = "the release record does not hash to the release id"
 	})
 	return capsuleInstallFixture{
 		Fixture: "capsule-install",
 		Note: "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go " +
 			"(CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. " +
 			"Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. " +
-			"Modelled simply: the owner and times are fixed, every install is a runtime install in force (state installed), and a release is installed or refused (cross_owner_before_frame) by its package, not by its publisher.",
+			"Modelled simply: the owner and times are fixed, every install is a runtime install in force (state installed), and a release is installed or refused (release_digest_mismatch) by its package, not by its record.",
 		RefusalPackage: "slides-next",
 		Created:        created, Repeat: repeat, List: list, Refusal: refusal,
 	}
@@ -187,7 +189,7 @@ func TestCapsuleInstallFixtureMatchesAdoptionHandler(t *testing.T) {
 		Error, Reason string
 	}
 	_ = json.Unmarshal(held.Refusal.Body, &refusal)
-	if refusal.Reason != "cross_owner_before_frame" {
+	if refusal.Reason != "release_digest_mismatch" {
 		t.Fatalf("refusal = %s", held.Refusal.Body)
 	}
 }

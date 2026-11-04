@@ -1196,6 +1196,14 @@
           </p>
           <div class="lib-facts">
             <div class="lib-fact">
+              <span class="lib-kv-label-inline">Publisher</span>
+              <span class="lib-code">{ownerOf(confirm.release) ? shortId(ownerOf(confirm.release), 12) : 'unknown'}</span>
+            </div>
+            <div class="lib-fact">
+              <span class="lib-kv-label-inline">Publisher computer</span>
+              <span class="lib-code">{publisherLabel(publisherOf(confirm.release), computerId)}</span>
+            </div>
+            <div class="lib-fact">
               <span class="lib-kv-label-inline">Release id</span>
               <span class="lib-code">{shortId(releaseIdOf(confirm.release), 16)}</span>
             </div>

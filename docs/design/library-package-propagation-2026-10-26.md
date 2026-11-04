@@ -1168,7 +1168,7 @@ adopted(R) -> package_base_moved -> adopted(R) re-materialized (approval, Q1) | 
 | L11 | Probation passes but the app is broken | the host smoke check | S7 leg |
 | L12 | Probation fails falsely | the cost is one reversible revert; outcomes are recorded | weak measure |
 | L13 | Auto on a non-test computer | the class floor at the proxy subscription write, plus the test-tier gate of standing consensus | tests across all five classes |
-| L14 | Same-origin code across owners | `cross_owner_before_frame` at the S5 gate | S5 test; S13 lifts it |
+| L14 | Same-origin code across owners | Superseded 2026-11-04 (owner): any listed release installs; `cross_owner_before_frame` removed; see S12 D6 | S12 tests |
 | L15 | A mixed candidate is published as a package | the publisher-side refusal names the paths and points to `choir platform publish` | S2 leg |
 | L16 | An export reshapes the tree | verbatim write plus the CI check | S4 |
 | L16b | **An export reverts a later change on main** | `onto_moved` when `--onto`'s subtree differs from P | S4 test |

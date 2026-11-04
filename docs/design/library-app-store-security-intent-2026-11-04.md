@@ -41,13 +41,11 @@ model is essential to the app store, not an add-on.
 
 - Releases are public (2026-11-03); withdraw exists; yank exists in the
   listing code; no signed listings (S11), no namespace signing (S13/S14).
-- S12 runtime install runs modules same-origin and installs only the
-  installer's own releases; the sandboxed frame (S13) is the planned
-  answer for other owners' code.
-- First narrow exception in build: the platform owner may install a
-  release published by one of the owner's own test computers, with an
-  explicit confirmation naming the release. It is the owner trusting
-  their own agents' output, not an app-store rule.
+- S12 runtime install runs modules same-origin with the installer's
+  session. Since the owner's ruling of 2026-11-04 any signed-in user can
+  install any listed release (`cross_owner_before_frame` is removed, no
+  switch); the install dialog names the publisher. The sandboxed frame
+  (S13) is a planned mitigation, not a precondition.
 - The modularity check (9858baf1e) proves an app keeps working across
   platform updates; it says nothing about whether the app is safe.
 

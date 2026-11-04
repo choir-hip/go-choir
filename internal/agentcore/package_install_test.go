@@ -267,13 +267,6 @@ func TestRuntimeInstallInstallsReplacesUninstallsAndReinstalls(t *testing.T) {
 	if code, _, reason := e.post(t, installBody(t, id, raw, append(append([]byte{}, tree...), 'x'), "")); code != http.StatusConflict || reason != "patch_digest_mismatch" {
 		t.Fatalf("F3 = %d %s", code, reason)
 	}
-	// S1: another owner's release.
-	_, otherID, otherRaw, otherTree := publishedPackage(t, e.repo, e.base, "owner-x", map[string]string{
-		"choir-package.json": installManifest("Theirs"), "App.svelte": "<p>theirs</p>\n",
-	})
-	if code, _, reason := e.post(t, installBody(t, otherID, otherRaw, otherTree, "")); code != http.StatusForbidden || reason != "cross_owner_before_frame" {
-		t.Fatalf("S1 = %d %s", code, reason)
-	}
 	// S7: a failed build.
 	e.builder.fail = errorsJoinBuild()
 	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusUnprocessableEntity || reason != "package_build_failed" {
@@ -491,5 +484,34 @@ func TestRuntimeInstallNeverReusesAnAdoptionID(t *testing.T) {
 	code, view, reason := e.post(t, installBody(t, id, raw, tree, ""))
 	if code != http.StatusCreated || view.AdoptionID == taken || !strings.HasPrefix(view.AdoptionID, taken) {
 		t.Fatalf("install = %d %s %q", code, reason, view.AdoptionID)
+	}
+}
+
+// Open install (owner, 2026-11-04): a release another owner published
+// installs like one's own (the Library is an app store); the guest holds no
+// cross-owner wall. A forged record is still refused by digest, and uninstall
+// still removes it.
+func TestRuntimeInstallInstallsAnotherOwnersRelease(t *testing.T) {
+	e := newInstallEnv(t)
+	_, otherID, otherRaw, otherTree := publishedPackage(t, e.repo, e.base, "owner-x", map[string]string{
+		"choir-package.json": installManifest("Theirs"), "App.svelte": "<p>theirs</p>\n",
+	})
+	forged := strings.Replace(string(otherRaw), `"op-owner-x"`, `"op-owner-z"`, 1)
+	if forged == string(otherRaw) {
+		t.Fatal("the forgery changed nothing")
+	}
+	if code, _, reason := e.post(t, installBody(t, otherID, json.RawMessage(forged), otherTree, "")); code != http.StatusUnprocessableEntity || reason != "release_digest_mismatch" {
+		t.Fatalf("forged = %d %s", code, reason)
+	}
+	code, view, reason := e.post(t, installBody(t, otherID, otherRaw, otherTree, ""))
+	if code != http.StatusCreated || view.State != installStateInstalled || !view.ModuleAvailable {
+		t.Fatalf("another owner's release = %d %s %+v", code, reason, view)
+	}
+	if n := e.records(t); n != 1 {
+		t.Fatalf("records = %d", n)
+	}
+	code, view, reason = e.post(t, []byte(`{"release_id":"`+otherID+`","action":"uninstall"}`))
+	if code != http.StatusCreated || view.State != installStateUninstalled {
+		t.Fatalf("uninstall = %d %s %+v", code, reason, view)
 	}
 }

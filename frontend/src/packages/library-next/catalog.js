@@ -38,14 +38,12 @@ export function plainReason(reason, status = 0) {
       return 'The Library does not hold this release\'s files, so it cannot be installed. Nothing changed on this computer.';
     case 'desks_unavailable':
       return 'This computer\'s desks did not take the install. Nothing changed on this computer. Try again in a moment.';
-    case 'cross_owner_before_frame':
-      return 'Another owner published this release. Their apps open only in a sandboxed window, which this computer does not have yet, so it was not installed. Nothing changed on this computer.';
     case 'package_build_failed':
       return 'This computer could not build the release, so it was not installed. Nothing changed on this computer.';
     case 'install_unavailable':
       return 'This computer cannot install apps right now. Nothing changed on this computer. Try again in a moment.';
     case 'release_not_published':
-      return 'That release is not available to install on this computer (it is no longer published, or another owner published it). Nothing changed on this computer.';
+      return 'That release is not available to install on this computer (it is no longer published). Nothing changed on this computer.';
     case 'release_id_invalid':
     case 'request_invalid':
       return 'This window sent an install the computer could not read. Nothing changed on this computer. Reload the app and try again.';

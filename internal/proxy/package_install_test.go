@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -175,18 +176,47 @@ func TestPackageInstallIsTheOwnersActAndCarriesOnlyTheStoresVerifiedRelease(t *t
 	refused("F3", body, http.StatusConflict, "patch_digest_mismatch")
 	env.blob = func() (int, []byte) { return http.StatusOK, tree }
 
-	// S12: another owner's release runs in the shell origin only after the
-	// sandboxed frame (S13); its install is refused here, its uninstall is not.
+	// Open install (owner, 2026-11-04): another owner's listed release
+	// installs; yanked and withdrawn ones are refused; uninstall always works.
+	// The forwarded body is exactly {release_id, record, tree_patch, action}:
+	// an unrefreshed guest decodes with DisallowUnknownFields.
 	_, otherID, otherRaw := installRecord(t, tree, "someone-else")
 	viewOf := env.view
 	env.view = func() (int, []byte) {
 		out, _ := json.Marshal(map[string]any{"release_id": otherID, "record": json.RawMessage(otherRaw), "listing": map[string]any{"state": state}})
 		return http.StatusOK, out
 	}
-	refused("S12 cross owner", `{"release_id":"`+otherID+`"}`, http.StatusForbidden, "cross_owner_before_frame")
+	for _, bad := range []string{pkgrelease.StateYanked, pkgrelease.StateWithdrawn} {
+		state = bad
+		refused("open install "+bad, `{"release_id":"`+otherID+`"}`, http.StatusNotFound, "release_not_published")
+	}
+	state = pkgrelease.StateListed
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+otherID+`"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
+		t.Fatalf("open install of another owner's listed release = %d %s", rec.Code, rec.Body.String())
+	}
+	var exact map[string]json.RawMessage
+	if err := json.Unmarshal(env.guestIn, &exact); err != nil {
+		t.Fatal(err)
+	}
+	keys := make([]string, 0, len(exact))
+	for k := range exact {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if strings.Join(keys, ",") != "action,record,release_id,tree_patch" {
+		t.Fatalf("forwarded body keys = %v", keys)
+	}
+	// A forged store copy of another owner's release does not verify.
+	forged := strings.Replace(string(otherRaw), `"operation_id":"op-1"`, `"operation_id":"op-z"`, 1)
+	env.view = func() (int, []byte) {
+		out, _ := json.Marshal(map[string]any{"release_id": otherID, "record": json.RawMessage(forged), "listing": map[string]any{"state": state}})
+		return http.StatusOK, out
+	}
+	refused("open install forged", `{"release_id":"`+otherID+`"}`, http.StatusBadGateway, "published_record_digest_mismatch")
 	env.guestIn = nil
 	if rec := env.send(t, `{"release_id":"`+otherID+`","action":"uninstall"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
-		t.Fatalf("S12 cross-owner uninstall = %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("cross-owner uninstall = %d %s", rec.Code, rec.Body.String())
 	}
 	env.view = viewOf
 

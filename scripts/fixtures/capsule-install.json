@@ -1,6 +1,6 @@
 {
   "fixture": "capsule-install",
-  "note": "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. Modelled simply: the owner and times are fixed, every install is a runtime install in force (state installed), and a release is installed or refused (cross_owner_before_frame) by its package, not by its publisher.",
+  "note": "Not the live computer. Generated from the real install handler by internal/agentcore/capsule_install_fixture_test.go (CHOIR_WRITE_CAPSULE_INSTALL_FIXTURE=1 go test ./internal/agentcore -run TestCapsuleInstallFixture); choir-shot serves it in a capsule, labelled. Release-specific fields (release_id, adoption_id, publisher and patch fields) are filled from the catalog fixture's release. Modelled simply: the owner and times are fixed, every install is a runtime install in force (state installed), and a release is installed or refused (release_digest_mismatch) by its package, not by its record.",
   "refusal_package": "slides-next",
   "created": {
     "status": 201,
@@ -8,7 +8,7 @@
       "action": "install",
       "adopter_base_commit": "",
       "adopter_tree_hash": "",
-      "adoption_id": "install-9d2afd2bff39d7c2a31a7c99",
+      "adoption_id": "install-b7e36e519a0f9c86efdba92c",
       "attempt": 1,
       "computer_id": "computer-b",
       "kind": "package",
@@ -25,8 +25,8 @@
       "patch_sha256": "4d25da2fac34cb40a404ac8dd5e4548e04d06255d6dd7f44bb9e076a17f7fd9b",
       "publisher_computer_id": "computer-owner-b",
       "publisher_operation_id": "op-owner-b",
-      "release_base_commit": "a8c6bef7e3c8062142e95c8d3cbb1c08a1e775a7",
-      "release_id": "df0d0810e37f8990835582f90dc0cc2bf40e2f5fe72d94c82c922fb44fcda54f",
+      "release_base_commit": "6549752e72ee9c94f2564e3a2ac7ddcb94ba8a8e",
+      "release_id": "dc46689dbdaa816f527aef974994c1b20e1d0852ef256e0c564453a4779a45d9",
       "release_tree_hash": "3df9477d4c93e7a1874be575fc401cac228ebd1a",
       "requested_at": "2026-11-03T03:00:00Z",
       "requires_sdk": "^1.0",
@@ -40,7 +40,7 @@
       "action": "install",
       "adopter_base_commit": "",
       "adopter_tree_hash": "",
-      "adoption_id": "install-9d2afd2bff39d7c2a31a7c99",
+      "adoption_id": "install-b7e36e519a0f9c86efdba92c",
       "attempt": 1,
       "computer_id": "computer-b",
       "kind": "package",
@@ -57,8 +57,8 @@
       "patch_sha256": "4d25da2fac34cb40a404ac8dd5e4548e04d06255d6dd7f44bb9e076a17f7fd9b",
       "publisher_computer_id": "computer-owner-b",
       "publisher_operation_id": "op-owner-b",
-      "release_base_commit": "a8c6bef7e3c8062142e95c8d3cbb1c08a1e775a7",
-      "release_id": "df0d0810e37f8990835582f90dc0cc2bf40e2f5fe72d94c82c922fb44fcda54f",
+      "release_base_commit": "6549752e72ee9c94f2564e3a2ac7ddcb94ba8a8e",
+      "release_id": "dc46689dbdaa816f527aef974994c1b20e1d0852ef256e0c564453a4779a45d9",
       "release_tree_hash": "3df9477d4c93e7a1874be575fc401cac228ebd1a",
       "requested_at": "2026-11-03T03:00:00Z",
       "requires_sdk": "^1.0",
@@ -74,7 +74,7 @@
           "action": "install",
           "adopter_base_commit": "",
           "adopter_tree_hash": "",
-          "adoption_id": "install-9d2afd2bff39d7c2a31a7c99",
+          "adoption_id": "install-b7e36e519a0f9c86efdba92c",
           "attempt": 1,
           "computer_id": "computer-b",
           "kind": "package",
@@ -91,8 +91,8 @@
           "patch_sha256": "4d25da2fac34cb40a404ac8dd5e4548e04d06255d6dd7f44bb9e076a17f7fd9b",
           "publisher_computer_id": "computer-owner-b",
           "publisher_operation_id": "op-owner-b",
-          "release_base_commit": "a8c6bef7e3c8062142e95c8d3cbb1c08a1e775a7",
-          "release_id": "df0d0810e37f8990835582f90dc0cc2bf40e2f5fe72d94c82c922fb44fcda54f",
+          "release_base_commit": "6549752e72ee9c94f2564e3a2ac7ddcb94ba8a8e",
+          "release_id": "dc46689dbdaa816f527aef974994c1b20e1d0852ef256e0c564453a4779a45d9",
           "release_tree_hash": "3df9477d4c93e7a1874be575fc401cac228ebd1a",
           "requested_at": "2026-11-03T03:00:00Z",
           "requires_sdk": "^1.0",
@@ -103,10 +103,10 @@
     }
   },
   "refusal": {
-    "status": 403,
+    "status": 422,
     "body": {
-      "error": "this release was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet",
-      "reason": "cross_owner_before_frame"
+      "error": "the release record does not hash to the release id",
+      "reason": "release_digest_mismatch"
     }
   }
 }
