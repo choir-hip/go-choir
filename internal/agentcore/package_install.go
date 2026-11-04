@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Package install (docs/design/package-install-2026-11-04.md). The owner's
@@ -223,11 +224,37 @@ func installedTree(prior []store.ReleaseAdoption, name, tree string) bool {
 func (rt *Runtime) packageInstallLive(ctx context.Context, adoption store.ReleaseAdoption) bool {
 	view := rt.adoptionView(ctx, adoption)
 	if view.Operation == nil {
+		// An attempt whose desks already ended its work without an
+		// operation (a refused Cast, say) is over: the owner may retry
+		// at once rather than after the quiet window.
+		if rt.installWorkEnded(ctx, adoption) {
+			return false
+		}
 		return time.Since(adoption.RequestedAt) < packageInstallQuietWindow
 	}
 	switch view.Operation.State {
 	case selfdev.StateFailed, selfdev.StateRejected, selfdev.StateRolledBack, selfdev.StateApplied:
 		return false
+	}
+	return true
+}
+
+// installWorkEnded reports whether the attempt's trajectory has work items
+// and none is open. An install trajectory is a lifecycle trajectory
+// (StartLifecycle), so it is read from the lifecycle snapshot; a lookup
+// failure, no trajectory or no work items reads as not ended.
+func (rt *Runtime) installWorkEnded(ctx context.Context, adoption store.ReleaseAdoption) bool {
+	if rt.store == nil || strings.TrimSpace(adoption.TrajectoryID) == "" {
+		return false
+	}
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, adoption.OwnerID, adoption.ComputerID, adoption.TrajectoryID)
+	if err != nil || len(snapshot.WorkItems) == 0 {
+		return false
+	}
+	for _, item := range snapshot.WorkItems {
+		if item.Status == types.WorkItemOpen {
+			return false
+		}
 	}
 	return true
 }

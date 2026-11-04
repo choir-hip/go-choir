@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Package install (docs/design/package-install-2026-11-04.md), failure
@@ -325,6 +326,42 @@ func TestPackageInstallRefusesWithoutTraceThenInstallsReplacesAndUninstalls(t *t
 	retry, code, reason := call(installBody(t, id, raw, treePatch, ""))
 	if code != http.StatusCreated || retry.Attempt != 3 {
 		t.Fatalf("F10: retry = %d %s attempt %d", code, reason, retry.Attempt)
+	}
+
+	// F10b: a recent attempt whose desks ended its work without an operation
+	// (pool, 2026-11-04: the Cast was refused at stack_base_moved) does not
+	// wait out the quiet window. Attempt 3's trajectory is a lifecycle one,
+	// as a real install's is (StartLifecycle), with one Texture work item.
+	ctx := context.Background()
+	textureAgent := currentTextureAgentID("install-doc")
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: owner, ComputerID: computerID, CommandID: "install-start", TrajectoryID: retry.TrajectoryID, Kind: types.TrajectoryKindTask,
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/install-doc", "doc_id": "install-doc"},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "install-work", Objective: "install", AssignedAgentID: textureAgent},
+		InitialDocument: types.Document{DocID: "install-doc", Title: "Install"},
+		InitialRevision: types.Revision{RevisionID: "install-rev", AuthorKind: types.AuthorUser, AuthorLabel: owner, Content: "Install."},
+		Agent:           types.AgentRecord{AgentID: textureAgent, OwnerID: owner, ComputerID: computerID, Profile: "texture", Role: "texture", ChannelID: "install-doc", CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := rt.store.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	if _, code, reason := call(installBody(t, id, raw, treePatch, "")); code == http.StatusCreated {
+		t.Fatalf("F10b: an open work item must keep the attempt live, got %d %s", code, reason)
+	}
+	settle := types.SettleLifecycleWorkRequest{
+		OwnerID: owner, ComputerID: computerID, CommandID: "install-settle", TrajectoryID: retry.TrajectoryID,
+		WorkItemID: "install-work", ActingAgentID: textureAgent, ResultRef: "evidence://refused",
+	}
+	settle.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settle)
+	if _, err := rt.store.SettleLifecycleWork(ctx, settle); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	again, code, reason := call(installBody(t, id, raw, treePatch, ""))
+	if code != http.StatusCreated || again.Attempt != 4 {
+		t.Fatalf("F10b: retry after ended work = %d %s attempt %d", code, reason, again.Attempt)
 	}
 }
 
