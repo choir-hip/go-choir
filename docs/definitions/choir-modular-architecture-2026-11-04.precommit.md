@@ -224,3 +224,9 @@ options, the record covers each (R0-07 lesson).
 - Materiality: medium (calibrates the expedite policy). Trigger: Phase 1 closed. Settler: rule (deploy history).
 
 **R0b-01, settled confirmed.** Devin's goal-file review returned ACCEPT, 0 blocking findings, 8 non-blocking amendments (folded). p = 0.70; Brier 0.09.
+
+## Settlements (2026-11-04 ~22:40 UTC; settler: rule)
+
+**R0b-04, settled contradicted (interval).** MA1.1 deleted 1632 net non-test Go lines (61 added, 1693 deleted; `git diff --numstat` over `*.go` not `*_test.go`), outside [500, 1600]; log ratio ln(1632/900) = +0.60. Assumption that failed: the slice's own list was the whole deletion; the receive path pulled orphans with it (lifecycle message intents, receipt drains, the emit-notice dedupe).
+
+**R0b-03, settled qualified (settler: the MA1.2 differential, commit ab8d3699c body).** The differential over 9996 inputs found no route the old switch carried outside the plan's list (the claim as worded: contradicted, p 0.55, Brier 0.30). It did surface rules the list did not name: subject scoping, a management task needs a subject on its sender id, the dual spelling of management-task, and unroutable addresses falling through to the packet path. Learning: a record about "routes" should have said "routes or routing rules"; the unit boundary was again underspecified (R0-06 lesson, second instance).
