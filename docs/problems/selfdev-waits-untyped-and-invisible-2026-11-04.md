@@ -211,11 +211,7 @@ surfaces in three places.
     docs/problems/self-opened-rounds-starve-the-deploy-refresh-2026-11-03.md.
     It now shows as kind `platform_update` with `until` set to its bound.
 - Named residuals:
-  - The unbounded `Lock` calls on `engineeringAssignmentOpenMu`,
-    `selfdevMaterializeMu` and `makeRoomMu`. Their holders run bounded
-    steps, but nothing records who holds them. The next slice gives them
-    a holder record.
-  - The three `time.Sleep` loops that ignore shutdown.
+  - The class c rows, checked in Part 4 below.
   - Another computer's holders are rendered as "another computer"
     with their kind, class and bytes, as vmctl sends them. No id is
     included.
@@ -224,3 +220,45 @@ surfaces in three places.
     assignment's close can race an admission observation, which can
     leave a stale entry. That entry is reaped after 6 h. Both are review
     round 2, F1 and F3.
+
+## Part 4: the nine class c rows, checked (2026-11-04)
+
+Owner ruling, 2026-11-04: "eradicate the waiting except for true resource
+contention, and expose it to eng, mgmt and texture." Each class c row was
+read against the code at origin/main 751eb988a: who holds it, for how long,
+and whether a waiter can block without end in practice.
+
+| # | row | real? | evidence | bound |
+|---|---|---|---|---|
+| 1 | `engineeringAssignmentOpenMu` (continuation_schedule.go, engineering_assignment_fate.go, inbox_records.go) | yes | The holder is a spawn saga or a trajectory reconcile. The spawn is bounded at 90 s, but the saga's store and tape calls run under the actor handler's context, and the actor dispatcher gives handlers no deadline. A wedged append (seen before: the comment on `failSelfdevOperation`) holds the lock, and every admission wake, inline spawn and reconcile waits behind it, with nothing naming the holder. | A holdlock waiter gives up at 5 min, naming the holder and its hold time. An assignment's wait past 2 s is its typed wait, kind `lock`, class contention. Management's frame and Texture's progress relay show it, through the existing tracker. |
+| 2 | `selfdevMaterializeMu` (self_development_materializer.go) | yes | The post-commit observer runs in its own goroutine for every committed event on the computer. The drain cleared its pending flag before each pass, so each event during a pass launched another drain, which then blocked on the pass's lock. An apply that takes minutes piles up one goroutine per event, and each of them runs a whole pass afterwards. The crash boot's marking also waited out a whole pass, the apply included. | One drain runs at a time (a running flag), and a trigger during a pass only marks it pending. The pass's wait is bounded at 5 min and names the holder. The abandon settle's 20 ms TryLock poll becomes one bounded wait. The crash marks get a mutex of their own, so marking never waits for a pass. |
+| 3 | `makeRoomMu` (vmctl/host_admission_make_room.go) | yes, latent | `admitHostMemory` calls make-room with `context.Background()`, so a start that waits behind another start's make-room has no bound but the holder. The holder runs up to 10 hibernates, each with a settle of up to 60 s. | A waiter gives up at 5 min, naming the holder ("the make-room of a start of vm-…"). |
+| 4 | desk session `acquire` (tools_desk.go) | partly | The caller's context is the activation's, and `ExecuteActivationSync` always sets the activation budget (60 min). So the wait was bounded, but only at an hour. The real defect was a different one: when a worker died mid-cell, `release` deleted the session without closing its `freed` channel. A run waiting for that session then waited out its whole activation for a session that no longer existed. | `close` wakes the waiters. A waiter gives up at 10 min, naming the run whose cell holds the session and for how long. |
+| 5 | restore restart `time.Sleep` (self_development_restore_restart.go) | yes, for shutdown | The 2 s delay and the 15 s idle poll, with a window of up to 1 h, slept through `Stop`, and then restarted the guest from a stopped runtime. | `sleepOrStop` ends the sleep at `Stop`, and the goroutine returns. |
+| 6 | run-end retry `time.Sleep` (run_end_retry.go) | yes, for shutdown | About 15 min of retries wrote to a stopped store. | The wait reports the stop, and the retry returns its last error. |
+| 7 | cache-return post reading `time.Sleep` (memory_cache_return.go) | yes, for shutdown, minor | A 60 s sleep, then a read of /proc after `Stop`. | `sleepOrStop`. |
+| 8 | broker frame read (yaegikernel/worker_mux.go) | no | The worker evaluates under `context.Background`. Its bound is the host: `EvalFrame` ends at its context (the activation budget, or the cell's bound), kills the worker, and the socket closes, which wakes every waiter. | Unchanged. A test pins that a waiting call returns when the socket closes. |
+| 9 | deploy refresh entry (vmctl/deploy_refresh_retry.go) | yes | An entry stays until its computer takes the update. A refusal that never clears was asked hourly for ever. An entry whose route refused was kept without counting an attempt, and so was asked every minute for ever. That held even after the computer served the target, because the route check came before the served check. | An entry lives 24 h from its first deferral of its target. Past that, the sweep forgets it, logged, and the next deploy records it again. The served check runs before the route check, so an entry is cleared when its condition resolves. |
+
+Real: 1, 2, 3, 4 (as a lost wake-up, not as a missing deadline), 5, 6, 7 and
+9. Not real: 8.
+
+Mechanism: `internal/holdlock` is a one-slot channel semaphore with a holder
+record. It replaces `sync.Mutex` at rows 1 to 3. `Acquire(ctx, lock, who,
+max)` returns a `HeldError`: "waiting for the self-development materialize
+lock held by a materializer pass for 4m10s: gave up after 5m0s: context
+deadline exceeded". `types.WaitKindLock` is the typed wait for an
+assignment that waits on the open lock.
+
+No lock was deleted. Each one guards a real serial section:
+
+- the open lock: one saga per spawn window (a duplicate wake would write
+  divergent fate intents);
+- the materializer: one pass moves an operation at a time;
+- make-room: one decider, so no computer is hibernated twice.
+
+What was deleted:
+
+- the pile of drains behind the materializer's lock;
+- the crash marking's wait for a pass;
+- the abandon settle's sleep poll.
