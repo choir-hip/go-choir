@@ -161,6 +161,10 @@ func TestPrecommitAcceptsTheYesNoShorthand(t *testing.T) {
 	}
 	for _, example := range []string{PrecommitShapeExample, RulePrecommitJudgeExample, RulePrecommitClockExample} {
 		var e CommitmentPrecommit
+		if PlaceholderHint(example) == "" || strings.Contains(example, "0.") {
+			t.Fatalf("example %s states a number (C3): it must hold placeholders only", example)
+		}
+		example = FillShapePlaceholders(example)
 		if err := json.Unmarshal([]byte(example), &e); err != nil || len(e.Distribution) != 2 {
 			t.Fatalf("example %s: %v", example, err)
 		}
@@ -168,7 +172,10 @@ func TestPrecommitAcceptsTheYesNoShorthand(t *testing.T) {
 			t.Fatalf("rule example %s: %v", example, ValidateRulePrecommit(e))
 		}
 	}
-	if _, err := ParseRoundPredictions([]byte(strings.TrimPrefix(RoundPredictionsExample, `"predictions": `))); err != nil {
+	if _, err := ParseRoundPredictions([]byte(strings.TrimPrefix(RoundPredictionsExample, `"predictions": `))); err == nil || !strings.Contains(err.Error(), "placeholder") {
+		t.Fatalf("a copied placeholder is refused with the hint: %v", err)
+	}
+	if _, err := ParseRoundPredictions([]byte(FillShapePlaceholders(strings.TrimPrefix(RoundPredictionsExample, `"predictions": `)))); err != nil {
 		t.Fatalf("the round example does not parse: %v", err)
 	}
 }

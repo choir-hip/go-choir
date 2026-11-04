@@ -1066,6 +1066,9 @@ func ParseRoundPredictions(raw json.RawMessage) (RoundPredictions, error) {
 	}
 	dec := json.NewDecoder(strings.NewReader(trimmed))
 	dec.DisallowUnknownFields()
+	if hint := PlaceholderHint(trimmed); hint != "" {
+		return out, fmt.Errorf("predictions: %s", hint)
+	}
 	if err := dec.Decode(&out); err != nil {
 		return out, fmt.Errorf("predictions: %w", err)
 	}
@@ -1141,14 +1144,41 @@ func (r RoundPredictions) Precommits() []CommitmentPrecommit {
 
 // Precommit shapes a desk can copy (live8 trace, 2026-11-04: management took
 // six tries to find the body). Help("Precommit"), the decode errors and the
-// Cast refusal show them literally.
+// Cast refusal show them literally. The shape is literal and the numbers are
+// placeholders (C3 of docs/design/calibration-wiring-permutations-2026-11-04.md):
+// a literal 0.8 became the most common stated tests_pass p, and the Cast
+// example's numbers recurred in Casts. Failure modes, written first:
+//   - a copied example anchors the stated numbers -> no number in any
+//     example, only <p>, <estimate>, <low>, <high>, <n>;
+//   - a desk copies a placeholder literally and reads a bare JSON error
+//     -> the decode error says to replace each placeholder (PlaceholderHint).
 const (
-	PrecommitShapeExample       = `{"question": "The build passes on its first run.", "p": 0.7, "resolver": "research"}`
-	RulePrecommitJudgeExample   = `{"question": "The independent judgment accepts my candidate.", "p": 0.6, "resolver": "rule", "rule": {"kind": "judge_accepts"}}`
-	RulePrecommitClockExample   = `{"question": "My Freeze lands 15 to 45 minutes after the assignment opened.", "p": 0.7, "resolver": "rule", "rule": {"kind": "freeze_minutes", "estimate_minutes": 25, "low_minutes": 15, "high_minutes": 45}}`
-	RoundPredictionsExample     = `"predictions": {"verify_pass": 0.8, "judge_accepts": 0.7, "owner_approves": 0.6, "freeze_minutes": {"estimate": 25, "low": 15, "high": 45, "p": 0.7}, "approval_minutes": {"estimate": 90, "low": 40, "high": 240, "p": 0.6}, "approved_within_rounds": {"freezes": 2, "p": 0.6}}`
-	precommitShapeErrorTemplate = "; the shape is %s (\"p\" is your chance of yes, short for \"distribution\": {\"yes\": p, \"no\": 1-p})"
+	PrecommitShapeExample       = `{"question": "The build passes on its first run.", "p": <p>, "resolver": "research"}`
+	RulePrecommitJudgeExample   = `{"question": "The independent judgment accepts my candidate.", "p": <p>, "resolver": "rule", "rule": {"kind": "judge_accepts"}}`
+	RulePrecommitClockExample   = `{"question": "My Freeze lands <low> to <high> minutes after the assignment opened.", "p": <p>, "resolver": "rule", "rule": {"kind": "freeze_minutes", "estimate_minutes": <estimate>, "low_minutes": <low>, "high_minutes": <high>}}`
+	RoundPredictionsExample     = `"predictions": {"verify_pass": <p>, "judge_accepts": <p>, "owner_approves": <p>, "freeze_minutes": {"estimate": <estimate>, "low": <low>, "high": <high>, "p": <p>}, "approval_minutes": {"estimate": <estimate>, "low": <low>, "high": <high>, "p": <p>}, "approved_within_rounds": {"freezes": <n>, "p": <p>}}`
+	precommitShapeErrorTemplate = "; the shape is %s (replace every <p> with your chance of yes from 0.02 to 0.98, and every <estimate>, <low>, <high> and <n> with your own whole number; \"p\" is short for \"distribution\": {\"yes\": p, \"no\": 1-p})"
 )
+
+// shapePlaceholders are the example's placeholders.
+var shapePlaceholders = []string{"<p>", "<estimate>", "<low>", "<high>", "<n>"}
+
+// PlaceholderHint is the reason a body that still holds an example's
+// placeholder is refused; "" when it holds none.
+func PlaceholderHint(raw string) string {
+	for _, ph := range shapePlaceholders {
+		if strings.Contains(raw, ph) {
+			return "the body still holds the example's placeholder " + ph + ": replace every <p> with your own probability and every <estimate>, <low>, <high> and <n> with your own whole number"
+		}
+	}
+	return ""
+}
+
+// FillShapePlaceholders puts neutral numbers in an example's placeholders,
+// for the tests that check the shape decodes (0.5, 10 [5, 20], 2).
+func FillShapePlaceholders(example string) string {
+	return strings.NewReplacer("<p>", "0.5", "<estimate>", "10", "<low>", "5", "<high>", "20", "<n>", "2").Replace(example)
+}
 
 // PrecommitShapeHint is the suffix a precommit decode error carries.
 func PrecommitShapeHint(rule bool) string {

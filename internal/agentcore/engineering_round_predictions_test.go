@@ -204,7 +204,7 @@ func TestPrecommitRefusalsNameTheShape(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), types.RulePrecommitClockExample) {
 		t.Fatalf("rule refusal: %v", err)
 	}
-	ok := yaegikernel.StagedIntent{LocalID: "p2", Kind: yaegikernel.IntentPrecommit, Precommit: types.RulePrecommitClockExample}
+	ok := yaegikernel.StagedIntent{LocalID: "p2", Kind: yaegikernel.IntentPrecommit, Precommit: types.FillShapePlaceholders(types.RulePrecommitClockExample)}
 	if err := validateEngineeringPrecommit("engineering", ok, []yaegikernel.StagedIntent{ok}); err != nil {
 		t.Fatalf("the clock example is refused: %v", err)
 	}
