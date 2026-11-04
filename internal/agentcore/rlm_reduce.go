@@ -1710,7 +1710,13 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": "fail", "verifier_ref": firstString(operation.VerifierRefs)}, nil
 	}
 	recordCtx := ctx
-	if decision == "pass" && operation.State == selfdev.StateFrozen {
+	// A U4 rebase answers the platform's rebase notice, not the owner's
+	// request: it carries no screens and the request's shot list is the
+	// applied change's, so the per-shot review would fail every rebase on
+	// missing shots. Management's Verify and the owner's approval still
+	// decide it.
+	_, rebase := rt.rebaseLineage(context.WithoutCancel(ctx), assignment)
+	if decision == "pass" && operation.State == selfdev.StateFrozen && !rebase {
 		reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shotReviewTimeout+30*time.Second)
 		// The shot list the request names comes from the owner's words the
 		// round answers, read from the tape, never from a desk's restatement.
