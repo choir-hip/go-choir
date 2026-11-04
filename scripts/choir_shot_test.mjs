@@ -11,6 +11,7 @@ import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor, selectorTimeoutMessage,
   loadCatalogFixture, catalogAnswer, loadInstallFixture, installAnswer, isInstallPath, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
+  ffmpegShimPlan, videoFileFor, pickVideoItem, videoSizeProblem, VIDEO_MAX_BYTES, VIDEO_MAX_MS,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -493,3 +494,36 @@ console.log('choir-shot: no-window checks ok');
   assert.match(await selectorTimeoutMessage({ evaluate: async () => '' }, '.a', new Error('Timeout')), /\(no visible text\)/);
 }
 console.log('choir-shot: selector timeout message ok');
+
+// --video: one recorded shot, a webm beside the PNGs, ffmpeg found through a private browsers-path shim.
+{
+  assert.equal(parseArgs(['--shots', 'x']).video, false);
+  assert.equal(parseArgs(['--shots', 'x', '--video']).video, true);
+  assert.equal(parseArgs(['--shots', 'x', '--video', '--video-shot', 'a']).videoShot, 'a');
+  throws(() => parseArgs(['--shots', 'x', '--video-shot', 'a']), /--video-shot needs --video/);
+  assert.match(USAGE, /--video/);
+  assert.equal(VIDEO_MAX_BYTES, 8 << 20);
+  assert.equal(VIDEO_MAX_MS, 20000);
+  assert.equal(videoFileFor('library-home.png'), 'library-home.webm');
+  assert.equal(videoFileFor('a.london-salmon-mobile.png'), 'a.london-salmon-mobile.webm');
+  throws(() => videoFileFor('../x.png'), /not a valid video name/);
+  throws(() => videoFileFor(`${'a'.repeat(100)}.png`), /not a valid video name/);
+  assert.deepEqual(ffmpegShimPlan('1011', '/nix/store/x/bin/ffmpeg', 'linux'), { dir: 'ffmpeg-1011', links: [{ name: 'ffmpeg-linux', target: '/nix/store/x/bin/ffmpeg' }] });
+  assert.deepEqual(ffmpegShimPlan('1011', '/f', 'darwin').links.map((l) => l.name), ['ffmpeg-linux', 'ffmpeg-mac']);
+  throws(() => ffmpegShimPlan('../1', '/f', 'linux'), /revision/);
+  throws(() => ffmpegShimPlan('1011', 'relative/ffmpeg', 'linux'), /absolute/);
+  const two = plan([{ name: 'a' }, { name: 'b' }], parseArgs(['--shots', 'x']));
+  assert.equal(pickVideoItem(two, parseArgs(['--shots', 'x', '--video'])).item.file, 'a.png');
+  assert.equal(pickVideoItem(two, parseArgs(['--shots', 'x', '--video', '--video-shot', 'b'])).item.file, 'b.png');
+  throws(() => pickVideoItem(two, parseArgs(['--shots', 'x', '--video', '--video-shot', 'zz'])), /--video-shot zz: no such planned shot/);
+  assert.equal(pickVideoItem(two, parseArgs(['--shots', 'x'])), null);
+  const flagged = plan([{ name: 'a' }, { name: 'b', video: true }, { name: 'c', video: true }], parseArgs(['--shots', 'x']));
+  assert.equal(pickVideoItem(flagged, parseArgs(['--shots', 'x'])), null); // a shot's video: true still needs --video
+  const r = pickVideoItem(flagged, parseArgs(['--shots', 'x', '--video']));
+  assert.equal(r.item.file, 'b.png');
+  assert.match(r.warnings[0], /c\.png also sets video: true; only b\.png is recorded/);
+  assert.equal(pickVideoItem(flagged, parseArgs(['--shots', 'x', '--video', '--video-shot', 'a'])).item.file, 'a.png');
+  assert.equal(videoSizeProblem(8 << 20), '');
+  assert.match(videoSizeProblem((8 << 20) + 1), /8388609 bytes.*8388608-byte cap/);
+}
+console.log('choir-shot: video helpers ok');

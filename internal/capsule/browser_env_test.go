@@ -24,11 +24,11 @@ func fakeChromium(t *testing.T, mode os.FileMode) string {
 
 func TestBrowserBrokerEnvNeedsOnlyTheImageBinary(t *testing.T) {
 	browser := fakeChromium(t, 0o755)
-	env := browserBrokerEnv(browser, " /nix/store/x-fonts.conf ")
+	env := browserBrokerEnv(browser, " /nix/store/x-fonts.conf ", "")
 	if len(env) != 2 || env[0] != BrowserEnv+"="+browser || env[1] != FontconfigEnv+"=/nix/store/x-fonts.conf" {
 		t.Fatalf("env: %q", env)
 	}
-	if env := browserBrokerEnv(browser, " "); len(env) != 1 {
+	if env := browserBrokerEnv(browser, " ", ""); len(env) != 1 {
 		t.Fatalf("no fontconfig named: %q", env)
 	}
 	for name, path := range map[string]string{
@@ -37,7 +37,7 @@ func TestBrowserBrokerEnvNeedsOnlyTheImageBinary(t *testing.T) {
 		"Chromium not executable":         fakeChromium(t, 0o644),
 		"Chromium is a directory":         t.TempDir(),
 	} {
-		if env := browserBrokerEnv(path, "/nix/store/x-fonts.conf"); env != nil {
+		if env := browserBrokerEnv(path, "/nix/store/x-fonts.conf", ""); env != nil {
 			t.Errorf("%s: env %q", name, env)
 		}
 	}
@@ -51,6 +51,44 @@ func TestBrowserJobEnvPassesOnlyTheBrowserKeys(t *testing.T) {
 		t.Fatalf("job env: %q", env)
 	}
 	values[BrowserEnv] = "/bin/sh\nEVIL=1"
+	if env := BrowserJobEnv(lookup); len(env) != 1 {
+		t.Fatalf("a value with a newline crossed: %q", env)
+	}
+}
+
+// choir-shot --video needs ffmpeg (Playwright's own download is absent from the
+// image): the broker carries CHOIR_FFMPEG only for an executable regular file,
+// whatever the browser says, and jobs get it through BrowserJobEnv.
+func TestBrowserBrokerEnvCarriesFfmpegOnlyWhenExecutable(t *testing.T) {
+	browser := fakeChromium(t, 0o755)
+	ffmpeg := fakeChromium(t, 0o755)
+	env := browserBrokerEnv(browser, "/nix/store/x-fonts.conf", " "+ffmpeg+" ")
+	if len(env) != 3 || env[2] != FfmpegEnv+"="+ffmpeg {
+		t.Fatalf("env: %q", env)
+	}
+	if env := browserBrokerEnv("", "", ffmpeg); len(env) != 1 || env[0] != FfmpegEnv+"="+ffmpeg {
+		t.Fatalf("ffmpeg without a browser: %q", env)
+	}
+	for name, path := range map[string]string{
+		"image names no ffmpeg": "",
+		"ffmpeg missing":        filepath.Join(t.TempDir(), "absent"),
+		"ffmpeg not executable": fakeChromium(t, 0o644),
+		"ffmpeg is a directory": t.TempDir(),
+	} {
+		if env := browserBrokerEnv(browser, "", path); len(env) != 1 || env[0] != BrowserEnv+"="+browser {
+			t.Errorf("%s: env %q", name, env)
+		}
+	}
+}
+
+func TestBrowserJobEnvPassesFfmpeg(t *testing.T) {
+	values := map[string]string{BrowserEnv: "/b", FfmpegEnv: " /nix/store/x-ffmpeg/bin/ffmpeg ", "OTHER": "x"}
+	lookup := func(k string) (string, bool) { v, ok := values[k]; return v, ok }
+	env := BrowserJobEnv(lookup)
+	if len(env) != 2 || env[1] != FfmpegEnv+"=/nix/store/x-ffmpeg/bin/ffmpeg" {
+		t.Fatalf("job env: %q", env)
+	}
+	values[FfmpegEnv] = "/bin/ffmpeg\nEVIL=1"
 	if env := BrowserJobEnv(lookup); len(env) != 1 {
 		t.Fatalf("a value with a newline crossed: %q", env)
 	}

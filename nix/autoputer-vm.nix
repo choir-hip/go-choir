@@ -71,6 +71,7 @@ let
   # (CHOIR_BROWSER) for an engineer's Playwright, with no grant; the
   # fontconfig file names DejaVu (text) and Noto Color Emoji (the shell icons are emoji code points) so both render without /etc/fonts.
   guestBrowser = toolPkgs.chromium;
+  guestFfmpeg = toolPkgs.ffmpeg;
   guestFontsConf = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts pkgs.noto-fonts-color-emoji ]; };
   guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
     contract=choir-guest-image-v1
@@ -80,6 +81,7 @@ let
     capsule_broker=${goChoirPackages.capsuleBroker}
     claude_code=${claudeCode}
     browser=${guestBrowser}
+    ffmpeg=${guestFfmpeg}
     kernel=${config.boot.kernelPackages.kernel}
     kernel_config=${config.boot.kernelPackages.kernel.configfile}
   '';
@@ -1104,6 +1106,7 @@ EOF
       # The store browser and fontconfig every computer's capsule jobs get
       # (Playwright), with no grant.
       CHOIR_BROWSER_BIN = "${guestBrowser}/bin/chromium";
+      CHOIR_FFMPEG_BIN = "${guestFfmpeg}/bin/ffmpeg";
       CHOIR_FONTCONFIG_FILE = "${guestFontsConf}";
       # Capsule overlay uppers and /tmp live on the data volume: package
       # installs do not fit in guest RAM. The executor scopes it per boot.

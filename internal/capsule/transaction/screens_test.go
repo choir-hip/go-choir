@@ -218,3 +218,47 @@ func TestABundleWithLegacyVisualEvidenceStillDecodesAndValidates(t *testing.T) {
 		t.Fatalf("a legacy bundle no longer validates: %v", err)
 	}
 }
+
+// The walkthrough video (docs/problems/library-releases-have-no-screenshots-2026-11-04.md):
+// a bundle carrying one must decode strictly in the judge's mirror, recompute
+// its digest, and have its bytes re-hashed; a swapped video is refused; a
+// bundle without one canonicalizes with no video field.
+func TestInBundleInspectionReadsAndRehashesTheVideo(t *testing.T) {
+	video := []byte("\x1a\x45\xdf\xa3 a walkthrough the inspection only hashes")
+	withVideo := func(b *CapsuleEffectBundle) {
+		b.Video = &capsule.VideoFile{Name: "home.webm", SHA256: sha256Hex(video), Bytes: int64(len(video))}
+	}
+	root, bundle := mountedScreensBundle(t, withVideo)
+	path := filepath.Join(root, filepath.FromSlash(capsule.BundleScreensDir), "home.webm")
+	if err := os.WriteFile(path, video, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDraft(bundle); err != nil {
+		t.Fatal(err)
+	}
+	out, err := yaegikernel.InspectMountedBundleAt(root)
+	if err != nil {
+		t.Fatalf("inspection refused a bundle with a video: %v", err)
+	}
+	row, _ := out["video"].(map[string]any)
+	if row["name"] != "home.webm" || row["sha256"] != bundle.Video.SHA256 {
+		t.Fatalf("video: %v", out["video"])
+	}
+	_ = os.Chmod(path, 0o644)
+	if err := os.WriteFile(path, []byte("swapped"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := yaegikernel.InspectMountedBundleAt(root); err == nil || !strings.Contains(err.Error(), "video") {
+		t.Fatalf("a swapped video was inspected cleanly: %v", err)
+	}
+	none := screensBundleBase()
+	raw, _ := computerevent.CanonicalJSON(none)
+	if strings.Contains(string(raw), `"video"`) {
+		t.Fatal("a bundle without a video carries the field")
+	}
+	bad := screensBundleBase()
+	bad.Video = &capsule.VideoFile{Name: "../x.webm", SHA256: sha256Hex(video), Bytes: 3}
+	if validateDraft(bad) == nil {
+		t.Fatal("a malformed video validated")
+	}
+}

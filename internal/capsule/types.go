@@ -377,6 +377,9 @@ type StagedRelease struct {
 	// Screens are the engineer's screenshots, staged beside release/ under
 	// <TemporaryRoot>/evidence/screens/; nil when it left none (screens.go).
 	Screens []ScreenFile
+	// Video is the one walkthrough video staged beside them; nil for none
+	// (screens_video.go).
+	Video *VideoFile
 }
 
 // FileManifest is a snapshot of a file's metadata at commit time.

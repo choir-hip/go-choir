@@ -99,8 +99,11 @@ func screenNames(changes []FileChange) ([]string, error) {
 		if !ok || change.Kind == ChangeDeleted || change.Mode.IsDir() || rel == "" {
 			continue
 		}
+		if ValidVideoName(rel) {
+			continue // the walkthrough video (videoName)
+		}
 		if !ValidScreenName(rel) {
-			return nil, fmt.Errorf("capsule freeze: screen %q is not a .png file directly in %s (names: letters, digits, '.', '-', '_')", change.Path, ScreensDir)
+			return nil, fmt.Errorf("capsule freeze: screen %q is not a .png (or one .webm video) file directly in %s (names: letters, digits, '.', '-', '_')", change.Path, ScreensDir)
 		}
 		names = append(names, rel)
 	}

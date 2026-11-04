@@ -63,6 +63,15 @@ type bundleDraftMirror struct {
 	ReleaseBinary           *mountedReleaseBinary      `json:"release_binary,omitempty"`
 	LegacyVisualEvidence    json.RawMessage            `json:"visual_evidence,omitempty"`
 	Screens                 []mountedScreen            `json:"screens,omitempty"`
+	Video                   *mountedVideo              `json:"video,omitempty"`
+}
+
+// mountedVideo mirrors capsule.VideoFile (the one walkthrough video,
+// docs/problems/library-releases-have-no-screenshots-2026-11-04.md).
+type mountedVideo struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+	Bytes  int64  `json:"bytes"`
 }
 
 // mountedScreen mirrors capsule.ScreenFile (the engineer's screenshots,
@@ -164,6 +173,10 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	video, err := inspectMountedVideo(root, record.Video)
+	if err != nil {
+		return nil, err
+	}
 	executionRefs := append([]string{record.BuildRecipeRef}, record.TestReceipts...)
 	executionRefs = append(executionRefs, record.DependencyToolchainRefs...)
 	runtimeFiles := make([]map[string]any, 0, len(record.RuntimeFiles))
@@ -191,7 +204,30 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 	if len(screens) > 0 {
 		out["screens"] = screens
 	}
+	if video != nil {
+		out["video"] = video
+	}
 	return out, nil
+}
+
+// inspectMountedVideo re-hashes the bundle's video under
+// <root>/evidence/screens/. nil for a bundle with none.
+func inspectMountedVideo(root string, video *mountedVideo) (map[string]any, error) {
+	if video == nil {
+		return nil, nil
+	}
+	if !computerevent.IsSHA256(video.SHA256) || video.Name != filepath.Base(video.Name) || !strings.HasSuffix(video.Name, ".webm") {
+		return nil, fmt.Errorf("choir: inspect_bundle: video %q is not a content-addressed WebM", video.Name)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "evidence", "screens", video.Name))
+	if err != nil {
+		return nil, fmt.Errorf("choir: inspect_bundle: video unavailable: %s", video.Name)
+	}
+	sum := sha256.Sum256(data)
+	if hex.EncodeToString(sum[:]) != video.SHA256 || int64(len(data)) != video.Bytes {
+		return nil, fmt.Errorf("choir: inspect_bundle: video digest mismatch: %s", video.Name)
+	}
+	return map[string]any{"name": video.Name, "sha256": video.SHA256, "bytes": video.Bytes}, nil
 }
 
 // inspectMountedScreens re-hashes every screen the bundle cites under
