@@ -105,9 +105,6 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
-	if body.SessionID != "" {
-		httpReq.Header.Set("x-session-id", body.SessionID)
-	}
 	if req.Stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	} else {
