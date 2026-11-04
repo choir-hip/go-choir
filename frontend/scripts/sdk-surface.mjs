@@ -16,11 +16,15 @@
 //
 // Usage:
 //   node scripts/sdk-surface.mjs            check (exit 1 on a problem)
+//   node scripts/sdk-surface.mjs --base REF also refuse any lock that existed
+//                                           at merge-base(REF, HEAD) and was
+//                                           changed, deleted or renamed (CI)
 //   node scripts/sdk-surface.mjs --write    write the lock for SDK_VERSION,
 //                                           only when the bump is enough
 //   node scripts/sdk-surface.mjs --json     print the surface
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +34,7 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const SDK_REL = 'src/lib/app-sdk.ts';
 const LOCK_REL = 'src/lib/sdk-surface';
 const MIN_NAMES = 30; // L6: a broken extractor must not produce an empty surface that "matches"
+const MIN_TYPES = 1; // L6: nor lose every referenced type (a changed import("...") print)
 const RANK = { none: 0, patch: 1, minor: 2, major: 3 };
 
 function loadTs(frontendRoot) {
@@ -322,12 +327,16 @@ export function readLocks(dir = lockDir()) {
  * lock for SDK_VERSION exists and equals the surface, and the step from the
  * previous lock is bumped enough for what changed.
  */
-export function checkLock({ frontendRoot = DEFAULT_ROOT, dir = lockDir(frontendRoot), surface = extractSurface({ frontendRoot }) } = {}) {
+export function checkLock({ frontendRoot = DEFAULT_ROOT, dir = lockDir(frontendRoot), surface = extractSurface({ frontendRoot }), base = '' } = {}) {
   const problems = [];
+  const history = base ? lockHistory({ base, dir }) : null;
+  if (history) problems.push(...history.problems);
   const version = surface.sdk_version;
   const count = Object.keys(surface.names).length;
   if (count < MIN_NAMES) problems.push(`the SDK surface has ${count} names (floor ${MIN_NAMES}); the extractor or app-sdk.ts is broken`);
   if (!surface.names.SDK_VERSION) problems.push('the SDK surface does not export SDK_VERSION');
+  const typeCount = Object.keys(surface.types || {}).length;
+  if (typeCount < MIN_TYPES) problems.push(`the SDK surface references ${typeCount} local types (floor ${MIN_TYPES}); the extractor no longer reads import("...") references`);
   const unresolved = Object.entries(surface.types).filter(([, d]) => d.kind === 'unresolved').map(([k]) => k);
   if (unresolved.length) problems.push(`referenced types the extractor could not resolve: ${unresolved.join(', ')}`);
   const locks = readLocks(dir);
@@ -365,6 +374,7 @@ export function checkLock({ frontendRoot = DEFAULT_ROOT, dir = lockDir(frontendR
     bump,
     digest: surface.digest,
     lock: current ? path.relative(frontendRoot, current.file) : null,
+    history,
     names: count,
     problems,
     diff,
@@ -378,6 +388,50 @@ export function describeDiff(diff) {
   if (diff.added.length) parts.push(`added ${diff.added.join(', ')}`);
   for (const c of diff.changed) if (c.need !== 'none') parts.push(`changed ${c.name} (${c.need})`);
   return parts.join('; ') || 'no change';
+}
+
+/**
+ * lockHistory (B1): a lock is never changed once it exists. Against
+ * merge-base(base, HEAD), every lock file in `dir` that existed there must be
+ * byte-for-byte unchanged in the working tree (no modification, deletion or
+ * rename); only new lock files may be added. Without this, the only lock
+ * could be deleted and written again with a smaller surface, and with one
+ * lock there is no previous step to catch it. A base that cannot be read
+ * fails: a check that passes when it cannot see is open exactly then.
+ * Returns { base, merge_base, problems, changed }.
+ */
+export function lockHistory({ base, dir = lockDir() }) {
+  const git = (...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+  const out = { base, merge_base: null, problems: [], changed: [] };
+  const top = git('rev-parse', '--show-toplevel');
+  if (top.status !== 0) {
+    out.problems.push(`lock history: ${dir} is not in a git work tree`);
+    return out;
+  }
+  const mb = git('merge-base', base, 'HEAD');
+  if (mb.status !== 0 || !mb.stdout.trim()) {
+    out.problems.push(`lock history: cannot find the merge base of ${base} and HEAD (${(mb.stderr || '').trim() || 'no output'}); fetch the base's history`);
+    return out;
+  }
+  out.merge_base = mb.stdout.trim();
+  const rel = path.relative(top.stdout.trim(), realpathSync(dir)).split(path.sep).join('/');
+  // The working tree, not HEAD: an uncommitted rewrite is refused too.
+  // Pathspecs are relative to the working directory: name the lock directory from the top.
+  const diff = git('diff', '--no-renames', '--name-status', out.merge_base, '--', `:(top)${rel}`);
+  if (diff.status !== 0) {
+    out.problems.push(`lock history: git diff failed: ${diff.stderr.trim()}`);
+    return out;
+  }
+  for (const line of diff.stdout.split('\n').filter(Boolean)) {
+    const [status, file] = line.split('\t');
+    if (!/\.json$/.test(file)) continue;
+    out.changed.push(`${status} ${file}`);
+    if (status !== 'A') {
+      const what = status === 'D' ? 'deleted (or renamed)' : status === 'M' ? 'modified' : `changed (${status})`;
+      out.problems.push(`lock history: ${file} existed at ${out.merge_base.slice(0, 12)} and is ${what}; a lock is never changed once it exists. Bump SDK_VERSION and write a new lock instead`);
+    }
+  }
+  return out;
 }
 
 /**
@@ -425,7 +479,13 @@ function main(argv) {
     process.stdout.write(`${JSON.stringify(surface, null, 2)}\n`);
     return 0;
   }
-  const result = checkLock({ frontendRoot, surface });
+  const bi = argv.indexOf('--base');
+  const base = bi >= 0 ? argv[bi + 1] || '' : '';
+  if (bi >= 0 && !base) {
+    console.error('sdk-surface: --base needs a ref');
+    return 2;
+  }
+  const result = checkLock({ frontendRoot, surface, base });
   if (argv.includes('--write')) {
     const dir = lockDir(frontendRoot);
     const target = path.join(dir, `${surface.sdk_version}.json`);
@@ -433,7 +493,7 @@ function main(argv) {
     // for this version and the step from the previous lock is bumped enough.
     const blocking = result.problems.filter((p) => !/^no lock for SDK_VERSION|^the SDK surface differs from the lock for/.test(p));
     if (existsSync(target) && result.problems.some((p) => p.startsWith('the SDK surface differs from the lock for'))) {
-      blocking.push(`the lock for ${surface.sdk_version} exists; a lock is never rewritten. Bump SDK_VERSION (${result.diff ? result.diff.required : 'patch'} or more) first, or delete this lock if it never left your branch`);
+      blocking.push(`the lock for ${surface.sdk_version} exists; a lock is never rewritten. Bump SDK_VERSION (${result.diff ? result.diff.required : 'patch'} or more) first. (Deleting it and writing it again is safe only while it has never reached main; CI refuses any change to a lock that exists at the merge base.)`);
     }
     if (blocking.length) {
       for (const p of blocking) console.error(`sdk-surface: ${p}`);
@@ -449,7 +509,8 @@ function main(argv) {
     return 0;
   }
   for (const p of result.problems) console.error(`sdk-surface: ${p}`);
-  console.log(`sdk-surface: SDK ${result.version}, ${result.names} names, ${result.digest}: ${result.ok ? 'ok' : 'FAILED'}`);
+  const seen = result.history ? `, locks unchanged since ${result.history.merge_base ? result.history.merge_base.slice(0, 12) : base}` : '';
+  console.log(`sdk-surface: SDK ${result.version}, ${result.names} names, ${result.digest}${seen}: ${result.ok ? 'ok' : 'FAILED'}`);
   return result.ok ? 0 : 1;
 }
 
