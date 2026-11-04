@@ -111,12 +111,10 @@ type OwnerActAuthority struct {
 	verifier *owneract.Verifier
 	note     string
 	now      func() time.Time
-	// Clean rebase branch (clean_rebase.go): the tape, the host build jobs
-	// and the computer tier; nil tape or jobs refuses every clean rebase,
-	// nil tier reads the embedded tier file.
+	// Clean rebase branch (clean_rebase.go): the tape and the host build
+	// jobs; nil tape or jobs refuses every clean rebase.
 	cleanRebaseTape TapeObjectReader
 	cleanRebaseJobs CleanRebaseHost
-	cleanRebaseTier func(computerID string) (test, platform bool, err error)
 }
 
 // NewOwnerActAuthority builds a policy. A nil verifier refuses every

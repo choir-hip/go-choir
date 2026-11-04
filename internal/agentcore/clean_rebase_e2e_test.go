@@ -22,15 +22,18 @@ package agentcore
 //   5. a crash or planned restart mid-attempt resumes it -> no resumer: an
 //      open pre-decision attempt with no live driver is closed "interrupted
 //      by a restart" and the pair goes to the notice (...InterruptedAttemptIsClosed)
-//   6. protected computers -> only test-tier, non-platform computers
-//      (...IneligibleComputerMintsTheNotice; corpusd refuses the rest even in
-//      observe)
+//   6. a computer that is not a test computer (owner ruling 2026-11-04: every
+//      computer works the same) -> the fixture is an owner-tier computer, in
+//      neither tier file, and takes the clean rebase through the real gate; an
+//      engineering capsule a restart would destroy holds the attempt, before
+//      and after the build (...LiveCapsuleHolds..., ...OwnerTierComputer...)
 //   7. the base moves again mid-attempt -> the attempt fails, nothing is
 //      applied (...SecondBaseMoveFailsTheAttempt)
 
 import (
 	"context"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,7 +124,7 @@ func (f *cleanRebaseE2E) tape(computerID string, ns tapestore.NS, digest string)
 
 // newCleanRebaseE2E applies a prior change (a 40-line file edited at line 5,
 // approved by standing consensus) on base B1, with a root Texture so a
-// notice can be minted, and the computer in the test tier.
+// notice can be minted. The computer is in no tier file: an owner-tier computer.
 func newCleanRebaseE2E(t *testing.T) *cleanRebaseE2E { return newCleanRebaseE2EWith(t, "") }
 
 func newCleanRebaseE2EWith(t *testing.T, pkg string) *cleanRebaseE2E {
@@ -138,7 +141,6 @@ func newCleanRebaseE2EWith(t *testing.T, pkg string) *cleanRebaseE2E {
 	f.guestRepo = t.TempDir()
 	gitRun(t, f.guestRepo, "clone", "-q", f.history.dir, ".")
 	f.authority.ConfigureCleanRebase(f.tape, f.hostBuilds)
-	f.authority.SetCleanRebaseTier(func(computerID string) (bool, bool, error) { return computerID == f.computerID, false, nil })
 
 	seedOwnerActDocument(t, f.store, f.owner, f.computerID, "doc-master")
 	if _, err := f.store.ClaimTextureRoot(context.Background(), nil, store.TextureRoot{OwnerID: f.owner, ComputerID: f.computerID, DocumentID: "doc-master", Generation: 1}); err != nil {
@@ -154,7 +156,6 @@ func newCleanRebaseE2EWith(t *testing.T, pkg string) *cleanRebaseE2E {
 		rt.bootedAt = now.Add(-time.Hour)
 		rt.rebaseNow = func() time.Time { return now }
 		rt.rebaseAfterFunc = func(time.Duration, func()) rebaseTimerHandle { return noopRebaseTimer{} }
-		rt.cleanRebaseTier = func(computerID string) (bool, string) { return computerID == f.computerID, "not the fixture computer" }
 		rt.cleanRebaseStart = func(run func()) { run() }
 		rt.cleanRebaseAttemptBudget = time.Minute
 	})
@@ -370,19 +371,51 @@ func TestCleanRebaseEndToEndInterruptedAttemptIsClosed(t *testing.T) {
 	}
 }
 
-func TestCleanRebaseEndToEndIneligibleComputerMintsTheNotice(t *testing.T) {
+// Owner ruling 2026-11-04: automatic rebase works the same on every computer.
+// The fixture computer is in neither tier file, so the happy-path tests are
+// the owner-tier computer taking a clean rebase through the real corpusd gate;
+// this pins that fact so a tier gate cannot return unseen.
+func TestCleanRebaseEndToEndOwnerTierComputerIsInNoTierFile(t *testing.T) {
 	f := newCleanRebaseE2E(t)
-	f.configure(func(rt *Runtime) {
-		rt.cleanRebaseTier = func(string) (bool, string) { return false, "a platform computer" }
-	})
+	tiers, err := computertiers.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tiers.TestComputer(f.computerID) || tiers.PlatformComputer(f.computerID) {
+		t.Fatalf("the fixture computer %s is in a tier file; it must be an owner-tier computer", f.computerID)
+	}
+}
+
+// A live engineering capsule is destroyed by the apply's restart (it lives in
+// the executor's memory), and it can exist with no operation. On a computer
+// with owner work in flight, the pair holds (no notice, no attempt) and the
+// attempt proceeds once the capsule ends.
+func TestCleanRebaseEndToEndLiveCapsuleHoldsThenProceeds(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthority(f.store, f.owner, f.computerID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := store.SeedEngineeringOpenRequest(seed, 0, "opaque-live-capsule")
+	if _, err := f.store.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.BindEngineeringAssignment(ctx, store.SeedEngineeringBindRequest(open, "run:"+seed.AssignmentIDs[0], "opaque-live-capsule")); err != nil {
+		t.Fatal(err)
+	}
 	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{35: "platform line 35"})})
 	f.boot(t, b2)
+	restarts := f.service.restarts
 	out := f.fire(t)
-	if _, found := f.cleanOp(t, b2); found {
-		t.Fatal("an ineligible computer opened a clean rebase")
+	if out.Minted != "" || f.noticeMinted(t, b2) || out.Rearm <= 0 || !strings.Contains(out.Reason, "live engineering capsule") {
+		t.Fatalf("a live capsule did not hold the pair: %+v", out)
 	}
-	if out.Minted == "" {
-		t.Fatalf("an ineligible computer did not get the notice: %+v", out)
+	if _, found := f.cleanOp(t, b2); found || f.service.restarts != restarts {
+		t.Fatal("a live capsule let a clean rebase start")
+	}
+	if hold := f.rt.cleanRebaseQuietHold(ctx); hold == "" {
+		t.Fatal("the quiet check reads busy as quiet")
 	}
 }
 
@@ -493,24 +526,6 @@ func TestCleanRebaseEndToEndRematerializedPackageConflictMintsTheNotice(t *testi
 	spec := rebaseSpec{Notice: types.StackRebaseNoticeID(f.prior, b2, 1), RebaseOf: f.prior, Base: b2}
 	if base, _, err := f.rt.sourceProjectionCastGateFor(context.Background(), spec, castLedgerRef{}); err != nil || base != b2 {
 		t.Fatalf("the rebase Cast gate on a rematerialized stack: %q %v", base, err)
-	}
-}
-
-func TestCleanRebaseEndToEndRematerializedIneligibleComputerMintsTheNotice(t *testing.T) {
-	f := newCleanRebaseE2E(t)
-	// An ineligible computer (a platform computer) never rebases on its own:
-	// the stack stays rematerialized and the notice is the path, as at
-	// stack_base_moved.
-	f.configure(func(rt *Runtime) {
-		rt.cleanRebaseTier = func(string) (bool, string) { return false, "a platform computer" }
-	})
-	f.authority.SetCleanRebaseTier(func(string) (bool, bool, error) { return false, false, nil })
-	b2 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "a platform change\n"})
-	f.boot(t, b2)
-	f.requireRematerialized(t, b2)
-	out := f.fire(t)
-	if _, found := f.cleanOp(t, b2); found || out.Minted == "" {
-		t.Fatalf("an ineligible computer on a rematerialized stack: %+v", out)
 	}
 }
 

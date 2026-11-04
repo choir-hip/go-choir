@@ -1001,14 +1001,21 @@ apply, a failed build or a package kept whole over the base's change
 gate and the owner retry accept that stack. A stack whose served base is the
 booted base is never acted on. One attempt per (operation, booted base).
 
-Scope: test-tier computers only (ring R1). A platform computer (the paper)
-never applies a clean rebase without the owner.
+Scope: every computer (owner ruling, 2026-11-04, amending the earlier
+"test-tier computers only (ring R1); a platform computer never applies a
+clean rebase without the owner"): "I want automatic rebase to work the same.
+I don't want test computers to work differently than other computers. Then
+that makes them not a good test. So I want automatic rebase to work
+correctly. If it doesn't work correctly, we need to fix it." There is no tier
+gate in the guest or in corpusd, and no switch. The paper and other
+always-busy computers take the clean rebase through the same marker-backed
+planned restart, and never mid self-development apply or with a live capsule.
 
 The corpusd gate always enforces, even in observe mode. It admits only
 when all of these hold:
 - the receipt is on the tape, hashes to the authority, is cited by the
   decision and names this computer, operation and bundle;
-- the computer is test-tier and not a platform computer;
+- (no computer-class condition: every tier is admitted);
 - the computer's mode is accept_once, qualified_consensus,
   standing_consensus or propose_only (the ruling is unconditional;
   off and audit_only are the hard stops);
@@ -1034,3 +1041,33 @@ Named residuals:
   path.
 - A prior change that was applied plainly is re-applied through the
   host-build path (stricter, accepted).
+
+### Clean rebase on every computer: failure modes (2026-11-04)
+
+Written before the code, for a computer that is not a test computer:
+
+1. The apply restarts the guest. A live engineering capsule (an assignment
+   bound to a capsule, possibly with no operation yet) lives in the
+   executor's memory and is destroyed by it; so is a streaming snapshot.
+   A test computer rarely has either, an owner's computer or the paper often
+   does. The open-operation hold does not see a capsule before its first
+   Freeze. Fix: `cleanRebaseQuietHold` (live capsules and snapshot in flight,
+   fail closed on an unreadable count) holds the pair before an attempt
+   starts (the pair is not spent) and again before the decision commits (the
+   host build can take an hour), waiting within the attempt budget.
+2. Running runs are cut by the restart. They resume across a planned restart
+   by the marker (the same path as the platform refresh with allow_busy), so
+   they are not a hold.
+3. Owner approval modes: accept_once is bound to one operation and consumed
+   only by the owner decision handler, never by a clean rebase; a proposal
+   awaiting the owner is an open operation and holds. off, audit_only and an
+   absent mode refuse in the guest (before any build) and in corpusd.
+4. The paper (critical_protected) is always busy: the open-operation and
+   live-capsule holds are the only waits; a deploy that lands mid-attempt
+   fails the attempt on the booted-base check and the next pair starts clean.
+   One attempt per (operation, booted base), so no loop.
+5. Stacked operations: the stack top is the effective release's operation;
+   corpusd requires that operation's apply to be the computer's latest
+   materialization or rollback event, and a clean-rebase prior is re-checked
+   down the chain (bounded at 32) to an owner or consensus decision. A
+   rolled-back or older change is refused and goes to the notice.

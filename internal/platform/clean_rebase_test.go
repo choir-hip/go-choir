@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"strings"
 	"testing"
 	"time"
@@ -89,8 +90,6 @@ type cleanRebaseCase struct {
 	receipt                 selfdevprotocol.CleanRebaseReceipt
 	receiptBytes            []byte // nil = canonical receipt
 	citeReceipt             bool
-	test, platform          bool
-	tierErr                 error
 	jobs                    bool
 	applied                 bool   // record the prior's materialization_applied
 	deployedCommit          string // "" = crBootedBase; "-" = unreadable manifest
@@ -112,7 +111,7 @@ func newCleanRebaseCase() *cleanRebaseCase {
 	return &cleanRebaseCase{
 		priorBundle: bundle(crStackBase, hexOf('3')), nextBundle: bundle(crBootedBase, hexOf('4')),
 		priorAuthority: AuthorityExternalOwner + "owner-1", priorMarked: true, priorParent: "op-1",
-		recordPrior: true, citeReceipt: true, test: true, jobs: true, applied: true,
+		recordPrior: true, citeReceipt: true, jobs: true, applied: true,
 	}
 }
 
@@ -283,7 +282,6 @@ func (f *cleanRebaseFixture) authority(c *cleanRebaseCase, mode OwnerActMode, jo
 	} else {
 		a.ConfigureCleanRebase(f.tape.read, nil)
 	}
-	a.cleanRebaseTier = func(string) (bool, bool, error) { return c.test, c.platform, c.tierErr }
 	return a
 }
 
@@ -345,9 +343,12 @@ func TestCleanRebaseGate(t *testing.T) {
 			r.ComputerID = "computer-ffffffffffffffffffffffffffffffff"
 		}
 	})
-	refusedWith("not a test computer", "ring R1", func(c *cleanRebaseCase) { c.test = false })
-	refusedWith("platform computer", "platform computer", func(c *cleanRebaseCase) { c.platform = true })
-	refusedWith("tier file unreadable", "computer tiers", func(c *cleanRebaseCase) { c.tierErr = errors.New("bad tier file") })
+	// Owner ruling 2026-11-04: every computer is eligible. The case computer
+	// sits in neither tier file (an owner-tier computer), and the gate has no
+	// tier to read, so the happy path above is the owner-tier admission.
+	if tiers, err := computertiers.Load(); err != nil || tiers.TestComputer(crComputer) || tiers.PlatformComputer(crComputer) {
+		t.Fatalf("the fixture computer must be an owner-tier computer: %v", err)
+	}
 	refusedWith("prior decision missing", "not on this computer's tape", func(c *cleanRebaseCase) { c.recordPrior = false })
 	refusedWith("prior decision names another bundle", "another bundle than the receipt's prior bundle", func(c *cleanRebaseCase) { c.priorEffect = hexOf('8') })
 	refusedWith("prior decision is a platform update", "not an owner, consensus or clean rebase", func(c *cleanRebaseCase) { c.priorAuthority = AuthorityPlatformUpdate })

@@ -17,7 +17,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
@@ -46,8 +45,11 @@ import (
 //     notice and is never retried for that pair;
 //   - only while no notice has been minted for the pair (the model route
 //     owns a pair once it has a notice);
-//   - only on a test-tier computer that is not a platform computer (ring R1:
-//     the tier autonomy already has, docs/design/progressive-delivery);
+//   - on every computer, whatever its tier (owner ruling 2026-11-04: a test
+//     computer must not work differently from the others, or it is no test);
+//     the paper and other always-busy computers take it through the same
+//     marker-backed planned restart, and never with a live capsule, a
+//     streaming snapshot or another open operation (cleanRebaseQuietHold);
 //   - no resumer: an attempt is driven only by the process that started it.
 //     A pre-decision clean-rebase operation found open with no live driver
 //     (a crash or planned restart killed it) is closed failed, "interrupted
@@ -77,26 +79,24 @@ func isCleanRebaseOperation(operationID string) bool {
 	return strings.HasPrefix(strings.TrimSpace(operationID), cleanRebaseOperationPrefix)
 }
 
-// cleanRebaseEligible is the computer-class gate: autonomy without an owner
-// act is admitted where it already is (standing consensus admits only the
-// test tier; the paper is a platform computer and never adopts by itself).
-func (rt *Runtime) cleanRebaseEligible(computerID string) (bool, string) {
-	if rt.cleanRebaseTier != nil {
-		return rt.cleanRebaseTier(computerID)
-	}
-	tiers, err := computertiers.Load()
+// cleanRebaseQuietHold says why the computer cannot take a restart now, or "".
+// The apply restarts the guest. Running runs resume across a planned restart
+// (the marker), but a live engineering capsule lives in the executor's memory
+// and a streaming snapshot is discarded; neither survives it. A test computer
+// rarely has either; an owner's computer or the paper often does. The check
+// fails closed: an unreadable count holds.
+func (rt *Runtime) cleanRebaseQuietHold(ctx context.Context) string {
+	work, err := rt.plannedRestartBusy(ctx, true)
 	if err != nil {
-		return false, "the computer tier file does not load: " + err.Error()
+		return "the work a restart would cut cannot be counted: " + err.Error()
 	}
-	if tiers.PlatformComputer(computerID) {
-		return false, "a platform computer re-applies only by an owner act"
+	switch {
+	case work.LiveCapsules > 0:
+		return fmt.Sprintf("%d live engineering capsule(s) a restart would destroy", work.LiveCapsules)
+	case work.SnapshotInFlight:
+		return "a snapshot is streaming; a restart would discard it"
 	}
-	for _, id := range tiers.TestComputerIDs() {
-		if id == computerID {
-			return true, ""
-		}
-	}
-	return false, "clean rebases without an owner act run on test-tier computers (ring R1) first"
+	return ""
 }
 
 func (rt *Runtime) cleanRebaseBudget() time.Duration {
@@ -137,9 +137,6 @@ func (rt *Runtime) cleanRebaseIsLive(key string) bool {
 func (rt *Runtime) cleanRebaseBeforeNotice(ctx context.Context, ownerID, computerID, operationID, stackBase, booted string) (hold bool, why string) {
 	if rt.selfdevOperations == nil || rt.store == nil {
 		return false, "no operation store"
-	}
-	if eligible, reason := rt.cleanRebaseEligible(computerID); !eligible {
-		return false, reason
 	}
 	// The model route owns a pair once a notice exists for it.
 	if rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, types.StackRebaseNoticeID(operationID, booted, 1)); err != nil {
@@ -184,6 +181,10 @@ func (rt *Runtime) cleanRebaseBeforeNotice(ctx context.Context, ownerID, compute
 	}
 	if !verdict.Clean {
 		return false, verdict.Reason
+	}
+	if why := rt.cleanRebaseQuietHold(ctx); why != "" {
+		// Hold, do not spend the pair: the timer rechecks.
+		return true, "a clean rebase waits: " + why
 	}
 	if !rt.cleanRebaseSetLive(key, true) {
 		return true, "a clean re-application of " + operationID + " is in flight"
@@ -370,6 +371,22 @@ func (rt *Runtime) runCleanRebase(ctx context.Context, a cleanRebaseAttempt) (er
 	resultDigest, err := built.Job.Result.Digest()
 	if err != nil {
 		return err
+	}
+	// The host build can take an hour; an owner's engineering capsule or a
+	// snapshot may have started since the attempt began. The decision commits
+	// the restart, so wait for a quiet moment, within the attempt's budget.
+	for {
+		why := rt.cleanRebaseQuietHold(ctx)
+		if why == "" {
+			break
+		}
+		if waitErr := sleepContext(ctx, rt.standingHostBuildPoll()); waitErr != nil {
+			return fmt.Errorf("the computer stayed busy before the decision: %s (%v)", why, waitErr)
+		}
+	}
+	// The base must still be the one the build was made on.
+	if now := rt.bootedBaseCommit(); now != a.booted {
+		return fmt.Errorf("the booted base moved to %s while waiting for a quiet moment", now)
 	}
 	priorDecision, found, err := rt.store.FinalizedDecisionForOperation(ctx, a.computerID, a.prior.OperationID, a.prior.TrajectoryID, a.prior.CapsuleID)
 	if err != nil || !found || priorDecision.Request.Event.EventKind != computerevent.EventEffectAccepted {

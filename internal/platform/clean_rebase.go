@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
@@ -20,6 +19,13 @@ import (
 // is admitted only when the receipt, the prior decision, the two bundles on
 // the tape and the host build all agree. The branch always enforces: observe
 // would admit exactly the guest-forged acceptance it exists to stop.
+//
+// The branch applies to every computer, whatever its tier (owner ruling
+// 2026-11-04: "I want automatic rebase to work the same. I don't want test
+// computers to work differently than other computers."). What refuses is
+// correctness, not class: the mode (off and audit_only decline mutation), the
+// receipt, the prior decision, the applied change, the deployed base and the
+// host build.
 //
 // No consumption row is written: the invariant is content equality, so a
 // replay of the same receipt admits the same content.
@@ -57,28 +63,10 @@ func (a *OwnerActAuthority) ConfigureCleanRebase(tape TapeObjectReader, jobs Cle
 	a.cleanRebaseJobs = jobs
 }
 
-// SetCleanRebaseTier replaces the computer tier the clean rebase branch reads
-// (the embedded tier file); a fixture computer is in no tier file.
-func (a *OwnerActAuthority) SetCleanRebaseTier(tier func(computerID string) (test, platform bool, err error)) {
-	if a != nil {
-		a.cleanRebaseTier = tier
-	}
-}
-
 // ReadTapeObject reads one tape object through the segment-first reader.
 func (s *Service) ReadTapeObject(computerID string, ns tapestore.NS, digest string) ([]byte, error) {
 	body, _, err := s.tapeReader().Read(computerID, ns, digest)
 	return body, err
-}
-
-// computerTierForCleanRebase reads the embedded tier file. An unreadable
-// file is an error, which refuses (fail closed).
-func computerTierForCleanRebase(computerID string) (test, platform bool, err error) {
-	platformTiersOnce.Do(func() { platformTiers, platformTiersErr = computertiers.Load() })
-	if platformTiersErr != nil {
-		return false, true, platformTiersErr
-	}
-	return platformTiers.TestComputer(computerID), platformTiers.PlatformComputer(computerID), nil
 }
 
 func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, event computerevent.Event, _ string) (string, func() error, error) {
@@ -98,20 +86,6 @@ func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, 
 	if !cited {
 		return "the clean rebase receipt is not an input artifact of the decision", nil, nil
 	}
-	tier := a.cleanRebaseTier
-	if tier == nil {
-		tier = computerTierForCleanRebase
-	}
-	test, platform, err := tier(event.ComputerID)
-	if err != nil {
-		return "", nil, fmt.Errorf("computer tiers: %w", err)
-	}
-	if platform {
-		return "a platform computer never applies a clean rebase without the owner", nil, nil
-	}
-	if !test {
-		return "clean rebases apply without approval only on test computers (ring R1)", nil, nil
-	}
 	if a.cleanRebaseTape == nil {
 		return "no tape reader", nil, nil
 	}
@@ -119,7 +93,7 @@ func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, 
 		return "no host build service", nil, nil
 	}
 	var mode string
-	err = tx.QueryRowContext(ctx, `SELECT mode FROM computer_self_development_modes WHERE computer_id=?`, event.ComputerID).Scan(&mode)
+	err := tx.QueryRowContext(ctx, `SELECT mode FROM computer_self_development_modes WHERE computer_id=?`, event.ComputerID).Scan(&mode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "the computer has no self-development mode", nil, nil
 	}
