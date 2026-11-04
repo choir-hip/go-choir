@@ -20,6 +20,7 @@ const SCRIPT_EXT = /\.(svelte|js|mjs|cjs|ts|mts|cts|tsx|jsx)$/i;
 const CSS_EXT = /\.(css|scss|sass|less|styl|stylus|pcss|postcss)$/i;
 const BANNED_IDENTIFIERS = new Set(['eval', 'Function', 'Worker', 'SharedWorker', 'importScripts']);
 const ALLOWED_META = new Set(['env', 'hot']);
+const SDK_GLOBAL = '__choirAppSdk';
 
 const splitQuery = (id) => {
   const i = id.search(/[?#]/);
@@ -66,6 +67,14 @@ function runtimeProblems(ast, { checkMeta }) {
   walk(ast, null, (node, parent) => {
     if (node.type === 'Identifier' && BANNED_IDENTIFIERS.has(node.name)) {
       problems.push(`"${node.name}" is not allowed in a package`);
+    } else if (
+      (node.type === 'Identifier' && node.name === SDK_GLOBAL)
+      || (node.type === 'Literal' && typeof node.value === 'string' && node.value.includes(SDK_GLOBAL))
+    ) {
+      // The module/v1 shim's fallback global holds the whole SDK; a package
+      // that read it would use names its sdk_imports never lists, so the
+      // shell's name check could not see them. Import SDK names one by one.
+      problems.push(`${SDK_GLOBAL} is the shell's, not a package's: import SDK names from app-sdk one by one`);
     } else if (node.type === 'MetaProperty' && checkMeta) {
       const prop = parent?.type === 'MemberExpression' && parent.object === node
         ? (parent.computed ? (parent.property.type === 'Literal' ? String(parent.property.value) : '') : parent.property.name)
