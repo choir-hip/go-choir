@@ -1,8 +1,9 @@
 # An engineering cell that never returns hides until the activation deadline (2026-11-03)
 
-Status: open. The host-side bound landed (062c669da); the root cause is
-not found. The memory hypothesis is refuted (see "The memory hypothesis is
-refuted").
+Status: open; cause identified, fix built (see "The cause: a host thread
+exit SIGKILLs the broker launcher"). The host-side bound landed
+(062c669da). The memory hypothesis is refuted (see "The memory hypothesis
+is refuted").
 Mutation class of the fix: red (the engineering agent loop's tool path).
 
 ## What was seen
@@ -177,6 +178,97 @@ and it was not built.
   pids: the job runs in a child leaf whose `pids.max` is the capsule's limit
   less a reserve for the broker.
 
+## A second occurrence: the broker is dead while its capsule lives (read 2026-11-04 00:01Z)
+
+Deepseek arm, computer-e80d229b0d78c35d47656b8c66426a43, release b8cb1ba3
+(without 062c669da), assignment-87f6f9554ea8cb4169f85e8f, capsule
+capsule-eb9b6fbf-6f96-5f06-8ccd-614cc82dd97a. Job job-de63a7165f2e
+(`node scripts/choir-shot.mjs --only smoke`, 20 min) waited for host memory
+and started at 23:32:21Z. The evidence comes from
+`/api/runtime/observability?computer_id=...&memory=detail`:
+
+- The capsule's cgroup holds `anon_bytes 0`, with 193 MiB of page cache
+  only. No process in it holds memory, so the broker, node and Chromium are
+  all gone, but the capsule was not destroyed.
+- The guest's process list has no broker, node or chromium.
+- `steps.in_flight` shows `cell.go_eval` from 23:51:01Z, still waiting
+  after 9 minutes or more: a re-dial into the held listener's backlog.
+- The capsule's last activity is an egress line at 23:32:39Z. The next
+  guest line is `agentcore: cache return mode=ceiling ... steps=19` at
+  23:32:53Z.
+
+Candidate 1 is confirmed: the broker died, and the host's held listener hid
+the death.
+
+## The cause: a host thread exit SIGKILLs the broker launcher (confirmed in code)
+
+- The host starts the broker launcher with `Pdeathsig: SIGKILL`
+  (executor.go, startBrokerLocked). The launcher starts the broker with
+  Pdeathsig as well.
+- Linux sends Pdeathsig when the parent THREAD that forked the child exits,
+  not when the process exits (prctl(2); golang/go#27505).
+- Go ends an OS thread when a goroutine that called `runtime.LockOSThread`
+  returns without unlocking. The guest does this on purpose:
+  - guestmem's cache return (reclaim.go: "Never unlocked: the thread ends
+    with this goroutine"; it lowers the thread's priority);
+  - tapestore compaction (lockLowPriorityThread).
+- If such a goroutine runs on the M that forked the launcher, the thread
+  ends with it. The launcher is SIGKILLed, the broker is killed by its own
+  Pdeathsig, and the whole capsule PID namespace dies with it. This leaves
+  the observed state: an empty cgroup, `oom_kill 0`, no log line, and a
+  listener the host still holds.
+- **The trigger.** ab1e95c04, deployed at about 22:11Z on 2026-11-03, made
+  the guest memory ceiling act through a live capsule on test arms
+  (through_work). Before it, the cache return stood aside while any capsule
+  was live. Since then it runs about once a minute during jobs:
+  - crouton: 22:21:44, 22:22:44 and 22:23:44, during job-d807dd9c4be9;
+  - deepseek: 23:32:53, 32 s into job-de63a7165f2e.
+
+  Each run ends one thread. Only the thread that forked the launcher is
+  fatal, so a death is likely but not certain. That fits the second crouton
+  capsule, whose broker survived its own cache returns.
+- **Test.** internal/childthread's
+  TestPdeathsigFiresWhenTheStartingThreadExits reproduces the kill without
+  privileges: a child started from a thread that then ends is SIGKILLed.
+
+## The fix (this change)
+
+- **`internal/childthread.Start`.** It forks the child from a goroutine
+  locked to its OS thread and keeps that goroutine until the child exits.
+  It waits with waitid(WNOWAIT), which does not reap, so the caller's
+  cmd.Wait is unchanged. Every Pdeathsig child the guest starts uses it:
+  - on the host: the broker launcher, desk session workers, doctool
+    helpers and the seccomp self-test;
+  - inside the capsule: the broker (from the launcher), the session
+    worker, the exec verb, job supervisors and the Claude delegate.
+
+  The capsule-job supervisor forks its command with raw syscall.ForkExec,
+  and that process never ends a thread, so it is left as it is.
+- **Reclaim and compaction threads.** They still end their thread. That is
+  the safer option: the thread's nice level and IO class were lowered, and
+  unlocking would hand those lowered attributes back to the scheduler's
+  pool for unrelated goroutines. With every Pdeathsig child on a held
+  thread, ending a thread is harmless again. A dedicated long-lived
+  low-priority thread would also work, but it is not needed.
+- **The probes**, so the next death is diagnosed and handled:
+  - The broker's exit is watched after readiness (broker_exit_linux.go).
+    The executor logs the status, the signal and the broker's last lines.
+    Every broker call then fails at once with "the capsule broker exited
+    (<status>)", a call in flight included. The host's listener copy is
+    closed, and the job watcher ends the running job as `failed` with the
+    broker's death, which wakes the run.
+  - The capsule receipt adds pids.max, pids.peak, pids.events max, cpu.stat
+    nr_throttled and throttled_usec, and the broker's exit when it died.
+  - The broker's own stderr is kept per capsule: the last 200 lines, plus
+    the first fatal lines. The observability route returns it as
+    `capsule_broker_log`.
+- **pids.max.** Engineering and Claude-mode capsules go from 256 and 512 to
+  1024. 256 was a size default from 7dfe782d3 (2026-08-08), with no
+  recorded security reason. Memory still bounds a thread bomb.
+- **The job clock was checked; no change.** A job's `minutes` count from its
+  start in the broker (capsulejob Manager.Start). A host-memory wait runs
+  before job_start, so the wait does not eat the job's budget.
+
 ## Remaining error field
 
 - Fix (next commit): every engineering cell has a host wall-clock limit
@@ -187,11 +279,10 @@ and it was not built.
   capsule broker did not answer" and names the job. The model's tool
   result names the running job (not stopped) and the next step. A
   "capsule_cell_running" progress event fires every 2 minutes.
-- Residual (root cause, open): the memory-in-the-job's-cgroup cause is
-  refuted (memory.events above). The broker died or went silent for a
-  cause not yet observed. A dead broker is invisible to the host, because
-  the host holds the listener and never reads the exit status. The next
-  step is the probes above, not a cgroup split.
+- Root cause: a host thread exit SIGKILLed the broker launcher through
+  Pdeathsig (above). The fix and the probes are built. Acceptance is on
+  staging: a test arm runs a choir-shot job through several cache returns,
+  and its broker answers until the job's own end.
 - Residual: while the broker stays silent, the host's job watcher cannot
   see the job end, so "the platform wakes you" depends on the broker
   coming back. The cell now answers within about 75 s instead of 60 min,
