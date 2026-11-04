@@ -40,6 +40,7 @@ internal/base/tree
 internal/buildinfo
 internal/capsule
 internal/capsulejob
+internal/childthread
 internal/claudedelegate
 internal/coagentpacket
 internal/computerevent
