@@ -100,6 +100,10 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R36 | 2026-11-04 | The lead hypothesis is "satisfice, then diversify": floors first, then a diversity-weighted lottery among the candidates that pass. *(recorded summary)* | section 10.3, MA0.6 |
 | R37 | 2026-11-04 | All Autopaper work, even small items, is postponed until after the modularity mission; work units are kept together. *(recorded summary)* | sections 8.2, 11, 14, 15 |
 | R38 | 2026-11-04 | Foresight and hindsight: "both are important." The record freezes the procedure that will measure realized materiality, not the hindsight itself. Three scores per record: accuracy (foresight, frozen weights), importance judgment (the weight as a forecast, settled by the frozen procedure), coverage (a foreseeability test: a miss counts only if someone named the consequence beforehand). Trust reads accuracy and coverage; learning and selection read all three. *(recorded summary; the owner agreed to this design)* | section 10.1, the trust draft 3.1 to 3.4, 4.1 and 6 |
+| R39 | 2026-11-04 | gVisor is a go ("Ok, sounds good"; ruled earlier, so the go/no-go wording of open question 2 was stale). gVisor (`runsc` outer, systrap, no KVM needed) wraps every desk worker, first-party or not. Not under gVisor: the VM itself (the outer wall), platform services (corpusd, gateway and the like), the frontend (iframe sandbox) and model calls. Inside gVisor the separate uid and the seccomp filter remain; gVisor's filesystem view replaces Landlock (ENOSYS inside gVisor), so the "required" confinement mode is redefined as gVisor-confined. | MA0.8, MA6.4, section 12, open question 2 |
+| R40 | 2026-11-04 | Trust classes for sandbox sharing, fixed by publisher and exposure, not by trust score (trust governs leases). A: first-party custodians (Mail, Texture, management). B: first-party desks that read untrusted content (research's web sub-RLM, source intake). C: one sandbox per other publisher, including this computer's own generated desks (stranger code is generated code). About 49 MiB each; 3 to 5 per computer is typical. When gVisor is unavailable, non-first-party desks are refused and first-party desks run under today's process confinement (a correctness refusal, not a switch). Only local unit tests run the desk worker natively on macOS; every real computer (Node B, or the Mac arm64 guest under Apple Virtualization.framework, `nix/guest-aarch64.nix`) runs desks under gVisor. | MA0.8, MA6.4, open question 2 |
+| R41 | 2026-11-04 | Capsules: gVisor augments and partly replaces them, as a pilot. The capsule idea (a disposable build and test copy with diagnostics and rollback refs) stays; gVisor's overlay and namespaces could replace the overlayfs and namespace mechanism and let the daemon drop CAP_SYS_ADMIN (precommit R0-04 is still with Devin). Measured costs: warm builds 4.5x, cold 1.5x, git about 10x. The pilot runs real self-development rounds both ways and decides on measured round time. | MA6.7, MA6.4 |
+| R42 | 2026-11-04 | Third-party Go modules in desk code are gated by capability, not by lines. A module's transitive import closure is checked mechanically and must contain no `unsafe`, `syscall`, `os/exec`, raw sockets or `net`, or anything outside the desk's import set; pure libraries pass. The platform builds from source, vendored, pinned and verified against the Go checksum database, with the digest in the behaviour-surface hash; a version bump is a new trust subject with a change discount. Start with a curated, platform-reviewed list (reviewed once for everyone) and open further as module-publisher trust builds. Yaegi's own limits (cgo, unsafe-heavy code, generics edge cases) are a practical bound on what interprets. Engineering adding a dependency to Choir's own codebase is ordinary work in a capsule under code review, a separate case. Still open: a size or dependency-depth cap, and who reviews additions to the curated list. | MA6.5, MA6.6, open question 9 |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -124,7 +128,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 
 ## 3. Phase 0: evidence
 
-Goal: decide gVisor on measured numbers, then freeze this plan. No product code
+Goal: measure gVisor (the decision is made, R39) and freeze this plan. No product code
 changes.
 
 Measured so far (reported by the coordinator; not re-measured by this author):
@@ -153,10 +157,11 @@ spawner refuses to start an unconfined worker, with no opt-out
 | MA0.4 | Devin review of this plan (one seat; the plan is a design, so it is reviewed like the change it designs) | none | MA0.1 to MA0.3 | n/a / 1 | a verdict file | n/a |
 | MA0.7 | Commit round 1 of the ledger (predictions for Phase 1) before MA1.1 lands; each later phase repeats this as its first step (rule 7 of the ledger, section 0 item 7) | `docs/definitions/choir-modular-architecture-2026-11-04.precommit.md` (append a round; no earlier record changes) | the previous round's settlements | green / 0 | the commit that adds the round precedes the phase's first slice commit | n/a |
 | MA0.6 | Pre-register the hypotheses before any data exists: H4 (`docs/precommitment-records.md` line 878, section 8.4: "a prior, domain-specific history of resolved records predicts future performance better than success rates, benchmarks, popularity or uncalibrated ratings") and the trust conjecture of the trust draft section 11 (per-class, materiality-weighted posteriors predict a resident agent's next material failure better than a fixed allowlist or a popularity signal, at a usable owner-tap rate), each with its test, baselines, metrics, stopping rule and the edge cases the draft names (`missing_oracle`); and from the scoring research: frozen against outcome-built weights (H-A1), flip-rate relevance (H-A2), tempered against capped weights (H-C1), spot-checks against peer agreement (H-B3), PPI coverage (H-B4), and the lead hypothesis "satisfice, then diversify" (Goodhart survey H8, with H1 kept for the Autopaper unit). Committed with a date before MA1.3 lands | `docs/evidence/preregistration-2026-11-0x.md` (new) | MA0.3 | green / 1 (a design) | the file is committed and later edits are append-only with dates | revert |
+| MA0.8 | Mac guest experiment (R40): boot the aarch64 guest (`nix/guest-aarch64.nix`, Apple Virtualization.framework), run a desk worker under `runsc` systrap on arm64, measure cell time and memory. If it fails, Mac computers fall back to process confinement and refuse non-first-party desks until fixed | same evidence file, an arm64 section | MA0.1 harness | green / 0 | the arm64 cell time and resident memory, or the failure and the fallback taken | delete the section |
 | MA0.5 | Owner walkthrough and sign-off | none | MA0.4 | n/a | owner statement recorded in the goal file | n/a |
 
 Nothing in Phases 1 to 8 starts before MA0.5 (R12). The gVisor decision
-criteria are an open question (section 18 item 2).
+is made (R39); the residual of section 18 item 2 is the accepted overhead ratio and the Mac result of MA0.8.
 
 Supersedes: nothing. Keeps: the desks design 1.3 account of confinement.
 
@@ -1633,8 +1638,9 @@ the sandbox, like decision 3; S4 depends on S3 for Open with.
 Goal: front-end sandbox; hardening and fuzzing of the worker and broker; gVisor
 for desk workers; one runtime for all desks. Phase 0 measured gVisor: `runsc`
 as the outer layer around the worker; warm builds 4.5x slower, cold builds
-1.5x; about 49 MiB of memory per sandbox. Whether those numbers are accepted
-(the go/no-go criteria) is the owner's, open question 2.
+1.5x; about 49 MiB of memory per sandbox. gVisor is a go (R39) and wraps
+every desk worker; sandboxes are shared per trust class (R40); capsules get a
+gVisor pilot (R41, MA6.7). Open question 2 is settled.
 
 ### 12.1 What Phase 6 gates (R24)
 
@@ -1642,9 +1648,8 @@ as the outer layer around the worker; warm builds 4.5x slower, cold builds
   publisher can be published or installed until MA6.1 to MA6.5 have landed
   (the iframe sandbox, the broker audit and fuzzing, and the worker sandbox:
   gVisor as measured in Phase 0, `runsc` outer, warm builds 4.5x, cold 1.5x,
-  about 49 MiB per sandbox; if the owner rejects those numbers under open
-  question 2, the gate is the iframe sandbox, the audit, the fuzzing and the
-  alternative the owner chooses). The
+  about 49 MiB per sandbox; a go under R39). Where gVisor is unavailable,
+  non-first-party desks are refused (R40). The
   validator enforces it as a capability check (MA2.3). First-party desks are
   unaffected, so Phase 4 proceeds.
 - **Front-end-only packages.** The earlier ruling (R16) stands: publishing
@@ -1686,9 +1691,10 @@ as the outer layer around the worker; warm builds 4.5x slower, cold builds
 | MA6.1 | Iframe sandbox for app UIs: opaque-origin frame with a message bridge (modular decision 7); the SDK in the frame is stubs that post messages; every call grant-checked against the ceiling; the `fetchWithRenewal` session never crosses. After it ships, code-bearing front-end packages from other publishers can install (section 12.1) and the MA3.10 app-identity check becomes unforgeable. Until it ships, publishing stays open (R16) and code-bearing installs from others are refused | `frontend/src/lib/PackageAppFrame.svelte`, `internal/pkgruntime/build-module.mjs`, `app-sdk.ts` | Phase 5 | red / 2 | a hostile fixture app cannot read the shell DOM, the session, or another app's routes; the contract runner passes in sandboxed mode | revert; renderers stay T2 |
 | MA6.2 | Worker and broker hardening audit (red-team items 3 and 5): explicit denials in the seccomp profile (io_uring, keyctl, bpf, perf events, userfaultfd, ptrace, namespace clones), a mount namespace without /proc, /sys and /dev, fd closure across the worker's execve, rlimits, a unique uid per activation, restart intensity for crash loops. Each is checked against `desk_cell_confinement_linux.go` (not read by this author: hypothesis that some are already present) | `internal/yaegikernel/desk_cell_confinement*.go`, `desk_worker_spawn_linux.go`, `desk_cgroup_linux.go` | none | red / 2 | the profile test enumerates what each is; an escape test per denied class; a selftest at boot | revert |
 | MA6.3 | Broker protocol fuzzing: native Go fuzz targets for `BrokerRequest` decode, the frame multiplexer (`worker_mux.go`) and each frame handler's payload; bound every field; audit `FrameAllowed` and verb handlers for confused-deputy use (a verb that acts with the daemon's authority on a cell-supplied reference) | `internal/yaegikernel/{broker_protocol.go,worker_mux.go,desk_session_worker.go}`, `agentcore/tools_*` handlers | none | orange / 1 | a fuzz corpus in CI for a fixed time; each handler has a field-bound test | revert |
-| MA6.4 | gVisor for desk workers, as measured in Phase 0 (`runsc` outer; warm builds 4.5x, cold 1.5x; about 49 MiB per sandbox), with the go/no-go criteria the owner sets in open question 2: the spawner starts the worker under `runsc` with systrap; the fd 3 socketpair and slot token cross unchanged; "required" confinement mode restated for the new layering. Yaegi runs inside gVisor, performance permitting; engineering's mutation already runs in capsules. How many sandboxes (one per desk, or shared per trust class) waits for the running memory experiment (MA0.1) | `internal/yaegikernel/desk_worker_spawn_linux.go`, `desk_cell_confinement*.go`, guest image | MA0.1, MA0.2, MA6.2 | red / 2 | the cell benchmark within the accepted ratio; a hostile cell cannot reach the host; a boot selftest whose result is read through `POST /api/runtime/isolation-selftest` (`internal/agentcore/isolation_selftest.go`, extended with a gVisor check), never by SSH | revert to the process-only profile only by an owner act, since it lowers isolation |
-| MA6.5 | One runtime, yaegi with full Go modules, for all desks: every desk, first-party or published, runs model cells and package-shipped Go modules in the same yaegi worker; the import allowlist (16 stdlib packages, `internal/yaegikernel/allowlist.go:11-28`, banned list `:32-43`, fail-closed static check `eval.go:101-122`) widens by expressivity under the sandbox boundary (still no `unsafe`, `syscall`, `os/exec`, raw sockets); package Go modules are vendored by the platform build (source only) and loaded with their declared imports | `internal/yaegikernel/{allowlist.go,eval.go}`, `internal/pkgruntime`, `internal/apppackage` | MA6.4 | red / 2 | a desk cell calls a package Go module and the host verbs; a module importing a banned package is refused at publish; the cell benchmark | revert |
-| MA6.6 | Code mode with per-desk import sets (R26): each desk runs model cells in yaegi with its own least-privilege import set, derived from its grants and carried in the manifest capability list (MA2.3). All desks import the precommitment-records protocol package, `math` and the other pure packages; most import nothing with effects. The point is tool calling as code: loops, fan-out and a hundred tool calls in one cell with one model round trip. The mechanism is the per-activation `NewAllowlist` (`internal/yaegikernel/allowlist.go:45-75`) with the static import check that fails closed (`eval.go:101-122`). Known limit to resolve in this slice: a cell may stage at most `MaxIntentsPerCell = 16` intents (`internal/yaegikernel/intent.go:171`), so code mode's many calls are frame calls (reads and host verbs), not staged acts; the slice measures whether frame calls need their own per-cell bound (hypothesis: they are bounded only by the cell deadline) and sets the intent quota deliberately. Third-party Go modules: see open question 9 | `internal/yaegikernel/{allowlist.go,eval.go,intent.go}`, `internal/deskmanifest`, `internal/apppackage` | MA6.5, MA2.3 | red / 2 | a cell makes a hundred read-verb calls in one model round trip and the trace shows one round trip; a cell importing a package outside its desk's set is refused at the static check; each desk's computed set is stable under the behaviour-surface hash | revert |
+| MA6.4 | gVisor for every desk worker (R39), as measured in Phase 0 (`runsc` outer, systrap; warm builds 4.5x, cold 1.5x; about 49 MiB per sandbox): the spawner starts the worker under `runsc`; the fd 3 socketpair and slot token cross unchanged; the separate uid and seccomp filter stay inside; gVisor's filesystem view replaces Landlock, so "required" confinement mode is redefined as gVisor-confined. Sandboxes are shared per trust class (R40): A first-party custodians, B first-party desks that read untrusted content, C one per other publisher (this computer's generated desks included); 3 to 5 per computer typical. Platform services, the VM, the frontend and model calls are not under gVisor. Where gVisor is unavailable, non-first-party desks are refused and first-party desks run under process confinement; only local unit tests run natively on macOS. Yaegi runs inside gVisor; engineering's mutation runs in capsules (MA6.7 pilots gVisor there) | `internal/yaegikernel/desk_worker_spawn_linux.go`, `desk_cell_confinement*.go`, guest image | MA0.1, MA0.2, MA0.8, MA6.2 | red / 2 | the cell benchmark at the measured ratio; a hostile cell cannot reach the host; one sandbox per class holds (count and RSS read back); a boot selftest whose result is read through `POST /api/runtime/isolation-selftest` (`internal/agentcore/isolation_selftest.go`, extended with a gVisor check), never by SSH | revert to the process-only profile only by an owner act, since it lowers isolation |
+| MA6.5 | One runtime, yaegi with full Go modules, for all desks: every desk, first-party or published, runs model cells and package-shipped Go modules in the same yaegi worker; the import allowlist (16 stdlib packages, `internal/yaegikernel/allowlist.go:11-28`, banned list `:32-43`, fail-closed static check `eval.go:101-122`) widens by expressivity under the sandbox boundary (still no `unsafe`, `syscall`, `os/exec`, raw sockets); package Go modules follow R42: platform-built from source, vendored, pinned and checked against the Go checksum database, with a transitive import-closure check, starting from a curated list | `internal/yaegikernel/{allowlist.go,eval.go}`, `internal/pkgruntime`, `internal/apppackage` | MA6.4 | red / 2 | a desk cell calls a package Go module and the host verbs; a module importing a banned package is refused at publish; the cell benchmark | revert |
+| MA6.6 | Code mode with per-desk import sets (R26): each desk runs model cells in yaegi with its own least-privilege import set, derived from its grants and carried in the manifest capability list (MA2.3). All desks import the precommitment-records protocol package, `math` and the other pure packages; most import nothing with effects. The point is tool calling as code: loops, fan-out and a hundred tool calls in one cell with one model round trip. The mechanism is the per-activation `NewAllowlist` (`internal/yaegikernel/allowlist.go:45-75`) with the static import check that fails closed (`eval.go:101-122`). Known limit to resolve in this slice: a cell may stage at most `MaxIntentsPerCell = 16` intents (`internal/yaegikernel/intent.go:171`), so code mode's many calls are frame calls (reads and host verbs), not staged acts; the slice measures whether frame calls need their own per-cell bound (hypothesis: they are bounded only by the cell deadline) and sets the intent quota deliberately. Third-party Go modules: gated by capability (R42, open question 9) | `internal/yaegikernel/{allowlist.go,eval.go,intent.go}`, `internal/deskmanifest`, `internal/apppackage` | MA6.5, MA2.3 | red / 2 | a cell makes a hundred read-verb calls in one model round trip and the trace shows one round trip; a cell importing a package outside its desk's set is refused at the static check; each desk's computed set is stable under the behaviour-surface hash | revert |
+| MA6.7 | Capsule pilot (R41): run real self-development rounds with the capsule on gVisor's overlay and namespaces and with the current overlayfs mechanism, and decide on measured round time (warm builds 4.5x, cold 1.5x, git about 10x are the known costs). If gVisor wins or ties, drop CAP_SYS_ADMIN from the daemon once precommit R0-04 is settled. Capsule semantics (diagnostics, retained events, rollback refs) do not change. A separate slice, since the decision needs Phase 8's rounds | the capsule runner, `internal/yaegikernel` spawner | MA6.4 | orange / 1 | a table of round times both ways from real rounds; the decision recorded | revert; keep overlayfs |
 
 Supersedes: desks 4.3 (T1a, T1b), D11. Keeps: desks 8.2 layers.
 
@@ -1821,7 +1827,7 @@ and the artifacts of MA7.9.
 
 Only what remains after the rulings (R19, R24, R25, R26, R27 closed the earlier
 items on research search, community desks before Phase 6, the router and the
-Go-module scope), plus what the plan found.
+Go-module scope; R39 to R42 settled items 2 and 9), plus what the plan found.
 
 1. **Trust parameters.** The impact table (I0 to I4 = 0, 1, 3, 10, 30), the
    thresholds tau (0.80, 0.95, 0.99), the severity multipliers (1, 5, 20), the
@@ -1834,19 +1840,14 @@ Go-module scope), plus what the plan found.
    and the tau values are re-set after it. Still open from section 10.3:
    whether audit-based floor status (F2, F5) is visible to desks, the floor
    thresholds, the exploration budget and `q`.
-2. **gVisor decision criteria and sandbox count.** Measured in Phase 0:
-   `runsc` as the outer layer; warm builds 4.5x slower, cold 1.5x; about 49 MiB
-   per sandbox. Measured earlier: about 1.8x warm
-   cell, about 2x on allocation-heavy work, +20% compute, 22 to 60 microsecond
-   verb IPC, about 30 ms start. For the owner to set: the accepted overhead
-   ratio; the resident memory per sandbox ceiling (from MA0.1); **how many
-   sandboxes: one per desk, or shared per trust class** (waits for the running
-   memory experiment); whether gVisor wraps all desk workers or only those of
-   published origin; the layering outcome of MA0.2 (hypothesis: if Landlock
-   cannot run inside gVisor, the "required" mode in
-   `desk_cell_confinement.go:38-60` needs a new definition); and the fallback
-   when the platform is unavailable (KVM is off on Node B because nested=0;
-   development hosts without x86 systrap).
+2. **gVisor: settled (R39, R40, R41).** gVisor wraps every desk worker; sandboxes
+   are shared per trust class (A first-party custodians, B first-party desks
+   reading untrusted content, C one per other publisher); Landlock is replaced
+   by gVisor's filesystem view and "required" mode is redefined as
+   gVisor-confined; where gVisor is unavailable non-first-party desks are
+   refused. Residual: the accepted overhead ratio is the measured one unless
+   the cell benchmark of MA6.4 shows worse; the arm64 result (MA0.8); the
+   capsule pilot's verdict (MA6.7) and precommit R0-04 (Devin).
 3. **The typed request vocabulary.** Which request kinds exist beyond cast,
    ask, report, reply, escalate, precommit, resolve and disagreement
    (`lease_request`, `open_subject`, `decline`, `feed`, `inform`?); what
@@ -1872,28 +1873,16 @@ Go-module scope), plus what the plan found.
    reads R16 (publishing open) and R24 (no third-party front-end package reads
    routes before the iframe) as: publishing open, data-only installs open,
    code-bearing installs from others refused until MA6.1. Confirm this reading.
-9. **Third-party Go modules in desk code (R26).** Allowed in principle, since
-   generated code is no different from third-party code. The owner flags the
-   tension: importing a million lines of unreviewed code is a huge
-   vulnerability surface. Open, not decided: the gating of such imports and
-   which desks may import them (engineering, maybe others). Considerations:
-   - *Platform-built and pinned.* Source only, vendored and built by the
-     platform at a pinned version and digest, no opaque binaries (MA2.3), with
-     the module digest in the behaviour-surface hash.
-   - *Review depth versus line count.* A review sized by lines of imported code
-     is impractical for large modules; sizing by the capability the module can
-     reach (its import set, which stays inside the desk's derived set) is
-     cheaper but weaker. Whether a size bound or a transitive-dependency bound
-     applies.
-   - *Trust record per module publisher.* The trust draft's hierarchy extends to
-     module publishers: a module is a subject with a track record and a
-     change discount.
-   - *Curated set versus open.* A curated allowlist of modules reviewed once for
-     everyone, or any module reviewed per install.
-   - *Containment independent of review.* The module runs inside the same
-     sandbox and under the same per-desk import set as the cell; an import
-     outside the desk's set is refused at the static check whatever the module
-     is.
+9. **Third-party Go modules in desk code: settled (R26, R42).** Gated by
+   capability, not lines: the transitive import closure must contain no
+   `unsafe`, `syscall`, `os/exec`, raw sockets or `net`, or anything outside the
+   desk's import set. Platform-built from source, vendored, pinned, verified
+   against the Go checksum database, digest in the behaviour-surface hash; a
+   version bump is a new trust subject with a change discount. Start with a
+   curated list reviewed once for everyone; open further as module-publisher
+   trust builds. Engineering adding a dependency to Choir's own code is
+   ordinary capsule work under code review. Residual open items: a size or
+   dependency-depth cap; who reviews additions to the curated list.
 10. **Out-of-process tool servers: removed** (owner, 2026-11-04: "No out of
     process tool servers. Get rid of that."). The backend protocol of modular
     section 1 (a package shipping its own server process) is dropped. A

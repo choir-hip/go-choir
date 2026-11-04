@@ -219,7 +219,7 @@ boundaries:
   excluded:
     - "Autopaper: moving the Autopaper app to a package (C8) is in scope, as the precursor to the Autopaper mission. Everything else (BM25 and graph search, self-citation, the Texture cite rule, typed relations and relies_on, research.related_story, Autopaper app agents, Autopaper floors) waits for the Autopaper mission, even small items (R37)"
     - self-development rounds before Phase 8; self-development deleting base code
-    - out-of-process tool servers (removed by the owner, 2026-11-04; a package backend is its desk); third-party Go modules in desk code until open question 9 is decided
+    - out-of-process tool servers (removed by the owner, 2026-11-04; a package backend is its desk); third-party Go modules outside the R42 capability gate (import closure with no unsafe, syscall, os/exec or raw sockets; curated list first)
     - zero-downtime or compatibility machinery beyond a slice's rollback; interim layers (R16)
     - the tape app, update-now-or-later prompt and email-as-app-agent ideas beyond MA4.7
   protected_surfaces: >-
@@ -283,7 +283,7 @@ now:
   #    recorded d@e day. Edge missing_oracle: unexercised paths.
   #  C4 (P6): the worker sandbox costs inside an acceptable ratio. Evidence:
   #    cold build 1.5x, warm 4.5x (R0-01 contradicted), runsc must be the
-  #    outer layer (R0-07). Owner sets the ratio (open question 2).
+  #    outer layer (R0-07). Owner settled gVisor 2026-11-04 (R39 to R41); the ratio is the measured one.
   #  C5 (P7): materiality-weighted posteriors predict the next material
   #    failure better than an allowlist or popularity (R0-15; MA0.6). Edge
   #    resource: few settled material events (n < 30 resolves unresolved).
@@ -328,7 +328,7 @@ receipts:
     identity: docs/evidence/gvisor-desk-capsule-x86-2026-11-04.md (modplan)
     proof_refs: [precommit settlements R0-01 to R0-07 (1876a56da)]
     rollback_ref: not_applicable
-    disposition: measured; R0-04 still with Devin; gVisor decision criteria with the owner (open question 2)
+    disposition: measured; R0-04 still with Devin; gVisor settled by the owner (R39 to R42); MA0.8 arm64 experiment and the capsule pilot (MA6.7) remain
 ---
 
 # Modular architecture
@@ -416,6 +416,6 @@ design changes:
   land early through the allowed overlap, or Mail moves to Phase 5.
 - MA1.5 (Phase 1) uses "the kernel judge service", which only exists after
   MA2.1 and MA3.6.
-- Section 12.1 and MA6.4 say "if Phase 0 holds". Phase 0 measured runsc as the
-  outer layer, with warm builds at 4.5x. The decision criteria are still with
-  the owner (open question 2).
+- Section 12.1 and MA6.4 said "if Phase 0 holds". Phase 0 measured runsc as the
+  outer layer, with warm builds at 4.5x; the owner settled gVisor on 2026-11-04
+  (R39 to R42, open questions 2 and 9 settled).
