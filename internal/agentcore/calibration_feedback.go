@@ -335,6 +335,9 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 					RecordID: rec.RecordID, Statement: rec.Precommit.Question, P: &p, ModelID: model, CommittedAt: committed})
 				continue
 			}
+			if types.ClockCensoredUninformative(*rec.Precommit.Rule, settlement.SubjectRefs) {
+				continue // C7: ended before the interval closed; the clock is unknown
+			}
 			var y float64
 			switch settlement.Resolve.Verdict {
 			case types.PrecommitAnswerYes:

@@ -69,10 +69,13 @@ type calibrationClaim struct {
 	Operation  string  `json:"operation,omitempty"`
 	Cast       string  `json:"cast,omitempty"`
 	// The settlement: empty Answer is open.
-	Answer        string `json:"answer,omitempty"`
-	Excerpt       string `json:"excerpt,omitempty"`
-	ActualS       *int64 `json:"actual_s,omitempty"`
-	Censored      bool   `json:"censored,omitempty"`
+	Answer   string `json:"answer,omitempty"`
+	Excerpt  string `json:"excerpt,omitempty"`
+	ActualS  *int64 `json:"actual_s,omitempty"`
+	Censored bool   `json:"censored,omitempty"`
+	// Unscored marks a clock claim censored before its interval closed
+	// (C7): kept on the record, counted by no score.
+	Unscored      bool   `json:"censored_unscored,omitempty"`
 	SettledAt     string `json:"settled_at,omitempty"`
 	DecisionActor string `json:"decision_actor,omitempty"`
 	Delegated     bool   `json:"delegated,omitempty"`
@@ -99,6 +102,7 @@ func calibrationClaimOf(rec types.CommitmentRecord, resolve *types.CommitmentRec
 			c.ActualS = &n
 		}
 		c.Censored = rr[types.RuleRefCensored] == "true"
+		c.Unscored = types.ClockCensoredUninformative(*rule, rr)
 		c.DecisionActor, c.Delegated = rr[types.RuleRefDecisionActor], rr[types.RuleRefDelegated] == "true"
 		for _, ref := range resolve.EvidenceRefs {
 			if op, ok := strings.CutPrefix(ref, "selfdev-operation:"); ok && c.Operation == "" {

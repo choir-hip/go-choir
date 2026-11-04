@@ -81,6 +81,38 @@ func TestFreezeMinutesAtTerminal(t *testing.T) {
 	if !ok || s.Answer != PrecommitAnswerUnresolved {
 		t.Fatalf("lost freeze settlement: %+v", s)
 	}
+	// C7: a round that ended (a crash, an abandon, a platform failure)
+	// before the interval closed says nothing about the clock: unresolved,
+	// the span kept and marked censored, never a "no".
+	for _, at := range []time.Duration{5 * time.Minute, 25 * time.Minute, 40 * time.Minute} {
+		s, ok = SettleRuleAtTerminal(rule, EngineeringTerminalObservation{Disposition: EngineeringAssignmentCancelled, Reason: "interrupted by a restart", At: cast.Add(at)})
+		if !ok || s.Answer != PrecommitAnswerUnresolved || s.Timing == nil || !s.Timing.Censored || !strings.Contains(s.Excerpt, "not scored") {
+			t.Fatalf("ended at %s, before the interval closed: %+v", at, s)
+		}
+	}
+}
+
+// C7: the read side applies the same rule to a settlement written before
+// it: a censored "no" before the high bound is uninformative.
+func TestClockCensoredBeforeHighIsUninformative(t *testing.T) {
+	rule := PrecommitRule{Kind: PrecommitRuleFreezeMinutes, LowMinutes: 10, HighMinutes: 40}
+	for _, c := range []struct {
+		refs map[string]string
+		want bool
+	}{
+		{map[string]string{RuleRefCensored: "true", RuleRefActualS: "300"}, true},
+		{map[string]string{RuleRefCensored: "true", RuleRefActualS: "2400"}, true},
+		{map[string]string{RuleRefCensored: "true", RuleRefActualS: "2401"}, false},
+		{map[string]string{RuleRefActualS: "300"}, false},
+		{map[string]string{RuleRefCensored: "true"}, true},
+	} {
+		if got := ClockCensoredUninformative(rule, c.refs); got != c.want {
+			t.Fatalf("%v: %v, want %v", c.refs, got, c.want)
+		}
+	}
+	if ClockCensoredUninformative(PrecommitRule{Kind: PrecommitRuleVerifyPass}, map[string]string{RuleRefCensored: "true"}) {
+		t.Fatal("an outcome claim is never clock-censored")
+	}
 }
 
 // R17: judge_accepts reads where the judgment left the operation.
@@ -194,8 +226,10 @@ func TestOwnerActSettlesApprovalClaims(t *testing.T) {
 	}{
 		{OwnerActApprove, time.Hour, "yes", "yes", false, true},
 		{OwnerActApply, 5 * time.Hour, "yes", "no", false, true},
-		{OwnerActReject, time.Hour, "no", "no", true, true},
-		{OwnerActAbandon, time.Hour, "no", "no", true, true},
+		// C7: a reject or abandon inside the interval is censored, unscored.
+		{OwnerActReject, time.Hour, "no", "unresolved", true, true},
+		{OwnerActAbandon, time.Hour, "no", "unresolved", true, true},
+		{OwnerActReject, 5 * time.Hour, "no", "no", true, true},
 		{"rollback", time.Hour, "", "", false, false},
 	} {
 		obs := EngineeringOwnerActObservation{Act: c.act, OperationID: "op", DecisionAt: cast.Add(c.after), Actor: "consensus:x", Delegated: true}
@@ -215,8 +249,11 @@ func TestOwnerActSettlesApprovalClaims(t *testing.T) {
 	if s, ok := SettleRuleOnVerify(approves, EngineeringVerifyObservation{OperationState: "failed", At: cast.Add(time.Hour)}); !ok || s.Answer != "no" {
 		t.Fatalf("judged out: %+v", s)
 	}
-	if s, ok := SettleRuleOnVerify(minutes, EngineeringVerifyObservation{OperationState: "failed", At: cast.Add(time.Hour)}); !ok || s.Answer != "no" || !s.Timing.Censored {
-		t.Fatalf("judged out minutes: %+v", s)
+	if s, ok := SettleRuleOnVerify(minutes, EngineeringVerifyObservation{OperationState: "failed", At: cast.Add(time.Hour)}); !ok || s.Answer != PrecommitAnswerUnresolved || !s.Timing.Censored {
+		t.Fatalf("judged out minutes inside the interval: %+v", s)
+	}
+	if s, ok := SettleRuleOnVerify(minutes, EngineeringVerifyObservation{OperationState: "failed", At: cast.Add(5 * time.Hour)}); !ok || s.Answer != "no" || !s.Timing.Censored {
+		t.Fatalf("judged out minutes after the interval: %+v", s)
 	}
 	if _, ok := SettleRuleOnVerify(approves, EngineeringVerifyObservation{OperationState: "awaiting_approval"}); ok {
 		t.Fatal("a passed judgment decided owner_approves")

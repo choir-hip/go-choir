@@ -457,3 +457,28 @@ func TestCalibrationSettlementRoute(t *testing.T) {
 		}
 	}
 }
+
+// rulePair is a rule precommit stated by desk and its rule settlement.
+func rulePair(id, agent string, rule types.PrecommitRule, p float64, verdict string, refs map[string]string) (types.CommitmentRecord, types.CommitmentRecord) {
+	rule.AssignmentID = "a1"
+	pc := types.CommitmentRecord{RecordID: id, Kind: types.CommitmentKindPrecommit, EmitterKind: types.CommitmentEmitterAgent,
+		Precommit:   &types.CommitmentPrecommit{Question: "q " + id, Distribution: map[string]float64{"yes": p, "no": 1 - p}, Resolver: "rule", Rule: &rule},
+		Provenance:  types.CommitmentProvenance{AgentID: agent, CommittedAt: "2026-11-04T01:00:00Z"},
+		SubjectRefs: map[string]string{"assignment": "a1"}}
+	res := types.CommitmentRecord{RecordID: types.RuleResolveRecordID(id), ParentID: id, Resolve: &types.CommitmentResolve{Verdict: verdict},
+		EmitterKind: types.CommitmentEmitterSystem, Provenance: types.CommitmentProvenance{AgentID: types.RuleScorerAgentID}, SubjectRefs: refs}
+	return pc, res
+}
+
+// C7: a clock claim settled "no" censored before its interval closed (a
+// settlement from before the rule, too) is no observation; one censored
+// past the high bound is a miss.
+func TestCollectCalibrationLeavesOutClockClaimsCensoredBeforeTheyClosed(t *testing.T) {
+	clock := types.PrecommitRule{Kind: types.PrecommitRuleFreezeMinutes, EstimateMinutes: 20, LowMinutes: 10, HighMinutes: 40}
+	early, earlyRes := rulePair("early", "management", clock, 0.7, "no", map[string]string{types.RuleRefCensored: "true", types.RuleRefActualS: "300"})
+	late, lateRes := rulePair("late", "management", clock, 0.7, "no", map[string]string{types.RuleRefCensored: "true", types.RuleRefActualS: "3000"})
+	obs, _ := collectCalibration([]byte("salt"), []types.CommitmentRecord{early, earlyRes, late, lateRes}, nil, nil)
+	if len(obs) != 1 || obs[0].RecordID != "late" || obs[0].Y != 0 {
+		t.Fatalf("observations %+v, want only the miss past the high bound", obs)
+	}
+}

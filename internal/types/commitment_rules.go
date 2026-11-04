@@ -554,17 +554,53 @@ func settleClock(rule PrecommitRule, end time.Time, verb string, refs []string) 
 		Excerpt: fmt.Sprintf("%s %s after the Cast, %s the %d-%dm interval (estimate %dm)", verb, roundMinutes(elapsed), where, rule.LowMinutes, rule.HighMinutes, rule.EstimateMinutes)}, true
 }
 
-// missedClock settles a clock claim whose event will not happen: "no", the
-// span to at censored (R16).
+// missedClock settles a clock claim whose event will not happen (R16, C7).
+// Past the interval's high bound it is a miss: "no", the span censored.
+// Before it, the round ended (a crash, an abandon, a reject, a platform
+// failure) while the interval was still open, which says nothing about the
+// clock: unresolved, the span kept and censored, so the claim is not scored
+// (docs/design/calibration-wiring-permutations-2026-11-04.md, C7).
+//
+// Failure modes, written before the code (C7):
+//   - a crash or abandon at minute 5 of a 15-45 interval scores as a
+//     forecasting miss -> unresolved until the high bound has passed;
+//   - a desk that never freezes escapes scoring by the same rule -> past the
+//     high bound the miss stands, whatever ended the round;
+//   - settlements written before this rule keep their "no" -> the readers
+//     apply ClockCensoredUninformative to them as well.
 func missedClock(rule PrecommitRule, at time.Time, what, why string, refs []string) RuleSettlement {
 	since, ok := parseRuleTime(rule.Since)
 	if !ok {
 		return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "the precommit carries no Cast anchor; " + why, EvidenceRefs: refs}
 	}
 	elapsed := max(at.Sub(since), 0)
-	return RuleSettlement{Answer: PrecommitAnswerNo, EvidenceRefs: refs,
-		Timing:  &RuleTiming{Since: since, End: at, ActualS: int64(elapsed / time.Second), Censored: true},
+	timing := &RuleTiming{Since: since, End: at, ActualS: int64(elapsed / time.Second), Censored: true}
+	if !clockIntervalClosed(rule, timing.ActualS) {
+		return RuleSettlement{Answer: PrecommitAnswerUnresolved, EvidenceRefs: refs, Timing: timing,
+			Excerpt: fmt.Sprintf("censored: the round ended %s after the Cast with no %s, before the %d-%dm interval closed, so the clock is unknown and the claim is not scored; %s", roundMinutes(elapsed), what, rule.LowMinutes, rule.HighMinutes, why)}
+	}
+	return RuleSettlement{Answer: PrecommitAnswerNo, EvidenceRefs: refs, Timing: timing,
 		Excerpt: fmt.Sprintf("no %s within %s of the Cast (interval %d-%dm, estimate %dm); %s", what, roundMinutes(elapsed), rule.LowMinutes, rule.HighMinutes, rule.EstimateMinutes, why)}
+}
+
+// clockIntervalClosed reports a span past the interval's high bound.
+func clockIntervalClosed(rule PrecommitRule, actualS int64) bool {
+	return actualS > int64(rule.HighMinutes)*60
+}
+
+// ClockCensoredUninformative reports a clock claim's settlement that ended
+// censored before the interval closed (C7): it tells nothing about the
+// clock, and no score counts it, a settlement written before C7 included.
+// refs are the resolve record's subject refs.
+func ClockCensoredUninformative(rule PrecommitRule, refs map[string]string) bool {
+	if !rule.Kind.clock() || refs[RuleRefCensored] != "true" {
+		return false
+	}
+	actualS, err := strconv.ParseInt(refs[RuleRefActualS], 10, 64)
+	if err != nil {
+		return true
+	}
+	return !clockIntervalClosed(rule, actualS)
 }
 
 // SettleRuleOnFreeze decides the claims a successful Freeze settles:
@@ -956,6 +992,9 @@ func RulePrecommitSayDo(records []CommitmentRecord, agentPrefix string) SayDoRec
 		answer := ""
 		if settled {
 			answer = settlement.Resolve.Verdict
+			if ClockCensoredUninformative(*rec.Precommit.Rule, settlement.SubjectRefs) {
+				answer = PrecommitAnswerUnresolved // C7, a settlement from before it
+			}
 		}
 		acc.add(p, answer, settled)
 		overall.add(p, answer, settled)
