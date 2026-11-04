@@ -246,7 +246,13 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 		toolregistry.WithToolLoopConversationID("research-child:"+childKey),
 		// Siblings share one system prompt and tools, so they share one
 		// cache thread under their parent desk.
-		toolregistry.WithToolLoopPromptCache(researchChildCacheScope(parent)))
+		toolregistry.WithToolLoopPromptCache(researchChildCacheScope(parent)),
+		// A child gets the same quota machinery as a run: the computer's
+		// shared ledger, its continuation chain, and a visible incident
+		// keyed by the child (never the parent's run).
+		toolregistry.WithQuotaLedger(&rt.quotaLedger),
+		toolregistry.WithProviderIncident(rt.providerQuotaIncidentHookFor(lineage.ownerID, parent.ComputerID, "research-child:"+childKey, parent.AgentID, "research child "+childKey, nil)),
+		toolregistry.WithContinuationChain(rt.quotaContinuationChainFor(lineage.ownerID)))
 	result.Findings = strings.TrimSpace(text)
 	result.InputTokens, result.OutputTokens, result.CachedInputTokens = usage.InputTokens, usage.OutputTokens, usage.CachedInputTokens
 	if loopErr != nil {

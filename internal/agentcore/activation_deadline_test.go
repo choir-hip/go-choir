@@ -14,13 +14,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 type quotaThenOK struct {
@@ -161,4 +164,62 @@ func TestReviewWaitIsNotChargedToTheBuild(t *testing.T) {
 	if d, _ := ctx.Deadline(); time.Until(d) < 250*time.Millisecond {
 		t.Fatalf("after a rejection the engineer has %s", time.Until(d))
 	}
+}
+
+// The production research-child path (runResearchChild) gets the quota
+// machinery of a run (review r2, Devin B1): the computer's shared ledger,
+// the continuation chain and a visible incident keyed by the child. Failure
+// modes: a pinned child dies on a quota (no chain); siblings each burn a
+// call on a model another child found exhausted (private ledger); an
+// every-model incident is invisible, or keyed by the parent's run.
+func TestResearchChildSwitchesOnQuotaWithTheComputersLedgerAndChain(t *testing.T) {
+	p := &quotaThenOK{}
+	rt := &Runtime{provider: p, modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}), researchChildCalls: &callSpacer{}}
+	parent := toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c", AgentID: "research:o", RunID: "run-parent"}
+	lineage := researchLineage{ownerID: "o", selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}
+	spec := yaegikernel.ResearchChild{Objective: "alpha"}
+	first := rt.runResearchChild(context.Background(), parent, lineage, spec)
+	if first.Error != "" || !strings.HasPrefix(first.Findings, "done on chatgpt/") {
+		t.Fatalf("first child = %+v; want it to switch to the chain", first)
+	}
+	before := p.calls["synthetic"]
+	second := rt.runResearchChild(context.Background(), parent, lineage, spec)
+	if second.Error != "" || p.calls["synthetic"] != before {
+		t.Fatalf("second child = %+v, synthetic calls %d -> %d; want the shared ledger to spare the doomed call", second, before, p.calls["synthetic"])
+	}
+}
+
+func TestResearchChildIncidentIsVisibleAndKeyedByTheChild(t *testing.T) {
+	p := &allQuotaProvider{}
+	rt := &Runtime{provider: p, modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}), researchChildCalls: &callSpacer{}}
+	parent := toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c", AgentID: "research:o", RunID: "run-parent"}
+	lineage := researchLineage{ownerID: "o", selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		rt.runResearchChild(ctx, parent, lineage, yaegikernel.ResearchChild{Objective: "alpha"})
+		close(done)
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	var views []types.WaitState
+	for time.Now().Before(deadline) {
+		if views = rt.providerWaitViews("o", "c"); len(views) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(views) != 1 || !strings.HasPrefix(views[0].Subject, "research child ") || strings.Contains(views[0].Subject, "run-parent") {
+		t.Fatalf("incident views = %+v; want one keyed by the child", views)
+	}
+	cancel()
+	<-done
+	if views := rt.providerWaitViews("o", "c"); len(views) != 0 {
+		t.Fatalf("the incident outlived its child: %+v", views)
+	}
+}
+
+type allQuotaProvider struct{ provideriface.Provider }
+
+func (allQuotaProvider) CallWithTools(_ context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	return nil, &provideriface.ProviderQuotaError{Provider: req.Provider, Model: req.Model, Reason: "provider quota exhausted", Message: req.Provider + ": quota exhausted", RetryAt: time.Now().Add(time.Hour)}
 }

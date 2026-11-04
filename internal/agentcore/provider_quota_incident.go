@@ -62,10 +62,18 @@ func (rt *Runtime) providerWaits() *providerWaitTracker {
 // quotaContinuationChain is rec's tool loop's continuation chain: the
 // models the computer's policy allows (modelpolicy ContinuationChain).
 func (rt *Runtime) quotaContinuationChain(rec *types.RunRecord) toolregistry.ToolLoopContinuationFunc {
-	if rt == nil || rt.modelPolicy == nil || rec == nil {
+	if rec == nil {
 		return nil
 	}
-	ownerID := rec.OwnerID
+	return rt.quotaContinuationChainFor(rec.OwnerID)
+}
+
+// quotaContinuationChainFor is the chain of a computer's owner; a research
+// child, which has no run record, uses it directly.
+func (rt *Runtime) quotaContinuationChainFor(ownerID string) toolregistry.ToolLoopContinuationFunc {
+	if rt == nil || rt.modelPolicy == nil {
+		return nil
+	}
 	return func(ctx context.Context) []provideriface.LLMSelection {
 		return rt.modelPolicy.ContinuationChain(ctx, ownerID)
 	}
@@ -76,16 +84,24 @@ func (rt *Runtime) providerQuotaIncidentHook(rec *types.RunRecord) toolregistry.
 	if rt == nil || rec == nil {
 		return nil
 	}
-	ownerID, computerID, runID, agentID := rec.OwnerID, rec.ComputerID, rec.RunID, rec.AgentID
+	return rt.providerQuotaIncidentHookFor(rec.OwnerID, rec.ComputerID, rec.RunID, rec.AgentID, "run "+rec.RunID, rec)
+}
+
+// providerQuotaIncidentHookFor keys the incident by key (a run's id, or a
+// research child's), so concurrent children of one parent each have their
+// own entry. rec is nil for a child: it has no run record and no assignment.
+func (rt *Runtime) providerQuotaIncidentHookFor(ownerID, computerID, runID, agentID, subject string, rec *types.RunRecord) toolregistry.ToolLoopProviderIncidentFunc {
+	if rt == nil {
+		return nil
+	}
 	assignmentID := ""
 	attempt := uint64(0)
-	if agentProfileForRun(rec) == agentprofile.Engineering {
+	if rec != nil && agentProfileForRun(rec) == agentprofile.Engineering {
 		assignmentID = metadataStringValue(rec.Metadata, "assignment_id")
 		attempt = uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
 	}
-	subject := "run " + runID
 	if assignmentID != "" {
-		subject = "run " + runID + " of assignment " + assignmentID
+		subject += " of assignment " + assignmentID
 	}
 	// resolve reads the assignment at each observation, so one that ended
 	// during the incident is seen ended.

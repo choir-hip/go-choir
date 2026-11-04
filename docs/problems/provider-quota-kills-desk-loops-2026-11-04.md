@@ -207,3 +207,36 @@ gone with the parks: a quota never touches the deadline.
 
 Unchanged: the ledger and the incident are process memory; a crash closes the
 run at boot. No resumer, no switch.
+
+### Review round 2 fixes
+
+- Research children (`runResearchChild`) get the same machinery as a run:
+  the computer's shared ledger, the continuation chain
+  (`quotaContinuationChainFor`) and an incident hook keyed by the child
+  (`providerQuotaIncidentHookFor`, subject "research child <key>"), shown on
+  `provider_waits` like any run's.
+- Capability filter: a candidate (pool member or chain) must serve the run.
+  A history with an image block skips models `modelcatalog.SupportsImage`
+  refuses; the role's own restriction (`WithQuotaModelFilter`) binds the
+  chain. With nothing capable left the run takes the all-exhausted path and
+  never sends an image to a text-only model.
+- Role restrictions found: management_task (R2-9: no `-free` or `preview`
+  model, now `modelpolicy.ManagementTaskModelAllowed`, applied to the task's
+  whole chain and shared with `managementTaskFallbacks`). Verifier and
+  multimodal-verifier roles, the model-verification tool, and the judge
+  calls (support judge, host judgment, Jev) call the provider directly and
+  not through the tool loop, so the chain cannot reach them; they still stop
+  on a quota (residual: "always continue" is not applied to judge calls). The
+  verifier policy `requires` lists are not enforced by the policy parser, so
+  there is nothing for the chain to bypass.
+- Also: the chain is read without writing the policy file; a model that a
+  non-quota failover left is not walked back to by a quota switch; the
+  incident's third retry round lands at 60 s so Texture's one-minute
+  announcement is not missed; the incident carries the estimated flag.
+- Stated trade-offs: the chain is read once, so a policy moved during an
+  incident (live8's rescue) no longer unsticks a run past its first quota; it
+  ends at the bound. A shorter activation budget (management task 10 min,
+  a research child's share) cuts the 18-minute bound with the activation's
+  own fate. Chain and pool order are deterministic, so runs on one computer
+  move together to the same next model (no jitter yet); the max tokens and
+  effort of the model left carry over to the next (`fillFallbackSelection`).

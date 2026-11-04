@@ -4024,6 +4024,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	toolLoopOptions = append(toolLoopOptions,
 		toolregistry.WithProviderIncident(rt.providerQuotaIncidentHook(rec)),
 		toolregistry.WithQuotaLedger(&rt.quotaLedger))
+	if isManagementTaskRun(rec) {
+		// R2-9: no free or preview model, in the pool or the chain.
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithQuotaModelFilter(modelpolicy.ManagementTaskModelAllowed))
+	}
 	if chain := rt.quotaContinuationChain(rec); chain != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithContinuationChain(chain))
 	}

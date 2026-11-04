@@ -243,3 +243,61 @@ func TestModelFailureDoesNotSwitchOrRaiseAnIncident(t *testing.T) {
 		t.Fatalf("incidents %v switches %v phases %v", r.incidents, r.switches, r.phases)
 	}
 }
+
+// Capability and role filters (review r2, Devin B2 and DeepSeek B2): a
+// quota switch never moves a run to a model that cannot serve it. Failure
+// modes: an image in the history reaches a text-only model (a deterministic
+// 400 for the quota window); the role's restriction (management tasks: no
+// free or preview model, R2-9) is bypassed by the chain; with nothing
+// capable left the run sends the image anyway instead of the incident path.
+
+const imageMessage = `{"role":"user","content":[{"type":"text","text":"look"},{"type":"image","source":{"kind":"artifact_ref","ref":"artifact:sha256:abc"}}]}`
+
+func runQuotaMessages(p *poolProvider, r *quotaRun, message string, chain []provideriface.LLMSelection, filter func(provideriface.LLMSelection) bool, primary provideriface.LLMSelection) (string, error) {
+	r.phases = map[string]int{}
+	emit := func(_ types.EventKind, name string, _ json.RawMessage) {
+		r.mu.Lock()
+		r.phases[name]++
+		r.mu.Unlock()
+	}
+	opts := []ToolLoopOption{WithToolLoopLLMConfig(primary), WithToolLoopConversationID("run-1"), WithProviderIncident(r.record),
+		WithContinuationChain(func(context.Context) []provideriface.LLMSelection { return chain })}
+	if filter != nil {
+		opts = append(opts, WithQuotaModelFilter(filter))
+	}
+	text, _, err := RunToolLoop(context.Background(), p, nil, []json.RawMessage{json.RawMessage(message)}, "system", 0, emit, nil, opts...)
+	return text, err
+}
+
+func TestImageRunSkipsTextOnlyModelsOnQuota(t *testing.T) {
+	shortenQuota(t)
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
+	text, err := runQuotaMessages(p, &quotaRun{}, imageMessage, []provideriface.LLMSelection{zaiMember, lunaMember}, nil, synthMember)
+	if err != nil || text != "done by chatgpt" || p.count("zai") != 0 {
+		t.Fatalf("run = %q, %v, zai calls %d; want the text-only model skipped", text, err, p.count("zai"))
+	}
+}
+
+func TestImageRunWithNoVisionModelLeftTakesTheIncidentPath(t *testing.T) {
+	shortenQuota(t)
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
+	r := &quotaRun{}
+	_, err := runQuotaMessages(p, r, imageMessage, []provideriface.LLMSelection{zaiMember}, nil, synthMember)
+	if err == nil || !strings.Contains(err.Error(), "every model is out of quota") || p.count("zai") != 0 {
+		t.Fatalf("err = %v, zai calls %d; want the incident path and no image to a text-only model", err, p.count("zai"))
+	}
+	if r.phases["provider_quota_incident"] == 0 {
+		t.Fatalf("phases = %v, want an incident", r.phases)
+	}
+}
+
+func TestRoleFilterBindsTheChain(t *testing.T) {
+	shortenQuota(t)
+	free := provideriface.LLMSelection{Provider: "opencode-zen", Model: "muse-spark-1.3-contributor-free"}
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
+	noFree := func(s provideriface.LLMSelection) bool { return !strings.HasSuffix(s.Model, "-free") }
+	text, err := runQuotaMessages(p, &quotaRun{}, `{"role":"user","content":"hello"}`, []provideriface.LLMSelection{free, lunaMember}, noFree, synthMember)
+	if err != nil || text != "done by chatgpt" || p.count("opencode-zen") != 0 {
+		t.Fatalf("run = %q, %v, free calls %d; want the role's filter to bind the chain", text, err, p.count("opencode-zen"))
+	}
+}

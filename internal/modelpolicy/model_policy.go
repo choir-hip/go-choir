@@ -199,7 +199,15 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 // any model the catalog does not serve. A policy the manager cannot read
 // still yields the platform default's chain.
 func (m *Manager) ContinuationChain(ctx context.Context, ownerID string) []provideriface.LLMSelection {
-	policy, _ := m.Load(ctx, ownerID)
+	// Read the file as it stands; this path never writes the policy file.
+	policy := fallbackPolicy(provideriface.Config{})
+	if path := strings.TrimSpace(m.config.PolicyPath); path != "" {
+		if raw, err := os.ReadFile(path); err == nil {
+			if parsed, err := parsePolicy(string(raw), path); err == nil {
+				policy = parsed
+			}
+		}
+	}
 	var out []provideriface.LLMSelection
 	seen := map[string]bool{}
 	add := func(selection provideriface.LLMSelection) {
@@ -434,14 +442,21 @@ func managementTaskSelection(p Policy) provideriface.LLMSelection {
 	return fillSelection(selection, p.Defaults)
 }
 
+// ManagementTaskModelAllowed is the R2-9 rule: a management task never runs
+// on a free or preview model. The quota switch applies it to the task's
+// whole chain.
+func ManagementTaskModelAllowed(sel provideriface.LLMSelection) bool {
+	model := strings.ToLower(strings.TrimSpace(sel.Model))
+	return !strings.HasSuffix(model, "-free") && !strings.Contains(model, "preview")
+}
+
 // managementTaskFallbacks is the pinned task's failover order: the default
 // pool's members other than the pin, in pool order, never a free or preview
 // model.
 func managementTaskFallbacks(pin provideriface.LLMSelection) []provideriface.LLMSelection {
 	var out []provideriface.LLMSelection
 	for _, member := range poolSelections(catalogPools()[modelcatalog.DefaultPool], pin) {
-		model := strings.ToLower(member.Model)
-		if (member.Provider == pin.Provider && member.Model == pin.Model) || strings.HasSuffix(model, "-free") || strings.Contains(model, "preview") {
+		if (member.Provider == pin.Provider && member.Model == pin.Model) || !ManagementTaskModelAllowed(member) {
 			continue
 		}
 		out = append(out, member)

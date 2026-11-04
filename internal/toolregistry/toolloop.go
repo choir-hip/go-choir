@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"log"
 	"reflect"
 	"strconv"
@@ -119,6 +120,7 @@ type toolLoopOptions struct {
 	providerIncident       ToolLoopProviderIncidentFunc
 	quotaLedger            *QuotaLedger
 	continuation           ToolLoopContinuationFunc
+	quotaModelFilter       func(provideriface.LLMSelection) bool
 }
 
 type pendingRequiredTool struct {
@@ -392,6 +394,40 @@ func WithContinuationChain(fn ToolLoopContinuationFunc) ToolLoopOption {
 	}
 }
 
+// WithQuotaModelFilter names the role's own restriction on which models may
+// serve the run (management tasks never run on a free or preview model).
+// A quota switch never moves the run to a model the filter refuses, whether
+// it comes from the pool or the continuation chain.
+func WithQuotaModelFilter(allow func(provideriface.LLMSelection) bool) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.quotaModelFilter = allow
+	}
+}
+
+// messagesCarryImage reports whether any message holds an image block.
+func messagesCarryImage(messages []json.RawMessage) bool {
+	for _, raw := range messages {
+		var m struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if json.Unmarshal(raw, &m) != nil || len(m.Content) == 0 || m.Content[0] != '[' {
+			continue
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(m.Content, &blocks) != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type == "image" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // WithQuotaLedger shares the computer's record of exhausted models between
 // its runs, so a model one run found out of quota is skipped by the others
 // until it resets. Without one, a loop keeps a private ledger.
@@ -461,9 +497,9 @@ var (
 	providerQuotaUnknownHold = 2 * time.Minute
 	// providerQuotaIncidentBackoff is the wait before each retry round of
 	// the chain when every model is out of quota: its length bounds the
-	// incident (about 18 minutes), after which the run fails with the
+	// incident (about 18 minutes; the third round lands at 60 s, so Texture's one-minute announcement is not missed), after which the run fails with the
 	// quota error, a visible end and not a pause.
-	providerQuotaIncidentBackoff = []time.Duration{15 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 5 * time.Minute, 5 * time.Minute}
+	providerQuotaIncidentBackoff = []time.Duration{15 * time.Second, 30 * time.Second, 15 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 5 * time.Minute, 5 * time.Minute}
 	providerQuotaNow             = time.Now
 )
 
@@ -606,6 +642,10 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	}
 	var continuation []provideriface.LLMSelection
 	continuationRead := false
+	// left holds the models a non-quota failover left this run, which a
+	// quota switch does not walk back to.
+	left := map[string]bool{}
+	quotaEstimated := false
 	// incident is the all-models-exhausted incident in progress (nil:
 	// none), since incidentSince, after incidentRounds retry rounds.
 	var incident *types.WaitState
@@ -633,8 +673,17 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			}
 		}
 		order := []provideriface.LLMSelection{activeLLMConfig}
+		// A model that cannot serve the run is never a candidate: an image
+		// in the history needs a vision model, and the role may restrict
+		// models (management tasks: no free or preview). Nothing capable
+		// left is the all-exhausted path.
+		needsImage := messagesCarryImage(messages)
 		add := func(sel provideriface.LLMSelection) {
 			if strings.TrimSpace(sel.Provider) == "" || strings.TrimSpace(sel.Model) == "" {
+				return
+			}
+			if left[servingSelectionID(sel)] || (needsImage && !modelcatalog.SupportsImage(sel.Model)) ||
+				(options.quotaModelFilter != nil && !options.quotaModelFilter(sel)) {
 				return
 			}
 			for _, have := range order {
@@ -878,6 +927,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					until = now.Add(providerQuotaUnknownHold)
 				}
 				ledger.Mark(activeLLMConfig, until)
+				quotaEstimated = q.RetryAtEstimated || q.RetryAt.IsZero()
 				if switchOnQuota("provider_quota", err) {
 					continue
 				}
@@ -908,7 +958,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					names = append(names, servingSelectionID(sel))
 				}
 				detail := fmt.Sprintf("every model of the chain is out of quota (%s); the loop retries the chain, round %d of %d", strings.Join(names, ", "), incidentRounds, len(providerQuotaIncidentBackoff))
-				incident = types.NewProviderQuotaWait("run", firstNonEmpty(q.Provider, activeLLMConfig.Provider), firstNonEmpty(q.Model, activeLLMConfig.Model), incidentSince, soonest, false, delay, detail)
+				incident = types.NewProviderQuotaWait("run", firstNonEmpty(q.Provider, activeLLMConfig.Provider), firstNonEmpty(q.Model, activeLLMConfig.Model), incidentSince, soonest, quotaEstimated, delay, detail)
 				incident.Stamp(now)
 				if options.providerIncident != nil {
 					options.providerIncident(ctx, incident.Clone(), "")
@@ -946,6 +996,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			// stories-2026-10-14.md). Never on our own cancellation.
 			if nextFallback < len(options.fallbackLLMConfigs) && ctx.Err() == nil && IsModelFailoverError(err) {
 				from := activeLLMConfig
+				left[servingSelectionID(from)] = true
 				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[nextFallback], from)
 				nextFallback++
 				// Only an error the backoff would have waited on owes the
