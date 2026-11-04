@@ -969,3 +969,12 @@ Devin approved U4 with one real low and three nits, all adopted:
   owner-stamped stack rebase notice naming the operation, committed under its own id.
 - **Nits 2 and 4.** The escaped path bound includes the ellipsis, and C1 control
   characters (0x80 to 0x9f) are escaped like C0.
+
+## Owner ruling, 2026-11-04
+
+"I want all this, and clean rebases without approval." A rebase whose
+applied change re-applies cleanly onto the new base, and whose build and
+package checks pass, applies without an owner act; its receipt records the
+clean re-application. A conflict still goes to engineering, Verify and the
+owner. This lifts the earlier "not yet" recorded in
+library-package-propagation-2026-10-26.md section 1.

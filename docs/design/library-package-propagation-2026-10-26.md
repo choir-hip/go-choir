@@ -119,6 +119,9 @@ Evidence labels:
    - The exporter refuses when main's package tree is no longer the
      release's parent.
    - No clean rebase applies without approval (owner: "not yet").
+     Superseded 2026-11-04 (owner: "I want all this, and clean rebases
+     without approval"): a clean rebase applies without an owner act; a
+     conflict still goes to engineering and the owner.
 9. **The Updates app is a read-only projection** of every update applied
    to the computer. Approvals stay where owner acts live today (section 11).
 10. **Protected computers adopt last, and never automatically at first.**
