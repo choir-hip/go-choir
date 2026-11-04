@@ -426,8 +426,23 @@ func TestCleanRebaseGateNeverAppliedOnAFreshComputer(t *testing.T) {
 	}
 }
 
+func TestCleanRebaseGateAdmitsEveryDevelopingMode(t *testing.T) {
+	// propose_only is the resting mode after a consumed grant; the owner's
+	// ruling admits clean rebases under it.
+	for _, mode := range []string{SelfDevelopmentModeProposeOnly, SelfDevelopmentModeAcceptOnce, SelfDevelopmentModeQualifiedConsensus, SelfDevelopmentModeStandingConsensus} {
+		f := newCleanRebaseFixture(t)
+		f.setMode(t, mode)
+		c := newCleanRebaseCase()
+		jobs := fakeJobs{}
+		event, _ := f.write(t, c, "op-2", jobs)
+		if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); reason != "" || err != nil {
+			t.Fatalf("mode %q refused: %q %v", mode, reason, err)
+		}
+	}
+}
+
 func TestCleanRebaseGateModeCheck(t *testing.T) {
-	for _, mode := range []string{"", SelfDevelopmentModeOff, SelfDevelopmentModeAuditOnly} {
+	for _, mode := range []string{"", SelfDevelopmentModeOff, SelfDevelopmentModeAuditOnly, "a-future-mode"} {
 		f := newCleanRebaseFixture(t)
 		f.setMode(t, mode)
 		c := newCleanRebaseCase()

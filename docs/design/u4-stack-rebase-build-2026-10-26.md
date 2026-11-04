@@ -978,3 +978,50 @@ package checks pass, applies without an owner act; its receipt records the
 clean re-application. A conflict still goes to engineering, Verify and the
 owner. This lifts the earlier "not yet" recorded in
 library-package-propagation-2026-10-26.md section 1.
+
+### Clean rebase (built 2026-11-04)
+
+Before the rebase notice is minted, the guest re-applies the applied
+change's exact patch bytes onto the booted base (`sourceproj.Reapply`:
+`git apply`, no 3-way, no fuzz). If it applies cleanly, it opens a
+`clean-rebase-` operation carrying the same patch, host-builds it on the
+booted base, and accepts it under the authority
+`platform-clean-rebase:<receipt digest>`. The receipt reads "clean
+re-application of <op> onto <base>, applied without an owner act under the
+owner's 2026-11-04 ruling", and the ordinary materializer applies it. A
+conflict, a failed build, a second base move or a wedged decided attempt
+(older than twice the attempt budget) mints the notice as before.
+
+Scope: test-tier computers only (ring R1). A platform computer (the paper)
+never applies a clean rebase without the owner.
+
+The corpusd gate always enforces, even in observe mode. It admits only
+when all of these hold:
+- the receipt is on the tape, hashes to the authority, is cited by the
+  decision and names this computer, operation and bundle;
+- the computer is test-tier and not a platform computer;
+- the computer's mode is accept_once, qualified_consensus,
+  standing_consensus or propose_only (the ruling is unconditional;
+  off and audit_only are the hard stops);
+- the prior decision is an effect_accepted that corpusd admitted under
+  owner, consensus or a valid earlier clean rebase authority;
+- the prior change is the one the computer has applied now: its latest
+  materialization or rollback event is the materialization_applied of
+  that decision and bundle;
+- the two bundles differ only in base identity, carry the same patch, and
+  the base moved;
+- the receipt's booted base is the host's deployed guest image;
+- the host build is done, is of this operation, bundle, base, patch and
+  deployed image, and is the result the receipt names.
+
+Named residuals:
+- The deployed image stands in for the per-computer booted base. Corpusd
+  has no per-computer boot record, so a computer not yet refreshed onto
+  the newest deploy is refused and gets the notice.
+- materialization_applied events are appended by the guest. The reducer
+  binds DecisionRef to the pending decision, and the gate cross-binds the
+  bundle.
+- The modularity contract hook is not yet wired into the clean rebase
+  path.
+- A prior change that was applied plainly is re-applied through the
+  host-build path (stricter, accepted).

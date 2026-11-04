@@ -126,8 +126,16 @@ func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, 
 	if err != nil {
 		return "", nil, err
 	}
-	if mode == SelfDevelopmentModeOff || mode == SelfDevelopmentModeAuditOnly {
-		return "the computer's self-development mode is " + mode + "; nothing applies", nil, nil
+	// The owner's ruling is unconditional ("clean rebases without approval",
+	// 2026-11-04), so every mode in which the computer develops admits a
+	// clean rebase, propose_only included: it is the mode a test computer
+	// rests in after any consumed grant, and refusing it would turn the
+	// feature off on the computers it is for. off and audit_only stay the
+	// hard stops. An allowlist, so a new mode is refused until it is named.
+	switch mode {
+	case SelfDevelopmentModeAcceptOnce, SelfDevelopmentModeQualifiedConsensus, SelfDevelopmentModeStandingConsensus, SelfDevelopmentModeProposeOnly:
+	default:
+		return "the computer's self-development mode is " + mode + "; no clean rebase applies under it", nil, nil
 	}
 	receipt, reason, err := a.cleanRebaseLink(ctx, tx, event, receiptDigest, 0)
 	if err != nil || reason != "" {
@@ -329,6 +337,9 @@ func (a *OwnerActAuthority) cleanRebaseAppliedChange(ctx context.Context, tx *sq
 	if applied.EventKind != computerevent.EventMaterializationApplied || applied.ComputerID != computerID {
 		return "the applied event is not a materialization_applied of this computer", nil
 	}
+	// DecisionRef is reducer-bound to the pending decision; ProposedEffectRef
+	// is not, and holds only because cleanRebaseLink cross-binds the prior
+	// decision to the same bundle.
 	if applied.DecisionRef != receipt.PriorDecisionEvent || applied.ProposedEffectRef != receipt.PriorBundleDigest {
 		return "the computer's applied change is not the one rebased (an older, other or never-applied change)", nil
 	}
