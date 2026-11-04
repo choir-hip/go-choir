@@ -123,9 +123,11 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.world_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.WorldEvent"},
 		{Kind: "choir.event_membership", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EventMembership"},
 		// An owner's install or uninstall of a Library package release
-		// (docs/design/package-install-2026-11-04.md). P8 software-release
-		// adoptions written under this kind before its deletion stay readable.
-		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ReleaseAdoption"},
+		// (docs/design/package-install-2026-11-04.md). The kind was renamed
+		// from its pre-MA2.4 name; records of the old kind stay registered
+		// and readable until the store converts them (store/package_install_legacy.go).
+		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.PackageInstall"},
+		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.PackageInstall"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file
 		// with a stable id and its plaintext digest, and the path view from a
 		// live path to that id. Written by the runtime for the Files API and

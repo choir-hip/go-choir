@@ -28,7 +28,7 @@ func TestPackageLockAdmitsAnOrdinaryCastWhenTheBaseTakesAnotherVersionOfThePacka
 		t.Fatal(err)
 	}
 	r := releaseGit(t, repo, "rev-parse", "HEAD:"+root)
-	if err := rt.store.PutReleaseAdoption(ctx, store.ReleaseAdoption{OwnerID: owner, ComputerID: computerID, AdoptionID: "install-1", ReleaseID: "release-ours",
+	if err := rt.store.PutPackageInstall(ctx, store.PackageInstall{OwnerID: owner, ComputerID: computerID, InstallID: "install-1", ReleaseID: "release-ours",
 		TrajectoryID: "trajectory-install", Kind: "package", Package: "library-next", Action: "install", ReleaseTreeHash: r}); err != nil {
 		t.Fatal(err)
 	}

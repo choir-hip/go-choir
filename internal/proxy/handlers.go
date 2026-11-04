@@ -926,6 +926,11 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isCatalogPath(path):
 		h.HandleCatalog(w, r)
 		return
+	case strings.HasPrefix(path, "/api/computers/") && (strings.HasSuffix(path, "/self-development/adoptions") || strings.Contains(path, "/self-development/adoptions/")):
+		// The pre-MA2.4 install route is gone: install is the only name
+		// (/api/computers/<id>/packages/installs).
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
 	case strings.HasPrefix(path, "/api/computers/") && strings.Contains(path, "/self-development/"):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development effects are disabled"})
 		return

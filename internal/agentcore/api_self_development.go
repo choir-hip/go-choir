@@ -261,11 +261,11 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.releaseWitness(w, r, computerID, strings.TrimSpace(parts[3]))
-	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "adoptions":
+	case len(parts) == 3 && parts[1] == "packages" && parts[2] == "installs":
 		// The Library: install or uninstall a package release; list installs.
-		h.handleReleaseAdoptions(w, r, ownerID, computerID, "")
-	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "adoptions":
-		h.handleReleaseAdoptions(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
+		h.handlePackageInstalls(w, r, ownerID, computerID, "")
+	case len(parts) == 4 && parts[1] == "packages" && parts[2] == "installs":
+		h.handlePackageInstalls(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "operations":
 		if r.Method != http.MethodGet {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

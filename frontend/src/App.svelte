@@ -289,8 +289,6 @@
     url.searchParams.delete('title');
     url.searchParams.delete('intake');
     url.searchParams.delete('intake_id');
-    url.searchParams.delete('adoption');
-    url.searchParams.delete('adoption_id');
     const next = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', next || '/');
   }

@@ -30,7 +30,7 @@ import (
 // Each field reads its single authority: the manifest `current` points at
 // (live), the manifest this process started with, the running binary, the
 // applied operation whose release is current (its bound bundle and patch),
-// the guest store's event head, and the adoption that produced the
+// the guest store's event head, and the install that produced the
 // operation. P5's layered fields (code commit, closure, builder receipt)
 // come from the same manifest; P5 reads this block rather than adding one.
 type EffectiveRelease struct {

@@ -29,6 +29,23 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		return "", "", false
 	}
 	rest := strings.TrimPrefix(path, prefix)
+	if rawID, tail, ok := strings.Cut(rest, "/packages/installs"); ok {
+		// The Library's installs: GET lists or reads one (read); POST installs
+		// or uninstalls a package release (the owner's act). Installs are not
+		// self-development operations, so they are not under /self-development/.
+		decoded, err := url.PathUnescape(rawID)
+		if err != nil || strings.TrimSpace(decoded) == "" || strings.Contains(rawID, "/") {
+			return "", "", false
+		}
+		computerID = strings.TrimSpace(decoded)
+		switch {
+		case tail == "":
+			return computerID, "installs", true
+		case strings.HasPrefix(tail, "/") && strings.TrimSpace(tail[1:]) != "" && !strings.Contains(tail[1:], "/"):
+			return computerID, "read", true
+		}
+		return "", "", false
+	}
 	rawID, after, found := strings.Cut(rest, "/self-development/")
 	if !found || strings.TrimSpace(rawID) == "" || strings.Contains(rawID, "/") || strings.TrimSpace(after) == "" {
 		return "", "", false
@@ -50,11 +67,6 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		return strings.TrimSpace(decoded), "rollback", true
 	case "kernel-capabilities", "verifier-key":
 		return strings.TrimSpace(decoded), "read", true
-	case "adoptions":
-		// The Library: GET lists installs (read); POST installs or
-		// uninstalls a package release (the owner's act). The method
-		// picks the action.
-		return strings.TrimSpace(decoded), "adoptions", true
 	case "abandonments":
 		// The owner closes an open operation that will not settle. POST only,
 		// and an owner act like an approval.
@@ -74,9 +86,6 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch" || parts[2] == "release-witness") {
 		return strings.TrimSpace(decoded), "read", true
 	}
-	if len(parts) == 2 && parts[0] == "adoptions" && strings.TrimSpace(parts[1]) != "" {
-		return strings.TrimSpace(decoded), "read", true
-	}
 	return "", "", false
 }
 
@@ -91,7 +100,7 @@ func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 		return method == http.MethodPost
 	case "read":
 		return method == http.MethodGet
-	case "adoptions":
+	case "installs":
 		return method == http.MethodGet || method == http.MethodPost
 	default:
 		return false
@@ -456,10 +465,10 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	if action == "adoptions" {
+	if action == "installs" {
 		action = "read"
 		if r.Method == http.MethodPost {
-			action = "adopt"
+			action = "install"
 		}
 	}
 	requiredScope := "computer:self_development:" + action
@@ -467,7 +476,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		// An approval-class act: the approve scope plus the owner-act gate below.
 		requiredScope = "computer:self_development:approve"
 	}
-	if action == "adopt" {
+	if action == "install" {
 		// Installing a package is an approval-class act: the approve
 		// scope plus the owner-act gate below.
 		requiredScope = releasePublishScope
@@ -494,7 +503,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		if !authorizeOwnerAct(w, authResult, "self-development rollback") {
 			return
 		}
-	case "adopt":
+	case "install":
 		if !authorizeOwnerAct(w, authResult, "package install") {
 			return
 		}
@@ -524,7 +533,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
-		// Reads wake the joined computer; approve, rollback, adopt and
+		// Reads wake the joined computer; approve, rollback, install and
 		// rebase-retry and abandon are owner acts and never do.
 		if action == "read" {
 			autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
@@ -558,7 +567,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		maxBody = 1 << 20
 	}
 	var upstreamBody io.Reader = http.MaxBytesReader(w, r.Body, maxBody)
-	if action == "adopt" {
+	if action == "install" {
 		// The owner's package install: the proxy reads and verifies the
 		// release and its tree, and the computer gets them from here only
 		// (package_install.go).
@@ -582,7 +591,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	if contentType := r.Header.Get("Content-Type"); contentType != "" {
 		upstream.Header.Set("Content-Type", contentType)
 	}
-	if action == "adopt" {
+	if action == "install" {
 		upstream.Header.Set("Content-Type", "application/json")
 	}
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)

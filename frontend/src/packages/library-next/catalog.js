@@ -97,7 +97,7 @@ export async function loadRelease(releaseId) {
 
 // loadInstalls reads what is installed on this computer.
 export async function loadInstalls(computerId) {
-  const path = '/api/computers/' + encodeURIComponent(computerId) + '/self-development/adoptions';
+  const path = '/api/computers/' + encodeURIComponent(computerId) + '/packages/installs';
   return requestJSON(path, { headers: { accept: 'application/json' } });
 }
 
@@ -107,7 +107,7 @@ export async function loadInstalls(computerId) {
 // one the catalog returned. 201 is a new request, 200 one already under way
 // or done.
 export async function installRelease(computerId, releaseId, record, action = 'install') {
-  const path = '/api/computers/' + encodeURIComponent(computerId) + '/self-development/adoptions';
+  const path = '/api/computers/' + encodeURIComponent(computerId) + '/packages/installs';
   let res;
   try {
     res = await fetchWithRenewal(path, {
@@ -301,9 +301,9 @@ export function installState(item) {
   return 'working';
 }
 
-// adoptionsOf is the installed list, always an array.
-export function adoptionsOf(body) {
-  const list = body && body.adoptions;
+// installListOf is the installed list in a response body, always an array.
+export function installListOf(body) {
+  const list = body && body.installs;
   return Array.isArray(list) ? list.filter(Boolean) : [];
 }
 

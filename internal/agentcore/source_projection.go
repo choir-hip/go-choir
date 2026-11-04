@@ -585,7 +585,7 @@ func rematerializedGraftDetail(result sourceproj.Result) string {
 	return strings.Join(parts, ". ")
 }
 
-// annotatePackageReleases names the package install (store.ReleaseAdoption,
+// annotatePackageReleases names the package install (store.PackageInstall,
 // kind package, action install) whose release tree is each entry's R, the
 // stack's subtree (a merged entry's projection differs from R). It is
 // provenance for /health only; a read failure leaves the entries unnamed.
@@ -597,7 +597,7 @@ func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourcepr
 	if ownerID == "" || computerID == "" {
 		return
 	}
-	installs, err := rt.store.ListReleaseAdoptions(ctx, ownerID, computerID)
+	installs, err := rt.store.ListPackageInstalls(ctx, ownerID, computerID)
 	if err != nil {
 		return
 	}
@@ -606,7 +606,7 @@ func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourcepr
 		// A runtime install (S12) is not in the source stack, so it never
 		// names a stack entry.
 		for _, install := range installs { // newest first
-			if install.Kind == "package" && install.Action == "install" && install.Mode != store.ReleaseAdoptionModeRuntime && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
+			if install.Kind == "package" && install.Action == "install" && install.Mode != store.PackageInstallModeRuntime && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
 				e.ReleaseID = install.ReleaseID
 				break
 			}

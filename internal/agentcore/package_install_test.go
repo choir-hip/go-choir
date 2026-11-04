@@ -208,26 +208,26 @@ func newInstallEnv(t *testing.T) *installEnv {
 	return &installEnv{rt: rt, h: NewAPIHandler(rt), repo: repo, base: base, builder: builder, computer: computerID, owner: owner}
 }
 
-func (e *installEnv) post(t *testing.T, body []byte) (int, ReleaseAdoptionView, string) {
+func (e *installEnv) post(t *testing.T, body []byte) (int, PackageInstallView, string) {
 	t.Helper()
-	w := releaseRouterCall(t, e.h, http.MethodPost, "/api/computers/"+e.computer+"/self-development/adoptions", e.owner, e.computer, body)
-	var view ReleaseAdoptionView
+	w := releaseRouterCall(t, e.h, http.MethodPost, "/api/computers/"+e.computer+"/packages/installs", e.owner, e.computer, body)
+	var view PackageInstallView
 	var refusal releaseAPIError
 	_ = json.Unmarshal(w.Body.Bytes(), &view)
 	_ = json.Unmarshal(w.Body.Bytes(), &refusal)
 	return w.Code, view, refusal.Reason
 }
 
-func (e *installEnv) list(t *testing.T) []ReleaseAdoptionView {
+func (e *installEnv) list(t *testing.T) []PackageInstallView {
 	t.Helper()
-	w := releaseRouterCall(t, e.h, http.MethodGet, "/api/computers/"+e.computer+"/self-development/adoptions", e.owner, e.computer, nil)
+	w := releaseRouterCall(t, e.h, http.MethodGet, "/api/computers/"+e.computer+"/packages/installs", e.owner, e.computer, nil)
 	var body struct {
-		Adoptions []ReleaseAdoptionView `json:"adoptions"`
+		Installs []PackageInstallView `json:"installs"`
 	}
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &body) != nil {
 		t.Fatalf("list = %d %s", w.Code, w.Body.String())
 	}
-	return body.Adoptions
+	return body.Installs
 }
 
 func (e *installEnv) installed(t *testing.T) []InstalledPackage {
@@ -282,7 +282,7 @@ func TestRuntimeInstallInstallsReplacesUninstallsAndReinstalls(t *testing.T) {
 
 	// S2: installed, with no source change.
 	code, view, _ := e.post(t, installBody(t, id, raw, tree, ""))
-	if code != http.StatusCreated || view.State != installStateInstalled || !view.PatchMatchesRelease || !view.ModuleAvailable || view.Mode != store.ReleaseAdoptionModeRuntime || view.TrajectoryID != "" {
+	if code != http.StatusCreated || view.State != installStateInstalled || !view.PatchMatchesRelease || !view.ModuleAvailable || view.Mode != store.PackageInstallModeRuntime || view.TrajectoryID != "" {
 		t.Fatalf("S2 = %d %+v", code, view)
 	}
 	if got := releaseGit(t, e.repo, "rev-parse", "HEAD"); got != head {
@@ -300,8 +300,8 @@ func TestRuntimeInstallInstallsReplacesUninstallsAndReinstalls(t *testing.T) {
 
 	// S3: a repeat answers the install, with no new build or record.
 	code, again, _ := e.post(t, installBody(t, id, raw, tree, ""))
-	if code != http.StatusOK || again.AdoptionID != view.AdoptionID || e.builder.builds != 1 || e.records(t) != 1 {
-		t.Fatalf("S3 = %d %s builds %d", code, again.AdoptionID, e.builder.builds)
+	if code != http.StatusOK || again.InstallID != view.InstallID || e.builder.builds != 1 || e.records(t) != 1 {
+		t.Fatalf("S3 = %d %s builds %d", code, again.InstallID, e.builder.builds)
 	}
 
 	// S4: another release of the same package replaces it.
@@ -467,7 +467,7 @@ func TestRuntimeUninstallNeedsNoCatalogRecordOrBuilder(t *testing.T) {
 // (review, DeepSeek) an attempt id that a record already holds is never
 // reused: the next free id is taken, so a reinstall cannot 500 after its
 // module is stored.
-func TestRuntimeInstallNeverReusesAnAdoptionID(t *testing.T) {
+func TestRuntimeInstallNeverReusesAnInstallID(t *testing.T) {
 	e := newInstallEnv(t)
 	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
 		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
@@ -475,15 +475,15 @@ func TestRuntimeInstallNeverReusesAnAdoptionID(t *testing.T) {
 	// A record already holds attempt 1's id (as one the listing window once
 	// missed would), but under another release, so the attempt count is 1.
 	taken := packageInstallID(e.computer, id, packageActionInstall, 1)
-	if err := e.rt.store.PutReleaseAdoption(context.Background(), store.ReleaseAdoption{
-		OwnerID: e.owner, ComputerID: e.computer, AdoptionID: taken, ReleaseID: strings.Repeat("f", 64),
-		Kind: adoptionKindPackage, Package: "other", Action: packageActionInstall, Attempt: 1, Mode: store.ReleaseAdoptionModeRuntime,
+	if err := e.rt.store.PutPackageInstall(context.Background(), store.PackageInstall{
+		OwnerID: e.owner, ComputerID: e.computer, InstallID: taken, ReleaseID: strings.Repeat("f", 64),
+		Kind: installKindPackage, Package: "other", Action: packageActionInstall, Attempt: 1, Mode: store.PackageInstallModeRuntime,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	code, view, reason := e.post(t, installBody(t, id, raw, tree, ""))
-	if code != http.StatusCreated || view.AdoptionID == taken || !strings.HasPrefix(view.AdoptionID, taken) {
-		t.Fatalf("install = %d %s %q", code, reason, view.AdoptionID)
+	if code != http.StatusCreated || view.InstallID == taken || !strings.HasPrefix(view.InstallID, taken) {
+		t.Fatalf("install = %d %s %q", code, reason, view.InstallID)
 	}
 }
 

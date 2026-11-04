@@ -52,7 +52,7 @@ func newInstallProxyEnv(t *testing.T) *installProxyEnv {
 		env.guestIn, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"adoption_id":"install-1"}`))
+		_, _ = w.Write([]byte(`{"install_id":"install-1"}`))
 	}))
 	t.Cleanup(guest.Close)
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +96,7 @@ func newInstallProxyEnv(t *testing.T) *installProxyEnv {
 
 func (e *installProxyEnv) send(t *testing.T, body, secret string) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/adoptions", strings.NewReader(body))
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/packages/installs", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+secret)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -237,7 +237,7 @@ func TestPackageInstallIsTheOwnersActAndCarriesOnlyTheStoresVerifiedRelease(t *t
 		t.Fatalf("P1: guest got %s (%v)", env.guestIn, err)
 	}
 	calls := strings.Join(env.calls, "\n")
-	for _, want := range []string{"corpusd GET /internal/platform/packages/releases/" + id + " owner_id=" + env.user, "/blobs/" + computerevent.DigestBytes(tree) + " owner_id=" + env.user, "guest POST /api/computers/computer-a/self-development/adoptions"} {
+	for _, want := range []string{"corpusd GET /internal/platform/packages/releases/" + id + " owner_id=" + env.user, "/blobs/" + computerevent.DigestBytes(tree) + " owner_id=" + env.user, "guest POST /api/computers/computer-a/packages/installs"} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("P1: calls missing %q:\n%s", want, calls)
 		}
@@ -263,6 +263,27 @@ func TestPackageInstallIsTheOwnersActAndCarriesOnlyTheStoresVerifiedRelease(t *t
 		for _, call := range env.calls {
 			if strings.HasPrefix(call, "corpusd") {
 				t.Fatalf("uninstall %s read the catalog: %v", leg, env.calls)
+			}
+		}
+	}
+}
+
+// The pre-MA2.4 install route answers 404 for every method and shape; the
+// install route is /api/computers/<id>/packages/installs.
+func TestPreRenameInstallRouteIsGone(t *testing.T) {
+	env := newInstallProxyEnv(t)
+	secret := env.secret(t, "admin")
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		for _, path := range []string{
+			"/api/computers/computer-a/self-development/adoptions",
+			"/api/computers/computer-a/self-development/adoptions/install-1",
+		} {
+			request := httptest.NewRequest(method, path, strings.NewReader(`{}`))
+			request.Header.Set("Authorization", "Bearer "+secret)
+			response := httptest.NewRecorder()
+			env.handler.HandleAPI(response, request)
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("%s %s = %d, want 404", method, path, response.Code)
 			}
 		}
 	}

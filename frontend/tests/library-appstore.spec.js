@@ -98,7 +98,7 @@ function world() {
       publisher_address: app.email, own: false,
     });
   });
-  return { releases, byTrack, entries, adoptions: [], posts: [] };
+  return { releases, byTrack, entries, installs: [], posts: [] };
 }
 
 // answer routes the catalog and the install list for one page, statefully.
@@ -125,18 +125,18 @@ async function answerCatalog(page, w) {
       const video = [...w.releases.values()].some((r) => r.media.some((i) => p.endsWith(i.sha256) && i.kind === 'video'));
       return route.fulfill({ status: 200, contentType: video ? 'video/webm' : 'image/png', body: video ? WEBM : PNG });
     }
-    if (p === `/api/computers/${COMPUTER}/self-development/adoptions`) {
-      if (req.method() === 'GET') return json({ adoptions: w.adoptions });
+    if (p === `/api/computers/${COMPUTER}/packages/installs`) {
+      if (req.method() === 'GET') return json({ installs: w.installs });
       const body = JSON.parse(req.postData() || '{}');
       w.posts.push(body);
       const release = w.releases.get(body.release_id);
-      const name = release ? release.listing.package : (w.adoptions.find((a) => a.release_id === body.release_id) || {}).package;
-      for (const a of w.adoptions) if (a.package === name && a.state !== 'replaced') Object.assign(a, { state: 'replaced', patch_matches_release: false });
+      const name = release ? release.listing.package : (w.installs.find((a) => a.release_id === body.release_id) || {}).package;
+      for (const a of w.installs) if (a.package === name && a.state !== 'replaced') Object.assign(a, { state: 'replaced', patch_matches_release: false });
       const row = {
-        adoption_id: 'ad-' + (w.adoptions.length + 1), release_id: body.release_id, package: name, action: body.action || 'install',
+        install_id: 'ad-' + (w.installs.length + 1), release_id: body.release_id, package: name, action: body.action || 'install',
         mode: 'runtime', patch_matches_release: true, requested_at: '2026-11-04T10:00:00Z', publisher_computer_id: release ? release.record.publisher.computer_id : 'computer-gone',
       };
-      w.adoptions.unshift(row);
+      w.installs.unshift(row);
       return json(row, 201);
     }
     return route.fallback();
@@ -366,9 +366,9 @@ test.describe('the Library is an app store', () => {
     // maker A's files-next (the 012 card) is installed; an app no longer
     // listed is installed too.
     const [aId] = w.byTrack.get(`files-next\n${hex(2)}`);
-    w.adoptions.push(
-      { adoption_id: 'ad-a', release_id: aId, package: 'files-next', action: 'install', mode: 'runtime', patch_matches_release: true },
-      { adoption_id: 'ad-gone', release_id: hex(777), package: 'old-app', action: 'install', mode: 'runtime', patch_matches_release: true },
+    w.installs.push(
+      { install_id: 'ad-a', release_id: aId, package: 'files-next', action: 'install', mode: 'runtime', patch_matches_release: true },
+      { install_id: 'ad-gone', release_id: hex(777), package: 'old-app', action: 'install', mode: 'runtime', patch_matches_release: true },
     );
     await stubBackend(page, { api: [] });
     await answerCatalog(page, w);

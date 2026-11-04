@@ -13,7 +13,7 @@ import (
 )
 
 // Package install at the proxy (docs/design/package-install-2026-11-04.md).
-// The owner's install arrives on POST /api/computers/<id>/self-development/adoptions,
+// The owner's install arrives on POST /api/computers/<id>/packages/installs,
 // the route the Library calls, as {release_id, record?, action?}. The proxy
 // reads the release from corpusd as the owner it authenticated, so only a
 // listed release that owner may see, verifies the record against its id

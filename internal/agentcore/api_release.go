@@ -66,27 +66,27 @@ func releasePrecommitment(precommit types.CommitmentRecord, resolve *types.Commi
 	return out
 }
 
-// handleReleaseAdoptions serves the Library's package installs, runtime
+// handlePackageInstalls serves the Library's package installs, runtime
 // installs since S12 (docs/design/s12-runtime-install-build-2026-11-04.md):
 //
-//	POST /api/computers/<id>/self-development/adoptions        install or uninstall (owner act; the proxy supplies the tree)
-//	GET  /api/computers/<id>/self-development/adoptions        list
-//	GET  /api/computers/<id>/self-development/adoptions/<aid>  one
-func (h *APIHandler) handleReleaseAdoptions(w http.ResponseWriter, r *http.Request, ownerID, computerID, adoption string) {
+//	POST /api/computers/<id>/packages/installs        install or uninstall (owner act; the proxy supplies the tree)
+//	GET  /api/computers/<id>/packages/installs        list
+//	GET  /api/computers/<id>/packages/installs/<id>  one
+func (h *APIHandler) handlePackageInstalls(w http.ResponseWriter, r *http.Request, ownerID, computerID, installID string) {
 	switch {
-	case adoption == "" && r.Method == http.MethodPost:
-		var request adoptReleaseRequest
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, adoptionRequestMaxBytes))
+	case installID == "" && r.Method == http.MethodPost:
+		var request packageInstallRequest
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, installRequestMaxBytes))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&request); err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, releaseAPIError{Error: "invalid adoption request", Reason: "request_invalid"})
+			writeAPIJSON(w, http.StatusBadRequest, releaseAPIError{Error: "invalid install request", Reason: "request_invalid"})
 			return
 		}
 		// An uninstall needs no record: the computer's in-force install
 		// names the package, so a release the catalog no longer has can
 		// always be removed.
 		if request.Action != packageActionUninstall && !isPackageReleaseRecord(request.Record) {
-			// Software-release adoption (P8) is deleted: only a Library
+			// The software-release flow (P8) is deleted: only a Library
 			// package release installs (docs/design/package-install-2026-11-04.md).
 			writeAPIJSON(w, http.StatusUnprocessableEntity, releaseAPIError{Error: "only a package release from the Library installs", Reason: "release_record_invalid"})
 			return
@@ -101,35 +101,34 @@ func (h *APIHandler) handleReleaseAdoptions(w http.ResponseWriter, r *http.Reque
 			status = http.StatusCreated
 		}
 		writeAPIJSON(w, status, view)
-	case adoption == "" && r.Method == http.MethodGet:
-		// Newest first; a P8 software-release adoption from before its
-		// deletion is not an install.
+	case installID == "" && r.Method == http.MethodGet:
+		// Newest first; a record of the deleted P8 flow is not an install.
 		list, err := h.rt.packageInstalls(r.Context(), ownerID, computerID)
 		if err != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "adoptions unreadable"})
+			writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "installs unreadable"})
 			return
 		}
-		views := make([]ReleaseAdoptionView, 0, len(list))
+		views := make([]PackageInstallView, 0, len(list))
 		for _, item := range list {
-			views = append(views, h.rt.adoptionView(item, list))
+			views = append(views, h.rt.installView(item, list))
 		}
-		writeAPIJSON(w, http.StatusOK, map[string]any{"adoptions": views})
-	case adoption != "" && r.Method == http.MethodGet:
-		item, err := h.rt.store.GetReleaseAdoption(r.Context(), ownerID, computerID, adoption)
+		writeAPIJSON(w, http.StatusOK, map[string]any{"installs": views})
+	case installID != "" && r.Method == http.MethodGet:
+		item, err := h.rt.store.GetPackageInstall(r.Context(), ownerID, computerID, installID)
 		if errors.Is(err, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "adoption not found"})
+			writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "install not found"})
 			return
 		}
 		if err != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "adoption unreadable"})
+			writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "install unreadable"})
 			return
 		}
 		list, err := h.rt.packageInstalls(r.Context(), ownerID, computerID)
-		if err != nil || item.Kind != adoptionKindPackage {
-			writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "adoption not found"})
+		if err != nil || item.Kind != installKindPackage {
+			writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "install not found"})
 			return
 		}
-		writeAPIJSON(w, http.StatusOK, h.rt.adoptionView(item, list))
+		writeAPIJSON(w, http.StatusOK, h.rt.installView(item, list))
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, releaseAPIError{Error: "method not allowed"})
 	}

@@ -75,7 +75,7 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 		for name, item := range current {
 			_, readErr := rt.packageModules.Read(item.ModuleSHA256)
 			out = append(out, InstalledPackage{
-				Name: name, ReleaseID: item.ReleaseID, InstallID: item.AdoptionID,
+				Name: name, ReleaseID: item.ReleaseID, InstallID: item.InstallID,
 				InstalledAt: item.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 				Publisher:   item.PublisherComputerID, RequiresSDK: item.RequiresSDK, Manifest: item.Manifest,
 				Module:    InstalledModule{ABI: item.ModuleABI, SHA256: item.ModuleSHA256, URL: packageModulesPrefix + item.ModuleSHA256 + ".js"},

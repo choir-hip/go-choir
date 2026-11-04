@@ -449,11 +449,11 @@ type Runtime struct {
 	selfdevStartupRelease       *effectiveReleaseIdentity
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
-	// Release identity and source adoption (P6/P8,
+	// Release identity (P6,
 	// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): the guest's source
 	// repository (CHOIR_CAPSULE_SOURCE_ROOT unless set), the per-release
 	// tree cache, the published-release reader and the owner-prompt
-	// submitter the adoption request goes through.
+	// submitter.
 	releaseSourceDir     string
 	effectiveTreeCompute func(ctx context.Context, repo, commit string, patch []byte) (string, error)
 	effectiveBuildCommit func() string

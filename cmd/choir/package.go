@@ -151,13 +151,13 @@ func packageCommands() []*command {
 			usage:  selfDevUsage, scopes: selfDevRead, readOnly: true,
 			handler: func(x *call) (any, error) {
 				if id := x.trim("install"); id != "" {
-					return getRaw(x, selfDevPath(x.str("computer"), "adoptions/"+url.PathEscape(id)))
+					return getRaw(x, installsPath(x.str("computer"), "/"+url.PathEscape(id)))
 				}
-				return getRaw(x, selfDevPath(x.str("computer"), "adoptions"))
+				return getRaw(x, installsPath(x.str("computer"), ""))
 			},
 		},
-		packageInstallAct("install", "Install a published package release on your computer: its desks apply it as a self-development change you then approve (owner act)"),
-		packageInstallAct("uninstall", "Uninstall a package release the Library installed on your computer, the same way (owner act)"),
+		packageInstallAct("install", "Install a published package release on your computer: the computer builds it into a module and records the install (owner act)"),
+		packageInstallAct("uninstall", "Uninstall a package release the Library installed on your computer, removing its module from the launcher (owner act)"),
 		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: nobody else sees it any more; it stays in your own history (owner act)"),
 		packageStateAct("reinstate", pkgrelease.StateListed, "Reinstate a withdrawn or suspended package release while it can still head its track (owner act)"),
 	}
@@ -177,11 +177,16 @@ func packageInstallAct(verb, summary string) *command {
 		usage:  "--computer and --release are required",
 		scopes: []string{"computer:self_development:read", releaseApprove}, idempotent: true,
 		handler: func(x *call) (any, error) {
-			return sendRaw(x, http.MethodPost, selfDevPath(x.str("computer"), "adoptions"), map[string]any{
+			return sendRaw(x, http.MethodPost, installsPath(x.str("computer"), ""), map[string]any{
 				"release_id": strings.ToLower(x.trim("release")), "action": verb,
 			})
 		},
 	})
+}
+
+// installsPath is the Library's install route on a computer.
+func installsPath(computerID, rest string) string {
+	return "/api/computers/" + url.PathEscape(strings.TrimSpace(computerID)) + "/packages/installs" + rest
 }
 
 func listingPath(x *call) string {

@@ -127,7 +127,7 @@
 // some releases carry none, for the gallery's "no screenshots" state. A shot's routes() still wins for any
 // catalog URL it handles.
 //
-// Install: POST/GET /api/computers/<id>/self-development/adoptions[/<aid>] is the
+// Install: POST/GET /api/computers/<id>/packages/installs[/<aid>] is the
 // owner's act on the real computer, which the autoputer here refuses. The helper
 // answers it from scripts/fixtures/capsule-install.json, written from the real
 // package install handler by internal/agentcore/capsule_install_fixture_test.go, with the
@@ -712,7 +712,7 @@ export function loadInstallFixture(file = INSTALL_FIXTURE_PATH) {
     const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
     const ok = (a) => a && Number.isInteger(a.status) && a.body && typeof a.body === 'object';
     return fx && fx.fixture === 'capsule-install' && typeof fx.refusal_package === 'string' && ok(fx.created) && ok(fx.repeat) && ok(fx.list) && ok(fx.refusal)
-      && Array.isArray(fx.list.body.adoptions) ? fx : null;
+      && Array.isArray(fx.list.body.installs) ? fx : null;
   } catch {
     return null;
   }
@@ -863,9 +863,9 @@ export function catalogAnswer(fx, method, pathname, search, mediaDir = CATALOG_M
   return { status: 404, body: { error: 'not found' } };
 }
 
-const INSTALL_PATH_RE = /^\/api\/computers\/([^/]+)\/self-development\/adoptions(?:\/([^/]+))?\/?$/;
+const INSTALL_PATH_RE = /^\/api\/computers\/([^/]+)\/packages\/installs(?:\/([^/]+))?\/?$/;
 
-// isInstallPath: is this URL path an adoptions route (the install fixture's)?
+// isInstallPath: is this URL path an installs route (the install fixture's)?
 export function isInstallPath(pathname) { return INSTALL_PATH_RE.test(pathname); }
 
 // refusalRelease is the catalog fixture release the install fixture refuses: the
@@ -876,47 +876,47 @@ function refusalRelease(ifx, cfx) {
   return of.length ? of[0].release_id : '';
 }
 
-// installAnswer is the install fixture's answer to an adoptions request, as the
+// installAnswer is the install fixture's answer to an installs request, as the
 // proxy relays the computer's: { status, body }, or null for a path that is not
-// the adoptions route (or no fixture). bodyText is the request body. state is
-// the shot's { adoptions: [] }, appended to by an install and emptied per shot.
+// the installs route (or no fixture). bodyText is the request body. state is
+// the shot's { installs: [] }, appended to by an install and emptied per shot.
 export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
   const m = INSTALL_PATH_RE.exec(pathname);
   if (!ifx || !cfx || !m) return null;
   const computerId = m[1]; // pathname arrives decoded once, as the proxy's router sees it
   const aid = m[2] || '';
   const clone = (v) => JSON.parse(JSON.stringify(v));
-  if (method === 'GET' && !aid) return { status: ifx.list.status, body: { ...clone(ifx.list.body), adoptions: clone(state.adoptions.filter((a) => a.computer_id === computerId)) } };
+  if (method === 'GET' && !aid) return { status: ifx.list.status, body: { ...clone(ifx.list.body), installs: clone(state.installs.filter((a) => a.computer_id === computerId)) } };
   if (method === 'GET') {
-    const found = state.adoptions.find((a) => a.adoption_id === aid && a.computer_id === computerId);
-    return found ? { status: ifx.repeat.status, body: clone(found) } : { status: 404, body: { error: 'adoption not found' } };
+    const found = state.installs.find((a) => a.install_id === aid && a.computer_id === computerId);
+    return found ? { status: ifx.repeat.status, body: clone(found) } : { status: 404, body: { error: 'install not found' } };
   }
   if (method !== 'POST' || aid) return { status: 405, body: { error: 'method not allowed' } };
   let req;
   try { req = JSON.parse(bodyText || ''); } catch { req = null; }
-  if (!req || typeof req !== 'object' || Array.isArray(req)) return { status: 400, body: { error: 'invalid adoption request', reason: 'request_invalid' } };
+  if (!req || typeof req !== 'object' || Array.isArray(req)) return { status: 400, body: { error: 'invalid install request', reason: 'request_invalid' } };
   const releaseId = String(req.release_id || '').trim().toLowerCase();
   if (!SHA256_RE.test(releaseId)) return { status: 400, body: { error: 'release_id must be a sha256', reason: 'release_id_invalid' } };
   // The install id of a first attempt, as the computer names it.
-  const adoptionId = 'install-' + createHash('sha256').update(`${computerId}\0${releaseId}\x00install\x001`).digest('hex').slice(0, 24);
-  const existing = state.adoptions.find((a) => a.adoption_id === adoptionId);
+  const installId = 'install-' + createHash('sha256').update(`${computerId}\0${releaseId}\x00install\x001`).digest('hex').slice(0, 24);
+  const existing = state.installs.find((a) => a.install_id === installId);
   if (existing) return { status: ifx.repeat.status, body: clone(existing) };
   const rel = cfx.releases.find((r) => r.release_id === releaseId);
   if (!rel) return { status: 404, body: { error: `the host has no published release ${releaseId}`, reason: 'release_not_published' } };
   if (releaseId === refusalRelease(ifx, cfx)) return { status: ifx.refusal.status, body: clone(ifx.refusal.body) };
-  const n = state.adoptions.length + 1;
+  const n = state.installs.length + 1;
   const rec = rel.record || {};
   const src = rec.source || {};
   const view = clone(ifx.created.body);
   Object.assign(view, {
-    adoption_id: adoptionId, computer_id: computerId, release_id: releaseId,
+    install_id: installId, computer_id: computerId, release_id: releaseId,
     publisher_computer_id: (rec.publisher || {}).computer_id || '', publisher_operation_id: (rec.operation || {}).operation_id || '',
     patch_sha256: (src.tree_patch || {}).sha256 || '', release_base_commit: src.built_on || '', release_tree_hash: src.tree || '',
     package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
     // A runtime install (S12) is in force when it answers: a distinct module per install.
     module_sha256: createHash('sha256').update(`module\0${releaseId}\0${n}`).digest('hex'),
   });
-  state.adoptions.unshift(view); // newest first, as the store lists
+  state.installs.unshift(view); // newest first, as the store lists
   return { status: ifx.created.status, body: clone(view) };
 }
 
@@ -1107,7 +1107,7 @@ function tunnel(req, socket, head) {
   socket.on('close', () => up.destroy());
 }
 
-function serve(dist, computer = false, themeState = { preset: null }, catalog = null, install = null, installState = { adoptions: [] }) {
+function serve(dist, computer = false, themeState = { preset: null }, catalog = null, install = null, installState = { installs: [] }) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     const u = decodeURIComponent(url.pathname);
@@ -1300,8 +1300,8 @@ async function main() {
   const catalog = loadCatalogFixture();
   if (!catalog) console.warn(`choir-shot: no catalog fixture at ${CATALOG_FIXTURE_PATH}; /api/catalog/* is unanswered in a capsule`);
   const install = loadInstallFixture();
-  if (!install) console.warn(`choir-shot: no install fixture at ${INSTALL_FIXTURE_PATH}; install (self-development/adoptions) is refused in a capsule`);
-  const installState = { adoptions: [] };
+  if (!install) console.warn(`choir-shot: no install fixture at ${INSTALL_FIXTURE_PATH}; install (packages/installs) is refused in a capsule`);
+  const installState = { installs: [] };
   const podcast = loadPodcastFixture();
   if (!podcast) console.warn(`choir-shot: no podcast fixture at ${PODCAST_FIXTURE_DIR}; podcast artwork and audio will not load in a capsule`);
   const podcastState = { served: false, seen: new Set() };
@@ -1327,7 +1327,7 @@ async function main() {
         const s = it.shot;
         themeState.preset = it.theme;
         themeState.fixtureServed = false;
-        installState.adoptions.length = 0; // the installed list is per shot, emptied with the desktop
+        installState.installs.length = 0; // the installed list is per shot, emptied with the desktop
         if (useComputer) await resetDesktop(base);
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         podcastState.served = false;

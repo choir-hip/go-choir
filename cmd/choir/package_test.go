@@ -240,7 +240,7 @@ func TestPackagePublishShowsTheWholeConfirmationPreview(t *testing.T) {
 func TestPackageInstallSendsOnlyTheReleaseAndTheAction(t *testing.T) {
 	id := testPackageID(t)
 	for _, verb := range []string{"install", "uninstall"} {
-		got := parityServer(t, `{"adoption_id":"install-1"}`)
+		got := parityServer(t, `{"install_id":"install-1"}`)
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{"package", verb, "--computer", "c1", "--release", strings.ToUpper(id)}, &stdout, &stderr); code != 0 {
 			t.Fatalf("%s: exit %d %s", verb, code, stderr.String())
@@ -251,7 +251,7 @@ func TestPackageInstallSendsOnlyTheReleaseAndTheAction(t *testing.T) {
 		req := (*got)[0]
 		var body map[string]any
 		_ = json.Unmarshal(req.Body, &body)
-		if req.Method != http.MethodPost || req.Path != "/api/computers/c1/self-development/adoptions" || len(body) != 2 || body["release_id"] != id || body["action"] != verb {
+		if req.Method != http.MethodPost || req.Path != "/api/computers/c1/packages/installs" || len(body) != 2 || body["release_id"] != id || body["action"] != verb {
 			t.Fatalf("%s: sent %s %s %s", verb, req.Method, req.Path, req.Body)
 		}
 	}

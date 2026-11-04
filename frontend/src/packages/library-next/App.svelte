@@ -9,7 +9,7 @@
   import { fetchWithRenewal } from '../../lib/app-sdk';
   import Icon from './Icon.svelte';
   import {
-    adoptionsOf,
+    installListOf,
     descriptionOf,
     formatDay,
     inFlightFor,
@@ -154,7 +154,7 @@
   async function refreshInstalls() {
     if (!computerId) return;
     try {
-      installs = adoptionsOf(await loadInstalls(computerId));
+      installs = installListOf(await loadInstalls(computerId));
       await resolveInstalled();
     } catch (err) {
       installs = [];
@@ -467,7 +467,7 @@
         <section class="lib-section" data-installed-section>
           <h3 class="lib-h3">Installed on this computer</h3>
           <ul class="lib-version-list lib-installed-list">
-            {#each shelfInstalls as item (item.adoption_id || item.release_id)}
+            {#each shelfInstalls as item (item.install_id || item.release_id)}
               <li class="lib-version" data-installed-row>
                 <span>{item.package}</span>
                 <button class="lib-btn lib-btn-quiet lib-btn-small" data-uninstall-button disabled={busy || !computerId} on:click={() => doUninstall(item)}>

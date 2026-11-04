@@ -27,10 +27,10 @@
     },
     {
       "method": "GET",
-      "path": "/api/computers/contract-computer/self-development/adoptions",
+      "path": "/api/computers/contract-computer/packages/installs",
       "status": 200,
       "json": {
-        "adoptions": []
+        "installs": []
       }
     }
   ],
