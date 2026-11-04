@@ -3895,8 +3895,27 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		// One record per tool loop of the job outcomes the model was given,
 		// shared by the park and the guard (capsule_jobs.go, jobDeliveries).
 		deliveries := rt.newRunJobDeliveries(rec)
+		spin := &noopSpinDetector{}
+		none := toolregistry.ToolLoopCompletionGuardResult{}
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolBatchWait(func(ctx context.Context, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
-			return rt.engineeringJobPark(ctx, rec, deliveries, emit, calls, results)
+			parked, ok, err := rt.engineeringJobPark(ctx, rec, deliveries, emit, calls, results)
+			if err != nil || ok {
+				spin.reset()
+				return parked, ok, err
+			}
+			count, nudge, stop := spin.observe(calls, results)
+			if count >= noopSpinNudgeAt && (nudge || stop) {
+				if payload, merr := json.Marshal(map[string]any{"count": count, "ended": stop}); merr == nil && emit != nil {
+					emit(types.EventRunProgress, "noop_spin", payload)
+				}
+			}
+			if stop {
+				return none, false, noopSpinError(count)
+			}
+			if nudge {
+				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: "noop_spin", Instruction: withActivationBudget(ctx, noopSpinNudge(count))}, true, nil
+			}
+			return parked, ok, err
 		}))
 		// The desk's only tool is capsule_go_eval; its durable transition is a
 		// committed terminal fate (freeze/verify for selfdev casts). An
