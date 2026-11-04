@@ -1,6 +1,6 @@
 # A provider quota kills every desk loop on the model after 45 s (2026-11-04)
 
-Status: open. Mutation class of the fix: red (gateway provider error
+Status: superseded by the switch ruling below (2026-11-04, about 18:30Z); the park and its machinery are deleted. Mutation class of the fix: red (gateway provider error
 handling and circuit breaker, the guest's provider retry path in the tool
 loop). This doc is green.
 
@@ -140,3 +140,70 @@ file was read and parsed and names another model for the role
 (modelpolicy.ResolveStrict, which neither falls back nor writes the file); a
 missing, unreadable or unparsable file, a bad overlay, or an unknown pool
 keeps the run on its model and logs once per distinct error.
+
+## Superseding ruling: switch, never pause (owner, 2026-11-04, about 18:30Z)
+
+Owner, verbatim: "On quota issues, we shouldn't stop but switch models.
+Always continue, never pause." This replaces the park above and the
+"pinned model fails rather than falls back" rule for quota (a non-quota
+failure of a pin or a NoFailover pool still fails; the Claude delegate is
+not in any chain, it is an engineering-only tool layer).
+
+### Behaviour
+
+On a typed quota answer the tool loop marks the model exhausted in the
+computer's quota ledger until its reset (two minutes when the answer names
+no reset time) and switches, with no sleep, to the first model after it that
+the ledger does not hold out:
+
+1. the rest of the role's own pool or fallbacks, in order;
+2. the members it left earlier in the run (a reset may have brought one back)
+   and its first model;
+3. the computer-wide continuation chain (`modelpolicy.Manager.ContinuationChain`):
+   the catalogued models the computer's own policy names (defaults, then
+   roles, pools expanded), then the default pool. It adds nothing a computer
+   may not already call; uncatalogued ids are dropped; the Claude delegate is
+   not in the catalog and so never appears.
+
+A model the ledger holds exhausted is skipped, including as the run's first
+model (reason `known_exhausted`), until its reset time passes. The ledger is
+shared by the computer's runs, so one run's finding spares the others the
+doomed call. Each switch is a `run.retry` event named `model_switch`
+(`reason` provider_quota, known_exhausted or provider_quota_retry;
+`from_provider`, `from_model`, `to_provider`, `to_model`,
+`from_quota_resets_at`, `provider_error`). Nothing waits.
+
+### Every model exhausted at once: bounded retry plus a loud incident
+
+This is the only wait left. Choice: retry the whole chain (the ledger is
+forgotten, so the gateway is asked again) after a short backoff of 15 s, 30 s,
+1 min, 2 min, 4 min, 5 min, 5 min (cut short when the earliest known reset is
+sooner), about 18 minutes in all. Then the run ends with an error that names
+the quota, which closes it with a visible fate; it is not a silent pause and
+the fate is not "interrupted". Why a bounded retry and not an unbounded one:
+if every model on the computer is out of quota there is nothing to switch to,
+and an unbounded loop is the park under another name that also hides the
+dead state; why not fail at once: a chain that is exhausted for seconds
+(concurrency 429s that were typed quota, a cooldown that ends) should not
+cost the work. While it lasts the incident is a typed `provider_quota`
+wait: on the obligations surface (`provider_waits`), in every desk's pack
+(Texture's included), as the assignment's wait for an engineering run
+(management's pack, Texture's relay after a minute), and as `run.retry`
+events `provider_quota_incident` (per round) and
+`provider_quota_incident_cleared`.
+
+### Deleted
+
+`toolregistry.WithProviderWait`, `waitQuotaPark`, `providerQuotaParkDelay`,
+the park delays and the 30 s policy re-read (`WithModelReselect`,
+`modelReselectForRun`, `modelpolicy.ResolveStrict`), the quota's use of the
+activation deadline's suspend/resume, the announce timer and the park
+sequencing in the tracker. The tracker stays, slimmed, for the incident
+only. The known gap above (non-engineering parks not announced to Texture;
+concurrent research children corrupting the parent's activation deadline) is
+gone with the parks: a quota never touches the deadline.
+
+### Restart rules
+
+Unchanged: the ledger and the incident are process memory; a crash closes the
+run at boot. No resumer, no switch.

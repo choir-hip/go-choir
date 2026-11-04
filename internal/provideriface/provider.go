@@ -268,8 +268,8 @@ type Config struct {
 
 // ProviderQuotaError is the gateway's typed answer that a model provider's
 // quota is exhausted (HTTP 429, kind provider_quota): true contention on an
-// external resource. A desk loop with no pool member left parks on it until
-// RetryAt instead of failing
+// external resource. A run switches to the next model that can serve it
+// (RetryAt says when this one is back) instead of failing or waiting
 // (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 type ProviderQuotaError struct {
 	Provider string

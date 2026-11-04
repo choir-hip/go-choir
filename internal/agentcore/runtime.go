@@ -240,11 +240,15 @@ type Runtime struct {
 	// assignmentWaits is each engineering assignment's typed wait and
 	// its minutes waited by kind (engineering_waits.go).
 	assignmentWaits assignmentWaitTracker
-	// providerQuotaWaits is each desk loop parked on an exhausted provider
-	// quota (provider_quota_wait.go).
+	// providerQuotaWaits is each run in an every-model quota incident
+	// (provider_quota_incident.go).
 	providerQuotaWaits providerWaitTracker
-	// liveActivations is each running activation's deadline, which a
-	// provider quota park suspends (activation_deadline.go).
+	// quotaLedger is the computer's record of models out of quota, shared by
+	// its runs so one run's finding is skipped by the others until the
+	// model resets (provider_quota_incident.go).
+	quotaLedger toolregistry.QuotaLedger
+	// liveActivations is each running activation's deadline, which an
+	// engineer's review park suspends (activation_deadline.go).
 	liveActivations liveActivations
 
 	desktopState    *desktopstate.Handler
@@ -682,8 +686,9 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 // lifecycle.
 func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunRecord) {
 	runRec := *rec
-	// The progress deadline is suspended while the run parks on a provider
-	// quota, up to the activation's hard wall (activation_deadline.go).
+	// The progress deadline is suspended while an engineer parks for
+	// management's verdict, up to the activation's hard wall
+	// (activation_deadline.go).
 	deadlineCtx, cancel := newActivationDeadline(ctx, rt.activationBudgetForRun(rec))
 	var runCtx context.Context = deadlineCtx
 	rt.liveActivations.put(rec.RunID, deadlineCtx)
@@ -4013,11 +4018,14 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
-	// A provider quota parks the loop, published as a typed wait
-	// (provider_quota_wait.go).
-	toolLoopOptions = append(toolLoopOptions, toolregistry.WithProviderWait(rt.providerQuotaWaitHook(rec)))
-	if reselect := rt.modelReselectForRun(rec); reselect != nil {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithModelReselect(reselect))
+	// A provider quota switches the run to the next model that can serve it
+	// (provider_quota_incident.go); only every model out at once is an
+	// incident.
+	toolLoopOptions = append(toolLoopOptions,
+		toolregistry.WithProviderIncident(rt.providerQuotaIncidentHook(rec)),
+		toolregistry.WithQuotaLedger(&rt.quotaLedger))
+	if chain := rt.quotaContinuationChain(rec); chain != nil {
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithContinuationChain(chain))
 	}
 	if isPersistentManagementRun(rec) {
 		// A turn does not end with a frozen candidate it owes a Verify

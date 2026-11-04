@@ -1071,8 +1071,8 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 		// refresh included (engineering_refresh_wait.go).
 		pack.Waits = rt.engineerWaitViews(ownerID, computerID, strings.TrimPrefix(agentID, agentprofile.Engineering+":"))
 	}
-	// Every desk sees the computer's loops parked on a provider quota
-	// (provider_quota_wait.go).
+	// Every desk sees the computer's runs in an every-model quota incident
+	// (provider_quota_incident.go).
 	pack.ProviderWaits = rt.providerWaitViews(ownerID, computerID)
 	return &pack
 }

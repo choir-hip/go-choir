@@ -120,11 +120,11 @@ type ActingPack struct {
 	// minutes waited by kind, so "blocked on host memory" reads apart from
 	// "stuck". Management sees all; an engineer sees its own assignment.
 	Waits []AssignmentWaitView `json:"waits,omitempty"`
-	// ProviderWaits is the computer's desk loops parked on an exhausted
-	// model provider quota (kind provider_quota, class contention): who
-	// waits, for which provider and model, and when the quota is expected
-	// to reset. A parked loop keeps its work and resumes at the reset; it is
-	// waiting, not dead. Every desk's pack.
+	// ProviderWaits is the computer's runs in an every-model quota incident
+	// (kind provider_quota, class contention): every model of the run's
+	// chain is out of quota at once, and the loop retries the chain with a
+	// short backoff for a bounded time. A quota that leaves some model
+	// usable is not here: the run switches and goes on. Every desk's pack.
 	ProviderWaits []WaitState `json:"provider_waits,omitempty"`
 }
 

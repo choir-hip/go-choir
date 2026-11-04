@@ -255,7 +255,7 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 		// instead of failing it after 1.5 s
 		// (docs/archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
 		// A provider quota is not the limiter: it goes to the caller at
-		// once, typed, with its reset time; the tool loop parks on it.
+		// once, typed, with its reset time; the tool loop switches models on it.
 		if httpResp.StatusCode == http.StatusTooManyRequests {
 			if q, ok := provideriface.AsProviderQuota(gatewayStatusError(httpResp.Status, body)); ok {
 				return nil, q
@@ -411,7 +411,7 @@ func gatewayStatusError(status string, body []byte) error {
 		RetryAtEstimated bool   `json:"retry_at_estimated"`
 	}
 	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Kind == gatewayKindProviderQuota {
-		// The provider's quota is spent: typed, so the tool loop parks on
+		// The provider's quota is spent: typed, so the tool loop switches models on
 		// it instead of retrying it as an outage
 		// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 		q := &provideriface.ProviderQuotaError{Provider: errResp.Provider, Model: errResp.Model, Reason: errResp.Reason,

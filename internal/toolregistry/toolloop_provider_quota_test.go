@@ -14,193 +14,232 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Provider quota park, the guest half
+// Provider quota means switch, never pause
 // (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md). Ways it
-// could fail, written down for these tests:
-//   - the loop still retries the quota 3 times at 15 s and dies (the
-//     incident);
-//   - the park never resumes, or resumes before the reset time;
-//   - the wait is untyped, or names no provider, model or reset time;
-//   - the wait is never cleared, so management and Texture read a loop
-//     that resumed as still waiting;
-//   - a model failure parks too (a dying model must not hold loops);
-//   - a pool with a member left parks instead of failing over;
-//   - a cancelled run stays parked.
+// could fail, written down before the code:
+//   - a pinned model, or a pool's last member, that meets a quota stops or
+//     sleeps instead of switching;
+//   - the switch waits (any sleep before the next call);
+//   - the switch leaves no run.retry model_switch event naming from and to;
+//   - a model known to be out of quota is called again before its reset,
+//     or never again after it;
+//   - the chain walks back to a model the run just left in the same round;
+//   - every model out of quota parks silently, forever, or fails at once
+//     with no incident;
+//   - the incident is never cleared, so desks read a working loop as stuck;
+//   - a model failure (not a quota) switches or raises an incident.
 
-func shortenQuotaPark(t *testing.T) {
+var (
+	routerMember = provideriface.LLMSelection{Provider: "openrouter", Model: "stealth/crouton-alpha"}
+	zaiMember    = provideriface.LLMSelection{Provider: "zai", Model: "glm-5.2"}
+)
+
+func shortenQuota(t *testing.T) {
 	t.Helper()
-	base, max, min, transient := providerQuotaBackoffBase, providerQuotaCheckMax, providerQuotaMinWait, transientProviderRetryDelay
-	providerQuotaBackoffBase, providerQuotaCheckMax, providerQuotaMinWait, transientProviderRetryDelay = 10*time.Millisecond, 200*time.Millisecond, time.Millisecond, time.Millisecond
+	hold, backoff, transient := providerQuotaUnknownHold, providerQuotaIncidentBackoff, transientProviderRetryDelay
+	providerQuotaUnknownHold = 5 * time.Millisecond
+	providerQuotaIncidentBackoff = []time.Duration{5 * time.Millisecond, 5 * time.Millisecond, 5 * time.Millisecond}
+	transientProviderRetryDelay = time.Millisecond
 	t.Cleanup(func() {
-		providerQuotaBackoffBase, providerQuotaCheckMax, providerQuotaMinWait, transientProviderRetryDelay = base, max, min, transient
+		providerQuotaUnknownHold, providerQuotaIncidentBackoff, transientProviderRetryDelay = hold, backoff, transient
 	})
 }
 
 type quotaRun struct {
-	mu     sync.Mutex
-	waits  []*types.WaitState
-	ends   []string
-	phases map[string]int
+	mu        sync.Mutex
+	incidents []*types.WaitState
+	ends      []string
+	phases    map[string]int
+	switches  []map[string]any
 }
 
 func (r *quotaRun) record(_ context.Context, w *types.WaitState, ended string) {
 	r.mu.Lock()
-	r.waits = append(r.waits, w)
+	r.incidents = append(r.incidents, w)
 	if w == nil {
 		r.ends = append(r.ends, ended)
 	}
 	r.mu.Unlock()
 }
 
-func runQuota(ctx context.Context, p *poolProvider, r *quotaRun, primary provideriface.LLMSelection, fallbacks ...provideriface.LLMSelection) (string, error) {
+type quotaSetup struct {
+	chain  []provideriface.LLMSelection
+	ledger *QuotaLedger
+}
+
+func runQuota(ctx context.Context, p *poolProvider, r *quotaRun, s quotaSetup, primary provideriface.LLMSelection, fallbacks ...provideriface.LLMSelection) (string, error) {
 	r.phases = map[string]int{}
-	var mu sync.Mutex
-	emit := func(_ types.EventKind, name string, _ json.RawMessage) {
-		mu.Lock()
+	emit := func(_ types.EventKind, name string, payload json.RawMessage) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		r.phases[name]++
-		mu.Unlock()
+		if name == "model_switch" {
+			var m map[string]any
+			_ = json.Unmarshal(payload, &m)
+			r.switches = append(r.switches, m)
+		}
 	}
-	text, _, err := RunToolLoop(ctx, p, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hello"}`)}, "system", 0, emit, nil,
-		WithToolLoopLLMConfig(primary), WithToolLoopFallbackLLMConfigs(fallbacks), WithToolLoopConversationID("run-1"),
-		WithProviderWait(r.record))
+	opts := []ToolLoopOption{WithToolLoopLLMConfig(primary), WithToolLoopFallbackLLMConfigs(fallbacks), WithToolLoopConversationID("run-1"),
+		WithProviderIncident(r.record)}
+	if s.chain != nil {
+		chain := s.chain
+		opts = append(opts, WithContinuationChain(func(context.Context) []provideriface.LLMSelection { return chain }))
+	}
+	if s.ledger != nil {
+		opts = append(opts, WithQuotaLedger(s.ledger))
+	}
+	text, _, err := RunToolLoop(ctx, p, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hello"}`)}, "system", 0, emit, nil, opts...)
 	return text, err
 }
 
-func quotaErr(retryAt time.Time) error {
-	return fmt.Errorf("gateway call failed: %w", &provideriface.ProviderQuotaError{Provider: "synthetic", Model: lunaSyntheticModel,
-		Reason: "provider quota exhausted (synthetic)", Message: "synthetic: quota exhausted: status 429 Too Many Requests (sanitized)", RetryAt: retryAt})
+func quotaErrFor(providerName string, retryAt time.Time) error {
+	return fmt.Errorf("gateway call failed: %w", &provideriface.ProviderQuotaError{Provider: providerName, Model: "m",
+		Reason: "provider quota exhausted (" + providerName + ")", Message: providerName + ": quota exhausted: status 429 Too Many Requests (sanitized)", RetryAt: retryAt})
 }
 
-func TestQuotaParksTheLoopAndResumesAfterTheReset(t *testing.T) {
-	shortenQuotaPark(t)
-	reset := time.Now().Add(80 * time.Millisecond)
-	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErr(reset), quotaErr(reset), nil}}}
+func TestPinnedModelSwitchesOnQuotaWithoutWaiting(t *testing.T) {
+	shortenQuota(t)
+	providerQuotaUnknownHold = time.Hour // a sleep of any kind would show
+	providerQuotaIncidentBackoff = []time.Duration{time.Hour}
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
 	r := &quotaRun{}
 	started := time.Now()
-	text, err := runQuota(context.Background(), p, r, synthMember)
+	text, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember}}, synthMember)
+	if err != nil || text != "done by chatgpt" {
+		t.Fatalf("run = %q, %v; want the pinned role to switch to the chain and finish", text, err)
+	}
+	if time.Since(started) > 2*time.Second {
+		t.Fatalf("the switch took %s, want no wait", time.Since(started))
+	}
+	if len(r.switches) != 1 || r.switches[0]["reason"] != "provider_quota" || r.switches[0]["from_provider"] != "synthetic" || r.switches[0]["to_provider"] != "chatgpt" || r.switches[0]["to_model"] != "gpt-6-luna" {
+		t.Fatalf("switch events = %v, want one naming from, to and why", r.switches)
+	}
+	if len(r.incidents) != 0 || r.phases["provider_quota_incident"] != 0 {
+		t.Fatalf("a switch is not an incident: %v %v", r.incidents, r.phases)
+	}
+}
+
+func TestPoolLastMemberSwitchesToTheContinuationChain(t *testing.T) {
+	shortenQuota(t)
+	// luna's pool: synth, then luna. synth fails first, luna (the last
+	// member) fails too, and the chain continues on OpenRouter.
+	p := &poolProvider{errs: map[string][]error{
+		"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))},
+		"chatgpt":   {quotaErrFor("chatgpt", time.Now().Add(time.Hour))},
+	}}
+	r := &quotaRun{}
+	text, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember, routerMember, zaiMember}}, synthMember, lunaMember)
+	if err != nil || text != "done by openrouter" {
+		t.Fatalf("run = %q, %v; want the chain's first usable model", text, err)
+	}
+	if len(r.switches) != 2 || r.switches[1]["to_provider"] != "openrouter" {
+		t.Fatalf("switches = %v, want pool member then chain", r.switches)
+	}
+	if p.count("synthetic") != 1 || p.count("chatgpt") != 1 || p.count("openrouter") != 1 || p.count("zai") != 0 {
+		t.Fatalf("calls synth %d luna %d router %d zai %d; each model once, in order", p.count("synthetic"), p.count("chatgpt"), p.count("openrouter"), p.count("zai"))
+	}
+}
+
+func TestExhaustedModelIsSkippedUntilItsReset(t *testing.T) {
+	shortenQuota(t)
+	ledger := NewQuotaLedger()
+	reset := time.Now().Add(150 * time.Millisecond)
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", reset)}}}
+	r := &quotaRun{}
+	setup := quotaSetup{chain: []provideriface.LLMSelection{lunaMember}, ledger: ledger}
+	if text, err := runQuota(context.Background(), p, r, setup, synthMember); err != nil || text != "done by chatgpt" {
+		t.Fatalf("first run = %q, %v", text, err)
+	}
+	// A second run on the same computer does not ask the exhausted model.
+	r2 := &quotaRun{}
+	text, err := runQuota(context.Background(), p, r2, setup, synthMember)
+	if err != nil || text != "done by chatgpt" || p.count("synthetic") != 1 {
+		t.Fatalf("second run = %q, %v, synthetic calls %d; want it skipped before the reset", text, err, p.count("synthetic"))
+	}
+	if len(r2.switches) != 1 || r2.switches[0]["reason"] != "known_exhausted" {
+		t.Fatalf("switches = %v, want a known_exhausted switch", r2.switches)
+	}
+	// After the reset the model serves again.
+	time.Sleep(time.Until(reset) + 20*time.Millisecond)
+	p.mu.Lock()
+	p.errs["synthetic"] = []error{nil}
+	p.mu.Unlock()
+	text, err = runQuota(context.Background(), p, &quotaRun{}, setup, synthMember)
 	if err != nil || text != "done by synthetic" {
-		t.Fatalf("run = %q, %v; want it to resume and finish on the same model", text, err)
-	}
-	if time.Now().Before(reset) {
-		t.Fatalf("resumed after %s, before the reset time", time.Since(started))
-	}
-	if r.phases["provider_quota"] != 2 || r.phases["provider_quota_cleared"] != 1 || r.phases["transient_provider"] != 0 || r.phases["provider_rate_limit"] != 0 {
-		t.Fatalf("phases = %v, want two parks, one clear, no outage retries", r.phases)
-	}
-	if len(r.waits) != 3 || r.waits[2] != nil || len(r.ends) != 1 || r.ends[0] != ProviderWaitResumed {
-		t.Fatalf("waits = %v ends %v, want two parks then the resume", r.waits, r.ends)
-	}
-	w := r.waits[0]
-	if w.Kind != types.WaitKindProviderQuota || w.Class != types.WaitClassContention || w.Provider != "synthetic" || w.Model != lunaSyntheticModel ||
-		!w.ExpectedUntil.Equal(reset.UTC()) || !strings.Contains(w.Sentence, "waiting for the Synthetic quota to reset (about 1 min)") {
-		t.Fatalf("wait = %+v, want a typed provider_quota contention wait with the reset time", w)
-	}
-	if !r.waits[1].Since.Equal(w.Since) {
-		t.Fatalf("the re-check moved the wait's start: %s -> %s", w.Since, r.waits[1].Since)
-	}
-	if line := w.TextureLine(w.Since); !strings.Contains(line, "Waiting 1 min for the Synthetic quota to reset (about 1 min)") {
-		t.Fatalf("texture line = %q", line)
+		t.Fatalf("run after the reset = %q, %v; want the model back in use", text, err)
 	}
 }
 
-func TestQuotaWithoutResetTimeBacksOff(t *testing.T) {
-	shortenQuotaPark(t)
-	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErr(time.Time{}), quotaErr(time.Time{}), quotaErr(time.Time{}), nil}}}
+func TestEveryModelExhaustedRetriesBoundedAndRaisesAnIncident(t *testing.T) {
+	shortenQuota(t)
+	soon := func() error { return quotaErrFor("x", time.Now().Add(time.Hour)) }
+	// Both models are out of quota for the first two chain passes, then
+	// synthetic answers.
+	p := &poolProvider{errs: map[string][]error{
+		"synthetic": {soon(), soon(), nil},
+		"chatgpt":   {soon(), soon(), soon()},
+	}}
 	r := &quotaRun{}
-	if _, err := runQuota(context.Background(), p, r, synthMember); err != nil {
-		t.Fatal(err)
+	text, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember}}, synthMember)
+	if err != nil || text != "done by synthetic" {
+		t.Fatalf("run = %q, %v; want the run to continue once a model answers", text, err)
 	}
-	if got := []time.Duration{providerQuotaParkDelay(time.Time{}, time.Now(), 1), providerQuotaParkDelay(time.Time{}, time.Now(), 2), providerQuotaParkDelay(time.Time{}, time.Now(), 9)}; got[0] != 10*time.Millisecond || got[1] != 20*time.Millisecond || got[2] != 200*time.Millisecond {
-		t.Fatalf("backoff = %v, want doubling from the base to the cap", got)
+	if r.phases["provider_quota_incident"] < 1 || r.phases["provider_quota_incident_cleared"] != 1 {
+		t.Fatalf("phases = %v, want an incident and its clearing", r.phases)
 	}
-	if r.phases["provider_quota"] != 3 || r.waits[0].CheckEverySec < 1 || !r.waits[0].ExpectedUntil.IsZero() {
-		t.Fatalf("phases %v, wait %+v", r.phases, r.waits[0])
+	w := r.incidents[0]
+	if w == nil || w.Kind != types.WaitKindProviderQuota || w.Provider == "" || !strings.Contains(w.Detail, "every model of the chain is out of quota") {
+		t.Fatalf("incident = %+v, want a typed provider_quota incident naming the chain", w)
 	}
-	// A reset far off is re-checked at the cap, so an early reset is seen.
-	if d := providerQuotaParkDelay(time.Now().Add(time.Hour), time.Now(), 1); d != providerQuotaCheckMax {
-		t.Fatalf("far reset delay = %s, want the check cap", d)
+	if n := len(r.incidents); r.incidents[n-1] != nil || len(r.ends) != 1 || r.ends[0] != ProviderIncidentCleared {
+		t.Fatalf("incidents %v ends %v, want the incident ended as cleared", r.incidents, r.ends)
 	}
 }
 
-func TestModelFailureDoesNotPark(t *testing.T) {
-	shortenQuotaPark(t)
-	outage := errors.New("gateway call failed: gateway client: provider synthetic model m: circuit open (model unhealthy) status 502 Bad Gateway")
-	p := &poolProvider{errs: map[string][]error{"synthetic": {outage}}}
+func TestEveryModelExhaustedForeverEndsTheRunBoundedAndVisibly(t *testing.T) {
+	shortenQuota(t)
+	forever := func(name string) []error { return []error{quotaErrFor(name, time.Now().Add(time.Hour))} }
+	p := &poolProvider{errs: map[string][]error{"synthetic": forever("synthetic"), "chatgpt": forever("chatgpt")}}
 	r := &quotaRun{}
-	_, err := runQuota(context.Background(), p, r, synthMember)
-	if err == nil || !strings.Contains(err.Error(), "model unhealthy") {
-		t.Fatalf("err = %v, want today's failure after the outage retries", err)
+	started := time.Now()
+	_, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember}}, synthMember)
+	if err == nil || !strings.Contains(err.Error(), "every model is out of quota after 3 retry rounds") {
+		t.Fatalf("err = %v, want a bounded, named end", err)
 	}
-	if len(r.waits) != 0 || r.phases["provider_quota"] != 0 || r.phases["transient_provider"] != 3 {
-		t.Fatalf("waits %v phases %v, want no park and the three outage retries", r.waits, r.phases)
+	if time.Since(started) > 5*time.Second {
+		t.Fatalf("took %s", time.Since(started))
 	}
-}
-
-func TestQuotaWithAPoolMemberLeftFailsOver(t *testing.T) {
-	shortenQuotaPark(t)
-	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErr(time.Now().Add(time.Hour))}}}
-	r := &quotaRun{}
-	text, err := runQuota(context.Background(), p, r, synthMember, lunaMember)
-	if err != nil || text != "done by chatgpt" || len(r.waits) != 0 || r.phases["model_failover"] != 1 {
-		t.Fatalf("run = %q, %v, waits %v, phases %v; want a failover, no park", text, err, r.waits, r.phases)
+	if r.phases["provider_quota_incident"] != 3 || len(r.ends) != 1 || r.ends[0] != ProviderIncidentLoopEnded {
+		t.Fatalf("phases %v ends %v, want 3 incident rounds and the incident ended with the loop", r.phases, r.ends)
 	}
 }
 
-func TestCancelledRunLeavesThePark(t *testing.T) {
-	shortenQuotaPark(t)
-	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErr(time.Now().Add(time.Hour))}}}
+func TestCancelledRunLeavesTheIncident(t *testing.T) {
+	shortenQuota(t)
+	providerQuotaIncidentBackoff = []time.Duration{time.Hour}
+	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
 	r := &quotaRun{}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, err := runQuota(ctx, p, r, synthMember)
-	if err == nil || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "parked on waiting for the Synthetic quota") {
-		t.Fatalf("err = %v, want the run's deadline, naming the park", err)
+	_, err := runQuota(ctx, p, r, quotaSetup{}, synthMember)
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the run's deadline", err)
 	}
-	if n := len(r.waits); n < 2 || r.waits[n-1] != nil || len(r.ends) != 1 || r.ends[0] != ProviderWaitLoopEnded {
-		t.Fatalf("waits = %v ends %v, want the park ended as the loop's end, not a reset", r.waits, r.ends)
+	if len(r.ends) != 1 || r.ends[0] != ProviderIncidentLoopEnded {
+		t.Fatalf("ends = %v, want the incident ended as the loop's end", r.ends)
 	}
 }
 
-// 2026-11-04 live8: main moved the arms' policy from Synthetic to OpenRouter
-// while their loops stayed parked on Synthetic's quota. A park re-reads the
-// policy while it waits; a policy that names another model ends the park on
-// that model. Failure modes: the park keeps the model it resolved before;
-// an unchanged policy reads as a change and moves the run; the park's end
-// is told as a quota reset.
-func TestPolicyChangeEndsTheParkOnTheNewModel(t *testing.T) {
-	shortenQuotaPark(t)
-	prev := providerQuotaPolicyCheck
-	providerQuotaPolicyCheck = 5 * time.Millisecond
-	t.Cleanup(func() { providerQuotaPolicyCheck = prev })
-
-	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErr(time.Now().Add(time.Hour))}}}
+func TestModelFailureDoesNotSwitchOrRaiseAnIncident(t *testing.T) {
+	shortenQuota(t)
+	outage := errors.New("gateway call failed: gateway client: provider synthetic model m: circuit open (model unhealthy) status 502 Bad Gateway")
+	p := &poolProvider{errs: map[string][]error{"synthetic": {outage}}}
 	r := &quotaRun{}
-	var mu sync.Mutex
-	checks := 0
-	reselect := func(context.Context) (provideriface.LLMSelection, []provideriface.LLMSelection, bool) {
-		mu.Lock()
-		defer mu.Unlock()
-		checks++
-		if checks < 3 {
-			return synthMember, nil, true // unchanged
-		}
-		return provideriface.LLMSelection{Provider: "openrouter", Model: "deepseek/deepseek-v4.1-flash"}, nil, true
+	_, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember}}, synthMember)
+	if err == nil || !strings.Contains(err.Error(), "model unhealthy") {
+		t.Fatalf("err = %v, want today's failure after the outage retries", err)
 	}
-	r.phases = map[string]int{}
-	emit := func(_ types.EventKind, name string, _ json.RawMessage) { mu.Lock(); r.phases[name]++; mu.Unlock() }
-	text, _, err := RunToolLoop(context.Background(), p, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hello"}`)}, "system", 0, emit, nil,
-		WithToolLoopLLMConfig(synthMember), WithToolLoopConversationID("run-1"), WithProviderWait(r.record), WithModelReselect(reselect))
-	if err != nil || text != "done by openrouter" {
-		t.Fatalf("run = %q, %v; want it to go on with the policy's new model", text, err)
-	}
-	if r.phases["model_policy_changed"] != 1 || r.phases["provider_quota"] != 1 || len(r.ends) != 1 || r.ends[0] != ProviderWaitModelChanged {
-		t.Fatalf("phases %v ends %v", r.phases, r.ends)
-	}
-	if checks < 3 {
-		t.Fatalf("the policy was read %d times, want it re-read while parked", checks)
-	}
-	last := p.requests[len(p.requests)-1]
-	if last.Provider != "openrouter" || last.ConversationID == "run-1" {
-		t.Fatalf("last request = %s/%s conversation %q, want the new model on its own conversation", last.Provider, last.Model, last.ConversationID)
+	if len(r.incidents) != 0 || len(r.switches) != 0 || r.phases["transient_provider"] != 3 {
+		t.Fatalf("incidents %v switches %v phases %v", r.incidents, r.switches, r.phases)
 	}
 }

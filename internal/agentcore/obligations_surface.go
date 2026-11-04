@@ -27,8 +27,9 @@ type obligationsResponse struct {
 	WorkItems   obligationsCountAge `json:"open_work_items"`
 	Actors      *obligationsActors  `json:"actors,omitempty"`
 	Selfdev     obligationsSelfdev  `json:"selfdev"`
-	// ProviderWaits is the desk loops parked on an exhausted provider
-	// quota, with when it is expected to reset (provider_quota_wait.go).
+	// ProviderWaits is the runs in an every-model quota incident: the
+	// loud case, since a single quota only switches models
+	// (provider_quota_incident.go).
 	ProviderWaits []types.WaitState `json:"provider_waits,omitempty"`
 	Errors        []string          `json:"errors,omitempty"`
 }

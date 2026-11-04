@@ -88,8 +88,8 @@ const (
 	// assignment or operation serves it, so it waits on the owner's next
 	// revise (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
 	WaitKindNoNextActor WaitKind = "no_next_actor"
-	// WaitKindProviderQuota is a desk loop parked on an exhausted model
-	// provider quota (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+	// WaitKindProviderQuota is a run whose every model is out of quota at
+	// once (a quota otherwise switches models) (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 	WaitKindProviderQuota WaitKind = "provider_quota"
 	// WaitKindCandidateDecision is a frozen candidate waiting for its
 	// decision (management's Verify, then the gate) after its build ended,
@@ -291,9 +291,9 @@ func quotaResource(provider string) string {
 	return "the " + ProviderDisplayName(provider) + " quota to reset"
 }
 
-// NewProviderQuotaWait is the wait of a desk loop parked on an exhausted
-// provider quota: true contention on an external resource, expected back at
-// expected (zero when unknown), re-checked every checkEvery.
+// NewProviderQuotaWait is the incident of a run whose every model is out of
+// quota: true contention on an external resource, expected back at expected
+// (zero when unknown), retried every checkEvery.
 func NewProviderQuotaWait(subject, provider, model string, since, expected time.Time, estimated bool, checkEvery time.Duration, detail string) *WaitState {
 	w := &WaitState{
 		Kind: WaitKindProviderQuota, Class: WaitClassContention, Subject: subject,

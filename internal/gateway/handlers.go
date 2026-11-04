@@ -141,8 +141,8 @@ type ProviderResponse struct {
 // or upstream response bodies (VAL-GATEWAY-007).
 type ErrorResponse struct {
 	Error string `json:"error"`
-	// A provider quota answer (HTTP 429) is typed so the guest parks instead
-	// of failing: Kind "provider_quota", the provider and model, the reason
+	// A provider quota answer (HTTP 429) is typed so the guest switches models
+	// instead of failing: Kind "provider_quota", the provider and model, the reason
 	// in words, and when the quota is expected to reset (RFC 3339; estimated
 	// when it is the gateway's cooldown, not the provider's time)
 	// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).

@@ -1,14 +1,15 @@
 package agentcore
 
-// A desk loop parked on a provider quota is shown to engineering,
+// A run whose every model is out of quota at once (the only case that
+// waits; a quota otherwise switches models) is shown to engineering,
 // management and Texture (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 // Failure modes, written down for this test:
 //
-//  Q1 the park leaves no record management can read, so a parked loop
+//  Q1 the incident leaves no record management can read, so a loop in the incident
 //     reads as dead or stuck;
-//  Q2 an engineering assignment's park never reaches Texture's line;
-//  Q3 the resume is never told: the owner's line and management's pack say
-//     "waiting" after the loop resumed;
+//  Q2 an engineering assignment's incident never reaches Texture's line;
+//  Q3 the end is never told: the owner's line and management's pack say
+//     "waiting" after a model answered again;
 //  Q4 the wait names no provider, model or expected reset time.
 
 import (
@@ -23,7 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestProviderQuotaParkIsShownAndCleared(t *testing.T) {
+func TestEveryModelQuotaIncidentIsShownAndCleared(t *testing.T) {
 	rt, s, _ := c1eRuntime(t)
 	ctx := context.Background()
 	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-quota", rt.TextureComputerID(), 1)
@@ -40,7 +41,7 @@ func TestProviderQuotaParkIsShownAndCleared(t *testing.T) {
 	rec.Metadata = cloneMetadata(run.Metadata)
 	rec.Metadata["assignment_id"] = assignment.AssignmentID
 	rec.Metadata["assignment_attempt"] = int(assignment.Binding.Attempt)
-	hook := rt.providerQuotaWaitHook(&rec)
+	hook := rt.providerQuotaIncidentHook(&rec)
 	const model = "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"
 	reset := now.Add(32 * time.Minute)
 	wait := types.NewProviderQuotaWait("run", "synthetic", model, now, reset, false, 30*time.Minute, "provider quota exhausted (synthetic)")
@@ -68,16 +69,16 @@ func TestProviderQuotaParkIsShownAndCleared(t *testing.T) {
 		t.Fatalf("Q2: relays = %+v", relays)
 	}
 
-	// The quota reset: the loop resumed.
+	// A model answered again: the incident ended.
 	now = now.Add(30 * time.Minute)
-	hook(ctx, nil, toolregistry.ProviderWaitResumed)
+	hook(ctx, nil, toolregistry.ProviderIncidentCleared)
 	if views := rt.providerWaitViews(seed.OwnerID, seed.ComputerID); len(views) != 0 {
-		t.Fatalf("Q3: provider waits after the resume = %+v", views)
+		t.Fatalf("Q3: provider waits after the end = %+v", views)
 	}
 	relays = waitRelays(t, s, seed)
 	var ended bool
 	for _, r := range relays {
-		if r.SubjectRefs["wait_phase"] == types.WaitRelayEnd && strings.Contains(r.Directive.Body, "the provider quota reset") {
+		if r.SubjectRefs["wait_phase"] == types.WaitRelayEnd && strings.Contains(r.Directive.Body, "a model answered again") {
 			ended = true
 		}
 	}
@@ -86,6 +87,6 @@ func TestProviderQuotaParkIsShownAndCleared(t *testing.T) {
 	}
 	av := rt.assignmentWaitViews(seed.OwnerID, seed.ComputerID)
 	if len(av) != 1 || av[0].Wait != nil || av[0].WaitedMinutes[string(types.WaitKindProviderQuota)] != 32 {
-		t.Fatalf("Q3: assignment view after the resume = %+v", av)
+		t.Fatalf("Q3: assignment view after the end = %+v", av)
 	}
 }

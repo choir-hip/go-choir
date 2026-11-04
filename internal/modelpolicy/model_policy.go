@@ -189,50 +189,44 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 	return m.stampResolved(policy, role, metadata)
 }
 
-// ResolveStrict resolves role into a copy of metadata from the policy file
-// exactly as it stands: it must exist, be readable and parse, its overlay
-// (if the metadata names one) must load, and the role must not name an
-// unknown pool. Unlike EnrichMetadata it never falls back to a cached or
-// platform policy and never writes the file; any of those failures is the
-// error. A parked run re-reads its model with it, so a policy it cannot read
-// keeps the run on its model instead of moving it to a default (owner rule:
-// a pinned model fails rather than falls back).
-func (m *Manager) ResolveStrict(ownerID, role string, metadata map[string]any) (map[string]any, error) {
-	path := strings.TrimSpace(m.config.PolicyPath)
-	if path == "" {
-		return nil, fmt.Errorf("model policy path is not configured")
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read model policy: %w", err)
-	}
-	policy, err := parsePolicy(string(raw), path)
-	if err != nil {
-		return nil, fmt.Errorf("parse model policy: %w", err)
-	}
-	out := make(map[string]any, len(metadata)+8)
-	for k, v := range metadata {
-		out[k] = v
-	}
-	if overlayID := metadataString(out, MetadataPolicyOverlayID); overlayID != "" {
-		overlay, err := m.loadOverlay(overlayID)
-		if err != nil {
-			return nil, fmt.Errorf("model policy overlay %q: %w", overlayID, err)
+// ContinuationChain is the computer-wide chain a run switches along when
+// its own pool is out of quota (owner, 2026-11-04: "On quota issues, we
+// shouldn't stop but switch models. Always continue, never pause."): the
+// models this computer's policy names (Policy.Selections: defaults first,
+// then the roles, pools expanded) and then the default pool's members, which
+// every computer may use. Only catalogued models appear, so the chain never
+// widens which models a computer may call, and it never holds a delegate or
+// any model the catalog does not serve. A policy the manager cannot read
+// still yields the platform default's chain.
+func (m *Manager) ContinuationChain(ctx context.Context, ownerID string) []provideriface.LLMSelection {
+	policy, _ := m.Load(ctx, ownerID)
+	var out []provideriface.LLMSelection
+	seen := map[string]bool{}
+	add := func(selection provideriface.LLMSelection) {
+		provider, model := strings.TrimSpace(selection.Provider), strings.TrimSpace(selection.Model)
+		if provider == "" || model == "" || strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
+			return
 		}
-		policy = applyOverlay(policy, overlay)
+		if _, ok := modelcatalog.Lookup(provider, model); !ok {
+			return
+		}
+		if key := provider + "/" + model; !seen[key] {
+			seen[key] = true
+			selection.Source = "quota_continuation"
+			out = append(out, selection)
+		}
 	}
-	if strings.TrimSpace(role) == "" {
-		role = agentprofile.Conductor
+	for _, selection := range policy.Selections() {
+		add(selection)
 	}
-	out = m.stampResolved(policy, role, out)
-	if metadataString(out, MetadataAssignment) == AssignmentUnknownPool {
-		return nil, fmt.Errorf("model policy names unknown pool %q for role %s", strings.TrimPrefix(metadataString(out, MetadataSpec), modelcatalog.PoolSpecPrefix), role)
+	for _, selection := range poolSelections(catalogPools()[modelcatalog.DefaultPool], provideriface.LLMSelection{}) {
+		add(selection)
 	}
-	return out, nil
+	return out
 }
 
 // stampResolved resolves role from policy and writes the selection into
-// metadata (EnrichMetadata's and ResolveStrict's shared tail).
+// metadata (EnrichMetadata's tail).
 func (m *Manager) stampResolved(policy Policy, role string, metadata map[string]any) map[string]any {
 	selection := policy.Resolve(role)
 	for _, diagnostic := range policy.Diagnostics {
@@ -330,8 +324,9 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 		}
 	}
 	if pool == "" {
-		// A concrete pin fails rather than falls back (owner 2026-10-23,
-		// R2): it names one model, so it gets none of any pool's members.
+		// A concrete pin has no pool fallbacks (owner 2026-10-23, R2): it
+		// names one model. A quota still moves it along the computer's
+		// continuation chain (ContinuationChain; owner 2026-11-04).
 		return selection, nil, assignment
 	}
 	members, ok := catalogPools()[pool]
@@ -344,8 +339,9 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 	index := weightedIndex(members, fnv32(thread))
 	ordered := poolSelections(rotate(members, index), selection)
 	if modelcatalog.NoFailover(pool) {
-		// The member that fails, fails: no fallbacks, not even the default
-		// pool's (owner 2026-10-23: "I'd rather them fail than fallback").
+		// A failing member has no pool fallbacks, not even the default
+		// pool's (owner 2026-10-23); a quota still moves it along the
+		// continuation chain (owner 2026-11-04).
 		return ordered[0], nil, assignment
 	}
 	return ordered[0], ordered[1:], assignment

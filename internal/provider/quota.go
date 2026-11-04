@@ -22,7 +22,8 @@ var ErrUpstreamQuotaExhausted = errors.New("upstream quota exhausted")
 // the model when known, the sanitized status, and when the quota is
 // expected to reset. It matches ErrUpstreamQuotaExhausted. The gateway hands
 // it to the guest as a typed answer (HTTP 429, kind provider_quota) so a
-// desk loop on a pinned model parks until RetryAt instead of dying
+// run on a pinned model switches to another model, skipping this one until
+// RetryAt, instead of dying
 // (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 type QuotaExhaustedError struct {
 	Provider string

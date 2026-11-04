@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -115,8 +116,9 @@ type toolLoopOptions struct {
 	completionGuard        ToolLoopCompletionGuardFunc
 	parkWaiter             ToolLoopParkWaiterFunc
 	batchWait              ToolLoopBatchWaitFunc
-	providerWait           ToolLoopProviderWaitFunc
-	modelReselect          ToolLoopModelReselectFunc
+	providerIncident       ToolLoopProviderIncidentFunc
+	quotaLedger            *QuotaLedger
+	continuation           ToolLoopContinuationFunc
 }
 
 type pendingRequiredTool struct {
@@ -341,124 +343,129 @@ func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
 	}
 }
 
-// ToolLoopProviderWaitFunc is told when the loop parks on an exhausted
-// provider quota (w is the typed wait, re-sent at each re-check) and when
-// the park ends (w nil, with ended: ProviderWaitResumed when the quota
-// reset and the loop goes on, ProviderWaitLoopEnded when the loop ended
-// while parked). It must not call the provider.
-type ToolLoopProviderWaitFunc func(ctx context.Context, w *types.WaitState, ended string)
+// Provider quota means switch, never pause (owner, 2026-11-04: "On quota
+// issues, we shouldn't stop but switch models. Always continue, never
+// pause."; docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+//
+// A typed quota answer moves the run to the next model that can serve it
+// and the very next call goes out, with no sleep. The order is the role's
+// own pool or fallbacks, then the computer's continuation chain
+// (WithContinuationChain: only models the computer's policy allows), and a
+// model whose quota is known exhausted (the QuotaLedger) is skipped until
+// its reset time. Only when every model of the chain is out of quota at
+// once does the loop wait: a bounded retry of the chain with a short
+// backoff, told to the runtime as an incident (WithProviderIncident) so it
+// is never a silent pause.
 
-// ToolLoopModelReselectFunc reads the run's model from the computer's
-// current model policy: the primary and its failover order. ok is false when
-// the run's model is not the policy's to change (a caller's explicit
-// selection) or the policy cannot be read.
-type ToolLoopModelReselectFunc func(ctx context.Context) (primary provideriface.LLMSelection, fallbacks []provideriface.LLMSelection, ok bool)
+// ToolLoopProviderIncidentFunc is told when every model of the run's chain
+// is out of quota at once (w is the typed incident, re-sent at each retry
+// round) and when the incident ends (w nil, with ended:
+// ProviderIncidentCleared when a model answered again,
+// ProviderIncidentLoopEnded when the loop ended during it). It must not call
+// the provider.
+type ToolLoopProviderIncidentFunc func(ctx context.Context, w *types.WaitState, ended string)
 
-// WithModelReselect lets a provider quota park follow the computer's model
-// policy: a park re-reads it every providerQuotaPolicyCheck and at each
-// wake, and a policy that now names another model ends the park on it.
-func WithModelReselect(fn ToolLoopModelReselectFunc) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		opts.modelReselect = fn
-	}
-}
-
-// providerQuotaPolicyCheck is how often a park re-reads the model policy.
-// A var so a test can shorten it.
-var providerQuotaPolicyCheck = 30 * time.Second
-
-// sameSelections reports whether two failover orders serve the same models.
-func sameSelections(a, b []provideriface.LLMSelection) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if !sameServingSelection(a[i], b[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// waitQuotaPark sleeps a park's delay, re-reading the model policy every
-// providerQuotaPolicyCheck and at the end. It returns the policy's new
-// selection when it no longer matches the run's (primary and fallbacks).
-func waitQuotaPark(ctx context.Context, delay time.Duration, reselect ToolLoopModelReselectFunc, primary provideriface.LLMSelection, fallbacks []provideriface.LLMSelection) (provideriface.LLMSelection, []provideriface.LLMSelection, bool, error) {
-	end := time.Now().Add(delay)
-	for {
-		left := time.Until(end)
-		step := left
-		if reselect != nil && step > providerQuotaPolicyCheck {
-			step = providerQuotaPolicyCheck
-		}
-		if err := sleepContext(ctx, step); err != nil {
-			return provideriface.LLMSelection{}, nil, false, err
-		}
-		if reselect != nil {
-			if next, nextFallbacks, ok := reselect(ctx); ok && strings.TrimSpace(next.Model) != "" &&
-				(!sameServingSelection(next, primary) || !sameSelections(nextFallbacks, fallbacks)) {
-				return next, nextFallbacks, true, nil
-			}
-		}
-		if !time.Now().Before(end) {
-			return provideriface.LLMSelection{}, nil, false, nil
-		}
-	}
-}
-
-// How a provider quota park ended (review r1 DeepSeek B3: a cancelled park
-// is not a reset).
+// How a provider quota incident ended.
 const (
-	ProviderWaitResumed   = "the provider quota reset"
-	ProviderWaitLoopEnded = "the run ended while it waited for the quota"
-	// ProviderWaitModelChanged: the computer's model policy now names
-	// another model, and the run goes on with it.
-	ProviderWaitModelChanged = "the model policy changed"
+	ProviderIncidentCleared   = "a model answered again"
+	ProviderIncidentLoopEnded = "the run ended while every model was out of quota"
 )
 
-// WithProviderWait lets the runtime publish a provider quota park
-// (engineering's assignment wait, management's pack, Texture's relay).
-func WithProviderWait(fn ToolLoopProviderWaitFunc) ToolLoopOption {
+// WithProviderIncident lets the runtime publish the all-models-exhausted
+// incident (obligations surface, the desks' packs, engineering's relay).
+func WithProviderIncident(fn ToolLoopProviderIncidentFunc) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
-		opts.providerWait = fn
+		opts.providerIncident = fn
 	}
 }
 
-// A provider quota park (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md):
-// a loop with no pool member left that meets the gateway's typed quota
-// answer keeps its work and its state and calls again when the quota is
-// expected to reset; each sleep is at most providerQuotaCheckMax, so a
-// top-up or an early reset is seen, and with no reset time it backs off
-// from providerQuotaBackoffBase, doubling, to providerQuotaCheckMax. Only
-// the run's context (its activation budget, a cancel) ends a park. Vars so
-// a test can shorten them.
+// ToolLoopContinuationFunc returns the computer-wide continuation chain: the
+// models a run may switch to after its own pool, in order, made only of
+// models the computer is allowed to use. It is read once, at the first
+// quota the loop meets.
+type ToolLoopContinuationFunc func(ctx context.Context) []provideriface.LLMSelection
+
+// WithContinuationChain names the computer's continuation chain.
+func WithContinuationChain(fn ToolLoopContinuationFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.continuation = fn
+	}
+}
+
+// WithQuotaLedger shares the computer's record of exhausted models between
+// its runs, so a model one run found out of quota is skipped by the others
+// until it resets. Without one, a loop keeps a private ledger.
+func WithQuotaLedger(l *QuotaLedger) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.quotaLedger = l
+	}
+}
+
+// QuotaLedger records which models are known to be out of quota, until when.
+// Safe for concurrent runs; a nil ledger records nothing.
+type QuotaLedger struct {
+	mu    sync.Mutex
+	until map[string]time.Time
+}
+
+// NewQuotaLedger returns an empty ledger.
+func NewQuotaLedger() *QuotaLedger { return &QuotaLedger{until: map[string]time.Time{}} }
+
+// Mark records that sel is out of quota until the given time.
+func (l *QuotaLedger) Mark(sel provideriface.LLMSelection, until time.Time) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.until == nil {
+		l.until = map[string]time.Time{}
+	}
+	l.until[servingSelectionID(sel)] = until
+}
+
+// Until is when sel's quota is expected back; zero when sel is not known to
+// be exhausted at now.
+func (l *QuotaLedger) Until(sel provideriface.LLMSelection, now time.Time) time.Time {
+	if l == nil {
+		return time.Time{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	id := servingSelectionID(sel)
+	until, ok := l.until[id]
+	if !ok {
+		return time.Time{}
+	}
+	if !until.After(now) {
+		delete(l.until, id)
+		return time.Time{}
+	}
+	return until
+}
+
+// Forget drops sel's record, so the next call asks the gateway.
+func (l *QuotaLedger) Forget(sel provideriface.LLMSelection) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	delete(l.until, servingSelectionID(sel))
+	l.mu.Unlock()
+}
+
+// Vars so a test can shorten them.
 var (
-	providerQuotaBackoffBase = time.Minute
-	providerQuotaCheckMax    = 30 * time.Minute
-	providerQuotaMinWait     = 5 * time.Second
-	providerQuotaNow         = time.Now
+	// providerQuotaUnknownHold is how long a model whose quota answer named
+	// no reset time is skipped.
+	providerQuotaUnknownHold = 2 * time.Minute
+	// providerQuotaIncidentBackoff is the wait before each retry round of
+	// the chain when every model is out of quota: its length bounds the
+	// incident (about 18 minutes), after which the run fails with the
+	// quota error, a visible end and not a pause.
+	providerQuotaIncidentBackoff = []time.Duration{15 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 5 * time.Minute, 5 * time.Minute}
+	providerQuotaNow             = time.Now
 )
-
-// providerQuotaParkDelay is how long the parks-th park in a row sleeps for
-// a quota expected back at retryAt (zero: unknown).
-func providerQuotaParkDelay(retryAt, now time.Time, parks int) time.Duration {
-	var d time.Duration
-	if !retryAt.IsZero() {
-		d = retryAt.Sub(now)
-	} else {
-		d = providerQuotaBackoffBase
-		for i := 1; i < parks && d < providerQuotaCheckMax; i++ {
-			d *= 2
-		}
-	}
-	if d > providerQuotaCheckMax {
-		d = providerQuotaCheckMax
-	}
-	if d < providerQuotaMinWait {
-		d = providerQuotaMinWait
-	}
-	return d
-}
 
 // transientProviderRetryDelay spaces the tool loop's three retries of a
 // transient provider outage. A var so a test can shorten it.
@@ -593,14 +600,20 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	}
 
 	transientAttempts := 0
-	// quotaWait is the current provider quota park (nil: none), since
-	// quotaSince, after quotaParks re-checks.
-	var quotaWait *types.WaitState
-	var quotaSince time.Time
-	quotaParks := 0
+	ledger := options.quotaLedger
+	if ledger == nil {
+		ledger = NewQuotaLedger()
+	}
+	var continuation []provideriface.LLMSelection
+	continuationRead := false
+	// incident is the all-models-exhausted incident in progress (nil:
+	// none), since incidentSince, after incidentRounds retry rounds.
+	var incident *types.WaitState
+	var incidentSince time.Time
+	incidentRounds := 0
 	defer func() {
-		if quotaWait != nil && options.providerWait != nil {
-			options.providerWait(context.WithoutCancel(ctx), nil, ProviderWaitLoopEnded)
+		if incident != nil && options.providerIncident != nil {
+			options.providerIncident(context.WithoutCancel(ctx), nil, ProviderIncidentLoopEnded)
 		}
 	}()
 	nextFallback := 0
@@ -609,6 +622,93 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	skippedRetryRounds := 0
 	baseConversationID := options.conversationID
 	baseCacheKey := cacheKey
+	// quotaOrder is the models the run may serve from, active first: the
+	// rest of its pool, the members it left (a reset may have brought one
+	// back), its first model, then the computer's continuation chain.
+	quotaOrder := func() []provideriface.LLMSelection {
+		if !continuationRead {
+			continuationRead = true
+			if options.continuation != nil {
+				continuation = options.continuation(ctx)
+			}
+		}
+		order := []provideriface.LLMSelection{activeLLMConfig}
+		add := func(sel provideriface.LLMSelection) {
+			if strings.TrimSpace(sel.Provider) == "" || strings.TrimSpace(sel.Model) == "" {
+				return
+			}
+			for _, have := range order {
+				if sameServingSelection(have, sel) {
+					return
+				}
+			}
+			order = append(order, fillFallbackSelection(sel, activeLLMConfig))
+		}
+		for _, f := range options.fallbackLLMConfigs[min(nextFallback, len(options.fallbackLLMConfigs)):] {
+			add(f)
+		}
+		for _, f := range options.fallbackLLMConfigs[:min(nextFallback, len(options.fallbackLLMConfigs))] {
+			add(f)
+		}
+		add(options.llmConfig)
+		for _, c := range continuation {
+			add(c)
+		}
+		return order
+	}
+	// switchOnQuota moves the run to the first model after the active one
+	// that is not known to be out of quota, with no wait. why names the
+	// cause on the trace; cause is the provider error (nil for a model the
+	// ledger already knows). False: no model is usable now.
+	switchOnQuota := func(why string, cause error) bool {
+		order := quotaOrder()
+		now := providerQuotaNow()
+		pick := -1
+		for k := 1; k < len(order); k++ {
+			if ledger.Until(order[k], now).IsZero() {
+				pick = k
+				break
+			}
+		}
+		if pick < 0 {
+			return false
+		}
+		from, next := activeLLMConfig, order[pick]
+		rest := append([]provideriface.LLMSelection(nil), order[pick+1:]...)
+		rest = append(rest, order[1:pick]...)
+		rest = append(rest, order[0])
+		options.fallbackLLMConfigs, nextFallback = rest, 0
+		activeLLMConfig = next
+		if baseConversationID != "" {
+			options.conversationID = baseConversationID
+			if !sameServingSelection(options.llmConfig, next) {
+				options.conversationID += "#quota-" + shortSHA256(servingSelectionID(next))[:6]
+			}
+		}
+		if baseCacheKey != "" {
+			cacheKey = failoverCacheKey(baseCacheKey, options.llmConfig, activeLLMConfig)
+		}
+		messages = stripProviderReplay(messages)
+		transientAttempts, skippedRetryRounds = 0, 0
+		if emit != nil {
+			payload := map[string]any{
+				"reason":        why,
+				"from_provider": from.Provider,
+				"from_model":    from.Model,
+				"to_provider":   next.Provider,
+				"to_model":      next.Model,
+			}
+			if until := ledger.Until(from, now); !until.IsZero() {
+				payload["from_quota_resets_at"] = until.UTC().Format(time.RFC3339)
+			}
+			if cause != nil {
+				payload["provider_error"] = cause.Error()
+			}
+			b, _ := json.Marshal(payload)
+			emit(types.EventRunRetry, "model_switch", b)
+		}
+		return true
+	}
 	for i := 0; ; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
 			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
@@ -616,6 +716,11 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				return "", totalUsage, fmt.Errorf("tool loop memory before iteration %d: %w", i, err)
 			}
 			messages = rebuilt
+		}
+		// A model already known to be out of quota is not called: the run
+		// goes on with the next one that can serve it.
+		if ctx.Err() == nil && !ledger.Until(activeLLMConfig, providerQuotaNow()).IsZero() {
+			switchOnQuota("known_exhausted", nil)
 		}
 
 		req := provideriface.ToolLoopRequest{
@@ -762,77 +867,72 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 				continue
 			}
-			// Provider quota: true contention on an external resource. With
-			// a pool member left the run fails over below; on a pinned model
-			// or the last member it parks, keeping its work item and its
-			// loop state, and calls again at the quota's reset time.
-			if q, ok := provideriface.AsProviderQuota(err); ok && ctx.Err() == nil && nextFallback >= len(options.fallbackLLMConfigs) {
+			// Provider quota: switch, never pause. The model is out of
+			// quota until its reset; the run moves to the next model that
+			// can serve it and calls at once. Only when no model of the
+			// chain is usable does the loop wait (below).
+			if q, ok := provideriface.AsProviderQuota(err); ok && ctx.Err() == nil {
 				now := providerQuotaNow()
-				quotaParks++
-				if quotaSince.IsZero() {
-					quotaSince = now
+				until := q.RetryAt
+				if until.IsZero() || !until.After(now) {
+					until = now.Add(providerQuotaUnknownHold)
 				}
-				delay := providerQuotaParkDelay(q.RetryAt, now, quotaParks)
-				quotaProvider := firstNonEmpty(q.Provider, activeLLMConfig.Provider)
-				model := firstNonEmpty(q.Model, activeLLMConfig.Model)
-				detail := firstNonEmpty(q.Reason, "provider quota exhausted ("+quotaProvider+")")
-				if q.RetryAt.IsZero() {
-					detail += "; the provider gave no reset time, so the loop asks again with a backoff"
-				} else if q.RetryAtEstimated {
-					detail += "; the reset time is the gateway's estimate"
+				ledger.Mark(activeLLMConfig, until)
+				if switchOnQuota("provider_quota", err) {
+					continue
 				}
-				wait := types.NewProviderQuotaWait("run", quotaProvider, model, quotaSince, q.RetryAt, q.RetryAtEstimated, delay, detail)
-				wait.Stamp(now)
-				quotaWait = wait
-				if options.providerWait != nil {
-					options.providerWait(ctx, wait.Clone(), "")
+				// Every model of the chain is out of quota at once: a
+				// bounded retry of the chain with a short backoff, told
+				// loudly as an incident.
+				incidentRounds++
+				if incidentRounds > len(providerQuotaIncidentBackoff) {
+					return "", totalUsage, fmt.Errorf("tool loop iteration %d: every model is out of quota after %d retry rounds over %s: %w",
+						i, len(providerQuotaIncidentBackoff), now.Sub(incidentSince).Round(time.Second), err)
+				}
+				if incidentSince.IsZero() {
+					incidentSince = now
+				}
+				order := quotaOrder()
+				delay := providerQuotaIncidentBackoff[incidentRounds-1]
+				var soonest time.Time
+				for _, sel := range order {
+					if u := ledger.Until(sel, now); !u.IsZero() && (soonest.IsZero() || u.Before(soonest)) {
+						soonest = u
+					}
+				}
+				if !soonest.IsZero() && soonest.Sub(now) < delay {
+					delay = max(soonest.Sub(now), time.Second)
+				}
+				names := make([]string, 0, len(order))
+				for _, sel := range order {
+					names = append(names, servingSelectionID(sel))
+				}
+				detail := fmt.Sprintf("every model of the chain is out of quota (%s); the loop retries the chain, round %d of %d", strings.Join(names, ", "), incidentRounds, len(providerQuotaIncidentBackoff))
+				incident = types.NewProviderQuotaWait("run", firstNonEmpty(q.Provider, activeLLMConfig.Provider), firstNonEmpty(q.Model, activeLLMConfig.Model), incidentSince, soonest, false, delay, detail)
+				incident.Stamp(now)
+				if options.providerIncident != nil {
+					options.providerIncident(ctx, incident.Clone(), "")
 				}
 				if emit != nil {
 					payload, _ := json.Marshal(map[string]any{
-						"reason":         "provider_quota",
-						"attempt":        quotaParks,
+						"reason":         "provider_quota_incident",
+						"round":          incidentRounds,
+						"rounds_max":     len(providerQuotaIncidentBackoff),
 						"delay_ms":       delay.Milliseconds(),
+						"models":         names,
 						"provider_error": err.Error(),
-						"wait":           wait,
+						"wait":           incident,
 					})
-					emit(types.EventRunRetry, "provider_quota", payload)
+					emit(types.EventRunRetry, "provider_quota_incident", payload)
 				}
-				next, nextFallbacks, changed, sleepErr := waitQuotaPark(ctx, delay, options.modelReselect, options.llmConfig, options.fallbackLLMConfigs)
-				if sleepErr != nil {
-					return "", totalUsage, fmt.Errorf("tool loop iteration %d: parked on %s: %w", i, wait.Sentence, sleepErr)
+				if sleepErr := sleepContext(ctx, delay); sleepErr != nil {
+					return "", totalUsage, fmt.Errorf("tool loop iteration %d: every model is out of quota: %w", i, sleepErr)
 				}
-				if changed {
-					// The policy moved the run to another model: the park
-					// ends and the run goes on with the policy's selection.
-					from := activeLLMConfig
-					if next.Source == "" {
-						next.Source = "model_policy"
-					}
-					options.llmConfig, options.fallbackLLMConfigs = next, nextFallbacks
-					activeLLMConfig, nextFallback, skippedRetryRounds, transientAttempts = next, 0, 0, 0
-					if baseConversationID != "" {
-						options.conversationID = baseConversationID + "#policy-" + shortSHA256(servingSelectionID(next))[:6]
-					}
-					if baseCacheKey != "" {
-						cacheKey = failoverCacheKey(baseCacheKey, provideriface.LLMSelection{}, activeLLMConfig)
-					}
-					messages = stripProviderReplay(messages)
-					if options.providerWait != nil {
-						options.providerWait(ctx, nil, ProviderWaitModelChanged)
-					}
-					if emit != nil {
-						payload, _ := json.Marshal(map[string]any{
-							"reason":        "model_policy_changed",
-							"from_provider": from.Provider,
-							"from_model":    from.Model,
-							"to_provider":   activeLLMConfig.Provider,
-							"to_model":      activeLLMConfig.Model,
-							"parks":         quotaParks,
-						})
-						emit(types.EventRunRetry, "model_policy_changed", payload)
-					}
-					quotaWait, quotaSince, quotaParks = nil, time.Time{}, 0
+				// The retry round asks the gateway again, the whole chain.
+				for _, sel := range order {
+					ledger.Forget(sel)
 				}
+				switchOnQuota("provider_quota_retry", nil)
 				continue
 			}
 			// Model failover: a model that still fails after its retries
@@ -908,23 +1008,23 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
 		}
 
-		if quotaWait != nil {
-			// The quota reset: the park ends and the work goes on.
-			waited := providerQuotaNow().Sub(quotaSince)
-			if options.providerWait != nil {
-				options.providerWait(ctx, nil, ProviderWaitResumed)
+		if incident != nil {
+			// A model answered: the incident ends and the work goes on.
+			waited := providerQuotaNow().Sub(incidentSince)
+			if options.providerIncident != nil {
+				options.providerIncident(ctx, nil, ProviderIncidentCleared)
 			}
 			if emit != nil {
 				payload, _ := json.Marshal(map[string]any{
-					"reason":    "provider_quota_cleared",
-					"parks":     quotaParks,
+					"reason":    "provider_quota_incident_cleared",
+					"rounds":    incidentRounds,
 					"waited_ms": waited.Milliseconds(),
-					"provider":  quotaWait.Provider,
-					"model":     quotaWait.Model,
+					"provider":  activeLLMConfig.Provider,
+					"model":     activeLLMConfig.Model,
 				})
-				emit(types.EventRunRetry, "provider_quota_cleared", payload)
+				emit(types.EventRunRetry, "provider_quota_incident_cleared", payload)
 			}
-			quotaWait, quotaSince, quotaParks = nil, time.Time{}, 0
+			incident, incidentSince, incidentRounds = nil, time.Time{}, 0
 		}
 
 		// Accumulate token usage.
@@ -1692,7 +1792,7 @@ func callToolLoopProviderWithPoolRetries(ctx context.Context, provider provideri
 			return resp, nil
 		}
 		lastErr = err
-		// A provider quota is the tool loop's to fail over or park on, not
+		// A provider quota is the tool loop's to switch models on, not
 		// a rate limit to back off here.
 		if _, quota := provideriface.AsProviderQuota(err); quota {
 			return nil, lastErr
