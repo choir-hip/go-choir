@@ -145,9 +145,43 @@ func packageCommands() []*command {
 			},
 		}),
 		packageExportCommand(),
+		{
+			path: []string{"package", "installs"}, summary: "List a computer's package installs from the Library (or one, with --install)",
+			params: []param{computerParam().orSay(selfDevUsage), pStr("install", "Install ID")},
+			usage:  selfDevUsage, scopes: selfDevRead, readOnly: true,
+			handler: func(x *call) (any, error) {
+				if id := x.trim("install"); id != "" {
+					return getRaw(x, selfDevPath(x.str("computer"), "adoptions/"+url.PathEscape(id)))
+				}
+				return getRaw(x, selfDevPath(x.str("computer"), "adoptions"))
+			},
+		},
+		packageInstallAct("install", "Install a published package release on your computer: its desks apply it as a self-development change you then approve (owner act)"),
+		packageInstallAct("uninstall", "Uninstall a package release the Library installed on your computer, the same way (owner act)"),
 		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: nobody else sees it any more; it stays in your own history (owner act)"),
 		packageStateAct("reinstate", pkgrelease.StateListed, "Reinstate a withdrawn or suspended package release while it can still head its track (owner act)"),
 	}
+}
+
+// packageInstallAct installs or uninstalls one package release on a
+// computer (docs/design/package-install-2026-11-04.md). The proxy reads the
+// release and its tree from the catalog as the owner and verifies both; the
+// command sends only the id and the action.
+func packageInstallAct(verb, summary string) *command {
+	return ownerAct(&command{
+		path: []string{"package", verb}, summary: summary,
+		params: []param{
+			computerParam().orSay(selfDevUsage),
+			pStr("release", "Package release id (the record's sha256)").req(),
+		},
+		usage:  "--computer and --release are required",
+		scopes: []string{"computer:self_development:read", releaseApprove}, idempotent: true,
+		handler: func(x *call) (any, error) {
+			return sendRaw(x, http.MethodPost, selfDevPath(x.str("computer"), "adoptions"), map[string]any{
+				"release_id": strings.ToLower(x.trim("release")), "action": verb,
+			})
+		},
+	})
 }
 
 func listingPath(x *call) string {

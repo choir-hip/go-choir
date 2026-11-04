@@ -37,10 +37,10 @@ which `admin` does not imply; reject stays an agent act.
 | Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
 | Roll back (owner) | `choir self-dev rollback --to-operation=ID [--wait]` | `rollback_requested` event, rollback operation to `rolled_back` |
 | Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |
-| Publish a release (owner) | `choir release publish --computer=A --operation=ID [--test-command=CMD]` (applied operation; source only) | release id, `choir.software_release` in Store B |
-| Find releases | `choir release list`, `choir release show --release=ID` (record verified against its id) | the release record |
-| Adopt as source (owner) | `choir release adopt --computer=B --release=ID` (B's own tree, B's desks and gate; refused before any change if it does not verify or apply) | `choir.release_adoption` on B's tape, B's operation on its trajectory |
-| Watch an adoption | `choir release adoptions --computer=B` | adoption with its operation and `patch_matches_release` |
+| Publish a package (owner) | `choir package publish --computer=A --operation=ID --package=NAME` (applied operation; one package directory; public) | package release id in the Library |
+| Find packages | `choir package search`, `choir package history --package=NAME`, `choir package show --release=ID` (record verified against its id) | the release record and listing |
+| Install or uninstall (owner) | `choir package install --computer=B --release=ID`, `choir package uninstall --computer=B --release=ID` (B's own tree, B's desks and gate; refused before any change if it does not verify, or would overwrite a package B did not install from the Library) | install record, B's operation on its trajectory |
+| Watch installs | `choir package installs --computer=B` | each install with its operation and `patch_matches_release` (B's tree holds the release) |
 
 Self-development a Texture request opens (Texture -> management -> engineering
 freeze) creates its own operation; `list` is how to find it — do not derive the

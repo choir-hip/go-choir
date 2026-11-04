@@ -232,3 +232,27 @@ func TestPackagePublishShowsTheWholeConfirmationPreview(t *testing.T) {
 		t.Fatalf("the preview output is truncated:\n%s", out)
 	}
 }
+
+// Install at the client (docs/design/package-install-2026-11-04.md): the
+// command sends the owner's act to the computer's install route with the
+// release id and the action only; the proxy reads and verifies the record
+// and the tree itself.
+func TestPackageInstallSendsOnlyTheReleaseAndTheAction(t *testing.T) {
+	id := testPackageID(t)
+	for _, verb := range []string{"install", "uninstall"} {
+		got := parityServer(t, `{"adoption_id":"install-1"}`)
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"package", verb, "--computer", "c1", "--release", strings.ToUpper(id)}, &stdout, &stderr); code != 0 {
+			t.Fatalf("%s: exit %d %s", verb, code, stderr.String())
+		}
+		if len(*got) != 1 {
+			t.Fatalf("%s: %d requests", verb, len(*got))
+		}
+		req := (*got)[0]
+		var body map[string]any
+		_ = json.Unmarshal(req.Body, &body)
+		if req.Method != http.MethodPost || req.Path != "/api/computers/c1/self-development/adoptions" || len(body) != 2 || body["release_id"] != id || body["action"] != verb {
+			t.Fatalf("%s: sent %s %s %s", verb, req.Method, req.Path, req.Body)
+		}
+	}
+}

@@ -56,9 +56,11 @@ var wantCLIOnly = []string{
 	// sharing, withdrawing or reinstating it.
 	// Writes a commit into a local git worktree (Library 10.2).
 	"package export",
-	"package publish", "package reinstate", "package share", "package withdraw",
+	// Owner acts (docs/design/package-install-2026-11-04.md): installing and
+	// uninstalling a package release on a computer.
+	"package install", "package publish", "package reinstate", "package share", "package uninstall", "package withdraw",
 	"precommit import-ledger",
-	// Owner acts (P7/P8): publishing and adopting a release; abandoning an open operation.
+	// Owner act: abandoning an open operation.
 	"self-dev abandon", "self-dev approve",
 	// Owner act: rolling an applied operation back.
 	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace tail", "version",
@@ -514,6 +516,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_patch":                   {cli: []string{"self-dev", "patch", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: sourcePatchReply("op-1", "c1", []byte(testSourcePatch), "")},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
+		"package_installs":                 {cli: []string{"package", "installs", "--computer", "c1", "--install", "install-1"}, mcp: `{"computer":"c1","install":"install-1"}`},
 		"package_search":                   {cli: []string{"package", "search", "--query", "read"}, mcp: `{"query":"read"}`},
 		"package_history":                  {cli: []string{"package", "history", "--package", "reader"}, mcp: `{"package":"reader"}`},
 		"package_show":                     {cli: []string{"package", "show", "--release", testPackageID(t)}, mcp: `{"release":"` + testPackageID(t) + `"}`, reply: testPackageReply(t)},
