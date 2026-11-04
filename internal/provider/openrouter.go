@@ -92,6 +92,7 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
 		Stream:          req.Stream,
 		ReasoningEffort: openRouterReasoningEffort(modelID, req.ReasoningEffort),
+		SessionID:       openRouterSessionID(req),
 	}
 	if req.MaxTokens > 0 {
 		maxTokens := req.MaxTokens
@@ -104,6 +105,9 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
+	if body.SessionID != "" {
+		httpReq.Header.Set("x-session-id", body.SessionID)
+	}
 	if req.Stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	} else {
@@ -187,4 +191,18 @@ func openRouterReasoningEffort(model, effort string) string {
 	default:
 		return ""
 	}
+}
+
+// openRouterSessionID is the desk thread's cache key (else the run's
+// conversation id), sent as OpenRouter's session_id so follow-up requests
+// stick to the upstream provider that holds the prefix cache; without it
+// OpenRouter may hop upstreams and re-send the whole context uncached
+// (stealth/crouton-alpha, 2026-11-04: cached_in=0 on 1109 calls, 205M input
+// tokens). OpenRouter caps the id at 256 characters.
+func openRouterSessionID(req LLMRequest) string {
+	id := cacheRoutingKey(req)
+	if len(id) > 256 {
+		id = id[:256]
+	}
+	return id
 }

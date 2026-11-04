@@ -1635,6 +1635,9 @@ type openAIChatCompletionRequest struct {
 	Stream              bool                `json:"stream,omitempty"`
 	ReasoningEffort     string              `json:"reasoning_effort,omitempty"`
 	Temperature         *float64            `json:"temperature,omitempty"`
+	// SessionID is OpenRouter's sticky-routing key (body field; only the
+	// OpenRouter provider sets it). Other providers leave it empty.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type openAIChatMessage struct {

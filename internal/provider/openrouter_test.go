@@ -300,3 +300,27 @@ func TestStreamRepeatedFinishChunkDoesNotDuplicateDeltas(t *testing.T) {
 		t.Fatalf("resp = %+v", resp)
 	}
 }
+
+func TestOpenRouterSendsSessionIDForStickyRouting(t *testing.T) {
+	var raw map[string]any
+	var hdr string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hdr = r.Header.Get("x-session-id")
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"id":"g","model":"m","choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":8}}}`)
+	}))
+	defer server.Close()
+	p := newTestOpenRouter(t, server)
+	resp, err := p.Call(context.Background(), LLMRequest{CacheKey: "desk-1", ConversationID: "run-9",
+		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hi"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw["session_id"] != "desk-1" || hdr != "desk-1" {
+		t.Fatalf("session_id body %v header %q, want desk-1", raw["session_id"], hdr)
+	}
+	if resp.Usage.CachedInputTokens != 8 {
+		t.Fatalf("cached %d, want 8", resp.Usage.CachedInputTokens)
+	}
+}
