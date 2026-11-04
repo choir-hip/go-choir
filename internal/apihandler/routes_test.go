@@ -32,6 +32,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/runs/run-1",
 		"/api/model-policy/resolve",
 		"/api/costs",
+		"/api/plugins/state",
 		"/api/podcast/subscriptions/refresh",
 		"/api/podcast/subscriptions",
 		"/api/podcast/search",

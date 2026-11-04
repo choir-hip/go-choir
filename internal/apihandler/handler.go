@@ -5,18 +5,25 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/yusefmosiah/go-choir/internal/kernel"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // Handler provides HTTP handlers backed by the application store.
 type Handler struct {
-	store *store.Store
+	store  *store.Store
+	kernel *kernel.Kernel
 }
 
 // NewHandler creates a Handler backed by the given store.
 func NewHandler(store *store.Store) *Handler {
-	return &Handler{store: store}
+	k := kernel.New(kernel.Options{})
+	// A fresh journal folds to nothing: no unit exists until a package registers one.
+	if err := k.Boot(); err != nil {
+		log.Printf("api handler: kernel boot: %v", err)
+	}
+	return &Handler{store: store, kernel: k}
 }
 
 // apiError is the JSON error envelope for API responses.

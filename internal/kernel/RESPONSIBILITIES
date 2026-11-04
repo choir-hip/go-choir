@@ -1,0 +1,12 @@
+# The Go kernel's exported surface, per responsibility (modular architecture
+# plan section 5.1). scripts/check-kernel-responsibilities fails when this file
+# and the exported symbols of internal/kernel differ, so growth is a deliberate
+# edit that review sees. "pipelines" is a planned responsibility with no
+# symbols yet.
+scope-tree: Scope Scope.Child Scope.Context Scope.Name NewRoot ErrScopeClosed
+effects: Scope.OnClose Scope.Close
+service-resolution: Provide Inject ErrNotProvided ErrServiceType ErrServiceExists
+supervisor: Supervisor Supervisor.Start Supervisor.Await Supervisor.Reopen Unit Intensity DefaultIntensity UnitIdle UnitRunning UnitStopped UnitClosed ErrUnitClosed ErrUnitRunning
+journal: Journal MemJournal MemJournal.Append MemJournal.Load Record RecordDeclared RecordStarted RecordStopped RecordClosed CauseInterrupted
+snapshot: Snapshot ScopeInfo UnitInfo Kernel.Snapshot
+kernel: Kernel New Options Kernel.Boot Kernel.Root Kernel.Shutdown Kernel.Supervisor

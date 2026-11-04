@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Selftest for the kernel structural gates: each gate passes on the real kernel
+# and the good fixture, and fails on its negative fixture.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+F=scripts/testdata/kernel-gates
+go build -o "${TMPDIR:-/tmp}/kernelgate.$$" ./scripts/kernelgate
+bin="${TMPDIR:-/tmp}/kernelgate.$$"
+trap 'rm -f "$bin"' EXIT
+
+fail() { echo "selftest-kernel-gates FAIL: $*" >&2; exit 1; }
+for g in imports names responsibilities; do
+  "$bin" "$g" internal/kernel >/dev/null || fail "$g refuses the real kernel"
+  "$bin" "$g" $F/good >/dev/null || fail "$g refuses the good fixture"
+done
+"$bin" imports $F/bad-imports >/dev/null 2>&1 && fail "imports accepted a repo import"
+"$bin" names $F/bad-names >/dev/null 2>&1 && fail "names accepted a desk name"
+"$bin" responsibilities $F/bad-surface >/dev/null 2>&1 && fail "responsibilities accepted an unlisted export"
+echo "selftest-kernel-gates: ok"

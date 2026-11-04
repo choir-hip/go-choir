@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Kernel structural gate: names (modular architecture plan section 5.1, R1).
+# Usage: scripts/check-kernel-names [KERNEL_DIR]   (default internal/kernel)
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+exec go run ./scripts/kernelgate names "${1:-internal/kernel}"

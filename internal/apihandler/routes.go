@@ -25,6 +25,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/captures", h.HandleCaptures)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
 	s.HandleFunc("/api/costs", api.HandleCosts)
+	s.HandleFunc("/api/plugins/state", api.HandlePluginsState)
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
 	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
 	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)
