@@ -208,6 +208,27 @@ func TestShotReviewNeverPassesAnUnreviewedShot(t *testing.T) {
 	}
 }
 
+func TestShotReviewAsksAMalformedAnswerOnceMore(t *testing.T) {
+	n := 0
+	flaky := func(context.Context, string, []string) (modelpolicy.VerifyOutcome, error) {
+		n++
+		if n == 1 {
+			return modelpolicy.VerifyOutcome{Text: `[{"image":1,` + allYes + `, "why": "ok" )}]`}, nil
+		}
+		return modelpolicy.VerifyOutcome{Text: `[{"image":1,` + allYes + `}]`}, nil
+	}
+	review, err := reviewShots(context.Background(), flaky, shotFixture(1), nil, always(true))
+	if err != nil || review.rejected() || review.Calls != 2 {
+		t.Fatalf("retried review = %+v, %v", review, err)
+	}
+	bad := func(context.Context, string, []string) (modelpolicy.VerifyOutcome, error) {
+		return modelpolicy.VerifyOutcome{Text: `[{"image":1, "q1": "yes" )}]`}, nil
+	}
+	if _, err := reviewShots(context.Background(), bad, shotFixture(1), nil, always(true)); err == nil || !strings.Contains(err.Error(), "not the JSON asked for") {
+		t.Fatalf("twice malformed = %v", err)
+	}
+}
+
 // The wiring in commitVerifyIntent: a pass on a frozen candidate whose
 // review cannot run stays frozen with the error stamped (FM1), and a
 // replayed pass the review already failed answers from the operation

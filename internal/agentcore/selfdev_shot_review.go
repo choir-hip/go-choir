@@ -32,6 +32,7 @@ import (
 //     candidate stays frozen; neither a pass nor a fail is recorded.
 //   - FM2 the answer is not the JSON asked for, or misses a shot: the same
 //     as FM1, never a pass on an unreviewed shot.
+//   - FM2b a malformed answer is asked once more before FM2 applies.
 //   - FM3 a replayed pass after the review failed the candidate: answered
 //     from the failed operation, no second model call.
 //   - FM4 shots confused across a batch: each image is labelled "Image N:"
@@ -402,6 +403,7 @@ func reviewShots(ctx context.Context, call shotReviewCall, screens []capsule.Scr
 		answers []shotBatchAnswer
 		outcome modelpolicy.VerifyOutcome
 		err     error
+		calls   int
 	}
 	var batches [][]int
 	for len(pending) > 0 {
@@ -424,9 +426,23 @@ func reviewShots(ctx context.Context, call shotReviewCall, screens []capsule.Scr
 				}
 			}
 			out, err := call(ctx, shotReviewPrompt(names), refs)
-			res := batchResult{idx: idx, outcome: out, err: err}
+			res := batchResult{idx: idx, outcome: out, err: err, calls: 1}
 			if err == nil {
 				res.answers, res.err = parseShotBatch(out.Text, len(idx))
+			}
+			// FM2b: one malformed answer is asked again once; pool's
+			// Calendar r1 (2026-11-04) lost a Verify to a stray ')' in one
+			// batch's JSON. A second malformed answer errors as FM2.
+			if err == nil && res.err != nil {
+				retry, retryErr := call(ctx, shotReviewPrompt(names), refs)
+				res.calls++
+				res.outcome.InputTokens += retry.InputTokens
+				res.outcome.OutputTokens += retry.OutputTokens
+				if retryErr != nil {
+					res.err = retryErr
+				} else if answers, parseErr := parseShotBatch(retry.Text, len(idx)); parseErr == nil {
+					res.answers, res.err, res.outcome.Model = answers, nil, retry.Model
+				}
 			}
 			results[b] = res
 		}(b, idx)
@@ -434,7 +450,7 @@ func reviewShots(ctx context.Context, call shotReviewCall, screens []capsule.Scr
 	wg.Wait()
 	models := map[string]bool{}
 	for _, res := range results {
-		review.Calls++
+		review.Calls += res.calls
 		review.InputTokens += res.outcome.InputTokens
 		review.OutputTokens += res.outcome.OutputTokens
 		if res.err != nil {
