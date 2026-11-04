@@ -528,9 +528,9 @@ type lockProbeCapsule struct {
 }
 
 func (c *lockProbeCapsule) SnapshotUnfinishedSourcePatch(ctx context.Context, id string) (capsule.CarriedPatch, error) {
-	free := c.rt.engineeringAssignmentOpenMu.TryLock()
+	release, free := c.rt.engineeringAssignmentOpenMu.TryAcquire("a test's probe")
 	if free {
-		c.rt.engineeringAssignmentOpenMu.Unlock()
+		release()
 	}
 	c.heldDuringIt = append(c.heldDuringIt, !free)
 	return c.snapshotCapsule.SnapshotUnfinishedSourcePatch(ctx, id)

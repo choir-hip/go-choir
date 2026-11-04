@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -47,17 +48,39 @@ func (rt *Runtime) triggerSelfDevelopmentReconcile() {
 	if rt == nil || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.selfdevComputerID == "" {
 		return
 	}
-	if rt.selfdevReconcilePending.CompareAndSwap(false, true) {
+	rt.startSelfdevReconcileDrain()
+}
+
+// startSelfdevReconcileDrain marks a reconcile pending and launches the
+// drain unless one runs. The pending flag alone had launched a drain for
+// every commit after a pass began (the pass clears it first), and each
+// waited on the pass's lock: one goroutine per committed event behind an
+// apply, each running a whole pass after it.
+func (rt *Runtime) startSelfdevReconcileDrain() {
+	rt.selfdevReconcilePending.Store(true)
+	if rt.selfdevReconcileRunning.CompareAndSwap(false, true) {
 		go rt.selfdevReconcileDrain()
 	}
 }
 
 // selfdevReconcileDrain runs the reconciler until the pending flag stays
 // clear — each pass covers every commit that preceded its state listing,
-// so one drain collapses a commit burst into one settlement boundary.
+// so one drain collapses a commit burst into one settlement boundary. The
+// caller holds selfdevReconcileRunning; the drain gives it back, then
+// takes it again if a trigger came between its last pass and the release.
 func (rt *Runtime) selfdevReconcileDrain() {
-	for rt.selfdevReconcilePending.Swap(false) {
-		rt.reconcileSelfDevelopmentMaterialization(context.Background())
+	for {
+		for rt.selfdevReconcilePending.Swap(false) {
+			if rt.selfdevReconcilePass != nil {
+				rt.selfdevReconcilePass()
+				continue
+			}
+			rt.reconcileSelfDevelopmentMaterialization(context.Background())
+		}
+		rt.selfdevReconcileRunning.Store(false)
+		if !rt.selfdevReconcilePending.Load() || !rt.selfdevReconcileRunning.CompareAndSwap(false, true) {
+			return
+		}
 	}
 }
 
@@ -170,10 +193,7 @@ func (rt *Runtime) markSelfDevelopmentOperationsInterruptedAfterCrash(ctx contex
 		interrupted[operation.OperationID] = true
 		log.Printf("selfdev: crash boot: %s (%s) interrupted; settles from the updater journal, never re-applied", operation.OperationID, operation.State)
 	}
-	rt.selfdevMaterializeMu.Lock()
-	rt.selfdevCrashInterrupted = interrupted
-	rt.selfdevSettlementSpent = map[string]bool{}
-	rt.selfdevMaterializeMu.Unlock()
+	rt.setSelfdevCrashMarks(interrupted)
 }
 
 // settleSelfDevelopmentOperationAfterCrash closes an interrupted operation
@@ -320,12 +340,20 @@ func selfdevSettlementUnfinishedNothingInstalled(last string) string {
 // reconcile pass, and a pass that retries after an error is not a crash. It
 // returns ErrGuestApplyAttemptsSpent once the limit is spent.
 func (rt *Runtime) spendSelfDevelopmentSettlementAttempt(operationID string) error {
-	if rt.selfdevSettlementSpent[operationID] {
+	// The map alone is under selfdevCrashMu, never the durable write: the
+	// caller holds the materializer's lock, which makes it the only spender
+	// (review r2, Devin R2-F3).
+	rt.selfdevCrashMu.Lock()
+	spent := rt.selfdevSettlementSpent[operationID]
+	rt.selfdevCrashMu.Unlock()
+	if spent {
 		return nil
 	}
 	if err := spendSettlementAttempt(rt.cfg.StorePath, selfdevSettlementAttemptReason, operationID, selfdevSettlementAttemptLimit); err != nil {
 		return err
 	}
+	rt.selfdevCrashMu.Lock()
+	defer rt.selfdevCrashMu.Unlock()
 	if rt.selfdevSettlementSpent == nil {
 		rt.selfdevSettlementSpent = map[string]bool{}
 	}
@@ -394,8 +422,20 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 	if rt == nil || rt.maintenanceHeld() || rt.selfdevUpdater == nil || rt.selfdevVerifier == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
 		return
 	}
-	rt.selfdevMaterializeMu.Lock()
-	defer rt.selfdevMaterializeMu.Unlock()
+	release, err := rt.lockSelfdevMaterialize(ctx, "a materializer pass")
+	if err != nil {
+		// A settle holds the lock past the bound: its own commits trigger
+		// the next pass, and the durable retry wakes stay armed.
+		// The drain consumed its pending flag for this pass: set it again,
+		// so the skipped pass runs when the drain loops.
+		log.Printf("selfdev materializer: pass skipped: %v", err)
+		var held *holdlock.HeldError
+		if errors.As(err, &held) && errors.Is(held.Cause, context.DeadlineExceeded) {
+			rt.selfdevReconcilePending.Store(true)
+		}
+		return
+	}
+	defer release()
 	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending, selfdev.StateDegraded)
 	if err != nil {
 		return
@@ -423,7 +463,7 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		// recordMaterializationApplied — discriminates the two.
 		rollback := operation.State == selfdev.StateRollbackPending ||
 			(operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "")
-		if rt.selfdevCrashInterrupted[operation.OperationID] {
+		if rt.selfdevCrashInterruptedOp(operation.OperationID) {
 			// Decided before a crash boot: settle from the journal, never
 			// apply, and arm no retry (a retry would only settle again).
 			if settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback); settleErr != nil {

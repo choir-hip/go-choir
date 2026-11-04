@@ -319,7 +319,9 @@ func (rt *Runtime) cacheReturnPostReading() {
 	if delay <= 0 {
 		delay = cacheReturnPostDelay
 	}
-	time.Sleep(delay)
+	if !rt.sleepOrStop(delay) {
+		return
+	}
 	root := rt.cacheReturn.ProcRoot
 	if root == "" {
 		root = "/proc"

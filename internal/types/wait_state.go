@@ -101,6 +101,10 @@ const (
 	// and has none yet
 	// (docs/problems/management-ends-without-verify-2026-11-04.md).
 	WaitKindVerifyOwed WaitKind = "verify_owed"
+	// WaitKindLock is a wait for an in-process lock another step holds
+	// (internal/holdlock): the holder is named, and the wait gives up at
+	// its bound.
+	WaitKindLock WaitKind = "lock"
 )
 
 // Label is the kind in words.
@@ -130,6 +134,8 @@ func (k WaitKind) Label() string {
 		return "a frozen candidate's decision"
 	case WaitKindVerifyOwed:
 		return "management's Verify"
+	case WaitKindLock:
+		return "lock"
 	}
 	return strings.ReplaceAll(string(k), "_", " ")
 }

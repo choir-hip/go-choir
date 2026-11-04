@@ -603,8 +603,11 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 	// assignment committed by the durable open is legitimately Open+Unbound
 	// while its saga spawns — without the lock this reconciler would reap a
 	// live saga's pre-bind window as "stranded".
-	rt.engineeringAssignmentOpenMu.Lock()
-	defer rt.engineeringAssignmentOpenMu.Unlock()
+	release, err := rt.lockEngineeringOpen(ctx, "the reconcile of trajectory "+trajectoryID, nil)
+	if err != nil {
+		return err
+	}
+	defer release()
 	exec := rt.assignedCapsule()
 	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {

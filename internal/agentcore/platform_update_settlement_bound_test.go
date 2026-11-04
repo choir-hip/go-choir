@@ -35,9 +35,9 @@ import (
 func (fx *derivableSelfDevFixture) useDurableAttemptCount(t *testing.T) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "runtime.db")
-	fx.rt.selfdevMaterializeMu.Lock()
+	unlockMaterialize := holdForTest(&fx.rt.selfdevMaterializeMu)
 	fx.rt.cfg.StorePath = path
-	fx.rt.selfdevMaterializeMu.Unlock()
+	unlockMaterialize()
 }
 
 // guestAttemptCount reads the durable count for one reason and target.

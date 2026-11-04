@@ -170,3 +170,51 @@ func TestDeployRefreshAsksEveryMinuteWhileTheGuestHoldsNewWork(t *testing.T) {
 		t.Fatalf("an unreadable refusal counted as holding: %+v", got)
 	}
 }
+
+// Class c (docs/problems/selfdev-waits-untyped-and-invisible-2026-11-04.md):
+// an entry that never cleared was asked for ever, up to hourly. It now has a
+// lifetime from its first deferral: past it, the sweep forgets it without
+// asking the guest, and the next deploy records it again if it still
+// defers. Ways it could fail: (1) an expired entry is asked again; (2) an
+// entry inside its lifetime is dropped; (3) a re-target does not restart
+// the lifetime.
+func TestDeployRefreshEntryExpiresAfterItsLifetime(t *testing.T) {
+	h, _, fake := newDeployRefreshFixture(t, "stuck")
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "0ld" }
+	fake.outcome = guestMarkBusy
+	if _, resp := postDeployRefresh(t, h, `{"user_id":"stuck","desktop_id":"primary","target":"761d94c5"}`); resp.Outcome != deployRefreshDeferred {
+		t.Fatalf("setup: %+v, want deferred", resp)
+	}
+	age := func(d time.Duration) {
+		tr := h.deployRefreshState()
+		tr.mu.Lock()
+		for k, e := range tr.pending {
+			e.FirstDeferredAt = time.Now().UTC().Add(-d)
+			e.LastAttemptAt = time.Time{}
+			tr.pending[k] = e
+		}
+		tr.mu.Unlock()
+	}
+	age(deployRefreshPendingLifetime - time.Hour)
+	marks := len(fake.marks)
+	h.SweepDeployRefreshPending(context.Background())
+	if len(fake.marks) != marks+1 || len(h.pendingDeployRefreshes()) != 1 {
+		t.Fatalf("an entry inside its lifetime was not asked or was dropped: marks=%d pending=%+v", len(fake.marks)-marks, h.pendingDeployRefreshes())
+	}
+	age(deployRefreshPendingLifetime + time.Minute)
+	marks = len(fake.marks)
+	h.SweepDeployRefreshPending(context.Background())
+	if len(fake.marks) != marks {
+		t.Fatal("an expired entry was asked again")
+	}
+	if pending := h.pendingDeployRefreshes(); len(pending) != 0 {
+		t.Fatalf("an expired entry stayed pending: %+v", pending)
+	}
+	// A new deploy records it again, with a fresh lifetime.
+	if _, resp := postDeployRefresh(t, h, `{"user_id":"stuck","desktop_id":"primary","target":"8a2f0c11"}`); resp.Outcome != deployRefreshDeferred {
+		t.Fatalf("re-record: %+v, want deferred", resp)
+	}
+	if pending := h.pendingDeployRefreshes(); len(pending) != 1 || time.Since(pending[0].FirstDeferredAt) > time.Minute {
+		t.Fatalf("the next deploy did not record a fresh entry: %+v", pending)
+	}
+}

@@ -302,9 +302,9 @@ func TestCrashBootRecordsJournaledSelfDevelopmentApply(t *testing.T) {
 	// passes already queued have drained and the call count is stable.
 	fx.rt.eventAppender.SetPostCommitObserver(func(computerevent.EventKind) {})
 	for stable, last := 0, int32(-1); stable < 3; {
-		fx.rt.selfdevMaterializeMu.Lock()
+		unlockMaterialize := holdForTest(&fx.rt.selfdevMaterializeMu)
 		calls := fx.applyCalls.Load()
-		fx.rt.selfdevMaterializeMu.Unlock()
+		unlockMaterialize()
 		if calls == last {
 			stable++
 		} else {

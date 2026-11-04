@@ -232,6 +232,17 @@ func (r *OwnershipRegistry) planMakeRoom(starter *VMOwnership, starterClass Warm
 	return plan
 }
 
+// makeRoomLockName names the one make-room slot in a waiter's error.
+const makeRoomLockName = "the make-room slot"
+
+// makeRoomLockWait bounds a start's wait for another start's make-room. A
+// make-room hibernates at most MaxMakeRoomVictims computers, each followed
+// by a settle of at most MaxMakeRoomSettleWait; the bound covers that worst
+// case with a minute per hibernate, so only a holder past its own bounds
+// (a hang) refuses a waiter, naming the holder (review r1, DeepSeek F4). A
+// var only so a test can shorten it.
+var makeRoomLockWait = time.Duration(MaxMakeRoomVictims) * (MaxMakeRoomSettleWait + time.Minute)
+
 // makeRoomAndAdmit is a refused start's second chance: under the one
 // make-room slot, re-admit on a fresh sample; else hibernate one victim at a
 // time, re-planning from the live registry and a fresh sample after each,
@@ -244,8 +255,11 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	r.makeRoomMu.Lock()
-	defer r.makeRoomMu.Unlock()
+	release, err := r.makeRoomMu.Acquire(ctx, makeRoomLockName, "the make-room of a start of "+own.VMID, makeRoomLockWait)
+	if err != nil {
+		return nil, fmt.Errorf("make-room: %w", err)
+	}
+	defer release()
 
 	r.mu.RLock()
 	cfg := normalizePressureReclaimConfig(r.pressureReclaim)

@@ -408,8 +408,7 @@ func TestAbandonSettlesForwardAMaterializingOperationJournaledApplied(t *testing
 func TestAbandonRefusesWhileTheMaterializerIsWorking(t *testing.T) {
 	fx := newDerivableSelfDevFixture(t, "computer-abandon-busy")
 	operation := fx.parkAppliedButUnrecorded(t, "op-abandon-busy")
-	fx.rt.selfdevMaterializeMu.Lock()
-	defer fx.rt.selfdevMaterializeMu.Unlock()
+	defer holdForTest(&fx.rt.selfdevMaterializeMu)()
 	rec := postAbandon(fx, abandonRequestBody(operation.OperationID, "no", "abandon-busy"))
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "materializer is working") {
 		t.Fatalf("status=%d body=%s; want 409 while the materializer holds its pass", rec.Code, rec.Body.String())

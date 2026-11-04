@@ -214,8 +214,12 @@ func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, o
 	// window — the wake handler must take the same lock and re-read so a
 	// trajectory reconcile can't reap a live saga's pre-bind window, and a
 	// committed bind/cancel is observed before external effects.
-	rt.engineeringAssignmentOpenMu.Lock()
-	defer rt.engineeringAssignmentOpenMu.Unlock()
+	release, err := rt.lockEngineeringOpen(ctx, fmt.Sprintf("the spawn saga of assignment %s attempt %d", deadline.AssignmentID, deadline.Attempt), &assignment)
+	if err != nil {
+		// The holder is named; the wake's retry asks again.
+		return fmt.Errorf("spawn saga for %s: %w", deadline.AssignmentID, err)
+	}
+	defer release()
 	assignment, err = rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil

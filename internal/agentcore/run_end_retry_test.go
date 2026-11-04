@@ -19,7 +19,7 @@ import (
 //     or never once the write lands.
 func TestRetryRunEndLandsAfterTransientFailures(t *testing.T) {
 	var waits []time.Duration
-	wait := func(d time.Duration) { waits = append(waits, d) }
+	wait := func(d time.Duration) bool { waits = append(waits, d); return true }
 	delays := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
 
 	t.Run("lands after the store recovers", func(t *testing.T) {

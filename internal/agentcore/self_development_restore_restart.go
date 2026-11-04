@@ -140,24 +140,31 @@ func (rt *Runtime) requestRestoreRestart(ctx context.Context, target string) (sc
 		return false, err.Error()
 	}
 	if why := rt.restoreRestartBusy(ctx); why != "" {
-		go rt.restartRestoredWhenIdle(target)
+		go rt.restartRestoredWhenIdle(target, restoreRestartIdlePoll, restoreRestartIdleWindow)
 		return false, why + "; the restart into the restored release waits for the next idle moment"
 	}
 	if err := rt.writeRestoreRestartMarker(target); err != nil {
 		if errors.Is(err, errHibernateFenced) {
 			// Being hibernated: wait for the fence to lift, as for a busy computer.
-			go rt.restartRestoredWhenIdle(target)
+			go rt.restartRestoredWhenIdle(target, restoreRestartIdlePoll, restoreRestartIdleWindow)
 			return false, "the guest is being hibernated; the restart into the restored release waits for the next idle moment"
 		}
 		log.Printf("restore: %v; no restart into the restored release", err)
 		return false, "the planned-restart marker could not be written (" + err.Error() + "); the previous binary keeps serving until the next restart"
 	}
+	delay, poll, window := restoreRestartDelay, restoreRestartIdlePoll, restoreRestartIdleWindow
 	go func() {
-		time.Sleep(restoreRestartDelay)
+		if !rt.sleepOrStop(delay) {
+			// The runtime stopped first: no restart. The marker stays; the
+			// pointer already names the restored release, so the next
+			// boot is the planned restart into it.
+			log.Printf("restore: the runtime stopped before the restart into the restored release %s", target)
+			return
+		}
 		// A run may have started while the answer went out.
 		if why := rt.restoreRestartBusy(context.Background()); why != "" {
 			rt.clearRestoreRestartMarker()
-			rt.restartRestoredWhenIdle(target)
+			rt.restartRestoredWhenIdle(target, poll, window)
 			return
 		}
 		rt.restartRestored(target)
@@ -181,10 +188,14 @@ func (rt *Runtime) restartRestored(target string) {
 
 // restartRestoredWhenIdle waits for an idle computer, then restarts into the
 // restored release under the planned marker.
-func (rt *Runtime) restartRestoredWhenIdle(target string) {
-	deadline := time.Now().Add(restoreRestartIdleWindow)
+// poll and window are read by the caller, before the goroutine starts.
+func (rt *Runtime) restartRestoredWhenIdle(target string, poll, window time.Duration) {
+	deadline := time.Now().Add(window)
 	for time.Now().Before(deadline) {
-		time.Sleep(restoreRestartIdlePoll)
+		if !rt.sleepOrStop(poll) {
+			log.Printf("restore: the runtime stopped; no restart into the restored release %s", target)
+			return
+		}
 		if rt.restoreRestartBusy(context.Background()) != "" {
 			continue
 		}
@@ -198,5 +209,5 @@ func (rt *Runtime) restartRestoredWhenIdle(target string) {
 		rt.restartRestored(target)
 		return
 	}
-	log.Printf("restore: the computer stayed busy for %s; no restart into the restored release %s; the previous binary keeps serving until the next restart", restoreRestartIdleWindow, target)
+	log.Printf("restore: the computer stayed busy for %s; no restart into the restored release %s; the previous binary keeps serving until the next restart", window, target)
 }

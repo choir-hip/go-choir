@@ -90,6 +90,13 @@ const (
 	// deskSessionMaxIdle bounds the idle sessions a computer keeps; beyond
 	// it the least recently used idle session is closed.
 	deskSessionMaxIdle = 12
+	// deskSessionAcquireWait bounds a run's wait for its desk's session
+	// while another run's cell holds it. The caller's context usually ends
+	// sooner (the activation budget); this bound holds when it has none.
+	// A management cell is bounded at its host deadline; a cell of another
+	// desk without timeout_ms is not, so a waiter must not wait as long as
+	// it runs.
+	deskSessionAcquireWait = 10 * time.Minute
 )
 
 type deskSession struct {
@@ -100,7 +107,9 @@ type deskSession struct {
 	cells    int
 	runs     []string
 	// busyRun is the run whose cell is evaluating now; "" when idle.
-	busyRun string
+	// busySince is when that cell took the session.
+	busyRun   string
+	busySince time.Time
 	// freed is closed when the busy cell ends, waking runs that wait for
 	// this session.
 	freed chan struct{}
@@ -109,8 +118,14 @@ type deskSession struct {
 	searches *deskSearches
 }
 
-// close ends the session: its searches' streams, then its worker.
+// close ends the session: its searches' streams, then its worker. Runs
+// waiting for its busy cell are woken: they find the session gone and
+// start a new one. The caller holds the pool mutex.
 func (s *deskSession) close() {
+	if s.freed != nil {
+		close(s.freed)
+		s.freed = nil
+	}
 	s.searches.close()
 	s.worker.Close()
 }
@@ -123,7 +138,9 @@ type deskSessionWorkers struct {
 	sessions  map[string]*deskSession
 	retention time.Duration
 	maxIdle   int
-	now       func() time.Time
+	// maxWait bounds a wait for a busy session (deskSessionAcquireWait).
+	maxWait time.Duration
+	now     func() time.Time
 	// afterFunc arms the idle reaper (time.AfterFunc unless a test replaces
 	// it); reaper is the armed timer, nil when nothing idle is being watched.
 	afterFunc func(time.Duration, func()) deskReaperTimer
@@ -152,6 +169,7 @@ func newDeskSessionWorkers() *deskSessionWorkers {
 		sessions:  map[string]*deskSession{},
 		retention: deskSessionRetention,
 		maxIdle:   deskSessionMaxIdle,
+		maxWait:   deskSessionAcquireWait,
 		now:       time.Now,
 	}
 }
@@ -207,20 +225,36 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 	}
 	shared := ""
 	waitStart := time.Now()
+	waitCtx := ctx
+	if m.maxWait > 0 {
+		var cancel context.CancelFunc
+		waitCtx, cancel = context.WithTimeout(ctx, m.maxWait)
+		defer cancel()
+	}
 	for {
 		s := m.sessions[key]
 		if s == nil || s.busyRun == "" || s.busyRun == runID {
 			break
 		}
-		other, freed := s.busyRun, s.freed
+		other, since, freed := s.busyRun, s.busySince, s.freed
 		m.mu.Unlock()
 		select {
 		case <-freed:
 			m.mu.Lock()
-			shared = other
-		case <-ctx.Done():
+			// A release (a dead worker) also wakes the waiters: the values
+			// are then gone, and the next pass starts a new session, so
+			// only a session still in place was shared.
+			if m.sessions[key] == s {
+				shared = other
+			}
+		case <-waitCtx.Done():
 			m.mu.Lock()
-			return deskSessionLease{}, fmt.Errorf("this desk's session is busy with run %s's cell: %w", other, ctx.Err())
+			cause := ctx.Err()
+			if cause == nil {
+				cause = context.DeadlineExceeded
+			}
+			return deskSessionLease{}, fmt.Errorf("this desk's session is busy with run %s's cell for %s: gave up after %s: %w",
+				other, m.clock().Sub(since).Round(time.Second), time.Since(waitStart).Round(time.Millisecond), cause)
 		}
 	}
 	now := m.clock()
@@ -230,6 +264,8 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 		s.close()
 		delete(m.sessions, key)
 		s = nil
+		// Nothing the run waited for survives: no shared values to claim.
+		shared = ""
 	}
 	if s == nil {
 		w, err := yaegikernel.SpawnDeskSessionWorker(cfg)
@@ -261,17 +297,28 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 	if !slices.Contains(s.runs, runID) {
 		s.runs = append(s.runs, runID)
 	}
+	if s.busyRun != runID {
+		s.busySince = m.clock()
+	}
 	s.busyRun = runID
-	s.freed = make(chan struct{})
+	// A run that re-enters its own busy session keeps the channel its
+	// waiters already wait on.
+	if s.freed == nil {
+		s.freed = make(chan struct{})
+	}
 	return lease, nil
 }
 
 // done ends a cell's hold on its session and wakes any run waiting for it.
-func (m *deskSessionWorkers) done(key string) {
+// It acts only on the lease's own session: a cell whose worker died
+// released its session, a waiter woken by that release may already hold a
+// new session under the same key, and the dead cell's done must not free
+// it.
+func (m *deskSessionWorkers) done(lease deskSessionLease) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if s := m.sessions[key]; s != nil {
-		s.busyRun = ""
+	if s := m.sessions[lease.key]; s != nil && s.worker == lease.worker {
+		s.busyRun, s.busySince = "", time.Time{}
 		s.cells++
 		s.lastUsed = m.clock()
 		if s.freed != nil {
@@ -544,7 +591,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			if err != nil {
 				return "", fmt.Errorf("desk_go_eval: spawn worker: %w", err)
 			}
-			defer workers.done(lease.key)
+			defer workers.done(lease)
 			w := lease.worker
 			reduction := rlmReductionForDeskCall(ctx, rt)
 			// A Texture cell works against its frame (Cut 2 2a): the

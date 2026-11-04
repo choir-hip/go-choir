@@ -78,11 +78,17 @@ type deployRefreshPendingEntry struct {
 // (about half an hour at the one-minute sweep) is refusing for a reason that
 // does not clear by itself, such as a held rollback awaiting an owner act. It
 // is asked with a gap that doubles from two minutes up to
-// deployRefreshRetryMaxGap, and never dropped: the act that clears the
-// refusal still leads to an update.
+// deployRefreshRetryMaxGap, so the act that clears the refusal still leads
+// to an update. An entry lives deployRefreshPendingLifetime from its first
+// deferral of its target: past it the sweep forgets it, logged, and the
+// next deploy records the computer again if it still defers. Without the
+// lifetime an entry that never cleared (a route that never joins, a user
+// never idle, a refusal no act clears) was asked for ever
+// (docs/problems/selfdev-waits-untyped-and-invisible-2026-11-04.md).
 const (
 	deployRefreshRetryBackoffAfter = 30
 	deployRefreshRetryMaxGap       = time.Hour
+	deployRefreshPendingLifetime   = 24 * time.Hour
 )
 
 // deployRefreshRetryDue reports whether the sweep asks entry again at now.
@@ -481,12 +487,15 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 		eligible := !own.IsHeld() && own.State == VMStateActive && own.DivergenceStatus != "divergent"
 		// A protected computer stopped by a failure or a vmctl restart is a
 		// rescue: it stays pending until the sweep boots it on the target.
+		// A rescue has no lifetime: no later deploy is sure to come for it
+		// (review r1, Devin F4).
 		rescue := h.registry.deployRescueEligible(own)
-		if eligible || rescue {
-			if err := h.requireComputerVersionRoute(ctx, entry.UserID, entry.DesktopID); err != nil {
-				log.Printf("vmctl: deploy refresh retry: user=%s desktop=%s route refused, kept: %v", entry.UserID, entry.DesktopID, err)
-				continue
-			}
+		// The sweep's clock is the behind gate's (time.Now unless a test sets it).
+		if _, clock := h.behindGate(); !rescue && !entry.FirstDeferredAt.IsZero() && clock().Sub(entry.FirstDeferredAt) > deployRefreshPendingLifetime {
+			log.Printf("vmctl: deploy refresh retry: %s (user=%s desktop=%s) still pending for %s after %d attempts since %s (last: %q); forgotten past its lifetime %s, the next deploy records it again",
+				entry.VMID, entry.UserID, entry.DesktopID, entry.Target, entry.Attempts, entry.FirstDeferredAt.Format(time.RFC3339), entry.LastReason, deployRefreshPendingLifetime)
+			h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+			continue
 		}
 		// A computer that woke behind: resolve the current release now (a
 		// switch may have moved it since validation), forget one that is not
@@ -511,6 +520,15 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 			if served := h.servedCommit(ctx, *own); served != "" && served == entry.Target {
 				log.Printf("vmctl: deploy refresh retry: %s already serves %s; forgotten", own.VMID, entry.Target)
 				h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+				continue
+			}
+		}
+		// The route is checked after the served commit: a computer that
+		// took its update by another path is forgotten even while its
+		// route refuses (it had been kept, and asked every minute).
+		if eligible || rescue {
+			if err := h.requireComputerVersionRoute(ctx, entry.UserID, entry.DesktopID); err != nil {
+				log.Printf("vmctl: deploy refresh retry: user=%s desktop=%s route refused, kept: %v", entry.UserID, entry.DesktopID, err)
 				continue
 			}
 		}

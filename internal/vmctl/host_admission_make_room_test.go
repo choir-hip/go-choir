@@ -380,6 +380,40 @@ func TestMakeRoomWaitIsBounded(t *testing.T) {
 	}
 }
 
+// Class c (docs/problems/selfdev-waits-untyped-and-invisible-2026-11-04.md):
+// a refused start waiting for another start's make-room gives up at its
+// bound and names the holder. It had waited on a sync.Mutex as long as the
+// holder held it, under a context with no deadline (admitHostMemory).
+func TestMakeRoomWaiterGivesUpNamingTheHolder(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("a", "vm-a", 2*time.Hour, 4*gib)
+	f.setAvail(5 * gib)
+	prev := makeRoomLockWait
+	makeRoomLockWait = 100 * time.Millisecond
+	t.Cleanup(func() { makeRoomLockWait = prev })
+	hold, err := f.reg.makeRoomMu.Acquire(context.Background(), makeRoomLockName, "the make-room of a start of vm-held", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hold()
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "waiting for the make-room slot held by the make-room of a start of vm-held for ") {
+			t.Fatalf("err = %v, want the holder named", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a start waited without bound behind another start's make-room")
+	}
+	if got := f.mr.hibernates(); len(got) != 0 {
+		t.Fatalf("a start that never got the slot hibernated %v", got)
+	}
+}
+
 // M4: two refused starts at once: one decider at a time, each victim
 // hibernated once, each start admitted with its own victim.
 func TestMakeRoomOneDeciderNoDoubleHibernate(t *testing.T) {

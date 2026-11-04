@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
@@ -661,8 +662,9 @@ type OwnershipRegistry struct {
 	cacheReturn    guestCacheReturnState
 	// makeRoomMu is the one make-room decider (host_admission_make_room.go):
 	// a refused start that waits on it re-admits before choosing a victim.
-	// Never taken while holding mu.
-	makeRoomMu sync.Mutex
+	// Never taken while holding mu. Its waiters give up at makeRoomLockWait
+	// and name the holder.
+	makeRoomMu holdlock.Mutex
 	// makeRoomGuard authorizes make-room's hibernates as the idle sweep's
 	// guard authorizes its own; nil means make-room hibernates nothing.
 	makeRoomGuard ComputerVersionRouteGuard

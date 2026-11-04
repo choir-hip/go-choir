@@ -22,8 +22,9 @@ var runEndRetryDelays = []time.Duration{
 // retryRunEnd attempts persist until it lands, waiting delays[i] after
 // failure i. It stops without error when persist reports the run was not
 // persisted (another path already ended it), and returns the last error
-// once the delays run out. after runs once, only when the write lands.
-func retryRunEnd(persist func() (bool, error), after func(), wait func(time.Duration), delays []time.Duration) (bool, error) {
+// once the delays run out or a wait reports the runtime stopped. after
+// runs once, only when the write lands.
+func retryRunEnd(persist func() (bool, error), after func(), wait func(time.Duration) bool, delays []time.Duration) (bool, error) {
 	for i := 0; ; i++ {
 		persisted, err := persist()
 		if err == nil {
@@ -35,7 +36,9 @@ func retryRunEnd(persist func() (bool, error), after func(), wait func(time.Dura
 		if i >= len(delays) {
 			return false, err
 		}
-		wait(delays[i])
+		if !wait(delays[i]) {
+			return false, err
+		}
 	}
 }
 
@@ -54,7 +57,7 @@ func (rt *Runtime) persistRunEndInBackground(rec types.RunRecord, kind types.Eve
 			if after != nil {
 				after(ctx, &rec)
 			}
-		}, time.Sleep, runEndRetryDelays)
+		}, rt.sleepOrStop, runEndRetryDelays)
 		switch {
 		case err != nil:
 			log.Printf("runtime: run %s end (%s) still not persisted after retries: %v", rec.RunID, rec.State, err)

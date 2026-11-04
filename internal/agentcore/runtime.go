@@ -24,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
+	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
@@ -155,7 +156,9 @@ type Runtime struct {
 	// saga so a duplicate revision wake cannot drive a second saga against an
 	// in-flight durable open (each delivery's cleanup would otherwise write
 	// divergent fate intents on the same deterministic command identity).
-	engineeringAssignmentOpenMu sync.Mutex
+	// Taken only through lockEngineeringOpen: its waiters give up at a
+	// bound and name the holder (inproc_locks.go).
+	engineeringAssignmentOpenMu holdlock.Mutex
 	// assignmentSagas holds one mutex per assignment attempt for its terminal
 	// report's drivers (assignmentSagaMutex).
 	assignmentSagas sync.Map
@@ -482,22 +485,35 @@ type Runtime struct {
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex
-	selfdevMaterializeMu  sync.Mutex
+	// selfdevMaterializeMu is the materializer's one pass at a time; taken
+	// only through lockSelfdevMaterialize, whose waiters give up at a bound
+	// and name the holder.
+	selfdevMaterializeMu holdlock.Mutex
+	// selfdevCrashMu guards the two maps below. They had been guarded by
+	// selfdevMaterializeMu, so a crash boot's marking waited out a whole
+	// materializer pass, an apply included.
+	selfdevCrashMu sync.Mutex
 	// selfdevCrashInterrupted names the self-development operations a crash
 	// boot found decided but unsettled (L1a-3b): the reconciler settles them
 	// from the updater journal and never calls the updater for them. Guarded
-	// by selfdevMaterializeMu.
+	// by selfdevCrashMu.
 	selfdevCrashInterrupted map[string]bool
 	// selfdevSettlementSpent names the operations whose settlement already
 	// spent this boot's durable attempt (self_development_materializer.go):
 	// one attempt per operation per crash boot, however many passes run.
 	// Reset when the boot marks its interrupted operations. Guarded by
-	// selfdevMaterializeMu.
+	// selfdevCrashMu.
 	selfdevSettlementSpent map[string]bool
 	// selfdevReconcilePending is the M7 derivable-continuation signal: the
 	// canonical post-commit observer sets it and a single drain loop
 	// collapses bursts into one reconcile per settlement boundary.
+	// selfdevReconcileRunning says that drain is running, so a trigger
+	// during a pass launches no second drain to wait on the pass's lock.
 	selfdevReconcilePending atomic.Bool
+	selfdevReconcileRunning atomic.Bool
+	// selfdevReconcilePass is a test seam, nil in production: the drain
+	// runs it in place of a reconcile pass.
+	selfdevReconcilePass func()
 	// selfdevDecisionBeforeTransition is a test seam, nil in production: the
 	// decision handler calls it after the decision event is final and before
 	// it moves the operation, so a test can let the post-commit observer win

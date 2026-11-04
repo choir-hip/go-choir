@@ -621,7 +621,8 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 		if rt.selfdevOperations == nil || rt.eventAppender == nil || rt.selfdevComputerID == "" {
 			return
 		}
-		if rt.selfdevReconcilePending.CompareAndSwap(false, true) {
+		rt.selfdevReconcilePending.Store(true)
+		if rt.selfdevReconcileRunning.CompareAndSwap(false, true) {
 			rt.selfdevReconcileDrain()
 		}
 	})
@@ -991,8 +992,8 @@ func (fx *derivableSelfDevFixture) waitForState(t *testing.T, operationID string
 	// A settle moves the row first and writes the tape (the discharge, the
 	// settlement) after it in the same materializer pass: wait for the pass
 	// to finish, so a caller that then reads the tape sees all of it.
-	fx.rt.selfdevMaterializeMu.Lock()
-	fx.rt.selfdevMaterializeMu.Unlock()
+	unlockMaterialize := holdForTest(&fx.rt.selfdevMaterializeMu)
+	unlockMaterialize()
 	return operation
 }
 func (fx *derivableSelfDevFixture) countEventKinds() map[computerevent.EventKind]int {

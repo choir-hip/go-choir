@@ -188,12 +188,12 @@ func TestDegradedRollbackWithAppliedJournalAndGonePinnedReleaseRecordsForward(t 
 		time.Sleep(50 * time.Millisecond)
 	}
 	fx.rt.eventAppender.SetPostCommitObserver(func(computerevent.EventKind) {})
-	fx.rt.selfdevMaterializeMu.Lock()
+	unlockMaterialize := holdForTest(&fx.rt.selfdevMaterializeMu)
 	row, err := fx.operations.Get(ctx, fx.computerID, rollback.OperationID)
 	if err == nil && row.State == selfdev.StateRollbackPending {
 		err = fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, row, true)
 	}
-	fx.rt.selfdevMaterializeMu.Unlock()
+	unlockMaterialize()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -773,9 +774,23 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		// kernel mode needs no post-commit arm. Runtimes without the wake
 		// outbox resume inline under the saga mutex.
 		if !opened.Replay && !(rt.kernelMode && rt.scheduleActor != nil) {
-			rt.engineeringAssignmentOpenMu.Lock()
-			_, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, assignmentSpawnRequest{Objective: castPlan.Objective})
-			rt.engineeringAssignmentOpenMu.Unlock()
+			resumeErr := func() error {
+				release, err := rt.lockEngineeringOpen(ctx, "the inline spawn of assignment "+opened.Assignment.AssignmentID, &opened.Assignment)
+				if err != nil {
+					return err
+				}
+				defer release()
+				_, err = rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, assignmentSpawnRequest{Objective: castPlan.Objective})
+				return err
+			}()
+			var held *holdlock.HeldError
+			if errors.As(resumeErr, &held) {
+				// The open is committed, and with it the spawn wake: a replay
+				// of this reduce skips the inline spawn, so failing here would
+				// leave the assignment undriven. The wake drives it.
+				log.Printf("runtime: engineering cast spawn of %s left to its spawn wake: %v", opened.Assignment.AssignmentID, resumeErr)
+				resumeErr = nil
+			}
 			if resumeErr != nil {
 				return nil, fmt.Errorf("reduce: engineering cast spawn (non-kernel): %w", resumeErr)
 			}

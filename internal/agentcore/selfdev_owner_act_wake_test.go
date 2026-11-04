@@ -411,9 +411,7 @@ func TestOwnerActWakeCrashSettledApplyMintsNothing(t *testing.T) {
 	// still failing (so no live pass can finish it first), and the next
 	// reconcile settles it from the journal only.
 	fx.rt.markSelfDevelopmentOperationsInterruptedAfterCrash(ctx)
-	fx.rt.selfdevMaterializeMu.Lock()
-	interrupted := fx.rt.selfdevCrashInterrupted[operation.OperationID]
-	fx.rt.selfdevMaterializeMu.Unlock()
+	interrupted := fx.rt.selfdevCrashInterruptedOp(operation.OperationID)
 	if !interrupted {
 		t.Fatalf("crash boot did not mark %s interrupted", operation.OperationID)
 	}

@@ -212,7 +212,19 @@ func (rt *Runtime) endAdmissionWait(ctx context.Context, assignmentID string, at
 	rt.endAssignmentWaitOf(ctx, assignmentID, attempt, "assignment ", outcome)
 }
 
+// endAssignmentWaitKind ends the attempt's wait only when it is of kind: a
+// lock wait's end does not end the admission wait that replaced it.
+func (rt *Runtime) endAssignmentWaitKind(ctx context.Context, assignmentID string, attempt uint64, kind types.WaitKind, outcome string) {
+	rt.endAssignmentWaitIf(ctx, assignmentID, attempt, func(w *types.WaitState) bool { return w != nil && w.Kind == kind }, outcome)
+}
+
 func (rt *Runtime) endAssignmentWaitOf(ctx context.Context, assignmentID string, attempt uint64, subjectPrefix, outcome string) {
+	rt.endAssignmentWaitIf(ctx, assignmentID, attempt, func(w *types.WaitState) bool {
+		return subjectPrefix == "" || (w != nil && strings.HasPrefix(w.Subject, subjectPrefix))
+	}, outcome)
+}
+
+func (rt *Runtime) endAssignmentWaitIf(ctx context.Context, assignmentID string, attempt uint64, match func(*types.WaitState) bool, outcome string) {
 	if rt == nil {
 		return
 	}
@@ -221,7 +233,7 @@ func (rt *Runtime) endAssignmentWaitOf(ctx context.Context, assignmentID string,
 	t := &rt.assignmentWaits
 	t.mu.Lock()
 	var plans []waitRelayPlan
-	if e := t.entries[key]; e != nil && (subjectPrefix == "" || (e.current != nil && strings.HasPrefix(e.current.Subject, subjectPrefix))) {
+	if e := t.entries[key]; e != nil && match(e.current) {
 		plans = e.endLocked(now, outcome)
 	}
 	t.mu.Unlock()

@@ -505,16 +505,11 @@ func (rt *Runtime) abandonSelfDevelopmentOperation(ctx context.Context, ownerID,
 	// row under it. A pass that only retries a failed read is short, so wait
 	// a moment for it; one inside a long apply outlasts the wait and is
 	// refused.
-	locked := false
-	for deadline := time.Now().Add(selfdevAbandonWait); !locked && time.Now().Before(deadline) && ctx.Err() == nil; {
-		if locked = rt.selfdevMaterializeMu.TryLock(); !locked {
-			time.Sleep(20 * time.Millisecond)
-		}
+	release, lockErr := rt.selfdevMaterializeMu.Acquire(ctx, selfdevMaterializeLockName, "the abandon of operation "+request.OperationID, selfdevAbandonWait)
+	if lockErr != nil {
+		return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s: the materializer is working; try again when it is idle (%v)", request.OperationID, lockErr)
 	}
-	if !locked {
-		return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s: the materializer is working; try again when it is idle", request.OperationID)
-	}
-	defer rt.selfdevMaterializeMu.Unlock()
+	defer release()
 	operation, err := rt.selfdevOperations.Get(ctx, computerID, request.OperationID)
 	if err != nil {
 		return selfdev.Operation{}, http.StatusNotFound, errors.New("self-development operation not found")

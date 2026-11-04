@@ -145,8 +145,8 @@ func TestDeskSessionBusySessionIsWaitedForNeverDuplicated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("another desk must not wait behind agent:a: %v", err)
 	}
-	workers.done(otherDesk.key)
-	workers.done(busy.key)
+	workers.done(otherDesk)
+	workers.done(busy)
 	select {
 	case lease := <-got:
 		if lease.key != busy.key || lease.worker != busy.worker {
@@ -155,7 +155,7 @@ func TestDeskSessionBusySessionIsWaitedForNeverDuplicated(t *testing.T) {
 		if !strings.Contains(lease.notice, "run-1") {
 			t.Fatalf("the waiting run must be told which run shares its REPL: %q", lease.notice)
 		}
-		workers.done(lease.key)
+		workers.done(lease)
 	case err := <-errs:
 		t.Fatalf("acquire after release: %v", err)
 	case <-time.After(5 * time.Second):
@@ -187,12 +187,12 @@ func TestDeskSessionCancelledWaiterReturnsWithoutSession(t *testing.T) {
 	if workers.count() != 1 || busy.worker.Dead() {
 		t.Fatalf("the holder's session must be untouched by the cancelled waiter")
 	}
-	workers.done(busy.key)
+	workers.done(busy)
 	again, err := workers.acquire(context.Background(), "agent:a", true, "run-2", cfg("run-2"))
 	if err != nil || again.worker != busy.worker {
 		t.Fatalf("after release the same session serves the next run: err=%v", err)
 	}
-	workers.done(again.key)
+	workers.done(again)
 }
 
 // Idle sessions beyond the pool's bound are closed least recently used first.
@@ -208,19 +208,100 @@ func TestDeskSessionPoolBoundsIdleSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
-	workers.done(first.key)
+	workers.done(first)
 	for _, key := range []string{"agent:b", "agent:c", "agent:d"} {
 		clock = clock.Add(time.Second)
 		lease, err := workers.acquire(context.Background(), key, true, "run-x", cfg("run-x"))
 		if err != nil {
 			t.Fatalf("acquire %s: %v", key, err)
 		}
-		workers.done(lease.key)
+		workers.done(lease)
 	}
 	if n := workers.count(); n > 2 {
 		t.Fatalf("idle sessions must stay within the bound: %d live", n)
 	}
 	if !first.worker.Dead() {
 		t.Fatalf("the least recently used idle session must be closed first")
+	}
+}
+
+// A waiter with no deadline of its own gives up at the pool's bound and
+// names the run whose cell holds the session and for how long (the doc's
+// class c hang risk: a caller context without a deadline).
+func TestDeskSessionWaiterGivesUpAtItsBoundNamingTheHolder(t *testing.T) {
+	deskTestWorkerBin(t)
+	workers := newDeskSessionWorkers()
+	workers.maxWait = 150 * time.Millisecond
+	t.Cleanup(workers.closeAll)
+	cfg := deskPoolCfg(t)
+	busy, err := workers.acquire(context.Background(), "agent:a", true, "run-1", cfg("run-1"))
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer workers.done(busy)
+	done := make(chan error, 1)
+	go func() {
+		_, err := workers.acquire(context.Background(), "agent:a", true, "run-2", cfg("run-2"))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "busy with run run-1's cell for ") || !strings.Contains(err.Error(), "gave up after") {
+			t.Fatalf("err = %v, want the holder and its hold time named", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a waiter with no deadline never returned behind a busy session")
+	}
+}
+
+// A session whose worker died mid-cell is released before its cell's done;
+// the release must wake the runs waiting for it. It had left them waiting
+// for a session that no longer existed until their own deadline (up to the
+// activation budget).
+func TestDeskSessionReleaseOfABusySessionWakesItsWaiters(t *testing.T) {
+	deskTestWorkerBin(t)
+	workers := newDeskSessionWorkers()
+	t.Cleanup(workers.closeAll)
+	cfg := deskPoolCfg(t)
+	busy, err := workers.acquire(context.Background(), "agent:a", true, "run-1", cfg("run-1"))
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	got := make(chan deskSessionLease, 1)
+	errs := make(chan error, 1)
+	go func() {
+		lease, err := workers.acquire(context.Background(), "agent:a", true, "run-2", cfg("run-2"))
+		if err != nil {
+			errs <- err
+			return
+		}
+		got <- lease
+	}()
+	time.Sleep(100 * time.Millisecond)
+	// The tool's order for a dead worker: release, then done.
+	workers.release(busy.key)
+	workers.done(busy)
+	select {
+	case lease := <-got:
+		if lease.worker == busy.worker {
+			t.Fatal("the waiter got the released worker")
+		}
+		// The dead cell's done (above, or racing the waiter) must not free
+		// the waiter's new session.
+		workers.done(busy)
+		workers.mu.Lock()
+		holder := ""
+		if cur := workers.sessions["agent:a"]; cur != nil {
+			holder = cur.busyRun
+		}
+		workers.mu.Unlock()
+		if holder != "run-2" {
+			t.Fatalf("the dead cell's done freed the waiter's new session (busy run %q)", holder)
+		}
+		workers.done(lease)
+	case err := <-errs:
+		t.Fatalf("acquire after release: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the release of a busy session never woke its waiter")
 	}
 }

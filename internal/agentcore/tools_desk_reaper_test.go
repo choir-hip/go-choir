@@ -89,7 +89,7 @@ func TestDeskReaperClosesIdleSessionWithoutAnyCell(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
-	workers.done(lease.key)
+	workers.done(lease)
 	if !clock.isArmed() {
 		t.Fatal("done left an idle session with no reaper armed")
 	}
@@ -125,7 +125,7 @@ func TestDeskReaperNeverReapsABusySession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire idle: %v", err)
 	}
-	workers.done(idle.key)
+	workers.done(idle)
 	clock.advance(time.Hour) // the busy cell has now run far past retention
 	clock.firePending(t)
 	if busy.worker.Dead() || workers.count() != 1 {
@@ -134,7 +134,7 @@ func TestDeskReaperNeverReapsABusySession(t *testing.T) {
 	if !idle.worker.Dead() {
 		t.Fatal("reaper kept the idle session past retention")
 	}
-	workers.done(busy.key)
+	workers.done(busy)
 	if !clock.isArmed() {
 		t.Fatal("ending the busy cell did not arm the reaper")
 	}
@@ -161,7 +161,7 @@ func TestDeskReaperStopsOnCloseAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
-	workers.done(lease.key)
+	workers.done(lease)
 	workers.closeAll()
 	if clock.isArmed() {
 		t.Fatal("closeAll left the reaper timer armed")
@@ -179,7 +179,7 @@ func TestDeskReaperStopsWhenReleaseEmptiesPool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
-	workers.done(lease.key)
+	workers.done(lease)
 	if !clock.isArmed() {
 		t.Fatal("done left no reaper armed")
 	}

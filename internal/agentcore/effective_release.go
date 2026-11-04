@@ -397,6 +397,26 @@ func (rt *Runtime) backgroundStop() chan struct{} {
 	return rt.bgStop
 }
 
+// sleepOrStop sleeps d, or less when the runtime stops; it reports whether
+// it slept the whole d. A background sleep that ignored Stop went on to act
+// on a stopped runtime (docs/problems/selfdev-waits-untyped-and-invisible-2026-11-04.md).
+func (rt *Runtime) sleepOrStop(d time.Duration) bool {
+	stop := rt.backgroundStop()
+	select {
+	case <-stop:
+		return false
+	default:
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-stop:
+		return false
+	}
+}
+
 func shortDigest(value string) string {
 	if len(value) > 12 {
 		return value[:12]
