@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -119,8 +118,10 @@ func roundPredictionRecords(cast types.CommitmentRecord, assignment types.Engine
 			RelatedIDs:  []string{cast.RecordID},
 			EmitterKind: types.CommitmentEmitterAgent,
 			ComputerID:  assignment.Binding.ComputerID,
-			SubjectRefs: map[string]string{"assignment": assignment.AssignmentID, "cast": cast.RecordID, "stated_at": "cast"},
+			SubjectRefs: map[string]string{"assignment": assignment.AssignmentID, "cast": cast.RecordID},
 		})
+		// A Cast's predictions precede the capsule: never late (R20).
+		stampRulePrecommitStatement(&out[len(out)-1], "cast", since, "")
 	}
 	return out, nil
 }
@@ -157,6 +158,9 @@ func (rt *Runtime) stateRoundPredictions(ctx context.Context, assignment types.E
 	// records without the salt.
 	arm := rt.calibrationArmOfThread(ctx, b.ComputerID, b.AssignedAgentID)
 	for i := range records {
+		if records[i].SubjectRefs == nil {
+			records[i].SubjectRefs = map[string]string{}
+		}
 		records[i].SubjectRefs[calibrationArmRef] = arm
 	}
 	for _, rec := range records {
@@ -188,9 +192,4 @@ func (rt *Runtime) ensureRoundPredictionsFor(ctx context.Context, ownerID, compu
 	if err := rt.stateRoundPredictions(ctx, assignment); err != nil {
 		log.Printf("runtime: assignment %s %v", assignmentID, err)
 	}
-}
-
-// calibrationArmOfThread is a thread's arm on its computer.
-func (rt *Runtime) calibrationArmOfThread(ctx context.Context, computerID, thread string) string {
-	return calibration.Arm(rt.calibrationSalt(ctx, computerID), thread)
 }

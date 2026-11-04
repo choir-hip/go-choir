@@ -45,6 +45,9 @@ type Observation struct {
 	Scorers     []string `json:"scorers,omitempty"`
 	CommittedAt string   `json:"committed_at,omitempty"`
 	HeldOut     bool     `json:"held_out,omitempty"`
+	// Arm is the A/B arm stamped on the record when it was stated, when
+	// it carries one (an engineering round's predictions).
+	Arm string `json:"stated_arm,omitempty"`
 }
 
 // Options bound a digest.

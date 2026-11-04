@@ -90,6 +90,13 @@ import (
 //	    desk that misses badly looks better than one that froze late.
 //	    -> the terminal pass settles it "no" with the elapsed time marked
 //	       censored (actual_s is a lower bound).
+//	R20 A claim stated after the evidence is visible flatters the record
+//	    (live8, 2026-11-04: "Freeze within 40 minutes" staged 21 s before
+//	    the Freeze it predicted).
+//	    -> every rule precommit records stated_at; a clock claim stated after
+//	       the run's first build or shot job, or any claim after its
+//	       candidate froze, is kept but marked late, and the digest and the
+//	       say-do view leave it out; the late share is its own metric.
 //	R17 judge_accepts and verify_pass are one event today: management's
 //	    Verify is the independent judgment (recordSelfDevelopmentVerdict).
 //	    -> both are kept as claim types: verify_pass reads the Verify
@@ -499,7 +506,28 @@ const (
 	RuleRefDecisionActor = "decision_actor"
 	RuleRefDelegated     = "delegated"
 	RuleRefFreezes       = "freezes"
+	// RuleRefStatedAt is when a rule precommit was stated, RuleRefStatedBy
+	// where ("cast" for a Cast's round predictions, "precommit" for a desk's
+	// own), and RuleRefLate a claim stated after the work visibly progressed
+	// (R20), with RuleRefLateReason why.
+	RuleRefStatedAt   = "stated_at"
+	RuleRefStatedBy   = "stated_by"
+	RuleRefLate       = "late"
+	RuleRefLateReason = "late_reason"
 )
+
+// ClockRule reports a claim about how long the work takes; any other rule
+// is about its outcome. A clock claim is late once the first build or shot
+// job ran, an outcome claim once the candidate froze (R20).
+func ClockRule(k PrecommitRuleKind) bool {
+	return k == PrecommitRuleFreezeWithin || k.clock()
+}
+
+// LateRulePrecommit reports a precommit marked late (R20): kept on the
+// tape, excluded from the digest and the scores.
+func LateRulePrecommit(rec CommitmentRecord) bool {
+	return rec.SubjectRefs[RuleRefLate] == "true"
+}
 
 // settleFreezeMinutes decides a freeze_minutes claim at a Freeze (R14).
 func settleFreezeMinutes(rule PrecommitRule, frozenAt time.Time, refs []string) (RuleSettlement, bool) {
@@ -807,9 +835,11 @@ type SayDoBucket struct {
 
 // SayDoRecord is an agent family's rule-settled track record.
 type SayDoRecord struct {
-	AgentPrefix string        `json:"agent_prefix"`
-	Overall     SayDoBucket   `json:"overall"`
-	ByRule      []SayDoBucket `json:"by_rule"`
+	AgentPrefix string `json:"agent_prefix"`
+	// Late counts the claims marked late, left out of every bucket (R20).
+	Late    int           `json:"late,omitempty"`
+	Overall SayDoBucket   `json:"overall"`
+	ByRule  []SayDoBucket `json:"by_rule"`
 }
 
 type sayDoAccumulator struct {
@@ -903,11 +933,16 @@ func RulePrecommitSayDo(records []CommitmentRecord, agentPrefix string) SayDoRec
 			ruleAnswers[target] = rec
 		}
 	}
+	var out SayDoRecord
 	overall := &sayDoAccumulator{bucket: SayDoBucket{Rule: "all"}}
 	byRule := map[string]*sayDoAccumulator{}
 	for _, rec := range records {
 		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil ||
 			!strings.HasPrefix(rec.Provenance.AgentID, agentPrefix) {
+			continue
+		}
+		if LateRulePrecommit(rec) {
+			out.Late++ // R20: counted, never scored
 			continue
 		}
 		kind := string(rec.Precommit.Rule.Kind)
@@ -930,7 +965,7 @@ func RulePrecommitSayDo(records []CommitmentRecord, agentPrefix string) SayDoRec
 		}
 		acc.addClock(*rec.Precommit.Rule, settledRec)
 	}
-	out := SayDoRecord{AgentPrefix: agentPrefix, Overall: overall.finish()}
+	out.AgentPrefix, out.Overall = agentPrefix, overall.finish()
 	kinds := make([]string, 0, len(byRule))
 	for k := range byRule {
 		kinds = append(kinds, k)

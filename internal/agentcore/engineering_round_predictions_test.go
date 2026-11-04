@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -203,5 +204,64 @@ func TestPrecommitRefusalsNameTheShape(t *testing.T) {
 	ok := yaegikernel.StagedIntent{LocalID: "p2", Kind: yaegikernel.IntentPrecommit, Precommit: types.RulePrecommitClockExample}
 	if err := validateEngineeringPrecommit("engineering", ok, []yaegikernel.StagedIntent{ok}); err != nil {
 		t.Fatalf("the clock example is refused: %v", err)
+	}
+}
+
+// R20 (live8: "Freeze within 40 minutes" staged 21 s before its Freeze):
+// every rule precommit records stated_at; a clock claim after the run's
+// first build is kept, marked late, and never scored; an outcome claim is
+// not late before the Freeze; the late share is counted per stating desk.
+func TestLateClockPrecommitIsKeptMarkedAndNeverScored(t *testing.T) {
+	rt, s, _ := c1eRuntime(t)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-late", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignment, run := c1eOpenBound(t, s, seed, 0)
+	r := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, rec: &run, scope: ReductionScope{
+		FromAgentID: run.AgentID, DeskAgentID: run.AgentID, FromRole: agentprofile.Engineering, ChannelID: run.AgentID,
+		RunID: run.RunID, OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, CellID: "cell-late-1",
+	}}
+	early := rulePrecommitIntent(t, "early", 0.7, map[string]any{"kind": "freeze_minutes", "estimate_minutes": 20, "low_minutes": 10, "high_minutes": 40})
+	if _, err := r.commitEngineeringPrecommit(ctx, early); err != nil {
+		t.Fatal(err)
+	}
+	rt.jobTable = &fakeJobTable{view: yaegikernel.JobView{ID: "job-1", Argv: []string{"go", "build", "./..."}}}
+	r.scope.CellID = "cell-late-2"
+	late := rulePrecommitIntent(t, "late", 0.9, map[string]any{"kind": "freeze_within", "within_minutes": 40})
+	outcome := rulePrecommitIntent(t, "outcome", 0.8, map[string]any{"kind": "tests_pass"})
+	for _, in := range []yaegikernel.StagedIntent{late, outcome} {
+		if _, err := r.commitEngineeringPrecommit(ctx, in); err != nil {
+			t.Fatalf("%s: %v", in.LocalID, err)
+		}
+	}
+	listed, err := s.ListRulePrecommitRecords(ctx, seed.OwnerID, seed.ComputerID, assignment.AssignmentID)
+	if err != nil || len(listed) != 3 {
+		t.Fatalf("listed %d, %v", len(listed), err)
+	}
+	lateKinds := map[types.PrecommitRuleKind]bool{}
+	for _, rec := range listed {
+		if rec.SubjectRefs[types.RuleRefStatedAt] == "" || rec.SubjectRefs[types.RuleRefStatedBy] != "precommit" {
+			t.Fatalf("%s: no stated_at: %v", rec.RecordID, rec.SubjectRefs)
+		}
+		lateKinds[rec.Precommit.Rule.Kind] = types.LateRulePrecommit(rec)
+	}
+	if lateKinds[types.PrecommitRuleFreezeMinutes] || !lateKinds[types.PrecommitRuleFreezeWithin] || lateKinds[types.PrecommitRuleTestsPass] {
+		t.Fatalf("late marks %v: want only the clock claim after the build", lateKinds)
+	}
+	all, _ := s.ListCommitmentRecords(ctx, seed.OwnerID, seed.ComputerID, "", 500)
+	if sd := types.RulePrecommitSayDo(all, "engineering:"); sd.Late != 1 || sd.Overall.Committed != 2 {
+		t.Fatalf("say-do %+v: the late claim must be counted apart, not scored", sd)
+	}
+	share := calibrationLateShares(all)["engineering"]
+	if share.Stated != 3 || share.Late != 1 {
+		t.Fatalf("late share %+v", share)
+	}
+	_, pending := collectCalibration(rt.calibrationSalt(ctx, seed.ComputerID), all, nil, nil)
+	for _, p := range pending {
+		if p.ClaimType == string(types.PrecommitRuleFreezeWithin) {
+			t.Fatal("the late claim is pending in the digest")
+		}
 	}
 }

@@ -81,6 +81,7 @@ func (h *APIHandler) HandleCalibration(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{
 		"push_desks":   sortedPushDesks(),
+		"late_share":   snap.Late,
 		"computed_at":  snap.At.Format(time.RFC3339),
 		"digests":      digests,
 		"observations": len(snap.Observations),
@@ -90,12 +91,18 @@ func (h *APIHandler) HandleCalibration(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("detail") == "1" {
 		type armed struct {
 			calibration.Observation
-			Arm string `json:"arm"`
+			ArmNow string `json:"arm"`
 		}
 		salt := rt.calibrationSalt(ctx, computerID)
 		detail := make([]armed, 0, len(snap.Observations))
 		for _, o := range snap.Observations {
-			detail = append(detail, armed{Observation: o, Arm: calibration.Arm(salt, o.Thread)})
+			// The arm stamped on the record when it was stated wins: a
+			// rotated guest key would split the thread anew.
+			arm := o.Arm
+			if arm == "" && salt != nil {
+				arm = calibration.Arm(salt, o.Thread)
+			}
+			detail = append(detail, armed{Observation: o, ArmNow: arm})
 		}
 		resp["observations"] = detail
 		resp["pending"] = snap.Pending

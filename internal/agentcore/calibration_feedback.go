@@ -76,7 +76,10 @@ const calibrationSaltLabel = "calibration-salt-v2"
 // the arms: derived from the guest key, so it is stable across restarts,
 // never stored and never shown to a desk. Without a guest key (a test
 // runtime, a host without one) it is random per process and logged: the
-// split is then unstable, never public.
+// split is then unstable, never public. With a guest key that fails to
+// derive, it is nil and not cached, so the next call retries: callers fail
+// closed (no digest, no arm) rather than split on a salt a restart changes
+// (review r3).
 func (rt *Runtime) calibrationSalt(ctx context.Context, computerID string) []byte {
 	if rt == nil {
 		return nil
@@ -90,17 +93,18 @@ func (rt *Runtime) calibrationSalt(ctx context.Context, computerID string) []byt
 	var salt []byte
 	if rt.privateArtifactCipher != nil {
 		derived, err := rt.privateArtifactCipher.DeriveSecret(ctx, computerID, calibrationSaltLabel)
-		if err == nil {
-			salt = derived
-		} else {
-			log.Printf("calibration: computer %s: no salt from the guest key (%v); using a per-process salt", computerID, err)
+		if err != nil {
+			log.Printf("calibration: computer %s: no salt from the guest key: %v", computerID, err)
+			return nil
 		}
-	}
-	if salt == nil {
+		salt = derived
+	} else {
 		salt = make([]byte, calibration.SaltBytes)
 		if _, err := rand.Read(salt); err != nil {
 			log.Printf("calibration: computer %s: random salt: %v", computerID, err)
+			return nil
 		}
+		log.Printf("calibration: computer %s: no guest key; the A/B split uses a per-process salt", computerID)
 	}
 	if rt.calibration.salts == nil {
 		rt.calibration.salts = map[string][]byte{}
@@ -115,6 +119,8 @@ type calibrationSnapshot struct {
 	At           time.Time                 `json:"at"`
 	Observations []calibration.Observation `json:"observations"`
 	Pending      []CalibrationPending      `json:"pending"`
+	// Late is each stating desk's late share (R20).
+	Late map[string]CalibrationLateShare `json:"late,omitempty"`
 }
 
 // CalibrationPending is a claim no independent scorer has settled yet:
@@ -291,8 +297,8 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 		model := strings.TrimSpace(rec.Provenance.ModelID)
 		committed := strings.TrimSpace(rec.Provenance.CommittedAt)
 		if rec.Precommit != nil && rec.Precommit.Rule != nil && rec.Resolve == nil {
-			if desk != agentprofile.Engineering {
-				continue
+			if desk != agentprofile.Engineering || types.LateRulePrecommit(rec) {
+				continue // R20: a late claim is never scored
 			}
 			p := rec.Precommit.YesProbability()
 			claim := string(rec.Precommit.Rule.Kind)
@@ -313,7 +319,7 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 			}
 			obs = append(obs, calibration.Observation{Desk: desk, ClaimType: claim, Thread: thread,
 				ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: p, Y: y, Scorers: []string{types.RuleScorerPrefix + claim},
-				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID)})
+				CommittedAt: committed, HeldOut: calibration.HeldOut(salt, rec.RecordID), Arm: rec.SubjectRefs[calibrationArmRef]})
 			continue
 		}
 		if rec.Cast != nil && rec.IsCast() {
@@ -414,8 +420,12 @@ func (rt *Runtime) calibrationSnapshotFor(ctx context.Context, ownerID, computer
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list support verdicts: %w", err)
 	}
-	obs, pending := collectCalibration(rt.calibrationSalt(ctx, computerID), records, checks, verdicts)
-	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending}
+	salt := rt.calibrationSalt(ctx, computerID)
+	if salt == nil {
+		return nil, fmt.Errorf("calibration: computer %s has no salt", computerID)
+	}
+	obs, pending := collectCalibration(salt, records, checks, verdicts)
+	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending, Late: calibrationLateShares(records)}
 	if rt.calibration.byComputer == nil {
 		rt.calibration.byComputer = map[string]*calibrationSnapshot{}
 	}
@@ -437,7 +447,17 @@ func (rt *Runtime) calibrationArmOfRun(ctx context.Context, rec *types.RunRecord
 	if rec == nil {
 		return ""
 	}
-	return calibration.Arm(rt.calibrationSalt(ctx, rec.ComputerID), agentIDForRun(rec))
+	return rt.calibrationArmOfThread(ctx, rec.ComputerID, agentIDForRun(rec))
+}
+
+// calibrationArmOfThread is a thread's arm on its computer; "" when the
+// computer has no salt.
+func (rt *Runtime) calibrationArmOfThread(ctx context.Context, computerID, thread string) string {
+	salt := rt.calibrationSalt(ctx, computerID)
+	if salt == nil {
+		return ""
+	}
+	return calibration.Arm(salt, thread)
 }
 
 // calibrationPushedToRun reports whether a run reads its desk's digest: its
@@ -517,4 +537,36 @@ func (rt *Runtime) calibrationDigestInjector(rec *types.RunRecord, history []jso
 		last = digest.Text
 		return []json.RawMessage{calibrationDigestMessage(digest.Text)}, nil
 	}
+}
+
+// CalibrationLateShare is a desk's rule precommits stated and the share
+// marked late (R20): a behaviour metric of its own, never a score.
+type CalibrationLateShare struct {
+	Stated int     `json:"stated"`
+	Late   int     `json:"late"`
+	Share  float64 `json:"share"`
+}
+
+// calibrationLateShares counts each desk's rule precommits and late ones;
+// the desk is the stater's (a Cast's predictions are management's, never
+// late), not the round's.
+func calibrationLateShares(records []types.CommitmentRecord) map[string]CalibrationLateShare {
+	out := map[string]CalibrationLateShare{}
+	for _, rec := range records {
+		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil {
+			continue
+		}
+		desk, _, _ := strings.Cut(strings.TrimSpace(rec.Provenance.AgentID), ":")
+		if desk == "" {
+			continue
+		}
+		c := out[desk]
+		c.Stated++
+		if types.LateRulePrecommit(rec) {
+			c.Late++
+		}
+		c.Share = float64(c.Late) / float64(c.Stated)
+		out[desk] = c
+	}
+	return out
 }

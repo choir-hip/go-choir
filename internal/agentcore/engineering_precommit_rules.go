@@ -138,19 +138,25 @@ func (r *rlmCallReduction) commitEngineeringPrecommit(ctx context.Context, in ya
 	if assignment.Disposition.Terminal() {
 		return 0, fmt.Errorf("reduce: precommit %s: assignment %s is %s", in.LocalID, assignmentID, assignment.Disposition)
 	}
+	// R20: a claim stated after the candidate froze is kept, marked late.
+	lateReason := ""
 	if rt.selfdevOperations != nil {
 		operation, found, opErr := rt.selfdevOperations.GetByIdempotency(ctx, r.scope.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
 		if opErr != nil {
 			return 0, fmt.Errorf("reduce: precommit %s: %w", in.LocalID, opErr)
 		}
 		if found && strings.TrimSpace(operation.BundleDigest) != "" {
-			return 0, fmt.Errorf("reduce: precommit %s: your candidate is already frozen; precommit before the evidence", in.LocalID)
+			lateReason = "stated after the candidate froze"
 		}
 	}
 	rec, err := engineeringRulePrecommitRecord(r.scope, in, assignment, metadataStringValue(r.rec.Metadata, runMetadataModel))
 	if err != nil {
 		return 0, err
 	}
+	if lateReason == "" && types.ClockRule(rec.Precommit.Rule.Kind) && r.runStartedBuildOrShot() {
+		lateReason = "a clock claim stated after the run's first build or shot job"
+	}
+	stampRulePrecommitStatement(&rec, "precommit", rec.Provenance.CommittedAt, lateReason)
 	rec.SubjectRefs[calibrationArmRef] = rt.calibrationArmOfThread(ctx, r.scope.ComputerID, assignment.Binding.AssignedAgentID)
 	if _, err := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); err != nil {
 		return 0, fmt.Errorf("reduce: precommit %s: %w", in.LocalID, err)
@@ -247,4 +253,43 @@ func (rt *Runtime) settleEngineeringPrecommitsAtTerminal(ctx context.Context, as
 		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
 			return types.SettleRuleAtTerminal(rule, obs)
 		})
+}
+
+// stampRulePrecommitStatement records when and where a rule precommit was
+// stated, and marks it late with why (R20).
+func stampRulePrecommitStatement(rec *types.CommitmentRecord, by, at, lateReason string) {
+	if rec.SubjectRefs == nil {
+		rec.SubjectRefs = map[string]string{}
+	}
+	rec.SubjectRefs[types.RuleRefStatedBy] = by
+	rec.SubjectRefs[types.RuleRefStatedAt] = at
+	if lateReason != "" {
+		rec.SubjectRefs[types.RuleRefLate] = "true"
+		rec.SubjectRefs[types.RuleRefLateReason] = lateReason
+	}
+}
+
+// runStartedBuildOrShot reports whether this run has started a build or a
+// choir-shot job (types.RoundJobKind, as the round receipt classifies them):
+// the work has visibly progressed, so a clock claim is late (R20). The job
+// table is the executor's in memory; a crash restart closes the run anyway.
+func (r *rlmCallReduction) runStartedBuildOrShot() bool {
+	rt := r.rt()
+	if rt == nil {
+		return false
+	}
+	jobs := rt.capsuleJobs()
+	if jobs == nil {
+		return false
+	}
+	runID := strings.TrimSpace(r.scope.RunID)
+	if r.toolCtx != nil && strings.TrimSpace(r.toolCtx.AgentRunID) != "" {
+		runID = strings.TrimSpace(r.toolCtx.AgentRunID)
+	}
+	for _, view := range jobs.JobViews(runID) {
+		if kind := types.RoundJobKind(view.Argv); kind == types.RoundJobBuild || kind == types.RoundJobShot {
+			return true
+		}
+	}
+	return false
 }
