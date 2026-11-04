@@ -42,6 +42,14 @@ type RebaseCheck struct {
 	// source patch.
 	CandidateBase string
 	Candidate     []byte
+	// Superseded is set for an empty candidate: the rebase round claims the
+	// new base supersedes P, so the candidate is B' unchanged
+	// (docs/problems/noop-rebase-never-clears-base-moved-2026-11-04.md). It
+	// passes only when no path of P is lost that B' did not take over: every
+	// path of P conflicts with B' and keeps B''s version (Unresolved), or B'
+	// already carries it (Resolved). A clean path or a dropped hunk refuses
+	// it. Without it an empty candidate is candidate_does_not_apply.
+	Superseded bool
 }
 
 // RebaseVerdict is what VerifyRebase found. Paths are sorted.
@@ -60,6 +68,10 @@ type RebaseVerdict struct {
 	// carries them (problem 14); each one's path is in Resolved. Sorted by
 	// path, in P's order within a path.
 	Upstreamed []UpstreamedHunk
+	// Superseded is true on a passing superseded check (RebaseCheck.
+	// Superseded): the candidate drops P, and Unresolved names the paths
+	// where B''s own version replaces P's.
+	Superseded bool
 }
 
 // VerifyRebase checks, in scratch indexes of repo (the guest repository holds
@@ -90,19 +102,23 @@ func VerifyRebase(ctx context.Context, repo string, c RebaseCheck) (RebaseVerdic
 	if !ok || candBase != booted || strings.TrimSpace(c.CandidateBase) != candBase {
 		return RebaseVerdict{Reason: RebaseBaseMismatch}, nil
 	}
-	if len(c.Candidate) == 0 {
+	superseded := len(c.Candidate) == 0 && c.Superseded
+	if len(c.Candidate) == 0 && !superseded {
 		return RebaseVerdict{Reason: RebaseCandidateDoesNotApply}, nil
 	}
 	bootedTree, err := git(ctx, repo, nil, nil, "rev-parse", booted+"^{tree}")
 	if err != nil {
 		return RebaseVerdict{}, fmt.Errorf("sourceproj: tree of %s: %w", booted, err)
 	}
-	candTree, err := patchedTree(ctx, repo, booted, c.Candidate, false)
-	if err != nil {
-		if errors.Is(err, ErrPatchDoesNotApply) {
-			return RebaseVerdict{Reason: RebaseCandidateDoesNotApply}, nil
+	candTree := bootedTree
+	if !superseded {
+		candTree, err = patchedTree(ctx, repo, booted, c.Candidate, false)
+		if err != nil {
+			if errors.Is(err, ErrPatchDoesNotApply) {
+				return RebaseVerdict{Reason: RebaseCandidateDoesNotApply}, nil
+			}
+			return RebaseVerdict{}, err
 		}
-		return RebaseVerdict{}, err
 	}
 	paths, err := patchPaths(ctx, repo, c.Patch)
 	if err != nil {
@@ -239,6 +255,9 @@ func VerifyRebase(ctx context.Context, repo string, c RebaseCheck) (RebaseVerdic
 		verdict.Reason = RebaseCleanPathDiffers
 	case len(verdict.Dropped) > 0:
 		verdict.Reason = RebaseHunkMissing
+	case superseded:
+		// Every path of P is one B' took over its own way or already carries.
+		verdict.Pass, verdict.Superseded = true, true
 	case len(verdict.Unresolved) > 0:
 		verdict.Reason = RebaseConflictUnresolved
 	default:

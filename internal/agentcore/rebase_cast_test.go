@@ -66,7 +66,12 @@ type rebaseCastFixture struct {
 // Cast naming it (a round open), and a fake source preflight.
 func newRebaseCastFixture(t *testing.T) *rebaseCastFixture {
 	t.Helper()
-	f := &rebaseCastFixture{rebaseFixture: newRebaseFixture(t), castID: "cast-root-1"}
+	return newRebaseCastFixtureOn(t, movedBaseChange())
+}
+
+func newRebaseCastFixtureOn(t *testing.T, moved map[string]string) *rebaseCastFixture {
+	t.Helper()
+	f := &rebaseCastFixture{rebaseFixture: newRebaseFixtureOn(t, moved), castID: "cast-root-1"}
 	f.preflight = &fakeSourcePreflight{head: gitHead(t, f.repo)}
 	f.rt.sourcePreflight = f.preflight
 	f.rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)

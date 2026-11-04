@@ -227,6 +227,7 @@ func rebasePatchNotice(offer carriedPatchOffer) string {
 				b.WriteString(" The rest still applies: " + carriedFileList(offer.CleanPaths) + ".")
 			}
 			b.WriteString(" Apply what applies from /workspace/platform with `git apply --reject /selfdev/carried/source.patch`, then resolve each rejected hunk by hand so the change's intent stands on top of the new base's code; a conflict path you leave as the new base has it counts as dropped.")
+			b.WriteString(" One exception: when the new base already ships its own version of every conflicting path (another version of the same app or file, not a partial edit) and nothing else of the change still applies, the change is superseded: make no edit and Freeze. An empty candidate drops the change; the platform admits it only when no path of the change applies cleanly to the new base and no hunk is lost that the new base did not replace, and the owner approves the drop.")
 		} else {
 			b.WriteString(" It applies to this base: apply it from /workspace/platform with `git apply /selfdev/carried/source.patch`.")
 		}

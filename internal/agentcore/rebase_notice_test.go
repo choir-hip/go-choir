@@ -56,6 +56,12 @@ type rebaseFixture struct {
 // switches on.
 func newRebaseFixture(t *testing.T) *rebaseFixture {
 	t.Helper()
+	return newRebaseFixtureOn(t, movedBaseChange())
+}
+
+// newRebaseFixtureOn is the rebase fixture with the moved base made by moved.
+func newRebaseFixtureOn(t *testing.T, moved map[string]string) *rebaseFixture {
+	t.Helper()
 	const computerID = "computer-rebase"
 	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
 	f := &rebaseFixture{rt: rt, s: rt.store, owner: "owner-rebase", computer: computerID, opID: "op-a", repo: repo, base: base}
@@ -63,7 +69,7 @@ func newRebaseFixture(t *testing.T) *rebaseFixture {
 	f.management = persistentManagementAgentID(f.owner)
 	patch, _ := releasePatch(t, repo, stackChange())
 	applyOperation(t, rt, updaterRoot, computerID, f.opID, base, patch)
-	f.moved = commitOnTop(t, repo, base, movedBaseChange())
+	f.moved = commitOnTop(t, repo, base, moved)
 	setBootedBase(t, rt, f.moved)
 
 	seedOwnerActDocument(t, f.s, f.owner, computerID, "doc-master")

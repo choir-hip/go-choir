@@ -43,7 +43,9 @@ type CapsuleToolCtx struct {
 	OpenFreezeCandidate func(ctx context.Context, trajectoryID string) (selfdev.Operation, error)
 	// VerifyRebase checks a staged cumulative patch for a rebase round (U4);
 	// nil, or an assignment no pair claim names, checks nothing.
-	VerifyRebase    func(ctx context.Context, staged *capsule.StagedRelease, patch []byte) ([]sourceproj.UpstreamedHunk, error)
+	// An empty patch is checked as a superseded rebase (the new base
+	// supersedes the applied change).
+	VerifyRebase    func(ctx context.Context, staged *capsule.StagedRelease, patch []byte) (rebaseFreezeVerdict, error)
 	EventProjection interface {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
@@ -303,8 +305,25 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}
 	files := staged.Files
 	defer os.RemoveAll(staged.TemporaryRoot)
-	if err := freezeSourceChangeError(staged); err != nil {
-		return nil, err
+	// An empty source patch is refused (failure 15), except in a rebase
+	// round, where it says the new base supersedes the applied change; that
+	// is admitted only when the content proves it, and the owner approves
+	// the drop (docs/problems/noop-rebase-never-clears-base-moved-2026-11-04.md).
+	var rebaseSuperseded []string
+	if strings.TrimSpace(staged.SourcePatchSHA) == "" {
+		var check rebaseFreezeVerdict
+		if toolCtx.VerifyRebase != nil {
+			var err error
+			if check, err = toolCtx.VerifyRebase(ctx, staged, nil); err != nil {
+				return nil, err
+			}
+		}
+		if !check.Rebase || len(check.Superseded) == 0 {
+			if err := freezeSourceChangeError(staged); err != nil {
+				return nil, err
+			}
+		}
+		rebaseSuperseded = check.Superseded
 	}
 	// U1: the bundle's patch is the cumulative one, from the stack base.
 	if err := composeFreezePatch(ctx, toolCtx.Executor.SourceDir(), staged); err != nil {
@@ -318,11 +337,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		if readErr != nil {
 			return nil, fmt.Errorf("read the staged source patch: %w", readErr)
 		}
-		upstreamed, err := toolCtx.VerifyRebase(ctx, staged, stagedPatch)
+		check, err := toolCtx.VerifyRebase(ctx, staged, stagedPatch)
 		if err != nil {
 			return nil, err
 		}
-		rebaseUpstreamed = upstreamed
+		rebaseUpstreamed = check.Upstreamed
 	}
 	sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, handle)
 	if err != nil {
@@ -402,6 +421,10 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	// the new base already carries them, so the drop is visible.
 	if len(rebaseUpstreamed) > 0 {
 		out["rebase_upstreamed"] = rebaseUpstreamed
+	}
+	if len(rebaseSuperseded) > 0 {
+		out["rebase_superseded"] = rebaseSuperseded
+		out["rebase_outcome"] = "superseded: this candidate changes no source and drops the applied change; the new base's own version stands at the paths in rebase_superseded. Verify and the owner's approval decide it like any candidate"
 	}
 	// Screens: save the engineer's screenshots as files Texture reads, and
 	// tell the cell where they are.

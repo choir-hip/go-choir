@@ -45,6 +45,10 @@ const (
 	rebaseBootedBaseMoved = "booted_base_moved"
 	// FactRebased is the facts-log kind a passing rebase writes.
 	factRebased = "source_projection_rebased"
+	// rebaseVerdictSuperseded is the receipt verdict (and fact state) of a
+	// rebase that drops the applied change because the new base supersedes it
+	// (docs/problems/noop-rebase-never-clears-base-moved-2026-11-04.md).
+	rebaseVerdictSuperseded = "superseded"
 )
 
 // rebaseContentMismatchError is a refused rebase candidate.
@@ -90,7 +94,10 @@ type rebaseLineageReceipt struct {
 	// Upstreamed are the hunks of the applied change the candidate lacks
 	// because the new base already carries them (problem 14).
 	Upstreamed []sourceproj.UpstreamedHunk `json:"upstreamed,omitempty"`
-	Verdict    string                      `json:"verdict"`
+	// Superseded names, on a superseded verdict, the paths of the applied
+	// change where the new base's own version replaces it.
+	Superseded []string `json:"superseded,omitempty"`
+	Verdict    string   `json:"verdict"`
 }
 
 func rebaseReceiptSHA256(raw []byte) string {
@@ -126,8 +133,11 @@ func (rt *Runtime) checkRebaseCandidate(ctx context.Context, lineage rebaseLinea
 	if err != nil {
 		return sourceproj.RebaseVerdict{}, "", nil, fmt.Errorf("read the applied change's patch: %w", err)
 	}
+	// An empty candidate is the round's claim that the new base supersedes the
+	// applied change; it is checked as such, never as "does not apply".
 	verdict, err := sourceproj.VerifyRebase(ctx, rt.releaseRepo(), sourceproj.RebaseCheck{
 		StackBase: stackBase, BootedBase: lineage.BootedBase, Patch: patch, CandidateBase: candidateBase, Candidate: candidate,
+		Superseded: len(candidate) == 0,
 	})
 	return verdict, stackBase, patch, err
 }
@@ -161,7 +171,11 @@ func (rt *Runtime) verifyRebaseContentForOperation(ctx context.Context, operatio
 	candidateBase, candidate, err := rt.boundSourcePatch(operation)
 	switch {
 	case errors.Is(err, errNoSourcePatch):
-		return true, &rebaseContentMismatchError{Verdict: sourceproj.RebaseVerdict{Reason: sourceproj.RebaseCandidateDoesNotApply}}
+		// A superseded candidate: no source change, so its base is the
+		// commit its reused binary was bound to, which is the capsule's
+		// pinned source (B' for a rebase round). Anything else has no
+		// provable base and is refused base_mismatch.
+		candidateBase, candidate = rt.supersededCandidateBase(operation), nil
 	case err != nil:
 		return true, fmt.Errorf("read the candidate's patch: %w", err)
 	}
@@ -177,6 +191,9 @@ func (rt *Runtime) verifyRebaseContentForOperation(ctx context.Context, operatio
 		StackBase: stackBase, Base: lineage.BootedBase, PatchDigest: sourceproj.SHA256(patch), CandidatePatchDigest: sourceproj.SHA256(candidate),
 		Clean: nonNil(verdict.Clean), Resolved: nonNil(verdict.Resolved), Extra: nonNil(verdict.Extra), Upstreamed: verdict.Upstreamed, Verdict: "pass",
 	}
+	if verdict.Superseded {
+		receipt.Verdict, receipt.Superseded = rebaseVerdictSuperseded, nonNil(verdict.Unresolved)
+	}
 	raw, err := json.Marshal(receipt)
 	if err != nil {
 		return true, err
@@ -185,11 +202,34 @@ func (rt *Runtime) verifyRebaseContentForOperation(ctx context.Context, operatio
 		return true, fmt.Errorf("write the lineage receipt: %w", err)
 	}
 	rt.appendSourceProjectionFactRecord(sourceProjectionFact{
-		At: time.Now().UTC().Format(time.RFC3339Nano), Kind: factRebased, Trigger: "apply", State: "pass",
+		At: time.Now().UTC().Format(time.RFC3339Nano), Kind: factRebased, Trigger: "apply", State: receipt.Verdict,
 		OperationID: operation.OperationID, Base: stackBase, BootedBase: lineage.BootedBase, RebaseOf: lineage.OperationID, ReceiptSHA256: rebaseReceiptSHA256(raw),
 		Upstreamed: verdict.Upstreamed,
 	})
 	return true, nil
+}
+
+// supersededCandidateBase is the base a candidate with no source patch was
+// built on: the source commit its reused running binary is bound to (Freeze
+// records SourceArtifactCommit of the capsule's pinned source there, inside
+// the bundle digest). "" when the bundle is unreadable or its binary is not
+// a reused one.
+func (rt *Runtime) supersededCandidateBase(operation selfdev.Operation) string {
+	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return ""
+	}
+	bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation)
+	if err != nil {
+		return ""
+	}
+	return supersededBaseOf(bundle.ReleaseBinary)
+}
+
+func supersededBaseOf(binary *capsule.ReleaseBinaryProvenance) string {
+	if binary == nil || binary.Origin != capsule.ReleaseBinaryReusedRunning {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(binary.SourceBaseCommit))
 }
 
 func nonNil(list []string) []string {
@@ -246,6 +286,14 @@ func (rt *Runtime) rebaseReceiptSentence(operationID string) string {
 // conflicts were resolved (bounded).
 func rebaseReceiptText(receipt rebaseLineageReceipt, sha string) string {
 	var b strings.Builder
+	if receipt.Verdict == rebaseVerdictSuperseded {
+		fmt.Fprintf(&b, " This candidate drops applied change %s: rebased onto base %s, it changes no source, because the new base supersedes the change; its lineage receipt (sha256 %s) records that the new base replaced every path of it with its own version", receipt.RebaseOf, carriedBaseLabel(receipt.Base), sha)
+		if text := boundedRecordPaths(receipt.Superseded); text != "" {
+			b.WriteString(": " + text)
+		}
+		fmt.Fprintf(&b, ". Approving it gives up %s; a rollback to %s restores it on its old base.", receipt.RebaseOf, receipt.RebaseOf)
+		return b.String()
+	}
 	fmt.Fprintf(&b, " This candidate is a rebase of applied change %s onto base %s; its lineage receipt (sha256 %s) records that it still contains that change", receipt.RebaseOf, carriedBaseLabel(receipt.Base), sha)
 	if n := len(receipt.Clean); n > 0 {
 		noun := "paths"
@@ -255,33 +303,41 @@ func rebaseReceiptText(receipt rebaseLineageReceipt, sha string) string {
 		fmt.Fprintf(&b, ": %d %s applied unchanged", n, noun)
 	}
 	if len(receipt.Resolved) > 0 {
-		// The paths are text a guest influences: escaped (a path can hold a
-		// newline) and bounded in bytes, not only in count (review 328).
-		const limit, perPath, total = 10, 160, 1200
-		var shown []string
-		size := 0
-		for _, path := range receipt.Resolved {
-			if len(shown) == limit {
-				break
-			}
-			path = escapeRecordText(path, perPath)
-			if size+len(path) > total {
-				break
-			}
-			shown = append(shown, path)
-			size += len(path) + 2
-		}
-		more := ""
-		if n := len(receipt.Resolved) - len(shown); n > 0 {
-			more = fmt.Sprintf(", and %d more", n)
-		}
-		fmt.Fprintf(&b, "; resolved conflicts: %s%s", strings.Join(shown, ", "), more)
+		fmt.Fprintf(&b, "; resolved conflicts: %s", boundedRecordPaths(receipt.Resolved))
 	}
 	if text := upstreamedText(receipt.Upstreamed); text != "" {
 		b.WriteString("; dropped as upstreamed (lines the new base added carry their tokens): " + text)
 	}
 	b.WriteString(".")
 	return b.String()
+}
+
+// boundedRecordPaths lists paths for a record. The paths are text a guest
+// influences: escaped (a path can hold a newline) and bounded in bytes, not
+// only in count (review 328).
+func boundedRecordPaths(paths []string) string {
+	const limit, perPath, total = 10, 160, 1200
+	var shown []string
+	size := 0
+	for _, path := range paths {
+		if len(shown) == limit {
+			break
+		}
+		path = escapeRecordText(path, perPath)
+		if size+len(path) > total {
+			break
+		}
+		shown = append(shown, path)
+		size += len(path) + 2
+	}
+	if len(shown) == 0 {
+		return ""
+	}
+	more := ""
+	if n := len(paths) - len(shown); n > 0 {
+		more = fmt.Sprintf(", and %d more", n)
+	}
+	return strings.Join(shown, ", ") + more
 }
 
 // upstreamedText names upstreamed hunks for a record: path and hunk header,
@@ -311,33 +367,57 @@ func upstreamedText(hunks []sourceproj.UpstreamedHunk) string {
 	return strings.Join(shown, ", ") + more
 }
 
+// rebaseFreezeVerdict is what Freeze learns about a rebase round's
+// candidate. Rebase is false for an assignment no pair claim names.
+type rebaseFreezeVerdict struct {
+	Rebase bool
+	// Upstreamed are the hunks the candidate dropped as already in the new
+	// base (problem 14).
+	Upstreamed []sourceproj.UpstreamedHunk
+	// Superseded names, for an empty candidate that passed, the paths where
+	// the new base's version replaces the applied change.
+	Superseded []string
+}
+
 // verifyRebaseAtFreeze is Freeze's call: for a run whose assignment a claim
-// names, the staged cumulative patch must already contain the applied change.
-// It writes nothing; it returns the hunks the candidate dropped as already in
-// the new base, so Freeze's result shows them.
-func (rt *Runtime) verifyRebaseAtFreeze(ctx context.Context, rec *types.RunRecord, staged *capsule.StagedRelease, patch []byte) ([]sourceproj.UpstreamedHunk, error) {
+// names, the staged cumulative patch must already contain the applied change,
+// or, when it is empty, the new base must supersede the change on every path.
+// It writes nothing.
+func (rt *Runtime) verifyRebaseAtFreeze(ctx context.Context, rec *types.RunRecord, staged *capsule.StagedRelease, patch []byte) (rebaseFreezeVerdict, error) {
 	if rt == nil || rt.store == nil || rec == nil || staged == nil {
-		return nil, nil
+		return rebaseFreezeVerdict{}, nil
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	if assignmentID == "" {
-		return nil, nil
+		return rebaseFreezeVerdict{}, nil
 	}
 	lineage, _, isRebase, err := rt.rebaseLineageOfAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID)
 	if err != nil {
-		return nil, fmt.Errorf("check whether this assignment is a rebase: %w", err)
+		return rebaseFreezeVerdict{}, fmt.Errorf("check whether this assignment is a rebase: %w", err)
 	}
 	if !isRebase {
-		return nil, nil
+		return rebaseFreezeVerdict{}, nil
 	}
-	verdict, _, _, err := rt.checkRebaseCandidate(ctx, lineage, staged.SourceBaseCommit, patch)
+	candidateBase := staged.SourceBaseCommit
+	if len(patch) == 0 {
+		candidateBase = supersededBaseOf(staged.Binary)
+	}
+	verdict, _, _, err := rt.checkRebaseCandidate(ctx, lineage, candidateBase, patch)
 	if err != nil {
-		return nil, fmt.Errorf("Freeze refused: the rebase could not be checked: %w", err)
+		return rebaseFreezeVerdict{Rebase: true}, fmt.Errorf("Freeze refused: the rebase could not be checked: %w", err)
 	}
 	if !verdict.Pass {
-		return nil, &rebaseContentMismatchError{Verdict: verdict}
+		mismatch := &rebaseContentMismatchError{Verdict: verdict}
+		if len(patch) == 0 {
+			return rebaseFreezeVerdict{Rebase: true}, fmt.Errorf("Freeze refused: this rebase capsule changed no /workspace/platform source, which drops applied change %s; that is admitted only when the new base supersedes every path of the change, and it does not: %w", lineage.OperationID, mismatch)
+		}
+		return rebaseFreezeVerdict{Rebase: true}, mismatch
 	}
-	return verdict.Upstreamed, nil
+	out := rebaseFreezeVerdict{Rebase: true, Upstreamed: verdict.Upstreamed}
+	if verdict.Superseded {
+		out.Superseded = nonNil(verdict.Unresolved)
+	}
+	return out, nil
 }
 
 // escapeRecordText makes guest-influenced text safe for a one-line record:

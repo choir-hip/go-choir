@@ -1,6 +1,7 @@
 # A rebase whose right answer is "the new base supersedes my change" has no outcome (2026-11-04)
 
-Status: open; documented before any fix. Mutation class of the fix: red
+Status: fix landed on branch noop-rebase (hypothesis 1), not yet deployed;
+documented before the fix. Mutation class of the fix: red
 (self-development Freeze, the U4 rebase content gate at apply). Blocks
 every ordinary engineering Cast on the crouton arm.
 

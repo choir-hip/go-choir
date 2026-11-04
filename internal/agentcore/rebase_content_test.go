@@ -46,7 +46,12 @@ type rebaseContentFixture struct {
 // B' adds other.txt and edits long.txt elsewhere (stackChange, movedBaseChange).
 func newRebaseContentFixture(t *testing.T) *rebaseContentFixture {
 	t.Helper()
-	f := &rebaseContentFixture{rebaseCastFixture: newRebaseCastFixture(t)}
+	return newRebaseContentFixtureOn(t, movedBaseChange())
+}
+
+func newRebaseContentFixtureOn(t *testing.T, moved map[string]string) *rebaseContentFixture {
+	t.Helper()
+	f := &rebaseContentFixture{rebaseCastFixture: newRebaseCastFixtureOn(t, moved)}
 	f.updaterRoot = f.rt.selfdevUpdaterRoot
 	plan, err := f.plan(t, f.spec(nil), f.rebaseObjective())
 	if err != nil {
