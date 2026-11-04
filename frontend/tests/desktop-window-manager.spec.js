@@ -371,3 +371,27 @@ test('desktop includes the prompt input in prompt surface', async ({
   await expect(promptInput).toBeVisible();
   await expect(promptInput).toBeEnabled();
 });
+
+// ---------------------------------------------------------------
+// Test: a new window opens to the right of the desktop icon columns
+// on a wide viewport (shot defect: windows covered "Calendar"/"Settings")
+// ---------------------------------------------------------------
+test('new window opens right of the desktop icon columns at 1100x750', async ({
+  page,
+  authenticator,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 750 });
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await openAppViaIcon(page, 'files');
+  const windowEl = page.locator('[data-window]').first();
+  await expect(windowEl).toBeVisible({ timeout: 5000 });
+
+  const iconsRight = await page.evaluate(() =>
+    Math.max(...[...document.querySelectorAll('[data-desktop-icon]')].map((el) => el.getBoundingClientRect().right))
+  );
+  const left = await windowEl.evaluate((el) => el.getBoundingClientRect().left);
+  expect(iconsRight).toBeGreaterThan(0);
+  expect(left).toBeGreaterThanOrEqual(iconsRight);
+});

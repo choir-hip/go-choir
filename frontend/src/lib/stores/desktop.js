@@ -52,6 +52,10 @@ const NEW_WINDOW_FREE_AREA_RATIO = 0.7;
 // Desktop cascade step, and how many steps before the cascade wraps.
 const CASCADE_STEP = 24;
 const CASCADE_WRAP = 6;
+// New desktop windows open to the right of the desktop icon columns when the
+// room left of them is at least this wide; narrower, they open as before.
+const ICON_CLEARANCE = 16;
+const MIN_WINDOW_ROOM_RIGHT_OF_ICONS = 640;
 // A restored (non-maximized) window on a phone is at least this much of the
 // screen, so restoring from maximized stays usable.
 const COMPACT_RESTORE_WIDTH_RATIO = 0.92;
@@ -264,6 +268,19 @@ function constrainWindowGeometry({ x, y, width, height, appId = '', anchor = 'nw
   };
 }
 
+// Right edge (viewport px) of the desktop icon columns, or 0 when none show.
+// Only icons in the left half of the viewport count: an icon the owner dragged
+// to the far side must not push every new window off the desktop.
+function desktopIconsRightEdge(viewportWidth) {
+  if (typeof document === 'undefined') return 0;
+  let right = 0;
+  for (const el of document.querySelectorAll('[data-desktop-icon]')) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.right <= viewportWidth / 2) right = Math.max(right, r.right);
+  }
+  return right;
+}
+
 /**
  * Geometry for a new window.
  * Phone (<768px): windows always open maximized (see openApp); the geometry
@@ -274,7 +291,7 @@ function constrainWindowGeometry({ x, y, width, height, appId = '', anchor = 'nw
  */
 function getNewWindowGeometry(openCount, appId = '') {
   const metrics = getViewportMetrics();
-  const area = metrics.freeArea;
+  let area = metrics.freeArea;
   const preference = getAppWindowPreference(appId);
   const desktopPref = preference.desktop || {};
   const compactPref = preference.compact || {};
@@ -299,6 +316,16 @@ function getNewWindowGeometry(openCount, appId = '') {
       height: compactHeight,
       appId,
     });
+  }
+
+  // Start right of the icon columns when there is room; otherwise keep the
+  // full free area (saved positions never pass through here).
+  const iconsRight = desktopIconsRightEdge(metrics.viewportWidth);
+  if (iconsRight > 0) {
+    const shift = Math.max(0, iconsRight + ICON_CLEARANCE - area.x);
+    if (area.width - shift >= MIN_WINDOW_ROOM_RIGHT_OF_ICONS) {
+      area = { ...area, x: area.x + shift, width: area.width - shift };
+    }
   }
 
   const defaultWidth = desktopPref.width || area.width;
