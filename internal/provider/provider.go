@@ -2387,6 +2387,8 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 }
 
 func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	body = withStallWatchdog(body)
+	defer stopStallWatchdog(body)
 	result := &LLMResponse{
 		Model:        modelID,
 		ProviderName: providerName,
@@ -2624,6 +2626,8 @@ func canonicalJSON(raw json.RawMessage) json.RawMessage {
 //
 // Unknown events (ping, error, etc.) are silently skipped.
 func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	body = withStallWatchdog(body)
+	defer stopStallWatchdog(body)
 	result := &LLMResponse{
 		Model:        modelID,
 		ProviderName: providerName,
@@ -2848,6 +2852,8 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 // parseOpenAIStreamLogged is parseOpenAIStream plus request cache metadata
 // (nil for none) appended to the per-call usage line.
 func parseOpenAIStreamLogged(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk), meta *cacheLogMeta) (*LLMResponse, error) {
+	body = withStallWatchdog(body)
+	defer stopStallWatchdog(body)
 	result := &LLMResponse{
 		Model:        modelID,
 		ProviderName: providerName,
@@ -2994,8 +3000,8 @@ func parseOpenAIStreamLogged(body io.Reader, modelID string, providerName string
 
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
 	RecordCacheUsage(providerName, result.Usage)
-	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d%s",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls), meta.logFields())
+	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d ttfb_ms=%d%s",
+		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls), firstByteOf(body).Milliseconds(), meta.logFields())
 	return result, nil
 }
 
