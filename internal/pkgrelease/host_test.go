@@ -39,7 +39,7 @@ const testManifest = `{
   "display": {"title": "Reader", "icon": "R", "description": "Read"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
     "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "public-preview"}, "theme": {}},
-  "opens": [{"media_type": "application/pdf", "extensions": ["pdf"]}],
+  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {"desks": []},
@@ -526,5 +526,32 @@ func TestGitNeverFetchesLazily(t *testing.T) {
 	}
 	if !strings.Contains("\n"+string(out), "\nGIT_NO_LAZY_FETCH=1\n") {
 		t.Fatalf("git ran without GIT_NO_LAZY_FETCH=1:\n%s", out)
+	}
+}
+
+// N4: a release tree carries source and text types only; a wasm module, a
+// native binary or an extensionless blob rides in no package.
+func TestHostRefusesNonSourceFilesInTheTree(t *testing.T) {
+	f := newFixture(t)
+	for name, p := range map[string]string{
+		"wasm": "payload.wasm", "so": "lib/x.so", "exe": "x.exe", "png": "a.png",
+		"no extension": "blob", "upper wasm": "x.WASM", "double": "x.js.wasm", "dotfile": ".env",
+	} {
+		t.Run(name, func(t *testing.T) {
+			f.t = t
+			record, blobs := f.release(f.tree(map[string]entry{testRoot + "/" + p: {"100644", "\x00asm"}}))
+			err := VerifyHost(context.Background(), f.input(record, blobs))
+			wantReason(t, err, ReasonContentNotConfined)
+		})
+	}
+	// Source and text types still pass.
+	f.t = t
+	files := map[string]entry{}
+	for _, p := range []string{"a.svelte", "lib/b.ts", "c.js", "d.css", "e.json", "f.md", "g.txt", "h.svg"} {
+		files[testRoot+"/"+p] = entry{"100644", "x\n"}
+	}
+	record, blobs := f.release(f.tree(files))
+	if err := VerifyHost(context.Background(), f.input(record, blobs)); err != nil {
+		t.Fatalf("source and text types refused: %v", err)
 	}
 }

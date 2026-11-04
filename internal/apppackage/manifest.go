@@ -226,6 +226,9 @@ func invalid(format string, args ...any) error {
 // or the package's files, on the running platform (CurrentPlatform).
 func (m Manifest) Validate() error { return m.ValidateOn(CurrentPlatform()) }
 
+// ShellAppNames lists the names a published package may not take.
+func ShellAppNames() []string { return append([]string{}, shellAppNames...) }
+
 // ValidateOn is Validate on a stated platform.
 func (m Manifest) ValidateOn(p Platform) error {
 	if m.Schema != ManifestSchemaV2 {
@@ -241,6 +244,15 @@ func (m Manifest) ValidateOn(p Platform) error {
 	// (<pkg>-candidate); no published package takes it.
 	if m.Origin != OriginFirstParty && strings.HasSuffix(m.Name, "-candidate") {
 		return invalid("name %q uses the reserved -candidate suffix", m.Name)
+	}
+	// A published package never takes a name the shell holds as an app id or
+	// reserves: installing it would shadow the built-in app (review B2).
+	if m.Origin != OriginFirstParty {
+		for _, n := range shellAppNames {
+			if m.Name == n {
+				return invalid("name %q is a shell app name; a published package cannot take it", m.Name)
+			}
+		}
 	}
 	if !versionPattern.MatchString(m.Version) {
 		return invalid("version %q is not MAJOR.MINOR.PATCH", m.Version)
@@ -303,6 +315,13 @@ func (m Manifest) ValidateOn(p Platform) error {
 		}
 		if len(m.Contributes.Desks) > 0 && !p.DeskSandbox {
 			return fmt.Errorf("%w: %d desk(s) in package %q", ErrDeskNeedsSandbox, len(m.Contributes.Desks), m.Name)
+		}
+		// opens and aliases have no consumer for an installed package yet
+		// (the shell builds no media routes or aliases from them), and the
+		// clash checks that guard them exist only for in-tree packages. A
+		// published manifest carries neither until they are wired (review N3).
+		if len(m.Opens) > 0 || (m.App != nil && len(m.App.Aliases) > 0) {
+			return invalid("opens and app.aliases are first-party only until an installed package's routes are wired")
 		}
 	}
 	return m.validateKinds()

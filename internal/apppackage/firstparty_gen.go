@@ -3,3 +3,31 @@
 package apppackage
 
 var firstPartyPackages = []firstPartyPackage{}
+
+// shellAppNames are the names a published package may not take (see gen-package-kinds.mjs).
+var shellAppNames = []string{
+	"audio",
+	"autopaper",
+	"browser",
+	"calendar",
+	"compute-monitor",
+	"content",
+	"desk",
+	"desktop",
+	"email",
+	"engineering",
+	"epub",
+	"management",
+	"owner",
+	"pdf",
+	"podcast",
+	"prompt",
+	"pulse",
+	"research",
+	"settings",
+	"shell",
+	"slides",
+	"system",
+	"texture",
+	"video",
+}

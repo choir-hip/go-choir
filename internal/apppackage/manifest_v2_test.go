@@ -350,7 +350,11 @@ func TestH5DesksFromAPublishedOriginWaitForTheSandbox(t *testing.T) {
 	if _, err := parseAs(t, OriginFirstParty, deskV); err != nil {
 		t.Fatalf("first-party desk: %v", err)
 	}
-	m, err := ParseManifest(v2JSON(t, deskV), OriginFirstParty)
+	m, err := ParseManifest(v2JSON(t, func(v map[string]any) {
+		deskV(v)
+		v["opens"] = []any{}
+		v["app"].(map[string]any)["aliases"] = []any{}
+	}), OriginFirstParty)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +369,12 @@ func TestH5DesksFromAPublishedOriginWaitForTheSandbox(t *testing.T) {
 		t.Fatal("this build has no Phase 6 sandbox yet")
 	}
 	// A front-end-only published package is unaffected (R16).
-	if _, err := parseAs(t, OriginPublished, func(v map[string]any) { v["kinds"] = []any{}; v["uses_kinds"] = []any{} }); err != nil {
+	if _, err := parseAs(t, OriginPublished, func(v map[string]any) {
+		v["kinds"] = []any{}
+		v["uses_kinds"] = []any{}
+		v["opens"] = []any{}
+		v["app"].(map[string]any)["aliases"] = []any{}
+	}); err != nil {
 		t.Fatalf("published front-end package: %v", err)
 	}
 }
@@ -561,8 +570,8 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 		}
 		seen[got] = name
 	}
-	// Not covered: authoring order, whitespace and key order, display, the
-	// version, and files the manifest does not name.
+	// Not covered: authoring order, whitespace and key order, display, window and
+	// theme geometry, the version, and files the manifest does not name.
 	same := map[string]func(t *testing.T) string{
 		"capability order": func(t *testing.T) string {
 			return hash(t, func(v map[string]any) { c := v["capabilities"].([]any); c[0], c[1] = c[1], c[0] }, files)
@@ -726,11 +735,116 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 		if m.Class() != ClassApp || m.Level() != LevelDefault {
 			t.Errorf("%s: class %s level %s", p, m.Class(), m.Level())
 		}
-		if _, err := ParseManifest(raw, OriginPublished); err != nil {
-			t.Errorf("%s as a published package: %v", p, err)
-		}
 		if _, err := m.BehaviourSurface(DirReader(filepath.Dir(p))); err != nil {
 			t.Errorf("%s: %v", p, err)
 		}
+	}
+}
+
+// Review follow-ups (Devin, 4bb0af990).
+
+// B2: a published package cannot take a name the shell already holds as an app
+// id (static ids) or reserves (check-packages RESERVED_NAMES).
+func TestB2PublishedNamesCannotTakeAShellAppName(t *testing.T) {
+	names := []string{"audio", "pdf", "calendar", "settings", "pulse", "browser", "email", "autopaper", "desk", "prompt", "system", "owner", "management", "engineering", "research", "desktop", "shell"}
+	for _, n := range names {
+		_, err := parseAs(t, OriginPublished, func(v map[string]any) {
+			v["name"] = n
+			v["kinds"] = []any{}
+			v["uses_kinds"] = []any{}
+			v["opens"] = []any{}
+			v["app"].(map[string]any)["aliases"] = []any{}
+		})
+		if !errors.Is(err, ErrInvalidManifest) {
+			t.Errorf("published %q: %v", n, err)
+		}
+	}
+	if len(ShellAppNames()) < 15 {
+		t.Fatalf("the generated shell app name list is short: %v", ShellAppNames())
+	}
+}
+
+// N1: a directive after the first declaration is scanned, and a file that does
+// not fully parse is refused.
+func TestN1GoSourceIsFullyParsed(t *testing.T) {
+	allowed := fixture(t).ImportSet()
+	for name, src := range map[string]string{
+		"late linkname": "package main\nfunc f(){}\n//go:linkname g runtime.g\nfunc g()\n",
+		"late embed":    "package main\nfunc f(){}\n//go:embed x.txt\nvar s string\n",
+		"late cgo":      "package main\nfunc f(){}\n//go:cgo_import_dynamic x\n",
+		"broken body":   "package main\nimport \"fmt\"\nfunc f( {\n",
+		"unclosed":      "package main\nfunc f(){\n",
+	} {
+		if err := CheckGoSource("a.go", []byte(src), allowed); !errors.Is(err, ErrInvalidManifest) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if err := CheckGoSource("a.go", []byte("package main\nimport \"fmt\"\nfunc f(){ fmt.Println(1) }\n"), allowed); err != nil {
+		t.Errorf("good source: %v", err)
+	}
+}
+
+// N2: the app block, opens and aliases move the behaviour surface.
+func TestN2AppBlockOpensAndAliasesMoveTheHash(t *testing.T) {
+	h := func(mut func(map[string]any)) string {
+		t.Helper()
+		m, err := parseAs(t, OriginFirstParty, mut)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := m.BehaviourSurface(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	app := func(v map[string]any) map[string]any { return v["app"].(map[string]any) }
+	base := h(func(map[string]any) {})
+	for name, mut := range map[string]func(map[string]any){
+		"entry":        func(v map[string]any) { app(v)["entry"] = "Other.svelte" },
+		"requires_sdk": func(v map[string]any) { app(v)["requires_sdk"] = "^1.2" },
+		"alias":        func(v map[string]any) { app(v)["aliases"] = []any{"p2b", "extra"} },
+		"opens ext": func(v map[string]any) {
+			v["opens"] = []any{map[string]any{"media_type": "application/x-p2btest", "extensions": []any{"p2b", "p3b"}}}
+		},
+		"opens type": func(v map[string]any) {
+			v["opens"] = []any{map[string]any{"media_type": "application/x-other", "extensions": []any{"p2b"}}}
+		},
+		"opens off":   func(v map[string]any) { v["opens"] = []any{} },
+		"app removed": func(v map[string]any) { delete(v, "app"); v["opens"] = []any{} },
+	} {
+		if h(mut) == base {
+			t.Errorf("%s did not move the hash", name)
+		}
+	}
+	// Window geometry and theme are presentation, not behaviour.
+	if h(func(v map[string]any) { app(v)["window"] = map[string]any{"singleton": false, "heavy": true} }) != base {
+		t.Error("window moved the hash")
+	}
+}
+
+// N3: opens and aliases have no consumer for an installed package, so a
+// published manifest may not carry them until one is wired.
+func TestN3PublishedManifestsCarryNoOpensOrAliases(t *testing.T) {
+	plain := func(v map[string]any) {
+		v["kinds"] = []any{}
+		v["uses_kinds"] = []any{}
+		v["opens"] = []any{}
+		v["app"].(map[string]any)["aliases"] = []any{}
+	}
+	if _, err := parseAs(t, OriginPublished, func(v map[string]any) { v["kinds"] = []any{}; v["uses_kinds"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
+		t.Errorf("published opens and aliases: %v", err)
+	}
+	if _, err := parseAs(t, OriginPublished, func(v map[string]any) { plain(v); v["app"].(map[string]any)["aliases"] = []any{"zzz"} }); !errors.Is(err, ErrInvalidManifest) {
+		t.Errorf("published alias: %v", err)
+	}
+	if _, err := parseAs(t, OriginPublished, func(v map[string]any) {
+		plain(v)
+		v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"zz"}}}
+	}); !errors.Is(err, ErrInvalidManifest) {
+		t.Errorf("published opens: %v", err)
+	}
+	if _, err := parseAs(t, OriginPublished, plain); err != nil {
+		t.Errorf("plain published app: %v", err)
 	}
 }

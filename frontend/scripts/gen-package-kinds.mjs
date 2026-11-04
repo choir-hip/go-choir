@@ -36,6 +36,23 @@ if (check && !existsSync(resolve(root, 'internal/apppackage'))) {
   fail('internal/apppackage is missing; --check cannot compare the generated table');
 }
 
+// Names a published package may not take: the shell's static app ids
+// (frontend/src/lib/apps/registry.ts STATIC_APPS) and the reserved shell and
+// system names of check-packages.mjs. A published package of such a name would
+// shadow or confuse the built-in app (review of MA2.3, B2).
+const RESERVED_NAMES = [
+  'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research',
+];
+const shellAppNames = new Set(RESERVED_NAMES);
+{
+  const registry = readFileSync(resolve(root, 'frontend/src/lib/apps/registry.ts'), 'utf8');
+  const start = registry.indexOf('const STATIC_APPS = [');
+  const end = registry.indexOf('] satisfies ChoirAppDefinition[]');
+  const block = start >= 0 && end > start ? registry.slice(start, end) : '';
+  for (const m of block.matchAll(/^ {4}id: (?:'([a-z0-9-]+)'|TEXTURE_APP_ID),/gm)) shellAppNames.add(m[1] || 'texture');
+  if (shellAppNames.size < RESERVED_NAMES.length + 10) fail('registry.ts: parsed too few static app ids; the layout changed');
+}
+
 const packages = [];
 if (existsSync(packagesDir)) {
   for (const dir of readdirSync(packagesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
@@ -94,6 +111,11 @@ if (packages.length === 0) {
   }
   lines.push('}');
 }
+lines.push('');
+lines.push('// shellAppNames are the names a published package may not take (see gen-package-kinds.mjs).');
+lines.push('var shellAppNames = []string{');
+for (const n of [...shellAppNames].sort()) lines.push(`\t${goString(n)},`);
+lines.push('}');
 const generated = `${lines.join('\n')}\n`;
 
 if (check) {

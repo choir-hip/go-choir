@@ -94,7 +94,9 @@ func CuratedModules() []string { return nil }
 // third-party module not on the curated list. It reads imports only (the file
 // is never type-checked or run), and refuses a file that does not parse.
 func CheckGoSource(name string, src []byte, allowed []string) error {
-	f, err := parser.ParseFile(token.NewFileSet(), name, src, parser.ImportsOnly|parser.ParseComments)
+	// The whole file is parsed: a directive after the import block is scanned,
+	// and a file that does not parse is refused (review N1).
+	f, err := parser.ParseFile(token.NewFileSet(), name, src, parser.ParseComments)
 	if err != nil {
 		return invalid("%s: not Go source: %v", name, err)
 	}
@@ -151,17 +153,34 @@ type surfaceKind struct {
 	Schema              json.RawMessage `json:"schema"`
 }
 
+type surfaceApp struct {
+	Entry       string   `json:"entry"`
+	ABI         string   `json:"abi"`
+	RequiresSDK string   `json:"requires_sdk"`
+	Aliases     []string `json:"aliases"`
+}
+
+type surfaceOpens struct {
+	MediaType  string   `json:"media_type"`
+	Extensions []string `json:"extensions"`
+	Default    bool     `json:"default"`
+}
+
 type surfaceDoc struct {
-	Domain       string        `json:"domain"`
-	Desks        []surfaceDesk `json:"desks"`
-	Kinds        []surfaceKind `json:"kinds"`
-	UsesKinds    []string      `json:"uses_kinds"`
-	Capabilities []string      `json:"capabilities"`
-	ImportSet    []string      `json:"import_set"`
+	Domain       string         `json:"domain"`
+	App          *surfaceApp    `json:"app"`
+	Opens        []surfaceOpens `json:"opens"`
+	Desks        []surfaceDesk  `json:"desks"`
+	Kinds        []surfaceKind  `json:"kinds"`
+	UsesKinds    []string       `json:"uses_kinds"`
+	Capabilities []string       `json:"capabilities"`
+	ImportSet    []string       `json:"import_set"`
 }
 
 // BehaviourSurface is the sha256 (lowercase hex) over what the package may do
-// on a computer: each desk's name, prompt file, code and tool files (by
+// on a computer: the app's entry, abi, SDK range and aliases, the files it
+// opens (media types and extensions, with whether it is the default opener);
+// each desk's name, prompt file, code and tool files (by
 // content), schedules and accepts; every kind with its schema and versions;
 // the kinds it reads; the capability ceiling with its arguments (the egress
 // hosts among them); and the derived import set. Any change moves the hash,
@@ -198,6 +217,23 @@ func (m Manifest) BehaviourSurface(files FileReader) (string, error) {
 		sum := sha256.Sum256(raw)
 		return surfaceFile{Path: p, SHA256: hex.EncodeToString(sum[:])}, nil
 	}
+	if m.App != nil {
+		al := append([]string{}, m.App.Aliases...)
+		sort.Strings(al)
+		doc.App = &surfaceApp{Entry: m.App.Entry, ABI: m.App.ABI, RequiresSDK: m.App.RequiresSDK, Aliases: al}
+	}
+	doc.Opens = []surfaceOpens{}
+	for _, o := range m.Opens {
+		ext := append([]string{}, o.Extensions...)
+		sort.Strings(ext)
+		doc.Opens = append(doc.Opens, surfaceOpens{MediaType: o.MediaType, Extensions: ext, Default: o.IsDefault()})
+	}
+	sort.Slice(doc.Opens, func(i, j int) bool {
+		if doc.Opens[i].MediaType != doc.Opens[j].MediaType {
+			return doc.Opens[i].MediaType < doc.Opens[j].MediaType
+		}
+		return strings.Join(doc.Opens[i].Extensions, ",") < strings.Join(doc.Opens[j].Extensions, ",")
+	})
 	for _, d := range m.Contributes.Desks {
 		sd := surfaceDesk{Name: d.Name, Tools: []surfaceFile{}, Schedules: append([]Schedule{}, d.Schedules...)}
 		var err error

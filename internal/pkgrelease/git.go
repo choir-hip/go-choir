@@ -253,6 +253,10 @@ func (s *scratch) confined(ctx context.Context, tree, root string) error {
 			// Case-insensitive: on a case-insensitive checkout .GITATTRIBUTES
 			// is .gitattributes.
 			tricks = append(tricks, e.path)
+		case !sourceFileExtensions[strings.ToLower(path.Ext(e.path))]:
+			// A release is source only: no wasm, native binary, image or
+			// extensionless blob rides in a package tree (MA2.3 review N4).
+			tricks = append(tricks, e.path+" (not a source or text file type)")
 		}
 	}
 	if len(outside) > 0 {
@@ -262,6 +266,13 @@ func (s *scratch) confined(ctx context.Context, tree, root string) error {
 		return refuse(ReasonContentNotConfined, "entries a package may not carry: %s", listSome(tricks))
 	}
 	return nil
+}
+
+// sourceFileExtensions are the file types a release tree may hold: source and
+// text. A dot-file has no extension here and is refused with the rest.
+var sourceFileExtensions = map[string]bool{
+	".svelte": true, ".ts": true, ".js": true, ".mjs": true, ".css": true, ".json": true,
+	".md": true, ".txt": true, ".html": true, ".svg": true, ".go": true,
 }
 
 func listSome(items []string) string {
