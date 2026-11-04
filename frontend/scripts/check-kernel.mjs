@@ -8,6 +8,11 @@
 //      and the legacy literals below.
 //   3. Responsibilities: the exported symbols per file equal the checked-in
 //      src/lib/kernel/responsibilities.json.
+// Limit, by design: this is a review tripwire against drift, not a sandbox. It
+// is regex based, so deliberate evasion passes (token splitting such as
+// 'imp'+'ort', globalThis['require'], a banned name embedded in a longer
+// token). Closing those would need a real parser and would still not stop a
+// determined author; review and the leak differential cover the rest.
 // `--root <frontend dir>` points it at a fixture tree (tests/kernel.spec.js).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
@@ -15,6 +20,10 @@ import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2);
 const rootFlag = argv.indexOf('--root');
+if (rootFlag >= 0 && !argv[rootFlag + 1]) {
+  console.error('check-kernel: --root needs a directory argument');
+  process.exit(2);
+}
 const frontendRoot = resolve(
   rootFlag >= 0 ? argv[rootFlag + 1] : join(dirname(fileURLToPath(import.meta.url)), '..'),
 );
@@ -31,7 +40,16 @@ const fail = (where, msg) => errors.push(`${where}: ${msg}`);
 
 function kernelFiles() {
   if (!existsSync(kernelDir)) return [];
-  return readdirSync(kernelDir).filter((f) => f.endsWith('.ts')).sort();
+  const out = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(?:ts|js|mjs|cjs|tsx|jsx)$/.test(e.name)) out.push(relative(kernelDir, full));
+    }
+  };
+  walk(kernelDir);
+  return out.sort();
 }
 
 function stripComments(src) {
@@ -42,7 +60,10 @@ function builtNames() {
   const names = new Set(LEGACY_NAMES);
   const reg = join(frontendRoot, 'src/lib/apps/registry.ts');
   if (existsSync(reg)) {
-    for (const m of readFileSync(reg, 'utf8').matchAll(/\bid:\s*'([a-z][a-z0-9-]*)'/g)) names.add(m[1]);
+    const src = readFileSync(reg, 'utf8');
+    for (const m of src.matchAll(/\bid:\s*['"`]([a-z][a-z0-9-]*)['"`]/g)) names.add(m[1]);
+    // ids written as constants: export const X_ID = 'texture'
+    for (const m of src.matchAll(/\b[A-Z][A-Z0-9_]*_ID\b\s*(?::[^=]+)?=\s*['"`]([a-z][a-z0-9-]*)['"`]/g)) names.add(m[1]);
   }
   const pk = join(frontendRoot, 'src/packages');
   if (existsSync(pk)) {
@@ -97,7 +118,7 @@ for (const f of files) {
       fail(f, `${spec} is not allowed in the kernel`);
     } else if (!spec.startsWith('./') || spec.slice(2).includes('/')) {
       fail(f, `imports "${spec}"; the kernel imports only its own files`);
-    } else if (!files.includes(`${spec.slice(2)}.ts`) && !files.includes(spec.slice(2))) {
+    } else if (!files.some((x) => x === spec.slice(2) || x.replace(/\.[a-z]+$/, '') === spec.slice(2))) {
       fail(f, `imports "${spec}", which is not a kernel file`);
     }
   }

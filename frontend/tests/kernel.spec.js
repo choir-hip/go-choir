@@ -89,7 +89,8 @@ test('ranking: policy, selection, priority, recency, base; rank.high is needed a
   const undecl = k.services.decline(sys, S, 'granted');
   await k.services.settled();
   expect(k.services.resolve(S)).toBe('claim');
-  await undecl();
+  await undecl(); // disposers enqueue; settled() is the wait
+  await k.services.settled();
   expect(k.services.resolve(S)).toBe('granted');
 });
 
@@ -204,6 +205,70 @@ test('pipelines: tier order, frozen input, origin stamped, failures skipped, re-
   expect(r.skipped.find((s) => s.handler === 'slow').reason).toBe('over budget');
 });
 
+// ---- re-entrant disposal (review B1) ----
+
+const withTimeout = (p, ms, what) =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} did not resolve`)), ms))]);
+
+test('a provider whose activate consumes on its act scope swaps and disposes without deadlock', async () => {
+  const { k } = setup();
+  const S = 'menu.renderer';
+  k.services.provide(k.scope('base'), S, { id: 'base', impl: 'base', base: true });
+  const pkg = k.scope('derived');
+  k.services.provide(pkg, S, {
+    id: 'd', impl: 'd', priority: 70, grants: ['rank.high'],
+    activate: (act) => { k.services.consume(act, [S], () => {}); },
+  });
+  await withTimeout(k.services.settled(), 1000, 'settled after provide');
+  expect(k.services.resolve(S)).toBe('d');
+  const base2 = k.scope('base2');
+  k.services.provide(base2, S, { id: 'e', impl: 'e', priority: 90, grants: ['rank.high'] });
+  await withTimeout(k.services.settled(), 1000, 'settled after swap');
+  expect(k.services.resolve(S)).toBe('e');
+  const report = await withTimeout(pkg.dispose(), 1000, 'dispose');
+  expect(report.errors).toEqual([]);
+  await withTimeout(k.services.settled(), 1000, 'settled after dispose');
+  expect(k.services.errors).toEqual([]);
+});
+
+test('a consumer fn that provides on its act scope tears down without deadlock', async () => {
+  const { k } = setup();
+  const S = 'menu.renderer';
+  k.services.define(k.root, 'inner', 'choir.service/inner/v1');
+  const pkg = k.scope('c');
+  k.services.provide(k.scope('base'), S, { id: 'base', impl: 'base', base: true });
+  k.services.consume(pkg, [S], (svc, act) => {
+    k.services.provide(act, 'inner', { id: 'i', impl: 'i' });
+  });
+  await withTimeout(k.services.settled(), 1000, 'settled');
+  expect(k.services.resolve('inner')).toBe('i');
+  const report = await withTimeout(pkg.dispose(), 1000, 'dispose');
+  expect(report.errors).toEqual([]);
+  await withTimeout(k.services.settled(), 1000, 'settled after dispose');
+  expect(k.services.resolve('inner')).toBeUndefined();
+});
+
+test('a failing queue job is recorded in errors and trace, not swallowed', async () => {
+  const { k } = setup();
+  k.services.provide(k.scope('base'), 'menu.renderer', { id: 'base', impl: 'base', base: true });
+  await k.services.settled();
+  // a consumer whose owner died before its start job runs makes fork throw inside the job
+  const dead = k.scope('dead');
+  k.services.consume(dead, ['menu.renderer'], () => {});
+  await dead.dispose();
+  await k.services.settled();
+  expect(k.services.errors.length).toBe(k.services.trace.filter((t) => t.startsWith('job-error:')).length);
+});
+
+test('a pipeline item that cannot be structured-cloned is reported per handler', async () => {
+  const k = createKernel();
+  const sys = k.scope('system');
+  k.pipelines.define(sys, 'p', { budgetMs: 50 });
+  k.pipelines.use(sys, 'p', { id: 'h' }, (items) => items);
+  const r = await k.pipelines.run('p', [{ f: () => 1 }]);
+  expect(r.skipped.map((x) => x.handler)).toEqual(['h']);
+});
+
 // ---- the K0 leak differential ----
 
 test('leak differential: install, activate, exercise, uninstall; snapshot equals baseline', async () => {
@@ -213,7 +278,22 @@ test('leak differential: install, activate, exercise, uninstall; snapshot equals
   k.pipelines.define(sys, 'menu.build', { budgetMs: 50 });
   k.services.provide(k.scope('base'), 'menu.renderer', { id: 'base', impl: 'base', base: true });
   await k.services.settled();
-  const baseline = JSON.parse(JSON.stringify(k.snapshot()));
+  // Scope ids and states are in the snapshot, so identity leaks show. The
+  // provider/consumer act scopes are recreated by design on every swap (new
+  // id); every scope a caller created keeps its id and must match exactly.
+  const stripActIds = (node) => {
+    if (node && typeof node === 'object') {
+      if (typeof node.name === 'string' && /^(provider|consumer):/.test(node.name)) node.id = 'act';
+      for (const c of node.children ?? []) stripActIds(c);
+    }
+    return node;
+  };
+  const view = () => {
+    const snap = JSON.parse(JSON.stringify(k.snapshot()));
+    stripActIds(snap.scopes);
+    return snap;
+  };
+  const baseline = view();
 
   for (let round = 0; round < 3; round++) {
     const pkg = k.scope(`pkg-${round}`);
@@ -237,12 +317,12 @@ test('leak differential: install, activate, exercise, uninstall; snapshot equals
     await k.services.settled();
     expect(k.services.resolve('menu.renderer')).toBe('fixture');
     expect((await k.pipelines.run('menu.build', [])).items).toHaveLength(1);
-    expect(k.snapshot()).not.toEqual(baseline);
+    expect(view()).not.toEqual(baseline);
     const report = await pkg.dispose();
     expect(report.errors).toEqual([]);
     await k.services.settled();
     expect(k.services.resolve('menu.renderer')).toBe('base');
-    expect(JSON.parse(JSON.stringify(k.snapshot()))).toEqual(baseline);
+    expect(view()).toEqual(baseline);
   }
 });
 

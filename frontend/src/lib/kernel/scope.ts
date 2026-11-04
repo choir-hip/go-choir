@@ -75,9 +75,11 @@ export class Scope {
   }
 
   /** @internal read by snapshot only */
-  describe(): { name: string; effects: number; children: ReturnType<Scope['describe']>[] } {
+  describe(): { id: number; name: string; state: ScopeState; effects: number; children: ReturnType<Scope['describe']>[] } {
     return {
+      id: this.id,
       name: this.name,
+      state: this.state,
       effects: this.effects.length,
       children: this.children.map((c) => c.describe()),
     };

@@ -80,19 +80,33 @@ export class Services {
   private seq = 0;
   private consumerSeq = 0;
   readonly trace: string[] = [];
+  /** Failures of queue jobs (also traced as `job-error:`); never swallowed. */
+  readonly errors: unknown[] = [];
 
   constructor(
     private readonly now: () => number,
     private readonly watchdog: WatchdogOptions,
   ) {}
 
-  /** Resolves when every queued activation change has run. */
-  settled(): Promise<void> {
-    return this.queue;
+  /**
+   * Resolves when every queued activation change has run. Never call it from
+   * inside a queue job or an act-scope effect: the tail includes the running
+   * job, so that wait is circular. Registration disposers therefore do not
+   * wait; they enqueue their own cleanup and callers await settled().
+   */
+  async settled(): Promise<void> {
+    // jobs may enqueue more jobs: wait until the tail stops moving
+    for (let tail = this.queue; ; tail = this.queue) {
+      await tail;
+      if (tail === this.queue) return;
+    }
   }
 
   private enqueue(job: () => Promise<void>): void {
-    this.queue = this.queue.then(job).catch(() => undefined);
+    this.queue = this.queue.then(job).catch((err) => {
+      this.errors.push(err);
+      this.trace.push(`job-error:${err instanceof Error ? err.message : String(err)}`);
+    });
   }
 
   private rec(name: string): ServiceRec {
@@ -139,12 +153,13 @@ export class Services {
     };
     r.providers.push(p);
     this.enqueue(() => this.reconcile(name));
-    return scope.effect(async () => {
+    return scope.effect(() => {
       const at = r.providers.indexOf(p);
       if (at >= 0) r.providers.splice(at, 1);
-      this.enqueue(() => this.reconcile(name));
-      await this.settled();
-      this.prune(name);
+      this.enqueue(async () => {
+        await this.reconcile(name);
+        this.prune(name);
+      });
     });
   }
 
@@ -152,16 +167,17 @@ export class Services {
     const c: ConsumerRec = { id: ++this.consumerSeq, names: [...names], fn, owner: scope, act: null };
     for (const n of names) this.rec(n).consumers.push(c);
     this.enqueue(() => this.syncConsumer(c));
-    return scope.effect(async () => {
+    return scope.effect(() => {
       this.enqueue(async () => {
         await this.stopConsumer(c);
         for (const n of names) {
           const r = this.table.get(n);
-          if (r) r.consumers.splice(r.consumers.indexOf(c), 1);
+          if (!r) continue;
+          const at = r.consumers.indexOf(c);
+          if (at >= 0) r.consumers.splice(at, 1);
+          this.prune(n);
         }
       });
-      await this.settled();
-      for (const n of names) this.prune(n);
     });
   }
 
@@ -183,12 +199,11 @@ export class Services {
     if (!set) this.declined.set(slot, (set = new Set()));
     set.add(id);
     this.enqueue(() => this.reconcile(slot));
-    return scope.effect(async () => {
+    return scope.effect(() => {
       const s = this.declined.get(slot);
       s?.delete(id);
       if (s && s.size === 0) this.declined.delete(slot);
       this.enqueue(() => this.reconcile(slot));
-      await this.settled();
     });
   }
 
@@ -196,14 +211,20 @@ export class Services {
     const prev = map.get(slot);
     map.set(slot, id);
     this.enqueue(() => this.reconcile(slot));
-    return scope.effect(async () => {
+    return scope.effect(() => {
       if (prev === undefined) map.delete(slot);
       else map.set(slot, prev);
       this.enqueue(() => this.reconcile(slot));
-      await this.settled();
     });
   }
 
+  /**
+   * Operator health flag. Semantics: false takes the provider out of the
+   * ranking; true puts it back, unless the watchdog has tripped it. A trip
+   * (reportFailure, failed activate) is permanent for this registration: the
+   * provider stays inactive and setHealthy(..., true) does not clear it.
+   * Recovery is to dispose the registration and provide it again.
+   */
   setHealthy(name: string, id: string, healthy: boolean): void {
     const p = this.table.get(name)?.providers.find((x) => x.spec.id === id);
     if (!p) return;
@@ -228,7 +249,7 @@ export class Services {
   rank(name: string): ProviderRec | null {
     const r = this.table.get(name);
     if (!r) return null;
-    const ok = (p: ProviderRec) => p.healthy && !p.tripped;
+    const ok = (p: ProviderRec) => p.healthy && !p.tripped && !p.owner.disposed;
     const live = r.providers.filter(ok);
     const byId = (id: string | undefined) => live.find((p) => p.spec.id === id);
     const pol = byId(this.policy.get(name));
@@ -304,7 +325,13 @@ export class Services {
         this.trace.push(`provider-on:${next.spec.id}`);
         try {
           await next.spec.activate?.(act);
-          r.active = next;
+          if (next.owner.disposed) {
+            // the owner died during activate: its provide-effect owns the cleanup
+            next.act = null;
+            await act.dispose();
+          } else {
+            r.active = next;
+          }
         } catch (err) {
           next.act = null;
           next.tripped = `activate failed: ${String(err)}`; // V7

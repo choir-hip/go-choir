@@ -95,13 +95,14 @@ export class Pipelines {
     let current: Item[] = items.map((i) => ({ ...i }));
     const skipped: PipelineResult['skipped'] = [];
     for (const h of this.ordered(p)) {
-      const input = deepFreeze(structuredClone(current)) as Item[];
-      const ctx: PipelineContext = {
-        chain: nextChain,
-        run: (n, its) => this.run(n, its, nextChain),
-      };
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
+        // a non-cloneable item is reported against this handler, not thrown from run()
+        const input = deepFreeze(structuredClone(current)) as Item[];
+        const ctx: PipelineContext = {
+          chain: nextChain,
+          run: (n, its) => this.run(n, its, nextChain),
+        };
         const budget = new Promise<never>((_, rej) => {
           timer = setTimeout(() => rej(new Error('over budget')), p.budgetMs);
         });
