@@ -48,19 +48,24 @@ func (rt *Runtime) operationMedia(operation selfdev.Operation) ([]pkgrelease.Med
 	sort.Slice(screens, func(i, j int) bool { return screens[i].Name < screens[j].Name })
 	var items []pkgrelease.Media
 	var data [][]byte
+	// A record names each digest once: a second screen with the same bytes
+	// (two shots rendering the same pixels) is skipped, never a refusal of
+	// the whole draft.
+	named := map[string]bool{}
 	for _, s := range screens {
 		if len(items) == pkgrelease.MaxScreenshots {
 			break
 		}
-		if s.Blank || s.Bytes > pkgrelease.MaxScreenshotBytes || s.Width > pkgrelease.MaxScreenshotSide || s.Height > pkgrelease.MaxScreenshotSide || !capsule.ValidScreenName(s.Name) {
+		if named[s.SHA256] || s.Blank || s.Bytes > pkgrelease.MaxScreenshotBytes || s.Width > pkgrelease.MaxScreenshotSide || s.Height > pkgrelease.MaxScreenshotSide || !capsule.ValidScreenName(s.Name) {
 			continue
 		}
 		item := pkgrelease.Media{Kind: pkgrelease.MediaKindScreenshot, Name: s.Name, MediaType: pkgrelease.MediaTypePNG, SHA256: s.SHA256, Bytes: int(s.Bytes), Width: s.Width, Height: s.Height}
 		if raw, ok := read(item); ok {
 			items, data = append(items, item), append(data, raw)
+			named[s.SHA256] = true
 		}
 	}
-	if v := bundle.Video; v != nil && v.Bytes <= pkgrelease.MaxVideoBytes && capsule.ValidVideoName(v.Name) {
+	if v := bundle.Video; v != nil && !named[v.SHA256] && v.Bytes <= pkgrelease.MaxVideoBytes && capsule.ValidVideoName(v.Name) {
 		item := pkgrelease.Media{Kind: pkgrelease.MediaKindVideo, Name: v.Name, MediaType: pkgrelease.MediaTypeWebM, SHA256: v.SHA256, Bytes: int(v.Bytes)}
 		if raw, ok := read(item); ok {
 			items, data = append(items, item), append(data, raw)

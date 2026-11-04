@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -65,6 +66,16 @@ type bundleDraftMirror struct {
 	Screens                 []mountedScreen            `json:"screens,omitempty"`
 	Video                   *mountedVideo              `json:"video,omitempty"`
 }
+
+// mountedVideoName and mountedVideoMaxBytes mirror capsule.ValidVideoName and
+// capsule.MaxVideoBytes (this package cannot import capsule; a test in
+// capsule/transaction holds them equal).
+var mountedVideoName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.webm$`)
+
+const mountedVideoMaxBytes = 8 << 20
+
+// MountedVideoMaxBytes exposes the mirror's bound for that test.
+const MountedVideoMaxBytes = mountedVideoMaxBytes
 
 // mountedVideo mirrors capsule.VideoFile (the one walkthrough video,
 // docs/problems/library-releases-have-no-screenshots-2026-11-04.md).
@@ -216,10 +227,16 @@ func inspectMountedVideo(root string, video *mountedVideo) (map[string]any, erro
 	if video == nil {
 		return nil, nil
 	}
-	if !computerevent.IsSHA256(video.SHA256) || video.Name != filepath.Base(video.Name) || !strings.HasSuffix(video.Name, ".webm") {
+	if !computerevent.IsSHA256(video.SHA256) || !mountedVideoName.MatchString(video.Name) || strings.Contains(video.Name, "..") ||
+		video.Bytes <= 0 || video.Bytes > mountedVideoMaxBytes {
 		return nil, fmt.Errorf("choir: inspect_bundle: video %q is not a content-addressed WebM", video.Name)
 	}
-	data, err := os.ReadFile(filepath.Join(root, "evidence", "screens", video.Name))
+	path := filepath.Join(root, "evidence", "screens", video.Name)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() != video.Bytes {
+		return nil, fmt.Errorf("choir: inspect_bundle: video unavailable or not its size: %s", video.Name)
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("choir: inspect_bundle: video unavailable: %s", video.Name)
 	}

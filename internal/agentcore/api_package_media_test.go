@@ -239,3 +239,22 @@ func TestPackageDraftWithoutScreensNamesNoMedia(t *testing.T) {
 		t.Fatalf("R4 a draft without screens names media: %+v", record.Media)
 	}
 }
+
+// Review r1 F1: two bound screens with the same bytes name the digest once,
+// and the draft still drafts; F7: the release's video bound is Freeze's.
+func TestPackageDraftNamesARepeatedScreenOnce(t *testing.T) {
+	if pkgrelease.MaxVideoBytes != capsule.MaxVideoBytes {
+		t.Fatalf("release video cap %d, Freeze cap %d", pkgrelease.MaxVideoBytes, capsule.MaxVideoBytes)
+	}
+	w := newDraftWorld(t)
+	same := mediaPNG(t, 64, 40, 5, false)
+	w.mediaOperation("op-twice", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"}, map[string][]byte{"a.png": same, "b.png": same, "c.png": mediaPNG(t, 64, 40, 6, false)}, nil)
+	record, _, _ := decodeDraft(t, w.draft("op-twice", nil))
+	var names []string
+	for _, m := range record.Media {
+		names = append(names, m.Name)
+	}
+	if strings.Join(names, ",") != "a.png,c.png" {
+		t.Fatalf("media %v, want a.png,c.png", names)
+	}
+}

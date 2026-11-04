@@ -106,8 +106,11 @@ func (h *Handler) readPackageReleaseMedia(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusNotFound, notFound)
 		return
 	}
-	raw, err := h.readPackageMedia(item)
-	if err != nil {
+	// The bytes were fully verified at publish; a read re-checks only that
+	// the store still holds them (hash and length), never a full decode a
+	// reader could repeat.
+	raw, err := h.contentStore(pkgrelease.MediaNamespace).ReadVerified(item.SHA256, pkgrelease.MaxMediaBytes)
+	if err != nil || len(raw) != item.Bytes {
 		writeJSON(w, http.StatusNotFound, notFound)
 		return
 	}
