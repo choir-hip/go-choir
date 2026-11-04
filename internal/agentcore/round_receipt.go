@@ -25,7 +25,9 @@ import (
 //     assignment's end put on the ledger (engineering_waits.go);
 //   - build, choir-shot and other jobs: the job end records in the
 //     engineer's inbox (start and finish);
-//   - the Freeze: the operation's creation (the freeze-open key);
+//   - the Freeze: the commit time of the successful Freeze that settled the
+//     round's freeze_minutes prediction (its resolve record's freeze_at), else
+//     the operation's creation;
 //   - the decision: the approve owner-act record, else the act itself.
 //
 // The record is addressed to management, so it is in management's acting
@@ -90,6 +92,17 @@ func (rt *Runtime) recordRoundReceipt(ctx context.Context, ownerID string, opera
 	now := rt.assignmentWaitNow()
 	in := types.RoundInputs{Outcome: act, EndAt: now, FreezeAt: parseRoundTime(operation.CreatedAt)}
 	castRec, _ := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, binding.ParentControlID)
+	// The Freeze is the fresh, successful one the freeze_minutes prediction
+	// settled at (engineering_round_predictions.go), not the operation's
+	// creation, which is the first Freeze attempt: a refused Freeze or a
+	// re-Freeze after a rejection moves it. A round without that settlement
+	// (an old Cast, a censored claim) keeps the operation's time.
+	if resolve, _ := rt.store.GetCommitmentRecord(ctx, ownerID, computerID,
+		types.RuleResolveRecordID(roundPredictionRecordID(binding.ParentControlID, types.PrecommitRuleFreezeMinutes))); resolve != nil {
+		if at := parseRoundTime(resolve.SubjectRefs[types.RuleRefFreezeAt]); !at.IsZero() {
+			in.FreezeAt = at
+		}
+	}
 	in.CastAt = firstTime(recordTime(castRec), assignment.CreatedAt)
 	if castRec != nil && strings.TrimSpace(castRec.ParentID) != "" {
 		textureRec, _ := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, castRec.ParentID)

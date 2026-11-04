@@ -51,6 +51,9 @@ func TestRoundReceiptIsOnTheLedgerAndInManagementsPack(t *testing.T) {
 		rec.SubjectRefs["total_s"] == "" || rec.SubjectRefs["platform_pct"] == "" {
 		t.Fatalf("P1: receipt = %+v", rec)
 	}
+	if rec.SubjectRefs["freeze_to_decision_s"] != "360" {
+		t.Fatalf("operation created_at is the Freeze when no prediction settled: %v", rec.SubjectRefs)
+	}
 	if rt.recordRoundReceipt(ctx, seed.OwnerID, op, types.OwnerActReject) == nil {
 		t.Fatal("P3: replay returned nothing")
 	}
@@ -71,5 +74,35 @@ func TestRoundReceiptIsOnTheLedgerAndInManagementsPack(t *testing.T) {
 	other.OperationID, other.IdempotencyKey = "op-other", "rebase:x"
 	if rt.recordRoundReceipt(ctx, seed.OwnerID, other, types.OwnerActReject) != nil {
 		t.Fatal("P4: a receipt for a non-engineering operation")
+	}
+}
+
+// F1 the Freeze is the successful one the freeze_minutes prediction settled
+// at, not the operation's creation (a refused first Freeze, a re-Freeze).
+func TestRoundReceiptFreezeIsThePredictionsFreeze(t *testing.T) {
+	rt, s, _ := c1eRuntime(t)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-round2", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignment, _ := c1eOpenBound(t, s, seed, 0)
+	start := time.Now().UTC()
+	now := start.Add(10 * time.Minute)
+	waitTestClock(rt, &now)
+	freezeAt := start.Add(8 * time.Minute).Format(time.RFC3339Nano)
+	resolveID := types.RuleResolveRecordID(roundPredictionRecordID(assignment.Binding.ParentControlID, types.PrecommitRuleFreezeMinutes))
+	if _, err := s.AppendCommitmentRecord(ctx, seed.OwnerID, seed.ComputerID, types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: resolveID, Kind: types.CommitmentKindResolve,
+		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: types.RuleScorerAgentID, CommittedAt: freezeAt},
+		SubjectRefs: map[string]string{types.RuleRefFreezeAt: freezeAt},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	op := selfdev.Operation{OperationID: "op-round-2", ComputerID: seed.ComputerID, IdempotencyKey: store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID),
+		CreatedAt: start.Add(4 * time.Minute).Format(time.RFC3339Nano)}
+	rec := rt.recordRoundReceipt(ctx, seed.OwnerID, op, types.OwnerActReject)
+	if rec == nil || rec.SubjectRefs["freeze_to_decision_s"] != "120" {
+		t.Fatalf("F1: freeze_to_decision = %v", rec)
 	}
 }
