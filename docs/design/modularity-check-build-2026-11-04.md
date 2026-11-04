@@ -68,11 +68,12 @@ module digest, and pass or fail per mode with the errors seen.
 | L3 | a name is added with no bump, so a package built against it declares `^1.0` and an older shell refuses it only by name | added names need minor |
 | L4 | the surface changes and no new lock is written, or the lock for the current version differs from the source | the current version's lock must exist and equal the extracted surface |
 | L5 | `SDK_VERSION` goes backwards, or skips the lock of an older version | versions compare as semver; the newest lock may not be newer than `SDK_VERSION` |
-| L6 | the extractor reads nothing (a moved file, a broken program) and an empty surface "matches" | floor: at least 30 names, and `SDK_VERSION` itself must be among them |
+| L6 | the extractor reads nothing (a moved file, a broken program) and an empty surface "matches" | floor: at least 30 names, at least 1 referenced type, and `SDK_VERSION` itself must be among the names |
 | L7 | the lock carries machine paths or depends on the TypeScript print of `SDK_VERSION` itself | paths rewritten relative to `src/lib`; `SDK_VERSION`'s type recorded as `string`; a test refuses `/Users/` or `/home/` in a lock |
 | L8 | a type referenced by the surface but not exported from it (for example `ChoirAppDefinition`, which `getAppDefinition` returns) changes and nobody sees | referenced local types are expanded into the lock and compared like exported ones |
 | L9 | a package imports a name that is not in the lock | `sdk_imports` must be a subset of the current lock |
 | L10 | a package's `requires_sdk` admits a shell that lacks a name it imports | the lowest version `requires_sdk` admits must hold every `sdk_imports` name |
+| L12 | a lock is deleted and written again with a smaller surface; with one lock there is no previous step to catch it (review B1) | `--base REF`: every lock that exists at merge-base(REF, HEAD) must be unchanged in the working tree; only new locks may be added; a base that cannot be read fails. CI passes the pull request's base, or on main the live staging commit |
 | L11 | the guard itself is wrong (says minor for a removal) | negative tests on synthetic surfaces: removal, incompatible change, widening, addition, rewording |
 
 ### The contracts
@@ -91,7 +92,10 @@ module digest, and pass or fail per mode with the errors seen.
 | C10 | the runner itself cannot fail (a check that never fails proves nothing) | negative tests: a missing ready selector, a console error, an uncaught exception, a module that imports a name the shell lacks |
 | C11 | the receipt is missing or partial when a test fails | the receipt is written in `afterAll` whatever the result; a row that did not run says so |
 | C12 | the receipt cannot be tied to what was checked | it carries the commit, the surface digest, each package's tree and contract digests and its module digest |
-| C13 | the backend stub drifts from the shell's boot needs and every app "fails" | the stub answers exactly the four boot routes (`/auth/session`, `/api/shell/bootstrap`, `/api/desktop/state`, `/api/packages/installed`) and 404 for the rest; the shell row fails first and names it |
+| C13 | the backend stub drifts from the shell's boot needs and every app "fails" | the stub answers the boot routes (`/auth/session`, `/api/shell/bootstrap`, `/api/desktop/state`, `/api/preferences/theme`, `/api/packages/installed`) and 404 for the rest; a request it does not answer before the open click fails the row as stub drift |
+| C15 | an app whose backend calls all 404 passes on its empty state (review N1) | a request nothing answered after the open click fails the row, unless the contract stubs it (`api`) or lists it in `allow_unanswered` with a reason |
+| C16 | the gate is switched off by a change that does not select it (review N2), or skipped because a dependency is missing (N4) | a change to `ci.yml` or the classifier selects the frontend lane; the workflow contract test asserts the job, its trigger, its base, no `continue-on-error`, and that `check` needs and requires it; a missing build dependency fails the spec |
+| C17 | package code reaches the SDK through the shim's fallback global, using names its `sdk_imports` never lists | the boundary plugin refuses the identifier and any string holding `__choirAppSdk` in package code (both copies) |
 | C14 | the gate is slow and gets skipped | one shell build (about 5 s), one module build per package (1 to 3 s), about 3 s per mode per package; one CI job beside the frontend build |
 
 ## What it does not prove (named residuals)
@@ -105,8 +109,23 @@ module digest, and pass or fail per mode with the errors seen.
   the forwarded event list are not in the lock. The installed mode exercises
   them for every first-party package, and `runtime-install.spec.js` for a
   fixture; a change that only third-party packages would notice is not seen.
-- **Lock history.** The check compares against the newest lock; rewriting an
-  older lock file in the same change is visible only in the diff.
+- **Lock history before main.** A lock is immutable from the moment it is
+  at the merge base. A lock written and rewritten on one branch before it
+  reaches main is not seen; nothing has adopted it yet.
+- **The quiet window.** After the ready selector and the assertions, the
+  runner waits for network idle (at most 3 s) and 750 ms more. An error a
+  package raises later than that (a slow timer, a retry) is not seen; a
+  loaded runner makes the window shorter in effect.
+- **The SDK global by a computed name.** The boundary refuses
+  `__choirAppSdk` written as an identifier or in a string; a name built at
+  run time (`globalThis['__choir' + 'AppSdk']`) gets past it. The boundary is
+  architectural, not a security one (the package runs same-origin), and the
+  fallback itself belongs to S12.
+- **The installed-mode build is a replica (review N3).** `buildPackageModule`
+  lays out the build directory the way `internal/pkgruntime/pkgruntime.go`
+  does and runs the same two embedded scripts. A change to the scripts reruns
+  the gate; a change only to the Go layout or invocation does not, and the
+  gate would not see the drift. The Go tests cover the Go side.
 - **A real backend.** Contracts run against a stub that answers the boot
   routes; an app's data paths are exercised only as far as a contract stubs
   them (its `api` field).
@@ -149,8 +168,8 @@ module digest, and pass or fail per mode with the errors seen.
   `/api/packages/installed`; every package failed "the window does not host
   the installed module". `runtime-install.spec.js` tests the loader in
   isolation and could not see it. Fix: read the installed set in the
-  signed-in branch of `onMount` too (one line, on this branch; it belongs on
-  `s12-runtime-install`).
+  signed-in branch of `onMount` too. Fixed upstream on `s12-runtime-install`
+  in `c3ca51df5`; this branch's own fix was dropped at the rebase.
 
 ## Built
 
@@ -168,20 +187,23 @@ module digest, and pass or fail per mode with the errors seen.
   (`--dist`, `--packages-dir`, `--only`, `--modes`, `--receipt`) for the
   seams.
 - `choir-contract.json` for image, reader and library-next.
-- `frontend/tests/package-modularity.spec.js`: five tests (the lock; the lock
-  rules on synthetic surfaces and temp locks; the contract schema; every
-  package in both modes with L9 and L10; the runner and the shell on eight
-  fixture packages: a good one, a vacuous selector, a missing selector, a
-  throw on mount, a console error, a late uncaught throw, an SDK name the
-  shell lacks, and `requires_sdk ^9.0`).
+- `frontend/tests/package-modularity.spec.js`: seven tests (the dependencies
+  are installed; the lock and its history; the lock rules on synthetic
+  surfaces and temp locks; lock history on a temp repository; the contract
+  schema; every package in both modes with L9 and L10; the runner and the
+  shell on twelve fixture packages: a good one, a vacuous selector, a missing
+  selector, a throw on mount, a console error, a late uncaught throw, an SDK
+  name the shell lacks, `requires_sdk ^9.0`, an unanswered request, the same
+  request allowed and stubbed, and the SDK global).
 - CI: the `Package Modularity` job (Chromium, the lock check, the spec, the
   receipt uploaded as `modularity-receipt-<sha>`); `check` requires it when
   the frontend lane is selected, and the lane now also covers
-  `frontend/scripts/*`, the spec, `frontend/playwright.config.js` and
-  `internal/pkgruntime/*.mjs`.
-- Finding F1 fixed (`Desktop.svelte`, one line).
+  `frontend/scripts/*`, the spec, `frontend/playwright.config.js`,
+  `internal/pkgruntime/*.mjs`, `ci.yml` and the classifier. The job checks
+  out full history and passes the lock-history base to both the lock check
+  and the spec.
 
-Measured locally: the whole spec in about 70 s (shell build 5 s, three
+Measured locally: the whole spec in about 75 s (shell build 5 s, three
 packages in two modes about 16 s, the fixture block most of the rest, two of
 its cases waiting out the 10 s ready bound on purpose).
 
