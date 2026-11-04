@@ -215,6 +215,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 	copied := result
 	rt.sourceProjectionLast = &copied
 	rt.sourceProjectionMu.Unlock()
+	rt.wakeStackBaseWaiters(ctx, reason, previous, result)
 	if previous == nil || previous.State != result.State || result.Changed {
 		log.Printf("source projection (%s): %s base=%s head=%s booted=%s op=%s changed=%t repaired=%t diverged=%t %s",
 			reason, result.State, shortDigest(result.Base), shortDigest(result.Head), shortDigest(result.BootedBase), result.OperationID, result.Changed, result.Repaired, result.Diverged, result.Reason)

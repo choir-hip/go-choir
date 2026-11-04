@@ -318,6 +318,9 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	// base refuses here, visibly, rather than building on the old base).
 	rebaseBase, sourceWarning, err := rt.sourceProjectionCastGateFor(ctx, spec.rebase(), castLedgerRef{OwnerID: ownerID, ComputerID: computerID, CastRecordID: recordID, ManagementAgentID: management, TrajectoryID: trajectoryID})
 	if err != nil {
+		if !spec.rebase().set() {
+			rt.noteStackBaseWaiter(stackBaseWaiter{OwnerID: ownerID, ComputerID: computerID, DocID: docID, TrajectoryID: trajectoryID, CastRecordID: recordID}, err.Error())
+		}
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
 	}
 	var preflight capsule.SourcePreflight
