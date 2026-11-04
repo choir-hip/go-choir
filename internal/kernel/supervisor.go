@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -55,17 +57,24 @@ type Supervisor struct {
 	in      Intensity
 	journal Journal
 	now     func() time.Time
+	closeTO time.Duration
 
 	mu    sync.Mutex
 	units map[string]*unitRec
 	wg    sync.WaitGroup
 }
 
-func newSupervisor(parent *Scope, in Intensity, j Journal, now func() time.Time) *Supervisor {
+// defaultCloseTimeout bounds how long one occurrence's effects are awaited.
+const defaultCloseTimeout = 30 * time.Second
+
+func newSupervisor(parent *Scope, in Intensity, j Journal, now func() time.Time, closeTO time.Duration) *Supervisor {
+	if closeTO <= 0 {
+		closeTO = defaultCloseTimeout
+	}
 	if in.MaxCrashes <= 0 || in.Window <= 0 {
 		in = DefaultIntensity
 	}
-	return &Supervisor{parent: parent, in: in, journal: j, now: now, units: map[string]*unitRec{}}
+	return &Supervisor{parent: parent, in: in, journal: j, now: now, closeTO: closeTO, units: map[string]*unitRec{}}
 }
 
 func (sv *Supervisor) record(unit, kind, cause string) {
@@ -74,6 +83,12 @@ func (sv *Supervisor) record(unit, kind, cause string) {
 
 // Start supervises u. It returns ErrUnitClosed for a closed unit.
 func (sv *Supervisor) Start(u Unit) error {
+	if u.Run == nil {
+		return fmt.Errorf("kernel: unit %q has no Run", u.Name)
+	}
+	if sv.parent.Context().Err() != nil {
+		return fmt.Errorf("%w: cannot start unit %q", ErrScopeClosed, u.Name)
+	}
 	sv.mu.Lock()
 	rec, ok := sv.units[u.Name]
 	if !ok {
@@ -113,7 +128,11 @@ func (sv *Supervisor) supervise(u Unit, rec *unitRec) {
 		sv.record(u.Name, RecordStarted, "")
 		runErr := safeRun(u, occ)
 		// The occurrence's effects run whatever the outcome.
-		closeErr := occ.Close(context.Background(), runErr)
+		// The wait is bounded: a wedged effect is abandoned and named, never
+		// awaited forever.
+		cctx, ccancel := context.WithTimeout(context.Background(), sv.closeTO)
+		closeErr := occ.Close(cctx, runErr)
+		ccancel()
 		if runErr == nil && closeErr != nil {
 			runErr = closeErr
 		}
@@ -205,12 +224,14 @@ func (sv *Supervisor) Reopen(name string) error {
 // CauseInterrupted.
 func (sv *Supervisor) fold(recs []Record) {
 	sv.mu.Lock()
-	defer sv.mu.Unlock()
 	for _, r := range recs {
 		u, ok := sv.units[r.Unit]
 		if !ok {
 			u = &unitRec{name: r.Unit}
 			sv.units[r.Unit] = u
+		}
+		if u.done != nil { // supervised now: the journal does not own it
+			continue
 		}
 		switch r.Kind {
 		case RecordDeclared:
@@ -223,12 +244,43 @@ func (sv *Supervisor) fold(recs []Record) {
 			u.state, u.cause = UnitClosed, r.Cause
 		}
 	}
+	var interrupted []string
 	for _, u := range sv.units {
 		if u.state == UnitRunning && u.done == nil {
 			u.state, u.cause = UnitClosed, CauseInterrupted
-			sv.record(u.name, RecordClosed, CauseInterrupted)
+			interrupted = append(interrupted, u.name)
 		}
+	}
+	sv.mu.Unlock()
+	sort.Strings(interrupted)
+	for _, n := range interrupted { // outside the lock
+		sv.record(n, RecordClosed, CauseInterrupted)
 	}
 }
 
-func (sv *Supervisor) wait() { sv.wg.Wait() }
+// wait blocks until every supervise goroutine has ended or ctx is done. On
+// ctx it returns an error naming the units that did not end.
+func (sv *Supervisor) wait(ctx context.Context) error {
+	ended := make(chan struct{})
+	go func() { sv.wg.Wait(); close(ended) }()
+	select {
+	case <-ended:
+		return nil
+	case <-ctx.Done():
+	}
+	sv.mu.Lock()
+	var stuck []string
+	for name, rec := range sv.units {
+		if rec.done == nil {
+			continue
+		}
+		select {
+		case <-rec.done:
+		default:
+			stuck = append(stuck, fmt.Sprintf("%q", name))
+		}
+	}
+	sv.mu.Unlock()
+	sort.Strings(stuck)
+	return fmt.Errorf("kernel: shutdown: units did not end: %s: %w", strings.Join(stuck, ", "), ctx.Err())
+}

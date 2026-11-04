@@ -99,7 +99,7 @@ func checkImports(dir string) []string {
 	var errs []string
 	fset := token.NewFileSet()
 	for _, f := range files {
-		af, err := parser.ParseFile(fset, f, nil, parser.ImportsOnly)
+		af, err := parser.ParseFile(fset, f, nil, parser.ImportsOnly|parser.ParseComments)
 		if err != nil {
 			errs = append(errs, err.Error())
 			continue
@@ -107,8 +107,18 @@ func checkImports(dir string) []string {
 		for _, imp := range af.Imports {
 			p, _ := strconv.Unquote(imp.Path.Value)
 			first := strings.SplitN(p, "/", 2)[0]
-			if strings.Contains(first, ".") && !strings.HasPrefix(p, kernelPath) {
+			own := p == kernelPath || strings.HasPrefix(p, kernelPath+"/")
+			if p == "C" {
+				errs = append(errs, fmt.Sprintf("%s imports \"C\": the kernel has no cgo", f))
+			} else if strings.Contains(first, ".") && !own {
 				errs = append(errs, fmt.Sprintf("%s imports %q: the kernel imports only the standard library and itself", f, p))
+			}
+		}
+		for _, cg := range af.Comments {
+			for _, c := range cg.List {
+				if strings.HasPrefix(c.Text, "//go:linkname") {
+					errs = append(errs, fmt.Sprintf("%s: //go:linkname reaches code without an import; the kernel refuses it", f))
+				}
 			}
 		}
 	}
@@ -125,7 +135,11 @@ func nameList(repo string) []string {
 	}
 	// App ids: the package manifests.
 	nameRe := regexp.MustCompile(`"name"\s*:\s*"([^"]+)"`)
-	manifests, _ := filepath.Glob(filepath.Join(repo, "frontend", "src", "packages", "*", "choir-package.json"))
+	manifests, gerr := filepath.Glob(filepath.Join(repo, "frontend", "src", "packages", "*", "choir-package.json"))
+	if gerr != nil {
+		fmt.Fprintln(os.Stderr, "kernelgate: cannot list package manifests:", gerr)
+		os.Exit(2) // fail closed: an unreadable tree must not shrink the ban list
+	}
 	for _, m := range manifests {
 		if b, err := os.ReadFile(m); err == nil {
 			if sub := nameRe.FindSubmatch(b); sub != nil {

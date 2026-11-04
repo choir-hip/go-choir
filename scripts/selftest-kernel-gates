@@ -14,6 +14,9 @@ for g in imports names responsibilities; do
   "$bin" "$g" $F/good >/dev/null || fail "$g refuses the good fixture"
 done
 "$bin" imports $F/bad-imports >/dev/null 2>&1 && fail "imports accepted a repo import"
+for b in bad-imports-prefix bad-imports-cgo bad-imports-linkname; do
+  "$bin" imports $F/$b >/dev/null 2>&1 && fail "imports accepted $b"
+done
 "$bin" names $F/bad-names >/dev/null 2>&1 && fail "names accepted a desk name"
 "$bin" responsibilities $F/bad-surface >/dev/null 2>&1 && fail "responsibilities accepted an unlisted export"
 echo "selftest-kernel-gates: ok"

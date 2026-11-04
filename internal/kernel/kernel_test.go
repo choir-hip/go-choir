@@ -153,7 +153,7 @@ func TestSupervisorTwoCrashesInWindowCloseWithCause(t *testing.T) {
 	if runs.Load() != 2 || cleaned.Load() != 2 {
 		t.Fatalf("runs=%d cleaned=%d, want 2 and 2", runs.Load(), cleaned.Load())
 	}
-	if err := k.Supervisor().Start(Unit{Name: "u"}); !errors.Is(err, ErrUnitClosed) {
+	if err := k.Supervisor().Start(Unit{Name: "u", Run: func(context.Context, *Scope) error { return nil }}); !errors.Is(err, ErrUnitClosed) {
 		t.Fatalf("restart of closed unit = %v", err)
 	}
 	if err := k.Supervisor().Reopen("u"); err != nil {
@@ -262,4 +262,61 @@ func TestSnapshotListsScopesEffectsServicesAndLeavesNoResidue(t *testing.T) {
 		t.Fatalf("residue after close: %+v", after)
 	}
 	_ = k.Shutdown(tctx(t))
+}
+
+func TestShutdownHonorsCtxAndNamesStuckUnits(t *testing.T) {
+	k := New(Options{CloseTimeout: 20 * time.Millisecond})
+	_ = k.Boot()
+	release := make(chan struct{})
+	defer close(release)
+	started := make(chan struct{})
+	// Run ignores ctx cancellation.
+	_ = k.Supervisor().Start(Unit{Name: "wedged", Run: func(context.Context, *Scope) error {
+		close(started)
+		<-release
+		return nil
+	}})
+	<-started
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- k.Shutdown(ctx) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), `"wedged"`) {
+			t.Fatalf("want ctx error naming wedged, got %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Shutdown hung on a ctx-ignoring Run")
+	}
+}
+
+func TestWedgedOnCloseIsBoundedPerOccurrence(t *testing.T) {
+	k := New(Options{CloseTimeout: 20 * time.Millisecond})
+	_ = k.Boot()
+	release := make(chan struct{})
+	defer close(release)
+	_ = k.Supervisor().Start(Unit{Name: "u", Run: func(_ context.Context, s *Scope) error {
+		return s.OnClose("stuck", func(context.Context) error { <-release; return nil })
+	}})
+	state, cause, err := k.Supervisor().Await(tctx(t), "u")
+	if err != nil || state != UnitClosed || !strings.Contains(cause, "abandoned") {
+		t.Fatalf("state=%s cause=%q err=%v", state, cause, err)
+	}
+	if err := k.Shutdown(tctx(t)); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestStartRefusesNilRunAndClosedKernel(t *testing.T) {
+	k := New(Options{})
+	_ = k.Boot()
+	if err := k.Supervisor().Start(Unit{Name: "nil"}); err == nil {
+		t.Fatal("nil Run accepted")
+	}
+	_ = k.Shutdown(tctx(t))
+	err := k.Supervisor().Start(Unit{Name: "late", Run: func(context.Context, *Scope) error { return nil }})
+	if !errors.Is(err, ErrScopeClosed) {
+		t.Fatalf("start after shutdown: %v", err)
+	}
 }
