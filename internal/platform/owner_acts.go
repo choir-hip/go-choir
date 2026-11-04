@@ -111,6 +111,12 @@ type OwnerActAuthority struct {
 	verifier *owneract.Verifier
 	note     string
 	now      func() time.Time
+	// Clean rebase branch (clean_rebase.go): the tape, the host build jobs
+	// and the computer tier; nil tape or jobs refuses every clean rebase,
+	// nil tier reads the embedded tier file.
+	cleanRebaseTape TapeObjectReader
+	cleanRebaseJobs HostBuildJobs
+	cleanRebaseTier func(computerID string) (test, platform bool, err error)
 }
 
 // NewOwnerActAuthority builds a policy. A nil verifier refuses every
@@ -329,8 +335,9 @@ func (a *OwnerActAuthority) admitEffectAccepted(ctx context.Context, tx *sql.Tx,
 	reason, mark, err := a.effectAcceptedRefusal(ctx, tx, event, eventDigest)
 	// P4: the consensus branch always enforces. There is no pre-P4
 	// consensus traffic to observe, and observe would admit exactly the
-	// guest-forged quorum the branch exists to stop.
-	enforce := a.Enforcing() || IsConsensusAuthority(event.AuthorityRef)
+	// guest-forged quorum the branch exists to stop. The clean rebase
+	// branch (owner 2026-11-04) always enforces for the same reason.
+	enforce := a.Enforcing() || IsConsensusAuthority(event.AuthorityRef) || IsCleanRebaseAuthority(event.AuthorityRef)
 	if err != nil {
 		if enforce {
 			return fmt.Errorf("%w: authority lookup failed: %v", ErrEffectAdmissionRefused, err)
@@ -340,7 +347,7 @@ func (a *OwnerActAuthority) admitEffectAccepted(ctx context.Context, tx *sql.Tx,
 	}
 	if reason != "" {
 		if enforce && !a.Enforcing() {
-			log.Printf("owner-act: enforce (consensus): refused effect_accepted %s computer=%s: %s", eventDigest, event.ComputerID, reason)
+			log.Printf("owner-act: enforce (consensus/clean rebase): refused effect_accepted %s computer=%s: %s", eventDigest, event.ComputerID, reason)
 			return fmt.Errorf("%w: %s", ErrEffectAdmissionRefused, reason)
 		}
 		return a.refuse(ErrEffectAdmissionRefused, "effect_accepted "+eventDigest+" authority="+event.AuthorityRef, event.ComputerID, reason)
@@ -369,6 +376,10 @@ func (a *OwnerActAuthority) effectAcceptedRefusal(ctx context.Context, tx *sql.T
 		// P4: admitted only for a ConsensusDecisionReceipt corpusd's
 		// decision poster minted from signed ballots.
 		return consensusDecisionRefusal(ctx, tx, event, eventDigest, a.now())
+	case IsCleanRebaseAuthority(authority):
+		// Owner 2026-11-04: a clean re-application of an approved change
+		// onto the booted base, host built, applies without an owner act.
+		return a.cleanRebaseRefusal(ctx, tx, event, eventDigest)
 	case authority == "":
 		return "no authority_ref", nil, nil
 	default:

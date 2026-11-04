@@ -133,6 +133,12 @@ func (t Tiers) PlatformComputer(computerID string) bool {
 	return t.platform[strings.TrimSpace(computerID)]
 }
 
+// TestComputer reports whether a computer is a named test computer (ring
+// R1). A test computer is never a platform computer (Parse refuses both).
+func (t Tiers) TestComputer(computerID string) bool {
+	return t.test[strings.TrimSpace(computerID)]
+}
+
 // TestComputerIDs lists the named test computers, sorted.
 func (t Tiers) TestComputerIDs() []string { return sortedKeys(t.test) }
 

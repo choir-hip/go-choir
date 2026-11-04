@@ -8,6 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
@@ -39,11 +40,21 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 	ownerActor := strings.TrimPrefix(event.AuthorityRef, "external-owner:")
 	consensusDigest, consensusAuth := decisionpolicy.ReceiptDigestFromAuthority(event.AuthorityRef)
 	dissentDigest, dissentAuth := strings.CutPrefix(event.AuthorityRef, consensusDissentAuthorityPrefix)
+	cleanRebaseDigest, cleanRebaseAuth := selfdevprotocol.CleanRebaseReceiptDigestFromAuthority(event.AuthorityRef)
 	authorityKind := "external-owner"
 	actor := ownerActor
 	if consensusAuth {
 		authorityKind = "qualified-consensus"
 		actor = consensusDigest
+	} else if cleanRebaseAuth {
+		// Owner ruling 2026-11-04: a clean re-application of an approved
+		// change is accepted under its receipt, and only accepted.
+		if event.EventKind != computerevent.EventEffectAccepted {
+			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: clean rebase authority mismatch")
+		}
+		authorityKind = "platform-clean-rebase"
+		actor = event.AuthorityRef
+		consensusDigest = cleanRebaseDigest
 	} else if dissentAuth {
 		// P4: a standing-consensus dissent may only reject.
 		if event.EventKind != computerevent.EventEffectRejected || !computerevent.IsSHA256(dissentDigest) {

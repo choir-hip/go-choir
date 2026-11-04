@@ -115,3 +115,19 @@ func TestEmbeddedTiersNameTheArmsTestComputers(t *testing.T) {
 		}
 	}
 }
+
+func TestTestComputerAccessor(t *testing.T) {
+	tiers, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tiers.TestComputer("computer-a875023a6379c41f6ddb438f02e76a02") {
+		t.Fatal("selfdev-arm-claude is not a test computer")
+	}
+	if tiers.TestComputer("computer-1355b83bced1613eb048ee28d66688a8") {
+		t.Fatal("the paper computer reads as a test computer")
+	}
+	if tiers.TestComputer("computer-00000000000000000000000000000000") {
+		t.Fatal("an unlisted computer reads as a test computer")
+	}
+}

@@ -177,6 +177,9 @@ type p4Fixture struct {
 	history     platformHistory
 	modeKeyID   string
 	hostBuilds  *hostbuild.Service
+	// authority is corpusd's effect admission gate; platform its service.
+	authority *platform.OwnerActAuthority
+	platform  *platform.Service
 }
 
 func newP4Fixture(t *testing.T) *p4Fixture {
@@ -293,7 +296,7 @@ func newP4Fixture(t *testing.T) *p4Fixture {
 		rt.selfdevGuestImageManifest = manifest
 		rt.selfdevStandingPoll = 20 * time.Millisecond
 	})
-	return &p4Fixture{derivableSelfDevFixture: fx, handler: handler, modes: modes, ownerSigner: ownerSigner, history: history, modeKeyID: keyID, hostBuilds: hostBuilds}
+	return &p4Fixture{derivableSelfDevFixture: fx, handler: handler, modes: modes, ownerSigner: ownerSigner, history: history, modeKeyID: keyID, hostBuilds: hostBuilds, authority: authority, platform: service}
 }
 
 // ownerWrite is the owner's mode write as the proxy forwards it: a

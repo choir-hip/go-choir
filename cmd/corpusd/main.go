@@ -172,6 +172,10 @@ func main() {
 	// the host's capsule-verifier ballot on this operation's P5 host build
 	// (signed here, platform-control) and the guest's signed reviewer
 	// ballot. Without the host build service it refuses every request.
+	// Clean rebase admission (owner 2026-11-04): an effect_accepted under
+	// platform-clean-rebase: is checked against the tape and the host build;
+	// without the host build service every clean rebase is refused.
+	ownerActs.ConfigureCleanRebase(svc.ReadTapeObject, hostBuilds)
 	consensus, err := svc.ConsensusActuatorRuntime(modeCAS, hostBuilds)
 	if err != nil {
 		log.Fatalf("corpusd consensus poster: %v", err)

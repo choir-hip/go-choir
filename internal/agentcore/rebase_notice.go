@@ -229,6 +229,14 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), booted) {
 		return rebaseNoticeOutcome{Reason: "the booted base's objects are missing"}
 	}
+	// Owner ruling 2026-11-04: a change that re-applies cleanly and builds
+	// applies without an owner act (clean_rebase.go). Only when it does not,
+	// or the attempt fails, does the notice go to Texture.
+	if hold, why := rt.cleanRebaseBeforeNotice(ctx, ownerID, computerID, operationID, stackBase, booted); hold {
+		return rebaseNoticeOutcome{Reason: why, Rearm: rt.rebaseRecheckInterval()}
+	} else if why != "" {
+		log.Printf("rebase notice: no clean rebase of %s onto %s: %s", operationID, booted, why)
+	}
 	addr, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
 	if err != nil {
 		return rt.transientRebase("rebase Texture: %v", err)

@@ -35,6 +35,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -302,8 +303,9 @@ func consensusDecisionHostBuildJob(decision *computerevent.Receipt) string {
 }
 
 // selfDevelopmentDecidedByConsensus reports whether the operation's
-// finalized decision cites a consensus decision (P4): such an operation
-// applies only as its host build. An operation with no finalized decision
+// finalized decision cites a consensus decision (P4), or a clean rebase
+// receipt (owner ruling 2026-11-04): such an operation applies only as its
+// host build, the build the decision was made on. An operation with no finalized decision
 // on the tape is an error, never "not consensus" (fail closed).
 func (rt *Runtime) selfDevelopmentDecidedByConsensus(ctx context.Context, operation selfdev.Operation) (bool, error) {
 	if rt.store == nil {
@@ -317,7 +319,8 @@ func (rt *Runtime) selfDevelopmentDecidedByConsensus(ctx context.Context, operat
 		return false, fmt.Errorf("materializer: operation %s has no finalized decision on the tape", operation.OperationID)
 	}
 	_, consensus := decisionpolicy.ReceiptDigestFromAuthority(transition.Request.Event.AuthorityRef)
-	return consensus, nil
+	_, cleanRebase := selfdevprotocol.CleanRebaseReceiptDigestFromAuthority(transition.Request.Event.AuthorityRef)
+	return consensus || cleanRebase, nil
 }
 
 // standingConsensusRequest signs management's reviewer ballot over this

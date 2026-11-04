@@ -1,0 +1,373 @@
+package agentcore
+
+// The clean rebase end to end (owner ruling 2026-11-04: "I want all this,
+// and clean rebases without approval"), on the P4 fixture: the guest runtime
+// wired as production, corpusd real where the decision is admitted (owner
+// acts in enforce, the event CAS with its admission gate, the host build
+// service behind its routes); only the nix build is a stand-in that applies
+// the patch at the base with real git.
+//
+// Ways it can fail, written before the code (also in the commit body):
+//   1. it applies something other than what was approved -> the bundle is
+//      the approved one with only base and identity fields changed, the patch
+//      bytes are the same, and corpusd checks both on the tape
+//      (...CleanAppliesWithoutAnOwnerAct, platform TestCleanRebaseGate)
+//   2. a clean merge that breaks behaviour -> the host build (frontend build,
+//      package check, Go build) runs before the decision; a failed build is no
+//      decision and the pair goes to the notice (...BuildFailureGoesToTheNotice)
+//   3. a conflict is applied -> ...ConflictMintsTheNotice
+//   4. a loop of rebases -> one attempt per (operation, booted base) pair;
+//      after it applies the stack is projected, so no further attempt or
+//      notice (...CleanAppliesWithoutAnOwnerAct, second fire)
+//   5. a crash or planned restart mid-attempt resumes it -> no resumer: an
+//      open pre-decision attempt with no live driver is closed "interrupted
+//      by a restart" and the pair goes to the notice (...InterruptedAttemptIsClosed)
+//   6. protected computers -> only test-tier, non-platform computers
+//      (...IneligibleComputerMintsTheNotice; corpusd refuses the rest even in
+//      observe)
+//   7. the base moves again mid-attempt -> the attempt fails, nothing is
+//      applied (...SecondBaseMoveFailsTheAttempt)
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
+	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
+)
+
+type cleanRebaseE2E struct {
+	*p4Fixture
+	guestRepo string
+	b1, prior string // the base the prior change was approved on; its operation
+	manifest  string
+	owner     string
+}
+
+func cleanLong(edits map[int]string) string {
+	var b strings.Builder
+	for i := 1; i <= 40; i++ {
+		if line, ok := edits[i]; ok {
+			b.WriteString(line + "\n")
+			continue
+		}
+		fmt.Fprintf(&b, "long line %02d\n", i)
+	}
+	return b.String()
+}
+
+// commitPlatform commits files on the host's platform history and returns
+// the commit; the history's HEAD and work tree follow it.
+func (f *cleanRebaseE2E) commitPlatform(t *testing.T, files map[string]string) string {
+	t.Helper()
+	for rel, content := range files {
+		full := filepath.Join(f.history.dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitRun(t, f.history.dir, "add", "-A")
+	gitRun(t, f.history.dir, "commit", "-q", "-m", "platform")
+	commit := gitRun(t, f.history.dir, "rev-parse", "HEAD")
+	if f.guestRepo != "" {
+		gitRun(t, f.guestRepo, "fetch", "-q", f.history.dir, "HEAD:refs/platform/"+commit[:12])
+	}
+	return commit
+}
+
+// boot names commit as the booted base, for the guest and the host alike.
+func (f *cleanRebaseE2E) boot(t *testing.T, commit string) {
+	t.Helper()
+	_ = os.Chmod(f.manifest, 0o644)
+	if err := os.WriteFile(f.manifest, []byte("contract=choir-guest-image-v1\nbuild_commit="+commit+"\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// tape is the corpusd tape as the fixture keeps it: event bytes from the
+// chain, payload bytes from the pinner.
+func (f *cleanRebaseE2E) tape(computerID string, ns tapestore.NS, digest string) ([]byte, error) {
+	switch ns {
+	case tapestore.NSPayload:
+		if raw, ok := f.pinner.fetch(digest); ok {
+			return raw, nil
+		}
+	case tapestore.NSEvent:
+		// The guest's projection, not the chain fake: the gate runs under the
+		// fake's lock.
+		if event, found, err := f.store.EventByDigest(context.Background(), computerID, digest); err == nil && found {
+			return event.CanonicalBytes()
+		}
+	}
+	return nil, fmt.Errorf("%s/%s not on the tape", ns, digest)
+}
+
+// newCleanRebaseE2E applies a prior change (a 40-line file edited at line 5,
+// approved by standing consensus) on base B1, with a root Texture so a
+// notice can be minted, and the computer in the test tier.
+func newCleanRebaseE2E(t *testing.T) *cleanRebaseE2E {
+	t.Helper()
+	f := &cleanRebaseE2E{p4Fixture: newP4Fixture(t), owner: "owner"}
+	f.manifest = f.rt.selfdevGuestImageManifest
+	f.b1 = f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(nil)})
+	f.history.base = f.b1
+	f.boot(t, f.b1)
+	f.guestRepo = t.TempDir()
+	gitRun(t, f.guestRepo, "clone", "-q", f.history.dir, ".")
+	f.authority.ConfigureCleanRebase(f.tape, f.hostBuilds)
+	f.authority.SetCleanRebaseTier(func(computerID string) (bool, bool, error) { return computerID == f.computerID, false, nil })
+
+	seedOwnerActDocument(t, f.store, f.owner, f.computerID, "doc-master")
+	if _, err := f.store.ClaimTextureRoot(context.Background(), nil, store.TextureRoot{OwnerID: f.owner, ComputerID: f.computerID, DocumentID: "doc-master", Generation: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	f.configure(func(rt *Runtime) {
+		rt.releaseSourceDir = f.guestRepo
+		rt.selfdevRouteOwnerID = f.owner
+		rt.bootedAt = now.Add(-time.Hour)
+		rt.rebaseNow = func() time.Time { return now }
+		rt.rebaseAfterFunc = func(time.Duration, func()) rebaseTimerHandle { return noopRebaseTimer{} }
+		rt.cleanRebaseTier = func(computerID string) (bool, string) { return computerID == f.computerID, "not the fixture computer" }
+		rt.cleanRebaseStart = func(run func()) { run() }
+		rt.cleanRebaseAttemptBudget = time.Minute
+	})
+	t.Cleanup(f.rt.stopRebaseNotice)
+
+	// The prior change, approved without a per-candidate owner act.
+	f.armStanding(t, time.Now().Add(2*time.Hour))
+	prior := f.verify(t, f.freezeWithPatch(t, "clean-prior", "the approved change", f.longPatch(t, map[int]string{5: "stack line 05"})))
+	if _, err := f.rt.runStandingConsensus(context.Background(), prior.OperationID, "run:management-p4"); err != nil {
+		t.Fatalf("prior approval: %v", err)
+	}
+	f.waitForState(t, prior.OperationID, selfdev.StateApplied)
+	f.prior = prior.OperationID
+	if result, err := f.rt.ReconcileSourceProjection(context.Background(), "test"); err != nil || result.State != sourceproj.StateProjected {
+		t.Fatalf("the prior change is not projected: %+v %v", result, err)
+	}
+	return f
+}
+
+// longPatch is a patch against B1 editing long.txt.
+func (f *cleanRebaseE2E) longPatch(t *testing.T, edits map[int]string) []byte {
+	t.Helper()
+	path := filepath.Join(f.history.dir, "frontend", "public", "long.txt")
+	if err := os.WriteFile(path, []byte(cleanLong(edits)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, f.history.dir, "add", "-A")
+	patch := gitRun(t, f.history.dir, "diff", "--cached", "--binary") + "\n"
+	gitRun(t, f.history.dir, "reset", "-q", "--hard", f.b1)
+	return []byte(patch)
+}
+
+func (f *cleanRebaseE2E) fire(t *testing.T) rebaseNoticeOutcome {
+	t.Helper()
+	return f.rt.fireRebaseNotice(context.Background())
+}
+
+func (f *cleanRebaseE2E) cleanOp(t *testing.T, booted string) (selfdev.Operation, bool) {
+	t.Helper()
+	op, found, err := f.operations.GetByIdempotency(context.Background(), f.computerID, cleanRebaseIdempotencyKey(f.prior, booted))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return op, found
+}
+
+func (f *cleanRebaseE2E) noticeMinted(t *testing.T, booted string) bool {
+	t.Helper()
+	rec, err := f.store.GetCommitmentRecord(context.Background(), f.owner, f.computerID, types.StackRebaseNoticeID(f.prior, booted, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rec != nil
+}
+
+func TestCleanRebaseEndToEndCleanAppliesWithoutAnOwnerAct(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	ctx := context.Background()
+	restarts := f.service.restarts
+	// A deploy moves the base: long.txt line 35 changes, far from line 5.
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{35: "platform line 35"})})
+	f.boot(t, b2)
+	if result, err := f.rt.ReconcileSourceProjection(ctx, rebaseReconcileReason); err != nil || result.State != sourceproj.StateBaseMoved {
+		t.Fatalf("the deploy did not move the stack's base: %+v %v", result, err)
+	}
+
+	out := f.fire(t)
+	if out.Minted != "" || f.noticeMinted(t, b2) {
+		t.Fatalf("a clean rebase minted a notice: %+v", out)
+	}
+	op, found := f.cleanOp(t, b2)
+	if !found {
+		t.Fatalf("no clean rebase operation: %+v", out)
+	}
+	applied := f.waitForState(t, op.OperationID, selfdev.StateApplied)
+
+	// The decision is the receipt's, not an owner's, and corpusd admitted it.
+	decision := f.decisionEvent(t, applied.OperationID)
+	receiptDigest, ok := selfdevprotocol.CleanRebaseReceiptDigestFromAuthority(decision.AuthorityRef)
+	if decision.EventKind != computerevent.EventEffectAccepted || !ok || applied.DecisionActor != decision.AuthorityRef {
+		t.Fatalf("decision %q actor %q", decision.AuthorityRef, applied.DecisionActor)
+	}
+	rawReceipt, found := f.pinner.fetch(receiptDigest)
+	if !found {
+		t.Fatal("the receipt is not on the tape")
+	}
+	receipt, err := selfdevprotocol.DecodeCleanRebaseReceipt(rawReceipt)
+	if err != nil || receipt.RebaseOf != f.prior || receipt.BootedBase != b2 || receipt.StackBase != f.b1 ||
+		receipt.Statement != "clean re-application of "+f.prior+" onto "+b2+", applied without an owner act under the owner's 2026-11-04 ruling" {
+		t.Fatalf("receipt = %+v %v", receipt, err)
+	}
+	for _, record := range f.cas.snapshot() {
+		if strings.HasPrefix(record.Request.Event.AuthorityRef, "external-owner:") {
+			t.Fatalf("an owner authority reached the chain: %+v", record.Request.Event)
+		}
+	}
+	// Same patch bytes; the applied release is the host build of it on B2.
+	priorOp, _ := f.operations.Get(ctx, f.computerID, f.prior)
+	priorPatch, _ := os.ReadFile(filepath.Join(f.updaterRoot, "incoming", priorOp.BundleDigest, "source.patch"))
+	newPatch, _ := os.ReadFile(filepath.Join(f.updaterRoot, "incoming", applied.BundleDigest, "source.patch"))
+	if len(priorPatch) == 0 || string(priorPatch) != string(newPatch) {
+		t.Fatal("the clean rebase does not carry the approved patch bytes")
+	}
+	built := f.hostBuildOf(t, applied)
+	current, err := updater.ReadCurrentManifest(f.updaterRoot)
+	if err != nil || current.ContentDigest != applied.ReleaseDigest || current.ClosureDigest != built.Result.ClosureDigest || built.BaseCommit != b2 {
+		t.Fatalf("applied release is not the host build on B2: job=%+v current=%+v %v", built, current, err)
+	}
+	if f.service.restarts != restarts+1 {
+		t.Fatalf("restarts %d -> %d, want one planned restart", restarts, f.service.restarts)
+	}
+
+	// The stack left stack_base_moved, and the next fire does nothing.
+	result, err := f.rt.ReconcileSourceProjection(ctx, rebaseReconcileReason)
+	if err != nil || result.State != sourceproj.StateProjected || result.OperationID != applied.OperationID || result.Base != b2 {
+		t.Fatalf("after the clean rebase the stack is %+v %v", result, err)
+	}
+	if again := f.fire(t); again.Minted != "" || !strings.Contains(again.Reason, "not stack_base_moved") {
+		t.Fatalf("second fire = %+v", again)
+	}
+}
+
+func TestCleanRebaseEndToEndConflictMintsTheNotice(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	// The deploy edits line 5 itself: the approved patch no longer applies.
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{5: "platform line 05"})})
+	f.boot(t, b2)
+	out := f.fire(t)
+	if _, found := f.cleanOp(t, b2); found {
+		t.Fatal("a conflict opened a clean rebase operation")
+	}
+	if out.Minted == "" || !f.noticeMinted(t, b2) {
+		t.Fatalf("a conflict did not mint the notice: %+v", out)
+	}
+}
+
+func TestCleanRebaseEndToEndBuildFailureGoesToTheNotice(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	restarts := f.service.restarts
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{35: "platform line 35"})})
+	f.boot(t, b2)
+	// The host's build of B2 + the patch fails (its tree no longer takes it).
+	if err := os.WriteFile(filepath.Join(f.history.dir, "frontend", "public", "long.txt"), []byte(cleanLong(map[int]string{5: "host-side drift"})), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := f.fire(t)
+	if out.Minted != "" {
+		t.Fatalf("the first fire minted a notice beside a clean attempt: %+v", out)
+	}
+	op, found := f.cleanOp(t, b2)
+	if !found || op.State != selfdev.StateFailed || !strings.Contains(op.TerminalError, "host build failed") {
+		t.Fatalf("a failed build must fail the attempt: %+v", op)
+	}
+	if out := f.fire(t); out.Minted == "" || !f.noticeMinted(t, b2) {
+		t.Fatalf("a failed build did not mint the notice: %+v", out)
+	}
+	if f.service.restarts != restarts {
+		t.Fatal("a failed clean rebase restarted the computer")
+	}
+	if current, _ := updater.ReadCurrentManifest(f.updaterRoot); current.BaseCommit == b2 {
+		t.Fatal("a failed clean rebase changed the release")
+	}
+}
+
+func TestCleanRebaseEndToEndSecondBaseMoveFailsTheAttempt(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	restarts := f.service.restarts
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{35: "platform line 35"})})
+	f.boot(t, b2)
+	var run func()
+	f.configure(func(rt *Runtime) { rt.cleanRebaseStart = func(r func()) { run = r } })
+	if out := f.fire(t); out.Minted != "" || run == nil {
+		t.Fatalf("the attempt did not start: %+v", out)
+	}
+	// While the attempt waits to run, another deploy lands.
+	b3 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "another deploy\n"})
+	f.boot(t, b3)
+	run()
+	op, _ := f.cleanOp(t, b2)
+	if op.State != selfdev.StateFailed {
+		t.Fatalf("an attempt whose base moved again ended %s (%s)", op.State, op.TerminalError)
+	}
+	if f.service.restarts != restarts {
+		t.Fatal("an attempt on a stale base restarted the computer")
+	}
+}
+
+func TestCleanRebaseEndToEndInterruptedAttemptIsClosed(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{35: "platform line 35"})})
+	f.boot(t, b2)
+	// A previous process opened the attempt and died before deciding.
+	key := cleanRebaseIdempotencyKey(f.prior, b2)
+	priorOp, _ := f.operations.Get(context.Background(), f.computerID, f.prior)
+	if _, err := f.operations.Start(context.Background(), selfdev.StartRequest{
+		ComputerID: f.computerID, IdempotencyKey: key, PromptArtifactRef: priorOp.PromptArtifactRef,
+		OperationID: cleanRebaseOperationID(key), TrajectoryID: priorOp.TrajectoryID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := f.fire(t)
+	op, _ := f.cleanOp(t, b2)
+	if op.State != selfdev.StateFailed || op.TerminalError != selfdevInterruptedByRestart {
+		t.Fatalf("an orphaned attempt must close as interrupted: %+v", op)
+	}
+	if out.Minted == "" || !f.noticeMinted(t, b2) {
+		t.Fatalf("the interrupted pair did not go to the notice: %+v", out)
+	}
+}
+
+func TestCleanRebaseEndToEndIneligibleComputerMintsTheNotice(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	f.configure(func(rt *Runtime) {
+		rt.cleanRebaseTier = func(string) (bool, string) { return false, "a platform computer" }
+	})
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/long.txt": cleanLong(map[int]string{35: "platform line 35"})})
+	f.boot(t, b2)
+	out := f.fire(t)
+	if _, found := f.cleanOp(t, b2); found {
+		t.Fatal("an ineligible computer opened a clean rebase")
+	}
+	if out.Minted == "" {
+		t.Fatalf("an ineligible computer did not get the notice: %+v", out)
+	}
+}

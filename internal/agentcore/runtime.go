@@ -476,6 +476,13 @@ type Runtime struct {
 	rebaseAfterFunc    func(d time.Duration, fn func()) rebaseTimerHandle
 	// rebaseCommit replaces the store commit of a notice (tests; nil commits).
 	rebaseCommit func(ctx context.Context, req types.CommitInboxRecordsRequest) error
+	// The clean rebase (clean_rebase.go): the attempts this process drives,
+	// and the test seams (tier gate, attempt budget, how an attempt starts).
+	cleanRebaseMu            sync.Mutex
+	cleanRebaseLive          map[string]bool
+	cleanRebaseTier          func(computerID string) (bool, string)
+	cleanRebaseAttemptBudget time.Duration
+	cleanRebaseStart         func(run func())
 	// sourcePreflight replaces the capsule executor's source preflight in the
 	// engineering cast plan (tests; nil uses capsuleExecutor).
 	sourcePreflight sourcePreflighter
