@@ -140,3 +140,28 @@ touched.
 - The judge does not view the video.
 - No gallery UI ships on main. The Library rounds build it against the API
   above.
+
+## Video on the owner's iPhone: byte ranges and codec (2026-11-04)
+
+Two separate things stand between a Library video and the owner's phone.
+
+1. Byte ranges (fixed in the same commit as this note). Safari's `<video>`
+   will not play a file from a server that ignores `Range`. The media relay
+   in `internal/proxy/packages.go` now serves through `http.ServeContent`
+   over the bytes it already holds (corpusd's answer is capped at
+   `MaxMediaBytes`), so it answers 206 with `Content-Range`, sends
+   `Accept-Ranges: bytes`, and honours `If-Range` and `If-None-Match` (the
+   digest ETag, 304). The visibility check, the two media types, nosniff and
+   `private, no-cache, must-revalidate` are unchanged. corpusd keeps
+   returning whole items to the proxy; ranges are the proxy's job.
+2. Codec (not fixed, not verified on a device). Playwright records WebM
+   with VP8 (no audio). From documentation and memory, not from a test on a
+   phone: Safari on macOS plays VP8/VP9 WebM from 14.1, and iOS Safari added
+   WebM container support in 17.4; older iOS plays no WebM. So a Playwright
+   VP8 WebM is expected to play on an iPhone on iOS 17.4 or later, but this is
+   unconfirmed here. Playwright's recorder also writes a live-streamed WebM
+   (often no duration or seek cues), which Safari can play badly or refuse
+   even when the codec is supported. The honest status is "unknown until the
+   owner's phone plays one". If it does not, the fix is a transcode at
+   publish time to H.264/AAC MP4 (needs ffmpeg in the capsule) and a new
+   media type, not more header work.

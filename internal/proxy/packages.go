@@ -1,11 +1,11 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -465,12 +465,10 @@ func (h *Handler) relayPackageMedia(w http.ResponseWriter, r *http.Request, upst
 	w.Header().Set("Cache-Control", "private, no-cache, must-revalidate")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(raw)
+	// ServeContent answers Range (206, Content-Range), If-Range and
+	// If-None-Match (304); Safari's <video> will not play without ranges.
+	// The zero modtime keeps Last-Modified out of the answer.
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(raw))
 }

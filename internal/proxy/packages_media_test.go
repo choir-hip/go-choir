@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -126,6 +127,36 @@ func TestPackageMediaReadIsTheAuthenticatedOwnersAndTyped(t *testing.T) {
 	env.handler.HandleAPI(condRec, cond)
 	if condRec.Code != http.StatusNotModified || condRec.Body.Len() != 0 {
 		t.Fatalf("revalidation = %d (%d bytes), want 304", condRec.Code, condRec.Body.Len())
+	}
+	// Safari's <video> reads by byte range: 206 with the right bytes, and
+	// If-Range with the digest ETag still ranges; a stale validator gets 200.
+	ranged := func(hdr map[string]string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/catalog/releases/"+id+"/media/"+digest, nil)
+		req.Header.Set("Authorization", "Bearer "+reader)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		out := httptest.NewRecorder()
+		env.handler.HandleAPI(out, req)
+		return out
+	}
+	if rr := ranged(map[string]string{"Range": "bytes=2-9"}); rr.Code != http.StatusPartialContent || !bytes.Equal(rr.Body.Bytes(), shot[2:10]) ||
+		rr.Header().Get("Content-Range") != fmt.Sprintf("bytes 2-9/%d", len(shot)) || rr.Header().Get("Accept-Ranges") != "bytes" ||
+		rr.Header().Get("Content-Type") != pkgrelease.MediaTypePNG || rr.Header().Get("X-Content-Type-Options") != "nosniff" ||
+		rr.Header().Get("Cache-Control") != "private, no-cache, must-revalidate" {
+		t.Fatalf("range read = %d %v", rr.Code, rr.Header())
+	}
+	if rr := ranged(map[string]string{"Range": "bytes=-5", "If-Range": `"` + digest + `"`}); rr.Code != http.StatusPartialContent || !bytes.Equal(rr.Body.Bytes(), shot[len(shot)-5:]) {
+		t.Fatalf("suffix range with matching If-Range = %d", rr.Code)
+	}
+	if rr := ranged(map[string]string{"Range": "bytes=0-3", "If-Range": `"stale"`}); rr.Code != http.StatusOK || !bytes.Equal(rr.Body.Bytes(), shot) {
+		t.Fatalf("stale If-Range = %d, want the whole body", rr.Code)
+	}
+	if rr := ranged(map[string]string{"Range": "bytes=999999-"}); rr.Code != http.StatusRequestedRangeNotSatisfiable {
+		t.Fatalf("unsatisfiable range = %d", rr.Code)
+	}
+	if rr := ranged(nil); rr.Code != http.StatusOK || !bytes.Equal(rr.Body.Bytes(), shot) || rr.Header().Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("full read = %d", rr.Code)
 	}
 	// P2: a type corpusd did not mean is never relayed.
 	if rec := env.send(t, http.MethodGet, "/api/catalog/releases/"+id+"/media/"+html, "", reader); rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "<script>") {
