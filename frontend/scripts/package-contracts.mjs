@@ -10,6 +10,8 @@
 //     "expect": [{ "selector": "<sel>", "text": "<substring>", "count": <n> }],
 //     "api": [{ "method": "GET", "path": "/api/...", "status": 200, "json": {} }],
 //     "allow_console": ["<regex>"],     app console errors accepted, by name
+//     "allow_unanswered": [{ "request": "GET /api/x/*", "reason": "<why>" }],
+//                                       requests the app may make unstubbed
 //     "note": "<what the contract shows>"
 //   }
 //
@@ -17,10 +19,13 @@
 // ([data-window][data-window-app-id=<name>] [data-window-content]), never the
 // shell chrome. The runner opens the package the way a person does (the app
 // switcher, the launcher entry, the window) in a shell whose backend is a stub
-// that answers the four boot routes (/auth/session, /api/shell/bootstrap,
-// /api/desktop/state, /api/packages/installed), the contract's `api` entries,
-// and 404 for the rest. Any uncaught exception, or a console error that is not
-// the browser's own "Failed to load resource" line, fails the run.
+// that answers the boot routes (/auth/session, /api/shell/bootstrap,
+// /api/desktop/state, /api/preferences/theme, /api/packages/installed), the
+// contract's `api` entries, and 404 for the rest. Any uncaught exception, a
+// console error that is not the browser's own "Failed to load resource" line,
+// or a request nothing answered fails the run: before the open click it is the
+// stub's drift from the shell's boot, after it the package's, unless the
+// contract lists it in allow_unanswered with a reason.
 //
 // Two modes:
 //   in-tree    the package as the shell build bundles it (svelte-inline/v1);
@@ -73,7 +78,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 export function validateContract(c) {
   const problems = [];
   if (!isObject(c)) return ['the contract must be a JSON object'];
-  const allowed = new Set(['schema', 'ready', 'expect', 'api', 'allow_console', 'note']);
+  const allowed = new Set(['schema', 'ready', 'expect', 'api', 'allow_console', 'allow_unanswered', 'note']);
   for (const k of Object.keys(c)) if (!allowed.has(k)) problems.push(`unknown field "${k}"`);
   if (c.schema !== CONTRACT_SCHEMA) problems.push(`schema must be "${CONTRACT_SCHEMA}"`);
   if (typeof c.ready !== 'string' || !c.ready.trim()) problems.push('ready must be a non-empty selector');
@@ -106,6 +111,15 @@ export function validateContract(c) {
       } catch {
         problems.push(`allow_console[${i}] must be a regular expression`);
       }
+    });
+  }
+  if (c.allow_unanswered !== undefined) {
+    if (!Array.isArray(c.allow_unanswered)) problems.push('allow_unanswered must be an array');
+    else c.allow_unanswered.forEach((a, i) => {
+      if (!isObject(a)) return problems.push(`allow_unanswered[${i}] must be an object`);
+      for (const k of Object.keys(a)) if (!['request', 'reason'].includes(k)) problems.push(`allow_unanswered[${i}]: unknown field "${k}"`);
+      if (typeof a.request !== 'string' || !/^(GET|POST|PUT|PATCH|DELETE) \/api\/\S*$/.test(a.request)) problems.push(`allow_unanswered[${i}].request must be "METHOD /api/path", with * for any run of characters`);
+      if (typeof a.reason !== 'string' || a.reason.trim().length < 10) problems.push(`allow_unanswered[${i}].reason must say why (10 characters or more)`);
     });
   }
   if (c.note !== undefined && typeof c.note !== 'string') problems.push('note must be a string');
@@ -255,10 +269,9 @@ export function installedRecord(manifest, built) {
 /**
  * stubBackend routes /auth and /api for one page (C13): the boot routes, the
  * installed list and its modules, the contract's api entries, 404 otherwise.
- * It returns the list of unanswered requests it saw.
+ * Each request nothing answered is passed to onUnanswered("METHOD /path").
  */
-export async function stubBackend(page, { installed = [], modules = new Map(), api = [] } = {}) {
-  const unanswered = [];
+export async function stubBackend(page, { installed = [], modules = new Map(), api = [], onUnanswered = () => {} } = {}) {
   await page.routeWebSocket(/\/api\/ws\b/, () => {}); // the live channel opens and stays quiet
   await page.route(/\/(auth|api)\//, (route) => {
     const req = route.request();
@@ -270,12 +283,17 @@ export async function stubBackend(page, { installed = [], modules = new Map(), a
     if (p === '/api/shell/bootstrap') return route.fulfill({ json: { computer_id: STUB_COMPUTER_ID } });
     if (p === '/api/desktop/state') return route.fulfill({ json: req.method() === 'GET' ? { windows: [], active_window_id: '' } : { ok: true } });
     if (p === '/api/packages/installed') return route.fulfill({ json: { packages: installed } });
+    if (p === '/api/preferences/theme' && req.method() === 'GET') return route.fulfill({ json: { theme: {} } }); // no stored preference
     const m = /^\/api\/packages\/modules\/([0-9a-f]{64})\.js$/.exec(p);
     if (m && modules.has(m[1])) return route.fulfill({ status: 200, contentType: 'text/javascript', body: modules.get(m[1]) });
-    unanswered.push(`${req.method()} ${p}`);
+    onUnanswered(`${req.method()} ${p}`);
     return route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not_stubbed"}' });
   });
-  return unanswered;
+}
+
+/** requestPattern turns an allow_unanswered request ("GET /api/x/*") into a whole-string regex. */
+export function requestPattern(request) {
+  return new RegExp(`^${request.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
 }
 
 // ---- one contract run ----
@@ -298,7 +316,7 @@ async function step(fn, what) {
  */
 export async function runContract(context, { base, pkg, mode, installed = [], modules = new Map(), screenshot = '' }) {
   const started = Date.now();
-  const row = { mode, pass: false, ms: 0, problems: [], boot_errors: [], page_errors: [], console_errors: [], allowed_console: [], network: [], unanswered: [] };
+  const row = { mode, pass: false, ms: 0, problems: [], boot_errors: [], page_errors: [], console_errors: [], allowed_console: [], network: [], unanswered: [], allowed_unanswered: [] };
   const page = await context.newPage();
   let opened = false;
   const allow = (pkg.contract.allow_console || []).map((r) => new RegExp(r));
@@ -312,7 +330,17 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
     row.console_errors.push(text);
   });
   try {
-    row.unanswered = await stubBackend(page, { installed, modules, api: pkg.contract.api || [] });
+    const allowUnanswered = (pkg.contract.allow_unanswered || []).map((a) => requestPattern(a.request));
+    await stubBackend(page, {
+      installed,
+      modules,
+      api: pkg.contract.api || [],
+      onUnanswered: (request) => {
+        if (!opened) return row.boot_errors.push(`unanswered ${request} (the stub no longer covers the shell's boot)`);
+        if (allowUnanswered.some((r) => r.test(request))) return row.allowed_unanswered.push(request);
+        row.unanswered.push(request);
+      },
+    });
     const name = pkg.name;
     await step(() => page.goto(base, { waitUntil: 'domcontentloaded' }), 'the shell did not load');
     await step(() => page.locator('[data-desktop][data-desktop-ready="true"]').waitFor({ timeout: STEP_MS }), 'the desktop never became ready (the stub backend or the shell boot is broken)');
@@ -377,6 +405,7 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
   for (const e of row.boot_errors) row.problems.push(`shell boot: ${e}`);
   for (const e of row.page_errors) row.problems.push(`uncaught: ${e}`);
   for (const e of row.console_errors) row.problems.push(`console.error: ${e}`);
+  for (const r of [...new Set(row.unanswered)]) row.problems.push(`unanswered: ${r} (stub it in the contract's api, or list it in allow_unanswered with a reason)`);
   row.pass = row.problems.length === 0;
   row.ms = Date.now() - started;
   return row;
@@ -410,7 +439,12 @@ export async function checkPackages({ browser, base, packages, modes = MODES, sd
     if (!pkg.manifest) continue;
     if (modes.includes('installed') || sdkCheck) {
       const b = await buildPackageModule({ name: pkg.name, dir: pkg.dir });
-      if (!b.ok) row.problems.push(`the module/v1 build failed (the package boundary or the build): ${b.log.split('\n').slice(-4).join(' | ')}`);
+      if (!b.ok) {
+        // Name the refusal itself (the boundary plugin's or the build's own line), not Node's stack dump after it.
+        const lines = b.log.split('\n').map((l) => l.trim()).filter(Boolean);
+        const why = lines.find((l) => /package "|module\/v1|Error:/.test(l)) || lines.slice(-4).join(' | ');
+        row.problems.push(`the module/v1 build failed (the package boundary or the build): ${why}`);
+      }
       else {
         row.module = { abi: MODULE_ABI, sha256: b.sha256, bytes: b.bytes.length };
         row.sdk_imports = b.sdk_imports;
