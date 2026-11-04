@@ -219,7 +219,7 @@ boundaries:
   excluded:
     - "Autopaper: moving the Autopaper app to a package (C8) is in scope, as the precursor to the Autopaper mission. Everything else (BM25 and graph search, self-citation, the Texture cite rule, typed relations and relies_on, research.related_story, Autopaper app agents, Autopaper floors) waits for the Autopaper mission, even small items (R37)"
     - self-development rounds before Phase 8; self-development deleting base code
-    - out-of-process tool servers (open question 10); third-party Go modules in desk code until open question 9 is decided
+    - out-of-process tool servers (removed by the owner, 2026-11-04; a package backend is its desk); third-party Go modules in desk code until open question 9 is decided
     - zero-downtime or compatibility machinery beyond a slice's rollback; interim layers (R16)
     - the tape app, update-now-or-later prompt and email-as-app-agent ideas beyond MA4.7
   protected_surfaces: >-

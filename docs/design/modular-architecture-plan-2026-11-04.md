@@ -1894,9 +1894,11 @@ Go-module scope), plus what the plan found.
      sandbox and under the same per-desk import set as the cell; an import
      outside the desk's set is refused at the static check whatever the module
      is.
-10. **Out-of-process tool servers** (the backend protocol of modular section
-    1). What sandbox they get: gVisor like desk workers, or a separate VM as an
-    earlier ruling suggested. Not needed for Phases 1 to 5.
+10. **Out-of-process tool servers: removed** (owner, 2026-11-04: "No out of
+    process tool servers. Get rid of that."). The backend protocol of modular
+    section 1 (a package shipping its own server process) is dropped. A
+    package's backend logic is its desk: yaegi cells and package Go modules in
+    the desk worker, inside the desk's sandbox and import set (MA6.5, MA6.6).
 11. **Planned-restart trays.** MA1.1 deletes the retired message intent whose
     branches exist for a pre-change tray that "still replays". Verify on the
     tape that no planned-restart marker has carried one.
