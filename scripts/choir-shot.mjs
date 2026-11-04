@@ -311,6 +311,44 @@ export async function checkAppWindow(page, app) {
   if (msg) throw new Error(msg);
 }
 
+// SETTLE_MS bounds the wait for a window to stop animating before the shot.
+const SETTLE_MS = 3000;
+
+// settleProblem says why the app's windows are not settled, or '' when one is:
+// opacity 1 and every animation on it and its subtree finished. Pure, so the
+// self-test can feed it states.
+export function settleProblem(app, wins) {
+  if (wins.some((w) => w.opacity >= 1 && w.running === 0 && w.ancestorRunning === 0)) return '';
+  const w = wins.find((x) => x.visible) || wins[0];
+  if (!w) return '';
+  return `window for ${app} did not settle within ${SETTLE_MS / 1000} s (opacity ${w.opacity}, ${w.running} running animation(s) on it, ${w.ancestorRunning} on its ancestors)`;
+}
+
+// waitSettled waits, bounded, until the app's window has opacity 1 and no
+// running CSS animation or transition on it, its subtree or its ancestors, and
+// the fonts are ready; a shot caught mid-open-animation is a failed shot.
+export async function waitSettled(page, app) {
+  const probe = (id) => page.evaluate((appId) => {
+    // finite only: a spinner that loops forever never settles and is not an open animation
+    const live = (a) => (a.playState === 'running' || a.playState === 'pending') && Number.isFinite(a.effect?.getComputedTiming().endTime);
+    return [...document.querySelectorAll(`[data-window][data-window-app-id="${appId}"]`)].filter((el) => el.getAttribute('data-window-mode') !== 'minimized').map((el) => {
+      const cs = getComputedStyle(el);
+      let ancestorRunning = 0;
+      for (let p = el.parentElement; p; p = p.parentElement) ancestorRunning += p.getAnimations().filter(live).length;
+      return { visible: cs.display !== 'none' && cs.visibility !== 'hidden', opacity: Number(cs.opacity), running: el.getAnimations({ subtree: true }).filter(live).length, ancestorRunning };
+    });
+  }, id);
+  const deadline = Date.now() + SETTLE_MS;
+  let wins = await probe(app);
+  while (wins.length && settleProblem(app, wins) && Date.now() < deadline) {
+    await page.waitForTimeout(100);
+    wins = await probe(app);
+  }
+  const msg = settleProblem(app, wins);
+  if (msg) throw new Error(msg);
+  await page.evaluate(() => document.fonts.ready);
+}
+
 // themeSeedScript is the init script that stores the boot cache before any page
 // script runs, in the shape App.svelte's loadThemeBootCache reads: a JSON
 // string of {schema_version, id} (normalizeThemeConfig fills in the rest).
@@ -910,7 +948,7 @@ async function main() {
           await s.act(page);
           await settle(page, s.selector);
         }
-        if (appId && s.expect_window !== false) await checkAppWindow(page, appId); // before the screenshot: a failed shot leaves no PNG for Freeze to admit
+        if (appId && s.expect_window !== false) { await checkAppWindow(page, appId); await waitSettled(page, appId); } // before the screenshot: a failed shot leaves no PNG for Freeze to admit
         if (readFixture || themeState.fixtureServed) await page.evaluate(fixtureBadge, CATALOG_FIXTURE_BADGE);
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
         if (readFixture || themeState.fixtureServed) {

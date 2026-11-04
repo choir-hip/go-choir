@@ -10,7 +10,7 @@ import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor,
-  loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow,
+  loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -397,6 +397,8 @@ console.log('choir_shot_test: ok');
 
 // A shot that opens an app fails when no visible, sized, unminimized window of it is on screen.
 assert.equal(windowProblem('library-next', [{ visible: true, minimized: false, w: 900, h: 600 }], true), '');
+assert.equal(settleProblem('x', [{ visible: true, opacity: 1, running: 0, ancestorRunning: 0 }]), '');
+assert.match(settleProblem('x', [{ visible: true, opacity: 0.1, running: 1, ancestorRunning: 0 }]), /did not settle within 3 s \(opacity 0.1, 1 running/);
 assert.match(windowProblem('library-next', [], true), /no window for library-next on screen at capture; no window element; taskbar chip present/);
 assert.match(windowProblem('library-next', [{ visible: false, minimized: true, w: 0, h: 0 }], true), /minimized/);
 assert.match(windowProblem('library-next', [{ visible: true, minimized: false, w: 0, h: 40 }], false), /0x40.*chip absent/);
