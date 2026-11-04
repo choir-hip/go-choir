@@ -92,18 +92,21 @@ file, it wins for that work.
 
 ## Desk Ontology
 
-Persistent root RLM desks come in two kinds (doctrine I26, owner 2026-10-21).
-**System desks:** **management**, **engineering** and **research**. **App
-desks:** one per app agent, **Texture** first, then Mail, Calendar, Slides and
-others as apps become app agents; an app desk ships with its app package and
-is the sole agent writer of its app's object kinds. Texture is the sole writer
-of canonical document revisions;
-management owns computer-wide coherence and admits engineering through delegated
-casts; engineering performs capsule-bound mutation; research has read-only
-world-evidence authority. The commitment ledger is the durable substrate:
-semantic acts record commitments and evidence on the tape, while Texture renders
-that ledger into the owner-facing supervision surface. Use the desk-specific
-in-cell module surface rather than legacy tool-call channels.
+There are no special desks or apps (doctrine I26, amended by the owner,
+2026-11-04, per
+[the modular architecture plan](docs/design/modular-architecture-plan-2026-11-04.md)).
+Every desk, **management**, **engineering**, **research**, **Texture**, Mail
+and the rest, is a package desk registered the same way; "system" or "app"
+says only who publishes it. Each data kind has one custodian desk with sole
+read and write (Texture for document revisions, the Mail agent for email).
+Desks talk only through precommitment records, and grants flow through
+custodian leases. Roles that remain: management owns computer-wide coherence
+and admits engineering through delegated casts; engineering performs
+capsule-bound mutation; research has read-only world-evidence authority. The
+commitment ledger is the durable substrate: semantic acts record commitments
+and evidence on the tape, while Texture renders that ledger into the
+owner-facing supervision surface. Use the desk-specific in-cell module surface
+rather than legacy tool-call channels.
 
 Before authoring or executing any mission Definition, read
 [docs/standing-questions.md](docs/standing-questions.md) — the pre-flight

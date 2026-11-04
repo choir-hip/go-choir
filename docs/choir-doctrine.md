@@ -394,19 +394,26 @@ bound release or an explicit frontend join; vmctl route CAS greens only after
 that serving join. CI pointer rotation and a host `frontend-current` tree are not
 computer changes. The current host-global SPA is non-conformance, not ontology.
 
-`I26` Each computer has persistent root RLM desks of two kinds, each running
-yaegi Go cells in killable subprocesses. System desks: management, engineering
-and research. App desks: one per app agent; Texture is the first, then Mail,
-Calendar, Slides and others as apps become app agents. An app desk ships with
-its app package and is the sole agent writer of its app's object kinds
-(Texture: document text). Research has read-only world and message authority;
+`I26` Each computer has persistent root RLM desks, each running yaegi Go
+cells in killable subprocesses. There are no special desks or apps: every desk,
+management, engineering and research included, is a package desk, registered
+the same way and under the same rules. "System" and "app" describe who
+publishes a desk (the first party or others), not a kind with its own rules.
+Each data kind has one custodian desk with sole read and write authority over
+it (the Texture desk for Texture revisions, the Mail agent for email). Desks
+reach each other only through precommitment records (PSA), and a desk's grant
+over a data kind it does not hold flows through the custodian's lease. Roles
+that remain: research has read-only world and message authority;
 engineering mutates only through capsule-bound per-assignment sub-RLM cells;
 management supplies computer-wide coherence/error correction, resource
 arbitration, delegated-`choir.Cast` admission into engineering, and owner
 escalation, holds no document/event mutation authority, and is not a
-concurrency limiter. Desks reach each other only by semantic act.
-(Owner-ratified 2026-10-21, owner notes §36. Until S7-0 packages the existing
-apps, Texture is the only app desk and is not yet packaged.)
+concurrency limiter. These are roles a package desk holds, not exemptions from
+the registration path. The commitment ledger is the durable substrate.
+(Owner-ratified 2026-10-21, owner notes §36; amended to remove the two-kinds
+split by the owner, 2026-11-04, ruling R3 of
+docs/design/modular-architecture-plan-2026-11-04.md. Today the desks are
+still built into the platform; Phase 4 of that plan moves them into packages.)
 
 The management admission ledger permits one live engineering assignment per
 computer in the initial sequential phase: each request carries a durable
