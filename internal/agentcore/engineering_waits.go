@@ -42,9 +42,18 @@ const waitAnnounceAfter = time.Minute
 // after its last change when its assignment's end was never seen.
 const waitTrackerIdleForget = 6 * time.Hour
 
+type spawnMark struct {
+	took time.Duration
+	at   time.Time
+}
+
 type assignmentWaitTracker struct {
 	mu      sync.Mutex
 	entries map[string]*assignmentWaitEntry
+	// spawns is how long each attempt's spawn saga took (the round receipt's
+	// capsule spawn, round_receipt.go); closeAssignmentWaits puts it on the
+	// ledger and drops it.
+	spawns map[string]spawnMark
 }
 
 type assignmentWaitEntry struct {
@@ -60,6 +69,10 @@ type assignmentWaitEntry struct {
 	// re-sends the same bytes under its fixed id (review r1 DeepSeek F1).
 	startRec *types.CommitmentRecord
 	tally    types.WaitTally
+	// jobTally is the part of tally that build jobs waited (a wait whose
+	// subject is not the assignment's admission): the round receipt takes
+	// it from the engineer's window, the rest from cast to bind.
+	jobTally types.WaitTally
 	updated  time.Time
 }
 
@@ -161,6 +174,9 @@ func (e *assignmentWaitEntry) endLocked(now time.Time, outcome string) []waitRel
 	episode := e.episodeID()
 	waited := now.Sub(w.Since)
 	e.tally.Add(w.Kind, waited)
+	if strings.HasPrefix(w.Subject, "job ") {
+		e.jobTally.Add(w.Kind, waited)
+	}
 	e.current, e.updated = nil, now
 	if !e.announced || e.textureInbox == "" {
 		return nil
@@ -232,15 +248,17 @@ func (rt *Runtime) closeAssignmentWaits(ctx context.Context, assignment types.En
 	t.mu.Lock()
 	e := t.entries[key]
 	var plans []waitRelayPlan
-	var tally types.WaitTally
+	var tally, jobTally types.WaitTally
 	if e != nil {
 		plans = e.endLocked(now, "the assignment ended ("+string(assignment.Disposition)+")")
-		tally = e.tally.Clone()
+		tally, jobTally = e.tally.Clone(), e.jobTally.Clone()
 		delete(t.entries, key)
 	}
+	spawn := t.spawns[key].took
+	delete(t.spawns, key)
 	t.mu.Unlock()
 	rt.mintWaitRelays(ctx, plans, "")
-	if tally.Total() <= 0 || rt.store == nil {
+	if rt.store == nil || (e == nil && spawn <= 0) {
 		return
 	}
 	stamp := now.UTC().Format(time.RFC3339Nano)
@@ -249,6 +267,14 @@ func (rt *Runtime) closeAssignmentWaits(ctx context.Context, assignment types.En
 		refs["waited_s:"+kind] = strconv.FormatInt(seconds, 10)
 	}
 	summary := tally.Summary()
+	// The round receipt reads the spawn and the job waits from here
+	// (types.BuildRoundReceipt); written for every ended attempt, waited or
+	// not, so a round with no wait still has a spawn.
+	refs[types.RoundRefSpawnS] = strconv.FormatInt(int64(spawn.Round(time.Second)/time.Second), 10)
+	refs[types.RoundRefJobWaitedS] = strconv.FormatInt(int64(jobTally.Total()/time.Second), 10)
+	if summary == "" {
+		summary = "did not wait"
+	}
 	rec := types.CommitmentRecord{
 		SchemaID:    types.CommitmentRecordSchemaV1,
 		RecordID:    assignmentWaitSummaryRecordID(assignment.AssignmentID, assignment.Binding.Attempt),
@@ -269,6 +295,28 @@ func (rt *Runtime) closeAssignmentWaits(ctx context.Context, assignment types.En
 	if _, err := rt.store.AppendCommitmentRecord(sctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, rec); err != nil {
 		log.Printf("runtime: engineering waits: summary record for %s: %v", assignment.AssignmentID, err)
 	}
+}
+
+// markAssignmentSpawn records how long the attempt's spawn saga took.
+func (rt *Runtime) markAssignmentSpawn(assignmentID string, attempt uint64, took time.Duration) {
+	if rt == nil || took <= 0 {
+		return
+	}
+	t := &rt.assignmentWaits
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.spawns == nil {
+		t.spawns = map[string]spawnMark{}
+	}
+	now := rt.assignmentWaitNow()
+	// A mark that lands after its attempt closed is never read: forget it
+	// with the idle entries (review r1 devin F1).
+	for k, m := range t.spawns {
+		if now.Sub(m.at) > waitTrackerIdleForget {
+			delete(t.spawns, k)
+		}
+	}
+	t.spawns[assignmentWaitKey(assignmentID, attempt)] = spawnMark{took: took, at: now}
 }
 
 // mintWaitRelays commits the relays into Texture's inbox when the
