@@ -790,6 +790,19 @@ func buildRegistry() []*command {
 			},
 		},
 		{
+			path: []string{"calibration", "claims"}, tool: "calibration_claims",
+			summary: "List an engineering round's rule-settled predictions, stated against what happened",
+			desc:    "Every rule-settled precommit on the computer (a round's Cast predictions and engineering's own): kind, stated p and minutes, stated_at, the late mark, the assignment, operation and Cast, and the settlement (answer, actual_s, censored, settled_at). Filter by --assignment or --operation. These are not the agent claims of `choir precommit list`.",
+			params: []param{pStr("assignment", "Only this engineering assignment's claims"), pStr("operation", "Only the claims of this self-development operation's assignment")},
+			scopes: []string{"read:runtime"}, readOnly: true,
+			handler: func(x *call) (any, error) {
+				q := url.Values{}
+				q.Set("assignment", x.trim("assignment"))
+				q.Set("operation", x.trim("operation"))
+				return getRaw(x, "/api/calibration/claims"+encodeQuery(q))
+			},
+		},
+		{
 			path: []string{"precommit", "list"}, tool: "precommit_list",
 			summary: "List claims with their settlements, governing outcome and Brier score",
 			params: append(claimFilterParams(),

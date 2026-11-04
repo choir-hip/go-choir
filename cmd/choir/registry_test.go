@@ -522,6 +522,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"precommit_settle": {cli: []string{"precommit", "settle", "calib:1", "--outcome", "true", "--evidence", "CI 1", "--evidence", "a, b"},
 			mcp: `{"claim_id":"calib:1","outcome":"true","evidence":["CI 1","a, b"]}`},
 		"precommit_list":      {cli: []string{"precommit", "list", "--status", "open"}, mcp: `{"status":"open"}`},
+		"calibration_claims":  {cli: []string{"calibration", "claims", "--operation", "op-1"}, mcp: `{"operation":"op-1"}`},
 		"calibration_summary": {cli: []string{"precommit", "calibration", "--scorer", "independent"}, mcp: `{"scorer":"independent"}`, reply: `{"context":"Calibration track record.\n","overall":{}}`},
 	}
 	setIdentity(t, "claude-code/lead", "claude-opus-5-5")

@@ -3,6 +3,8 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -263,5 +265,53 @@ func TestLateClockPrecommitIsKeptMarkedAndNeverScored(t *testing.T) {
 		if p.ClaimType == string(types.PrecommitRuleFreezeWithin) {
 			t.Fatal("the late claim is pending in the digest")
 		}
+	}
+}
+
+// C1-C3: the claims read lists the round's rule precommits stated against
+// what happened, and refuses another computer's id.
+func TestCalibrationClaimsListStatedAgainstActual(t *testing.T) {
+	f := newRebaseCastFixture(t)
+	ctx := context.Background()
+	plan, err := f.plan(t, f.spec(nil), f.rebaseObjective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "cell-records:" + plan.AssignmentID, Records: []types.CommitmentRecord{plan.Cast}}
+	records.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(records)
+	if _, err := f.rt.openDelegatedCastAssignment(ctx, plan, records); err != nil {
+		t.Fatal(err)
+	}
+	cast, _ := f.s.GetCommitmentRecord(ctx, f.owner, f.computer, plan.Cast.RecordID)
+	since, _ := parseCommitmentStamp(cast.Provenance.CommittedAt)
+	frozenAt := since.Add(35 * time.Minute)
+	f.rt.settleRulePrecommits(ctx, f.owner, f.computer, plan.AssignmentID, "freeze", frozenAt, func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
+		return types.SettleRuleOnFreeze(rule, types.EngineeringFreezeObservation{FrozenAt: frozenAt, OperationID: "op-9"})
+	})
+	for _, assignment := range []string{plan.AssignmentID, ""} {
+		claims, err := f.rt.calibrationClaims(ctx, f.owner, f.computer, assignment)
+		if err != nil || len(claims) != len(types.RoundPredictionsMandatory) {
+			t.Fatalf("assignment %q: %d claims, %v", assignment, len(claims), err)
+		}
+		for _, c := range claims {
+			if c.Desk != "management" || c.StatedBy != "cast" || c.Late || c.Cast != cast.RecordID || c.Assignment != plan.AssignmentID || c.StatedAt != cast.Provenance.CommittedAt {
+				t.Fatalf("claim %+v", c)
+			}
+			if c.Kind == string(types.PrecommitRuleFreezeMinutes) {
+				if c.Answer != "yes" || c.ActualS == nil || *c.ActualS != 2100 || c.Estimate != 20 || c.Low != 10 || c.High != 40 || c.P != 0.75 || c.Operation != "op-9" || c.SettledAt == "" {
+					t.Fatalf("freeze_minutes claim %+v", c)
+				}
+			} else if c.Answer != "" {
+				t.Fatalf("%s settled before its event: %+v", c.Kind, c)
+			}
+		}
+	}
+	h := &APIHandler{rt: f.rt}
+	req := httptest.NewRequest(http.MethodGet, "/api/calibration/claims?computer_id=computer-elsewhere", nil)
+	req.Header.Set("X-Authenticated-User", f.owner)
+	rec := httptest.NewRecorder()
+	h.HandleCalibrationClaims(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("another computer's id: %d %s", rec.Code, rec.Body)
 	}
 }
