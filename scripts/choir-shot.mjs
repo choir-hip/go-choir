@@ -86,14 +86,15 @@
 //
 // The shots file is an ES module whose default export is a list of
 //   { name, path = '/', selector, routes(context, base), before(page, base),
-//     act(page), fullPage = false }
+//     act(page), fullPage = false, preset, size }
 // name: letters, digits, '.', '-', '_'. routes mocks the backend
 // (context.route) for signed-in views. before runs before the page is opened
 // (seed storage with context.addInitScript through page.context()); act runs
 // after it is ready (click, type), and the helper waits for idle again.
 // Files: <name>.png for the desktop preset, <name>-<preset>.png otherwise,
 // <name>-<W>x<H>.png for --size. Presets: desktop 1280x800, tablet 820x1180,
-// mobile 390x844. Run single shots while iterating; run the full set once
+// mobile 390x844. A shot's own preset (an id or a list) or size replaces
+// --preset and --size for that shot. Run single shots while iterating; run the full set once
 // before choir.Freeze (a change no one looks at needs no shot).
 // Each shot starts from a clean desktop (resetDesktop, before the page opens);
 // one shot is one page load plus its single act, so there is no between-step reset.
@@ -283,6 +284,21 @@ export function themesFor(shot, o, known = null) {
 
 const PHONE_NAME_RE = /(^|[^a-z])(phone|mobile)([^a-z]|$)/i;
 
+// shotOwnViews is a shot's own `preset` (an id or a list) or `size` (WxH),
+// which replace --preset and --size for that shot; null when it sets neither.
+function shotOwnViews(shot) {
+  if (shot.size !== undefined && shot.preset !== undefined) throw new Error(`shot ${shot.name}: size and preset are exclusive`);
+  if (shot.size !== undefined) {
+    if (typeof shot.size !== 'string' || !/^\d{2,5}x\d{2,5}$/.test(shot.size)) throw new Error(`shot ${shot.name}: size ${shot.size}: want WIDTHxHEIGHT, such as 390x844`);
+    const [width, height] = shot.size.split('x').map(Number);
+    return [{ label: shot.size, viewport: { width, height } }];
+  }
+  if (shot.preset === undefined) return null;
+  const names = Array.isArray(shot.preset) ? shot.preset : [shot.preset];
+  for (const n of names) if (typeof n !== 'string' || !PRESETS[n]) throw new Error(`shot ${shot.name}: preset ${n}: want one of ${Object.keys(PRESETS).join(', ')}`);
+  return names.map((n) => ({ label: n, preset: PRESETS[n] }));
+}
+
 // plan expands the selected shots and presets into the files to write.
 export function plan(shots, o, knownThemes = null) {
   if (!Array.isArray(shots) || shots.length === 0) throw new Error('the shots file must default-export a non-empty list');
@@ -306,10 +322,10 @@ export function plan(shots, o, knownThemes = null) {
   for (const shot of picked) {
     // A shot named for a phone is taken at portrait sizes only. The name alone
     // sizes nothing, and a desktop "phone" shot fails review every time.
-    let shotViews = views;
+    let shotViews = shotOwnViews(shot) || views;
     if (PHONE_NAME_RE.test(shot.name)) {
-      shotViews = views.filter((v) => { const s = v.preset || v.viewport; return s.width < s.height; });
-      if (shotViews.length === 0) throw new Error(`shot ${shot.name} is named for a phone but no view is portrait: add --preset mobile (390x844) or --size WxH with W < H`);
+      shotViews = shotViews.filter((v) => { const s = v.preset || v.viewport; return s.width < s.height; });
+      if (shotViews.length === 0) throw new Error(`shot ${shot.name} is named for a phone but no view is portrait: add --preset mobile (390x844), --size WxH with W < H, or the shot's own preset: 'mobile'`);
     }
     for (const theme of themesFor(shot, o, knownThemes))
       for (const v of shotViews) {

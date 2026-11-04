@@ -61,6 +61,14 @@ throws(() => plan([{ name: 'day-mobile' }], parseArgs(['--shots', 'x', '--size',
 assert.deepEqual(plan([{ name: 'home' }, { name: 'phone-day' }], parseArgs(['--shots', 'x', '--preset', 'desktop,mobile'])).map((i) => i.file), ['home.png', 'home-mobile.png', 'phone-day-mobile.png']);
 assert.deepEqual(plan([{ name: 'phone-day' }], parseArgs(['--shots', 'x', '--size', '390x844'])).map((i) => i.file), ['phone-day-390x844.png']);
 assert.deepEqual(plan([{ name: 'microphone' }], parseArgs(['--shots', 'x'])).map((i) => i.file), ['microphone.png']);
+// A shot's own preset or size sizes it; crouton's engineer set preset: 'mobile' on its
+// phone shots and choir-shot ignored the field.
+assert.deepEqual(plan([{ name: 'home' }, { name: 'phone-day', preset: 'mobile' }], parseArgs(['--shots', 'x'])).map((i) => [i.file, i.viewport.width]), [['home.png', 1280], ['phone-day-mobile.png', 390]]);
+assert.deepEqual(plan([{ name: 'a', size: '400x900' }], parseArgs(['--shots', 'x', '--preset', 'desktop'])).map((i) => i.file), ['a-400x900.png']);
+assert.deepEqual(plan([{ name: 'a', preset: ['tablet', 'mobile'] }], parseArgs(['--shots', 'x'])).map((i) => i.file), ['a-tablet.png', 'a-mobile.png']);
+throws(() => plan([{ name: 'a', preset: 'phone' }], parseArgs(['--shots', 'x'])), /shot a: preset phone/);
+throws(() => plan([{ name: 'a', size: '390' }], parseArgs(['--shots', 'x'])), /shot a: size 390/);
+throws(() => plan([{ name: 'a', size: '390x844', preset: 'mobile' }], parseArgs(['--shots', 'x'])), /shot a: size and preset are exclusive/);
 
 // The autoputer binary order, the proxy rule, the recipe env and the opt-out.
 assert.equal(pickAutoputerBinary((f) => true), '/var/lib/artifact/release/bin/autoputer');
