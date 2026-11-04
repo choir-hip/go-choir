@@ -93,7 +93,7 @@ func (rt *Runtime) bootedBaseForJoin() (string, error) {
 // whose release is `current` (the authority the effective identity already
 // uses), its bundle's patch and base, and whether an apply is in flight.
 func (rt *Runtime) sourceProjectionInput(ctx context.Context) sourceproj.Input {
-	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit(), OnSave: rt.recordSourceProjectionSaved, PackageLock: rt.packageLockOn(ctx)}
+	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit(), OnSave: rt.recordSourceProjectionSaved}
 	root := strings.TrimSpace(rt.selfdevUpdaterRoot)
 	if root == "" {
 		return in // no updater: nothing was ever applied here
@@ -568,17 +568,6 @@ func rematerializedGraftDetail(result sourceproj.Result) string {
 	}
 	return "The booted base also changed the package roots " + strings.Join(conflicts, ", ") +
 		" (package_behind_base): the capsule source keeps this computer's version of each whole, so approving this Cast's candidate keeps it over the base's version (to take the base's, restore the root to the base in the candidate). Elsewhere the graft is byte-identical"
-}
-
-// packageLockOn reads the packages.lock setting (S6). With no owner or
-// computer scope, or no store, it is the declared default; a read error is
-// off, which is the whole-stack S4 graft: it only refuses more.
-func (rt *Runtime) packageLockOn(ctx context.Context) bool {
-	ownerID, computerID := rt.rebaseScope()
-	if rt == nil || rt.store == nil || ownerID == "" || computerID == "" {
-		return store.KnownComputerSettings[store.SettingPackagesLock]
-	}
-	return rt.computerSettingOn(ctx, ownerID, computerID, store.SettingPackagesLock)
 }
 
 // annotatePackageReleases names the package install whose release tree each

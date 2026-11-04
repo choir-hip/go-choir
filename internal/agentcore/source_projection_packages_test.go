@@ -13,8 +13,7 @@ import (
 // through the runtime. An applied package-only change (a local library-next),
 // then a deploy whose base carries a different library-next: an ordinary
 // engineering Cast on another path is admitted, with a ledger warning that
-// names the package conflict; /health shows the entry; packages.lock off is
-// the rollback to today's refusal.
+// names the package conflict; /health shows the entry.
 func TestPackageLockAdmitsAnOrdinaryCastWhenTheBaseTakesAnotherVersionOfThePackage(t *testing.T) {
 	const computerID = "computer-package-lock"
 	const owner = "owner-package-lock"
@@ -61,13 +60,5 @@ func TestPackageLockAdmitsAnOrdinaryCastWhenTheBaseTakesAnotherVersionOfThePacka
 	// A rebase Cast is not needed: the stack is not stranded.
 	if _, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-library", Base: exported}, cast); err == nil || !strings.Contains(err.Error(), "rebase_not_needed") {
 		t.Fatalf("rebase: %v", err)
-	}
-
-	// Rollback: packages.lock off is today's behaviour.
-	if err := rt.store.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computerID, Key: store.SettingPackagesLock, Value: false}); err != nil {
-		t.Fatal(err)
-	}
-	if err := rt.sourceProjectionCastGate(ctx); err == nil || !strings.HasPrefix(err.Error(), "stack_base_moved") {
-		t.Fatalf("lock off must refuse as before: %v", err)
 	}
 }

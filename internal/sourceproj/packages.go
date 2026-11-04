@@ -111,9 +111,13 @@ func packageEntries(ctx context.Context, repo, base, tree string) ([]PackageEntr
 	return entries, nil
 }
 
-// packageGraft is graftTree with package roots as units. Shell paths keep
-// S4: a shell path the booted base also changed is not grafted (ok false,
-// why names it). Each package root gets its entry: upstreamed roots are left
+// packageGraft is the re-materialization of a stack onto a moved base, with
+// package roots as units. Shell paths keep S4: when no shell path the patch
+// touches differs between base and booted, the graft holds the patch's
+// after-image at exactly those paths, byte for byte; a shell path the booted
+// base also changed is not grafted (ok false, why names it), nor is an
+// after-image that does not fit booted's tree (a directory and a file at one
+// path). Each package root gets its entry: upstreamed roots are left
 // as booted has them; a root whose touched paths booted left alone is grafted
 // path by path (byte-identical to R when booted's subtree is P); a root where
 // booted changed a touched path gets R whole. The entries are returned also

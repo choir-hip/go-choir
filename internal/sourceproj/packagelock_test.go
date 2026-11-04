@@ -38,7 +38,7 @@ func pkgRepo(t *testing.T) (repo, base string) {
 }
 
 func lockOp(id, base string, patch []byte) Input {
-	return Input{Top: opFor(id, base, patch), PackageLock: true}
+	return Input{Top: opFor(id, base, patch)}
 }
 
 func entryOf(t *testing.T, res Result, root string) PackageEntry {
@@ -76,8 +76,7 @@ func addExportedLibrary(t *testing.T, r string) {
 // Today's case (2026-11-04, 8d78b7e78): an applied package-only change adds
 // library-next; the base gains a different library-next. The stack is not
 // stranded: the projection keeps this computer's version (the approved
-// content), the entry is a conflict, and casting is admitted. With the lock
-// off, today's behaviour (stack_base_moved) comes back.
+// content), the entry is a conflict, and casting is admitted.
 func TestPackageLockTodaysCaseAnotherLibraryOnTheBaseAdmitsTheCast(t *testing.T) {
 	repo, base := pkgRepo(t)
 	patch := patchFrom(t, repo, base, func(r string) { addLocalLibrary(t, r) })
@@ -115,13 +114,6 @@ func TestPackageLockTodaysCaseAnotherLibraryOnTheBaseAdmitsTheCast(t *testing.T)
 		t.Fatal("Freeze composes from the booted base")
 	}
 	mustClean(t, repo)
-
-	// Rollback: packages.lock off is today's behaviour.
-	in.PackageLock = false
-	off := reconcile(t, in)
-	if off.State != StateBaseMoved || !strings.HasPrefix(off.Refusal(), "stack_base_moved: ") || len(off.Packages) != 0 {
-		t.Fatalf("lock off must be today's stack_base_moved: %+v", off)
-	}
 }
 
 // L17: an adopter's change to a first-party package, and a deploy that

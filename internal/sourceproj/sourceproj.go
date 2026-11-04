@@ -129,11 +129,6 @@ type Input struct {
 	// Top is the effective release's operation with a source patch; nil is an
 	// empty stack (a base release, a genesis baseline, a platform release).
 	Top *Op
-	// PackageLock (S6, setting packages.lock): package roots under the stack
-	// are entries with their own answer when the base moves
-	// (docs/design/s6-package-lock-build-2026-11-04.md). Off is S4's whole
-	// stack path graft.
-	PackageLock bool
 	// TopUnavailable is set instead of Top when the operation exists but its
 	// bundle or patch cannot be read; the reason is named in the result.
 	TopUnavailable string
@@ -204,7 +199,7 @@ type Result struct {
 	// Saved lists what was kept at refs/choir/saved/ before the reset.
 	Saved []Saved `json:"saved,omitempty"`
 	// Packages are the package roots the stack touches, each with its answer
-	// (S6; set only with Input.PackageLock).
+	// (S6, docs/design/s6-package-lock-build-2026-11-04.md).
 	Packages []PackageEntry `json:"packages,omitempty"`
 	At       time.Time      `json:"at"`
 }
@@ -294,7 +289,7 @@ func reconcileLocked(ctx context.Context, in Input, res Result) (Result, error) 
 	if in.Top == nil || len(in.Top.Patch) == 0 {
 		return reconcileEmptyStack(ctx, repo, res, cur, booted, haveBooted)
 	}
-	return reconcileStack(ctx, repo, in.Top, in.PackageLock, res, cur, booted, haveBooted)
+	return reconcileStack(ctx, repo, in.Top, res, cur, booted, haveBooted)
 }
 
 // current is what the repository held when reconcile started, and the hook
@@ -345,7 +340,7 @@ func reconcileEmptyStack(ctx context.Context, repo string, res Result, cur curre
 	return res, err
 }
 
-func reconcileStack(ctx context.Context, repo string, top *Op, lock bool, res Result, cur current, booted string, haveBooted bool) (Result, error) {
+func reconcileStack(ctx context.Context, repo string, top *Op, res Result, cur current, booted string, haveBooted bool) (Result, error) {
 	res.OperationID = top.OperationID
 	base, ok := resolveCommit(ctx, repo, top.Base)
 	if !ok {
@@ -380,15 +375,9 @@ func reconcileStack(ctx context.Context, repo string, top *Op, lock bool, res Re
 	if haveBooted && base != booted {
 		// S4: a moved base the patch's paths did not see is grafted, byte for
 		// byte (library design 10.3, applied to the whole stack).
-		// S6: with the lock, package roots are units (graftTree for the shell).
-		var graft, why string
-		var ok bool
-		var gerr error
-		if lock {
-			graft, res.Packages, ok, why, gerr = packageGraft(ctx, repo, base, booted, tree)
-		} else {
-			graft, ok, why, gerr = graftTree(ctx, repo, base, booted, tree)
-		}
+		// S6: package roots are units; shell paths keep S4's path graft.
+		graft, packages, ok, why, gerr := packageGraft(ctx, repo, base, booted, tree)
+		res.Packages = packages
 		if gerr != nil {
 			return res, gerr
 		}
@@ -419,7 +408,7 @@ func reconcileStack(ctx context.Context, repo string, top *Op, lock bool, res Re
 		return res, err
 	}
 	res.Base, res.Diverged = base, true
-	if lock && haveBooted {
+	if haveBooted {
 		entries, perr := packageEntries(ctx, repo, base, tree)
 		if perr != nil {
 			return res, perr

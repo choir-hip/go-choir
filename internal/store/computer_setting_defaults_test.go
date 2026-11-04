@@ -25,7 +25,6 @@ var defaultOnFeatures = []string{
 	SettingAppPackageObjects,
 	SettingFilesObject,
 	SettingPackagesPublish,
-	SettingPackagesLock,
 	SettingIntakeEvents,
 	SettingIntakeLabels,
 	SettingResearchSystem1,

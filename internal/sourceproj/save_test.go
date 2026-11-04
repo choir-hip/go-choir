@@ -299,7 +299,7 @@ func TestAGraftEqualToTheBootedBaseIsUpstreamed(t *testing.T) {
 	repo, base := baseRepo(t)
 	ctx := context.Background()
 	moved := platformMoved(t, repo, base, func(r string) { editLine(t, r, "internal/x.go", 3, "func X() int { return 2 }") })
-	graft, ok, why, err := graftTree(ctx, repo, base, moved, tgit(t, repo, "rev-parse", base+"^{tree}"))
+	graft, _, ok, why, err := packageGraft(ctx, repo, base, moved, tgit(t, repo, "rev-parse", base+"^{tree}"))
 	if err != nil || !ok || graft != tgit(t, repo, "rev-parse", moved+"^{tree}") {
 		t.Fatalf("11: %s %v %q %v", graft, ok, why, err)
 	}

@@ -81,12 +81,13 @@ the next candidate's cumulative patch (composed from the booted base) no
 longer carries it. Another unpromoted entry stays placed. When every entry
 and the shell are in booted, the stack is `upstreamed` (today's rule).
 
-## Rollback switch
+## Rollout and rollback
 
-Computer setting `packages.lock`, default on for every computer (owner
-2026-11-03: nothing off by default; registry entry `packages_lock`). Off, or
-a setting read error, gives today's S4 path graft for every path. It is read
-at each reconcile, so a change takes effect at the next Cast, no restart.
+No switch (owner, 2026-11-03: rollout goes by ring, rollback is a git
+revert). The package-aware graft replaces S4's whole-stack graft on every
+computer; reverting the commit restores it. What the off path stood in for
+stays on its own: a shell path the booted base also changed is still
+`stack_base_moved`, and U4's rebase still answers it.
 
 ## Restarts
 
@@ -105,7 +106,6 @@ the next pass from the same inputs (saved refs first, as S4).
 | K5 | The placed subtree is not R | the root's tree id is compared after the write; a mismatch is not graftable (`stack_base_moved`) | byte-identity test |
 | K6 | The re-materialized commit is not reproducible | the commit is a function of the operation and the tree | rebuild gives the same id |
 | K7 | A crash between apply and projection leaves a stale HEAD or dirty tree | reconcile from inputs; S4 saves first | stale HEAD + dirty file |
-| K8 | The switch cannot be read | read error means off: today's behaviour, which only refuses more | settings unit |
 | K9 | The stack deletes a package, or the base deletes it | an absent subtree is the empty tree; R absent placed means removed | delete case |
 | K10 | A directory/file clash at the root | the index write fails: not graftable, `stack_base_moved` | covered by S4's clash test |
 | K11 | The placed package fails to build on a base whose SDK moved (L18) | the capsule build fails; nothing is applied | residual (S12 removes it) |
