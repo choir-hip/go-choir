@@ -38,7 +38,11 @@ func (rt *Runtime) operationMedia(operation selfdev.Operation) ([]pkgrelease.Med
 	}
 	stage := filepath.Join(bundleRoot, filepath.FromSlash(capsule.BundleScreensDir))
 	read := func(item pkgrelease.Media) ([]byte, bool) {
-		raw, err := os.ReadFile(filepath.Join(stage, item.Name))
+		path := filepath.Join(stage, item.Name)
+		if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() || info.Size() != int64(item.Bytes) {
+			return nil, false
+		}
+		raw, err := os.ReadFile(path)
 		if err != nil || pkgrelease.VerifyMedia(item, raw) != nil {
 			return nil, false
 		}

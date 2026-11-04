@@ -1170,6 +1170,7 @@ async function main() {
       const context = await browser.newContext({ viewport: it.viewport, ...it.device, ...(recording ? { recordVideo: { dir: videoDir, size: it.viewport } } : {}) });
       let startedAt = 0;
       let pageVideo = null;
+      let shotDone = false;
       try {
         const s = it.shot;
         themeState.preset = it.theme;
@@ -1209,8 +1210,11 @@ async function main() {
           const left = Math.min(VIDEO_SETTLE_MS, VIDEO_MAX_MS - (Date.now() - startedAt));
           if (left > 0) await page.waitForTimeout(left); // the video shows the settled state
         }
+        shotDone = true;
       } finally {
-        await context.close();
+        try { await context.close(); } catch (e) { shotDone = false; throw e; } finally {
+          if (recording && !shotDone) fs.rmSync(videoDir, { recursive: true, force: true }); // a failed shot keeps no recording
+        }
       }
       if (recording) {
         const name = videoFileFor(it.file);
