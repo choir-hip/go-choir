@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: station 1 (pd) landed and proved; station 2 (selfdev) wound down to two crouton arms (with and without the Claude delegate) by owner ruling 10:40Z; priority now the Library as an app store on every computer (owner, 16:30Z), then reviewing apps through it and publish-and-pull self-development
+  slice: station 1 (pd) landed and proved; station 2 (selfdev) wound down to two crouton arms (with and without the Claude delegate) by owner ruling 10:40Z; priority now the Library as an app store on every computer (owner, 16:30Z) and forced modularity, base and apps as separate enforced layers, adopt deleted, clean rebase on every computer, forced app updates (owner, 17:10Z), then reviewing apps through it and publish-and-pull self-development
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
