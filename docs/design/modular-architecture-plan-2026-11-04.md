@@ -1565,11 +1565,11 @@ Go-module scope), plus what the plan found.
     intake labelling and support judging) against fans-out of many children;
     and what counts as a "named decision dependency" in a form the reducer can
     check.
-17. **Focus on apps without a desk (R31).** The owner's examples include
-    "Files · <folder>", but Files has no app agent today (audit section 4: only
-    Texture has an app desk). Open: does Files become an app agent, or does the
-    chip name the app and send the text to the conductor with the app named as a
-    hint? Also open: the bound on `selection`; how an app with several windows
+17. **Focus on apps without a desk (R31).** Settled (owner, 2026-11-04): for
+    an app with no desk, the chip names the app and the text goes to the
+    conductor with the app named as a hint; as each app becomes an app agent,
+    its focused submits go straight to its desk. Files is the first case
+    (audit section 4: only Texture has an app desk today). Still open: the bound on `selection`; how an app with several windows
     or an unsaved object publishes a ref; and whether a focused submit that the
     owner redirects should train the router as a labelled example (recommended
     yes, as an owner correction).
