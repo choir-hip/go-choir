@@ -30,12 +30,18 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 	// key. An existing one is returned before the mode is consulted, so a
 	// re-freeze after the mode is switched off still reaches its own
 	// operation; a retry on the same trajectory opens its own.
-	idempotencyKey := store.EngineeringFreezeIdempotencyKey(assignmentID)
-	if existing, found, err := operations.GetByIdempotency(ctx, computerID, idempotencyKey); err != nil {
+	// Engineer reuse (engineer_reuse.go): the current revision is returned
+	// unless management rejected it while its engineer was live, which
+	// opens the next revision of the same assignment.
+	revision := 1
+	if existing, current, found, err := assignmentOperation(ctx, operations, computerID, assignmentID); err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: %w", err)
-	} else if found {
+	} else if found && !freezeOpensNextRevision(existing, current) {
 		return advanceFreezeCandidate(ctx, operations, existing)
+	} else if found {
+		revision = current + 1
 	}
+	idempotencyKey := store.EngineeringFreezeRevisionIdempotencyKey(assignmentID, revision)
 	if err := authorizeProposal(ctx); err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: the computer's mode does not authorize a proposal: %w", err)
 	}
@@ -45,7 +51,7 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 	}
 	operation, err := operations.Start(ctx, selfdev.StartRequest{
 		ComputerID: computerID, IdempotencyKey: idempotencyKey, PromptArtifactRef: promptRef.String(),
-		OperationID: store.EngineeringFreezeOperationID(computerID, assignmentID), TrajectoryID: trajectoryID,
+		OperationID: store.EngineeringFreezeRevisionOperationID(computerID, assignmentID, revision), TrajectoryID: trajectoryID,
 	})
 	if errors.Is(err, selfdev.ErrOperationOpen) {
 		// One open operation per computer. A completed assignment's frozen

@@ -20,7 +20,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -206,8 +205,10 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if assignmentID == "" {
 		return nil, fmt.Errorf("self-development freeze requires an assignment")
 	}
-	operation, found, err := toolCtx.OperationStore.GetByIdempotency(ctx, toolCtx.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
-	if err == nil && !found {
+	// The current revision (engineer_reuse.go); one management rejected
+	// while this engineer was live is followed by the next revision.
+	operation, revision, found, err := assignmentOperation(ctx, toolCtx.OperationStore, toolCtx.ComputerID, assignmentID)
+	if err == nil && (!found || freezeOpensNextRevision(operation, revision)) {
 		if toolCtx.OpenFreezeCandidate == nil {
 			return nil, fmt.Errorf("resolve self-development operation: assignment %s has none and cannot open one", assignmentID)
 		}

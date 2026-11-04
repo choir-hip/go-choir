@@ -109,3 +109,22 @@ func TestToolBatchWaitsAreBounded(t *testing.T) {
 		t.Fatalf("unbounded batch waits: %v", err)
 	}
 }
+
+// A batch wait that committed the run's terminal fate itself (an engineer's
+// Complete kept while management judged its candidate, engineer_reuse.go)
+// ends the loop with no further model call.
+func TestToolBatchWaitTerminalEndsTheLoop(t *testing.T) {
+	registry, provider := batchWaitFixture(t, `{"stdout":"review requested"}`)
+	waits := 0
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"x"}`)}, "system", 0, noEmit, nil,
+		WithToolBatchWait(func(context.Context, []types.ToolCall, []types.ToolResult) (ToolLoopCompletionGuardResult, bool, error) {
+			waits++
+			return ToolLoopCompletionGuardResult{Terminal: true, Reason: "candidate_review_passed"}, true, nil
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if waits != 1 || provider.CallCount() != 1 {
+		t.Fatalf("waits %d, model calls %d; want 1 and 1", waits, provider.CallCount())
+	}
+}

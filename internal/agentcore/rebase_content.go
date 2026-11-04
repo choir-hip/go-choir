@@ -146,7 +146,7 @@ func (rt *Runtime) rebaseContentGate(ctx context.Context, operation selfdev.Oper
 // verifyRebaseContentForOperation checks the operation's bound bundle when the
 // operation is a claimed rebase round's. checked is false for any other.
 func (rt *Runtime) verifyRebaseContentForOperation(ctx context.Context, operation selfdev.Operation) (checked bool, err error) {
-	assignmentID, ok := strings.CutPrefix(operation.IdempotencyKey, "freeze-open:")
+	assignmentID, ok := store.EngineeringFreezeAssignmentOf(operation.IdempotencyKey)
 	if !ok || strings.TrimSpace(assignmentID) == "" || rt == nil || rt.store == nil {
 		return false, nil
 	}

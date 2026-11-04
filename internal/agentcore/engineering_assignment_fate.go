@@ -474,12 +474,22 @@ func (rt *Runtime) failBoundSelfdevOperation(ctx context.Context, computerID, as
 	if rt == nil || rt.selfdevOperations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(assignmentID) == "" {
 		return
 	}
-	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	operation, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, computerID, assignmentID)
 	if err != nil {
 		log.Printf("selfdev: fail the operation of assignment %s: read: %v", assignmentID, err)
 		return
 	}
 	if !found {
+		return
+	}
+	// An open assignment's candidate awaits approval only when management
+	// passed it while its engineer was parked on the review
+	// (engineer_reuse.go): the judged candidate stays for the owner's
+	// decision, as a completed assignment's does, when the run ends before
+	// its Complete commits. A trajectory's cancellation still closes it
+	// (failTrajectorySelfdevOperations).
+	if operation.State == selfdev.StateAwaitingApproval {
+		log.Printf("selfdev: assignment %s ended (%s); its candidate %s passed management's review and stays awaiting approval", assignmentID, reason, operation.OperationID)
 		return
 	}
 	rt.failSelfdevOperation(ctx, operation, reason)
@@ -979,9 +989,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		report.ReportID = store.TerminalReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, attempt, propositionDigest)
 		report.PropositionDigest = propositionDigest
 	} else {
-		report.ReportID = "report:" + objectgraph.SHA256([]byte(strings.Join([]string{
-			"choir:co-super-report:v1", assignment.Binding.OwnerID, assignment.Binding.ComputerID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
-		}, "\x00")))
+		// One derivation, shared with management's review admission
+		// (engineer_reuse.go, assignmentInReview).
+		report.ReportID = partialReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, rec.RunID, assignmentID, attempt, toolCallID)
 		report.PropositionDigest = ""
 	}
 	cancellationIntended := false
@@ -1848,7 +1858,7 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 	}
 	computerID := assignment.Binding.ComputerID
 	for attempt := 0; attempt < selfdevCloseAttempts; attempt++ {
-		operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
+		operation, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, computerID, assignment.AssignmentID)
 		if err != nil {
 			log.Printf("selfdev: close the operation of ended assignment %s: read: %v", assignment.AssignmentID, err)
 			return
@@ -1892,16 +1902,22 @@ func (rt *Runtime) assignmentOutcomeRefs(ctx context.Context, assignment types.E
 	if ref := strings.TrimSpace(report.CandidateArtifactRef); ref != "" {
 		refs = append(refs, ref)
 	}
-	if report.Result == types.EngineeringResultPartial || rt == nil || rt.selfdevOperations == nil {
+	// A review request (engineer_reuse.go) is a partial report that names
+	// its candidate, so management's Verify can name it as from a final one.
+	review := report.Result == types.EngineeringResultPartial && reviewOperationFromRefs(report.EvidenceRefs) != ""
+	if (report.Result == types.EngineeringResultPartial && !review) || rt == nil || rt.selfdevOperations == nil {
 		return refs
 	}
-	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, assignment.Binding.ComputerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
+	operation, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, assignment.Binding.ComputerID, assignment.AssignmentID)
 	if err != nil || !found {
 		return refs
 	}
 	refs = append(refs, "selfdev-operation:"+operation.OperationID)
 	if digest := strings.TrimSpace(operation.BundleDigest); digest != "" {
 		refs = append(refs, "bundle:"+digest)
+	}
+	if review {
+		refs = append(refs, reviewEvidencePrefix+operation.OperationID)
 	}
 	return refs
 }

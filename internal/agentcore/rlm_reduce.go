@@ -919,7 +919,7 @@ func refusePartialCompleteAfterFreeze(ctx context.Context, operations *selfdev.S
 	if operations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(assignmentID) == "" {
 		return nil
 	}
-	operation, found, err := operations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	operation, _, found, err := assignmentOperation(ctx, operations, computerID, assignmentID)
 	if err != nil {
 		// Accepting the partial could strand a frozen candidate; the
 		// refused cell commits nothing, so the model can retry.
@@ -1573,7 +1573,7 @@ func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikerne
 		in.BuildRecipeRef, in.TestReceipts, in.DependencyToolchainRefs)
 	// The assignment's own operation (C1e D2), opened by the freeze when it
 	// had none; a freeze refused before it opened leaves nothing to stamp.
-	operation, found, lookupErr := r.toolCtx.OperationStore.GetByIdempotency(ctx, r.toolCtx.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	operation, _, found, lookupErr := assignmentOperation(ctx, r.toolCtx.OperationStore, r.toolCtx.ComputerID, assignmentID)
 	if lookupErr != nil || !found {
 		if err != nil {
 			return nil, err
@@ -1645,12 +1645,21 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if assignment.Binding.ParentAgentID != strings.TrimSpace(r.scope.DeskAgentID) {
 		return nil, fmt.Errorf("reduce: verify %s: assignment %s was not cast by this desk", in.LocalID, assignmentID)
 	}
-	if assignment.Disposition != types.EngineeringAssignmentCompleted && assignment.Disposition != types.EngineeringAssignmentCancelled {
-		return nil, fmt.Errorf("reduce: verify %s: assignment %s is %s; only a completed assignment's candidate, or one retained frozen when its build's budget ended, is verified", in.LocalID, assignmentID, assignment.Disposition)
-	}
-	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, r.scope.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	// The assignment's current candidate (engineer_reuse.go: an assignment
+	// whose engineer fixed a rejected candidate has later revisions).
+	operation, revision, found, err := assignmentOperation(ctx, rt.selfdevOperations, r.scope.ComputerID, assignmentID)
 	if err != nil {
 		return nil, fmt.Errorf("reduce: verify %s: resolve the assignment's operation: %w", in.LocalID, err)
+	}
+	// An open assignment's candidate is verified while its engineer waits
+	// for the verdict: the review Report the platform minted for exactly
+	// this operation is the proof (engineer_reuse.go).
+	// Verify admits the union (design A6): a completed assignment's
+	// candidate, a cancelled assignment's retained candidate (checked
+	// below), or an open assignment's candidate in review.
+	inReview := !assignment.Disposition.Terminal() && found && rt.assignmentInReview(ctx, assignment, operation)
+	if assignment.Disposition != types.EngineeringAssignmentCompleted && assignment.Disposition != types.EngineeringAssignmentCancelled && !inReview {
+		return nil, fmt.Errorf("reduce: verify %s: assignment %s is %s; only a completed assignment's candidate, one retained frozen when its build's budget ended, or one whose engineer asked for review, is verified", in.LocalID, assignmentID, assignment.Disposition)
 	}
 	if !found {
 		return nil, fmt.Errorf("reduce: verify %s: assignment %s froze no candidate", in.LocalID, assignmentID)
@@ -1735,16 +1744,29 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if retained {
 		rt.endRetainedCandidateWait(ctx, retention, decision)
 	}
+	if inReview {
+		// The verdict that landed, the per-shot review's flip included:
+		// a flipped pass resumes the waiting engineer as a rejection with
+		// the per-shot reasons (the park reads the failed operation).
+		reviewReason, _ := verdictExtra[verdictReasonKey].(string)
+		rt.noteReviewVerdict(ctx, assignment, operation, revision, decision, reviewReason)
+	}
 	// Management's verdict settles verify_pass, and where it left the
 	// operation settles judge_accepts: the two part when the per-shot
-	// review fails a candidate management passed (R17).
+	// review fails a candidate management passed (R17). A rejection the
+	// engineer may still fix (in review, engineer_reuse.go), management's
+	// or the per-shot review's, settles nothing: the claims are about the
+	// assignment's candidate, which a later revision may be; a pass, or
+	// the round's end, settles them.
 	verdict := types.EngineeringVerifyObservation{Decision: in.Decision, BundleDigest: operation.BundleDigest, VerifierRefs: trimNonEmptyStrings(in.VerifierRefs), OperationID: operation.OperationID}
 	verdict.OperationState, _ = out["state"].(string)
 	verdict.At = time.Now().UTC()
-	rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, "verify", time.Now().UTC(),
-		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
-			return types.SettleRuleOnVerify(rule, verdict)
-		})
+	if !inReview || decision == "pass" {
+		rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, "verify", time.Now().UTC(),
+			func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
+				return types.SettleRuleOnVerify(rule, verdict)
+			})
+	}
 	// P4: under the owner's standing_consensus arm, a passed Verify asks
 	// corpusd's decision poster once (no-op under any other mode).
 	if state, _ := out["state"].(string); state == selfdev.StateAwaitingApproval {
@@ -1899,7 +1921,9 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	}
 	result := types.EngineeringAssignmentResultKind(strings.TrimSpace(in.Result))
 	verdict := types.EngineeringAssignmentVerdict(strings.TrimSpace(in.Verdict))
-	evidenceRefs := sortedUniqueStrings(in.EvidenceRefs)
+	// review:<operation> is the platform's mark of a review request
+	// (engineer_reuse.go); the engineer's own refs never carry it.
+	evidenceRefs := withoutReviewRefs(sortedUniqueStrings(in.EvidenceRefs))
 	// A repeated ref is the same evidence: one command per distinct ref, in
 	// first-cited order. The post-freeze binder collapses repeats, so a
 	// repeat here failed its count check after the freeze was durable, when
@@ -1950,6 +1974,12 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	rt := r.rt()
 	if rt == nil {
 		return false, fmt.Errorf("reduce: complete intent without runtime")
+	}
+	// Engineer reuse (engineer_reuse.go): a completed Complete after a Freeze
+	// below the revision bound asks management's Verify now, while the
+	// engineer's capsule is live; the Complete itself is kept for the pass.
+	if op, revision, divert := r.reviewDivert(ctx, result); divert {
+		return false, r.commitReviewRequest(ctx, op, revision, intentIdentity, report)
 	}
 	// The report's outcome (row, final Report to management) commits in one
 	// transaction (C1e D3); management's Verify, not a host chain, judges a

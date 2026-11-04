@@ -45,6 +45,10 @@ type ToolLoopCompletionGuardResult struct {
 	// end) and Instruction reports it: the turn resumes, and the wait is
 	// not a retry of the guard's reminder (bounded by maxCompletionGuardWaits).
 	Waited bool
+	// Terminal, from a batch wait, says the wait itself committed the run's
+	// terminal fate (an engineer's Complete kept while management judged its
+	// candidate): the loop ends as after a terminal tool, with no model call.
+	Terminal bool
 }
 
 type ToolLoopCompletionGuardFunc func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error)
@@ -1123,6 +1127,16 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				waited, ok, err := options.batchWait(ctx, resp.ToolCalls, toolResults)
 				if err != nil {
 					return "", totalUsage, fmt.Errorf("tool loop batch wait: %w", err)
+				}
+				if ok && waited.Terminal {
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"iteration": i + 1,
+							"reason":    waited.Reason,
+						})
+						emit(types.EventRunProgress, "batch_wait_terminal", payload)
+					}
+					return combinedFinalText(resp.Text), totalUsage, nil
 				}
 				if ok && waited.Continue {
 					completionGuardWaits++

@@ -17,7 +17,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -275,7 +274,7 @@ func (toolCtx *CapsuleToolCtx) frozenScreensNote(ctx context.Context, assignment
 	if toolCtx == nil || toolCtx.OperationStore == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || strings.TrimSpace(assignmentID) == "" {
 		return ""
 	}
-	operation, found, err := toolCtx.OperationStore.GetByIdempotency(ctx, toolCtx.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	operation, _, found, err := assignmentOperation(ctx, toolCtx.OperationStore, toolCtx.ComputerID, assignmentID)
 	if err != nil || !found || operation.BundleDigest == "" || !computerevent.IsSHA256(operation.BundleDigest) {
 		return ""
 	}
