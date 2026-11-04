@@ -1476,7 +1476,9 @@ func (rt *Runtime) settleAssignmentOfEndedEngineeringRun(ctx context.Context, re
 			return true
 		}
 	}
-	if _, err := rt.persistSystemEngineeringCancellation(context.WithoutCancel(ctx), assignment, reason, false); err != nil {
+	// The run ended without a fate: the build ended, and a candidate it
+	// froze is retained for its decision (retained_candidate.go).
+	if _, err := rt.persistSystemEngineeringCancellation(withBuildBudgetEnd(context.WithoutCancel(ctx)), assignment, reason, false); err != nil {
 		log.Printf("runtime: run-end settle of %s: cancel: %v", assignmentID, err)
 	}
 	return true

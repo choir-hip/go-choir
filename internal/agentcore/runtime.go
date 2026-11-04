@@ -1920,7 +1920,13 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		// assignment revoke intent must precede capability revoke/destroy/inspect,
 		// structured executor ack, and assignment/work/run cancellation.
 		rt.runningMu.Unlock()
-		assignmentProjected, err = rt.cancelBoundEngineeringRun(context.WithoutCancel(ctx), rec, reason)
+		// Every end of the engineer's run (its budget, a cell or loop
+		// failure, a run cancel, a drain, no live loop) ends the build, not
+		// the candidate: a candidate it froze is retained for its decision
+		// (retained_candidate.go). Assignment-level acts (management's
+		// cancel, a trajectory cancel, the crash boot, a Report) decide the
+		// candidate on their own paths.
+		assignmentProjected, err = rt.cancelBoundEngineeringRun(withBuildBudgetEnd(context.WithoutCancel(ctx)), rec, reason)
 		if err != nil {
 			return fmt.Errorf("cancel bound Engineering run fate: %w", err)
 		}
@@ -4837,7 +4843,16 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		return
 	}
 	if assignedEngineeringRun(rec) {
-		termErr := rt.terminalizeRun(context.Background(), rec.RunID, rec.OwnerID, err.Error())
+		reason, termCtx := err.Error(), context.Background()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// The run's own context is past its deadline: the activation
+			// budget ended the build. Named as such, and marked so a
+			// candidate it froze is retained for its decision
+			// (retained_candidate.go), not failed with the raw "context
+			// deadline exceeded".
+			reason, termCtx = activationBudgetExceededReason, withBuildBudgetEnd(termCtx)
+		}
+		termErr := rt.terminalizeRun(termCtx, rec.RunID, rec.OwnerID, reason)
 		if termErr == nil {
 			if stored, loadErr := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID); loadErr == nil {
 				*rec = stored
@@ -4856,7 +4871,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 	if ctx.Err() != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			err = errors.New("activation budget exceeded: progress deadline reached")
+			err = errors.New(activationBudgetExceededReason)
 		}
 		// Context cancellation means the runtime is shutting down or the
 		// run was cancelled, not a provider failure. Treat as cancelled.

@@ -325,6 +325,11 @@ type EngineeringTerminalObservation struct {
 	At              time.Time
 	CandidateFrozen bool
 	CandidateRef    string
+	// CandidateRetained says the round's frozen candidate was retained for
+	// its Verify when the build's clock ended the round
+	// (docs/problems/frozen-candidate-dies-with-build-deadline-2026-11-04.md),
+	// so verify_pass stays open for that Verify.
+	CandidateRetained bool
 }
 
 // RuleSettlement is one rule's answer with the observation and evidence it
@@ -508,7 +513,7 @@ func SettleRuleAtTerminal(rule PrecommitRule, obs EngineeringTerminalObservation
 		}
 		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: excerpt, EvidenceRefs: refs}, true
 	case PrecommitRuleVerifyPass, PrecommitRuleJudgeAccepts:
-		if obs.CandidateFrozen && obs.Disposition == EngineeringAssignmentCompleted {
+		if obs.CandidateFrozen && (obs.Disposition == EngineeringAssignmentCompleted || obs.CandidateRetained) {
 			return RuleSettlement{}, false
 		}
 		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: "no completed candidate to judge; " + ended, EvidenceRefs: refs}, true

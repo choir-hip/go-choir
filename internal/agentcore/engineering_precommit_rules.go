@@ -237,6 +237,9 @@ func (rt *Runtime) settleEngineeringPrecommitsAtTerminal(ctx context.Context, as
 		if err == nil && found && strings.TrimSpace(operation.BundleDigest) != "" {
 			obs.CandidateFrozen = true
 			obs.CandidateRef = "selfdev-operation:" + operation.OperationID
+			// A candidate retained when its build's clock ended still
+			// waits for its Verify (retained_candidate.go).
+			_, obs.CandidateRetained = rt.retainedFor(operation, assignment.AssignmentID)
 		}
 	}
 	rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, "terminal "+string(assignment.Disposition), obs.At,

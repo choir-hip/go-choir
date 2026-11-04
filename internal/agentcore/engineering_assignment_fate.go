@@ -228,6 +228,16 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 	if cancel.Reason == "" {
 		cancel.Reason = "persistent Management cancelled assignment"
 	}
+	// Freeze ends the build budget (retained_candidate.go): at the
+	// assignment deadline a frozen candidate is retained for its decision.
+	retained, retain := selfdev.Operation{}, false
+	if !assignment.Disposition.Terminal() {
+		retained, cancel.Reason, retain = rt.decideRetention(ctx, assignment, cancel.Reason)
+	} else if retainedPrefix := cancel.Reason + "; the build ended after its Freeze"; strings.HasPrefix(assignment.DispositionReason, retainedPrefix) {
+		// A re-fired deadline wake replays the retaining cancel it
+		// committed, not a conflicting plain one (review r3, devin F3).
+		cancel.Reason = assignment.DispositionReason
+	}
 	cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 	if assignment.Disposition.Terminal() {
 		// Exact cancellation replay/conflict is receipt-authoritative even after
@@ -235,6 +245,13 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 		replayed, replayErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if replayErr != nil {
 			return types.EngineeringAssignmentCommandResult{}, replayErr
+		}
+		// A retaining cancel whose record was not written heals here, as the
+		// persist loop's early return does (review r4, devin F1).
+		if cancel.Reason == assignment.DispositionReason && strings.Contains(cancel.Reason, "; the build ended after its Freeze") {
+			if operation, frozen := rt.frozenCandidateOf(ctx, assignment.Binding.ComputerID, assignment.AssignmentID); frozen {
+				rt.recordRetention(assignment, operation)
+			}
 		}
 		return replayed, nil
 	}
@@ -251,7 +268,11 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
 	if !cancelled.Replay {
-		rt.failBoundSelfdevOperation(ctx, assignment.Binding.ComputerID, assignment.AssignmentID, cancel.Reason)
+		if retain {
+			rt.retainCandidateAtBuildEnd(ctx, cancelled.Assignment, retained)
+		} else {
+			rt.failBoundSelfdevOperation(ctx, assignment.Binding.ComputerID, assignment.AssignmentID, cancel.Reason)
+		}
 		rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
 		rt.wakeNextQueuedEngineeringRequest(ctx, cancelled.Assignment)
@@ -294,12 +315,27 @@ func (rt *Runtime) stopCancelledAssignmentRun(ctx context.Context, assignment ty
 // its final Report into the engineering round while that round is open (D3);
 // a crash boot's cancellation is silent (D7), so nothing wakes.
 func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, assignment types.EngineeringAssignment, reason string, silent bool) (types.EngineeringAssignmentCommandResult, error) {
+	// Freeze ends the build budget (retained_candidate.go): a round whose
+	// build's clock ended after it froze keeps its candidate frozen.
+	retainedReason := strings.TrimSpace(reason)
+	if retainedReason == "" {
+		retainedReason = "system cancelled assignment fate"
+	}
+	retained, retain := selfdev.Operation{}, false
+	if !assignment.Disposition.Terminal() {
+		retained, retainedReason, retain = rt.decideRetention(ctx, assignment, retainedReason)
+	}
 	for attempt := 0; attempt < 4; attempt++ {
 		current, err := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt)
 		if err != nil {
 			return types.EngineeringAssignmentCommandResult{}, err
 		}
 		if current.Disposition.Terminal() {
+			// This call's own retaining cancel committed on an earlier
+			// attempt that returned an error: record its retention.
+			if retain && current.Disposition == types.EngineeringAssignmentCancelled && current.DispositionReason == retainedReason {
+				rt.recordRetention(current, retained)
+			}
 			return types.EngineeringAssignmentCommandResult{Assignment: current, Replay: true}, nil
 		}
 		if current.CapsuleDisposition != types.EngineeringCapsuleRevoked {
@@ -311,6 +347,9 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 		if cancel.Reason == "" {
 			cancel.Reason = "system cancelled assignment fate"
 		}
+		// Decided once, before the loop, so every attempt sends the same
+		// command (review r1, devin F3).
+		cancel.Reason = retainedReason
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 		result, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if cancelErr == nil {
@@ -319,7 +358,11 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 				// choke point; the assignment's own self-development op
 				// (resolved by its freeze key, D2) fails here. Best-effort:
 				// a terminal or missing op converges.
-				rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.AssignmentID, cancel.Reason)
+				if retain {
+					rt.retainCandidateAtBuildEnd(ctx, result.Assignment, retained)
+				} else {
+					rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.AssignmentID, cancel.Reason)
+				}
 				rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, cancel.Reason)
 				if !silent {
 					rt.wakeNextQueuedEngineeringRequest(ctx, result.Assignment)
@@ -728,6 +771,13 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			OwnerID:   ownerID, ComputerID: computerID, AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 			ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart revoked absent assignment capsule",
 		}
+		// The bound run is gone (this branch is never the crash boot's):
+		// the build ended, and a candidate it froze is retained
+		// (retained_candidate.go, review r5 devin F1).
+		retained, retain := selfdev.Operation{}, false
+		if !crashBoot {
+			retained, cancel.Reason, retain = rt.decideRetention(withBuildBudgetEnd(ctx), assignment, cancel.Reason)
+		}
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 		cancelled, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
@@ -740,7 +790,11 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			return cancelErr
 		}
 		if !cancelled.Replay {
-			rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
+			if retain {
+				rt.retainCandidateAtBuildEnd(ctx, cancelled.Assignment, retained)
+			} else {
+				rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
+			}
 			rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
 			rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
 			rt.wakeNextQueuedEngineeringRequest(ctx, cancelled.Assignment)
@@ -812,6 +866,8 @@ func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx contex
 	if _, planned := rt.BootWasPlannedRestart(); planned {
 		rt.resumeQueuedEngineeringRequestsAtPlannedBoot(ctx, computerID)
 		rt.rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx, computerID)
+	} else {
+		rt.closeRetainedCandidatesAtCrashBoot(ctx)
 	}
 }
 
