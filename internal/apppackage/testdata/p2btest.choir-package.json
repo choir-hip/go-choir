@@ -10,7 +10,7 @@
     "launcher": { "menu": true, "desktopIcon": false, "order": 900 },
     "window": { "singleton": true, "heavy": false },
     "auth": { "preview": "private" },
-    "theme": { "surface": "standard", "shellDataAttr": "p2btest", "contentClass": "p2btest-content" }
+    "theme": { "surface": "standard", "shellDataAttr": "data-p2btest", "contentClass": "p2btest-content" }
   },
   "opens": [{ "media_type": "application/x-p2btest", "extensions": ["p2b"] }],
   "kinds": [

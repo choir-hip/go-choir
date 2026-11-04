@@ -26,11 +26,14 @@ const (
 
 // InstalledPackage is one installed package as the shell lists it.
 type InstalledPackage struct {
-	Name        string          `json:"name"`
-	ReleaseID   string          `json:"release_id"`
-	InstallID   string          `json:"install_id"`
-	InstalledAt string          `json:"installed_at"`
-	Publisher   string          `json:"publisher_computer_id,omitempty"`
+	Name        string `json:"name"`
+	ReleaseID   string `json:"release_id"`
+	InstallID   string `json:"install_id"`
+	InstalledAt string `json:"installed_at"`
+	Publisher   string `json:"publisher_computer_id,omitempty"`
+	// Track is the owner id of the track the release is on: the shell tells
+	// the owner's own track from a stranger's by it.
+	Track       string          `json:"track,omitempty"`
 	RequiresSDK string          `json:"requires_sdk"`
 	Manifest    json.RawMessage `json:"manifest"`
 	Module      InstalledModule `json:"module"`
@@ -77,7 +80,7 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 			out = append(out, InstalledPackage{
 				Name: name, ReleaseID: item.ReleaseID, InstallID: item.InstallID,
 				InstalledAt: item.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
-				Publisher:   item.PublisherComputerID, RequiresSDK: item.RequiresSDK, Manifest: item.Manifest,
+				Publisher:   item.PublisherComputerID, Track: item.PublisherTrack, RequiresSDK: item.RequiresSDK, Manifest: item.Manifest,
 				Module:    InstalledModule{ABI: item.ModuleABI, SHA256: item.ModuleSHA256, URL: packageModulesPrefix + item.ModuleSHA256 + ".js"},
 				Available: readErr == nil,
 			})

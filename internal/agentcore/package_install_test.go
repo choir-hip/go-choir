@@ -49,7 +49,7 @@ func installManifest(title string) string {
   "version": "1.0.0",
   "display": {"title": "` + title + `", "icon": "D", "description": "Demo"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
-    "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "private"}, "theme": {}},
+    "launcher": {"menu": true, "desktopIcon": false, "order": 1}, "window": {"singleton": false, "heavy": false}, "auth": {"preview": "private"}, "theme": {"surface": "standard", "shellDataAttr": "data-x-window", "contentClass": "x-content"}},
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
@@ -85,7 +85,7 @@ func publishedPackage(t *testing.T, repo, base, track string, files map[string]s
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := pkgrelease.CheckManifest(installName, []byte(files["choir-package.json"]), nil)
+	manifest, version, err := pkgrelease.CheckManifest(installName, []byte(files["choir-package.json"]), pkgrelease.TreeSource(ctx, repo, fullTree, root))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,6 +507,11 @@ func TestRuntimeInstallInstallsAnotherOwnersRelease(t *testing.T) {
 	}
 	if n := e.records(t); n != 1 {
 		t.Fatalf("records = %d", n)
+	}
+	// The installed API says whose track the release is on, so the shell can
+	// tell the owner's own track from a stranger's.
+	if pkgs := e.installed(t); len(pkgs) != 1 || pkgs[0].Track != "owner-x" || pkgs[0].Publisher != "computer-owner-x" {
+		t.Fatalf("installed = %+v", pkgs)
 	}
 	code, view, reason = e.post(t, []byte(`{"release_id":"`+otherID+`","action":"uninstall"}`))
 	if code != http.StatusCreated || view.State != installStateUninstalled {

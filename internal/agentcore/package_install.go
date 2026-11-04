@@ -142,7 +142,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	// Backstop of the proxy's rule: a stranger's release never replaces a
 	// built-in app, whichever route brought it here.
 	if apppackage.IsBuiltinPackage(rec.Package.Name) && rec.Track != ownerID {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusForbidden, "builtin_name_not_yours", "package %s is a built-in app; only its owner's own track may replace it", rec.Package.Name)
+		return PackageInstallView{}, false, refuseInstall(http.StatusForbidden, "builtin_name_not_yours", "package %s is a built-in app; only its owner's own track may replace it", rec.Package.Name)
 	}
 	rt.packageInstallMu.Lock()
 	defer rt.packageInstallMu.Unlock()
@@ -169,6 +169,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	}
 	record.Package = rec.Package.Name
 	record.PublisherComputerID, record.PublisherOperationID = rec.Publisher.ComputerID, rec.Operation.OperationID
+	record.PublisherTrack = rec.Track
 	record.ReleaseBaseCommit, record.ReleaseTreeHash = rec.Source.BuiltOn, rec.Source.Tree
 
 	// 4. Verify and build: the bytes are the record's, confined to the

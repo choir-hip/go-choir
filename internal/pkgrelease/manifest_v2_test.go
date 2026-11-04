@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 )
 
 // MA2.3 failure modes at the release seam (the manifest classes are pinned in
@@ -20,6 +22,8 @@ import (
 //	R5  a v1 record (no schema, no surface) still validates, or is refused with
 //	    a generic code the catalog cannot count (package_manifest_v1_deleted).
 //	R6  two checks of the same bytes give two behaviour surfaces.
+
+var appSource = apppackage.MapSource(map[string]string{"App.svelte": "<p>x</p>"})
 
 func readerManifest(t *testing.T, mutate func(map[string]any)) []byte {
 	t.Helper()
@@ -39,11 +43,11 @@ func readerManifest(t *testing.T, mutate func(map[string]any)) []byte {
 
 func TestCheckManifestSummaryIsDerivedAndStable(t *testing.T) {
 	raw := readerManifest(t, nil)
-	a, version, err := CheckManifest("reader", raw, nil)
+	a, version, err := CheckManifest("reader", raw, appSource)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _, _ := CheckManifest("reader", raw, nil)
+	b, _, _ := CheckManifest("reader", raw, appSource)
 	if a != b || len(a.BehaviourSurface) != 64 || a.Schema != "choir.package/v2" || a.Class != "app" || a.Level != "default" || a.DesksCount != 0 || version != "1.0.1" && version != "1.0.0" {
 		t.Fatalf("summary = %+v version %s", a, version)
 	}
@@ -77,7 +81,7 @@ func TestCheckManifestRefusalReasons(t *testing.T) {
 			if c.name == "candidate suffix" {
 				name = "reader-candidate"
 			}
-			_, _, err := CheckManifest(name, readerManifest(t, c.mutate), nil)
+			_, _, err := CheckManifest(name, readerManifest(t, c.mutate), appSource)
 			if got := ReasonOf(err); got != c.reason {
 				t.Fatalf("reason = %q (%v), want %q", got, err, c.reason)
 			}
@@ -86,11 +90,11 @@ func TestCheckManifestRefusalReasons(t *testing.T) {
 	// An extended grant is accepted by the manifest and carried as the level.
 	ext, _, err := CheckManifest("reader", readerManifest(t, func(v map[string]any) {
 		v["capabilities"] = []any{map[string]any{"grant": "ui.net.egress", "args": []any{"api.example.com"}}}
-	}), nil)
+	}), appSource)
 	if err != nil || ext.Level != "extended" {
 		t.Fatalf("extended: %+v %v", ext, err)
 	}
-	base, _, _ := CheckManifest("reader", readerManifest(t, nil), nil)
+	base, _, _ := CheckManifest("reader", readerManifest(t, nil), appSource)
 	if ext.BehaviourSurface == base.BehaviourSurface {
 		t.Fatal("an added capability did not move the behaviour surface")
 	}

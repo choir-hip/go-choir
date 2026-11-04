@@ -134,6 +134,9 @@ export type InstalledPackageRecord = {
   release_id: string;
   install_id: string;
   installed_at: string;
+  /** The owner id of the track the release is on (own track vs a stranger's). */
+  track?: string;
+  publisher_computer_id?: string;
   requires_sdk: string;
   manifest: PackageManifest;
   module: { abi: string; sha256: string; url: string };

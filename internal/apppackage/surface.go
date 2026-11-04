@@ -10,6 +10,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,43 +19,101 @@ import (
 )
 
 // SurfaceDomain versions the behaviour-surface hash's input format.
-const SurfaceDomain = "choir.behaviour-surface/v1"
+const SurfaceDomain = "choir.behaviour-surface/v2"
 
 // MaxSurfaceFileBytes bounds each file the hash reads.
 const MaxSurfaceFileBytes = 256 << 10
 
-// FileReader reads one file of the package by its package-relative path. The
-// path has passed checkPath; a reader must still refuse anything outside the
-// package (DirReader does; a git tree reader cannot name one).
-type FileReader func(path string) ([]byte, error)
+// MaxSourceFileBytes bounds each file of a release tree the hash reads (the
+// release patch cap).
+const MaxSourceFileBytes = 2 << 20
 
-// DirReader reads files under root and refuses a symlink, a non-regular file,
-// a path that leaves root, and a file over MaxSurfaceFileBytes.
-func DirReader(root string) FileReader {
-	return func(p string) ([]byte, error) {
-		if err := checkPathAny(p, ".md", ".txt", ".go", ".svelte"); err != nil {
+// Source is the package's release tree: every file's path (relative to the
+// package root, slash separated) and its bytes. The behaviour-surface hash
+// covers every file in it, so a change to any source the build can reach moves
+// the hash, not only a change to the manifest.
+type Source interface {
+	// List returns every regular file of the package, sorted or not.
+	List() ([]string, error)
+	// Read returns one file by a path List returned.
+	Read(path string) ([]byte, error)
+}
+
+type mapSource map[string]string
+
+func (m mapSource) List() ([]string, error) {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out, nil
+}
+
+func (m mapSource) Read(p string) ([]byte, error) {
+	v, ok := m[p]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return []byte(v), nil
+}
+
+// MapSource is a Source over an in-memory file map (tests and fixtures).
+func MapSource(files map[string]string) Source { return mapSource(files) }
+
+type dirSource struct{ root string }
+
+// DirSource reads a package directory. It refuses a symlink, a non-regular
+// file, a path that leaves root, and a file over MaxSourceFileBytes.
+func DirSource(root string) Source { return dirSource{root} }
+
+func (d dirSource) List() ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(d.root, func(p string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if e.IsDir() {
+			return nil
+		}
+		if !e.Type().IsRegular() {
+			return fmt.Errorf("%q is not a regular file", p)
+		}
+		rel, err := filepath.Rel(d.root, p)
+		if err != nil {
+			return err
+		}
+		out = append(out, filepath.ToSlash(rel))
+		return nil
+	})
+	return out, err
+}
+
+func (d dirSource) Read(p string) ([]byte, error) {
+	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "\\") {
+		return nil, fmt.Errorf("%q is not a clean relative path", p)
+	}
+	cur := d.root
+	for _, part := range strings.Split(p, "/") {
+		if part == "" || part == "." || part == ".." {
+			return nil, fmt.Errorf("%q is not a clean relative path", p)
+		}
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if err != nil {
 			return nil, err
 		}
-		cur := root
-		for _, part := range strings.Split(p, "/") {
-			cur = filepath.Join(cur, part)
-			fi, err := os.Lstat(cur)
-			if err != nil {
-				return nil, err
-			}
-			if fi.Mode()&os.ModeSymlink != 0 {
-				return nil, fmt.Errorf("%q passes through a symlink", p)
-			}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("%q passes through a symlink", p)
 		}
-		fi, err := os.Lstat(cur)
-		if err != nil || !fi.Mode().IsRegular() {
-			return nil, fmt.Errorf("%q is not a regular file", p)
-		}
-		if fi.Size() > MaxSurfaceFileBytes {
-			return nil, fmt.Errorf("%q is over %d bytes", p, MaxSurfaceFileBytes)
-		}
-		return os.ReadFile(cur)
 	}
+	fi, err := os.Lstat(cur)
+	if err != nil || !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%q is not a regular file", p)
+	}
+	if fi.Size() > MaxSourceFileBytes {
+		return nil, fmt.Errorf("%q is over %d bytes", p, MaxSourceFileBytes)
+	}
+	return os.ReadFile(cur)
 }
 
 // baseImportSet is every desk's yaegi import set before grants add to it: the
@@ -174,7 +233,7 @@ type surfaceDoc struct {
 	Kinds        []surfaceKind  `json:"kinds"`
 	UsesKinds    []string       `json:"uses_kinds"`
 	Capabilities []string       `json:"capabilities"`
-	ImportSet    []string       `json:"import_set"`
+	Files        []surfaceFile  `json:"files"`
 }
 
 // BehaviourSurface is the sha256 (lowercase hex) over what the package may do
@@ -183,7 +242,11 @@ type surfaceDoc struct {
 // each desk's name, prompt file, code and tool files (by
 // content), schedules and accepts; every kind with its schema and versions;
 // the kinds it reads; the capability ceiling with its arguments (the egress
-// hosts among them); and the derived import set. Any change moves the hash,
+// hosts among them); and the bytes of every file in the release tree except the
+// manifest, by sorted path. The derived import set is not in the hash: it is a
+// platform fact and a platform release that widens it would otherwise move every
+// package's surface (it follows from the hashed grants and the platform
+// version). Any change moves the hash,
 // and a changed hash is an update the owner approves even when grants are
 // unchanged (plan section 5.1, red-team item 2). Authoring order does not
 // matter: lists are sorted and JSON is canonical.
@@ -191,18 +254,39 @@ type surfaceDoc struct {
 // It also runs the source gate: desk Go files that import outside the desk's
 // set are refused here, so a hash is never issued for a package the gate
 // would refuse. files may be nil only when the manifest names no desk file.
-func (m Manifest) BehaviourSurface(files FileReader) (string, error) {
+func (m Manifest) BehaviourSurface(src Source) (string, error) {
 	imports := m.ImportSet()
 	sort.Strings(imports)
 	doc := surfaceDoc{
 		Domain: SurfaceDomain, Desks: []surfaceDesk{}, Kinds: []surfaceKind{},
-		UsesKinds: []string{}, Capabilities: []string{}, ImportSet: imports,
+		UsesKinds: []string{}, Capabilities: []string{}, Files: []surfaceFile{},
+	}
+	if src == nil && (m.App != nil || len(m.Contributes.Desks) > 0) {
+		return "", invalid("no source to hash: the behaviour surface covers every file of the package")
+	}
+	if src != nil {
+		paths, err := src.List()
+		if err != nil {
+			return "", invalid("listing the package files: %v", err)
+		}
+		sort.Strings(paths)
+		for _, p := range paths {
+			if p == ManifestFile {
+				continue // the manifest is covered field by field
+			}
+			raw, err := src.Read(p)
+			if err != nil {
+				return "", invalid("%s: %v", p, err)
+			}
+			if len(raw) > MaxSourceFileBytes {
+				return "", invalid("%s: over %d bytes", p, MaxSourceFileBytes)
+			}
+			sum := sha256.Sum256(raw)
+			doc.Files = append(doc.Files, surfaceFile{Path: p, SHA256: hex.EncodeToString(sum[:])})
+		}
 	}
 	read := func(p string, isGo bool) (surfaceFile, error) {
-		if files == nil {
-			return surfaceFile{}, invalid("%s: no file reader to hash it", p)
-		}
-		raw, err := files(p)
+		raw, err := src.Read(p)
 		if err != nil {
 			return surfaceFile{}, invalid("%s: %v", p, err)
 		}

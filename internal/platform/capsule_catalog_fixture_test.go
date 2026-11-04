@@ -226,7 +226,7 @@ func generateCapsuleCatalogFixture(t *testing.T) (capsuleCatalogFixture, map[str
 		if err != nil {
 			t.Fatal(err)
 		}
-		manifest, version, err := pkgrelease.CheckManifest(fr.pkg, []byte(fixtureManifest(fr.pkg)), nil)
+		manifest, version, err := pkgrelease.CheckManifest(fr.pkg, []byte(fixtureManifest(fr.pkg)), pkgrelease.TreeSource(ctx, w.repo, w.fullTree(full), root))
 		if err != nil {
 			t.Fatal(err)
 		}

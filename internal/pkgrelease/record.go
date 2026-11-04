@@ -129,17 +129,20 @@ type Source struct {
 // subtree the record binds, and the record carries no executable bytes.
 type Manifest struct {
 	SHA256 string `json:"sha256"`
-	Schema string `json:"schema"`
+	Schema string `json:"schema,omitempty"`
 	// ABI is the app's ABI; empty for a package with no app.
 	ABI         string `json:"abi,omitempty"`
 	RequiresSDK string `json:"requires_sdk,omitempty"`
 	KindsCount  int    `json:"kinds_count"`
 	OpensCount  int    `json:"opens_count"`
-	DesksCount  int    `json:"desks_count"`
-	Class       string `json:"class"`
-	Level       string `json:"level"`
+	DesksCount  int    `json:"desks_count,omitempty"`
+	Class       string `json:"class,omitempty"`
+	Level       string `json:"level,omitempty"`
 	// BehaviourSurface is the sha256 of apppackage.Manifest.BehaviourSurface.
-	BehaviourSurface string `json:"behaviour_surface"`
+	// The v2 fields are omitted when empty so a record published under the
+	// deleted v1 manifest re-canonicalizes to the bytes its id hashes (it is
+	// kept readable as a parent: see ValidateAsParent).
+	BehaviourSurface string `json:"behaviour_surface,omitempty"`
 }
 
 // Publisher is the computer that made and applied the change, and its owner.
@@ -215,7 +218,16 @@ func (r Record) ReleaseID() (string, error) {
 // Validate checks the record's shape: every binding present and well
 // formed, the root the package's, the track the publisher's, and the parent
 // one of its two kinds.
-func (r Record) Validate() error {
+func (r Record) Validate() error { return r.validate(false) }
+
+// ValidateAsParent is Validate for a record read only to serve as a track's
+// head and a new release's parent: a release published under the deleted v1
+// manifest passes, so its track can publish its first v2 release on it
+// (plan section 18 item 12). Such a record is still refused everywhere it
+// would be served or installed, because those paths call Validate.
+func (r Record) ValidateAsParent() error { return r.validate(true) }
+
+func (r Record) validate(legacyParentOK bool) error {
 	r = r.Normalize()
 	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, format, args...) }
 	if r.Schema != Schema {
@@ -286,7 +298,11 @@ func (r Record) Validate() error {
 			return fail("changed path %q is not a clean path under %s", path, r.Source.Root)
 		}
 	}
-	if err := r.Manifest.validate(); err != nil {
+	if legacyParentOK && r.Manifest.isLegacyV1() {
+		if !computerevent.IsSHA256(r.Manifest.SHA256) {
+			return fail("manifest names a sha256")
+		}
+	} else if err := r.Manifest.validate(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(r.Operation.OperationID) == "" || !computerevent.IsSHA256(r.Operation.BundleDigest) || strings.TrimSpace(r.Operation.DecisionEvent) == "" {
@@ -350,8 +366,15 @@ func decodeStrict(raw []byte, target any) error {
 
 // VerifyID validates the record and requires its canonical digest to equal
 // releaseID.
-func VerifyID(record Record, releaseID string) error {
-	if err := record.Validate(); err != nil {
+func VerifyID(record Record, releaseID string) error { return verifyID(record, releaseID, false) }
+
+// VerifyIDAsParent is VerifyID with ValidateAsParent.
+func VerifyIDAsParent(record Record, releaseID string) error {
+	return verifyID(record, releaseID, true)
+}
+
+func verifyID(record Record, releaseID string, asParent bool) error {
+	if err := record.validate(asParent); err != nil {
 		return err
 	}
 	releaseID = strings.ToLower(strings.TrimSpace(releaseID))
@@ -384,6 +407,9 @@ func VerifyBlob(blob Blob, raw []byte) error {
 // and level are the platform's vocabulary, the level is one a Library release
 // may carry, and a desk is refused while the platform lacks the Phase 6
 // isolation (R24), here again after the manifest check.
+// isLegacyV1 reports a summary written before manifest v2.
+func (m Manifest) isLegacyV1() bool { return m.Schema == "" && m.BehaviourSurface == "" }
+
 func (m Manifest) validate() error {
 	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, format, args...) }
 	// A record published before manifest v2 summarized a v1 manifest and
@@ -421,7 +447,7 @@ func (m Manifest) validate() error {
 	default:
 		return fail("manifest level %q is not a level", m.Level)
 	}
-	if m.DesksCount > 0 && !apppackage.CurrentPlatform().DeskSandbox {
+	if m.DesksCount > 0 && !apppackage.CurrentPlatform().AdmitsDesksFrom(apppackage.OriginPublished) {
 		return refuse(ReasonDeskNeedsSandbox, "a desk-bearing release from a publisher waits for the Phase 6 sandbox (R24)")
 	}
 	return nil

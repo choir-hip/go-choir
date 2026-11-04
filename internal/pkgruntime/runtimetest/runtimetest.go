@@ -91,7 +91,7 @@ func Release(t testing.TB, ownerID, name string, files map[string]string) (pkgre
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := pkgrelease.CheckManifest(name, []byte(files["choir-package.json"]), nil)
+	manifest, version, err := pkgrelease.CheckManifest(name, []byte(files["choir-package.json"]), pkgrelease.TreeSource(ctx, repo, full, root))
 	if err != nil {
 		t.Fatal(err)
 	}

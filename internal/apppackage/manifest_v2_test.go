@@ -157,10 +157,11 @@ func TestH2DirReaderRefusesSymlinksAndEscapes(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "dir")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "big.md"), make([]byte, MaxSurfaceFileBytes+1), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "big.md"), make([]byte, MaxSourceFileBytes+1), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	read := DirReader(root)
+	src := DirSource(root)
+	read := src.Read
 	if b, err := read("ok.md"); err != nil || string(b) != "ok" {
 		t.Fatalf("ok: %q %v", b, err)
 	}
@@ -443,19 +444,27 @@ func TestH7DeskSourceImportGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := mapFiles{"prompts/desk.md": "be careful", "desk/main.go": "package main\nimport \"os/exec\"\n"}
-	if _, err := m.BehaviourSurface(files.read); !errors.Is(err, ErrInvalidManifest) {
+	if _, err := m.BehaviourSurface(files); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("hash over banned source: %v", err)
 	}
 }
 
 type mapFiles map[string]string
 
-func (f mapFiles) read(p string) ([]byte, error) {
+func (f mapFiles) Read(p string) ([]byte, error) {
 	s, ok := f[p]
 	if !ok {
 		return nil, os.ErrNotExist
 	}
 	return []byte(s), nil
+}
+
+func (f mapFiles) List() ([]string, error) {
+	out := make([]string, 0, len(f))
+	for k := range f {
+		out = append(out, k)
+	}
+	return out, nil
 }
 
 func cloneFiles(f mapFiles) mapFiles {
@@ -495,7 +504,7 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		h, err := m.BehaviourSurface(f.read)
+		h, err := m.BehaviourSurface(f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -548,6 +557,7 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 		"kind identity": func(t *testing.T) string {
 			return hash(t, func(v map[string]any) { v["kinds"].([]any)[1].(map[string]any)["owner_edits"] = true }, files)
 		},
+		"unnamed file": func(t *testing.T) string { return hash(t, nil, file("README.md", "hello")) },
 		"kind removed": func(t *testing.T) string {
 			return hash(t, func(v map[string]any) { v["kinds"] = v["kinds"].([]any)[:1] }, files)
 		},
@@ -571,7 +581,7 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 		seen[got] = name
 	}
 	// Not covered: authoring order, whitespace and key order, display, window and
-	// theme geometry, the version, and files the manifest does not name.
+	// theme geometry, and the version.
 	same := map[string]func(t *testing.T) string{
 		"capability order": func(t *testing.T) string {
 			return hash(t, func(v map[string]any) { c := v["capabilities"].([]any); c[0], c[1] = c[1], c[0] }, files)
@@ -579,8 +589,7 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 		"display": func(t *testing.T) string {
 			return hash(t, func(v map[string]any) { v["display"].(map[string]any)["title"] = "Else" }, files)
 		},
-		"version":      func(t *testing.T) string { return hash(t, func(v map[string]any) { v["version"] = "9.9.9" }, files) },
-		"unnamed file": func(t *testing.T) string { return hash(t, nil, file("README.md", "hello")) },
+		"version": func(t *testing.T) string { return hash(t, func(v map[string]any) { v["version"] = "9.9.9" }, files) },
 		"kinds order": func(t *testing.T) string {
 			return hash(t, func(v map[string]any) { k := v["kinds"].([]any); k[0], k[1] = k[1], k[0] }, files)
 		},
@@ -592,7 +601,7 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 	}
 	// A missing file is an error, not an empty hash input.
 	m, _ := ParseManifest(v2JSON(t, deskV), OriginFirstParty)
-	if _, err := m.BehaviourSurface(mapFiles{"prompts/desk.md": "x"}.read); !errors.Is(err, ErrInvalidManifest) {
+	if _, err := m.BehaviourSurface(mapFiles{"prompts/desk.md": "x"}); !errors.Is(err, ErrInvalidManifest) {
 		t.Errorf("missing code file: %v", err)
 	}
 	if _, err := m.BehaviourSurface(nil); !errors.Is(err, ErrInvalidManifest) {
@@ -601,7 +610,7 @@ func TestH8BehaviourSurfaceHashIsStableAndMovesWithEachCoveredInput(t *testing.T
 }
 
 func TestBehaviourSurfaceOfAFrontEndOnlyPackageNeedsNoFiles(t *testing.T) {
-	a, err := fixture(t).BehaviourSurface(nil)
+	a, err := fixture(t).BehaviourSurface(mapFiles{"App.svelte": "x"})
 	if err != nil || len(a) != 64 {
 		t.Fatalf("%v %q", err, a)
 	}
@@ -735,7 +744,7 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 		if m.Class() != ClassApp || m.Level() != LevelDefault {
 			t.Errorf("%s: class %s level %s", p, m.Class(), m.Level())
 		}
-		if _, err := m.BehaviourSurface(DirReader(filepath.Dir(p))); err != nil {
+		if _, err := m.BehaviourSurface(DirSource(filepath.Dir(p))); err != nil {
 			t.Errorf("%s: %v", p, err)
 		}
 	}
@@ -792,7 +801,7 @@ func TestN2AppBlockOpensAndAliasesMoveTheHash(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := m.BehaviourSurface(nil)
+		s, err := m.BehaviourSurface(mapFiles{"App.svelte": "x"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -846,5 +855,102 @@ func TestN3PublishedManifestsCarryNoOpensOrAliases(t *testing.T) {
 	}
 	if _, err := parseAs(t, OriginPublished, plain); err != nil {
 		t.Errorf("plain published app: %v", err)
+	}
+}
+
+// Second-seat #2: the hash covers the bytes of every file of the release tree.
+func TestSurfaceHashCoversEveryFileOfTheTree(t *testing.T) {
+	m := fixture(t)
+	files := mapFiles{"App.svelte": "<p>a</p>", "lib/x.js": "export const x = 1", "choir-package.json": "{}"}
+	h := func(f mapFiles) string {
+		t.Helper()
+		got, err := m.BehaviourSurface(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	base := h(files)
+	for name, mod := range map[string]func(mapFiles){
+		"entry bytes":  func(f mapFiles) { f["App.svelte"] = "<p>evil</p>" },
+		"imported js":  func(f mapFiles) { f["lib/x.js"] = "export const x = 2" },
+		"added file":   func(f mapFiles) { f["lib/y.css"] = "a{}" },
+		"removed file": func(f mapFiles) { delete(f, "lib/x.js") },
+		"renamed file": func(f mapFiles) { f["lib/z.js"] = f["lib/x.js"]; delete(f, "lib/x.js") },
+	} {
+		f := cloneFiles(files)
+		mod(f)
+		if h(f) == base {
+			t.Errorf("%s did not move the hash", name)
+		}
+	}
+	// The manifest file is covered field by field, not as bytes.
+	f := cloneFiles(files)
+	f["choir-package.json"] = `{"display":"changed"}`
+	if h(f) != base {
+		t.Error("the manifest's bytes moved the hash")
+	}
+	// An app package with no source to hash is an error, not an empty input.
+	if _, err := m.BehaviourSurface(nil); !errors.Is(err, ErrInvalidManifest) {
+		t.Errorf("nil source with an app: %v", err)
+	}
+	// The domain is versioned: the doc shape changed with this coverage.
+	if SurfaceDomain != "choir.behaviour-surface/v2" {
+		t.Errorf("domain = %s", SurfaceDomain)
+	}
+}
+
+// The derived import set is not in the hash: a platform release that widens it
+// must not move every package's surface.
+func TestImportSetIsNotInTheHash(t *testing.T) {
+	m := fixture(t)
+	files := mapFiles{"App.svelte": "x"}
+	before, _ := m.BehaviourSurface(files)
+	saved := baseImportSet
+	baseImportSet = append(append([]string{}, saved...), "text/tabwriter")
+	defer func() { baseImportSet = saved }()
+	after, _ := m.BehaviourSurface(files)
+	if before != after {
+		t.Fatal("the import set moved the surface")
+	}
+}
+
+// Second-seat non-blocking: the app block is validated in Go for any manifest.
+func TestAppBlockIsValidatedInGo(t *testing.T) {
+	app := func(v map[string]any) map[string]any { return v["app"].(map[string]any) }
+	cases := map[string]func(map[string]any){
+		"launcher missing field": func(v map[string]any) { app(v)["launcher"] = map[string]any{"menu": true} },
+		"launcher extra": func(v map[string]any) {
+			app(v)["launcher"] = map[string]any{"menu": true, "desktopIcon": false, "order": 1, "x": 1}
+		},
+		"launcher wrong type": func(v map[string]any) {
+			app(v)["launcher"] = map[string]any{"menu": "yes", "desktopIcon": false, "order": 1}
+		},
+		"window missing": func(v map[string]any) { app(v)["window"] = map[string]any{"singleton": true} },
+		"window bad geometry": func(v map[string]any) {
+			app(v)["window"] = map[string]any{"singleton": true, "heavy": false, "desktop": map[string]any{"width": -1}}
+		},
+		"auth unknown":         func(v map[string]any) { app(v)["auth"] = map[string]any{"preview": "public-write"} },
+		"theme surface":        func(v map[string]any) { t := app(v)["theme"].(map[string]any); t["surface"] = "neon" },
+		"theme attr not data-": func(v map[string]any) { t := app(v)["theme"].(map[string]any); t["shellDataAttr"] = "onclick" },
+		"theme attr injection": func(v map[string]any) { t := app(v)["theme"].(map[string]any); t["shellDataAttr"] = "data-x onload=1" },
+		"theme class":          func(v map[string]any) { t := app(v)["theme"].(map[string]any); t["contentClass"] = "A b" },
+		"block absent":         func(v map[string]any) { delete(app(v), "theme") },
+		"block null":           func(v map[string]any) { app(v)["auth"] = nil },
+	}
+	for name, mut := range cases {
+		for _, origin := range []string{OriginFirstParty, OriginPublished} {
+			if _, err := parseAs(t, origin, func(v map[string]any) { mut(v); v["opens"] = []any{}; app(v)["aliases"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
+				t.Errorf("%s (%s): %v", name, origin, err)
+			}
+		}
+	}
+}
+
+// One platform decision: a record and a manifest ask the same question.
+func TestDeskAdmissionIsOneDecision(t *testing.T) {
+	if (Platform{}).AdmitsDesksFrom(OriginPublished) || !(Platform{DeskSandbox: true}).AdmitsDesksFrom(OriginPublished) ||
+		!(Platform{}).AdmitsDesksFrom(OriginFirstParty) {
+		t.Fatal("desk admission is wrong")
 	}
 }

@@ -24,11 +24,13 @@ const ogKindPackageInstall = objectgraph.ObjectKind("choir.package_install")
 // PackageInstall is an install or uninstall of a package release and what the
 // computer verified before doing it.
 type PackageInstall struct {
-	InstallID            string    `json:"install_id"`
-	OwnerID              string    `json:"owner_id"`
-	ComputerID           string    `json:"computer_id"`
-	ReleaseID            string    `json:"release_id"`
-	PublisherComputerID  string    `json:"publisher_computer_id"`
+	InstallID           string `json:"install_id"`
+	OwnerID             string `json:"owner_id"`
+	ComputerID          string `json:"computer_id"`
+	ReleaseID           string `json:"release_id"`
+	PublisherComputerID string `json:"publisher_computer_id"`
+	// PublisherTrack is the owner id of the track a runtime install came from.
+	PublisherTrack       string    `json:"publisher_track,omitempty"`
 	PublisherOperationID string    `json:"publisher_operation_id"`
 	PatchSHA256          string    `json:"patch_sha256"`
 	ReleaseBaseCommit    string    `json:"release_base_commit"`

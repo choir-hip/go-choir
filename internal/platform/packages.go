@@ -498,6 +498,18 @@ func listingFor(listing pkgrelease.Listing, reader string) pkgrelease.Listing {
 // readPackageRecord reads ownerID's release by id and re-verifies it from
 // its body.
 func (h *Handler) readPackageRecord(ctx context.Context, ownerID, releaseID string) (objectgraph.Object, pkgrelease.Record, error) {
+	return h.readPackageRecordWith(ctx, ownerID, releaseID, pkgrelease.VerifyID)
+}
+
+// readPackageParent reads a record to serve as a track's head or a new
+// release's parent. A release under the deleted v1 manifest reads (so its
+// track can publish its first v2 release on it) though every serving and
+// install path refuses it.
+func (h *Handler) readPackageParent(ctx context.Context, ownerID, releaseID string) (objectgraph.Object, pkgrelease.Record, error) {
+	return h.readPackageRecordWith(ctx, ownerID, releaseID, pkgrelease.VerifyIDAsParent)
+}
+
+func (h *Handler) readPackageRecordWith(ctx context.Context, ownerID, releaseID string, verify func(pkgrelease.Record, string) error) (objectgraph.Object, pkgrelease.Record, error) {
 	store := h.releaseStore()
 	if store == nil {
 		return objectgraph.Object{}, pkgrelease.Record{}, errors.New("package store unavailable")
@@ -515,7 +527,7 @@ func (h *Handler) readPackageRecord(ctx context.Context, ownerID, releaseID stri
 	}
 	record, err := pkgrelease.Decode(obj.Body)
 	if err == nil {
-		err = pkgrelease.VerifyID(record, releaseID)
+		err = verify(record, releaseID)
 	}
 	if err != nil {
 		return objectgraph.Object{}, pkgrelease.Record{}, err
@@ -670,7 +682,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 			moved(detail)
 			return
 		}
-		_, parent, err := h.readPackageRecord(ctx, ownerID, record.Parent.ReleaseID)
+		_, parent, err := h.readPackageParent(ctx, ownerID, record.Parent.ReleaseID)
 		if err != nil {
 			writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonParentMismatch, Detail: "the parent release is unreadable: " + err.Error()})
 			return
@@ -1070,7 +1082,7 @@ func (h *Handler) packageTrackHead(w http.ResponseWriter, r *http.Request, name 
 		writeJSON(w, http.StatusNotFound, noHead)
 		return
 	}
-	_, record, err := h.readPackageRecord(r.Context(), reader, head.RecordID)
+	_, record, err := h.readPackageParent(r.Context(), reader, head.RecordID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "the track head's record is unreadable"})
 		return

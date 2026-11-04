@@ -14,3 +14,11 @@ type Platform struct {
 // body with detection of the sandbox; until then no desk from another
 // publisher is published or installed.
 func CurrentPlatform() Platform { return Platform{DeskSandbox: false} }
+
+// AdmitsDesksFrom is the one answer to "may a desk from this origin be published
+// or installed here": a first-party desk always; any other origin's only when
+// the platform has the isolation. The manifest validator and the release record
+// both ask it, so they cannot disagree when the sandbox ships.
+func (p Platform) AdmitsDesksFrom(origin string) bool {
+	return origin == OriginFirstParty || p.DeskSandbox
+}

@@ -62,7 +62,7 @@ const pkgManifest = `{
   "version": "1.0.0",
   "display": {"title": "Reader", "icon": "R", "description": "Read"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
-    "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "public-preview"}, "theme": {}},
+    "launcher": {"menu": true, "desktopIcon": false, "order": 1}, "window": {"singleton": false, "heavy": false}, "auth": {"preview": "public-preview"}, "theme": {"surface": "standard", "shellDataAttr": "data-x-window", "contentClass": "x-content"}},
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
@@ -179,7 +179,7 @@ func (w *pkgWorld) build(content, owner string, parent *built) built {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := pkgrelease.CheckManifest("reader", []byte(pkgManifest), nil)
+	manifest, version, err := pkgrelease.CheckManifest("reader", []byte(pkgManifest), pkgrelease.TreeSource(context.Background(), w.repo, full, pkgRoot))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -778,4 +778,52 @@ func newReleaseHandler(t *testing.T) (*Handler, string) {
 	t.Helper()
 	store, root := openTestPlatformStore(t)
 	return NewHandler(NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "signing-key"))), root
+}
+
+// Second-seat #3: a listed release under the deleted v1 manifest must not
+// strand its track. It stays a readable head and parent (so the track
+// publishes its first v2 release on it), while it is never served or installed.
+func TestPackageTrackWithAV1HeadPublishesItsFirstV2Release(t *testing.T) {
+	w := newPkgWorld(t)
+	built := w.build("<p>v1</p>\n", "owner-a", nil)
+	rec := built.record
+	// The summary a v1 publisher wrote: no schema, class, level or surface.
+	rec.Manifest = pkgrelease.Manifest{SHA256: rec.Manifest.SHA256, ABI: rec.Manifest.ABI}
+	v1 := w.seal(rec, built.blobs)
+	if v1.id == built.id {
+		t.Fatal("the v1 record has the v2 id")
+	}
+	w.storeRecordOnly(v1)
+	listing := pkgrelease.Listing{
+		RecordKind: pkgrelease.RecordKindPackageRelease, RecordID: v1.id, Package: "reader", Track: "owner-a", Seq: 1,
+		Scopes: publishScopes, State: pkgrelease.StateListed, StateReason: "published", StateActor: "owner-a", Version: 1,
+	}
+	obj, err := listingObject("owner-a", computerOf("owner-a"), listing, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := w.h.releaseStore().InsertObjectIfAbsent(context.Background(), obj); err != nil || !ok {
+		t.Fatalf("list the v1 release: %v %v", ok, err)
+	}
+
+	// The head endpoint answers (no 500) and names the v1 release.
+	head := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a")
+	if head.Code != http.StatusOK || !strings.Contains(head.Body.String(), v1.id) {
+		t.Fatalf("head = %d %s", head.Code, head.Body.String())
+	}
+	// It is not served: a read of the release and the catalog drop it.
+	if rec := w.read(packagesRoute + "/releases/" + v1.id + "?owner_id=owner-a"); rec.Code == http.StatusOK {
+		t.Fatalf("a v1 release is served: %s", rec.Body.String())
+	}
+	if rec := w.read(packagesRoute + "/catalog?owner_id=owner-a"); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), v1.id) {
+		t.Fatalf("catalog = %d %s", rec.Code, rec.Body.String())
+	}
+	// The first v2 release publishes on the v1 head.
+	v2 := w.build("<p>v2</p>\n", "owner-a", &v1)
+	if view := w.published(v2); view.Listing.Seq != 2 || view.Listing.Track != "owner-a" {
+		t.Fatalf("v2 listing = %+v", view.Listing)
+	}
+	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a"); !strings.Contains(rec.Body.String(), v2.id) {
+		t.Fatalf("head after v2 = %s", rec.Body.String())
+	}
 }

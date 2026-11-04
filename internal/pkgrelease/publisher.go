@@ -139,22 +139,48 @@ func ManifestDescription(raw []byte) string {
 	return line
 }
 
-// treeFiles reads package files from a git tree in a scratch repository:
-// root is the package directory inside full. A path the manifest validator
-// admitted is a clean relative path, and a git tree path cannot leave the
-// tree, so there is nothing to escape; a symlink blob (mode 120000) is
-// refused by the confinement check before this runs.
-func treeFiles(ctx context.Context, dir string, env []string, full, root string) apppackage.FileReader {
-	return func(path string) ([]byte, error) {
-		raw, err := gitRun(ctx, dir, env, nil, "cat-file", "blob", full+":"+root+"/"+path)
-		if err != nil {
-			return nil, fmt.Errorf("the release holds no %s", path)
-		}
-		if len(raw) > apppackage.MaxSurfaceFileBytes {
-			return nil, fmt.Errorf("%s is over %d bytes", path, apppackage.MaxSurfaceFileBytes)
-		}
-		return raw, nil
+// treeSource is the package's files in a git tree in a scratch repository:
+// root is the package directory inside full. Every path is listed from the
+// tree, a git tree path cannot leave the tree, and a symlink blob (mode 120000)
+// is refused by the confinement check before this runs.
+type treeSource struct {
+	ctx        context.Context
+	dir        string
+	env        []string
+	full, root string
+}
+
+func treeFiles(ctx context.Context, dir string, env []string, full, root string) apppackage.Source {
+	return treeSource{ctx: ctx, dir: dir, env: env, full: full, root: root}
+}
+
+func (t treeSource) List() ([]string, error) {
+	out, err := gitRun(t.ctx, t.dir, t.env, nil, "ls-tree", "-r", "-z", t.full+":"+t.root)
+	if err != nil {
+		return nil, fmt.Errorf("the release holds no %s", t.root)
 	}
+	// Only regular files: a symlink or a submodule is refused by the
+	// confinement check, and is never read as source.
+	var paths []string
+	for _, line := range strings.Split(string(out), "\x00") {
+		meta, name, ok := strings.Cut(line, "\t")
+		fields := strings.Fields(meta)
+		if ok && len(fields) == 3 && fields[1] == "blob" && (fields[0] == "100644" || fields[0] == "100755") {
+			paths = append(paths, name)
+		}
+	}
+	return paths, nil
+}
+
+func (t treeSource) Read(path string) ([]byte, error) {
+	raw, err := gitRun(t.ctx, t.dir, t.env, nil, "cat-file", "blob", t.full+":"+t.root+"/"+path)
+	if err != nil {
+		return nil, fmt.Errorf("the release holds no %s", path)
+	}
+	if len(raw) > apppackage.MaxSourceFileBytes {
+		return nil, fmt.Errorf("%s is over %d bytes", path, apppackage.MaxSourceFileBytes)
+	}
+	return raw, nil
 }
 
 // CheckManifest validates the package's choir-package.json bytes for a
@@ -165,7 +191,7 @@ func treeFiles(ctx context.Context, dir string, env []string, full, root string)
 // (package_kinds_need_platform). files reads the package's source files for the
 // behaviour-surface hash and the desk import gate. It returns the record's
 // manifest summary and the manifest version.
-func CheckManifest(name string, raw []byte, files apppackage.FileReader) (Manifest, string, error) {
+func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, string, error) {
 	// Kinds first: a first-party package's kinds are generated into
 	// internal/apppackage/firstparty_gen.go, outside the package, so a
 	// release cannot carry them until runtime install (S12).
@@ -651,4 +677,11 @@ func packagePathsBetween(ctx context.Context, s *scratch, root, from, to string)
 	}
 	sort.Strings(paths)
 	return paths, nil
+}
+
+// TreeSource is the package's files at root in the full-path tree of repo: the
+// source the behaviour surface covers. Publishers and tests build the record's
+// manifest summary from it.
+func TreeSource(ctx context.Context, repo, fullTree, root string) apppackage.Source {
+	return treeFiles(ctx, repo, nil, fullTree, root)
 }

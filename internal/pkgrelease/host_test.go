@@ -38,7 +38,7 @@ const testManifest = `{
   "version": "1.0.0",
   "display": {"title": "Reader", "icon": "R", "description": "Read"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
-    "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "public-preview"}, "theme": {}},
+    "launcher": {"menu": true, "desktopIcon": false, "order": 1}, "window": {"singleton": false, "heavy": false}, "auth": {"preview": "public-preview"}, "theme": {"surface": "standard", "shellDataAttr": "data-x-window", "contentClass": "x-content"}},
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
@@ -146,7 +146,7 @@ func (f *fixture) release(full string) (Record, Blobs) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := CheckManifest("reader", manifestRaw, nil)
+	manifest, version, err := CheckManifest("reader", manifestRaw, treeFiles(context.Background(), f.repo, nil, full, testRoot))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestHostAcceptsANewPackageOnlyWhenTheBaseLacksIt(t *testing.T) {
 	if err != nil || blobs.ParentPatch != nil {
 		t.Fatalf("new package blobs: parent_patch=%d bytes, %v", len(blobs.ParentPatch), err)
 	}
-	summary, version, err := CheckManifest("notes", []byte(manifest), nil)
+	summary, version, err := CheckManifest("notes", []byte(manifest), treeFiles(context.Background(), f.repo, nil, full, root))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,8 @@ func TestHostAcceptsANewPackageOnlyWhenTheBaseLacksIt(t *testing.T) {
 func TestHostChecksAReleaseParentAgainstItsStoredTree(t *testing.T) {
 	f := newFixture(t)
 	first, firstBlobs := f.release(f.tree(changed("<p>v2</p>\n")))
-	second := f.subtree(f.tree(changed("<p>v3</p>\n")))
+	secondFull := f.tree(changed("<p>v3</p>\n"))
+	second := f.subtree(secondFull)
 	blobs, err := BuildBlobs(context.Background(), f.repo, testRoot, first.Source.Tree, second)
 	if err != nil {
 		t.Fatal(err)
@@ -357,6 +358,14 @@ func TestHostChecksAReleaseParentAgainstItsStoredTree(t *testing.T) {
 	record.ParentPatch = nil
 	record.Source.Tree = second
 	record.Source.TreePatch, record.Source.ReviewPatch = *blobOf(blobs.TreePatch), *blobOf(blobs.ReviewPatch)
+	// The summary is the second tree's: its behaviour surface covers the bytes.
+	manifestRaw, err := ReadFile(context.Background(), f.repo, secondFull, testRoot+"/choir-package.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Manifest, _, err = CheckManifest("reader", manifestRaw, treeFiles(context.Background(), f.repo, nil, secondFull, testRoot)); err != nil {
+		t.Fatal(err)
+	}
 	in := HostInput{Record: record, TreePatch: blobs.TreePatch, ReviewPatch: blobs.ReviewPatch, ParentRelease: &first, ParentTreePatch: firstBlobs.TreePatch, Base: GitStore{Dir: f.repo}}
 	if err := VerifyHost(context.Background(), in); err != nil {
 		t.Fatalf("a release on its track head is refused: %v", err)
@@ -554,4 +563,17 @@ func TestHostRefusesNonSourceFilesInTheTree(t *testing.T) {
 	if err := VerifyHost(context.Background(), f.input(record, blobs)); err != nil {
 		t.Fatalf("source and text types refused: %v", err)
 	}
+}
+
+// Second-seat #2: the record's behaviour surface covers the bytes of the
+// release's files, so a summary computed over other source bytes is refused.
+func TestHostRefusesABehaviourSurfaceOverOtherSourceBytes(t *testing.T) {
+	f := newFixture(t)
+	record, blobs := f.release(f.tree(changed("<p>v2</p>\n")))
+	other, _ := f.release(f.tree(changed("<p>EVIL</p>\n")))
+	if other.Manifest.BehaviourSurface == record.Manifest.BehaviourSurface {
+		t.Fatal("two source trees share a behaviour surface")
+	}
+	record.Manifest.BehaviourSurface = other.Manifest.BehaviourSurface
+	wantReason(t, VerifyHost(context.Background(), f.input(record, blobs)), ReasonManifestInvalid)
 }
