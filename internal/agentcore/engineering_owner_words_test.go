@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -258,5 +259,60 @@ func TestEngineeringRunContextCarriesTheOwnersWordsVerbatim(t *testing.T) {
 	run = buildAssignedEngineeringRun(assignment, "run-drift", "x", "capsule-source-git:commit:x")
 	if got := g.rt.runContextForRun(&run); strings.Contains(got, round4) {
 		t.Fatalf("an unbound request was carried:\n%s", got)
+	}
+}
+
+// The judge's owner notes (ON1-ON6 in engineering_owner_words.go).
+func TestOwnerNotesSinceTheCast(t *testing.T) {
+	castAt := time.Date(2026, 11, 3, 18, 50, 0, 0, time.UTC)
+	revs := ownerCastRevisions()
+	revs["rev-before"] = ownerWordsRevision("rev-before", 40, "before the cast")
+	revs["rev-note"] = ownerWordsRevision("rev-note", 55, "shot 10 means the Import from Files picker over Calendar")
+	other := ownerWordsRevision("rev-other", 56, "another trajectory's note")
+	other.TrajectoryID = "traj-0"
+	revs["rev-other"] = other
+	revs["rev-texture"] = ownerCastRevision("rev-texture-late", types.AuthorAppAgent, "rev-note", map[string]any{"owner_prompt": "Texture's words"})
+	late := revs["rev-texture"]
+	late.CreatedAt = time.Date(2026, 11, 3, 18, 57, 0, 0, time.UTC)
+	revs["rev-texture"] = late
+	long := ownerWordsRevision("rev-long", 58, strings.Repeat("é", 4000))
+	revs["rev-long"] = long
+	list := func() ([]types.Revision, error) {
+		out := []types.Revision{}
+		for _, rev := range revs {
+			out = append(out, rev)
+		}
+		return out, nil
+	}
+	got := ownerNotesSince(castAt, ownerCastScope, list)
+	if !strings.HasPrefix(got, judgeOwnerNotesHead) || !strings.Contains(got, "Import from Files picker") {
+		t.Fatalf("notes = %q", got)
+	}
+	for _, bad := range []string{"before the cast", "another trajectory", "Texture's words"} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("notes carry %q: %s", bad, got)
+		}
+	}
+	if strings.Index(got, "Import from Files") > strings.Index(got, "éé") {
+		t.Fatalf("not newest last: %s", got)
+	}
+	if n := strings.Count(got, "é"); n != judgeOwnerNoteRunes {
+		t.Fatalf("long note kept %d runes, want %d", n, judgeOwnerNoteRunes)
+	}
+	// Bounded to the last five.
+	for i := 0; i < 7; i++ {
+		id := fmt.Sprintf("rev-n%d", i)
+		revs[id] = ownerWordsRevision(id, 51+i/2, fmt.Sprintf("note-%d", i))
+		r := revs[id]
+		r.CreatedAt = castAt.Add(time.Duration(i+1) * time.Hour)
+		revs[id] = r
+	}
+	got = ownerNotesSince(castAt, ownerCastScope, list)
+	if c := strings.Count(got, "\n- ("); c != judgeOwnerNotesMax || strings.Contains(got, "note-1\n") || !strings.Contains(got, "note-6") {
+		t.Fatalf("%d notes: %s", c, got)
+	}
+	// No notes, no cast time, no lister: empty.
+	if ownerNotesSince(castAt.Add(100*time.Hour), ownerCastScope, list) != "" || ownerNotesSince(time.Time{}, ownerCastScope, list) != "" || ownerNotesSince(castAt, ownerCastScope, nil) != "" {
+		t.Fatal("expected no notes")
 	}
 }

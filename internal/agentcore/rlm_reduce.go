@@ -1714,13 +1714,14 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shotReviewTimeout+30*time.Second)
 		// The shot list the request names comes from the owner's words the
 		// round answers, read from the tape, never from a desk's restatement.
-		request := ""
+		request, notes := "", ""
 		if rt.store != nil {
+			notes = rt.ownerNotesForAssignment(reviewCtx, r.scope.OwnerID, r.scope.ComputerID, assignment)
 			if words, _, _, ok := rt.ownerWordsForAssignment(reviewCtx, r.scope.OwnerID, r.scope.ComputerID, assignment); ok {
 				request = words.Text
 			}
 		}
-		review, reviewErr := rt.reviewCandidateShots(reviewCtx, r.scope.OwnerID, operation, request)
+		review, reviewErr := rt.reviewCandidateShots(reviewCtx, r.scope.OwnerID, operation, request, notes)
 		cancel()
 		// The verdict a completed review decided is written past the cell's
 		// teardown too, so a cancel during the review does not discard it

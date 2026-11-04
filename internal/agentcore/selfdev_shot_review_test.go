@@ -316,7 +316,7 @@ func TestReviewCandidateShotsReadsTheBoundBundleAndTheStore(t *testing.T) {
 	}
 	judge := &scriptedJudge{answer: func(string) string { return allYes }}
 	rt.shotReviewCall = judge.call
-	review, err := rt.reviewCandidateShots(ctx, "owner", operation, "")
+	review, err := rt.reviewCandidateShots(ctx, "owner", operation, "", "")
 	if err != nil || review == nil {
 		t.Fatalf("review = %v, %v", review, err)
 	}
@@ -411,5 +411,47 @@ func TestShotReviewPhoneShotsMustBePhoneSizedAndCarryTheRequestDescription(t *te
 	}
 	if !strings.Contains(strings.Join(judge.prompts, "\n"), "(the request describes it as: frutiger-aero release detail") {
 		t.Fatal("the prompt does not carry the request's description of shot 05")
+	}
+}
+
+// FM10: owner notes written after the Cast reach the prompt only.
+func TestShotReviewOwnerNotesReachThePromptNotTheShotList(t *testing.T) {
+	wanted := requestedShots(libraryShotLine)
+	screens := shotFixture(1)
+	run := func(notes string) (*scriptedJudge, shotReview) {
+		judge := &scriptedJudge{answer: func(string) string { return allYes }}
+		review, err := reviewShotsNoted(context.Background(), judge.call, screens, nil, notes, always(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return judge, review
+	}
+	plain, _ := run("")
+	again := &scriptedJudge{answer: func(string) string { return allYes }}
+	if _, err := reviewShots(context.Background(), again.call, screens, nil, always(true)); err != nil {
+		t.Fatal(err)
+	}
+	if plain.prompts[0] != again.prompts[0] || strings.Contains(plain.prompts[0], "Owner notes") {
+		t.Fatal("no notes must leave the prompt as it was")
+	}
+	notes := judgeOwnerNotesHead + "\n- (2026-11-03T18:55:00Z) shot 10 is the Import from Files picker over Calendar. Also 13 zz and 14 yy and 15 xx.\n"
+	noted, _ := run(notes)
+	if !strings.Contains(noted.prompts[0], notes) || strings.Index(noted.prompts[0], "Import from Files") > strings.Index(noted.prompts[0], "Image 1:") {
+		t.Fatalf("notes not before the images: %s", noted.prompts[0])
+	}
+	// The list a note names is never parsed: the required shots come from the request.
+	if got := requestedShots(libraryShotLine); len(got) != len(wanted) {
+		t.Fatalf("shots changed: %d vs %d", len(got), len(wanted))
+	}
+	_, review := func() (*scriptedJudge, shotReview) {
+		judge := &scriptedJudge{answer: func(string) string { return allYes }}
+		r, err := reviewShotsNoted(context.Background(), judge.call, screens, wanted, notes, always(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return judge, r
+	}()
+	if len(review.Missing) != len(wanted)-1 { // only 01 is in the fixture; the note adds none
+		t.Fatalf("missing = %v", review.Missing)
 	}
 }
