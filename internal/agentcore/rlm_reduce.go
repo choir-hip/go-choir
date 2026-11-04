@@ -1097,6 +1097,10 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 				seq, err = r.commitEngineeringPrecommit(ctx, in)
 			} else {
 				seq, err = r.commitActIntent(ctx, in)
+				if err == nil {
+					// The run has predicted (calibration read marks, C6).
+					r.rt().noteCalibrationPredicted(r.scope.RunID, time.Now())
+				}
 			}
 		case yaegikernel.IntentMessage:
 			// Every staged message on an assigned desk or lifecycle producer

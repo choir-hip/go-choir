@@ -489,6 +489,11 @@ func (e *traceExporter) exportCalibrationClaims(bundle *traceBundle) *traceLayer
 	if len(assignments) == 0 {
 		b.note("no engineering assignment named by the trajectory or its runs")
 	}
+	for _, name := range []string{"trajectory", "runs"} {
+		if layer := bundle.Layers[name]; layer == nil || layer.Status == traceStatusUnserved {
+			b.note("discovery is partial: the %s layer is unserved", name)
+		}
+	}
 	for _, assignment := range sortedKeys(assignments) {
 		path := "/api/calibration/claims?assignment=" + url.QueryEscape(assignment)
 		var body struct {

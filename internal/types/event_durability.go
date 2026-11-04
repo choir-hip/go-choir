@@ -46,7 +46,6 @@ var eventDurability = map[EventKind]EventDurability{
 	EventToolInvoked:                  DurabilityBatched,
 	EventToolResult:                   DurabilityBatched,
 	EventDeskCell:                     DurabilityBatched,
-	EventCalibrationRead:              DurabilityBatched,
 	EventDeskEgress:                   DurabilityBatched,
 	EventTextureAgentRevisionProgress: DurabilityBatched,
 
@@ -74,6 +73,9 @@ var eventDurability = map[EventKind]EventDurability{
 	// Acknowledged: a judged pair relation is the authority for a public
 	// graph edge; a lost record would leave an edge with no record behind it.
 	EventStoryRelation: DurabilityAcknowledged,
+	// calibration.read (C6): a read mark of the calibration experiment;
+	// rare, and a lost mark would read as no read.
+	EventCalibrationRead: DurabilityAcknowledged,
 
 	// Acknowledged: a story's entity attachments are the authority for public
 	// graph rows and edges, as a judged pair is.

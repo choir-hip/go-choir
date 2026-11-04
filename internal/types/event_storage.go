@@ -39,7 +39,6 @@ var eventStorage = map[EventKind]EventStorage{
 	EventToolInvoked:                  StorageEventTable,
 	EventToolResult:                   StorageEventTable,
 	EventDeskCell:                     StorageEventTable,
-	EventCalibrationRead:              StorageEventTable,
 	EventDeskEgress:                   StorageEventTable,
 	EventTextureAgentRevisionProgress: StorageEventTable,
 
@@ -60,6 +59,10 @@ var eventStorage = map[EventKind]EventStorage{
 	EventChannelMessage:  StorageObjectGraph,
 	EventSystem1Judgment: StorageObjectGraph,
 	EventStoryRelation:   StorageObjectGraph,
+	// calibration.read (C6, 2026-11-04): rare, and the read metric of the
+	// calibration experiment rests on it, so it is held like any
+	// acknowledged kind, not batched.
+	EventCalibrationRead: StorageObjectGraph,
 	EventStoryEntities:   StorageObjectGraph,
 
 	// Object graph: owner acts and evidence.

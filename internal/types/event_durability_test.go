@@ -126,8 +126,10 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	// And story.entities (acknowledged, 2026-10-26): the research desk's
 	// entity attachments of a published story, whose tape record is the
 	// authority for the Store B choir.entity rows and mentions_entity edges.
-	if n := len(eventDurability); n != 45 {
-		t.Fatalf("eventDurability has %d entries, want 45 (the 42 designed kinds, system1.judgment, story.relation and story.entities)", n)
+	// And calibration.read (acknowledged, 2026-11-04): the calibration
+	// experiment's read mark (C6), rare, and a lost one reads as no read.
+	if n := len(eventDurability); n != 46 {
+		t.Fatalf("eventDurability has %d entries, want 46 (the 42 designed kinds, system1.judgment, story.relation, story.entities and calibration.read)", n)
 	}
 }
 
