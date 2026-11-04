@@ -39,7 +39,10 @@ import (
 //   - the printed sha256 is not the digest of the written file;
 //   - the captures layer (Cut 2 amendment A5) asks for no window, or misses
 //     a capture a report cites inside its JSON-string packet, or is
-//     anything but "unserved" when its route fails.
+//     anything but "unserved" when its route fails;
+//   - the calibration claims of the trajectory's assignments (precommits
+//     and their rule settlements, C9) are missing, or another assignment's
+//     ride along, or a deploy without the claims route reads as "empty".
 
 type traceStub struct {
 	mu       sync.Mutex
@@ -182,6 +185,15 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"capture_id": "cap-window", "in_window": true, "raw_present": true, "blocks": []any{map[string]any{"id": "c1", "text": "x", "normtext": "x"}}},
 			map[string]any{"capture_id": "cap-cited", "in_window": false, "raw_present": true, "blocks": []any{}},
 		}})
+	case r.URL.Path == "/api/calibration/claims":
+		if q.Get("assignment") != "as-1" {
+			http.Error(w, "unexpected assignment "+q.Get("assignment"), http.StatusBadRequest)
+			return
+		}
+		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "assignment": "as-1", "claims": []any{
+			map[string]any{"id": "cast-1:predict:verify_pass", "kind": "verify_pass", "p": 0.6, "assignment": "as-1", "answer": "yes", "settled_at": "t"},
+			map[string]any{"id": "pc-2", "kind": "tests_pass", "p": 0.7, "assignment": "as-1"},
+		}})
 	case r.URL.Path == "/api/runtime/obligations":
 		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "restart": map[string]any{"kind": "crash", "reason": "no marker"}})
 	case r.URL.Path == "/api/runtime/census":
@@ -256,24 +268,26 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 		t.Fatalf("bundle header = %+v", bundle)
 	}
 	want := map[string]string{
-		"trajectory":        "present",
-		"lifecycle_events":  "present",
-		"runs":              "present",
-		"run_events":        "present",
-		"cells":             "present",
-		"egress":            "present",
-		"deliveries":        "present",
-		"records":           "present",
-		"inboxes":           "present",
-		"turn_commits":      "present",
-		"revisions":         "present",
-		"publications":      "present",
-		"search_arrivals":   "unserved",
-		"research_children": "unserved",
-		"captures":          "present",
-		"obligations":       "present",
-		"census":            "present",
-		"boot":              "present",
+		"trajectory":         "present",
+		"lifecycle_events":   "present",
+		"runs":               "present",
+		"run_events":         "present",
+		"cells":              "present",
+		"egress":             "present",
+		"deliveries":         "present",
+		"records":            "present",
+		"inboxes":            "present",
+		"turn_commits":       "present",
+		"revisions":          "present",
+		"publications":       "present",
+		"search_arrivals":    "unserved",
+		"research_children":  "unserved",
+		"captures":           "present",
+		"calibration_claims": "present",
+		"calibration_reads":  "empty",
+		"obligations":        "present",
+		"census":             "present",
+		"boot":               "present",
 	}
 	for name, status := range want {
 		layer := layerStatus(t, bundle, name)
@@ -286,6 +300,9 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 	}
 	if len(bundle.Layers) != len(want) {
 		t.Errorf("bundle has %d layers, want %d", len(bundle.Layers), len(want))
+	}
+	if ids := strings.Join(itemIDs(t, layerStatus(t, bundle, "calibration_claims"), "id"), ","); ids != "cast-1:predict:verify_pass,pc-2" {
+		t.Fatalf("calibration claims = %s", ids)
 	}
 	if got := len(layerStatus(t, bundle, "lifecycle_events").Items); got != 3 {
 		t.Fatalf("lifecycle events paged = %d, want 3", got)

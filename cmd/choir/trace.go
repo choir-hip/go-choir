@@ -410,6 +410,8 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	bundle.Layers["search_arrivals"] = unservedLayer("async search arrivals have no product route until Cut 2")
 	bundle.Layers["research_children"] = unservedLayer("choir.Research children run without a run record and emit no events")
 	bundle.Layers["captures"] = e.exportCaptures(bundle, now)
+	bundle.Layers["calibration_claims"] = e.exportCalibrationClaims(bundle)
+	bundle.Layers["calibration_reads"] = deriveRunEventKind(bundle.Layers["run_events"], "calibration.read")
 
 	// obligations and boot.
 	obligations := newLayer("GET /api/runtime/obligations")
@@ -467,6 +469,38 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	}
 	bundle.Layers["boot"] = boot.finish()
 	return bundle
+}
+
+// exportCalibrationClaims builds the calibration_claims layer (C9 of
+// docs/design/calibration-wiring-permutations-2026-11-04.md): every rule
+// precommit of each engineering assignment the trajectory or its runs name,
+// stated against its rule settlement (the claims API joins them). The guest's
+// recent log, the only calibration trace before this, is lost on a reboot.
+func (e *traceExporter) exportCalibrationClaims(bundle *traceBundle) *traceLayer {
+	b := newLayer("GET /api/calibration/claims?assignment=")
+	assignments := map[string]bool{}
+	for _, name := range []string{"trajectory", "runs"} {
+		if layer := bundle.Layers[name]; layer != nil {
+			for _, item := range layer.Items {
+				collectIDs(item, func(key string) bool { return key == "assignment_id" }, assignments)
+			}
+		}
+	}
+	if len(assignments) == 0 {
+		b.note("no engineering assignment named by the trajectory or its runs")
+	}
+	for _, assignment := range sortedKeys(assignments) {
+		path := "/api/calibration/claims?assignment=" + url.QueryEscape(assignment)
+		var body struct {
+			Claims []json.RawMessage `json:"claims"`
+		}
+		if err := e.get(path, &body); err != nil {
+			b.fail("%s", routeFailure(path, err))
+			continue
+		}
+		b.add(body.Claims...)
+	}
+	return b.finish()
 }
 
 // traceCaptureWindowMargin opens the captures window before the earliest
