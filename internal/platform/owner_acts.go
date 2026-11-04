@@ -115,7 +115,7 @@ type OwnerActAuthority struct {
 	// and the computer tier; nil tape or jobs refuses every clean rebase,
 	// nil tier reads the embedded tier file.
 	cleanRebaseTape TapeObjectReader
-	cleanRebaseJobs HostBuildJobs
+	cleanRebaseJobs CleanRebaseHost
 	cleanRebaseTier func(computerID string) (test, platform bool, err error)
 }
 

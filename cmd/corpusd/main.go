@@ -158,12 +158,14 @@ func main() {
 	// misconfigured build service never stops corpusd (H23): it stays
 	// unconfigured, and Go-touching applies fail visibly.
 	var hostBuilds platform.HostBuildJobs
+	var cleanRebaseHost platform.CleanRebaseHost
 	if buildCfg, enabled := hostbuild.ConfigFromEnv(os.Getenv); enabled {
 		if buildSvc, err := handler.ConfigureHostBuild(buildCfg); err != nil {
 			log.Printf("corpusd host build: disabled, configuration failed: %v", err)
 		} else {
 			buildSvc.Start(context.Background())
 			hostBuilds = buildSvc
+			cleanRebaseHost = buildSvc
 			log.Printf("corpusd host build: enabled (source %s, installable %s)", buildCfg.SourceDir, buildCfg.Installable)
 		}
 	}
@@ -175,7 +177,7 @@ func main() {
 	// Clean rebase admission (owner 2026-11-04): an effect_accepted under
 	// platform-clean-rebase: is checked against the tape and the host build;
 	// without the host build service every clean rebase is refused.
-	ownerActs.ConfigureCleanRebase(svc.ReadTapeObject, hostBuilds)
+	ownerActs.ConfigureCleanRebase(svc.ReadTapeObject, cleanRebaseHost)
 	consensus, err := svc.ConsensusActuatorRuntime(modeCAS, hostBuilds)
 	if err != nil {
 		log.Fatalf("corpusd consensus poster: %v", err)

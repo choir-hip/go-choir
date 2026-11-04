@@ -371,3 +371,21 @@ func TestCleanRebaseEndToEndIneligibleComputerMintsTheNotice(t *testing.T) {
 		t.Fatalf("an ineligible computer did not get the notice: %+v", out)
 	}
 }
+
+// Devin F4: a decided clean rebase that never finishes must not hold the
+// notice back forever.
+func TestCleanRebaseEndToEndWedgedDecidedAttemptFallsThroughToTheNotice(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	now := f.rt.rebaseClock()
+	for _, state := range []string{selfdev.StateAccepted, selfdev.StateMaterializing} {
+		fresh := selfdev.Operation{ComputerID: f.computerID, OperationID: "clean-rebase-x", State: state, UpdatedAt: now.Add(-time.Minute).Format(time.RFC3339Nano)}
+		if hold, why := f.rt.cleanRebaseExisting(context.Background(), "k", fresh); !hold {
+			t.Fatalf("%s within the bound fell through: %s", state, why)
+		}
+		wedged := fresh
+		wedged.UpdatedAt = now.Add(-3 * time.Minute).Format(time.RFC3339Nano)
+		if hold, why := f.rt.cleanRebaseExisting(context.Background(), "k", wedged); hold || !strings.Contains(why, "wedged") {
+			t.Fatalf("%s past the bound held: %v %s", state, hold, why)
+		}
+	}
+}

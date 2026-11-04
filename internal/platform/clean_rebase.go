@@ -37,9 +37,19 @@ func IsCleanRebaseAuthority(authorityRef string) bool {
 	return strings.HasPrefix(strings.TrimSpace(authorityRef), selfdevprotocol.CleanRebaseAuthorityPrefix)
 }
 
-// ConfigureCleanRebase gives the gate the tape and the host build jobs the
+// CleanRebaseHost is the host build service as the clean rebase branch reads
+// it: its jobs, and the guest image the host has deployed. Corpusd keeps no
+// per-computer record of the base a computer booted; the deployed image is a
+// host file the guest cannot write, and a computer refreshed onto this deploy
+// booted it. A computer still on an older image is refused (the notice).
+type CleanRebaseHost interface {
+	HostBuildJobs
+	DeployedBase() (manifestDigest, buildCommit string, err error)
+}
+
+// ConfigureCleanRebase gives the gate the tape and the host build service the
 // clean rebase branch reads. Without either, every clean rebase is refused.
-func (a *OwnerActAuthority) ConfigureCleanRebase(tape TapeObjectReader, jobs HostBuildJobs) {
+func (a *OwnerActAuthority) ConfigureCleanRebase(tape TapeObjectReader, jobs CleanRebaseHost) {
 	if a == nil {
 		return
 	}
@@ -108,9 +118,30 @@ func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, 
 	if a.cleanRebaseJobs == nil {
 		return "no host build service", nil, nil
 	}
+	var mode string
+	err = tx.QueryRowContext(ctx, `SELECT mode FROM computer_self_development_modes WHERE computer_id=?`, event.ComputerID).Scan(&mode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "the computer has no self-development mode", nil, nil
+	}
+	if err != nil {
+		return "", nil, err
+	}
+	if mode == SelfDevelopmentModeOff || mode == SelfDevelopmentModeAuditOnly {
+		return "the computer's self-development mode is " + mode + "; nothing applies", nil, nil
+	}
 	receipt, reason, err := a.cleanRebaseLink(ctx, tx, event, receiptDigest, 0)
 	if err != nil || reason != "" {
 		return reason, nil, err
+	}
+	if reason, err := a.cleanRebaseAppliedChange(ctx, tx, event.ComputerID, receipt); err != nil || reason != "" {
+		return reason, nil, err
+	}
+	deployedDigest, deployedCommit, err := a.cleanRebaseJobs.DeployedBase()
+	if err != nil {
+		return "the host's deployed guest image is unreadable: " + err.Error(), nil, nil
+	}
+	if receipt.BootedBase != deployedCommit {
+		return "the receipt's booted base " + receipt.BootedBase + " is not the host's deployed guest image " + deployedCommit, nil, nil
 	}
 	job, found := a.cleanRebaseJobs.Get(event.ComputerID, receipt.HostBuildJobID)
 	if !found {
@@ -123,6 +154,8 @@ func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, 
 		return "the host build is for another operation or bundle", nil, nil
 	case job.BaseCommit != receipt.BootedBase || job.SourcePatchSHA256 != receipt.SourcePatchSHA256:
 		return "the host build is of another base or patch", nil, nil
+	case job.BaseImageManifestDigest != deployedDigest:
+		return "the host build is of another guest image than the deployed one", nil, nil
 	}
 	resultDigest, err := job.Result.Digest()
 	if err != nil {
@@ -262,6 +295,44 @@ func (a *OwnerActAuthority) cleanRebaseLink(ctx context.Context, tx *sql.Tx, eve
 		return none, "the next bundle's base is not the receipt's booted base", nil
 	}
 	return receipt, "", nil
+}
+
+// cleanRebaseAppliedChange requires the rebased change to be the one the
+// computer has applied now: its latest materialization or rollback event on
+// the tape is the materialization_applied of the prior decision and bundle.
+// An older approved change, a rolled-back change (or one with a rollback
+// pending) and a change that never applied are refused.
+func (a *OwnerActAuthority) cleanRebaseAppliedChange(ctx context.Context, tx *sql.Tx, computerID string, receipt selfdevprotocol.CleanRebaseReceipt) (string, error) {
+	var kind, digest string
+	err := tx.QueryRowContext(ctx, `SELECT event_kind, event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_kind IN (?, ?, ?) ORDER BY sequence DESC LIMIT 1`,
+		computerID, string(computerevent.EventMaterializationApplied), string(computerevent.EventRollbackRequested), string(computerevent.EventRollbackApplied)).Scan(&kind, &digest)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "the computer has applied no self-development change to rebase", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if kind != string(computerevent.EventMaterializationApplied) {
+		return "the computer's latest self-development event is a " + kind + "; the rebased change is not the applied one", nil
+	}
+	raw, err := a.cleanRebaseTape(computerID, tapestore.NSEvent, digest)
+	if err != nil {
+		return "", fmt.Errorf("applied event %s: %w", digest, err)
+	}
+	if computerevent.DigestBytes(raw) != digest {
+		return "the applied event bytes do not hash to its digest", nil
+	}
+	applied, err := computerevent.DecodeHistoricEvent(raw)
+	if err != nil {
+		return "the applied event does not decode", nil
+	}
+	if applied.EventKind != computerevent.EventMaterializationApplied || applied.ComputerID != computerID {
+		return "the applied event is not a materialization_applied of this computer", nil
+	}
+	if applied.DecisionRef != receipt.PriorDecisionEvent || applied.ProposedEffectRef != receipt.PriorBundleDigest {
+		return "the computer's applied change is not the one rebased (an older, other or never-applied change)", nil
+	}
+	return "", nil
 }
 
 // admittedMark reports whether an authority log row recorded this event as

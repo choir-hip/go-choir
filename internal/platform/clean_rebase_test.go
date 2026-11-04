@@ -23,7 +23,11 @@ import (
 // next bundle changes a field other than its base identity, or carries
 // another patch, or the base never moved; the host build is missing,
 // unfinished, of another bundle, or another result; observe mode admits a
-// forged acceptance.
+// forged acceptance. Round 2 (Devin F1): the receipt rebases an older
+// approved change, a rolled-back change or one that never applied, so a
+// re-application silently reverts the current change or re-lands a removed
+// one; the receipt's booted base is not the image the host deployed; the host
+// build is of another guest image; the computer's mode is off or absent.
 
 const (
 	crComputer   = "computer-0123456789abcdef0123456789abcdef"
@@ -49,6 +53,21 @@ func (f fakeTape) read(_ string, ns tapestore.NS, digest string) ([]byte, error)
 
 type fakeJobs map[string]hostbuild.Job
 
+// fakeHost is the host build service with a deployed guest image.
+type fakeHost struct {
+	fakeJobs
+	digest, commit string
+}
+
+func (f fakeHost) DeployedBase() (string, string, error) {
+	if f.commit == "" {
+		return "", "", errors.New("no manifest")
+	}
+	return f.digest, f.commit, nil
+}
+
+const crDeployedDigest = "9999999999999999999999999999999999999999999999999999999999999999"
+
 func (f fakeJobs) Get(computerID, jobID string) (hostbuild.Job, bool) {
 	job, ok := f[jobID]
 	if !ok || job.ComputerID != computerID {
@@ -73,6 +92,9 @@ type cleanRebaseCase struct {
 	test, platform          bool
 	tierErr                 error
 	jobs                    bool
+	applied                 bool   // record the prior's materialization_applied
+	deployedCommit          string // "" = crBootedBase; "-" = unreadable manifest
+	after                   func(t *testing.T, f *cleanRebaseFixture, priorDecision, priorBundle string)
 	mutateReceipt           func(*selfdevprotocol.CleanRebaseReceipt)
 	mutateJob               func(*hostbuild.Job)
 }
@@ -90,7 +112,7 @@ func newCleanRebaseCase() *cleanRebaseCase {
 	return &cleanRebaseCase{
 		priorBundle: bundle(crStackBase, hexOf('3')), nextBundle: bundle(crBootedBase, hexOf('4')),
 		priorAuthority: AuthorityExternalOwner + "owner-1", priorMarked: true, priorParent: "op-1",
-		recordPrior: true, citeReceipt: true, test: true, jobs: true,
+		recordPrior: true, citeReceipt: true, test: true, jobs: true, applied: true,
 	}
 }
 
@@ -109,7 +131,36 @@ type cleanRebaseFixture struct {
 func newCleanRebaseFixture(t *testing.T) *cleanRebaseFixture {
 	t.Helper()
 	store, _ := openTestPlatformStore(t)
-	return &cleanRebaseFixture{store: store, tape: fakeTape{}}
+	f := &cleanRebaseFixture{store: store, tape: fakeTape{}}
+	f.setMode(t, SelfDevelopmentModeStandingConsensus)
+	return f
+}
+
+// setMode writes the computer's mode row ("" removes it).
+func (f *cleanRebaseFixture) setMode(t *testing.T, mode string) {
+	t.Helper()
+	if _, err := f.store.db.Exec(`DELETE FROM computer_self_development_modes WHERE computer_id=?`, crComputer); err != nil {
+		t.Fatal(err)
+	}
+	if mode == "" {
+		return
+	}
+	_, err := f.store.db.Exec(`INSERT INTO computer_self_development_modes (computer_id, mode, generation, last_idempotency_key, last_request_commitment, mode_receipt_json, mode_receipt_digest, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		crComputer, mode, 1, "mode-key", hexOf('0'), "{}", hexOf('0'), time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// recordApplied puts a materialization_applied (or a rollback event) naming
+// decision and bundle on the tape and in the DB.
+func (f *cleanRebaseFixture) recordApplied(t *testing.T, kind computerevent.EventKind, decision, bundle string) {
+	t.Helper()
+	event := computerevent.Event{
+		ComputerID: crComputer, EventKind: kind, DecisionRef: decision, ProposedEffectRef: bundle,
+		IdempotencyKey: fmt.Sprintf("applied-%d", f.seq+1),
+	}
+	f.recordEvent(t, kind, f.tape.put(tapestore.NSEvent, crJSON(t, event)))
 }
 
 func (f *cleanRebaseFixture) recordEvent(t *testing.T, kind computerevent.EventKind, digest string) {
@@ -162,6 +213,12 @@ func (f *cleanRebaseFixture) write(t *testing.T, c *cleanRebaseCase, operation s
 	if c.priorMarked {
 		f.markOwner(t, priorEventDigest)
 	}
+	if c.applied {
+		f.recordApplied(t, computerevent.EventMaterializationApplied, priorEventDigest, priorDigest)
+	}
+	if c.after != nil {
+		c.after(t, f, priorEventDigest, priorDigest)
+	}
 	c.result = hostbuild.Result{
 		JobID: hexOf('7'), ComputerID: crComputer, OperationID: operation, BundleDigest: nextDigest,
 		BaseCommit: crBootedBase, SourcePatchSHA256: hexOf('a'), BuiltAt: "2026-11-04T00:00:00Z",
@@ -172,7 +229,8 @@ func (f *cleanRebaseFixture) write(t *testing.T, c *cleanRebaseCase, operation s
 	}
 	job := hostbuild.Job{
 		JobID: c.result.JobID, ComputerID: crComputer, OperationID: operation, BundleDigest: nextDigest,
-		BaseCommit: crBootedBase, SourcePatchSHA256: hexOf('a'), State: hostbuild.StateDone, Result: &c.result,
+		BaseCommit: crBootedBase, SourcePatchSHA256: hexOf('a'), BaseImageManifestDigest: crDeployedDigest,
+		State: hostbuild.StateDone, Result: &c.result,
 	}
 	if c.mutateJob != nil {
 		c.mutateJob(&job)
@@ -213,7 +271,15 @@ func (f *cleanRebaseFixture) write(t *testing.T, c *cleanRebaseCase, operation s
 func (f *cleanRebaseFixture) authority(c *cleanRebaseCase, mode OwnerActMode, jobs fakeJobs) *OwnerActAuthority {
 	a := NewOwnerActAuthority(mode, nil)
 	if c.jobs {
-		a.ConfigureCleanRebase(f.tape.read, jobs)
+		host := fakeHost{fakeJobs: jobs, digest: crDeployedDigest, commit: crBootedBase}
+		switch c.deployedCommit {
+		case "":
+		case "-":
+			host.commit = ""
+		default:
+			host.commit = c.deployedCommit
+		}
+		a.ConfigureCleanRebase(f.tape.read, host)
 	} else {
 		a.ConfigureCleanRebase(f.tape.read, nil)
 	}
@@ -320,6 +386,58 @@ func TestCleanRebaseGate(t *testing.T) {
 	refusedWith("host build result digest mismatch", "not the one the receipt names", func(c *cleanRebaseCase) {
 		c.mutateReceipt = func(r *selfdevprotocol.CleanRebaseReceipt) { r.HostBuildResultDigest = hexOf('c') }
 	})
+
+	// Devin F1: the rebased change must be the one the computer has applied
+	// now, and the booted base the image the host deployed.
+	refusedWith("an older approved change (a newer one applied since)", "not the one rebased", func(c *cleanRebaseCase) {
+		c.after = func(t *testing.T, f *cleanRebaseFixture, _, _ string) {
+			f.recordApplied(t, computerevent.EventMaterializationApplied, hexOf('d'), hexOf('b'))
+		}
+	})
+	refusedWith("a never-applied change", "not the one rebased", func(c *cleanRebaseCase) { c.applied = false })
+	refusedWith("a rolled-back change", "latest self-development event is a rollback_applied", func(c *cleanRebaseCase) {
+		c.after = func(t *testing.T, f *cleanRebaseFixture, decision, bundle string) {
+			f.recordApplied(t, computerevent.EventRollbackRequested, decision, bundle)
+			f.recordApplied(t, computerevent.EventRollbackApplied, decision, bundle)
+		}
+	})
+	refusedWith("a change with a rollback pending", "latest self-development event is a rollback_requested", func(c *cleanRebaseCase) {
+		c.after = func(t *testing.T, f *cleanRebaseFixture, decision, bundle string) {
+			f.recordApplied(t, computerevent.EventRollbackRequested, decision, bundle)
+		}
+	})
+	refusedWith("a target base that is not the deployed image", "is not the host's deployed guest image", func(c *cleanRebaseCase) {
+		c.deployedCommit = "5555555555555555555555555555555555555555"
+	})
+	refusedWith("an unreadable deployed manifest", "deployed guest image is unreadable", func(c *cleanRebaseCase) { c.deployedCommit = "-" })
+	refusedWith("host build of another guest image", "another guest image", func(c *cleanRebaseCase) {
+		c.mutateJob = func(j *hostbuild.Job) { j.BaseImageManifestDigest = hexOf('8') }
+	})
+}
+
+func TestCleanRebaseGateNeverAppliedOnAFreshComputer(t *testing.T) {
+	f := newCleanRebaseFixture(t)
+	c := newCleanRebaseCase()
+	c.applied = false
+	jobs := fakeJobs{}
+	event, _ := f.write(t, c, "op-2", jobs)
+	if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); err != nil || !strings.Contains(reason, "applied no self-development change") {
+		t.Fatalf("got %q %v", reason, err)
+	}
+}
+
+func TestCleanRebaseGateModeCheck(t *testing.T) {
+	for _, mode := range []string{"", SelfDevelopmentModeOff, SelfDevelopmentModeAuditOnly} {
+		f := newCleanRebaseFixture(t)
+		f.setMode(t, mode)
+		c := newCleanRebaseCase()
+		jobs := fakeJobs{}
+		event, _ := f.write(t, c, "op-2", jobs)
+		reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event)
+		if err != nil || !strings.Contains(reason, "mode") {
+			t.Fatalf("mode %q: got %q %v", mode, reason, err)
+		}
+	}
 }
 
 func TestCleanRebaseGateReceiptDigestMismatch(t *testing.T) {
@@ -376,6 +494,7 @@ func TestCleanRebaseGateAdmitsAChainOfCleanRebases(t *testing.T) {
 	firstEvent, firstReceipt := f.write(t, first, "op-2", nil)
 	firstEventDigest := f.tape.put(tapestore.NSEvent, crJSON(t, firstEvent))
 	f.recordEvent(t, computerevent.EventEffectAccepted, firstEventDigest)
+	f.recordApplied(t, computerevent.EventMaterializationApplied, firstEventDigest, firstEvent.ProposedEffectRef)
 
 	// Link 2: op-2 re-applied as op-3 onto another booted base.
 	const nextBase = "4444444444444444444444444444444444444444"
@@ -389,7 +508,7 @@ func TestCleanRebaseGateAdmitsAChainOfCleanRebases(t *testing.T) {
 	nextDigest := f.tape.put(tapestore.NSPayload, crJSON(t, second))
 	result := hostbuild.Result{JobID: hexOf('2'), ComputerID: crComputer, OperationID: "op-3", BundleDigest: nextDigest, BaseCommit: nextBase, SourcePatchSHA256: hexOf('a')}
 	resultDigest, _ := result.Digest()
-	jobs := fakeJobs{hexOf('2'): {JobID: hexOf('2'), ComputerID: crComputer, OperationID: "op-3", BundleDigest: nextDigest, BaseCommit: nextBase, SourcePatchSHA256: hexOf('a'), State: hostbuild.StateDone, Result: &result}}
+	jobs := fakeJobs{hexOf('2'): {JobID: hexOf('2'), ComputerID: crComputer, OperationID: "op-3", BundleDigest: nextDigest, BaseCommit: nextBase, SourcePatchSHA256: hexOf('a'), BaseImageManifestDigest: crDeployedDigest, State: hostbuild.StateDone, Result: &result}}
 	receipt := selfdevprotocol.CleanRebaseReceipt{
 		Schema: selfdevprotocol.CleanRebaseReceiptSchema, ComputerID: crComputer, OperationID: "op-3", BundleDigest: nextDigest,
 		RebaseOf: "op-2", PriorBundleDigest: priorDigest, PriorDecisionEvent: firstEventDigest,
@@ -406,6 +525,7 @@ func TestCleanRebaseGateAdmitsAChainOfCleanRebases(t *testing.T) {
 		ComputerID: crComputer, EventKind: computerevent.EventEffectAccepted, ParentEventID: "op-3", ProposedEffectRef: nextDigest,
 		AuthorityRef: selfdevprotocol.CleanRebaseAuthority(digest), InputArtifactRefs: []string{"artifact:sha256:" + hexOf('5'), "artifact:sha256:" + digest},
 	}
+	first.deployedCommit = nextBase
 	a := f.authority(first, OwnerActEnforce, jobs)
 	if reason, err := f.judge(t, a, event); reason != "" || err != nil {
 		t.Fatalf("chain refused: %q %v", reason, err)

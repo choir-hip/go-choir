@@ -205,6 +205,13 @@ func (rt *Runtime) cleanRebaseBeforeNotice(ctx context.Context, ownerID, compute
 func (rt *Runtime) cleanRebaseExisting(ctx context.Context, key string, op selfdev.Operation) (bool, string) {
 	switch op.State {
 	case selfdev.StateAccepted, selfdev.StateMaterializing:
+		// A decided clean rebase belongs to the materializer. One that has
+		// sat decided past twice the attempt budget is wedged: the owner gets
+		// the notice (the operation itself is left to the materializer's own
+		// settlement; nothing here closes a decided operation).
+		if updated, err := time.Parse(time.RFC3339Nano, op.UpdatedAt); err == nil && rt.rebaseClock().Sub(updated) > 2*rt.cleanRebaseBudget() {
+			return false, "the clean rebase " + op.OperationID + " has been " + op.State + " since " + op.UpdatedAt + "; wedged, so the notice"
+		}
 		return true, "the clean rebase " + op.OperationID + " is " + op.State
 	case selfdev.StateApplied:
 		return true, "the clean rebase " + op.OperationID + " is applied"

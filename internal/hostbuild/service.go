@@ -815,3 +815,18 @@ func SampleHostPressure() (Pressure, error) {
 	}
 	return p, fmt.Errorf("pressure/memory has no some avg60")
 }
+
+// DeployedBase is the host's deployed guest image: its manifest digest and
+// the commit it was built from. A computer refreshed onto this deploy booted
+// it; the host, not the guest, holds this file.
+func (s *Service) DeployedBase() (manifestDigest, buildCommit string, err error) {
+	raw, err := os.ReadFile(s.cfg.BaseManifestPath)
+	if err != nil {
+		return "", "", err
+	}
+	commit := strings.ToLower(manifestBuildCommit(raw))
+	if commit == "" {
+		return "", "", errors.New("the deployed guest image manifest names no build_commit")
+	}
+	return sha256Hex(raw), commit, nil
+}
