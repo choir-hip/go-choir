@@ -126,32 +126,32 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 43745079a (stack_base_moved waiters woken once the block
-    clears, Devin approve r2, deployed 13:44Z). The owner's Library verifier passed at 13:30:56Z:
-    timer-next built and published on the claude arm (release 16a10f3e),
-    converter-next built and published on the crouton arm (release
-    4bafb76d, third candidate after two correct rejections for blank
-    Temperature units), then each arm installed the other's app; both
-    installs applied with patch_matches_release true, same_base true, no
-    refusal and no base move, and both arms' applied source holds both
-    package folders. Gap: no screenshot of converter-next opened on the
-    claude arm (its install recorded no screens). Toward apps as a layer,
-    not yet pushed: S6 package-aware containment (tier 2 approve Devin and
-    DeepSeek, non-blocking fixes in progress), clean rebases without
-    approval (corpusd gate, test tier only, tier 2 review running), S12
-    runtime install (packages built to a module outside the source stack,
-    owner's own releases only until S13, epoch 37, tier 2 review running),
-    and the owner's modularity check (2026-11-04: "some verifiable way to
-    assert modularity"; SDK surface lock plus a smoke contract per
-    package, building). Node B 15 GB available, 157 GB disk free.
+    staging 9f3970680 (deployed 14:38Z, security epoch 38); 9858baf1e
+    (modularity check) in CI. Apps as a layer is on main: stack_base_moved
+    waiters woken once the block clears (43745079a), S6 package-aware
+    containment without a switch (6b61e3660, tier 2), clean rebases apply
+    without an owner act on test-tier computers with a corpusd gate bound
+    to the applied change and the deployed base (3c48a7ac2, tier 2, Devin
+    round 2 after a blocking catch), S12 runtime install, packages built to
+    a module outside the source stack, owner's own releases only until S13
+    (9f3970680, tier 2, Devin round 2 after a blocking uninstall catch),
+    and the owner's modularity check: an SDK surface lock per version
+    judged by the TypeScript checker plus a smoke contract per package run
+    bundled and installed, a required CI job and a receipt (9858baf1e,
+    Devin round 2). The owner's Library verifier passed at 13:30Z. None of
+    the four runtime pieces is proven on a live computer yet. Patch Watch
+    failed at 9f3970680 because govulncheck did not run (report-only).
+    Node B 13 GB available, 164 GB disk free, load 6.0.
   main_uncertainty: >-
-    whether S6 and clean-rebase survive tier 2 review without a redesign;
-    whether S12's runtime layer fits in a day or needs a sandbox decision
-  next_observation: S6 tier 2 verdicts; the clean-rebase and S12 builder reports
+    whether runtime install works on a live arm once R1 refreshes; whether
+    the first clean rebase happens at the next base move; whether the
+    modularity job is fast and stable in CI
+  next_observation: modularity CI job result; arms refreshing to 9f3970680 or later
   blocker: none
   next_action: >-
-    land S6 after its fixes, then clean-rebase and S12 after tier 2, then
-    the modularity check; prove the stack-base wake live at the next base
-    move on an arm; run the S6 staging proof on a test computer carrying a
-    package
+    once the arms are on 9f3970680+, install a published release at run
+    time on one arm (app opens, no restart, uninstall works), watch the
+    next base move for a platform-clean-rebase decision and for S6
+    re-materialization; wire the modularity contract into clean rebase and
+    S7 probation next
 receipts: []
