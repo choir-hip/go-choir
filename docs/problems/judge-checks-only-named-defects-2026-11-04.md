@@ -100,3 +100,71 @@ So a full 12-shot review costs about 10-16k input and 3-5k output tokens and
 extends (that check stays optional for management). Both pool models failed
 every planted defect the old prompt passed. The script and shots are not
 kept; the numbers are from one run each.
+
+## Follow-up: question 1 failed a modal over its scrim (2026-11-04)
+
+Pool Library r5 (op selfdev-41747edf…, shot 05): the judge failed the round
+because "the page shows through". The larger-view panel was opaque and crisp;
+the page text ("Precommitments", "1 recorded") sat outside the panel's edge,
+dimmed under the modal's backdrop. The wording "one opaque app window in
+focus, nothing behind showing through" reads a normal scrim as a defect.
+Question 1 now asks that the focused surface (the window, or a modal or
+dialog over it) be opaque: content dimmed behind a backdrop outside its
+edges passes, and only text or imagery showing through inside its bounds
+fails.
+Questions 3 and 6 do not judge page content dimmed behind a backdrop, and
+still judge everything else visible (review: a scrim-less dialog must not
+hide the page from them); one luna run had failed the scrim modal on the
+dimmed page's rows.
+
+Check (OpenRouter, synthetic 1280x800 Library shots): an opaque modal over
+a scrim with page text dimmed outside it, and the same modal at 60%
+opacity. With the new wording, deepseek-v4.1-flash-1017 and gpt-6-luna
+each ran three times: the scrim modal passed every question 6/6 and the
+fading modal failed question 1 6/6. The four calendar shots above still
+failed on the same planted defects.
+
+## Follow-up: "Call with European office" was management's misquote, not the vision model's (2026-11-04)
+
+Luna Calendar r4 (computer-2bf3cab1e3ebf3eb24a515c4603cf954, op
+selfdev-e83ce99d9cb68bf85b08c309169d769c, release 1104c9890, before the
+per-shot review): management's Verify failed the round saying an image
+reading put the Tokyo label on "Call with European office". Shot 03 has no
+such event.
+
+Trace (management run 5086cb92-08ce-449b-8f22-61f993785f64, read-only
+`GET /api/runs/{id}/events`):
+
+- seq 29, 08:12:19Z: management's one vision call on shot 03
+  (artifact:sha256:145809b8...), answered by deepseek/deepseek-v4.1-flash-1017
+  (677 input tokens). The prompt itself was wrong: it asked for "a Tokyo zone
+  label on the Rainfall review event". The answer was correct: "the
+  “09:00 GMT+9” label is on the **Call with Tokyo office** event instead."
+- seq 56, 08:13:05Z: management's Verify reason restates that answer as
+  putting the label "on the \"Call with European office\" event rather than
+  the Tokyo one". Management's own model is the same
+  deepseek-v4.1-flash-1017 (run metadata), so the invention happened when the
+  desk model restated a text answer, not in the vision reading.
+
+Measured (OpenRouter, the real shots luna 03 and pool 05 from lane C):
+
+- Transcribing every title and label, 3 runs per model per shot: deepseek-v4.1-flash-1017,
+  stealth/crouton-alpha, gpt-6-luna and deepseek-v4-flash-vision-exp
+  transcribed "Call with Tokyo office / 09:00 GMT+9", "Standup / 09:30 EST",
+  "Rainfall review / 3:00 PM – 4:30 PM", the date and the modal's
+  caption correctly in 24 of 24 runs. Nothing was invented. The only miss
+  was the dimmed "Precommitments" under the pool 05 scrim, in 5 runs.
+- A leading prompt naming a "Call with European office" event, and a neutral
+  one, 3 runs each on deepseek, crouton and luna: all 18 answers denied
+  the European event or quoted the Tokyo block correctly.
+
+Decision: no model-routing change for the judge. No vision model
+hallucinated on these shots, so pinning a verifier or requiring two
+agreeing readings would not have prevented this failure, which happened in the
+desk's restatement. The per-shot review already records the vision model's
+answers verbatim, in the event's `shot_review` and in the fail reason, so
+a fail it decides cannot be misquoted. The management overlay now tells management to
+quote a vision answer's text_excerpt verbatim, never in its own words, and
+to ask about what the request names. Residual: a fail that management decides
+on its own still rests on management's prose. The per-shot review runs
+only on a pass, by design (the Verify admission work is elsewhere).
