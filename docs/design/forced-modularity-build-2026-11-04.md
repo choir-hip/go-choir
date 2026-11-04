@@ -122,8 +122,8 @@ the tape, a module in the module store, a launcher entry. This includes the
 computer that built it.
 
 **Self-development that changes an app is a package operation, not a source
-operation.** Today a package change goes capsule, freeze, approval, host
-build, restart, then publish. New: the capsule edits
+operation.** Today a package change goes capsule, freeze, owner approval, host
+build, restart, then a publish that needs its own owner-act receipt. New: the capsule edits
 `frontend/src/packages/<name>/` as it does now (the capsule keeps its full
 workspace so it can build and test against the real shell), but when the
 frozen source patch touches package paths the operation is a package
@@ -137,7 +137,7 @@ operation:
   verifiers are the package checks the host build already runs
   (`scripts/check-packages.mjs`, the boundary plugin, the contract runner
   `frontend/scripts/package-contracts.mjs`) plus a `module/v1` build.
-- on approval the operation's effect is: publish the release (the existing
+- on acceptance the operation's effect is: publish the release (the existing
   draft and `publish` path), then install it locally (`installPackage`). Both
   steps are existing code. The publish act is what makes the release a
   record the installer verifies byte for byte, the same way every other
@@ -148,6 +148,46 @@ operation:
 
 The source stack carries only platform operations. It never holds a path
 under `frontend/src/packages/`.
+
+**Nothing waits on an owner act (owner, 2026-11-04):** "I don't want to
+approve each version!!! The whole point of library is so I don't have to
+approve. Builds in test computers can be installed. We shouldn't block on
+human approval where possible." A package operation is decided by automated
+acceptance, and the owner is never asked:
+
+- the Freeze gates: the screens, and for an update the before and after pair
+  (referenced in section 1a, built by another builder);
+- the shot review of those screens;
+- the package contracts, the modularity runner in both modes (bundled
+  in-tree and installed `module/v1`), plus `check-packages.mjs` and the
+  boundary plugin;
+- the verifier and consensus decision (`decisionpolicy`, corpusd as the
+  decision poster, `internal/platform/standing_consensus.go`).
+
+On a pass the release publishes, installs locally, the candidate overlay is
+removed, and other installers pick it up by the automatic update (section 5).
+On a fail nothing publishes and the installed version stands. A build made on
+a test computer publishes and installs like any other.
+
+*Which decision mode applies, and where the code does not fit.* The modes are
+`off`, `audit_only`, `propose_only`, `accept_once`, `qualified_consensus` and
+`standing_consensus` (`internal/platform/self_development_modes.go:22-30`).
+The closest is `standing_consensus`, the autonomous consensus decision. It
+does not fit as written: it needs a verified owner act to arm
+(`standingArmRefusal`, `standing_consensus.go:127-139`), only on a test-tier
+computer (`:142`), never on a platform computer (`:144`), and it expires within
+`StandingConsensusMaxWindow`, 24 hours
+(`self_development_modes.go:33`). Publishing is separately gated: the publish
+route demands an `ActPackagePublish` owner-act receipt per release
+(`internal/platform/packages.go:233`, `owneract.go:81`). Default: package-only
+operations use the **`standing_consensus` decision policy as the rule for
+every computer whose mode is not `off` or `audit_only`**, with no arm, no
+expiry and no tier test (the same removal ruling 2 makes for clean rebase,
+R1). The accepted decision, bound to the operation's bundle digest, is the
+authority for the publish and the local install, replacing the per-release
+owner-act receipt for operations of this kind. Platform operations keep their
+current mode behavior; this design changes only how a package operation is
+decided. Slice M3 owns the change.
 
 **The publish gate stays; its switch goes.** `packages.publish` is a
 computer setting, default on (`internal/store/computer_setting.go:161,248`),
@@ -184,7 +224,7 @@ without before and after.
   A first version of a new app has nothing to sit beside, so it needs no
   overlay and no "before" screen (it still shows its "after").
 - **Freeze and publication supplant.** On freeze the candidate is a frozen
-  tree; on approval the effect is the one in section 1: publish the release
+  tree; on acceptance (automated, section 1) the effect is the one in section 1: publish the release
   on the computer's track, install it as the real package (this is what
   replaces the installed version, through the ordinary install-replaces-track
   rule), then remove the candidate instance. The candidate record is never
@@ -203,7 +243,7 @@ without before and after.
   tree and its media, not an applied stack operation.
 
 Failure modes: the candidate replaces the installed version early (it is a
-separate record and name; the supplant is only the approval's effect);
+separate record and name; the supplant is only the acceptance's effect);
 the candidate leaks to another user (installs are per computer and the
 candidate is never published); a crash leaves a candidate (it is closed at
 boot as "interrupted by a restart", never resumed, and the installed version
@@ -211,7 +251,8 @@ stands); a publish of an update with no before screen (refused by the host
 and by freeze). Proof on staging, added to M3's: on d@e a candidate of
 `image` runs beside the installed `image`, both open in the launcher, the
 update refuses to publish without a before screen and publishes with one, and
-after approval only the new version remains.
+after acceptance only the new version remains, with no owner act in the
+path.
 
 ### 2. Enforcement, both directions
 
@@ -307,8 +348,7 @@ M2:
    that release at runtime; (b) otherwise draft, publish and install a
    release of the subtree on that computer's own track (the computer's
    `packages.publish` act is performed by the platform as the migration, with
-   the owner-act receipt of the owner, or, for test computers, the
-   operator); (c) then remove the package paths from the stack by composing
+   the migration's own decision record; no per-release owner act); (c) then remove the package paths from the stack by composing
    a new platform-only stack from the operations' non-package hunks.
 2. A computer whose stack is package-only becomes a stack of nothing: its
    served build is the booted base. Its apps run as installed modules.
@@ -339,8 +379,10 @@ an install. No switch. The threat this accepts is the one the owner named
 (a compromised publisher account): an automatic update reaches installers at
 their next load. The brakes are the platform's break-glass yank (below) and a
 **soak**: a release becomes eligible for auto-update only once it has been
-listed for 24 hours (a constant, not a setting). Decision D2 asks the owner to
-confirm 24 hours or none.
+listed for 24 hours (a constant, not a setting). The soak holds
+only automatic updates back from installers. It never asks anyone to approve
+anything, and a publish is not delayed by it. Decision D2 keeps 24 hours as
+the default and leaves it open for the owner to confirm or drop.
 
 **Forced update and yank: platform only, manual, break glass.** The ruling
 excludes every other design:
@@ -536,11 +578,13 @@ package patch is refused at corpusd; the host build refuses it at
 `AdmitPatchedTree`. Rollback: revert; the stack accepts package paths again.
 
 **M3. Package operations, the candidate overlay and the migration (red, tier 2).**
-Package-only freeze: no host build, publish then install as the effect;
-draft reads the frozen tree; candidate overlay and before/after screens for updates (section 1a); boot one-shot migration; `packages.publish`
+Package-only freeze: no host build, no owner act; automated acceptance (Freeze
+gates, shot review, package contracts, consensus) decides, and on a pass
+publish then install is the effect (decision mode: section 1, `standing_consensus`
+policy without arm, expiry or tier); draft reads the frozen tree; candidate overlay and before/after screens for updates (section 1a); boot one-shot migration; `packages.publish`
 setting deleted. Packages: `internal/agentcore`, `internal/capsule/transaction`,
 `internal/selfdev`, `internal/platform`. Staging proof: on a test arm, an
-engineer builds an app change end to end; the operation reaches `applied`
+engineer builds an app change end to end with no owner act; the operation reaches `applied`
 with an install record, the launcher shows the app, a base deploy follows and
 the app is untouched with no restart (S12's "staging acceptance", currently
 deferred). Migration proof: the differential on every computer that holds
@@ -618,8 +662,8 @@ updates `objectgraph/registry.go`.
 ## Decisions for the owner (each with a default)
 
 - **D1. The migration publishes a computer's app source as a release on that
-  computer's track.** Default: yes, on the computer's own track, owner-act
-  bound for real owners and operator-bound for the test arms. Alternative:
+  computer's track.** Default: yes, on the computer's own track, decided by the
+  migration's own record, with no owner act. Alternative:
   drop the unpublished app source. Default stays; it keeps the keep set.
 - **D2. Auto-update soak.** The ruling wants everything automatic but a
   compromised publisher is the threat; auto-update with no soak delivers a
@@ -650,3 +694,10 @@ updates `objectgraph/registry.go`.
   Default: M3 adds `origin: published` for Library releases, accepted by the
   runtime install and refused by `main` export, and base packages stay
   `first_party`.
+- **D7. Decision mode for package operations.** Section 1 names
+  `standing_consensus` as the closest mode and removes its arm, expiry and
+  tier test for package operations. Default: do that, on every computer not
+  `off` or `audit_only`. Alternative: keep the arm for platform operations
+  and add a new mode for package operations; rejected as a second mode for
+  the same decision. The only owner act left in this design is the platform
+  break-glass yank or force.
