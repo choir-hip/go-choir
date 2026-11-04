@@ -27,7 +27,7 @@ const RESERVED_NAMES = new Set([
 const MIN_STATIC_IDS = 10;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
-const REQUIRED_PACKAGES = ['image'];
+const REQUIRED_PACKAGES = ['image', 'files'];
 
 const errors = [];
 const fail = (where, message) => errors.push(`${where}: ${message}`);

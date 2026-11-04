@@ -1,0 +1,33 @@
+{
+  "schema": "choir.app-package/v1",
+  "name": "files",
+  "version": "1.0.0",
+  "origin": "first_party",
+  "display": {
+    "title": "Files",
+    "icon": "📁",
+    "description": "File Browser"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": { "menu": true, "desktopIcon": true, "order": 10 },
+    "window": {
+      "singleton": true,
+      "heavy": false
+    },
+    "auth": { "preview": "public-preview" },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-files-app",
+      "contentClass": "files-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "desk": null,
+  "backend": null,
+  "grants": []
+}

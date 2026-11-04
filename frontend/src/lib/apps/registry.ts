@@ -53,17 +53,6 @@ export const TEXTURE_APP_ID = 'texture';
 // First-party packages (src/packages/<name>/) join them below.
 const STATIC_APPS = [
   {
-    id: 'files',
-    name: 'Files',
-    icon: '📁',
-    description: 'File Browser',
-    component: () => import('../FileBrowser.svelte'),
-    launcher: { menu: true, desktopIcon: true, order: 10 },
-    window: { ...windowDefaults },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'standard', shellDataAttr: 'data-files-app', contentClass: 'files-content' },
-  },
-  {
     id: 'browser',
     name: 'Web Lens',
     icon: '🌐',

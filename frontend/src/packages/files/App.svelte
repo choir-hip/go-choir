@@ -1,5 +1,5 @@
 <!--
-  FileBrowser — file/directory browser app for the ChoirOS desktop.
+  Files — file/directory browser app for the ChoirOS desktop (first-party package).
 
   Features:
     - File/directory listing with folder/file icons
@@ -41,15 +41,25 @@
     data-files-status     — status line (copied, duplicated, renamed)
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { fetchWithRenewal, AuthRequiredError } from './auth.js';
-  import { createEventDispatcher } from 'svelte';
-  import { mediaRouteForFileName } from './media-utils.js';
-  import { contextMenu, type ContextMenuEntry } from './context-menu';
-  import { isTextFileName, openersForFile, type FileOpener } from './open-with';
-  import { dropZone, pickFiles, uploadFiles } from './file-upload';
-  import { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from './live-events.js';
-  import { previewFiles, previewFolderEntries } from './public-preview-data';
+  import { onMount, createEventDispatcher } from 'svelte';
+  import {
+    AuthRequiredError,
+    addLiveEventListener,
+    contextMenu,
+    currentDeviceId,
+    dropZone,
+    fetchWithRenewal,
+    isOwnLiveEvent,
+    isTextFileName,
+    liveEventKind,
+    liveEventPayload,
+    mediaRouteForFileName,
+    openersForFile,
+    pickFiles,
+    uploadFiles,
+  } from '../../lib/app-sdk';
+  import type { ContextMenuEntry, FileOpener } from '../../lib/app-sdk';
+  import { previewFiles, previewFolderEntries } from './preview-data';
 
   const dispatch = createEventDispatcher();
   export let authenticated = false;

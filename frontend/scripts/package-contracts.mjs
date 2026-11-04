@@ -9,11 +9,20 @@
 //     "ready": "<selector>",            required: the app is up when this shows
 //     "expect": [{ "selector": "<sel>", "text": "<substring>", "count": <n> }],
 //     "api": [{ "method": "GET", "path": "/api/...", "status": 200, "json": {} }],
+//     "steps": [<step>, ...],           optional: drive the app after `expect` (below)
+//     "expect_requests": [{ "request": "PATCH /api/files/a", "body": "<substring>" }],
+//                                       stubbed `api` requests the steps must have caused
 //     "allow_console": ["<regex>"],     app console errors accepted, by name
 //     "allow_unanswered": [{ "request": "GET /api/x/*", "reason": "<why>" }],
 //                                       requests the app may make unstubbed
 //     "note": "<what the contract shows>"
 //   }
+//
+// A step is one of (selectors are Playwright locators inside the window):
+//   { "click": sel }   { "fill": sel, "value": str }   { "press": sel, "key": "F2" }
+//   { "upload": sel, "name": "a.txt", "mime": "text/plain", "content": "hi" }
+//   { "see": sel, "text": "<substring>", "count": n }
+// A failed step is a problem naming the step, never a skip.
 //
 // Every selector is resolved inside the app window's content
 // ([data-window][data-window-app-id=<name>] [data-window-content]), never the
@@ -55,6 +64,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const CONTRACT_SCHEMA = 'choir.package-contract/v1';
 export const CONTRACT_FILE = 'choir-contract.json';
+const STEP_KINDS = ['click', 'fill', 'press', 'upload', 'see'];
 export const RECEIPT_SCHEMA = 'choir.modularity-receipt/v1';
 export const MODULE_ABI = 'choir.app-frontend/module/v1';
 /** The stub computer's id; a contract's `api` paths that name a computer use it. */
@@ -78,7 +88,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 export function validateContract(c) {
   const problems = [];
   if (!isObject(c)) return ['the contract must be a JSON object'];
-  const allowed = new Set(['schema', 'ready', 'expect', 'api', 'allow_console', 'allow_unanswered', 'note']);
+  const allowed = new Set(['schema', 'ready', 'expect', 'api', 'steps', 'expect_requests', 'allow_console', 'allow_unanswered', 'note']);
   for (const k of Object.keys(c)) if (!allowed.has(k)) problems.push(`unknown field "${k}"`);
   if (c.schema !== CONTRACT_SCHEMA) problems.push(`schema must be "${CONTRACT_SCHEMA}"`);
   if (typeof c.ready !== 'string' || !c.ready.trim()) problems.push('ready must be a non-empty selector');
@@ -100,6 +110,31 @@ export function validateContract(c) {
       if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(a.method)) problems.push(`api[${i}].method must be GET, POST, PUT, PATCH or DELETE`);
       if (typeof a.path !== 'string' || !a.path.startsWith('/api/')) problems.push(`api[${i}].path must start with /api/`);
       if (a.status !== undefined && !(Number.isInteger(a.status) && a.status >= 100 && a.status < 600)) problems.push(`api[${i}].status must be an HTTP status`);
+    });
+  }
+  if (c.steps !== undefined) {
+    if (!Array.isArray(c.steps)) problems.push('steps must be an array');
+    else c.steps.forEach((st, i) => {
+      if (!isObject(st)) return problems.push(`steps[${i}] must be an object`);
+      const kind = STEP_KINDS.filter((k) => k in st);
+      if (kind.length !== 1) return problems.push(`steps[${i}] must have exactly one of ${STEP_KINDS.join(', ')}`);
+      const k = kind[0];
+      const extra = { click: [], fill: ['value'], press: ['key'], upload: ['name', 'mime', 'content'], see: ['text', 'count'] }[k];
+      for (const f of Object.keys(st)) if (f !== k && !extra.includes(f)) problems.push(`steps[${i}]: unknown field "${f}"`);
+      if (typeof st[k] !== 'string' || !st[k].trim()) problems.push(`steps[${i}].${k} must be a non-empty selector`);
+      if (k === 'fill' && typeof st.value !== 'string') problems.push(`steps[${i}].value must be a string`);
+      if (k === 'press' && (typeof st.key !== 'string' || !st.key)) problems.push(`steps[${i}].key must be a key name`);
+      if (k === 'upload' && (typeof st.name !== 'string' || !st.name || typeof st.content !== 'string')) problems.push(`steps[${i}] upload needs name and content strings`);
+      if (k === 'see' && st.count !== undefined && !(Number.isInteger(st.count) && st.count >= 0)) problems.push(`steps[${i}].count must be a whole number`);
+    });
+  }
+  if (c.expect_requests !== undefined) {
+    if (!Array.isArray(c.expect_requests)) problems.push('expect_requests must be an array');
+    else c.expect_requests.forEach((r, i) => {
+      if (!isObject(r)) return problems.push(`expect_requests[${i}] must be an object`);
+      for (const k of Object.keys(r)) if (!['request', 'body'].includes(k)) problems.push(`expect_requests[${i}]: unknown field "${k}"`);
+      if (typeof r.request !== 'string' || !/^(GET|POST|PUT|PATCH|DELETE) \/api\/\S*$/.test(r.request)) problems.push(`expect_requests[${i}].request must be "METHOD /api/path"`);
+      if (r.body !== undefined && typeof r.body !== 'string') problems.push(`expect_requests[${i}].body must be a string`);
     });
   }
   if (c.allow_console !== undefined) {
@@ -285,14 +320,17 @@ export function installedRecord(manifest, built) {
  * installed list and its modules, the contract's api entries, 404 otherwise.
  * Each request nothing answered is passed to onUnanswered("METHOD /path").
  */
-export async function stubBackend(page, { installed = [], modules = new Map(), api = [], onUnanswered = () => {} } = {}) {
+export async function stubBackend(page, { installed = [], modules = new Map(), api = [], onUnanswered = () => {}, onApi = () => {} } = {}) {
   await page.routeWebSocket(/\/api\/ws\b/, () => {}); // the live channel opens and stays quiet
   await page.route(/\/(auth|api)\//, (route) => {
     const req = route.request();
     const url = new URL(req.url());
     const p = url.pathname;
     const own = api.find((a) => a.method === req.method() && a.path === p);
-    if (own) return route.fulfill({ status: own.status || 200, contentType: 'application/json', body: JSON.stringify(own.json ?? {}) });
+    if (own) {
+      onApi({ request: `${req.method()} ${p}`, body: req.postData() || '' });
+      return route.fulfill({ status: own.status || 200, contentType: 'application/json', body: JSON.stringify(own.json ?? {}) });
+    }
     if (p === '/auth/session') return route.fulfill({ json: { authenticated: true, user: { id: STUB_USER, username: STUB_USER } } });
     if (p === '/api/shell/bootstrap') return route.fulfill({ json: { computer_id: STUB_COMPUTER_ID } });
     if (p === '/api/desktop/state') return route.fulfill({ json: req.method() === 'GET' ? { windows: [], active_window_id: '' } : { ok: true } });
@@ -344,11 +382,13 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
     row.console_errors.push(text);
   });
   try {
+    const apiHits = [];
     const allowUnanswered = (pkg.contract.allow_unanswered || []).map((a) => requestPattern(a.request));
     await stubBackend(page, {
       installed,
       modules,
       api: pkg.contract.api || [],
+      onApi: (hit) => apiHits.push(hit),
       onUnanswered: (request) => {
         if (!opened) return row.boot_errors.push(`unanswered ${request} (the stub no longer covers the shell's boot)`);
         if (allowUnanswered.some((r) => r.test(request))) return row.allowed_unanswered.push(request);
@@ -406,6 +446,32 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
         const text = await loc.first().innerText();
         if (!text.includes(e.text)) row.problems.push(`${JSON.stringify(e.selector)} shows ${JSON.stringify(text.slice(0, 120))}, not ${JSON.stringify(e.text)}`);
       }
+    }
+    for (const [i, st] of (pkg.contract.steps || []).entries()) {
+      const kind = STEP_KINDS.find((k) => k in st);
+      const what = `step ${i + 1} (${kind} ${JSON.stringify(st[kind])})`;
+      const loc = content.locator(st[kind]).first();
+      if (kind === 'click') await step(() => loc.click({ timeout: STEP_MS }), what);
+      else if (kind === 'fill') await step(() => loc.fill(st.value, { timeout: STEP_MS }), what);
+      else if (kind === 'press') await step(async () => { await loc.focus({ timeout: STEP_MS }); await page.keyboard.press(st.key); }, what);
+      else if (kind === 'upload') await step(() => loc.setInputFiles({ name: st.name, mimeType: st.mime || 'application/octet-stream', buffer: Buffer.from(st.content) }, { timeout: STEP_MS }), what);
+      else {
+        try {
+          if (st.count !== undefined) {
+            await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length === n, [`${contentSel(name)} ${st.see}`, st.count], { timeout: STEP_MS });
+          } else {
+            await loc.waitFor({ state: 'visible', timeout: STEP_MS });
+          }
+          if (st.text !== undefined) await page.waitForFunction(([sel, t]) => (document.querySelector(sel)?.innerText || '').includes(t), [`${contentSel(name)} ${st.see}`, st.text], { timeout: STEP_MS });
+        } catch {
+          row.problems.push(`${what}${st.text !== undefined ? ` text ${JSON.stringify(st.text)}` : ''}${st.count !== undefined ? ` count ${st.count}` : ''} did not hold`);
+          break;
+        }
+      }
+    }
+    for (const r of pkg.contract.expect_requests || []) {
+      const hit = apiHits.find((h) => h.request === r.request && (r.body === undefined || h.body.includes(r.body)));
+      if (!hit) row.problems.push(`the steps never sent ${r.request}${r.body !== undefined ? ` with a body holding ${JSON.stringify(r.body)}` : ''}`);
     }
     // Errors thrown after mount (a failed fetch handled badly, a timer) land in the quiet window.
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});

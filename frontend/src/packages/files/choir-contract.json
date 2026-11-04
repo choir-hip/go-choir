@@ -1,0 +1,51 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Files lists the root, opens a folder and returns, renames a file in place and uploads one, all against stubbed /api/files routes.",
+  "ready": "[data-file-list]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/files",
+      "status": 200,
+      "json": [
+        { "name": "Documents", "type": "directory", "size": 0, "modified": "2026-11-04T09:00:00Z" },
+        { "name": "hello.txt", "type": "file", "size": 12, "modified": "2026-11-04T09:00:00Z" }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/files/Documents",
+      "status": 200,
+      "json": [
+        { "name": "notes.md", "type": "file", "size": 40, "modified": "2026-11-04T09:00:00Z" }
+      ]
+    },
+    { "method": "PATCH", "path": "/api/files/hello.txt", "status": 200, "json": { "ok": true } },
+    { "method": "PUT", "path": "/api/files/upload-me.txt", "status": 200, "json": { "ok": true } }
+  ],
+  "expect": [
+    { "selector": "[data-breadcrumb]", "text": "Root" },
+    { "selector": "[data-file-item]", "count": 2 },
+    { "selector": "[data-file-name]", "text": "Documents" },
+    { "selector": "[data-new-folder-btn]" },
+    { "selector": "[data-upload-btn]" }
+  ],
+  "steps": [
+    { "click": "[data-file-item]:has-text(\"Documents\")" },
+    { "see": "[data-breadcrumb-segment]:has-text(\"Documents\")" },
+    { "see": "[data-file-item]", "text": "notes.md", "count": 1 },
+    { "click": "[data-breadcrumb-segment]:has-text(\"Root\")" },
+    { "see": "[data-file-item]", "count": 2 },
+    { "press": "[data-file-item]:has-text(\"hello.txt\")", "key": "F2" },
+    { "fill": "[data-rename-input]", "value": "renamed.txt" },
+    { "press": "[data-rename-input]", "key": "Enter" },
+    { "see": "[data-files-status]", "text": "Renamed to renamed.txt" },
+    { "upload": "[data-upload-input]", "name": "upload-me.txt", "mime": "text/plain", "content": "uploaded" },
+    { "see": "[data-upload-status]", "text": "Uploaded upload-me.txt" }
+  ],
+  "expect_requests": [
+    { "request": "GET /api/files/Documents" },
+    { "request": "PATCH /api/files/hello.txt", "body": "renamed.txt" },
+    { "request": "PUT /api/files/upload-me.txt" }
+  ]
+}
