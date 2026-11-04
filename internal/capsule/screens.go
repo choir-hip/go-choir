@@ -13,7 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
@@ -120,17 +122,77 @@ type screenInput interface {
 	Stat() (os.FileInfo, error)
 }
 
+// newestSourceChange is the latest modification time among the capsule's
+// source changes, with the path that has it. A source change is the one
+// collectSourcePatchFiles files: a non-directory under /workspace/platform,
+// here also not deleted (nothing to stat), not a link, and not under
+// node_modules, .git or .cache (carriedExcludedPrefix), and not build output
+// (a dist segment; the frontend builds to dist, and the source patch does
+// carry it): the engineer builds before it shoots, and a rebuild after the
+// shots rewrites dist with no source change. modTime reads a diff
+// path (the Linux executor opens beneath the capsule root). The zero time
+// means there is no source change.
+func newestSourceChange(changes []FileChange, modTime func(path string) (time.Time, error)) (time.Time, string, error) {
+	var newest time.Time
+	var path string
+	for _, change := range changes {
+		p := change.Path
+		if !strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		rel, ok := strings.CutPrefix(p, "/workspace/platform/")
+		if !ok || change.Kind == ChangeDeleted || change.Mode.IsDir() || change.Mode&os.ModeSymlink != 0 || carriedExcludedPrefix(rel) != "" || notScreenSource(rel) {
+			continue
+		}
+		t, err := modTime(change.Path)
+		if err != nil {
+			return time.Time{}, "", fmt.Errorf("capsule freeze: source change %q is unavailable: %w", change.Path, err)
+		}
+		if t.After(newest) {
+			newest, path = t, rel
+		}
+	}
+	return newest, path, nil
+}
+
+// notScreenSource is a change no screen can show that an engineer writes
+// after shooting: build output, docs and Markdown, and tool state.
+func notScreenSource(rel string) bool {
+	if strings.HasSuffix(rel, ".md") || strings.HasPrefix(rel, "docs/") {
+		return true
+	}
+	for _, seg := range []string{"dist", ".claude", "test-results", "coverage"} {
+		if hasPathSegment(rel, seg) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPathSegment(rel, seg string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if part == seg {
+			return true
+		}
+	}
+	return false
+}
+
 // stageScreenFiles reads each named screen through open (the Linux executor
 // opens beneath the capsule root without following symlinks), bounds it,
 // decodes it as a PNG, scans it for secrets and only then writes the set
-// under <temporary>/evidence/screens/. A refused set writes nothing.
-func stageScreenFiles(ctx context.Context, names []string, open func(name string) (screenInput, error), temporary string) ([]ScreenFile, error) {
+// under <temporary>/evidence/screens/. A refused set writes nothing. A screen
+// modified before notBefore (the newest source change, at source) was shot
+// of an older build and is refused; equal times pass, zero notBefore skips
+// the check.
+func stageScreenFiles(ctx context.Context, names []string, open func(name string) (screenInput, error), temporary string, notBefore time.Time, source string) ([]ScreenFile, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
 	var out []ScreenFile
 	contents := map[string][]byte{}
 	var total int64
+	var stale []string
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -143,6 +205,9 @@ func stageScreenFiles(ctx context.Context, names []string, open func(name string
 		if err != nil || !info.Mode().IsRegular() {
 			_ = input.Close()
 			return nil, fmt.Errorf("capsule freeze: screen %q is not a regular file", name)
+		}
+		if !notBefore.IsZero() && info.ModTime().Before(notBefore) {
+			stale = append(stale, name)
 		}
 		data, err := io.ReadAll(io.LimitReader(input, MaxScreenBytes+1))
 		_ = input.Close()
@@ -165,6 +230,10 @@ func stageScreenFiles(ctx context.Context, names []string, open func(name string
 		sum := sha256.Sum256(data)
 		out = append(out, ScreenFile{Name: name, SHA256: hex.EncodeToString(sum[:]), Bytes: int64(len(data)), Width: width, Height: height, Blank: blank})
 		contents[name] = data
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		return nil, fmt.Errorf("capsule freeze: %d screens predate the last source change (%s at %s): re-shoot them with choir-shot before Freeze: %s", len(stale), source, notBefore.UTC().Format("15:04:05Z"), strings.Join(stale, ", "))
 	}
 	if err := ValidateScreens(out); err != nil {
 		return nil, fmt.Errorf("capsule freeze: %w", err)

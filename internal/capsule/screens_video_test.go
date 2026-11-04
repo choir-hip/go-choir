@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The walkthrough video (docs/problems/library-releases-have-no-screenshots-2026-11-04.md,
@@ -63,7 +64,7 @@ func TestStageVideoFileBindsTheWebMBySHA256(t *testing.T) {
 	ctx := context.Background()
 	temporary := t.TempDir()
 	home := testPNG(t, 64, 64, false)
-	if _, err := stageScreenFiles(ctx, []string{"home.png"}, memOpen(map[string][]byte{"home.png": home}), temporary); err != nil {
+	if _, err := stageScreenFiles(ctx, []string{"home.png"}, memOpen(map[string][]byte{"home.png": home}), temporary, time.Time{}, ""); err != nil {
 		t.Fatal(err)
 	}
 	raw := webmBytes(4096)

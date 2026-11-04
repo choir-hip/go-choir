@@ -2,7 +2,11 @@
 
 package capsule
 
-import "context"
+import (
+	"context"
+	"strings"
+	"time"
+)
 
 // stageScreens copies the capsule's screens into <temporary>/evidence/screens/
 // (stageScreenFiles). Files are opened beneath the capsule root without
@@ -12,13 +16,29 @@ func (e *Executor) stageScreens(ctx context.Context, rootFD int, changes []FileC
 	if err != nil || len(names) == 0 {
 		return nil, err
 	}
+	// A screen older than the newest source change shows an older build.
+	newest, source, err := newestSourceChange(changes, func(path string) (time.Time, error) {
+		in, err := openBeneath(rootFD, strings.TrimPrefix(path, "/"))
+		if err != nil {
+			return time.Time{}, err
+		}
+		defer in.Close()
+		info, err := in.Stat()
+		if err != nil {
+			return time.Time{}, err
+		}
+		return info.ModTime(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return stageScreenFiles(ctx, names, func(name string) (screenInput, error) {
 		in, err := openBeneath(rootFD, ScreensPrefix+name)
 		if err != nil {
 			return nil, err
 		}
 		return in, nil
-	}, temporary)
+	}, temporary, newest, source)
 }
 
 // stageVideo copies the capsule's one walkthrough video, if any, beside the

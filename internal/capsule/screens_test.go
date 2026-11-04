@@ -50,22 +50,24 @@ func testPNG(t *testing.T, w, h int, uniform bool) []byte {
 type memInput struct {
 	*bytes.Reader
 	mode os.FileMode
+	mod  time.Time
 }
 
 func (m memInput) Close() error { return nil }
 func (m memInput) Stat() (os.FileInfo, error) {
-	return memInfo{size: int64(m.Len()), mode: m.mode}, nil
+	return memInfo{size: int64(m.Len()), mode: m.mode, mod: m.mod}, nil
 }
 
 type memInfo struct {
 	size int64
 	mode os.FileMode
+	mod  time.Time
 }
 
 func (i memInfo) Name() string       { return "x" }
 func (i memInfo) Size() int64        { return i.size }
 func (i memInfo) Mode() os.FileMode  { return i.mode }
-func (i memInfo) ModTime() time.Time { return time.Time{} }
+func (i memInfo) ModTime() time.Time { return i.mod }
 func (i memInfo) IsDir() bool        { return i.mode.IsDir() }
 func (i memInfo) Sys() any           { return nil }
 
@@ -109,7 +111,7 @@ func TestStageScreenFilesBindsEachPNGBySHA256(t *testing.T) {
 	ctx := context.Background()
 	home, blank := testPNG(t, 320, 200, false), testPNG(t, 300, 200, true)
 	temporary := t.TempDir()
-	screens, err := stageScreenFiles(ctx, []string{"home.png", "blank.png"}, memOpen(map[string][]byte{"home.png": home, "blank.png": blank}), temporary)
+	screens, err := stageScreenFiles(ctx, []string{"home.png", "blank.png"}, memOpen(map[string][]byte{"home.png": home, "blank.png": blank}), temporary, time.Time{}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +133,7 @@ func TestStageScreenFilesBindsEachPNGBySHA256(t *testing.T) {
 	if err := ValidateScreens(screens); err != nil {
 		t.Fatal(err)
 	}
-	if none, err := stageScreenFiles(ctx, nil, memOpen(nil), t.TempDir()); none != nil || err != nil {
+	if none, err := stageScreenFiles(ctx, nil, memOpen(nil), t.TempDir(), time.Time{}, ""); none != nil || err != nil {
 		t.Fatalf("no screens: %v, %v", none, err)
 	}
 }
@@ -153,7 +155,7 @@ func TestStageScreenFilesRefusesBadInputAndWritesNothing(t *testing.T) {
 	}
 	for name, open := range cases {
 		temporary := t.TempDir()
-		if _, err := stageScreenFiles(ctx, []string{"a.png"}, open, temporary); err == nil {
+		if _, err := stageScreenFiles(ctx, []string{"a.png"}, open, temporary, time.Time{}, ""); err == nil {
 			t.Errorf("%s: admitted", name)
 		}
 		if _, err := os.Stat(filepath.Join(temporary, filepath.FromSlash(BundleScreensDir))); !os.IsNotExist(err) {
@@ -186,7 +188,7 @@ func TestStageScreenFilesRefusesToShareTheStagingPathWithAReleaseFile(t *testing
 		t.Fatal(err)
 	}
 	good := testPNG(t, 64, 64, false)
-	if _, err := stageScreenFiles(context.Background(), []string{"home.png"}, memOpen(map[string][]byte{"home.png": good}), temporary); err == nil {
+	if _, err := stageScreenFiles(context.Background(), []string{"home.png"}, memOpen(map[string][]byte{"home.png": good}), temporary, time.Time{}, ""); err == nil {
 		t.Fatal("a screen was staged over an existing file")
 	}
 	if got, _ := os.ReadFile(filepath.Join(dir, "home.png")); string(got) != "release bytes" {
@@ -232,5 +234,72 @@ func TestBlankCheckIsExactAndPixelBoundIsSane(t *testing.T) {
 	}
 	if _, _, _, err := CheckScreenPNG(buf.Bytes()); err == nil {
 		t.Fatal("an oversized PNG was admitted")
+	}
+}
+
+// A screen shot before the newest source change shows an older build: the
+// engineer edited and rebuilt but froze the old shots (claude arm Calendar
+// candidate 2, 2026-11-04). What can go wrong: build outputs or node_modules
+// counted as source (every screen stale); equal times (mtime granularity)
+// refused; no source change or no screens refused; deleted or directory
+// changes statted.
+func TestStageScreenFilesRefusesScreensOlderThanTheLastSourceChange(t *testing.T) {
+	ctx := context.Background()
+	shot := testPNG(t, 32, 32, false)
+	at := time.Date(2026, 11, 4, 11, 8, 30, 0, time.UTC)
+	openAt := func(mod time.Time) func(string) (screenInput, error) {
+		return func(string) (screenInput, error) {
+			return memInput{Reader: bytes.NewReader(shot), mod: mod}, nil
+		}
+	}
+	names := []string{"01-month.png", "02-week.png"}
+	_, err := stageScreenFiles(ctx, names, openAt(at.Add(-time.Second)), t.TempDir(), at, "calendar-next.css")
+	if err == nil || !strings.Contains(err.Error(), "2 screens predate the last source change (calendar-next.css at 11:08:30Z)") || !strings.Contains(err.Error(), "01-month.png, 02-week.png") {
+		t.Fatalf("stale screens: %v", err)
+	}
+	for name, c := range map[string]struct {
+		mod, notBefore time.Time
+	}{"fresh": {at.Add(time.Second), at}, "equal": {at, at}, "no source change": {at.Add(-time.Hour), time.Time{}}} {
+		if _, err := stageScreenFiles(ctx, names, openAt(c.mod), t.TempDir(), c.notBefore, ""); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if none, err := stageScreenFiles(ctx, nil, memOpen(nil), t.TempDir(), at, "x.css"); none != nil || err != nil {
+		t.Errorf("no screens: %v, %v", none, err)
+	}
+}
+
+func TestNewestSourceChangeCountsOnlySourceFiles(t *testing.T) {
+	base := time.Date(2026, 11, 4, 11, 0, 0, 0, time.UTC)
+	mods := map[string]time.Time{
+		"/workspace/platform/a.css":                   base.Add(time.Minute),
+		"workspace/platform/b.css":                    base.Add(2 * time.Minute),
+		"/workspace/platform/node_modules/x/index.js": base.Add(time.Hour),
+		"/workspace/platform/frontend/dist/app.js":    base.Add(time.Hour),
+		"/workspace/platform/docs/problems/x.md":      base.Add(time.Hour),
+		"/workspace/platform/.claude/settings.json":   base.Add(time.Hour),
+		"/workspace/platform/.git/index":              base.Add(time.Hour),
+		"/" + ScreensPrefix + "home.png":              base.Add(time.Hour),
+		"/workspace/platform/gone.css":                base.Add(time.Hour),
+		"/workspace/platform/sub":                     base.Add(time.Hour),
+	}
+	changes := []FileChange{
+		{Path: "/workspace/platform/a.css", Kind: ChangeModified, Mode: 0o644},
+		{Path: "workspace/platform/b.css", Kind: ChangeAdded, Mode: 0o644},
+		{Path: "/workspace/platform/node_modules/x/index.js", Kind: ChangeAdded, Mode: 0o644},
+		{Path: "/workspace/platform/frontend/dist/app.js", Kind: ChangeModified, Mode: 0o644},
+		{Path: "/workspace/platform/docs/problems/x.md", Kind: ChangeAdded, Mode: 0o644},
+		{Path: "/workspace/platform/.claude/settings.json", Kind: ChangeAdded, Mode: 0o644},
+		{Path: "/workspace/platform/.git/index", Kind: ChangeModified, Mode: 0o644},
+		{Path: "/" + ScreensPrefix + "home.png", Kind: ChangeAdded, Mode: 0o644},
+		{Path: "/workspace/platform/gone.css", Kind: ChangeDeleted},
+		{Path: "/workspace/platform/sub", Kind: ChangeAdded, Mode: os.ModeDir | 0o755},
+	}
+	got, path, err := newestSourceChange(changes, func(p string) (time.Time, error) { return mods[p], nil })
+	if err != nil || !got.Equal(base.Add(2*time.Minute)) || path != "b.css" {
+		t.Fatalf("newest %v %q %v", got, path, err)
+	}
+	if zero, _, err := newestSourceChange(changes[5:], func(string) (time.Time, error) { return time.Now(), nil }); err != nil || !zero.IsZero() {
+		t.Fatalf("no source: %v %v", zero, err)
 	}
 }
