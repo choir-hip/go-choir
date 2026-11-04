@@ -1869,6 +1869,14 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 		if !found || !slices.Contains(closable, operation.State) {
 			return
 		}
+		// Design A6 rule 4: a candidate retained when its build's clock
+		// ended waits for Verify; a late report on its cancelled
+		// assignment does not close it (merge review, DeepSeek F1).
+		if operation.State == selfdev.StateFrozen {
+			if _, retained := rt.retainedFor(operation, assignment.AssignmentID); retained {
+				return
+			}
+		}
 		reason := fmt.Sprintf("assignment %s before its candidate froze", assignment.Disposition)
 		if operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified {
 			reason = fmt.Sprintf("assignment %s; its candidate cannot be verified", assignment.Disposition)

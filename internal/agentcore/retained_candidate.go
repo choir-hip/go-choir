@@ -216,7 +216,9 @@ func (rt *Runtime) frozenCandidateOf(ctx context.Context, computerID, assignment
 	if rt == nil || rt.selfdevOperations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(assignmentID) == "" {
 		return selfdev.Operation{}, false
 	}
-	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	// The current revision (engineer_reuse.go, design A6 rule 1): a build
+	// that ends during rework retains the revision it froze.
+	operation, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, computerID, assignmentID)
 	if err != nil {
 		log.Printf("selfdev: read the candidate of assignment %s: %v", assignmentID, err)
 		return selfdev.Operation{}, false
@@ -430,9 +432,9 @@ func (rt *Runtime) closeOrphanedFrozenCandidatesAtCrashBoot(ctx context.Context)
 			newest[a.AssignmentID] = a
 		}
 	}
-	prefix := store.EngineeringFreezeIdempotencyKey("")
 	for _, operation := range frozen {
-		assignmentID, ok := strings.CutPrefix(operation.IdempotencyKey, prefix)
+		// Any revision's key names its assignment (design A6 rule 2).
+		assignmentID, ok := store.EngineeringFreezeAssignmentOf(operation.IdempotencyKey)
 		if !ok {
 			continue
 		}
