@@ -145,5 +145,11 @@ now:
     whether the install applies end to end once pool is rebased
   next_observation: crouton's superseded rebase reaching approval; pool's rebase notice; the install retry on pool
   blocker: none
-  next_action: land the superseded-rebase fix and unwedge crouton; prove a Library install on pool on staging; then review apps through the Library and run publish and install rounds
+  next_action: >-
+    run the owner's Library verifier (owner, 2026-11-04 12:55Z: "build 2
+    separate apps simultaneously on different VMs, publish them both, then
+    install them both so that both VMs have both apps"): timer-next on the
+    claude arm and converter-next on the crouton arm, published, then each
+    installs the other's; code pushes held while it runs so the base stays
+    put
 receipts: []
