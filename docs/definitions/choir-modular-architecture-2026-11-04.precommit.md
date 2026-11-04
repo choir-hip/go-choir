@@ -181,3 +181,44 @@ Calibration so far: 80% intervals 3 of 4 covered (R0-02, R0-05, R0-09; R0-01 mis
 ### Learning entry
 
 - **R0-08 (confirmed at 0.40).** A plan assembled from designs that each passed review carries their acceptance forward. Change: a review-outcome prediction states how many earlier rounds the reviewed content already passed and conditions on it. Checked by: the goal file's review record in round 0b.
+
+## Records, round 0b (committed 2026-11-04, before the goal-file review and before Phase 1)
+
+Format change from round 0 (the ledger review lessons): each record names its
+materiality (high, medium, low: how much a wrong answer would change what we
+do), its trigger (the event that makes it settleable), and its settler. A
+record whose premise dies is voided explicitly, with the reason. Point
+estimates state their unit boundary. Where a choice has a small known set of
+options, the record covers each (R0-07 lesson).
+
+**R0b-01.** Devin's review of the rewritten goal file returns ACCEPT.
+- p = 0.70. Grounds: the plan it points to was accepted and absorbed every amendment (R0-08 lesson: condition on rounds already passed); the goal file itself is new text, never reviewed.
+- Materiality: low. Trigger: the review output. Settler: the review output.
+
+**R0b-02.** Phase 1 (MA1.1 to MA1.7) is on main with CI green, from the owner's MA0.5 sign-off.
+- Estimate: 1.5 days, 80% interval [0.5, 3]. Unit: wall-clock from the sign-off message to the CI-green commit that closes the last Phase 1 slice. Grounds: base rate, FP0 timelines ran about 10x pessimistic on the data system mission; R0-10 (filed before the plan grew MA1.5 to MA1.7) said 1.5 [0.5, 4].
+- Materiality: medium (sequences the owner's calendar). Trigger: the closing CI run. Settler: rule (timestamps).
+
+**R0b-03.** MA1.2's differential (the manifest-derived resolver against the old route switch on the same inputs) finds at least one route the old switch carried and the plan's list of non-manifest rules does not name.
+- p = 0.55. Grounds: Devin found four unlisted rules by reading; reading misses what a differential sees.
+- Materiality: high (a missed route silently drops messages). Trigger: the differential test's first run. Settler: rule (the test's output).
+
+**R0b-04.** MA1.1 deletes at least 600 net lines of Go (insertions minus deletions, excluding tests).
+- Estimate: 900 net deleted, 80% interval [500, 1600]. Unit: `git diff --numstat` over `*.go` not `*_test.go`, the MA1.1 commits only.
+- Materiality: low. Trigger: MA1.1 landed. Settler: rule.
+
+**R0b-05.** The first d@e run after MA1.3 lands produces a request record carrying `p_success` and provenance that reads back through the product API without a code fix.
+- p = 0.60. Grounds: new tape kind plus a read path; first deploys of new record kinds needed a fix about half the time in the data system mission.
+- Materiality: medium. Trigger: MA1.3's deployed acceptance. Settler: rule (the API response).
+
+**R0b-06.** Under the asynchronous settler (MA1.5), a research fan-out on d@e completes with the judge stalled, and the judge's settlement arrives later and is recorded.
+- p = 0.75.
+- Materiality: high (fate-sharing between research and the judge would stall the paper). Trigger: MA1.5's stalled-judge test and its d@e acceptance. Settler: rule.
+
+**R0b-07.** Per-run inert sub-calls (MA1.6 detector) on d@e's first ten research runs after MA1.6.
+- Estimate: 20% of sub-calls inert, 80% interval [5%, 45%]. Unit: sub-RLM casts the detector marks inert, over all sub-RLM casts, in those ten runs.
+- Materiality: medium (tells us whether inertness is a tuning problem or a design problem). Trigger: ten research runs completed after MA1.6. Settler: rule (the detector's counts).
+
+**R0b-08.** Phase 1 needs at least one rollback or hotfix on staging (ring-expedited releases included).
+- p = 0.50.
+- Materiality: medium (calibrates the expedite policy). Trigger: Phase 1 closed. Settler: rule (deploy history).
