@@ -137,3 +137,56 @@ func TestStackBaseWakeDeliversToASettledDocument(t *testing.T) {
 		t.Fatalf("a settled document was not woken: %d", n)
 	}
 }
+
+// A document whose trajectory ended its episode still gets the note, in its
+// document-keyed inbox, and is not continued onto a new trajectory.
+func TestStackBaseWakeDeliversToAnEndedEpisodeWithoutContinuingIt(t *testing.T) {
+	f := newRebaseFixture(t)
+	ctx := context.Background()
+	trajectoryID, agentID := seedOwnerActDocument(t, f.s, f.owner, f.computer, "doc-wait")
+	snapshot, err := f.s.GetLifecycleSnapshot(ctx, f.owner, f.computer, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, work := range snapshot.WorkItems {
+		req := types.SettleLifecycleWorkRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "settle:" + work.WorkItemID, TrajectoryID: trajectoryID, WorkItemID: work.WorkItemID, ActingAgentID: agentID, ResultRef: "result:done"}
+		req.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(req)
+		if _, err := f.s.SettleLifecycleWork(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc, err := f.s.GetLifecycleDocument(ctx, f.owner, f.computer, "doc-wait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = f.s.GetLifecycleSnapshot(ctx, f.owner, f.computer, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Trajectory.Status != types.TrajectorySettled {
+		settle := types.SettleLifecycleTrajectoryRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "settle-trajectory", TrajectoryID: trajectoryID,
+			ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: doc.CurrentRevisionID}
+		settle.CommandDigest, _ = store.ComputeSettleLifecycleTrajectoryDigest(settle)
+		if _, err := f.s.SettleLifecycleTrajectory(ctx, settle); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if state, err := f.rt.rebaseTextureRunState(ctx, f.owner, f.computer, trajectoryID, agentID); err != nil || state != rebaseTextureTrajectorySettled {
+		t.Fatalf("setup: the episode should have ended: %v %v", state, err)
+	}
+	refuseAtBaseMoved(t, f, "doc-wait", "cast-1")
+	setBootedBase(t, f.rt, f.base)
+	if _, err := f.rt.ReconcileSourceProjection(ctx, "apply"); err != nil {
+		t.Fatal(err)
+	}
+	if n := stackBaseNotes(t, f, "doc-wait"); n != 1 {
+		t.Fatalf("an ended episode's document was not given the note: %d", n)
+	}
+	after, err := f.s.GetLifecycleDocument(ctx, f.owner, f.computer, "doc-wait")
+	if err != nil || after.TrajectoryID != trajectoryID {
+		t.Fatalf("the ended episode was continued: %v %+v", err, after)
+	}
+	if len(f.rt.readStackBaseWaiters()) != 0 {
+		t.Fatal("waiter not removed")
+	}
+}

@@ -13,8 +13,8 @@ Fix: the refused Cast registers its document in a file under the selfdev updater
 root (`source-projection/base-waiters.json`, `stack_base_wake.go`), because the
 rebase apply goes through a planned restart. Every reconcile whose result admits
 a cast (`Result.Refusal() == ""`; pending and unavailable states do not count)
-commits one system Note into each registered Texture inbox (live or settled
-trajectory, not cancelled or archived) and removes the entry after the note
+commits one system Note into each registered Texture inbox (live or settled work, or an ended episode, which
+is not continued; not cancelled or archived) and removes the entry after the note
 commits. The first reconcile of the process, of any reason, first runs the boot
 pass: a crash boot (no planned-restart marker) deletes the entries registered
 before the boot and wakes no one; a planned boot keeps them for the first

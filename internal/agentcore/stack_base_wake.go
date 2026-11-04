@@ -57,7 +57,9 @@ func (rt *Runtime) readStackBaseWaiters() map[string]stackBaseWaiter {
 		return out
 	}
 	if raw, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(raw, &out) // a torn file reads as no waiters
+		if json.Unmarshal(raw, &out) != nil {
+			return map[string]stackBaseWaiter{} // a torn file reads as no waiters
+		}
 	}
 	return out
 }
@@ -135,6 +137,10 @@ func (rt *Runtime) wakeStackBaseWaiters(ctx context.Context, result sourceproj.R
 	if rt == nil || rt.stackBaseWaitersPath() == "" || result.Refusal() != "" {
 		return
 	}
+	// One wake pass at a time: two overlapping passes over different results
+	// would each commit a note for one refusal.
+	rt.stackBaseWakeMu.Lock()
+	defer rt.stackBaseWakeMu.Unlock()
 	rt.stackBaseWaitMu.Lock()
 	pending := rt.readStackBaseWaiters()
 	rt.stackBaseWaitMu.Unlock()
@@ -174,15 +180,18 @@ func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, r
 		return true, nil
 	}
 	inbox := currentTextureAgentID(w.DocID)
-	// The addressee rule of the rebase notice (rebaseOperationTexture): a live
-	// trajectory without a cancellation intent, whether or not it has open
-	// work (a Texture settles its items at the end of each round; the note is
-	// the wake).
+	// Narrower than the rebase notice's addressee rule (rebaseOperationTexture):
+	// a live trajectory without a cancellation intent, whether or not it has
+	// open work (a Texture settles its items at the end of each round; the note
+	// is the wake), and a trajectory whose episode has ended, where the note
+	// only waits in the document-keyed inbox and the document is NOT continued
+	// (this note is advisory; it must not resurrect an ended episode). A
+	// cancelled or not-live trajectory gets nothing.
 	state, err := rt.rebaseTextureRunState(ctx, w.OwnerID, w.ComputerID, strings.TrimSpace(doc.TrajectoryID), inbox)
 	if err != nil {
 		return false, err
 	}
-	if state != rebaseTextureOpen && state != rebaseTextureSettled {
+	if state != rebaseTextureOpen && state != rebaseTextureSettled && state != rebaseTextureTrajectorySettled {
 		return true, nil
 	}
 	operationID := result.OperationID
