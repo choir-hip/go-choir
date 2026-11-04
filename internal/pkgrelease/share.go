@@ -47,7 +47,8 @@ const ShareRetiredDetail = "share is retired: a published release is public, vis
 func PublicNotice(pathsDigest string) string {
 	return "publishing makes this release public: every signed-in owner can see it in the Library and install it. " +
 		"What becomes public: every path listed in the preview and its content, the review diff, and the release record " +
-		"(your owner id, this computer's id, the operation's receipts, the precommitment questions and the test command shown in the preview). " +
+		"(your owner id, this computer's id, the operation's receipts, the precommitment questions and the test command shown in the preview), " +
+		"and the round's screenshots and video listed in it. " +
 		"Confirm these paths with --confirm-paths " + pathsDigest
 }
 
@@ -77,6 +78,9 @@ type Preview struct {
 	// release id, which hashes the whole record.
 	Questions   []string `json:"precommitment_questions"`
 	TestCommand string   `json:"test_command,omitempty"`
+	// Media lists the screenshots and video that become public with it
+	// (name, kind, size); the digest binds them through the release id.
+	Media []string `json:"media,omitempty"`
 }
 
 // PublishPreview is computed from the bytes the host stores: tree_patch
@@ -128,8 +132,16 @@ func PublishPreview(ctx context.Context, record Record, treePatch, reviewPatch [
 	for _, p := range record.Precommitments {
 		questions = append(questions, p.Question)
 	}
+	var media []string
+	for _, m := range record.Media {
+		size := fmt.Sprintf("%d bytes", m.Bytes)
+		if m.Width > 0 {
+			size = fmt.Sprintf("%dx%d, %d bytes", m.Width, m.Height, m.Bytes)
+		}
+		media = append(media, fmt.Sprintf("%s (%s, %s)", m.Name, m.Kind, size))
+	}
 	return Preview{Paths: paths, PathsDigest: computerevent.DigestBytes(raw), ReviewPatchBytes: len(reviewPatch),
-		Questions: questions, TestCommand: record.Declarations.TestCommand}, nil
+		Questions: questions, TestCommand: record.Declarations.TestCommand, Media: media}, nil
 }
 
 // ValidTrack reports whether id has the shape of a track (an owner id).

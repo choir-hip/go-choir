@@ -48,6 +48,10 @@ type packageProxyEnv struct {
 	receipt string // the owner-act header corpusd saw on the publish
 	// guestStatus is the guest's status (0 is 200).
 	guestStatus int
+	// guestMedia answers the guest's .../media/<sha> route by digest;
+	// corpusdMedia answers corpusd's release media read (bytes and type).
+	guestMedia   map[string][]byte
+	corpusdMedia map[string][2]string
 }
 
 func (e *packageProxyEnv) record(call string) {
@@ -79,6 +83,15 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 	env := &packageProxyEnv{}
 	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		env.record("guest " + r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery + " owner=" + r.Header.Get("X-Authenticated-User") + " computer=" + r.Header.Get("X-Authenticated-Computer"))
+		if _, digest, ok := strings.Cut(r.URL.Path, "/media/"); ok {
+			raw, found := env.guestMedia[digest]
+			if !found {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(raw)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if env.guestStatus != 0 {
 			w.WriteHeader(env.guestStatus)
@@ -96,6 +109,18 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 			env.mu.Unlock()
 		}
 		env.record(line)
+		if _, digest, ok := strings.Cut(r.URL.Path, "/media/"); ok && r.Method == http.MethodGet {
+			answer, found := env.corpusdMedia[digest]
+			if !found {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":"package media not found"}`))
+				return
+			}
+			w.Header().Set("Content-Type", answer[1])
+			_, _ = w.Write([]byte(answer[0]))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/internal/platform/listings/"):

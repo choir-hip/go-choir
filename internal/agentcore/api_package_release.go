@@ -107,6 +107,11 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		parent := packageBlobRef(source.Blobs.ParentPatch)
 		record.ParentPatch = &parent
 	}
+	// The round's accepted screens and video, from the bound bundle only.
+	if record.Media, _, err = h.rt.operationMedia(operation); err != nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
+		return
+	}
 	if err := record.Validate(); err != nil {
 		writePackageDraftRefusal(w, err)
 		return

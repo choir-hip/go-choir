@@ -51,6 +51,11 @@ type fixtureRelease struct {
 	questions []release.Precommitment
 	withdrawn bool
 	testCmd   string
+	// media: desktop screenshots, phone screenshots, and whether the
+	// release carries the fixture's walkthrough video. A release with
+	// none shows the gallery's "no screenshots" state.
+	desktop, phone int
+	video          bool
 }
 
 // fixturePackages are the packages the fixture's store holds, as the base
@@ -81,36 +86,36 @@ func pc(question string, permille int, settled string) release.Precommitment {
 var fixtureReleases = []fixtureRelease{
 	{pkg: "files-next", publisher: 0, edits: map[string]string{
 		"FileTree.svelte": "<script>\n  export let nodes = [];\n</script>\n<ul class=\"tree\">\n  {#each nodes as n}<li>{n.name}</li>{/each}\n</ul>\n",
-	}, questions: []release.Precommitment{pc("Does the file tree list every file in the home folder?", 880, "yes")}},
+	}, questions: []release.Precommitment{pc("Does the file tree list every file in the home folder?", 880, "yes")}, desktop: 1},
 	{pkg: "files-next", publisher: 1, edits: map[string]string{
 		"files-store.js": "export const files = [];\nexport function sortByName(list) { return [...list].sort((a, b) => a.name.localeCompare(b.name)); }\n",
-	}, questions: []release.Precommitment{pc("Do files sort by name, folders first?", 780, "yes")}},
+	}, questions: []release.Precommitment{pc("Do files sort by name, folders first?", 780, "yes")}, desktop: 1},
 	{pkg: "files-next", publisher: 0, edits: map[string]string{
 		"RenameDialog.svelte": "<dialog><input aria-label=\"New name\" /></dialog>\n",
 		"App.svelte":          "<script>\n  import FileTree from './FileTree.svelte';\n  import RenameDialog from './RenameDialog.svelte';\n</script>\n<FileTree />\n<RenameDialog />\n",
-	}, questions: []release.Precommitment{pc("Does renaming a file keep it selected?", 640, "yes"), pc("Does a name clash refuse without losing the typed name?", 700, "")}, testCmd: "npm run check"},
+	}, questions: []release.Precommitment{pc("Does renaming a file keep it selected?", 640, "yes"), pc("Does a name clash refuse without losing the typed name?", 700, "")}, testCmd: "npm run check", desktop: 2, phone: 1},
 	{pkg: "files-next", publisher: 2, edits: map[string]string{
 		"FileTree.svelte": "<ul class=\"tree\" role=\"tree\"></ul>\n",
 	}, questions: []release.Precommitment{pc("Is the tree reachable with the keyboard alone?", 560, "no")}},
 	{pkg: "files-next", publisher: 1, edits: map[string]string{
 		"files-store.js":  "export const files = [];\nexport function sortByName(list) { return [...list].sort((a, b) => a.name.localeCompare(b.name)); }\nexport function sortByModified(list) { return [...list].sort((a, b) => b.modified - a.modified); }\n",
 		"FileTree.svelte": "<ul class=\"tree\" data-sort=\"modified\"></ul>\n",
-	}, questions: []release.Precommitment{pc("Does the sort order survive a reload?", 720, "")}},
+	}, questions: []release.Precommitment{pc("Does the sort order survive a reload?", 720, "")}, desktop: 1},
 	{pkg: "files-next", publisher: 0, edits: map[string]string{
 		"FileTree.svelte": "<script>\n  export let nodes = [];\n  export let open = new Set();\n</script>\n<ul class=\"tree\">\n  {#each nodes as n}<li class:open={open.has(n.path)}>{n.name}</li>{/each}\n</ul>\n",
 		"files-store.js":  "export const files = [];\nexport const expanded = new Set();\n",
-	}, questions: []release.Precommitment{pc("Do expanded folders stay expanded after a rename?", 610, "")}},
+	}, questions: []release.Precommitment{pc("Do expanded folders stay expanded after a rename?", 610, "")}, desktop: 2, phone: 1},
 
 	{pkg: "slides-next", publisher: 3, edits: map[string]string{
 		"Deck.svelte": "<script>\n  export let slides = [];\n</script>\n<section class=\"deck\">\n  {#each slides as s}<article>{s.title}</article>{/each}\n</section>\n",
-	}, questions: []release.Precommitment{pc("Does a deck with forty slides open in under a second?", 700, "yes")}},
+	}, questions: []release.Precommitment{pc("Does a deck with forty slides open in under a second?", 700, "yes")}, desktop: 1},
 	{pkg: "slides-next", publisher: 4, edits: map[string]string{
 		"slide-render.js": "export function render(slide) { return `${slide.title}\\n${slide.notes || ''}`; }\n",
 	}, questions: []release.Precommitment{pc("Are speaker notes kept when a slide is reordered?", 820, "yes")}},
 	{pkg: "slides-next", publisher: 3, edits: map[string]string{
 		"Present.svelte": "<div class=\"present\" tabindex=\"0\"></div>\n",
 		"App.svelte":     "<script>\n  import Deck from './Deck.svelte';\n  import Present from './Present.svelte';\n</script>\n<Deck />\n<Present />\n",
-	}, questions: []release.Precommitment{pc("Does presenting mode leave with the Escape key?", 900, "yes"), pc("Do the arrow keys move one slide at a time?", 850, "yes")}},
+	}, questions: []release.Precommitment{pc("Does presenting mode leave with the Escape key?", 900, "yes"), pc("Do the arrow keys move one slide at a time?", 850, "yes")}, desktop: 3, phone: 1},
 	{pkg: "slides-next", publisher: 4, edits: map[string]string{
 		"Deck.svelte": "<section class=\"deck\" data-layout=\"grid\"></section>\n",
 	}, questions: []release.Precommitment{pc("Does the grid layout fit a phone-width window?", 480, "no")}},
@@ -120,14 +125,14 @@ var fixtureReleases = []fixtureRelease{
 
 	{pkg: "library-next", publisher: 0, edits: map[string]string{
 		"Catalog.svelte": "<script>\n  export let packages = [];\n</script>\n<div class=\"catalog\">\n  {#each packages as p}<button>{p.package}</button>{/each}\n</div>\n",
-	}, questions: []release.Precommitment{pc("Does the catalog list every public package once?", 860, "yes")}},
+	}, questions: []release.Precommitment{pc("Does the catalog list every public package once?", 860, "yes")}, desktop: 1, phone: 1},
 	{pkg: "library-next", publisher: 5, edits: map[string]string{
 		"catalog-client.js": "export async function packages() {\n  const res = await fetch('/api/catalog/packages');\n  return res.ok ? (await res.json()).packages : [];\n}\n",
 	}, questions: []release.Precommitment{pc("Does an unreachable catalog show an empty list instead of an error?", 670, "yes")}},
 	{pkg: "library-next", publisher: 0, edits: map[string]string{
 		"Catalog.svelte":     "<script>\n  export let packages = [];\n</script>\n<div class=\"catalog\">\n  {#each packages as p}<button>{p.package} by {p.track.slice(0, 8)}</button>{/each}\n</div>\n",
 		"ReleasePane.svelte": "<aside class=\"release\"></aside>\n",
-	}, questions: []release.Precommitment{pc("Does choosing a release show its changed paths?", 740, "")}},
+	}, questions: []release.Precommitment{pc("Does choosing a release show its changed paths?", 740, "")}, desktop: 2, phone: 1, video: true},
 }
 
 // fixtureIDs are random-looking UUIDs from a fixed seed, so the fixture holds
@@ -151,7 +156,7 @@ func fixtureManifest(name string) string {
 	return strings.ReplaceAll(m, `"title": "Reader"`, `"title": "`+title+`"`)
 }
 
-func generateCapsuleCatalogFixture(t *testing.T) capsuleCatalogFixture {
+func generateCapsuleCatalogFixture(t *testing.T) (capsuleCatalogFixture, map[string][]byte) {
 	t.Helper()
 	// Git commit dates are part of the base commit id, which a release
 	// records; fix them.
@@ -194,7 +199,8 @@ func generateCapsuleCatalogFixture(t *testing.T) capsuleCatalogFixture {
 	var order []trackKey
 	seen := map[trackKey]bool{}
 	var withdrawn []built
-	for _, fr := range fixtureReleases {
+	media := map[string][]byte{}
+	for seq, fr := range fixtureReleases {
 		owner, computer := publishers[fr.publisher], computers[fr.publisher]
 		key := trackKey{fr.pkg, owner}
 		if !seen[key] {
@@ -252,6 +258,7 @@ func generateCapsuleCatalogFixture(t *testing.T) capsuleCatalogFixture {
 			},
 			Precommitments: precommits,
 			Declarations:   pkgrelease.Declarations{TestCommand: fr.testCmd},
+			Media:          w.fixtureReleaseMedia(fr, seq, media),
 		}
 		if parent != nil {
 			record.Parent = pkgrelease.Parent{Kind: pkgrelease.ParentRelease, ReleaseID: parent.id, Tree: parentTree}
@@ -330,7 +337,7 @@ func generateCapsuleCatalogFixture(t *testing.T) capsuleCatalogFixture {
 	for i := len(all) - 1; i >= 0; i-- {
 		f.Releases = append(f.Releases, get("/releases/"+all[i].id+"?"+owner))
 	}
-	return f
+	return f, media
 }
 
 // subtree2 is the subtree of root in a full tree.
@@ -408,8 +415,9 @@ func shapeOf(t *testing.T, raw any) any {
 }
 
 func TestCapsuleCatalogFixtureMatchesCorpusd(t *testing.T) {
-	fresh := generateCapsuleCatalogFixture(t)
+	fresh, media := generateCapsuleCatalogFixture(t)
 	if os.Getenv("CHOIR_WRITE_CAPSULE_CATALOG_FIXTURE") == "1" {
+		writeFixtureMedia(t, media)
 		out, err := json.MarshalIndent(fresh, "", "  ")
 		if err != nil {
 			t.Fatal(err)
@@ -497,4 +505,5 @@ func TestCapsuleCatalogFixtureMatchesCorpusd(t *testing.T) {
 			t.Fatalf("catalog entry %+v has no release or history in the fixture", p)
 		}
 	}
+	checkFixtureMedia(t, held)
 }
