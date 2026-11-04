@@ -93,19 +93,21 @@ func TestFrameActionsArePinned(t *testing.T) {
 	}
 }
 
-// The message targets and capsule verbs of the tables the manifest replaced.
-func TestMessageTargetsAndCapsuleVerbsKeepTheirOldAuthority(t *testing.T) {
-	targets := map[string][]string{
-		Management: {Texture, Research}, Texture: {Research, Management}, Research: {Texture},
-		Engineering: {Management}, Conductor: {}, Email: {},
+// The inbox shapes the address resolver reads, and the capsule verbs of the
+// table the manifest replaced.
+func TestInstancesAndCapsuleVerbsKeepTheirOldAuthority(t *testing.T) {
+	instances := map[string]Instance{
+		Management: InstanceOwner, Texture: InstanceSubject, Research: InstanceSubject,
+		Engineering: InstanceAssignment, Conductor: InstanceNone, Email: InstanceNone,
+		ManagementTask: InstanceNone, ResearchChild: InstanceNone,
 	}
-	for name, want := range targets {
+	for name, want := range instances {
 		d, ok := Lookup(name)
 		if !ok {
 			t.Fatalf("desk %s missing", name)
 		}
-		if !reflect.DeepEqual(sorted(d.MessageTargets), sorted(want)) {
-			t.Errorf("desk %s message targets = %v, want %v", name, d.MessageTargets, want)
+		if d.Instance != want {
+			t.Errorf("desk %s instance = %q, want %q", name, d.Instance, want)
 		}
 	}
 	verbs := map[string][]string{
@@ -126,9 +128,9 @@ func TestLookupReturnsCopies(t *testing.T) {
 	d, _ := Lookup(Research)
 	d.Verbs[0] = "Exec"
 	d.CapsuleVerbs[0] = "exec"
-	d.MessageTargets = append(d.MessageTargets, Engineering)
+	d.OwnedKinds = append(d.OwnedKinds, "assignment")
 	again, _ := Lookup(Research)
-	if again.Verbs[0] == "Exec" || again.CapsuleVerbs[0] == "exec" || len(again.MessageTargets) != 1 {
+	if again.Verbs[0] == "Exec" || again.CapsuleVerbs[0] == "exec" || len(again.OwnedKinds) != 1 {
 		t.Fatal("a caller changed the manifest through a returned copy")
 	}
 }

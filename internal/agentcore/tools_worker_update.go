@@ -165,16 +165,6 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	if target.AgentID == "" || target.OwnerID != ownerID || target.ComputerID != computerID || targetProfile == "" {
 		return fmt.Errorf("update_coagent target scope/profile is not authoritative")
 	}
-	canMessage, err := agentprofile.CanMessage(callerProfile, targetProfile)
-	if err != nil {
-		return fmt.Errorf("update_coagent message policy refused: %w", err)
-	}
-	if !canMessage {
-		if targetProfile == agentprofile.Email {
-			return fmt.Errorf("update_coagent %s cannot message %s; an Email draft is not reachable from update_coagent", callerProfile, targetProfile)
-		}
-		return fmt.Errorf("update_coagent %s cannot message %s", callerProfile, targetProfile)
-	}
 	if callerProfile == agentprofile.Management && targetProfile == agentprofile.Engineering {
 		trajectoryID := strings.TrimSpace(trajectoryIDForRun(execution.RunRecord))
 		if trajectoryID == "" {

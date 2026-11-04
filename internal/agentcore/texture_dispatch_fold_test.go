@@ -153,8 +153,9 @@ func TestFoldTextureDispatchRefusals(t *testing.T) {
 		want    string
 	}{
 		{"two turns", []yaegikernel.StagedIntent{turn, foldTurn("tray-2", yaegikernel.TextureTurn{Wait: "x"})}, "one turn"},
-		{"other desk", []yaegikernel.StagedIntent{turn, cast(agentprofile.Engineering)}, "research or management"},
-		{"management without an owner", []yaegikernel.StagedIntent{turn, cast(agentprofile.Management)}, "no management inbox"},
+		{"unregistered desk", []yaegikernel.StagedIntent{turn, cast("no-such-desk")}, "not a registered desk"},
+		{"engineering without an owner", []yaegikernel.StagedIntent{turn, cast(agentprofile.Engineering)}, "no inbox for"},
+		{"management without an owner", []yaegikernel.StagedIntent{turn, cast(agentprofile.Management)}, "no inbox for"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := foldTextureDispatch(tc.intents, foldScope, cellRecords{})
@@ -162,6 +163,24 @@ func TestFoldTextureDispatchRefusals(t *testing.T) {
 				t.Fatalf("error = %v, want containing %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// A Texture Cast to engineering is no longer refused; Texture does not hold
+// the assignment kind, so it lands in management's inbox as an admission
+// request (MA1.2).
+func TestFoldTextureDispatchForwardsEngineeringCastToManagement(t *testing.T) {
+	scope := foldScope
+	scope.OwnerID = "owner-1"
+	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentCast, LocalID: "tray-9", ToDesk: agentprofile.Engineering, Objective: "o",
+		Statement: `{"kind":"execution_request","summary":"s","actions":[{"type":"run_tests","objective":"a"}]}`}}
+	out, folded, err := foldTextureDispatch(intents, scope, cellRecords{})
+	if err != nil || len(folded) != 1 {
+		t.Fatalf("fold = %v, %v, %d folded", out, err, len(folded))
+	}
+	turn := foldedTurn(t, out[0].Body)
+	if len(turn.InboxRecords) != 1 || turn.InboxRecords[0].Inbox != "management:owner-1" || !strings.Contains(string(mustJSON(t, turn.InboxRecords[0])), "Admission request") {
+		t.Fatalf("records = %+v", turn.InboxRecords)
 	}
 }
 

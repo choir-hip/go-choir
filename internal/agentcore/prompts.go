@@ -40,8 +40,7 @@ type toolDescriptorResponse struct {
 }
 
 type rolePolicyResponse struct {
-	Profile               string   `json:"profile"`
-	AllowedMessageTargets []string `json:"allowed_message_targets,omitempty"`
+	Profile string `json:"profile"`
 }
 
 func promptSourceLabel(source string) string {
@@ -57,8 +56,7 @@ func promptSourceLabel(source string) string {
 
 func rolePolicyFromSpec(spec agentprofile.Policy) rolePolicyResponse {
 	return rolePolicyResponse{
-		Profile:               spec.Profile,
-		AllowedMessageTargets: append([]string(nil), spec.AllowedMessageTargets...),
+		Profile: spec.Profile,
 	}
 }
 

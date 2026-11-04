@@ -162,7 +162,8 @@ func TestCommitTrayLifecycleProducerReportResolvesDeskName(t *testing.T) {
 	if len(pending) != 0 {
 		t.Fatalf("research report queued a packet on the records route: %+v", pending)
 	}
-	inbox, ok, _ := recordsRoute(run.AgentID, run.OwnerID, "texture")
+	route, _ := ResolveAddress(run.AgentID, run.OwnerID, "texture")
+	inbox, ok := route.Inbox, route.OnRoute
 	if !ok {
 		t.Fatalf("no Texture inbox for research desk %q", run.AgentID)
 	}

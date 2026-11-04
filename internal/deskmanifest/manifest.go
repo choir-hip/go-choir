@@ -2,9 +2,9 @@
 // call, spawn and spend (SDC ARCH-02, launch item L1-04).
 //
 // Before it, a desk's authority was written in six places that nobody read
-// together: agentprofile.PolicyFor (message targets), capsule.RoleVerbSets
+// together: agentprofile.PolicyFor (message targets, since deleted), capsule.RoleVerbSets
 // (broker verbs), yaegikernel.NewChoirScope (handle actions) and
-// deskModuleSets (verbs), agentcore recordsRoute (inbox routing) and
+// deskModuleSets (verbs), agentcore ResolveAddress (inbox routing, from each desk's Instance) and
 // deskCarrierLive (carrier). The daemon's frame check, the cell confinement
 // profile and the memory budgets read this table instead, so a desk added
 // without an entry has no authority: every consumer treats an unknown name
@@ -120,6 +120,24 @@ type Memory struct {
 	CapsuleRequestedBytes int64
 }
 
+// Instance is the shape of a desk's inbox: how many of the desk there are
+// and what names one (MA1.2). The address resolver reads it to turn a
+// recipient name into the registered inbox; a desk with no instance has no
+// inbox that records reach.
+type Instance string
+
+const (
+	// InstanceNone: the desk has no records inbox.
+	InstanceNone Instance = ""
+	// InstanceOwner: one per owner, <desk>:<owner>.
+	InstanceOwner Instance = "owner"
+	// InstanceSubject: one per subject (a document), <desk>:<doc>.
+	InstanceSubject Instance = "subject"
+	// InstanceAssignment: one per assignment, <desk>:<assignment>; only
+	// the holder of the assignment kind opens one.
+	InstanceAssignment Instance = "assignment"
+)
+
 // Desk is one row of the manifest.
 type Desk struct {
 	Name    string
@@ -133,12 +151,9 @@ type Desk struct {
 	// CapsuleVerbs are the broker verbs of a desk that runs in a capsule
 	// (capsule.RoleVerbSets).
 	CapsuleVerbs []string
-	// MessageTargets are the desks this desk may message (agentprofile).
-	MessageTargets []string
-	// Addresses are the desks whose inboxes this desk may address by
-	// records. Pinned against agentcore recordsRoute; not yet generated
-	// from here.
-	Addresses []string
+
+	// Instance is the shape of the desk's records inbox (MA1.2).
+	Instance Instance
 
 	Sandbox Sandbox
 	Taint   Taint
@@ -203,6 +218,7 @@ const mib = 1 << 20
 var system = []Desk{
 	{
 		Name: Management, Kind: KindSystem, Carrier: CarrierDeskWorker,
+		Instance: InstanceOwner,
 		// Management delegates engineering work and reports; it does not
 		// touch the filesystem (mutation is capsule-bound under
 		// engineering). It reads the captures a capture arrival names and
@@ -210,32 +226,30 @@ var system = []Desk{
 		Verbs: []string{"Cast", "Ask", "Note", "Reply",
 			"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 			"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask", "Calibration", "Restate"},
-		CapsuleVerbs:   []string{},
-		MessageTargets: []string{Texture, Research},
-		Addresses:      []string{Texture, Engineering},
-		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61001},
-		Taint:          TaintPrivileged,
-		Memory:         Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds:     []string{"assignment", "admission"},
-		ModelRole:      Management, Restart: RestartContract,
+		CapsuleVerbs: []string{},
+		Sandbox:      Sandbox{Profile: "desk_cell", UID: 61001},
+		Taint:        TaintPrivileged,
+		Memory:       Memory{WorkerMaxBytes: 768 * mib},
+		OwnedKinds:   []string{"assignment", "admission"},
+		ModelRole:    Management, Restart: RestartContract,
 	},
 	{
 		Name: Texture, Kind: KindSystem, Carrier: CarrierDeskWorker,
+		Instance: InstanceSubject,
 		// Texture writes its document with one verb, Write, and closes a
 		// turn with Done, Wait or Reject. It is the sole writer of canonical
 		// document revisions. It reads the captures its frame names; it
 		// never fetches the world.
-		Verbs:          []string{"Cast", "Ask", "Note", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
-		MessageTargets: []string{Research, Management},
-		Addresses:      []string{Research, Management},
-		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61002},
-		Taint:          TaintPrivileged,
-		Memory:         Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds:     []string{"document_revision"},
-		ModelRole:      Texture, Restart: RestartContract,
+		Verbs:      []string{"Cast", "Ask", "Note", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
+		Sandbox:    Sandbox{Profile: "desk_cell", UID: 61002},
+		Taint:      TaintPrivileged,
+		Memory:     Memory{WorkerMaxBytes: 768 * mib},
+		OwnedKinds: []string{"document_revision"},
+		ModelRole:  Texture, Restart: RestartContract,
 	},
 	{
 		Name: Research, Kind: KindSystem, Carrier: CarrierDeskWorker,
+		Instance: InstanceSubject,
 		// Research observes the world read-only but has full message
 		// authority: read-only world access is not read-only messaging.
 		Verbs: []string{"Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -243,27 +257,24 @@ var system = []Desk{
 			"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 			"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
 			"System1", "RelateStories", "Relate", "StoryAnalysis"},
-		CapsuleVerbs:   []string{"read_file", "list_dir", "stat", "go_eval"},
-		MessageTargets: []string{Texture},
-		Addresses:      []string{Texture},
-		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61003},
-		Taint:          TaintUntrustedInput,
-		Memory:         Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds:     []string{"evidence"},
-		ModelRole:      Research, Restart: RestartContract,
+		CapsuleVerbs: []string{"read_file", "list_dir", "stat", "go_eval"},
+		Sandbox:      Sandbox{Profile: "desk_cell", UID: 61003},
+		Taint:        TaintUntrustedInput,
+		Memory:       Memory{WorkerMaxBytes: 768 * mib},
+		OwnedKinds:   []string{"evidence"},
+		ModelRole:    Research, Restart: RestartContract,
 	},
 	{
 		Name: Engineering, Kind: KindSystem, Carrier: CarrierCapsule,
+		Instance: InstanceAssignment,
 		// Engineering mutates inside its capsule, converses with
 		// management on records, and ends its assignment with Complete,
 		// freezing a candidate first.
 		Verbs: []string{"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note", "Calibration", "Restate"},
 		CapsuleVerbs: []string{"exec", "read_file", "write_file", "list_dir", "stat", "mkdir", "remove",
 			"kill_session", "go_eval", "init_session", "close_session", "job_start", "job_status", "job_stop"},
-		MessageTargets: []string{Management},
-		Addresses:      []string{Management},
-		Sandbox:        Sandbox{Profile: "capsule"},
-		Taint:          TaintPrivileged,
+		Sandbox: Sandbox{Profile: "capsule"},
+		Taint:   TaintPrivileged,
 		// A capsule asks for what the cmd/autoputer link needs (measured
 		// peak 1.50 GiB stripped, 1.80 GiB with DWARF).
 		Memory:     Memory{CapsuleRequestedBytes: 2 << 30},
@@ -275,13 +286,11 @@ var system = []Desk{
 		// A management task disposes of the captures its lease names. It
 		// has no filesystem, assignment, message, product API or ledger
 		// authority: one level of delegation.
-		Verbs:          []string{"Cast", "Note", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
-		MessageTargets: []string{},
-		Addresses:      []string{Texture},
-		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61001},
-		Taint:          TaintPrivileged,
-		Memory:         Memory{WorkerMaxBytes: 384 * mib},
-		ModelRole:      ManagementTask, Restart: RestartContract,
+		Verbs:     []string{"Cast", "Note", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
+		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61001},
+		Taint:     TaintPrivileged,
+		Memory:    Memory{WorkerMaxBytes: 384 * mib},
+		ModelRole: ManagementTask, Restart: RestartContract,
 	},
 	{
 		Name: ResearchChild, Kind: KindRole, Carrier: CarrierDeskWorker,
@@ -290,22 +299,20 @@ var system = []Desk{
 		// report or write.
 		Verbs: []string{"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 			"ReadEvidence", "ListEvidence"},
-		MessageTargets: []string{},
-		Addresses:      []string{},
-		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61003},
-		Taint:          TaintUntrustedInput,
-		Memory:         Memory{WorkerMaxBytes: 384 * mib},
-		ModelRole:      ResearchChild, Restart: RestartContract,
+		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61003},
+		Taint:     TaintUntrustedInput,
+		Memory:    Memory{WorkerMaxBytes: 384 * mib},
+		ModelRole: ResearchChild, Restart: RestartContract,
 	},
 	{
 		Name: Conductor, Kind: KindSystem, Carrier: CarrierNone,
-		MessageTargets: []string{}, Addresses: []string{}, Sandbox: Sandbox{Profile: "none"},
-		Taint: TaintPrivileged, ModelRole: Conductor, Restart: RestartContract,
+		Sandbox: Sandbox{Profile: "none"},
+		Taint:   TaintPrivileged, ModelRole: Conductor, Restart: RestartContract,
 	},
 	{
 		Name: Email, Kind: KindSystem, Carrier: CarrierNone,
-		MessageTargets: []string{}, Addresses: []string{}, Sandbox: Sandbox{Profile: "none"},
-		Taint: TaintUntrustedInput, ModelRole: Email, Restart: RestartContract,
+		Sandbox: Sandbox{Profile: "none"},
+		Taint:   TaintUntrustedInput, ModelRole: Email, Restart: RestartContract,
 	},
 }
 
@@ -335,8 +342,6 @@ func (d Desk) clone() Desk {
 	}
 	d.Verbs = cp(d.Verbs)
 	d.CapsuleVerbs = cp(d.CapsuleVerbs)
-	d.MessageTargets = cp(d.MessageTargets)
-	d.Addresses = cp(d.Addresses)
 	d.OwnedKinds = cp(d.OwnedKinds)
 	return d
 }
@@ -516,7 +521,6 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 	d := Desk{
 		Name: spec.Name, Kind: KindApp, Carrier: CarrierDeskWorker,
 		Verbs: append([]string{}, spec.Verbs...), CapsuleVerbs: []string{},
-		MessageTargets: []string{}, Addresses: []string{},
 		Sandbox:    Sandbox{Profile: "desk_cell", UID: spec.UID},
 		Taint:      spec.Taint,
 		Memory:     Memory{WorkerMaxBytes: spec.WorkerMaxBytes},
@@ -595,7 +599,6 @@ func (d Desk) Equal(o Desk) bool {
 	}
 	return d.Name == o.Name && d.Kind == o.Kind && d.Carrier == o.Carrier &&
 		same(d.Verbs, o.Verbs) && same(d.CapsuleVerbs, o.CapsuleVerbs) &&
-		same(d.MessageTargets, o.MessageTargets) && same(d.Addresses, o.Addresses) &&
-		d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
+		d.Instance == o.Instance && d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
 		same(d.OwnedKinds, o.OwnedKinds) && d.ModelRole == o.ModelRole && d.Restart == o.Restart
 }

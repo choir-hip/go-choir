@@ -26,99 +26,6 @@ import (
 // Management's conversations moved in L3b; engineering's in C1e B1: one
 // conversation per assignment, management:<owner> with engineering:<id>.
 
-// recordsDesk reports whether a desk's conversations are on records:
-// Texture with research (L3a) and with management (L3b), research with
-// Texture, management with Texture and with engineering, engineering with
-// management (C1e B1).
-func recordsDesk(profile string) bool {
-	switch strings.TrimSpace(profile) {
-	case agentprofile.Texture, agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
-		return true
-	}
-	return false
-}
-
-// recordsRoute is the inbox a records desk addresses for the desk name or
-// agent id it staged. ok is false for a route that stays on its packet
-// path. Texture talks to research:<doc> and management:<owner>; research to
-// texture:<doc>; management to texture:<doc>, which it must name (it holds
-// conversations with every Texture of its owner), and to
-// engineering:<assignment> for an assignment it opened (a Cast to bare
-// "engineering" opens a new one and is planned by planEngineeringCast);
-// engineering:<assignment> to management:<owner>.
-func recordsRoute(fromAgentID, ownerID, toDesk string) (string, bool, error) {
-	fromDesk, fromSubject, _ := strings.Cut(strings.TrimSpace(fromAgentID), ":")
-	to := strings.TrimSpace(toDesk)
-	toName, toSubject, hasSubject := strings.Cut(to, ":")
-	if !hasSubject {
-		toName = to
-	}
-	switch fromDesk {
-	case agentprofile.Texture:
-		if fromSubject == "" {
-			return "", false, nil
-		}
-		switch toName {
-		case agentprofile.Research:
-			if hasSubject && toSubject != fromSubject {
-				return "", false, nil
-			}
-			return agentprofile.Research + ":" + fromSubject, true, nil
-		case agentprofile.Management:
-			if strings.TrimSpace(ownerID) == "" || (hasSubject && toSubject != ownerID) {
-				return "", false, nil
-			}
-			return agentprofile.Management + ":" + ownerID, true, nil
-		}
-	case agentprofile.Research:
-		if fromSubject != "" && toName == agentprofile.Texture && (!hasSubject || toSubject == fromSubject) {
-			return agentprofile.Texture + ":" + fromSubject, true, nil
-		}
-	case agentprofile.Management:
-		if toName == captureSourceDesk && hasSubject && strings.TrimSpace(toSubject) != "" {
-			// A decline of a poll's captures goes back to the source that
-			// sent them (Cut 2 2b); no desk reads it.
-			return captureSourceDesk + ":" + strings.TrimSpace(toSubject), true, nil
-		}
-		if toName == agentprofile.Texture {
-			if !hasSubject || strings.TrimSpace(toSubject) == "" {
-				return "", false, fmt.Errorf("management addresses a Texture by its inbox: pass the record's from (texture:<doc>), not \"texture\"")
-			}
-			return agentprofile.Texture + ":" + strings.TrimSpace(toSubject), true, nil
-		}
-		if toName == agentprofile.Engineering {
-			if !hasSubject || strings.TrimSpace(toSubject) == "" {
-				return "", false, fmt.Errorf("management speaks into an open assignment by its inbox (engineering:<assignment>, the record's from); a Cast to \"engineering\" opens a new one")
-			}
-			return agentprofile.Engineering + ":" + strings.TrimSpace(toSubject), true, nil
-		}
-	case agentprofile.Engineering:
-		if fromSubject != "" && toName == agentprofile.Management && strings.TrimSpace(ownerID) != "" && (!hasSubject || toSubject == ownerID) {
-			return agentprofile.Management + ":" + ownerID, true, nil
-		}
-	case types.ManagementTaskDesk:
-		// A management task (S2a, §3.1a) speaks outward as management, to
-		// a story or a source; its sender is set by the reducer. Engineering,
-		// management and the computer are the parent's.
-		if fromSubject == "" {
-			return "", false, nil
-		}
-		switch toName {
-		case captureSourceDesk:
-			if hasSubject && strings.TrimSpace(toSubject) != "" {
-				return captureSourceDesk + ":" + strings.TrimSpace(toSubject), true, nil
-			}
-		case agentprofile.Texture:
-			if !hasSubject || strings.TrimSpace(toSubject) == "" {
-				return "", false, fmt.Errorf("a task addresses a story by its inbox (texture:<doc>), or opens one at texture:new")
-			}
-			return agentprofile.Texture + ":" + strings.TrimSpace(toSubject), true, nil
-		}
-		return "", false, fmt.Errorf("a management task sends only to stories (texture:<doc>, texture:new) and to sources; %q is management's to address", to)
-	}
-	return "", false, nil
-}
-
 // engineeringCastIntent reports whether a staged act is a Cast to the
 // engineering desk: from management it opens a new assignment (C1e D4).
 func engineeringCastIntent(in yaegikernel.StagedIntent) bool {
@@ -670,9 +577,16 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			localIDs = append(localIDs, in)
 			continue
 		}
-		toInbox, onRoute, routeErr := recordsRoute(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
+		route, routeErr := ResolveAddress(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
 		if routeErr != nil && recordsIntent(in) {
 			return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, routeErr)
+		}
+		toInbox, onRoute := route.Inbox, route.OnRoute
+		if route.Forwarded && in.Kind == yaegikernel.IntentCast {
+			// An engineering Cast from a desk that does not hold the
+			// assignment kind is an admission request in the holder's inbox;
+			// the holder decides on its own grants.
+			in.Objective = "Admission request, a Cast aimed at " + strings.TrimSpace(in.ToDesk) + " by " + sender + ": " + in.Objective
 		}
 		if strings.HasPrefix(strings.TrimSpace(in.ToDesk), captureSourceDesk+":") && !onRoute {
 			return nil, fmt.Errorf("reduce: %s: only management declines a source's captures", in.LocalID)
@@ -923,11 +837,6 @@ func (r *rlmCallReduction) requireStoryEntitiesRecorded(ctx context.Context) err
 // inboxRecordRequestSource marks a run a records desk started because its
 // inbox has unread records (Cut 1 L3a).
 const inboxRecordRequestSource = "inbox_record"
-
-// captureSourceDesk names a source's inbox (source:<source_id>): the
-// sender of its capture arrivals and the addressee of management's
-// declines (Cut 2 2b).
-const captureSourceDesk = "source"
 
 // inboxUnread reports whether a desk's inbox head is past its cursor.
 func (rt *Runtime) inboxUnread(ctx context.Context, ownerID, computerID, deskAgentID string) (bool, error) {
@@ -1209,7 +1118,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	// A management activation that ends with a Verify owed arms its
 	// re-check (verify_owed.go).
 	rt.armVerifyOwedAfterRun(ctx, rec)
-	if !recordsDesk(agentProfileForRun(rec)) || isManagementTaskRun(rec) {
+	if !isRecordsDesk(agentProfileForRun(rec)) || isManagementTaskRun(rec) {
 		// A task is one round: its run's end closed it (above), and
 		// nothing re-arms it.
 		return

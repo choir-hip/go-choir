@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -47,13 +46,14 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 			out = append(out, in)
 			continue
 		}
-		desk, _ := agentprofile.Canonical(strings.TrimSpace(in.ToDesk))
-		if desk != agentprofile.Research && desk != agentprofile.Management {
-			return nil, nil, fmt.Errorf("reduce: Texture %s: Texture dispatches only to research or management, not %q", in.LocalID, in.ToDesk)
+		route, routeErr := ResolveAddress(scope.DeskAgentID, scope.OwnerID, in.ToDesk)
+		if routeErr != nil || !route.OnRoute {
+			return nil, nil, fmt.Errorf("reduce: Texture %s: no inbox for %q from desk %q: %v", in.LocalID, in.ToDesk, scope.DeskAgentID, routeErr)
 		}
-		toInbox, onRoute, routeErr := recordsRoute(scope.DeskAgentID, scope.OwnerID, desk)
-		if routeErr != nil || !onRoute {
-			return nil, nil, fmt.Errorf("reduce: Texture %s: no %s inbox for desk %q: %v", in.LocalID, desk, scope.DeskAgentID, routeErr)
+		toInbox := route.Inbox
+		desk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":")
+		if route.Forwarded && in.Kind == yaegikernel.IntentCast {
+			in.Objective = "Admission request, a Cast aimed at " + strings.TrimSpace(in.ToDesk) + " by " + scope.DeskAgentID + ": " + in.Objective
 		}
 		if in.Kind == yaegikernel.IntentNote && strings.TrimSpace(in.Body) == "" {
 			return nil, nil, fmt.Errorf("reduce: Texture %s: a note to %s needs a body", in.LocalID, desk)

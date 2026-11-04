@@ -763,7 +763,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 		role = agentProfileForRun(execCtx.RunRecord)
 	}
 	var records cellRecords
-	if recordsDesk(role) || role == agentprofile.ManagementTask {
+	if isRecordsDesk(role) || role == agentprofile.ManagementTask {
 		runID := ""
 		if role != agentprofile.Texture {
 			// Texture's frame decides what its cells see (Cut 2 2a).
@@ -2200,19 +2200,6 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 		targetAgent, targetErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, targetAgentID)
 		if targetErr != nil {
 			return 0, fmt.Errorf("commit lifecycle act target agent %s: %w", targetAgentID, targetErr)
-		}
-		// The desk-messaging matrix governs conversational acts; cast,
-		// escalate, and retract carry their own authority — delegated-cast
-		// admission opens the assignment post-commit, escalate's Addressee is
-		// the governance target, and retract's addressee derives from the
-		// retracted record. Applying CanMessage to them would block
-		// research→management escalations and management→engineering casts.
-		if rec.Kind == types.CommitmentKindDirective && rec.Directive != nil && rec.Directive.Subtype == types.CommitmentDirectiveNote {
-			callerProfile, _ := agentprofile.Canonical(firstNonEmpty(callerAgent.Profile, r.scope.FromRole))
-			targetProfile, _ := agentprofile.Canonical(firstNonEmpty(targetAgent.Profile, targetAgent.Role))
-			if ok, policyErr := agentprofile.CanMessage(callerProfile, targetProfile); policyErr != nil || !ok {
-				return 0, fmt.Errorf("commit lifecycle act: %s cannot direct %s", callerProfile, targetProfile)
-			}
 		}
 		var packet types.SourcePacket
 		switch {

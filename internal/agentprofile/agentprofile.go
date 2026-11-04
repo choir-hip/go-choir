@@ -5,8 +5,6 @@ package agentprofile
 import (
 	"fmt"
 	"strings"
-
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -26,13 +24,15 @@ const (
 	ManagementTask = "management_task"
 )
 
-// Policy is the canonical capability and message policy for an agent profile.
+// Policy is the canonical policy for an agent profile. Message routing is
+// not here: any desk may send a request to any registered desk, and the
+// agentcore address resolver says where it lands (modular architecture
+// MA1.2, R5).
 type Policy struct {
-	Profile               string
-	AllowedMessageTargets []string
+	Profile string
 }
 
-// PolicyFor returns the capability and message policy for profile.
+// PolicyFor returns the policy for profile.
 // It fails closed on unknown profiles: no default policy is synthesized.
 func PolicyFor(profile string) (Policy, error) {
 	canonical, err := Canonical(profile)
@@ -46,21 +46,6 @@ func PolicyFor(profile string) (Policy, error) {
 	case "processor", "reconciler":
 		return Policy{}, UnknownProfileError{Input: profile}
 	}
-	// Message targets come from the desk manifest (internal/deskmanifest), the
-	// one table of what each desk may call. Texture is the artifact control
-	// plane, not an evidence gatherer; engineering has no static tool
-	// authority and reports to management; executability of a report is
-	// sender-authorized at management, not granted by packet.kind.
-	if d, ok := deskmanifest.Lookup(canonical); ok && d.Kind == deskmanifest.KindSystem {
-		p := Policy{Profile: canonical}
-		if len(d.MessageTargets) > 0 {
-			p.AllowedMessageTargets = d.MessageTargets
-		}
-		return p, nil
-	}
-	// Canonical but unlisted profiles (the verifier roles) get a bare policy:
-	// no message targets. Fail-closed by construction — never add a
-	// permissive default here.
 	return Policy{Profile: strings.TrimSpace(profile)}, nil
 }
 
@@ -112,27 +97,4 @@ func IsLive(profile string) bool {
 	default:
 		return false
 	}
-}
-
-// CanMessage reports whether callerProfile may address targetProfile,
-// failing closed on unknown profiles on either side.
-func CanMessage(callerProfile, targetProfile string) (bool, error) {
-	policy, err := PolicyFor(callerProfile)
-	if err != nil {
-		return false, err
-	}
-	target, err := Canonical(targetProfile)
-	if err != nil || !IsLive(target) {
-		return false, UnknownProfileError{Input: targetProfile}
-	}
-	for _, allowed := range policy.AllowedMessageTargets {
-		canonicalAllowed, err := Canonical(allowed)
-		if err != nil {
-			return false, err
-		}
-		if target == canonicalAllowed {
-			return true, nil
-		}
-	}
-	return false, nil
 }
