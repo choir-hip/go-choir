@@ -43,14 +43,13 @@ const deskWorkerArg = "desk-session"
 // size (8 GiB virtual; Linux staging enforced).
 const deskWorkerMemoryLimitBytes uint64 = 8 << 30 // 8 GiB
 
-// managementCellDeadline bounds a management cell whose source sets no
+// The management cell deadline (the deskmanifest rows' CellDeadline, 300 s) bounds a management cell whose source sets no
 // timeout_ms (management delegation S1, design round 2 R2-19). Before it, a
 // management cell ran until its worker died: run 305a582d's cell 6 ran
 // 860,565 ms. The value is max(300 s, 2 x the p99 management cell duration
 // S0 measured on the live paper): p99 4.6 s over 295 cells (10-14
 // 06:51-09:12 UTC) and 1.0 s over 1,582 cells (10-13 15:00 to 10-14 09:12),
 // with one cell over 60 s, the 860 s one. So the 300 s floor governs.
-const managementCellDeadline = 300 * time.Second
 
 // managementCellDeadlineEnv overrides the management cell deadline with a Go
 // duration; "0" (any zero duration) or "off" removes it. A value that does not parse, or a
@@ -62,22 +61,24 @@ const managementCellDeadlineEnv = "CHOIR_MANAGEMENT_CELL_DEADLINE"
 // legitimate long calls (research's choir.SearchWait), and the design scopes
 // S1 to management.
 func deskCellHostDeadline(deskRole string) time.Duration {
-	// A management task's cells are management cells (S2a): the same bound.
-	if deskRole != agentprofile.Management && deskRole != agentprofile.ManagementTask {
+	// The bound is the desk row's cell_deadline (F11); a management task's
+	// row carries management's (S2a). A desk with none waits.
+	d, ok := deskmanifest.Lookup(deskRole)
+	if !ok || d.CellDeadline <= 0 {
 		return 0
 	}
 	raw := strings.TrimSpace(os.Getenv(managementCellDeadlineEnv))
 	switch strings.ToLower(raw) {
 	case "":
-		return managementCellDeadline
+		return d.CellDeadline
 	case "0", "off":
 		return 0
 	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d < 0 {
-		return managementCellDeadline
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed < 0 {
+		return d.CellDeadline
 	}
-	return d
+	return parsed
 }
 
 // A desk's session outlives its run (PD2): the next run of the same agent

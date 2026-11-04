@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/promptspec"
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 )
@@ -32,14 +33,11 @@ func New(root string) *Store {
 	return &Store{root: root}
 }
 
+// promptRoles are the desks that have a stored role prompt: the desk
+// registry's Prompt rows (MA2.5, desks design F2). The order is the
+// registry's, sorted by name.
 func promptRoles() []string {
-	return []string{
-		agentprofile.Conductor,
-		agentprofile.Texture,
-		agentprofile.Research,
-		agentprofile.Management,
-		agentprofile.Engineering,
-	}
+	return deskmanifest.PromptNames()
 }
 
 func promptDefaultFiles() []string {

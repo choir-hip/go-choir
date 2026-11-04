@@ -89,7 +89,7 @@ var verbDispatch = map[string]BrokerAction{
 func TestFrameTableIsWhatTheDesksVerbsDispatch(t *testing.T) {
 	for role, table := range pinnedFrameActions {
 		want := map[BrokerAction]bool{}
-		for _, verb := range deskModuleSets[role] {
+		for _, verb := range deskModuleSets()[role] {
 			if a, ok := verbDispatch[verb]; ok && a != ActionExec && a != ActionWriteFile && a != ActionReadFile && a != ActionListDir {
 				want[a] = true
 			}

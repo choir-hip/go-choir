@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
@@ -169,7 +170,7 @@ func currentTextureAgentID(docID string) string {
 
 func isTextureAgentID(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
-	return strings.HasPrefix(agentID, agentprofile.Texture+":") || strings.HasPrefix(agentID, agentprofile.Texture+":")
+	return strings.HasPrefix(agentID, agentprofile.Texture+":")
 }
 
 // systemPromptForRun is a desk's stable prefix: the core, the role prompt,
@@ -311,16 +312,11 @@ func buildRLMAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistr
 // on the host desk-cell carrier (sealed desk_go_eval registry). The predicate
 // is per-profile so each desk owns its promoted carrier state.
 func deskCarrierLive(profile string) bool {
-	switch profile {
-	case agentprofile.Management:
-		return true // R3c: management is live on the cell carrier
-	case agentprofile.Texture:
-		return true // R3d-a: texture is live on the cell carrier
-	case agentprofile.Research:
-		return true // R3r: research is live on the cell carrier (D2 caps resolved)
-	default:
-		return false
-	}
+	// The desk registry says (MA2.5, desks design F3): a confined desk-worker
+	// carrier that is a root desk runs on the cell carrier. A run role is not
+	// a desk anyone starts work on; an unknown name is false.
+	d, ok := deskmanifest.Lookup(profile)
+	return ok && d.Profile && d.Kind != deskmanifest.KindRole && d.Carrier == deskmanifest.CarrierDeskWorker
 }
 
 // buildDeskCellRegistry is the host-cell sealed overlay for a non-capsule desk
@@ -389,23 +385,16 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 		rt.SetTextureCaptures(researchtools.NewTextureCaptures(researchDeps.Captures, rt.cfg.ComputerID))
 	}
 	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}
-	for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
-		if !deskCarrierLive(deskProfile) {
-			continue
-		}
+	// Every desk-worker desk and run role in the registry gets the sealed
+	// registry (F3); a management task's desk worker binds the task's module
+	// set and handle (S2a).
+	for _, deskProfile := range deskmanifest.CellCarrierNames() {
 		deskReg, err := buildDeskCellRegistry(rt, deskProfile, researchDeps)
 		if err != nil {
 			return err
 		}
 		deskCellRegistries[deskProfile] = deskReg
 	}
-	// A management task (S2a) runs on the same carrier with its own role,
-	// so its desk worker binds the task's module set and handle.
-	taskReg, err := buildDeskCellRegistry(rt, agentprofile.ManagementTask, researchDeps)
-	if err != nil {
-		return err
-	}
-	deskCellRegistries[agentprofile.ManagementTask] = taskReg
 
 	conductorRegistry := toolregistry.MustNewToolRegistry()
 	emailRegistry := toolregistry.MustNewToolRegistry()

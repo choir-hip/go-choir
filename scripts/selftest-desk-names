@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Selftest for scripts/check-desk-names: it passes the good fixture and fails on
+# a new hard-coded desk name (a file outside the allowlist) and on a file whose
+# count grew past its entry.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+F=scripts/testdata/desk-names
+fail() { echo "selftest-desk-names FAIL: $*" >&2; exit 1; }
+python3 -I scripts/check-desk-names --root $F/good --allowlist $F/good/allowlist.json >/dev/null || fail "refused the good fixture"
+python3 -I scripts/check-desk-names --root $F/bad --allowlist $F/bad/allowlist.json >/dev/null 2>&1 && fail "accepted a new hard-coded desk name"
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+echo '{"files": {"internal/x/a.go": 0}}' > "$tmp/grew.json"
+python3 -I scripts/check-desk-names --root $F/good --allowlist "$tmp/grew.json" >/dev/null 2>&1 && fail "accepted a count above its entry"
+python3 -I scripts/check-desk-names >/dev/null || fail "refused the real tree"
+echo "selftest-desk-names: ok"

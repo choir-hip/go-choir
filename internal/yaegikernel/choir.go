@@ -319,15 +319,20 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 // verbs are grouped so messaging authority is separable from world mutation.
 // "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Cast;
 // "commit" = Complete+Freeze; "epistemic" = the full semantic-act surface.
-var deskModuleSets = func() map[string][]string {
+//
+// It is computed from the live desk registry on each call, app desks
+// included: a snapshot taken at init would miss every desk registered after
+// it (and the old filter excluded KindApp outright, so an app desk had no
+// module set).
+func deskModuleSets() map[string][]string {
 	sets := map[string][]string{}
 	for _, name := range deskmanifest.Names() {
-		if d, _ := deskmanifest.Lookup(name); d.Carrier != deskmanifest.CarrierNone && d.Kind != deskmanifest.KindApp {
+		if d, _ := deskmanifest.Lookup(name); d.Carrier != deskmanifest.CarrierNone {
 			sets[name] = d.Verbs
 		}
 	}
 	return sets
-}()
+}
 
 // legacyObservation gates the observation verbs of the packet transports
 // (Cut 1 L6). Every desk converses on records and reads choir.Records
@@ -337,12 +342,9 @@ func (s *ChoirScope) legacyObservation(name string) bool {
 	if s == nil {
 		return false
 	}
-	switch s.desk {
-	case "texture", "management":
-		return name == "Updates"
-	default:
-		return false
-	}
+	// The module updates.read is granted by the desk's manifest row (F12).
+	d, ok := deskmanifest.Lookup(s.desk)
+	return ok && name == "Updates" && d.HasModule(deskmanifest.ModuleUpdatesRead)
 }
 
 func (s *ChoirScope) deskModule(name string) bool {

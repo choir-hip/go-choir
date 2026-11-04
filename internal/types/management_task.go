@@ -17,7 +17,33 @@ import (
 // ManagementTaskDesk is the desk part of a task's inbox. It must never be
 // spelled management:<anything>: WakeRecordsInbox wakes only the persistent
 // management inbox under that desk.
+//
+// Two spellings exist in the code: this one, "management-task", is the
+// inbox desk part that is written to the tape and to records; the run role
+// (agentprofile.ManagementTask, deskmanifest.ManagementTask) is spelled
+// "management_task". Writers use ManagementTaskDesk only. Readers accept
+// both through IsManagementTaskDesk and NormalizeManagementTaskRef, so an id
+// minted with either spelling resolves; nothing on the tape is rewritten.
 const ManagementTaskDesk = "management-task"
+
+// managementTaskRoleDesk is the other spelling, the role name.
+const managementTaskRoleDesk = "management_task"
+
+// IsManagementTaskDesk reports whether desk names the management task desk
+// in either spelling.
+func IsManagementTaskDesk(desk string) bool {
+	desk = strings.TrimSpace(desk)
+	return desk == ManagementTaskDesk || desk == managementTaskRoleDesk
+}
+
+// NormalizeManagementTaskRef rewrites a ref or agent id whose desk part is the
+// role spelling to the written one; any other string is returned unchanged.
+func NormalizeManagementTaskRef(ref string) string {
+	if rest, ok := strings.CutPrefix(strings.TrimSpace(ref), managementTaskRoleDesk+":"); ok {
+		return ManagementTaskDesk + ":" + rest
+	}
+	return ref
+}
 
 // ManagementTaskInbox is the reader inbox of one task.
 func ManagementTaskInbox(taskID string) string {
@@ -28,7 +54,7 @@ func ManagementTaskInbox(taskID string) string {
 // task inbox.
 func ManagementTaskIDOfInbox(inbox string) (string, bool) {
 	desk, id, ok := strings.Cut(strings.TrimSpace(inbox), ":")
-	if !ok || desk != ManagementTaskDesk || strings.TrimSpace(id) == "" {
+	if !ok || !IsManagementTaskDesk(desk) || strings.TrimSpace(id) == "" {
 		return "", false
 	}
 	return strings.TrimSpace(id), true

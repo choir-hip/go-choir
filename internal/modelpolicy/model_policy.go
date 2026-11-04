@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -518,9 +519,12 @@ func (p Policy) Selections() []provideriface.LLMSelection {
 // frozen V1 decoder, never through this function.
 func NormalizeRole(role string) string {
 	normalized := strings.TrimSpace(strings.ToLower(role))
+	// The role set is the desk registry's profiles (MA2.5, desks design F2).
+	if d, ok := deskmanifest.Lookup(normalized); ok && d.Profile {
+		return normalized
+	}
 	switch normalized {
-	case agentprofile.Management, agentprofile.Engineering, agentprofile.Research,
-		agentprofile.Conductor, agentprofile.Texture, agentprofile.Email, VerifierRole, agentprofile.ManagementTask:
+	case VerifierRole:
 		return normalized
 	case MultimodalVerifierRole, "verifier-multimodal":
 		// One canonical spelling: the hyphenated form normalizes to the

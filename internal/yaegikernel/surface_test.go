@@ -27,7 +27,7 @@ import (
 
 func allSurfaceScopes() []*ChoirScope {
 	scopes := []*ChoirScope{{desk: "engineering", slot: "verifier"}, {desk: "research", readOnly: true}}
-	for desk := range deskModuleSets {
+	for desk := range deskModuleSets() {
 		scopes = append(scopes, &ChoirScope{desk: desk})
 	}
 	return scopes
@@ -288,7 +288,7 @@ func TestWriteHelpGivesTheWholeGrammar(t *testing.T) {
 // the async verbs; choir.Searches renders as a call instead of its methods;
 // the surface does not say an arrival never wakes the desk.
 func TestSearchSurfaceIsAsyncOnResearchOnly(t *testing.T) {
-	for desk := range deskModuleSets {
+	for desk := range deskModuleSets() {
 		exports := (&ChoirScope{desk: desk, searches: newSearchStore()}).ChoirExports()["choir/choir"]
 		if _, ok := exports["WebSearch"]; ok {
 			t.Errorf("%s still exports choir.WebSearch", desk)

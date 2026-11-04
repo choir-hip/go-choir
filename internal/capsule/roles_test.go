@@ -1,6 +1,10 @@
 package capsule
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+)
 
 func TestRoleVerbSets(t *testing.T) {
 	// Management should have no broker verbs.
@@ -79,5 +83,34 @@ func TestUnknownRoleHasNoVerbs(t *testing.T) {
 				t.Errorf("role %q is granted %s", role, verb)
 			}
 		}
+	}
+}
+
+// RoleVerbSets is the fold of the desk registry (MA2.5, F4): every root desk has
+// an entry, the sets equal the manifest rows, and a run role has none.
+func TestRoleVerbSetsFoldTheRegistry(t *testing.T) {
+	for _, name := range deskmanifest.Names() {
+		d, _ := deskmanifest.Lookup(name)
+		set, ok := RoleVerbSets[AgentRole(name)]
+		if d.Kind == deskmanifest.KindRole {
+			if ok {
+				t.Errorf("run role %s has a broker verb set", name)
+			}
+			continue
+		}
+		if d.Kind == deskmanifest.KindApp {
+			continue // registered after init by other tests
+		}
+		if !ok || len(set) != len(d.CapsuleVerbs) {
+			t.Errorf("%s: broker set %d verbs, manifest %d", name, len(set), len(d.CapsuleVerbs))
+		}
+		for _, v := range d.CapsuleVerbs {
+			if !set[v] {
+				t.Errorf("%s lacks %s", name, v)
+			}
+		}
+	}
+	if AgentRole("texture").HasVerb("exec") {
+		t.Error("texture holds a broker verb")
 	}
 }

@@ -24,16 +24,20 @@ type VerbSet map[string]bool
 // (docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
 var RoleVerbSets = func() map[AgentRole]VerbSet {
 	sets := map[AgentRole]VerbSet{}
-	// A role the manifest does not name has no entry, so HasVerb is false
-	// for every verb: unknown roles fail closed.
-	for _, role := range []AgentRole{RoleManagement, RoleEngineering, RoleResearch} {
-		set := VerbSet{}
-		if d, ok := deskmanifest.Lookup(string(role)); ok {
-			for _, verb := range d.CapsuleVerbs {
-				set[verb] = true
-			}
+	// Every desk the manifest names that is not a run role has an entry (F4):
+	// the table is the fold of the registry, not a list of three names. A
+	// role the manifest does not name has no entry, so HasVerb is false for
+	// every verb: unknown roles fail closed.
+	for _, name := range deskmanifest.Names() {
+		d, _ := deskmanifest.Lookup(name)
+		if d.Kind == deskmanifest.KindRole {
+			continue
 		}
-		sets[role] = set
+		set := VerbSet{}
+		for _, verb := range d.CapsuleVerbs {
+			set[verb] = true
+		}
+		sets[AgentRole(name)] = set
 	}
 	return sets
 }()

@@ -5,6 +5,8 @@ package agentprofile
 import (
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -70,9 +72,14 @@ func (e UnknownProfileError) Error() string {
 // owns them) and resolve as themselves.
 func Canonical(profile string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(profile))
+	// The desk registry is the vocabulary (MA2.5, desks design F1): a name is
+	// a profile when a registered desk says so. The frozen history names and
+	// the verifier roles are not desks.
+	if d, ok := deskmanifest.Lookup(normalized); ok && d.Profile {
+		return normalized, nil
+	}
 	switch normalized {
-	case Management, Engineering, Research, Texture, Conductor, Email, ManagementTask,
-		"processor", "reconciler", "verifier":
+	case "processor", "reconciler", "verifier":
 		return normalized, nil
 	case "verifier-multimodal", "verifier_multimodal":
 		// One canonical spelling (the modelpolicy roles.<name> key): the
@@ -91,10 +98,10 @@ func IsLive(profile string) bool {
 	if err != nil {
 		return false
 	}
-	switch canonical {
-	case Management, Engineering, Research, Texture, Conductor, Email, "verifier", "verifier_multimodal":
-		return true
-	default:
-		return false
+	if d, ok := deskmanifest.Lookup(canonical); ok {
+		// A run role (a management task) is a profile but not a desk anyone
+		// addresses or starts work on.
+		return d.Profile && d.Kind != deskmanifest.KindRole
 	}
+	return canonical == "verifier" || canonical == "verifier_multimodal"
 }

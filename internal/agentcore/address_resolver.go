@@ -184,7 +184,7 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	}
 	named := hasSubject && toSubject != ""
 	owner := strings.TrimSpace(ownerID)
-	isTask := fromDesk == types.ManagementTaskDesk
+	isTask := types.IsManagementTaskDesk(fromDesk)
 
 	if isTask && fromSubject == "" {
 		return Route{}, fmt.Errorf("a management task's agent id %q names no task", fromAgentID)

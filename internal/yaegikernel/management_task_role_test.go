@@ -143,7 +143,7 @@ func TestUnknownDeskRoleFailsClosed(t *testing.T) {
 	}
 	// Every desk the kernel knows is a role agentprofile knows, so a run
 	// identity can carry it.
-	for desk := range deskModuleSets {
+	for desk := range deskModuleSets() {
 		if desk == SessionRoleResearchChild {
 			continue
 		}

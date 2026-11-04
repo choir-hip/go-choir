@@ -40,6 +40,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
@@ -794,19 +795,23 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 	if agentID := metadataStringValue(metadata, runMetadataAgentID); agentID != "" {
 		return agentID
 	}
+	// The desk's identity rule is data (MA2.5, desks design F6).
+	if d, ok := deskmanifest.Lookup(profile); ok {
+		switch d.Identity {
+		case deskmanifest.IdentityOwner:
+			if ownerID != "" {
+				if d.Name == agentprofile.Management {
+					return persistentManagementAgentID(ownerID)
+				}
+				return d.Name + ":" + ownerID
+			}
+		case deskmanifest.IdentitySubject:
+			if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
+				return d.Name + ":" + strings.TrimSpace(docID)
+			}
+		}
+	}
 	switch profile {
-	case agentprofile.Conductor:
-		if ownerID != "" {
-			return "conductor:" + ownerID
-		}
-	case agentprofile.Management:
-		if ownerID != "" {
-			return persistentManagementAgentID(ownerID)
-		}
-	case agentprofile.Texture:
-		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
-			return currentTextureAgentID(docID)
-		}
 	case frozenProcessorProfile:
 		if key := metadataStringValue(metadata, runMetadataProcessorKey); key != "" {
 			return "processor:" + safeRefPart(key)
@@ -837,12 +842,15 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 	if parent != nil && strings.TrimSpace(parent.ChannelID) != "" {
 		return strings.TrimSpace(parent.ChannelID)
 	}
-	if profile == agentprofile.Texture {
+	if d, ok := deskmanifest.Lookup(profile); ok && d.Identity == deskmanifest.IdentitySubject {
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return docID
 		}
 	}
-	if profile == agentprofile.Management || profile == frozenProcessorProfile || profile == frozenReconcilerProfile {
+	if d, ok := deskmanifest.Lookup(profile); ok && d.OwnChannel {
+		return agentID
+	}
+	if profile == frozenProcessorProfile || profile == frozenReconcilerProfile {
 		return agentID
 	}
 	return ""

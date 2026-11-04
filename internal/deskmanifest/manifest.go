@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+	"time"
 )
 
 // Desk names, in the spelling the code already uses.
@@ -168,7 +169,41 @@ type Desk struct {
 	ModelRole string
 	// Restart is the restart contract. Declared; every desk has the same.
 	Restart string
+
+	// Profile reports that the desk's name is an agent profile and a model
+	// policy role: agentprofile.Canonical and modelpolicy.NormalizeRole
+	// resolve it (MA2.5, desks design F1 and F2). A role that only borrows
+	// its parent's policy (the research child) is not one.
+	Profile bool
+	// Prompt reports that the desk has a stored role prompt (promptstore).
+	Prompt bool
+	// Identity is how the desk's agent id is minted (F6).
+	Identity Identity
+	// OwnChannel reports that the desk's channel id is its agent id (a
+	// persistent desk whose runs share one channel).
+	OwnChannel bool
+	// CellDeadline is the host's bound on a cell that sets no timeout of its
+	// own, or 0 for none (F11).
+	CellDeadline time.Duration
+	// Modules are named groups of observation verbs beyond the base tier
+	// (F12). "updates.read" is the packet observation Updates.
+	Modules []string
 }
+
+// Identity is how a desk's agent id is minted (desks design F6).
+type Identity string
+
+const (
+	// IdentityRun: a fresh id per run.
+	IdentityRun Identity = ""
+	// IdentityOwner: <desk>:<owner>, one agent per owner.
+	IdentityOwner Identity = "owner"
+	// IdentitySubject: <desk>:<subject>, one agent per subject (a document).
+	IdentitySubject Identity = "subject"
+)
+
+// ModuleUpdatesRead is the module that grants the Updates observation.
+const ModuleUpdatesRead = "updates.read"
 
 // Verb dispatch classes. A verb either calls a host-served action over the
 // frame protocol (the daemon checks it against the role table), is served by
@@ -234,6 +269,8 @@ var system = []Desk{
 		Memory:       Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds:   []string{"assignment", "admission"},
 		ModelRole:    Management, Restart: RestartContract,
+		Profile: true, Prompt: true, Identity: IdentityOwner, OwnChannel: true,
+		CellDeadline: 300 * time.Second, Modules: []string{ModuleUpdatesRead},
 	},
 	{
 		Name: Texture, Kind: KindSystem, Carrier: CarrierDeskWorker,
@@ -248,6 +285,8 @@ var system = []Desk{
 		Memory:     Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds: []string{"document_revision"},
 		ModelRole:  Texture, Restart: RestartContract,
+		Profile: true, Prompt: true, Identity: IdentitySubject,
+		Modules: []string{ModuleUpdatesRead},
 	},
 	{
 		Name: Research, Kind: KindSystem, Carrier: CarrierDeskWorker,
@@ -265,6 +304,7 @@ var system = []Desk{
 		Memory:       Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds:   []string{"evidence"},
 		ModelRole:    Research, Restart: RestartContract,
+		Profile: true, Prompt: true,
 	},
 	{
 		Name: Engineering, Kind: KindSystem, Carrier: CarrierCapsule,
@@ -282,6 +322,7 @@ var system = []Desk{
 		Memory:     Memory{CapsuleRequestedBytes: 2 << 30},
 		OwnedKinds: []string{"capsule_effect_bundle"},
 		ModelRole:  Engineering, Restart: RestartContract,
+		Profile: true, Prompt: true,
 	},
 	{
 		Name: ManagementTask, Kind: KindRole, Carrier: CarrierDeskWorker,
@@ -293,6 +334,7 @@ var system = []Desk{
 		Taint:     TaintPrivileged,
 		Memory:    Memory{WorkerMaxBytes: 384 * mib},
 		ModelRole: ManagementTask, Restart: RestartContract,
+		Profile: true, CellDeadline: 300 * time.Second,
 	},
 	{
 		Name: ResearchChild, Kind: KindRole, Carrier: CarrierDeskWorker,
@@ -310,11 +352,13 @@ var system = []Desk{
 		Name: Conductor, Kind: KindSystem, Carrier: CarrierNone,
 		Sandbox: Sandbox{Profile: "none"},
 		Taint:   TaintPrivileged, ModelRole: Conductor, Restart: RestartContract,
+		Profile: true, Prompt: true, Identity: IdentityOwner,
 	},
 	{
 		Name: Email, Kind: KindSystem, Carrier: CarrierNone,
 		Sandbox: Sandbox{Profile: "none"},
 		Taint:   TaintUntrustedInput, ModelRole: Email, Restart: RestartContract,
+		Profile: true,
 	},
 }
 
@@ -323,16 +367,31 @@ var (
 	registry = map[string]Desk{}
 )
 
+// init loads the built-in table through Register, the one path every desk
+// takes (MA2.5, desks design D1): nothing is a special case in code.
 func init() {
 	for _, d := range system {
-		if _, dup := registry[d.Name]; dup {
-			panic("deskmanifest: duplicate desk " + d.Name)
-		}
-		if err := validateStructure(d); err != nil {
+		if err := Register(d); err != nil {
 			panic("deskmanifest: " + err.Error())
 		}
-		registry[d.Name] = d.clone()
 	}
+}
+
+// Register validates a desk and adds it to the registry. It is the one way a
+// desk becomes known: the built-in table, an app package's desk and a
+// worker's rebuilt row all come through it. It refuses a name that exists, so
+// a desk can never replace another.
+func Register(d Desk) error {
+	if err := validateStructure(d); err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if _, exists := registry[d.Name]; exists {
+		return fmt.Errorf("desk %s is already registered", d.Name)
+	}
+	registry[d.Name] = d.clone()
+	return nil
 }
 
 func (d Desk) clone() Desk {
@@ -345,6 +404,7 @@ func (d Desk) clone() Desk {
 	d.Verbs = cp(d.Verbs)
 	d.CapsuleVerbs = cp(d.CapsuleVerbs)
 	d.OwnedKinds = cp(d.OwnedKinds)
+	d.Modules = cp(d.Modules)
 	return d
 }
 
@@ -368,6 +428,45 @@ func Names() []string {
 	out := make([]string, 0, len(registry))
 	for n := range registry {
 		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// HasModule reports whether the desk holds the named module.
+func (d Desk) HasModule(module string) bool {
+	for _, m := range d.Modules {
+		if m == module {
+			return true
+		}
+	}
+	return false
+}
+
+// ProfileNames lists the desks whose name is an agent profile, sorted.
+func ProfileNames() []string {
+	return namesWhere(func(d Desk) bool { return d.Profile })
+}
+
+// PromptNames lists the desks that have a stored role prompt, sorted.
+func PromptNames() []string {
+	return namesWhere(func(d Desk) bool { return d.Prompt })
+}
+
+// CellCarrierNames lists the desks whose cells run on the host desk-cell
+// carrier (a confined desk worker), roles included, sorted.
+func CellCarrierNames() []string {
+	return namesWhere(func(d Desk) bool { return d.Carrier == CarrierDeskWorker && d.Profile })
+}
+
+func namesWhere(keep func(Desk) bool) []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	var out []string
+	for n, d := range registry {
+		if keep(d) {
+			out = append(out, n)
+		}
 	}
 	sort.Strings(out)
 	return out
@@ -535,6 +634,7 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		Taint:      spec.Taint,
 		Memory:     Memory{WorkerMaxBytes: spec.WorkerMaxBytes},
 		OwnedKinds: append([]string{}, spec.OwnedKinds...), ModelRole: spec.Name, Restart: RestartContract,
+		Profile: true,
 	}
 	if err := validateStructure(d); err != nil {
 		return Desk{}, err
@@ -557,13 +657,7 @@ func RegisterApp(d Desk) error {
 			return fmt.Errorf("app desk %s: verb %s is not available to app desks", d.Name, v)
 		}
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if _, exists := registry[d.Name]; exists {
-		return fmt.Errorf("desk %s is already registered", d.Name)
-	}
-	registry[d.Name] = d.clone()
-	return nil
+	return Register(d)
 }
 
 // RetireApp removes an app desk (ARCH-03: a disabled package's desk). A
@@ -610,5 +704,7 @@ func (d Desk) Equal(o Desk) bool {
 	return d.Name == o.Name && d.Kind == o.Kind && d.Carrier == o.Carrier &&
 		same(d.Verbs, o.Verbs) && same(d.CapsuleVerbs, o.CapsuleVerbs) &&
 		d.Instance == o.Instance && d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
-		same(d.OwnedKinds, o.OwnedKinds) && d.ModelRole == o.ModelRole && d.Restart == o.Restart
+		same(d.OwnedKinds, o.OwnedKinds) && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
+		d.Profile == o.Profile && d.Prompt == o.Prompt && d.Identity == o.Identity && d.OwnChannel == o.OwnChannel &&
+		d.CellDeadline == o.CellDeadline && same(d.Modules, o.Modules)
 }

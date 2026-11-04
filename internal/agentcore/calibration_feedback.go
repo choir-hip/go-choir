@@ -221,8 +221,11 @@ type CalibrationPending struct {
 // desk whose track record it adds to; "" for a desk with no digest.
 func calibrationDeskOfThread(thread string) string {
 	desk, _, _ := strings.Cut(strings.TrimSpace(thread), ":")
+	if types.IsManagementTaskDesk(desk) {
+		return agentprofile.Management
+	}
 	switch desk {
-	case types.ManagementTaskDesk, agentprofile.Management:
+	case agentprofile.Management:
 		return agentprofile.Management
 	case agentprofile.Texture, agentprofile.Research, agentprofile.Engineering:
 		return desk
