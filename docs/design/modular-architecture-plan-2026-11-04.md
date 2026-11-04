@@ -67,7 +67,8 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R2 | 2026-11-04 | "More modular is better." Maximal modularity serves self-development and, above all, security. | whole plan |
 | R3 | 2026-11-04 | "we should aim to make all desks modular. Better to make the kernel small and make every desk function the same way. No special system desks or apps." | Phases 2, 4, 5 |
 | R4 | 2026-11-04 | "A locked, versioned protocol between desks (casts, delegation, the commitment ledger)." Amended by R5: the lock must not record MessageTargets. | MA1.4 |
-| MA1.5 | Every sub-RLM call is a Cast carrying the parent's precommitment (section 4.4): delete the raw `choir.Research` result path, so research children are Casts to a `research_child` role whose Reports are records; give `Delegate` Casts typed questions with probabilities and make the task's final Report a scored observation; add the rule kinds `report_schema_valid` and `citations_resolve`; the kernel judge service as settler (blind System 1 question, batched per fan-out); self-score records and the self-favor gap view; management sampling of material disagreements; the weight floor from grants and the weight-zero audit sample | `internal/yaegikernel/choir.go:580-634`, `broker_protocol.go:32-34, 163-188`, `internal/agentcore/{tools_desk.go:1336,research_children.go,management_tasks.go:316+,inbox_records.go:640-650,system1_verb.go}`, `internal/types/{commitment.go,commitment_rules.go,management_task.go:136-139}` | MA1.3 | red / 2 (tape type, reducer, judge as settler) | every child call produces a Cast with at least one typed question unless marked weight zero, and a Report record; a fan-out of N children is scored by one judge call; a rule failure (a citation that does not resolve) contradicts regardless of the judge; a parent cannot settle its own record (negative test); the self-favor gap is computed on replayed d@e records; the research acceptance (Texture asks, research answers) unchanged | revert; records written stay decodable |
+| MA1.5 | Every sub-RLM call is a Cast carrying the parent's precommitment (section 4.4): delete the raw `choir.Research` result path, so research children are Casts to a `research_child` role whose Reports are records; give `Delegate` Casts typed questions with probabilities and make the task's final Report a scored observation; add the rule kinds `report_schema_valid` and `citations_resolve`; the kernel judge service as settler (blind System 1 question, batched per fan-out); self-score records and the self-favor gap view; management sampling of material disagreements; the weight floor from grants. No sub-call is exempt from scoring (R29) | `internal/yaegikernel/choir.go:580-634`, `broker_protocol.go:32-34, 163-188`, `internal/agentcore/{tools_desk.go:1336,research_children.go,management_tasks.go:316+,inbox_records.go:640-650,system1_verb.go}`, `internal/types/{commitment.go,commitment_rules.go,management_task.go:136-139}` | MA1.3 | red / 2 (tape type, reducer, judge as settler) | every child call produces a Cast with at least one typed question unless marked weight zero, and a Report record; a fan-out of N children is scored by one judge call; a rule failure (a citation that does not resolve) contradicts regardless of the judge; a parent cannot settle its own record (negative test); the self-favor gap is computed on replayed d@e records; the research acceptance (Texture asks, research answers) unchanged | revert; records written stay decodable |
+| MA1.6 | Inertness detection and measurement (section 4.4, R29): the commit-time rule detector (base-rate probability, near-certain answer set, missing falsifier or decision dependency, below-floor weight, known-trivial template); an optional `inert` flag set on the record; the sampled System 1 question "could any plausible outcome have contradicted this prediction"; inert-precommitment and inert-delegation rates per desk, model and prompt version; the inert count fed into `choir.Calibration()` ("N of your last M precommitments were uninformative"); the short material-precommitment statement with one good and one inert example in each desk prompt, worded after the baseline; no Cast is refused for being inert | `internal/types/{commitment.go,calibration_digest.go:81-95}`, `internal/agentcore/{calibration_feedback.go,rlm_reduce.go,system1_verb.go}`, `internal/yaegikernel/choir.go:1403`, `internal/runtimeprompts/prompts.go` | MA1.3, MA1.5 | orange / 1 (a flag, a metric, prompt text; no refusal) | fixtures for each rule flag; a replay of d@e records yields per-desk rates; the digest shows the inert count; the judge sample is scored against the rules; the Phase 1 ledger round with the baseline rates is committed before any prompt change | revert; the optional field stays decodable |
 | R5 | 2026-11-04 | "Desks all need to message each other, but only via the PSA protocol." Delete MessageTargets allowlists (app desk default-empty, management-only). Any desk may message any desk; every message is a PSA record (request with precommitment, typed, settled by rule or by the recipient), never free text or a call. Authority never travels with a message: the recipient acts on its own grants; untrusted-origin requests carry provenance and need admission for privileged effects. | Phase 1 |
 | R6 | 2026-11-04 | Roadmap: "remove raw messaging/allowlists ASAP". | Phase 1 first |
 | R7 | 2026-11-04 | Progressive delivery closed (done, cb1a6cba9). | none |
@@ -90,6 +91,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R26 | 2026-11-04 | (Q10) Each desk has its own least-privilege yaegi import set; all desks import the precommitment-records protocol, math and similar; most import nothing with effects. The point is code mode: tool calling as code, loops, fan-out, a hundred tool calls in one cell with one model round trip. Yaegi runs inside gVisor, performance permitting; engineering already runs in capsules. Third-party Go modules are allowed in principle, since generated code is no different from third-party code, but: "if you import a million lines of code but then don't review that, that's a huge vulnerability surface". | MA2.3, MA6.5, open questions 2 and 9 |
 | R27 | 2026-11-04 | Security process: defense in depth first; then agentic red teaming from the inside once the functionality is satisfying; then iterate. *(recorded summary)* | section 12.2 |
 | R28 | 2026-11-04 | "the sub RLM calls shouldn't be raw. They should also be wrapped in the PSA protocol. So when you're making a sub RLM call, you're making a pre-commitment as to the results that you get from it. And then that pre-commitment needs to be scored at some point ... any kind of sub-agent delegation needs to be through PSA." The owner is unsure who scores: management, the parent itself, or a self-score that is in turn scored. | MA1.5, section 4.4, open question 16 |
+| R29 | 2026-11-04 | "It seems odd to just let those be ... inert pre-commitments are ... a waste of attention. It kind of shows that the model doesn't get it ... at minimum, we should be counting and scoring how many of these that we do. Like, maybe we have to tune the system against them rather than try to solve it in advance." | MA1.6, section 4.4 |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -307,7 +309,7 @@ documents). This fixes Devin's B1 non-desk routing item.
 | MA1.1 | Delete the emit and message channels: `ActionEmit`, `ActionMessage`, `EmitPayload`, `EmitResult`, `StreamBrokerEmit` and its result stream, the sidecar sender, the host `deskEmitSignal`, the `emit` envelope kind, the `Emit` and `Message` stubs, `IntentMessage` and its three reducer branches. Bump `ProtocolVersion` | `internal/yaegikernel/broker_protocol.go:9, 20, 143-151, 326`; `transport.go:41-45`; `sidecar.go:140-154`; `desk_session_worker.go:55-56, 448-451`; `worker_mux.go:78`; `frame_selftest.go:31, 96, 170, 195`; `choir.go:538-556`; `intent.go:22, 407`; `internal/agentcore/tools_desk.go:515-519, 869, 1085-1119`; `rlm_reduce.go:138, 388, 1127` | none | orange / 1 (deletes unreachable code; one-act revert) | frame self-test asserts every action in the new set and none else; a grep gate for the deleted names; a test that a manifest naming `emit` is refused at validation; the existing D0 branch corpus is re-captured | revert |
 | MA1.2 | One data-driven address resolver; delete `MessageTargets`, `Addresses`, `CanMessage`, `AllowedMessageTargets`, `recordsDesk`/`recordsRoute` sender switch, the Texture cast restriction. Non-desk inbox classes become registrations. Engineering casts from non-holders forward to management | `deskmanifest/manifest.go:136-141, 214-307, 338-339, 512, 591`; `internal/agentprofile/agentprofile.go:32, 56-57, 119-135`; `internal/agentcore/prompts.go:44, 61`; `inbox_records.go:33-120`; `texture_dispatch_fold.go:46-58`; `rlm_reduce.go:2285`; `tools_worker_update.go:168` | MA1.1 | red / 2 (routing, concurrency, ledger) | contract test: every desk to every desk resolves to its registered inbox; a request to an unregistered name is refused; a cast to engineering from research lands in management's inbox, not as an assignment; the existing Texture, research, management and engineering product-path acceptance unchanged on d@e | revert |
 | MA1.3 | The request record: required `p_success`, `weight` and `settlement` on requests; reducer-stamped provenance with an origin class; delete Note and the `note` directive subtype; `Decline` and `Feed` as typed request kinds | `internal/yaegikernel/intent.go:44-48, 521, 543`; `choir.go:1431-1462, 1532`; `internal/types/commitment.go:43-65, 162-175, 572`; `rlm_reduce.go:237, 262, 404, 1218, 1265, 1297, 1357`; `inbox_records.go:391, 442, 595`; `tools_desk.go:1178`; `commitment_rules.go:107-170` | MA1.2 | red / 2 (tape type, reducer) | golden fixtures for every request kind; the reducer refuses a request with missing or out-of-range `p_success`; provenance cannot be set by a cell (negative test); a precommit with `weight` 0 on an I1+ class is refused | revert; tape records written stay decodable (new fields optional on read, required on write) |
-| MA1.4 | Re-cut D0: lock protocol 1.0.0 without allowlists. Cherry-pick the extractor, checker, contract tests and the transition table from the `d0-protocol` branch; remove `MessageTargets`/`Addresses` from the surface (`internal/deskprotocol/surface.go:77-78, 277-278` on that branch) and the `note` and `emit` golden fixtures; re-capture the corpus after MA1.3; add the roots below | `internal/deskprotocol/**`, `cmd/deskprotocol-lock`, `.github/workflows/ci.yml` (job `desk-protocol`), `internal/store/lifecycle.go` and `engineering_assignments.go` (transition table reads, from commit e63e2f536) | MA1.3, MA1.5 | yellow tooling, orange reducer table / 1 | the checker passes against its own lock; negative tests (field removed, required field added, enum value added to a closed type) classify correctly; the transition contract test runs against current store behaviour (every transition the store performs today is in the table), not only table-versus-store symmetry; a build with a deliberately breaking change fails the job | revert |
+| MA1.4 | Re-cut D0: lock protocol 1.0.0 without allowlists. Cherry-pick the extractor, checker, contract tests and the transition table from the `d0-protocol` branch; remove `MessageTargets`/`Addresses` from the surface (`internal/deskprotocol/surface.go:77-78, 277-278` on that branch) and the `note` and `emit` golden fixtures; re-capture the corpus after MA1.3; add the roots below | `internal/deskprotocol/**`, `cmd/deskprotocol-lock`, `.github/workflows/ci.yml` (job `desk-protocol`), `internal/store/lifecycle.go` and `engineering_assignments.go` (transition table reads, from commit e63e2f536) | MA1.3, MA1.5, MA1.6 | yellow tooling, orange reducer table / 1 | the checker passes against its own lock; negative tests (field removed, required field added, enum value added to a closed type) classify correctly; the transition contract test runs against current store behaviour (every transition the store performs today is in the table), not only table-versus-store symmetry; a build with a deliberately breaking change fails the job | revert |
 
 ### 4.4 Sub-RLM calls are Casts, and who scores them (R28)
 
@@ -378,16 +380,78 @@ the intake labeller and the support judge; children themselves queue on the
 ceiling (R8); the cost is attributed per desk and watched. Scoring runs after
 the report is delivered and is not on the critical path of the cell.
 
-**Trivial sub-calls.** A sub-call whose materiality is zero (relevance zero or
-impact class I0: a lookup, a format, a computation) skips independent scoring,
-and **the record is kept** with its prediction, report and weight zero, so the
-track record exists and can be audited. A kept record earns no trust evidence
-(trust draft 3.2: I0 earns nothing). Two guards against a parent declaring
-weight zero to dodge scoring: the kernel sets a floor on `weight` from the
-child's grants (a child that holds a lease or `world.read`, or whose report is
-later cited, is at least I1), and a small random fraction of weight-zero
-records is scored anyway as the scorer audit (the fraction is a starting
-parameter committed in the Phase 1 ledger round).
+**Inert precommitments and inert delegations: everything is scored, nothing is
+exempt (R29).** The earlier draft let materiality-zero sub-calls skip
+independent scoring. The owner rejected that: an inert precommitment is a waste
+of attention and shows the model does not get it, so the system counts and
+scores them and tunes against the measured rate. Two different things are
+separated:
+
+- **(a) An inert precommitment**: the prediction is true of almost any outcome,
+  or sits at the base rate, or has no falsifier or no named decision
+  dependency. The fault is in the prediction.
+- **(b) An inert delegation**: the sub-call itself has no material consequence;
+  it probably should have been code in the cell, not an agent. The fault is in
+  the fan-out. (Code mode, R26, makes the cell the right place for a loop or a
+  computation.)
+
+Every sub-call Cast is scored by the layers above. Inertness is detected
+cheaply and recorded, in two steps:
+
+1. **A rule-based inertness detector at commit time**, run by the reducer on
+   every request record (MA1.6). It flags:
+   - a probability within epsilon of the question type's base rate;
+   - a question whose answer set makes one answer near-certain by construction
+     (a one-answer choice, a yes/no whose stated p is above a ceiling
+     with no named risk);
+   - a missing falsifier or criterion (`CastHypothesis.Criterion` empty,
+     `commitment.go:330-345`) or no named decision dependency (no
+     `uses`/`depends_on` reference to the act the result will feed);
+   - a `weight` below the floor the kernel derives from the child's grants;
+   - a known-trivial template (for example a prediction of the form "returns a
+     result"; the template list is data, grown from the traces).
+   The flag is stored on the record (optional field, a minor protocol bump) and
+   never blocks the Cast: nothing is refused for being inert, because the
+   record is the evidence.
+2. **A sampled System 1 typed question** on records the rules did not flag:
+   "Could any plausible outcome have contradicted this prediction?" (yes/no
+   with probabilities, blind to who wrote it). Sampling keeps the cost to a
+   fraction of one judge call per fan-out; the sampling rate is a Phase 1
+   ledger parameter. The judge's answers are themselves scored against the rule
+   flags and against later outcomes (score the scorer).
+
+**Consequences, not punishment theatre:**
+
+- An inert precommitment **earns zero skill**: the Brier skill score against the
+  base rate is zero when the prediction is the base rate, and the Murphy
+  resolution term exposes it (`types.CalibrationDigest` already carries
+  `Resolution`, `calibration_digest.go:91`).
+- It **counts against the desk's specificity and sharpness metrics**
+  (precommitment-records 5.3 and 5.4: "specificity per agent", "sharpness and
+  resolution beside reliability").
+- It gives **no positive trust evidence** (trust draft 3.2: relevance zero earns
+  nothing), so it cannot farm trust.
+- It is **fed back into the agent's own calibration digest** that the cell sees
+  through `choir.Calibration()` (`choir.go:1403`, the digest of
+  `internal/agentcore/calibration_feedback.go`): for example "N of your last M
+  precommitments were uninformative". That is the in-context learning loop; the
+  model sees that it is not getting it.
+- **Inert delegations are counted separately as wasted fan-out**: a child whose
+  Cast was flagged inert and whose report was not cited downstream, per fan-out
+  and per desk.
+
+**Prompting.** Each desk prompt carries a short statement of what a material
+precommitment is, with one good and one inert example, and the context pack
+shows the desk's own inert rate. The wording is not designed here: it is
+written when the baseline is measured (below).
+
+**Measure, then tune.** The tracked metrics are the **inert-precommitment rate**
+and the **inert-delegation rate**, per desk, per model and per prompt version,
+shown beside Brier, resolution and the self-favor gap. The starting rates are
+committed as a Phase 1 ledger round before any tuning. Tuning against them, by
+prompt and by pack, happens only after the rates are measured and the causes
+are read from traces (CLAUDE.md: understand before tuning); it is not designed
+in advance. The rates are also evidence for the paper (MA7.9).
 
 **Who scores is not fully settled.** The owner is unsure whether management,
 the parent or a scored self-score. This plan implements the layering above
@@ -1195,7 +1259,7 @@ Per the trust draft, with the revisions of section 10. The act gate comes last.
 | MA7.7 | Cost attribution and anomaly notice (BT7) | orange / 1 | MA3.9 | an anomaly produces an owner notice |
 | MA7.8 | **The act gate and circuit breaker** (BT4), last: material acts (I2 and up) outside autonomy go to a gate; the first fidelity event drops the class | red / 2 | all above | a planted-bad fixture package on d@e is gated within the measured time; replay AUC and tap rate reported (draft section 11 test) |
 
-| MA7.9 | **Evidence for the paper.** A harness that, from the instrumented records, produces the pre-registered tests of MA0.6: (0) the mission's own precommitment ledger (every round's records, their settlements by rule, Devin or the owner, and the Brier, log and interval scores with calibration and sharpness), reported beside the desk records as evidence that the practice works when applied to ourselves; (a) replay of settled records on d@e and the arms, scoring whether the lower-bound ordering predicts the next contradicted or fidelity event (AUC) and how many owner taps per day the gate would have asked for; (b) baselines computed on the same data, a fixed allowlist (the grants alone) and a popularity signal (install counts), plus the success-rate and uncalibrated-rating baselines H4 names; (c) measured outcomes: lease durations and revocations, gate rates, time to gate; (d) red-team drills that plant known-bad packages on d@e only (never the paper or owner computers) and measure time to gate; every run writes a dated, reproducible artifact | orange / 1 | MA7.2, MA7.4, MA7.8 | the harness reproduces a stored result byte for byte from the stored inputs; drills write their artifact; results append to the pre-registration file whatever they show |
+| MA7.9 | **Evidence for the paper.** A harness that, from the instrumented records, produces the pre-registered tests of MA0.6: (0') the inert-precommitment and inert-delegation rates per desk, model and prompt version, before and after tuning; (0) the mission's own precommitment ledger (every round's records, their settlements by rule, Devin or the owner, and the Brier, log and interval scores with calibration and sharpness), reported beside the desk records as evidence that the practice works when applied to ourselves; (a) replay of settled records on d@e and the arms, scoring whether the lower-bound ordering predicts the next contradicted or fidelity event (AUC) and how many owner taps per day the gate would have asked for; (b) baselines computed on the same data, a fixed allowlist (the grants alone) and a popularity signal (install counts), plus the success-rate and uncalibrated-rating baselines H4 names; (c) measured outcomes: lease durations and revocations, gate rates, time to gate; (d) red-team drills that plant known-bad packages on d@e only (never the paper or owner computers) and measure time to gate; every run writes a dated, reproducible artifact | orange / 1 | MA7.2, MA7.4, MA7.8 | the harness reproduces a stored result byte for byte from the stored inputs; drills write their artifact; results append to the pre-registration file whatever they show |
 
 Instrumentation that earlier phases must already emit, so the harness has data: the golden record corpus (MA1.4), reducer-stamped provenance and `p_success` on every request (MA1.3), lease records and their use logs (MA3.4), label-stamped acts and disclosure decisions (MA3.5, MA3.6), the router's decision distribution and settlement (MA4.8), per-call model attribution (MA3.9), and the ledger rounds committed at each phase boundary (section 0 item 7). Missing oracles are recorded as such (the draft's `missing_oracle`: failures nobody settles never enter the posterior), not dropped.
 
@@ -1223,7 +1287,7 @@ serialize. Review runs in the background while the next slice builds.
 | Phase | Run at once | Then | Hot-file collisions |
 |---|---|---|---|
 | 0 | MA0.1, MA0.2 harness; MA0.3 | MA0.4, MA0.5 | none |
-| 1 | MA1.1 (alone first); the D0 tooling cherry-pick (extractor, checker, contract harness) can run beside MA1.1 | MA1.2, then MA1.3, then MA1.5, then MA1.4 | `deskmanifest/manifest.go`, `agentcore/inbox_records.go`, `rlm_reduce.go`, `yaegikernel/intent.go`, `choir.go`, `types/commitment.go`, `.github/workflows/ci.yml` |
+| 1 | MA1.1 (alone first); the D0 tooling cherry-pick (extractor, checker, contract harness) can run beside MA1.1 | MA1.2, then MA1.3, then MA1.5, then MA1.6, then MA1.4 | `deskmanifest/manifest.go`, `agentcore/inbox_records.go`, `rlm_reduce.go`, `yaegikernel/intent.go`, `choir.go`, `types/commitment.go`, `.github/workflows/ci.yml` |
 | 2 | MA2.1, MA2.2, MA2.3, MA2.4 | MA2.5 after MA1.2 and MA2.1/MA2.3 | `check-packages.mjs` (MA2.3 then S2, S3, S5, S6, S7, U1), `ci.yml` (kernel gates, desk-names gate, desk-protocol job: serialize edits), `objectgraph/registry.go` (MA2.4 kind rename then MA3.1) |
 | 3 | MA3.1, then MA3.2 and MA3.3 in sequence (shared `writer.go`, `sql_store.go`); MA3.8 beside MA3.3 after MA3.2; MA3.5 beside MA3.3 | MA3.4, MA3.6, MA3.7, MA3.9, MA3.10 | `objectgraph/{registry,writer}.go`, `store/**`, `agentcore/{tools_desk,tools_product_api,system1_verb}.go`, `rlm_reduce.go` |
 | 4 | MA4.1, then MA4.2 to MA4.4 in sequence (shared `appdesk.go`, boot path), MA4.5 | MA4.6 and MA4.7 in parallel; MA4.8 beside them after MA3.6; MA4.9; MA4.10; MA4.11 | `deskmanifest/manifest.go`, `agentcore/{runtime,tool_profiles,tools_desk,inbox_records}.go`, `store/engineering_assignments.go` |
@@ -1386,16 +1450,22 @@ Go-module scope), plus what the plan found.
     D6 to D9 are unverified at this commit and must be re-grepped by each
     slice's first step; the desktop focus and input signals the router's
     settlement rule needs are a hypothesis until MA4.8's first step.
-16. **Who scores sub-RLM Casts (R28).** The owner is unsure: management, the
-    parent itself, or a self-score that is in turn scored. **Recommended:**
-    layered scoring, as in section 4.4: rules first, then a blind System 1
-    judge as the default independent scorer, then downstream settlement, with
-    the parent's self-score as a learning signal whose gap against the
-    independent score is tracked (the scored self-score), and management only
-    for sampled material disagreements. Parameters to set in the Phase 1 ledger
-    round: the fraction of weight-zero records scored as an audit, the sampling
-    rate and materiality weighting for management's third opinion, and the
-    judge-call budget per fan-out (batched; one call per fan-out, N questions).
-    Also open: the judge's per-computer rate limit (about 60 calls a minute,
-    shared with intake labelling and support judging) against fan-outs of many
-    children.
+16. **Who scores sub-RLM Casts (R28), and inertness (R29).** The owner is unsure
+    whether management, the parent itself, or a self-score that is in turn
+    scored scores a sub-RLM Cast. **Recommended:** layered scoring as in
+    section 4.4: rules first, then a blind System 1 judge as the default
+    independent scorer, then downstream settlement, with the parent's
+    self-score as a learning signal whose gap against the independent score is
+    tracked (the scored self-score), and management only for sampled material
+    disagreements. Nothing is exempt from scoring (R29): inert precommitments
+    and inert delegations are detected, counted and fed back, and tuned against
+    after the baseline is measured. Parameters to set in the Phase 1 ledger
+    round: epsilon for "within the base rate", the near-certainty ceiling, the
+    weight floor by grant, the starting list of known-trivial templates, the
+    sampling rate of the System 1 inertness question, the sampling rate and
+    materiality weighting for management's third opinion, and the judge-call
+    budget per fan-out (batched: one call per fan-out, N questions). Also open:
+    the judge's per-computer rate limit (about 60 calls a minute, shared with
+    intake labelling and support judging) against fans-out of many children;
+    and what counts as a "named decision dependency" in a form the reducer can
+    check.
