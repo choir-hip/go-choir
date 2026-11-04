@@ -126,22 +126,24 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging b5fa1aa82 (package install, 11:39Z; software-release adoption
-    deleted); 5727d3d3d in CI (a U4 rebase skips the per-shot review, Devin
-    approve). e6fe4b1fe deployed (Freeze refuses stale screens). The Library
-    export (8d78b7e78) collided with the arms' own library-next changes:
-    claude's rebase re-applied and was failed by the judge for 0 of 12 shots
-    (fixed by 5727d3d3d); crouton's base supersedes its change and U4 had no
-    outcome for that, so it is wedged at stack_base_moved (problem doc;
-    the superseded-rebase fix on branch noop-rebase is in tier 2 review,
-    then an owner rebase-retry). Pool and luna rounds cancelled on Synthetic
-    quota (their Texture recorded no quota hold, so the quota watch missed
-    them). Install proof waits for pool (R1, now on crouton-alpha) to take
-    b5fa1aa82 when its ring opens. Node B 12 GB available, 147 GB disk free.
+    staging 661b75b24. Landed and deployed this hour: package install
+    (b5fa1aa82, software-release adoption deleted), the judge skips U4
+    rebases (5727d3d3d), a rebase may freeze empty when the new base
+    supersedes the change, owner approval names the drop (e272375a1, tier 2
+    Devin and DeepSeek), an install attempt whose work ended without an
+    operation does not block a retry for 2 h (661b75b24, Devin round 2 after
+    a blocking catch). First staging install (luna's calendar-next onto
+    pool, 12:00Z) was refused cleanly: pool is at stack_base_moved too, so
+    it must rebase before it can take any install. The superseded path ran
+    live on crouton: its empty Freeze was refused because the base moved
+    again mid-rebase; a fresh rebase onto e272375a1 is running, and the
+    drop is pre-cleared for approval if its receipt is superseded and names
+    only library-next. Claude and pool rebases wait on their timers. Node
+    B 16 GB available, 148 GB disk free.
   main_uncertainty: >-
-    whether the superseded-rebase fix passes tier 2; whether the first
-    staging install applies through self-development on the first try
-  next_observation: the noop-rebase review; pool's refresh to b5fa1aa82 and the install; claude r4 Cast after 5727d3d3d reaches it
+    whether the rebases complete on crouton-alpha without another surprise;
+    whether the install applies end to end once pool is rebased
+  next_observation: crouton's superseded rebase reaching approval; pool's rebase notice; the install retry on pool
   blocker: none
   next_action: land the superseded-rebase fix and unwedge crouton; prove a Library install on pool on staging; then review apps through the Library and run publish and install rounds
 receipts: []
