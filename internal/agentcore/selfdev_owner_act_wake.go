@@ -179,11 +179,12 @@ func (rt *Runtime) wakeTextureForOwnerAct(ctx context.Context, ownerID string, o
 // notifyTextureOfOwnerAct is the call sites' form: the act already
 // happened, so a failure to wake is logged and never fails the act.
 func (rt *Runtime) notifyTextureOfOwnerAct(ctx context.Context, ownerID string, operation selfdev.Operation, act, reason string) {
-	// A round's receipt first, so Texture's record carries its line
+	// The round's predictions the act decides first
+	// (engineering_round_settlement.go), so the receipt states them against
+	// what happened; then the receipt, so Texture's record carries its line
 	// (round_receipt.go).
-	rt.recordRoundReceipt(ctx, ownerID, operation, act)
-	// The round's predictions the act decides (engineering_round_settlement.go).
 	rt.settleOwnerActPrecommits(ctx, ownerID, operation, act)
+	rt.recordRoundReceipt(ctx, ownerID, operation, act)
 	if _, err := rt.wakeTextureForOwnerAct(ctx, ownerID, operation, act, reason); err != nil {
 		log.Printf("selfdev owner act: %s %s: Texture not woken: %v", act, operation.OperationID, err)
 	}

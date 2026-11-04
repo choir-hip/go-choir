@@ -144,6 +144,13 @@ func (rt *Runtime) recordRoundReceipt(ctx context.Context, ownerID string, opera
 	stamp := now.UTC().Format(time.RFC3339Nano)
 	summary := receipt.Summary()
 	refs := receipt.Refs()
+	// The round's governing predictions (its Cast's), stated against what
+	// happened (calibration_claims_api.go).
+	preds := rt.roundPredictions(ctx, ownerID, computerID, assignment.AssignmentID, binding.ParentControlID)
+	types.RoundPredictionRefs(refs, preds)
+	if line := types.RoundPredictionsSummary(preds); line != "" {
+		summary += " " + line
+	}
 	refs["operation_id"], refs["assignment_id"] = operation.OperationID, assignment.AssignmentID
 	rec := types.CommitmentRecord{
 		SchemaID:    types.CommitmentRecordSchemaV1,
@@ -190,4 +197,25 @@ func (rt *Runtime) roundLineSentence(ctx context.Context, ownerID, computerID st
 		return "\n\n" + line + "."
 	}
 	return ""
+}
+
+// roundPredictions are the round's Cast predictions with their settlements.
+func (rt *Runtime) roundPredictions(ctx context.Context, ownerID, computerID, assignmentID, castID string) []types.RoundPrediction {
+	claims, err := rt.calibrationClaims(ctx, ownerID, computerID, assignmentID)
+	if err != nil {
+		log.Printf("selfdev round receipt: assignment %s predictions: %v", assignmentID, err)
+		return nil
+	}
+	var out []types.RoundPrediction
+	for _, c := range claims {
+		if c.StatedBy != "cast" || c.Cast != strings.TrimSpace(castID) {
+			continue
+		}
+		p := types.RoundPrediction{Kind: c.Kind, P: c.P, Estimate: c.Estimate, Low: c.Low, High: c.High, Answer: c.Answer, Censored: c.Censored}
+		if c.ActualS != nil {
+			p.ActualS, p.HasActual = *c.ActualS, true
+		}
+		out = append(out, p)
+	}
+	return out
 }

@@ -306,6 +306,17 @@ func TestCalibrationClaimsListStatedAgainstActual(t *testing.T) {
 			}
 		}
 	}
+	// The round receipt reads the same claims: the Cast's, stated against
+	// what happened.
+	preds := f.rt.roundPredictions(ctx, f.owner, f.computer, plan.AssignmentID, plan.Cast.RecordID)
+	if len(preds) != len(types.RoundPredictionsMandatory) {
+		t.Fatalf("round predictions %+v", preds)
+	}
+	refs := map[string]string{"total_s": "3000"}
+	types.RoundPredictionRefs(refs, preds)
+	if line := types.RoundLineFromRefs(refs); !strings.Contains(line, "Freeze predicted 20 min (10-40), took 35") {
+		t.Fatalf("receipt line %q", line)
+	}
 	h := &APIHandler{rt: f.rt}
 	req := httptest.NewRequest(http.MethodGet, "/api/calibration/claims?computer_id=computer-elsewhere", nil)
 	req.Header.Set("X-Authenticated-User", f.owner)

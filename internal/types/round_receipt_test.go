@@ -80,3 +80,30 @@ func TestBuildRoundReceiptWithoutJobsOrTimes(t *testing.T) {
 		t.Errorf("R5: %+v", z)
 	}
 }
+
+// The receipt states the round's predictions against what happened, and
+// Texture's line says what the clock claims predicted and what they took.
+func TestRoundReceiptCarriesPredictions(t *testing.T) {
+	preds := []RoundPrediction{
+		{Kind: "verify_pass", P: 0.8, Answer: "yes"},
+		{Kind: "freeze_minutes", P: 0.7, Estimate: 25, Low: 15, High: 45, Answer: "yes", ActualS: 35 * 60, HasActual: true},
+		{Kind: "approval_minutes", P: 0.6, Estimate: 90, Low: 40, High: 240, Answer: "no", ActualS: 300 * 60, HasActual: true, Censored: true},
+		{Kind: "owner_approves", P: 0.6},
+	}
+	refs := RoundReceipt{TotalS: 3000, EngineerS: 2400, PlatformS: 600, PlatformPct: 20}.Refs()
+	RoundPredictionRefs(refs, preds)
+	line := RoundLineFromRefs(refs)
+	if !strings.Contains(line, ", Freeze predicted 25 min (15-45), took 35") || !strings.Contains(line, ", approval predicted 90 min (40-240), none in 300 min") {
+		t.Fatalf("line %q", line)
+	}
+	sum := RoundPredictionsSummary(preds)
+	for _, want := range []string{"verify_pass p 0.80: yes", "freeze_minutes 25 min (15-45, p 0.70), took 35 min: yes", "approval_minutes 90 min (40-240, p 0.60), none in 300 min: no", "owner_approves p 0.60: open"} {
+		if !strings.Contains(sum, want) {
+			t.Fatalf("summary %q lacks %q", sum, want)
+		}
+	}
+	plain := RoundReceipt{TotalS: 3000, EngineerS: 2400, PlatformS: 600, PlatformPct: 20}.Refs()
+	if RoundLineFromRefs(plain) != (RoundReceipt{TotalS: 3000, EngineerS: 2400, PlatformS: 600, PlatformPct: 20}).Line() {
+		t.Fatal("a round without predictions changed its line")
+	}
+}

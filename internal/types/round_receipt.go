@@ -282,5 +282,86 @@ func RoundLineFromRefs(refs map[string]string) string {
 	return RoundReceipt{
 		TotalS: total, EngineerS: RoundRefInt(refs, "engineer_s"), PlatformS: RoundRefInt(refs, "platform_s"),
 		PlatformPct: int(RoundRefInt(refs, "platform_pct")),
-	}.Line()
+	}.Line() + roundClockClause(refs, string(PrecommitRuleFreezeMinutes), "Freeze") + roundClockClause(refs, string(PrecommitRuleApprovalMinutes), "approval")
+}
+
+// RoundPrediction is one of a round's governing predictions (its Cast's),
+// stated against actual, for the round receipt (calibration claims).
+type RoundPrediction struct {
+	Kind                string
+	P                   float64
+	Estimate, Low, High int
+	Answer              string // yes, no, unresolved, or "" while open
+	ActualS             int64
+	HasActual, Censored bool
+}
+
+// Subject-ref keys of the receipt's clock predictions, per clock kind:
+// "predicted:<kind>:estimate" and so on.
+func roundPredictedRef(kind, field string) string { return "predicted:" + kind + ":" + field }
+
+// RoundPredictionRefs puts the clock predictions on the receipt's refs, so
+// Texture's line can say what was predicted and what it took.
+func RoundPredictionRefs(refs map[string]string, preds []RoundPrediction) {
+	for _, p := range preds {
+		if !PrecommitRuleKind(p.Kind).clock() {
+			continue
+		}
+		refs[roundPredictedRef(p.Kind, "estimate")] = strconv.Itoa(p.Estimate)
+		refs[roundPredictedRef(p.Kind, "low")] = strconv.Itoa(p.Low)
+		refs[roundPredictedRef(p.Kind, "high")] = strconv.Itoa(p.High)
+		if p.HasActual {
+			refs[roundPredictedRef(p.Kind, "actual_s")] = strconv.FormatInt(p.ActualS, 10)
+			if p.Censored {
+				refs[roundPredictedRef(p.Kind, "censored")] = "true"
+			}
+		}
+	}
+}
+
+// roundClockClause is ", predicted 25 min (15-45), took 35" for one clock
+// kind on the refs, "" when the receipt carries none.
+func roundClockClause(refs map[string]string, kind, what string) string {
+	est, ok := refs[roundPredictedRef(kind, "estimate")]
+	if !ok {
+		return ""
+	}
+	out := fmt.Sprintf(", %s predicted %s min (%s-%s)", what, est, refs[roundPredictedRef(kind, "low")], refs[roundPredictedRef(kind, "high")])
+	actual, ok := refs[roundPredictedRef(kind, "actual_s")]
+	if !ok {
+		return out
+	}
+	n, _ := strconv.ParseInt(actual, 10, 64)
+	if refs[roundPredictedRef(kind, "censored")] == "true" {
+		return out + fmt.Sprintf(", none in %d min", wholeMinutes(n))
+	}
+	return out + fmt.Sprintf(", took %d", wholeMinutes(n))
+}
+
+// RoundPredictionsSummary is the predictions sentence of the receipt's
+// summary: each prediction, stated against what happened.
+func RoundPredictionsSummary(preds []RoundPrediction) string {
+	if len(preds) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(preds))
+	for _, p := range preds {
+		s := fmt.Sprintf("%s p %.2f", p.Kind, p.P)
+		if PrecommitRuleKind(p.Kind).clock() {
+			s = fmt.Sprintf("%s %d min (%d-%d, p %.2f)", p.Kind, p.Estimate, p.Low, p.High, p.P)
+			if p.HasActual {
+				if p.Censored {
+					s += fmt.Sprintf(", none in %d min", wholeMinutes(p.ActualS))
+				} else {
+					s += fmt.Sprintf(", took %d min", wholeMinutes(p.ActualS))
+				}
+			}
+		}
+		answer := p.Answer
+		if answer == "" {
+			answer = "open"
+		}
+		parts = append(parts, s+": "+answer)
+	}
+	return "Predictions (the Cast's, stated against what happened): " + strings.Join(parts, "; ") + "."
 }
