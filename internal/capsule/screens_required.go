@@ -152,7 +152,7 @@ func summarizePaths(paths []string) string {
 }
 
 // requireScreens is the Freeze rule over the diff and the staged screens.
-func requireScreens(changes []FileChange, screens []ScreenFile) error {
+func requireScreens(changes []FileChange, screens []ScreenFile, baseHasDir func(rel string) bool) error {
 	relevant := screenRelevantChanges(changes)
 	if len(relevant) == 0 {
 		return nil
@@ -164,10 +164,29 @@ func requireScreens(changes []FileChange, screens []ScreenFile) error {
 	for _, c := range relevant {
 		if c.Kind == ChangeModified || c.Kind == ChangeDeleted {
 			existing = append(existing, c)
+		} else if root := packageRootOf(c.Path); root != "" && baseHasDir != nil && baseHasDir(root) {
+			// Adding to a package that exists on the base updates an app:
+			// the publish rule needs the pair, so Freeze asks for it too.
+			existing = append(existing, c)
 		}
 	}
 	if len(existing) > 0 && !HasBeforeAfterPair(screens) {
 		return fmt.Errorf("capsule freeze: %s: this change modifies existing files (%s); shoot the same view on the base build (before) and the candidate (after), named NN-before-<view>.png and NN-after-<view>.png in %s; shoot the before view before your first edit", BeforeAfterRequiredReason, summarizePaths(screenChangePaths(existing)), ScreensDir)
 	}
 	return nil
+}
+
+// packageRootOf is the app package directory (frontend/src/packages/<name>)
+// a source path lies in, or "".
+func packageRootOf(rel string) string {
+	const root = "frontend/src/packages/"
+	rest, ok := strings.CutPrefix(rel, root)
+	if !ok {
+		return ""
+	}
+	name, _, hasFile := strings.Cut(rest, "/")
+	if name == "" || !hasFile {
+		return ""
+	}
+	return root + name
 }

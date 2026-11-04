@@ -467,7 +467,7 @@ func TestShotReviewKeepsBeforeAfterPairsTogetherAndFailsARegression(t *testing.T
 	// pairs were not kept whole.
 	screens := []capsule.ScreenFile{
 		shot("01-a.png", 1), shot("02-b.png", 2), shot("03-c.png", 3),
-		shot("04-before-home.png", 4), shot("04-after-home.png", 5),
+		shot("04-after-home.png", 5), shot("04-before-home.png", 4), // real order: path-sorted, after first
 	}
 	judge := &scriptedJudge{answer: func(name string) string {
 		if strings.HasPrefix(name, "04-after-home.png") {
@@ -506,5 +506,75 @@ func TestShotReviewKeepsBeforeAfterPairsTogetherAndFailsARegression(t *testing.T
 	}
 	if strings.Contains(plain.prompts[0], "before/after pair of one view") {
 		t.Fatal("the pair rule leaked into a prompt with no pair")
+	}
+}
+
+// A before shot is the base build and cannot show the requested change: its
+// question 2 never rejects it, so a pair whose before image does not show the
+// change passes when the after image does. A backend-only continuity pair
+// (the after image is the same view, still working) passes the same way.
+func TestShotReviewBeforeShotsAreNotJudgedAgainstTheRequest(t *testing.T) {
+	shot := func(name string, i int) capsule.ScreenFile {
+		return capsule.ScreenFile{Name: name, SHA256: strings.Repeat(fmt.Sprintf("%x", i), 64), Width: 1280, Height: 800, Bytes: 100}
+	}
+	screens := []capsule.ScreenFile{shot("01-after-list.png", 1), shot("01-before-list.png", 2)}
+	judge := &scriptedJudge{answer: func(name string) string {
+		if strings.HasPrefix(name, "01-before-list.png") {
+			return `"q1":"yes","q2":"no","q3":"yes","q4":"n/a","q6":"yes","why":"does not show the new column"`
+		}
+		return allYes
+	}}
+	review, err := reviewShots(context.Background(), judge.call, screens, nil, always(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review.rejected() {
+		t.Fatalf("a before shot failed question 2 and rejected the pair: %s", review.reason(""))
+	}
+	for _, want := range []string{"BEFORE image cannot show the requested change", "continuity screen", "never against the request text"} {
+		if !strings.Contains(judge.prompts[0], want) {
+			t.Errorf("pair prompt lacks %q", want)
+		}
+	}
+	// A before shot is still a real screen: unreadable, it rejects.
+	bad := &scriptedJudge{answer: func(name string) string {
+		if strings.HasPrefix(name, "01-before-list.png") {
+			return `"q1":"yes","q2":"yes","q3":"no","q4":"n/a","q6":"yes","why":"text cut mid-word"`
+		}
+		return allYes
+	}}
+	if r, err := reviewShots(context.Background(), bad.call, screens, nil, always(true)); err != nil || !r.rejected() {
+		t.Fatalf("an unreadable before shot passed: %v %+v", err, r)
+	}
+	// A blank before shot rejects on Q1.
+	blank := []capsule.ScreenFile{shot("01-after-list.png", 1), shot("01-before-list.png", 2)}
+	blank[1].Blank = true
+	if r, err := reviewShots(context.Background(), judge.call, blank, nil, always(true)); err != nil || !r.rejected() {
+		t.Fatalf("a blank before shot passed: %v", err)
+	}
+}
+
+func TestPairedBatchesPairsEitherOrderAndNeverSplitsAPair(t *testing.T) {
+	names := []string{"01-a.png", "02-b.png", "03-c.png", "04-after-x.png", "04-before-x.png", "05-after-y.png", "05-before-y.png"}
+	var screens []capsule.ScreenFile
+	var pending []int
+	for i, n := range names {
+		screens = append(screens, capsule.ScreenFile{Name: n})
+		pending = append(pending, i)
+	}
+	batches := pairedBatches(pending, screens)
+	for _, b := range batches {
+		if len(b) > shotReviewBatch {
+			t.Fatalf("batch of %d", len(b))
+		}
+		in := map[string]bool{}
+		for _, i := range b {
+			in[names[i]] = true
+		}
+		for _, pair := range [][2]string{{"04-after-x.png", "04-before-x.png"}, {"05-after-y.png", "05-before-y.png"}} {
+			if in[pair[0]] != in[pair[1]] {
+				t.Fatalf("pair %v split across batches %v", pair, batches)
+			}
+		}
 	}
 }

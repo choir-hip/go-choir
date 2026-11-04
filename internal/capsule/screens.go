@@ -146,7 +146,10 @@ func sourceChangeTimes(changes []FileChange, modTime func(path string) (time.Tim
 			p = "/" + p
 		}
 		rel, ok := strings.CutPrefix(p, "/workspace/platform/")
-		if !ok || change.Kind == ChangeDeleted || change.Mode.IsDir() || change.Mode&os.ModeSymlink != 0 || carriedExcludedPrefix(rel) != "" || notScreenSource(rel) {
+		// Exempt paths (tests, docs, build output) are not edits a shot
+		// can predate: writing tests first must not make a before shot late.
+		// A deleted file has no time to read, so it cannot set oldest.
+		if !ok || change.Kind == ChangeDeleted || change.Mode.IsDir() || change.Mode&os.ModeSymlink != 0 || ScreenExemptPath(rel) {
 			continue
 		}
 		t, terr := modTime(change.Path)
@@ -185,7 +188,7 @@ func refuseLateBeforeShots(names []string, oldest time.Time, modTime func(name s
 	}
 	if len(late) > 0 {
 		sort.Strings(late)
-		return fmt.Errorf("capsule freeze: %s: %d before screens were shot after the first source edit (%s): a before shot is the base build, taken before you edit; re-shoot the base build in a clean copy or restore the file, shoot, then redo the edit: %s", BeforeAfterRequiredReason, len(late), oldest.UTC().Format("15:04:05Z"), strings.Join(late, ", "))
+		return fmt.Errorf("capsule freeze: %s: %d before screens were shot after the first source edit (%s): a before shot is the base build, taken before you edit; restore every changed file (or shoot the base in a clean copy), shoot, then redo the edits: %s", BeforeAfterRequiredReason, len(late), oldest.UTC().Format("15:04:05Z"), strings.Join(late, ", "))
 	}
 	return nil
 }

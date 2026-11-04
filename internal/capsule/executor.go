@@ -2322,7 +2322,12 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		return nil, err
 	}
 	// A change to the UI needs at least one screen (screens_required.go).
-	if err := requireScreens(changes, screens); err != nil {
+	lowerRoot := filepath.Join(caps.MergedDir, "..", "source-lower")
+	baseHasDir := func(rel string) bool {
+		_, isDir, err := readSourceBeneath(lowerRoot, platformSourcePrefix+"/"+rel)
+		return err == nil && isDir
+	}
+	if err := requireScreens(changes, screens, baseHasDir); err != nil {
 		return nil, err
 	}
 	video, err := e.stageVideo(ctx, rootFD, changes, temporary)

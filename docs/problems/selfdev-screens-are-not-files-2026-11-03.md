@@ -141,3 +141,21 @@ Dated future intents (not built):
   overlay so the old and the new both exist and the new supplants the old at
   freeze or publication, which would give the before shot from the old
   build directly instead of from the engineer's discipline.
+
+Review fixes (tier-2, 2026-11-04): the shot review pairs whichever side it
+meets first (screens are path-sorted, so the after shot comes first) and
+never splits a pair across calls; a before shot is excluded from question 2
+(it is the base build and cannot show the change) and is judged only as a
+real, readable screen; a backend change's after shot is a continuity screen
+judged against its before shot, not the request text; the package-update
+pair is proved on the bundle's screens, the media keep a pair through the
+cap, and a pair of identical pixels names its digest once; Freeze asks for
+the pair when files are added to an app package that already exists on the
+base, so Freeze and publish agree; the first-edit time ignores exempt
+paths, so writing tests first does not make a before shot late.
+
+Named residual: before-shot integrity is documentary, not enforcement. Freeze
+compares file times only (`touch -d`, or copying an after shot, defeats it, and
+a deleted file has no time to set the first edit). Until the overlay build
+lands, a before shot is the engineer's claim with its bytes pinned. A
+host-attested receipt is not built now.

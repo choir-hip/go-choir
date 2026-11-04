@@ -50,14 +50,22 @@ func (rt *Runtime) operationMedia(operation selfdev.Operation) ([]pkgrelease.Med
 	}
 	screens := append([]capsule.ScreenFile{}, bundle.Screens...)
 	sort.Slice(screens, func(i, j int) bool { return screens[i].Name < screens[j].Name })
-	var items []pkgrelease.Media
-	var data [][]byte
+	// Members of a before/after pair are chosen first, so the cap never
+	// drops them; the chosen items are then listed by name.
+	paired := pairedViews(screens)
+	sort.SliceStable(screens, func(i, j int) bool { return paired[screenViewKey(screens[i])] && !paired[screenViewKey(screens[j])] })
+	type chosen struct {
+		item pkgrelease.Media
+		raw  []byte
+	}
+	var picks []chosen
 	// A record names each digest once: a second screen with the same bytes
-	// (two shots rendering the same pixels) is skipped, never a refusal of
-	// the whole draft.
+	// (two shots rendering the same pixels, a continuity pair among them) is
+	// skipped, never a refusal of the whole draft. The pair itself is proved
+	// on the bundle's screens (bundleHasBeforeAfter), not on these items.
 	named := map[string]bool{}
 	for _, s := range screens {
-		if len(items) == pkgrelease.MaxScreenshots {
+		if len(picks) == pkgrelease.MaxScreenshots {
 			break
 		}
 		if named[s.SHA256] || s.Blank || s.Bytes > pkgrelease.MaxScreenshotBytes || s.Width > pkgrelease.MaxScreenshotSide || s.Height > pkgrelease.MaxScreenshotSide || !capsule.ValidScreenName(s.Name) {
@@ -65,9 +73,15 @@ func (rt *Runtime) operationMedia(operation selfdev.Operation) ([]pkgrelease.Med
 		}
 		item := pkgrelease.Media{Kind: pkgrelease.MediaKindScreenshot, Name: s.Name, MediaType: pkgrelease.MediaTypePNG, SHA256: s.SHA256, Bytes: int(s.Bytes), Width: s.Width, Height: s.Height}
 		if raw, ok := read(item); ok {
-			items, data = append(items, item), append(data, raw)
+			picks = append(picks, chosen{item, raw})
 			named[s.SHA256] = true
 		}
+	}
+	sort.Slice(picks, func(i, j int) bool { return picks[i].item.Name < picks[j].item.Name })
+	var items []pkgrelease.Media
+	var data [][]byte
+	for _, p := range picks {
+		items, data = append(items, p.item), append(data, p.raw)
 	}
 	if v := bundle.Video; v != nil && !named[v.SHA256] && v.Bytes <= pkgrelease.MaxVideoBytes && capsule.ValidVideoName(v.Name) {
 		item := pkgrelease.Media{Kind: pkgrelease.MediaKindVideo, Name: v.Name, MediaType: pkgrelease.MediaTypeWebM, SHA256: v.SHA256, Bytes: int(v.Bytes)}
@@ -115,4 +129,47 @@ func (h *APIHandler) packageReleaseMedia(w http.ResponseWriter, r *http.Request,
 		}
 	}
 	writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "media not found: the operation's release names no such item"})
+}
+
+// screenViewKey is a screen's view when it follows the before/after naming.
+func screenViewKey(s capsule.ScreenFile) string {
+	_, view := capsule.ScreenRole(s.Name)
+	return view
+}
+
+// pairedViews are the views with both a before and an after screen.
+func pairedViews(screens []capsule.ScreenFile) map[string]bool {
+	before, after := map[string]bool{}, map[string]bool{}
+	for _, s := range screens {
+		role, view := capsule.ScreenRole(s.Name)
+		switch {
+		case view == "":
+		case role == capsule.ScreenBefore:
+			before[view] = true
+		default:
+			after[view] = true
+		}
+	}
+	out := map[string]bool{}
+	for v := range before {
+		if after[v] {
+			out[v] = true
+		}
+	}
+	delete(out, "")
+	return out
+}
+
+// bundleHasBeforeAfter says the operation's bound bundle carries a
+// before/after pair of one view (the bundle's screens, not the published
+// media, which dedupe identical pixels and cap the count).
+func (rt *Runtime) bundleHasBeforeAfter(operation selfdev.Operation) (bool, error) {
+	if strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || !computerevent.IsSHA256(operation.BundleDigest) {
+		return false, errBundleUnavailable
+	}
+	bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation)
+	if err != nil {
+		return false, err
+	}
+	return capsule.HasBeforeAfterPair(bundle.Screens), nil
 }

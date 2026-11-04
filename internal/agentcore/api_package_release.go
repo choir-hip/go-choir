@@ -115,7 +115,12 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 	}
 	// A release that updates a package shows the same view before and after
 	// (owner, 2026-11-04); a new package (empty parent) needs only after shots.
-	if err := packageUpdateNeedsBeforeAfter(record.Parent, record.Media); err != nil {
+	hasPair, err := h.rt.bundleHasBeforeAfter(operation)
+	if err != nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
+		return
+	}
+	if err := packageUpdateNeedsBeforeAfter(record.Parent, hasPair); err != nil {
 		writeAPIJSON(w, http.StatusUnprocessableEntity, releaseAPIError{Error: err.Error(), Reason: capsule.BeforeAfterRequiredReason})
 		return
 	}
@@ -258,19 +263,10 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 }
 
 // packageUpdateNeedsBeforeAfter refuses a release with a prior version (any
-// parent but the empty tree) whose media holds no before/after screenshot
-// pair of one view (capsule.ScreenRole names the pairing).
-func packageUpdateNeedsBeforeAfter(parent pkgrelease.Parent, media []pkgrelease.Media) error {
-	if parent.Tree == pkgrelease.EmptyTree {
-		return nil
-	}
-	var screens []capsule.ScreenFile
-	for _, m := range media {
-		if m.Kind == pkgrelease.MediaKindScreenshot {
-			screens = append(screens, capsule.ScreenFile{Name: m.Name})
-		}
-	}
-	if capsule.HasBeforeAfterPair(screens) {
+// parent but the empty tree) whose bound bundle holds no before/after
+// screenshot pair of one view (capsule.ScreenRole names the pairing).
+func packageUpdateNeedsBeforeAfter(parent pkgrelease.Parent, hasPair bool) error {
+	if parent.Tree == pkgrelease.EmptyTree || hasPair {
 		return nil
 	}
 	return errors.New(capsule.BeforeAfterRequiredReason + ": this release updates an existing package; its screenshots must hold the same view before (the base build) and after (the candidate), named NN-before-<view>.png and NN-after-<view>.png")

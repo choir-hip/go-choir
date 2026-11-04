@@ -98,7 +98,7 @@ func TestRequireScreens(t *testing.T) {
 	pair := []ScreenFile{{Name: "01-before-home.png"}, {Name: "01-after-home.png"}}
 
 	// A UI change with no screens is refused, naming the path and the way to shoot.
-	err := requireScreens(diffOf(ChangeAdded, "frontend/src/NewApp.svelte", "docs/a.md"), nil)
+	err := requireScreens(diffOf(ChangeAdded, "frontend/src/NewApp.svelte", "docs/a.md"), nil, nil)
 	if err == nil {
 		t.Fatal("a UI change with no screens passed")
 	}
@@ -111,49 +111,62 @@ func TestRequireScreens(t *testing.T) {
 		t.Errorf("refusal names an exempt path: %q", err)
 	}
 	// A backend-only change with no screens is refused too (continuity).
-	if err := requireScreens(diffOf(ChangeAdded, "internal/agentcore/x.go"), nil); err == nil || !strings.Contains(err.Error(), ScreensRequiredReason) {
+	if err := requireScreens(diffOf(ChangeAdded, "internal/agentcore/x.go"), nil, nil); err == nil || !strings.Contains(err.Error(), ScreensRequiredReason) {
 		t.Errorf("a backend change with no screens passed: %v", err)
 	}
 	// A package path is a source path like any other.
-	if err := requireScreens(diffOf(ChangeAdded, "frontend/src/packages/reader/Reader.svelte"), nil); err == nil {
+	if err := requireScreens(diffOf(ChangeAdded, "frontend/src/packages/reader/Reader.svelte"), nil, nil); err == nil {
 		t.Error("a package-path change with no screens passed")
 	}
 	// Exempt-only changes need no screen.
-	if err := requireScreens(diffOf(ChangeModified, "docs/a.md", "README.md", "internal/agentcore/x_test.go", "frontend/tests/a.spec.js", "frontend/dist/a.js"), nil); err != nil {
+	if err := requireScreens(diffOf(ChangeModified, "docs/a.md", "README.md", "internal/agentcore/x_test.go", "frontend/tests/a.spec.js", "frontend/dist/a.js"), nil, nil); err != nil {
 		t.Errorf("an exempt-only change was refused: %v", err)
 	}
-	if err := requireScreens(nil, nil); err != nil {
+	if err := requireScreens(nil, nil, nil); err != nil {
 		t.Errorf("an empty diff was refused: %v", err)
 	}
 	// Adding only new files (a brand-new app): after screens suffice.
-	if err := requireScreens(diffOf(ChangeAdded, "frontend/src/packages/new/App.svelte"), shot); err != nil {
+	if err := requireScreens(diffOf(ChangeAdded, "frontend/src/packages/new/App.svelte"), shot, nil); err != nil {
 		t.Errorf("a new-files change with an after screen was refused: %v", err)
 	}
 	// Modifying an existing file needs a pair.
-	err = requireScreens(diffOf(ChangeModified, "frontend/src/App.svelte"), shot)
+	err = requireScreens(diffOf(ChangeModified, "frontend/src/App.svelte"), shot, nil)
 	if err == nil || !strings.Contains(err.Error(), BeforeAfterRequiredReason) || !strings.Contains(err.Error(), "-before-") {
 		t.Errorf("a modifying change with no pair: %v", err)
 	}
-	if err := requireScreens(diffOf(ChangeModified, "internal/agentcore/x.go"), shot); err == nil {
+	if err := requireScreens(diffOf(ChangeModified, "internal/agentcore/x.go"), shot, nil); err == nil {
 		t.Error("a modifying backend change with no pair passed")
 	}
-	if err := requireScreens(diffOf(ChangeDeleted, "frontend/src/Old.svelte"), shot); err == nil {
+	if err := requireScreens(diffOf(ChangeDeleted, "frontend/src/Old.svelte"), shot, nil); err == nil {
 		t.Error("deleting an existing file with no pair passed")
 	}
-	if err := requireScreens(diffOf(ChangeModified, "frontend/src/App.svelte"), pair); err != nil {
+	if err := requireScreens(diffOf(ChangeModified, "frontend/src/App.svelte"), pair, nil); err != nil {
 		t.Errorf("a modifying change with a pair was refused: %v", err)
 	}
 	// Modifying only an exempt file does not demand a pair.
 	mixed := append(diffOf(ChangeModified, "docs/a.md"), diffOf(ChangeAdded, "frontend/src/N.svelte")...)
-	if err := requireScreens(mixed, shot); err != nil {
+	if err := requireScreens(mixed, shot, nil); err != nil {
 		t.Errorf("an exempt modification demanded a pair: %v", err)
 	}
+	// Adding files to a package that exists on the base updates an app and
+	// needs the pair, as the publish rule does; a package new to the base does not.
+	has := func(rel string) bool { return rel == "frontend/src/packages/reader" }
+	add := diffOf(ChangeAdded, "frontend/src/packages/reader/Extra.svelte")
+	if err := requireScreens(add, shot, has); err == nil || !strings.Contains(err.Error(), BeforeAfterRequiredReason) {
+		t.Errorf("an add into an existing package with no pair: %v", err)
+	}
+	if err := requireScreens(add, pair, has); err != nil {
+		t.Errorf("an add into an existing package with a pair: %v", err)
+	}
+	if err := requireScreens(diffOf(ChangeAdded, "frontend/src/packages/brandnew/App.svelte"), shot, has); err != nil {
+		t.Errorf("a new package demanded a pair: %v", err)
+	}
 	// The screens directory itself is not source.
-	if err := requireScreens([]FileChange{{Path: ScreensPrefix + "a.png", Kind: ChangeAdded}}, nil); err != nil {
+	if err := requireScreens([]FileChange{{Path: ScreensPrefix + "a.png", Kind: ChangeAdded}}, nil, nil); err != nil {
 		t.Errorf("the screens directory counted as a change: %v", err)
 	}
 	many := diffOf(ChangeAdded, "a.go", "b.go", "c.go", "d.go")
-	if err := requireScreens(many, nil); err == nil || !strings.Contains(err.Error(), "+1 more") {
+	if err := requireScreens(many, nil, nil); err == nil || !strings.Contains(err.Error(), "+1 more") {
 		t.Errorf("refusal does not summarize: %v", err)
 	}
 }
@@ -190,5 +203,22 @@ func TestStageScreenFilesLetsABeforeShotPredateTheEdit(t *testing.T) {
 	}
 	if _, err := stageScreenFiles(context.Background(), []string{"01-before-home.png", "01-after-home.png"}, open, t.TempDir(), at, "App.svelte"); err != nil {
 		t.Fatalf("a before shot older than the newest edit was called stale: %v", err)
+	}
+}
+
+func TestSourceChangeTimesIgnoreExemptEdits(t *testing.T) {
+	t0 := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	mods := map[string]time.Time{
+		"/workspace/platform/frontend/tests/a.spec.js": t0.Add(-time.Hour), // tests written first
+		"/workspace/platform/frontend/src/App.svelte":  t0,
+		"/workspace/platform/docs/a.md":                t0.Add(time.Hour),
+	}
+	var changes []FileChange
+	for p := range mods {
+		changes = append(changes, FileChange{Path: p, Kind: ChangeModified})
+	}
+	oldest, newest, _, err := sourceChangeTimes(changes, func(p string) (time.Time, error) { return mods[p], nil })
+	if err != nil || !oldest.Equal(t0) || !newest.Equal(t0) {
+		t.Fatalf("oldest %v newest %v err %v, want both %v", oldest, newest, err, t0)
 	}
 }

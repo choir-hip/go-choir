@@ -284,3 +284,33 @@ func TestPackageDraftNamesARepeatedScreenOnce(t *testing.T) {
 		t.Fatalf("media %v, want a.png,after-x.png,before-x.png,c.png", names)
 	}
 }
+
+// An update whose before and after pixels are identical (the continuity
+// proof for a backend change) still drafts: the pair is proved on the
+// bundle's screens, and the record names the digest once. A pair that sorts
+// past the screenshot cap is not dropped.
+func TestPackageDraftKeepsAPairThroughDedupeAndTheCap(t *testing.T) {
+	same := mediaPNG(t, 64, 40, 80, false)
+	w := newDraftWorld(t)
+	w.mediaOperation("op-same", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"}, map[string][]byte{"01-before-view.png": same, "01-after-view.png": same}, nil)
+	record, _, _ := decodeDraft(t, w.draft("op-same", nil))
+	if len(record.Media) != 1 {
+		t.Fatalf("identical pair names %d media, want the digest once", len(record.Media))
+	}
+
+	w = newDraftWorld(t)
+	screens := map[string][]byte{"before-view.png": mediaPNG(t, 64, 40, 81, false), "after-view.png": mediaPNG(t, 64, 40, 82, false)}
+	for i := 0; i < pkgrelease.MaxScreenshots+2; i++ {
+		screens[fmt.Sprintf("a-%02d.png", i)] = mediaPNG(t, 64, 40, int64(100+i), false)
+	}
+	w.mediaOperation("op-cap", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"}, screens, nil)
+	record, _, _ = decodeDraft(t, w.draft("op-cap", nil))
+	var names []string
+	for _, m := range record.Media {
+		names = append(names, m.Name)
+	}
+	joined := strings.Join(names, ",")
+	if len(names) != pkgrelease.MaxScreenshots || !strings.Contains(joined, "before-view.png") || !strings.Contains(joined, "after-view.png") {
+		t.Fatalf("media %v lost the pair to the cap", names)
+	}
+}
