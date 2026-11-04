@@ -493,6 +493,22 @@ jobs:
         shell: bash
         run: scripts/check-test-hang-guards.sh
 
+      # The Go kernel imports only the standard packages and itself, names no
+      # desk and no app, and exports exactly its RESPONSIBILITIES list
+      # (docs/design/modular-architecture-plan-2026-11-04.md section 5.1, R1).
+      - name: Set up Go for the kernel gates
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.26.10'
+
+      - name: Run kernel structural gates
+        shell: bash
+        run: |
+          scripts/selftest-kernel-gates
+          scripts/check-kernel-imports
+          scripts/check-kernel-names
+          scripts/check-kernel-responsibilities
+
       # Every write under the files root goes through internal/ownerfiles
       # (docs/design/capsule-overlay-computer-state-2026-11-03.md, S1).
       - name: Run files-root write gate
