@@ -401,6 +401,7 @@ func TestSourceProjectionRunsWithNoSettingAndTheKeyIsGone(t *testing.T) {
 // composes a patch on the booted base.
 func TestAGraftedStackAdmitsTheCastWithALedgerWarning(t *testing.T) {
 	const computerID = "computer-graft"
+	t.Setenv("CHOIR_OWNER_ID", "owner-graft")
 	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
 	ctx := context.Background()
 	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
@@ -441,9 +442,10 @@ func TestAGraftedStackAdmitsTheCastWithALedgerWarning(t *testing.T) {
 	if _, again, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast); err != nil || again == nil || again.RecordID != pending.RecordID {
 		t.Fatalf("replay: %+v %v", again, err)
 	}
-	// A rebase Cast is not needed on a graft.
-	if _, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-a", Base: moved}, cast); err == nil || !strings.Contains(err.Error(), "rebase_not_needed") {
-		t.Fatalf("a rebase on a graft: %v", err)
+	// A rebase Cast is admitted on a graft (2026-11-04 remat-serve): the
+	// capsule starts from the booted base.
+	if rebaseBase, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-a", Base: moved}, cast); err != nil || rebaseBase != moved {
+		t.Fatalf("a rebase on a graft: base %q err %v, want %s", rebaseBase, err, moved)
 	}
 	// 10: a capsule cast from the graft freezes a cumulative patch on B'.
 	patchB := stagedPatchFrom(t, repo, head, map[string]string{"frontend/public/b.txt": "B\n"})

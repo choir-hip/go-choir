@@ -504,12 +504,46 @@ func TestCleanRebaseEndToEndRematerializedIneligibleComputerMintsTheNotice(t *te
 	f.configure(func(rt *Runtime) {
 		rt.cleanRebaseTier = func(string) (bool, string) { return false, "a platform computer" }
 	})
+	f.authority.SetCleanRebaseTier(func(string) (bool, bool, error) { return false, false, nil })
 	b2 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "a platform change\n"})
 	f.boot(t, b2)
 	f.requireRematerialized(t, b2)
 	out := f.fire(t)
 	if _, found := f.cleanOp(t, b2); found || out.Minted == "" {
 		t.Fatalf("an ineligible computer on a rematerialized stack: %+v", out)
+	}
+}
+
+// Devin F2 (remat-serve review): a rematerialized stack admits ordinary Casts,
+// so an operation is routinely open at fire time. The pair must hold (no
+// notice, no attempt) and proceed at the next fire once the operation closes.
+func TestCleanRebaseEndToEndOpenOperationHoldsTheNoticeThenProceeds(t *testing.T) {
+	f := newCleanRebaseE2E(t)
+	ctx := context.Background()
+	b2 := f.commitPlatform(t, map[string]string{"frontend/public/other.txt": "a platform change\n"})
+	f.boot(t, b2)
+	f.requireRematerialized(t, b2)
+	open := f.freezeWithPatch(t, "busy-op", "a change in flight", f.longPatch(t, map[int]string{9: "busy line 09"}))
+	if _, isOpen, err := f.operations.OpenOperation(ctx, f.computerID); err != nil || !isOpen {
+		t.Fatalf("the fixture has no open operation: %v", err)
+	}
+	restarts := f.service.restarts
+	out := f.fire(t)
+	if out.Minted != "" || f.noticeMinted(t, b2) || out.Rearm <= 0 || !strings.Contains(out.Reason, "operation") {
+		t.Fatalf("an open operation did not hold the pair: %+v", out)
+	}
+	if _, found := f.cleanOp(t, b2); found || f.service.restarts != restarts {
+		t.Fatal("an open operation let a clean rebase start")
+	}
+	// The operation closes; the next fire proceeds (the clean rebase here).
+	if _, err := f.operations.Transition(ctx, f.computerID, open.OperationID, open.State, selfdev.StateFailed, nil); err != nil {
+		t.Fatalf("close the operation: %v", err)
+	}
+	if next := f.fire(t); next.Minted != "" {
+		t.Fatalf("the next fire minted beside a clean attempt: %+v", next)
+	}
+	if _, found := f.cleanOp(t, b2); !found {
+		t.Fatal("the next fire after the operation closed did not proceed")
 	}
 }
 

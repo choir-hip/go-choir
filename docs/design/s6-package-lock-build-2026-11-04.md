@@ -56,7 +56,7 @@ The overall state: the whole-stack containment test runs first, as today.
 Then, when the shell grafts: the result tree equal to booted is `upstreamed`;
 otherwise `stack_rematerialized`, now also when a package root moved under
 the stack. The served build does not change (owner Q1: no clean rebase
-without approval); approving the next candidate cast on this projection
+without approval; superseded, see the note below); approving the next candidate cast on this projection
 approves the re-materialization, as S4 already does.
 
 ## The Cast gate
@@ -70,6 +70,18 @@ is `stack_rematerialized`, and an ordinary Cast on another path is admitted.
 The rebase notice is armed only at `stack_base_moved`, unchanged. A pair
 claimed before this deploy is inert: a rebase Cast on it answers
 `rebase_not_needed`.
+
+> Superseded 2026-11-04 (remat-serve; see
+> `docs/problems/rematerialized-stack-never-served-2026-11-04.md` and the
+> amendment in `docs/design/u4-stack-rebase-build-2026-10-26.md`): the rebase
+> notice now also arms at `stack_rematerialized` when the served base is not
+> the booted base, the clean rebase runs there (a package conflict still goes
+> to the notice, never the clean rebase), and the rebase Cast gate and owner
+> retry admit that state. So the served build can change without an owner act
+> (the "no clean rebase without approval" line above is the earlier text),
+> and `rebase_not_needed` no longer answers a rebase Cast at a rematerialized
+> stack that is behind the booted base. The two paragraphs above are kept as
+> the record of the earlier decision.
 
 To take the platform's version instead, an engineer restores the root to the
 base's in a candidate (an ordinary change), or the owner uninstalls.

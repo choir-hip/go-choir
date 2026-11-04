@@ -19,7 +19,8 @@ import (
 
 // U4 (docs/design/u4-stack-rebase-build-2026-10-26.md, route D, slices 1 and
 // 2): when the applied self-development stack sits on a base the computer no
-// longer booted (stack_base_moved), the runtime asks the root Texture RLM, with a
+// longer booted (stack_base_moved, or since 2026-11-04 a stack_rematerialized
+// stack served on an older base), the runtime asks the root Texture RLM, with a
 // rebase notice, to rebase it. This file is the trigger and the bounded
 // re-mint. There is no switch (capsule overlay S4). With no live root RLM the
 // notice goes to the Texture of the document the stack operation's own
@@ -142,7 +143,8 @@ func rebasePackageConflict(result sourceproj.Result) bool {
 }
 
 // armRebaseNotice is called after a reconcile. It arms the one timer when the
-// stack sits on a moved base; it never mints, so it is safe at boot. A timer
+// stack is behind the booted base (stack_base_moved, or stack_rematerialized
+// served on an older base; rebaseStackBase); it never mints, so it is safe at boot. A timer
 // already armed is left as it is.
 func (rt *Runtime) armRebaseNotice(ctx context.Context, result sourceproj.Result) {
 	if rt == nil {

@@ -299,8 +299,9 @@ const rebaseNeedsRoot = "rebase_needs_root: no live root desk to Cast the rebase
 // rebase_needs_root when no root desk is live), admitted at
 // stack_rematerialized with a ledger warning. A Cast whose spec names a rebase
 // notice is admitted only when every live fact agrees:
-//   - the stack sits on a moved base (stack_base_moved), its operation is the
-//     spec's rebase_of, the booted base is the spec's base, and the booted
+//   - the stack sits behind the booted base (stack_base_moved, or, since the
+//     2026-11-04 remat-serve change, stack_rematerialized with a served base
+//     that is not the booted base), its operation is the spec's rebase_of, the booted base is the spec's base, and the booted
 //     base's objects are in the guest repository;
 //   - no assignment has claimed the pair.
 //

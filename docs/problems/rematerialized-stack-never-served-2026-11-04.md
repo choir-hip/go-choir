@@ -104,3 +104,31 @@ C. Leave it and wait for an approved candidate (the S6 plan). Rejected by the
 5. A notice that cannot be answered because the Cast gate refuses it.
    Guard: the gate and the owner retry accept `stack_rematerialized` with a
    served base that is not the booted base.
+6. An open selfdev operation at fire time (review, Devin F2, 2026-11-04).
+   At `stack_rematerialized` ordinary Casts are admitted, so an open
+   operation is routine. The first build of fix A let `cleanRebaseBeforeNotice`
+   return hold=false while an operation was open, so `mintRebaseNotice` minted
+   a notice; a rebase assignment claiming it would have its Freeze refused by
+   `selfdev.ErrOperationOpen`, with the pair's claim standing and only the
+   owner retry reviving it. Guard: an open operation holds the pair (no
+   notice, no attempt, the timer rechecks at the recheck interval); the next
+   fire after the operation closes proceeds. Test:
+   `TestCleanRebaseEndToEndOpenOperationHoldsTheNoticeThenProceeds`. No new
+   resumer: the hold only re-arms the in-memory timer; a crash still closes
+   open attempts as "interrupted by a restart".
+
+## Named residuals (review, 2026-11-04; no code in this change)
+
+- F4: a package root the platform already adopted falls to the notice path.
+  The stack's package files are left as `B'` has them, so `Reapply`
+  (plain `git apply --cached`) fails because the after-image is already
+  present. Conservative and consistent with "does not apply -> notice"; it is
+  not a bug, and a smarter already-applied detection is later work.
+- F5: two candidate paths can both be open at `stack_rematerialized`: an
+  ordinary Cast (graft; serves the kept-whole package) and the rebase Cast
+  (serves `B'` plus the change). `refuseCastOntoOpenAssignment` is per
+  (trajectory, round), so both may be open and approved, the second apply
+  rolling back the first; for a package conflict the two produce different
+  package content. No corruption, but the product does not say which path
+  the owner should use. Open decision, to settle before the rebase Cast is
+  offered at a package conflict as the preferred path.

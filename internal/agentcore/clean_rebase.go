@@ -130,7 +130,8 @@ func (rt *Runtime) cleanRebaseIsLive(key string) bool {
 }
 
 // cleanRebaseBeforeNotice runs inside the notice timer's fire, before a
-// notice is minted. hold says the notice must wait (an attempt is in flight);
+// notice is minted. hold says the notice must wait (an attempt is in flight,
+// or another selfdev operation is open);
 // otherwise the notice goes as today, and why (when set) says why the clean
 // path did not take the pair.
 func (rt *Runtime) cleanRebaseBeforeNotice(ctx context.Context, ownerID, computerID, operationID, stackBase, booted string) (hold bool, why string) {
@@ -157,7 +158,11 @@ func (rt *Runtime) cleanRebaseBeforeNotice(ctx context.Context, ownerID, compute
 	if open, isOpen, err := rt.selfdevOperations.OpenOperation(ctx, computerID); err != nil {
 		return true, "read the open operation: " + err.Error()
 	} else if isOpen {
-		return false, fmt.Sprintf("operation %s is %s; a clean rebase opens no second operation", open.OperationID, open.State)
+		// Hold, do not mint: at stack_rematerialized ordinary Casts are
+		// admitted, so an open operation is routine work, and a notice minted
+		// now could be claimed by a rebase assignment whose Freeze then hits
+		// selfdev.ErrOperationOpen, spending the pair. The timer rechecks.
+		return true, fmt.Sprintf("operation %s is %s; a clean rebase opens no second operation, and the notice waits", open.OperationID, open.State)
 	}
 	if err := rt.selfDevelopmentProposalAuthorized(ctx); err != nil {
 		return false, "the computer's mode does not authorize a proposal: " + err.Error()
