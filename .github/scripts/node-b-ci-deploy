@@ -595,6 +595,22 @@
     fi
     # shellcheck disable=SC2086 # expedite_range is a git log argument list
     expedite_line=$(git log --format='%H%x09%(trailers:key=Ring-Expedite,valueonly,separator=%x20)' $expedite_range 2>/dev/null | awk -F'\t' '$2 != "" {print; exit}' || true)
+    # Owner policy (2026-11-04): "expedite anything which is in the hill
+    # climbing loop". A release whose range touches the self-development
+    # loop (the desks, capsules, source projection, packages and their
+    # shell seams, the shot tool) opens every ring at once, as if it
+    # carried the trailer. The guards and the guest's refusals still hold.
+    if [ -z "$expedite_line" ]; then
+      if [ "$expedite_range" = "-1 ${DEPLOY_COMMIT}" ]; then
+        loop_paths=$(git diff-tree --no-commit-id --name-only -r "$DEPLOY_COMMIT" 2>/dev/null || true)
+      else
+        loop_paths=$(git diff --name-only "$expedite_base" "$DEPLOY_COMMIT" 2>/dev/null || true)
+      fi
+      loop_hit=$(printf '%s\n' "$loop_paths" | grep -E '^(internal/(agentcore|capsule|sourceproj|selfdev|selfdevprotocol|pkgrelease|pkgruntime|apppackage|hostbuild)/|frontend/src/packages/|frontend/src/lib/apps/|frontend/scripts/|scripts/choir-shot)' | head -1 || true)
+      if [ -n "$loop_hit" ]; then
+        expedite_line="${DEPLOY_COMMIT}"$'\t'"owner policy 2026-11-04: the hill-climbing loop changed (${loop_hit})"
+      fi
+    fi
     if [ -n "$expedite_line" ]; then
       expedite_sha=${expedite_line%%$'\t'*}
       expedite_reason=${expedite_line#*$'\t'}
