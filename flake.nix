@@ -266,6 +266,7 @@
               base == "package.json" ||
               base == "package-lock.json" ||
               base == "choir-package.json" ||
+              base == "responsibilities.json" ||
               base == "svelte.config.js" ||
               base == "vite.config.js";
         };
