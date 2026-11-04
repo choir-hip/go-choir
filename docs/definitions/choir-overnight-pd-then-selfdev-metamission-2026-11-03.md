@@ -126,27 +126,26 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 7c36347ff (05:45Z): calibration cut 1 (every Cast states
-    verify_pass, judge_accepts and freeze_minutes; runtime-settled), per-
-    round phase receipt, OpenRouter route for the DeepSeek 1017 snapshot
-    (four arms moved off Synthetic at 05:10), stall watchdog, no-op spin
-    detector, frozen candidate retained past the engineer's deadline,
-    fixture badge off the window controls. In CI: quota park keeps its
-    deadline and follows policy changes; Library release screenshots and
-    video in the catalog; byte ranges for the video. First settled cut-1
-    predictions: crouton r4 freeze_minutes 38 [25,45] settled no (13.4
-    min), judge_accepts 0.45 no; engineering digests over-confident (crouton
-    n=30 mean p 0.78 vs 0.67; claude n=49 Brier 0.211). Rounds judged since
-    03:00: 7, all rejected on real defects (no app applied this window);
-    the 14-shot requests against a 12-screen Freeze cap and the badge were
-    platform faults, withdrawn from the engineers' records. Building:
-    engineer reuse after rejection (the main remaining waste: every judge
-    reject ends the assignment), calibration cut 2 (late claims flagged,
-    per-claim read, record durability check, desk of record).
+    staging 950f74113 (engineer clock: elapsed and budget in Context, one
+    note at minute 40), over e884887f6 (calibration C2-C11: Cast-level A/B,
+    no anchor numbers, per-type bins, clock bias, resolution, read verb,
+    censoring, claims in trace export) and 29894990c (choir-shot waits for
+    step animations). In CI: 1104c9890, London Salmon no longer strips app
+    buttons transparent with !important, the platform cause of most
+    repeated "bare salmon buttons" rejections. Applied and published on the
+    seed: luna calendar-next, claude library-next (first release with its
+    own screenshots). Settled Cast claims, 8 rounds: freeze_minutes held 6
+    of 8, verify_pass 3 of 8 (over-confident), judge_accepts 3 of 8,
+    owner_approves 1 of 4. Judge passes rounds the owner gate rejects
+    (deepseek r4): judge-per-shot builder at tier 2. crouton Calendar paused
+    after six rounds; resumes as engineer reuse's proof round. In review:
+    engineer reuse (final mirror), management verify-owed guard, E1
+    mechanisms, judge per-shot. Node B: 11.6 GB available, 100 jobs
+    admitted, 0 refused in the hour.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
   next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
   blocker: none
-  next_action: deploy 6472fab6f; send claude Library r3 and pool r4 on it; land engineer reuse and cut 2 as each is approved; prove a judge reject returns to the same engineer
+  next_action: land engineer reuse, verify-owed and judge per-shot as approved; prove reuse on crouton Calendar r7; land E1 and assign arms; morning letter
 receipts: []
