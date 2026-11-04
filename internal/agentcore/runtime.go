@@ -3958,6 +3958,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if reselect := rt.modelReselectForRun(rec); reselect != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithModelReselect(reselect))
 	}
+	if isPersistentManagementRun(rec) {
+		// A turn does not end with a frozen candidate it owes a Verify
+		// unverified (verify_owed.go): bounded reminders, then the backstop.
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(rt.managementVerifyOwedGuard(rec)))
+	}
 	if isManagementTaskRun(rec) {
 		// A task ends when its Done commits (R2-8), and no model call may
 		// take its whole deadline (R2-9).

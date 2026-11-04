@@ -220,6 +220,10 @@ var RestartWorkKinds = map[string]bool{
 	// PD3 S1: a crash never delivers a pre-boot root digest; the next commit
 	// after boot mints a new one.
 	TextureRootDigestKind: true,
+	// A crash never delivers a pre-boot Verify-owed re-wake: it is a
+	// continuation of the activation that armed it
+	// (docs/problems/management-ends-without-verify-2026-11-04.md).
+	verifyOwedUpdateKind: true,
 }
 
 // TextureRootDigestKind is the Texture root's wake (PD3 S1,

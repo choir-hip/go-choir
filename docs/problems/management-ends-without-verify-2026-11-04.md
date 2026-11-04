@@ -120,5 +120,15 @@ Nothing at boot arms one.
 - Engineer reuse's review state needs `assignmentInReview` (branch
   engineer-reuse); until it lands, the in-review case is a stub that answers
   no, and merging the branch makes it one call.
+- Merging engineer reuse: `verifyOwedInReview` becomes
+  `rt.assignmentInReview`, and `freezeKeyAssignment` can become
+  `store.EngineeringFreezeAssignmentOf`; that branch already moves
+  `frozenCandidateOf` to the current revision, which this guard reads.
+- A lost notice wake (review r1, Devin; r1b, DeepSeek B1): each notice
+  arms one re-check of its own. Only that re-check, finding the notice
+  unread with management idle, wakes management for it again, so a notice
+  gets at most one re-wake however many turns end without reading it; other
+  re-checks spend no notice while the last one is unread. A re-check that
+  finds management working arms one more per run.
 - A management task desk never casts engineering (records bindings are
   management:<owner> only), so only the persistent desk is guarded.

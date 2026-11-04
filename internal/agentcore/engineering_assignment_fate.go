@@ -908,6 +908,13 @@ func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *typ
 			// report takes a replay return. One indexed read when there is
 			// nothing to close.
 			rt.closeEndedAssignmentSelfdevOperation(ctx, result.Assignment)
+			// A Report that leaves the candidate owed management's Verify
+			// arms its re-check (verify_owed.go).
+			reportRef := "call:" + toolCallID
+			if result.Report != nil && strings.TrimSpace(result.Report.ReportID) != "" {
+				reportRef = result.Report.ReportID
+			}
+			rt.armVerifyOwedAfterReport(ctx, result.Assignment, reportRef)
 			return result, nil
 		}
 		lastErr = err

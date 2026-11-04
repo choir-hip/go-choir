@@ -1017,6 +1017,8 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 		// And each frozen candidate's wait for its decision, from durable
 		// state (retained_candidate.go).
 		pack.Waits = append(pack.Waits, rt.candidateDecisionWaitViews(ctx, ownerID, computerID)...)
+		// And each Verify it owes (verify_owed.go).
+		pack.Waits = append(pack.Waits, rt.verifyOwedWaitViews(ctx, ownerID, computerID, agentID)...)
 	} else if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
 		// An engineer sees its own assignment's wait, the deferred deploy
 		// refresh included (engineering_refresh_wait.go).

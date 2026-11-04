@@ -96,6 +96,11 @@ const (
 	// on a budget of its own
 	// (docs/problems/frozen-candidate-dies-with-build-deadline-2026-11-04.md).
 	WaitKindCandidateDecision WaitKind = "candidate_decision"
+	// WaitKindVerifyOwed is a frozen candidate whose assignment is ready
+	// for management's Verify (completed, or its engineer asked for review)
+	// and has none yet
+	// (docs/problems/management-ends-without-verify-2026-11-04.md).
+	WaitKindVerifyOwed WaitKind = "verify_owed"
 )
 
 // Label is the kind in words.
@@ -123,6 +128,8 @@ func (k WaitKind) Label() string {
 		return "provider quota"
 	case WaitKindCandidateDecision:
 		return "a frozen candidate's decision"
+	case WaitKindVerifyOwed:
+		return "management's Verify"
 	}
 	return strings.ReplaceAll(string(k), "_", " ")
 }

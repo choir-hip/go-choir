@@ -219,6 +219,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return memory, nil
 	case "selfdev_materialization_retry":
 		return h.handleSelfDevelopmentMaterializationRetry(ctx, u, memory)
+	case "verify_owed":
+		return h.handleVerifyOwed(ctx, u, memory)
 	case "source_poll_due":
 		return h.handleSourcePollDue(ctx, u, memory)
 	case "inbox_record":
@@ -290,6 +292,21 @@ func (h *actorHandler) handleCellTerminalDeadline(ctx context.Context, u actor.U
 // gate — replayed or superseded wakes are no-ops.
 func (h *actorHandler) handleSelfDevelopmentMaterializationRetry(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	h.rt.TriggerSelfDevelopmentReconcile()
+	return memory, nil
+}
+
+// handleVerifyOwed re-checks a Verify management owes and, when it is still
+// owed and management is idle, wakes management with a notice
+// (agentcore.HandleVerifyOwed). The runtime re-reads the state, so a stale
+// or replayed wake does nothing.
+func (h *actorHandler) handleVerifyOwed(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve verify_owed scope: %w", err)
+	}
+	if err := h.rt.HandleVerifyOwed(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: verify owed: %v", actor.ErrDeferUnprocessed, err)
+	}
 	return memory, nil
 }
 

@@ -98,6 +98,12 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 	if types.IsStackRebaseNotice(rec) {
 		return true
 	}
+	// A verify-owed notice asks management for the Verify it owes. It is
+	// minted only by the live verify_owed continuation, never at a boot; a
+	// pre-boot notice's wake is interrupted by the generic crash-boot gate.
+	if types.IsVerifyOwedNotice(rec) {
+		return true
+	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {
 		return true
 	}

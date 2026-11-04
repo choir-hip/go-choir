@@ -544,6 +544,25 @@ func TestFrameTellsAPendingReaderRequest(t *testing.T) {
 	}
 }
 
+// A frozen candidate is not a verified one
+// (docs/problems/management-ends-without-verify-2026-11-04.md): luna's
+// Texture wrote "frozen and holds up" with no Verify behind it. While the
+// document's candidate is frozen, every frame says it is unverified and
+// names the verdict words it must not use; otherwise it says nothing.
+func TestFrameTellsAnUnverifiedCandidate(t *testing.T) {
+	doc, _ := citedBase(t)
+	plain := Frame{DocID: "doc", RevisionID: "rev-1", Blocks: DocBlocks(doc)}.Render()
+	if strings.Contains(plain, "not yet verified") {
+		t.Fatalf("frame without a frozen candidate tells one:\n%s", plain)
+	}
+	frozen := Frame{DocID: "doc", RevisionID: "rev-1", Blocks: DocBlocks(doc), UnverifiedCandidate: "selfdev-a8b3"}.Render()
+	for _, want := range []string{"Candidate selfdev-a8b3 is frozen and not yet verified", "choir.Verify", "do not write that it holds up, passed or is verified"} {
+		if !strings.Contains(frozen, want) {
+			t.Fatalf("frame missing %q:\n%s", want, frozen)
+		}
+	}
+}
+
 // T4 (docs/problems/tool-call-failures-dual-model-2026-10-21.md): Texture
 // wrote {{ref 1}}, as the published story numbers its citations, and the
 // refusal did not say what a {{ref}} takes or how to cite a new source, so

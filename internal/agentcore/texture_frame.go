@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -142,6 +143,11 @@ func (rt *Runtime) currentTextureFrame(ctx context.Context, rec *types.RunRecord
 	}
 	if id, pending, perr := rt.store.PendingStoryResearchRequest(ctx, rec.OwnerID, rec.ComputerID, doc.DocID); perr == nil && pending {
 		frame.ReaderRequest = id
+	}
+	// The document's language follows its candidate's state: frozen is not
+	// verified (verify_owed.go).
+	if operationID, state := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" && state == selfdev.StateFrozen {
+		frame.UnverifiedCandidate = operationID
 	}
 	if parent != nil {
 		if prior, _, perr := texturewrite.Base(*parent); perr == nil {

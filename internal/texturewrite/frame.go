@@ -43,6 +43,11 @@ type Frame struct {
 	// ReaderRequest, when set, names a reader's pending request for more
 	// research on this story (docs/design/research-more-goes-to-research-2026-10-21.md).
 	ReaderRequest string
+	// UnverifiedCandidate, when set, names the document's self-development
+	// candidate that is frozen and not yet verified: no verdict exists, so
+	// the frame says the document must not claim one
+	// (docs/problems/management-ends-without-verify-2026-11-04.md).
+	UnverifiedCandidate string
 }
 
 // Render writes the frame as one user turn.
@@ -52,6 +57,9 @@ func (f Frame) Render() string {
 	f.renderDoc(&b)
 	if f.ReaderRequest != "" {
 		fmt.Fprintf(&b, "\nA reader asked for more research on this story (request %s). Research works on it and reports to you as it goes. Expand the story with what research reports: keep its text, structure and citations unless a source corrects them, and add what the new sources say. With nothing new, change nothing.\n", f.ReaderRequest)
+	}
+	if f.UnverifiedCandidate != "" {
+		fmt.Fprintf(&b, "\nCandidate %s is frozen and not yet verified: management's choir.Verify has not judged it, and no check, Report or Note is its verdict. Until it is verified, write that it is frozen and awaiting Verify; do not write that it holds up, passed or is verified.\n", f.UnverifiedCandidate)
 	}
 	if len(f.Dropped) > 0 {
 		alias := map[string]string{}
