@@ -126,8 +126,9 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 9f3970680 (deployed 14:38Z, security epoch 38); 9858baf1e
-    (modularity check) in CI. Apps as a layer is on main: stack_base_moved
+    staging 755617851 (deployed 15:39Z, security epoch 38, main green,
+    first expedited ring walk under the owner's hill-climbing-loop policy,
+    c35e24ca6). Apps as a layer is on main: stack_base_moved
     waiters woken once the block clears (43745079a), S6 package-aware
     containment without a switch (6b61e3660, tier 2), clean rebases apply
     without an owner act on test-tier computers with a corpusd gate bound
@@ -141,7 +142,7 @@ now:
     Devin round 2). The owner's Library verifier passed at 13:30Z. None of
     the four runtime pieces is proven on a live computer yet. Patch Watch
     failed at 9f3970680 because govulncheck did not run (report-only).
-    Node B 13 GB available, 164 GB disk free, load 6.0.
+    Node B 18 GB available, 160 GB disk free, load 3.2.
   main_uncertainty: >-
     whether runtime install works on a live arm once R1 refreshes; whether
     the first clean rebase happens at the next base move; whether the
