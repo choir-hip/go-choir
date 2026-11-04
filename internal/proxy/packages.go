@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 //	GET  /api/catalog/packages[?q=]               the packages the caller may see           read
 //	GET  /api/catalog/packages/<name>/releases    a package's history                       read
 //	GET  /api/catalog/releases/<release id>       one package release and its listing       read
+//	GET  /api/catalog/releases/<id>/media/<sha>    one screenshot or video of a release      read
 //	PATCH /api/catalog/records/<release id>/listing  withdraw or reinstate                owner act
 //
 // A published release is public: every signed-in owner sees it in the
@@ -180,6 +182,36 @@ func (h *Handler) HandleComputerPackagePublish(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// The release's screenshots and video: each fetched from the
+	// publisher computer, which answers only the items its bound frozen
+	// bundle carries, and verified against the record before any is stored
+	// (docs/problems/library-releases-have-no-screenshots-2026-11-04.md).
+	media := make([][]byte, 0, len(record.Media))
+	for _, item := range record.Media {
+		mediaPath := "/api/computers/" + url.PathEscape(computerID) + "/packages/operations/" + url.PathEscape(record.Operation.OperationID) + "/media/" + item.SHA256
+		status, raw, err := h.guestJSONLimit(r.Context(), guestURL, http.MethodGet, mediaPath, authResult, computerID, nil, pkgrelease.MaxMediaBytes+1)
+		if err != nil || status != http.StatusOK {
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer did not answer the release's media item " + item.Name})
+			return
+		}
+		if err := pkgrelease.VerifyMedia(item, raw); err != nil {
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's media item does not verify: " + err.Error()})
+			return
+		}
+		media = append(media, raw)
+	}
+	for _, raw := range media {
+		status, body, err := h.corpusdCall(r.Context(), http.MethodPut, "/internal/platform/packages/media/"+computerevent.DigestBytes(raw), "application/octet-stream", raw)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
+			return
+		}
+		if status != http.StatusCreated && status != http.StatusOK {
+			relayJSON(w, status, body)
+			return
+		}
+	}
+
 	// The patches, then the record, with the publisher the proxy authorized.
 	for _, patch := range patches {
 		status, raw, err := h.corpusdCall(r.Context(), http.MethodPut, "/internal/platform/packages/blobs/"+computerevent.DigestBytes(patch), "application/octet-stream", patch)
@@ -309,6 +341,9 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		upstream = "/internal/platform/packages/catalog/" + parts[1] + "/releases?" + owner.Encode()
 	case len(parts) == 2 && parts[0] == "releases" && computerevent.IsSHA256(strings.ToLower(parts[1])):
 		upstream = "/internal/platform/packages/releases/" + strings.ToLower(parts[1]) + "?" + owner.Encode()
+	case len(parts) == 4 && parts[0] == "releases" && parts[2] == "media" && computerevent.IsSHA256(strings.ToLower(parts[1])) && computerevent.IsSHA256(strings.ToLower(parts[3])):
+		h.relayPackageMedia(w, r, "/internal/platform/packages/releases/"+strings.ToLower(parts[1])+"/media/"+strings.ToLower(parts[3])+"?"+owner.Encode())
+		return
 	default:
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
@@ -402,4 +437,31 @@ func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request
 		return
 	}
 	relayJSON(w, status, raw)
+}
+
+// relayPackageMedia serves one release media item to a signed-in owner:
+// public like the release (corpusd decides visibility for the owner the
+// proxy authenticated). Only the two media types are ever relayed, with
+// nosniff, so an answer can never be served as a page.
+func (h *Handler) relayPackageMedia(w http.ResponseWriter, r *http.Request, upstream string) {
+	status, contentType, raw, err := h.corpusdFetch(r.Context(), upstream, pkgrelease.MaxMediaBytes+1)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
+		return
+	}
+	if status != http.StatusOK {
+		relayJSON(w, status, raw)
+		return
+	}
+	if (contentType != pkgrelease.MediaTypePNG && contentType != pkgrelease.MediaTypeWebM) || len(raw) > pkgrelease.MaxMediaBytes {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the package store answered a media item that is not one"})
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// Content addressed, so immutable; private, as it is read signed in.
+	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
 }

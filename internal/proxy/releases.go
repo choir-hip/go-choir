@@ -330,6 +330,34 @@ func (h *Handler) corpusdCallHeaders(ctx context.Context, method, path, contentT
 	return response.StatusCode, raw, err
 }
 
+// corpusdFetch is a host-internal GET of up to limit bytes that also
+// returns the answer's media type.
+func (h *Handler) corpusdFetch(ctx context.Context, path string, limit int64) (int, string, []byte, error) {
+	base, err := joinBasePath(h.cfg.CorpusdURL, strings.SplitN(path, "?", 2)[0])
+	if err != nil {
+		return 0, "", nil, err
+	}
+	if parts := strings.SplitN(path, "?", 2); len(parts) == 2 && parts[1] != "" {
+		base += "?" + parts[1]
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, base, nil)
+	if err != nil {
+		return 0, "", nil, err
+	}
+	hostauth.MarkInternal(request)
+	client := h.corpusd
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, "", nil, fmt.Errorf("call corpusd: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, limit))
+	return response.StatusCode, response.Header.Get("Content-Type"), raw, err
+}
+
 func relayJSON(w http.ResponseWriter, status int, raw []byte) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

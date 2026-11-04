@@ -5,10 +5,12 @@
 // the tree it replaced, the review diff, the manifest, the base it was built
 // on, the publisher's receipts and settled precommitments.
 //
-// The record carries no executable bytes and no evidence assets. Its three
-// patches live in the host content store's package namespace, and corpusd
-// runs the host checks of section 3.2 (VerifyHost) on the bytes it stores,
-// so a release can never carry a path outside its package root.
+// The record carries no executable bytes. Its three patches live in the host
+// content store's package namespace, and corpusd runs the host checks of
+// section 3.2 (VerifyHost) on the bytes it stores, so a release can never
+// carry a path outside its package root. It may name its round's screenshots
+// and one walkthrough video (media.go), bound by sha256 and stored in
+// MediaNamespace.
 package pkgrelease
 
 import (
@@ -73,6 +75,9 @@ type Record struct {
 	Operation      Operation               `json:"operation"`
 	Precommitments []release.Precommitment `json:"precommitments"`
 	Declarations   Declarations            `json:"declarations"`
+	// Media are the round's accepted screenshots and at most one video
+	// (media.go). omitempty: a record with none hashes as before.
+	Media []Media `json:"media,omitempty"`
 }
 
 // Package names the package. ManifestVersion is the manifest's semver,
@@ -169,6 +174,9 @@ func (r Record) Normalize() Record {
 	paths := append([]string{}, r.Source.ChangedPaths...)
 	sort.Strings(paths)
 	r.Source.ChangedPaths = paths
+	if len(r.Media) == 0 {
+		r.Media = nil
+	}
 	return r
 }
 
@@ -276,7 +284,7 @@ func (r Record) Validate() error {
 	if strings.ContainsAny(r.Declarations.TestCommand, "\x00\n\r") || len(r.Declarations.TestCommand) > 1024 {
 		return fail("test_command must be one line of at most 1024 bytes")
 	}
-	return nil
+	return validMedia(r.Media)
 }
 
 func validBlob(name string, b Blob) error {

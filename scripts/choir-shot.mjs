@@ -118,7 +118,12 @@
 // x-choir-fixture: capsule-catalog. A shot whose page read it carries a visible
 // "catalog fixture" badge and logs a line saying so. A listing act (PATCH)
 // answers 409 capsule_fixture, any other write 405 as at the proxy; history
-// paging (limit, before_seq) is not modelled. A shot's routes() still wins for any
+// paging (limit, before_seq) is not modelled. Release media
+// (GET /api/catalog/releases/<id>/media/<sha>, the URL in each release's and
+// catalog entry's media[].url / head_media[].url) answers the item's bytes from
+// scripts/fixtures/capsule-catalog-media/<sha>.<png|webm>: mock screens drawn
+// by the test (desktop 1280x800, phone 390x844) and one real walkthrough video;
+// some releases carry none, for the gallery's "no screenshots" state. A shot's routes() still wins for any
 // catalog URL it handles.
 //
 // Install: POST/GET /api/computers/<id>/self-development/adoptions[/<aid>] is the
@@ -652,6 +657,10 @@ export function loadCatalogFixture(file = CATALOG_FIXTURE_PATH) {
   }
 }
 
+// CATALOG_MEDIA_DIR holds the fixture releases' screenshots and video, each
+// named <sha256>.png or <sha256>.webm (written by the same Go test).
+export const CATALOG_MEDIA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-catalog-media');
+
 // INSTALL_FIXTURE_PATH is the install fixture beside this script.
 export const INSTALL_FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-install.json');
 
@@ -672,8 +681,9 @@ const PACKAGE_NAME_RE = /^[a-z][a-z0-9-]{1,31}$/; // objectgraph.ValidPackageNam
 
 // catalogAnswer is the fixture's answer to a /api/catalog request, as the proxy
 // relays corpusd's: { status, body }, or null for a path that is not the
-// catalog's (or no fixture). search is the URL's query string.
-export function catalogAnswer(fx, method, pathname, search) {
+// catalog's (or no fixture). search is the URL's query string. A media item
+// (/api/catalog/releases/<id>/media/<sha>) answers { status, type, body: Buffer }.
+export function catalogAnswer(fx, method, pathname, search, mediaDir = CATALOG_MEDIA_DIR) {
   if (!fx || !(pathname === '/api/catalog' || pathname.startsWith('/api/catalog/'))) return null;
   const parts = pathname.replace(/^\/api\/catalog\/?/, '').split('/').filter(Boolean);
   if (method === 'PATCH' && parts.length === 3 && parts[0] === 'records' && parts[2] === 'listing') {
@@ -691,6 +701,21 @@ export function catalogAnswer(fx, method, pathname, search) {
     const track = (q.get('track') || '').trim() || reader;
     const found = fx.history.find((h) => h.package === parts[1] && h.track === track);
     return { status: 200, body: found || { package: parts[1], track, releases: [], count: 0 } };
+  }
+  if (parts.length === 4 && parts[0] === 'releases' && parts[2] === 'media') {
+    // One screenshot or the video of a release, as the proxy serves it: only
+    // an item the release names, from its file beside the fixture.
+    const notFound = { status: 404, body: { error: 'package media not found' } };
+    const rel = fx.releases.find((r) => r.release_id === parts[1].toLowerCase());
+    const digest = parts[3].toLowerCase();
+    const item = rel && SHA256_RE.test(digest) && (rel.media || []).find((m) => m.sha256 === digest);
+    if (!item) return notFound;
+    const ext = item.media_type === 'video/webm' ? '.webm' : '.png';
+    try {
+      return { status: 200, type: item.media_type, body: fs.readFileSync(path.join(mediaDir, digest + ext)) };
+    } catch {
+      return notFound;
+    }
   }
   if (parts.length === 2 && parts[0] === 'releases' && SHA256_RE.test(parts[1].toLowerCase())) {
     const found = fx.releases.find((r) => r.release_id === parts[1].toLowerCase());
@@ -951,6 +976,10 @@ function serve(dist, computer = false, themeState = { preset: null }, catalog = 
     const listed = catalogAnswer(catalog, req.method, u, url.search);
     if (listed) {
       themeState.fixtureServed = true; // the badge rests on this, not on the page's response event
+      if (Buffer.isBuffer(listed.body)) {
+        res.writeHead(listed.status, { 'content-type': listed.type, 'content-length': listed.body.length, 'x-content-type-options': 'nosniff', 'cache-control': 'no-store', [CATALOG_FIXTURE_HEADER]: 'capsule-catalog' }).end(listed.body);
+        return;
+      }
       res.writeHead(listed.status, { 'content-type': 'application/json', 'cache-control': 'no-store', [CATALOG_FIXTURE_HEADER]: 'capsule-catalog' }).end(JSON.stringify(listed.body));
       return;
     }

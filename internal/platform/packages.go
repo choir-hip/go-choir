@@ -87,6 +87,9 @@ type PackageReleaseView struct {
 	Published   bool               `json:"published,omitempty"`
 	Record      json.RawMessage    `json:"record"`
 	Listing     pkgrelease.Listing `json:"listing"`
+	// Media is the record's screenshots and video with their public URLs;
+	// empty, never null, for a release with none (packages_media.go).
+	Media []PackageMediaView `json:"media"`
 }
 
 type packageAPIError struct {
@@ -107,6 +110,8 @@ type packagePublishRequest struct {
 // HandlePackages serves the package release routes, every one host only:
 //
 //	PUT  /internal/platform/packages/blobs/<sha>                 upload a patch
+//	PUT  /internal/platform/packages/media/<sha>                 upload a media item (packages_media.go)
+//	GET  /internal/platform/packages/releases/<id>/media/<sha>?owner_id=   one media item of a visible release
 //	POST /internal/platform/packages/releases                    publish (owner act, through the proxy)
 //	GET  /internal/platform/packages/releases/<id>?owner_id=     one release and its listing
 //	GET  /internal/platform/packages/catalog?owner_id=&q=        the packages the owner may see
@@ -130,6 +135,10 @@ func (h *Handler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 2 && parts[0] == "blobs" && r.Method == http.MethodPut:
 		h.putPackageBlob(w, r, parts[1])
+	case len(parts) == 2 && parts[0] == "media" && r.Method == http.MethodPut:
+		h.putPackageMedia(w, r, parts[1])
+	case len(parts) == 4 && parts[0] == "releases" && parts[2] == "media" && r.Method == http.MethodGet:
+		h.readPackageReleaseMedia(w, r, strings.ToLower(parts[1]), strings.ToLower(parts[3]))
 	case rest == "releases" && r.Method == http.MethodPost:
 		h.publishPackage(w, r)
 	case len(parts) == 2 && parts[0] == "releases" && r.Method == http.MethodGet:
@@ -527,7 +536,11 @@ func packageView(obj objectgraph.Object, releaseID string, listing pkgrelease.Li
 		PublishedAt string `json:"published_at"`
 	}
 	_ = json.Unmarshal(obj.Metadata, &metadata)
-	return PackageReleaseView{ReleaseID: releaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body), Listing: listing}
+	media := []PackageMediaView{}
+	if record, err := pkgrelease.Decode(obj.Body); err == nil {
+		media = mediaViews(releaseID, record)
+	}
+	return PackageReleaseView{ReleaseID: releaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body), Listing: listing, Media: media}
 }
 
 func (h *Handler) readPackageBlob(blob pkgrelease.Blob) ([]byte, error) {
@@ -581,6 +594,11 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil && record.ParentPatch != nil {
 		in.ParentPatch, err = h.readPackageBlob(*record.ParentPatch)
+	}
+	if err == nil {
+		// Every screenshot and video the record names is stored and is
+		// that item, or the release is not listed.
+		err = h.verifyPackageMedia(record)
 	}
 	if err != nil {
 		writePackageRefusal(w, err)
@@ -815,6 +833,9 @@ type PackageCatalogEntry struct {
 	HeadReleaseID string `json:"head_release_id,omitempty"`
 	HeadSeq       int    `json:"head_seq,omitempty"`
 	Releases      int    `json:"releases"`
+	// HeadMedia is the head release's screenshots and video, so a gallery
+	// grid needs no second read; empty for a head with none.
+	HeadMedia []PackageMediaView `json:"head_media"`
 }
 
 func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
@@ -870,9 +891,12 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		head, found, _ := trackHead(visible)
-		entry := PackageCatalogEntry{Package: key.pkg, Track: key.track, Releases: len(visible)}
+		entry := PackageCatalogEntry{Package: key.pkg, Track: key.track, Releases: len(visible), HeadMedia: []PackageMediaView{}}
 		if found {
 			entry.HeadReleaseID, entry.HeadSeq = head.RecordID, head.Seq
+			if _, record, err := h.readPackageRecord(ctx, key.track, head.RecordID); err == nil {
+				entry.HeadMedia = mediaViews(head.RecordID, record)
+			}
 		}
 		entries = append(entries, entry)
 	}

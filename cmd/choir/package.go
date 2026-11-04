@@ -187,6 +187,7 @@ func publishConfirmText(e *apiErrorResp, computer, operation, pkg, testCommand s
 			ReviewPatchBytes int      `json:"review_patch_bytes"`
 			Questions        []string `json:"precommitment_questions"`
 			TestCommand      string   `json:"test_command"`
+			Media            []string `json:"media"`
 		} `json:"preview"`
 	}
 	if json.Unmarshal([]byte(e.Body), &refusal) != nil || refusal.Preview == nil || refusal.Preview.PathsDigest == "" ||
@@ -207,6 +208,12 @@ func publishConfirmText(e *apiErrorResp, computer, operation, pkg, testCommand s
 	}
 	for _, q := range pv.Questions {
 		fmt.Fprintf(&b, "Precommitment question: %s\n", q)
+	}
+	if len(pv.Media) == 0 {
+		fmt.Fprintf(&b, "Screenshots: none (the Library shows no screenshots)\n")
+	}
+	for _, m := range pv.Media {
+		fmt.Fprintf(&b, "Public media: %s\n", m)
 	}
 	fmt.Fprintf(&b, "paths_digest: %s\n", pv.PathsDigest)
 	cmd := fmt.Sprintf("choir package publish --computer %s --operation %s --package %s", computer, operation, pkg)

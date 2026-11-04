@@ -3,6 +3,7 @@
 // and is skipped without them.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -142,6 +143,31 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   assert.equal(catalogAnswer(fx, 'GET', '/api/catalog/elsewhere', '').status, 404);
   // Every head the list names resolves, so a Library can open each one.
   for (const p of list.body.packages) assert.equal(catalogAnswer(fx, 'GET', `/api/catalog/releases/${p.head_release_id}`, '').status, 200);
+  // Media (docs/problems/library-releases-have-no-screenshots-2026-11-04.md):
+  // every item a release names answers its bytes and type from the fixture's
+  // media files; a digest the release does not name, or another release's, is
+  // 404; releases with and without media, and one video, exist.
+  {
+    const withMedia = fx.releases.filter((r) => r.media.length > 0);
+    const without = fx.releases.filter((r) => r.media.length === 0);
+    assert.ok(withMedia.length > 0 && without.length > 0);
+    assert.ok(fx.releases.some((r) => r.media.some((m) => m.kind === 'video' && m.media_type === 'video/webm')));
+    assert.ok(list.body.packages.some((p) => p.head_media.length > 0) && list.body.packages.some((p) => p.head_media.length === 0));
+    for (const r of withMedia) {
+      for (const m of r.media) {
+        assert.equal(m.url, `/api/catalog/releases/${r.release_id}/media/${m.sha256}`);
+        const a = catalogAnswer(fx, 'GET', m.url, '');
+        assert.equal(a.status, 200);
+        assert.equal(a.type, m.media_type);
+        assert.ok(Buffer.isBuffer(a.body) && a.body.length === m.bytes);
+        assert.equal(createHash('sha256').update(a.body).digest('hex'), m.sha256);
+      }
+    }
+    const item = withMedia[0].media[0];
+    assert.equal(catalogAnswer(fx, 'GET', `/api/catalog/releases/${without[0].release_id}/media/${item.sha256}`, '').status, 404);
+    assert.equal(catalogAnswer(fx, 'GET', `/api/catalog/releases/${withMedia[0].release_id}/media/${'0'.repeat(64)}`, '').status, 404);
+    assert.equal(catalogAnswer(fx, 'GET', `/api/catalog/releases/${withMedia[0].release_id}/media/../../x`, '').status, 404);
+  }
   // A listing act is the owner's on the real computer: refused, by reason.
   const act = catalogAnswer(fx, 'PATCH', `/api/catalog/records/${head}/listing`, '');
   assert.deepEqual([act.status, act.body.reason], [409, 'capsule_fixture']);

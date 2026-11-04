@@ -252,6 +252,14 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.packageReleaseDraft(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
+	case len(parts) == 6 && parts[1] == "packages" && parts[2] == "operations" && parts[4] == "media":
+		// The bytes of one item the release draft names (the round's bound
+		// screens and video); read only, for the proxy at publish.
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.packageReleaseMedia(w, r, ownerID, computerID, strings.TrimSpace(parts[3]), parts[5])
 	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "release-witness":
 		// S6-0: the joined release witness for any operation in any state;
 		// a projection of the tape, read only.
