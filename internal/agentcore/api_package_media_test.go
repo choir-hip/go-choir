@@ -79,7 +79,7 @@ func mediaWebM() []byte {
 // mediaOperation records an applied operation whose frozen bundle carries
 // the patch of files and the given screens and video, staged as Freeze
 // stages them (evidence/screens/).
-func (w *draftWorld) mediaOperation(id string, files map[string]string, screens map[string][]byte, video []byte) {
+func (w *draftWorld) mediaOperation(id string, files map[string]string, screens map[string][]byte, video []byte) []byte {
 	w.t.Helper()
 	t := w.t
 	patch, _ := releasePatch(t, w.repo, files)
@@ -147,6 +147,21 @@ func (w *draftWorld) mediaOperation(id string, files map[string]string, screens 
 		strings.Repeat("e", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), "checkpoint:"+id, "route-cert:"+id, selfdev.StateApplied, w.at, w.at); err != nil {
 		t.Fatal(err)
 	}
+	return patch
+}
+
+// pairedScreens is the before/after pair every update of an existing package
+// carries (capsule.ScreenRole).
+func pairedScreens(t *testing.T) map[string][]byte {
+	return map[string][]byte{
+		"01-before-view.png": mediaPNG(t, 64, 40, 71, false),
+		"01-after-view.png":  mediaPNG(t, 64, 40, 72, false),
+	}
+}
+
+func (w *draftWorld) paired(id string, files map[string]string) []byte {
+	w.t.Helper()
+	return w.mediaOperation(id, files, pairedScreens(w.t), nil)
 }
 
 func (w *draftWorld) media(op, digest string) (int, string, []byte) {
@@ -157,12 +172,14 @@ func (w *draftWorld) media(op, digest string) (int, string, []byte) {
 func TestPackageDraftNamesTheBoundScreensWithinBounds(t *testing.T) {
 	w := newDraftWorld(t)
 	screens := map[string][]byte{
-		"blank.png":   mediaPNG(t, 64, 40, 1, true),
-		"huge.png":    noisyPNG(t, 900, 700),
-		"tall.png":    mediaPNG(t, 40, pkgrelease.MaxScreenshotSide+1, 2, false),
-		"swapped.png": mediaPNG(t, 64, 40, 3, false),
-		"z-phone.png": mediaPNG(t, 39, 84, 4, false),
-		"a-home.png":  mediaPNG(t, 128, 80, 5, false),
+		"blank.png":       mediaPNG(t, 64, 40, 1, true),
+		"huge.png":        noisyPNG(t, 900, 700),
+		"tall.png":        mediaPNG(t, 40, pkgrelease.MaxScreenshotSide+1, 2, false),
+		"swapped.png":     mediaPNG(t, 64, 40, 3, false),
+		"z-phone.png":     mediaPNG(t, 39, 84, 4, false),
+		"a-home.png":      mediaPNG(t, 128, 80, 5, false),
+		"after-home.png":  mediaPNG(t, 64, 40, 73, false),
+		"before-home.png": mediaPNG(t, 64, 40, 74, false),
 	}
 	for i := 0; i < 8; i++ {
 		screens[fmt.Sprintf("m-%d.png", i)] = mediaPNG(t, 110, 75, int64(10+i), false)
@@ -196,7 +213,7 @@ func TestPackageDraftNamesTheBoundScreensWithinBounds(t *testing.T) {
 		}
 	}
 	// R2: first 8 eligible by name; blank, huge, tall and swapped skipped.
-	want := "a-home.png,m-0.png,m-1.png,m-2.png,m-3.png,m-4.png,m-5.png,m-6.png,walk.webm"
+	want := "a-home.png,after-home.png,before-home.png,m-0.png,m-1.png,m-2.png,m-3.png,m-4.png,walk.webm"
 	if strings.Join(names, ",") != want || shots != 8 || videos != 1 {
 		t.Fatalf("media %v, want %s", names, want)
 	}
@@ -211,7 +228,7 @@ func TestPackageDraftNamesTheBoundScreensWithinBounds(t *testing.T) {
 		}
 	}
 	// R1: a bound but unnamed screen, a skipped one and an unknown digest are 404.
-	for _, digest := range []string{computerevent.DigestBytes(screens["blank.png"]), computerevent.DigestBytes(screens["m-7.png"]), computerevent.DigestBytes(screens["huge.png"]), strings.Repeat("0", 64), "not-a-digest"} {
+	for _, digest := range []string{computerevent.DigestBytes(screens["blank.png"]), computerevent.DigestBytes(screens["m-5.png"]), computerevent.DigestBytes(screens["huge.png"]), strings.Repeat("0", 64), "not-a-digest"} {
 		if status, _, _ := w.media("op-shots", digest); status != http.StatusNotFound {
 			t.Fatalf("media %s = %d, want 404", digest, status)
 		}
@@ -230,13 +247,22 @@ func TestPackageDraftNamesTheBoundScreensWithinBounds(t *testing.T) {
 	}
 }
 
-func TestPackageDraftWithoutScreensNamesNoMedia(t *testing.T) {
+// Owner, 2026-11-04: a release that updates a package shows the same view
+// before and after. A bundle with no screens, or after shots only, is refused;
+// a new package (empty parent) needs only after shots, so it is not drafted
+// here (its fixture is the registry's).
+func TestPackageDraftOfAnUpdateNeedsABeforeAfterPair(t *testing.T) {
 	w := newDraftWorld(t)
 	w.operation("op-plain", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
-	rec := w.draft("op-plain", nil)
-	record, _, _ := decodeDraft(t, rec)
-	if record.Media != nil || bytes.Contains(rec.Body.Bytes(), []byte(`"media"`)) {
-		t.Fatalf("R4 a draft without screens names media: %+v", record.Media)
+	wantDraftReason(t, w.draft("op-plain", nil), http.StatusUnprocessableEntity, capsule.BeforeAfterRequiredReason)
+	w = newDraftWorld(t)
+	w.mediaOperation("op-after", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"}, map[string][]byte{"01-after-view.png": mediaPNG(t, 64, 40, 75, false)}, nil)
+	wantDraftReason(t, w.draft("op-after", nil), http.StatusUnprocessableEntity, capsule.BeforeAfterRequiredReason)
+	w = newDraftWorld(t)
+	w.paired("op-pair", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
+	record, _, _ := decodeDraft(t, w.draft("op-pair", nil))
+	if len(record.Media) != 2 {
+		t.Fatalf("a paired draft names %d media, want 2", len(record.Media))
 	}
 }
 
@@ -248,13 +274,13 @@ func TestPackageDraftNamesARepeatedScreenOnce(t *testing.T) {
 	}
 	w := newDraftWorld(t)
 	same := mediaPNG(t, 64, 40, 5, false)
-	w.mediaOperation("op-twice", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"}, map[string][]byte{"a.png": same, "b.png": same, "c.png": mediaPNG(t, 64, 40, 6, false)}, nil)
+	w.mediaOperation("op-twice", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"}, map[string][]byte{"a.png": same, "b.png": same, "c.png": mediaPNG(t, 64, 40, 6, false), "before-x.png": mediaPNG(t, 64, 40, 76, false), "after-x.png": mediaPNG(t, 64, 40, 77, false)}, nil)
 	record, _, _ := decodeDraft(t, w.draft("op-twice", nil))
 	var names []string
 	for _, m := range record.Media {
 		names = append(names, m.Name)
 	}
-	if strings.Join(names, ",") != "a.png,c.png" {
-		t.Fatalf("media %v, want a.png,c.png", names)
+	if strings.Join(names, ",") != "a.png,after-x.png,before-x.png,c.png" {
+		t.Fatalf("media %v, want a.png,after-x.png,before-x.png,c.png", names)
 	}
 }

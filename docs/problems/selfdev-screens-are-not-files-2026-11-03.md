@@ -85,3 +85,59 @@ gated by the grant above.
   cannot occupy (`evidence/` is reserved) and into a directory that must be
   new; `MaxScreenPixels` is 4096x8192 and the blank check compares every
   pixel; directory fsyncs follow the renames.
+
+## Screens are required, and before/after for what exists (owner, 2026-11-04)
+
+Gap found: the shot review returned nil when a bundle carried no screens
+(FM8), so a candidate with no evidence of what it did to the UI went through
+unchallenged. Owner rulings, 2026-11-04, about 17:45Z: "screenshots are a
+requirement for self-development, period. For anything that is changing the
+UI, the look and feel, it needs a screenshot." Widened about 18:00Z: "even
+back-end changes which touch on the front-end should have a screenshot just
+to prove that there's still continuity. No regressions... For anything which
+is modifying anything that already exists, like making an updated version of
+an app, you should take a screenshot before and after... in order to publish,
+you should need to show before and after."
+
+The rule, in `internal/capsule/screens_required.go`, enforced in Freeze
+beside the screen staging (`Executor.StageGrantedRelease`):
+
+- `screens_required`: every candidate carries at least one screen, except a
+  candidate whose changes are all exempt (`ScreenExemptPath`): docs, `.md`,
+  tests (test directories, `_test.go`, spec and test files, the Playwright
+  config), build output and tool state (`dist`, `node_modules`, `.claude`,
+  `test-results`, `coverage`). Backend changes need a screen too. No switch,
+  no bypass.
+- `before_after_required`: a candidate that modifies or deletes a non-exempt
+  file that exists on the base carries a before/after pair of one view,
+  named `NN-before-<view>.png` and `NN-after-<view>.png` (they pair on
+  `<view>`; a name with neither word is an after screen). A candidate that
+  only adds files (a brand-new app) needs after screens only.
+- The before shot is the base build: the engineer shoots the views it will
+  touch before its first edit (the capsule has no second copy of the base;
+  `choir-shot.mjs` builds the working tree). Freeze refuses a before shot
+  modified after the first source edit (`refuseLateBeforeShots`), and does
+  not call a before shot stale. This checks file time, not content: a before
+  shot of an edited tree whose file time was preserved would pass.
+- Why Freeze: it is the one producer of a bound bundle, and the source stack,
+  package release drafts and S12 runtime install all start from one, so
+  nothing reaches Verify, apply or a release without having passed; the
+  engineer still holds its capsule, so it reads the reason in-loop and shoots
+  and Freezes again in the same round. The engineer is told up front in the
+  capsule browser recipe (`run_context.go`) and the Claude delegate brief.
+- The shot review (`selfdev_shot_review.go`) keeps a pair in one call and
+  asks the judge, for the after image, whether anything outside the intended
+  change regressed against the before image (it answers question 2).
+- Publish: a package release draft whose parent is not the empty tree (an
+  update) is refused `before_after_required` unless its media holds a pair
+  (`packageUpdateNeedsBeforeAfter`). The `appstore` branch's rule that a
+  listed release carries a screenshot is separate and complements it.
+
+Dated future intents (not built):
+
+- Video (owner, 2026-11-04): a requirement later, "once we get it working
+  and we have enough resources". It is not required now.
+- Overlay builds (owner, 2026-11-04, design intent): build a change as an
+  overlay so the old and the new both exist and the new supplants the old at
+  freeze or publication, which would give the before shot from the old
+  build directly instead of from the engineer's discipline.

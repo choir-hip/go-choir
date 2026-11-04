@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
@@ -110,6 +111,12 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 	// The round's accepted screens and video, from the bound bundle only.
 	if record.Media, _, err = h.rt.operationMedia(operation); err != nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
+		return
+	}
+	// A release that updates a package shows the same view before and after
+	// (owner, 2026-11-04); a new package (empty parent) needs only after shots.
+	if err := packageUpdateNeedsBeforeAfter(record.Parent, record.Media); err != nil {
+		writeAPIJSON(w, http.StatusUnprocessableEntity, releaseAPIError{Error: err.Error(), Reason: capsule.BeforeAfterRequiredReason})
 		return
 	}
 	if err := record.Validate(); err != nil {
@@ -248,4 +255,23 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 		return base, baseLabel, "", nil, nil
 	}
 	return before, beforeLabel, beforeBase, stack, nil
+}
+
+// packageUpdateNeedsBeforeAfter refuses a release with a prior version (any
+// parent but the empty tree) whose media holds no before/after screenshot
+// pair of one view (capsule.ScreenRole names the pairing).
+func packageUpdateNeedsBeforeAfter(parent pkgrelease.Parent, media []pkgrelease.Media) error {
+	if parent.Tree == pkgrelease.EmptyTree {
+		return nil
+	}
+	var screens []capsule.ScreenFile
+	for _, m := range media {
+		if m.Kind == pkgrelease.MediaKindScreenshot {
+			screens = append(screens, capsule.ScreenFile{Name: m.Name})
+		}
+	}
+	if capsule.HasBeforeAfterPair(screens) {
+		return nil
+	}
+	return errors.New(capsule.BeforeAfterRequiredReason + ": this release updates an existing package; its screenshots must hold the same view before (the base build) and after (the candidate), named NN-before-<view>.png and NN-after-<view>.png")
 }

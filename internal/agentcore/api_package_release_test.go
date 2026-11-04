@@ -240,7 +240,7 @@ func TestPackageDraftRefusesAMixedOperationNamingItsPaths(t *testing.T) {
 
 func TestPackageDraftIsTheConfinedSubtreeOnTheBase(t *testing.T) {
 	w := newDraftWorld(t)
-	w.operation("op-reader", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
+	w.paired("op-reader", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
 	record, id, blobs := decodeDraft(t, w.draft("op-reader", url.Values{"test_command": {"npm test"}}))
 	baseTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", w.base+":"+draftRoot))
 	if record.Package.Name != "reader" || record.Package.ManifestVersion != "1.0.0" || record.Track != "owner-a" ||
@@ -265,12 +265,12 @@ func TestPackageDraftCarriesAnEarlierUnpublishedRoundOfTheStack(t *testing.T) {
 	// op-1 changed the reader and the shell; it applied, and the projection
 	// left its ref. It can never be published (it is mixed).
 	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0001", w.operation("op-0001", selfdev.StateApplied, first))
+	projectApplied(t, w.repo, w.base, "op-0001", w.paired("op-0001", first))
 	wantDraftReason(t, w.draft("op-0001", nil), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
 	// op-2 changes only the reader. Its bundle patch is cumulative from the
 	// stack base (U1), so it carries op-1's change too.
 	cumulative := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", draftRoot + "/Extra.svelte": "<p>x</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	w.operation("op-0002", selfdev.StateApplied, cumulative)
+	w.paired("op-0002", cumulative)
 
 	// Fix 11: with no track head, op-2's release is the stack's package
 	// change from the base. Only the root travels (L1).
@@ -313,10 +313,10 @@ func TestPackageDraftCarriesAnEarlierUnpublishedRoundOfTheStack(t *testing.T) {
 func TestPackageDraftCarriesTheStackFromAHeadInItsLineage(t *testing.T) {
 	w := newDraftWorld(t)
 	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0001", w.operation("op-0001", selfdev.StateApplied, first))
+	projectApplied(t, w.repo, w.base, "op-0001", w.paired("op-0001", first))
 	second := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0002", w.operation("op-0002", selfdev.StateApplied, second))
-	w.operation("op-0003", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
+	projectApplied(t, w.repo, w.base, "op-0002", w.paired("op-0002", second))
+	w.paired("op-0003", map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
 	// The track head is the reader at op-1 (op-2 was never published).
 	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
 	headID := strings.Repeat("f", 64)
@@ -345,11 +345,11 @@ func TestPackageDraftRefusesWhenThePrecedingOperationLeftNoRef(t *testing.T) {
 	w := newDraftWorld(t)
 	// op-1 changed the reader and the shell and left its projection ref.
 	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0001", w.operation("op-0001", selfdev.StateApplied, first))
+	projectApplied(t, w.repo, w.base, "op-0001", w.paired("op-0001", first))
 	// op-2 changed the reader again; the projection never left its ref.
 	w.operation("op-0002", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"})
 	// op-3 changes the reader once more (cumulative from the stack base).
-	w.operation("op-0003", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
+	w.paired("op-0003", map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
 
 	// The reader at op-1 is the track head. Measured from op-1's ref, op-3
 	// would carry op-2's unpublished change to the reader as its own.
