@@ -156,6 +156,9 @@ func requestIntoBody(view *yaegikernel.InboxRecord) {
 			spec = map[string]any{"spec": view.Body}
 		}
 	}
+	// The engineer does not see the round's predictions, so they do not
+	// anchor the work they predict (engineering_round_predictions.go).
+	delete(spec, types.RoundPredictionsField)
 	if r := view.Request; r != nil {
 		spec["request"] = map[string]any{
 			"record_id": r.RecordID, "from": r.From, "objective": r.Objective, "body": r.Body, "truncated": r.Truncated,

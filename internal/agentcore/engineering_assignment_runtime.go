@@ -190,6 +190,10 @@ type engineeringCastSpec struct {
 	RebaseNotice string `json:"rebase_notice,omitempty"`
 	RebaseOf     string `json:"rebase_of,omitempty"`
 	Base         string `json:"base,omitempty"`
+	// Predictions is the round's mandatory predictions block
+	// (types.RoundPredictions): stated before the capsule starts, settled
+	// by the runtime (engineering_round_predictions.go).
+	Predictions json.RawMessage `json:"predictions,omitempty"`
 }
 
 func (s engineeringCastSpec) rebase() rebaseSpec {
@@ -301,6 +305,9 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	}
 	if rt.capsuleExecutor == nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: capsule authority unavailable")
+	}
+	if err := refuseCastWithoutPredictions(spec.Predictions); err != nil {
+		return engineeringCastPlan{}, err
 	}
 	assignmentID := "assignment-" + computerevent.DigestBytes([]byte(strings.Join([]string{
 		vocabmigrate.IdentitySeedDelegatedCastRequestV1, ownerID, computerID, trajectoryID, recordID,
@@ -484,6 +491,11 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, plan enginee
 	result, err := rt.store.OpenEngineeringAssignment(ctx, open)
 	if err == nil {
 		rt.recordRematerializedCastWarning(ctx, plan.Binding.OwnerID, plan.Binding.ComputerID, plan.SourceWarning)
+		// The round's predictions, from the Cast just committed; a failure
+		// is repaired before the first settlement pass.
+		if predErr := rt.stateRoundPredictions(context.WithoutCancel(ctx), result.Assignment); predErr != nil {
+			log.Printf("runtime: assignment %s %v", plan.AssignmentID, predErr)
+		}
 	}
 	return result, err
 }

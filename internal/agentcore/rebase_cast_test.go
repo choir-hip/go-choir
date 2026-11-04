@@ -99,6 +99,12 @@ func (f *rebaseCastFixture) spec(mutate func(map[string]string)) string {
 
 func (f *rebaseCastFixture) plan(t *testing.T, spec, objective string) (engineeringCastPlan, error) {
 	t.Helper()
+	return f.planRaw(t, withTestRoundPredictions(t, spec), objective)
+}
+
+// planRaw plans a Cast with the spec exactly as given.
+func (f *rebaseCastFixture) planRaw(t *testing.T, spec, objective string) (engineeringCastPlan, error) {
+	t.Helper()
 	scope := ReductionScope{
 		FromAgentID: f.management, DeskAgentID: f.management, FromRole: agentprofile.Management, ChannelID: f.management,
 		RunID: "run-management", OwnerID: f.owner, ComputerID: f.computer, CellID: "cell-" + strings.ReplaceAll(t.Name(), "/", "-"),

@@ -62,7 +62,7 @@ func capsuleSourcePaths(changes []capsule.FileChange) []string {
 func validateEngineeringPrecommit(fromDesk string, in yaegikernel.StagedIntent, intents []yaegikernel.StagedIntent) error {
 	var precommit types.CommitmentPrecommit
 	if err := json.Unmarshal([]byte(in.Precommit), &precommit); err != nil {
-		return fmt.Errorf("reduce: precommit %s: invalid typed body: %w", in.LocalID, err)
+		return fmt.Errorf("reduce: precommit %s: invalid typed body: %w%s", in.LocalID, err, types.PrecommitShapeHint(fromDesk == agentprofile.Engineering))
 	}
 	if fromDesk != agentprofile.Engineering {
 		if precommit.Rule != nil {
@@ -71,7 +71,7 @@ func validateEngineeringPrecommit(fromDesk string, in yaegikernel.StagedIntent, 
 		return nil
 	}
 	if err := types.ValidateRulePrecommit(precommit); err != nil {
-		return fmt.Errorf("reduce: precommit %s: %w", in.LocalID, err)
+		return fmt.Errorf("reduce: precommit %s: %w%s", in.LocalID, err, types.PrecommitShapeHint(true))
 	}
 	for _, other := range intents {
 		if other.Kind == yaegikernel.IntentFreeze || other.Kind == yaegikernel.IntentComplete {
@@ -165,6 +165,9 @@ func (rt *Runtime) settleRulePrecommits(ctx context.Context, ownerID, computerID
 	}
 	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
+	// The round's predictions are derived from its Cast before any pass
+	// reads them (engineering_round_predictions.go, P2).
+	rt.ensureRoundPredictionsFor(settleCtx, ownerID, computerID, assignmentID)
 	settled, err := rt.store.SettleRulePrecommits(settleCtx, ownerID, computerID, assignmentID, at, settle)
 	if err != nil {
 		log.Printf("runtime: assignment %s rule precommit settlement at %s: %v", assignmentID, cause, err)

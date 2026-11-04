@@ -27,7 +27,10 @@ import (
 //   - research's final completed Reports with a p_complete self-score,
 //     settled by a scorer's coverage;
 //   - Texture's Write pSupported, on each new citation's check memo,
-//     settled by Jev's support verdict on the same pair.
+//     settled by Jev's support verdict on the same pair;
+//   - an engineering round's rule-settled predictions (the ones its Cast
+//     states and engineering's own Precommits), settled by the rule scorer
+//     from the events the runtime records.
 //
 // While the computer's calibration.feedback setting is on, a run in the
 // experiment's digest arm reads its desk's digest as a user turn appended
@@ -80,7 +83,7 @@ func calibrationDeskOfThread(thread string) string {
 	switch desk {
 	case types.ManagementTaskDesk, agentprofile.Management:
 		return agentprofile.Management
-	case agentprofile.Texture, agentprofile.Research:
+	case agentprofile.Texture, agentprofile.Research, agentprofile.Engineering:
 		return desk
 	}
 	return ""
@@ -88,7 +91,17 @@ func calibrationDeskOfThread(thread string) string {
 
 // calibrationThreadOfRecord is the desk thread that authored a record: a
 // management task's acts go out as management and name the task.
+//
+// A rule-settled precommit is a prediction about an engineering round,
+// whoever stated it (management's Cast states the round's predictions;
+// engineering may add its own): its thread is the round's engineer, so it
+// counts on engineering's record, and its author stays on the record.
 func calibrationThreadOfRecord(rec types.CommitmentRecord) string {
+	if rec.Precommit != nil && rec.Precommit.Rule != nil {
+		if assignment := strings.TrimSpace(rec.Precommit.Rule.AssignmentID); assignment != "" {
+			return agentprofile.Engineering + ":" + assignment
+		}
+	}
 	if task := strings.TrimSpace(rec.Provenance.ActingTask); task != "" {
 		return types.ManagementTaskDesk + ":" + task
 	}
@@ -196,6 +209,17 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 			}
 		}
 	}
+	// The rule scorer's settlement of each rule precommit (the first wins,
+	// as in RulePrecommitSayDo).
+	ruleSettled := map[string]types.CommitmentRecord{}
+	for _, rec := range records {
+		if rec.Resolve == nil || rec.Provenance.AgentID != types.RuleScorerAgentID || strings.TrimSpace(rec.ParentID) == "" {
+			continue
+		}
+		if _, seen := ruleSettled[rec.ParentID]; !seen {
+			ruleSettled[rec.ParentID] = rec
+		}
+	}
 	var obs []calibration.Observation
 	var pending []CalibrationPending
 	for _, rec := range records {
@@ -209,6 +233,32 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 		}
 		model := strings.TrimSpace(rec.Provenance.ModelID)
 		committed := strings.TrimSpace(rec.Provenance.CommittedAt)
+		if rec.Precommit != nil && rec.Precommit.Rule != nil && rec.Resolve == nil {
+			if desk != agentprofile.Engineering {
+				continue
+			}
+			p := rec.Precommit.YesProbability()
+			claim := string(rec.Precommit.Rule.Kind)
+			settlement, settled := ruleSettled[rec.RecordID]
+			if !settled {
+				pending = append(pending, CalibrationPending{Desk: desk, ClaimType: claim, Thread: thread,
+					RecordID: rec.RecordID, Statement: rec.Precommit.Question, P: &p, ModelID: model, CommittedAt: committed})
+				continue
+			}
+			var y float64
+			switch settlement.Resolve.Verdict {
+			case types.PrecommitAnswerYes:
+				y = 1
+			case types.PrecommitAnswerNo:
+				y = 0
+			default:
+				continue // unresolved: the rule could not decide
+			}
+			obs = append(obs, calibration.Observation{Desk: desk, ClaimType: claim, Thread: thread,
+				ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: p, Y: y, Scorers: []string{types.RuleScorerPrefix + claim},
+				CommittedAt: committed, HeldOut: calibration.HeldOut(rec.RecordID)})
+			continue
+		}
 		if rec.Cast != nil && rec.IsCast() {
 			for _, h := range rec.Cast.Hypotheses {
 				if strings.TrimSpace(h.ID) == "" || !(h.Probability >= 0 && h.Probability <= 1) {

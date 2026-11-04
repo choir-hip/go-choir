@@ -74,7 +74,7 @@ func (h *APIHandler) HandleCalibration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	digests := map[string]types.CalibrationDigest{}
-	for _, desk := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
+	for _, desk := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research, agentprofile.Engineering} {
 		d := calibration.Compute(desk, snap.Observations, calibration.DefaultOptions)
 		d.ComputedAt = snap.At.Format(time.RFC3339)
 		digests[desk] = d

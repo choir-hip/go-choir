@@ -295,17 +295,19 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 
 func typedCommitmentPrecommit(raw string) (types.CommitmentPrecommit, error) {
 	var value types.CommitmentPrecommit
+	// Every refusal names the shape to send (live8 trace, 2026-11-04).
+	hint := types.PrecommitShapeHint(strings.Contains(raw, `"rule"`))
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
-		return value, fmt.Errorf("invalid typed body: %w", err)
+		return value, fmt.Errorf("invalid typed body: %w%s", err, hint)
 	}
 	if strings.TrimSpace(value.Question) == "" {
-		return value, fmt.Errorf("missing question")
+		return value, fmt.Errorf("missing question%s", hint)
 	}
 	if len(value.Distribution) == 0 {
-		return value, fmt.Errorf("missing distribution")
+		return value, fmt.Errorf("missing p (or distribution)%s", hint)
 	}
 	if strings.TrimSpace(value.Resolver) == "" {
-		return value, fmt.Errorf("missing resolver")
+		return value, fmt.Errorf("missing resolver%s", hint)
 	}
 	return value, nil
 }
@@ -1656,8 +1658,10 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if operation.LastIntentError != "" {
 		stamp("")
 	}
-	// Management's verdict settles engineering's verify_pass precommits.
-	verdict := types.EngineeringVerifyObservation{Decision: in.Decision, BundleDigest: operation.BundleDigest, VerifierRefs: trimNonEmptyStrings(in.VerifierRefs)}
+	// Management's verdict settles verify_pass, and where it left the
+	// operation settles judge_accepts.
+	verdict := types.EngineeringVerifyObservation{Decision: in.Decision, BundleDigest: operation.BundleDigest, VerifierRefs: trimNonEmptyStrings(in.VerifierRefs), OperationID: operation.OperationID}
+	verdict.OperationState, _ = out["state"].(string)
 	rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, "verify", time.Now().UTC(),
 		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
 			return types.SettleRuleOnVerify(rule, verdict)
