@@ -4,6 +4,14 @@ package apppackage
 
 var firstPartyPackages = []firstPartyPackage{}
 
+// builtinPackageNames are the in-tree first-party packages: an installed package of such a name replaces the built-in app, so only the owner's own track may install one.
+var builtinPackageNames = []string{
+	"files",
+	"image",
+	"library-next",
+	"reader",
+}
+
 // shellAppNames are the names a published package may not take (see gen-package-kinds.mjs).
 var shellAppNames = []string{
 	"audio",

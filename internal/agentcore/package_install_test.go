@@ -513,3 +513,38 @@ func TestRuntimeInstallInstallsAnotherOwnersRelease(t *testing.T) {
 		t.Fatalf("uninstall = %d %s %+v", code, reason, view)
 	}
 }
+
+// B2 backstop: the computer refuses another owner's release of an in-tree
+// package's name, whichever route brought it (the proxy refuses it first).
+func TestRuntimeInstallNeverLetsAStrangerShadowABuiltInApp(t *testing.T) {
+	e := newInstallEnv(t)
+	record := func(track string) (string, json.RawMessage) {
+		blob := pkgrelease.Blob{SHA256: strings.Repeat("a", 64), Bytes: 10}
+		rec := pkgrelease.Record{
+			Schema: pkgrelease.Schema, Package: pkgrelease.Package{Name: "reader", ManifestVersion: "1.0.0"}, Track: track,
+			Parent: pkgrelease.Parent{Kind: pkgrelease.ParentBase, Commit: strings.Repeat("1", 40), Tree: pkgrelease.EmptyTree},
+			Source: pkgrelease.Source{Root: pkgrelease.Root("reader"), Tree: strings.Repeat("2", 40), TreePatch: blob, ReviewPatch: blob,
+				ChangedPaths: []string{pkgrelease.Root("reader") + "/App.svelte"}, BuiltOn: strings.Repeat("1", 40)},
+			Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("3", 64), Schema: "choir.package/v2", ABI: "choir.app-frontend/svelte-inline/v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
+			Publisher: pkgrelease.Publisher{OwnerID: track, ComputerID: "computer-" + track},
+			Operation: pkgrelease.Operation{OperationID: "op-" + track, BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
+		}
+		id, err := rec.ReleaseID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := rec.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id, raw
+	}
+	id, raw := record("owner-x")
+	if code, _, reason := e.post(t, installBody(t, id, raw, []byte("x"), "")); code != http.StatusForbidden || reason != "builtin_name_not_yours" {
+		t.Fatalf("stranger's reader = %d %s", code, reason)
+	}
+	id, raw = record(e.owner)
+	if _, _, reason := e.post(t, installBody(t, id, raw, []byte("x"), "")); reason == "builtin_name_not_yours" {
+		t.Fatal("the owner's own track was refused")
+	}
+}

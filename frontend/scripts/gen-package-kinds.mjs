@@ -53,6 +53,7 @@ const shellAppNames = new Set(RESERVED_NAMES);
   if (shellAppNames.size < RESERVED_NAMES.length + 10) fail('registry.ts: parsed too few static app ids; the layout changed');
 }
 
+const builtinNames = [];
 const packages = [];
 if (existsSync(packagesDir)) {
   for (const dir of readdirSync(packagesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
@@ -66,6 +67,7 @@ if (existsSync(packagesDir)) {
     }
     if (manifest.schema !== 'choir.package/v2') fail(`${manifestPath}: schema must be "choir.package/v2" (the v1 reader is deleted)`);
     if (manifest.name !== dir) fail(`${manifestPath}: name ${JSON.stringify(manifest.name)} must equal the directory name ${dir}`);
+    builtinNames.push(manifest.name);
     const kinds = manifest.kinds ?? [];
     if (!Array.isArray(kinds)) fail(`${manifestPath}: kinds must be a list`);
     if (kinds.length === 0) continue;
@@ -111,6 +113,11 @@ if (packages.length === 0) {
   }
   lines.push('}');
 }
+lines.push('');
+lines.push('// builtinPackageNames are the in-tree first-party packages: an installed package of such a name replaces the built-in app, so only the owner\'s own track may install one.');
+lines.push('var builtinPackageNames = []string{');
+for (const n of builtinNames.sort()) lines.push(`\t${goString(n)},`);
+lines.push('}');
 lines.push('');
 lines.push('// shellAppNames are the names a published package may not take (see gen-package-kinds.mjs).');
 lines.push('var shellAppNames = []string{');

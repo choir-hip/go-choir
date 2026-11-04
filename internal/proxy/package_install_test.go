@@ -106,13 +106,18 @@ func (e *installProxyEnv) send(t *testing.T, body, secret string) *httptest.Resp
 
 func installRecord(t *testing.T, tree []byte, publisherOwner string) (pkgrelease.Record, string, []byte) {
 	t.Helper()
+	return installRecordNamed(t, tree, publisherOwner, "demo-next")
+}
+
+func installRecordNamed(t *testing.T, tree []byte, publisherOwner, name string) (pkgrelease.Record, string, []byte) {
+	t.Helper()
 	blob := pkgrelease.Blob{SHA256: computerevent.DigestBytes(tree), Bytes: len(tree)}
 	rec := pkgrelease.Record{
-		Schema: pkgrelease.Schema, Package: pkgrelease.Package{Name: "demo-next", ManifestVersion: "1.0.0"}, Track: publisherOwner,
+		Schema: pkgrelease.Schema, Package: pkgrelease.Package{Name: name, ManifestVersion: "1.0.0"}, Track: publisherOwner,
 		Parent: pkgrelease.Parent{Kind: pkgrelease.ParentBase, Commit: strings.Repeat("1", 40), Tree: pkgrelease.EmptyTree},
 		Source: pkgrelease.Source{
-			Root: pkgrelease.Root("demo-next"), Tree: strings.Repeat("2", 40), TreePatch: blob, ReviewPatch: blob,
-			ChangedPaths: []string{pkgrelease.Root("demo-next") + "/App.svelte"}, BuiltOn: strings.Repeat("1", 40),
+			Root: pkgrelease.Root(name), Tree: strings.Repeat("2", 40), TreePatch: blob, ReviewPatch: blob,
+			ChangedPaths: []string{pkgrelease.Root(name) + "/App.svelte"}, BuiltOn: strings.Repeat("1", 40),
 		},
 		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("3", 64), Schema: "choir.package/v2", ABI: "choir.app-frontend/svelte-inline/v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
 		Publisher: pkgrelease.Publisher{OwnerID: publisherOwner, ComputerID: "computer-p"},
@@ -286,5 +291,50 @@ func TestPreRenameInstallRouteIsGone(t *testing.T) {
 				t.Fatalf("%s %s = %d, want 404", method, path, response.Code)
 			}
 		}
+	}
+}
+
+// B2: an installed package of an in-tree package's name replaces the built-in
+// app in the shell, so only the installing owner's own track may install one.
+func TestPackageInstallNeverLetsAStrangerShadowABuiltInApp(t *testing.T) {
+	env := newInstallProxyEnv(t)
+	tree := []byte("diff --git a/frontend/src/packages/reader/App.svelte b/frontend/src/packages/reader/App.svelte\n")
+	owner := env.secret(t, "computer:self_development:approve", OwnerActsScope)
+	serve := func(raw []byte, id string) {
+		env.view = func() (int, []byte) {
+			out, _ := json.Marshal(map[string]any{"release_id": id, "record": json.RawMessage(raw), "listing": map[string]any{"state": pkgrelease.StateListed}})
+			return http.StatusOK, out
+		}
+		env.blob = func() (int, []byte) { return http.StatusOK, tree }
+	}
+	// A stranger's release named like a built-in app is refused with its own
+	// reason, and nothing reaches the computer.
+	_, strangerID, strangerRaw := installRecordNamed(t, tree, "someone-else", "reader")
+	serve(strangerRaw, strangerID)
+	env.guestIn = nil
+	rec := env.send(t, `{"release_id":"`+strangerID+`"}`, owner)
+	var got errorResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if rec.Code != http.StatusForbidden || got.Reason != "builtin_name_not_yours" || env.guestIn != nil {
+		t.Fatalf("stranger's reader = %d %s, guest got %q", rec.Code, rec.Body.String(), env.guestIn)
+	}
+	// Uninstall stays open (an install from before this rule can always go).
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+strangerID+`","action":"uninstall"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
+		t.Fatalf("uninstall = %d %s", rec.Code, rec.Body.String())
+	}
+	// The owner's own track of the same package installs (a track under review).
+	_, ownID, ownRaw := installRecordNamed(t, tree, env.user, "reader")
+	serve(ownRaw, ownID)
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+ownID+`"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
+		t.Fatalf("own-track reader = %d %s", rec.Code, rec.Body.String())
+	}
+	// A stranger's package with a name no built-in holds still installs.
+	_, otherID, otherRaw := installRecordNamed(t, tree, "someone-else", "notes-plus")
+	serve(otherRaw, otherID)
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+otherID+`"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
+		t.Fatalf("stranger's notes-plus = %d %s", rec.Code, rec.Body.String())
 	}
 }

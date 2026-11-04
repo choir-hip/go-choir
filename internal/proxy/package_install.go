@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
@@ -99,6 +100,13 @@ func (h *Handler) packageInstallBody(ctx context.Context, ownerID string, raw []
 	}
 	if err != nil {
 		return nil, &installRefusal{http.StatusBadGateway, "published_record_digest_mismatch", "the store's copy of " + releaseID + " does not verify: " + err.Error()}
+	}
+	// An installed package of an in-tree package's name replaces the built-in
+	// app in the shell, so only the installing owner's own track may install
+	// one (MA2.3 review B2). Another owner's package under any other name
+	// installs as before; an uninstall returned above and is never refused.
+	if apppackage.IsBuiltinPackage(published.Package.Name) && published.Track != ownerID {
+		return nil, &installRefusal{http.StatusForbidden, "builtin_name_not_yours", "package " + published.Package.Name + " is a built-in app; only its owner's own track may replace it, not another owner's release"}
 	}
 	if len(request.Record) > 0 {
 		supplied, err := pkgrelease.Decode(request.Record)

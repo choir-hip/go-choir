@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
@@ -137,6 +138,11 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	}
 	if err := pkgrelease.VerifyID(rec, releaseID); err != nil {
 		return PackageInstallView{}, false, refuseInstall(http.StatusUnprocessableEntity, "release_digest_mismatch", "%v", err)
+	}
+	// Backstop of the proxy's rule: a stranger's release never replaces a
+	// built-in app, whichever route brought it here.
+	if apppackage.IsBuiltinPackage(rec.Package.Name) && rec.Track != ownerID {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusForbidden, "builtin_name_not_yours", "package %s is a built-in app; only its owner's own track may replace it", rec.Package.Name)
 	}
 	rt.packageInstallMu.Lock()
 	defer rt.packageInstallMu.Unlock()

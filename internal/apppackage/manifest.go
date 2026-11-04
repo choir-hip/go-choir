@@ -226,6 +226,18 @@ func invalid(format string, args ...any) error {
 // or the package's files, on the running platform (CurrentPlatform).
 func (m Manifest) Validate() error { return m.ValidateOn(CurrentPlatform()) }
 
+// IsBuiltinPackage reports whether name is an in-tree first-party package. An
+// installed package of that name replaces the built-in app in the shell, so an
+// install of one is allowed only from the installing owner's own track.
+func IsBuiltinPackage(name string) bool {
+	for _, n := range builtinPackageNames {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 // ShellAppNames lists the names a published package may not take.
 func ShellAppNames() []string { return append([]string{}, shellAppNames...) }
 
