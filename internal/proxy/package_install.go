@@ -110,9 +110,10 @@ func (h *Handler) packageInstallBody(ctx context.Context, ownerID string, raw []
 		}
 	}
 	// Runtime install (S12) runs the app in the shell's origin, so until the
-	// sandboxed frame (S13) only the owner's own releases install. An
-	// uninstall removes code and is never refused for this.
-	if action != "uninstall" && strings.TrimSpace(published.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
+	// sandboxed frame (S13) only the owner's own releases install (uninstall
+	// returned above). corpusd's owner-scoped read answers 404 for another
+	// owner's release first; this is the second wall.
+	if strings.TrimSpace(published.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
 		return nil, &installRefusal{http.StatusForbidden, "cross_owner_before_frame", "release " + releaseID + " was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet"}
 	}
 	canonical, err := published.Canonical()

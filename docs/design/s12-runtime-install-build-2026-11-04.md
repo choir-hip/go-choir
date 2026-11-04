@@ -65,7 +65,7 @@ source is not in the build directory at all.
 What the build is not: an OS sandbox. It runs as the autoputer user with that
 user's file access. "No network" holds by construction (locked dependencies
 symlinked in, `configFile`, `envFile` and `publicDir` off, no npm, no install
-scripts, URL and `data:` imports refused, a module that imports nothing),
+scripts, URL and `data:` imports refused, a built module with no imports),
 not by a network namespace. No package code runs, but a compromised locked
 dependency or a Vite or Rollup bug could act as the autoputer user during a
 build. That is the same supply-chain trust the shell's own SPA build already
@@ -166,8 +166,11 @@ owner's code only in the S13 sandboxed frame. So:
   `{release_id, action}`, with no listing gate and no blob fetch, and the
   computer derives the package from its own in-force install record. A
   withdrawn, yanked or garbage-collected release can always be uninstalled;
-- the bytes that run are exactly the bytes verified (digest at fetch, import
-  from a `blob:` URL of those bytes);
+- the module that runs is exactly the module verified (digest at fetch,
+  import from a `blob:` URL of those bytes). This bounds the module graph,
+  not what the module does at run time: same-origin code can still inject a
+  `<script>` element or fetch anything the owner can, which is why another
+  owner's code waits for S13's frame and its CSP;
 - the build is source only, on the owner's own computer.
 
 This narrows what the source-patch install allowed (any listed release, after
@@ -219,6 +222,35 @@ here.
   makes no transition. `onMount`'s signed-in branch now refreshes too. It
   does not race sign-out clearing, which lives only in the reactive block's
   signed-out branch, and the refresh sequence token drops a stale answer.
+
+Round 2 (Devin approved c3ca51df5). Fixed with the trailers:
+
+- **A signed-out mount kept the previous owner's apps.** Desktop unmounts on
+  the legal, recover, email sign-in and device-approve routes and while auth
+  is checking or reconnecting; a sign-out landing then never ran the reactive
+  sign-out branch. `enterPublicDesktop()` now clears the installed set, so
+  every signed-out entry clears it. No test: the shell's specs have no
+  signed-in-then-unmounted Desktop harness, and building one is not cheap.
+- **Legacy different-base records read "the same base".** `same_base` is
+  `omitempty` now, so a stored `false` comes back absent; the Library shows
+  "the same base" only for `true`.
+- **A dead condition** in the proxy's cross-owner check (uninstall returns
+  before it) is removed.
+
+Residuals, recorded and not fixed here:
+
+- **Uninstall needs the self-development operation store.** The adoptions
+  route answers 503 when a computer has no `selfdevOperations` store, so such
+  a computer can neither install nor uninstall. Every computer the runtime
+  builds has one; the "always" in D6 is true of the catalog, not of this
+  latent wiring gap.
+- **DOM-injected code is outside the verified bytes.** See D6: the build
+  bounds the import graph, not `<script>` injection or `fetch` at run time.
+  Under S12's owner's-own-code rule this is bookkeeping; S13's frame needs a
+  CSP regardless.
+- **Unexercised assumption:** the paging loop relies on the store's
+  derived-key fast path honouring `limit` the same way; read from the
+  signature, not traced to its SQL.
 
 ## Built, and deferred
 

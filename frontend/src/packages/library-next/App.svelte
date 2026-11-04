@@ -306,7 +306,7 @@
     bits.push(when ? verb + when : 'time not recorded');
     bits.push('from ' + publisherLabel(item.publisher_computer_id, computerId));
     // A runtime install has no base: it is not in this computer's source.
-    if (item.mode !== 'runtime') bits.push(item.same_base === false ? 'a different base' : 'the same base');
+    if (item.mode !== 'runtime') bits.push(item.same_base === true ? 'the same base' : 'a different base');
     const state = item.operation && item.operation.state ? String(item.operation.state) : '';
     if (state) bits.push('operation ' + state);
     return bits.join(' · ');

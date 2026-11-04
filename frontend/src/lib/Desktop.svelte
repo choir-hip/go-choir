@@ -167,7 +167,6 @@
       if (wasAuthenticated) {
         void flushDesktopState({ keepalive: true, allowSignedOutTransition: true });
       }
-      clearInstalledPackages();
       enterPublicDesktop();
     }
   }
@@ -218,6 +217,10 @@
   }
 
   function enterPublicDesktop() {
+    // Every signed-out entry drops the previous owner's installed apps: the
+    // sign-out transition, and a signed-out mount after a sign-out that
+    // happened while Desktop was unmounted (S12 review round 2).
+    clearInstalledPackages();
     closeLiveChannel();
     bootstrapData = null;
     bootstrapError = '';
