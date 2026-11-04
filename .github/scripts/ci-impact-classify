@@ -123,6 +123,15 @@ else
         ;;
     esac
 
+    # The package modularity gate (docs/design/modularity-check-build-2026-11-04.md)
+    # also reads the frontend's build scripts, its own spec and the computer's
+    # module build; a change to any of them reruns the frontend lane.
+    case "$path" in
+      frontend/scripts/*|frontend/tests/package-modularity.spec.js|frontend/playwright.config.js|internal/pkgruntime/*.mjs)
+        mark frontend "$path -> package modularity gate"
+        ;;
+    esac
+
     case "$path" in
       flake.nix|flake.lock|go.mod|go.sum|skills/*|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
         mark sbom "$path -> SBOM derivation input"

@@ -37,6 +37,12 @@ assert_output runtime-change $'internal/agentcore/engine.go\ninternal/textureown
 assert_output frontend-change $'frontend/src/routes/+page.svelte\n' \
   'frontend=true' 'go=false' 'sbom=true' 'flakehub=true'
 
+assert_output modularity-gate $'frontend/scripts/sdk-surface.mjs\ninternal/pkgruntime/build-module.mjs\n' \
+  'frontend=true' 'go=true'
+
+assert_output modularity-spec $'frontend/tests/package-modularity.spec.js\n' \
+  'frontend=true' 'go=false' 'sbom=false'
+
 assert_output workflow-only $'.github/workflows/ci.yml\n' \
   'non_docs=true' 'go=true' 'sbom=true' 'high_risk_race=true' 'flakehub=false' 'ci=true'
 
