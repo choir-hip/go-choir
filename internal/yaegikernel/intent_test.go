@@ -8,12 +8,12 @@ import (
 )
 
 // TestTrayStagesWithoutBlocking proves in-cell orchestration never touches
-// the network: Note and Complete return in microseconds with no broker
+// the network: Escalate and Complete return in microseconds with no broker
 // roundtrip.
 func TestTrayStagesWithoutBlocking(t *testing.T) {
 	var tray Tray
 	start := time.Now()
-	msgID, err := tray.Note("research", "look at x")
+	msgID, err := tray.Escalate("research", "look at x", testRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,15 +38,15 @@ func TestTrayStagesWithoutBlocking(t *testing.T) {
 func TestTrayQuotas(t *testing.T) {
 	var tray Tray
 	for range MaxIntentsPerCell {
-		if _, err := tray.Note("peer", "x"); err != nil {
+		if _, err := tray.Escalate("peer", "x", testRequest()); err != nil {
 			t.Fatalf("quota fill: %v", err)
 		}
 	}
-	if _, err := tray.Note("peer", "one too many"); err == nil {
+	if _, err := tray.Escalate("peer", "one too many", testRequest()); err == nil {
 		t.Fatal("17th intent must exceed quota")
 	}
 	var big Tray
-	if _, err := big.Note("peer", strings.Repeat("b", MaxIntentBody+1)); err == nil {
+	if _, err := big.Escalate("peer", strings.Repeat("b", MaxIntentBody+1), testRequest()); err == nil {
 		t.Fatal("oversize body must be rejected")
 	}
 	var twice Tray
@@ -76,12 +76,12 @@ func TestCellBindingInboxAndStaging(t *testing.T) {
 	if got := scope.Inbox(); len(got) != 1 || got[0].Body != "build it" {
 		t.Fatalf("inbox snapshot not isolated: %+v", got)
 	}
-	res, err := scope.Note("management", "built")
+	res, err := scope.Escalate("management", "built", testRequest())
 	if err != nil || res == "" {
-		t.Fatalf("bound note = %q, %v", res, err)
+		t.Fatalf("bound escalate = %q, %v", res, err)
 	}
 	staged := hooks.End()
-	if len(staged) != 1 || staged[0].Kind != IntentNote {
+	if len(staged) != 1 || staged[0].Kind != IntentEscalate {
 		t.Fatalf("drained = %+v", staged)
 	}
 	if len(scope.Inbox()) != 0 {
@@ -128,7 +128,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 		t.Fatalf("import choir: %v", err)
 	}
 	hooks := scope.BindCell()
-	good, err := serveCell(sess, SessionFrame{ID: "c-ok", Source: `choir.Note("management", "hi")`}, nil, &hooks)
+	good, err := serveCell(sess, SessionFrame{ID: "c-ok", Source: `choir.Ask("management", "hi", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`}, nil, &hooks)
 	if err != nil {
 		t.Fatalf("good cell: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 	}
 	// Runtime failure (not a compile rejection): the cell stages then panics
 	// at execution, so it poisons and ships nothing.
-	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Note("management", "x"); panic("boom")`}, nil, &hooks)
+	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Ask("management", "x", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"}); panic("boom")`}, nil, &hooks)
 	if err == nil {
 		t.Fatal("bad cell must poison")
 	}

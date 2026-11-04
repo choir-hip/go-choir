@@ -29,8 +29,8 @@ func TestRefusedVerbIsShownInTheCellResult(t *testing.T) {
 		return out
 	}
 
-	out := cell(`choir.Note("", "x")`)
-	if !strings.Contains(out.Stdout, "choir.Note refused:") || !strings.Contains(out.Stdout, "destination") {
+	out := cell(`choir.Ask("", "x", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
+	if !strings.Contains(out.Stdout, "choir.Ask refused:") || !strings.Contains(out.Stdout, "desk") {
 		t.Fatalf("refused verb not shown: %q", out.Stdout)
 	}
 	if out := cell(`x := 1

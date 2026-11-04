@@ -203,7 +203,7 @@ func (h *APIHandler) HandleCalibrationSettlements(w http.ResponseWriter, r *http
 			SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID,
 			Kind: types.CommitmentKindResolve, Discrepancy: types.DiscrepancyUnresolved,
 			Resolve:     &types.CommitmentResolve{Verdict: "calibration_score", EvidenceRefs: s.EvidenceRefs},
-			Provenance:  types.CommitmentProvenance{AgentID: scorerAgent, ModelID: req.ModelID, CommittedAt: stamp},
+			Provenance:  types.CommitmentProvenance{AgentID: scorerAgent, ModelID: req.ModelID, CommittedAt: stamp, Origin: types.OriginExternal},
 			EmitterKind: types.CommitmentEmitterOwner, ComputerID: computerID,
 			RelatedIDs: []string{target}, Scores: []types.CommitmentScore{score},
 		}

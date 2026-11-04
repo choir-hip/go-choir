@@ -18,7 +18,7 @@ func TestCompleteIsRefusedWhileTheRunsJobRuns(t *testing.T) {
 	running := &fakeJobTable{running: true, view: yaegikernel.JobView{ID: "job-build", State: capsulejob.StateRunning, Argv: []string{"sh", "-c", "npm ci"}}}
 	idle := &fakeJobTable{}
 	complete := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentComplete, LocalID: "tray-1", Result: yaegikernel.CompleteBlocked}}
-	poll := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentNote, LocalID: "tray-1", ToDesk: "management:m", Body: "still building"}}
+	poll := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentEscalate, Req: testRequest(), LocalID: "tray-1", ToDesk: "management:m", Body: "still building"}}
 
 	err := refuseCompleteWhileJobRuns(running, "run-1", complete)
 	if err == nil {

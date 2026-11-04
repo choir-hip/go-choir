@@ -64,7 +64,7 @@ func IsSelfDevelopmentOwnerAct(rec CommitmentRecord) bool {
 	return rec.EmitterKind == CommitmentEmitterSystem && operationID != "" && IsOwnerAct(act) &&
 		strings.TrimSpace(rec.SenderInbox) == OwnerActSenderInbox(operationID) &&
 		strings.TrimSpace(rec.RecordID) == OwnerActRecordID(operationID, act) &&
-		rec.Directive != nil && rec.Directive.Subtype == CommitmentDirectiveNote
+		rec.Directive != nil && rec.Directive.Subtype.IsNotice()
 }
 
 // SelfDevelopmentOwnerAct is one act on one candidate, addressed to the
@@ -106,7 +106,7 @@ func NewSelfDevelopmentOwnerAct(act SelfDevelopmentOwnerAct) (CommitmentRecord, 
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  strings.TrimSpace(act.ComputerID),
 		Inbox:       inbox, SenderInbox: OwnerActSenderInbox(operationID), Addressee: inbox,
-		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: body},
+		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNotice, Body: body},
 		EvidenceRefs: []string{operationID},
 		SubjectRefs:  refs,
 	}, true

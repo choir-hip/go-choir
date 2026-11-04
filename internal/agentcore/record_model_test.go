@@ -37,9 +37,9 @@ func TestRecordModelIDPrefersTheAnsweringModel(t *testing.T) {
 func TestDeskActsCarryTheScopeModel(t *testing.T) {
 	scope := ReductionScope{FromAgentID: "management:o", DeskAgentID: "management:o", CellID: "cell-m", OwnerID: "o", ComputerID: "c", ModelID: "opencode-go/deepseek-v4.1-flash"}
 	intents := []yaegikernel.StagedIntent{
-		{Kind: yaegikernel.IntentCast, LocalID: "t1", ToDesk: "texture:new", Objective: "open", Statement: `{"hypotheses":[{"statement":"x","probability":0.7}]}`},
+		{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "t1", ToDesk: "texture:new", Objective: "open", Statement: `{"hypotheses":[{"statement":"x","probability":0.7}]}`},
 		{Kind: yaegikernel.IntentReport, LocalID: "t2", ToDesk: "texture", Claim: "done"},
-		{Kind: yaegikernel.IntentAsk, LocalID: "t3", ToDesk: "research", Question: "who?"},
+		{Kind: yaegikernel.IntentAsk, Req: testRequest(), LocalID: "t3", ToDesk: "research", Question: "who?"},
 		{Kind: yaegikernel.IntentPrecommit, LocalID: "t4", Precommit: `{"question":"q","distribution":{"a":0.6,"b":0.4},"resolver":"research"}`},
 	}
 	for _, in := range intents {
@@ -56,7 +56,7 @@ func TestDeskActsCarryTheScopeModel(t *testing.T) {
 func TestTextureFoldLeavesTheModelToTheCommit(t *testing.T) {
 	scope := foldScope
 	scope.ModelID = "chatgpt/gpt-6-luna"
-	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentCast, LocalID: "tray-2", ToDesk: agentprofile.Research, Objective: "o",
+	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-2", ToDesk: agentprofile.Research, Objective: "o",
 		Statement: `{"kind":"question","summary":"s","questions":["q?"]}`}}
 	out, _, err := foldTextureDispatch(intents, scope, cellRecords{})
 	if err != nil || len(out) != 1 {

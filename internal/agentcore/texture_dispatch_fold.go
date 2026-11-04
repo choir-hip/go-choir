@@ -42,7 +42,7 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 	var inboxRecords []types.CommitmentRecord
 	var objectives []string
 	for _, in := range intents {
-		if in.Kind != yaegikernel.IntentCast && in.Kind != yaegikernel.IntentAsk && in.Kind != yaegikernel.IntentNote {
+		if in.Kind != yaegikernel.IntentCast && in.Kind != yaegikernel.IntentAsk {
 			out = append(out, in)
 			continue
 		}
@@ -58,8 +58,8 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 		if route.Forwarded {
 			in = markForwarded(in, scope.DeskAgentID)
 		}
-		if in.Kind == yaegikernel.IntentNote && strings.TrimSpace(in.Body) == "" {
-			return nil, nil, fmt.Errorf("reduce: Texture %s: a note to %s needs a body", in.LocalID, desk)
+		if err := types.ValidateRequestFields(in.Kind, in.Req); err != nil {
+			return nil, nil, fmt.Errorf("reduce: Texture %s: %s to %s: %w", in.LocalID, in.Kind, desk, err)
 		}
 		rec, recErr := inboxRecordForIntent(scope, in, toInbox, false)
 		if recErr != nil {

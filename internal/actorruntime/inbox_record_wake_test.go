@@ -77,7 +77,7 @@ func newRecordsWakeFixture(t *testing.T, docID string, parked, workClosed bool) 
 	}
 	req := types.CommitInboxRecordsRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "report-to-texture", Records: []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "report-1", Kind: types.CommitmentKindDirective,
-		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "findings"},
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "findings"},
 		Inbox:     f.agentID, SenderInbox: "research:" + docID, Addressee: f.agentID, EmitterKind: types.CommitmentEmitterAgent,
 		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: "research:" + docID, CommittedAt: now.Format(time.RFC3339Nano)},
 	}}}

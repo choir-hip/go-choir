@@ -275,7 +275,7 @@ func TestCommitTrayLifecycleEscalateCastRetractMintRecordNative(t *testing.T) {
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
 
 	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "esc-1", Kind: yaegikernel.IntentEscalate, ToDesk: "management", Body: "evidence window expired"},
+		{LocalID: "esc-1", Kind: yaegikernel.IntentEscalate, Req: testRequest(), ToDesk: "management", Body: "evidence window expired"},
 	}, 1); err != nil {
 		t.Fatalf("commitTray escalate failed: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestCommitTrayPacketPathEngineeringCastIsRefused(t *testing.T) {
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
 	err = reduction.commitTray(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "cast-1", Kind: yaegikernel.IntentCast, ToDesk: "engineering", Objective: "build the widget", Statement: "spec body"},
+		{LocalID: "cast-1", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: "engineering", Objective: "build the widget", Statement: "spec body"},
 	}, 1)
 	if err == nil || !strings.Contains(err.Error(), "naming the Texture request it serves") {
 		t.Fatalf("packet-path engineering Cast was not refused: %v", err)
@@ -419,7 +419,7 @@ func TestCommitTrayLifecycleCastToResearchOpensNoAssignment(t *testing.T) {
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
 	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "cast-r", Kind: yaegikernel.IntentCast, ToDesk: "research", Objective: "find the filing", Statement: "spec body"},
+		{LocalID: "cast-r", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: "research", Objective: "find the filing", Statement: "spec body"},
 	}, 1); err != nil {
 		t.Fatalf("a Cast to research ran delegated-cast admission: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestCommitTrayLifecycleAskPrecommitMintRecordNative(t *testing.T) {
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
 	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "engineering", Question: "does the build pass?"},
+		{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "engineering", Question: "does the build pass?"},
 		{LocalID: "pre-1", Kind: yaegikernel.IntentPrecommit, Precommit: `{"question":"will deploy land today?"}`},
 	}, 1); err != nil {
 		t.Fatal(err)

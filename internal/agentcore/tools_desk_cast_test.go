@@ -58,7 +58,7 @@ func TestR3cDeskCastReachesDelegatedAdmission(t *testing.T) {
 	}
 
 	intent := yaegikernel.StagedIntent{
-		LocalID: "cast-1", Kind: yaegikernel.IntentCast, ToDesk: "engineering",
+		LocalID: "cast-1", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: "engineering",
 		Objective: "bounded delegated assignment",
 	}
 	// commitTray path via commitActIntent: mints the commitment, then reaches

@@ -1,0 +1,53 @@
+{
+  "schema_id": "commitment_record.v1",
+  "record_id": "cell-1:decline:tray-1",
+  "prediction": {
+    "hypothesis": "",
+    "committed_at": ""
+  },
+  "observation": {
+    "excerpt": "",
+    "source_ref": "",
+    "observed_at": ""
+  },
+  "scores": null,
+  "discrepancy": "unresolved",
+  "provenance": {
+    "agent_id": "texture:doc-1",
+    "model_id": "prov/model",
+    "committed_at": "2026-11-04T10:00:00Z",
+    "desk": "texture:doc-1",
+    "run_id": "run-1",
+    "origin": "desk_run"
+  },
+  "revision": {},
+  "kind": "directive",
+  "directive": {
+    "subtype": "decline",
+    "body": "no news event\n\nDeclined captures: cap-3"
+  },
+  "p_success": 0.8,
+  "weight": 0,
+  "impact_class": "I0",
+  "settlement": "recipient",
+  "materiality_procedure": {
+    "kind": "decline",
+    "custodian": "management",
+    "procedure_ref": "",
+    "no_procedure": true,
+    "weight": 0,
+    "impact_class": "I0",
+    "hash": "cb0cda2d05aeb5ca40a29b8d337048ba2f134c8ce90393b2f8fa4c3b37277377"
+  },
+  "addressee": "management:o",
+  "emitter_kind": "agent",
+  "inbox": "source:rss",
+  "sender_inbox": "texture:doc-1",
+  "disposition": {
+    "kind": "decline",
+    "captures": [
+      "cap-3"
+    ],
+    "reason": "no news event"
+  }
+}

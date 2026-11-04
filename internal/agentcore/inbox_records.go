@@ -295,7 +295,7 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 // a record: the conversational acts addressed to its counterpart.
 func recordsIntent(in yaegikernel.StagedIntent) bool {
 	switch in.Kind {
-	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentFeed, yaegikernel.IntentDecline,
 		yaegikernel.IntentReport, yaegikernel.IntentReply:
 		return true
 	}
@@ -346,9 +346,9 @@ func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toI
 				Probabilities: map[string]float64{types.SelfScoreComplete: *p},
 			})
 		}
-	case yaegikernel.IntentNote:
-		// choir.Feed and choir.Decline (L2a R2-5): the Note a hand-written
-		// feed or decline is, plus the structured captures.
+	case yaegikernel.IntentFeed, yaegikernel.IntentDecline:
+		// choir.Feed and choir.Decline (L2a R2-5): typed requests with the
+		// structured captures.
 		if in.Disposition != "" {
 			rec.Disposition = &types.CommitmentDisposition{Kind: in.Disposition, Captures: append([]string(nil), in.Captures...), Reason: strings.TrimSpace(in.Reason)}
 		}
@@ -481,10 +481,10 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	var records []types.CommitmentRecord
 	// choir.Feed and choir.Decline are refused while the computer's
 	// intake.labels setting is off (L2a A6): the whole cell commits
-	// nothing, and choir.Note does the same work.
+	// nothing.
 	for _, in := range intents {
 		if in.Disposition != "" && !rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
-			return nil, fmt.Errorf("reduce: %s: choir.Feed and choir.Decline are off on this computer (the owner's intake.labels setting); feed or decline with choir.Note, naming the capture ids", in.LocalID)
+			return nil, fmt.Errorf("reduce: %s: choir.Feed and choir.Decline are off on this computer (the owner's intake.labels setting); leave the captures unfed and undeclined", in.LocalID)
 		}
 	}
 	deskProfile := strings.TrimSpace(r.rec.AgentProfile)
@@ -499,12 +499,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			switch {
 			case in.Kind == yaegikernel.IntentTaskDone:
 				taskDone = &intents[i]
-			case in.Kind == yaegikernel.IntentCast || in.Kind == yaegikernel.IntentNote:
+			case in.Kind == yaegikernel.IntentCast || in.Kind == yaegikernel.IntentFeed || in.Kind == yaegikernel.IntentDecline:
 				if engineeringCastIntent(in) {
 					return nil, fmt.Errorf("reduce: %s: a management task cannot cast engineering; leave the capture to management with choir.Done(why)", in.LocalID)
 				}
 			default:
-				return nil, fmt.Errorf("reduce: %s: a management task stages Cast, Note, Feed, Decline and Done; %s is management's", in.LocalID, in.Kind)
+				return nil, fmt.Errorf("reduce: %s: a management task stages Cast, Feed, Decline and Done; %s is management's", in.LocalID, in.Kind)
 			}
 		}
 		var err error
@@ -871,7 +871,7 @@ func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, d
 // for its inbox.
 var recordsInboxPrompts = map[string]string{
 	agentprofile.Research:   "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round. Send an interim packet (no work_disposition) as soon as you have read one new source you can cite, and another each time you have read more; the final Report comes last.",
-	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline with choir.Note(r.From, reason).",
+	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline it to its source.",
 }
 
 // researchStoryEntitiesPrompt is what a story's research desk is asked when

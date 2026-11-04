@@ -92,8 +92,10 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// (selfdev-round-blockers-cluster-2026-11-03, fix 10) and one line said so;
 	// 6.3k until a Write alone was refused while the owner's request had no
 	// next actor (texture-write-leaves-owner-request-unattended-2026-11-04).
-	if n := len(prompt); n > 6400 {
-		t.Errorf("prompt core is %d characters; the budget is about 6.4k", n)
+	// 6.6k once a Cast or Ask had to state its p_success, weight and
+	// settlement (modular architecture MA1.3).
+	if n := len(prompt); n > 6600 {
+		t.Errorf("prompt core is %d characters; the budget is about 6.6k", n)
 	}
 }
 

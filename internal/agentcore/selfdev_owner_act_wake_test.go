@@ -109,7 +109,7 @@ func checkOwnerActRecord(t *testing.T, rec types.CommitmentRecord, inbox, operat
 	if rec.SubjectRefs["operation_id"] != operationID || rec.SubjectRefs["owner_act"] != act {
 		t.Fatalf("owner-act record subject refs %v; want operation %s act %s", rec.SubjectRefs, operationID, act)
 	}
-	if rec.Directive == nil || rec.Directive.Subtype != types.CommitmentDirectiveNote || !strings.Contains(rec.Directive.Body, operationID) {
+	if rec.Directive == nil || rec.Directive.Subtype.IsNotice() == false || !strings.Contains(rec.Directive.Body, operationID) {
 		t.Fatalf("owner-act record directive %+v; want a Note naming %s", rec.Directive, operationID)
 	}
 	if !store.RecordWakesReader(rec) {

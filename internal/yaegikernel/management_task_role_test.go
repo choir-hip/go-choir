@@ -44,7 +44,7 @@ func TestManagementTaskRoleReverseParity(t *testing.T) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	want := []string{"CellOut", "Context", "Decline", "Done", "Feed", "Help", "ListDir", "Note", "Pack", "ReadCapture", "ReadFile", "Records", "Stories", "Cast"}
+	want := []string{"CellOut", "Context", "Decline", "Done", "Feed", "Help", "ListDir", "Pack", "ReadCapture", "ReadFile", "Records", "Stories", "Cast"}
 	sort.Strings(want)
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("management task exports %v, want exactly %v", names, want)

@@ -193,7 +193,7 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 	"hypotheses": []interface{}{map[string]interface{}{"statement": "the harbor reopens Monday", "probability": 0.7}},
 	"captures":   ids,
 	"publish":    "auto",
-})`
+}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
 	out := cell(open)
 	if !strings.Contains(out, "1 captures rss:port capture-1") {
 		t.Fatalf("management did not read the arrival: %s", out)
@@ -221,7 +221,7 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 	"hypotheses": []interface{}{map[string]interface{}{"statement": "the harbor reopens Monday", "probability": 0.7}},
 	"captures":   []string{"capture-1"},
 	"publish":    "auto",
-})`)
+}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if m := castReceiptRE.FindStringSubmatch(retry); m != nil && m[1] != story {
 		t.Fatalf("a retried opening opened %s beside %s", m[1], story)
 	}
@@ -257,6 +257,9 @@ func TestManagementDeclinesCapturesWithANoteToTheSource(t *testing.T) {
 	if _, err := s.CommitInboxRecords(ctx, seed); err != nil {
 		t.Fatalf("seed arrival: %v", err)
 	}
+	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: true}); err != nil {
+		t.Fatal(err)
+	}
 	before, _ := s.ListUnprojectedActorWakes(ctx)
 	rec := types.RunRecord{RunID: "run-mgmt-decline", AgentID: management, OwnerID: owner, ComputerID: computer, ChannelID: management,
 		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning,
@@ -279,12 +282,12 @@ func TestManagementDeclinesCapturesWithANoteToTheSource(t *testing.T) {
 		}
 		return out
 	}
-	if out := cell(`choir.Cast("` + source + `", "poll again", map[string]interface{}{})`); !strings.Contains(out, "decline") {
+	if out := cell(`choir.Cast("` + source + `", "poll again", map[string]interface{}{}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "decline") {
 		t.Fatalf("a Cast to a source was not refused: %s", out)
 	}
 	out := cell(`rs := choir.Records()
-choir.Note(rs[0].From, "declined capture-9: a newsletter signup page, no news event")`)
-	if !strings.Contains(out, "rlm:note:") {
+choir.Decline([]string{"capture-9"}, "declined capture-9: a newsletter signup page, no news event", map[string]any{"p_success": 0.9, "weight": 0, "settlement": "recipient"})`)
+	if !strings.Contains(out, "rlm:decline:") {
 		t.Fatalf("the decline did not commit: %s", out)
 	}
 	got, err := s.ListInboxRecords(ctx, owner, computer, source, 0, 0)

@@ -226,7 +226,7 @@ func TestR2DelegatedCastReachesDelegatedAdmission(t *testing.T) {
 		t.Fatalf("caster run: %v", err)
 	}
 	intent := yaegikernel.StagedIntent{
-		LocalID: "cast-1", Kind: yaegikernel.IntentCast, ToDesk: "engineering",
+		LocalID: "cast-1", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: "engineering",
 		Objective: "bounded delegated assignment",
 	}
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope, ledger: rt.store, rec: &casterRun}

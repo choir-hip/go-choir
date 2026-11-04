@@ -54,7 +54,7 @@ func inboxRecord(id, from, to string) types.CommitmentRecord {
 func inboxNote(id, from, to string) types.CommitmentRecord {
 	rec := inboxRecord(id, from, to)
 	rec.Kind = types.CommitmentKindDirective
-	rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "note " + id}
+	rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "note " + id}
 	return rec
 }
 

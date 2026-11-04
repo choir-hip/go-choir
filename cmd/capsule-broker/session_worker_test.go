@@ -148,7 +148,7 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 		t.Fatalf("overlay file = %q, %v", content, err)
 	}
 	// Note is the staged act.
-	res := evalCell(t, w, `choir.Note("owner", "hi")`)
+	res := evalCell(t, w, `choir.Escalate("owner", "hi", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if res.Error != "" {
 		t.Fatalf("note: %s", res.Error)
 	}
@@ -157,7 +157,7 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	// worker-local receipts stay empty (nothing was delivered yet).
 	found := false
 	for _, in := range res.Intents {
-		if in.Kind == yaegikernel.IntentNote && in.ToDesk == "owner" && in.Body == "hi" {
+		if in.Kind == yaegikernel.IntentEscalate && in.ToDesk == "owner" && in.Body == "hi" {
 			found = true
 		}
 	}

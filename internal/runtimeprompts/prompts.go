@@ -36,7 +36,7 @@ type RunContextOptions struct {
 // PeerCoordinationOptions carries the desk's static coordination default.
 type PeerCoordinationOptions struct {
 	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
-	// peer coordination is a semantic act (choir.ReportPacket, choir.Note,
+	// peer coordination is a semantic act (choir.ReportPacket,
 	// choir.Cast, choir.Ask), not a JSON tool.
 	InCellCarrier bool
 }

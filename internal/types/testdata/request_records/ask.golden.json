@@ -1,0 +1,52 @@
+{
+  "schema_id": "commitment_record.v1",
+  "record_id": "cell-1:ask:tray-1",
+  "prediction": {
+    "hypothesis": "which story?",
+    "questions": [
+      {
+        "question": "which story?"
+      }
+    ],
+    "committed_at": "2026-11-04T10:00:00Z"
+  },
+  "observation": {
+    "excerpt": "",
+    "source_ref": "",
+    "observed_at": ""
+  },
+  "scores": null,
+  "discrepancy": "unresolved",
+  "provenance": {
+    "agent_id": "texture:doc-1",
+    "model_id": "prov/model",
+    "committed_at": "2026-11-04T10:00:00Z",
+    "desk": "texture:doc-1",
+    "run_id": "run-1",
+    "origin": "desk_run"
+  },
+  "revision": {},
+  "precommit": {
+    "question": "which story?",
+    "distribution": null,
+    "resolver": "management:o"
+  },
+  "kind": "precommit",
+  "p_success": 0.8,
+  "weight": 0,
+  "impact_class": "I0",
+  "settlement": "recipient",
+  "materiality_procedure": {
+    "kind": "ask",
+    "custodian": "management",
+    "procedure_ref": "",
+    "no_procedure": true,
+    "weight": 0,
+    "impact_class": "I0",
+    "hash": "b9b75f0b0a53980bad443b1c49e9693cc34a3a00216b58ed4df025047146fd0c"
+  },
+  "addressee": "management:o",
+  "emitter_kind": "agent",
+  "inbox": "management:o",
+  "sender_inbox": "texture:doc-1"
+}

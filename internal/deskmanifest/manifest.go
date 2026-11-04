@@ -260,7 +260,7 @@ var system = []Desk{
 		// touch the filesystem (mutation is capsule-bound under
 		// engineering). It reads the captures a capture arrival names and
 		// never fetches the world.
-		Verbs: []string{"Cast", "Ask", "Note", "Reply",
+		Verbs: []string{"Cast", "Ask", "Reply",
 			"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 			"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask", "Calibration", "Restate"},
 		CapsuleVerbs: []string{},
@@ -279,7 +279,7 @@ var system = []Desk{
 		// turn with Done, Wait or Reject. It is the sole writer of canonical
 		// document revisions. It reads the captures its frame names; it
 		// never fetches the world.
-		Verbs:      []string{"Cast", "Ask", "Note", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
+		Verbs:      []string{"Cast", "Ask", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
 		Sandbox:    Sandbox{Profile: "desk_cell", UID: 61002},
 		Taint:      TaintPrivileged,
 		Memory:     Memory{WorkerMaxBytes: 768 * mib},
@@ -293,7 +293,7 @@ var system = []Desk{
 		Instance: InstanceSubject,
 		// Research observes the world read-only but has full message
 		// authority: read-only world access is not read-only messaging.
-		Verbs: []string{"Cast", "Ask", "Note", "Reply", "CancelAct",
+		Verbs: []string{"Cast", "Ask", "Reply", "CancelAct",
 			"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 			"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 			"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
@@ -312,7 +312,7 @@ var system = []Desk{
 		// Engineering mutates inside its capsule, converses with
 		// management on records, and ends its assignment with Complete,
 		// freezing a candidate first.
-		Verbs: []string{"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note", "Calibration", "Restate"},
+		Verbs: []string{"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Calibration", "Restate"},
 		CapsuleVerbs: []string{"exec", "read_file", "write_file", "list_dir", "stat", "mkdir", "remove",
 			"kill_session", "go_eval", "init_session", "close_session", "job_start", "job_status", "job_stop"},
 		Sandbox: Sandbox{Profile: "capsule"},
@@ -329,7 +329,7 @@ var system = []Desk{
 		// A management task disposes of the captures its lease names. It
 		// has no filesystem, assignment, message, product API or ledger
 		// authority: one level of delegation.
-		Verbs:     []string{"Cast", "Note", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
+		Verbs:     []string{"Cast", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
 		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61001},
 		Taint:     TaintPrivileged,
 		Memory:    Memory{WorkerMaxBytes: 384 * mib},
@@ -552,9 +552,10 @@ func FrameAllowed(name, action string) bool {
 	return ok && d.AllowsFrame(action)
 }
 
-// retiredVerbs are verbs deleted with the emit and message channels (MA1.1).
-// A manifest naming one is refused at validation.
-var retiredVerbs = map[string]bool{"Emit": true, "Emits": true, "Message": true}
+// retiredVerbs are verbs deleted with the emit and message channels (MA1.1)
+// and with the agent Note (MA1.3). A manifest naming one is refused at
+// validation.
+var retiredVerbs = map[string]bool{"Emit": true, "Emits": true, "Message": true, "Note": true}
 
 func validateStructure(d Desk) error {
 	if d.Name == "" {
@@ -586,7 +587,7 @@ func validateStructure(d Desk) error {
 			return fmt.Errorf("desk %s: empty verb", d.Name)
 		}
 		if retiredVerbs[v] {
-			return fmt.Errorf("desk %s: verb %s was deleted with the emit and message channels; reach another desk with a record (Cast, Ask, Note, ReportPacket)", d.Name, v)
+			return fmt.Errorf("desk %s: verb %s was deleted (emit and message channels, MA1.1; the Note, MA1.3); reach another desk with a typed record (Cast, Ask, Feed, Decline, ReportPacket)", d.Name, v)
 		}
 	}
 	if d.Carrier == CarrierDeskWorker {
@@ -642,7 +643,7 @@ var appName = regexp.MustCompile(`^app:[a-z][a-z0-9-]{0,31}$`)
 // world verb: an app desk's egress is declared, owner-approved and added with
 // NET-10, not taken from here.
 var appDeskVerbs = map[string]bool{
-	"Cast": true, "Ask": true, "Note": true, "Reply": true, "CancelAct": true, "Escalate": true,
+	"Cast": true, "Ask": true, "Reply": true, "CancelAct": true, "Escalate": true,
 	"Precommit": true, "Report": true, "ReportPacket": true, "Resolve": true, "Disagreement": true,
 	"ReadCapture": true, "Done": true,
 }

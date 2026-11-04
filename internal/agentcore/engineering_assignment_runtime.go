@@ -244,7 +244,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: runtime authority unavailable")
 	}
 	if to := strings.TrimSpace(in.ToDesk); to != agentprofile.Engineering {
-		return engineeringCastPlan{}, fmt.Errorf("engineering cast: address \"engineering\"; each Cast opens a new assignment with its own conversation (use Note to speak into an open one), not %q", to)
+		return engineeringCastPlan{}, fmt.Errorf("engineering cast: address \"engineering\"; each Cast opens a new assignment with its own conversation (use Ask to speak into an open one), not %q", to)
 	}
 	objective := strings.TrimSpace(in.Objective)
 	if objective == "" {
@@ -465,7 +465,7 @@ func (rt *Runtime) refuseCastOntoOpenAssignment(ctx context.Context, ownerID, co
 			continue
 		}
 		inbox := strings.TrimSpace(child.Binding.AssignedAgentID)
-		return fmt.Errorf("engineering cast: assignment %s for this request is still %s, so no second assignment opens; send the change to its engineer with choir.Note(%q, <the change in full>) and wait for its final Report before casting again. If it is stuck, choir.CancelAssignment(%q, reason) ends it and mints its final Report, after which a Cast admits", child.AssignmentID, child.Disposition, inbox, child.AssignmentID)
+		return fmt.Errorf("engineering cast: assignment %s for this request is still %s, so no second assignment opens; send the change to its engineer with choir.Ask(%q, <the change in full>, req) and wait for its final Report before casting again. If it is stuck, choir.CancelAssignment(%q, reason) ends it and mints its final Report, after which a Cast admits", child.AssignmentID, child.Disposition, inbox, child.AssignmentID)
 	}
 	return nil
 }

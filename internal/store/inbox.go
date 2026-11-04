@@ -164,11 +164,14 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 		if rec.Directive == nil || !types.IsValidDirectiveSubtype(rec.Directive.Subtype) {
 			return inboxRefused("directive record %s requires a valid subtype", rec.RecordID)
 		}
-		if rec.Directive.Subtype == types.CommitmentDirectiveNote && strings.TrimSpace(rec.Directive.Body) == "" {
-			return inboxRefused("note record %s requires a body", rec.RecordID)
+		if (rec.Directive.Subtype.IsNotice() || rec.Directive.Subtype == types.CommitmentDirectiveFeed || rec.Directive.Subtype == types.CommitmentDirectiveDecline) && strings.TrimSpace(rec.Directive.Body) == "" {
+			return inboxRefused("%s record %s requires a body", rec.Directive.Subtype, rec.RecordID)
 		}
 	default:
 		return inboxRefused("record %s kind %q is not a mintable act", rec.RecordID, rec.Kind)
+	}
+	if err := types.ValidateRequestRecord(rec); err != nil {
+		return inboxRefused("%v", err)
 	}
 	if rec.Cast != nil && !rec.IsCast() {
 		return inboxRefused("record %s carries a cast body but is not a cast", rec.RecordID)
@@ -189,12 +192,12 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 		return inboxRefused("record %s is addressed to %s; only a management Cast committed through CommitInboxRecords opens a story", rec.RecordID, types.StoryOpenInbox)
 	}
 	if d := rec.Disposition; d != nil {
-		isNote := kind == types.CommitmentKindDirective && rec.Directive != nil && rec.Directive.Subtype == types.CommitmentDirectiveNote
+		isDispose := kind == types.CommitmentKindDirective && rec.Directive != nil && string(rec.Directive.Subtype) == d.Kind
 		toStory, toSource := strings.HasPrefix(rec.Inbox, "texture:"), strings.HasPrefix(rec.Inbox, "source:")
-		if !isNote || len(d.Captures) == 0 || !strings.HasPrefix(rec.SenderInbox, "management:") ||
+		if !isDispose || len(d.Captures) == 0 || !strings.HasPrefix(rec.SenderInbox, "management:") ||
 			(d.Kind == types.DispositionFeed && !toStory) || (d.Kind == types.DispositionDecline && !toSource) ||
 			(d.Kind != types.DispositionFeed && d.Kind != types.DispositionDecline) {
-			return inboxRefused("disposition %s must be management's Note feeding captures to texture:<doc> or declining them to source:<id>", rec.RecordID)
+			return inboxRefused("disposition %s must be management's Feed or Decline: feeding captures to texture:<doc> or declining them to source:<id>", rec.RecordID)
 		}
 	}
 	return nil

@@ -23,7 +23,7 @@ func commitActFixtureRecord(recordID, callerAgentID, addressee, body string) typ
 			CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		},
 		Addressee: addressee,
-		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: body},
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: body},
 	}
 }
 
@@ -149,7 +149,7 @@ func TestCommitLifecycleActReplayIsByteIdentical(t *testing.T) {
 
 	// Changed content under the same CommandID is a digest conflict.
 	changed := req
-	changed.Record.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "different body"}
+	changed.Record.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "different body"}
 	changed.CommandDigest, _ = ComputeCommitLifecycleActDigest(changed)
 	if _, err := s.CommitLifecycleAct(ctx, changed); !errors.Is(err, ErrLifecycleCommandConflict) {
 		t.Fatalf("changed replay err=%v", err)

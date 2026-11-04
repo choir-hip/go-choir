@@ -113,7 +113,7 @@ func TestTextureTurnWithoutWorkItemCommitsOnRecords(t *testing.T) {
 	textureInbox := start.Agent.AgentID
 	seed := types.CommitInboxRecordsRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "seed-no-work", Records: []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "mgmt:note:no-work", Kind: types.CommitmentKindDirective,
-		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "fyi"},
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "fyi"},
 		Inbox: textureInbox, SenderInbox: "management:" + start.OwnerID, Addressee: textureInbox,
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{AgentID: "management:" + start.OwnerID},

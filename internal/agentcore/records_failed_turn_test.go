@@ -248,7 +248,7 @@ func TestManagementFailedTurnRetryIsBoundedAndBacksOff(t *testing.T) {
 	research := "research:doc-retry"
 	commit := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "retry-research", Records: []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "retry-research-note", Kind: types.CommitmentKindDirective,
-		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "x"},
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "x"},
 		Inbox:     research, SenderInbox: "texture:doc-retry", Addressee: research, EmitterKind: types.CommitmentEmitterAgent,
 		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: "texture:doc-retry"},
 	}}}

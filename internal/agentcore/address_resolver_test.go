@@ -209,7 +209,7 @@ func TestResolveAddressNormalisesDeskNames(t *testing.T) {
 		t.Errorf("texture -> Engineering: %+v", r)
 	}
 	err := validateCellIntents(ReductionScope{FromRole: agentprofile.Engineering}, []yaegikernel.StagedIntent{
-		{LocalID: "n1", Kind: yaegikernel.IntentNote, ToDesk: "TEXTURE", Body: "x"}})
+		{LocalID: "n1", Kind: yaegikernel.IntentEscalate, ToDesk: "TEXTURE", Body: "x"}})
 	if err == nil {
 		t.Error("engineering -> TEXTURE evaded invariant 6")
 	}
@@ -219,7 +219,7 @@ func TestResolveAddressNormalisesDeskNames(t *testing.T) {
 // engineering.
 func TestMarkForwardedNamesTheOriginalAddressee(t *testing.T) {
 	for _, in := range []yaegikernel.StagedIntent{
-		{Kind: yaegikernel.IntentCast, Objective: "o"}, {Kind: yaegikernel.IntentNote, Body: "o"},
+		{Kind: yaegikernel.IntentCast, Objective: "o"}, {Kind: yaegikernel.IntentEscalate, Body: "o"},
 		{Kind: yaegikernel.IntentReply, Answer: "o"},
 		{Kind: yaegikernel.IntentReport, Claim: "o"},
 	} {

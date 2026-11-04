@@ -1,0 +1,45 @@
+{
+  "schema_id": "commitment_record.v1",
+  "record_id": "cell-1:escalate:tray-1",
+  "prediction": {
+    "hypothesis": "",
+    "committed_at": ""
+  },
+  "observation": {
+    "excerpt": "",
+    "source_ref": "",
+    "observed_at": ""
+  },
+  "scores": null,
+  "discrepancy": "unresolved",
+  "provenance": {
+    "agent_id": "texture:doc-1",
+    "model_id": "prov/model",
+    "committed_at": "2026-11-04T10:00:00Z",
+    "desk": "texture:doc-1",
+    "run_id": "run-1",
+    "origin": "desk_run"
+  },
+  "revision": {},
+  "kind": "directive",
+  "directive": {
+    "subtype": "escalate",
+    "body": "the build is blocked"
+  },
+  "p_success": 0.8,
+  "weight": 0.3,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "materiality_procedure": {
+    "kind": "escalate",
+    "custodian": "management",
+    "procedure_ref": "request.escalate.v1",
+    "weight": 0.3,
+    "impact_class": "I1",
+    "hash": "230af827876a3f692ebe52d6950f9975583c90ddbd2eee80d4437a254f93c685"
+  },
+  "addressee": "management:o",
+  "emitter_kind": "agent",
+  "inbox": "management:o",
+  "sender_inbox": "texture:doc-1"
+}

@@ -297,7 +297,7 @@ func TestC1eItems2And11CastWithoutValidParentCommitsNothing(t *testing.T) {
 		}
 	}
 	cast := func(spec string) yaegikernel.StagedIntent {
-		return yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Engineering, Objective: "change the platform", Statement: spec}
+		return yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: agentprofile.Engineering, Objective: "change the platform", Statement: spec}
 	}
 	mgmtHead := c1eInboxHead(t, s, seed.OwnerID, seed.ComputerID, seed.ParentAgentID)
 	textureHead := c1eInboxHead(t, s, seed.OwnerID, seed.ComputerID, seed.TextureInbox)

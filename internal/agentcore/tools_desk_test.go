@@ -179,13 +179,13 @@ func (a *stubCellAuthorizer) CommitCellTextureAuthor(_ context.Context, _ *types
 // the non-empty check — R3b's canonical-desk gate before the ledger mints.
 func TestValidateSemanticActRejectsUnknownDesk(t *testing.T) {
 	err := validateSemanticActIntent(yaegikernel.StagedIntent{
-		Kind: yaegikernel.IntentCast, ToDesk: "not-a-real-desk", Objective: "do thing", LocalID: "c1",
+		Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: "not-a-real-desk", Objective: "do thing", LocalID: "c1",
 	})
 	if err == nil {
 		t.Fatal("cast to unknown desk must be rejected")
 	}
 	if err := validateSemanticActIntent(yaegikernel.StagedIntent{
-		Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Research, Objective: "do thing", LocalID: "c1",
+		Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: agentprofile.Research, Objective: "do thing", LocalID: "c1",
 	}); err != nil {
 		t.Fatalf("cast to known desk %q should pass: %v", agentprofile.Research, err)
 	}

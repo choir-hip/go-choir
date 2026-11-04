@@ -68,6 +68,9 @@ func validateCommitLifecycleActShape(req types.CommitLifecycleActRequest) error 
 	if strings.TrimSpace(rec.RecordID) == "" {
 		return fmt.Errorf("commit lifecycle act: record_id is required")
 	}
+	if err := types.ValidateRequestRecord(rec); err != nil {
+		return fmt.Errorf("commit lifecycle act: %w", err)
+	}
 	kind := rec.RecordKind()
 	switch kind {
 	case types.CommitmentKindPrecommit, types.CommitmentKindReport,
@@ -76,8 +79,8 @@ func validateCommitLifecycleActShape(req types.CommitLifecycleActRequest) error 
 		if rec.Directive == nil || !types.IsValidDirectiveSubtype(rec.Directive.Subtype) {
 			return fmt.Errorf("commit lifecycle act: directive record requires a valid subtype")
 		}
-		if rec.Directive.Subtype == types.CommitmentDirectiveNote && strings.TrimSpace(rec.Directive.Body) == "" {
-			return fmt.Errorf("commit lifecycle act: note directive requires a body")
+		if (rec.Directive.Subtype.IsNotice() || rec.Directive.Subtype == types.CommitmentDirectiveFeed || rec.Directive.Subtype == types.CommitmentDirectiveDecline) && strings.TrimSpace(rec.Directive.Body) == "" {
+			return fmt.Errorf("commit lifecycle act: %s directive requires a body", rec.Directive.Subtype)
 		}
 	default:
 		return fmt.Errorf("commit lifecycle act: record kind %q is not a mintable act", rec.Kind)

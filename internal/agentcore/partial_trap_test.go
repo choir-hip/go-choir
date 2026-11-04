@@ -92,7 +92,7 @@ func TestPartialCompleteIsRefusedOnceTheAssignmentsCandidateFroze(t *testing.T) 
 		{"frozen then blocked (failure 3)", []string{selfdev.StateFrozen}, []yaegikernel.StagedIntent{completeIntent("blocked")}, false},
 		{"freeze and partial in one cell (failure 4)", nil, []yaegikernel.StagedIntent{freeze, completeIntent("partial")}, true},
 		{"freeze and completed in one cell", nil, []yaegikernel.StagedIntent{freeze, completeIntent("completed")}, false},
-		{"frozen, a cell with no Complete", []string{selfdev.StateFrozen}, []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentNote, LocalID: "tray-1", ToDesk: "management:m", Body: "hi"}}, false},
+		{"frozen, a cell with no Complete", []string{selfdev.StateFrozen}, []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentEscalate, Req: testRequest(), LocalID: "tray-1", ToDesk: "management:m", Body: "hi"}}, false},
 	}
 	// The checks only read, so cases in one candidate state share a store
 	// (each store costs a Dolt open).

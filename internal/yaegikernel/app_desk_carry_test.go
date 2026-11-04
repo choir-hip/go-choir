@@ -26,7 +26,7 @@ func carryEnv(m map[string]string) func(string) string {
 
 func appDeskForCarry(t *testing.T, name string, uid uint32) deskmanifest.Desk {
 	t.Helper()
-	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: name, Verbs: []string{"Note", "Done", "ReadCapture"},
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: name, Verbs: []string{"Escalate", "Done", "ReadCapture"},
 		Taint: deskmanifest.TaintUntrustedInput, UID: uid, WorkerMaxBytes: 256 << 20})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestAppDeskWorkerWithoutACarryHasNoVerbs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scope.deskModule("Note") || scope.desk != "" {
+	if scope.deskModule("Escalate") || scope.desk != "" {
 		t.Fatal("an unknown app role got a desk module")
 	}
 }
@@ -108,7 +108,7 @@ func TestAppDeskCarryInstallsTheRowInTheWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !scope.deskModule("Note") || scope.deskModule("ProductAPI") || scope.deskModule("Exec") {
+	if !scope.deskModule("Escalate") || scope.deskModule("ProductAPI") || scope.deskModule("Exec") {
 		t.Fatal("app desk scope has the wrong module set")
 	}
 }
@@ -135,7 +135,7 @@ func TestAppDeskCarryRefusals(t *testing.T) {
 			"CHOIR_DESK_SESSION_" + appDeskEnv: mk(func(s *deskmanifest.AppDeskSpec) { s.UID = 61001 })},
 		"malformed": {"CHOIR_DESK_SESSION_ROLE": good.Name, "CHOIR_DESK_SESSION_" + appDeskEnv: "{not json"},
 		"unknown field": {"CHOIR_DESK_SESSION_ROLE": good.Name,
-			"CHOIR_DESK_SESSION_" + appDeskEnv: `{"Name":"app:carry-bad","Verbs":["Note"],"Taint":"untrusted_input","UID":62103,"WorkerMaxBytes":1048576,"Kind":"system"}`},
+			"CHOIR_DESK_SESSION_" + appDeskEnv: `{"Name":"app:carry-bad","Verbs":["Escalate"],"Taint":"untrusted_input","UID":62103,"WorkerMaxBytes":1048576,"Kind":"system"}`},
 	}
 	for name, m := range cases {
 		if err := RegisterCarriedAppDesk(carryEnv(m), ""); err == nil {

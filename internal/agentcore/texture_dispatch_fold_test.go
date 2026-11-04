@@ -45,11 +45,11 @@ func TestFoldTextureDispatchCastIntoTurn(t *testing.T) {
 	write := yaegikernel.TextureTurn{BaseRevisionID: "rev-1", Write: &yaegikernel.TextureWrite{Edits: "@insert end\nv1", Why: "first"}}
 	intents := []yaegikernel.StagedIntent{
 		foldTurn("tray-1", write),
-		{Kind: yaegikernel.IntentCast, LocalID: "tray-2", ToDesk: agentprofile.Research, Objective: "cover chips",
+		{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-2", ToDesk: agentprofile.Research, Objective: "cover chips",
 			Statement: `{"kind":"question","summary":"chips this week","questions":["what shipped?"]}`},
-		{Kind: yaegikernel.IntentAsk, LocalID: "tray-3", ToDesk: agentprofile.Research, Question: "who funded it?"},
-		{Kind: yaegikernel.IntentNote, LocalID: "tray-4", ToDesk: agentprofile.Research, Body: "prefer primary sources"},
-		{Kind: yaegikernel.IntentEscalate, LocalID: "tray-5", ToDesk: agentprofile.Management, Body: "stuck"},
+		{Kind: yaegikernel.IntentAsk, Req: testRequest(), LocalID: "tray-3", ToDesk: agentprofile.Research, Question: "who funded it?"},
+		{Kind: yaegikernel.IntentAsk, Req: testRequest(), LocalID: "tray-4", ToDesk: agentprofile.Research, Question: "prefer primary sources"},
+		{Kind: yaegikernel.IntentEscalate, Req: testRequest(), LocalID: "tray-5", ToDesk: agentprofile.Management, Body: "stuck"},
 	}
 	packet := `{"kind":"evidence_update","summary":"s","sources":[{"source_id":"s1","target":{"uri":"https://example.org/a"}}]}`
 	read := cellRecords{inbox: "texture:doc-fold", after: 2, through: 5, view: []yaegikernel.InboxRecord{{Seq: 5, RecordID: "rec-5", Kind: "report", From: "research:doc-fold", Body: packet}}}
@@ -58,7 +58,7 @@ func TestFoldTextureDispatchCastIntoTurn(t *testing.T) {
 		t.Fatalf("fold: %v", err)
 	}
 	if len(folded) != 3 {
-		t.Fatalf("folded = %d intents, want 3 (cast, ask, note)", len(folded))
+		t.Fatalf("folded = %d intents, want 3 (cast, ask, ask)", len(folded))
 	}
 	if len(out) != 2 || out[0].Kind != yaegikernel.IntentTextureTurn || out[1].Kind != yaegikernel.IntentEscalate {
 		t.Fatalf("remaining intents = %+v, want the turn and the escalate", out)
@@ -98,9 +98,9 @@ func TestFoldTextureDispatchManagementCast(t *testing.T) {
 	scope.OwnerID = "owner-fold"
 	out, folded, err := foldTextureDispatch([]yaegikernel.StagedIntent{
 		foldTurn("tray-1", yaegikernel.TextureTurn{BaseRevisionID: "rev-1", Wait: "waiting on the build"}),
-		{Kind: yaegikernel.IntentCast, LocalID: "tray-2", ToDesk: agentprofile.Management, Objective: "build it",
+		{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-2", ToDesk: agentprofile.Management, Objective: "build it",
 			Statement: `{"kind":"execution_request","summary":"build","actions":[{"type":"run_tests","objective":"verify the page"}]}`},
-		{Kind: yaegikernel.IntentAsk, LocalID: "tray-3", ToDesk: agentprofile.Management, Question: "is a build possible?"},
+		{Kind: yaegikernel.IntentAsk, Req: testRequest(), LocalID: "tray-3", ToDesk: agentprofile.Management, Question: "is a build possible?"},
 	}, scope, cellRecords{})
 	if err != nil || len(folded) != 2 {
 		t.Fatalf("fold: %v (folded %d)", err, len(folded))
@@ -115,7 +115,7 @@ func TestFoldTextureDispatchManagementCast(t *testing.T) {
 // is never lost to a refusal, and it still commits with a turn.
 func TestFoldTextureDispatchWithoutATurnCommitsAsWait(t *testing.T) {
 	out, folded, err := foldTextureDispatch([]yaegikernel.StagedIntent{
-		{Kind: yaegikernel.IntentCast, LocalID: "tray-1", ToDesk: agentprofile.Research, Objective: "cover chips", Statement: `{"kind":"question","summary":"s"}`},
+		{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-1", ToDesk: agentprofile.Research, Objective: "cover chips", Statement: `{"kind":"question","summary":"s"}`},
 	}, foldScope, cellRecords{inbox: "texture:doc-fold", after: 1, through: 3})
 	if err != nil || len(folded) != 1 || len(out) != 1 || out[0].Kind != yaegikernel.IntentTextureTurn {
 		t.Fatalf("fold = %+v, %v", out, err)
@@ -129,7 +129,7 @@ func TestFoldTextureDispatchWithoutATurnCommitsAsWait(t *testing.T) {
 // A cell with no turn and no dispatch commits nothing: its records stay
 // unread for the turn that answers them.
 func TestFoldTextureDispatchLeavesCellsWithoutATurnAlone(t *testing.T) {
-	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentEscalate, LocalID: "tray-1", Body: "x"}}
+	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentEscalate, Req: testRequest(), LocalID: "tray-1", Body: "x"}}
 	out, folded, err := foldTextureDispatch(intents, foldScope, cellRecords{inbox: "texture:doc-fold", after: 3, through: 4})
 	if err != nil || len(folded) != 0 || len(out) != 1 || out[0].Kind != yaegikernel.IntentEscalate {
 		t.Fatalf("cell changed: err=%v out=%+v", err, out)
@@ -144,7 +144,7 @@ func TestFoldTextureDispatchLeavesCellsWithoutATurnAlone(t *testing.T) {
 func TestFoldTextureDispatchRefusals(t *testing.T) {
 	turn := foldTurn("tray-1", yaegikernel.TextureTurn{BaseRevisionID: "rev-1", Wait: "w"})
 	cast := func(desk string) yaegikernel.StagedIntent {
-		return yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "tray-9", ToDesk: desk, Objective: "o",
+		return yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-9", ToDesk: desk, Objective: "o",
 			Statement: `{"kind":"execution_request","summary":"s","actions":[{"type":"run_tests","objective":"a"}]}`}
 	}
 	for _, tc := range []struct {
@@ -172,7 +172,7 @@ func TestFoldTextureDispatchRefusals(t *testing.T) {
 func TestFoldTextureDispatchForwardsEngineeringCastToManagement(t *testing.T) {
 	scope := foldScope
 	scope.OwnerID = "owner-1"
-	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentCast, LocalID: "tray-9", ToDesk: agentprofile.Engineering, Objective: "o",
+	intents := []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-9", ToDesk: agentprofile.Engineering, Objective: "o",
 		Statement: `{"kind":"execution_request","summary":"s","actions":[{"type":"run_tests","objective":"a"}]}`}}
 	out, folded, err := foldTextureDispatch(intents, scope, cellRecords{})
 	if err != nil || len(folded) != 1 {
@@ -235,7 +235,7 @@ println(err)`)
 	}
 
 	out = run(`choir.Write("@replace b2\nWe are finding out what shipped.", "acknowledge")
-choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","summary":"chips","questions":[]string{"what shipped?"}})`)
+choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","summary":"chips","questions":[]string{"what shipped?"}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if len(auth.seen) != 1 {
 		t.Fatalf("authorizer calls = %d, want 1; out=%s", len(auth.seen), out)
 	}
@@ -247,7 +247,7 @@ choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","
 		t.Fatalf("the cell receipt does not name the committed turn: %s", out)
 	}
 
-	out = run(`choir.Cast("research", "alone", map[string]interface{}{"kind":"question","summary":"s","questions":[]string{"q?"}})`)
+	out = run(`choir.Cast("research", "alone", map[string]interface{}{"kind":"question","summary":"s","questions":[]string{"q?"}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if len(auth.seen) != 2 || !strings.Contains(foldedTurn(t, auth.seen[1]).Wait, "alone") {
 		t.Fatalf("a Cast alone did not commit as a Wait: calls=%d out=%s", len(auth.seen), out)
 	}

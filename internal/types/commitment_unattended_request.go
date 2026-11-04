@@ -32,7 +32,7 @@ func IsUnattendedRequestNotice(rec CommitmentRecord) bool {
 	sender := strings.TrimSpace(rec.SenderInbox)
 	return rec.EmitterKind == CommitmentEmitterSystem &&
 		strings.HasPrefix(sender, unattendedRecordPrefix) && sender != unattendedRecordPrefix &&
-		rec.Directive != nil && rec.Directive.Subtype == CommitmentDirectiveNote
+		rec.Directive != nil && rec.Directive.Subtype.IsNotice()
 }
 
 // NewUnattendedRequestNotice builds the notice for managementInbox about the
@@ -50,7 +50,7 @@ func NewUnattendedRequestNotice(managementInbox, computerID, docID, trajectoryID
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  computerID,
 		Inbox:       strings.TrimSpace(managementInbox), SenderInbox: UnattendedRequestSenderInbox(workItemID), Addressee: strings.TrimSpace(managementInbox),
-		Directive:   &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: strings.TrimSpace(body)},
+		Directive:   &CommitmentDirective{Subtype: CommitmentDirectiveNotice, Body: strings.TrimSpace(body)},
 		SubjectRefs: map[string]string{"doc_id": strings.TrimSpace(docID), "trajectory_id": strings.TrimSpace(trajectoryID), "work_item_id": workItemID, "run_id": runID},
 	}
 }

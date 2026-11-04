@@ -111,7 +111,7 @@ func TestApplyTextureIsGoneFromTexture(t *testing.T) {
 	if _, ok := exports["ApplyTexture"]; ok {
 		t.Fatal("Texture still exports ApplyTexture")
 	}
-	for _, name := range []string{"Write", "Done", "Wait", "Reject", "ReadDoc", "Cast", "Ask", "Note"} {
+	for _, name := range []string{"Write", "Done", "Wait", "Reject", "ReadDoc", "Cast", "Ask"} {
 		if _, ok := exports[name]; !ok {
 			t.Errorf("Texture does not export %s", name)
 		}

@@ -46,7 +46,7 @@ func TestEngineeringCastOntoABoundRequestIsRefusedAndTheNoteGoesThrough(t *testi
 	}
 
 	cast := func(parent string) yaegikernel.StagedIntent {
-		return yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Engineering,
+		return yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: agentprofile.Engineering,
 			Objective: "continue the repair", Statement: `{"parent":"` + parent + `"}`}
 	}
 	rows := func() int {
@@ -60,7 +60,7 @@ func TestEngineeringCastOntoABoundRequestIsRefusedAndTheNoteGoesThrough(t *testi
 	for i, parent := range []string{"texture-cell:Cast:recast-r5-2", seed.TextureCastID} {
 		reduction, cellCtx := c1eManagementReduction(rt, seed, run, "r5-2-cast-"+string(rune('a'+i)))
 		err := reduction.commitTray(cellCtx, []yaegikernel.StagedIntent{cast(parent)}, 1)
-		if err == nil || !strings.Contains(err.Error(), bound.AssignmentID) || !strings.Contains(err.Error(), "choir.Note(\"engineering:"+bound.AssignmentID+"\"") ||
+		if err == nil || !strings.Contains(err.Error(), bound.AssignmentID) || !strings.Contains(err.Error(), "choir.Ask(\"engineering:"+bound.AssignmentID+"\"") ||
 			// Review bunch 238 B: the release for a stuck assignment.
 			!strings.Contains(err.Error(), "choir.CancelAssignment(\""+bound.AssignmentID+"\"") {
 			t.Fatalf("second Cast for a bound request (parent %s): err = %v", parent, err)
@@ -72,7 +72,7 @@ func TestEngineeringCastOntoABoundRequestIsRefusedAndTheNoteGoesThrough(t *testi
 
 	// The Note to the bound engineer goes through.
 	engineeringHead := c1eInboxHead(t, s, seed.OwnerID, seed.ComputerID, bound.Binding.AssignedAgentID)
-	note := yaegikernel.StagedIntent{LocalID: "note-eng", Kind: yaegikernel.IntentNote, ToDesk: bound.Binding.AssignedAgentID, Body: "the owner corrected the spec: keep the ids pdf and epub"}
+	note := yaegikernel.StagedIntent{LocalID: "note-eng", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: bound.Binding.AssignedAgentID, Question: "the owner corrected the spec: keep the ids pdf and epub"}
 	reduction, cellCtx := c1eManagementReduction(rt, seed, run, "r5-2-note")
 	if err := reduction.commitTray(cellCtx, []yaegikernel.StagedIntent{note}, 1); err != nil {
 		t.Fatalf("Note to the bound engineer: %v", err)
@@ -112,7 +112,7 @@ func TestEngineeringCastReplayOfTheSameCellIsNotRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := c1eManagementRun(t, s, seed)
-	in := yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Engineering,
+	in := yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, Req: testRequest(), ToDesk: agentprofile.Engineering,
 		Objective: "repair the Reader", Statement: `{"parent":"` + seed.TextureCastID + `"}`}
 	const cell = "r5-2-replay-cell"
 	reduction, cellCtx := c1eManagementReduction(rt, seed, run, cell)

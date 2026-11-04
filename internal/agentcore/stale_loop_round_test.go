@@ -98,7 +98,7 @@ func TestStaleManagementLoopEndDoesNotCloseANewerRound(t *testing.T) {
 	next := &types.RunRecord{RunID: "run-calendar", AgentID: management, OwnerID: owner, ComputerID: computer,
 		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning}
 	_, err = rt.planEngineeringCast(ctx, ReductionScope{OwnerID: owner, ComputerID: computer, DeskAgentID: management, FromRole: agentprofile.Management, RunID: next.RunID},
-		next, yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "tray-1", ToDesk: agentprofile.Engineering, Objective: "build calendar", Statement: string(spec)})
+		next, yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-1", ToDesk: agentprofile.Engineering, Objective: "build calendar", Statement: string(spec)})
 	if err != nil && strings.Contains(err.Error(), "is not open") {
 		t.Fatalf("the engineering Cast was refused for a closed round: %v", err)
 	}

@@ -43,7 +43,7 @@ func IsEngineeringProgressRelay(rec CommitmentRecord) bool {
 	return rec.EmitterKind == CommitmentEmitterSystem &&
 		strings.HasPrefix(strings.TrimSpace(rec.SenderInbox), progressRecordPrefix) &&
 		strings.TrimSpace(rec.SenderInbox) != progressRecordPrefix &&
-		rec.Directive != nil && rec.Directive.Subtype == CommitmentDirectiveNote
+		rec.Directive != nil && rec.Directive.Subtype.IsNotice()
 }
 
 // NewEngineeringProgressRelay builds the relay of one engineering progress
@@ -65,7 +65,7 @@ func NewEngineeringProgressRelay(source CommitmentRecord, textureInbox string) (
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  source.ComputerID,
 		Inbox:       textureInbox, SenderInbox: ProgressSenderInbox(source.SenderInbox), Addressee: textureInbox,
-		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: body},
+		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNotice, Body: body},
 		RelatedIDs:   []string{strings.TrimSpace(source.RecordID)},
 		EvidenceRefs: append([]string(nil), source.EvidenceRefs...),
 		SubjectRefs:  map[string]string{"assignment_inbox": strings.TrimSpace(source.SenderInbox), "relay_of": strings.TrimSpace(source.RecordID)},

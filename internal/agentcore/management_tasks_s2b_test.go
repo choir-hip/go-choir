@@ -52,7 +52,7 @@ func TestManagementTasksRunKAtOnceAndTheQueueDrains(t *testing.T) {
 		}
 		return `var ids []string
 for _, r := range choir.Records() { if r.Captures != nil { for _, c := range r.Captures.Items { ids = append(ids, c.CaptureID) } } }
-choir.Decline(ids, "a listing, no news event")
+choir.Decline(ids, "a listing, no news event", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 choir.Done("declined")`, true
 	}
 	f.rt.provider = model
@@ -176,7 +176,7 @@ func TestConcurrentTasksOpenOneStoryForOneEvent(t *testing.T) {
 			if !barrier.arrive(20 * time.Second) {
 				return "", false
 			}
-			return leased + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}})
+			return leased + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 choir.Done("opened the strike story")`, true
 		case 2:
 			if !strings.Contains(last, "story library moved") {
@@ -184,7 +184,7 @@ choir.Done("opened the strike story")`, true
 			}
 			return leased + `p, _ := choir.Stories(50, "")
 for _, s := range p.Stories {
-	if s.Headline == "Harbor strike begins" { choir.Feed(s.Inbox, ids, "the same strike, opened by another task") }
+	if s.Headline == "Harbor strike begins" { choir.Feed(s.Inbox, ids, "the same strike, opened by another task", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"}) }
 }
 choir.Done("fed the strike story")`, true
 		}
@@ -258,7 +258,7 @@ func TestATaskOpensTwoStoriesWithoutRefusingItself(t *testing.T) {
 for _, r := range choir.Records() { if r.Captures != nil { ids = append(ids, r.RecordID) } }
 choir.Delegate("intake", "", ids, []any{ids})`}
 	open := func(capture, headline string) string {
-		return `choir.Cast("texture:new", "` + headline + `", map[string]any{"captures": []string{"` + capture + `"}, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "it matters", "probability": 0.5}}})`
+		return `choir.Cast("texture:new", "` + headline + `", map[string]any{"captures": []string{"` + capture + `"}, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "it matters", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
 	}
 	model.taskCell = func(step int, _ string) (string, bool) {
 		switch step {

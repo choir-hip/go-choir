@@ -209,7 +209,7 @@ func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, r
 		EmitterKind: types.CommitmentEmitterSystem,
 		ComputerID:  w.ComputerID,
 		Inbox:       inbox, SenderInbox: sender, Addressee: inbox,
-		Directive:    &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: body},
+		Directive:    &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: body},
 		EvidenceRefs: []string{w.CastRecordID},
 		SubjectRefs:  map[string]string{"stack_base_cleared": string(result.State), "cast_record_id": w.CastRecordID},
 	}

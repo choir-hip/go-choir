@@ -86,7 +86,7 @@ func TestSettlementWaitsForTextureRecords(t *testing.T) {
 		t.Fatal("the trajectory is ready to settle while Texture has an unread Report")
 	}
 	// Texture reads it.
-	commit("note-1", types.CommitmentRecord{Kind: types.CommitmentKindDirective, Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "thanks"},
+	commit("note-1", types.CommitmentRecord{Kind: types.CommitmentKindDirective, Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "thanks"},
 		Inbox: research, SenderInbox: texture, Addressee: research}, &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: 0, Seq: 1})
 	if !ready() {
 		t.Fatal("a trajectory whose Texture has read every record and has no open round is not ready to settle")

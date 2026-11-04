@@ -29,7 +29,7 @@ func TestTextureCellCastWriteWaitPanicOnErrKeepsCastAndWrite(t *testing.T) {
 	defer sess.Close()
 	hooks := scope.BindCell()
 	doc := &DocSnapshot{DocID: "doc-1", RevisionID: "rev-1", Blocks: []texturewrite.Block{{Alias: "b1", ID: "p1", Kind: "paragraph", Text: "body"}}}
-	source := `_, err := choir.Cast("management", "build the Reader", map[string]any{"kind": "execution_request"})
+	source := `_, err := choir.Cast("management", "build the Reader", map[string]any{"kind": "execution_request"}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 if err != nil { panic(err) }
 _, err = choir.Write("@replace b1\nnew body", "rewrite")
 if err != nil { panic(err) }

@@ -66,7 +66,7 @@ func NewEngineeringWaitRelay(engineeringInbox, textureInbox, computerID string, 
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  computerID,
 		Inbox:       textureInbox, SenderInbox: ProgressSenderInbox(engineeringInbox), Addressee: textureInbox,
-		Directive:   &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: body},
+		Directive:   &CommitmentDirective{Subtype: CommitmentDirectiveNotice, Body: body},
 		SubjectRefs: subject,
 	}, true
 }

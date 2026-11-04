@@ -84,17 +84,19 @@ func delegate(t *testing.T, s *Store, cast types.CommitmentRecord, row types.Man
 	return err
 }
 
-// taskFeed is a task's feed Note, sent as management with the task named.
+// taskFeed is a task's Feed, sent as management with the task named.
 func taskFeed(id, taskID, runID, doc string, captures ...string) types.CommitmentRecord {
 	rec := inboxNote(id, taskParent, "texture:"+doc)
 	rec.Provenance.AgentID = types.ManagementTaskInbox(taskID)
 	rec.Provenance.ActingTask, rec.Provenance.ActingRunID = taskID, runID
+	rec.Directive.Subtype = types.CommitmentDirectiveFeed
 	rec.Disposition = &types.CommitmentDisposition{Kind: types.DispositionFeed, Captures: captures, Reason: "adds detail"}
 	return rec
 }
 
 func parentFeed(id, doc string, captures ...string) types.CommitmentRecord {
 	rec := inboxNote(id, taskParent, "texture:"+doc)
+	rec.Directive.Subtype = types.CommitmentDirectiveFeed
 	rec.Disposition = &types.CommitmentDisposition{Kind: types.DispositionFeed, Captures: captures, Reason: "parent feed"}
 	return rec
 }

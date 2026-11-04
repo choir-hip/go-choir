@@ -12,7 +12,7 @@ import (
 func goodManifest(pkg string) Manifest {
 	return Manifest{
 		Package:        pkg,
-		Verbs:          []string{"Cast", "Note", "ReadCapture", "Done"},
+		Verbs:          []string{"Cast", "Escalate", "ReadCapture", "Done"},
 		WorkerMaxBytes: 256 << 20,
 		OwnedKinds:     []string{"choir.app." + pkg + ".episode_note"},
 	}
@@ -207,7 +207,7 @@ func TestDisableRetiresTheDeskAndItsKinds(t *testing.T) {
 func TestSecondClaimIsRefused(t *testing.T) {
 	first := goodManifest("reader")
 	second := goodManifest("reader")
-	second.Verbs = []string{"Note"}
+	second.Verbs = []string{"Escalate"}
 	set, rs := Derive([]Event{install(1, first), install(2, second)})
 	if len(set.Desks) != 1 || !set.Desks[0].HasVerb("Cast") || !hasCode(rs, CodeNameTaken) {
 		t.Fatalf("second install of a name: desks=%+v refusals=%+v", set.Desks, rs)

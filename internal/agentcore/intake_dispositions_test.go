@@ -86,7 +86,7 @@ func TestFeedAndDeclineWriteTheNoteRecordsWithCapturesAndRecordOverrides(t *test
 	// Off: Feed and Decline are refused and commit nothing.
 	storeIntakeLabelsOff(t, s, owner, computer)
 	cell := managementCell(t, rt, owner, computer, "run-dispose-off")
-	if out := cell(`choir.Feed("` + pope + `", []string{"cap-d1"}, "adds the diagnosis")`); !strings.Contains(out, "intake.labels") {
+	if out := cell(`choir.Feed("` + pope + `", []string{"cap-d1"}, "adds the diagnosis", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "intake.labels") {
 		t.Fatalf("Feed with intake.labels off: %s", out)
 	}
 	if got, _ := s.ListInboxRecords(ctx, owner, computer, "texture:"+pope, 0, 0); len(got) != 1 {
@@ -99,17 +99,17 @@ func TestFeedAndDeclineWriteTheNoteRecordsWithCapturesAndRecordOverrides(t *test
 	cell = managementCell(t, rt, owner, computer, "run-dispose-on")
 	out := cell(`rs := choir.Records()
 fmt.Println(rs[0].Labels["cap-d2"].Says)
-choir.Feed("texture:` + pope + `", []string{"cap-d1"}, "adds the Vatican's confirmation of the diagnosis")
-choir.Feed("` + trial + `", []string{"cap-d2"}, "this is the Nord Stream trial, not the pope's surgery")
-choir.Decline([]string{"cap-d3", "cap-d4"}, "no news event: a signup page and a procedural note")`)
-	if !strings.Contains(out, "Jev: same event as texture:"+pope) || strings.Count(out, "rlm:note:") < 3 {
+choir.Feed("texture:` + pope + `", []string{"cap-d1"}, "adds the Vatican's confirmation of the diagnosis", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+choir.Feed("` + trial + `", []string{"cap-d2"}, "this is the Nord Stream trial, not the pope's surgery", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+choir.Decline([]string{"cap-d3", "cap-d4"}, "no news event: a signup page and a procedural note", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
+	if !strings.Contains(out, "Jev: same event as texture:"+pope) || strings.Count(out, "rlm:") < 3 {
 		t.Fatalf("dispositions did not commit: %s", out)
 	}
 
-	// The feed is the Note a hand-written feed is, plus the captures.
+	// The feed is the Feed, plus the captures.
 	popeInbox, _ := s.ListInboxRecords(ctx, owner, computer, "texture:"+pope, 0, 0)
 	feed := popeInbox[len(popeInbox)-1]
-	if feed.Directive == nil || feed.Directive.Subtype != types.CommitmentDirectiveNote || feed.SenderInbox != agentprofile.Management+":"+owner ||
+	if feed.Directive == nil || feed.Directive.Subtype != types.CommitmentDirectiveFeed || feed.SenderInbox != agentprofile.Management+":"+owner ||
 		!strings.Contains(feed.Directive.Body, "Vatican's confirmation") || !strings.Contains(feed.Directive.Body, "cap-d1") {
 		t.Fatalf("feed record = %+v", feed)
 	}
@@ -142,7 +142,7 @@ choir.Decline([]string{"cap-d3", "cap-d4"}, "no news event: a signup page and a 
 	if len(labels) != 1 || labels[0].EventDocID != pope {
 		t.Fatalf("an override edited the label: %+v", labels)
 	}
-	if out := cell(`choir.Decline([]string{"cap-unknown"}, "no")`); !strings.Contains(out, "not named by a captures record") {
+	if out := cell(`choir.Decline([]string{"cap-unknown"}, "no", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "not named by a captures record") {
 		t.Fatalf("Decline of a capture no record names: %s", out)
 	}
 }

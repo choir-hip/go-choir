@@ -111,13 +111,13 @@ for _, r := range choir.Records() {
 	if r.Captures == nil { continue }
 	for _, c := range r.Captures.Items {
 		if strings.Contains(c.Title, "Pope") {
-			choir.Feed("texture:` + popeDoc + `", []string{c.CaptureID}, "the pope's recovery, not the label's story")
+			choir.Feed("texture:` + popeDoc + `", []string{c.CaptureID}, "the pope's recovery, not the label's story", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 		} else if !strings.Contains(c.Title, "leave") {
 			decline = append(decline, c.CaptureID)
 		}
 	}
 }
-if len(decline) > 0 { choir.Decline(decline, "no news event") }
+if len(decline) > 0 { choir.Decline(decline, "no news event", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"}) }
 choir.Done("the capture titled leave needs management")`
 }
 
@@ -651,7 +651,7 @@ func TestTaskStoryOpenNeedsTheLibraryHead(t *testing.T) {
 		if readFirst {
 			cell += "p, _ := choir.Stories(50, \"\")\nfmt.Println(\"stories\", len(p.Stories))\n"
 		}
-		return cell + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}})
+		return cell + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 choir.Done("opened the strike story")`
 	}
 	run := func(task types.ManagementTask, cell string) types.ManagementTask {

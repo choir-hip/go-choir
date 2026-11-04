@@ -32,8 +32,8 @@ const (
 
 // Semantic-act intent kinds (commitment-ledger carrier, mission R2). These
 // stage the same way as the existing kinds: they land in the tray in
-// microseconds and the reducer authors the act on cell return. Cast/Ask/Note/
-// Reply/Cancel/Escalate are operational acts (tracked, not scored);
+// microseconds and the reducer authors the act on cell return. Cast/Ask/Feed/
+// Decline/Reply/Cancel/Escalate are operational acts (tracked, not scored);
 // Precommit/Report/Resolve are epistemic acts (claims that resolve and score
 // on the commitment ledger).
 const (
@@ -42,9 +42,11 @@ const (
 	IntentCast = "cast"
 	// IntentAsk is a directed query; it resolves on the target's Reply.
 	IntentAsk = "ask"
-	// IntentNote is raw unscored transport (the successor to Message's
-	// unstructured use).
-	IntentNote = "note"
+	// IntentFeed feeds captures into an existing story; IntentDecline
+	// declines captures to their source. Typed request kinds (MA1.3): they
+	// rode on the deleted Note.
+	IntentFeed    = "feed"
+	IntentDecline = "decline"
 	// IntentReply answers a staged Ask.
 	IntentReply = "reply"
 	// IntentCancel retracts a commitment; IntentEscalate surfaces an issue to
@@ -352,7 +354,7 @@ type StagedIntent struct {
 	// claim-only Report.
 	Packet string `json:"packet,omitempty"`
 	// Disposition fields (management's choir.Feed and choir.Decline, L2a
-	// R2-5): a Note that disposes of captures carries which (feed or
+	// R2-5): a Feed or Decline carries which (feed or
 	// decline), the capture ids and management's reason. A Verify also
 	// carries its optional reason here, bounded by NormalizeVerifyReason; the
 	// reducer records it on the verification event and, on a fail, on the
@@ -360,6 +362,11 @@ type StagedIntent struct {
 	Disposition string   `json:"disposition,omitempty"`
 	Captures    []string `json:"captures,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
+	// Req carries a request's stated p_success, weight, impact class and
+	// settlement (MA1.3): required on Cast, Ask, Escalate, Feed and
+	// Decline. It has no provenance or origin field: the reducer stamps
+	// those and a cell cannot name them.
+	Req *types.RequestFields `json:"req,omitempty"`
 	// Job fields (IntentJob, jobs.go): the operation, the job id the cell
 	// minted, and a start's argv, cwd, wall clock and declared memory need.
 	JobOp       string   `json:"job_op,omitempty"`
@@ -472,28 +479,25 @@ func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bund
 // Cast stages delegated admission: open a downstream assignment for
 // (desk, objective) under the delegated-cast admission authority. Spec is an
 // optional structured payload (JSON) the assignment binds.
-func (t *Tray) Cast(desk, objective, spec string) (string, error) {
+func (t *Tray) Cast(desk, objective, spec string, req *types.RequestFields) (string, error) {
 	if desk == "" || objective == "" {
 		return "", fmt.Errorf("tray: cast requires a desk and objective")
 	}
-	return t.stage(StagedIntent{Kind: IntentCast, ToDesk: desk, Objective: objective, Statement: spec})
+	if err := types.ValidateRequestFields(types.RequestCast, req); err != nil {
+		return "", fmt.Errorf("tray: %w", err)
+	}
+	return t.stage(StagedIntent{Kind: IntentCast, ToDesk: desk, Objective: objective, Statement: spec, Req: req})
 }
 
 // Ask stages a directed query to a desk; it resolves on the target's Reply.
-func (t *Tray) Ask(toDesk, question string) (string, error) {
+func (t *Tray) Ask(toDesk, question string, req *types.RequestFields) (string, error) {
 	if toDesk == "" || question == "" {
 		return "", fmt.Errorf("tray: ask requires a desk and a question")
 	}
-	return t.stage(StagedIntent{Kind: IntentAsk, ToDesk: toDesk, Question: question})
-}
-
-// Note stages raw unscored transport to a desk (successor to unstructured
-// Message). Returns the cell-local correlation id.
-func (t *Tray) Note(toDesk, body string) (string, error) {
-	if toDesk == "" {
-		return "", fmt.Errorf("tray: note requires a destination desk")
+	if err := types.ValidateRequestFields(types.RequestAsk, req); err != nil {
+		return "", fmt.Errorf("tray: %w", err)
 	}
-	return t.stage(StagedIntent{Kind: IntentNote, ToDesk: toDesk, Body: body})
+	return t.stage(StagedIntent{Kind: IntentAsk, ToDesk: toDesk, Question: question, Req: req})
 }
 
 // Disposition values of a disposing Note (L2a R2-5).
@@ -502,20 +506,23 @@ const (
 	DispositionDecline = types.DispositionDecline
 )
 
-// Dispose stages a Note that disposes of captures: fed into the story at
-// toDesk (texture:<doc>) or declined to their source (source:<id>). Its
-// body names the reason and the captures, as a hand-written Note would.
-func (t *Tray) Dispose(toDesk, disposition string, captureIDs []string, reason string) (string, error) {
+// Dispose stages a Feed or Decline: captures fed into the story at toDesk
+// (texture:<doc>) or declined to their source (source:<id>). Its body names
+// the reason and the captures.
+func (t *Tray) Dispose(toDesk, disposition string, captureIDs []string, reason string, req *types.RequestFields) (string, error) {
 	reason = strings.TrimSpace(reason)
 	if toDesk == "" || len(captureIDs) == 0 || reason == "" {
 		return "", fmt.Errorf("tray: %s requires a destination, capture ids and a reason", disposition)
 	}
-	verb := "Fed"
+	verb, kind := "Fed", IntentFeed
 	if disposition == DispositionDecline {
-		verb = "Declined"
+		verb, kind = "Declined", IntentDecline
+	}
+	if err := types.ValidateRequestFields(kind, req); err != nil {
+		return "", fmt.Errorf("tray: %w", err)
 	}
 	body := reason + "\n\n" + verb + " captures: " + strings.Join(captureIDs, ", ")
-	return t.stage(StagedIntent{Kind: IntentNote, ToDesk: toDesk, Body: body, Disposition: disposition, Captures: append([]string(nil), captureIDs...), Reason: reason})
+	return t.stage(StagedIntent{Kind: kind, ToDesk: toDesk, Body: body, Disposition: disposition, Captures: append([]string(nil), captureIDs...), Reason: reason, Req: req})
 }
 
 // Delegate stages a batch delegation (management delegation S2a): one
@@ -576,11 +583,14 @@ func (t *Tray) CancelAssignment(assignmentID, reason string) (string, error) {
 }
 
 // Escalate surfaces an issue to management or the owner.
-func (t *Tray) Escalate(toDesk, issue string) (string, error) {
+func (t *Tray) Escalate(toDesk, issue string, req *types.RequestFields) (string, error) {
 	if toDesk == "" || issue == "" {
 		return "", fmt.Errorf("tray: escalate requires a target and an issue")
 	}
-	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue})
+	if err := types.ValidateRequestFields(types.RequestEscalate, req); err != nil {
+		return "", fmt.Errorf("tray: %w", err)
+	}
+	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue, Req: req})
 }
 
 // Precommit freezes a typed prediction on the commitment ledger. precommitJSON

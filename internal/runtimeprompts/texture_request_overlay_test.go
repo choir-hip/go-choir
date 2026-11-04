@@ -86,7 +86,7 @@ func TestManagementOverlayForwardsASpecChangeToTheBoundEngineer(t *testing.T) {
 		for _, want := range []string{
 			"changes the spec of an implementation assignment that is still open",
 			"owner direction",
-			"choir.Note to the bound engineer (engineering:<assignment>) carrying the change in full",
+			"choir.Ask to the bound engineer (engineering:<assignment>) carrying the change in full",
 			"before anything else",
 			"even while the assignment is bound and running",
 			"never reaches it",

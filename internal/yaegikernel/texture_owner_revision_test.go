@@ -34,7 +34,7 @@ func TestTextureCellNamesTheOwnerRevisionFromItsFrame(t *testing.T) {
 	hooks := scope.BindCell()
 	frame.Source = `id := choir.ReadDoc().OwnerRevision
 println("owner revision", id)
-_, err := choir.Cast("management", "build the Reader", map[string]any{"kind": "execution_request", "owner_revision": id})
+_, err := choir.Cast("management", "build the Reader", map[string]any{"kind": "execution_request", "owner_revision": id}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 println(err)`
 	out, err := serveCell(sess, frame, nil, &hooks)
 	if err != nil || out.Error != "" {

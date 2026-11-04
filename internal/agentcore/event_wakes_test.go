@@ -318,8 +318,8 @@ func TestDeclineRoutesAnEventRecordsCapturesToTheirOwnSources(t *testing.T) {
 	report, _ := rt.resolveEvents(ctx, owner, computer, inputs)
 	rt.mintEventWakes(ctx, owner, computer, inputs, report, nil)
 	cell := managementCell(t, rt, owner, computer, "run-event-decline")
-	out := cell(`choir.Decline([]string{"c1", "c2"}, "a terminal accident with no follow-up")`)
-	if strings.Count(out, "rlm:note:") < 2 {
+	out := cell(`choir.Decline([]string{"c1", "c2"}, "a terminal accident with no follow-up", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
+	if strings.Count(out, "rlm:decline:") < 2 {
 		t.Fatalf("decline did not commit: %s", out)
 	}
 	for _, src := range []string{"src-c1", "src-c2"} {
@@ -590,7 +590,7 @@ func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
 	report, _ := rt.resolveEvents(ctx, owner, computer, inputs)
 	rt.mintEventWakes(ctx, owner, computer, inputs, report, nil)
 	cell := managementCell(t, rt, owner, computer, "run-event-cover")
-	if out := cell(`choir.Feed("` + story + `", []string{"c1", "c2"}, "the collision story")`); !strings.Contains(out, "rlm:note:") {
+	if out := cell(`choir.Feed("` + story + `", []string{"c1", "c2"}, "the collision story", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "rlm:feed:") {
 		t.Fatalf("feed: %s", out)
 	}
 	third := []eventInput{capItem("c4", "Eurotunnel crash injures 19", "https://www.euronews.com/4", "")}
@@ -609,7 +609,7 @@ func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
 	r2, _ := rt.resolveEvents(ctx, owner, computer, plex)
 	rt.mintEventWakes(ctx, owner, computer, plex, r2, nil)
 	cell = managementCell(t, rt, owner, computer, "run-event-decline-2")
-	if out := cell(`choir.Decline([]string{"p1", "p2"}, "a product launch, not news")`); !strings.Contains(out, "rlm:note:") {
+	if out := cell(`choir.Decline([]string{"p1", "p2"}, "a product launch, not news", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "rlm:decline:") {
 		t.Fatalf("decline: %s", out)
 	}
 	p3 := []eventInput{capItem("p3", "Plex launches movie tickets", "https://techcrunch.com/p3", "")}

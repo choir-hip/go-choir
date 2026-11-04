@@ -51,17 +51,39 @@ const (
 )
 
 // CommitmentDirectiveSubtype is the closed directive routing enum —
-// note, escalate, cast, retract. Never free text: the reducer and
-// projections route on it, and open-ended subtypes would smuggle acts past
-// the scored taxonomy.
+// escalate, cast, feed, decline, retract, and the platform-only notice. Never
+// free text: the reducer and projections route on it, and open-ended subtypes
+// would smuggle acts past the scored taxonomy.
+//
+// The agent Note is deleted (MA1.3): feed and decline are typed request kinds
+// (they rode on Note), and a platform notice is its own subtype that only a
+// system emitter writes. A tape record written with the old "note" subtype
+// still decodes and replays (IsNotice reads it).
 type CommitmentDirectiveSubtype string
 
 const (
-	CommitmentDirectiveNote     CommitmentDirectiveSubtype = "note"
 	CommitmentDirectiveEscalate CommitmentDirectiveSubtype = "escalate"
 	CommitmentDirectiveCast     CommitmentDirectiveSubtype = "cast"
 	CommitmentDirectiveRetract  CommitmentDirectiveSubtype = "retract"
+	// CommitmentDirectiveFeed feeds captures into an existing story.
+	CommitmentDirectiveFeed CommitmentDirectiveSubtype = "feed"
+	// CommitmentDirectiveDecline declines captures to their source.
+	CommitmentDirectiveDecline CommitmentDirectiveSubtype = "decline"
+	// CommitmentDirectiveNotice is a platform notice (owner act, progress
+	// relay, rebase notice, unattended request, verify owed). Only system
+	// emitters write one; no cell can stage it.
+	CommitmentDirectiveNotice CommitmentDirectiveSubtype = "notice"
+
+	// legacyDirectiveNote is the subtype of records written before MA1.3.
+	// Read-only: IsValidDirectiveSubtype refuses it on write.
+	legacyDirectiveNote CommitmentDirectiveSubtype = "note"
 )
+
+// IsNotice reports a platform notice, including one written under the retired
+// "note" subtype before MA1.3.
+func (s CommitmentDirectiveSubtype) IsNotice() bool {
+	return s == CommitmentDirectiveNotice || s == legacyDirectiveNote
+}
 
 // CommitmentDirective is the typed operational-act body: a directive's full
 // content lives on the record (never the retired envelope). Body carries the
@@ -98,6 +120,11 @@ type CommitmentPrecommit struct {
 	// answers it from receipts (commitment_rules.go). Engineering's
 	// precommits carry one; older bodies have none.
 	Rule *PrecommitRule `json:"rule,omitempty"`
+	// Weight is the sender's proposed materiality in [0,1] and ImpactClass
+	// its class (I0..I4); a weight of 0 on a class of I1 or above is refused
+	// (MA1.3). Both are optional: an unstated class is I0.
+	Weight      *float64    `json:"weight,omitempty"`
+	ImpactClass ImpactClass `json:"impact_class,omitempty"`
 }
 
 // CommitmentResolve is the evidence-bearing result staged by choir.Resolve.
@@ -174,6 +201,13 @@ type CommitmentProvenance struct {
 	// run; the store requires them on every record a task scope commits.
 	ActingTask  string `json:"acting_task,omitempty"`
 	ActingRunID string `json:"acting_run_id,omitempty"`
+	// Desk, RunID and Origin are stamped by the reducer (MA1.3), never
+	// supplied by a cell: the desk and run whose cell wrote the record and
+	// the origin class (OriginDeskRun, OriginTask, ...). Records written
+	// before the slice have none.
+	Desk   string `json:"desk,omitempty"`
+	RunID  string `json:"run_id,omitempty"`
+	Origin string `json:"origin,omitempty"`
 }
 
 // CommitmentRevision is the optional post-score model update: which
@@ -239,6 +273,17 @@ type CommitmentRecord struct {
 	// (note/escalate/cast/retract). Directives are operational records —
 	// excluded from claim accrual and materiality projection.
 	Directive *CommitmentDirective `json:"directive,omitempty"`
+
+	// The request record (MA1.3, request_record.go): a cast, ask, escalate,
+	// feed or decline carries the sender's stated p_success, proposed
+	// weight, impact class and settlement, plus the materiality procedure
+	// the reducer froze with them. Optional on read (older records have
+	// none), required on write by the reducer.
+	PSuccess             *float64           `json:"p_success,omitempty"`
+	Weight               *float64           `json:"weight,omitempty"`
+	ImpactClass          ImpactClass        `json:"impact_class,omitempty"`
+	Settlement           string             `json:"settlement,omitempty"`
+	MaterialityProcedure *MaterialityFreeze `json:"materiality_procedure,omitempty"`
 
 	// Addressee is the desk/actor this act is addressed to (StagedIntent
 	// ToDesk, falling back to ResolverID). It is the ledger-side analogue of
@@ -546,7 +591,7 @@ func (rec CommitmentRecord) RecordKind() CommitmentRecordKind {
 	parts := strings.Split(rec.RecordID, ":")
 	if len(parts) >= 2 {
 		switch parts[len(parts)-2] {
-		case "note", "escalate", "cast", "cancel", "retract":
+		case "note", "notice", "escalate", "cast", "feed", "decline", "cancel", "retract":
 			return CommitmentKindDirective
 		case "resolve":
 			return CommitmentKindResolve
@@ -568,11 +613,13 @@ func (rec CommitmentRecord) IsDirectiveRecord() bool {
 }
 
 // IsValidDirectiveSubtype reports whether the subtype is one of the closed
-// routing enum members.
+// routing enum members a record may be WRITTEN with. The retired "note" is
+// read-only.
 func IsValidDirectiveSubtype(subtype CommitmentDirectiveSubtype) bool {
 	switch subtype {
-	case CommitmentDirectiveNote, CommitmentDirectiveEscalate,
-		CommitmentDirectiveCast, CommitmentDirectiveRetract:
+	case CommitmentDirectiveNotice, CommitmentDirectiveEscalate,
+		CommitmentDirectiveCast, CommitmentDirectiveRetract,
+		CommitmentDirectiveFeed, CommitmentDirectiveDecline:
 		return true
 	}
 	return false

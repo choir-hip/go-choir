@@ -1017,7 +1017,7 @@ func (rt *Runtime) noteTextureCell(runID string, intents []yaegikernel.StagedInt
 	cells := rt.textureCells[runID]
 	for _, in := range intents {
 		switch {
-		case in.Kind == yaegikernel.IntentTextureTurn, in.Kind == yaegikernel.IntentCast, in.Kind == yaegikernel.IntentAsk, in.Kind == yaegikernel.IntentNote:
+		case in.Kind == yaegikernel.IntentTextureTurn, in.Kind == yaegikernel.IntentCast, in.Kind == yaegikernel.IntentAsk:
 			cells.applied = true
 		case strings.TrimSpace(in.Kind) != "":
 			cells.staged = true

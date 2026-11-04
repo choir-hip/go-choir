@@ -125,7 +125,7 @@ const SessionRoleResearchChild = "research_child"
 // SessionRoleManagementTask is a management task (management delegation
 // S2a, design round 2 R2-1/R2-2): a bounded sub-RLM of the management desk
 // that disposes of the captures its lease names. It reads records and
-// captures and stages Cast, Note, Feed, Decline and Done; it has no
+// captures and stages Cast, Feed, Decline and Done; it has no
 // filesystem, assignment, message, product API or ledger authority. The
 // spelling is agentprofile.ManagementTask's.
 const SessionRoleManagementTask = "management_task"
@@ -386,7 +386,6 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Freeze":           func() reflect.Value { return reflect.ValueOf(s.Freeze) },
 		"Cast":             func() reflect.Value { return reflect.ValueOf(s.Cast) },
 		"Ask":              func() reflect.Value { return reflect.ValueOf(s.Ask) },
-		"Note":             func() reflect.Value { return reflect.ValueOf(s.Note) },
 		"Reply":            func() reflect.Value { return reflect.ValueOf(s.Reply) },
 		"CancelAct":        func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
 		"CancelAssignment": func() reflect.Value { return reflect.ValueOf(s.CancelAssignment) },
@@ -735,11 +734,10 @@ func (s *ChoirScope) Stories(limit int, before string) (StoriesPage, error) {
 	return out, nil
 }
 
-// Feed feeds captures into an existing story (L2a R2-5): the same Note to
-// texture:<doc> a hand-written feed is, plus the structured list of
-// captures. doc is the story's doc id or its inbox; reason says what the
+// Feed feeds captures into an existing story (L2a R2-5): a typed Feed request to
+// texture:<doc>, with the structured list of captures. doc is the story's doc id or its inbox; reason says what the
 // captures add, and why, when you feed elsewhere than Jev's label said.
-func (s *ChoirScope) Feed(doc string, captureIDs any, reason string) (string, error) {
+func (s *ChoirScope) Feed(doc string, captureIDs any, reason string, req ...any) (string, error) {
 	t, err := s.boundTray("feed")
 	if err != nil {
 		return "", err
@@ -752,14 +750,18 @@ func (s *ChoirScope) Feed(doc string, captureIDs any, reason string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("choir: Feed: %w", err)
 	}
-	return t.Dispose("texture:"+doc, DispositionFeed, ids, reason)
+	fields, err := requestArg("Feed", req)
+	if err != nil {
+		return "", err
+	}
+	return t.Dispose("texture:"+doc, DispositionFeed, ids, reason, fields)
 }
 
 // Decline declines captures that open no story and feed none (L2a R2-5):
-// the same Note to their source a hand-written decline is, one per source,
-// plus the structured list of captures. Each id must be named by a
+// a typed Decline request to their source, one per source,
+// with the structured list of captures. Each id must be named by a
 // captures record of this turn.
-func (s *ChoirScope) Decline(captureIDs any, reason string) (string, error) {
+func (s *ChoirScope) Decline(captureIDs any, reason string, req ...any) (string, error) {
 	t, err := s.boundTray("decline")
 	if err != nil {
 		return "", err
@@ -767,6 +769,10 @@ func (s *ChoirScope) Decline(captureIDs any, reason string) (string, error) {
 	ids, err := captureIDsArg(captureIDs)
 	if err != nil {
 		return "", fmt.Errorf("choir: Decline: %w", err)
+	}
+	fields, err := requestArg("Decline", req)
+	if err != nil {
+		return "", err
 	}
 	sourceOf := map[string]string{}
 	for _, r := range s.records {
@@ -797,7 +803,7 @@ func (s *ChoirScope) Decline(captureIDs any, reason string) (string, error) {
 	}
 	var refs []string
 	for _, src := range sources {
-		ref, err := t.Dispose(types.CaptureArrivalSenderInbox(src), DispositionDecline, bySource[src], reason)
+		ref, err := t.Dispose(types.CaptureArrivalSenderInbox(src), DispositionDecline, bySource[src], reason, fields)
 		if err != nil {
 			return strings.Join(refs, ","), err
 		}
@@ -1258,7 +1264,7 @@ func (s *ChoirScope) Done(why string) (string, error) {
 }
 
 // Wait records that the document is waiting for evidence, and why. Alone it
-// is a turn without a revision; a Cast, Ask or Note in the same cell commits
+// is a turn without a revision; a Cast or Ask in the same cell commits
 // with it. After a Write in the same cell it returns nil and the why commits
 // with the revision: the request stays open and the Wait names what it waits
 // on, which a Write that leaves the owner's request open with nothing
@@ -1395,7 +1401,11 @@ func (s *ChoirScope) boundTray(op string) (*Tray, error) {
 // Cast stages delegated admission of a downstream assignment. spec is an
 // optional structured payload — a JSON-encoded string or any
 // JSON-marshalable Go value (""/nil stage no spec).
-func (s *ChoirScope) Cast(desk, objective string, spec any) (string, error) {
+//
+// The last argument is the request's stated fields (MA1.3), required:
+// {"p_success": 0.8, "weight": 0.3, "settlement": "recipient"}. The reducer
+// stamps provenance and freezes the materiality procedure; a cell cannot.
+func (s *ChoirScope) Cast(desk, objective string, spec any, req ...any) (string, error) {
 	t, err := s.boundTray("cast")
 	if err != nil {
 		return "", err
@@ -1404,25 +1414,46 @@ func (s *ChoirScope) Cast(desk, objective string, spec any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return t.Cast(desk, objective, specJSON)
+	fields, err := requestArg("Cast", req)
+	if err != nil {
+		return "", err
+	}
+	return t.Cast(desk, objective, specJSON, fields)
 }
 
-// Ask stages a directed query that resolves on the target's Reply.
-func (s *ChoirScope) Ask(toDesk, question string) (string, error) {
+// Ask stages a directed query that resolves on the target's Reply. The last
+// argument is the request's stated fields (see Cast).
+func (s *ChoirScope) Ask(toDesk, question string, req ...any) (string, error) {
 	t, err := s.boundTray("ask")
 	if err != nil {
 		return "", err
 	}
-	return t.Ask(toDesk, question)
-}
-
-// Note stages raw unscored transport.
-func (s *ChoirScope) Note(toDesk, body string) (string, error) {
-	t, err := s.boundTray("note")
+	fields, err := requestArg("Ask", req)
 	if err != nil {
 		return "", err
 	}
-	return t.Note(toDesk, body)
+	return t.Ask(toDesk, question, fields)
+}
+
+// requestArg decodes the request fields a request verb takes as its last
+// argument: a JSON object (a Go map literal or a JSON string). It is required,
+// so a call without it fails in the cell with the shape to send.
+func requestArg(verb string, req []any) (*types.RequestFields, error) {
+	if len(req) > 1 {
+		return nil, fmt.Errorf("choir: %s takes one request-fields argument, not %d", verb, len(req))
+	}
+	var raw string
+	if len(req) == 1 {
+		var err error
+		if raw, err = jsonCellArg(req[0]); err != nil {
+			return nil, err
+		}
+	}
+	fields, err := types.ParseRequestFields(raw)
+	if err != nil {
+		return nil, fmt.Errorf("choir: %s: %w", verb, err)
+	}
+	return fields, nil
 }
 
 // Reply answers a staged Ask.
@@ -1457,12 +1488,16 @@ func (s *ChoirScope) CancelAssignment(assignmentID, reason string) (string, erro
 }
 
 // Escalate surfaces an issue to management or the owner.
-func (s *ChoirScope) Escalate(toDesk, issue string) (string, error) {
+func (s *ChoirScope) Escalate(toDesk, issue string, req ...any) (string, error) {
 	t, err := s.boundTray("escalate")
 	if err != nil {
 		return "", err
 	}
-	return t.Escalate(toDesk, issue)
+	fields, err := requestArg("Escalate", req)
+	if err != nil {
+		return "", err
+	}
+	return t.Escalate(toDesk, issue, fields)
 }
 
 // Precommit freezes a typed, machine-scoreable prediction on the ledger.

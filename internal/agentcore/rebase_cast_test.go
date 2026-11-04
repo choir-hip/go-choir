@@ -114,7 +114,7 @@ func (f *rebaseCastFixture) planRaw(t *testing.T, spec, objective string) (engin
 		FromAgentID: f.management, DeskAgentID: f.management, FromRole: agentprofile.Management, ChannelID: f.management,
 		RunID: "run-management", OwnerID: f.owner, ComputerID: f.computer, CellID: "cell-" + strings.ReplaceAll(t.Name(), "/", "-"),
 	}
-	in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "e1", ToDesk: "engineering", Objective: objective, Statement: spec}
+	in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "e1", ToDesk: "engineering", Objective: objective, Statement: spec}
 	return f.rt.planEngineeringCast(context.Background(), scope, &types.RunRecord{RunID: "run-management"}, in)
 }
 

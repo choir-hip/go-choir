@@ -294,7 +294,7 @@ func NewClaimRecord(req ClaimRequest, now time.Time, randomHex string) (types.Co
 		},
 		Precommit:   &types.CommitmentPrecommit{Question: text, Distribution: dist, Resolver: claimResolver},
 		Discrepancy: types.DiscrepancyUnresolved,
-		Provenance:  types.CommitmentProvenance{AgentID: agentIDPrefix + agent, ModelID: model, ContextRef: session, CommittedAt: stamp},
+		Provenance:  types.CommitmentProvenance{AgentID: agentIDPrefix + agent, ModelID: model, ContextRef: session, CommittedAt: stamp, Origin: types.OriginExternal},
 		EmitterKind: types.CommitmentEmitterAgent,
 		Calibration: &types.CommitmentCalibration{
 			Schema: types.CalibrationSchemaV1,
@@ -430,7 +430,7 @@ func NewSettlementRecord(claim types.CommitmentRecord, req SettlementRequest, no
 		EvidenceRefs: evidence,
 		Observation:  types.CommitmentObservation{Excerpt: excerpt, SourceRef: evidence[0], ObservedAt: stamp},
 		Discrepancy:  discrepancyFor(outcome),
-		Provenance:   types.CommitmentProvenance{AgentID: agentID, ModelID: model, CommittedAt: stamp, ResolvedAt: stamp},
+		Provenance:   types.CommitmentProvenance{AgentID: agentID, ModelID: model, CommittedAt: stamp, ResolvedAt: stamp, Origin: types.OriginExternal},
 		EmitterKind:  emitter,
 		Calibration: &types.CommitmentCalibration{
 			Schema: types.CalibrationSchemaV1,

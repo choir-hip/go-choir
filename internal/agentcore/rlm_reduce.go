@@ -226,9 +226,9 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		desk, subject, _ := strings.Cut(to, ":")
 		if desk == captureSourceDesk && strings.TrimSpace(subject) != "" {
 			// A source's inbox takes management's decline of its captures,
-			// a Note, and nothing else (Cut 2 2b).
-			if in.Kind != yaegikernel.IntentNote {
-				return fmt.Errorf("reduce: %s %s: a source takes only a Note: decline its captures with choir.Note(r.From, reason)", in.Kind, in.LocalID)
+			// and nothing else (Cut 2 2b).
+			if in.Kind != yaegikernel.IntentDecline {
+				return fmt.Errorf("reduce: %s %s: a source takes only a Decline: decline its captures with choir.Decline(captureIDs, reason, req)", in.Kind, in.LocalID)
 			}
 			return nil
 		}
@@ -236,6 +236,17 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 			return fmt.Errorf("reduce: %s %s targets unknown desk %q", in.Kind, in.LocalID, in.ToDesk)
 		}
 		return nil
+	}
+	// A request carries its stated p_success, weight and settlement (MA1.3):
+	// the reducer refuses one without, or out of range, before anything
+	// mints. A tray staged before the change has none and is refused too:
+	// a crash never resumes work, so no such tray replays.
+	switch in.Kind {
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentEscalate,
+		yaegikernel.IntentFeed, yaegikernel.IntentDecline:
+		if err := types.ValidateRequestFields(in.Kind, in.Req); err != nil {
+			return fmt.Errorf("reduce: %s %s: %w", in.Kind, in.LocalID, err)
+		}
 	}
 	switch in.Kind {
 	case yaegikernel.IntentCast:
@@ -252,7 +263,7 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if in.Question == "" {
 			return fmt.Errorf("reduce: ask %s missing question", in.LocalID)
 		}
-	case yaegikernel.IntentNote, yaegikernel.IntentEscalate:
+	case yaegikernel.IntentFeed, yaegikernel.IntentDecline, yaegikernel.IntentEscalate:
 		if err := needTo(); err != nil {
 			return err
 		}
@@ -313,6 +324,10 @@ func typedCommitmentPrecommit(raw string) (types.CommitmentPrecommit, error) {
 	}
 	if strings.TrimSpace(value.Resolver) == "" {
 		return value, fmt.Errorf("missing resolver%s", hint)
+	}
+	// A weight of 0 on a class of I1 or above is refused (MA1.3).
+	if err := types.ValidateImpactWeight(types.RequestPrecommit, value.ImpactClass, value.Weight); err != nil {
+		return value, err
 	}
 	return value, nil
 }
@@ -391,9 +406,9 @@ func stagedIntentEnvelope(scope ReductionScope, in yaegikernel.StagedIntent) (to
 	case yaegikernel.IntentAsk:
 		to = in.ToDesk
 		content = encodeEnvelope(rlmEnvelope{Kind: "ask", Body: in.Question, From: scope.FromAgentID})
-	case yaegikernel.IntentNote:
+	case yaegikernel.IntentFeed, yaegikernel.IntentDecline:
 		to = in.ToDesk
-		content = encodeEnvelope(rlmEnvelope{Kind: "note", Body: in.Body, From: scope.FromAgentID})
+		content = encodeEnvelope(rlmEnvelope{Kind: in.Kind, Body: in.Body, From: scope.FromAgentID})
 	case yaegikernel.IntentReply:
 		to = in.ToDesk
 		content = encodeEnvelope(rlmEnvelope{Kind: "reply", Body: in.Answer, From: scope.FromAgentID})
@@ -1153,6 +1168,11 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	if !isSemanticActKind(in.Kind) {
 		return castStagedIntent(ctx, r.mb, r.scope, in)
 	}
+	// Every addressee-bearing act goes through the resolver, or is refused
+	// where the cell reads it (MA1.3, the MA1.2 re-review residual).
+	if err := r.checkAddresseeScope(ctx, in); err != nil {
+		return 0, err
+	}
 	// Mint the commitment record. The record id binds the act to its cell for
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
@@ -1190,7 +1210,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// no envelope follows it. Unaddressed acts mint ledger-only through
 	// the same transaction. Non-lifecycle callers stay on the
 	// append+envelope path.
-	if (in.Kind == yaegikernel.IntentNote ||
+	if (in.Kind == yaegikernel.IntentFeed || in.Kind == yaegikernel.IntentDecline ||
 		(in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.ToDesk) != "") ||
 		in.Kind == yaegikernel.IntentEscalate || in.Kind == yaegikernel.IntentCast ||
 		in.Kind == yaegikernel.IntentCancel ||
@@ -1237,7 +1257,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	var seq uint64
 	var err error
 	switch in.Kind {
-	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentFeed, yaegikernel.IntentDecline,
 		yaegikernel.IntentReply, yaegikernel.IntentEscalate, yaegikernel.IntentReport:
 		seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 	}
@@ -1269,7 +1289,7 @@ func (r *rlmCallReduction) commitTextureAuthorIntent(ctx context.Context, in yae
 
 func isSemanticActKind(kind string) bool {
 	switch kind {
-	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentFeed, yaegikernel.IntentDecline,
 		yaegikernel.IntentReply, yaegikernel.IntentCancel, yaegikernel.IntentEscalate,
 		yaegikernel.IntentPrecommit, yaegikernel.IntentReport, yaegikernel.IntentResolve,
 		yaegikernel.IntentDisagreement, yaegikernel.IntentCancelAssignment:
@@ -1329,9 +1349,12 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 			Questions:   []types.TypedQuestion{{Question: in.Question}},
 			CommittedAt: rec.Provenance.CommittedAt,
 		}
-	case yaegikernel.IntentNote:
+	case yaegikernel.IntentFeed:
 		rec.Kind = types.CommitmentKindDirective
-		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: in.Body}
+		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveFeed, Body: in.Body}
+	case yaegikernel.IntentDecline:
+		rec.Kind = types.CommitmentKindDirective
+		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveDecline, Body: in.Body}
 	case yaegikernel.IntentEscalate:
 		rec.Kind = types.CommitmentKindDirective
 		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveEscalate, Body: in.Body}
@@ -1406,7 +1429,38 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 	if in.TargetRef != "" {
 		rec.ParentID = in.TargetRef
 	}
+	stampRequestRecord(scope, in, &rec)
 	return rec
+}
+
+// stampRequestRecord is where the reducer stamps what a cell cannot set
+// (MA1.3): the provenance desk, run and origin class, and for a request the
+// stated fields and the frozen materiality procedure. Nothing here reads a
+// cell-supplied provenance: a StagedIntent has no field for one.
+func stampRequestRecord(scope ReductionScope, in yaegikernel.StagedIntent, rec *types.CommitmentRecord) {
+	rec.Provenance.Desk = strings.TrimSpace(scope.DeskAgentID)
+	rec.Provenance.RunID = strings.TrimSpace(scope.RunID)
+	rec.Provenance.Origin = types.OriginDeskRun
+	if _, ok := types.ManagementTaskIDOfInbox(scope.DeskAgentID); ok {
+		rec.Provenance.Origin = types.OriginTask
+	}
+	switch in.Kind {
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentEscalate,
+		yaegikernel.IntentFeed, yaegikernel.IntentDecline:
+		// A refused request never reaches here (validateSemanticActIntent);
+		// a nil Req leaves the record unstamped rather than inventing one.
+		if in.Req != nil {
+			_ = rec.StampRequest(in.Kind, in.Req)
+		}
+	case yaegikernel.IntentPrecommit:
+		if rec.Precommit != nil && rec.Precommit.Weight != nil {
+			rec.Weight = rec.Precommit.Weight
+			rec.ImpactClass = types.EffectiveImpact(types.RequestPrecommit, rec.Precommit.ImpactClass)
+			if m, ok := types.FreezeMateriality(types.RequestPrecommit, *rec.Precommit.Weight, rec.Precommit.ImpactClass); ok {
+				rec.MaterialityProcedure = &m
+			}
+		}
+	}
 }
 
 // commitmentIntentAddressee returns the desk/actor the act is addressed to —
@@ -2392,4 +2446,66 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 		rt.wakeUpdatedCoagent(toolCallCtx, *result.Update)
 	}
 	return uint64(result.Receipt.ReducerSeq), nil
+}
+
+// checkAddresseeScope refuses an act that names an address the sender may not
+// name, for the addressee-bearing acts the records route does not carry:
+// Escalate's destination, a Precommit's resolver when it names an inbox, and
+// the addressee a CancelAct derives from its target, which must be the cell's
+// own commitment. A refusal is visible: it names the address.
+func (r *rlmCallReduction) checkAddresseeScope(ctx context.Context, in yaegikernel.StagedIntent) error {
+	from := strings.TrimSpace(r.scope.DeskAgentID)
+	refuse := func(addr string, err error) error {
+		return fmt.Errorf("reduce: %s: %q is not an address %s may name: %w", in.LocalID, addr, from, err)
+	}
+	// resolve is the resolver's answer; a forwarded route is refused here
+	// (only a Cast is forwarded to its admission).
+	resolve := func(addr string) error {
+		route, err := ResolveAddress(from, r.scope.OwnerID, addr)
+		switch {
+		case err != nil:
+			return refuse(addr, err)
+		case route.Forwarded:
+			return refuse(addr, fmt.Errorf("it would be forwarded to %s; only a Cast is forwarded to its admission", route.Inbox))
+		case !route.OnRoute:
+			return refuse(addr, fmt.Errorf("it is not on the records path"))
+		}
+		return nil
+	}
+	switch in.Kind {
+	case yaegikernel.IntentEscalate:
+		if to := strings.TrimSpace(in.ToDesk); to != "" {
+			return resolve(to)
+		}
+	case yaegikernel.IntentPrecommit:
+		// A bare desk name ("research", "management") or the rule resolver
+		// resolves inside the cell's own scope; an inbox (profile:suffix)
+		// must resolve from this sender.
+		var body struct {
+			Resolver string `json:"resolver"`
+		}
+		_ = json.Unmarshal([]byte(in.Precommit), &body)
+		if resolver := strings.TrimSpace(body.Resolver); strings.Contains(resolver, ":") {
+			return resolve(resolver)
+		}
+	case yaegikernel.IntentCancel:
+		rt := r.rt()
+		if rt == nil || rt.store == nil {
+			return nil
+		}
+		computerID := strings.TrimSpace(r.scope.ComputerID)
+		if computerID == "" {
+			computerID = rt.TextureComputerID()
+		}
+		target, err := rt.store.GetCommitmentRecord(ctx, strings.TrimSpace(r.scope.OwnerID), computerID, strings.TrimSpace(in.TargetRef))
+		if err != nil || target == nil {
+			return nil // nothing to stand down: a ledger-only retract
+		}
+		own := strings.TrimSpace(target.Provenance.AgentID) == strings.TrimSpace(r.scope.FromAgentID) ||
+			strings.TrimSpace(target.SenderInbox) == from
+		if !own {
+			return refuse(in.TargetRef, fmt.Errorf("a CancelAct retracts only this desk's own commitments; this one was written by %s", firstNonEmpty(target.Provenance.AgentID, target.SenderInbox)))
+		}
+	}
+	return nil
 }

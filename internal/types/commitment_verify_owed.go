@@ -43,7 +43,7 @@ func IsVerifyOwedNotice(rec CommitmentRecord) bool {
 	return rec.EmitterKind == CommitmentEmitterSystem && strings.TrimSpace(rec.Provenance.AgentID) == VerifyOwedAgentID &&
 		strings.HasPrefix(sender, verifyOwedPrefix) && sender != verifyOwedPrefix &&
 		strings.HasPrefix(rec.RecordID, verifyOwedPrefix) && !rec.Final && rec.Round == 0 &&
-		rec.Directive != nil && rec.Directive.Subtype == CommitmentDirectiveNote
+		rec.Directive != nil && rec.Directive.Subtype.IsNotice()
 }
 
 // NewVerifyOwedNotice builds the nth notice for managementInbox about the
@@ -60,7 +60,7 @@ func NewVerifyOwedNotice(managementInbox, computerID, trajectoryID, assignmentID
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  computerID,
 		Inbox:       strings.TrimSpace(managementInbox), SenderInbox: VerifyOwedSenderInbox(assignmentID), Addressee: strings.TrimSpace(managementInbox),
-		Directive:   &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: strings.TrimSpace(body)},
+		Directive: &CommitmentDirective{Subtype: CommitmentDirectiveNotice, Body: strings.TrimSpace(body)},
 		SubjectRefs: map[string]string{
 			"trajectory_id": strings.TrimSpace(trajectoryID), "assignment_id": assignmentID, "operation_id": operationID,
 			"bundle_digest": strings.TrimSpace(bundleDigest), "notice": fmt.Sprint(n),

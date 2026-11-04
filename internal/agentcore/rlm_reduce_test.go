@@ -245,7 +245,7 @@ func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentNote, ToDesk: "management", Body: "outbound"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentEscalate, Req: testRequest(), ToDesk: "management", Body: "outbound"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestCommitRecoversPartialActTray(t *testing.T) {
 	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "management", "management", "snapshot-mail"); err != nil {
 		t.Fatal(err)
 	}
-	intent := yaegikernel.StagedIntent{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "is the cast ready?"}
+	intent := yaegikernel.StagedIntent{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "management", Question: "is the cast ready?"}
 
 	// Model a process death after the append-only ledger mint and before the
 	// envelope/cursor writes.
@@ -353,7 +353,7 @@ func TestCommitRecoversUnmailedActWithoutInboxAdvance(t *testing.T) {
 	scope.CellID = "cell-unmailed-act-recovery"
 	scope.ComputerID = rt.TextureComputerID()
 	ctx := testReductionCtx(scope)
-	intent := yaegikernel.StagedIntent{LocalID: "note-1", Kind: yaegikernel.IntentNote, ToDesk: "management", Body: "recover this mail"}
+	intent := yaegikernel.StagedIntent{LocalID: "note-1", Kind: yaegikernel.IntentEscalate, Req: testRequest(), ToDesk: "management", Body: "recover this mail"}
 
 	if _, err := rt.store.AppendCommitmentRecord(ctx, scope.OwnerID, scope.ComputerID, commitmentRecordForIntent(scope, intent)); err != nil {
 		t.Fatalf("stage commitment record: %v", err)
@@ -525,7 +525,7 @@ func TestCommitSkipsInboxCursorEntryWhenCursorDidNotMove(t *testing.T) {
 		sc.Cursor = cursor
 		r := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: sc, highWater: highWater}
 		if err := r.commit(ctx, []yaegikernel.StagedIntent{
-			{LocalID: localID, Kind: yaegikernel.IntentNote, ToDesk: "management", Body: localID},
+			{LocalID: localID, Kind: yaegikernel.IntentEscalate, Req: testRequest(), ToDesk: "management", Body: localID},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -590,7 +590,7 @@ func TestDeskCellReadsTheAgentCursorOnceInTheCommonCase(t *testing.T) {
 		t.Fatalf("cell start reduction = active %t, highWater %d; want active, 1", reduction.active, reduction.highWater)
 	}
 	atStart := rt.store.RunMemoryAgentListCalls() - before
-	intent := yaegikernel.StagedIntent{LocalID: "ask-common", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "is it ready?"}
+	intent := yaegikernel.StagedIntent{LocalID: "ask-common", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "management", Question: "is it ready?"}
 	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{intent}); err != nil {
 		t.Fatal(err)
 	}
@@ -612,8 +612,8 @@ func TestCommitWithNoPriorCommitmentRecordDoesNotReadTheAgentCursor(t *testing.T
 	scope.CellID = "cell-no-prior-record"
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, highWater: 1}
 	intents := []yaegikernel.StagedIntent{
-		{LocalID: "ask-a", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "first?"},
-		{LocalID: "ask-b", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "second?"},
+		{LocalID: "ask-a", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "management", Question: "first?"},
+		{LocalID: "ask-b", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "management", Question: "second?"},
 	}
 	before := rt.store.RunMemoryAgentListCalls()
 	if err := reduction.commit(ctx, intents); err != nil {
@@ -627,8 +627,8 @@ func TestCommitWithNoPriorCommitmentRecordDoesNotReadTheAgentCursor(t *testing.T
 func TestPartialCommitRecoveryStillReadsTheAgentCursor(t *testing.T) {
 	rt, scope, ctx := deskCellRuntime(t)
 	scope.CellID = "cell-recovery-reads-cursor"
-	first := yaegikernel.StagedIntent{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "is the cast ready?"}
-	second := yaegikernel.StagedIntent{LocalID: "ask-2", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "and the next?"}
+	first := yaegikernel.StagedIntent{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "management", Question: "is the cast ready?"}
+	second := yaegikernel.StagedIntent{LocalID: "ask-2", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "management", Question: "and the next?"}
 	// A process death after the append-only ledger mint of both acts and
 	// before the envelope and cursor writes.
 	for _, in := range []yaegikernel.StagedIntent{first, second} {

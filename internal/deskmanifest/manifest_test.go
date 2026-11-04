@@ -213,7 +213,7 @@ func TestWorkerBudgets(t *testing.T) {
 var appSeq atomic.Int32
 
 func goodApp() AppDeskSpec {
-	return AppDeskSpec{Name: fmt.Sprintf("app:t%d", appSeq.Add(1)), Verbs: []string{"Note", "Ask", "ReadCapture"}, Taint: TaintPrivileged, UID: 62001, WorkerMaxBytes: 256 * mib}
+	return AppDeskSpec{Name: fmt.Sprintf("app:t%d", appSeq.Add(1)), Verbs: []string{"Escalate", "Ask", "ReadCapture"}, Taint: TaintPrivileged, UID: 62001, WorkerMaxBytes: 256 * mib}
 }
 
 func TestAppDeskCannotHoldMoreThanASystemDeskGives(t *testing.T) {

@@ -45,7 +45,7 @@ func (f *rebaseFixture) textureReduction(desk string) *rlmCallReduction {
 
 func textureRebaseCast(notice string) yaegikernel.StagedIntent {
 	packet, _ := json.Marshal(map[string]any{"kind": "execution_request", "summary": "rebase", "rebase_notice": notice})
-	return yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "c1", ToDesk: "management", Objective: "Rebase", Statement: string(packet)}
+	return yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "c1", ToDesk: "management", Objective: "Rebase", Statement: string(packet)}
 }
 
 func TestRebaseNoticeTextureCastCarriesTheRecordsOwnID(t *testing.T) {
@@ -92,7 +92,7 @@ func TestRebaseNoticeTextureCastRefusesANamingOfNoNotice(t *testing.T) {
 		t.Fatal("a Texture answered a notice sent to another")
 	}
 	// A Cast without the field, or to another desk, is untouched.
-	plain := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "c2", ToDesk: "management", Statement: `{"kind":"execution_request"}`}
+	plain := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "c2", ToDesk: "management", Statement: `{"kind":"execution_request"}`}
 	if out, err := f.textureReduction(f.root).resolveTextureRebaseNotices(context.Background(), []yaegikernel.StagedIntent{plain}); err != nil || out[0].Statement != plain.Statement {
 		t.Fatalf("an ordinary Cast changed: %v", err)
 	}

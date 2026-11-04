@@ -197,7 +197,7 @@ func TestManagementCellAnswersTextureOnRecords(t *testing.T) {
 	if out := cell(`choir.ReportPacket("texture", map[string]interface{}{"kind":"blocker","summary":"x","notes":[]string{"x"}}, "")`); !strings.Contains(out, "texture:<doc>") {
 		t.Fatalf("a bare \"texture\" was not refused: %s", out)
 	}
-	if out := cell(`choir.Cast("engineering", "build it", map[string]interface{}{})`); !strings.Contains(out, "name the Texture request it serves") {
+	if out := cell(`choir.Cast("engineering", "build it", map[string]interface{}{}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "name the Texture request it serves") {
 		t.Fatalf("an engineering Cast naming no parent Texture request was not refused: %s", out)
 	}
 	out := cell(`rs := choir.Records()
@@ -238,7 +238,7 @@ func TestRecordsRecheckAfterTurn(t *testing.T) {
 		t.Helper()
 		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "late-" + id, Records: []types.CommitmentRecord{{
 			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
-			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: id},
 			Inbox:     research, SenderInbox: texture, Addressee: research, EmitterKind: types.CommitmentEmitterAgent,
 			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture, CommittedAt: at.Format(time.RFC3339Nano)},
 		}}}
@@ -296,7 +296,7 @@ func TestRecordsRecheckAfterTurn(t *testing.T) {
 // anything commits; management and research may address a Texture inbox.
 func TestReducerRefusesEngineeringActsToTexture(t *testing.T) {
 	for _, to := range []string{"texture", "texture:doc-1"} {
-		for _, kind := range []string{yaegikernel.IntentReport, yaegikernel.IntentNote, yaegikernel.IntentAsk, yaegikernel.IntentCast} {
+		for _, kind := range []string{yaegikernel.IntentReport, yaegikernel.IntentEscalate, yaegikernel.IntentAsk, yaegikernel.IntentCast} {
 			in := yaegikernel.StagedIntent{Kind: kind, LocalID: "tray-1", ToDesk: to, Objective: "x", Body: "x", Claim: "x"}
 			err := validateCellIntents(ReductionScope{FromRole: agentprofile.Engineering}, []yaegikernel.StagedIntent{in})
 			if err == nil || !strings.Contains(err.Error(), "only through management") {
@@ -428,7 +428,7 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 		t.Helper()
 		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "shown-" + id, Records: []types.CommitmentRecord{{
 			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
-			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: id},
 			Inbox:     management, SenderInbox: source, Addressee: management, EmitterKind: types.CommitmentEmitterSystem,
 			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: "system:captures", CommittedAt: at.Format(time.RFC3339Nano)},
 			// A capture arrival, the system record that wakes its reader:
@@ -480,7 +480,7 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 		t.Fatalf("Records() showed the first record in a cell that only read, but cursor = %d: %s", cursor(), out)
 	}
 	note("mid-run", time.Now().UTC())
-	if out := cell(`fmt.Println(choir.Note("source:rss:test", "acting on what I read"))`); !strings.Contains(out, "rlm:note") || cursor() != 1 {
+	if out := cell(`fmt.Println(choir.Ask("research:doc-x", "acting on what I read", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"}))`); !strings.Contains(out, "rlm:ask") || cursor() != 1 {
 		t.Fatalf("(b) an acting cell marked other than what the run was shown: cursor %d (want 1): %s", cursor(), out)
 	}
 	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 2") || cursor() != 1 {

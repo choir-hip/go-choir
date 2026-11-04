@@ -83,7 +83,7 @@ func ownerCastLoader(revs map[string]types.Revision) func(string) (types.Revisio
 }
 
 func ownerCast(spec string) yaegikernel.StagedIntent {
-	return yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "tray-2", ToDesk: agentprofile.Management, Objective: "build the Reader", Statement: spec}
+	return yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-2", ToDesk: agentprofile.Management, Objective: "build the Reader", Statement: spec}
 }
 
 func castOwnerDirectionsOf(t *testing.T, statement string) (map[string]json.RawMessage, []castOwnerDirection) {
@@ -107,7 +107,7 @@ func TestTextureCastAttachesTheOwnerRevisionVerbatim(t *testing.T) {
 	intents := []yaegikernel.StagedIntent{
 		turn,
 		ownerCast(`{"kind":"execution_request","actions":[{"summary":"build"}],"owner_revision":["rev-root","rev-direction"],"n":12345678901234567}`),
-		{Kind: yaegikernel.IntentAsk, LocalID: "tray-3", ToDesk: agentprofile.Research, Question: "who funded it?"},
+		{Kind: yaegikernel.IntentAsk, Req: testRequest(), LocalID: "tray-3", ToDesk: agentprofile.Research, Question: "who funded it?"},
 	}
 	out, err := attachCastOwnerDirections(intents, ownerCastScope, ownerCastLoader(revs))
 	if err != nil {
@@ -168,7 +168,7 @@ func TestTextureCastWithoutOwnerRevisionIsUnchanged(t *testing.T) {
 		ownerCast(`{"kind":"execution_request", "summary":"spaced  as typed"}`),
 		ownerCast(""),
 		ownerCast("a plain string spec"),
-		{Kind: yaegikernel.IntentNote, LocalID: "tray-4", ToDesk: agentprofile.Management, Body: `{"owner_revision":"rev-direction"}`},
+		{Kind: yaegikernel.IntentEscalate, Req: testRequest(), LocalID: "tray-4", ToDesk: agentprofile.Management, Body: `{"owner_revision":"rev-direction"}`},
 	}
 	out, err := attachCastOwnerDirections(intents, ownerCastScope, func(string) (types.Revision, error) {
 		t.Fatal("a cast that names no owner revision read the store")
@@ -249,7 +249,7 @@ func TestCellSetOwnerDirectionsIsRefusedOnEveryDesk(t *testing.T) {
 		{agentprofile.Research, agentprofile.Texture},
 	} {
 		scope := ReductionScope{FromRole: tc.role, DeskAgentID: tc.role + ":doc-1", FromAgentID: tc.role + ":doc-1"}
-		in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "tray-1", ToDesk: tc.to, Objective: "o", Statement: forged}
+		in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "tray-1", ToDesk: tc.to, Objective: "o", Statement: forged}
 		if err := validateCellIntents(scope, []yaegikernel.StagedIntent{in}); err == nil || !strings.Contains(err.Error(), "owner_directions") {
 			t.Fatalf("%s cast with owner_directions = %v, want refused", tc.role, err)
 		}

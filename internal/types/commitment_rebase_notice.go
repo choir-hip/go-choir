@@ -161,7 +161,7 @@ func IsStackRebaseNotice(rec CommitmentRecord) bool {
 		strings.TrimSpace(refs["operation_id"]) == operationID &&
 		strings.TrimSpace(refs["booted_base"]) == base &&
 		strings.TrimSpace(refs["attempt"]) == strconv.Itoa(attempt) &&
-		rec.Directive != nil && rec.Directive.Subtype == CommitmentDirectiveNote
+		rec.Directive != nil && rec.Directive.Subtype.IsNotice()
 }
 
 // StackRebaseNotice is one attempt's notice, addressed to the root Texture
@@ -212,7 +212,7 @@ func NewStackRebaseNotice(n StackRebaseNotice) (CommitmentRecord, bool) {
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  strings.TrimSpace(n.ComputerID),
 		Inbox:       inbox, SenderInbox: StackRebaseSenderInbox(op), Addressee: inbox,
-		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: body},
+		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNotice, Body: body},
 		EvidenceRefs: []string{op},
 		SubjectRefs:  refs,
 	}, true
@@ -222,7 +222,7 @@ func stackRebaseNoticeBody(op, booted, stack, id string) string {
 	packet := fmt.Sprintf(`map[string]any{"kind": "execution_request", "summary": "Rebase the applied self-development change %s onto the platform base %s.", "rebase_notice": %q}`, op, booted, id)
 	return fmt.Sprintf("Rebase notice %s. The computer runs a newer platform base (%s) than the one its applied self-development change %s was built on (%s). "+
 		"The applied change is kept, and new engineering casts are refused until it is rebased. This is the platform's request, not the owner's: it asks for a rebase of the change as it is, not new work. "+
-		"Make this one Cast to management and nothing else, copying the notice id exactly:\n\nchoir.Cast(\"management\", \"Rebase the applied change %s onto base %s (rebase notice %s)\", %s)",
+		"Make this one Cast to management and nothing else, copying the notice id exactly:\n\nchoir.Cast(\"management\", \"Rebase the applied change %s onto base %s (rebase notice %s)\", %s, map[string]any{\"p_success\": 0.9, \"weight\": 0.3, \"settlement\": \"recipient\"})\n\nThe last argument states your chance (0 to 1) that the rebase lands and how much it matters; change the numbers to your own.",
 		id, booted, op, stack, op, booted, id, packet)
 }
 

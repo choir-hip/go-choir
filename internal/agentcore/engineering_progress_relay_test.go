@@ -106,7 +106,7 @@ func TestEngineeringProgressRelayMintsOneTextureRecordWhenOn(t *testing.T) {
 	// A Note directive: operational, so it joins no open-claim projection
 	// (ResolveCommitments skips directives), and it carries the Report's
 	// own packet, the bytes management reads.
-	if rec.Directive == nil || rec.Directive.Subtype != types.CommitmentDirectiveNote || rec.Directive.Body != relayTestPacket || rec.Report != nil {
+	if rec.Directive == nil || rec.Directive.Subtype.IsNotice() == false || rec.Directive.Body != relayTestPacket || rec.Report != nil {
 		t.Fatalf("progress record lost the Report's body: directive=%+v report=%+v", rec.Directive, rec.Report)
 	}
 	if view := inboxRecordView(rec); view.Kind != "progress" || view.Body != relayTestPacket {
@@ -216,7 +216,7 @@ func TestEngineeringProgressRelayOnlyTheProgressRecordWakes(t *testing.T) {
 	}
 	// A system Note that is not from the progress sender does not wake.
 	other := types.CommitmentRecord{EmitterKind: types.CommitmentEmitterSystem, Inbox: "texture:d", SenderInbox: "other:x",
-		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "x"}}
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "x"}}
 	if store.RecordWakesReader(other) {
 		t.Fatal("an arbitrary system Note wakes its reader")
 	}

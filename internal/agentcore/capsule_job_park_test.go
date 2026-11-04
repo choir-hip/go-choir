@@ -112,7 +112,7 @@ func awaitPark(t *testing.T, done chan parkOutcome, within time.Duration) parkOu
 // and 3). A failed cell that polled still waited.
 func TestCellJobPark(t *testing.T) {
 	stop := yaegikernel.StagedIntent{Kind: yaegikernel.IntentJob, JobOp: yaegikernel.JobOpStop, JobID: "job-build"}
-	note := yaegikernel.StagedIntent{Kind: yaegikernel.IntentNote}
+	note := yaegikernel.StagedIntent{Kind: yaegikernel.IntentEscalate}
 	for _, tc := range []struct {
 		name   string
 		result capsule.GoEvalResult

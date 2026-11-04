@@ -53,7 +53,7 @@ func TestRebaseNoticeShapeIsASystemNoteToTheRoot(t *testing.T) {
 		t.Fatalf("a freshly built notice is not a notice: %+v", rec)
 	}
 	if rec.EmitterKind != CommitmentEmitterSystem || rec.Final || rec.Round != 0 || rec.Inbox != "texture:doc-master" ||
-		rec.SenderInbox != "selfdev-rebase:op-a" || rec.Directive == nil || rec.Directive.Subtype != CommitmentDirectiveNote {
+		rec.SenderInbox != "selfdev-rebase:op-a" || rec.Directive == nil || rec.Directive.Subtype.IsNotice() == false {
 		t.Fatalf("notice shape %+v", rec)
 	}
 	if rec.RecordID != StackRebaseNoticeID(rebaseTestOp, rebaseTestBase, 1) {
