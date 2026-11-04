@@ -54,6 +54,13 @@ throws(() => plan(shots, parseArgs(['--shots', 'x', '--only', 'nope'])), /no suc
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x'])).map((i) => i.file), ['home.png', 'detail.png']);
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x', '--only', 'home', '--preset', 'mobile,desktop'])).map((i) => i.file), ['home-mobile.png', 'home.png']);
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x', '--only', 'detail', '--size', '1000x700'])).map((i) => [i.file, i.viewport.width]), [['detail-1000x700.png', 1000]]);
+// A shot named for a phone is taken only at a portrait size: crouton's engineer named
+// shots "...-mobile" with no --preset mobile and got 1280x800 phone shots three times.
+throws(() => plan([{ name: '11-phone-agenda' }], parseArgs(['--shots', 'x'])), /--preset mobile/);
+throws(() => plan([{ name: 'day-mobile' }], parseArgs(['--shots', 'x', '--size', '1000x700'])), /--preset mobile/);
+assert.deepEqual(plan([{ name: 'home' }, { name: 'phone-day' }], parseArgs(['--shots', 'x', '--preset', 'desktop,mobile'])).map((i) => i.file), ['home.png', 'home-mobile.png', 'phone-day-mobile.png']);
+assert.deepEqual(plan([{ name: 'phone-day' }], parseArgs(['--shots', 'x', '--size', '390x844'])).map((i) => i.file), ['phone-day-390x844.png']);
+assert.deepEqual(plan([{ name: 'microphone' }], parseArgs(['--shots', 'x'])).map((i) => i.file), ['microphone.png']);
 
 // The autoputer binary order, the proxy rule, the recipe env and the opt-out.
 assert.equal(pickAutoputerBinary((f) => true), '/var/lib/artifact/release/bin/autoputer');

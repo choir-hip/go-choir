@@ -193,6 +193,7 @@ export const USAGE = `usage: node scripts/choir-shot.mjs --shots FILE [options]
   --shots FILE      ES module whose default export is a list of shots (required)
   --only a,b        take only these shots
   --preset p,q      desktop (default), tablet, mobile
+                    (a shot named for a phone or mobile is taken at portrait views only)
   --size WxH        custom viewport, such as 1000x700 (exclusive with --preset)
   --theme a,b       shell theme preset ids, one shot per preset
   --contrast SEL    WCAG contrast of every visible text element under SEL
@@ -280,6 +281,8 @@ export function themesFor(shot, o, known = null) {
   return t;
 }
 
+const PHONE_NAME_RE = /(^|[^a-z])(phone|mobile)([^a-z]|$)/i;
+
 // plan expands the selected shots and presets into the files to write.
 export function plan(shots, o, knownThemes = null) {
   if (!Array.isArray(shots) || shots.length === 0) throw new Error('the shots file must default-export a non-empty list');
@@ -300,9 +303,16 @@ export function plan(shots, o, knownThemes = null) {
     views = names.map((n) => ({ label: n, preset: PRESETS[n] }));
   }
   const out = [];
-  for (const shot of picked)
+  for (const shot of picked) {
+    // A shot named for a phone is taken at portrait sizes only. The name alone
+    // sizes nothing, and a desktop "phone" shot fails review every time.
+    let shotViews = views;
+    if (PHONE_NAME_RE.test(shot.name)) {
+      shotViews = views.filter((v) => { const s = v.preset || v.viewport; return s.width < s.height; });
+      if (shotViews.length === 0) throw new Error(`shot ${shot.name} is named for a phone but no view is portrait: add --preset mobile (390x844) or --size WxH with W < H`);
+    }
     for (const theme of themesFor(shot, o, knownThemes))
-      for (const v of views) {
+      for (const v of shotViews) {
         const { width, height, ...device } = v.preset || { ...v.viewport };
         const stem = `${shot.name}${theme ? '.' + theme : ''}${v.label === 'desktop' ? '' : '-' + v.label}`;
         const contrast = shot.contrast || o.contrast || '';
@@ -310,6 +320,7 @@ export function plan(shots, o, knownThemes = null) {
         if (open) checkApp(open, `shot ${shot.name}: open`);
         out.push({ shot, theme, contrast, open, viewport: { width, height }, device, file: `${stem}.png`, contrastFile: contrast ? `${stem}.contrast.json` : '' });
       }
+  }
   return out;
 }
 
