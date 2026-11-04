@@ -119,23 +119,23 @@ func ReadFile(ctx context.Context, repo, tree, path string) ([]byte, error) {
 	return raw, nil
 }
 
-// ManifestDescription is the manifest's display description, trimmed; "" when
-// the bytes do not parse (CheckManifest refuses those first).
+// ManifestDescription is the manifest's display description as one line of at
+// most 200 characters (whitespace collapsed); "" when the bytes do not parse
+// (CheckManifest refuses those first). The host derives it from the manifest
+// it verifies and stores it beside the release as listing-side metadata: the
+// record carries none, so the record format is unchanged.
 func ManifestDescription(raw []byte) string {
 	manifest, err := apppackage.ParseManifest(raw)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(manifest.Display.Description)
-}
-
-// checkDescription requires a record's description to be the manifest's, or
-// absent.
-func checkDescription(rec Record, raw []byte) error {
-	if rec.Description != "" && rec.Description != ManifestDescription(raw) {
-		return refuse(ReasonManifestInvalid, "the record's description is not the manifest's")
+	// One line of at most 200 characters: the record's Validate refuses
+	// more, and a manifest may hold a longer or multi-line description.
+	line := strings.Join(strings.Fields(manifest.Display.Description), " ")
+	if r := []rune(line); len(r) > 200 {
+		line = strings.TrimSpace(string(r[:200]))
 	}
-	return nil
+	return line
 }
 
 // CheckManifest validates the package's choir-package.json bytes for a
@@ -274,8 +274,6 @@ type DraftSource struct {
 	Blobs           Blobs
 	Manifest        Manifest
 	ManifestVersion string
-	// Description is the manifest's display description.
-	Description string
 }
 
 // DraftPackage runs the publisher-side checks of design 3.2 and builds the
@@ -476,7 +474,7 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	if err != nil {
 		return DraftSource{}, err
 	}
-	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version, Description: ManifestDescription(raw)}, nil
+	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version}, nil
 }
 
 // graftBefore is the tree of Base with the change BeforeBase..before applied,

@@ -1,6 +1,6 @@
 {
   "schema": "choir.package-contract/v1",
-  "note": "The Library opens on its shelf of apps and lists the catalog it is given: one card per app and its maker, by the maker's email address.",
+  "note": "The Library opens on its shelf of apps and lists the catalog it is given: one card per app and its maker, by the maker's Choir address.",
   "ready": "[data-library-app][data-view=\"list\"]",
   "api": [
     {
@@ -19,8 +19,8 @@
             "head_media": [],
             "head_description": "Read the news",
             "head_published_at": "2026-11-04T06:27:00Z",
-            "publisher_email": "maker@example.com",
-            "own": false
+            "own": false,
+            "publisher_address": "007@choir.news"
           }
         ]
       }
@@ -45,7 +45,7 @@
     },
     {
       "selector": "[data-card-publisher]",
-      "text": "maker@example.com"
+      "text": "007@choir.news"
     },
     {
       "selector": "[data-card-desc]",

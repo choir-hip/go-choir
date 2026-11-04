@@ -205,3 +205,21 @@ func TestRequireScreenshotRefusesNoneAndVideoOnly(t *testing.T) {
 		t.Fatalf("a screenshot and a video = %v", err)
 	}
 }
+
+// A manifest may hold a multi-line display description; the card's one-line
+// form is derived from it by the host.
+func TestManifestDescriptionIsOneBoundedLine(t *testing.T) {
+	raw := []byte(`{"schema":"choir.app-package/v1","name":"reader","version":"1.0.0","origin":"first_party",` +
+		`"display":{"title":"Reader","icon":"R","description":"Reads\n  the   news\r\n today"},` +
+		`"app":{"entry":"App.svelte","abi":"choir.app-frontend/svelte-inline/v1","aliases":[],"launcher":{"menu":true},"window":{"singleton":false},"auth":{"preview":"public-preview"},"theme":{}},` +
+		`"opens":[],"kinds":[],"uses_kinds":[],"desk":null,"backend":null}`)
+	if got := ManifestDescription(raw); got != "Reads the news today" {
+		t.Fatalf("description = %q", got)
+	}
+	// A description at the manifest's own bound still passes the record's.
+	edge := strings.Repeat("a", 198) + `\n` + "b"
+	got := ManifestDescription([]byte(strings.Replace(string(raw), "Reads\\n  the   news\\r\\n today", edge, 1)))
+	if n := len([]rune(got)); n == 0 || n > 200 || strings.ContainsAny(got, "\r\n") {
+		t.Fatalf("edge description is %d runes: %q", n, got)
+	}
+}

@@ -60,6 +60,12 @@ const numberCandidatesQuery = `SELECT u.id, u.email FROM users u
 	ORDER BY u.created_at ASC, u.id ASC`
 
 func scanNumberCandidates(rows *sql.Rows) ([]string, error) {
+	return scanCandidates(rows, false)
+}
+
+// scanCandidates reads (id, email) rows, keeping the real-domain accounts or,
+// with ephemeral set, the test and ephemeral-domain ones.
+func scanCandidates(rows *sql.Rows, ephemeral bool) ([]string, error) {
 	defer rows.Close()
 	var ids []string
 	for rows.Next() {
@@ -67,7 +73,7 @@ func scanNumberCandidates(rows *sql.Rows) ([]string, error) {
 		if err := rows.Scan(&id, &email); err != nil {
 			return nil, err
 		}
-		if IsEphemeralEmailDomain(email) {
+		if IsEphemeralEmailDomain(email) != ephemeral {
 			continue
 		}
 		ids = append(ids, id)
@@ -84,6 +90,18 @@ func (s *Store) ListNumberCandidates(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return scanNumberCandidates(rows)
+}
+
+// ListTestNumberCandidates returns the accounts on test or ephemeral sign-in
+// domains that finished registration, oldest first. They get numbers from the
+// test range (owner, 2026-11-04: every account has a numbered address, test
+// accounts included); nothing bound them before.
+func (s *Store) ListTestNumberCandidates(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, numberCandidatesQuery)
+	if err != nil {
+		return nil, err
+	}
+	return scanCandidates(rows, true)
 }
 
 // ListNumberCandidatesReadOnly does the same against an auth database file
@@ -104,6 +122,9 @@ func ListNumberCandidatesReadOnly(ctx context.Context, dbPath string) ([]string,
 // NumberAssigner sends an ordered batch of account ids to maild.
 type NumberAssigner interface {
 	AssignNumbers(ctx context.Context, ownerIDs []string) error
+	// AssignTestNumbers numbers test and ephemeral-domain accounts from the
+	// test range.
+	AssignTestNumbers(ctx context.Context, ownerIDs []string) error
 }
 
 type maildNumberAssigner struct {
@@ -120,7 +141,15 @@ func NewMaildNumberAssigner(maildURL string, client *http.Client) NumberAssigner
 }
 
 func (m *maildNumberAssigner) AssignNumbers(ctx context.Context, ownerIDs []string) error {
-	body, err := json.Marshal(map[string]any{"owner_ids": ownerIDs})
+	return m.post(ctx, map[string]any{"owner_ids": ownerIDs})
+}
+
+func (m *maildNumberAssigner) AssignTestNumbers(ctx context.Context, ownerIDs []string) error {
+	return m.post(ctx, map[string]any{"test_owner_ids": ownerIDs})
+}
+
+func (m *maildNumberAssigner) post(ctx context.Context, payload map[string]any) error {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -175,6 +204,31 @@ func (h *Handler) ReconcileNumbers(ctx context.Context) error {
 		}
 		h.numbersMu.Unlock()
 		todo = todo[n:]
+	}
+	// Test and ephemeral-domain accounts, oldest first, from the test range.
+	testIDs, err := h.store.ListTestNumberCandidates(ctx)
+	if err != nil {
+		return err
+	}
+	h.numbersMu.Lock()
+	var testTodo []string
+	for _, id := range testIDs {
+		if _, ok := h.numbersDone[id]; !ok {
+			testTodo = append(testTodo, id)
+		}
+	}
+	h.numbersMu.Unlock()
+	for len(testTodo) > 0 {
+		n := min(numberReconcileBatch, len(testTodo))
+		if err := h.numberAssigner.AssignTestNumbers(ctx, testTodo[:n]); err != nil {
+			return err
+		}
+		h.numbersMu.Lock()
+		for _, id := range testTodo[:n] {
+			h.numbersDone[id] = struct{}{}
+		}
+		h.numbersMu.Unlock()
+		testTodo = testTodo[n:]
 	}
 	return nil
 }

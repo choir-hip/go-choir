@@ -79,6 +79,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(AuthRecoveryLinkPath, h.HandleAuthRecoveryLink)
 	s.HandleFunc(AuthSignInCodePath, h.HandleAuthSignInCode)
 	s.HandleFunc(AuthAssignNumbersPath, h.HandleAuthAssignNumbers)
+	s.HandleFunc(PublicAddressesPath, h.HandlePublicAddresses)
 	s.HandleFunc(DigestPath, h.HandleDigest)
 	s.HandleFunc(DigestSendNowPath, h.HandleDigestSendNow)
 	s.HandleFunc(DigestRunPath, h.HandleDigestRun)

@@ -78,10 +78,6 @@ type Record struct {
 	// Media are the round's accepted screenshots and at most one video
 	// (media.go). omitempty: a record with none hashes as before.
 	Media []Media `json:"media,omitempty"`
-	// Description is the manifest's display description, one line for the
-	// app store card (omitempty: records published before it carry none;
-	// when set it must equal the manifest bytes' description).
-	Description string `json:"description,omitempty"`
 }
 
 // Package names the package. ManifestVersion is the manifest's semver,
@@ -216,9 +212,6 @@ func (r Record) Validate() error {
 	}
 	if !objectgraph.ValidPackageName(r.Package.Name) {
 		return fail("package name %q is not a package name", r.Package.Name)
-	}
-	if len([]rune(r.Description)) > 200 || strings.ContainsAny(r.Description, "\r\n") {
-		return fail("description is one line of at most 200 characters")
 	}
 	if !manifestVersion.MatchString(r.Package.ManifestVersion) {
 		return fail("package manifest_version %q is not MAJOR.MINOR.PATCH", r.Package.ManifestVersion)

@@ -92,20 +92,38 @@ func TestCatalogListsOnlyReleasesWithScreenshotsAndKeepsTheOthersStored(t *testi
 	}
 }
 
-func TestCatalogCardCarriesTheManifestsDescription(t *testing.T) {
+// A4: the card's description is the manifest's, derived by the host at
+// publish and kept as listing-side metadata. The record carries none, so a
+// publisher cannot claim one and the record format is unchanged.
+func TestCatalogCardCarriesTheHostDerivedManifestDescription(t *testing.T) {
 	w := newPkgWorld(t)
 	b := w.build("<p>v2</p>\n", "owner-a", nil)
-	b.record.Description = "Read"
-	b = w.seal(b.record, b.blobs)
-	w.published(b)
+	if strings.Contains(string(b.raw), "description") {
+		t.Fatalf("the record carries a description: %s", b.raw)
+	}
+	view := w.published(b)
+	if view.Description != "Read" {
+		t.Fatalf("A4 the release view's description = %q, want the manifest's", view.Description)
+	}
 	got := w.catalogOf("owner-b")
 	if len(got) != 1 || got[0].HeadDescription != "Read" {
 		t.Fatalf("A4 catalog = %+v", got)
 	}
+}
 
-	// A4: a description the manifest does not hold is refused.
-	forged := w.build("<p>v3</p>\n", "owner-c", nil)
-	forged.record.Description = "Ships a free phone"
-	forged = w.seal(forged.record, forged.blobs)
-	wantPkgRefusal(t, w.publish(forged), http.StatusUnprocessableEntity, pkgrelease.ReasonManifestInvalid)
+// N2: a track whose releases are all withdrawn shows its publisher no card,
+// since a card with no head could not be opened.
+func TestCatalogSkipsATrackWithNoHead(t *testing.T) {
+	w := newPkgWorld(t)
+	b := w.build("<p>v2</p>\n", "owner-a", nil)
+	w.published(b)
+	if got := w.catalogOf("owner-a"); len(got) != 1 {
+		t.Fatalf("before the withdraw: %+v", got)
+	}
+	if rec := w.state(b, "owner-a", pkgrelease.StateWithdrawn); rec.Code != http.StatusOK {
+		t.Fatalf("withdraw = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := w.catalogOf("owner-a"); len(got) != 0 {
+		t.Fatalf("N2 a headless card is listed: %+v", got)
+	}
 }

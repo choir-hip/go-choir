@@ -108,6 +108,60 @@ func (s *Store) AssignUserNumber(ctx context.Context, domain, ownerID string, no
 	return UserNumberAssignment{}, fmt.Errorf("no free user number after %d attempts", reserveAttempts)
 }
 
+// AssignTestUserNumber gives a test or ephemeral-domain account a number from
+// the test range [10,000,000, 100,000,000) as a numbered alias on the public
+// receive policy, in one step (reserve and bind together: the account is
+// known, so no reservation waits). Idempotent like AssignUserNumber: an
+// account that already has a numbered alias keeps it. Every account has a
+// numbered address (owner, 2026-11-04: "every vm has its own email, even test
+// accounts"); before this, nothing bound a test account to the test range.
+func (s *Store) AssignTestUserNumber(ctx context.Context, domain, ownerID string, now time.Time) (UserNumberAssignment, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	ownerID = strings.TrimSpace(ownerID)
+	if domain == "" || ownerID == "" {
+		return UserNumberAssignment{}, fmt.Errorf("domain and owner are required")
+	}
+	tx, err := s.routingDB.BeginTx(ctx, nil)
+	if err != nil {
+		return UserNumberAssignment{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var existing sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT canonical_number FROM email_aliases
+		WHERE target_type = 'user' AND target_id = ? AND canonical_number IS NOT NULL`, ownerID).Scan(&existing)
+	if err == nil {
+		return UserNumberAssignment{OwnerID: ownerID, Number: existing.Int64}, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return UserNumberAssignment{}, err
+	}
+	stamp := now.UTC().Format(numberTimeFormat)
+	for attempt := 0; attempt < reserveAttempts; attempt++ {
+		n, err := allocateNumber(ctx, tx, numberRangeTest)
+		if err != nil {
+			return UserNumberAssignment{}, err
+		}
+		localPart := canonicalNumberString(n)
+		res, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO email_aliases (
+			id, domain, local_part, canonical_number, target_type, target_id,
+			visibility, receive_policy_id, created_at
+		) VALUES (?, ?, ?, ?, 'user', ?, 'public', ?, ?)`,
+			aliasRowID(domain, localPart), domain, localPart, n, ownerID, DefaultPublicPolicyID, stamp)
+		if err != nil {
+			return UserNumberAssignment{}, fmt.Errorf("insert test numbered alias: %w", err)
+		}
+		if c, _ := res.RowsAffected(); c != 1 {
+			log.Printf("maild: test number %s is occupied; skipping", localPart)
+			continue
+		}
+		if err := tx.Commit(); err != nil {
+			return UserNumberAssignment{}, err
+		}
+		return UserNumberAssignment{OwnerID: ownerID, Number: n, Created: true}, nil
+	}
+	return UserNumberAssignment{}, fmt.Errorf("no free test number after %d attempts", reserveAttempts)
+}
+
 // PlannedUserNumber is one line of the dry-run plan.
 type PlannedUserNumber struct {
 	OwnerID  string `json:"owner_id"`
@@ -174,6 +228,9 @@ func (s *Store) PlanUserNumbers(ctx context.Context, rootOwnerID string, owners 
 
 type authAssignNumbersRequest struct {
 	OwnerIDs []string `json:"owner_ids"`
+	// TestOwnerIDs are accounts on test or ephemeral sign-in domains: they
+	// get numbers from the test range, never the user sequence.
+	TestOwnerIDs []string `json:"test_owner_ids,omitempty"`
 }
 
 type authAssignNumbersResponse struct {
@@ -209,8 +266,8 @@ func (h *Handler) HandleAuthAssignNumbers(w http.ResponseWriter, r *http.Request
 		writeDecodeError(w, err)
 		return
 	}
-	if len(in.OwnerIDs) == 0 || len(in.OwnerIDs) > authAssignNumbersMaxOwners {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "owner_ids must hold 1 to 500 ids"})
+	if len(in.OwnerIDs)+len(in.TestOwnerIDs) == 0 || len(in.OwnerIDs) > authAssignNumbersMaxOwners || len(in.TestOwnerIDs) > authAssignNumbersMaxOwners {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "owner_ids and test_owner_ids hold 1 to 500 ids"})
 		return
 	}
 	var out authAssignNumbersResponse
@@ -228,6 +285,24 @@ func (h *Handler) HandleAuthAssignNumbers(w http.ResponseWriter, r *http.Request
 		if a.Created {
 			out.Assigned++
 			log.Printf("maild: operation=assign_user_number owner_id=%s number=%s result=assigned", id, canonicalNumberString(a.Number))
+		} else {
+			out.Existing++
+		}
+	}
+	for _, id := range in.TestOwnerIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || id == h.cfg.RootOwnerID {
+			continue
+		}
+		a, err := h.store.AssignTestUserNumber(r.Context(), h.cfg.PrimaryDomain, id, time.Now())
+		if err != nil {
+			log.Printf("maild: operation=assign_test_number result=error error=%q", err)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "assignment failed", "assigned": out.Assigned, "existing": out.Existing})
+			return
+		}
+		if a.Created {
+			out.Assigned++
+			log.Printf("maild: operation=assign_test_number owner_id=%s number=%s result=assigned", id, canonicalNumberString(a.Number))
 		} else {
 			out.Existing++
 		}

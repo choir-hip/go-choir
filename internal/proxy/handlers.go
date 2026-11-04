@@ -191,6 +191,7 @@ type Handler struct {
 	dialer                     *websocket.Dialer
 	corpusd                    *http.Client
 	maild                      *http.Client
+	publisherAddresses         publisherAddressCache // short-lived owner id -> numbered address, for the Library
 	autoputerHTTP              *http.Client
 	replayAutoputerHTTP        *http.Client  // dedicated long-budget client for replay completeness
 	residueImportAutoputerHTTP *http.Client  // dedicated long-budget client for residue import

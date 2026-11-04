@@ -90,6 +90,10 @@ type PackageReleaseView struct {
 	// Media is the record's screenshots and video with their public URLs;
 	// empty, never null, for a release with none (packages_media.go).
 	Media []PackageMediaView `json:"media"`
+	// Description is the manifest's one-line description, derived by the
+	// host at publish and kept in the object's metadata; "" for a release
+	// published before it was kept.
+	Description string `json:"description,omitempty"`
 }
 
 type packageAPIError struct {
@@ -537,13 +541,14 @@ func writePackageJSON(w http.ResponseWriter, status int, v any) {
 func packageView(obj objectgraph.Object, releaseID string, listing pkgrelease.Listing) PackageReleaseView {
 	var metadata struct {
 		PublishedAt string `json:"published_at"`
+		Description string `json:"description"`
 	}
 	_ = json.Unmarshal(obj.Metadata, &metadata)
 	media := []PackageMediaView{}
 	if record, err := pkgrelease.Decode(obj.Body); err == nil {
 		media = mediaViews(releaseID, record)
 	}
-	return PackageReleaseView{ReleaseID: releaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body), Listing: listing, Media: media}
+	return PackageReleaseView{ReleaseID: releaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body), Listing: listing, Media: media, Description: metadata.Description}
 }
 
 func (h *Handler) readPackageBlob(blob pkgrelease.Blob) ([]byte, error) {
@@ -675,7 +680,8 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := pkgrelease.VerifyHost(ctx, in); err != nil {
+	description, err := pkgrelease.VerifyHostDescribed(ctx, in)
+	if err != nil {
 		writePackageRefusal(w, err)
 		return
 	}
@@ -711,11 +717,17 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnprocessableEntity, apiError{Error: err.Error()})
 			return
 		}
-		metadata, err := objectgraph.NormalizeMetadata(map[string]any{
+		metaFields := map[string]any{
 			"release_id": releaseID, "package": record.Package.Name, "track": record.Track,
 			"publisher_computer_id": computerID, "operation_id": record.Operation.OperationID,
 			"tree": record.Source.Tree, "parent_kind": record.Parent.Kind, "published_at": now.Format(time.RFC3339Nano),
-		})
+		}
+		if description != "" {
+			// The manifest's one-line description, derived by the host from
+			// the bytes it verified: listing-side metadata, not in the record.
+			metaFields["description"] = description
+		}
+		metadata, err := objectgraph.NormalizeMetadata(metaFields)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package metadata"})
 			return
@@ -841,7 +853,7 @@ type PackageCatalogEntry struct {
 	HeadSeq       int    `json:"head_seq,omitempty"`
 	Releases      int    `json:"releases"`
 	// HeadMedia is the head release's screenshots and video, so a gallery
-	// grid needs no second read; empty for a head with none.
+	// grid needs no second read (every listed head has a screenshot).
 	HeadMedia []PackageMediaView `json:"head_media"`
 	// HeadPublishedAt and HeadDescription feed the app card: the date the
 	// head was published and the manifest's one-line description.
@@ -902,7 +914,15 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			obj, record, err := h.readPackageRecord(ctx, key.track, id)
-			if err != nil || !record.HasScreenshot() {
+			if err != nil {
+				if errors.Is(err, objectgraph.ErrNotFound) || pkgrelease.ReasonOf(err) != "" {
+					continue // a record that no longer verifies is not served
+				}
+				// A store failure is not "no screenshot": fail the read.
+				writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
+				return
+			}
+			if !record.HasScreenshot() {
 				continue
 			}
 			visible[id], records[id], decoded[id] = listing, obj, record
@@ -911,12 +931,17 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		head, found, _ := trackHead(visible)
+		if !found {
+			// Nothing here can be a head (the publisher's own releases are
+			// all withdrawn): no card, since it could not be opened.
+			continue
+		}
 		entry := PackageCatalogEntry{Package: key.pkg, Track: key.track, Releases: len(visible), HeadMedia: []PackageMediaView{}}
 		if found {
 			entry.HeadReleaseID, entry.HeadSeq = head.RecordID, head.Seq
 			record := decoded[head.RecordID]
 			entry.HeadMedia = mediaViews(head.RecordID, record)
-			entry.HeadDescription = record.Description
+			entry.HeadDescription = packageView(records[head.RecordID], head.RecordID, head).Description
 			entry.HeadPublishedAt = packageView(records[head.RecordID], head.RecordID, head).PublishedAt
 		}
 		entries = append(entries, entry)

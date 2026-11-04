@@ -7,7 +7,8 @@
 //
 // Failure modes, written before the code:
 //   S1  the list shows an id, a track, a computer, a "reader ..." header, or a
-//       card without its maker's email or its thumbnail;
+//       card without its maker's Choir address (<NNN>@choir.news) or its thumbnail, or
+//       any other email text (the sign-in email is never shown);
 //   S2  the window is titled "Library (new)";
 //   S3  the app page is a second drill-down: its screenshots, its Install
 //       button, its description or its precommitments need another tap;
@@ -43,9 +44,9 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const WEBM = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 0x77, 0x65, 0x62, 0x6d]), Buffer.alloc(64, 5)]);
 
 const APPS = [
-  { name: 'converter-next', owner: hex(1), email: 'maker@example.com', desc: 'Convert units between systems', shots: 3, video: true, versions: 2 },
-  { name: 'files-next', owner: hex(2), email: 'files-maker@example.com', desc: 'Browse and rename files', shots: 1, video: false, versions: 1 },
-  { name: 'files-next', owner: hex(3), email: 'other-maker@example.com', desc: '', shots: 2, video: false, versions: 1 },
+  { name: 'converter-next', owner: hex(1), email: '007@choir.news', desc: 'Convert units between systems', shots: 3, video: true, versions: 2 },
+  { name: 'files-next', owner: hex(2), email: '012@choir.news', desc: 'Browse and rename files', shots: 1, video: false, versions: 1 },
+  { name: 'files-next', owner: hex(3), email: '10000042@choir.news', desc: '', shots: 2, video: false, versions: 1 },
 ];
 
 function world() {
@@ -68,13 +69,13 @@ function world() {
       releases.set(id, {
         release_id: id,
         published_at: v === 1 && app.versions > 1 ? '2026-11-03T09:15:00Z' : '2026-11-04T06:27:00Z',
-        publisher_email: app.email,
+        publisher_address: app.email,
+        description: app.desc,
         own: false,
         media,
         listing: { record_id: id, package: app.name, track: app.owner, seq: v, state: 'listed', scopes: ['owner', 'public'] },
         record: {
           package: { name: app.name, manifest_version: '1.0.0' },
-          description: app.desc,
           publisher: { owner_id: app.owner, computer_id: `computer-${hex(ai + 50, 8)}` },
           source: { built_on: hex(9, 40), changed_paths: [`frontend/src/packages/${app.name}/App.svelte`] },
           operation: { operation_id: 'op-' + hex(7, 12) },
@@ -94,7 +95,7 @@ function world() {
     entries.push({
       package: app.name, track: app.owner, head_release_id: ids[0], head_seq: app.versions, releases: app.versions,
       head_media: head.media, head_description: app.desc, head_published_at: head.published_at,
-      publisher_email: app.email, own: false,
+      publisher_address: app.email, own: false,
     });
   });
   return { releases, byTrack, entries, adoptions: [], posts: [] };
@@ -129,11 +130,11 @@ async function answerCatalog(page, w) {
       const body = JSON.parse(req.postData() || '{}');
       w.posts.push(body);
       const release = w.releases.get(body.release_id);
-      const name = release.listing.package;
+      const name = release ? release.listing.package : (w.adoptions.find((a) => a.release_id === body.release_id) || {}).package;
       for (const a of w.adoptions) if (a.package === name && a.state !== 'replaced') Object.assign(a, { state: 'replaced', patch_matches_release: false });
       const row = {
         adoption_id: 'ad-' + (w.adoptions.length + 1), release_id: body.release_id, package: name, action: body.action || 'install',
-        mode: 'runtime', patch_matches_release: true, requested_at: '2026-11-04T10:00:00Z', publisher_computer_id: release.record.publisher.computer_id,
+        mode: 'runtime', patch_matches_release: true, requested_at: '2026-11-04T10:00:00Z', publisher_computer_id: release ? release.record.publisher.computer_id : 'computer-gone',
       };
       w.adoptions.unshift(row);
       return json(row, 201);
@@ -142,8 +143,13 @@ async function answerCatalog(page, w) {
   });
 }
 
-const HEX_RUN = /[0-9a-f]{8,}/i;
+// A run of hex that is an id: eight or more hex digits with at least one
+// letter (a Choir address's digits are not an id).
+const HEX_RUN = /(?=[0-9a-f]*[a-f])[0-9a-f]{8,}/i;
 const METADATA_WORDS = /publisher owner|manifest version|built on|made by operation|who may see|track and seq|what it changes|changed paths|release history|\btrack\b|computer-|reader /i;
+
+// every email-looking token in a text
+const addressesIn = (text) => text.match(/[^\s@]+@[^\s@]+/g) || [];
 
 async function openLibrary(page, base) {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
@@ -199,14 +205,16 @@ test.describe('the Library is an app store', () => {
       expect(await win.innerText()).not.toMatch(/\(new\)/i);
 
       // S1: the shelf. One card per app and maker, a real thumbnail, the
-      // description, the maker's email and a plain date; no id anywhere.
+      // description, the maker's Choir address and a plain date; no id anywhere.
       const cards = content.locator('[data-package-row]');
       await expect(cards).toHaveCount(3);
       const shelfText = await content.innerText();
       expect(shelfText, 'shelf text').not.toMatch(HEX_RUN);
       expect(shelfText, 'shelf text').not.toMatch(METADATA_WORDS);
       expect(shelfText).not.toMatch(/releases? from this catalog/i);
-      for (const email of ['maker@example.com', 'files-maker@example.com', 'other-maker@example.com']) expect(shelfText).toContain(email);
+      for (const address of ['007@choir.news', '012@choir.news', '10000042@choir.news']) expect(shelfText).toContain(address);
+      expect(addressesIn(shelfText), 'only Choir addresses appear').toEqual(expect.arrayContaining(['007@choir.news']));
+      for (const a of addressesIn(shelfText)) expect(a).toMatch(/^\d{3,}@choir\.news$/);
       expect(shelfText).toContain('Convert units between systems');
       expect(shelfText).toMatch(/Updated Nov 4/);
       const firstThumb = cards.first().locator('img');
@@ -229,7 +237,7 @@ test.describe('the Library is an app store', () => {
       const app = content.locator('[data-app-view]');
       await app.locator('[data-app-name]').waitFor();
       await expect(content.locator('[data-app-title]')).toHaveText('converter-next');
-      await expect(app.locator('[data-app-publisher]')).toHaveText('maker@example.com');
+      await expect(app.locator('[data-app-publisher]')).toHaveText('007@choir.news');
       await expect(app.locator('[data-app-desc]')).toHaveText('Convert units between systems');
       const install = app.locator('[data-install-button]');
       await expect(install).toBeVisible();
@@ -243,6 +251,7 @@ test.describe('the Library is an app store', () => {
       expect(appText, 'app page text').not.toMatch(HEX_RUN);
       expect(appText, 'app page text').not.toMatch(METADATA_WORDS);
       expect(appText).toContain('Updated Nov 4');
+      for (const a of addressesIn(appText)) expect(a).toMatch(/^\d{3,}@choir\.news$/);
       // The precommitments are on the page itself, in words.
       const precs = app.locator('[data-precommitment]');
       await expect(precs).toHaveCount(3);
@@ -279,13 +288,14 @@ test.describe('the Library is an app store', () => {
       expect(versionText).toContain('Version 2, Nov 4');
       expect(versionText).toContain('Version 1, Nov 3');
       expect(versionText).not.toMatch(HEX_RUN);
+      await expect(versions.locator('[data-older]'), 'no older page when the history fits').toHaveCount(0);
 
       // S6: install from the app page, then uninstall.
       await install.click();
       const confirm = content.locator('[data-confirm]');
       await expect(confirm).toBeVisible();
       expect(await confirm.innerText()).not.toMatch(HEX_RUN);
-      expect(await confirm.innerText()).toContain('maker@example.com');
+      expect(await confirm.innerText()).toContain('007@choir.news');
       await confirm.locator('[data-confirm-cancel]').click();
       await expect(confirm).toHaveCount(0);
       expect(w.posts, 'a cancelled install posts nothing').toHaveLength(0);
@@ -314,7 +324,7 @@ test.describe('the Library is an app store', () => {
       // A maker with one version and no promises: no history, no empty panel.
       await content.locator('[data-back]').click();
       await content.locator('[data-package-row][data-package="files-next"]').nth(1).click();
-      await expect(content.locator('[data-app-publisher]')).toHaveText('other-maker@example.com');
+      await expect(content.locator('[data-app-publisher]')).toHaveText('10000042@choir.news');
       await expect(content.locator('[data-versions]')).toHaveCount(0);
       const plain = await content.innerText();
       expect(plain).not.toMatch(HEX_RUN);
@@ -325,4 +335,79 @@ test.describe('the Library is an app store', () => {
       await context.close();
     });
   }
+
+  // No fallback: when the address service is down the read fails visibly,
+  // with no card and no placeholder maker.
+  test('a shelf the server could not attribute shows an error, never cards without makers', async ({ browser }) => {
+    test.setTimeout(60_000);
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
+    await stubBackend(page, { api: [] });
+    await page.route(/\/api\/catalog\/packages$/, (route) => route.fulfill({
+      status: 502, contentType: 'application/json',
+      body: JSON.stringify({ error: 'publisher_address_unavailable: x', reason: 'publisher_address_unavailable' }),
+    }));
+    const { content } = await openLibrary(page, server.base);
+    await expect(content.locator('[data-error]')).toContainText('address service did not answer');
+    await expect(content.locator('[data-package-row]')).toHaveCount(0);
+    expect(await content.innerText()).not.toMatch(/unnamed|unknown publisher/i);
+    await context.close();
+  });
+
+  // Install state belongs to one maker. Two makers of one name: A's install
+  // is not B's; B's page offers no Update and no Uninstall of A's app, and
+  // installing B says it replaces A's. An installed app that is no longer
+  // listed can still be uninstalled from the shelf.
+  test('one maker\'s install is not another maker\'s, and an unlisted install can be removed', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
+    const w = world();
+    // maker A's files-next (the 012 card) is installed; an app no longer
+    // listed is installed too.
+    const [aId] = w.byTrack.get(`files-next\n${hex(2)}`);
+    w.adoptions.push(
+      { adoption_id: 'ad-a', release_id: aId, package: 'files-next', action: 'install', mode: 'runtime', patch_matches_release: true },
+      { adoption_id: 'ad-gone', release_id: hex(777), package: 'old-app', action: 'install', mode: 'runtime', patch_matches_release: true },
+    );
+    await stubBackend(page, { api: [] });
+    await answerCatalog(page, w);
+    const { content } = await openLibrary(page, server.base);
+    const cards = content.locator('[data-package-row][data-package="files-next"]');
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(0).locator('[data-card-installed]')).toHaveText('Installed');
+    await expect(cards.nth(1).locator('[data-card-installed]')).toHaveCount(0);
+
+    // The unlisted install is on the shelf's Installed section.
+    const row = content.locator('[data-installed-row]', { hasText: 'old-app' });
+    await expect(row).toHaveCount(1);
+
+    // B's page: no Uninstall, no Update, a replace note, a confirm that says so.
+    await cards.nth(1).click();
+    const app = content.locator('[data-app-view]');
+    await app.locator('[data-app-name]').waitFor();
+    await expect(app.locator('[data-uninstall-button]')).toHaveCount(0);
+    await expect(app.locator('[data-installed]')).toHaveCount(0);
+    await expect(app.locator('[data-elsewhere]')).toContainText('from a different maker');
+    await expect(app.locator('[data-install-button]')).toContainText('Install');
+    await app.locator('[data-install-button]').click();
+    await expect(content.locator('[data-confirm-replaces]')).toContainText('different maker');
+    await content.locator('[data-confirm-cancel]').click();
+    expect(w.posts).toHaveLength(0);
+    await content.locator('[data-back]').click();
+
+    // A's page: installed, up to date, Uninstall but no Update.
+    await cards.nth(0).click();
+    await expect(app.locator('[data-installed]')).toHaveText('Installed');
+    await expect(app.locator('[data-uninstall-button]')).toBeVisible();
+    await expect(app.locator('[data-install-button]')).toHaveCount(0);
+    await content.locator('[data-back]').click();
+
+    // The unlisted app is removed from the shelf.
+    await content.locator('[data-installed-row]', { hasText: 'old-app' }).locator('[data-uninstall-button]').click();
+    await expect.poll(() => w.posts.length).toBe(1);
+    expect(w.posts[0]).toMatchObject({ release_id: hex(777), action: 'uninstall' });
+    await expect(content.locator('[data-installed-row]', { hasText: 'old-app' })).toHaveCount(0);
+    await context.close();
+  });
 });

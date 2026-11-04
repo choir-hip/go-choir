@@ -14,7 +14,9 @@
     formatDay,
     inFlightFor,
     installRelease,
+    installedElsewhere,
     installedFor,
+    installsOf,
     isVideo,
     loadInstalls,
     loadPackageReleases,
@@ -51,12 +53,17 @@
   let searchTimer = null;
   let generation = 0;
 
-  let page = { entry: null, head: null, versions: [], loading: false, error: '' };
+  let page = { entry: null, head: null, versions: [], next: 0, loading: false, error: '' };
   let pageGeneration = 0;
 
   let installs = [];
+  // Where each installed release came from: release id -> { track, seq }.
+  // An installed app belongs to one maker; another maker's app of the same
+  // name is not it.
+  let installInfo = {};
   let busy = false;
   let confirm = null; // the release the owner is asked about
+  let confirmReplaces = false; // it replaces another maker's app of the name
   let message = null; // { tone: 'ok' | 'warn' | 'bad', text }
   let missing = {};
   let viewer = { open: false, index: 0 };
@@ -64,10 +71,16 @@
 
   $: media = page.head ? mediaOf(page.head) : [];
   $: shots = media.filter((item) => !isVideo(item));
-  $: installed = view.kind === 'app' ? installedFor(installs, view.name) : null;
+  $: tracks = Object.fromEntries(Object.entries(installInfo).map(([id, info]) => [id, info.track]));
+  $: installed = view.kind === 'app' ? installedFor(installs, view.name, view.track, tracks) : null;
+  $: elsewhere = view.kind === 'app' && !installed ? installedElsewhere(installs, view.name, view.track, tracks) : null;
   $: working = view.kind === 'app' ? inFlightFor(installs, view.name) : null;
   $: headId = page.head ? releaseIdOf(page.head) : '';
+  $: installedSeq = installed ? (installInfo[String(installed.release_id)] || {}).seq || 0 : 0;
   $: upToDate = Boolean(installed && headId && String(installed.release_id) === headId);
+  // Update is offered only to a newer version of the same maker's app.
+  $: canUpdate = Boolean(installed && !upToDate && page.head && seqOf(page.head) > installedSeq);
+  $: shelfInstalls = installsOf(installs);
 
   onMount(() => {
     void boot();
@@ -142,10 +155,31 @@
     if (!computerId) return;
     try {
       installs = adoptionsOf(await loadInstalls(computerId));
+      await resolveInstalled();
     } catch (err) {
       installs = [];
       if (err && err.name === 'AuthRequiredError') reportAuth('install_read');
     }
+  }
+
+  // resolveInstalled learns which maker's track each installed release is on.
+  // A release that cannot be read (no longer listed) stays unresolved and
+  // belongs to no card; the Installed section still lists it.
+  async function resolveInstalled() {
+    const next = { ...installInfo };
+    await Promise.all(
+      installsOf(installs).map(async (item) => {
+        const id = String(item.release_id || '');
+        if (!id || next[id]) return;
+        try {
+          const rel = await loadRelease(id);
+          next[id] = { track: String((rel.listing && rel.listing.track) || ''), seq: seqOf(rel) };
+        } catch (_err) {
+          // unresolved
+        }
+      }),
+    );
+    installInfo = next;
   }
 
   function cardKey(pkg) {
@@ -157,12 +191,14 @@
     return list.find((item) => item && item.url && !isVideo(item)) || null;
   }
 
-  function cardInstalled(pkg) {
-    return Boolean(installedFor(installs, pkg.package));
+  function cardInstalled(pkg, list, byRelease) {
+    return Boolean(installedFor(list, pkg.package, pkg.track, byRelease));
   }
 
+  // The maker's public Choir address, as the server resolved it. The server
+  // fails the read when it cannot, so there is no fallback text here.
   function publisherName(pkg) {
-    return pkg && pkg.publisher_email ? pkg.publisher_email : 'an unnamed publisher';
+    return String((pkg && pkg.publisher_address) || '');
   }
 
   // ---- one app ----
@@ -170,7 +206,7 @@
   function openApp(pkg) {
     message = null;
     view = { kind: 'app', name: String(pkg.package), track: String(pkg.track || '') };
-    page = { entry: pkg, head: null, versions: [], loading: true, error: '' };
+    page = { entry: pkg, head: null, versions: [], next: 0, loading: true, error: '' };
     void loadApp(pkg);
   }
 
@@ -182,11 +218,22 @@
         loadPackageReleases(pkg.package, pkg.track, { limit: 20 }),
       ]);
       if (gen !== pageGeneration) return;
-      page = { entry: pkg, head, versions: sortedByNewest(history.releases), loading: false, error: '' };
+      page = { entry: pkg, head, versions: sortedByNewest(history.releases), next: Number(history.next_before_seq) || 0, loading: false, error: '' };
     } catch (err) {
       if (gen !== pageGeneration) return;
-      page = { entry: pkg, head: null, versions: [], loading: false, error: messageOf(err) };
+      page = { entry: pkg, head: null, versions: [], next: 0, loading: false, error: messageOf(err) };
       if (err && err.name === 'AuthRequiredError') reportAuth('release_read');
+    }
+  }
+
+  async function loadOlder() {
+    if (!page.next || busy) return;
+    const pkg = page.entry;
+    try {
+      const body = await loadPackageReleases(pkg.package, pkg.track, { limit: 20, beforeSeq: page.next });
+      page = { ...page, versions: sortedByNewest([...page.versions, ...(body.releases || [])]), next: Number(body.next_before_seq) || 0 };
+    } catch (err) {
+      message = { tone: 'bad', text: messageOf(err) };
     }
   }
 
@@ -202,6 +249,7 @@
   function askInstall(rel) {
     if (!rel) return;
     message = null;
+    confirmReplaces = Boolean(elsewhere);
     confirm = rel;
   }
 
@@ -234,15 +282,15 @@
     }
   }
 
-  async function doUninstall() {
-    if (!installed || busy || !computerId) return;
+  async function doUninstall(item) {
+    if (!item || busy || !computerId) return;
     busy = true;
     try {
-      await installRelease(computerId, String(installed.release_id || ''), null, 'uninstall');
+      await installRelease(computerId, String(item.release_id || ''), null, 'uninstall');
       await refreshInstalls();
-      message = installedFor(installs, view.name)
-        ? { tone: 'ok', text: 'Removing this app from your computer.' }
-        : { tone: 'ok', text: 'Uninstalled. It has left the launcher.' };
+      message = installsOf(installs).some((other) => String(other.release_id) === String(item.release_id))
+        ? { tone: 'ok', text: 'Removing ' + item.package + ' from your computer.' }
+        : { tone: 'ok', text: 'Uninstalled ' + item.package + '. It has left the launcher.' };
     } catch (err) {
       if (err && err.name === 'AuthRequiredError') reportAuth('install');
       message = { tone: 'bad', text: messageOf(err) + ' Nothing was removed.' };
@@ -317,8 +365,8 @@
     return day ? 'Updated ' + day : '';
   }
 
-  function publisherOfRelease(rel, fallback) {
-    return (rel && rel.publisher_email) || (fallback && fallback.publisher_email) || 'an unnamed publisher';
+  function publisherOfRelease(rel, entry) {
+    return String((rel && rel.publisher_address) || (entry && entry.publisher_address) || '');
   }
 </script>
 
@@ -401,7 +449,7 @@
                   <span class="lib-card-body">
                     <span class="lib-card-name">
                       {pkg.package}
-                      {#if cardInstalled(pkg)}<span class="lib-tag lib-tag-ok" data-card-installed>Installed</span>{/if}
+                      {#if cardInstalled(pkg, installs, tracks)}<span class="lib-tag lib-tag-ok" data-card-installed>Installed</span>{/if}
                     </span>
                     {#if pkg.head_description}
                       <span class="lib-card-desc" data-card-desc>{pkg.head_description}</span>
@@ -415,6 +463,21 @@
           </ul>
         {/if}
       </section>
+      {#if shelfInstalls.length}
+        <section class="lib-section" data-installed-section>
+          <h3 class="lib-h3">Installed on this computer</h3>
+          <ul class="lib-version-list lib-installed-list">
+            {#each shelfInstalls as item (item.adoption_id || item.release_id)}
+              <li class="lib-version" data-installed-row>
+                <span>{item.package}</span>
+                <button class="lib-btn lib-btn-quiet lib-btn-small" data-uninstall-button disabled={busy || !computerId} on:click={() => doUninstall(item)}>
+                  Uninstall
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
     {:else}
       <section class="lib-app" data-app-view>
         {#if page.loading}
@@ -439,14 +502,15 @@
             <div class="lib-hero-actions">
               {#if working}
                 <button class="lib-btn lib-btn-primary" disabled data-working>Working…</button>
-              {:else if installed && upToDate}
-                <span class="lib-tag lib-tag-ok" data-installed>Installed</span>
-                <button class="lib-btn lib-btn-quiet" data-uninstall-button disabled={busy || !computerId} on:click={doUninstall}>Uninstall</button>
               {:else if installed}
-                <button class="lib-btn lib-btn-primary" data-install-button disabled={busy || !computerId} on:click={() => askInstall(page.head)}>
-                  <Icon name="download" size={16} /> Update
-                </button>
-                <button class="lib-btn lib-btn-quiet" data-uninstall-button disabled={busy || !computerId} on:click={doUninstall}>Uninstall</button>
+                {#if canUpdate}
+                  <button class="lib-btn lib-btn-primary" data-install-button disabled={busy || !computerId} on:click={() => askInstall(page.head)}>
+                    <Icon name="download" size={16} /> Update
+                  </button>
+                {:else}
+                  <span class="lib-tag lib-tag-ok" data-installed>Installed</span>
+                {/if}
+                <button class="lib-btn lib-btn-quiet" data-uninstall-button disabled={busy || !computerId} on:click={() => doUninstall(installed)}>Uninstall</button>
               {:else}
                 <button class="lib-btn lib-btn-primary" data-install-button disabled={busy || !computerId} on:click={() => askInstall(page.head)}>
                   <Icon name="download" size={16} /> Install
@@ -454,6 +518,12 @@
               {/if}
             </div>
           </header>
+
+          {#if elsewhere && !working}
+            <p class="lib-note" data-elsewhere>
+              Another version of {view.name}, from a different maker, is installed on this computer. Installing this one replaces it.
+            </p>
+          {/if}
 
           <div class="lib-gallery" data-gallery>
             <ul class="lib-strip">
@@ -503,7 +573,7 @@
                       {versionLabel(rel)}
                       {#if installed && String(installed.release_id) === releaseIdOf(rel)}<span class="lib-tag lib-tag-ok">Installed</span>{/if}
                     </span>
-                    {#if !(installed && String(installed.release_id) === releaseIdOf(rel))}
+                    {#if !installed || seqOf(rel) > installedSeq}
                       <button class="lib-btn lib-btn-quiet lib-btn-small" data-install-version disabled={busy || !computerId} on:click={() => askInstall(rel)}>
                         Install this version
                       </button>
@@ -511,6 +581,9 @@
                   </li>
                 {/each}
               </ul>
+              {#if page.next}
+                <button class="lib-btn lib-btn-quiet lib-btn-small" data-older on:click={loadOlder}>Show older versions</button>
+              {/if}
             </details>
           {/if}
         {/if}
@@ -527,6 +600,11 @@
           Made by {publisherOfRelease(confirm, page.entry)}. It will be added to your launcher and run with your
           account's access, so install apps only from people you trust.
         </p>
+        {#if confirmReplaces}
+          <p class="lib-note" data-confirm-replaces>
+            This replaces the {view.name} that is installed now, which is a different maker's app.
+          </p>
+        {/if}
         {#if identityError}<p class="lib-note">{identityError}</p>{/if}
         <div class="lib-dialog-foot">
           <button class="lib-btn lib-btn-quiet" data-confirm-cancel on:click={() => (confirm = null)}>Cancel</button>

@@ -111,6 +111,11 @@ func (h *Handler) HandleComputerPackagePublish(w http.ResponseWriter, r *http.Re
 	if !authorizeOwnerAct(w, authResult, "package publish") {
 		return
 	}
+	// A published app shows its maker by their numbered Choir address, so
+	// the publisher must have one (and the address service must answer).
+	if !h.requirePublisherAddress(w, r, authResult.UserID) {
+		return
+	}
 	var body packagePublishBody
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 	decoder.DisallowUnknownFields()
@@ -366,7 +371,11 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status == http.StatusOK {
-		raw = h.decoratePublisherEmail(raw, authResult.UserID)
+		var failure *publisherAddressFailure
+		if raw, failure = h.decoratePublisherAddress(r.Context(), raw, authResult.UserID); failure != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": failure.reason + ": " + failure.detail, "reason": failure.reason})
+			return
+		}
 	}
 	relayJSON(w, status, raw)
 }

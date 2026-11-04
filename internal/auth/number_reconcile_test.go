@@ -55,7 +55,18 @@ func TestListNumberCandidatesOldestFirstRealOnly(t *testing.T) {
 type fakeAssigner struct {
 	mu      sync.Mutex
 	batches [][]string
+	tests   [][]string
 	fail    bool
+}
+
+func (f *fakeAssigner) AssignTestNumbers(_ context.Context, ids []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
+		return errors.New("maild unreachable")
+	}
+	f.tests = append(f.tests, append([]string(nil), ids...))
+	return nil
 }
 
 func (f *fakeAssigner) AssignNumbers(_ context.Context, ids []string) error {
@@ -112,5 +123,31 @@ func TestListNumberCandidatesReadOnlyOnFile(t *testing.T) {
 	got, err := ListNumberCandidatesReadOnly(context.Background(), path)
 	if err != nil || fmt.Sprint(got) != "[x]" {
 		t.Fatalf("got %v err=%v", got, err)
+	}
+}
+
+// Every account has a numbered address, test accounts included: the ones on
+// test or ephemeral domains are sent to maild's test-range assignment, and
+// never to the user sequence. Before this nothing bound them at all.
+func TestReconcileNumbersTestAccountsFromTheTestRange(t *testing.T) {
+	s := TestStore(t)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	addAccount(t, s, "real", "a@gmail.com", base, true)
+	addAccount(t, s, "t2", "t2@example.com", base.Add(2*time.Hour), true)
+	addAccount(t, s, "t1", "t1@example.org", base.Add(time.Hour), true)
+	addAccount(t, s, "t-unfinished", "u@example.com", base.Add(3*time.Hour), false)
+	f := &fakeAssigner{}
+	h := &Handler{store: s, numberAssigner: f, numberNudge: make(chan struct{}, 1)}
+	if err := h.ReconcileNumbers(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(f.batches) != "[[real]]" || fmt.Sprint(f.tests) != "[[t1 t2]]" {
+		t.Fatalf("real %v, test %v", f.batches, f.tests)
+	}
+	if err := h.ReconcileNumbers(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.batches) != 1 || len(f.tests) != 1 {
+		t.Fatalf("a second pass resent: %v %v", f.batches, f.tests)
 	}
 }

@@ -95,9 +95,8 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 			Root: source.Root, Tree: source.Tree, TreePatch: packageBlobRef(source.Blobs.TreePatch), ReviewPatch: packageBlobRef(source.Blobs.ReviewPatch),
 			ChangedPaths: source.Paths, BuiltOn: base,
 		},
-		Manifest:    source.Manifest,
-		Description: source.Description,
-		Publisher:   pkgrelease.Publisher{OwnerID: ownerID, ComputerID: computerID},
+		Manifest:  source.Manifest,
+		Publisher: pkgrelease.Publisher{OwnerID: ownerID, ComputerID: computerID},
 		Operation: pkgrelease.Operation{
 			OperationID: operation.OperationID, BundleDigest: operation.BundleDigest, DecisionEvent: operation.DecisionEvent,
 			MaterializationReceipt: operation.MaterializationReceipt, CheckpointRef: operation.CheckpointRef, VerifierRefs: operation.VerifierRefs,
@@ -114,6 +113,12 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
 		return
 	}
+	// No screenshot, no listing: refuse here with the reason, before the
+	// owner is asked to confirm a publish the host would refuse.
+	if err := pkgrelease.RequireScreenshot(record); err != nil {
+		writePackageDraftRefusal(w, err)
+		return
+	}
 	// A release that updates a package shows the same view before and after
 	// (owner, 2026-11-04); a new package (empty parent) needs only after shots.
 	hasPair, err := h.rt.bundleHasBeforeAfter(operation)
@@ -126,12 +131,6 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if err := record.Validate(); err != nil {
-		writePackageDraftRefusal(w, err)
-		return
-	}
-	// No screenshot, no listing: refuse here with the reason, before the
-	// owner is asked to confirm a publish the host would refuse.
-	if err := pkgrelease.RequireScreenshot(record); err != nil {
 		writePackageDraftRefusal(w, err)
 		return
 	}

@@ -20,12 +20,6 @@ const REFUSED = 'This computer refused the request. Nothing changed here.';
 // server message is never shown.
 export function plainReason(reason, status = 0) {
   switch (String(reason || '')) {
-    case 'patch_does_not_apply':
-      return 'The release was built on a different base, so its patch does not apply to this computer. Nothing changed on this computer. Install a release built on this computer\'s base, or wait for the publisher to publish one.';
-    case 'package_name_taken':
-      return 'This computer already has its own app by that name, which an install never overwrites. Nothing changed on this computer.';
-    case 'package_already_present':
-      return 'This computer already holds exactly this release. Nothing changed.';
     case 'package_not_installed':
       return 'This release is not what this computer holds under that name, so there is nothing of it to uninstall. Nothing changed on this computer.';
     case 'package_content_invalid':
@@ -36,8 +30,6 @@ export function plainReason(reason, status = 0) {
       return 'The release did not verify on this computer, so it was not installed. Nothing changed on this computer.';
     case 'patch_unavailable':
       return 'The Library does not hold this release\'s files, so it cannot be installed. Nothing changed on this computer.';
-    case 'desks_unavailable':
-      return 'This computer\'s desks did not take the install. Nothing changed on this computer. Try again in a moment.';
     case 'package_build_failed':
       return 'This computer could not build the release, so it was not installed. Nothing changed on this computer.';
     case 'install_unavailable':
@@ -47,6 +39,10 @@ export function plainReason(reason, status = 0) {
     case 'release_id_invalid':
     case 'request_invalid':
       return 'This window sent an install the computer could not read. Nothing changed on this computer. Reload the app and try again.';
+    case 'publisher_address_unavailable':
+      return 'The Library could not look up who made these apps because the address service did not answer. Try again in a moment.';
+    case 'publisher_address_missing':
+      return 'An app in the Library has a maker with no Choir address, which should never happen. Nothing changed on this computer.';
     case 'capsule_fixture':
       return 'This window cannot install anything. Nothing changed on this computer.';
     default:
@@ -332,11 +328,10 @@ export function versionLabel(release, now = new Date()) {
   return day ? name + ', ' + day : name;
 }
 
-// descriptionOf is the manifest's one-line description the publisher
-// recorded, or ''.
+// descriptionOf is the manifest's one-line description the host derived at
+// publish (not part of the record), or ''.
 export function descriptionOf(release) {
-  const record = (release && release.record) || {};
-  return String(record.description || '').trim();
+  return String((release && release.description) || '').trim();
 }
 
 // predictionLabel and outcomeLabel say a precommitment in words, never as a
@@ -355,11 +350,25 @@ export function outcomeLabel(precommit) {
   return { tone: '', text: 'Settled' };
 }
 
-// installedFor finds the install in force for a package on this computer: a
-// finished install that is not an uninstall.
-export function installedFor(installs, name) {
+// installsOf is every install in force on this computer: a finished install
+// that is not an uninstall, one per package.
+export function installsOf(installs) {
   const list = Array.isArray(installs) ? installs : [];
-  return list.find((item) => item && item.package === name && item.action !== 'uninstall' && installState(item) === 'done') || null;
+  return list.filter((item) => item && item.action !== 'uninstall' && installState(item) === 'done');
+}
+
+// installedFor is the install in force for one maker's app: the package's
+// install whose release is on that maker's track. tracks maps an installed
+// release id to the track it was published on ('' when it is not listed any
+// more). Another maker's app of the same name is not this one.
+export function installedFor(installs, name, track, tracks) {
+  return installsOf(installs).find((item) => item.package === name && (tracks || {})[String(item.release_id)] === track) || null;
+}
+
+// installedElsewhere is an install in force of the same name that is not this
+// maker's: installing this one replaces it.
+export function installedElsewhere(installs, name, track, tracks) {
+  return installsOf(installs).find((item) => item.package === name && (tracks || {})[String(item.release_id)] !== track) || null;
 }
 
 // inFlightFor finds an install or uninstall of the package still working.

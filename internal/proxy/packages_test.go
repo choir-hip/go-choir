@@ -59,6 +59,12 @@ type packageProxyEnv struct {
 	// empty catalog.
 	answer string
 	store  *auth.Store
+	// addresses is maild's lookup: owner id -> numbered address. An owner
+	// not in it has no number. maildDown makes maild answer 503;
+	// maildAsked records each lookup's ids.
+	addresses  map[string]string
+	maildDown  bool
+	maildAsked [][]string
 }
 
 func (e *packageProxyEnv) record(call string) {
@@ -165,7 +171,33 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 		}
 	}))
 	t.Cleanup(corpusd.Close)
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			OwnerIDs []string `json:"owner_ids"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if r.URL.Path != "/internal/maild/public-addresses" || r.Method != http.MethodPost || r.Header.Get("X-Internal-Caller") != "true" {
+			t.Errorf("maild call %s %s internal=%q", r.Method, r.URL.Path, r.Header.Get("X-Internal-Caller"))
+		}
+		env.mu.Lock()
+		env.maildAsked = append(env.maildAsked, in.OwnerIDs)
+		down := env.maildDown
+		out := map[string]string{}
+		for _, id := range in.OwnerIDs {
+			if a, ok := env.addresses[id]; ok {
+				out[id] = a
+			}
+		}
+		env.mu.Unlock()
+		if down {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"addresses": out})
+	}))
+	t.Cleanup(maild.Close)
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	handler.cfg.MaildURL = maild.URL
 	handler.cfg.CorpusdURL = corpusd.URL
 	user, err := store.CreateUser("package-user", "package@example.com")
 	if err != nil {
@@ -173,6 +205,7 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 	}
 	env.user = user.ID
 	env.store = store
+	env.addresses = map[string]string{user.ID: "000@choir.example"}
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID,
@@ -568,52 +601,140 @@ func TestPackageHistoryForwardsTheTrackAndThePage(t *testing.T) {
 	}
 }
 
-// The app store shows who made an app by the account's email address (owner,
-// 2026-11-04). The proxy resolves the publisher's owner id to the address
-// from the auth store and adds it to the catalog, history and release
-// answers as display-only fields; an owner it cannot resolve gets none.
-func TestCatalogAnswersCarryThePublishersEmailAndNoOwnerIDIsNeededToShowIt(t *testing.T) {
+// The app store shows who made an app by their numbered Choir address, the
+// account's real Choir email, never the sign-in email (owner, 2026-11-04).
+// The proxy asks maild's host-internal lookup for the owners of the releases
+// in the answer. There is no fallback: maild down, or a listed release whose
+// publisher has no number, fails the read visibly; and a publisher with no
+// number cannot publish.
+func TestCatalogAnswersCarryThePublishersNumberedAddressAndNeverFallBack(t *testing.T) {
 	env := newPackageProxyEnv(t)
 	reader := env.secret(t, "computer:self_development:read")
 	maker, err := env.store.CreateUser("maker", "maker@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
+	env.addresses[maker.ID] = "007@choir.example"
+	env.addresses["tester"] = "10000042@choir.example"
+	calls := func() int {
+		env.mu.Lock()
+		defer env.mu.Unlock()
+		return len(env.maildAsked)
+	}
+	noEmail := func(label string, rec *httptest.ResponseRecorder) {
+		t.Helper()
+		body := rec.Body.String()
+		if strings.Contains(body, "@example.com") || strings.Contains(body, "publisher_email") || strings.Contains(body, "maker@") || strings.Contains(body, "package@") {
+			t.Fatalf("%s shows a real sign-in email: %s", label, body)
+		}
+	}
 	id := strings.Repeat("a", 64)
-	env.answer = `{"count":2,"reader":"` + env.user + `","packages":[{"package":"reader","track":"` + maker.ID + `","releases":1},{"package":"reader","track":"` + env.user + `","releases":1},{"package":"gone","track":"no-such-owner","releases":1}]}`
+	release := func(owner string) string {
+		return `{"release_id":"` + id + `","record":{"publisher":{"owner_id":"` + owner + `","computer_id":"computer-x"}},"media":[]}`
+	}
+
+	// The shelf: each track in the answer, test accounts included.
+	env.answer = `{"count":3,"reader":"` + env.user + `","packages":[{"package":"reader","track":"` + maker.ID + `","releases":1},{"package":"reader","track":"` + env.user + `","releases":1},{"package":"t","track":"tester","releases":1}]}`
 	rec := env.send(t, http.MethodGet, "/api/catalog/packages", "", reader)
 	var catalog struct {
 		Packages []struct {
-			Track          string `json:"track"`
-			PublisherEmail string `json:"publisher_email"`
-			Own            bool   `json:"own"`
+			PublisherAddress string `json:"publisher_address"`
+			Own              bool   `json:"own"`
 		} `json:"packages"`
 	}
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &catalog) != nil || len(catalog.Packages) != 3 {
 		t.Fatalf("catalog = %d %s", rec.Code, rec.Body.String())
 	}
-	want := []struct {
-		email string
-		own   bool
-	}{{"maker@example.com", false}, {"package@example.com", true}, {"", false}}
-	for i, w := range want {
-		if got := catalog.Packages[i]; got.PublisherEmail != w.email || got.Own != w.own {
-			t.Fatalf("catalog entry %d = %+v, want email %q own %v", i, got, w.email, w.own)
+	noEmail("catalog", rec)
+	for i, want := range []struct {
+		addr string
+		own  bool
+	}{{"007@choir.example", false}, {"000@choir.example", true}, {"10000042@choir.example", false}} {
+		if got := catalog.Packages[i]; got.PublisherAddress != want.addr || got.Own != want.own {
+			t.Fatalf("catalog entry %d = %+v, want %+v", i, got, want)
 		}
 	}
+	if calls() != 1 {
+		t.Fatalf("maild asked %v, want one call", env.maildAsked)
+	}
+	env.send(t, http.MethodGet, "/api/catalog/packages", "", reader)
+	if calls() != 1 {
+		t.Fatalf("the cache did not answer a repeat: %v", env.maildAsked)
+	}
 
-	// A release: by its record's publisher.
-	env.answer = `{"release_id":"` + id + `","record":{"publisher":{"owner_id":"` + maker.ID + `","computer_id":"computer-x"}},"media":[]}`
+	// A release, and a history of releases.
+	env.answer = release(maker.ID)
 	rec = env.send(t, http.MethodGet, "/api/catalog/releases/"+id, "", reader)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"publisher_email":"maker@example.com"`) || !strings.Contains(rec.Body.String(), `"own":false`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"publisher_address":"007@choir.example"`) || !strings.Contains(rec.Body.String(), `"own":false`) {
 		t.Fatalf("release = %d %s", rec.Code, rec.Body.String())
 	}
-	// A history: by its track.
-	env.answer = `{"package":"reader","track":"` + maker.ID + `","releases":[],"count":0}`
+	noEmail("release", rec)
+	env.answer = `{"package":"reader","track":"` + maker.ID + `","count":1,"releases":[{"release_id":"` + id + `","record":{"publisher":{"owner_id":"` + maker.ID + `"}}}]}`
 	rec = env.send(t, http.MethodGet, "/api/catalog/packages/reader/releases?track="+maker.ID, "", reader)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"publisher_email":"maker@example.com"`) {
+	if rec.Code != http.StatusOK || strings.Count(rec.Body.String(), `"publisher_address":"007@choir.example"`) != 1 {
 		t.Fatalf("history = %d %s", rec.Code, rec.Body.String())
 	}
-	// A refusal is relayed untouched.
+	noEmail("history", rec)
+
+	// B1: a track named in the request with no visible release resolves
+	// nothing and asks maild nothing.
+	before := calls()
+	for _, track := range []string{maker.ID, env.user, "anyone-at-all"} {
+		env.answer = `{"package":"reader","track":"` + track + `","releases":[],"count":0}`
+		rec = env.send(t, http.MethodGet, "/api/catalog/packages/anything/releases?track="+track, "", reader)
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "publisher_address") {
+			t.Fatalf("B1 an empty history for track %s resolves an address: %d %s", track, rec.Code, rec.Body.String())
+		}
+	}
+	if calls() != before {
+		t.Fatalf("B1 maild was asked about a request parameter: %v", env.maildAsked[before:])
+	}
+
+	// No fallback (1): a listed release whose publisher has no number is a
+	// defect, named in a visible error, never an omitted field.
+	env.answer = release("numberless-owner")
+	rec = env.send(t, http.MethodGet, "/api/catalog/releases/"+id, "", reader)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "publisher_address_missing") || !strings.Contains(rec.Body.String(), "numberless-owner") || strings.Contains(rec.Body.String(), "publisher_address\":") {
+		t.Fatalf("a numberless publisher = %d %s, want 502 publisher_address_missing naming the owner", rec.Code, rec.Body.String())
+	}
+	// No fallback (2): maild down fails the read, never drops the field.
+	env.mu.Lock()
+	env.maildDown = true
+	env.mu.Unlock()
+	env.handler.publisherAddresses = publisherAddressCache{}
+	env.answer = release(maker.ID)
+	rec = env.send(t, http.MethodGet, "/api/catalog/releases/"+id, "", reader)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "publisher_address_unavailable") {
+		t.Fatalf("maild down = %d %s, want 502 publisher_address_unavailable", rec.Code, rec.Body.String())
+	}
 	env.answer = ""
+}
+
+// Publishing requires the publisher's account to have a numbered address, and
+// the address service to answer: a release is listed with its maker shown by
+// that address.
+func TestPublishNeedsThePublishersNumberedAddress(t *testing.T) {
+	env := newPackageProxyEnv(t)
+	owner := env.secret(t, "computer:self_development:approve", OwnerActsScope)
+	path := "/api/computers/computer-a/packages/releases"
+	body := `{"operation_id":"op-1","package":"reader"}`
+	env.draft = func(string) []byte { return packageDraftFor(t, env.user, nil, false) }
+
+	env.mu.Lock()
+	delete(env.addresses, env.user)
+	env.mu.Unlock()
+	env.handler.publisherAddresses = publisherAddressCache{}
+	rec := env.send(t, http.MethodPost, path, body, owner)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "publisher_address_missing") || strings.Contains(env.joined(), "guest GET") || strings.Contains(env.joined(), "corpusd POST") {
+		t.Fatalf("publish without a number = %d %s, calls:\n%s", rec.Code, rec.Body.String(), env.joined())
+	}
+
+	env.mu.Lock()
+	env.addresses[env.user] = "000@choir.example"
+	env.maildDown = true
+	env.mu.Unlock()
+	rec = env.send(t, http.MethodPost, path, body, owner)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "publisher_address_unavailable") || strings.Contains(env.joined(), "corpusd POST") {
+		t.Fatalf("publish with maild down = %d %s", rec.Code, rec.Body.String())
+	}
 }
