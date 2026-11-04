@@ -127,6 +127,82 @@ type CapsuleMemoryReceipt struct {
 	// memory.high would have throttled this capsule. Under doctrine it is
 	// what happened (EventsHigh says how often).
 	DoctrineWouldThrottle bool `json:"doctrine_would_throttle"`
+	// Pids and CPU next to memory (docs/problems/engineering-cell-never-returns-2026-11-03.md):
+	// PidsMax is the capsule's pids.max (-1 unknown); PidsPeak its
+	// pids.peak; PidsEventsMax how often a fork or a thread creation was
+	// refused at pids.max (cgroup v2 counts threads). CPUNrThrottled and
+	// CPUThrottledUsec are cpu.stat's throttled periods and time.
+	PidsMax          int64 `json:"pids_max"`
+	PidsPeak         int64 `json:"pids_peak"`
+	PidsEventsMax    int64 `json:"pids_events_max"`
+	CPUNrThrottled   int64 `json:"cpu_nr_throttled"`
+	CPUThrottledUsec int64 `json:"cpu_throttled_usec"`
+	// BrokerExit is the broker's exit status and time when it died before
+	// the capsule's destroy; empty when it ran until then.
+	BrokerExit string `json:"broker_exit,omitempty"`
+}
+
+// cgroupResourceFeedback is a capsule cgroup's pids.events, pids.peak and
+// cpu.stat.
+type cgroupResourceFeedback interface {
+	PidsEvents() (string, error)
+	PidsPeak() (int64, error)
+	CPUStat() (string, error)
+}
+
+func (d cgroupMemoryDir) PidsEvents() (string, error) {
+	raw, err := os.ReadFile(filepath.Join(string(d), "pids.events"))
+	return string(raw), err
+}
+
+func (d cgroupMemoryDir) PidsPeak() (int64, error) {
+	raw, err := os.ReadFile(filepath.Join(string(d), "pids.peak"))
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64)
+}
+
+func (d cgroupMemoryDir) CPUStat() (string, error) {
+	raw, err := os.ReadFile(filepath.Join(string(d), "cpu.stat"))
+	return string(raw), err
+}
+
+// flatKeyed reads a cgroup flat-keyed file ("key value" lines) into the
+// named fields; a field whose key is absent keeps its value.
+func flatKeyed(text string, fields map[string]*int64) {
+	for _, line := range strings.Split(text, "\n") {
+		f := strings.Fields(line)
+		if len(f) != 2 {
+			continue
+		}
+		if dst, ok := fields[f[0]]; ok {
+			if n, err := strconv.ParseInt(f[1], 10, 64); err == nil {
+				*dst = n
+			}
+		}
+	}
+}
+
+// readCapsuleResources fills the receipt's pids and CPU fields; what it
+// cannot read is -1.
+func readCapsuleResources(r *CapsuleMemoryReceipt, cg any) {
+	r.PidsMax, r.PidsPeak, r.PidsEventsMax, r.CPUNrThrottled, r.CPUThrottledUsec = -1, -1, -1, -1, -1
+	fb, ok := cg.(cgroupResourceFeedback)
+	if !ok || fb == nil {
+		return
+	}
+	if peak, err := fb.PidsPeak(); err == nil {
+		r.PidsPeak = peak
+	}
+	if events, err := fb.PidsEvents(); err == nil {
+		r.PidsEventsMax = 0
+		flatKeyed(events, map[string]*int64{"max": &r.PidsEventsMax})
+	}
+	if stat, err := fb.CPUStat(); err == nil {
+		r.CPUNrThrottled, r.CPUThrottledUsec = 0, 0
+		flatKeyed(stat, map[string]*int64{"nr_throttled": &r.CPUNrThrottled, "throttled_usec": &r.CPUThrottledUsec})
+	}
 }
 
 // readCapsuleMemoryReceipt reads the receipt from a capsule cgroup that is
@@ -134,6 +210,7 @@ type CapsuleMemoryReceipt struct {
 func readCapsuleMemoryReceipt(policy CapsuleMemoryPolicy, plan capsuleMemoryPlan, request int64, cg any) CapsuleMemoryReceipt {
 	r := CapsuleMemoryReceipt{Policy: policy, Request: request, Admitted: plan.Admit, High: plan.High, Max: plan.Max,
 		Peak: -1, EventsHigh: -1, EventsMax: -1, EventsOOM: -1, EventsOOMKill: -1}
+	readCapsuleResources(&r, cg)
 	fb, ok := cg.(cgroupMemoryFeedback)
 	if !ok || fb == nil {
 		return r
@@ -178,9 +255,26 @@ func receiptMiB(v int64) string {
 	return strconv.FormatInt(v>>20, 10) + "MiB"
 }
 
+func receiptCount(v int64) string {
+	if v < 0 {
+		return "unknown"
+	}
+	return strconv.FormatInt(v, 10)
+}
+
 // String is the receipt's log line.
 func (r CapsuleMemoryReceipt) String() string {
-	return fmt.Sprintf("policy=%s request=%s admitted=%s high=%s max=%s peak=%s events high=%d max=%d oom=%d oom_kill=%d doctrine_would_throttle=%t",
+	pidsMax := r.PidsMax
+	if pidsMax <= 0 {
+		pidsMax = -1
+	}
+	line := fmt.Sprintf("policy=%s request=%s admitted=%s high=%s max=%s peak=%s events high=%d max=%d oom=%d oom_kill=%d doctrine_would_throttle=%t"+
+		" pids max=%s peak=%s events max=%s cpu nr_throttled=%s throttled_usec=%s",
 		r.Policy, receiptMiB(r.Request), receiptMiB(r.Admitted), receiptMiB(r.High), receiptMiB(r.Max), receiptMiB(r.Peak),
-		r.EventsHigh, r.EventsMax, r.EventsOOM, r.EventsOOMKill, r.DoctrineWouldThrottle)
+		r.EventsHigh, r.EventsMax, r.EventsOOM, r.EventsOOMKill, r.DoctrineWouldThrottle,
+		receiptCount(pidsMax), receiptCount(r.PidsPeak), receiptCount(r.PidsEventsMax), receiptCount(r.CPUNrThrottled), receiptCount(r.CPUThrottledUsec))
+	if r.BrokerExit != "" {
+		line += fmt.Sprintf(" broker_exit=%q", r.BrokerExit)
+	}
+	return line
 }

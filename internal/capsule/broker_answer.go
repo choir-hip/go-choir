@@ -15,6 +15,11 @@ import (
 // bound.
 var ErrBrokerNoAnswer = errors.New("the capsule broker did not answer")
 
+// ErrBrokerExited marks a broker RPC to a capsule whose broker process
+// exited before the capsule's destroy: it fails at once instead of waiting
+// in the host-held listener's backlog for its read bound.
+var ErrBrokerExited = errors.New("the capsule broker exited")
+
 // brokerGoEvalDefault is the broker's own cell bound when timeout_ms is
 // unset (cmd/capsule-broker handleGoEvalSession).
 const brokerGoEvalDefault = 60 * time.Second

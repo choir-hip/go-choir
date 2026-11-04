@@ -214,7 +214,7 @@ func TestClaudeEgressReachesNoHostByConnect(t *testing.T) {
 }
 
 func TestClaudeCapsuleSize(t *testing.T) {
-	if m, c, p := ClaudeCapsuleSize(6<<30, 2<<30); m != 3<<30 || c != 200000 || p != 512 {
+	if m, c, p := ClaudeCapsuleSize(6<<30, 2<<30); m != 3<<30 || c != 200000 || p != 1024 {
 		t.Fatalf("8 GiB guest: %d %d %d", m, c, p)
 	}
 	// A 4096 MiB guest's budget is 3/4 of MemTotal, under 3 GiB.

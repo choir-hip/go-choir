@@ -38,7 +38,15 @@ const (
 	// same 2 GiB as before, and the ceiling becomes twice it.
 	engineeringAssignmentMemoryRequest = engineeringAssignmentMemoryMax
 	engineeringAssignmentCPUQuota      = int64(100000)
-	engineeringAssignmentPidsMax       = int64(256)
+	// engineeringAssignmentPidsMax bounds the capsule's tasks; cgroup v2
+	// counts threads. 256 was a size default from the first assignment
+	// capsules (7dfe782d3, 2026-08-08), with no recorded security reason;
+	// a choir-shot job (vite, Chromium, an autoputer) is thread-heavy, and a
+	// Go broker that cannot make a thread dies
+	// (docs/problems/engineering-cell-never-returns-2026-11-03.md). 1024 is
+	// the desk worker cgroups' bound (workerPidsMax); memory still bounds a
+	// thread bomb.
+	engineeringAssignmentPidsMax = int64(1024)
 	// coManagementAssignmentDeadline is the fail-closed scheduling deadline for one
 	// live assignment (I26): a bound assignment that has not reached a terminal
 	// disposition by this bound is cancelled with an expired reason. The

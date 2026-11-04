@@ -306,14 +306,15 @@ func ClaudeEgressPolicy() EgressPolicy {
 	}
 }
 
-// Claude-mode capsule size: 2 CPUs and 512 pids always (Claude Code beside
-// go test needs more threads than 256), and 3 GiB when the guest's capsule
+// Claude-mode capsule size: 2 CPUs and 1024 pids always (Claude Code beside
+// go test needs more threads than 256; 1024 is an engineering capsule's
+// bound too), and 3 GiB when the guest's capsule
 // budget holds it (an 8 GiB guest's does; a 4 GiB guest's budget is about
 // 2.85 GiB), else the caller's default memory.
 const (
 	ClaudeCapsuleMemory   = int64(3 << 30)
 	ClaudeCapsuleCPUQuota = int64(200000)
-	ClaudeCapsulePidsMax  = int64(512)
+	ClaudeCapsulePidsMax  = int64(1024)
 )
 
 // ClaudeCapsuleSize picks a claude-mode capsule's memory, CPU quota and pids

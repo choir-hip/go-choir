@@ -92,6 +92,9 @@ type Executor struct {
 	capsuleAggregateFor func() cgroupMemory
 	// memoryReceipts are the last capsules' memory receipts, newest last.
 	memoryReceipts []CapsuleMemoryReceipt
+	// brokerLogs are the brokers' own recent log lines (broker_log.go),
+	// under their own lock.
+	brokerLogs brokerLogRegistry
 	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
 	// (unset) leaves the route out of the policy.
 	goModuleProxy netip.AddrPort
@@ -606,16 +609,15 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return
 		}
 		var cleanupErr error
+		caps.stopping.Store(true)
 		if caps.Process != nil {
 			_ = caps.Process.Kill()
 			if caps.wait != nil {
 				_ = caps.wait()
 			}
 		}
-		if caps.listener != nil {
-			cleanupErr = errors.Join(cleanupErr, caps.listener.Close())
-			caps.listener = nil
-		}
+		cleanupErr = errors.Join(cleanupErr, caps.closeListener())
+		e.brokerLogs.end(caps.ID, "")
 		caps.closeEgress()
 		if caps.Cgroup != nil {
 			cleanupErr = errors.Join(cleanupErr, caps.Cgroup.Delete())
@@ -912,7 +914,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	if err != nil {
 		return fmt.Errorf("capsule create parent broker listener: %w", err)
 	}
+	caps.listenerMu.Lock()
 	caps.listener = listener
+	caps.listenerMu.Unlock()
 	if err := os.Chmod(hostSocket, 0o600); err != nil {
 		return fmt.Errorf("capsule secure parent broker listener: %w", err)
 	}
@@ -944,7 +948,14 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 		cmd.Env = append(cmd.Env, ClaudeDelegateBrokerTokenEnv+"="+claudeToken, ClaudeDelegateBrokerBinEnv+"="+e.claudeBinary)
 	}
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// The broker's stderr goes to the journal as before and to a bounded
+	// tail the observability route returns (broker_log.go).
+	logPipe, err := attachBrokerLog(cmd, e.brokerLogs.register(caps.ID), os.Stderr)
+	if err != nil {
+		_ = inheritedListener.Close()
+		_ = cgroupFile.Close()
+		return err
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot:                     caps.MergedDir,
 		Cloneflags:                 unix.CLONE_NEWUSER,
@@ -957,25 +968,17 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 		CgroupFD:                   int(cgroupFile.Fd()),
 		Pdeathsig:                  syscall.SIGKILL,
 	}
-	if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, cmd.Start); err != nil {
+	// Started on a thread that outlives the launcher (broker_exit_linux.go).
+	if err := caps.startBrokerProcess(ctx, capsuleBrokerStartTimeout, cmd); err != nil {
 		_ = inheritedListener.Close()
 		_ = cgroupFile.Close()
+		logPipe.abort()
 		return fmt.Errorf("capsule start broker launcher: %w", err)
 	}
 	_ = inheritedListener.Close()
 	_ = cgroupFile.Close()
+	logPipe.started()
 	timer.phase("broker_start")
-	caps.Process = cmd.Process
-	caps.PID = cmd.Process.Pid
-	caps.processDone = make(chan struct{})
-	caps.wait = func() error {
-		<-caps.processDone
-		return caps.processErr
-	}
-	go func() {
-		caps.processErr = cmd.Wait()
-		close(caps.processDone)
-	}()
 	readinessCapability := &Capability{
 		CapabilityID: "broker-readiness-" + caps.ID, Handle: "broker-readiness", CapsuleID: caps.ID,
 		AgentRunID: "guest-core-readiness", AgentRole: RoleResearch, TargetCapsule: caps.ID,
@@ -1001,6 +1004,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 		} else {
 			caps.broker = client
 			timer.phase("broker_ready", fmt.Sprintf("probes=%d", probes))
+			// From readiness on, an exit nobody asked for is a death
+			// (broker_exit_linux.go).
+			go e.watchBrokerExit(caps)
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -1008,6 +1014,11 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 		}
 		select {
 		case <-caps.processDone:
+			tail := e.brokerLogs.tailOf(caps.ID)
+			tail.waitStream(brokerLogDrainWait)
+			if last := tail.last(); last != "" {
+				return fmt.Errorf("capsule broker exited before readiness: %v; last broker log line: %s", caps.processErr, last)
+			}
 			return fmt.Errorf("capsule broker exited before readiness: %v", caps.processErr)
 		case <-ctx.Done():
 			return ctx.Err()
@@ -1043,13 +1054,11 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		return fmt.Errorf("capsule %s not found", id)
 	}
 	caps.State = StateDestroying
+	caps.stopping.Store(true)
 	if caps.broker != nil {
 		_ = caps.broker.Close()
 	}
-	if caps.listener != nil {
-		_ = caps.listener.Close()
-		caps.listener = nil
-	}
+	_ = caps.closeListener()
 	caps.closeEgress()
 	var cleanupErr error
 	if caps.Process != nil {
@@ -1123,6 +1132,7 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		}
 	}
 	caps.State = StateDestroyed
+	e.brokerLogs.end(id, caps.brokerDeath())
 	delete(e.capsules, id)
 	e.vmMemoryUsed -= caps.admittedMemory()
 	// Its host build reservation ends with it (S4); ReleaseBuild never

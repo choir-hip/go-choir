@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
@@ -78,6 +79,17 @@ type Capsule struct {
 	// policy it was spawned under. Guarded by the executor's lock.
 	memoryAdmitted int64
 	memoryPolicy   CapsuleMemoryPolicy
+
+	// stopping is set before a destroy (or a failed spawn's cleanup) stops
+	// the broker, so its exit is not read as a death (broker_exit_linux.go).
+	stopping atomic.Bool
+	// listenerMu guards listener: the broker watch closes it from its own
+	// goroutine, a destroy under the executor's lock.
+	listenerMu sync.Mutex
+	// deathMu guards death: the broker's exit status and time when it died
+	// before the capsule's destroy; empty while it runs.
+	deathMu sync.Mutex
+	death   string
 }
 
 // admittedMemory is what a destroy returns to the budget: what the spawn

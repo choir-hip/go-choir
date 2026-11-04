@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 )
 
 // Run states.
@@ -379,7 +380,7 @@ func (s *Server) Start(spec Spec) (Status, error) {
 		ID: id, State: StateRunning, Dir: dir, StartedAt: now.UTC(),
 		WallClockMin: spec.WallClockMin, MaxTurns: spec.MaxTurns,
 	}}
-	if err := cmd.Start(); err != nil {
+	if err := childthread.Start(cmd); err != nil {
 		_ = prompt.Close()
 		_ = events.Close()
 		_ = stderrFile.Close()

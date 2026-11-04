@@ -26,6 +26,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -353,7 +354,7 @@ func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, au
 	// the guest log only says "capsule broker launcher: exit status 1".
 	command.Stderr = os.Stderr
 	command.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWPID, Pdeathsig: syscall.SIGKILL}
-	if err := command.Start(); err != nil {
+	if err := childthread.Start(command); err != nil {
 		_ = listenerFile.Close()
 		return fmt.Errorf("start isolated broker: %w", err)
 	}
@@ -597,7 +598,7 @@ func (b *Broker) handleExecDirect(ctx context.Context, cwdPath string, p capsule
 	cmd.Stderr = &stderr
 
 	start := time.Now()
-	if err := cmd.Start(); err != nil {
+	if err := childthread.Start(cmd); err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("exec start failed: %v", err)}
 	}
 	done := make(chan error, 1)

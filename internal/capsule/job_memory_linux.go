@@ -260,6 +260,10 @@ func (e *Executor) recordMemoryReceiptLocked(caps *Capsule) {
 	}
 	r := readCapsuleMemoryReceipt(policy, plan, caps.Spec.MemoryRequest, cg)
 	r.CapsuleID = caps.ID
+	if caps.Spec.PidsMax > 0 {
+		r.PidsMax = caps.Spec.PidsMax
+	}
+	r.BrokerExit = caps.brokerDeath()
 	log.Printf("capsule %s memory: %s", caps.ID, r)
 	e.memoryReceipts = append(e.memoryReceipts, r)
 	if n := len(e.memoryReceipts); n > memoryReceiptsKept {

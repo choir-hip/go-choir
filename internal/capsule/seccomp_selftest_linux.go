@@ -20,6 +20,8 @@ import (
 	"github.com/elastic/go-seccomp-bpf"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
+
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 )
 
 // seccompSelfTestFilter is the capsule's own constructor for a filter name:
@@ -203,7 +205,7 @@ func SeccompSelfTest(ctx context.Context, bin string) SeccompSelfTestReceipt {
 		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
-		runErr := cmd.Run()
+		runErr := childthread.Run(cmd)
 		cancel()
 		if err := json.Unmarshal(stdout.Bytes(), &f); err != nil {
 			f = SeccompSelfTestFilter{Name: name}

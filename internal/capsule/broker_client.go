@@ -47,6 +47,9 @@ type BrokerClient struct {
 	// transport error is re-dialed by the next call.
 	dialed bool
 	closed bool
+	// exited, once set, is the broker's death (MarkExited): every call
+	// fails with it, a call in flight included.
+	exited error
 }
 
 // BrokerRPCRequest is the wire format for broker RPCs.
@@ -91,6 +94,13 @@ func (b *BrokerClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to broker socket %s: %w", b.socketPath, err)
 	}
 	b.stateMu.Lock()
+	if b.exited != nil {
+		// The broker died while this dial was in flight (review r1).
+		exited := b.exited
+		b.stateMu.Unlock()
+		_ = conn.Close()
+		return exited
+	}
 	if b.closed {
 		b.stateMu.Unlock()
 		_ = conn.Close()
@@ -118,6 +128,29 @@ func (b *BrokerClient) Close() error {
 	return conn.Close()
 }
 
+// MarkExited records that the broker process exited: every later call fails
+// at once with ErrBrokerExited and the status, and a call in flight is
+// interrupted with it. The connection is closed; no call re-dials.
+func (b *BrokerClient) MarkExited(status string) {
+	b.stateMu.Lock()
+	if b.exited == nil {
+		b.exited = fmt.Errorf("%w (%s); the capsule runs no more cells or jobs", ErrBrokerExited, status)
+	}
+	conn := b.conn
+	b.conn, b.dec = nil, nil
+	b.stateMu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
+}
+
+// exitedErr is the broker's death, or nil.
+func (b *BrokerClient) exitedErr() error {
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	return b.exited
+}
+
 // connection returns the live connection and its decoder, re-dialing one a
 // transport error dropped. The caller holds connMu.
 func (b *BrokerClient) connection(ctx context.Context) (net.Conn, *json.Decoder, error) {
@@ -125,9 +158,11 @@ func (b *BrokerClient) connection(ctx context.Context) (net.Conn, *json.Decoder,
 	if b.conn != nil && b.dec == nil {
 		b.dec = json.NewDecoder(b.conn) // a client built around an open conn
 	}
-	conn, dec, dialed, closed := b.conn, b.dec, b.dialed, b.closed
+	conn, dec, dialed, closed, exited := b.conn, b.dec, b.dialed, b.closed, b.exited
 	b.stateMu.Unlock()
 	switch {
+	case exited != nil:
+		return nil, nil, exited
 	case closed:
 		return nil, nil, fmt.Errorf("broker client is closed")
 	case conn != nil:
@@ -196,6 +231,9 @@ func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, p
 
 	if err := json.NewEncoder(conn).Encode(&req); err != nil {
 		b.drop(conn)
+		if exited := b.exitedErr(); exited != nil {
+			return nil, exited
+		}
 		return nil, fmt.Errorf("failed to send broker RPC: %w", err)
 	}
 
@@ -208,6 +246,9 @@ func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, p
 	var resp BrokerRPCResponse
 	if err := dec.Decode(&resp); err != nil {
 		b.drop(conn)
+		if exited := b.exitedErr(); exited != nil {
+			return nil, exited
+		}
 		return nil, fmt.Errorf("failed to read broker response: %w", err)
 	}
 
@@ -230,7 +271,7 @@ func (b *BrokerClient) boundedCall(ctx context.Context, bound time.Duration, ver
 	resp, err := b.call(callCtx, verb, cap, params)
 	// The socket's read deadline can fire before the context's own timer
 	// marks it done, so the clock decides, not callCtx.Err().
-	if err != nil && boundIsTighter && ctx.Err() == nil && !time.Now().Before(boundAt) {
+	if err != nil && !errors.Is(err, ErrBrokerExited) && boundIsTighter && ctx.Err() == nil && !time.Now().Before(boundAt) {
 		return nil, fmt.Errorf("%w to %s within %s: %v", ErrBrokerNoAnswer, verb, bound, err)
 	}
 	return resp, err

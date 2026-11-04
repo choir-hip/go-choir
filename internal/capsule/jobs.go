@@ -441,6 +441,12 @@ func (e *Executor) pollJob(job *capsuleJob) bool {
 	default:
 		return false // frozen for a Freeze, or quiescing: read it later
 	}
+	// A dead broker never answers again, and took the job with it (it is
+	// PID 1 of the capsule's PID namespace).
+	if death := caps.brokerDeath(); death != "" {
+		e.finishJob(job, nil, capsulejob.StateFailed, "the capsule broker exited ("+death+"); the job's end could not be confirmed")
+		return true
+	}
 	capability, err := e.ResolveCapability(job.agentRunID, job.handle)
 	if err != nil {
 		e.finishJob(job, nil, capsulejob.StateStopped, "the assignment's capsule authority ended before the job did")

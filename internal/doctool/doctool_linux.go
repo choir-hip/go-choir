@@ -22,6 +22,8 @@ import (
 	"github.com/landlock-lsm/go-landlock/landlock"
 	ll "github.com/landlock-lsm/go-landlock/landlock/syscall"
 	"golang.org/x/sys/unix"
+
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 )
 
 // The helper's environment, set by the spawner only. Without the level the
@@ -141,7 +143,7 @@ func runSandboxed(ctx context.Context, opts runOptions, budget bool, tool, toolP
 	}
 	cmd.WaitDelay = 2 * time.Second
 
-	if err := cmd.Start(); err != nil {
+	if err := childthread.Start(cmd); err != nil {
 		return "", nil, 0, setupErrorf("start: %v", err)
 	}
 	err = cmd.Wait()

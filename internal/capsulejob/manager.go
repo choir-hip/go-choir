@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 )
 
 // Launch builds the (unstarted) supervisor command for a job; the Manager
@@ -139,7 +141,7 @@ func (m *Manager) Start(spec Spec) (Status, error) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.Setpgid = true
-	if err := cmd.Start(); err != nil {
+	if err := childthread.Start(cmd); err != nil {
 		for _, f := range []*os.File{outR, outW, resR, resW} {
 			_ = f.Close()
 		}

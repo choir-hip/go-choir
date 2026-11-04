@@ -898,6 +898,12 @@ type guestObservabilityResponse struct {
 	// policy, request, limits, memory.peak and memory.events of each at its
 	// end, and whether doctrine's memory.high would have throttled it.
 	CapsuleMemory []capsule.CapsuleMemoryReceipt `json:"capsule_memory,omitempty"`
+	// CapsuleBrokerLog is each live capsule broker's last log lines and the
+	// last few ended ones, with the exit status of a broker that died before
+	// its capsule's destroy (docs/problems/engineering-cell-never-returns-2026-11-03.md).
+	// The broker logs only its own operation, never cell or job output or
+	// the Claude delegate's token.
+	CapsuleBrokerLog []capsule.CapsuleBrokerLog `json:"capsule_broker_log,omitempty"`
 	// Unanswered names the reads that did not return within
 	// observabilityReadBudget, most likely waiting on a held lock; the rest
 	// of the response is still current (failure 9).
@@ -1036,6 +1042,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		} else {
 			unanswered("claude_delegate")
 		}
+		// Under its own lock, never the executor's.
+		resp.CapsuleBrokerLog = h.rt.capsuleExecutor.BrokerLogs()
 		if receipts, ok := boundedObservabilityRead(observabilityReadBudget, h.rt.capsuleExecutor.MemoryReceipts); ok {
 			resp.CapsuleMemory = receipts
 		} else {

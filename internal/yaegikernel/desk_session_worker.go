@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -231,7 +232,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	cmd.Stdin = nil
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
-	if err := cmd.Start(); err != nil {
+	if err := childthread.Start(cmd); err != nil {
 		_ = childFile.Close()
 		_ = parentConn.Close()
 		budget.release()

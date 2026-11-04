@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/childthread"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -124,7 +125,7 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 	cmd.ExtraFiles = []*os.File{childFile}
 	stderr := &lockedTail{limit: 2048}
 	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
+	if err := childthread.Start(cmd); err != nil {
 		_ = childFile.Close()
 		_ = parentConn.Close()
 		return nil, fmt.Errorf("start session worker: %w", err)
