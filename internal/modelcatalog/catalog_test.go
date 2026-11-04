@@ -140,7 +140,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 
 // stealth/crouton-alpha on OpenRouter (owner 2026-11-03), from the public
 // models listing and a keyed probe that day: a 1048576-token window, tools,
-// image input answered correctly. In no pool: a test arm pins it.
+// image input answered correctly. In one pool only: crouton-synthetic-luna.
 func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
 	info, ok := Lookup("openrouter", "stealth/crouton-alpha")
 	if !ok {
@@ -154,9 +154,42 @@ func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
 	}
 	for name, members := range Pools() {
 		for _, m := range members {
-			if m.Provider == "openrouter" {
+			if m.Provider == "openrouter" && (name != CroutonSyntheticLunaPool || m.Model != "stealth/crouton-alpha") {
 				t.Fatalf("pool %s carries openrouter member %v", name, m)
 			}
 		}
+	}
+}
+
+// crouton-synthetic-luna is the owner's 2026-11-04 self-development pool.
+// Ways it could fail: crouton is not primary or shares slots with a
+// fallback; the fallback order is not Synthetic then luna; a member is not in
+// the catalog; the pool is NoFailover; it is not resolvable by name.
+func TestCroutonSyntheticLunaPool(t *testing.T) {
+	pool, ok := Pools()[CroutonSyntheticLunaPool]
+	if !ok || CroutonSyntheticLunaPool != "crouton-synthetic-luna" {
+		t.Fatalf("pool %q does not resolve", CroutonSyntheticLunaPool)
+	}
+	want := []PoolMember{
+		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+		{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
+	}
+	if len(pool) != len(want) {
+		t.Fatalf("pool = %v, want %v", pool, want)
+	}
+	for i := range want {
+		if pool[i] != want[i] {
+			t.Fatalf("member %d = %v, want %v", i, pool[i], want[i])
+		}
+		if _, ok := Lookup(pool[i].Provider, pool[i].Model); !ok {
+			t.Fatalf("member %v is not in the catalog", pool[i])
+		}
+	}
+	if pool[0].SlotWeight() != 1 || pool[1].SlotWeight() != 0 || pool[2].SlotWeight() != 0 {
+		t.Fatal("crouton must hold every slot; fallbacks hold none")
+	}
+	if NoFailover(CroutonSyntheticLunaPool) {
+		t.Fatal("crouton-synthetic-luna must fail over")
 	}
 }

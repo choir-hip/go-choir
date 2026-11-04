@@ -251,7 +251,9 @@ func SupportedModels() []ModelInfo {
 		// completion advertised; the catalog keeps its 65536 ceiling),
 		// tools, mandatory reasoning, and an image named correctly through
 		// an image_url data URI (docs/problems/openrouter-provider-crouton-
-		// alpha-2026-11-03.md). In no pool: the arm pins it.
+		// alpha-2026-11-03.md). In one pool only: crouton-synthetic-luna, the
+		// self-development pool (owner 2026-11-04); OpenRouter is for Jev and
+		// free models like this one.
 		{
 			ID:                  "stealth/crouton-alpha",
 			DisplayName:         "Crouton Alpha (OpenRouter stealth)",
@@ -358,8 +360,20 @@ func Pools() map[string][]PoolMember {
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
+		CroutonSyntheticLunaPool: {
+			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
+		},
 	}
 }
+
+// CroutonSyntheticLunaPool names the self-development pool (owner
+// 2026-11-04): OpenRouter's free stealth/crouton-alpha is always primary,
+// Synthetic's DeepSeek V4.1 Flash 1017 is the first fallback and gpt-6-luna
+// the last. A pinned model never falls back; only a policy naming this pool
+// does.
+const CroutonSyntheticLunaPool = "crouton-synthetic-luna"
 
 // LunaSyntheticPool names the pool that runs every thread on gpt-6-luna and
 // falls back to Synthetic's DeepSeek V4.1 Flash 1017 only when luna fails.
