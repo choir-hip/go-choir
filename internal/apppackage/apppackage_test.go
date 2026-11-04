@@ -92,6 +92,8 @@ func TestParseManifestRefusesWhatP1AndTheSlicesDoNotAdmit(t *testing.T) {
 		"an escaping entry":          func(v map[string]any) { v["app"].(map[string]any)["entry"] = "../App.svelte" },
 		"an alias equal to the name": func(v map[string]any) { v["app"].(map[string]any)["aliases"] = []any{"p2btest"} },
 		"a repeated alias":           func(v map[string]any) { v["app"].(map[string]any)["aliases"] = []any{"a1", "a1"} },
+		"an SDK range not ^M.m":      func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = ">=1.0" },
+		"an SDK version, not range":  func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = "1.0.0" },
 		"an extension claimed twice": func(v map[string]any) {
 			v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"x", "x"}}}
 		},
@@ -116,6 +118,13 @@ func TestParseManifestRefusesWhatP1AndTheSlicesDoNotAdmit(t *testing.T) {
 }
 
 // M2
+func TestParseManifestTakesAnSDKRange(t *testing.T) {
+	m, err := ParseManifest(fixtureJSON(t, func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = "^1.2" }))
+	if err != nil || m.App.RequiresSDK != "^1.2" {
+		t.Fatalf("requires_sdk = %q (%v)", m.App.RequiresSDK, err)
+	}
+}
+
 func TestParseManifestRefusesANameThatIsADeskOrTheShell(t *testing.T) {
 	for _, name := range []string{
 		"texture", "management", "engineering", "research", "autoradio", // built-in desk writers

@@ -107,7 +107,10 @@ function checkManifest(manifest, dirName, where) {
   }
 
   const app = manifest.app;
-  if (strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases'])) {
+  if (strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases', 'requires_sdk'])) {
+    if (app.requires_sdk !== undefined && (typeof app.requires_sdk !== 'string' || !/^\^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$/.test(app.requires_sdk))) {
+      fail(`${where} app`, 'requires_sdk must be "^MAJOR.MINOR"');
+    }
     if (app.entry !== 'App.svelte') fail(`${where} app`, 'entry must be "App.svelte" inside the package');
     if (app.abi !== ABI) fail(`${where} app`, `abi must be "${ABI}"`);
     if (app.aliases !== undefined && !Array.isArray(app.aliases)) fail(`${where} app`, 'aliases must be an array');

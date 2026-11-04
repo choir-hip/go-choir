@@ -71,6 +71,11 @@ const badCases = [
   ['extension-clash-package', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer' }), /extension "png" is already opened by package "image"/],
   ['extension-clash-static', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', opens: [{ media_type: 'application/pdf', extensions: ['pdf'] }] }), /extension "pdf" is still routed by the static/],
   ['missing-entry', (root) => fs.rmSync(path.join(root, 'src/packages/image/App.svelte')), /missing App\.svelte/],
+  ['bad-requires-sdk', (root) => {
+    const m = imageManifest(root);
+    m.app.requires_sdk = '>=1.0';
+    fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
+  }, /requires_sdk must be/],
   ['bad-abi', (root) => {
     const m = imageManifest(root);
     m.app.abi = 'something/else';

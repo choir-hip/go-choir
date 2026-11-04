@@ -31,6 +31,10 @@ const (
 	ManifestSchemaV1 = "choir.app-package/v1"
 	OriginFirstParty = "first_party"
 	AppABISvelteV1   = "choir.app-frontend/svelte-inline/v1"
+	// DefaultRequiresSDK is the SDK range of a manifest that names none: the
+	// shell SDK the svelte-inline/v1 packages were written against
+	// (frontend/src/lib/app-sdk.ts SDK_VERSION 1.0.0).
+	DefaultRequiresSDK = "^1.0"
 )
 
 // ErrInvalidManifest refuses a manifest that is not choir.app-package/v1.
@@ -39,8 +43,9 @@ var ErrInvalidManifest = errors.New("app package: invalid manifest")
 var (
 	// A package name is also the app desk's name (desk:<name>), so it follows
 	// objectgraph.ValidPackageName: 2 to 32 characters.
-	versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$`)
-	aliasPattern   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+	versionPattern  = regexp.MustCompile(`^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$`)
+	aliasPattern    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+	sdkRangePattern = regexp.MustCompile(`^\^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$`)
 )
 
 // Manifest is choir.app-package/v1 as P1 fixes it (design section 3.1). The
@@ -75,6 +80,9 @@ type App struct {
 	Window   json.RawMessage `json:"window"`
 	Auth     json.RawMessage `json:"auth"`
 	Theme    json.RawMessage `json:"theme"`
+	// RequiresSDK is the shell SDK range the package was written against,
+	// "^MAJOR.MINOR" (runtime install, S12). Absent means DefaultRequiresSDK.
+	RequiresSDK string `json:"requires_sdk,omitempty"`
 }
 
 type Opens struct {
@@ -153,6 +161,9 @@ func (m Manifest) Validate() error {
 	}
 	if m.App.ABI != AppABISvelteV1 {
 		return invalid("app.abi %q is not %s", m.App.ABI, AppABISvelteV1)
+	}
+	if m.App.RequiresSDK != "" && !sdkRangePattern.MatchString(m.App.RequiresSDK) {
+		return invalid("app.requires_sdk %q is not ^MAJOR.MINOR", m.App.RequiresSDK)
 	}
 	if err := checkEntry(m.App.Entry); err != nil {
 		return invalid("app.entry: %v", err)
