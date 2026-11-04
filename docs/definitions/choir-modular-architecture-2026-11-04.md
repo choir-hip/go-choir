@@ -21,7 +21,7 @@ definition_version: 4
 #
 # Rewritten 2026-11-04 ~21:30Z (the morning version planned "waves W0 to W8"
 # from the sysmod and appdesk designs; the consolidated plan replaced them).
-readiness: reviewed  # not executable: executable needs the owner's MA0.5 sign-off
+readiness: executable  # owner MA0.5 sign-off 2026-11-04 ("Yes I sign off")
 
 review:
   reviewer: Devin (one seat)
@@ -200,7 +200,7 @@ boundaries:
   authority_sources:
     - the owner rulings R1 to R38 in plan section 1 (quoted rulings are owner authority; rows marked "recorded summary" are owner authority as summarized, and a quote supersedes them)
     - the operating_tempo ruling above
-    - docs/design/modular-architecture-plan-2026-11-04.md as the build plan, Devin-accepted; ratified by the owner at MA0.5 (pending)
+    - docs/design/modular-architecture-plan-2026-11-04.md as the build plan, Devin-accepted; ratified by the owner at MA0.5 (2026-11-04)
     - docs/choir-doctrine.md, CLAUDE.md, docs/standing-questions.md
   must_preserve:
     - the keep set (newspaper content, the Autopaper object graph, the owner's emails, Textures, precommitment records, the agent record)
@@ -290,9 +290,9 @@ now:
   decision:
     what: adopt the consolidated plan (phases 0 to 8, the MA slices, the defaults of its open questions) as the build plan
     kind: architecture
-    status: proposal
+    status: ratified
     evidence_ref: plan modplan 9f32a1a90; Devin ACCEPT (precommit R0-08)
-    owner_ratification_ref: pending MA0.5 (R12 - no landings without the owner's walkthrough); direction already ratified by R2, R3, R5, R17
+    owner_ratification_ref: MA0.5, owner 2026-11-04 ("Yes I sign off"), after the walkthrough that settled R39 to R42 and removed tool servers
   belief:
     believed_state: >-
       The plan is accepted by Devin (R0-08) with all amendments and structural
@@ -305,16 +305,15 @@ now:
       vocabulary, open question 3; engineering casts, open question 5) and
       whether MA1.5's judge settler can run before the kernel service of
       MA2.1 and MA3.6 exists
-    next_observation: the owner's MA0.5 sign-off; the MA0.7 round 1 records; MA1.1's citer grep
+    next_observation: MA1.1's citer grep and open question 11 evidence; MA0.6 committed before MA1.3
   blocker_or_risk: >-
-    MA0.5 owner sign-off (R12) gates every landing. The plan's editing
-    defects are fixed (the file's Notes are historical). Token
+    MA0.5 signed off (2026-11-04). MA0.7: round 0b of the precommit ledger
+    (84b99adbc) is Phase 1's round, committed before MA1.1. Token
     budget: Sonnet builders, Opus orchestrates.
   next_action: >-
-    Land modplan on main (docs-only); owner MA0.5 sign-off recorded here;
-    commit MA0.6 and MA0.7; then a Sonnet builder runs MA1.1 in its own
-    worktree, starting with a grep of every citer of the deleted names
-    across code, docs, specs and skills.
+    Running in parallel: MA1.1 (Sonnet builder, worktree go-choir-ma11),
+    MA1.7 (doctrine, go-choir-ma17), MA0.6 (pre-registration, go-choir-ma06).
+    Then MA1.2, MA1.3 (after MA0.6 lands), MA1.5, MA1.6, MA1.4.
 
 receipts:
   - id: P0_plan_review
