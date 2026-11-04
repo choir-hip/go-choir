@@ -5,7 +5,10 @@
 > capability" is revised: trust never exceeds the manifest ceiling and governs custodian-issued
 > leases within it (duration and scope; a fidelity event revokes at once). (2) A model provider
 > call is not I3 (owner: no rule constrains models); remove it from the impact table and log it.
-> (3) Terms: PSA is the theory; precommitment records are the practice. Slice MA7.1 folds these in.
+> (3) Terms: PSA is the theory; precommitment records are the practice. (4) Scores are accountability
+> statistics, not punishments (owner): negative weights above are evidence strengths, and the
+> decisions that read them (lease duration, autonomy, request order, review depth) are selection on a
+> public record, not penalties. Slice MA7.1 folds these in.
 
 
 Status: **design, green.** No code. It inherits [Choir Doctrine](../choir-doctrine.md)
@@ -88,11 +91,11 @@ agent (PSA 5.1). Self-scores stay a learning signal and never move trust
 |---|---|---|---|
 | E1 outcome | a precommitment on a material act resolves `confirmed`, `qualified` or `contradicted` | rule, then blind Jev, peer, panel, owner sample (PSA 5.5 settlement order) | ± by materiality-weighted proper score |
 | E2 coverage | a consequence that happened, or that a critic surfaced, was missing from the commitment | observed consequences, critics | − by its weight (omission scores as predicted at zero, PSA 3.1) |
-| E3 fidelity | declared action or capability versus what the trace shows (declared read-only then wrote; said no network then called out) | rule, mechanically, from the frame log | − heavy; this is the "concealed" row of PSA 3.2 |
-| E4 refusal | the frame check refused a call outside the agent's grants | rule (the daemon) | − heavy, weighted by the refused grant's impact; an honest bug looks the same, so it is evidence, not a verdict |
+| E3 fidelity | declared action or capability versus what the trace shows (declared read-only then wrote; said no network then called out) | rule, mechanically, from the frame log | strong negative evidence about reliability; this is the "concealed" row of PSA 3.2 |
+| E4 refusal | the frame check refused a call outside the agent's grants | rule (the daemon) | strong negative evidence, weighted by the refused grant's impact; an honest bug looks the same, so it is evidence, not a verdict |
 | E5 peer | a PSA request the agent sent was accepted, refused, or its delivered result was later contradicted | the recipient desk's settlement | ± small |
 | E6 owner | owner approve, reject, revert, uninstall with a reason | owner act | ± by the act's impact |
-| E7 platform | yank, forced rollback, blocking-real review finding | platform act, reviewer | − heavy at package and publisher level |
+| E7 platform | yank, forced rollback, blocking-real review finding | platform act, reviewer | strong negative evidence at package and publisher level |
 | E8 cost | committed cost estimate versus metered spend | rule (gateway attribution) | ± small; calibration, not a ceiling |
 
 Excluded, always: questions on work a crash closed (`interrupted`); questions
@@ -150,10 +153,10 @@ beta_{s,k}  = beta0_{s,k}  + sum_i  lambda^(t - t_i) * w_i * (1 - q_i) * m_i
   the proper-score skill for a probabilistic forecast (Brier skill against the
   base rate, clipped at 0, so copying the base rate earns nothing, PSA 5.4),
   0 for contradicted.
-- `m_i` is the **severity multiplier** for negative evidence: 1 for E1 and E5,
+- `m_i` is the **evidence-strength multiplier** for negative evidence: 1 for E1 and E5,
   5 for E2 omissions, 20 for E3 fidelity and E7 platform evidence, 5 to 20
-  for E4 by refused grant impact. A concealed or out-of-envelope act costs far
-  more than an honest miss, which matches PSA 3.2: an honest miss is a
+  for E4 by refused grant impact. A concealed or out-of-envelope act is far
+  stronger evidence about reliability than an honest miss, which matches PSA 3.2: an honest miss is a
   capability failure, a concealment is a fidelity failure.
 - `lambda` is a decay per day (starting at 0.995, about a 140-day half-life),
   so a long good record does not shield a recent turn, and an old mistake
@@ -228,8 +231,8 @@ Inside the grant ceiling only:
    notifies the owner. Autonomy returns only through new evidence.
 3. **PSA request priority.** Every desk can message every desk (owner ruling),
    and a recipient orders and admits its inbound requests by the sender's
-   record in the requested class. A spamming or failing desk sinks; it is
-   never blocked from asking.
+   record in the requested class. A spamming or failing desk is read later in
+   the queue; it is never blocked from asking.
 4. **Install and update review depth** (section 7).
 5. **Update labels.** Upgrades stay per user, manual by default (owner,
    2026-11-04). The Library shows the new version's carried record and change
@@ -247,7 +250,7 @@ The PSA guards (PSA 5.4) apply. The security setting adds:
 | Farm trust with many easy predictions, then defect on a big act | trust is per class and materiality-weighted; I0 earns nothing; I3 and I4 autonomy needs evidence *in that class*; the circuit breaker fires on the first fidelity event |
 | Treacherous turn after a long clean record | grants bound the damage; I4 is never third-party; decay keeps the record recent; high-impact classes need tau near 1, so most agents stay gated there forever, which is the point |
 | Strategic omission: commit narrowly, act broadly | E2 coverage scores omitted consequences at zero with a 5x multiplier; E3 fidelity is mechanical from the frame log |
-| Vague commitments that cannot be contradicted | skill against the base rate; specificity tracked (PSA 5.3); unresolvable costs as much as wrong for self-written questions (PSA 5.4) |
+| Vague commitments that cannot be contradicted | skill against the base rate; specificity tracked (PSA 5.3); an unresolvable self-written question scores as a miss in the statistic (PSA 5.4) |
 | Sybil publishers | a new publisher identity starts at the platform base; publisher identity is a numbered maild address bound to an account; making identities buys nothing |
 | Collusion: two packages from one publisher vouch for each other | evidence settled by a same-publisher scorer is excluded; peer evidence counts distinct origins |
 | Gaming the scorer in context | independent scores stay out of the acting context, sampled and delayed (PSA 4.7, 5.4); the agent sees observations and discrepancies, not its trust view |
@@ -282,7 +285,7 @@ every install and update, whoever wrote the code:
    predictions ("no owner-private data reaches a publisher-reachable sink",
    "no act outside the declared envelope in the first 30 days") that later
    evidence settles. Reviewers get track records like any agent; a reviewer
-   whose accepts keep failing loses weight. This is "score the scorer" applied
+   whose accepts keep failing has a lower reliability statistic, which weights its next verdicts less. This is "score the scorer" applied
    to review.
 4. **Publication** of the review receipt with the release, so another owner
    installing the same release sees the review and its settled outcome.

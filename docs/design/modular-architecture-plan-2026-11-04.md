@@ -53,6 +53,7 @@ switch.
 6. Terminology (owner, 2026-11-04): "PSA" (prospective self-alignment) names the theory and the science. "Precommitment records" names the practice and the engineering: the schema, the protocol, the code. This plan uses the words that way. Owner quotes that say "PSA" are left as spoken.
 7. **A new round of predictions at every phase boundary.** The ledger's rule 7 ("Re-predict at every phase boundary (roadmap phases 0 to 8), citing what was learned") is a gate of this plan: before a phase's first slice lands, FP0 commits a new round of records to the ledger (claim, probability or 80% interval, falsifier, resolving observation, settler other than the committer), before that phase's evidence exists, citing the discrepancies of the round before. A phase does not start until its round is committed; a round is a new commit, and committed records are never edited (a revision is a new record citing the old). The settlements and the Brier, log and interval scores are part of each phase's exit report.
 8. Security process (R27): defence in depth first; agentic red teaming from the inside once the functionality is satisfying; then iterate. Section 12.2 places the red-team round.
+9. Scores are accountability statistics, not punishments (R30). A low score is a low score; nothing is done to the agent because of it. Decisions elsewhere read the statistics (section 10), and each place says so and says who reads it.
 5. Defence in depth: per-user VMs, tape restore, process confinement, the
    frame check, custody, leases, trust.
 
@@ -92,6 +93,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R27 | 2026-11-04 | Security process: defense in depth first; then agentic red teaming from the inside once the functionality is satisfying; then iterate. *(recorded summary)* | section 12.2 |
 | R28 | 2026-11-04 | "the sub RLM calls shouldn't be raw. They should also be wrapped in the PSA protocol. So when you're making a sub RLM call, you're making a pre-commitment as to the results that you get from it. And then that pre-commitment needs to be scored at some point ... any kind of sub-agent delegation needs to be through PSA." The owner is unsure who scores: management, the parent itself, or a self-score that is in turn scored. | MA1.5, section 4.4, open question 16 |
 | R29 | 2026-11-04 | "It seems odd to just let those be ... inert pre-commitments are ... a waste of attention. It kind of shows that the model doesn't get it ... at minimum, we should be counting and scoring how many of these that we do. Like, maybe we have to tune the system against them rather than try to solve it in advance." | MA1.6, section 4.4 |
+| R30 | 2026-11-04 | "no punishments. Like, if we're keeping score of things, then there's no need for a punishment ... if your field goal percentage is high, that's good. If it's low, you don't get punished for that. You just have a low score ... It doesn't need to be punitive. It's just accountability." | section 0 item 9, sections 4.4 and 10, the trust doc |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -420,17 +422,18 @@ cheaply and recorded, in two steps:
    ledger parameter. The judge's answers are themselves scored against the rule
    flags and against later outcomes (score the scorer).
 
-**Consequences, not punishment theatre:**
+**What the statistics show (accountability, not penalty):**
 
 - An inert precommitment **earns zero skill**: the Brier skill score against the
   base rate is zero when the prediction is the base rate, and the Murphy
   resolution term exposes it (`types.CalibrationDigest` already carries
   `Resolution`, `calibration_digest.go:91`).
-- It **counts against the desk's specificity and sharpness metrics**
+- It **shows up in the desk's specificity and sharpness statistics**, which the
+  desk, the owner and the trust view read
   (precommitment-records 5.3 and 5.4: "specificity per agent", "sharpness and
   resolution beside reliability").
-- It gives **no positive trust evidence** (trust draft 3.2: relevance zero earns
-  nothing), so it cannot farm trust.
+- It **adds no positive trust evidence** (trust draft 3.2: relevance zero earns
+  nothing), so it cannot be used to build a record.
 - It is **fed back into the agent's own calibration digest** that the cell sees
   through `choir.Calibration()` (`choir.go:1403`, the digest of
   `internal/agentcore/calibration_feedback.go`): for example "N of your last M
@@ -1121,7 +1124,7 @@ track record in the action class `route/I1`, and a destination desk may use it.
 ## 10. Trust: how the plan revises the draft
 
 The draft [bayesian-trust-2026-11-04.md](bayesian-trust-2026-11-04.md) is copied
-in unchanged except for a header note. The plan changes three things in it.
+in unchanged except for a header note. The plan changes four things in it.
 
 1. **Two layers of authority, not "trust never adds a capability".** The draft
    says "Trust never adds a capability" (1, 5). Revised by R20: **trust never
@@ -1130,14 +1133,26 @@ in unchanged except for a header note. The plan changes three things in it.
    Library. Leases are custodian-issued scoped grants (section 7.2). Trust sets
    a lease's duration and scope: a strong record in the action class gets a
    durable lease that renews without asking, a thin or new desk gets a
-   per-task lease, a fidelity event (E3) or platform event (E7) revokes the
-   lease at once (the draft's circuit breaker, 5.2, becomes lease revocation
-   plus gating). The draft's "grants are the ceiling, trust is the dial"
+   per-task lease, a fidelity event (E3) or platform event (E7) is read by the lease policy,
+   which ends the lease at once (the draft's circuit breaker, 5.2, becomes lease
+   revocation plus gating; it is a decision made on the statistic, section 10
+   item 4). The draft's "grants are the ceiling, trust is the dial"
    table stays true: the dial now also moves lease length.
 2. **The act gate comes last** (Phase 7). Until then leases are per-task and
    non-first-party I3 acts are gated by the label rules and the owner tap
    (the draft's own conservative default, 10).
-3. **Model provider calls are not I3.** Per R15 no rule constrains models;
+3. **Scores are statistics; decisions read them (R30).** Nothing in the trust
+   system is a punishment: a low score is a low score. The honest note is that
+   *decisions do read the statistics*: lease duration and scope, whether an act
+   is autonomous or goes to a gate, the order in which a recipient admits
+   requests, and the depth of install review. That is selection on a public
+   record, the way a coach plays the better shooter, not a penalty applied to
+   the agent. The agent keeps its grants and may ask again; its record only
+   changes how much is granted without asking. The wording of the trust draft is
+   changed to match (its negative weights are evidence strengths, not
+   penalties), and the owner-facing views state what the statistic is and who
+   reads it.
+4. **Model provider calls are not I3.** Per R15 no rule constrains models;
    the draft's I3 example "a provider call carrying owner-private data" (3.2)
    is removed; model calls are logged with provider and labels. The draft's
    spend language already follows R8 (no ceiling, monitor).
