@@ -112,6 +112,7 @@ type packagePublishRequest struct {
 //	PUT  /internal/platform/packages/blobs/<sha>                 upload a patch
 //	PUT  /internal/platform/packages/media/<sha>                 upload a media item (packages_media.go)
 //	GET  /internal/platform/packages/releases/<id>/media/<sha>?owner_id=   one media item of a visible release
+//	GET  /internal/platform/packages/releases/<id>/blobs/<sha>?owner_id=   one patch of a visible release (packages_blobs.go)
 //	POST /internal/platform/packages/releases                    publish (owner act, through the proxy)
 //	GET  /internal/platform/packages/releases/<id>?owner_id=     one release and its listing
 //	GET  /internal/platform/packages/catalog?owner_id=&q=        the packages the owner may see
@@ -139,6 +140,8 @@ func (h *Handler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 		h.putPackageMedia(w, r, parts[1])
 	case len(parts) == 4 && parts[0] == "releases" && parts[2] == "media" && r.Method == http.MethodGet:
 		h.readPackageReleaseMedia(w, r, strings.ToLower(parts[1]), strings.ToLower(parts[3]))
+	case len(parts) == 4 && parts[0] == "releases" && parts[2] == "blobs" && r.Method == http.MethodGet:
+		h.readPackageReleaseBlob(w, r, strings.ToLower(parts[1]), strings.ToLower(parts[3]))
 	case rest == "releases" && r.Method == http.MethodPost:
 		h.publishPackage(w, r)
 	case len(parts) == 2 && parts[0] == "releases" && r.Method == http.MethodGet:

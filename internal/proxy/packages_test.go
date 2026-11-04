@@ -52,6 +52,8 @@ type packageProxyEnv struct {
 	// corpusdMedia answers corpusd's release media read (bytes and type).
 	guestMedia   map[string][]byte
 	corpusdMedia map[string][2]string
+	// corpusdBlobs answers corpusd's release blob read (bytes and type).
+	corpusdBlobs map[string][2]string
 }
 
 func (e *packageProxyEnv) record(call string) {
@@ -109,6 +111,18 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 			env.mu.Unlock()
 		}
 		env.record(line)
+		if _, digest, ok := strings.Cut(r.URL.Path, "/blobs/"); ok && r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/releases/") {
+			answer, found := env.corpusdBlobs[digest]
+			if !found {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":"package blob not found"}`))
+				return
+			}
+			w.Header().Set("Content-Type", answer[1])
+			_, _ = w.Write([]byte(answer[0]))
+			return
+		}
 		if _, digest, ok := strings.Cut(r.URL.Path, "/media/"); ok && r.Method == http.MethodGet {
 			answer, found := env.corpusdMedia[digest]
 			if !found {

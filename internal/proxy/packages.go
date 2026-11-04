@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 //	GET  /api/catalog/packages/<name>/releases    a package's history                       read
 //	GET  /api/catalog/releases/<release id>       one package release and its listing       read
 //	GET  /api/catalog/releases/<id>/media/<sha>    one screenshot or video of a release      read
+//	GET  /api/catalog/releases/<id>/blobs/<sha>    one patch the release record names        read
 //	PATCH /api/catalog/records/<release id>/listing  withdraw or reinstate                owner act
 //
 // A published release is public: every signed-in owner sees it in the
@@ -344,6 +346,9 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 4 && parts[0] == "releases" && parts[2] == "media" && computerevent.IsSHA256(strings.ToLower(parts[1])) && computerevent.IsSHA256(strings.ToLower(parts[3])):
 		h.relayPackageMedia(w, r, "/internal/platform/packages/releases/"+strings.ToLower(parts[1])+"/media/"+strings.ToLower(parts[3])+"?"+owner.Encode())
 		return
+	case len(parts) == 4 && parts[0] == "releases" && parts[2] == "blobs" && computerevent.IsSHA256(strings.ToLower(parts[1])) && computerevent.IsSHA256(strings.ToLower(parts[3])):
+		h.relayPackageBlob(w, r, "/internal/platform/packages/releases/"+strings.ToLower(parts[1])+"/blobs/"+strings.ToLower(parts[3])+"?"+owner.Encode())
+		return
 	default:
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
@@ -437,6 +442,36 @@ func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request
 		return
 	}
 	relayJSON(w, status, raw)
+}
+
+// relayPackageBlob serves one patch a release record names to a signed-in
+// owner (choir package export rebuilds the release tree from it). corpusd
+// decides visibility for the owner the proxy authenticated and serves only
+// a digest the record names. The proxy relays only octet-stream within the
+// patch cap, and checks the bytes hash to the digest it asked for, so a
+// wrong answer is never relayed as the blob.
+func (h *Handler) relayPackageBlob(w http.ResponseWriter, r *http.Request, upstream string) {
+	status, contentType, raw, err := h.corpusdFetch(r.Context(), upstream, pkgrelease.MaxBlobBytes+1)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
+		return
+	}
+	if status != http.StatusOK {
+		relayJSON(w, status, raw)
+		return
+	}
+	want := upstream[strings.LastIndex(upstream, "/blobs/")+len("/blobs/"):]
+	want, _, _ = strings.Cut(want, "?")
+	if contentType != "application/octet-stream" || len(raw) > pkgrelease.MaxBlobBytes || computerevent.DigestBytes(raw) != want {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the package store answered a blob that is not the one asked for"})
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-cache, must-revalidate")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
 }
 
 // relayPackageMedia serves one release media item to a signed-in owner:
