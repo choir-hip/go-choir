@@ -126,17 +126,18 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging fef74e749 (01:44Z): the capsule broker no longer dies (every
-    Pdeathsig child forks from a held thread; broker exit watched and named;
-    pids.max 1024), the reservation idle baseline is per boot, shots wait
-    for a settled window and new windows open clear of the desktop icons.
-    Rounds resumed at 01:45Z, two building (claude Library r2 with the
-    delegate, pool Library r2 with the carried patch). Owner ruling 01:02Z:
-    eradicate waiting except true contention, and expose what remains to
-    engineering, management and Texture. In tier-2 review: per-job memory
-    leases (a capsule no longer holds 3 GiB while its agent thinks) and one
-    typed wait record rendered to all three. A live tracer times every
-    wait, true or artificial.
+    staging 751eb988a (02:43Z): per-job host memory leases (4a6ab66bf; since
+    02:09Z every job admitted, zero refusals, zero spawn waits, MemAvailable
+    14-18 GB, against 58 refused builds in the 10 hours before) and the
+    typed wait record rendered to engineering, management and Texture with
+    minutes waited by kind. In CI: the capsule install fixture and the
+    Texture next-actor guard (a turn cannot leave an owner request
+    unattended; backstop banner). Building: provider quota as a parked,
+    resumable, typed wait; bounding the nine hang-risk waits. Synthetic
+    subscription quota exhausted since 02:35Z: DeepSeek arms paused, the
+    paper on chatgpt unaffected, crouton on OpenRouter running Library r2.
+    Owner decision open: raise the Synthetic limit, move the DeepSeek arms
+    to OpenRouter or crouton tonight, or wait for the reset (default).
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
