@@ -169,3 +169,15 @@ Calibration so far: 80% intervals 2 of 3 covered (R0-02, R0-05; R0-01 missed); p
 - **R0-07 (contradicted).** FP0 predicted one layering order without listing the alternative. Change: when a design choice has a small known set of options, the record covers each option, not the first one considered.
 
 **Correction (2026-11-04 19:35 UTC).** The settlements heading above says "~20:40 UTC"; the settlements were written at about 19:32 UTC (commit 1876a56da is the witness). The heading is left as committed.
+
+## Settlements (2026-11-04, settler: Devin's review output, scratchpad review-plan/devin.out, plan at 611b526af)
+
+**R0-08, settled confirmed.** Devin's first review of the consolidated plan returned ACCEPT. p = 0.40; Brier 0.36; log score ln(0.40) = -0.92. The base rate the record cited (one accept, one send-back this week) undersold a plan that had already absorbed two earlier review rounds on its component designs.
+
+**R0-09, settled confirmed.** Zero blocking findings (seven non-blocking amendments), inside [0, 5]; the point estimate of 2 was high.
+
+Calibration so far: 80% intervals 3 of 4 covered (R0-02, R0-05, R0-09; R0-01 missed); probabilities R0-03, R0-07, R0-08, mean Brier 0.22.
+
+### Learning entry
+
+- **R0-08 (confirmed at 0.40).** A plan assembled from designs that each passed review carries their acceptance forward. Change: a review-outcome prediction states how many earlier rounds the reviewed content already passed and conditions on it. Checked by: the goal file's review record in round 0b.
