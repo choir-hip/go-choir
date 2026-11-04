@@ -346,7 +346,7 @@ export async function waitSettled(page, app) {
   }
   const msg = settleProblem(app, wins);
   if (msg) throw new Error(msg);
-  await page.evaluate(() => document.fonts.ready);
+  await Promise.race([page.evaluate(() => document.fonts.ready), page.waitForTimeout(SETTLE_MS)]);
 }
 
 // themeSeedScript is the init script that stores the boot cache before any page
@@ -948,7 +948,7 @@ async function main() {
           await s.act(page);
           await settle(page, s.selector);
         }
-        if (appId && s.expect_window !== false) { await checkAppWindow(page, appId); await waitSettled(page, appId); } // before the screenshot: a failed shot leaves no PNG for Freeze to admit
+        if (appId && s.expect_window !== false) { await waitSettled(page, appId); await checkAppWindow(page, appId); } // before the screenshot: a failed shot leaves no PNG for Freeze to admit
         if (readFixture || themeState.fixtureServed) await page.evaluate(fixtureBadge, CATALOG_FIXTURE_BADGE);
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
         if (readFixture || themeState.fixtureServed) {

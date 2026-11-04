@@ -53,7 +53,7 @@ const NEW_WINDOW_FREE_AREA_RATIO = 0.7;
 const CASCADE_STEP = 24;
 const CASCADE_WRAP = 6;
 // New desktop windows open to the right of the desktop icon columns when the
-// room left of them is at least this wide; narrower, they open as before.
+// room right of them is at least this wide; narrower, they open as before.
 const ICON_CLEARANCE = 16;
 const MIN_WINDOW_ROOM_RIGHT_OF_ICONS = 640;
 // A restored (non-maximized) window on a phone is at least this much of the
