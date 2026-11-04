@@ -225,7 +225,11 @@ func (s settledIdle) fresh(now time.Time) bool {
 		return false
 	}
 	at, err := time.Parse(time.RFC3339, s.at)
-	return err == nil && now.Sub(at) <= buildIdleSettledMaxAge
+	if err != nil {
+		return false
+	}
+	age := now.Sub(at)
+	return age >= 0 && age <= buildIdleSettledMaxAge
 }
 
 // buildIdle is the idle baseline a computer's builds are charged on top of
@@ -238,7 +242,8 @@ func (s settledIdle) fresh(now time.Time) bool {
 //   - without it (the first report already carries live builds, as after a
 //     vmctl restart), a fresh settled RSS is the baseline, and a stale one
 //     is only trusted as max(settled, rss), whose rss may hold build
-//     growth: conservative, never under.
+//     growth: conservative, never under; with no reading at all it is
+//     unmeasured (0), which charges the builds in full.
 func buildIdle(settled settledIdle, rss uint64, preCapsule bool, now time.Time) (uint64, string) {
 	fresh := settled.fresh(now)
 	switch {
@@ -249,6 +254,11 @@ func buildIdle(settled settledIdle, rss uint64, preCapsule bool, now time.Time) 
 		return rss, "pre_capsule_rss"
 	case fresh:
 		return settled.bytes, "settled"
+	case rss == 0:
+		// No reading yet (just after a vmctl restart) and no settle to
+		// trust: unmeasured, so the builds are charged in full until the
+		// first reading sets the baseline (review r1, devin F2).
+		return 0, "unmeasured"
 	default:
 		return max(settled.bytes, rss), "max_settled_rss"
 	}

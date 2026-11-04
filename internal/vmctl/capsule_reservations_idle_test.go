@@ -177,3 +177,45 @@ func TestAdmittedStartStampsItsSettleWithTheEpoch(t *testing.T) {
 		t.Fatalf("D4 settle not stamped with its epoch: %d MiB epoch %d", got.MemorySettledRSSBytes/mib, got.MemorySettledEpoch)
 	}
 }
+
+// Review r1 (devin): I6 a stale settled RSS installed before the sampler's
+// first reading is never repaired; I7 a future-dated settle reads as fresh;
+// I8 a set's baseline outlives its builds, so the next build is charged on
+// an old idle.
+func TestBuildIdleUnmeasuredFutureAndRecreated(t *testing.T) {
+	f := newAdmissionFixture(t, measuredAdmission())
+	own := &VMOwnership{VMID: "vm-p", ComputerID: "computer-p", UserID: "u-p", DesktopID: PrimaryDesktopID,
+		Kind: VMKindInteractive, State: VMStateActive, Epoch: 4,
+		MemorySettledRSSBytes: 418 * mib, MemorySettledEpoch: 3, MemorySettledAt: f.now.Format(time.RFC3339)}
+	addOwnership(f.reg, own)
+	f.setAvail(20 * gib)
+	admitBuild(t, f, "computer-p", "cap-p") // no RSS reading yet
+	views := f.reg.HostAdmissionSummary().Reservations
+	if len(views) != 1 || views[0].IdleSource != "unmeasured" || views[0].OutstandingBytes != 3*gib {
+		t.Fatalf("I6: before any reading: %+v", views)
+	}
+	f.mgr.setRSS("vm-p", 2000*mib)
+	f.reg.sampleVMMemory()
+	if _, err := f.reg.ReportCapsuleReservations(CapsuleReservationReport{ComputerID: "computer-p",
+		Reservations: []CapsuleReservation{{CapsuleID: "cap-p", Bytes: 3 * gib}}}); err != nil {
+		t.Fatal(err)
+	}
+	if v := f.reg.HostAdmissionSummary().Reservations; len(v) != 1 || v[0].IdleBytes != 2000*mib || v[0].IdleSource != "max_settled_rss" {
+		t.Fatalf("I6: after the first reading: %+v", v)
+	}
+	// I8: the build ends; the next one is charged on the RSS before it.
+	if _, err := f.reg.ReportCapsuleReservations(CapsuleReservationReport{ComputerID: "computer-p"}); err != nil {
+		t.Fatal(err)
+	}
+	f.mgr.setRSS("vm-p", 2600*mib)
+	f.reg.sampleVMMemory()
+	admitBuild(t, f, "computer-p", "cap-q")
+	if v := f.reg.HostAdmissionSummary().Reservations; len(v) != 1 || v[0].IdleBytes != 2600*mib || v[0].OutstandingBytes != 3*gib {
+		t.Fatalf("I8: the next build's baseline: %+v", v)
+	}
+	// I7: a settle stamped in the future is not fresh.
+	future := settledIdle{bytes: gib, epoch: 4, current: 4, at: f.now.Add(time.Hour).Format(time.RFC3339)}
+	if future.fresh(*f.now) {
+		t.Fatal("I7: a future-dated settle reads as fresh")
+	}
+}
