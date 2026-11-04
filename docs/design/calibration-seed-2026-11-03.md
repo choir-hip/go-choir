@@ -79,6 +79,49 @@ Management's Cast makes `verify_pass`, `judge_accepts` and
 reason), so every round predicts. These records feed the engineering
 digest on that computer; `calibrationDeskOfThread` gains engineering.
 
+**As built (2026-11-04, cuts 1 and 2).** Management's Cast to engineering
+must carry `"predictions": {"verify_pass": p, "judge_accepts": p,
+"owner_approves": p, "freeze_minutes": {...}, "approval_minutes": {...}}`.
+`approved_within_rounds` is optional. A Cast without the mandatory claims is
+refused with a literal example. The runtime derives one rule precommit per
+claim from the committed Cast record, with id `<cast>:predict:<kind>`. The
+records name management's agent and model as their author and the assignment
+as their subject, and they count on engineering's calibration record. The
+definitions:
+- `judge_accepts`: management's Verify is the independent judgment today.
+  It is yes when the operation reaches `awaiting_approval`, and no when it
+  fails. It shares one event with `verify_pass` until the judge leaves
+  Verify. Management predicts its own verdict, so this claim can be
+  self-fulfilling. Read it with that in mind.
+- `owner_approves`: yes on an approve act, or on an apply or failed apply
+  that follows an approval. No on a reject, an abandon, a failed judgment,
+  or a round with no candidate. The settlement names `decision_actor` and
+  `delegated`, which is true when the actor is not the computer's owner.
+- `freeze_minutes` and `approval_minutes` (owner, 2026-11-04: "clock time is
+  something that agents should be precommitting to and getting scored on"):
+  a point estimate, a low-high interval, and p(inside). Minutes run from the
+  Cast record's `committed_at`. They end at the fresh Freeze's commit time,
+  or at the approve act's record time (the same timestamps the round receipt
+  reads). An event that never happens settles "no", censored. The
+  readout reports coverage beside the log ratio of estimate to actual and
+  the interval's log width.
+- `approved_within_rounds` (N): **within N Freezes**, counted from the
+  Cast, on the trajectory the Cast serves. Each self-development operation
+  that froze a bundle counts once: a reused engineer's re-Freeze opens a
+  new operation revision and counts as one Freeze, and a later round's
+  Freezes count too. It settles yes at the first approval when the count
+  is at most N. It settles no once the count passes N without an approval,
+  or when the request is abandoned. Counting Casts would mean nothing once a
+  rejection reuses the engineer instead of casting again.
+- The held-out set and the arms hash under an HMAC with the computer's
+  secret salt, which is derived from the guest key. Engineering is the
+  only push desk. Its digest-arm rounds read their digest and its
+  control-arm rounds do not. Each round's records carry `calibration_arm`.
+  `calibration.feedback` is deleted.
+- Not built yet: `adopted_elsewhere`, the `Predicts:` trailers, release-walk
+  weighting, the pull (REPL-only) arm, and a fresh "minutes to re-Freeze"
+  stated at each reuse of the engineer.
+
 **A platform release** (a commit range on main that walks the rings). The
 author, a builder agent or the orchestrator, states its predictions in the
 commit message as `Predicts:` trailers, one per claim:
