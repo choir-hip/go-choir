@@ -43,6 +43,7 @@ function makeFixture() {
     fs.copyFileSync(path.join(frontendRoot, rel), path.join(root, rel));
   }
   fs.cpSync(path.join(frontendRoot, 'src/packages/image'), path.join(root, 'src/packages/image'), { recursive: true });
+  fs.cpSync(path.join(frontendRoot, 'src/packages/files'), path.join(root, 'src/packages/files'), { recursive: true });
   return root;
 }
 
@@ -73,7 +74,7 @@ test.describe('manifest "opens" with default', () => {
     writePackage(root, 'deck', deckManifest('deck', [{ media_type: PPTX, extensions: ['pptx', 'pdf'], default: false }]));
     writePackage(root, 'deck2', deckManifest('deck2', [{ media_type: PPTX, extensions: ['pptx'], default: false }]));
     const r = runCheck(root);
-    expect(r.out).toContain('3 package(s) ok');
+    expect(r.out).toContain('4 package(s) ok');
     expect(r.code).toBe(0);
   });
 
