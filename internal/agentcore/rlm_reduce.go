@@ -1667,7 +1667,42 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if reason := yaegikernel.NormalizeVerifyReason(in.Reason); reason != "" {
 		verdictExtra[verdictReasonKey] = reason
 	}
-	out, verifyErr := recordSelfDevelopmentVerdict(ctx, toolCtx, assignment.Binding.TrajectoryID, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs, verdictExtra)
+	// The judge's per-shot review (selfdev_shot_review.go): a pass on a
+	// frozen candidate with screens asks the six questions of every shot,
+	// and a "no" on 1, 2, 3, 5 or 6 turns the verdict into a fail. A replay
+	// of a pass the review already failed answers from the operation (FM3).
+	decision := strings.TrimSpace(in.Decision)
+	if decision == "pass" && operation.State == selfdev.StateFailed && strings.HasPrefix(operation.TerminalError, selfDevelopmentJudgmentRejected+": "+shotReviewMarker) {
+		if operation.LastIntentError != "" {
+			stamp("")
+		}
+		return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": "fail", "verifier_ref": firstString(operation.VerifierRefs)}, nil
+	}
+	recordCtx := ctx
+	if decision == "pass" && operation.State == selfdev.StateFrozen {
+		reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shotReviewTimeout+30*time.Second)
+		review, reviewErr := rt.reviewCandidateShots(reviewCtx, r.scope.OwnerID, operation)
+		cancel()
+		// The verdict a completed review decided is written past the cell's
+		// teardown too, so a cancel during the review does not discard it
+		// and bill a second review on the retry.
+		var cancelRecord context.CancelFunc
+		recordCtx, cancelRecord = context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		defer cancelRecord()
+		if reviewErr != nil {
+			reason := fmt.Sprintf("verify %s: the per-shot review did not run, so the candidate stays frozen; retry the Verify: %v", in.LocalID, reviewErr)
+			stamp(reason)
+			return nil, fmt.Errorf("reduce: %s", reason)
+		}
+		if review != nil {
+			verdictExtra["shot_review"] = review.record()
+			if review.rejected() {
+				decision = "fail"
+				verdictExtra[verdictReasonKey] = review.reason(in.Reason)
+			}
+		}
+	}
+	out, verifyErr := recordSelfDevelopmentVerdict(recordCtx, toolCtx, assignment.Binding.TrajectoryID, operation.OperationID, operation.BundleDigest, decision, in.VerifierRefs, verdictExtra)
 	if verifyErr != nil {
 		stamp("verify: " + verifyErr.Error())
 		return nil, verifyErr
@@ -1676,10 +1711,11 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		stamp("")
 	}
 	if retained {
-		rt.endRetainedCandidateWait(ctx, retention, in.Decision)
+		rt.endRetainedCandidateWait(ctx, retention, decision)
 	}
 	// Management's verdict settles verify_pass, and where it left the
-	// operation settles judge_accepts.
+	// operation settles judge_accepts: the two part when the per-shot
+	// review fails a candidate management passed (R17).
 	verdict := types.EngineeringVerifyObservation{Decision: in.Decision, BundleDigest: operation.BundleDigest, VerifierRefs: trimNonEmptyStrings(in.VerifierRefs), OperationID: operation.OperationID}
 	verdict.OperationState, _ = out["state"].(string)
 	verdict.At = time.Now().UTC()

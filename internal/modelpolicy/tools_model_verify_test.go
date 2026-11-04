@@ -224,3 +224,41 @@ func TestVerifyModelCapabilityRejectsBadImagesBeforeProvider(t *testing.T) {
 		})
 	}
 }
+
+// The judge's per-shot review (docs/problems/judge-checks-only-named-
+// defects-2026-11-04.md): image_refs sends a batch in order, each image after
+// its "Image N:" label, refuses a ref the store does not hold, a second
+// image source, and more than the gateway's 20 images.
+func TestVerifyModelCapabilityImageRefsSendsALabelledBatch(t *testing.T) {
+	refA, refB := "artifact:sha256:"+strings.Repeat("a", 64), "artifact:sha256:"+strings.Repeat("b", 64)
+	store := &memImageStore{blobs: map[string][]byte{refA: {1}, refB: {2}}}
+	provider := &capturingModelVerifyProvider{}
+	manager := NewManager(ManagerConfig{Provider: provider, ImageStore: store})
+	out, err := manager.VerifyImages(context.Background(), "owner", "verifier_multimodal", "judge each", []string{refA, refB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Text != "verification passed" || !out.ImageInput || out.InputTokens != 11 {
+		t.Fatalf("outcome = %+v", out)
+	}
+	sent := string(provider.request.Messages[0])
+	ia, la, ib, lb := strings.Index(sent, `"Image 1:"`), strings.Index(sent, refA), strings.Index(sent, `"Image 2:"`), strings.Index(sent, refB)
+	if ia < 0 || !(ia < la && la < ib && ib < lb) {
+		t.Fatalf("batch message order wrong: %s", sent)
+	}
+	tool := NewVerifyModelCapabilityTool(manager)
+	for name, input := range map[string]string{
+		"missing ref":  `{"role":"verifier_multimodal","prompt":"p","image_refs":["artifact:sha256:` + strings.Repeat("c", 64) + `"]}`,
+		"two sources":  `{"role":"verifier_multimodal","prompt":"p","image_ref":"` + refA + `","image_refs":["` + refB + `"]}`,
+		"not a ref":    `{"role":"verifier_multimodal","prompt":"p","image_refs":["https://x/y.png"]}`,
+		"over the cap": `{"role":"verifier_multimodal","prompt":"p","image_refs":[` + strings.TrimSuffix(strings.Repeat(`"`+refA+`",`, 21), ",") + `]}`,
+	} {
+		calls := provider.calls
+		if _, err := tool.Func(verifierContext(), json.RawMessage(input)); err == nil {
+			t.Fatalf("%s: admitted", name)
+		}
+		if provider.calls != calls {
+			t.Fatalf("%s: the model was called", name)
+		}
+	}
+}

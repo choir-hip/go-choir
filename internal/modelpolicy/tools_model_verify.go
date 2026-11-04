@@ -27,7 +27,15 @@ type verifyModelCapabilityArgs struct {
 	// ImageRef names an image in this computer's image store
 	// (artifact:sha256:<hex>), e.g. a screenshot a desk stored earlier.
 	ImageRef string `json:"image_ref,omitempty"`
+	// ImageRefs names a batch of stored images for one call, each sent after
+	// a "Image N:" label in order (the judge's per-shot review,
+	// docs/problems/judge-checks-only-named-defects-2026-11-04.md).
+	ImageRefs []string `json:"image_refs,omitempty"`
 }
+
+// MaxVerifyImageRefs bounds image_refs: the gateway admits 20 images per
+// request (provider.MaxImagesPerRequest).
+const MaxVerifyImageRefs = 20
 
 // ImageStore is the computer's content-addressed image store
 // (imageblob.Store). With one configured, an inline image is stored first
@@ -44,7 +52,7 @@ const verifierRedPixelPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeA
 func NewVerifyModelCapabilityTool(manager *Manager) toolregistry.Tool {
 	return toolregistry.Tool{
 		Name:        "verify_model_capability",
-		Description: "Run a bounded provider-backed verification prompt through a selected role/model policy, optionally with one image, and return evidence without mutating product state.",
+		Description: "Run a bounded provider-backed verification prompt through a selected role/model policy, optionally with one image or a batch of stored images (image_refs), and return evidence without mutating product state.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"role":             map[string]any{"type": "string", "description": "Required model-policy role to resolve, for example verifier, verifier_multimodal, researcher, super, co-super, or texture."},
 			"provider":         map[string]any{"type": "string", "description": "Optional explicit provider override from the configured model catalog."},
@@ -56,6 +64,7 @@ func NewVerifyModelCapabilityTool(manager *Manager) toolregistry.Tool {
 			"image_mime_type":  map[string]any{"type": "string", "description": "MIME type for image_base64, default image/png."},
 			"image_fixture":    map[string]any{"type": "string", "description": "Optional deterministic image fixture for capability probes. Use \"red_pixel_png\" when the caller needs a known valid tiny PNG without supplying image_base64."},
 			"image_ref":        map[string]any{"type": "string", "description": "Optional artifact:sha256:<hex> ref of an image in this computer's image store."},
+			"image_refs":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional batch of up to 20 artifact:sha256:<hex> refs, sent in order, each labelled \"Image N:\"."},
 		}, []string{"role", "prompt"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var input verifyModelCapabilityArgs
@@ -86,13 +95,56 @@ func (m *Manager) VerifyForOwner(ctx context.Context, ownerID string, raw json.R
 	return m.verifyModelCapability(toolregistry.WithExecutionContext(ctx, execution), input)
 }
 
+// VerifyOutcome is one verification call's answer and cost.
+type VerifyOutcome struct {
+	Role, Provider, Model, ReasoningEffort, PolicySource string
+	ResponseModel, StopReason, Text                      string
+	ImageInput, MaxTokensRequested, ReasoningPresent     bool
+	ImageRef                                             string
+	InputTokens, OutputTokens                            int
+}
+
+// VerifyImages runs one bounded verification call for the platform, as
+// ownerID, over a batch of stored images (refs in order, labelled "Image N:"),
+// and returns the model's whole answer. The per-shot review of a frozen
+// candidate calls it (docs/problems/judge-checks-only-named-defects-2026-11-04.md).
+func (m *Manager) VerifyImages(ctx context.Context, ownerID, role, prompt string, refs []string) (VerifyOutcome, error) {
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	execution.OwnerID = ownerID
+	return m.runVerify(toolregistry.WithExecutionContext(ctx, execution), verifyModelCapabilityArgs{Role: role, Prompt: prompt, ImageRefs: refs})
+}
+
 func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCapabilityArgs) (string, error) {
+	out, err := m.runVerify(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return toolregistry.ResultJSON(map[string]any{
+		"status":                    "verified",
+		"role":                      out.Role,
+		"provider":                  out.Provider,
+		"model":                     out.Model,
+		"reasoning_effort":          out.ReasoningEffort,
+		"policy_source":             out.PolicySource,
+		"image_input":               out.ImageInput,
+		"image_ref":                 out.ImageRef,
+		"max_tokens_requested":      out.MaxTokensRequested,
+		"stop_reason":               out.StopReason,
+		"response_model":            out.ResponseModel,
+		"input_tokens":              out.InputTokens,
+		"output_tokens":             out.OutputTokens,
+		"reasoning_content_present": out.ReasoningPresent,
+		"text_excerpt":              truncateToolText(out.Text, 2000),
+	})
+}
+
+func (m *Manager) runVerify(ctx context.Context, input verifyModelCapabilityArgs) (VerifyOutcome, error) {
 	if m == nil || m.config.Provider == nil {
-		return "", fmt.Errorf("verify_model_capability missing runtime provider")
+		return VerifyOutcome{}, fmt.Errorf("verify_model_capability missing runtime provider")
 	}
 	prompt := strings.TrimSpace(input.Prompt)
 	if prompt == "" {
-		return "", fmt.Errorf("prompt must not be empty")
+		return VerifyOutcome{}, fmt.Errorf("prompt must not be empty")
 	}
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	role := NormalizeRole(firstNonEmpty(input.Role, execution.Role))
@@ -101,21 +153,21 @@ func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCa
 	}
 	normalized, err := normalizeVerifyImageInput(input)
 	if err != nil {
-		return "", err
+		return VerifyOutcome{}, err
 	}
-	hasImage := strings.TrimSpace(normalized.ImageURL) != "" || strings.TrimSpace(normalized.ImageBase64) != "" || strings.TrimSpace(normalized.ImageRef) != ""
+	hasImage := strings.TrimSpace(normalized.ImageURL) != "" || strings.TrimSpace(normalized.ImageBase64) != "" || strings.TrimSpace(normalized.ImageRef) != "" || len(normalized.ImageRefs) > 0
 	selection, policySource, err := m.resolveToolModelSelection(ctx, execution.OwnerID, role, input, hasImage)
 	if err != nil {
-		return "", err
+		return VerifyOutcome{}, err
 	}
 	if hasImage {
 		if refusal := modelcatalog.ImageRefusal(selection.Model); refusal != "" {
-			return "", fmt.Errorf("image input requires a multimodal model: %s", refusal)
+			return VerifyOutcome{}, fmt.Errorf("image input requires a multimodal model: %s", refusal)
 		}
 	}
 	normalized, err = m.storeVerifyImage(normalized)
 	if err != nil {
-		return "", err
+		return VerifyOutcome{}, err
 	}
 	messages := []json.RawMessage{buildVerificationUserMessage(prompt, normalized)}
 	maxTokens := provideriface.MaxInteractiveOutputTokensForSelection(selection, role)
@@ -130,25 +182,15 @@ func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCa
 		MaxTokens: maxTokens,
 	})
 	if err != nil {
-		return "", &ModelCallError{err: err}
+		return VerifyOutcome{}, &ModelCallError{err: err}
 	}
-	return toolregistry.ResultJSON(map[string]any{
-		"status":                    "verified",
-		"role":                      role,
-		"provider":                  selection.Provider,
-		"model":                     selection.Model,
-		"reasoning_effort":          selection.ReasoningEffort,
-		"policy_source":             policySource,
-		"image_input":               hasImage,
-		"image_ref":                 normalized.ImageRef,
-		"max_tokens_requested":      maxTokens > 0,
-		"stop_reason":               response.StopReason,
-		"response_model":            response.Model,
-		"input_tokens":              response.Usage.InputTokens,
-		"output_tokens":             response.Usage.OutputTokens,
-		"reasoning_content_present": strings.TrimSpace(response.ReasoningContent) != "",
-		"text_excerpt":              truncateToolText(response.Text, 2000),
-	})
+	return VerifyOutcome{
+		Role: role, Provider: selection.Provider, Model: selection.Model, ReasoningEffort: selection.ReasoningEffort,
+		PolicySource: policySource, ImageInput: hasImage, ImageRef: normalized.ImageRef, MaxTokensRequested: maxTokens > 0,
+		StopReason: response.StopReason, ResponseModel: response.Model, Text: response.Text,
+		InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens,
+		ReasoningPresent: strings.TrimSpace(response.ReasoningContent) != "",
+	}, nil
 }
 
 func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role string, input verifyModelCapabilityArgs, needsImage bool) (provideriface.LLMSelection, string, error) {
@@ -226,9 +268,24 @@ func normalizeVerifyImageInput(input verifyModelCapabilityArgs) (verifyModelCapa
 			sources++
 		}
 	}
-	if sources > 1 {
-		return verifyModelCapabilityArgs{}, fmt.Errorf("provide only one image source: image_url, image_base64, image_fixture, or image_ref")
+	if len(output.ImageRefs) > 0 {
+		sources++
 	}
+	if sources > 1 {
+		return verifyModelCapabilityArgs{}, fmt.Errorf("provide only one image source: image_url, image_base64, image_fixture, image_ref, or image_refs")
+	}
+	if len(output.ImageRefs) > MaxVerifyImageRefs {
+		return verifyModelCapabilityArgs{}, fmt.Errorf("image_refs takes at most %d images", MaxVerifyImageRefs)
+	}
+	refs := make([]string, 0, len(output.ImageRefs))
+	for _, ref := range output.ImageRefs {
+		ref = strings.TrimSpace(ref)
+		if !strings.HasPrefix(ref, "artifact:sha256:") {
+			return verifyModelCapabilityArgs{}, fmt.Errorf("each image_refs entry must be an artifact:sha256:<hex> ref")
+		}
+		refs = append(refs, ref)
+	}
+	output.ImageRefs = refs
 	if ref := strings.TrimSpace(output.ImageRef); ref != "" && !strings.HasPrefix(ref, "artifact:sha256:") {
 		return verifyModelCapabilityArgs{}, fmt.Errorf("image_ref must be an artifact:sha256:<hex> ref")
 	}
@@ -248,6 +305,17 @@ func normalizeVerifyImageInput(input verifyModelCapabilityArgs) (verifyModelCapa
 // stays inline and a ref is refused.
 func (m *Manager) storeVerifyImage(input verifyModelCapabilityArgs) (verifyModelCapabilityArgs, error) {
 	store := m.config.ImageStore
+	if len(input.ImageRefs) > 0 {
+		if store == nil {
+			return input, fmt.Errorf("image_refs needs this computer's image store, which is not configured")
+		}
+		for _, ref := range input.ImageRefs {
+			if _, _, err := store.Get(ref); err != nil {
+				return input, err
+			}
+		}
+		return input, nil
+	}
 	if ref := strings.TrimSpace(input.ImageRef); ref != "" {
 		if store == nil {
 			return input, fmt.Errorf("image_ref needs this computer's image store, which is not configured")
@@ -279,6 +347,11 @@ func buildVerificationUserMessage(prompt string, input verifyModelCapabilityArgs
 	content := []map[string]any{{"type": "text", "text": prompt}}
 	if ref := strings.TrimSpace(input.ImageRef); ref != "" {
 		content = append(content, map[string]any{"type": "image", "source": map[string]string{"kind": "artifact_ref", "ref": ref}})
+	}
+	for i, ref := range input.ImageRefs {
+		content = append(content,
+			map[string]any{"type": "text", "text": fmt.Sprintf("Image %d:", i+1)},
+			map[string]any{"type": "image", "source": map[string]string{"kind": "artifact_ref", "ref": ref}})
 	}
 	if url := strings.TrimSpace(input.ImageURL); url != "" {
 		content = append(content, map[string]any{"type": "image", "source": map[string]string{"kind": "url", "url": url}})

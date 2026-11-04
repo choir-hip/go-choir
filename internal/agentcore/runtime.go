@@ -185,6 +185,9 @@ type Runtime struct {
 	commitCaptureArrival func(ctx context.Context, req types.CommitInboxRecordsRequest) error
 
 	modelPolicy *modelpolicy.Manager
+	// shotReviewCall replaces the judge's per-shot review model call in
+	// tests (selfdev_shot_review.go); nil uses modelPolicy.
+	shotReviewCall shotReviewCall
 	// researchChildCalls spaces every sub-RLM's model calls on this
 	// computer: research children and management tasks
 	// (subRLMCallSpacer, research_children.go).
