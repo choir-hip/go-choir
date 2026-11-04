@@ -494,7 +494,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	case "adopt":
-		if !authorizeOwnerAct(w, authResult, "release adoption") {
+		if !authorizeOwnerAct(w, authResult, "package install") {
 			return
 		}
 	case "rebase-retry":
@@ -553,16 +553,36 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	}
 	u.RawQuery = r.URL.RawQuery
 	maxBody := int64(64 << 10)
-	if action == "approve" || action == "adopt" {
+	if action == "approve" {
 		maxBody = 1 << 20
 	}
-	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), http.MaxBytesReader(w, r.Body, maxBody))
+	var upstreamBody io.Reader = http.MaxBytesReader(w, r.Body, maxBody)
+	if action == "adopt" {
+		// The owner's package install: the proxy reads and verifies the
+		// release and its tree, and the computer gets them from here only
+		// (package_install.go).
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxInstallRequestBytes))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid install request", Reason: "request_invalid"})
+			return
+		}
+		body, refusal := h.packageInstallBody(r.Context(), authResult.UserID, raw)
+		if refusal != nil {
+			writeJSON(w, refusal.status, errorResponse{Error: refusal.detail, Reason: refusal.reason})
+			return
+		}
+		upstreamBody = bytes.NewReader(body)
+	}
+	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), upstreamBody)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
 		return
 	}
 	if contentType := r.Header.Get("Content-Type"); contentType != "" {
 		upstream.Header.Set("Content-Type", contentType)
+	}
+	if action == "adopt" {
+		upstream.Header.Set("Content-Type", "application/json")
 	}
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
 	upstream.Header.Set("X-Authenticated-Computer", computerID)

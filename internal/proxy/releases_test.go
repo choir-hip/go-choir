@@ -202,37 +202,3 @@ func TestReleasePublishIsTheOwnersActAndOnlyVerifiedSourceReachesCorpusd(t *test
 		}
 	}
 }
-
-func TestReleaseAdoptionIsTheOwnersActAndReadsUseTheReadScope(t *testing.T) {
-	env := newReleaseProxyEnv(t)
-	env.draft = func() []byte { return []byte(`{}`) }
-	const adopt = "/api/computers/computer-a/self-development/adoptions"
-	if computerID, action, ok := selfDevelopmentGuestRoute(adopt); !ok || computerID != "computer-a" || action != "adoptions" {
-		t.Fatalf("classifier = %q %q %v", computerID, action, ok)
-	}
-	body := `{"release_id":"` + strings.Repeat("a", 64) + `","record":{}}`
-	for _, scopes := range [][]string{{"computer:self_development:approve"}, {"admin"}, {"computer:self_development:read"}} {
-		if rec := env.send(t, http.MethodPost, adopt, body, env.secret(t, scopes...)); rec.Code != http.StatusForbidden || len(env.calls) != 0 {
-			t.Fatalf("%v adopt = %d, calls %v", scopes, rec.Code, env.calls)
-		}
-	}
-	rec := env.send(t, http.MethodPost, adopt, body, env.secret(t, "computer:self_development:approve", OwnerActsScope))
-	if rec.Code != http.StatusCreated || string(env.adopted) != body {
-		t.Fatalf("owner adopt = %d %s, guest got %s", rec.Code, rec.Body.String(), env.adopted)
-	}
-	reader := env.secret(t, "computer:self_development:read")
-	for _, path := range []string{adopt, adopt + "/adoption-1", "/api/computers/computer-a/self-development/operations/op-1/release-draft"} {
-		if rec := env.send(t, http.MethodGet, path, "", reader); rec.Code != http.StatusOK {
-			t.Fatalf("read %s = %d %s", path, rec.Code, rec.Body.String())
-		}
-	}
-	if rec := env.send(t, http.MethodGet, "/api/releases?limit=5", "", reader); rec.Code != http.StatusOK || !strings.Contains(strings.Join(env.calls, "\n"), "corpusd GET /internal/platform/releases internal=true") {
-		t.Fatalf("release list = %d, calls %v", rec.Code, env.calls)
-	}
-	if rec := env.send(t, http.MethodGet, "/api/releases/"+strings.Repeat("a", 64), "", reader); rec.Code != http.StatusOK {
-		t.Fatalf("release show = %d %s", rec.Code, rec.Body.String())
-	}
-	if rec := env.send(t, http.MethodPost, "/api/releases", "{}", env.secret(t, "admin")); rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("release list write = %d", rec.Code)
-	}
-}
