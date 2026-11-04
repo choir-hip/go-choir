@@ -910,8 +910,11 @@ func EngineeringFreezeIdempotencyKey(assignmentID string) string {
 // first is revision 1, and a candidate management rejects while its
 // engineer is still live may be followed by the next revision, frozen by
 // the same engineer in the same capsule
-// (docs/design/engineer-reuse-2026-11-04.md, A4, A5).
-const EngineeringFreezeMaxRevisions = 3
+// (docs/design/engineer-reuse-2026-11-04.md, A4, A5). Six, not three:
+// claude's Calendar r1 (2026-11-04) went 3, then 1, then 1 smaller defect,
+// each fix in 2 to 3 minutes, and the cap ended it one fix short; the
+// run's build budget is the bound that matters.
+const EngineeringFreezeMaxRevisions = 6
 
 // EngineeringFreezeRevisionOperationID and
 // EngineeringFreezeRevisionIdempotencyKey name revision n of an

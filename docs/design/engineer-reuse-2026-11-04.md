@@ -80,7 +80,7 @@ memory) on the verdict. Pass: the platform commits the engineer's own
 Complete, and the round ends exactly as today. Fail: the turn resumes with
 management's reason; the engineer fixes the work in the same capsule and
 Freezes again, which opens the assignment's next operation revision. The
-bound is three candidates per assignment: the third Complete takes
+bound is six candidates per assignment (three until 2026-11-04, A5): the last Complete takes
 today's path (Complete, then Verify), so a third rejection ends the round
 with the judge's reason.
 
@@ -107,14 +107,14 @@ the operation's revision.
 - the intent's result is `completed`;
 - the assignment's current operation (A4) is `frozen` with a bundle;
 - that operation's revision is below the bound (`reviewInLoopMaxRevisions`
-  = 3), so revisions 1 and 2 review in the loop and revision 3 does not.
+  = 6), so revisions 1 to 5 review in the loop and revision 6 does not.
 
 Diverted, it builds the report exactly as today (receipts resolved,
 screens note attached) and commits it as a **progress Report**
 (`result=partial`, the existing non-final path through
 `commitAssignedEngineeringReport`), with:
 
-- the summary prefixed "Review requested (candidate N of 3): ";
+- the summary prefixed "Review requested (candidate N of 6): ";
 - outcome refs `selfdev-operation:<op>`, `bundle:<digest>` and
   `review:<op>`, so management's Verify can name the bundle as it does from
   a final Report (`assignmentOutcomeRefs`, which today returns early for a
@@ -150,7 +150,7 @@ After the verdict is recorded:
 - on `fail`, it mints one platform Note to the Texture the round serves,
   through the progress relay's record shape and gate
   (`engineering.progress_to_texture`): "Management rejected candidate
-  <op> (N of 3): <reason>. The engineer is fixing it in the same capsule."
+  <op> (N of 6): <reason>. The engineer is fixing it in the same capsule."
   This is the only Texture line; no Texture or management turn is needed
   for the fix.
 
@@ -170,7 +170,7 @@ the run has a kept review (A1), the park waits, with no model call, until one of
 | outcome | how it is read | what the park does |
 |---|---|---|
 | pass | operation `verified`, `awaiting_approval`, `accepted`, `materializing` or `applied` | commits the kept Complete through `recordAssignedEngineeringReport` (the terminal saga, under the saga mutex, detached from the activation with its own 3-minute deadline, as `commitTray` commits a cell's Complete), then ends the loop (new `Terminal` on the batch-wait result); if the commit fails, resumes the turn with the error, and that candidate's next Complete is not diverted again |
-| fail, revisions left | operation `failed` with the judgment-rejected error | resumes the turn: "Management rejected candidate <op> (N of 3): <reason>. Your capsule and your work are as you left them. Fix what the reason names, re-run the build and the checks Freeze cites, choir.Freeze again, then choir.Complete." plus the activation budget line |
+| fail, revisions left | operation `failed` with the judgment-rejected error | resumes the turn: "Management rejected candidate <op> (N of 6): <reason>. Your capsule and your work are as you left them. Fix what the reason names, re-run the build and the checks Freeze cites, choir.Freeze again, then choir.Complete." plus the activation budget line |
 | other operation end | any other state: failed for another cause, `rejected` by the owner, `degraded`, `rollback_pending`, `rolled_back` | resumes the turn with the fact; the completion guard handles the rest as today |
 | no verdict in `reviewParkMax` (20 min) | timer | commits the kept Complete (today's order: the round ends, the candidate stays frozen for management's Verify on the final Report); the candidate is not diverted again |
 | run context ends | ctx | returns its error, as today |
@@ -197,7 +197,7 @@ rules, carry, the cancellation choke point, outcome refs, the close at the
 end, screens) goes through it.
 
 `openFreezeCandidate` opens revision n+1 only when revision n is `failed`
-by a judgment rejection, the assignment is open, and n+1 <= 3. "By a
+by a judgment rejection, the assignment is open, and n+1 <= 6. "By a
 judgment rejection" is the verdict's terminal error *and* the verification
 event it stamps on the operation (`VerifierRefs`); no cancellation close
 stamps one. "The assignment is open" holds by construction: only the bound
@@ -243,8 +243,8 @@ before n+1 opens, and admission holds one live assignment.
 
 ### A5. The bound
 
-Three candidates per assignment. Revisions 1 and 2 are reviewed in the
-loop; revision 3's Complete takes today's path, so its rejection ends the
+Six candidates per assignment (three until 2026-11-04, when a converging run ran out one fix short). Revisions 1 to 5 are reviewed in the
+loop; revision 6's Complete takes today's path, so its rejection ends the
 round with the judge's reason and the carry offers the patch to
 management's next Cast as today. Each candidate is its own operation on
 the tape (frozen, verified or failed with its reason) and its own Report in

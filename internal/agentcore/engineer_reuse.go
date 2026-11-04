@@ -23,7 +23,7 @@ import (
 // capsule live and its conversation in memory. A pass commits the
 // engineer's own Complete; a fail resumes the turn with management's
 // reason, and the engineer's next Freeze opens the assignment's next
-// operation revision. Revisions 1 and 2 are reviewed in the loop; the third
+// operation revision. Revisions 1 to 5 are reviewed in the loop; the sixth
 // candidate takes the old order (Complete, then Verify), so its rejection
 // ends the round with the judge's reason.
 //
@@ -423,8 +423,10 @@ func reviewRejectedInstruction(review *candidateReview, op selfdev.Operation) st
 	b := &strings.Builder{}
 	fmt.Fprintf(b, "Management rejected your candidate %s (candidate %d of %d): %s\n", op.OperationID, review.revision, store.EngineeringFreezeMaxRevisions, reason)
 	b.WriteString("Your capsule and your work are as you left them, and this assignment is still yours: no new round is cast. ")
-	b.WriteString("Fix what the reason names, re-run the build and the checks Freeze cites (and the screenshots, if the reason is visual) after your last write, ")
-	fmt.Fprintf(b, "then choir.Freeze again, which opens candidate %d, and choir.Complete(result=\"completed\", ...) as before.", next)
+	b.WriteString("Fix what the reason names, re-run the build and the checks Freeze cites (and the screenshots, if the reason is visual) after your last write. ")
+	b.WriteString("If the reason is visual, re-shoot every screen it names, not only the one you changed, and look at each new shot yourself to confirm the named defect is gone and nothing new is clipped or covered before you Freeze: management judges the whole set again, and a candidate is a scarce turn, not a free retry. ")
+	b.WriteString("Then ")
+	fmt.Fprintf(b, "choir.Freeze again, which opens candidate %d, and choir.Complete(result=\"completed\", ...) as before.", next)
 	if next >= store.EngineeringFreezeMaxRevisions {
 		b.WriteString(" It is the last candidate: management judges it after the round ends, and a rejection ends the round with its reason.")
 	}

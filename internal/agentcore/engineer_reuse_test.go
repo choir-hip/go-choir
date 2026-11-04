@@ -189,7 +189,7 @@ func TestEngineerReuseReviewAdmitsVerifyOnlyForItsCandidate(t *testing.T) {
 		t.Fatal("an engineer's own progress Report admitted Verify")
 	}
 	review := types.EngineeringAssignmentReport{Result: types.EngineeringResultPartial, Verdict: types.EngineeringVerdictNone,
-		Summary: reviewSummaryPrefix + " (candidate 1 of 3)", EvidenceRefs: []string{reviewEvidencePrefix + op.OperationID}}
+		Summary: reviewSummaryPrefix + " (candidate 1 of 6)", EvidenceRefs: []string{reviewEvidencePrefix + op.OperationID}}
 	if _, err := rt.recordAssignedEngineeringReport(ctx, &run, reviewToolCallID(run.RunID, op.OperationID), review); err != nil {
 		t.Fatalf("review Report: %v", err)
 	}
