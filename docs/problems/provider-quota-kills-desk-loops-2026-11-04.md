@@ -83,5 +83,33 @@ when: `weekly_next_regen=03:07:16Z`, 32 minutes later.
 - The park lives inside the run's activation budget (60 min default; a
   management task's deadline for tasks). A quota that resets after the
   budget still ends the run, now with the wait visible.
+- A management task run has a 10-minute deadline, so a task parked on a
+  longer quota still ends at its deadline (review r1 DeepSeek).
 - A computer whose loops are parked is busy, so an update waits for it like
   any busy computer.
+- Mid-stream provider errors are still swallowed by the guest's SSE parser
+  (pre-existing, review r1 Devin F5); desk loops call unstreamed.
+- A pool parks on its last member only, even when an earlier member resets
+  first.
+
+## Fix review (tier 2)
+
+Round 1: Devin APPROVE (non-blocking: announce-timer race, stale cached
+assignment, Retry-After 0); DeepSeek v4.1 flash BLOCK on B1: a success or
+failure from a call in flight when the quota tripped dropped the quota hold
+while the breaker stayed open, so refusals until the reset read "model
+unhealthy" again. Fixed in the same change: the hold lives as long as the
+quota's breaker is open; a failure-opened breaker is not relabelled quota
+(B4); the Synthetic reset time follows the spent limit (subscription
+renewsAt vs weekly nextRegenAt, B2); a park that ends with its run is told
+as such, not as a reset (B3); observations and the end are serialized.
+
+Round 2 (Devin, one seat): BLOCK on R2-B1, the success and failure arms
+read the breaker before taking the provider's lock, so a quota hold written
+in between could still be deleted. Fixed: every arm reads the breaker under
+that lock (the breaker's own lock is a leaf). Not re-reviewed after this
+three-line fix (the mission brief allows one re-review); the remaining r2
+items are non-blocking (an in-flight failure extends the open window and
+refusals past the reset read as a 15 s estimate; the announce timer path
+has no direct test).
+

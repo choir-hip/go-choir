@@ -111,6 +111,7 @@ type toolLoopOptions struct {
 	completionGuard        ToolLoopCompletionGuardFunc
 	parkWaiter             ToolLoopParkWaiterFunc
 	batchWait              ToolLoopBatchWaitFunc
+	providerWait           ToolLoopProviderWaitFunc
 }
 
 type pendingRequiredTool struct {
@@ -335,6 +336,68 @@ func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
 	}
 }
 
+// ToolLoopProviderWaitFunc is told when the loop parks on an exhausted
+// provider quota (w is the typed wait, re-sent at each re-check) and when
+// the park ends (w nil, with ended: ProviderWaitResumed when the quota
+// reset and the loop goes on, ProviderWaitLoopEnded when the loop ended
+// while parked). It must not call the provider.
+type ToolLoopProviderWaitFunc func(ctx context.Context, w *types.WaitState, ended string)
+
+// How a provider quota park ended (review r1 DeepSeek B3: a cancelled park
+// is not a reset).
+const (
+	ProviderWaitResumed   = "the provider quota reset"
+	ProviderWaitLoopEnded = "the run ended while it waited for the quota"
+)
+
+// WithProviderWait lets the runtime publish a provider quota park
+// (engineering's assignment wait, management's pack, Texture's relay).
+func WithProviderWait(fn ToolLoopProviderWaitFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.providerWait = fn
+	}
+}
+
+// A provider quota park (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md):
+// a loop with no pool member left that meets the gateway's typed quota
+// answer keeps its work and its state and calls again when the quota is
+// expected to reset; each sleep is at most providerQuotaCheckMax, so a
+// top-up or an early reset is seen, and with no reset time it backs off
+// from providerQuotaBackoffBase, doubling, to providerQuotaCheckMax. Only
+// the run's context (its activation budget, a cancel) ends a park. Vars so
+// a test can shorten them.
+var (
+	providerQuotaBackoffBase = time.Minute
+	providerQuotaCheckMax    = 30 * time.Minute
+	providerQuotaMinWait     = 5 * time.Second
+	providerQuotaNow         = time.Now
+)
+
+// providerQuotaParkDelay is how long the parks-th park in a row sleeps for
+// a quota expected back at retryAt (zero: unknown).
+func providerQuotaParkDelay(retryAt, now time.Time, parks int) time.Duration {
+	var d time.Duration
+	if !retryAt.IsZero() {
+		d = retryAt.Sub(now)
+	} else {
+		d = providerQuotaBackoffBase
+		for i := 1; i < parks && d < providerQuotaCheckMax; i++ {
+			d *= 2
+		}
+	}
+	if d > providerQuotaCheckMax {
+		d = providerQuotaCheckMax
+	}
+	if d < providerQuotaMinWait {
+		d = providerQuotaMinWait
+	}
+	return d
+}
+
+// transientProviderRetryDelay spaces the tool loop's three retries of a
+// transient provider outage. A var so a test can shorten it.
+var transientProviderRetryDelay = 15 * time.Second
+
 var providerRateLimitRetryDelays = []time.Duration{
 	5 * time.Second,
 	20 * time.Second,
@@ -464,6 +527,16 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	}
 
 	transientAttempts := 0
+	// quotaWait is the current provider quota park (nil: none), since
+	// quotaSince, after quotaParks re-checks.
+	var quotaWait *types.WaitState
+	var quotaSince time.Time
+	quotaParks := 0
+	defer func() {
+		if quotaWait != nil && options.providerWait != nil {
+			options.providerWait(context.WithoutCancel(ctx), nil, ProviderWaitLoopEnded)
+		}
+	}()
 	nextFallback := 0
 	// skippedRetryRounds counts the pool members that failed over without
 	// their rate-limit backoff; the last member owes them its retries.
@@ -623,6 +696,46 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 				continue
 			}
+			// Provider quota: true contention on an external resource. With
+			// a pool member left the run fails over below; on a pinned model
+			// or the last member it parks, keeping its work item and its
+			// loop state, and calls again at the quota's reset time.
+			if q, ok := provideriface.AsProviderQuota(err); ok && ctx.Err() == nil && nextFallback >= len(options.fallbackLLMConfigs) {
+				now := providerQuotaNow()
+				quotaParks++
+				if quotaSince.IsZero() {
+					quotaSince = now
+				}
+				delay := providerQuotaParkDelay(q.RetryAt, now, quotaParks)
+				quotaProvider := firstNonEmpty(q.Provider, activeLLMConfig.Provider)
+				model := firstNonEmpty(q.Model, activeLLMConfig.Model)
+				detail := firstNonEmpty(q.Reason, "provider quota exhausted ("+quotaProvider+")")
+				if q.RetryAt.IsZero() {
+					detail += "; the provider gave no reset time, so the loop asks again with a backoff"
+				} else if q.RetryAtEstimated {
+					detail += "; the reset time is the gateway's estimate"
+				}
+				wait := types.NewProviderQuotaWait("run", quotaProvider, model, quotaSince, q.RetryAt, q.RetryAtEstimated, delay, detail)
+				wait.Stamp(now)
+				quotaWait = wait
+				if options.providerWait != nil {
+					options.providerWait(ctx, wait.Clone(), "")
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"reason":         "provider_quota",
+						"attempt":        quotaParks,
+						"delay_ms":       delay.Milliseconds(),
+						"provider_error": err.Error(),
+						"wait":           wait,
+					})
+					emit(types.EventRunRetry, "provider_quota", payload)
+				}
+				if sleepErr := sleepContext(ctx, delay); sleepErr != nil {
+					return "", totalUsage, fmt.Errorf("tool loop iteration %d: parked on %s: %w", i, wait.Sentence, sleepErr)
+				}
+				continue
+			}
 			// Model failover: a model that still fails after its retries
 			// hands the rest of the run to the next pool member. The cache
 			// breaks; the work continues. The loop walks the fallbacks in
@@ -689,11 +802,30 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				select {
 				case <-ctx.Done():
 					return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, ctx.Err())
-				case <-time.After(15 * time.Second):
+				case <-time.After(transientProviderRetryDelay):
 				}
 				continue
 			}
 			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
+		}
+
+		if quotaWait != nil {
+			// The quota reset: the park ends and the work goes on.
+			waited := providerQuotaNow().Sub(quotaSince)
+			if options.providerWait != nil {
+				options.providerWait(ctx, nil, ProviderWaitResumed)
+			}
+			if emit != nil {
+				payload, _ := json.Marshal(map[string]any{
+					"reason":    "provider_quota_cleared",
+					"parks":     quotaParks,
+					"waited_ms": waited.Milliseconds(),
+					"provider":  quotaWait.Provider,
+					"model":     quotaWait.Model,
+				})
+				emit(types.EventRunRetry, "provider_quota_cleared", payload)
+			}
+			quotaWait, quotaSince, quotaParks = nil, time.Time{}, 0
 		}
 
 		// Accumulate token usage.
@@ -1451,6 +1583,11 @@ func callToolLoopProviderWithPoolRetries(ctx context.Context, provider provideri
 			return resp, nil
 		}
 		lastErr = err
+		// A provider quota is the tool loop's to fail over or park on, not
+		// a rate limit to back off here.
+		if _, quota := provideriface.AsProviderQuota(err); quota {
+			return nil, lastErr
+		}
 		if hasFallback && failsOverWithoutRetry(err) {
 			return nil, lastErr
 		}

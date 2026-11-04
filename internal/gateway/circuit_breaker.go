@@ -34,15 +34,18 @@ import (
 // A 429 still counts against its model. The open model breaker is the short
 // per-model backoff: it lasts OpenTimeout, fails the next calls at once with
 // "circuit open", and that is what moves a run to its next pool member
-// instead of an 85 s rate-limit backoff against the same model. The
-// upstream's Retry-After does not survive the provider's sanitized errors,
-// so it is not read here.
+// instead of an 85 s rate-limit backoff against the same model. A quota's
+// reset time travels on its typed error (provider.QuotaExhaustedError).
 //
 // The model breaker is each pool member's health, mirroring the search
 // plane's per-provider cooldowns (docs/design/model-pool-autoroute-2026-11-02.md):
 // the open duration doubles on each failed probe and resets on a success; an
 // exhausted quota (provider.ErrUpstreamQuotaExhausted) opens it on the first
-// one, for a longer cooldown; a Synthetic concurrency 429 opens it only after
+// one, until the quota's reset time when the provider gives one (Retry-After,
+// Synthetic's nextRegenAt), else for a longer doubling cooldown, and the
+// calls it refuses meanwhile are answered as that quota with its reset
+// time, not "model unhealthy"
+// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md); a Synthetic concurrency 429 opens it only after
 // ConcurrencyStreakBeforeCooldown in a row with no success between. The
 // guest fails over at once on "circuit open", so a cooling member costs a
 // run one fast refusal, not an 85 s same-model retry.
@@ -62,7 +65,30 @@ type CircuitBreakingProvider struct {
 	// concurrencyStreak counts each model's concurrency 429s since its last
 	// success.
 	concurrencyStreak map[string]int
+	// quotaHolds is each model whose breaker an exhausted quota opened, and
+	// when the quota is expected to reset, so a call the open breaker
+	// refuses is answered as the quota it is, not "model unhealthy"
+	// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+	quotaHolds map[string]quotaHold
+	// quotaCooldownMax bounds how long a known reset time keeps the
+	// breaker open: an owner top-up is seen within it.
+	quotaCooldownMax time.Duration
 }
+
+// quotaHold is a model's exhausted quota: when it is expected to reset, and
+// whether that time is the gateway's own cooldown (estimated) rather than
+// the provider's.
+type quotaHold struct {
+	retryAt   time.Time
+	estimated bool
+	// trips is the breaker's trip count when the quota held it, so a
+	// later failure that reopened it (a new trip) ends the hold.
+	trips int
+}
+
+// quotaProbeWait is the reset time given to a call refused while the
+// quota's half-open probe is in flight: the caller asks again shortly.
+const quotaProbeWait = 15 * time.Second
 
 // ConcurrencyStreakBeforeCooldown is how many concurrency 429s in a row, with
 // no success between them, put a model in cooldown. One burst is the
@@ -111,7 +137,17 @@ func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *
 		quotaCooldown:     doublingCooldown(qBase, qMax),
 		models:            make(map[string]*health.CircuitBreaker),
 		concurrencyStreak: make(map[string]int),
+		quotaHolds:        make(map[string]quotaHold),
+		quotaCooldownMax:  qMax,
 	}
+}
+
+// now is the breakers' clock.
+func (c *CircuitBreakingProvider) now() time.Time {
+	if c.cfg.Now != nil {
+		return c.cfg.Now()
+	}
+	return time.Now()
 }
 
 // doublingCooldown returns base on the first trip, doubling on each trip in
@@ -230,6 +266,9 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model string, fn 
 	}, func(err error) bool { return providerUnreachable(ctx, err) })
 	if err == health.ErrCircuitOpen {
 		if modelOpen {
+			if q := c.quotaRefusal(model); q != nil {
+				return q
+			}
 			// No status code in this message: the runtime reads a "429"
 			// text as a rate limit to wait out, and an open circuit as a
 			// reason to fail over now.
@@ -237,7 +276,51 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model string, fn 
 		}
 		return fmt.Errorf("provider %s: circuit open (upstream unhealthy)", c.inner.Name())
 	}
+	if q, ok := provider.AsQuotaExhausted(err); ok {
+		return c.quotaAnswer(model, q)
+	}
 	return err
+}
+
+// quotaRefusal is the answer to a call the model's open breaker refused
+// while the model is held for an exhausted quota: the quota, with its reset
+// time. Nil when the model is not held for a quota.
+func (c *CircuitBreakingProvider) quotaRefusal(model string) *provider.QuotaExhaustedError {
+	c.mu.Lock()
+	hold, ok := c.quotaHolds[strings.TrimSpace(model)]
+	c.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	q := &provider.QuotaExhaustedError{Provider: c.inner.Name(), Model: modelLabel(model), CircuitOpen: true,
+		RetryAt: hold.retryAt, RetryAtEstimated: hold.estimated}
+	if now := c.now(); !q.RetryAt.After(now) {
+		// The reset time passed and the half-open probe is in flight.
+		q.RetryAt, q.RetryAtEstimated = now.Add(quotaProbeWait).UTC(), true
+	}
+	return q
+}
+
+// quotaAnswer is an upstream quota error as the guest gets it: with the
+// model, and with the gateway's cooldown as an estimated reset time when the
+// provider gave none.
+func (c *CircuitBreakingProvider) quotaAnswer(model string, q *provider.QuotaExhaustedError) *provider.QuotaExhaustedError {
+	out := *q
+	if out.Provider == "" {
+		out.Provider = c.inner.Name()
+	}
+	if out.Model == "" {
+		out.Model = modelLabel(model)
+	}
+	if out.RetryAt.IsZero() {
+		c.mu.Lock()
+		hold, ok := c.quotaHolds[strings.TrimSpace(model)]
+		c.mu.Unlock()
+		if ok && !hold.retryAt.IsZero() {
+			out.RetryAt, out.RetryAtEstimated = hold.retryAt, hold.estimated
+		}
+	}
+	return &out
 }
 
 // observeModelOutcome applies the outcomes the breaker's failure count does
@@ -247,16 +330,69 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 	key := strings.TrimSpace(model)
 	switch {
 	case err == nil:
+		// A success admitted before the quota tripped does not close an
+		// open breaker, so the hold stays while the breaker is open: every
+		// refusal until the reset stays typed as the quota (review r1
+		// DeepSeek B1). It goes when the breaker closes.
+		// The breaker is read under c.mu (b.mu is a leaf lock), so a quota
+		// that trips and holds between the read and the delete is not lost
+		// (review r2 Devin R2-B1).
 		c.mu.Lock()
 		delete(c.concurrencyStreak, key)
+		if b.Snapshot().State == health.StateClosed {
+			delete(c.quotaHolds, key)
+		}
 		c.mu.Unlock()
 	case ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled):
 		// The caller went away: no evidence either way.
 	case provider.IsQuotaExhausted(err):
-		if b.Trip(c.quotaCooldown) {
-			snap := b.Snapshot()
-			log.Printf("gateway: model %s/%s cooling down (quota exhausted, trip %d, until %s)",
-				c.inner.Name(), modelLabel(model), snap.Trips, formatUntil(snap.OpenUntil))
+		// A known reset time opens the model until it (bounded by the quota
+		// cooldown's maximum, so a top-up is seen): the circuit half-opens
+		// when the quota resets. Without one, the doubling quota cooldown.
+		now := c.now()
+		q, _ := provider.AsQuotaExhausted(err)
+		var opened bool
+		if q != nil && q.RetryAt.After(now) {
+			until := q.RetryAt
+			if limit := now.Add(c.quotaCooldownMax); until.After(limit) {
+				until = limit
+			}
+			opened = b.TripUntil(until)
+		} else {
+			opened = b.Trip(c.quotaCooldown)
+		}
+		known := q != nil && q.RetryAt.After(now)
+		c.mu.Lock()
+		snap := b.Snapshot() // under c.mu, like the other arms
+		hold := quotaHold{estimated: true, trips: snap.Trips}
+		if known {
+			hold.retryAt, hold.estimated = q.RetryAt.UTC(), false
+		} else if snap.OpenUntil != nil {
+			hold.retryAt = snap.OpenUntil.UTC()
+		}
+		prev, held := c.quotaHolds[key]
+		switch {
+		case held && !opened:
+			// A quota from a call in flight when the breaker opened: the
+			// later reset wins (review r1 DeepSeek nit).
+			if hold.retryAt.After(prev.retryAt) {
+				prev.retryAt, prev.estimated = hold.retryAt, hold.estimated
+			}
+			prev.trips = snap.Trips
+			c.quotaHolds[key] = prev
+		case opened || known:
+			// This quota opened the breaker, or held it open until its
+			// reset (TripUntil extends): the breaker is the quota's.
+			c.quotaHolds[key] = hold
+		default:
+			// The breaker was already open for a model failure and this
+			// quota names no reset: the failure stays the breaker's reason
+			// (review r1 DeepSeek B4).
+		}
+		c.mu.Unlock()
+		if opened {
+			log.Printf("gateway: model %s/%s provider quota exhausted (trip %d, half-opens at %s, reset expected %s%s)",
+				c.inner.Name(), modelLabel(model), snap.Trips, formatUntil(snap.OpenUntil), formatUntil(&hold.retryAt), estimatedLabel(hold.estimated))
 		}
 	case errors.Is(err, provider.ErrUpstreamConcurrencyLimit):
 		c.mu.Lock()
@@ -271,7 +407,40 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 			log.Printf("gateway: model %s/%s cooling down (%d concurrency 429s in a row, trip %d, until %s)",
 				c.inner.Name(), modelLabel(model), streak, snap.Trips, formatUntil(snap.OpenUntil))
 		}
+	case providerFailureCounts(ctx, err):
+		// The model now fails for another reason. The breaker is no longer
+		// the quota's once this failure reopened it (a failed half-open
+		// probe: a new trip) or it closed; a failure from a call in flight
+		// while the quota's breaker is open leaves it the quota's (review r1
+		// DeepSeek B1).
+		c.mu.Lock()
+		snap := b.Snapshot() // under c.mu (review r2 Devin R2-B1)
+		if hold, ok := c.quotaHolds[key]; ok && (snap.State != health.StateOpen || snap.Trips != hold.trips) {
+			delete(c.quotaHolds, key)
+		}
+		c.mu.Unlock()
 	}
+}
+
+// clearQuotaHold forgets model's quota hold ("" model is the default; all
+// forgets every model's).
+func (c *CircuitBreakingProvider) clearQuotaHold(model string) {
+	c.mu.Lock()
+	delete(c.quotaHolds, strings.TrimSpace(model))
+	c.mu.Unlock()
+}
+
+func (c *CircuitBreakingProvider) clearQuotaHolds() {
+	c.mu.Lock()
+	c.quotaHolds = make(map[string]quotaHold)
+	c.mu.Unlock()
+}
+
+func estimatedLabel(estimated bool) string {
+	if estimated {
+		return ", estimated"
+	}
+	return ""
 }
 
 func formatUntil(t *time.Time) string {
@@ -437,6 +606,7 @@ func (r *BreakerRegistry) Reset(name string) bool {
 		for _, b := range p.modelBreakers() {
 			b.Reset()
 		}
+		p.clearQuotaHolds()
 		return true
 	}
 	if slash := strings.Index(name, "/"); slash > 0 {
@@ -447,6 +617,7 @@ func (r *BreakerRegistry) Reset(name string) bool {
 			}
 			if b := p.lookupModelBreaker(model); b != nil {
 				b.Reset()
+				p.clearQuotaHold(model)
 				return true
 			}
 		}

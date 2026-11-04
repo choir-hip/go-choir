@@ -27,7 +27,10 @@ type obligationsResponse struct {
 	WorkItems   obligationsCountAge `json:"open_work_items"`
 	Actors      *obligationsActors  `json:"actors,omitempty"`
 	Selfdev     obligationsSelfdev  `json:"selfdev"`
-	Errors      []string            `json:"errors,omitempty"`
+	// ProviderWaits is the desk loops parked on an exhausted provider
+	// quota, with when it is expected to reset (provider_quota_wait.go).
+	ProviderWaits []types.WaitState `json:"provider_waits,omitempty"`
+	Errors        []string          `json:"errors,omitempty"`
 }
 
 // ActorObligations is the actor tape's share of what is owed: unprocessed
@@ -236,6 +239,7 @@ func (h *APIHandler) HandleObligations(w http.ResponseWriter, r *http.Request) {
 	rt := h.rt
 	ctx := r.Context()
 	resp := obligationsResponse{ComputerID: rt.TextureComputerID(), GeneratedAt: time.Now().UTC(), Runs: map[string]int{}}
+	resp.ProviderWaits = rt.providerWaitViews(ownerID, "")
 	if marker, planned := rt.BootWasPlannedRestart(); planned {
 		resp.Restart = obligationsRestart{Kind: "planned", Reason: marker.Reason, Target: marker.Target}
 	} else {

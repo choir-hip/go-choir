@@ -120,6 +120,12 @@ type ActingPack struct {
 	// minutes waited by kind, so "blocked on host memory" reads apart from
 	// "stuck". Management's pack only.
 	Waits []AssignmentWaitView `json:"waits,omitempty"`
+	// ProviderWaits is the computer's desk loops parked on an exhausted
+	// model provider quota (kind provider_quota, class contention): who
+	// waits, for which provider and model, and when the quota is expected
+	// to reset. A parked loop keeps its work and resumes at the reset; it is
+	// waiting, not dead. Every desk's pack.
+	ProviderWaits []WaitState `json:"provider_waits,omitempty"`
 }
 
 // SupervisionPackItem is the supervising surface's full per-act view: the

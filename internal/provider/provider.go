@@ -950,7 +950,7 @@ func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk fu
 		// (docs/design/model-pool-autoroute-2026-11-02.md).
 		reason := logRejectedRequest("synthetic", resp)
 		if syntheticRateLimitIsQuota(reason, resp.Header) {
-			return nil, &upstreamQuotaError{provider: "synthetic", status: resp.Status}
+			return nil, newQuotaError("synthetic", resp)
 		}
 		return nil, &upstreamConcurrencyError{status: resp.Status}
 	}

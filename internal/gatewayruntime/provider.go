@@ -254,6 +254,13 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 		// seconds until its window resets. Waiting that out queues the call
 		// instead of failing it after 1.5 s
 		// (docs/archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
+		// A provider quota is not the limiter: it goes to the caller at
+		// once, typed, with its reset time; the tool loop parks on it.
+		if httpResp.StatusCode == http.StatusTooManyRequests {
+			if q, ok := provideriface.AsProviderQuota(gatewayStatusError(httpResp.Status, body)); ok {
+				return nil, q
+			}
+		}
 		if wait, ok := retryAfter(httpResp); ok && httpResp.StatusCode == http.StatusTooManyRequests && rateLimitWaits < maxRateLimitWaits {
 			rateLimitWaits++
 			lastErr = gatewayStatusError(httpResp.Status, body)
@@ -355,6 +362,19 @@ func (p *Provider) do(ctx context.Context, req llmRequest, accept string) (*http
 	return resp, nil
 }
 
+// gatewayKindProviderQuota is the gateway's typed provider quota answer
+// (gateway.ErrorKindProviderQuota).
+const gatewayKindProviderQuota = "provider_quota"
+
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // gatewayHTTPStatusError preserves the HTTP status the gateway returned so
 // callers (the tool loop) can distinguish transient 5xx/429 provider outages
 // from hard failures. The message format is unchanged.
@@ -382,7 +402,26 @@ func (e *gatewayHTTPStatusError) Transient() bool {
 
 func gatewayStatusError(status string, body []byte) error {
 	var errResp struct {
-		Error string `json:"error"`
+		Error            string `json:"error"`
+		Kind             string `json:"kind"`
+		Provider         string `json:"provider"`
+		Model            string `json:"model"`
+		Reason           string `json:"reason"`
+		RetryAt          string `json:"retry_at"`
+		RetryAtEstimated bool   `json:"retry_at_estimated"`
+	}
+	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Kind == gatewayKindProviderQuota {
+		// The provider's quota is spent: typed, so the tool loop parks on
+		// it instead of retrying it as an outage
+		// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+		q := &provideriface.ProviderQuotaError{Provider: errResp.Provider, Model: errResp.Model, Reason: errResp.Reason,
+			Message: firstNonEmptyString(errResp.Error, "provider quota exhausted"), RetryAtEstimated: errResp.RetryAtEstimated}
+		if at, perr := time.Parse(time.RFC3339, strings.TrimSpace(errResp.RetryAt)); perr == nil {
+			q.RetryAt = at.UTC()
+		} else {
+			q.RetryAtEstimated = false
+		}
+		return q
 	}
 	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
 		return &gatewayHTTPStatusError{status: status, message: fmt.Sprintf("gateway client: %s", errResp.Error)}

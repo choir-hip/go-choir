@@ -213,6 +213,9 @@ type Runtime struct {
 	// assignmentWaits is each engineering assignment's typed wait and
 	// its minutes waited by kind (engineering_waits.go).
 	assignmentWaits assignmentWaitTracker
+	// providerQuotaWaits is each desk loop parked on an exhausted provider
+	// quota (provider_quota_wait.go).
+	providerQuotaWaits providerWaitTracker
 
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
@@ -3907,6 +3910,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
+	// A provider quota parks the loop, published as a typed wait
+	// (provider_quota_wait.go).
+	toolLoopOptions = append(toolLoopOptions, toolregistry.WithProviderWait(rt.providerQuotaWaitHook(rec)))
 	if isManagementTaskRun(rec) {
 		// A task ends when its Done commits (R2-8), and no model call may
 		// take its whole deadline (R2-9).

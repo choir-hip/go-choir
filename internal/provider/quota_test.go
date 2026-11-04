@@ -125,3 +125,63 @@ func TestChatGPTPlainRateLimitStaysUntyped(t *testing.T) {
 		t.Fatalf("err = %v, want the untyped sanitized 429", err)
 	}
 }
+
+// The quota's reset time travels on its typed error
+// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md): Retry-After
+// first, then Synthetic's nextRegenAt; a past or absurd time is no time, and
+// a Synthetic 429 that names a reset time is a limit to wait out, not a
+// concurrency burst.
+func TestQuotaCarriesItsResetTime(t *testing.T) {
+	future := time.Now().Add(32 * time.Minute).UTC().Truncate(time.Second)
+	retryAfter := func(secs string) http.Header { h := http.Header{}; h.Set("Retry-After", secs); return h }
+	for name, tc := range map[string]struct {
+		body    string
+		headers http.Header
+		want    func(time.Time) bool
+		quota   bool
+	}{
+		"retry-after seconds": {`{"error":"You've exceeded your subscription rate limits"}`, retryAfter("120"),
+			func(at time.Time) bool { d := time.Until(at); return d > 110*time.Second && d <= 120*time.Second }, true},
+		"next regen": {`{"error":"You've exceeded your subscription rate limits"}`,
+			http.Header{"X-Synthetic-Quotas": {fmt.Sprintf(`{"planWeeklyLimit":{"percentRemaining":0,"nextRegenAt":%q}}`, future.Format(time.RFC3339))}},
+			func(at time.Time) bool { return at.Equal(future) }, true},
+		"subscription window when the weekly plan has room": {`{"error":"You've exceeded your subscription rate limits"}`,
+			http.Header{"X-Synthetic-Quotas": {fmt.Sprintf(`{"subscription":{"limit":500,"requests":500,"renewsAt":%q},"planWeeklyLimit":{"percentRemaining":40,"nextRegenAt":%q}}`,
+				future.Add(-20*time.Minute).Format(time.RFC3339), future.Add(48*time.Hour).Format(time.RFC3339))}},
+			func(at time.Time) bool { return at.Equal(future.Add(-20 * time.Minute)) }, true},
+		"retry-after zero is no time": {`{"error":"You've exceeded your subscription rate limits"}`, retryAfter("0"),
+			func(at time.Time) bool { return at.IsZero() }, true},
+		"past regen is no time": {`{"error":"You've exceeded your subscription rate limits"}`,
+			http.Header{"X-Synthetic-Quotas": {`{"planWeeklyLimit":{"percentRemaining":0,"nextRegenAt":"2020-01-01T00:00:00Z"}}`}},
+			func(at time.Time) bool { return at.IsZero() }, true},
+		"absurd retry-after is no time": {`{"error":"You've exceeded your subscription rate limits"}`, retryAfter("99999999"),
+			func(at time.Time) bool { return at.IsZero() }, true},
+		"unknown body with retry-after is a limit": {`{"error":"slow down"}`, retryAfter("60"),
+			func(at time.Time) bool { return !at.IsZero() }, true},
+		"concurrency with retry-after stays concurrency": {`{"error":"Too many concurrent requests"}`, retryAfter("5"), nil, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for k, v := range tc.headers {
+					w.Header()[k] = v
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				fmt.Fprint(w, tc.body)
+			}))
+			t.Cleanup(srv.Close)
+			p, err := NewSyntheticProvider(SyntheticConfig{APIKey: "syn-test-key", ModelID: "hf:test", BaseURL: srv.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = callOnce(p)
+			q, ok := AsQuotaExhausted(err)
+			if ok != tc.quota {
+				t.Fatalf("typed quota = %v, want %v (err %v)", ok, tc.quota, err)
+			}
+			if ok && (q.Provider != "synthetic" || !tc.want(q.RetryAt)) {
+				t.Fatalf("quota = %+v, unexpected reset time", q)
+			}
+		})
+	}
+}

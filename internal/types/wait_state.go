@@ -34,6 +34,15 @@ type WaitState struct {
 	// zero when only an outer deadline bounds it.
 	Since time.Time `json:"since"`
 	Until time.Time `json:"until,omitempty"`
+	// ExpectedUntil is when the resource is expected back (a provider
+	// quota's reset time), zero when unknown; ExpectedEstimated says it is
+	// an estimate (the gateway's cooldown) rather than the holder's word.
+	ExpectedUntil     time.Time `json:"expected_until,omitempty"`
+	ExpectedEstimated bool      `json:"expected_estimated,omitempty"`
+	// Provider and Model name an external resource's holder: the model
+	// provider whose quota a provider_quota wait waits on.
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
 	// CheckEverySec is how often the wait is re-checked; 0 when it is
 	// woken instead.
 	CheckEverySec int `json:"check_every_s,omitempty"`
@@ -79,6 +88,9 @@ const (
 	// assignment or operation serves it, so it waits on the owner's next
 	// revise (docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md).
 	WaitKindNoNextActor WaitKind = "no_next_actor"
+	// WaitKindProviderQuota is a desk loop parked on an exhausted model
+	// provider quota (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+	WaitKindProviderQuota WaitKind = "provider_quota"
 )
 
 // Label is the kind in words.
@@ -102,6 +114,8 @@ func (k WaitKind) Label() string {
 		return "unreadable state"
 	case WaitKindNoNextActor:
 		return "a next actor"
+	case WaitKindProviderQuota:
+		return "provider quota"
 	}
 	return strings.ReplaceAll(string(k), "_", " ")
 }
@@ -137,6 +151,7 @@ func (w *WaitState) SentenceAt(now time.Time) string {
 	var b strings.Builder
 	b.WriteString("waiting for ")
 	b.WriteString(firstNonEmptyString(w.Resource, w.Kind.Label()))
+	b.WriteString(w.expectedText(now))
 	if w.Class == WaitClassPolicy {
 		b.WriteString(" (policy)")
 	}
@@ -193,7 +208,7 @@ func (w *WaitState) TextureLine(now time.Time) string {
 	if w.Since.IsZero() || minutes < 1 {
 		minutes = 1
 	}
-	line := fmt.Sprintf("Waiting %d min for %s", minutes, firstNonEmptyString(w.Resource, w.Kind.Label()))
+	line := fmt.Sprintf("Waiting %d min for %s%s", minutes, firstNonEmptyString(w.Resource, w.Kind.Label()), w.expectedText(now))
 	if len(w.Holders) > 0 {
 		held := make([]string, 0, len(w.Holders))
 		for _, h := range w.Holders {
@@ -206,6 +221,73 @@ func (w *WaitState) TextureLine(now time.Time) string {
 		line += ", held by " + joinAnd(held)
 	}
 	return line
+}
+
+// expectedText is " (about N min)" while the resource is expected back
+// later, " (expected about now)" once that time passed, "" when unknown.
+func (w *WaitState) expectedText(now time.Time) string {
+	if w.ExpectedUntil.IsZero() {
+		return ""
+	}
+	left := w.ExpectedUntil.Sub(now)
+	if left <= 0 {
+		return " (expected about now)"
+	}
+	minutes := int((left + time.Minute - 1) / time.Minute)
+	if minutes < 1 {
+		minutes = 1
+	}
+	if minutes >= 120 {
+		return fmt.Sprintf(" (about %d h)", (minutes+30)/60)
+	}
+	return fmt.Sprintf(" (about %d min)", minutes)
+}
+
+// ProviderDisplayName is a model provider's name as the owner reads it.
+func ProviderDisplayName(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "synthetic":
+		return "Synthetic"
+	case "chatgpt":
+		return "ChatGPT"
+	case "openrouter":
+		return "OpenRouter"
+	case "opencode-go", "opencode":
+		return "OpenCode"
+	case "zai":
+		return "Z.ai"
+	case "bedrock":
+		return "Bedrock"
+	case "":
+		return "the provider"
+	}
+	return strings.TrimSpace(provider)
+}
+
+func quotaResource(provider string) string {
+	if strings.TrimSpace(provider) == "" {
+		return "the provider quota to reset"
+	}
+	return "the " + ProviderDisplayName(provider) + " quota to reset"
+}
+
+// NewProviderQuotaWait is the wait of a desk loop parked on an exhausted
+// provider quota: true contention on an external resource, expected back at
+// expected (zero when unknown), re-checked every checkEvery.
+func NewProviderQuotaWait(subject, provider, model string, since, expected time.Time, estimated bool, checkEvery time.Duration, detail string) *WaitState {
+	w := &WaitState{
+		Kind: WaitKindProviderQuota, Class: WaitClassContention, Subject: subject,
+		Resource: quotaResource(provider),
+		Provider: strings.TrimSpace(provider), Model: strings.TrimSpace(model),
+		Since: since.UTC(), ExpectedEstimated: estimated && !expected.IsZero(), Detail: detail,
+	}
+	if !expected.IsZero() {
+		w.ExpectedUntil = expected.UTC()
+	}
+	if checkEvery > 0 {
+		w.CheckEverySec = max(int(checkEvery/time.Second), 1)
+	}
+	return w
 }
 
 func (h WaitHolder) render(now time.Time) string {

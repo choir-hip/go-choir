@@ -1008,6 +1008,9 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	if agentID == agentprofile.Management || strings.HasPrefix(agentID, agentprofile.Management+":") {
 		pack.Waits = rt.assignmentWaitViews(ownerID, computerID)
 	}
+	// Every desk sees the computer's loops parked on a provider quota
+	// (provider_quota_wait.go).
+	pack.ProviderWaits = rt.providerWaitViews(ownerID, computerID)
 	return &pack
 }
 

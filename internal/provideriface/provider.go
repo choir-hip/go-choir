@@ -12,6 +12,7 @@ package provideriface
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -263,4 +264,39 @@ type Config struct {
 	// MaxManagementTaskSlots. The owner's management.serial_tasks setting
 	// holds it at 1 live. Env: RUNTIME_MANAGEMENT_TASK_SLOTS.
 	ManagementTaskSlots int
+}
+
+// ProviderQuotaError is the gateway's typed answer that a model provider's
+// quota is exhausted (HTTP 429, kind provider_quota): true contention on an
+// external resource. A desk loop with no pool member left parks on it until
+// RetryAt instead of failing
+// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+type ProviderQuotaError struct {
+	Provider string
+	Model    string
+	// Reason is "provider quota exhausted (<provider>)"; Message is the
+	// gateway's sanitized error text.
+	Reason  string
+	Message string
+	// RetryAt is when the quota is expected to reset (zero when unknown);
+	// RetryAtEstimated says it is the gateway's cooldown, not the
+	// provider's own time.
+	RetryAt          time.Time
+	RetryAtEstimated bool
+}
+
+func (e *ProviderQuotaError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return "gateway client: " + e.Message
+}
+
+// AsProviderQuota returns err's provider quota answer, if it is one.
+func AsProviderQuota(err error) (*ProviderQuotaError, bool) {
+	var q *ProviderQuotaError
+	if errors.As(err, &q) && q != nil {
+		return q, true
+	}
+	return nil, false
 }

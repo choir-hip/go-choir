@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,44 @@ type ProviderResponse struct {
 // or upstream response bodies (VAL-GATEWAY-007).
 type ErrorResponse struct {
 	Error string `json:"error"`
+	// A provider quota answer (HTTP 429) is typed so the guest parks instead
+	// of failing: Kind "provider_quota", the provider and model, the reason
+	// in words, and when the quota is expected to reset (RFC 3339; estimated
+	// when it is the gateway's cooldown, not the provider's time)
+	// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+	Kind             string `json:"kind,omitempty"`
+	Provider         string `json:"provider,omitempty"`
+	Model            string `json:"model,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	RetryAt          string `json:"retry_at,omitempty"`
+	RetryAtEstimated bool   `json:"retry_at_estimated,omitempty"`
+}
+
+// ErrorKindProviderQuota is the kind of a provider quota answer.
+const ErrorKindProviderQuota = "provider_quota"
+
+func quotaModel(fromErr, requested string) string {
+	if strings.TrimSpace(fromErr) != "" && fromErr != "(default)" {
+		return fromErr
+	}
+	return requested
+}
+
+// writeProviderQuota answers a call that met an exhausted provider quota:
+// 429 with Retry-After when the reset time is known, and the typed body.
+func writeProviderQuota(w http.ResponseWriter, q *provider.QuotaExhaustedError, model string, now time.Time) {
+	body := ErrorResponse{
+		Error: sanitizeError(q), Kind: ErrorKindProviderQuota, Provider: q.Provider,
+		Model: quotaModel(q.Model, model), Reason: "provider quota exhausted (" + q.Provider + ")",
+		RetryAtEstimated: q.RetryAtEstimated,
+	}
+	if !q.RetryAt.IsZero() {
+		body.RetryAt = q.RetryAt.UTC().Format(time.RFC3339)
+		if left := q.RetryAt.Sub(now); left > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int((left+time.Second-1)/time.Second)))
+		}
+	}
+	writeGatewayJSON(w, http.StatusTooManyRequests, body)
 }
 
 // Handler provides HTTP handlers for the gateway service.
@@ -484,6 +523,10 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		sanitized := sanitizeError(err)
 		log.Printf("gateway: provider call failed for autoputer %s: %v (sanitized: %s)",
 			computerID, err, sanitized)
+		if q, ok := provider.AsQuotaExhausted(err); ok {
+			writeProviderQuota(w, q, req.Model, time.Now())
+			return
+		}
 		status := http.StatusBadGateway
 		if provider.IsMediaError(err) {
 			// A refused image is the caller's error: not retried as a
@@ -525,7 +568,9 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
 
+	wrote := false
 	resp, err := p.Stream(ctx, llmReq, func(chunk provider.StreamChunk) {
+		wrote = true
 		// Marshal the chunk as SSE data.
 		data, err := json.Marshal(chunk)
 		if err != nil {
@@ -546,6 +591,13 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 		sanitized := sanitizeError(err)
 		log.Printf("gateway: streaming provider call failed for autoputer %s: %v (sanitized: %s)",
 			computerID, err, sanitized)
+		if q, ok := provider.AsQuotaExhausted(err); ok && !wrote {
+			// Nothing streamed yet: the typed quota answer, as unstreamed.
+			w.Header().Del("Cache-Control")
+			w.Header().Del("X-Accel-Buffering")
+			writeProviderQuota(w, q, llmReq.Model, time.Now())
+			return
+		}
 
 		errData, _ := json.Marshal(map[string]string{"error": sanitized})
 		fmt.Fprintf(w, "data: %s\n\n", errData)

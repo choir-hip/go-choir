@@ -124,7 +124,7 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 		// sanitized status text the breaker reads.
 		if resp.StatusCode == http.StatusPaymentRequired ||
 			(resp.StatusCode == http.StatusTooManyRequests && openRouterRateLimitIsQuota(reason)) {
-			return nil, &upstreamQuotaError{provider: "openrouter", status: resp.Status}
+			return nil, newQuotaError("openrouter", resp)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			// A short rate limit (the per-minute cap): the guest retries

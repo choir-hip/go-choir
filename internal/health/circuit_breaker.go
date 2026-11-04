@@ -237,6 +237,32 @@ func (b *CircuitBreaker) Trip(cooldown func(trips int) time.Duration) bool {
 	return true
 }
 
+// TripUntil opens the breaker until the absolute time until: the caller
+// knows when the upstream will take calls again (a quota's reset time), so
+// the breaker half-opens then, not at its own backoff. A breaker already
+// open is extended to until when that is later, without counting a trip:
+// calls in flight when it opened must not stack trips. It reports whether
+// this call opened the breaker; an until not after now opens nothing.
+func (b *CircuitBreaker) TripUntil(until time.Time) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.maybeHalfOpenLocked()
+	now := b.cfg.Now()
+	if !until.After(now) {
+		return false
+	}
+	if b.state == StateOpen {
+		if until.After(b.openedAt.Add(b.openFor)) {
+			b.openFor = until.Sub(b.openedAt)
+		}
+		return false
+	}
+	b.consecutiveWins = 0
+	b.openLocked()
+	b.openFor = until.Sub(b.openedAt)
+	return true
+}
+
 func (b *CircuitBreaker) closeLocked() {
 	b.state = StateClosed
 	b.consecutiveFails = 0

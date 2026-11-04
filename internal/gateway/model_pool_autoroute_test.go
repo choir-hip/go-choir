@@ -46,7 +46,9 @@ func newQuotaFake(t *testing.T, mode string) *quotaFake {
 		w.Header().Set("Content-Type", "application/json")
 		switch f.mode.Load().(string) {
 		case "quota":
-			w.Header().Set("x-synthetic-quotas", `{"subscription":{"limit":135,"requests":135},"planWeeklyLimit":{"percentRemaining":0,"nextRegenAt":"2026-11-05T00:00:00Z"}}`)
+			// No reset time: the doubling quota cooldown applies (a known
+			// reset time is provider_quota_wait_test.go's).
+			w.Header().Set("x-synthetic-quotas", `{"subscription":{"limit":135,"requests":135},"planWeeklyLimit":{"percentRemaining":0}}`)
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = fmt.Fprint(w, `{"error":"You've exceeded your subscription rate limits. Upgrade, or try again later"}`)
 		case "concurrent":
@@ -215,8 +217,11 @@ func TestChatGPTQuotaCoolsOnlyThatModel(t *testing.T) {
 	if err := callModel(cbp, "gpt-6-luna"); err == nil || !strings.Contains(err.Error(), "quota exhausted") {
 		t.Fatalf("first: %v", err)
 	}
-	if err := callModel(cbp, "gpt-6-luna"); err == nil || !strings.Contains(err.Error(), "provider chatgpt model gpt-6-luna: circuit open") {
-		t.Fatalf("second: %v, want the model's circuit open", err)
+	// The refusal names the quota, not "model unhealthy"
+	// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
+	if err := callModel(cbp, "gpt-6-luna"); err == nil || !strings.Contains(err.Error(), "provider chatgpt model gpt-6-luna: provider quota exhausted (chatgpt)") ||
+		!strings.Contains(err.Error(), "circuit open") || strings.Contains(err.Error(), "unhealthy") {
+		t.Fatalf("second: %v, want the model's quota circuit open", err)
 	}
 	if stub.count("gpt-6-luna") != 1 {
 		t.Fatalf("upstream calls = %d, want 1", stub.count("gpt-6-luna"))
