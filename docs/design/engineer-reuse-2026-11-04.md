@@ -1,6 +1,10 @@
 # Engineer reuse: a rejection returns to the same engineer; an app's engineer resumes from its lineage (2026-11-04)
 
-Status: design, revision 1. Mutation class of this doc: green. The change
+Status: design, revision 2: revision 1 reviewed (Devin and DeepSeek v4.1
+flash, both "revise"); their blocking findings (the retained-candidate
+composition; a passed candidate lost to a run end before its Complete
+commits) and the non-blocking ones are folded in below and listed in
+"Review round 1". Mutation class of this doc: green. The change
 it designs is red: management's Verify (run acceptance), the assignment's
 terminal saga, the self-development operation's identity, and the
 engineering prompt. Code refs are at `d64f85c82`.
@@ -62,9 +66,9 @@ docs/problems/frozen-candidate-dies-with-build-deadline-2026-11-04.md):
 The parallel fix on branch `freeze-decision-deadline`
 (docs/problems/frozen-candidate-dies-with-build-deadline-2026-11-04.md)
 retains a candidate frozen when its build's clock ends, and admits Verify
-on that cancelled assignment's retained candidate. This design composes
-with it: a retained candidate has no live engineer, so a rejection of it
-takes today's path (item 4).
+on that cancelled assignment's retained candidate. A retained candidate
+has no live engineer, so a rejection of it takes today's path (item 4).
+The two changes compose only under the merge rules in A6.
 
 ## The decision
 
@@ -140,6 +144,10 @@ After the verdict is recorded:
 
 - it wakes the parked engineer (an in-memory signal keyed by the
   assignment; the park re-reads durable state on wake, A3);
+- a `fail` in review settles none of the assignment's `verify_pass`
+  precommits: the claim is about the assignment's candidate, which a later
+  revision may be; a pass, or the round's end (`SettleRuleAtTerminal`:
+  "no completed candidate"), settles it;
 - on `fail`, it mints one platform Note to the Texture the round serves,
   through the progress relay's record shape and gate
   (`engineering.progress_to_texture`): "Management rejected candidate
@@ -163,15 +171,18 @@ waits, with no model call, until one of:
 
 | outcome | how it is read | what the park does |
 |---|---|---|
-| pass | operation `awaiting_approval` or later | commits the kept Complete through `recordAssignedEngineeringReport` (the terminal saga, under the saga mutex, as `commitCompleteIntent` does), then ends the loop (new `Terminal` on the batch-wait result) |
+| pass | operation `verified`, `awaiting_approval`, `accepted`, `materializing` or `applied` | commits the kept Complete through `recordAssignedEngineeringReport` (the terminal saga, under the saga mutex, detached from the activation with its own 3-minute deadline, as `commitTray` commits a cell's Complete), then ends the loop (new `Terminal` on the batch-wait result); if the commit fails, resumes the turn with the error, and that candidate's next Complete is not diverted again |
 | fail, revisions left | operation `failed` with the judgment-rejected error | resumes the turn: "Management rejected candidate <op> (N of 3): <reason>. Your capsule and your work are as you left them. Fix what the reason names, re-run the build and the checks Freeze cites, choir.Freeze again, then choir.Complete." plus the activation budget line |
-| other operation end | operation terminal for another cause, or the assignment terminal | resumes the turn with the fact; the completion guard handles the rest as today |
-| no verdict in `reviewParkMax` (20 min) | timer | commits the kept Complete (today's order: the round ends, the candidate stays frozen for management's Verify on the final Report) |
+| other operation end | any other state: failed for another cause, `rejected` by the owner, `degraded`, `rollback_pending`, `rolled_back` | resumes the turn with the fact; the completion guard handles the rest as today |
+| no verdict in `reviewParkMax` (20 min) | timer | commits the kept Complete (today's order: the round ends, the candidate stays frozen for management's Verify on the final Report); the candidate is not diverted again |
 | run context ends | ctx | returns its error, as today |
 
-The park reads only durable state (the operation and the assignment) and
-registers its wake before the first read, so a verdict that lands between
-the cell and the park is not missed. It is bounded by `reviewParkMax`, the
+The park reads only durable state (the operation) and registers its wake
+before the first read, so a verdict that lands between the cell and the
+park is not missed. A Verify signals the wake; an owner act or a close on
+the operation does not, so the park also re-reads every 30 seconds
+(`reviewParkRecheck`). The re-read is a bounded backstop on one row for at
+most 20 minutes, not a delivery mechanism. It is bounded by `reviewParkMax`, the
 activation budget and the assignment deadline. It is one completion-guard
 wait (bounded by `maxCompletionGuardWaits`).
 
@@ -188,8 +199,47 @@ rules, carry, the cancellation choke point, outcome refs, the close at the
 end, screens) goes through it.
 
 `openFreezeCandidate` opens revision n+1 only when revision n is `failed`
-by a judgment rejection, the assignment is open, and n+1 <= 3. Any other
-terminal state of the current revision keeps today's refusal. The
+by a judgment rejection, the assignment is open, and n+1 <= 3. "By a
+judgment rejection" is the verdict's terminal error *and* the verification
+event it stamps on the operation (`VerifierRefs`); no cancellation close
+stamps one. "The assignment is open" holds by construction: only the bound
+live run of an open assignment can Freeze. Any other terminal state of the
+current revision keeps today's refusal. Parsers of the key (not only
+resolvers) go through `store.EngineeringFreezeAssignmentOf` and
+`store.IsEngineeringFreezeKeyOf` (`rebase_content.go`,
+`openOperationHold`).
+
+The review admission's report id is the one derivation
+(`partialReportID`) the store-side partial report also uses, so the two
+cannot drift.
+
+**A passed candidate survives its run's end.** Between the pass and the
+commit of the kept Complete the assignment is open and its candidate is
+`awaiting_approval`, a state no open assignment reached before. When the
+run ends in that window (activation budget, deadline, cancel, crash), the
+cancellation choke point (`failBoundSelfdevOperation`) leaves an
+`awaiting_approval` candidate for the owner's decision instead of failing
+it, as a completed assignment's candidate is left today; the assignment
+itself still ends. A trajectory's cancellation still closes it
+(`failTrajectorySelfdevOperations`).
+
+### A6. Merge rules with the retained-candidate fix
+
+Whichever of the two lands second applies these:
+
+1. Every reader on `retained_candidate.go` that resolves the assignment's
+   operation by `EngineeringFreezeIdempotencyKey` (`frozenCandidateOf`,
+   `decideRetention`, `retainedFor`, `recordRetention`) resolves through
+   `assignmentOperation`, so a build-end cancel during rework retains the
+   current revision; the retention record names that revision's operation.
+2. `closeOrphanedFrozenCandidatesAtCrashBoot` parses the assignment with
+   `store.EngineeringFreezeAssignmentOf`, never `CutPrefix("freeze-open:")`,
+   so a revision n > 1 orphan is closed at the crash boot.
+3. management's Verify admits the union: a completed assignment, a
+   cancelled assignment's retained candidate, or an open assignment in
+   review.
+4. `closeEndedAssignmentSelfdevOperation` keeps the retained exclusion for
+   a cancelled assignment's retained frozen candidate. The
 computer's one-open-operation rule is unchanged: revision n is terminal
 before n+1 opens, and admission holds one live assignment.
 
@@ -303,15 +353,25 @@ still offered (the carry gives the patch; the lineage gives the context).
    a failed candidate. The round ends with the judge's reason.
 7. The rework Freeze while the current revision failed for another cause
    (cancel, apply failure): refused as today.
+7a. The build clock ends while revision n > 1 is frozen or under review:
+    the cancellation choke point resolves the current revision (A4); with
+    the retained-candidate fix, A6 rule 1 retains it.
+7b. management's Verify on the review is refused (digest, store error):
+    the park waits; at `reviewParkMax` it commits the Complete and the old
+    order takes over.
+7c. Pass, then the run ends before the kept Complete commits: the
+    candidate stays `awaiting_approval` for the owner (A4, last paragraph);
+    the assignment ends; the restart rule is unaffected (an
+    `awaiting_approval` candidate is a decided object, not work, and it
+    survives a crash today for a completed assignment).
 8. Two Freezes race a rejection: revision n+1 opens through the store's
    idempotency key; a replay returns it.
 9. The kept Complete is lost (crash): there is no park to commit it; the
    restart rule closes the round.
 10. Pass, then the terminal saga fails: the saga's own watchdog
     re-drives it, as for any Complete (`armAssignedEngineeringFateWatchdog`).
-11. Precommits: a rejection settles the assignment's `verify_pass`
-    precommits `no` at the first rejection; later revisions are not
-    scored again. Named residual R2.
+11. Precommits: a rejection in review settles nothing; the final verdict
+    or the round's end settles `verify_pass` (A2).
 12. The activation budget runs out during rework: the park's resume carries
     the budget line; at the end, today's cancellation (or retention) runs.
 13. Phase B: the lineage names an app the request does not concern (a word
@@ -341,7 +401,9 @@ inert data a reverted runtime never reads. There is no runtime switch (the
   apply would wait on each other. Those findings reach the next round by
   the carry (same request) and by the lineage (same app). The Freeze's own
   gate (a refused Freeze) already returns in the cell.
-- R2. Precommits are per assignment, not per revision (failure mode 11).
+- R2. Precommits stay per assignment: `freeze_within`, `tests_pass` and
+  `paths_confined` settle at the first Freeze and are not re-scored for a
+  later revision.
 - R3. The rework shares the build's activation budget; a fresh budget per
   revision would need the run to passivate and re-activate (the durable
   park I21 asks for), a later step.
@@ -352,7 +414,34 @@ inert data a reverted runtime never reads. There is no runtime switch (the
   asked to keep (the conversation and the capsule). The durable form is
   the run's passivation, with the verdict delivered to its inbox; named
   for the later step with R3.
-- R5. Phase B's app match is a word match unless management names the app.
+- R5. Phase B's app match is a word match unless management names the app
+  (the Cast spec gains an `"app"` field in phase B).
+- R6. The Texture rejection line rides the progress relay's gate
+  (`engineering.progress_to_texture`, default on): a computer that stored
+  it off gets no line, as for every relay.
+- R7. A computer that runs both this and the retained-candidate fix needs
+  the A6 merge rules; until the second lands, its own tests are the check.
+
+## Review round 1
+
+Devin (revise) and DeepSeek v4.1 flash (revise), on revision 1:
+
+- Blocking, both: the retained-candidate fix's readers resolve revision 1
+  only, and its crash-boot sweep misparses revision keys; Verify needs the
+  union. Fixed: A6.
+- Blocking, DeepSeek: a pass is lost when the run ends before the kept
+  Complete commits, because the cancellation close fails an
+  `awaiting_approval` candidate. Fixed: A4's last paragraph, failure mode
+  7c, and the commit detached from the activation (A3).
+- Non-blocking, both: the park had no wake for non-Verify transitions
+  (30 s re-read, A3); a repeated pass in the commit window was refused
+  (admission includes `awaiting_approval`); the report-id derivation was
+  duplicated (shared); "awaiting_approval or later" admitted `degraded`
+  (states enumerated, A3); the timeout path could re-divert (not diverted
+  again); precommits settled `no` at the first rejection (A2); the
+  rejection test was a string prefix (plus the verification event, A4);
+  the Texture line's gate is named (R6); the Cast has no `"app"` field yet
+  (phase B adds it).
 
 ## Staging proof
 
