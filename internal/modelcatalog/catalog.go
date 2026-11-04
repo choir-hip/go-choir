@@ -260,21 +260,9 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 1048576,
 		},
 
-		// The same DeepSeek V4.1 Flash 1017 snapshot the Synthetic arms pin,
-		// served by OpenRouter (public models listing 2026-11-04: a
-		// 1048576-token window, 0.15/0.60 per million, input text and
-		// image, tools, efforts max/high/low/none). The DeepSeek test
-		// arms move to it while Synthetic's subscription limit refuses
-		// them, so the arms keep their model and the per-model comparison
-		// holds (docs/problems/synthetic-limit-stalls-deepseek-arms-2026-11-04.md).
-		// In no pool: the arms pin it.
-		{
-			ID:                  "deepseek/deepseek-v4.1-flash-1017",
-			DisplayName:         "DeepSeek V4.1 Flash 1017 (OpenRouter)",
-			Provider:            "openrouter",
-			MaxOutputTokens:     65536,
-			ContextWindowTokens: 1048576,
-		},
+		// No DeepSeek through OpenRouter (owner, 2026-11-04: "only use Jev
+		// via openrouter, and free models like crouton"). The arms that ran
+		// DeepSeek V4.1 Flash there drained the account's credit.
 
 		{
 			ID:                  "gpt-6-luna",

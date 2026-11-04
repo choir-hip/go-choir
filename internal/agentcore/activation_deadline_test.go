@@ -165,9 +165,9 @@ func TestModelReselectReadsTheCurrentPolicy(t *testing.T) {
 	if _, _, ok := reselect(context.Background()); ok {
 		t.Fatal("an unchanged policy read as a change")
 	}
-	write("openrouter", "deepseek/deepseek-v4.1-flash-1017")
+	write("openrouter", "stealth/crouton-alpha")
 	next, _, ok := reselect(context.Background())
-	if !ok || next.Provider != "openrouter" || next.Model != "deepseek/deepseek-v4.1-flash-1017" {
+	if !ok || next.Provider != "openrouter" || next.Model != "stealth/crouton-alpha" {
 		t.Fatalf("after the policy moved: %+v ok=%v", next, ok)
 	}
 	explicit := &types.RunRecord{RunID: "x", OwnerID: "o", Metadata: map[string]any{"llm_provider": "synthetic", "llm_model": "m"}}
@@ -198,7 +198,7 @@ func TestModelReselectKeepsTheModelWhenThePolicyIsNotUsable(t *testing.T) {
 
 	for name, breakIt := range map[string]func(){
 		"not found":    func() { _ = os.Remove(path) },
-		"permission":   func() { write(role("openrouter", "deepseek/deepseek-v4.1-flash-1017")); _ = os.Chmod(path, 0o000) },
+		"permission":   func() { write(role("openrouter", "stealth/crouton-alpha")); _ = os.Chmod(path, 0o000) },
 		"parse error":  func() { write("[roles.management\nmodel = \"openrouter/x\"\n") },
 		"unknown pool": func() { write("# owner-edited\n[roles.management]\nmodel = \"pool:no-such-pool\"\n") },
 	} {
@@ -210,7 +210,7 @@ func TestModelReselectKeepsTheModelWhenThePolicyIsNotUsable(t *testing.T) {
 			t.Fatalf("%s: the re-read wrote a default policy file", name)
 		}
 	}
-	write(role("openrouter", "deepseek/deepseek-v4.1-flash-1017"))
+	write(role("openrouter", "stealth/crouton-alpha"))
 	if next, _, ok := reselect(context.Background()); !ok || next.Provider != "openrouter" {
 		t.Fatalf("a readable policy naming another model: %+v ok=%v", next, ok)
 	}
