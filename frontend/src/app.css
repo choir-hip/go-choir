@@ -361,13 +361,16 @@ body {
   .audio-play,
   .video-play
 ) {
+  /* The serif italic is London Salmon's voice; the control keeps the theme's
+     control surface and shadow (.app-content buttons above), so a button
+     still reads as a button. This rule used to force background, border and
+     shadow transparent with !important, which no app could override: every
+     self-development round's salmon buttons were judged bare text
+     (docs/problems/salmon-theme-strips-app-buttons-2026-11-04.md). */
   font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
   font-style: italic !important;
   font-weight: 430 !important;
-  background: transparent !important;
   color: var(--choir-text-primary) !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
 }
 
 :root[data-theme-id='london-salmon'] .app-content :is(
