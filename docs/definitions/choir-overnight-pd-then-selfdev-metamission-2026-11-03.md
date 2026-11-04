@@ -126,26 +126,26 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 950f74113 (engineer clock: elapsed and budget in Context, one
-    note at minute 40), over e884887f6 (calibration C2-C11: Cast-level A/B,
-    no anchor numbers, per-type bins, clock bias, resolution, read verb,
-    censoring, claims in trace export) and 29894990c (choir-shot waits for
-    step animations). In CI: 1104c9890, London Salmon no longer strips app
-    buttons transparent with !important, the platform cause of most
-    repeated "bare salmon buttons" rejections. Applied and published on the
-    seed: luna calendar-next, claude library-next (first release with its
-    own screenshots). Settled Cast claims, 8 rounds: freeze_minutes held 6
-    of 8, verify_pass 3 of 8 (over-confident), judge_accepts 3 of 8,
-    owner_approves 1 of 4. Judge passes rounds the owner gate rejects
-    (deepseek r4): judge-per-shot builder at tier 2. crouton Calendar paused
-    after six rounds; resumes as engineer reuse's proof round. In review:
-    engineer reuse (final mirror), management verify-owed guard, E1
-    mechanisms, judge per-shot. Node B: 11.6 GB available, 100 jobs
-    admitted, 0 refused in the hour.
+    staging 4cf05e4d0 (08:39Z): engineer reuse (a rejection, including a
+    per-shot judge flip, returns to the same engineer for up to 3
+    candidates; an app's next engineer starts from the last one's handoff),
+    the judge asks six questions of every shot (modal over a scrim passes;
+    management quotes vision answers verbatim), management verify-owed
+    guard, engineer clock, London Salmon buttons fixed, calibration cuts 1
+    and 2 plus C2-C11, E1 mechanisms (not started: the protocol needs a
+    quiet 12-hour window and the owner's act on the arm settings). Applied
+    and published this window: luna calendar-next, claude library-next r3
+    and r4, pool library-next r6. Judge false negatives found and fixed
+    (scrim modal; misquoted vision answer). Calibration: management
+    over-estimates freeze minutes on small rounds (14 to 22 min against 35
+    to 38 stated) and over-states verify_pass (about 0.7 stated, under 0.5
+    held). Building: claude and pool calendar-next r1, luna files-next r1,
+    crouton library r5; queued: reuse proof rounds (crouton Calendar r7,
+    deepseek Calendar r6).
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
   next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
   blocker: none
-  next_action: land engineer reuse, verify-owed and judge per-shot as approved; prove reuse on crouton Calendar r7; land E1 and assign arms; morning letter
+  next_action: prove engineer reuse on the two proof rounds (rejection, rev:2 Freeze, no new Cast); keep four arms building; start E1 after a quiet 12-hour window with the owner act
 receipts: []
