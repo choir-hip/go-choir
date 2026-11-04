@@ -38,3 +38,17 @@ revert the commit.
 Cost note: the price lookup matches by model name and so prices the
 OpenRouter calls at Synthetic's 0.60/1.20 entry, which overstates
 OpenRouter's price. That is the safe direction for a cost report.
+
+## Route facts, read before landing (Devin review 1)
+
+OpenRouter's public models listing for `deepseek/deepseek-v4.1-flash-1017`
+on 2026-11-04: input modalities text and image; supported parameters
+include tools, tool_choice, parallel_tool_calls, reasoning and
+reasoning_effort; reasoning optional (default on, default effort high) with
+efforts max, high, low and none only. The OpenRouter effort map was
+crouton's (it sent minimal, medium and xhigh, which this model refuses), so
+the map is now per model: for DeepSeek it follows Synthetic's meaning for
+the same snapshot (minimal and the disable spellings to none, medium to
+high) and sends xhigh, which this listing lacks, as max. Vision stays on,
+on the listing's evidence; a refused image would show as a 400 on the
+verifier_multimodal desk.

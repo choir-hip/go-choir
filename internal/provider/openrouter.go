@@ -91,7 +91,7 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 		Tools:           convertOpenAIChatTools(req.Tools),
 		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
 		Stream:          req.Stream,
-		ReasoningEffort: openRouterReasoningEffort(req.ReasoningEffort),
+		ReasoningEffort: openRouterReasoningEffort(modelID, req.ReasoningEffort),
 	}
 	if req.MaxTokens > 0 {
 		maxTokens := req.MaxTokens
@@ -155,12 +155,31 @@ func openRouterRateLimitIsQuota(reason string) bool {
 }
 
 // openRouterReasoningEffort maps Choir's effort to the values the models
-// listing advertises for stealth/crouton-alpha (2026-11-03: max, xhigh,
-// high, medium, low, minimal). Reasoning is mandatory there, so "none" is
-// a 400 ("cannot be disabled"): the disable spellings map to minimal. An
-// unknown value is a 400 too, so it is omitted (model default).
-func openRouterReasoningEffort(effort string) string {
-	switch e := strings.ToLower(strings.TrimSpace(effort)); e {
+// listing advertises for the model. stealth/crouton-alpha (2026-11-03: max,
+// xhigh, high, medium, low, minimal) makes reasoning mandatory, so "none" is
+// a 400 ("cannot be disabled") and the disable spellings map to minimal.
+// deepseek/deepseek-v4.1-flash-1017 (2026-11-04: max, high, low, none;
+// optional) takes Synthetic's meaning for the same snapshot: the disable
+// spellings and minimal are none, medium is high, and xhigh, which this
+// listing lacks, is max. An unknown value is a 400 on either, so it is
+// omitted (model default).
+func openRouterReasoningEffort(model, effort string) string {
+	e := strings.ToLower(strings.TrimSpace(effort))
+	if strings.HasPrefix(strings.ToLower(model), "deepseek/") {
+		switch e {
+		case "none", "low", "high", "max":
+			return e
+		case "minimal", "off", "disabled", "false":
+			return "none"
+		case "medium":
+			return "high"
+		case "xhigh":
+			return "max"
+		default:
+			return ""
+		}
+	}
+	switch e {
 	case "minimal", "low", "medium", "high", "xhigh", "max":
 		return e
 	case "none", "off", "disabled", "false":

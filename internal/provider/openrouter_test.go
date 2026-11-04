@@ -101,8 +101,30 @@ func TestOpenRouterReasoningEffortNeverSendsAnInvalidValue(t *testing.T) {
 		"max":      "max",
 		"turbo":    "",
 	} {
-		if got := openRouterReasoningEffort(in); got != want {
+		if got := openRouterReasoningEffort("stealth/crouton-alpha", in); got != want {
 			t.Fatalf("openRouterReasoningEffort(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// deepseek/deepseek-v4.1-flash-1017 on OpenRouter advertises only max,
+// high, low and none (models listing 2026-11-04); anything else is a 400.
+func TestOpenRouterReasoningEffortDeepSeekSendsOnlyAdvertisedValues(t *testing.T) {
+	const model = "deepseek/deepseek-v4.1-flash-1017"
+	for in, want := range map[string]string{
+		"":        "",
+		"none":    "none",
+		"off":     "none",
+		"minimal": "none",
+		"low":     "low",
+		"medium":  "high",
+		"high":    "high",
+		"xhigh":   "max",
+		"max":     "max",
+		"turbo":   "",
+	} {
+		if got := openRouterReasoningEffort(model, in); got != want {
+			t.Fatalf("openRouterReasoningEffort(%q, %q) = %q, want %q", model, in, got, want)
 		}
 	}
 }
