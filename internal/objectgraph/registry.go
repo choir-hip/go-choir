@@ -107,6 +107,9 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
 		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
+		// An app's engineering lineage: the handoff its last engineer left
+		// (docs/design/engineer-reuse-2026-11-04.md, phase B).
+		{Kind: "choir.engineering_lineage", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EngineeringLineage"},
 		// The Texture root marker (PD3 S1): which document is the computer's
 		// master document, and its generation, claimed by compare-and-set.
 		{Kind: "choir.texture_root", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.TextureRoot"},
