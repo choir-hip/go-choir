@@ -1,0 +1,8 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Image opens from the launcher with no file and says so.",
+  "ready": "[data-image-app]",
+  "expect": [
+    { "selector": "[data-media-empty]", "text": "No readable image source" }
+  ]
+}

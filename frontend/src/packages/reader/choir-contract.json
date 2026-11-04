@@ -1,0 +1,9 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Reader opens from the launcher with its file picker and an empty PDF view.",
+  "ready": "[data-reader-app]",
+  "expect": [
+    { "selector": "[data-reader-app][data-reader-status]" },
+    { "selector": "input[data-reader-file-input]", "count": 1 }
+  ]
+}

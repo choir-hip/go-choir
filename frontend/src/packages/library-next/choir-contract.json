@@ -1,0 +1,43 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "The Library opens on its list view and lists the catalog it is given.",
+  "ready": "[data-library-app][data-view=\"list\"]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/catalog/packages",
+      "status": 200,
+      "json": {
+        "count": 1,
+        "packages": [
+          {
+            "package": "reader",
+            "track": "contract-track",
+            "head_release_id": "0000000000000000000000000000000000000000000000000000000000000001",
+            "head_seq": 1,
+            "releases": 1,
+            "head_media": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/computers/contract-computer/self-development/adoptions",
+      "status": 200,
+      "json": {
+        "adoptions": []
+      }
+    }
+  ],
+  "expect": [
+    {
+      "selector": ".lib-crumb-here",
+      "text": "Library"
+    },
+    {
+      "selector": "[data-package-row][data-package=\"reader\"]",
+      "text": "reader"
+    }
+  ]
+}
