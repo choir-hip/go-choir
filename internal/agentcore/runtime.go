@@ -461,7 +461,8 @@ type Runtime struct {
 	sourceProjectionLast  *sourceproj.Result
 	// stackBaseWaiters are the documents whose Cast was refused at
 	// stack_base_moved (stack_base_wake.go); durable in a file under the updater root.
-	stackBaseWaitMu sync.Mutex
+	stackBaseWaitMu   sync.Mutex
+	stackBaseBootOnce sync.Once
 	// U4 (rebase_notice.go): the one live timer that mints a stack rebase
 	// notice, its due time, and the test seams (stay-up interval, answer
 	// window, clock and scheduler). Zero values mean the defaults.

@@ -203,6 +203,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 	// Gather and reconcile under one lock: an input read before a newer
 	// reconcile must never be applied after it (a boot pass that read an empty
 	// stack must not reset the repository once an apply has projected).
+	rt.startStackBaseBootPass()
 	rt.sourceProjectionRunMu.Lock()
 	result, err := sourceproj.Reconcile(ctx, rt.sourceProjectionInput(ctx))
 	rt.sourceProjectionRunMu.Unlock()
@@ -215,7 +216,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 	copied := result
 	rt.sourceProjectionLast = &copied
 	rt.sourceProjectionMu.Unlock()
-	rt.wakeStackBaseWaiters(ctx, reason, previous, result)
+	rt.wakeStackBaseWaiters(ctx, result)
 	if previous == nil || previous.State != result.State || result.Changed {
 		log.Printf("source projection (%s): %s base=%s head=%s booted=%s op=%s changed=%t repaired=%t diverged=%t %s",
 			reason, result.State, shortDigest(result.Base), shortDigest(result.Head), shortDigest(result.BootedBase), result.OperationID, result.Changed, result.Repaired, result.Diverged, result.Reason)

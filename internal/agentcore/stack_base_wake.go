@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -86,88 +87,105 @@ func (rt *Runtime) writeStackBaseWaiters(waiters map[string]stackBaseWaiter) {
 }
 
 // noteStackBaseWaiter records the document whose Cast was just refused at
-// stack_base_moved. One entry per document: a second refusal replaces it.
-func (rt *Runtime) noteStackBaseWaiter(w stackBaseWaiter, refusal string) {
+// stack_base_moved. One entry per document: a second refusal replaces it. If
+// the last reconcile already admits a cast (the block cleared between the
+// refusal and this registration), the waiter is woken at once.
+func (rt *Runtime) noteStackBaseWaiter(ctx context.Context, w stackBaseWaiter, refusal string) {
 	if rt == nil || strings.TrimSpace(w.DocID) == "" || !strings.HasPrefix(refusal, string(sourceproj.StateBaseMoved)) {
 		return
 	}
 	w.At = time.Now().UTC().Format(time.RFC3339Nano)
 	rt.stackBaseWaitMu.Lock()
-	defer rt.stackBaseWaitMu.Unlock()
 	waiters := rt.readStackBaseWaiters()
 	waiters[w.DocID] = w
 	rt.writeStackBaseWaiters(waiters)
+	rt.stackBaseWaitMu.Unlock()
+	if last := rt.sourceProjectionStatus(); last != nil {
+		rt.wakeStackBaseWaiters(ctx, *last)
+	}
 }
 
-// wakeStackBaseWaiters runs after a reconcile stored result over previous.
-//   - live transition (previous is stack_base_moved, result is not): wake all.
-//   - boot pass (previous nil, reason "boot"): a planned restart wakes all
-//     registered before this boot when the stack is off stack_base_moved and
-//     keeps them otherwise; a crash boot deletes them and wakes no one.
-//
-// The file is drained first, so a document is woken once per refusal. Entries
-// registered during this boot are never touched by the boot pass.
-func (rt *Runtime) wakeStackBaseWaiters(ctx context.Context, reason string, previous *sourceproj.Result, result sourceproj.Result) {
-	if rt == nil || rt.stackBaseWaitersPath() == "" {
-		return
-	}
-	live := previous != nil && previous.State == sourceproj.StateBaseMoved && result.State != sourceproj.StateBaseMoved
-	boot := previous == nil && reason == "boot"
-	if !live && !boot {
-		return
-	}
-	_, planned := rt.BootWasPlannedRestart()
-	rt.stackBaseWaitMu.Lock()
-	all := rt.readStackBaseWaiters()
-	var wake []stackBaseWaiter
-	for id, w := range all {
-		if boot {
-			at, _ := time.Parse(time.RFC3339Nano, w.At)
-			if !at.Before(rt.bootedAt) {
-				continue // registered during this boot
-			}
-			if planned && result.State == sourceproj.StateBaseMoved {
-				continue // still blocked: keep it for the clearing pass
-			}
-			if planned {
-				wake = append(wake, w)
-			}
-			delete(all, id) // a crash boot only clears
-			continue
+// startStackBaseBootPass runs once per process, at the first reconcile of any
+// reason and before the reconcile reads anything: a crash boot (no planned
+// restart marker) deletes the waiters registered before this boot and wakes no
+// one (CLAUDE.md: a crash restart never resumes work). A planned boot keeps
+// them; the first reconcile that admits a cast wakes them.
+func (rt *Runtime) startStackBaseBootPass() {
+	rt.stackBaseBootOnce.Do(func() {
+		if _, planned := rt.BootWasPlannedRestart(); planned || rt.stackBaseWaitersPath() == "" {
+			return
 		}
-		wake = append(wake, w)
-		delete(all, id)
+		rt.stackBaseWaitMu.Lock()
+		defer rt.stackBaseWaitMu.Unlock()
+		all := rt.readStackBaseWaiters()
+		for id, w := range all {
+			if at, _ := time.Parse(time.RFC3339Nano, w.At); at.Before(rt.bootedAt) {
+				delete(all, id)
+			}
+		}
+		rt.writeStackBaseWaiters(all)
+	})
+}
+
+// wakeStackBaseWaiters runs after a reconcile stored result. When the result
+// admits a cast (Refusal is empty: not pending, unavailable or unrebuildable,
+// which would refuse the re-Cast and lose the waiter), every registered
+// document is woken once and its entry removed after its note commits.
+func (rt *Runtime) wakeStackBaseWaiters(ctx context.Context, result sourceproj.Result) {
+	if rt == nil || rt.stackBaseWaitersPath() == "" || result.Refusal() != "" {
+		return
 	}
-	rt.writeStackBaseWaiters(all)
+	rt.stackBaseWaitMu.Lock()
+	pending := rt.readStackBaseWaiters()
 	rt.stackBaseWaitMu.Unlock()
-	operationID := ""
-	if previous != nil {
-		operationID = previous.OperationID
-	} else {
-		operationID = result.OperationID
-	}
-	for _, w := range wake {
-		if err := rt.wakeStackBaseWaiter(ctx, w, operationID, result); err != nil {
+	for id, w := range pending {
+		done, err := rt.wakeStackBaseWaiter(ctx, w, result)
+		if err != nil {
 			log.Printf("source projection: stack_base_moved cleared: Texture %s not woken: %v", w.DocID, err)
 		}
+		if !done {
+			continue
+		}
+		rt.stackBaseWaitMu.Lock()
+		current := rt.readStackBaseWaiters()
+		if cur, ok := current[id]; ok && cur.CastRecordID == w.CastRecordID {
+			delete(current, id)
+			rt.writeStackBaseWaiters(current)
+		}
+		rt.stackBaseWaitMu.Unlock()
 	}
 }
 
-func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, operationID string, result sourceproj.Result) error {
+// wakeStackBaseWaiter delivers the note and reports whether the entry is done:
+// the note committed, or nothing waits (document gone, archived, cancelled).
+// A read or commit failure leaves it for the next admitting reconcile.
+func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, result sourceproj.Result) (bool, error) {
 	if rt.store == nil {
-		return nil
+		return true, nil
 	}
 	doc, err := rt.store.GetLifecycleDocument(ctx, w.OwnerID, w.ComputerID, w.DocID)
-	if err != nil || doc.ArchivedAt != nil {
-		return nil // gone or archived: nothing waits
+	if errors.Is(err, store.ErrNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("document %s: %w", w.DocID, err)
+	}
+	if doc.ArchivedAt != nil {
+		return true, nil
 	}
 	inbox := currentTextureAgentID(w.DocID)
-	// Only a Texture that can take a run: a cancelled or settled document is
-	// not resumed by this note (the owner's revise continues it).
+	// The addressee rule of the rebase notice (rebaseOperationTexture): a live
+	// trajectory without a cancellation intent, whether or not it has open
+	// work (a Texture settles its items at the end of each round; the note is
+	// the wake).
 	state, err := rt.rebaseTextureRunState(ctx, w.OwnerID, w.ComputerID, strings.TrimSpace(doc.TrajectoryID), inbox)
-	if err != nil || state != rebaseTextureOpen {
-		return err
+	if err != nil {
+		return false, err
 	}
+	if state != rebaseTextureOpen && state != rebaseTextureSettled {
+		return true, nil
+	}
+	operationID := result.OperationID
 	sender := "selfdev:stack-base"
 	if operationID = strings.TrimSpace(operationID); operationID != "" {
 		sender = types.OwnerActSenderInbox(operationID)
@@ -175,7 +193,7 @@ func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, o
 	body := fmt.Sprintf("The block that refused your Cast has cleared: the applied stack is no longer on a moved base (it is now %s). Cast to management again.", result.State)
 	rec := types.CommitmentRecord{
 		SchemaID:    types.CommitmentRecordSchemaV1,
-		RecordID:    "stack-base-cleared:" + w.DocID + ":" + w.CastRecordID,
+		RecordID:    "stack-base-cleared:" + w.DocID + ":" + w.CastRecordID + ":" + shortDigest(result.Head) + ":" + shortDigest(result.BootedBase),
 		Kind:        types.CommitmentKindDirective,
 		Discrepancy: types.DiscrepancyUnresolved,
 		Provenance:  types.CommitmentProvenance{AgentID: types.OwnerActAgentID},
@@ -189,11 +207,11 @@ func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, o
 	req := types.CommitInboxRecordsRequest{OwnerID: w.OwnerID, ComputerID: w.ComputerID, CommandID: rec.RecordID, Records: []types.CommitmentRecord{rec}}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
 	if err != nil {
-		return err
+		return false, err
 	}
 	req.CommandDigest = digest
 	if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
-		return fmt.Errorf("commit %s: %w", rec.RecordID, err)
+		return false, fmt.Errorf("commit %s: %w", rec.RecordID, err)
 	}
-	return nil
+	return true, nil
 }
