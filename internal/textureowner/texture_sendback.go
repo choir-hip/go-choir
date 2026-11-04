@@ -44,7 +44,7 @@ func (h *Handler) rejectedRound(ctx context.Context, ownerID, computerID, trajec
 }
 
 func (h *Handler) refuseDoneOnRejectedRound(ctx context.Context, rec *types.RunRecord, doc types.Document, turn yaegikernel.TextureTurn) error {
-	if h == nil || h.Store == nil || rec == nil || strings.TrimSpace(turn.Done) == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
+	if h == nil || h.Store == nil || rec == nil || turn.Done == "" || strings.TrimSpace(doc.TrajectoryID) == "" {
 		return nil
 	}
 	if _, isRoot := h.textureRootFor(ctx, rec.OwnerID, doc.ComputerID, doc.DocID); isRoot {
