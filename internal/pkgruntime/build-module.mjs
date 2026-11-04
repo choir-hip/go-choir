@@ -115,6 +115,11 @@ export function mount(target, ctx) {
     async moduleParsed(info) {
       if (!info.ast || info.id === sdkFile) return;
       for (const node of info.ast.body) {
+        if (node.type === 'ExportAllDeclaration' && node.source && typeof node.source.value === 'string') {
+          const target = await this.resolve(node.source.value, info.id);
+          if (target && target.id === sdkFile) this.error(`package "${name}" must import SDK names one by one (no export * from the SDK)`);
+          continue;
+        }
         if (node.type !== 'ImportDeclaration' && node.type !== 'ExportNamedDeclaration') continue;
         if (!node.source || typeof node.source.value !== 'string') continue;
         const resolved = await this.resolve(node.source.value, info.id);
@@ -131,6 +136,11 @@ export function mount(target, ctx) {
     generateBundle(_options, bundle) {
       for (const [file, item] of Object.entries(bundle)) {
         if (item.type === 'chunk' && file !== 'module.js') this.error(`a module/v1 build is one chunk, got ${file}`);
+        // Nothing outside the verified bytes: a module that imports anything
+        // (an external, a data: URL) would run code the digest does not cover.
+        if (item.type === 'chunk' && (item.imports.length || item.dynamicImports.length)) {
+          this.error(`a module/v1 build imports nothing, got ${[...item.imports, ...item.dynamicImports].join(', ')}`);
+        }
       }
     },
   };

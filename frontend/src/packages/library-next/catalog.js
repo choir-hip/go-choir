@@ -45,7 +45,7 @@ export function plainReason(reason, status = 0) {
     case 'install_unavailable':
       return 'This computer cannot install apps right now. Nothing changed on this computer. Try again in a moment.';
     case 'release_not_published':
-      return 'That release is no longer published, so it cannot be installed. Nothing changed on this computer.';
+      return 'That release is not available to install on this computer (it is no longer published, or another owner published it). Nothing changed on this computer.';
     case 'release_id_invalid':
     case 'request_invalid':
       return 'This window sent an install the computer could not read. Nothing changed on this computer. Reload the app and try again.';
@@ -297,6 +297,9 @@ export function installState(item) {
   if (!item) return '';
   if (item.patch_matches_release === true) return 'done';
   if (item.state === 'replaced') return 'replaced';
+  // A source install from before runtime install: what it did is in this
+  // computer's source; it is neither running nor failed.
+  if (item.state === 'source') return 'source';
   const state = String((item.operation && item.operation.state) || '');
   if (state === 'failed' || state === 'rejected' || state === 'rolled_back') return 'failed';
   if (state === 'applied') return 'failed';

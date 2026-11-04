@@ -73,7 +73,7 @@
     normalizeAppId,
   } from './stores/desktop.js';
   import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
-  import { refreshInstalledPackages } from './apps/packages';
+  import { clearInstalledPackages, refreshInstalledPackages } from './apps/packages';
   import { canOpenWith } from './open-with';
   import {
     createOverviewPreviewDecisions,
@@ -167,6 +167,7 @@
       if (wasAuthenticated) {
         void flushDesktopState({ keepalive: true, allowSignedOutTransition: true });
       }
+      clearInstalledPackages();
       enterPublicDesktop();
     }
   }
@@ -1652,6 +1653,10 @@
     lastAuthenticated = authenticated;
     if (authenticated) {
       startAuthenticatedDesktop();
+      // A page load with a live session mounts already signed in, so the
+      // sign-in transition above never fires: read the installed set here too
+      // (modularity check finding F1; docs/design/s12-runtime-install-build-2026-11-04.md).
+      void refreshInstalledPackages();
     } else {
       enterPublicDesktop();
     }

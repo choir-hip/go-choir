@@ -58,6 +58,16 @@ func (h *Handler) packageInstallBody(ctx context.Context, ownerID string, raw []
 		return nil, &installRefusal{http.StatusBadRequest, "request_invalid", "action must be install or uninstall"}
 	}
 
+	// An uninstall reads nothing from the catalog: the computer removes the
+	// install of this release that is in force, from its own record, so a
+	// withdrawn, suspended, yanked or deleted release can always be removed.
+	if action == "uninstall" {
+		out, err := json.Marshal(map[string]any{"release_id": releaseID, "action": action})
+		if err != nil {
+			return nil, &installRefusal{http.StatusInternalServerError, "request_invalid", err.Error()}
+		}
+		return out, nil
+	}
 	owner := url.Values{"owner_id": {ownerID}}.Encode()
 	status, body, err := h.corpusdCall(ctx, http.MethodGet, "/internal/platform/packages/releases/"+releaseID+"?"+owner, "", nil)
 	switch {

@@ -62,6 +62,16 @@ no package code and never the publisher's declared commands. The package
 boundary plugin refuses imports that leave the package, and the shell's own
 source is not in the build directory at all.
 
+What the build is not: an OS sandbox. It runs as the autoputer user with that
+user's file access. "No network" holds by construction (locked dependencies
+symlinked in, `configFile`, `envFile` and `publicDir` off, no npm, no install
+scripts, URL and `data:` imports refused, a module that imports nothing),
+not by a network namespace. No package code runs, but a compromised locked
+dependency or a Vite or Rollup bug could act as the autoputer user during a
+build. That is the same supply-chain trust the shell's own SPA build already
+places in those dependencies; the host build (deferred) is where an enforced
+sandbox belongs.
+
 The host build stays the later optimization (one content-addressed module per
 release, shared by every adopter). The module digest is recorded per install
 now, so a host build can be compared against computer builds when it lands.
@@ -149,8 +159,13 @@ L14) already decided this: same origin for the owner's own code; another
 owner's code only in the S13 sandboxed frame. So:
 
 - the proxy and the computer both refuse an install whose release's
-  publisher is another owner (`403 cross_owner_before_frame`); an uninstall is
-  never refused for this;
+  publisher is another owner (`403 cross_owner_before_frame`). Behind corpusd's
+  owner-scoped read this is a second wall: corpusd answers 404 first, so the
+  Library says "not available to install" for both;
+- an uninstall never depends on the catalog: the proxy forwards only
+  `{release_id, action}`, with no listing gate and no blob fetch, and the
+  computer derives the package from its own in-force install record. A
+  withdrawn, yanked or garbage-collected release can always be uninstalled;
 - the bytes that run are exactly the bytes verified (digest at fetch, import
   from a `blob:` URL of those bytes);
 - the build is source only, on the owner's own computer.
@@ -175,6 +190,35 @@ here.
 | B1, B2 | a first-party package does not build; the SDK is bundled | build every in-tree package | `frontend/tests/runtime-install.spec.js` |
 | L1, L2 | changed bytes run; a missing module | the shell's loader | the same, in Chromium |
 | M1, M2 | the mounted app cannot reach the SDK or loses its CSS; destroy leaves DOM or style | wrapper | the same |
+
+## Review round 1 (Devin, DeepSeek), and the modularity check
+
+- **Uninstall always works** (B1): see D6. Tests:
+  `TestRuntimeUninstallNeedsNoCatalogRecordOrBuilder` and the proxy uninstall
+  loop over listed, withdrawn and gone releases.
+- **The fold reads the whole history.** `listReleaseAdoptions` pages until a
+  page comes back short (`TestListReleaseAdoptionsReturnsTheWholeHistory`), and
+  an attempt id that is already taken gets a `-N` suffix
+  (`TestRuntimeInstallNeverReusesAnAdoptionID`). The attempt limit is checked
+  before the build, not after.
+- **The bytes that run are the bytes verified, with no second module.** The
+  boundary plugin refuses any scheme or protocol-relative import (`data:`,
+  `https:`, `//`) and any import that does not resolve to a file; the build
+  refuses `export *` from the SDK (the shell's SDK-name check could not see
+  it) and any chunk with static or dynamic imports
+  (`TestBuildRefusesURLImportsAndSDKExportStar`).
+- **The shell.** Sign-out clears the installed set; refreshes are sequenced
+  and use `fetchWithRenewal`; an installed record that is unavailable or
+  needs an SDK the shell lacks never shadows its in-tree twin; runtime
+  definitions are keyed on `install_id|sha256`, so a refresh does not remount
+  unchanged open windows. Runtime records carry no `same_base`. Legacy
+  source-patch records show a neutral "Earlier source install".
+- **F1 (modularity check, branch `modularity`): a page load with a live
+  session never read the installed set.** `Desktop.svelte` refreshed it only
+  on a sign-in transition after mount, and a session that is live at mount
+  makes no transition. `onMount`'s signed-in branch now refreshes too. It
+  does not race sign-out clearing, which lives only in the reactive block's
+  signed-out branch, and the refresh sequence token drops a stale answer.
 
 ## Built, and deferred
 

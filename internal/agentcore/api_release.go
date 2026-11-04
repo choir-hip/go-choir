@@ -82,7 +82,10 @@ func (h *APIHandler) handleReleaseAdoptions(w http.ResponseWriter, r *http.Reque
 			writeAPIJSON(w, http.StatusBadRequest, releaseAPIError{Error: "invalid adoption request", Reason: "request_invalid"})
 			return
 		}
-		if !isPackageReleaseRecord(request.Record) {
+		// An uninstall needs no record: the computer's in-force install
+		// names the package, so a release the catalog no longer has can
+		// always be removed.
+		if request.Action != packageActionUninstall && !isPackageReleaseRecord(request.Record) {
 			// Software-release adoption (P8) is deleted: only a Library
 			// package release installs (docs/design/package-install-2026-11-04.md).
 			writeAPIJSON(w, http.StatusUnprocessableEntity, releaseAPIError{Error: "only a package release from the Library installs", Reason: "release_record_invalid"})

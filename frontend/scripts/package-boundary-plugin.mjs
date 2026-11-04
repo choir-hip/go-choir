@@ -137,8 +137,17 @@ export default function packageBoundary({ root }) {
         if (!importer) return null;
         const pkg = packageOf(importer);
         if (!pkg) return null;
+        // A URL (data:, http:, blob:, any scheme) is never a package's
+        // import: Vite does not resolve a data: URL and Rollup would leave it
+        // external, so its bytes would run unchecked. (An absolute path is
+        // judged below, after it resolves; Svelte's own CSS imports use one.)
+        if (/^[a-z][a-z0-9+.-]*:/i.test(source) || source.startsWith('//')) {
+          this.error(`package "${pkg}" may not import "${source.slice(0, 80)}"; a package reaches only its own files, src/lib/app-sdk.ts, svelte and declared dependencies`);
+        }
         const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
-        if (!resolved) return null;
+        if (!resolved || resolved.external) {
+          this.error(`package "${pkg}" may not import "${source.slice(0, 80)}" (it does not resolve to a file); a package reaches only its own files, src/lib/app-sdk.ts, svelte and declared dependencies`);
+        }
         if (!allowed(resolved.id, pkg, source)) {
           const shown = path.isAbsolute(resolved.id) ? path.relative(frontendRoot, splitQuery(resolved.id)[0]) : resolved.id;
           this.error(`package "${pkg}" may not import "${source}" (resolves to ${shown}); a package reaches only its own files, src/lib/app-sdk.ts, svelte and declared dependencies`);

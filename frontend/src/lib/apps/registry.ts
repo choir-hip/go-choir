@@ -277,18 +277,30 @@ export const HEAVY_APP_IDS = new Set(APP_REGISTRY.filter((app) => app.window.hea
 export const registryRevision = writable(0);
 const BUILT_IN: ChoirAppDefinition[] = [...APP_REGISTRY];
 const STATIC_IDS = new Set(STATIC_APPS.map((app) => app.id));
+// One definition per install and module: a refresh that leaves a package's
+// install unchanged keeps its definition object, so AppHost (which reloads on
+// a new definition) never remounts an open window for it.
+let runtimeDefinitions = new Map<string, ChoirAppDefinition>();
 
 export function applyInstalledPackages(records: InstalledPackageRecord[]): void {
   const runtime = new Map<string, ChoirAppDefinition>();
+  const kept = new Map<string, ChoirAppDefinition>();
   for (const record of records) {
     // A static app is never replaced; an in-tree package is, unless the
     // shell's SDK is out of the installed package's range (the base wins).
     if (STATIC_IDS.has(record.name) || runtime.has(record.name)) continue;
+    // The in-tree twin wins when the installed module cannot run here: the
+    // SDK is out of its range, or its module is not in the store.
     const base = BUILT_IN.some((app) => app.id === record.name);
-    if (base && !sdkSatisfies(record.requires_sdk)) continue;
-    const app = runtimeAppDefinition(record);
-    if (app) runtime.set(record.name, app);
+    if (base && (!sdkSatisfies(record.requires_sdk) || !record.available)) continue;
+    const key = `${record.install_id}|${record.module.sha256}`;
+    const app = runtimeDefinitions.get(key) || runtimeAppDefinition(record);
+    if (app) {
+      runtime.set(record.name, app);
+      kept.set(key, app);
+    }
   }
+  runtimeDefinitions = kept;
   const next = [...BUILT_IN.filter((app) => !runtime.has(app.id)), ...runtime.values()];
   APP_REGISTRY.splice(0, APP_REGISTRY.length, ...next);
   LAUNCHER_APPS.splice(0, LAUNCHER_APPS.length, ...next.filter((app) => app.launcher.menu).sort((a, b) => a.launcher.order - b.launcher.order));

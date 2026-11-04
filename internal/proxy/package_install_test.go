@@ -212,9 +212,28 @@ func TestPackageInstallIsTheOwnersActAndCarriesOnlyTheStoresVerifiedRelease(t *t
 			t.Fatalf("P1: calls missing %q:\n%s", want, calls)
 		}
 	}
-	// An uninstall names only the release; the record is the store's.
-	env.guestIn = nil
-	if rec := env.send(t, `{"release_id":"`+id+`","action":"uninstall"}`, owner); rec.Code != http.StatusCreated || !strings.Contains(string(env.guestIn), `"action":"uninstall"`) {
-		t.Fatalf("uninstall = %d, guest got %s", rec.Code, env.guestIn)
+	// B1 (review): an uninstall reads nothing from the catalog, so a
+	// withdrawn release, and one whose object and tree are gone, can always
+	// be removed; the computer works from its own install record.
+	uninstall := `{"release_id":"` + id + `","action":"uninstall"}`
+	for leg, setup := range map[string]func(){
+		"listed":    func() {},
+		"withdrawn": func() { state = pkgrelease.StateWithdrawn },
+		"gone": func() {
+			env.view = func() (int, []byte) { return http.StatusNotFound, []byte(`{"error":"package release not published"}`) }
+			env.blob = func() (int, []byte) { return http.StatusNotFound, nil }
+		},
+	} {
+		setup()
+		env.calls, env.guestIn = nil, nil
+		rec := env.send(t, uninstall, owner)
+		if rec.Code != http.StatusCreated || string(env.guestIn) != `{"action":"uninstall","release_id":"`+id+`"}` {
+			t.Fatalf("uninstall %s = %d %s, guest got %s", leg, rec.Code, rec.Body.String(), env.guestIn)
+		}
+		for _, call := range env.calls {
+			if strings.HasPrefix(call, "corpusd") {
+				t.Fatalf("uninstall %s read the catalog: %v", leg, env.calls)
+			}
+		}
 	}
 }

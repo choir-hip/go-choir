@@ -602,8 +602,10 @@ func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourcepr
 	}
 	for i := range result.Packages {
 		e := &result.Packages[i]
+		// A runtime install (S12) is not in the source stack, so it never
+		// names a stack entry.
 		for _, install := range installs { // newest first
-			if install.Kind == "package" && install.Action == "install" && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
+			if install.Kind == "package" && install.Action == "install" && install.Mode != store.ReleaseAdoptionModeRuntime && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
 				e.ReleaseID = install.ReleaseID
 				break
 			}

@@ -8,6 +8,7 @@
 // the shell alive if that gate was bypassed.
 import type { ComponentType } from 'svelte';
 import { writable } from 'svelte/store';
+import { AuthRequiredError, fetchWithRenewal } from '../auth.js';
 import type { ChoirAppDefinition } from './registry';
 
 type PackageManifest = {
@@ -161,19 +162,34 @@ function validInstalled(record: any): record is InstalledPackageRecord {
  * Reads the installed set. Signed out or no route: empty. A transient failure
  * keeps the last known set.
  */
+let refreshSeq = 0;
+
 export async function refreshInstalledPackages(): Promise<void> {
+  // Only the newest read lands: an older answer never overwrites a newer set.
+  const mine = ++refreshSeq;
+  const land = (records: InstalledPackageRecord[]) => {
+    if (mine === refreshSeq) installedPackages.set(records);
+  };
   try {
-    const res = await fetch('/api/packages/installed', { credentials: 'same-origin', cache: 'no-store' });
+    const res = await fetchWithRenewal('/api/packages/installed', { cache: 'no-store' });
     if (res.status === 401 || res.status === 403 || res.status === 404) {
-      installedPackages.set([]);
+      land([]);
       return;
     }
     if (!res.ok) return;
     const body = await res.json();
-    installedPackages.set(Array.isArray(body?.packages) ? body.packages.filter(validInstalled) : []);
-  } catch {
-    // Keep the last known set; the next change or sign-in reads it again.
+    land(Array.isArray(body?.packages) ? body.packages.filter(validInstalled) : []);
+  } catch (err) {
+    // Signed out: nothing is installed for this window. Otherwise keep the
+    // last known set; the next change or sign-in reads it again.
+    if (err instanceof AuthRequiredError) land([]);
   }
+}
+
+/** Sign-out: the previous owner's installed apps leave the launcher at once. */
+export function clearInstalledPackages(): void {
+  refreshSeq += 1;
+  installedPackages.set([]);
 }
 
 /** Tells the shell the installed set changed (the Library calls it after an install or uninstall). */
@@ -236,7 +252,7 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
  */
 export async function loadPackageModule(record: InstalledPackageRecord): Promise<PackageModule> {
   if (record.module.abi !== MODULE_ABI) throw new PackageLoadError('refused', `unsupported module ABI ${record.module.abi}`);
-  const res = await fetch(record.module.url, { credentials: 'same-origin' });
+  const res = await fetchWithRenewal(record.module.url, {});
   if (!res.ok) throw new PackageLoadError('unavailable', `the package's module is unavailable (${res.status})`);
   const bytes = await res.arrayBuffer();
   const actual = await sha256Hex(bytes);

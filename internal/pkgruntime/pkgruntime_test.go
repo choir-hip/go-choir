@@ -169,3 +169,31 @@ func TestBuildRefusesAnImportOutsideThePackage(t *testing.T) {
 		t.Fatalf("R5: build = %v", err)
 	}
 }
+
+// R9 (review): nothing outside the verified bytes runs. A literal data: (or
+// any URL) import, which Vite leaves unresolved and Rollup would externalize,
+// and an `export *` from the SDK, which would hide names from sdk_imports,
+// fail the build.
+func TestBuildRefusesURLImportsAndSDKExportStar(t *testing.T) {
+	b := builder(t)
+	for name, app := range map[string]string{
+		"dataimport": "<script>\n  import('data:text/javascript,window.x=1');\n</script>\n<p>x</p>\n",
+		"urlimport":  "<script>\n  import x from 'https://example.invalid/x.js';\n</script>\n<p>{x}</p>\n",
+	} {
+		rec, patch := runtimetest.Release(t, "owner-a", name, map[string]string{
+			"choir-package.json": runtimetest.Manifest(name, ""),
+			"App.svelte":         app,
+		})
+		if _, err := b.Build(context.Background(), rec, patch); !errors.Is(err, ErrBuild) || !strings.Contains(err.Error(), "may not import") {
+			t.Fatalf("%s: build = %v", name, err)
+		}
+	}
+	rec, patch := runtimetest.Release(t, "owner-a", "starsdk", map[string]string{
+		"choir-package.json": runtimetest.Manifest("starsdk", ""),
+		"App.svelte":         "<script>\n  import * as s from './sdk.js';\n</script>\n<p>{s.appTitle('x')}</p>\n",
+		"sdk.js":             "export * from '../../lib/app-sdk';\n",
+	})
+	if _, err := b.Build(context.Background(), rec, patch); !errors.Is(err, ErrBuild) || !strings.Contains(err.Error(), "export *") {
+		t.Fatalf("export * build = %v", err)
+	}
+}

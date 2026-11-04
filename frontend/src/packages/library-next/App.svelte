@@ -237,7 +237,7 @@
     const item = installOf(releaseId);
     if (!item) return '';
     const state = installState(item);
-    if (item.action === 'uninstall' || state === 'replaced') return state === 'done' || state === 'replaced' ? '' : 'warn';
+    if (item.action === 'uninstall' || state === 'replaced' || state === 'source') return state === 'done' || state === 'replaced' || state === 'source' ? '' : 'warn';
     return state === 'done' ? 'ok' : 'warn';
   }
 
@@ -250,7 +250,7 @@
       return state === 'failed' ? 'Uninstall failed' : 'Uninstalling';
     }
     if (state === 'done') return 'Installed';
-    if (state === 'replaced') return '';
+    if (state === 'replaced' || state === 'source') return '';
     if (state === 'failed') return 'Install failed';
     if (state === 'approve') return 'Waiting for your approval';
     return 'Installing';
@@ -262,6 +262,7 @@
     const uninstall = item.action === 'uninstall';
     if (state === 'done') return { tone: 'ok', text: uninstall ? 'Uninstalled' : 'Installed' };
     if (state === 'replaced') return { tone: '', text: 'Replaced' };
+    if (state === 'source') return { tone: '', text: 'Earlier source install' };
     if (state === 'failed') return { tone: 'warn', text: uninstall ? 'Uninstall failed' : 'Install failed' };
     if (state === 'approve') return { tone: 'warn', text: 'Waiting for your approval' };
     return { tone: 'warn', text: uninstall ? 'Uninstalling' : 'Installing' };
@@ -304,7 +305,8 @@
     const verb = item.action === 'uninstall' ? 'uninstall asked ' : 'install asked ';
     bits.push(when ? verb + when : 'time not recorded');
     bits.push('from ' + publisherLabel(item.publisher_computer_id, computerId));
-    bits.push(item.same_base === false ? 'a different base' : 'the same base');
+    // A runtime install has no base: it is not in this computer's source.
+    if (item.mode !== 'runtime') bits.push(item.same_base === false ? 'a different base' : 'the same base');
     const state = item.operation && item.operation.state ? String(item.operation.state) : '';
     if (state) bits.push('operation ' + state);
     return bits.join(' · ');

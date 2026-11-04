@@ -912,7 +912,7 @@ export function installAnswer(ifx, cfx, state, method, pathname, bodyText) {
     adoption_id: adoptionId, computer_id: computerId, release_id: releaseId,
     publisher_computer_id: (rec.publisher || {}).computer_id || '', publisher_operation_id: (rec.operation || {}).operation_id || '',
     patch_sha256: (src.tree_patch || {}).sha256 || '', release_base_commit: src.built_on || '', release_tree_hash: src.tree || '',
-    same_base: true, package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
+    package: (rec.package || {}).name || '', kind: 'package', action: 'install', attempt: 1,
     // A runtime install (S12) is in force when it answers: a distinct module per install.
     module_sha256: createHash('sha256').update(`module\0${releaseId}\0${n}`).digest('hex'),
   });

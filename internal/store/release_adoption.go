@@ -35,7 +35,7 @@ type ReleaseAdoption struct {
 	ReleaseTreeHash      string `json:"release_tree_hash"`
 	AdopterBaseCommit    string `json:"adopter_base_commit"`
 	AdopterTreeHash      string `json:"adopter_tree_hash"`
-	SameBase             bool   `json:"same_base"`
+	SameBase             bool   `json:"same_base,omitempty"`
 	TestCommand          string `json:"test_command,omitempty"`
 	// StagedDir is never stored or served: a package install's staging is
 	// <updater root>/adoptions/<install id> (stagedInstallDir), so the
@@ -68,6 +68,9 @@ type ReleaseAdoption struct {
 	RequiresSDK  string          `json:"requires_sdk,omitempty"`
 	Manifest     json.RawMessage `json:"manifest,omitempty"`
 }
+
+// releaseAdoptionPage is the first page of an adoption listing.
+var releaseAdoptionPage = 200
 
 // ReleaseAdoptionModeRuntime marks a runtime install record (S12).
 const ReleaseAdoptionModeRuntime = "runtime"
@@ -129,14 +132,27 @@ func (s *Store) GetReleaseAdoption(ctx context.Context, ownerID, computerID, ado
 }
 
 // ListReleaseAdoptions returns the computer's adoptions, newest first.
+// It returns every one: the installed set is a fold of the whole history,
+// so a window would drop a package that is still installed.
 func (s *Store) ListReleaseAdoptions(ctx context.Context, ownerID, computerID string) ([]ReleaseAdoption, error) {
 	return s.listReleaseAdoptions(ctx, ownerID, []objectgraph.JSONFieldMatch{{JSONPath: "$.computer_id", Value: strings.TrimSpace(computerID)}})
 }
 
 func (s *Store) listReleaseAdoptions(ctx context.Context, ownerID string, matches []objectgraph.JSONFieldMatch) ([]ReleaseAdoption, error) {
-	objs, err := s.ogListByOwnerAndBody(ctx, ogKindReleaseAdoption, strings.TrimSpace(ownerID), matches, 200)
-	if err != nil {
-		return nil, err
+	// The list has no cursor, so the limit grows until a page comes back
+	// short: the whole set, however long.
+	limit := releaseAdoptionPage
+	var objs []objectgraph.Object
+	for {
+		page, err := s.ogListByOwnerAndBody(ctx, ogKindReleaseAdoption, strings.TrimSpace(ownerID), matches, limit)
+		if err != nil {
+			return nil, err
+		}
+		objs = page
+		if len(page) < limit {
+			break
+		}
+		limit *= 4
 	}
 	out := make([]ReleaseAdoption, 0, len(objs))
 	for _, obj := range objs {

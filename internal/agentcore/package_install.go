@@ -109,8 +109,8 @@ func packageInstallID(computerID, releaseID, action string, attempt int) string 
 // installPackage installs or uninstalls a release at run time. created is
 // false when the computer already holds what was asked.
 func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID string, request adoptReleaseRequest) (ReleaseAdoptionView, bool, *adoptionRefusal) {
-	if rt.store == nil || rt.packageBuilder == nil || strings.TrimSpace(rt.packageModules.Dir) == "" {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "install_unavailable", "this computer has no package builder or module store")
+	if rt.store == nil {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "install_unavailable", "this computer has no install store")
 	}
 	releaseID := strings.ToLower(strings.TrimSpace(request.ReleaseID))
 	if !computerevent.IsSHA256(releaseID) {
@@ -123,7 +123,12 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if action != packageActionInstall && action != packageActionUninstall {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusBadRequest, "request_invalid", "action must be install or uninstall")
 	}
-	uninstall := action == packageActionUninstall
+	if action == packageActionUninstall {
+		return rt.uninstallPackage(ctx, ownerID, computerID, releaseID)
+	}
+	if rt.packageBuilder == nil || strings.TrimSpace(rt.packageModules.Dir) == "" {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusServiceUnavailable, "install_unavailable", "this computer has no package builder or module store")
+	}
 
 	// 1. The record hashes to the id the owner named.
 	rec, err := pkgrelease.Decode(request.Record)
@@ -134,9 +139,8 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusUnprocessableEntity, "release_digest_mismatch", "%v", err)
 	}
 	// 2. Same-origin code is the owner's own until the sandboxed frame
-	// (S13): a release another owner published never installs here. An
-	// uninstall removes code, so it is never refused for this.
-	if !uninstall && strings.TrimSpace(rec.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
+	// (S13): a release another owner published never installs here.
+	if strings.TrimSpace(rec.Publisher.OwnerID) != strings.TrimSpace(ownerID) {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusForbidden, "cross_owner_before_frame", "release %s was published by another owner; another owner's app runs only in the sandboxed frame, which is not built yet", releaseID)
 	}
 
@@ -148,20 +152,6 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	}
 	current := currentPackageInstalls(prior)[rec.Package.Name]
 
-	if uninstall {
-		if current == nil || current.ReleaseID != releaseID {
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_not_installed", "this computer has no runtime install of release %s of %s", releaseID, rec.Package.Name)
-		}
-		record := rt.newPackageInstallRecord(ownerID, computerID, releaseID, rec, action, prior)
-		if record.Attempt > packageInstallMaxAttempts {
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "install_attempts_exhausted", "%d uninstalls of this release already", packageInstallMaxAttempts)
-		}
-		if err := rt.store.PutReleaseAdoption(ctx, record); err != nil {
-			return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
-		}
-		return rt.adoptionView(record, append([]store.ReleaseAdoption{record}, prior...)), true, nil
-	}
-
 	// 3. Already installed, with its module in the store: nothing to do.
 	if current != nil && current.ReleaseID == releaseID {
 		if _, err := rt.packageModules.Read(current.ModuleSHA256); err == nil {
@@ -172,6 +162,15 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if len(request.TreePatch) == 0 {
 		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "patch_unavailable", "the install carries no release tree; an install reaches this computer through the Library")
 	}
+	// The record is named before the build, so a refused attempt costs no build.
+	record, refusal := rt.newPackageInstallRecord(ctx, ownerID, computerID, releaseID, packageActionInstall, prior)
+	if refusal != nil {
+		return ReleaseAdoptionView{}, false, refusal
+	}
+	record.Package = rec.Package.Name
+	record.PublisherComputerID, record.PublisherOperationID = rec.Publisher.ComputerID, rec.Operation.OperationID
+	record.ReleaseBaseCommit, record.ReleaseTreeHash = rec.Source.BuiltOn, rec.Source.Tree
+
 	// 4. Verify and build: the bytes are the record's, confined to the
 	// package root, carry no secret and a valid manifest; then the module.
 	module, err := rt.packageBuilder.Build(ctx, rec, request.TreePatch)
@@ -199,10 +198,6 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	// 5. Record it. The record is the install: it is written after the
 	// module is stored, so a crash before it leaves only an unreferenced
 	// module, never an install whose module is missing.
-	record := rt.newPackageInstallRecord(ownerID, computerID, releaseID, rec, action, prior)
-	if record.Attempt > packageInstallMaxAttempts {
-		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "install_attempts_exhausted", "%d installs of this release already", packageInstallMaxAttempts)
-	}
 	record.PatchSHA256 = computerevent.DigestBytes(request.TreePatch)
 	record.ModuleSHA256, record.ModuleABI, record.RequiresSDK, record.Manifest = sha, module.ABI, module.RequiresSDK, module.Manifest
 	if err := rt.store.PutReleaseAdoption(ctx, record); err != nil {
@@ -211,12 +206,67 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	return rt.adoptionView(record, append([]store.ReleaseAdoption{record}, prior...)), true, nil
 }
 
-func (rt *Runtime) newPackageInstallRecord(ownerID, computerID, releaseID string, rec pkgrelease.Record, action string, prior []store.ReleaseAdoption) store.ReleaseAdoption {
+// uninstallPackage removes the runtime install of releaseID that is in
+// force. It needs nothing from the catalog: the install record names the
+// package, so a withdrawn, suspended, yanked or deleted release, or a
+// computer with no builder, can always be uninstalled.
+func (rt *Runtime) uninstallPackage(ctx context.Context, ownerID, computerID, releaseID string) (ReleaseAdoptionView, bool, *adoptionRefusal) {
+	rt.packageInstallMu.Lock()
+	defer rt.packageInstallMu.Unlock()
+	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
+	if err != nil {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
+	}
+	var current *store.ReleaseAdoption
+	for _, item := range currentPackageInstalls(prior) {
+		if item.ReleaseID == releaseID {
+			current = item
+			break
+		}
+	}
+	if current == nil {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusConflict, "package_not_installed", "this computer has no runtime install of release %s in force", releaseID)
+	}
+	record, refusal := rt.newPackageInstallRecord(ctx, ownerID, computerID, releaseID, packageActionUninstall, prior)
+	if refusal != nil {
+		return ReleaseAdoptionView{}, false, refusal
+	}
+	record.Package = current.Package
+	record.PublisherComputerID, record.PublisherOperationID = current.PublisherComputerID, current.PublisherOperationID
+	record.ReleaseBaseCommit, record.ReleaseTreeHash = current.ReleaseBaseCommit, current.ReleaseTreeHash
+	if err := rt.store.PutReleaseAdoption(ctx, record); err != nil {
+		return ReleaseAdoptionView{}, false, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
+	}
+	return rt.adoptionView(record, append([]store.ReleaseAdoption{record}, prior...)), true, nil
+}
+
+// newPackageInstallRecord names the next runtime record of one release and
+// action: its attempt counts the records of that release and action in the
+// full history, and its id is one no record holds yet (a free id is searched
+// past any taken one, so an id never collides).
+func (rt *Runtime) newPackageInstallRecord(ctx context.Context, ownerID, computerID, releaseID, action string, prior []store.ReleaseAdoption) (store.ReleaseAdoption, *adoptionRefusal) {
 	attempt := 1
 	for _, item := range prior {
 		if item.ReleaseID == releaseID && item.Action == action && item.Attempt >= attempt {
 			attempt = item.Attempt + 1
 		}
+	}
+	if attempt > packageInstallMaxAttempts {
+		return store.ReleaseAdoption{}, refuseAdoption(http.StatusConflict, "install_attempts_exhausted", "%d %ss of this release already", packageInstallMaxAttempts, action)
+	}
+	id := packageInstallID(computerID, releaseID, action, attempt)
+	for tries := 0; ; tries++ {
+		_, err := rt.store.GetReleaseAdoption(ctx, ownerID, computerID, id)
+		if errors.Is(err, store.ErrNotFound) {
+			break
+		}
+		if err != nil {
+			return store.ReleaseAdoption{}, refuseAdoption(http.StatusInternalServerError, "adoption_store", "%v", err)
+		}
+		if tries >= 1000 {
+			return store.ReleaseAdoption{}, refuseAdoption(http.StatusInternalServerError, "adoption_store", "no free install id for release %s", releaseID)
+		}
+		id = packageInstallID(computerID, releaseID, action, attempt) + fmt.Sprintf("-%d", tries+1)
 	}
 	now := time.Now().UTC()
 	// Records order by RequestedAt; never let a new one sort before the
@@ -227,12 +277,10 @@ func (rt *Runtime) newPackageInstallRecord(ownerID, computerID, releaseID string
 		}
 	}
 	return store.ReleaseAdoption{
-		AdoptionID: packageInstallID(computerID, releaseID, action, attempt), OwnerID: ownerID, ComputerID: computerID, ReleaseID: releaseID,
-		PublisherComputerID: rec.Publisher.ComputerID, PublisherOperationID: rec.Operation.OperationID,
-		ReleaseBaseCommit: rec.Source.BuiltOn, ReleaseTreeHash: rec.Source.Tree, SameBase: true,
-		RequestedAt: now, Kind: adoptionKindPackage, Package: rec.Package.Name, Action: action, Attempt: attempt,
+		AdoptionID: id, OwnerID: ownerID, ComputerID: computerID, ReleaseID: releaseID,
+		RequestedAt: now, Kind: adoptionKindPackage, Action: action, Attempt: attempt,
 		Mode: store.ReleaseAdoptionModeRuntime,
-	}
+	}, nil
 }
 
 // packageInstalls lists this computer's package install records, newest

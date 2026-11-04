@@ -443,3 +443,53 @@ func TestRuntimeInstallWithTheRealBuilder(t *testing.T) {
 		t.Fatalf("module = %d (%d bytes)", w.Code, len(body))
 	}
 }
+
+// B1 (review): an uninstall needs nothing from the catalog. A release that
+// was withdrawn, suspended, yanked or deleted arrives with no record (the
+// proxy reads nothing for an uninstall), and a computer whose builder is
+// gone can still remove what it installed.
+func TestRuntimeUninstallNeedsNoCatalogRecordOrBuilder(t *testing.T) {
+	e := newInstallEnv(t)
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
+	})
+	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusCreated {
+		t.Fatalf("install = %d %s", code, reason)
+	}
+	e.rt.packageBuilder = nil
+	body := []byte(`{"release_id":"` + id + `","action":"uninstall"}`)
+	code, view, reason := e.post(t, body)
+	if code != http.StatusCreated || view.State != installStateUninstalled || view.Package != installName || view.ReleaseTreeHash == "" {
+		t.Fatalf("uninstall without a record = %d %s %+v", code, reason, view)
+	}
+	if pkgs := e.installed(t); len(pkgs) != 0 {
+		t.Fatalf("installed after uninstall = %+v", pkgs)
+	}
+	// Nothing in force now: a second uninstall is refused, not a 500.
+	if code, _, reason := e.post(t, body); code != http.StatusConflict || reason != "package_not_installed" {
+		t.Fatalf("second uninstall = %d %s", code, reason)
+	}
+}
+
+// (review, DeepSeek) an attempt id that a record already holds is never
+// reused: the next free id is taken, so a reinstall cannot 500 after its
+// module is stored.
+func TestRuntimeInstallNeverReusesAnAdoptionID(t *testing.T) {
+	e := newInstallEnv(t)
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": installManifest("Demo"), "App.svelte": "<p>demo</p>\n",
+	})
+	// A record already holds attempt 1's id (as one the listing window once
+	// missed would), but under another release, so the attempt count is 1.
+	taken := packageInstallID(e.computer, id, packageActionInstall, 1)
+	if err := e.rt.store.PutReleaseAdoption(context.Background(), store.ReleaseAdoption{
+		OwnerID: e.owner, ComputerID: e.computer, AdoptionID: taken, ReleaseID: strings.Repeat("f", 64),
+		Kind: adoptionKindPackage, Package: "other", Action: packageActionInstall, Attempt: 1, Mode: store.ReleaseAdoptionModeRuntime,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	code, view, reason := e.post(t, installBody(t, id, raw, tree, ""))
+	if code != http.StatusCreated || view.AdoptionID == taken || !strings.HasPrefix(view.AdoptionID, taken) {
+		t.Fatalf("install = %d %s %q", code, reason, view.AdoptionID)
+	}
+}
