@@ -94,6 +94,7 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R28 | 2026-11-04 | "the sub RLM calls shouldn't be raw. They should also be wrapped in the PSA protocol. So when you're making a sub RLM call, you're making a pre-commitment as to the results that you get from it. And then that pre-commitment needs to be scored at some point ... any kind of sub-agent delegation needs to be through PSA." The owner is unsure who scores: management, the parent itself, or a self-score that is in turn scored. | MA1.5, section 4.4, open question 16 |
 | R29 | 2026-11-04 | "It seems odd to just let those be ... inert pre-commitments are ... a waste of attention. It kind of shows that the model doesn't get it ... at minimum, we should be counting and scoring how many of these that we do. Like, maybe we have to tune the system against them rather than try to solve it in advance." | MA1.6, section 4.4 |
 | R30 | 2026-11-04 | "no punishments. Like, if we're keeping score of things, then there's no need for a punishment ... if your field goal percentage is high, that's good. If it's low, you don't get punished for that. You just have a low score ... It doesn't need to be punitive. It's just accountability." | section 0 item 9, sections 4.4 and 10, the trust doc |
+| R31 | 2026-11-04 | "We should have some indicator in the prompt bar of the focus (as we sometimes currently do, eg to continue a texture; this should be generalized and redesigned/streamlined)." Related rulings the same day: response kinds are irrelevant to the user, the prompt bar and the conductor, because desks decide them; no focus goes to the conductor. | MA4.8, H3 (section 11.1) |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -1013,8 +1014,8 @@ desks decision A. Keeps: desks 4.5 (schedules vs occurrences), 6.2 to 6.5,
 **The router is the conductor.** It is not folded into Mail (R18) and it is not
 a desk with custody. It is a kernel-adjacent package: first party, required
 (B4), providing the service `prompt.route` to the Go kernel; it owns no object
-kinds, reads no kind but the submitted text and the bounded context named
-below, and writes only its route records.
+kinds, reads no kind but the submitted text (it sees no focus: R31), and
+writes only its route records.
 
 **What the conductor does today.**
 
@@ -1051,16 +1052,26 @@ is dogfooded and calibrated by us before launch (R25).
 precommitment record:
 
 1. *Candidates* come from the installed packages' `accepts` declarations
-   (cast kinds, file media types, the existing `opens` routes of the
-   manifest, `internal/apppackage/manifest.go:88-94`) plus the standing
-   choices (new Texture, continue the focused document, open an app). The
-   choice set is therefore open and derived from the registry. This is decided
-   from the code: the set of destinations is not enumerable in Go source, since
-   packages install at runtime; the standing choices guarantee a default.
+   plus the standing choices (Texture as the default, open an app). **The
+   manifest has no `accepts` field today**: the fields are `opens` (media type
+   and extensions, for Open with; `internal/apppackage/manifest.go:55-90`,
+   `type Opens` at `:88-94`), `kinds`, `uses_kinds`, `desk` (must be null
+   before P4, `:196-198`), `backend` and `grants` (`:202-203`), and
+   `docs/evidence/prompt-bar-audit-2026-11-04.md` section 4 confirms it. An
+   earlier draft of this plan wrongly named `opens` as the `accepts` source;
+   `opens` routes files, not prompts. **MA4.8 adds `accepts`** as a field of
+   `contributes.desks[]` (reserved in the desks design 4.1 and left opaque by
+   MA2.3): the request kinds and the plain-language intents the desk takes from
+   the prompt bar, validated and shown in the Library. "Continue the focused
+   document" is no longer a candidate: with a focus, the desk decides whether to
+   continue or start anew (below). The choice set is open and derived from the
+   registry, because packages install at runtime; the standing choices guarantee
+   a default.
 2. *The question.* A System 1 typed choice question (`system1_verb.go:20-40`,
    request construction `:516-546`): "which destination does this input want?",
-   with the owner's text and a bounded context (the focused app and the title
-   of the focused document) as the evidence. The judge returns a probability
+   with the owner's text as the only evidence: the conductor receives no focus
+   (R31: no focus goes to the conductor), so the owner clearing the focus chip
+   is also what keeps focused data out of the judge. The judge returns a probability
    per candidate. The record is frozen with the full distribution, the pinned
    model id, the context pack ids and the chosen route **before the app
    opens**. The deterministic URL classifier stays as a rule route: it also
@@ -1118,6 +1129,45 @@ precommitment record:
    these curves. The route records and their settlements feed the paper
    harness (MA7.9) and the Phase 4 ledger round.
 
+**Focus-aware request (MA4.8, replaces `continue_doc_id`).** Today the only
+focus signal is whether the active window is an owner Texture document
+(`frontend/src/lib/prompt-target.js:9-19`), and the request carries `text`,
+`command_id` and `continue_doc_id` only (`frontend/src/lib/conductor.js:14-18`;
+`ContinueDocID` at `internal/textureowner/prompt_bar.go:30-33`, decoded strictly
+with `DisallowUnknownFields` at `:94`; the owner-revise branch at
+`:111, 145-160`). The request becomes:
+
+```text
+{ text, command_id, focus?: { app_agent_id, object_ref, selection? } }
+```
+
+- `app_agent_id` is the focused window's app agent (a desk id of the registry);
+  `object_ref` is the typed ref of its focused object (a Texture document, an
+  Autopaper article by object id, slug and version, a Files folder);
+  `selection` is a bounded excerpt or range inside it. The app supplies all
+  three through the SDK `setAppContext(ctx)` of SDK 1.1.0 (modular section 3),
+  so no shell code names an app. The audit found the window id stays
+  client-side today (`Desktop.svelte:1280`), and that is unchanged.
+- **With a focus, the text goes to the focused app agent**, as an owner-origin
+  request record carrying the focus; **the desk decides** whether the text
+  continues the object, starts a new one, replies to it or something else
+  (response kinds are the desk's to decide, R31). The Texture "Continue or New
+  document" choice is therefore no longer a prompt-bar concept. The direct
+  call to the owner-revise core from the prompt bar (`continuePromptBarDocument`,
+  `prompt_bar.go:145-160`, and its in-process 403) is replaced by that request;
+  the owner's `/revise` route stays as the document editor's own path.
+- **Without a focus (or when the owner clears it), the text goes to the
+  conductor**, which routes by the System 1 question above.
+- **Labels.** The focus and the selection are `owner_private:<kind of the
+  focused object>` and go only to the focused app agent, the custodian of that
+  kind. They never go to the conductor.
+- The wire change widens a strict-decoder API, so the front end and the back end
+  change together: MA4.8 includes the minimal front-end change that sends
+  `focus` from the existing Texture chip (`prompt-target.js`,
+  `PromptSurface.svelte` payload at `:95-97`, `conductor.js`,
+  `Desktop.svelte:1246-1262, 1297`); the full chip redesign is H3
+  (section 11.1). Red, tier 2, as H3 is.
+
 A route is also a request-record sender in the trust sense: the router has a
 track record in the action class `route/I1`, and a destination desk may use it.
 
@@ -1172,10 +1222,41 @@ Library kinds, then Texture.
 |---|---|---|---|
 | Services | S1 SDK 1.1.0 and shell functions; S2 commands and shortcuts; S3 one file-route table; S4 context menu on the slot; S5 theme; S6 settings; S7 deep links; W1 window and launch API; U1 `uses` extraction | S1 owns `Desktop.svelte`, `AppHost.svelte` and the SDK lock (serialized); S4 is where the renderer-swap drill from K0 runs | orange / 1 (U1 yellow / 0) |
 | App batches | C1 Calendar, C2 Pulse, C3 Audio, C4 Video, C5 Slides, C6 Podcast, C7 PDF and EPUB deleted; C8 Autopaper, C9 Compute Monitor, C10 Source, C11 Web Lens; C12 Settings | Mail (C13) moved to MA4.7. Each deletes only its registry row. Audio and Video need the five media helpers named in SDK 1.1.0 | orange / 1 (tier 0 for Pulse, Calendar) |
-| Shell surfaces | H1 launcher, desktop-icons, overview; H2 `menu-default`; H3 `prompt-bar`; H4 `notifications` and `Desktop.svelte` reduced to the window host with the last-resort surface | H3's front end pairs with MA4.8's router service. The window manager and context-menu event capture stay host (modular 1 items 3 and 4) | red / 2 |
+| Shell surfaces | H1 launcher, desktop-icons, overview; H2 `menu-default`; H3 `prompt-bar` (one streamlined focus indicator for every app agent, section 11.1); H4 `notifications` and `Desktop.svelte` reduced to the window host with the last-resort surface | H3's front end pairs with MA4.8's router service. The window manager and context-menu event capture stay host (modular 1 items 3 and 4) | red / 2 |
 | Forced modularity | M2+M3 together, M4, M5, X1 (SDK 2.0.0), F1 (update policy and platform yank) | M1 is MA2.4. F1 compares extracted `uses`, grants and the behaviour-surface hash | red / 2 (M4, M5, X1 orange / 1) |
 | Library distributing services | L1 kind, slots, tier, uses, displaces, and now level and ceiling; L2 selection records; L3 tiered review; L4 watchdog failover and yank reaching the kernel | L3's T2 refusal stays; the Library block shows the ceiling, the levels and the lease policy; L3 is the install-time forced review of R10 for the mechanical part | L1, L2, L4 orange / 1; L3 red / 2 |
 | Texture | T1 Texture app, with the Texture desk (D7): committer registered with the kernel, `textureCellAuthorizer` field removed, `/pub/texture/` as a `contributes.links` public route, `TEXTURE_APP_ID` leaves `registry.ts` | last; app and desk land together; the names gate allowlist reaches zero here | red / 2 |
+
+### 11.1 H3: one focus indicator for every app agent (R31)
+
+The prompt bar shows what the text will go to. Today a chip appears only when
+the active window is an owner Texture document and reads "Continue <title>" or
+"New document" (`frontend/src/lib/PromptSurface.svelte:352-374`, audit section
+2); nothing shows for any other app and nothing shows the conductor. H3
+replaces it with one indicator:
+
+- **The chip names the focused app agent and its object**, for example
+  "Texture · <title>", "Autopaper · <headline>", "Files · <folder>", read from
+  the focused window's `setAppContext` (MA4.8's `focus`).
+- **Clearing the chip sends the text to the conductor.**
+- **With no focus the chip says the conductor will route.** After submit it
+  shows **where the text went** (the destination app agent or the route the
+  conductor chose), so a wrong route is corrected in **one tap**. That tap is
+  the **settlement signal for the router** (section 9.2, item 4): a redirect
+  contradicts the route record, and the corrected destination is recorded as
+  the right answer. For a focused submit, a redirect is recorded as an owner
+  correction too and joins the router's in-context examples.
+- **The Texture "Continue or New document" toggle is removed**: the desk
+  decides, as with response kinds. The placeholder and status text lose the
+  generic "Routing through conductor..." wording (`Desktop.svelte:1306`) in
+  favour of the chip.
+
+Slice H3 stays red, tier 2: it changes the owner's only door and the request
+body of a strict-decoder API, and it lands after MA4.8's backend and
+minimal front-end change (so the two never disagree on the wire). The front end
+pairs with the `prompt.route` service of MA4.8. Its Playwright proof extends
+`prompt-bar-continue.spec.js` and `prompt-surface-registry.spec.js` to each app
+agent present, the clear-to-conductor path and the one-tap correction.
 
 New slices this plan adds to Phase 5 (Devin's unassigned-work amendments and
 the owner's "context menu with full coverage"):
@@ -1484,3 +1565,11 @@ Go-module scope), plus what the plan found.
     intake labelling and support judging) against fans-out of many children;
     and what counts as a "named decision dependency" in a form the reducer can
     check.
+17. **Focus on apps without a desk (R31).** The owner's examples include
+    "Files · <folder>", but Files has no app agent today (audit section 4: only
+    Texture has an app desk). Open: does Files become an app agent, or does the
+    chip name the app and send the text to the conductor with the app named as a
+    hint? Also open: the bound on `selection`; how an app with several windows
+    or an unsaved object publishes a ref; and whether a focused submit that the
+    owner redirects should train the router as a labelled example (recommended
+    yes, as an owner correction).
