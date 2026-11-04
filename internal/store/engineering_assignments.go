@@ -906,6 +906,64 @@ func EngineeringFreezeIdempotencyKey(assignmentID string) string {
 	return "freeze-open:" + strings.TrimSpace(assignmentID)
 }
 
+// EngineeringFreezeMaxRevisions bounds an assignment's candidates: the
+// first is revision 1, and a candidate management rejects while its
+// engineer is still live may be followed by the next revision, frozen by
+// the same engineer in the same capsule
+// (docs/design/engineer-reuse-2026-11-04.md, A4, A5).
+const EngineeringFreezeMaxRevisions = 3
+
+// EngineeringFreezeRevisionOperationID and
+// EngineeringFreezeRevisionIdempotencyKey name revision n of an
+// assignment's operation. Revision 1 is the assignment's original
+// operation, under EngineeringFreezeOperationID and
+// EngineeringFreezeIdempotencyKey unchanged, so an operation opened before
+// revisions existed resolves as revision 1.
+func EngineeringFreezeRevisionOperationID(computerID, assignmentID string, revision int) string {
+	if revision <= 1 {
+		return EngineeringFreezeOperationID(computerID, assignmentID)
+	}
+	return "selfdev-" + computerevent.DigestBytes([]byte(strings.TrimSpace(computerID) + "\x00" + strings.TrimSpace(assignmentID) + "\x00rev:" + strconv.Itoa(revision)))[:32]
+}
+
+func EngineeringFreezeRevisionIdempotencyKey(assignmentID string, revision int) string {
+	if revision <= 1 {
+		return EngineeringFreezeIdempotencyKey(assignmentID)
+	}
+	return EngineeringFreezeIdempotencyKey(assignmentID) + ":rev:" + strconv.Itoa(revision)
+}
+
+// EngineeringFreezeAssignmentOf returns the assignment whose operation
+// revision the key names.
+func EngineeringFreezeAssignmentOf(key string) (string, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(key), "freeze-open:")
+	if !ok || strings.TrimSpace(rest) == "" {
+		return "", false
+	}
+	if i := strings.LastIndex(rest, ":rev:"); i > 0 {
+		if n, err := strconv.Atoi(rest[i+len(":rev:"):]); err == nil && n > 1 {
+			rest = rest[:i]
+		}
+	}
+	return rest, true
+}
+
+// IsEngineeringFreezeKeyOf reports whether key names any revision of the
+// assignment's operation.
+func IsEngineeringFreezeKeyOf(key, assignmentID string) bool {
+	base := EngineeringFreezeIdempotencyKey(assignmentID)
+	key = strings.TrimSpace(key)
+	if key == base {
+		return true
+	}
+	rest, ok := strings.CutPrefix(key, base+":rev:")
+	if !ok {
+		return false
+	}
+	n, err := strconv.Atoi(rest)
+	return err == nil && n > 1 && n <= EngineeringFreezeMaxRevisions
+}
+
 func (s *Store) prepareEngineeringLifecycleTransition(ctx context.Context, trajectoryObj objectgraph.Object, trajectory types.TrajectoryRecord, now time.Time) (engineeringLifecycleTransition, error) {
 	if trajectory.Status == types.TrajectoryLive {
 		next := trajectory

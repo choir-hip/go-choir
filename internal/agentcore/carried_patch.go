@@ -423,9 +423,8 @@ func (rt *Runtime) openOperationHold(ctx context.Context, assignment types.Engin
 	if err != nil {
 		return nil, err
 	}
-	own := store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID)
 	for i := range open {
-		if open[i].IdempotencyKey != own {
+		if !store.IsEngineeringFreezeKeyOf(open[i].IdempotencyKey, assignment.AssignmentID) {
 			return &open[i], nil
 		}
 	}
@@ -983,7 +982,7 @@ func annotateCarriedOperations(ctx context.Context, operations carriedOperationR
 		return nil
 	}
 	for i := range entries {
-		op, found, err := operations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(entries[i].AssignmentID))
+		op, _, found, err := assignmentOperation(ctx, operations, computerID, entries[i].AssignmentID)
 		if err != nil {
 			return fmt.Errorf("read the operation of assignment %s: %w", entries[i].AssignmentID, err)
 		}

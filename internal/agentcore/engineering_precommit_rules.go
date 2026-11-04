@@ -11,7 +11,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -141,7 +140,7 @@ func (r *rlmCallReduction) commitEngineeringPrecommit(ctx context.Context, in ya
 	// R20: a claim stated after the candidate froze is kept, marked late.
 	lateReason := ""
 	if rt.selfdevOperations != nil {
-		operation, found, opErr := rt.selfdevOperations.GetByIdempotency(ctx, r.scope.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+		operation, _, found, opErr := assignmentOperation(ctx, rt.selfdevOperations, r.scope.ComputerID, assignmentID)
 		if opErr != nil {
 			return 0, fmt.Errorf("reduce: precommit %s: %w", in.LocalID, opErr)
 		}
@@ -247,7 +246,7 @@ func (rt *Runtime) settleEngineeringPrecommitsAtTerminal(ctx context.Context, as
 	}
 	obs := types.EngineeringTerminalObservation{Disposition: assignment.Disposition, Reason: reason, At: time.Now().UTC()}
 	if rt.selfdevOperations != nil {
-		operation, found, err := rt.selfdevOperations.GetByIdempotency(context.WithoutCancel(ctx), assignment.Binding.ComputerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
+		operation, _, found, err := assignmentOperation(context.WithoutCancel(ctx), rt.selfdevOperations, assignment.Binding.ComputerID, assignment.AssignmentID)
 		if err == nil && found && strings.TrimSpace(operation.BundleDigest) != "" {
 			obs.CandidateFrozen = true
 			obs.CandidateRef = "selfdev-operation:" + operation.OperationID

@@ -233,7 +233,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
 			// The assignment's own operation (C1e D2), not the trajectory's.
 			if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
-				_, found, err := rt.selfdevOperations.GetByIdempotency(context.Background(), rec.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+				_, _, found, err := assignmentOperation(context.Background(), rt.selfdevOperations, rec.ComputerID, assignmentID)
 				hasSelfDevelopmentOperation = err == nil && found
 			}
 		}

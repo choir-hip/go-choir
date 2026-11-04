@@ -87,6 +87,16 @@ type Runtime struct {
 	// jobWakes holds each engineering run's capsule-job wake (run id ->
 	// chan struct{}): a job's end signals it (capsule_jobs.go).
 	jobWakes sync.Map
+	// reviews holds each engineering run's candidate under review while
+	// its engineer is parked on management's verdict (run id ->
+	// *candidateReview; engineer_reuse.go), and reviewWakes the wake a
+	// verdict signals (assignment id -> chan struct{}). In memory: a crash
+	// ends the park, and the restart rule closes the run.
+	reviews     sync.Map
+	reviewWakes sync.Map
+	// reviewsEnded names, per run, the candidate whose review timed out or
+	// whose kept Complete failed, so its next Complete is not diverted.
+	reviewsEnded sync.Map
 	// jobTable overrides the executor's job view for the completion guard
 	// (tests).
 	jobTable capsuleJobTable
@@ -3921,6 +3931,13 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		spin := &noopSpinDetector{}
 		none := toolregistry.ToolLoopCompletionGuardResult{}
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolBatchWait(func(ctx context.Context, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
+			// A cell that requested management's review of its candidate
+			// parks on the verdict first (engineer_reuse.go); a review wait,
+			// like a job park, resets the spin count.
+			if waited, ok, err := rt.engineeringReviewPark(ctx, rec, emit); ok || err != nil {
+				spin.reset()
+				return waited, ok, err
+			}
 			parked, ok, err := rt.engineeringJobPark(ctx, rec, deliveries, emit, calls, results)
 			if err != nil || ok {
 				spin.reset()
