@@ -52,6 +52,7 @@ switch.
 4. A crash closes work; a planned-restart marker may resume (CLAUDE.md).
 6. Terminology (owner, 2026-11-04): "PSA" (prospective self-alignment) names the theory and the science. "Precommitment records" names the practice and the engineering: the schema, the protocol, the code. This plan uses the words that way. Owner quotes that say "PSA" are left as spoken.
 7. **A new round of predictions at every phase boundary.** The ledger's rule 7 ("Re-predict at every phase boundary (roadmap phases 0 to 8), citing what was learned") is a gate of this plan: before a phase's first slice lands, FP0 commits a new round of records to the ledger (claim, probability or 80% interval, falsifier, resolving observation, settler other than the committer), before that phase's evidence exists, citing the discrepancies of the round before. A phase does not start until its round is committed; a round is a new commit, and committed records are never edited (a revision is a new record citing the old). The settlements and the Brier, log and interval scores are part of each phase's exit report.
+8. Security process (R27): defence in depth first; agentic red teaming from the inside once the functionality is satisfying; then iterate. Section 12.2 places the red-team round.
 5. Defence in depth: per-user VMs, tape restore, process confinement, the
    frame check, custody, leases, trust.
 
@@ -74,15 +75,19 @@ designs. Where only a ruling summary exists it is marked *(recorded summary)*.
 | R10 | 2026-11-04 | "there's no difference between 'strangers code' and 'generated code'." One trust model. "We should force a code review before installing, and also track user reputation of publishers in library." | Phases 2, 5, 7 |
 | R11 | 2026-11-04 | "PSA is a real security technique. We need to lean on it. It's a way to create trust from reputation... perhaps the most important aspect of it. Keeping track records of resident agents; bayesian-trust (not zero trust)." Also "We need to judge precommitments by materiality." | Phase 7, MA1.3 |
 | R12 | 2026-11-04 | "Don't use luna for code review. Let's slow down with the design. I want to understand all the details and decide this myself." No design revisions, reviews or landings without the owner walking through them. | Phase 0 gate; all review tiers |
-| R13 | 2026-11-04 | Expressivity of the RLM is a priority after security (full Go, calling Go modules); low resource overhead next. Defence in depth (per-user VMs, tape restore). *(recorded summary)* | MA6.5 |
+| R13 | 2026-11-04 | Expressivity of the RLM is a priority after security (full Go, calling Go modules); low resource overhead next. Defence in depth (per-user VMs, tape restore). *(recorded summary)* | MA6.5 | Code mode with per-desk import sets (R26): each desk runs model cells in yaegi with its own least-privilege import set, derived from its grants and carried in the manifest capability list (MA2.3). All desks import the precommitment-records protocol package, `math` and the other pure packages; most import nothing with effects. The point is tool calling as code: loops, fan-out and a hundred tool calls in one cell with one model round trip. The mechanism is the per-activation `NewAllowlist` (`internal/yaegikernel/allowlist.go:45-75`) with the static import check that fails closed (`eval.go:101-122`). Known limit to resolve in this slice: a cell may stage at most `MaxIntentsPerCell = 16` intents (`internal/yaegikernel/intent.go:171`), so code mode's many calls are frame calls (reads and host verbs), not staged acts; the slice measures whether frame calls need their own per-cell bound (hypothesis: they are bounded only by the cell deadline) and sets the intent quota deliberately. Third-party Go modules: see open question 9 | `internal/yaegikernel/{allowlist.go,eval.go,intent.go}`, `internal/deskmanifest`, `internal/apppackage` | MA6.4, MA2.3 | red / 2 | a cell makes a hundred read-verb calls in one model round trip and the trace shows one round trip; a cell importing a package outside its desk's set is refused at the static check; each desk's computed set is stable under the behaviour-surface hash | revert |
 | R14 | 2026-11-04 | Data custody: email state only to the email app agent, texture state only to the texture desk; research and engineering may have broad read; engineering may request web grants to arbitrary sites (privileged). Note desk capabilities; limit what users can publish by default. A new user app agent desk (e.g. video editing) is very limited and uses precommitment records to ask other desks (read a specific email, make a video texture consumes). *(recorded summary)* | Phases 2, 3 |
 | R15 | 2026-11-04 | Labels and provenance propagate. The model provider is chosen by the user's VM, always configurable and modular; no rule constraining models. "No cross reads!" is a hard invariant. gVisor looks good; test on our x86. Skip wasm. Run the custody inventory. *(recorded summary)* | MA3.5, MA3.6, Phase 6 |
 | R16 | 2026-11-04 | Defaults 1 to 10 accepted ("Sounds good"), except: remove raw messaging ASAP; keep full publishing until the iframe sandbox ships (no known-publishers interim). "We are still pre-release so don't do excess building only to make more changes. Just go straight to real solution." More testing before 100% committed. | all; Phase 6 |
 | R17 | 2026-11-04 | Roadmap Phases 0 to 8 accepted in the order of sections 3 to 11. | this document |
-| R18 | 2026-11-04 | "Mail as conductor? That doesn't sound right. Conductor is its own concern. It does need help though. Conductor should be system 1 router I think." Mail absorbs only the email desk rows. The conductor becomes a System 1 (Jev, typed choice question) router, a kernel-adjacent package, not a desk with custody. | MA4.8 |
-| R19 | 2026-11-04 | "research should maybe get a texture research grant? And/or search through guarded sql based api rather than texture files?" **Not decided.** Written up as the recommended fate of research's corpus search (section 8.6) and as an open question. | MA3.7, section 8.6, section 13 |
+| R18 | 2026-11-04 | "Mail as conductor? That doesn't sound right. Conductor is its own concern. It does need help though. Conductor should be system 1 router I think." Mail absorbs only the email desk rows. The conductor becomes a System 1 (Jev, typed choice question) router, a kernel-adjacent package, not a desk with custody. | MA4.8 | **The prompt router** (the conductor), a decided design, section 9.2: each route a frozen System 1 typed choice record, settled by rule from the owner's next acts, calibrated per pinned model, with an in-context pack of similar settled routes, abstain and disambiguate below a tuned threshold, scorer audit, dogfooded | `internal/textureowner/prompt_bar.go:206-243`, `internal/content/content.go:1639`, `internal/agentcore/texture_model_api.go:31-42`, `internal/agentcore/system1_verb.go`, `internal/deskmanifest/manifest.go:300-304`, router package, settlement rule over desktop events | MA3.6, MA4.5, MA1.3 | red / 2 (the owner's only door) | section 9.2 | revert to the deterministic default route |
+| R19 | 2026-11-04 | "research should maybe get a texture research grant? And/or search through guarded sql based api rather than texture files?" **Answered (Q3, same day):** use the RLM pattern properly. A research RLM fans out to sub-RLMs, one for the web and one for Texture; the Texture sub-RLM holds the `texture.search` lease, the web sub-RLM holds `world.read`, and the parent receives only their reports, as precommitment records. *(recorded summary)* | MA3.7, MA4.6, section 8.6 |
 | R20 | 2026-11-04 | "Then other desks, like a video editing appagent desk can also get this scoped grant. And the grants can be durable if the desk has good trust score." Two-layer authority: ceiling in the manifest, leases issued by the custodian; trust sets lease duration and scope inside the ceiling. | MA3.4, MA7.x, sections 8 and 10 |
 | R23 | 2026-11-04 | "PSA" (prospective self-alignment) names the theory and science; "precommitment records" names the practice and engineering. A real paper will be written at external launch, so the evidence it needs is built in from Phase 0. | section 0 item 6, MA0.6, MA7.9, section 18 |
+| R24 | 2026-11-04 | (Q8) Build the sandboxes before community desks. Phase 6 (iframe sandbox, broker audit and fuzzing, gVisor) lands before any desk-bearing package from a non-first-party publisher can be published or installed. (Q12) There is no third-party front-end package that reads routes before the iframe sandbox. Front-end-only packages stay under R16. *(recorded summary)* | Phase 6, MA2.3, section 12.1 |
+| R25 | 2026-11-04 | (Q9) The router is the conductor. "the key is to make it a system which is learning via PSA ... you can figure this one out yourself, how to make sure the system one model is getting increasingly calibrated over time ... we'll dogfood it and calibrate it ourselves ... good enough for users when we really launch." | MA4.8, section 9.2 |
+| R26 | 2026-11-04 | (Q10) Each desk has its own least-privilege yaegi import set; all desks import the precommitment-records protocol, math and similar; most import nothing with effects. The point is code mode: tool calling as code, loops, fan-out, a hundred tool calls in one cell with one model round trip. Yaegi runs inside gVisor, performance permitting; engineering already runs in capsules. Third-party Go modules are allowed in principle, since generated code is no different from third-party code, but: "if you import a million lines of code but then don't review that, that's a huge vulnerability surface". | MA2.3, MA6.5, open questions 2 and 9 |
+| R27 | 2026-11-04 | Security process: defense in depth first; then agentic red teaming from the inside once the functionality is satisfying; then iterate. *(recorded summary)* | section 12.2 |
 | R21 | 2026-11-04 | (earlier, system design) Every system app moves to an app package, written by us on main, not by self-development. The Library distributes service providers, themes and command packs. No feature switches. Publisher identity is the maild numbered address. App updates are a per-user per-app setting, manual by default; forced update and yank are platform-only. Install is the only name (adopt is deleted). | Phases 2, 5 |
 | R22 | 2026-11-04 | (earlier, desks design) An app agent is an app package that ships an RLM desk, the sole writer of its app's object kinds. Texture is the precedent. | Phases 3, 4 |
 
@@ -249,7 +254,7 @@ recipient decides on its own grants, as follows.
   opened only by the holder of `admit.assignment`. The plan: a Cast to
   engineering from a desk without that grant is *forwarded* to management's
   inbox as an admission request, and management's admission ledger decides
-  (open question, section 18 item 6).
+  (open question, section 18 item 5).
 
 **One resolver, no sender switch.** `recordsRoute` and `recordsDesk` become one
 data-driven resolver: the recipient name is looked up in the desk registry; the
@@ -335,8 +340,26 @@ behaviour-surface hash is computed; adopt is deleted.
   A package with a desk is never classed below *default* with review: the
   red-team result that a community desk is an autonomous agent even without
   code ("abolish T0 for desks") is adopted; a desk's prompt is behaviour.
-  Full publishing stays open for front-end packages until the iframe sandbox
-  ships (R16); see section 18 item 8 for desks.
+  **Desk-bearing packages from a non-first-party publisher can be neither
+  published nor installed until Phase 6 has landed (R24).** The validator
+  refuses `contributes.desks` from a non-first-party origin unless the running
+  platform reports the isolation it requires (iframe sandbox for the UI, the
+  hardened and fuzzed broker, and the worker sandbox Phase 0 selects). That is
+  a correctness refusal tied to a capability the platform either has or lacks,
+  not a switch. Front-end-only packages: see section 12.1.
+- **Per-desk import set.** The capability list also carries the desk's yaegi
+  import set (R26), derived from its grants by the host and not authored: every
+  desk gets the precommitment-records protocol package (`choir`), `math`,
+  `math/big`, `sort`, `strings`, `strconv`, `unicode`, `encoding/json` and the
+  other pure packages of the present default set
+  (`internal/yaegikernel/allowlist.go:11-28`); a grant adds only the
+  packages it implies; nothing with effects is in the base set (`os`, `os/exec`,
+  `net`, `net/http` stay banned for cells, `allowlist.go:32-43`; engineering's
+  effects run in capsules through the broker). The set is part of the
+  behaviour-surface hash and is shown in the Library. The mechanism exists:
+  `NewAllowlist(packages...)` builds a per-activation list and the session
+  worker is given `DefaultSafeStdlibPackagesList()` plus `choir`
+  (`allowlist.go:45-75`); the plan makes the list per desk and derived.
 - **Behaviour-surface hash.** The host computes, at publish and install, a
   digest over the prompt file, desk `code`, schedules, owned kinds and
   schemas, migrations, tool artifacts and egress methods, stored in the
@@ -365,7 +388,7 @@ vmmanager uses of "adopt a surviving VM" are a different concept and stay.
 |---|---|---|---|---|---|---|
 | MA2.1 | Go kernel: scope, effects (LIFO, awaited), provider and inject, supervisor with restart intensity, snapshot, `GET /api/plugins/state`; structural gates (imports, names, responsibility list) in the repo gates and CI. Registers no existing service. (G0, with R1 replacing the size limit) | `internal/kernel/**` (new), `internal/apihandler/routes.go`, `scripts/check-kernel-*`, `.github/workflows/ci.yml` | MA0.5 | orange / 1 | Go tests: scope cancel, effect order, supervisor intensity (two crashes in a window close with the cause), boot-fold rebuild with no occurrence replayed; the three gates, with a negative fixture each; `GET /api/plugins/state` on d@e with no SSH | revert |
 | MA2.2 | Front-end kernel: same five responsibilities; gates as above; K0 leak differential. The d@e renderer-swap drill moves to S4 because it needs the S4 slot (Devin amendment 4) | `frontend/src/lib/kernel/**`, `frontend/scripts/check-kernel.mjs`, `frontend/tests/kernel.spec.js` | MA0.5 | orange / 1 | contract tests for scope disposal order, swap ordering, ranking and failover; the leak differential (install, activate, exercise, uninstall; `snapshot()` equals baseline) | revert |
-| MA2.3 | Manifest v2 and validators: `contributes.desks` decoded, typed capability list with levels, namespaced grants, behaviour-surface hash, source-only release record, kind inference. Rewrite every in-tree manifest; delete the v1 reader in the same slice (no shim; the exposure is published v1 releases, section 18 item 14). Includes P0 | `internal/apppackage/{manifest,schema}.go`, testdata, `frontend/scripts/{check-packages,gen-package-kinds}.mjs`, every `frontend/src/packages/*/choir-package.json`, `internal/pkgrelease/{listing,record}.go` | none | red / 2 (install path) | Go tests for strict unknown-key refusal, path containment, publisher-declared refusal, kind inference, each privileged grant refused from a non-first-party origin, hash stability and change on each covered input; `check-packages` on all in-tree packages; `runtime-install.spec.js` unchanged | revert |
+| MA2.3 | Manifest v2 and validators: `contributes.desks` decoded, typed capability list with levels, namespaced grants, behaviour-surface hash, source-only release record, kind inference. Rewrite every in-tree manifest; delete the v1 reader in the same slice (no shim; the exposure is published v1 releases, section 18 item 12). Includes P0 | `internal/apppackage/{manifest,schema}.go`, testdata, `frontend/scripts/{check-packages,gen-package-kinds}.mjs`, every `frontend/src/packages/*/choir-package.json`, `internal/pkgrelease/{listing,record}.go` | none | red / 2 (install path) | Go tests for strict unknown-key refusal, path containment, publisher-declared refusal, kind inference, each privileged grant refused from a non-first-party origin, hash stability and change on each covered input; `check-packages` on all in-tree packages; `runtime-install.spec.js` unchanged | revert |
 | MA2.4 | Delete adopt (M1). Brings the kind rename `release_adoption` to `install` with its tape conversion as designed in forced modularity | files above plus `cmd/choir/package.go`, `frontend/src/packages/library-next/**`, `scripts` | none (disjoint from kernels) | orange / 1 | the forced-modularity M1 proof; a grep gate for `adopt` outside the vmctl exceptions | revert |
 | MA2.5 | Grant-driven desk registry (D1): desk becomes a data type loaded through `Register`; the closed lists become lookups (F1 to F6, F11, F12 of the desks design); `scripts/check-desk-names` gate with an allowlist that must reach zero; fix `deskModuleSets` excluding `KindApp` (`internal/yaegikernel/choir.go:328-331`); fix `isTextureAgentID`'s duplicated check (`internal/agentcore/tool_profiles.go:170-173`) and the `management-task`/`management_task` dual spelling (`internal/types/management_task.go:20`) | `internal/deskmanifest/manifest.go`, `agentprofile/agentprofile.go:86-115`, `modelpolicy/model_policy.go:519-531, 639-662`, `promptstore/store.go`, `runtimeprompts/prompts.go:57-123`, `agentcore/{tool_profiles,runtime,tools_desk,inbox_records}.go`, `yaegikernel/choir.go`, `capsule/roles.go` (all unverified beyond the spot checks above; re-grep) | MA1.2, MA2.1, MA2.3 | red / 2 | the parity tests pin each row unchanged; a test asserts every built-in desk's computed verb set equals today's literal byte for byte; all four desks run an ordinary day on d@e with identical routing; the names gate passes with the allowlist at its starting size | revert |
 
@@ -585,7 +608,7 @@ per call, and never constrained by a rule (R15). A model call is therefore not
 a disclosure sink that the rules gate; it is logged with the resolved provider
 and the run's labels. This contradicts the trust draft's I3 listing "a
 provider call carrying owner-private data" (draft 3.2); the plan follows the
-ruling and the draft is amended in MA7.1 (open question, section 18 item 11).
+ruling and the draft is amended in MA7.1 (open question, section 18 item 7).
 System 1's own call caps (`CHOIR_SYSTEM1_MAX_CALLS_PER_RUN`/`_PER_DAY`,
 `system1_verb.go:38-40, 56`) make it "off until configured": a switch and a
 ceiling that MA3.6 removes.
@@ -667,9 +690,9 @@ which reads only the submitted text (inventory X11).
 
 | # | Cross read (file:line) | Fate | Slice |
 |---|---|---|---|
-| X1 | Research corpus search over all Texture documents: `researchtools.go:71` calls `Store.SearchDocuments` (`store/texture.go:125`), which lists every owner Texture document (`searchableTextureDocuments`, `:143-158`) and uses the in-memory head index (`store/search_index.go:15-29`) | **Recommended: an explicit first-party grant `texture.search`**, section 8.6. The capture, event and published parts of the same tool are shared world content (E4) and stay | MA3.7 |
+| X1 | Research corpus search over all Texture documents: `researchtools.go:71` calls `Store.SearchDocuments` (`store/texture.go:125`), which lists every owner Texture document (`searchableTextureDocuments`, `:143-158`) and uses the in-memory head index (`store/search_index.go:15-29`) | **Decided (Q3): a `texture.search` lease held by a Texture sub-RLM of research**, section 8.6. The capture, event and published parts of the same tool are shared world content (E4) and stay | MA3.7 |
 | X2 | `System1` context ref `story:<rev>` reads any revision of the owner: `agentcore/system1_verb.go:461-475` | the cell passes the text, or the call carries `text`; the ref form is deleted | MA3.7 |
-| X3 | `StoryAnalysis` preloads a story's head (`agentcore/story_analysis.go:142, 200-220`, unverified line numbers) | Texture supplies the text in the Cast or a Texture-owned export; research never reads the revision | MA4.6 |
+| X3 | `StoryAnalysis` preloads a story's head (`agentcore/story_analysis.go:142, 200-220`, unverified line numbers) | Texture supplies the text in the Cast or a Texture-owned export; research never reads the revision | MA4.6 | Research as a package (D6) with the fan-out of section 8.6: a research parent and two child roles, `research_web` (holds `world.read`, no lease) and `research_texture` (holds the `texture.search` lease, no `world.read`); children report to the parent as precommitment records | `internal/agentcore/research_children.go` (existing child mechanism: `runResearchChildren` serves `choir.Research`, children are `research_child` desks with read-only world verbs, no further `choir.Research`, no messaging, reporting or writes, an inert ledger reduction, one level of fan-out, `:132-145`), `internal/deskmanifest/manifest.go:287-298` (the `research_child` role row), `internal/yaegikernel/{search_store.go,system1.go,relate*.go,story_analysis.go}`, `internal/agentcore/desk_search.go` (unverified) | MA4.5, MA3.4, MA3.7 | red / 2 | the deployed Texture acceptance unchanged (research answers its casts); a run in which one child tries the other's grant is refused at the frame check; the web child's transcript contains no Texture-derived text; a third-party manifest asking `world.read` is refused | revert |
 | X4 | Engineering run context re-reads owner words each render (`agentcore/engineering_owner_words.go:152-165`) | read the data attached to the Cast record (the record is the precommitment-record substrate) | MA4.10 |
 | X5 | Reducer attaches `owner_directions` to a Cast (`agentcore/texture_owner_directions_cast.go:466-478`) | E3: the reducer acts as Texture's agent for this one read, or Texture's turn writes the words | MA3.7 |
 | X6 | Capsule store copy and files tree: `capsule/computer_state_linux.go:135-177`, `autoputer/capsule_executor_linux.go:144-156` | a lease: kinds chosen per assignment; default excludes mail (already carved out at `capsule/computer_state.go:45`) and Texture bodies | MA3.4 |
@@ -703,51 +726,66 @@ record in the action class (Phase 7) the same request is answered with a
 durable lease that renews without asking; a fidelity event revokes it at once.
 Delegation-scoped reads (X6, the capsule snapshot) are leases.
 
-### 8.6 Recommended fate of research's corpus search (R19, not decided)
+### 8.6 Research's corpus search over Texture (R19, settled by Q3)
 
-The owner is weighing "a texture research grant? And/or search through guarded
-sql based api rather than texture files?" Recommendation:
+Decided: use the RLM pattern properly. The research desk fans out to
+sub-RLMs, one for the web and one for Texture, and its parent receives only
+their reports. This is the structural taint split (option (a) of the earlier
+draft), realised as child RLMs.
 
-- **The grant.** `texture.search`, an explicit first-party grant. It grants a
-  guarded, typed search API that Texture's service owns. It does not grant raw
-  documents, files or arbitrary SQL. It is in the research package's ceiling and
-  is issued as a lease (per-task until Phase 7, durable afterwards if the record
-  is strong).
-- **What the API returns.** Ranked refs plus bounded snippets, labelled
-  `owner_private:texture`. Backed by SQL or full-text search (the current
-  in-memory head index, `store/search_index.go:15-29`, or an indexed table),
-  with limits on results and snippet length, and a bound on query rate. Every
-  query is logged as a visible record (a request to Texture with the query
-  as its content, scored).
-- **Full bodies.** Fetching a full document body still goes through
-  delegation, meaning a ref handed over by Texture in a record or a lease on
-  that ref, or through a request to Texture. The search API never returns a
-  body.
-- **The taint rule.** Research holds `world.read` (`NewAppDesk` floors and the
-  catalogue make it privileged and `untrusted_input`), so it reads untrusted
-  web content, and web search queries and fetches are an outbound channel
-  (`search_start`, `read`, `poll_source` in `verbDispatch`, `manifest.go:167-189`).
-  A run that has read owner-private snippets must not send derived web
-  queries freely. Two options:
-  - (a) *Document search and web research run as separate child runs.* The
-    document-search child holds the `texture.search` lease and no
-    `world.read`; the web child holds `world.read` and no lease; the parent
-    passes only what the custodian's rules let cross, as typed fields. This
-    uses the existing research child role (`research_child` row).
-  - (b) *After reading owner-private data, a run's outbound acts are
-    I3-material and go through the trust gate* (the label rules of MA3.5/MA3.6
-    and the Phase 7 act gate).
-  **Recommend (a)** as the structural option: it needs no judgment at run
-  time. (b) remains the control for cases (a) cannot separate.
-- **Why not raw SQL.** A single query can dump everything and is hard to
-  guard (it expresses its own scope). Read-only views are a possible middle
-  ground: the custodian defines a view per purpose and the lease names the
-  view.
+**What exists.** Research already fans out. `choir.Research` is served by
+`runResearchChildren` (`internal/agentcore/research_children.go:132`): each
+child is a `research_child` desk (a role row, `internal/deskmanifest/manifest.go:287-298`)
+on its own model loop with read-only world verbs, no further `choir.Research`
+(one level of fan-out, "rounds over recursion", owner 2026-10-11 PD1), no
+messaging, reporting or writes, and an inert ledger reduction; concurrency and
+the computer-wide call spacer bound the tree (`:22-48, :93-106`); the whole
+tree ends with the calling cell's deadline. Results come back as return
+values. The present Texture search is not a child: the tool `search_wire_corpus`
+calls `Store.SearchDocuments` from whatever session holds it
+(`internal/researchtools/researchtools.go:34, 42-48, 71`; implementation
+`internal/store/texture.go:125`, listing every owner document at `:143-158`,
+head index `store/search_index.go:15-29`).
 
-The coordinator's code citation: the research corpus search is
-`newSearchWireCorpusTool` (`internal/researchtools/researchtools.go:34, 42-48`)
-whose handler calls `deps.Store.SearchDocuments` (`:71`), implemented at
-`internal/store/texture.go:125`, listing documents at `:143-158`.
+**The design.**
+
+- Two child roles of the research desk, each a role with a subset of the
+  desk's grants (a role can only narrow; section 6, B1):
+  - `research_web` holds `world.read` (search, read, poll sources) and no
+    lease. It reads untrusted web content.
+  - `research_texture` holds a `texture.search` lease and no `world.read`.
+    It reads owner-private text and has no outbound channel.
+- `texture.search` is a first-party grant whose lease the Texture service
+  issues (section 7.2). It grants a guarded, typed search API that Texture's
+  service owns: ranked refs plus bounded snippets labelled
+  `owner_private:texture`, backed by SQL or full-text search, with limits on
+  results, snippet length and rate. Every query is logged as a visible
+  precommitment record. It grants no raw documents, files or arbitrary SQL. A
+  full document body is never returned: it comes only by a ref Texture hands
+  over in a record or a lease on that ref, or by a request to Texture.
+- The parent spawns both children in one fan-out call. Their objectives are
+  written from the parent's own, unlabelled context, so no Texture-derived text
+  can reach a web query. Each child returns a **Report precommitment record**
+  (claims, excerpts, source refs, `p_success`, provenance, labels), and the
+  parent receives only those. This changes the present child contract (results
+  as return values, no reporting): a child's single permitted act becomes a
+  Report addressed to its parent, stamped by the reducer, and everything else in
+  the child contract stays.
+- The Texture child's report carries `owner_private:texture`, so the parent
+  run now carries that label (MA3.5). Any later outbound act by the parent,
+  including spawning another web child with an objective it wrote after reading
+  that report, meets the disclosure path (section 7.2): the kernel table denies
+  or asks, System 1 may be asked, the owner may tap. Rounds after the first are
+  therefore the controlled case, not the default.
+- Raw SQL is not offered: one query can dump everything and is hard to guard.
+  Read-only views are a possible later middle ground (the custodian defines a
+  view per purpose and the lease names it).
+
+Settled by this: the option between a separate-children split and a post-read
+trust gate (the trust gate remains as the control on the later rounds above).
+The grant name and the guarded API shape are decided; the snippet, result and
+rate limits are parameters set when MA3.7 is built and logged with the
+lease.
 
 ## 9. Phase 4: every desk is a package
 
@@ -755,7 +793,7 @@ Goal: every desk except Texture's (which moves with its app in Phase 5) is a
 package desk loaded by the one path; the desk-name switches are deleted.
 
 Order, by the roadmap: Devin's B1 to B4 first; then research, Mail,
-management, engineering last. Texture follows in Phase 5 (section 18 item 7).
+management, engineering last. Texture follows in Phase 5 (section 18 item 6).
 
 ### 9.1 Slices
 
@@ -767,7 +805,7 @@ management, engineering last. Texture follows in Phase 5 (section 18 item 7).
 | MA4.4 | B4: required set is image config, desired state is fold union required; re-seed on boot | `internal/appdesk`, boot path in `internal/autoputer/run.go` | MA4.2 | red / 2 | restore to a pre-install head: the computer boots with the required packages re-installed by a new event and open obligations closed; a required package refuses disable | revert |
 | MA4.5 | `contributes.desks` wired for first-party registration: delete `CHOIR_APP_DESKS` (`appdesk.go:328`), the `app_packages.objects` setting (it defaults ON when absent, `internal/autoputer/app_package_objects.go:96-104`, against its own comment), and the P4 gate; `Activate` gets its first production caller | `internal/appdesk/appdesk.go:327-340`, `internal/autoputer/app_package_objects.go`, `internal/apppackage/manifest.go:196-198`, `internal/store/app_package_objects.go` | MA4.2, MA2.3 | red / 2 | the staging health lists the derived desk set; a third-party manifest asking for a privileged grant is refused | revert |
 | MA4.6 | Research as a package (D6): the world tools as a module; the `texture.search` lease (MA3.7) and the document-search child per 8.6(a) | `internal/yaegikernel/{search_store.go,system1.go,relate*.go,story_analysis.go}`, `internal/agentcore/{desk_search.go,research_children.go}` (unverified) | MA4.5, MA3.7 | red / 2 | the deployed Texture acceptance unchanged (research answers its casts); a third-party manifest asking `world.read` is refused; a search-then-web run in one run is refused | revert |
-| MA4.7 | **Mail app agent** (new): the Mail package ships the Mail UI (modular C13, moved here) and a Mail desk that absorbs the email desk rows only (`deskmanifest.Email`, a carrier-less row with an empty registry: `manifest.go:305-309`, `agentcore/tool_profiles.go:411, 421`). Mail data stays in maild, reached through a maild service the Mail desk is custodian of; objects it writes are package kinds written by the reducer. Not the conductor | `frontend/src/packages/mail/**`, `frontend/src/lib/MailApp.svelte`, `internal/maild` service seam, `deskmanifest`, `agentcore/tool_profiles.go` | MA3.8, MA4.5, S1, S2, S7 (the C13 deps) | red / 2 | `email-app-state.spec.js`, `mail-digest-toggle.spec.js`, `mail-attachments-deployed.spec.js`; a video-editing-style fixture desk asks Mail through a precommitment-record request for one email by ref, gets a per-task lease, and is refused a second email | revert both halves together |
+| MA4.7 | **Mail app agent** (new): the Mail package ships the Mail UI (modular C13, moved here) and a Mail desk that absorbs the email desk rows only (`deskmanifest.Email`, a carrier-less row with an empty registry: `manifest.go:305-309`, `agentcore/tool_profiles.go:411, 421`). Mail data stays in maild, reached through a maild service the Mail desk is custodian of; objects it writes are package kinds written by the reducer. Not the conductor | `frontend/src/packages/mail/**`, `frontend/src/lib/MailApp.svelte`, `internal/maild` service seam, `deskmanifest`, `agentcore/tool_profiles.go` | MA3.8, MA4.5, S1, S2, S7 (the C13 deps) | red / 2 | `email-app-state.spec.js`, `mail-digest-toggle.spec.js`, `mail-attachments-deployed.spec.js`; a video-editing-style fixture desk (a test-only first-party fixture, since community desks wait for Phase 6) asks Mail through a precommitment-record request for one email by ref, gets a per-task lease, and is refused a second email | revert both halves together |
 | MA4.8 | **The prompt router**: the conductor as a System 1 router (section 9.2) | `internal/textureowner/prompt_bar.go`, `internal/content/content.go:1639`, `internal/agentcore/texture_model_api.go:31-42`, `internal/agentcore/system1_verb.go`, `internal/deskmanifest` (conductor row), router package | MA3.6, MA4.5, MA1.3 | red / 2 (the owner's only door) | section 9.2 | revert to the deterministic default route |
 | MA4.9 | Management as a package (D9): admission ledger, intake controller, platform update, `product.api`; persistent per-owner identity as `instance: per_owner` | `internal/agentcore/{management_controller.go,management_tasks.go,platform_update.go:184,229,337,tools_worker_update.go,intake_view.go,calibration_feedback.go}`, `internal/actorruntime/**` | MA4.6, MA4.7, MA4.1 | red / 2, two seats, re-reviewed after any blocking-real finding | a platform update applied from d@e by the packaged desk; engineering admission FIFO unchanged; owner escalation reaches the owner | revert |
 | MA4.10 | Engineering as a package, **last** (D8): capsule driver registered, `store/engineering_assignments.go` profile checks (`Profile != Engineering`, desks doc `:728-787, 845, 1289, 1512`, unverified) become grant checks, generic assignment ledger | `internal/capsule/**`, `internal/agentcore/{engineering_assignment_runtime.go,engineering_waits.go,self_development_materializer.go}`, `internal/store/engineering_assignments.go`, `internal/selfdev` | MA4.9 and a week of MA4.6 to MA4.9 runs on staging | red / 2, two seats | a full self-development operation (capsule, freeze, verify, apply) on d@e from the packaged desk; a crash during a capsule closes it "interrupted by a restart"; no planned restart while a capsule is live | revert; in-flight assignments finish under their epoch |
@@ -782,7 +820,13 @@ Supersedes: desks 9.2 and slices D1 to D9 wording, desks 10 D4 to D9 order,
 desks decision A. Keeps: desks 4.5 (schedules vs occurrences), 6.2 to 6.5,
 7.2, 7.3 (schema versions; uninstall and replace).
 
-### 9.2 The prompt router (MA4.8)
+### 9.2 The prompt router (MA4.8), a decided design
+
+**The router is the conductor.** It is not folded into Mail (R18) and it is not
+a desk with custody. It is a kernel-adjacent package: first party, required
+(B4), providing the service `prompt.route` to the Go kernel; it owns no object
+kinds, reads no kind but the submitted text and the bounded context named
+below, and writes only its route records.
 
 **What the conductor does today.**
 
@@ -790,63 +834,104 @@ desks decision A. Keeps: desks 4.5 (schedules vs occurrences), 6.2 to 6.5,
   (`internal/textureowner/prompt_bar.go:206`). The default app is Texture
   (`:207`).
 - A deterministic classifier, `ClassifyPromptBarContentIntent`
-  (`internal/content/content.go:1639`), only fires when the text is exactly one
+  (`internal/content/content.go:1639`), fires only when the text is exactly one
   whitespace-delimited token that normalises to an http(s) URL; it maps the
-  media type to an app hint (and maps "files" to "browser", `:1653-1660`).
+  media type to an app hint ("files" becomes "browser", `:1653-1660`).
   Everything else, every sentence, goes to Texture.
 - It records a "conductor decision" run through `CompletePromptBarDecision`
-  (`internal/agentcore/texture_model_api.go:31-42`) with the action
-  `open_app` (`prompt_bar.go:235-238`) and, when the app is Texture, hands off
-  with caller profile conductor (`:240-244`). The decision shape is
-  `ConductorDecision` (`internal/textureowner/texture_handoff.go:40-52`). A
-  `continue_doc_id` goes to the owner-revise path (`prompt_bar.go`
-  `continuePromptBarDocument`, ~`:150`).
-- Management also reaches the same route as its door for creating Textures
-  (`/api/prompt-bar`, `internal/agentcore/tools_product_api.go:215-216`).
-- The conductor is a carrier-less desk row with no verbs, no targets and an
-  empty tool registry (`deskmanifest/manifest.go:300-304`;
-  `agentcore/tool_profiles.go:409, 419`). A model role `conductor` exists on
-  the "low" pool (`modelpolicy/model_policy.go:679`) and a prompt overlay
-  exists (`runtimeprompts/prompts.go:48`, `tool_profiles.go:213-215`); whether
+  (`internal/agentcore/texture_model_api.go:31-42`) with the action `open_app`
+  (`prompt_bar.go:235-238`) and, for Texture, hands off with caller profile
+  conductor (`:240-244`). The decision shape is `ConductorDecision`
+  (`internal/textureowner/texture_handoff.go:40-52`). A `continue_doc_id` goes
+  to the owner-revise path (`continuePromptBarDocument`, ~`:150`).
+- Management reaches the same route to create Textures
+  (`internal/agentcore/tools_product_api.go:215-216`).
+- The conductor desk row has no verbs, targets or tools
+  (`internal/deskmanifest/manifest.go:300-304`;
+  `internal/agentcore/tool_profiles.go:409, 419`). A `conductor` model role
+  exists on the "low" pool (`internal/modelpolicy/model_policy.go:679`) and a
+  prompt overlay exists (`internal/runtimeprompts/prompts.go:48`); whether
   any run uses them is a hypothesis (the decision is recorded as a
   deterministic run).
 
-So the conductor "needs help": it is a URL regex plus a default. It never
-routes to Mail, Calendar, a research question, or a continue-in-the-open-window.
+So today nearly everything routes to Texture. The router matters once there
+are more app agents (MA4.7 is the first, Mail), and the owner's instruction is
+to make it a system that learns by the practice of precommitment records and
+is dogfooded and calibrated by us before launch (R25).
 
-**Routing as a System 1 typed question.** System 1 is the existing fast judge:
-the caller passes closed choice questions, the host sends them to the one
-`CandidateJudge` and returns the full distribution; "it never collapses a
-distribution into a decision" (`agentcore/system1_verb.go:20-40`, request
-construction `:516-546`). The router:
+**The design.** One owner submission is one route, and one route is one
+precommitment record:
 
-1. builds the choices from the installed packages' declared `accepts` (cast
-   kinds, file media types, `opens` routes) plus the standing choices (new
-   Texture, continue the focused document, ask management, open an app), so
-   the choice set is data, not a list in code;
-2. asks one typed question: "which destination does this input want?" with the
-   owner's text and a bounded context (the focused app and document title)
-   as the evidence;
-3. applies a deterministic decision rule in code: take the top choice when its
-   probability and margin clear thresholds; otherwise take the default route
-   (Texture, today's behaviour) or surface a one-tap disambiguation;
-4. records the decision as a precommit with `p_success` and the choice
-   distribution, settled by the owner's next act (accepted, redirected,
-   closed), which gives the router a track record in the Phase 7 sense;
-5. hands off by a request record to the chosen destination's inbox; it performs no
-   effect itself. A router failure or timeout takes the default route.
+1. *Candidates* come from the installed packages' `accepts` declarations
+   (cast kinds, file media types, the existing `opens` routes of the
+   manifest, `internal/apppackage/manifest.go:88-94`) plus the standing
+   choices (new Texture, continue the focused document, open an app). The
+   choice set is therefore open and derived from the registry. This is decided
+   from the code: the set of destinations is not enumerable in Go source, since
+   packages install at runtime; the standing choices guarantee a default.
+2. *The question.* A System 1 typed choice question (`system1_verb.go:20-40`,
+   request construction `:516-546`): "which destination does this input want?",
+   with the owner's text and a bounded context (the focused app and the title
+   of the focused document) as the evidence. The judge returns a probability
+   per candidate. The record is frozen with the full distribution, the pinned
+   model id, the context pack ids and the chosen route **before the app
+   opens**. The deterministic URL classifier stays as a rule route: it also
+   emits a route record with its own calibration, so rule routes and judge
+   routes are scored on the same footing.
+3. *Decision.* Take the top candidate when its calibrated probability clears
+   the threshold `theta`; otherwise abstain and disambiguate (a one-tap
+   choice among the top candidates, defaulting to Texture, today's behaviour).
+   A judge failure or timeout takes the default route. The router performs no
+   effect itself; it hands off by a request record to the destination's inbox.
+4. *Settlement by rule from the owner's next acts.* The settler is a rule over
+   desktop and window events (the desktop state surface,
+   `internal/desktopstate`; hypothesis: the focus and input signals needed
+   exist, and the build's first step is to confirm them):
+   - **confirmed** if the owner stays and works in the chosen app or desk
+     within window `W` (focus held and input received);
+   - **contradicted** on a redirect (the owner opens a different app or desk
+     within the window), a close-and-reopen elsewhere, or an explicit
+     correction;
+   - **unresolved** otherwise.
+   Corrections are first-class one-tap acts ("not here", with the right
+   destination); a correction both settles the route and labels the right
+   answer. Unresolved routes are reported as a rate and excluded from the
+   calibration fit, with that exclusion stated in every report because
+   unresolved is not random.
+5. *Calibration.* Fit a per-type temperature, or isotonic regression where
+   the data allows, on settled routes, per pinned model
+   (`docs/precommitment-records.md` section 5.3: miscalibration sign depends on
+   question type; calibrate per type; clamp probabilities before logging).
+   Report reliability and sharpness together, since calibration can improve
+   simply by becoming vaguer. A new pinned model starts uncalibrated and
+   abstains more.
+6. *In-context learning.* A small context pack (k similar settled routes, with
+   their text, the distribution given, the settled outcome and any correction)
+   is retrieved from the owner's own route records into the System 1 prompt.
+   This is the ICRL loop of the practice. Retrieval is lexical over route text
+   (the head-index style of `store/search_index.go:15-29`); the pack carries the
+   label `owner_private:router` and goes only to the judge the VM's model policy
+   chose.
+7. *Abstain and disambiguate.* `theta` is tuned to a target error rate `E*`
+   from the settled data: the smallest threshold at which the settled error
+   above it is at or below `E*`, recomputed per window of routes. `E*`, `W` and
+   `k` are starting parameters committed in the ledger round for Phase 4 and
+   tuned by dogfooding, not open questions.
+8. *Scorer audit.* A sample of routes, weighted toward disagreements and low
+   margins, is scored by a second-opinion scorer (a different pinned model, or
+   the owner's correction), and the self-favor gap is computed: how much more
+   the judge favours its own routes than the second scorer does
+   (trust draft 4.1, calibration beside the posterior).
+9. *Measures and dogfooding.* Routing accuracy (of settled routes), calibration
+   (reliability, Brier, log score, with skill against the "always Texture" base
+   rate), sharpness, the tap rate (disambiguations plus corrections per day)
+   and the unresolved rate, over time, on the owner's own computers once app
+   agents exist. "Good enough for users" is set by the owner at launch from
+   these curves. The route records and their settlements feed the paper
+   harness (MA7.9) and the Phase 4 ledger round.
 
-**Standing.** The router is a kernel-adjacent package: first party,
-required (B4), providing a service `prompt.route` to the Go kernel. It is not a
-desk and has no custody: it owns no object kinds, reads no kind but the
-submitted text, and writes only its decision record. Its model comes from the
-VM's policy like any call. It supersedes the desks design 9.4 text that makes
-the prompt bar "the conductor row" with routing by `accepts` and also the
-folding of conductor into Mail (R18). The System 1 caps and switch of
-`system1_verb.go` are removed in MA3.6; a per-submit judge call is only
-acceptable if that is gone.
-
-Open questions on the router are in section 18 item 9.
+A route is also a request-record sender in the trust sense: the router has a
+track record in the action class `route/I1`, and a destination desk may use it.
 
 ## 10. Trust: how the plan revises the draft
 
@@ -902,8 +987,7 @@ the owner's "context menu with full coverage"):
 | MA5.3 | Window management as a service: the `windows` provider contract and the API of W1; the window host stays in the shell | `lib/stores/desktop.js`, `Desktop.svelte` | W1, H4 | orange / 1 | `desktop-window-manager.spec.js`, `desktop-state-persistence.spec.js` unchanged |
 
 Folded system-design amendments (Devin ACCEPT): the collision arrows (below);
-unassigned work (MA5.1); v1 manifest reader lifetime (MA2.3, section 18 item
-14); K0 drill moved to S4; factual slips (the Texture family is 21 other files:
+unassigned work (MA5.1); v1 manifest reader lifetime (MA2.3, section 18 item 12); K0 drill moved to S4; factual slips (the Texture family is 21 other files:
 `PublicationResult`, `SourcePanel`, `Toolbar` and the rest; S1 does not name
 `packages/library-next/App.svelte` as a clipboard site because it has no
 `navigator.clipboard` at this commit); doc inconsistencies resolved: provider
@@ -922,12 +1006,55 @@ the sandbox, like decision 3; S4 depends on S3 for Open with.
 Goal: front-end sandbox; hardening and fuzzing of the worker and broker; gVisor
 for desk workers if Phase 0 holds; one runtime for all desks.
 
+### 12.1 What Phase 6 gates (R24)
+
+- **Desk-bearing packages.** No desk-bearing package from a non-first-party
+  publisher can be published or installed until MA6.1 to MA6.5 have landed
+  (the iframe sandbox, the broker audit and fuzzing, and the worker sandbox
+  Phase 0 selects; if Phase 0 rejects gVisor, the gate is the iframe sandbox,
+  the audit, the fuzzing and the alternative the owner chooses). The
+  validator enforces it as a capability check (MA2.3). First-party desks are
+  unaffected, so Phase 4 proceeds.
+- **Front-end-only packages.** The earlier ruling (R16) stands: publishing
+  stays open until the iframe sandbox ships, with no known-publishers interim.
+  The two rulings fit together this way, as the plan's reading:
+  - *Publishing* a front-end-only package by any publisher is open before
+    MA6.1. A release lands in the Library catalogue.
+  - *Installing a data-only package* (themes, command packs, settings
+    schemas, the T0 kinds of modular 2) from another publisher is allowed
+    before MA6.1 because it runs no code.
+  - *Installing a code-bearing front-end package* (app windows, pipeline
+    handlers, providers) from another publisher is refused before MA6.1,
+    because before the sandbox it would run in the shell realm with the session
+    and could read routes. This is R24's "no third-party front-end package that
+    reads routes before the iframe sandbox"; it matches the system design's
+    standing statement that the Library does not offer T1 code from other
+    publishers before S13 (modular section 1). After MA6.1, such packages
+    install and read only the routes their ceiling names, through the bridge.
+  - First-party code-bearing packages are not affected.
+
+### 12.2 Security process (R27)
+
+1. Defence in depth, built in the order of this plan: per-user VMs, tape
+   restore, process confinement and the frame check (exist), custody and leases
+   (Phase 3), the sandboxes (this phase), trust (Phase 7).
+2. Once the functionality is satisfying (after Phase 5 for the product path and
+   MA6.1 to MA6.5 for isolation), agentic red teaming from the inside: agents
+   with the community-desk threat model attack d@e only, with planted
+   known-bad packages (the drills of MA7.9). Never the paper or an owner's
+   computer.
+3. Iterate: each finding is a problem record first, then a fix, then a new
+   drill; the red-team round repeats after each hardening slice and before any
+   widening of what a non-first-party publisher may publish.
+
+### 12.3 Slices
+
 | Slice | Work | Files | Deps | Class / tier | Proof | Rollback |
 |---|---|---|---|---|---|---|
-| MA6.1 | Iframe sandbox for app UIs: opaque-origin frame with a message bridge (modular decision 7); the SDK in the frame is stubs that post messages; every call grant-checked; the `fetchWithRenewal` session never crosses. After it ships, publishing of front-end packages by others is offered publicly and the MA3.10 app-identity check becomes unforgeable. Until it ships, full publishing stays open (R16) | `frontend/src/lib/PackageAppFrame.svelte`, `internal/pkgruntime/build-module.mjs`, `app-sdk.ts` | Phase 5 | red / 2 | a hostile fixture app cannot read the shell DOM, the session, or another app's routes; the contract runner passes in sandboxed mode | revert; renderers stay T2 |
+| MA6.1 | Iframe sandbox for app UIs: opaque-origin frame with a message bridge (modular decision 7); the SDK in the frame is stubs that post messages; every call grant-checked against the ceiling; the `fetchWithRenewal` session never crosses. After it ships, code-bearing front-end packages from other publishers can install (section 12.1) and the MA3.10 app-identity check becomes unforgeable. Until it ships, publishing stays open (R16) and code-bearing installs from others are refused | `frontend/src/lib/PackageAppFrame.svelte`, `internal/pkgruntime/build-module.mjs`, `app-sdk.ts` | Phase 5 | red / 2 | a hostile fixture app cannot read the shell DOM, the session, or another app's routes; the contract runner passes in sandboxed mode | revert; renderers stay T2 |
 | MA6.2 | Worker and broker hardening audit (red-team items 3 and 5): explicit denials in the seccomp profile (io_uring, keyctl, bpf, perf events, userfaultfd, ptrace, namespace clones), a mount namespace without /proc, /sys and /dev, fd closure across the worker's execve, rlimits, a unique uid per activation, restart intensity for crash loops. Each is checked against `desk_cell_confinement_linux.go` (not read by this author: hypothesis that some are already present) | `internal/yaegikernel/desk_cell_confinement*.go`, `desk_worker_spawn_linux.go`, `desk_cgroup_linux.go` | none | red / 2 | the profile test enumerates what each is; an escape test per denied class; a selftest at boot | revert |
 | MA6.3 | Broker protocol fuzzing: native Go fuzz targets for `BrokerRequest` decode, the frame multiplexer (`worker_mux.go`) and each frame handler's payload; bound every field; audit `FrameAllowed` and verb handlers for confused-deputy use (a verb that acts with the daemon's authority on a cell-supplied reference) | `internal/yaegikernel/{broker_protocol.go,worker_mux.go,desk_session_worker.go}`, `agentcore/tools_*` handlers | none | orange / 1 | a fuzz corpus in CI for a fixed time; each handler has a field-bound test | revert |
-| MA6.4 | gVisor for desk workers, if Phase 0 holds (section 18 item 2): the spawner starts the worker under `runsc` with systrap; the fd 3 socketpair and slot token cross unchanged; "required" confinement mode restated for the new layering | `internal/yaegikernel/desk_worker_spawn_linux.go`, `desk_cell_confinement*.go`, guest image | MA0.2, MA6.2 | red / 2 | the cell benchmark within the accepted ratio; a hostile cell cannot reach the host; a boot selftest | revert to the process-only profile only by an owner act, since it lowers isolation |
+| MA6.4 | gVisor for desk workers, if Phase 0 holds (section 18 item 2): the spawner starts the worker under `runsc` with systrap; the fd 3 socketpair and slot token cross unchanged; "required" confinement mode restated for the new layering. Yaegi runs inside gVisor, performance permitting; engineering's mutation already runs in capsules. How many sandboxes (one per desk, or shared per trust class) waits for the running memory experiment (MA0.1) | `internal/yaegikernel/desk_worker_spawn_linux.go`, `desk_cell_confinement*.go`, guest image | MA0.1, MA0.2, MA6.2 | red / 2 | the cell benchmark within the accepted ratio; a hostile cell cannot reach the host; a boot selftest | revert to the process-only profile only by an owner act, since it lowers isolation |
 | MA6.5 | One runtime, yaegi with full Go modules, for all desks: every desk, first-party or published, runs model cells and package-shipped Go modules in the same yaegi worker; the import allowlist (16 stdlib packages, `internal/yaegikernel/allowlist.go:11-28`, banned list `:32-43`, fail-closed static check `eval.go:101-122`) widens by expressivity under the sandbox boundary (still no `unsafe`, `syscall`, `os/exec`, raw sockets); package Go modules are vendored by the platform build (source only) and loaded with their declared imports | `internal/yaegikernel/{allowlist.go,eval.go}`, `internal/pkgruntime`, `internal/apppackage` | MA6.4 | red / 2 | a desk cell calls a package Go module and the host verbs; a module importing a banned package is refused at publish; the cell benchmark | revert |
 
 Supersedes: desks 4.3 (T1a, T1b), D11. Keeps: desks 8.2 layers.
@@ -1010,11 +1137,11 @@ being loadable as modules.
 | Red-team 2: executable content in `uses` | red team | behaviour-surface hash, MA2.3 |
 | Red-team 3 and 5: broker as hostile input; confinement audit | red team | MA6.2, MA6.3 |
 | Red-team 4: provenance stamping, authority-threshold acts | red team | MA1.3, MA3.5, MA7.8 |
-| Red-team 6: wasm | red team | rejected by R9; the audit before community desks becomes MA6.2 and item 8 below |
+| Red-team 6: wasm | red team | rejected by R9; the audit and sandboxes before any community desk become MA6.2 to MA6.5 and the section 12.1 gate |
 | Red-team 7: no opaque binaries | red team | MA2.3 |
 | Red-team 8: resource envelope, outbound ledger | red team | MA3.9 without any spend ceiling (R8); owner-visible outbound ledger from lease and frame records |
 | Gateway monopoly: a package never supplies a provider, model or URL | red team | MA3.6; the local-first default routing is **not adopted** (R15: the VM chooses, no rule) |
-| Standing-intent decay and throttling | red team | section 18 item 16 |
+| Standing-intent decay and throttling | red team | section 18 item 14 |
 | Luna's findings | red team | considered as one seat's opinion; no review use of luna |
 
 ## 17. Docs to write once the design is committed
@@ -1047,92 +1174,94 @@ and the artifacts of MA7.9.
 
 ## 18. Open questions
 
-Only what remains after the rulings, plus what the plan found.
+Only what remains after the rulings (R19, R24, R25, R26, R27 closed the earlier
+items on research search, community desks before Phase 6, the router and the
+Go-module scope), plus what the plan found.
 
 1. **Trust parameters.** The impact table (I0 to I4 = 0, 1, 3, 10, 30), the
    thresholds tau (0.80, 0.95, 0.99), the severity multipliers (1, 5, 20), the
    decay (0.995 per day), the prior shrinkage and the change-discount range
-   (0.1 to 0.9) are the draft's starting numbers and policy. New with leases:
-   what lower bound earns a durable lease, how long durable is, and how
-   scope widens. Also the draft's questions: does the owner see the trust view
-   or only its effects; cross-computer aggregation on or off by default.
-2. **gVisor decision criteria.** Measured: about 1.8x warm cell, about 2x on
-   allocation-heavy work, +20% compute, 22 to 60 microsecond verb IPC, about
-   30 ms start. To set by the owner: the accepted overhead ratio; the RSS per
-   sandbox ceiling (from MA0.1, as a figure for five concurrent desks against
-   the guest memory budget); whether gVisor wraps all desk workers or only
-   those of published origin; the layering outcome of MA0.2 (hypothesis: if
-   Landlock cannot run inside gVisor, the "required" mode in
+   (0.1 to 0.9) are the draft's starting numbers and policy. With leases: what
+   lower bound earns a durable lease, how long durable is, and how scope
+   widens. Also the draft's questions: does the owner see the trust view or only
+   its effects; cross-computer aggregation on or off by default.
+2. **gVisor decision criteria and sandbox count.** Measured: about 1.8x warm
+   cell, about 2x on allocation-heavy work, +20% compute, 22 to 60 microsecond
+   verb IPC, about 30 ms start. For the owner to set: the accepted overhead
+   ratio; the resident memory per sandbox ceiling (from MA0.1); **how many
+   sandboxes: one per desk, or shared per trust class** (waits for the running
+   memory experiment); whether gVisor wraps all desk workers or only those of
+   published origin; the layering outcome of MA0.2 (hypothesis: if Landlock
+   cannot run inside gVisor, the "required" mode in
    `desk_cell_confinement.go:38-60` needs a new definition); and the fallback
-   when the platform is unavailable (the KVM platform is off on Node B because
-   nested=0; development hosts without x86 systrap).
-3. **Research and Texture search (R19).** Not decided. Recommended: the
-   `texture.search` first-party grant as a lease over a guarded typed API
-   (section 8.6), with option (a) separate child runs as the structural taint
-   control. Open: grant versus read-only SQL views versus both; whether
-   snippets may carry labels beyond `owner_private:texture`; snippet and
-   rate limits; whether the same grant form applies to the video-editing
-   style desks (R20 says yes).
-4. **The typed request vocabulary.** Which request kinds exist beyond cast,
+   when the platform is unavailable (KVM is off on Node B because nested=0;
+   development hosts without x86 systrap).
+3. **The typed request vocabulary.** Which request kinds exist beyond cast,
    ask, report, reply, escalate, precommit, resolve and disagreement
    (`lease_request`, `open_subject`, `decline`, `feed`, `inform`?); what
    replaces Note's information-only use; who sets materiality weight (the
    sender proposes, recipient and scorers judge: confirm); whether all requests
-   are scored or only material ones (owner question, R-list line 14).
-5. **Custodian shape and System 1** (owner questions, answered here as
-   recommendations): custodian is the owning app desk, not a separate desk and
-   not management; System 1 is the Jev judge generalised to a kernel service.
-   Confirm.
-6. **Engineering casts from non-management desks.** Recommended: forwarded to
-   management's admission ledger. Alternative: any desk may open an
-   assignment if it holds `admit.assignment`.
-7. **Where the Texture desk moves.** The roadmap lists Texture's app last in
-   Phase 5 and the desks in Phase 4; this plan moves Texture's desk with its app
-   in Phase 5 (app and desk never land separately) so MA4.11's names gate
+   are scored or only material ones.
+4. **Custodian shape and System 1** (owner questions, answered as
+   recommendations): the custodian is the owning app desk, not a separate desk
+   and not management; System 1 is the Jev judge generalised to a kernel
+   service. Confirm.
+5. **Engineering casts from non-management desks.** Recommended: forwarded to
+   management's admission ledger. Alternative: any desk may open an assignment
+   if it holds `admit.assignment`.
+6. **Where the Texture desk moves.** The roadmap lists Texture's app last in
+   Phase 5 and the desks in Phase 4; this plan moves Texture's desk with its
+   app in Phase 5 (app and desk never land separately), so MA4.11's names gate
    keeps a Texture residue until then.
-8. **Community desks before Phase 6.** R16 keeps full publishing open until the
-   iframe sandbox ships. The red team says no community desk should be offered
-   before the broker audit and fuzzing and the sandbox. Open: whether
-   publishing a desk-bearing package is allowed pre-Phase 6 with install
-   gated by the forced review (R10), or held.
-9. **The router (MA4.8).** Unclear and open: whether the choice set is closed
-   (the standing choices) or open (every `accepts` declaration); the
-   thresholds and margin for taking the top choice; what bounded context the
-   judge may see (focused app and title are owner-private data to a model
-   call; allowed under R15 but labelled); what settles a routing precommit (the
-   owner's next act); whether multi-intent input is split; the one-tap
-   disambiguation surface; the latency budget of one judge call on every
-   submit and the timeout default; whether the model role stays named
-   `conductor` or becomes `router`; whether the deterministic URL path stays as
-   a pre-filter.
-10. **"Full Go modules" and tool servers.** Does "full Go modules" mean
-    vendored third-party pure-Go libraries compiled by the platform and loaded
-    into yaegi, or only package-shipped source and the host's verbs? What
-    sandbox do out-of-process tool servers (the backend protocol of modular
-    1) get: gVisor like desk workers, or a separate VM as an earlier ruling
-    suggested?
-11. **Provider calls and the trust draft.** The draft lists a provider call
-    carrying owner-private data as I3. R15 says no rule constrains models.
-    Plan: remove it and log. Confirm; the lease and label rules otherwise
-    treat a model call as an ordinary logged act.
-12. **Pre-iframe app UI custody.** Until MA6.1 the app-identity check is
-    advisory. Accept, or hold third-party front-end packages that read any
-    route until the sandbox ships.
-13. **Planned-restart trays.** MA1.1 deletes the retired message intent whose
+7. **Provider calls and the trust draft.** The draft lists a provider call
+   carrying owner-private data as I3. R15 says no rule constrains models. Plan:
+   remove it and log. Confirm.
+8. **Interplay reading, front-end packages before the iframe.** Section 12.1
+   reads R16 (publishing open) and R24 (no third-party front-end package reads
+   routes before the iframe) as: publishing open, data-only installs open,
+   code-bearing installs from others refused until MA6.1. Confirm this reading.
+9. **Third-party Go modules in desk code (R26).** Allowed in principle, since
+   generated code is no different from third-party code. The owner flags the
+   tension: importing a million lines of unreviewed code is a huge
+   vulnerability surface. Open, not decided: the gating of such imports and
+   which desks may import them (engineering, maybe others). Considerations:
+   - *Platform-built and pinned.* Source only, vendored and built by the
+     platform at a pinned version and digest, no opaque binaries (MA2.3), with
+     the module digest in the behaviour-surface hash.
+   - *Review depth versus line count.* A review sized by lines of imported code
+     is impractical for large modules; sizing by the capability the module can
+     reach (its import set, which stays inside the desk's derived set) is
+     cheaper but weaker. Whether a size bound or a transitive-dependency bound
+     applies.
+   - *Trust record per module publisher.* The trust draft's hierarchy extends to
+     module publishers: a module is a subject with a track record and a
+     change discount.
+   - *Curated set versus open.* A curated allowlist of modules reviewed once for
+     everyone, or any module reviewed per install.
+   - *Containment independent of review.* The module runs inside the same
+     sandbox and under the same per-desk import set as the cell; an import
+     outside the desk's set is refused at the static check whatever the module
+     is.
+10. **Out-of-process tool servers** (the backend protocol of modular section
+    1). What sandbox they get: gVisor like desk workers, or a separate VM as an
+    earlier ruling suggested. Not needed for Phases 1 to 5.
+11. **Planned-restart trays.** MA1.1 deletes the retired message intent whose
     branches exist for a pre-change tray that "still replays". Verify on the
     tape that no planned-restart marker has carried one.
-14. **Published v1 manifests.** MA2.3 deletes the v1 reader with no shim. The
-    exposure is any release published before P0 becoming uninstallable.
-    Check the listing count at build time; if non-zero, republish them on
-    their tracks or accept the loss (pre-release).
-15. **System 1 caps and switch.** `system1_verb.go:38-40, 56` make System 1 off
+12. **Published v1 manifests.** MA2.3 deletes the v1 reader with no shim. The
+    exposure is any release published before P0 becoming uninstallable. Check
+    the listing count at build time; if non-zero, republish them on their
+    tracks or accept the loss (pre-release).
+13. **System 1 caps and switch.** `system1_verb.go:38-40, 56` make System 1 off
     until configured, with per-run and per-day caps. Under R8 and "on, never
-    off", MA3.6 removes both. Confirm no ceiling is wanted for the judge.
-16. **Standing-intent throttling** for packages with no owner interaction
-    (red team item): a bound on schedule frequency is in MA3.9; the decay after
-    seven days idle is not adopted without the owner.
-17. **Unread by this author.** The `d0-protocol` branch was inspected by file
-    list and commit subjects only; the sandbox/confinement files
-    `desk_cell_confinement_linux.go` and the desk-worker spawn were not read in
-    full; the desk-design file lists for D6 to D9 are unverified at this
-    commit and must be re-grepped by each slice's first step.
+    off", MA3.6 removes both. Confirm no ceiling is wanted for the judge, given
+    that the router calls it on every submission.
+14. **Standing-intent throttling** for packages with no owner interaction (red
+    team): a bound on schedule frequency is in MA3.9; the decay after seven
+    days idle is not adopted without the owner.
+15. **Unread by this author.** The `d0-protocol` branch was inspected by file
+    list and commit subjects only; `desk_cell_confinement_linux.go` and the
+    desk-worker spawn were not read in full; the desk-design file lists for
+    D6 to D9 are unverified at this commit and must be re-grepped by each
+    slice's first step; the desktop focus and input signals the router's
+    settlement rule needs are a hypothesis until MA4.8's first step.
