@@ -9,6 +9,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -66,7 +67,7 @@ func (rt *Runtime) recordRoundReceipt(ctx context.Context, ownerID string, opera
 	if rt == nil || rt.store == nil || !roundEndAct(act) {
 		return nil
 	}
-	assignmentID, ok := strings.CutPrefix(strings.TrimSpace(operation.IdempotencyKey), "freeze-open:")
+	assignmentID, ok := store.EngineeringFreezeAssignmentOf(operation.IdempotencyKey)
 	if !ok || assignmentID == "" {
 		return nil
 	}

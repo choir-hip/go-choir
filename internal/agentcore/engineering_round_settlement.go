@@ -36,7 +36,7 @@ import (
 // ownerActAssignmentID is the assignment an engineering operation belongs
 // to (its freeze-open idempotency key), "" for any other operation.
 func ownerActAssignmentID(operation selfdev.Operation) string {
-	id, ok := strings.CutPrefix(strings.TrimSpace(operation.IdempotencyKey), store.EngineeringFreezeIdempotencyKey(""))
+	id, ok := store.EngineeringFreezeAssignmentOf(operation.IdempotencyKey)
 	if !ok {
 		return ""
 	}

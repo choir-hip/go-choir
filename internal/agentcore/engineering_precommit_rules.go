@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -245,8 +246,22 @@ func (rt *Runtime) settleEngineeringPrecommitsAtTerminal(ctx context.Context, as
 		return
 	}
 	obs := types.EngineeringTerminalObservation{Disposition: assignment.Disposition, Reason: reason, At: time.Now().UTC()}
+	var rejected *selfdev.Operation
+	// A candidate management passed in review stays for the owner when its
+	// run ends before the Complete (failBoundSelfdevOperation): the owner's
+	// claims wait for the owner's act (merge review, DeepSeek F4).
+	awaitingOwner := false
 	if rt.selfdevOperations != nil {
 		operation, _, found, err := assignmentOperation(context.WithoutCancel(ctx), rt.selfdevOperations, assignment.Binding.ComputerID, assignment.AssignmentID)
+		if err == nil && found && operation.State == selfdev.StateAwaitingApproval {
+			awaitingOwner = true
+		}
+		if err == nil && found && judgmentRejected(operation) {
+			// management's rejection in review was not settled while the
+			// engineer could still fix it (engineer_reuse.go); the round
+			// ended on it, so it is the final verdict.
+			rejected = &operation
+		}
 		if err == nil && found && strings.TrimSpace(operation.BundleDigest) != "" {
 			obs.CandidateFrozen = true
 			obs.CandidateRef = "selfdev-operation:" + operation.OperationID
@@ -255,8 +270,19 @@ func (rt *Runtime) settleEngineeringPrecommitsAtTerminal(ctx context.Context, as
 			_, obs.CandidateRetained = rt.retainedFor(operation, assignment.AssignmentID)
 		}
 	}
+	if rejected != nil {
+		verdict := types.EngineeringVerifyObservation{Decision: "fail", BundleDigest: rejected.BundleDigest, VerifierRefs: rejected.VerifierRefs,
+			OperationID: rejected.OperationID, OperationState: rejected.State, At: obs.At}
+		rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, "verify", obs.At,
+			func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
+				return types.SettleRuleOnVerify(rule, verdict)
+			})
+	}
 	rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, "terminal "+string(assignment.Disposition), obs.At,
 		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
+			if awaitingOwner && (rule.Kind == types.PrecommitRuleOwnerApproves || rule.Kind == types.PrecommitRuleApprovalMinutes) {
+				return types.RuleSettlement{}, false
+			}
 			return types.SettleRuleAtTerminal(rule, obs)
 		})
 }

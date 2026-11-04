@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -220,7 +219,7 @@ func (rt *Runtime) calibrationClaims(ctx context.Context, ownerID, computerID, a
 		if op, seen := operations[assignment]; seen {
 			return op
 		}
-		op, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignment))
+		op, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, computerID, assignment)
 		id := ""
 		if err == nil && found {
 			id = op.OperationID
