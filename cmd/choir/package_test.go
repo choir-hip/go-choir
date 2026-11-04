@@ -30,7 +30,7 @@ func testPackageRecord(t *testing.T) (string, json.RawMessage) {
 			TreePatch: pkgrelease.Blob{SHA256: strings.Repeat("7", 64), Bytes: 9}, ReviewPatch: pkgrelease.Blob{SHA256: strings.Repeat("8", 64), Bytes: 9},
 			ChangedPaths: []string{"frontend/src/packages/reader/App.svelte"}, BuiltOn: strings.Repeat("1", 40),
 		},
-		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), ABI: "choir.app-frontend/svelte-inline/v1"},
+		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), Schema: "choir.package/v2", ABI: "choir.app-frontend/svelte-inline/v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
 		Publisher: pkgrelease.Publisher{OwnerID: "o0", ComputerID: "c0"},
 		Operation: pkgrelease.Operation{OperationID: "op-0", BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
 	}

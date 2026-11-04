@@ -14,12 +14,12 @@
             "media_type": "image/png",
             "name": "files-next-desktop-1.png",
             "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
-            "url": "/api/catalog/releases/c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+            "url": "/api/catalog/releases/53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-04T17:25:31.006819Z",
-        "head_release_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
+        "head_published_at": "2026-11-04T22:09:48.59439Z",
+        "head_release_id": "53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70",
         "head_seq": 1,
         "package": "files-next",
         "releases": 1,
@@ -35,12 +35,12 @@
             "media_type": "image/png",
             "name": "files-next-desktop-1.png",
             "sha256": "0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
-            "url": "/api/catalog/releases/afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
+            "url": "/api/catalog/releases/54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-04T17:25:31.759005Z",
-        "head_release_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47",
+        "head_published_at": "2026-11-04T22:09:49.299745Z",
+        "head_release_id": "54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc",
         "head_seq": 2,
         "package": "files-next",
         "releases": 2,
@@ -56,7 +56,7 @@
             "media_type": "image/png",
             "name": "files-next-desktop-1.png",
             "sha256": "d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
-            "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
+            "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
             "width": 1280
           },
           {
@@ -66,7 +66,7 @@
             "media_type": "image/png",
             "name": "files-next-desktop-2.png",
             "sha256": "55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
-            "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
+            "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
             "width": 1280
           },
           {
@@ -76,12 +76,12 @@
             "media_type": "image/png",
             "name": "files-next-phone-1-mobile.png",
             "sha256": "e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
-            "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
+            "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
             "width": 390
           }
         ],
-        "head_published_at": "2026-11-04T17:25:32.578416Z",
-        "head_release_id": "a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e",
+        "head_published_at": "2026-11-04T22:09:50.059041Z",
+        "head_release_id": "38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825",
         "head_seq": 3,
         "package": "files-next",
         "releases": 3,
@@ -97,12 +97,12 @@
             "media_type": "image/png",
             "name": "library-next-desktop-1.png",
             "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
-            "url": "/api/catalog/releases/0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+            "url": "/api/catalog/releases/c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-04T17:25:38.179522Z",
-        "head_release_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
+        "head_published_at": "2026-11-04T22:09:55.2921Z",
+        "head_release_id": "c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06",
         "head_seq": 1,
         "package": "library-next",
         "releases": 1,
@@ -118,7 +118,7 @@
             "media_type": "image/png",
             "name": "library-next-desktop-1.png",
             "sha256": "e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
-            "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
+            "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
             "width": 1280
           },
           {
@@ -128,7 +128,7 @@
             "media_type": "image/png",
             "name": "library-next-desktop-2.png",
             "sha256": "9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
-            "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
+            "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
             "width": 1280
           },
           {
@@ -138,7 +138,7 @@
             "media_type": "image/png",
             "name": "library-next-phone-1-mobile.png",
             "sha256": "5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
-            "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
+            "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
             "width": 390
           },
           {
@@ -147,11 +147,11 @@
             "media_type": "video/webm",
             "name": "library-next-walkthrough.webm",
             "sha256": "34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e",
-            "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
+            "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
           }
         ],
-        "head_published_at": "2026-11-04T17:25:38.920302Z",
-        "head_release_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e",
+        "head_published_at": "2026-11-04T22:09:56.032115Z",
+        "head_release_id": "5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78",
         "head_seq": 2,
         "package": "library-next",
         "releases": 2,
@@ -167,7 +167,7 @@
             "media_type": "image/png",
             "name": "slides-next-desktop-1.png",
             "sha256": "d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
-            "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
+            "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
             "width": 1280
           },
           {
@@ -177,7 +177,7 @@
             "media_type": "image/png",
             "name": "slides-next-desktop-2.png",
             "sha256": "b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
-            "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
+            "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
             "width": 1280
           },
           {
@@ -187,7 +187,7 @@
             "media_type": "image/png",
             "name": "slides-next-desktop-3.png",
             "sha256": "dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
-            "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
+            "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
             "width": 1280
           },
           {
@@ -197,12 +197,12 @@
             "media_type": "image/png",
             "name": "slides-next-phone-1-mobile.png",
             "sha256": "5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
-            "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
+            "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
             "width": 390
           }
         ],
-        "head_published_at": "2026-11-04T17:25:35.018294Z",
-        "head_release_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
+        "head_published_at": "2026-11-04T22:09:52.385697Z",
+        "head_release_id": "913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5",
         "head_seq": 2,
         "package": "slides-next",
         "releases": 2,
@@ -218,12 +218,12 @@
             "media_type": "image/png",
             "name": "slides-next-desktop-1.png",
             "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
-            "url": "/api/catalog/releases/da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+            "url": "/api/catalog/releases/9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-04T17:25:35.879165Z",
-        "head_release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
+        "head_published_at": "2026-11-04T22:09:53.073467Z",
+        "head_release_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
         "head_seq": 2,
         "package": "slides-next",
         "releases": 3,
@@ -238,11 +238,11 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825",
           "description": "Read",
           "listing": {
             "package": "files-next",
-            "record_id": "a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e",
+            "record_id": "38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -267,7 +267,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-1.png",
               "sha256": "d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
-              "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
+              "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
               "width": 1280
             },
             {
@@ -277,7 +277,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-2.png",
               "sha256": "55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
-              "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
+              "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
               "width": 1280
             },
             {
@@ -287,7 +287,7 @@
               "media_type": "image/png",
               "name": "files-next-phone-1-mobile.png",
               "sha256": "e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
-              "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
+              "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
               "width": 390
             }
           ],
@@ -296,9 +296,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+              "schema": "choir.package/v2",
+              "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
             },
             "media": [
               {
@@ -341,8 +346,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",
-              "tree": "d41baf75fc19d49cba109de8267974db52ce4453"
+              "release_id": "013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8",
+              "tree": "f2eb3c299a2a673bfe0443e54dc91b8a67a00874"
             },
             "precommitments": [
               {
@@ -358,7 +363,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte",
                 "frontend/src/packages/files-next/files-store.js"
@@ -368,22 +373,22 @@
                 "sha256": "93ef0ec657aa08c81b12fbbd14d6f9b9f0ab04079712e7216c49c321950ba566"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "55208791996a8b4b533a9f9b66f39f70cf23aa78",
+              "tree": "991f33934a2092ddb785114f2927b47656826148",
               "tree_patch": {
-                "bytes": 2499,
-                "sha256": "550712b3c174afe92f2dabccf37c7ac25ebc33ad8cb01f478444a641cac83e59"
+                "bytes": 2469,
+                "sha256": "0425f68c08490e682b27599de75f17d14f53f15873d04a965bef2d9e79cda2ab"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e"
+          "release_id": "38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825"
         },
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8",
           "description": "Read",
           "listing": {
             "package": "files-next",
-            "record_id": "fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",
+            "record_id": "013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -408,7 +413,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-1.png",
               "sha256": "2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
-              "url": "/api/catalog/releases/fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
+              "url": "/api/catalog/releases/013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
               "width": 1280
             },
             {
@@ -418,7 +423,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-2.png",
               "sha256": "f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
-              "url": "/api/catalog/releases/fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
+              "url": "/api/catalog/releases/013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
               "width": 1280
             },
             {
@@ -428,7 +433,7 @@
               "media_type": "image/png",
               "name": "files-next-phone-1-mobile.png",
               "sha256": "962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
-              "url": "/api/catalog/releases/fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
+              "url": "/api/catalog/releases/013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
               "width": 390
             }
           ],
@@ -439,9 +444,14 @@
             },
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+              "schema": "choir.package/v2",
+              "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
             },
             "media": [
               {
@@ -484,8 +494,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c",
-              "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b"
+              "release_id": "784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a",
+              "tree": "95820523fbf338f3cd06b97576ec94b1919e6453"
             },
             "precommitments": [
               {
@@ -509,7 +519,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/files-next/App.svelte",
                 "frontend/src/packages/files-next/RenameDialog.svelte"
@@ -519,22 +529,22 @@
                 "sha256": "d7fc62e493157e9b0b588b713c611886b361f771b849e691367d06e6a5bd7f61"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "d41baf75fc19d49cba109de8267974db52ce4453",
+              "tree": "f2eb3c299a2a673bfe0443e54dc91b8a67a00874",
               "tree_patch": {
-                "bytes": 2399,
-                "sha256": "a6591f01f7692a4c243e0ad3e49c1315802ac51df45296d1d50dc833d7b1027a"
+                "bytes": 2369,
+                "sha256": "06cd457e4e737132c91444abe84f197b99dedb1403147e332d00f3d3cac2de57"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e"
+          "release_id": "013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8"
         },
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a",
           "description": "Read",
           "listing": {
             "package": "files-next",
-            "record_id": "8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c",
+            "record_id": "784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -559,7 +569,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-1.png",
               "sha256": "e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
-              "url": "/api/catalog/releases/8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
+              "url": "/api/catalog/releases/784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
               "width": 1280
             }
           ],
@@ -568,9 +578,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+              "schema": "choir.package/v2",
+              "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
             },
             "media": [
               {
@@ -594,13 +609,13 @@
               "name": "files-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+              "tree": "8669197cff9e45786875613d760a5f98ce0f1707"
             },
             "parent_patch": {
-              "bytes": 1863,
-              "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+              "bytes": 1833,
+              "sha256": "f4fea6b17119cc8d0e2bc2e6d147f3451b04a776035cd7c3a7c24cb4e9089712"
             },
             "precommitments": [
               {
@@ -618,7 +633,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte"
               ],
@@ -627,15 +642,15 @@
                 "sha256": "f4940e7c426743137da43d28c5dd6a41e4c8e147d87895e29352a8d7156013b6"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b",
+              "tree": "95820523fbf338f3cd06b97576ec94b1919e6453",
               "tree_patch": {
-                "bytes": 1960,
-                "sha256": "324b4d9c9f8a18dd6dfc1aeda5ae620724ecf6fc6b7f1efc989a9ee5f8928eca"
+                "bytes": 1930,
+                "sha256": "ec7264b28cf04b43cf4df876e4ac1ba62396668f5c6a62ece4343a1b7bf1d4ed"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c"
+          "release_id": "784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a"
         }
       ],
       "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
@@ -645,11 +660,11 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47",
+          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc",
           "description": "Read",
           "listing": {
             "package": "files-next",
-            "record_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47",
+            "record_id": "54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -674,7 +689,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-1.png",
               "sha256": "0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
-              "url": "/api/catalog/releases/afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
+              "url": "/api/catalog/releases/54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
               "width": 1280
             }
           ],
@@ -683,9 +698,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+              "schema": "choir.package/v2",
+              "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
             },
             "media": [
               {
@@ -710,8 +730,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1",
-              "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7"
+              "release_id": "a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b",
+              "tree": "cfd1167d5abe675f5377be60015c1608d54699b5"
             },
             "precommitments": [
               {
@@ -727,7 +747,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte",
                 "frontend/src/packages/files-next/files-store.js"
@@ -737,22 +757,22 @@
                 "sha256": "3e3c52bc409ccc8acb72390d3d954072776b93a00cb0d9b10b1466eb9315b40e"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "7f271aa277b5087caf48e41ae45871c050e2096a",
+              "tree": "949a5b3ca236ce0060a4aa5df7274e6f24ffb4cb",
               "tree_patch": {
-                "bytes": 2087,
-                "sha256": "3f4c5183b06e833980fa5808a366d19da3a92b68a2e6779009276e5488ffe795"
+                "bytes": 2057,
+                "sha256": "7bacc29bced7f6aff88322a93631e1b9a318bf4afdf61a3befdc7f512eba3c0d"
               }
             },
             "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
           },
-          "release_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47"
+          "release_id": "54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc"
         },
         {
-          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1",
+          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b",
           "description": "Read",
           "listing": {
             "package": "files-next",
-            "record_id": "ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1",
+            "record_id": "a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -777,7 +797,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-1.png",
               "sha256": "378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
-              "url": "/api/catalog/releases/ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
+              "url": "/api/catalog/releases/a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
               "width": 1280
             }
           ],
@@ -786,9 +806,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+              "schema": "choir.package/v2",
+              "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
             },
             "media": [
               {
@@ -812,13 +837,13 @@
               "name": "files-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+              "tree": "8669197cff9e45786875613d760a5f98ce0f1707"
             },
             "parent_patch": {
-              "bytes": 1863,
-              "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+              "bytes": 1833,
+              "sha256": "f4fea6b17119cc8d0e2bc2e6d147f3451b04a776035cd7c3a7c24cb4e9089712"
             },
             "precommitments": [
               {
@@ -836,7 +861,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/files-next/files-store.js"
               ],
@@ -845,15 +870,15 @@
                 "sha256": "3edbd2f20b2ab85e1a1d982d6c67fd5f836a7b6ca113737e98e66a9d5cc26e1c"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7",
+              "tree": "cfd1167d5abe675f5377be60015c1608d54699b5",
               "tree_patch": {
-                "bytes": 1966,
-                "sha256": "bf076eddc66f97c5e4123599275b14e1c2c297f1889a4cc8e9294d364c336cde"
+                "bytes": 1936,
+                "sha256": "0b357178c66bc6248883035800c182772866fb736fa97c643d951b3acb02c5cb"
               }
             },
             "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
           },
-          "release_id": "ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1"
+          "release_id": "a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b"
         }
       ],
       "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
@@ -863,11 +888,11 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
+          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70",
           "description": "Read",
           "listing": {
             "package": "files-next",
-            "record_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
+            "record_id": "53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -892,7 +917,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-1.png",
               "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
-              "url": "/api/catalog/releases/c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+              "url": "/api/catalog/releases/53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
               "width": 1280
             }
           ],
@@ -901,9 +926,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+              "schema": "choir.package/v2",
+              "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
             },
             "media": [
               {
@@ -927,13 +957,13 @@
               "name": "files-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+              "tree": "8669197cff9e45786875613d760a5f98ce0f1707"
             },
             "parent_patch": {
-              "bytes": 1863,
-              "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+              "bytes": 1833,
+              "sha256": "f4fea6b17119cc8d0e2bc2e6d147f3451b04a776035cd7c3a7c24cb4e9089712"
             },
             "precommitments": [
               {
@@ -951,7 +981,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte"
               ],
@@ -960,15 +990,15 @@
                 "sha256": "50810803d75291993a374d667ce6f3cc53766e64042fc8fac8c863f040689ff9"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "0724ad2f8bddb22330edf1f55341e28cf6c2da9a",
+              "tree": "ab624840f25b166144dfc975e42435c549e07607",
               "tree_patch": {
-                "bytes": 1875,
-                "sha256": "8c0d065fd9545863f2dfcd750bf626c66fe9ff3006a361b628322415c407fe74"
+                "bytes": 1845,
+                "sha256": "5d33f85d1bb88d08c587f31f3fa9fe0c510748e0a5d779d84eb9dde8ccc2b398"
               }
             },
             "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
           },
-          "release_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48"
+          "release_id": "53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70"
         }
       ],
       "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
@@ -978,11 +1008,11 @@
       "package": "slides-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
+          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5",
           "description": "Read",
           "listing": {
             "package": "slides-next",
-            "record_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
+            "record_id": "913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1007,7 +1037,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-1.png",
               "sha256": "d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
-              "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
+              "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
               "width": 1280
             },
             {
@@ -1017,7 +1047,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-2.png",
               "sha256": "b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
-              "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
+              "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
               "width": 1280
             },
             {
@@ -1027,7 +1057,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-3.png",
               "sha256": "dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
-              "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
+              "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
               "width": 1280
             },
             {
@@ -1037,7 +1067,7 @@
               "media_type": "image/png",
               "name": "slides-next-phone-1-mobile.png",
               "sha256": "5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
-              "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
+              "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
               "width": 390
             }
           ],
@@ -1046,9 +1076,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+              "schema": "choir.package/v2",
+              "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
             },
             "media": [
               {
@@ -1100,8 +1135,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
-              "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f"
+              "release_id": "c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0",
+              "tree": "b8998b60a2ea147aabdec14792d387d5cc3e203d"
             },
             "precommitments": [
               {
@@ -1127,7 +1162,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/slides-next/App.svelte",
                 "frontend/src/packages/slides-next/Present.svelte"
@@ -1137,22 +1172,22 @@
                 "sha256": "736dbeda688d85f432e022a55cdec35e152a72fbd15beef4cbd93dce9761d395"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "bc2f9fc815fec48027b51fcd25892e1a7ebdb5e7",
+              "tree": "5f04aca867db853b047b0289098f55162c47722a",
               "tree_patch": {
-                "bytes": 2409,
-                "sha256": "eeed058555e310f552406da59511f870d51404167827ca3d121783dd4c2de696"
+                "bytes": 2379,
+                "sha256": "f0d748ef6b8e3cc3e3b235d906eae443acc25018f50665694b6ae2a0eb4e5b65"
               }
             },
             "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
           },
-          "release_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f"
+          "release_id": "913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5"
         },
         {
-          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
+          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0",
           "description": "Read",
           "listing": {
             "package": "slides-next",
-            "record_id": "1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
+            "record_id": "c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1177,7 +1212,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-1.png",
               "sha256": "62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
-              "url": "/api/catalog/releases/1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
+              "url": "/api/catalog/releases/c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
               "width": 1280
             }
           ],
@@ -1186,9 +1221,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+              "schema": "choir.package/v2",
+              "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
             },
             "media": [
               {
@@ -1212,13 +1252,13 @@
               "name": "slides-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+              "tree": "f7057ca0a22acb282b907d13636dbad509abebe4"
             },
             "parent_patch": {
-              "bytes": 1895,
-              "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+              "bytes": 1865,
+              "sha256": "fc83fc91e0f6c3c3ece1408bd43b2db88c85b606c9e576c9a39d0692817e2518"
             },
             "precommitments": [
               {
@@ -1236,7 +1276,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/slides-next/Deck.svelte"
               ],
@@ -1245,15 +1285,15 @@
                 "sha256": "85c3dca79c4f5726963c21fb982d3e905359a8676a7c4527b26d242f17b67dfc"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f",
+              "tree": "b8998b60a2ea147aabdec14792d387d5cc3e203d",
               "tree_patch": {
-                "bytes": 2005,
-                "sha256": "8059033dbc639f8f1e250ba4fadd661c82174b961815ee0a2c660a54eb96a064"
+                "bytes": 1975,
+                "sha256": "7b3c6d015fa6458892e2f9d076158875fef181ca813f625678e143a339aa9b24"
               }
             },
             "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
           },
-          "release_id": "1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e"
+          "release_id": "c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0"
         }
       ],
       "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
@@ -1263,12 +1303,12 @@
       "package": "slides-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
+          "canonical_id": "obj:choir.package_release:b3duZXI:6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131",
           "description": "Read",
           "listing": {
             "package": "slides-next",
-            "prev_version_digest": "6ce82a9647645e81707a7eb696773fa253bc20a5610fa2cc63f45425b7bcdb73",
-            "record_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
+            "prev_version_digest": "276470d0faddb0fb15ca5267487344ee919f309c3be19b0f5aabb76c7a98e127",
+            "record_id": "6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1293,7 +1333,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-1.png",
               "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
-              "url": "/api/catalog/releases/0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+              "url": "/api/catalog/releases/6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
               "width": 1280
             }
           ],
@@ -1302,9 +1342,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+              "schema": "choir.package/v2",
+              "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
             },
             "media": [
               {
@@ -1329,8 +1374,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
-              "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8"
+              "release_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
+              "tree": "1f6a13975aefd55b122da0cc30e9d3954a9250d1"
             },
             "precommitments": [
               {
@@ -1346,7 +1391,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/slides-next/slide-render.js"
               ],
@@ -1355,22 +1400,22 @@
                 "sha256": "c4e170ab5bfb8b6dcec4d86174209d1097e39d942cd45e23c9eb90699a3f2edf"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "7883f3feb760ed61a223b97b11e3a05ae2934cd7",
+              "tree": "2f9741dc0e1c732da9e2093b0618173ee91b9985",
               "tree_patch": {
-                "bytes": 1964,
-                "sha256": "9a3c6203e6d69fbc7cd8cf2be3f7844dcd2ac3f63fcdd741522edcd813a7d5ae"
+                "bytes": 1934,
+                "sha256": "fa9e346aa52a5b9e899886d267a10863ee5232ab3da6e8d6fc115e4121593c76"
               }
             },
             "track": "owner"
           },
-          "release_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f"
+          "release_id": "6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131"
         },
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
+          "canonical_id": "obj:choir.package_release:b3duZXI:9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
           "description": "Read",
           "listing": {
             "package": "slides-next",
-            "record_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
+            "record_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1395,7 +1440,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-1.png",
               "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
-              "url": "/api/catalog/releases/da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+              "url": "/api/catalog/releases/9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
               "width": 1280
             }
           ],
@@ -1404,9 +1449,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+              "schema": "choir.package/v2",
+              "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
             },
             "media": [
               {
@@ -1431,8 +1481,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
-              "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60"
+              "release_id": "18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489",
+              "tree": "7a4464a34e4015cb7fb06c8e6bc240b0a1940fa1"
             },
             "precommitments": [
               {
@@ -1450,7 +1500,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/slides-next/Deck.svelte"
               ],
@@ -1459,22 +1509,22 @@
                 "sha256": "d52881f8db2bdec3da3cfa00f9c2525f9ff75536c54a7fbc07628abbcb2f4679"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8",
+              "tree": "1f6a13975aefd55b122da0cc30e9d3954a9250d1",
               "tree_patch": {
-                "bytes": 1941,
-                "sha256": "d207c32c723df9cc6acfeaf8167f64332f8f66e782a18d71a3e98aa5e6c73af1"
+                "bytes": 1911,
+                "sha256": "7477e90ba243c94215850a5bf18dc16f7aff5bf1428ac0a9ee5015c297218347"
               }
             },
             "track": "owner"
           },
-          "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9"
+          "release_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720"
         },
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
+          "canonical_id": "obj:choir.package_release:b3duZXI:18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489",
           "description": "Read",
           "listing": {
             "package": "slides-next",
-            "record_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
+            "record_id": "18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1499,7 +1549,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-1.png",
               "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
-              "url": "/api/catalog/releases/77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+              "url": "/api/catalog/releases/18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
               "width": 1280
             }
           ],
@@ -1508,9 +1558,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+              "schema": "choir.package/v2",
+              "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
             },
             "media": [
               {
@@ -1534,13 +1589,13 @@
               "name": "slides-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+              "tree": "f7057ca0a22acb282b907d13636dbad509abebe4"
             },
             "parent_patch": {
-              "bytes": 1895,
-              "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+              "bytes": 1865,
+              "sha256": "fc83fc91e0f6c3c3ece1408bd43b2db88c85b606c9e576c9a39d0692817e2518"
             },
             "precommitments": [
               {
@@ -1558,7 +1613,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/slides-next/slide-render.js"
               ],
@@ -1567,15 +1622,15 @@
                 "sha256": "62ca4d3d1514ece2ee4b69d1281c737e8666b0b59c04bc76f6edb211adbf2ac5"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60",
+              "tree": "7a4464a34e4015cb7fb06c8e6bc240b0a1940fa1",
               "tree_patch": {
-                "bytes": 1922,
-                "sha256": "d7298bfae091662788d895815f99010a10376ea167a0be388a125a0dce3f3ee7"
+                "bytes": 1892,
+                "sha256": "10872174b80bf5c95d343675ea32d2c5de8c12176cd70a7390c20dcbcd8bde5b"
               }
             },
             "track": "owner"
           },
-          "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4"
+          "release_id": "18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489"
         }
       ],
       "track": "owner"
@@ -1585,11 +1640,11 @@
       "package": "library-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78",
           "description": "Read",
           "listing": {
             "package": "library-next",
-            "record_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e",
+            "record_id": "5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1614,7 +1669,7 @@
               "media_type": "image/png",
               "name": "library-next-desktop-1.png",
               "sha256": "e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
-              "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
+              "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
               "width": 1280
             },
             {
@@ -1624,7 +1679,7 @@
               "media_type": "image/png",
               "name": "library-next-desktop-2.png",
               "sha256": "9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
-              "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
+              "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
               "width": 1280
             },
             {
@@ -1634,7 +1689,7 @@
               "media_type": "image/png",
               "name": "library-next-phone-1-mobile.png",
               "sha256": "5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
-              "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
+              "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
               "width": 390
             },
             {
@@ -1643,7 +1698,7 @@
               "media_type": "video/webm",
               "name": "library-next-walkthrough.webm",
               "sha256": "34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e",
-              "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
+              "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
             }
           ],
           "published_at": "2026-11-03T02:53:00.000000Z",
@@ -1651,9 +1706,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+              "schema": "choir.package/v2",
+              "sha256": "94779bb9b2523dc9fa43edff2b346d78de35e16d5109e926488f6ac4135481c8"
             },
             "media": [
               {
@@ -1703,8 +1763,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
-              "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f"
+              "release_id": "5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e",
+              "tree": "b3cca4a79edf4da504cfce232c1ae61dfc49f623"
             },
             "precommitments": [
               {
@@ -1720,7 +1780,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/library-next/Catalog.svelte",
                 "frontend/src/packages/library-next/ReleasePane.svelte"
@@ -1730,22 +1790,22 @@
                 "sha256": "f2ae8d92ef012aa8301322f9994e68d90620386e343e0921e6378678540329fa"
               },
               "root": "frontend/src/packages/library-next",
-              "tree": "3f787f2443e816e617b9b9d99164215da4bf297d",
+              "tree": "0d3d337b323959dffe9a98d69c324c2add842ffd",
               "tree_patch": {
-                "bytes": 2415,
-                "sha256": "bcc2c19eeb490943972cd125baceee249a754215447b6a4b7e98a345c7c26550"
+                "bytes": 2385,
+                "sha256": "eee75dd7f78ebcc6373e9541aabc424d82ea29b2820f3f0198cadd52246f90e2"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e"
+          "release_id": "5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78"
         },
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e",
           "description": "Read",
           "listing": {
             "package": "library-next",
-            "record_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
+            "record_id": "5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1770,7 +1830,7 @@
               "media_type": "image/png",
               "name": "library-next-desktop-1.png",
               "sha256": "228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
-              "url": "/api/catalog/releases/bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
+              "url": "/api/catalog/releases/5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
               "width": 1280
             },
             {
@@ -1780,7 +1840,7 @@
               "media_type": "image/png",
               "name": "library-next-phone-1-mobile.png",
               "sha256": "cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
-              "url": "/api/catalog/releases/bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
+              "url": "/api/catalog/releases/5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
               "width": 390
             }
           ],
@@ -1789,9 +1849,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+              "schema": "choir.package/v2",
+              "sha256": "94779bb9b2523dc9fa43edff2b346d78de35e16d5109e926488f6ac4135481c8"
             },
             "media": [
               {
@@ -1824,13 +1889,13 @@
               "name": "library-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+              "tree": "46374d96c4e7748d0175d4a8b1db32c78f9244af"
             },
             "parent_patch": {
-              "bytes": 1922,
-              "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+              "bytes": 1892,
+              "sha256": "3cd9d768616d4ea3eaac31b3680970e2d34a5fa8a837ad67348b005cb3f59bf8"
             },
             "precommitments": [
               {
@@ -1848,7 +1913,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/library-next/Catalog.svelte"
               ],
@@ -1857,15 +1922,15 @@
                 "sha256": "82bd845b266cab4e18c19b8682acf4d6804d393e23b0ed629c0f4312e397de5b"
               },
               "root": "frontend/src/packages/library-next",
-              "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f",
+              "tree": "b3cca4a79edf4da504cfce232c1ae61dfc49f623",
               "tree_patch": {
-                "bytes": 2036,
-                "sha256": "6b6c761d8201dbdbfcff19423bd9242a75b1eba284037be73d5bc7683a80f345"
+                "bytes": 2006,
+                "sha256": "3d2a7108b316512a7d40d525b12c93e0f95533cd95359e7a66dfb5aa8dc8b527"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208"
+          "release_id": "5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e"
         }
       ],
       "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
@@ -1875,11 +1940,11 @@
       "package": "library-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
+          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06",
           "description": "Read",
           "listing": {
             "package": "library-next",
-            "record_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
+            "record_id": "c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1904,7 +1969,7 @@
               "media_type": "image/png",
               "name": "library-next-desktop-1.png",
               "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
-              "url": "/api/catalog/releases/0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+              "url": "/api/catalog/releases/c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
               "width": 1280
             }
           ],
@@ -1913,9 +1978,14 @@
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
+              "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+              "class": "app",
+              "desks_count": 0,
               "kinds_count": 0,
+              "level": "default",
               "opens_count": 0,
-              "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+              "schema": "choir.package/v2",
+              "sha256": "94779bb9b2523dc9fa43edff2b346d78de35e16d5109e926488f6ac4135481c8"
             },
             "media": [
               {
@@ -1939,13 +2009,13 @@
               "name": "library-next"
             },
             "parent": {
-              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "kind": "base",
-              "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+              "tree": "46374d96c4e7748d0175d4a8b1db32c78f9244af"
             },
             "parent_patch": {
-              "bytes": 1922,
-              "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+              "bytes": 1892,
+              "sha256": "3cd9d768616d4ea3eaac31b3680970e2d34a5fa8a837ad67348b005cb3f59bf8"
             },
             "precommitments": [
               {
@@ -1963,7 +2033,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
               "changed_paths": [
                 "frontend/src/packages/library-next/catalog-client.js"
               ],
@@ -1972,15 +2042,15 @@
                 "sha256": "ca9c475c96cdd3931bd9e5fc0b5c0ad08a4198fd0800dd3fe383a58fdec79a98"
               },
               "root": "frontend/src/packages/library-next",
-              "tree": "36635904a4ebaae6e2daa86485318632734c1375",
+              "tree": "e7c4be3da6ec88d237d3864a4e13793fefb1d5dd",
               "tree_patch": {
-                "bytes": 2020,
-                "sha256": "44e844784714daa5ee2dfa07fc00c1e52f2fe4d2f06c41b17d965989847807d1"
+                "bytes": 1990,
+                "sha256": "4fbd564974070b103c289b71eff9e0cbabf265bb52a07382ca3c34f6de51ef1e"
               }
             },
             "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
           },
-          "release_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5"
+          "release_id": "c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06"
         }
       ],
       "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
@@ -1988,11 +2058,11 @@
   ],
   "releases": [
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78",
       "description": "Read",
       "listing": {
         "package": "library-next",
-        "record_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e",
+        "record_id": "5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2017,7 +2087,7 @@
           "media_type": "image/png",
           "name": "library-next-desktop-1.png",
           "sha256": "e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
-          "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
+          "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
           "width": 1280
         },
         {
@@ -2027,7 +2097,7 @@
           "media_type": "image/png",
           "name": "library-next-desktop-2.png",
           "sha256": "9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
-          "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
+          "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
           "width": 1280
         },
         {
@@ -2037,7 +2107,7 @@
           "media_type": "image/png",
           "name": "library-next-phone-1-mobile.png",
           "sha256": "5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
-          "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
+          "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
           "width": 390
         },
         {
@@ -2046,7 +2116,7 @@
           "media_type": "video/webm",
           "name": "library-next-walkthrough.webm",
           "sha256": "34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e",
-          "url": "/api/catalog/releases/f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
+          "url": "/api/catalog/releases/5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
         }
       ],
       "published_at": "2026-11-03T02:53:00.000000Z",
@@ -2054,9 +2124,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+          "schema": "choir.package/v2",
+          "sha256": "94779bb9b2523dc9fa43edff2b346d78de35e16d5109e926488f6ac4135481c8"
         },
         "media": [
           {
@@ -2106,8 +2181,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
-          "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f"
+          "release_id": "5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e",
+          "tree": "b3cca4a79edf4da504cfce232c1ae61dfc49f623"
         },
         "precommitments": [
           {
@@ -2123,7 +2198,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/library-next/Catalog.svelte",
             "frontend/src/packages/library-next/ReleasePane.svelte"
@@ -2133,22 +2208,22 @@
             "sha256": "f2ae8d92ef012aa8301322f9994e68d90620386e343e0921e6378678540329fa"
           },
           "root": "frontend/src/packages/library-next",
-          "tree": "3f787f2443e816e617b9b9d99164215da4bf297d",
+          "tree": "0d3d337b323959dffe9a98d69c324c2add842ffd",
           "tree_patch": {
-            "bytes": 2415,
-            "sha256": "bcc2c19eeb490943972cd125baceee249a754215447b6a4b7e98a345c7c26550"
+            "bytes": 2385,
+            "sha256": "eee75dd7f78ebcc6373e9541aabc424d82ea29b2820f3f0198cadd52246f90e2"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "f5559bd28dbc32b6a29eddc25e9fdb4031731533d4c2f010d153ccc8aae9e55e"
+      "release_id": "5b4e26df103ac190ebea0cc89fcd48bab1bcc57b15cce9b962738df2aeab9f78"
     },
     {
-      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
+      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06",
       "description": "Read",
       "listing": {
         "package": "library-next",
-        "record_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5",
+        "record_id": "c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2173,7 +2248,7 @@
           "media_type": "image/png",
           "name": "library-next-desktop-1.png",
           "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
-          "url": "/api/catalog/releases/0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+          "url": "/api/catalog/releases/c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
           "width": 1280
         }
       ],
@@ -2182,9 +2257,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+          "schema": "choir.package/v2",
+          "sha256": "94779bb9b2523dc9fa43edff2b346d78de35e16d5109e926488f6ac4135481c8"
         },
         "media": [
           {
@@ -2208,13 +2288,13 @@
           "name": "library-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+          "tree": "46374d96c4e7748d0175d4a8b1db32c78f9244af"
         },
         "parent_patch": {
-          "bytes": 1922,
-          "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+          "bytes": 1892,
+          "sha256": "3cd9d768616d4ea3eaac31b3680970e2d34a5fa8a837ad67348b005cb3f59bf8"
         },
         "precommitments": [
           {
@@ -2232,7 +2312,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/library-next/catalog-client.js"
           ],
@@ -2241,22 +2321,22 @@
             "sha256": "ca9c475c96cdd3931bd9e5fc0b5c0ad08a4198fd0800dd3fe383a58fdec79a98"
           },
           "root": "frontend/src/packages/library-next",
-          "tree": "36635904a4ebaae6e2daa86485318632734c1375",
+          "tree": "e7c4be3da6ec88d237d3864a4e13793fefb1d5dd",
           "tree_patch": {
-            "bytes": 2020,
-            "sha256": "44e844784714daa5ee2dfa07fc00c1e52f2fe4d2f06c41b17d965989847807d1"
+            "bytes": 1990,
+            "sha256": "4fbd564974070b103c289b71eff9e0cbabf265bb52a07382ca3c34f6de51ef1e"
           }
         },
         "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
       },
-      "release_id": "0fff18c6d16e2ef2d700273d4715a7cb1597433693b51a7b4152e9df9ffe55a5"
+      "release_id": "c34812d4520f37d1462f8f35d1be48412b812891a4e4a516c509578f37a98c06"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e",
       "description": "Read",
       "listing": {
         "package": "library-next",
-        "record_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208",
+        "record_id": "5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2281,7 +2361,7 @@
           "media_type": "image/png",
           "name": "library-next-desktop-1.png",
           "sha256": "228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
-          "url": "/api/catalog/releases/bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
+          "url": "/api/catalog/releases/5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
           "width": 1280
         },
         {
@@ -2291,7 +2371,7 @@
           "media_type": "image/png",
           "name": "library-next-phone-1-mobile.png",
           "sha256": "cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
-          "url": "/api/catalog/releases/bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
+          "url": "/api/catalog/releases/5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
           "width": 390
         }
       ],
@@ -2300,9 +2380,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+          "schema": "choir.package/v2",
+          "sha256": "94779bb9b2523dc9fa43edff2b346d78de35e16d5109e926488f6ac4135481c8"
         },
         "media": [
           {
@@ -2335,13 +2420,13 @@
           "name": "library-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+          "tree": "46374d96c4e7748d0175d4a8b1db32c78f9244af"
         },
         "parent_patch": {
-          "bytes": 1922,
-          "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+          "bytes": 1892,
+          "sha256": "3cd9d768616d4ea3eaac31b3680970e2d34a5fa8a837ad67348b005cb3f59bf8"
         },
         "precommitments": [
           {
@@ -2359,7 +2444,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/library-next/Catalog.svelte"
           ],
@@ -2368,23 +2453,23 @@
             "sha256": "82bd845b266cab4e18c19b8682acf4d6804d393e23b0ed629c0f4312e397de5b"
           },
           "root": "frontend/src/packages/library-next",
-          "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f",
+          "tree": "b3cca4a79edf4da504cfce232c1ae61dfc49f623",
           "tree_patch": {
-            "bytes": 2036,
-            "sha256": "6b6c761d8201dbdbfcff19423bd9242a75b1eba284037be73d5bc7683a80f345"
+            "bytes": 2006,
+            "sha256": "3d2a7108b316512a7d40d525b12c93e0f95533cd95359e7a66dfb5aa8dc8b527"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "bad86c8da842ac7e82bc3ab1650566e5f03aeff5fbb24757c8b02a1981cf5208"
+      "release_id": "5c4c0cd6afa51e966ddbe51d6c55d411fc762ea4b68f18ec9504c7d566136d6e"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
+      "canonical_id": "obj:choir.package_release:b3duZXI:6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131",
       "description": "Read",
       "listing": {
         "package": "slides-next",
-        "prev_version_digest": "6ce82a9647645e81707a7eb696773fa253bc20a5610fa2cc63f45425b7bcdb73",
-        "record_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f",
+        "prev_version_digest": "276470d0faddb0fb15ca5267487344ee919f309c3be19b0f5aabb76c7a98e127",
+        "record_id": "6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2409,7 +2494,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-1.png",
           "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
-          "url": "/api/catalog/releases/0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+          "url": "/api/catalog/releases/6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
           "width": 1280
         }
       ],
@@ -2418,9 +2503,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+          "schema": "choir.package/v2",
+          "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
         },
         "media": [
           {
@@ -2445,8 +2535,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
-          "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8"
+          "release_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
+          "tree": "1f6a13975aefd55b122da0cc30e9d3954a9250d1"
         },
         "precommitments": [
           {
@@ -2462,7 +2552,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/slides-next/slide-render.js"
           ],
@@ -2471,22 +2561,22 @@
             "sha256": "c4e170ab5bfb8b6dcec4d86174209d1097e39d942cd45e23c9eb90699a3f2edf"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "7883f3feb760ed61a223b97b11e3a05ae2934cd7",
+          "tree": "2f9741dc0e1c732da9e2093b0618173ee91b9985",
           "tree_patch": {
-            "bytes": 1964,
-            "sha256": "9a3c6203e6d69fbc7cd8cf2be3f7844dcd2ac3f63fcdd741522edcd813a7d5ae"
+            "bytes": 1934,
+            "sha256": "fa9e346aa52a5b9e899886d267a10863ee5232ab3da6e8d6fc115e4121593c76"
           }
         },
         "track": "owner"
       },
-      "release_id": "0eae045d9ea53ef91e61eaf89926852b57bfa7602b9f86dc139dba646e818d6f"
+      "release_id": "6c2884d5fa24a5d23748e6237db12db639a5e20fb0a5d0d46f239cd24e738131"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
+      "canonical_id": "obj:choir.package_release:b3duZXI:9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
       "description": "Read",
       "listing": {
         "package": "slides-next",
-        "record_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9",
+        "record_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2511,7 +2601,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-1.png",
           "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
-          "url": "/api/catalog/releases/da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+          "url": "/api/catalog/releases/9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
           "width": 1280
         }
       ],
@@ -2520,9 +2610,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+          "schema": "choir.package/v2",
+          "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
         },
         "media": [
           {
@@ -2547,8 +2642,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
-          "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60"
+          "release_id": "18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489",
+          "tree": "7a4464a34e4015cb7fb06c8e6bc240b0a1940fa1"
         },
         "precommitments": [
           {
@@ -2566,7 +2661,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/slides-next/Deck.svelte"
           ],
@@ -2575,22 +2670,22 @@
             "sha256": "d52881f8db2bdec3da3cfa00f9c2525f9ff75536c54a7fbc07628abbcb2f4679"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8",
+          "tree": "1f6a13975aefd55b122da0cc30e9d3954a9250d1",
           "tree_patch": {
-            "bytes": 1941,
-            "sha256": "d207c32c723df9cc6acfeaf8167f64332f8f66e782a18d71a3e98aa5e6c73af1"
+            "bytes": 1911,
+            "sha256": "7477e90ba243c94215850a5bf18dc16f7aff5bf1428ac0a9ee5015c297218347"
           }
         },
         "track": "owner"
       },
-      "release_id": "da5339bc57722f979f2d9e12fc7c2af323f6fc579f6f8cc1f4f3b121314988c9"
+      "release_id": "9db8ce5c5c4393b3aec97c0f32faf082b22f8cd95ccb4412b7c5b3e020217720"
     },
     {
-      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
+      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5",
       "description": "Read",
       "listing": {
         "package": "slides-next",
-        "record_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f",
+        "record_id": "913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2615,7 +2710,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-1.png",
           "sha256": "d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
-          "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
+          "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
           "width": 1280
         },
         {
@@ -2625,7 +2720,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-2.png",
           "sha256": "b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
-          "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
+          "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
           "width": 1280
         },
         {
@@ -2635,7 +2730,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-3.png",
           "sha256": "dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
-          "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
+          "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
           "width": 1280
         },
         {
@@ -2645,7 +2740,7 @@
           "media_type": "image/png",
           "name": "slides-next-phone-1-mobile.png",
           "sha256": "5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
-          "url": "/api/catalog/releases/98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
+          "url": "/api/catalog/releases/913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
           "width": 390
         }
       ],
@@ -2654,9 +2749,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+          "schema": "choir.package/v2",
+          "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
         },
         "media": [
           {
@@ -2708,8 +2808,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
-          "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f"
+          "release_id": "c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0",
+          "tree": "b8998b60a2ea147aabdec14792d387d5cc3e203d"
         },
         "precommitments": [
           {
@@ -2735,7 +2835,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/slides-next/App.svelte",
             "frontend/src/packages/slides-next/Present.svelte"
@@ -2745,22 +2845,22 @@
             "sha256": "736dbeda688d85f432e022a55cdec35e152a72fbd15beef4cbd93dce9761d395"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "bc2f9fc815fec48027b51fcd25892e1a7ebdb5e7",
+          "tree": "5f04aca867db853b047b0289098f55162c47722a",
           "tree_patch": {
-            "bytes": 2409,
-            "sha256": "eeed058555e310f552406da59511f870d51404167827ca3d121783dd4c2de696"
+            "bytes": 2379,
+            "sha256": "f0d748ef6b8e3cc3e3b235d906eae443acc25018f50665694b6ae2a0eb4e5b65"
           }
         },
         "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
       },
-      "release_id": "98181bb66d00ce3e0481008db7311a8a41262d2b73bd2ae08c0558e1bdf5031f"
+      "release_id": "913a71f4bbf4739e49a924838e58e9b00a2caa850449601423b9c731f3a84ea5"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
+      "canonical_id": "obj:choir.package_release:b3duZXI:18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489",
       "description": "Read",
       "listing": {
         "package": "slides-next",
-        "record_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4",
+        "record_id": "18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2785,7 +2885,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-1.png",
           "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
-          "url": "/api/catalog/releases/77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+          "url": "/api/catalog/releases/18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
           "width": 1280
         }
       ],
@@ -2794,9 +2894,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+          "schema": "choir.package/v2",
+          "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
         },
         "media": [
           {
@@ -2820,13 +2925,13 @@
           "name": "slides-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+          "tree": "f7057ca0a22acb282b907d13636dbad509abebe4"
         },
         "parent_patch": {
-          "bytes": 1895,
-          "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+          "bytes": 1865,
+          "sha256": "fc83fc91e0f6c3c3ece1408bd43b2db88c85b606c9e576c9a39d0692817e2518"
         },
         "precommitments": [
           {
@@ -2844,7 +2949,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/slides-next/slide-render.js"
           ],
@@ -2853,22 +2958,22 @@
             "sha256": "62ca4d3d1514ece2ee4b69d1281c737e8666b0b59c04bc76f6edb211adbf2ac5"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60",
+          "tree": "7a4464a34e4015cb7fb06c8e6bc240b0a1940fa1",
           "tree_patch": {
-            "bytes": 1922,
-            "sha256": "d7298bfae091662788d895815f99010a10376ea167a0be388a125a0dce3f3ee7"
+            "bytes": 1892,
+            "sha256": "10872174b80bf5c95d343675ea32d2c5de8c12176cd70a7390c20dcbcd8bde5b"
           }
         },
         "track": "owner"
       },
-      "release_id": "77de53093ee0c71a3b71692d0aa231bf225e35eacd069368f6038a016c5944e4"
+      "release_id": "18407fba04e352594479cedac1edee63ec2480aea36dbae38dd6ebdfffe47489"
     },
     {
-      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
+      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0",
       "description": "Read",
       "listing": {
         "package": "slides-next",
-        "record_id": "1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e",
+        "record_id": "c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2893,7 +2998,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-1.png",
           "sha256": "62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
-          "url": "/api/catalog/releases/1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
+          "url": "/api/catalog/releases/c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
           "width": 1280
         }
       ],
@@ -2902,9 +3007,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+          "schema": "choir.package/v2",
+          "sha256": "e3afd1886191281069bcab65313db8847fdea541370962ca87eb2cb6d41010c7"
         },
         "media": [
           {
@@ -2928,13 +3038,13 @@
           "name": "slides-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+          "tree": "f7057ca0a22acb282b907d13636dbad509abebe4"
         },
         "parent_patch": {
-          "bytes": 1895,
-          "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+          "bytes": 1865,
+          "sha256": "fc83fc91e0f6c3c3ece1408bd43b2db88c85b606c9e576c9a39d0692817e2518"
         },
         "precommitments": [
           {
@@ -2952,7 +3062,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/slides-next/Deck.svelte"
           ],
@@ -2961,22 +3071,22 @@
             "sha256": "85c3dca79c4f5726963c21fb982d3e905359a8676a7c4527b26d242f17b67dfc"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f",
+          "tree": "b8998b60a2ea147aabdec14792d387d5cc3e203d",
           "tree_patch": {
-            "bytes": 2005,
-            "sha256": "8059033dbc639f8f1e250ba4fadd661c82174b961815ee0a2c660a54eb96a064"
+            "bytes": 1975,
+            "sha256": "7b3c6d015fa6458892e2f9d076158875fef181ca813f625678e143a339aa9b24"
           }
         },
         "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
       },
-      "release_id": "1a962000d5adcd4a2be86420ffaa9084fb7cd4dd13bcac027bd5f5767454f88e"
+      "release_id": "c0475e25f3ca4b1a783c89af73d402d565868864efc014e893f34c77fd9508d0"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825",
       "description": "Read",
       "listing": {
         "package": "files-next",
-        "record_id": "a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e",
+        "record_id": "38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3001,7 +3111,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-1.png",
           "sha256": "d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
-          "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
+          "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
           "width": 1280
         },
         {
@@ -3011,7 +3121,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-2.png",
           "sha256": "55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
-          "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
+          "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
           "width": 1280
         },
         {
@@ -3021,7 +3131,7 @@
           "media_type": "image/png",
           "name": "files-next-phone-1-mobile.png",
           "sha256": "e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
-          "url": "/api/catalog/releases/a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
+          "url": "/api/catalog/releases/38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
           "width": 390
         }
       ],
@@ -3030,9 +3140,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+          "schema": "choir.package/v2",
+          "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
         },
         "media": [
           {
@@ -3075,8 +3190,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",
-          "tree": "d41baf75fc19d49cba109de8267974db52ce4453"
+          "release_id": "013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8",
+          "tree": "f2eb3c299a2a673bfe0443e54dc91b8a67a00874"
         },
         "precommitments": [
           {
@@ -3092,7 +3207,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte",
             "frontend/src/packages/files-next/files-store.js"
@@ -3102,22 +3217,22 @@
             "sha256": "93ef0ec657aa08c81b12fbbd14d6f9b9f0ab04079712e7216c49c321950ba566"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "55208791996a8b4b533a9f9b66f39f70cf23aa78",
+          "tree": "991f33934a2092ddb785114f2927b47656826148",
           "tree_patch": {
-            "bytes": 2499,
-            "sha256": "550712b3c174afe92f2dabccf37c7ac25ebc33ad8cb01f478444a641cac83e59"
+            "bytes": 2469,
+            "sha256": "0425f68c08490e682b27599de75f17d14f53f15873d04a965bef2d9e79cda2ab"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "a631873f9886ff0b777370dca0b589f64c25e7e99cfb882bf8951ba443c0bb0e"
+      "release_id": "38abd488f7b7ae4f6e9d8b28f24e3b76df177ca40e2f4252f1a46b7ddbdff825"
     },
     {
-      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47",
+      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc",
       "description": "Read",
       "listing": {
         "package": "files-next",
-        "record_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47",
+        "record_id": "54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3142,7 +3257,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-1.png",
           "sha256": "0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
-          "url": "/api/catalog/releases/afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
+          "url": "/api/catalog/releases/54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
           "width": 1280
         }
       ],
@@ -3151,9 +3266,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+          "schema": "choir.package/v2",
+          "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
         },
         "media": [
           {
@@ -3178,8 +3298,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1",
-          "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7"
+          "release_id": "a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b",
+          "tree": "cfd1167d5abe675f5377be60015c1608d54699b5"
         },
         "precommitments": [
           {
@@ -3195,7 +3315,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte",
             "frontend/src/packages/files-next/files-store.js"
@@ -3205,22 +3325,22 @@
             "sha256": "3e3c52bc409ccc8acb72390d3d954072776b93a00cb0d9b10b1466eb9315b40e"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "7f271aa277b5087caf48e41ae45871c050e2096a",
+          "tree": "949a5b3ca236ce0060a4aa5df7274e6f24ffb4cb",
           "tree_patch": {
-            "bytes": 2087,
-            "sha256": "3f4c5183b06e833980fa5808a366d19da3a92b68a2e6779009276e5488ffe795"
+            "bytes": 2057,
+            "sha256": "7bacc29bced7f6aff88322a93631e1b9a318bf4afdf61a3befdc7f512eba3c0d"
           }
         },
         "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
       },
-      "release_id": "afb15e4913f76e00d7cd140071780e37a2f609b88c0d2ee6b8fe2ac5f9511d47"
+      "release_id": "54356899c059fa2b0ee7153fdf94b2a6c9288b9a490373e96af8ceff27517dbc"
     },
     {
-      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
+      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70",
       "description": "Read",
       "listing": {
         "package": "files-next",
-        "record_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48",
+        "record_id": "53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3245,7 +3365,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-1.png",
           "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
-          "url": "/api/catalog/releases/c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+          "url": "/api/catalog/releases/53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
           "width": 1280
         }
       ],
@@ -3254,9 +3374,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+          "schema": "choir.package/v2",
+          "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
         },
         "media": [
           {
@@ -3280,13 +3405,13 @@
           "name": "files-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+          "tree": "8669197cff9e45786875613d760a5f98ce0f1707"
         },
         "parent_patch": {
-          "bytes": 1863,
-          "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+          "bytes": 1833,
+          "sha256": "f4fea6b17119cc8d0e2bc2e6d147f3451b04a776035cd7c3a7c24cb4e9089712"
         },
         "precommitments": [
           {
@@ -3304,7 +3429,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte"
           ],
@@ -3313,22 +3438,22 @@
             "sha256": "50810803d75291993a374d667ce6f3cc53766e64042fc8fac8c863f040689ff9"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "0724ad2f8bddb22330edf1f55341e28cf6c2da9a",
+          "tree": "ab624840f25b166144dfc975e42435c549e07607",
           "tree_patch": {
-            "bytes": 1875,
-            "sha256": "8c0d065fd9545863f2dfcd750bf626c66fe9ff3006a361b628322415c407fe74"
+            "bytes": 1845,
+            "sha256": "5d33f85d1bb88d08c587f31f3fa9fe0c510748e0a5d779d84eb9dde8ccc2b398"
           }
         },
         "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
       },
-      "release_id": "c08c38bcaccc0f32a32f497c0c009b04dd40d6ebde8b304008a2a543c3d0ea48"
+      "release_id": "53d5fa1756b33104c40ee927d1ced4db3a80bd4894ee56c090a2dbd9cb2a1c70"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8",
       "description": "Read",
       "listing": {
         "package": "files-next",
-        "record_id": "fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e",
+        "record_id": "013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3353,7 +3478,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-1.png",
           "sha256": "2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
-          "url": "/api/catalog/releases/fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
+          "url": "/api/catalog/releases/013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
           "width": 1280
         },
         {
@@ -3363,7 +3488,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-2.png",
           "sha256": "f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
-          "url": "/api/catalog/releases/fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
+          "url": "/api/catalog/releases/013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
           "width": 1280
         },
         {
@@ -3373,7 +3498,7 @@
           "media_type": "image/png",
           "name": "files-next-phone-1-mobile.png",
           "sha256": "962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
-          "url": "/api/catalog/releases/fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
+          "url": "/api/catalog/releases/013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
           "width": 390
         }
       ],
@@ -3384,9 +3509,14 @@
         },
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+          "schema": "choir.package/v2",
+          "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
         },
         "media": [
           {
@@ -3429,8 +3559,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c",
-          "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b"
+          "release_id": "784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a",
+          "tree": "95820523fbf338f3cd06b97576ec94b1919e6453"
         },
         "precommitments": [
           {
@@ -3454,7 +3584,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/files-next/App.svelte",
             "frontend/src/packages/files-next/RenameDialog.svelte"
@@ -3464,22 +3594,22 @@
             "sha256": "d7fc62e493157e9b0b588b713c611886b361f771b849e691367d06e6a5bd7f61"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "d41baf75fc19d49cba109de8267974db52ce4453",
+          "tree": "f2eb3c299a2a673bfe0443e54dc91b8a67a00874",
           "tree_patch": {
-            "bytes": 2399,
-            "sha256": "a6591f01f7692a4c243e0ad3e49c1315802ac51df45296d1d50dc833d7b1027a"
+            "bytes": 2369,
+            "sha256": "06cd457e4e737132c91444abe84f197b99dedb1403147e332d00f3d3cac2de57"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "fe223fd1158cd4ce0db9d508f0f9b2f15a8033d1931f9811e220e871ab0b394e"
+      "release_id": "013ece360a46a784f267d5abd7c04f40ec408b29f169bb79a174b3d6a71da1f8"
     },
     {
-      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1",
+      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b",
       "description": "Read",
       "listing": {
         "package": "files-next",
-        "record_id": "ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1",
+        "record_id": "a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3504,7 +3634,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-1.png",
           "sha256": "378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
-          "url": "/api/catalog/releases/ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
+          "url": "/api/catalog/releases/a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
           "width": 1280
         }
       ],
@@ -3513,9 +3643,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+          "schema": "choir.package/v2",
+          "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
         },
         "media": [
           {
@@ -3539,13 +3674,13 @@
           "name": "files-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+          "tree": "8669197cff9e45786875613d760a5f98ce0f1707"
         },
         "parent_patch": {
-          "bytes": 1863,
-          "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+          "bytes": 1833,
+          "sha256": "f4fea6b17119cc8d0e2bc2e6d147f3451b04a776035cd7c3a7c24cb4e9089712"
         },
         "precommitments": [
           {
@@ -3563,7 +3698,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/files-next/files-store.js"
           ],
@@ -3572,22 +3707,22 @@
             "sha256": "3edbd2f20b2ab85e1a1d982d6c67fd5f836a7b6ca113737e98e66a9d5cc26e1c"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7",
+          "tree": "cfd1167d5abe675f5377be60015c1608d54699b5",
           "tree_patch": {
-            "bytes": 1966,
-            "sha256": "bf076eddc66f97c5e4123599275b14e1c2c297f1889a4cc8e9294d364c336cde"
+            "bytes": 1936,
+            "sha256": "0b357178c66bc6248883035800c182772866fb736fa97c643d951b3acb02c5cb"
           }
         },
         "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
       },
-      "release_id": "ab78e32e9208e94df2a4aeba597aa5de42c30073f46b6dc5f18cab2fd50b21f1"
+      "release_id": "a109f3c364ebdff83132df015211f4186aa4a53ba530fb8ec0ddf21956276e3b"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a",
       "description": "Read",
       "listing": {
         "package": "files-next",
-        "record_id": "8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c",
+        "record_id": "784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3612,7 +3747,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-1.png",
           "sha256": "e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
-          "url": "/api/catalog/releases/8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
+          "url": "/api/catalog/releases/784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
           "width": 1280
         }
       ],
@@ -3621,9 +3756,14 @@
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
+          "behaviour_surface": "d60c330fd55978374898dee532915965dc1c708aabf29038a9aa1f3c4e773d99",
+          "class": "app",
+          "desks_count": 0,
           "kinds_count": 0,
+          "level": "default",
           "opens_count": 0,
-          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+          "schema": "choir.package/v2",
+          "sha256": "ff61f41afa4a73b5fb9a3a4520d2896443c13ed39f275e2fc5df3471a0449043"
         },
         "media": [
           {
@@ -3647,13 +3787,13 @@
           "name": "files-next"
         },
         "parent": {
-          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "commit": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "kind": "base",
-          "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+          "tree": "8669197cff9e45786875613d760a5f98ce0f1707"
         },
         "parent_patch": {
-          "bytes": 1863,
-          "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+          "bytes": 1833,
+          "sha256": "f4fea6b17119cc8d0e2bc2e6d147f3451b04a776035cd7c3a7c24cb4e9089712"
         },
         "precommitments": [
           {
@@ -3671,7 +3811,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "built_on": "210a910291f291ff48c07c46d9b3a81abcab6e62",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte"
           ],
@@ -3680,15 +3820,15 @@
             "sha256": "f4940e7c426743137da43d28c5dd6a41e4c8e147d87895e29352a8d7156013b6"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b",
+          "tree": "95820523fbf338f3cd06b97576ec94b1919e6453",
           "tree_patch": {
-            "bytes": 1960,
-            "sha256": "324b4d9c9f8a18dd6dfc1aeda5ae620724ecf6fc6b7f1efc989a9ee5f8928eca"
+            "bytes": 1930,
+            "sha256": "ec7264b28cf04b43cf4df876e4ac1ba62396668f5c6a62ece4343a1b7bf1d4ed"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "8311029612a773c1ed9ca6b78eef5192e901f75565987cd4bc1718cd0623f09c"
+      "release_id": "784ffdb6d1b85a2735a1f5d24dd3aab8aea7e4a8a1b72470bc0c6cabee323b5a"
     }
   ]
 }

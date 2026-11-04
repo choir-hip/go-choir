@@ -57,19 +57,17 @@ import (
 const pkgRoot = "frontend/src/packages/reader"
 
 const pkgManifest = `{
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "reader",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {"title": "Reader", "icon": "R", "description": "Read"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
     "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "public-preview"}, "theme": {}},
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": {"desks": []},
+  "capabilities": []
 }
 `
 
@@ -181,7 +179,7 @@ func (w *pkgWorld) build(content, owner string, parent *built) built {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := pkgrelease.CheckManifest("reader", []byte(pkgManifest))
+	manifest, version, err := pkgrelease.CheckManifest("reader", []byte(pkgManifest), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

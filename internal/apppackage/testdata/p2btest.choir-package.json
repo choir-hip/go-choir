@@ -1,8 +1,7 @@
 {
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "p2btest",
   "version": "0.1.0",
-  "origin": "first_party",
   "display": { "title": "P2b test", "icon": "T", "description": "fixture" },
   "app": {
     "entry": "App.svelte",
@@ -45,7 +44,6 @@
     }
   ],
   "uses_kinds": ["choir.content_item"],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": { "desks": [] },
+  "capabilities": []
 }

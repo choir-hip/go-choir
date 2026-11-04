@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -915,6 +916,9 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			}
 			obj, record, err := h.readPackageRecord(ctx, key.track, id)
 			if err != nil {
+				if pkgrelease.ReasonOf(err) == pkgrelease.ReasonManifestV1 {
+					noteLegacyV1Release(id)
+				}
 				if errors.Is(err, objectgraph.ErrNotFound) || pkgrelease.ReasonOf(err) != "" {
 					continue // a record that no longer verifies is not served
 				}
@@ -1072,4 +1076,17 @@ func (h *Handler) packageTrackHead(w http.ResponseWriter, r *http.Request, name 
 		return
 	}
 	writeJSON(w, http.StatusOK, PackageTrackHead{ReleaseID: head.RecordID, Tree: record.Source.Tree, Seq: head.Seq})
+}
+
+// legacyV1Seen holds the ids of releases published under the deleted v1
+// manifest that a catalog read has met. MA2.3 deletes the v1 reader with no
+// shim, so these drop out of the catalog; the log line is the build-time
+// count of that exposure (plan section 18 item 12): read it on staging after
+// the deploy, and republish those on their tracks or accept the loss.
+var legacyV1Seen sync.Map
+
+func noteLegacyV1Release(id string) {
+	if _, dup := legacyV1Seen.LoadOrStore(id, true); !dup {
+		log.Printf("corpusd: package release %s is a v1 manifest release and is no longer served (MA2.3)", id)
+	}
 }

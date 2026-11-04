@@ -33,19 +33,17 @@ import (
 const testRoot = "frontend/src/packages/reader"
 
 const testManifest = `{
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "reader",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {"title": "Reader", "icon": "R", "description": "Read"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
     "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "public-preview"}, "theme": {}},
   "opens": [{"media_type": "application/pdf", "extensions": ["pdf"]}],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": {"desks": []},
+  "capabilities": []
 }
 `
 
@@ -148,7 +146,7 @@ func (f *fixture) release(full string) (Record, Blobs) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := CheckManifest("reader", manifestRaw)
+	manifest, version, err := CheckManifest("reader", manifestRaw, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +317,7 @@ func TestHostAcceptsANewPackageOnlyWhenTheBaseLacksIt(t *testing.T) {
 	if err != nil || blobs.ParentPatch != nil {
 		t.Fatalf("new package blobs: parent_patch=%d bytes, %v", len(blobs.ParentPatch), err)
 	}
-	summary, version, err := CheckManifest("notes", []byte(manifest))
+	summary, version, err := CheckManifest("notes", []byte(manifest), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +373,7 @@ func TestHostRefusesKindsBeforeS12(t *testing.T) {
 	f := newFixture(t)
 	withKinds := strings.Replace(testManifest, `"kinds": []`, `"kinds": [{"kind": "choir.app.reader.note"}]`, 1)
 	full := f.tree(map[string]entry{testRoot + "/choir-package.json": {"100644", withKinds}})
-	if _, _, err := CheckManifest("reader", []byte(withKinds)); ReasonOf(err) != ReasonKindsNeedPlatform {
+	if _, _, err := CheckManifest("reader", []byte(withKinds), nil); ReasonOf(err) != ReasonKindsNeedPlatform {
 		t.Fatalf("L25 publisher side = %v", err)
 	}
 	record, blobs := f.release(f.tree(changed("<p>v2</p>\n")))

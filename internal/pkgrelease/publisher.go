@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -125,7 +126,7 @@ func ReadFile(ctx context.Context, repo, tree, path string) ([]byte, error) {
 // it verifies and stores it beside the release as listing-side metadata: the
 // record carries none, so the record format is unchanged.
 func ManifestDescription(raw []byte) string {
-	manifest, err := apppackage.ParseManifest(raw)
+	manifest, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
 	if err != nil {
 		return ""
 	}
@@ -138,11 +139,33 @@ func ManifestDescription(raw []byte) string {
 	return line
 }
 
+// treeFiles reads package files from a git tree in a scratch repository:
+// root is the package directory inside full. A path the manifest validator
+// admitted is a clean relative path, and a git tree path cannot leave the
+// tree, so there is nothing to escape; a symlink blob (mode 120000) is
+// refused by the confinement check before this runs.
+func treeFiles(ctx context.Context, dir string, env []string, full, root string) apppackage.FileReader {
+	return func(path string) ([]byte, error) {
+		raw, err := gitRun(ctx, dir, env, nil, "cat-file", "blob", full+":"+root+"/"+path)
+		if err != nil {
+			return nil, fmt.Errorf("the release holds no %s", path)
+		}
+		if len(raw) > apppackage.MaxSurfaceFileBytes {
+			return nil, fmt.Errorf("%s is over %d bytes", path, apppackage.MaxSurfaceFileBytes)
+		}
+		return raw, nil
+	}
+}
+
 // CheckManifest validates the package's choir-package.json bytes for a
-// release of package name: the manifest parses, names the package, and
-// declares no kinds before S12 (package_kinds_need_platform). It returns
-// the record's manifest summary and the manifest version.
-func CheckManifest(name string, raw []byte) (Manifest, string, error) {
+// release of package name published through the Library (origin published):
+// the manifest parses as choir.package/v2, names the package, refuses what a
+// publisher may not state or ask for (the platform's own facts, a privileged
+// grant, a desk before the Phase 6 sandbox), and declares no kinds before S12
+// (package_kinds_need_platform). files reads the package's source files for the
+// behaviour-surface hash and the desk import gate. It returns the record's
+// manifest summary and the manifest version.
+func CheckManifest(name string, raw []byte, files apppackage.FileReader) (Manifest, string, error) {
 	// Kinds first: a first-party package's kinds are generated into
 	// internal/apppackage/firstparty_gen.go, outside the package, so a
 	// release cannot carry them until runtime install (S12).
@@ -152,17 +175,35 @@ func CheckManifest(name string, raw []byte) (Manifest, string, error) {
 	if err := json.Unmarshal(raw, &probe); err == nil && len(probe.Kinds) > 0 {
 		return Manifest{}, "", refuse(ReasonKindsNeedPlatform, "the manifest declares %d kinds; a package's kinds need the platform until runtime install (S12)", len(probe.Kinds))
 	}
-	manifest, err := apppackage.ParseManifest(raw)
+	manifest, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
 	if err != nil {
+		switch {
+		case errors.Is(err, apppackage.ErrPublisherDeclared):
+			return Manifest{}, "", refuse(ReasonPublisherDeclared, "%v", err)
+		case errors.Is(err, apppackage.ErrPrivilegedGrant):
+			return Manifest{}, "", refuse(ReasonPrivilegedGrant, "%v", err)
+		case errors.Is(err, apppackage.ErrDeskNeedsSandbox):
+			return Manifest{}, "", refuse(ReasonDeskNeedsSandbox, "%v", err)
+		}
 		return Manifest{}, "", refuse(ReasonManifestInvalid, "%v", err)
 	}
 	if manifest.Name != name {
 		return Manifest{}, "", refuse(ReasonManifestInvalid, "the manifest names package %q, the release %q", manifest.Name, name)
 	}
-	return Manifest{
-		SHA256: computerevent.DigestBytes(raw), ABI: manifest.App.ABI,
-		KindsCount: len(manifest.Kinds), OpensCount: len(manifest.Opens),
-	}, manifest.Version, nil
+	surface, err := manifest.BehaviourSurface(files)
+	if err != nil {
+		return Manifest{}, "", refuse(ReasonManifestInvalid, "%v", err)
+	}
+	summary := Manifest{
+		SHA256: computerevent.DigestBytes(raw), Schema: manifest.Schema,
+		KindsCount: len(manifest.Kinds), OpensCount: len(manifest.Opens), DesksCount: len(manifest.Contributes.Desks),
+		Class: string(manifest.Class()), Level: string(manifest.Level()), BehaviourSurface: surface,
+	}
+	if manifest.App != nil {
+		summary.ABI = manifest.App.ABI
+		summary.RequiresSDK = manifest.App.RequiresSDK
+	}
+	return summary, manifest.Version, nil
 }
 
 // AddedSecrets runs the release's refusal-grade secret scan over the lines
@@ -470,7 +511,7 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	if err != nil || len(raw) > maxManifestBytes {
 		return DraftSource{}, refuse(ReasonManifestInvalid, "%s/choir-package.json is missing or unreadable", root)
 	}
-	manifest, version, err := CheckManifest(in.Name, raw)
+	manifest, version, err := CheckManifest(in.Name, raw, treeFiles(ctx, s.dir, s.env, full, root))
 	if err != nil {
 		return DraftSource{}, err
 	}

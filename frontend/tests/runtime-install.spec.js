@@ -36,14 +36,14 @@ const runtimeDir = path.join(repoRoot, 'internal/pkgruntime');
 const ORIGIN = 'https://choir.test';
 
 const FIXTURE_MANIFEST = {
-  schema: 'choir.app-package/v1', name: 'fixture', version: '1.0.0', origin: 'first_party',
+  schema: 'choir.package/v2', name: 'fixture', version: '1.0.0',
   display: { title: 'Fixture', icon: 'F', description: 'Runtime install fixture' },
   app: {
     entry: 'App.svelte', abi: 'choir.app-frontend/svelte-inline/v1', aliases: [], requires_sdk: '^1.0',
     launcher: { menu: true, desktopIcon: false, order: 900 }, window: { singleton: false, heavy: false },
     auth: { preview: 'private' }, theme: { surface: 'standard', shellDataAttr: 'data-fixture-window', contentClass: 'fixture-content' },
   },
-  opens: [], kinds: [], uses_kinds: [], desk: null, backend: null, grants: [],
+  opens: [], kinds: [], uses_kinds: [], contributes: { desks: [] }, capabilities: [],
 };
 
 const FIXTURE_APP = `<script>

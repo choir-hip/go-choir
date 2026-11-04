@@ -20,7 +20,17 @@ const (
 	ReasonManifestInvalid    = "package_manifest_invalid"
 	ReasonKindsNeedPlatform  = "package_kinds_need_platform"
 	ReasonUnchanged          = "package_unchanged"
-	ReasonTrackMoved         = "track_moved"
+	// ReasonManifestV1: a record published under the deleted v1 manifest.
+	ReasonManifestV1 = "package_manifest_v1_deleted"
+	// ReasonPrivilegedGrant: the manifest asks for a first-party-only grant.
+	ReasonPrivilegedGrant = "package_privileged_grant"
+	// ReasonDeskNeedsSandbox: a publisher's desk waits for the Phase 6 sandbox.
+	ReasonDeskNeedsSandbox = "package_desk_needs_sandbox"
+	// ReasonReviewRequired: the level needs a platform review record.
+	ReasonReviewRequired = "package_review_required"
+	// ReasonPublisherDeclared: the manifest states a fact only the platform sets.
+	ReasonPublisherDeclared = "package_publisher_declared"
+	ReasonTrackMoved        = "track_moved"
 	// ReasonScreenshotRequired: a release is listed only with at least one
 	// screenshot of the app it ships (owner, 2026-11-04: an app store).
 	ReasonScreenshotRequired = "screenshot_required"

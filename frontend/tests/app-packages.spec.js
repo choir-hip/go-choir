@@ -89,9 +89,24 @@ const badCases = [
   }, /kinds must be empty in P1/],
   ['desk', (root) => {
     const m = imageManifest(root);
-    m.desk = { name: 'image' };
+    m.contributes = { desks: [{ name: 'image', prompt: 'prompt.md' }] };
     fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
-  }, /desk must be null/],
+  }, /desks must be an empty list/],
+  ['declared-origin', (root) => {
+    const m = imageManifest(root);
+    m.origin = 'first_party';
+    fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
+  }, /"origin" is a platform fact/],
+  ['v1-desk-field', (root) => {
+    const m = imageManifest(root);
+    m.desk = null;
+    fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
+  }, /unknown field "desk"/],
+  ['bad-grant-name', (root) => {
+    const m = imageManifest(root);
+    m.capabilities = [{ grant: 'net:*' }];
+    fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
+  }, /grant must be a ui\.\* or desk\.\* name/],
   // F3: only real directories under src/packages.
   ['symlinked-package-dir', (root) => {
     fs.cpSync(path.join(root, 'src/packages/image'), path.join(root, 'elsewhere'), { recursive: true });

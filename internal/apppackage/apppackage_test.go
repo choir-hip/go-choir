@@ -44,7 +44,7 @@ func fixture(t *testing.T) Manifest {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := ParseManifest(raw)
+	m, err := ParseManifest(raw, OriginFirstParty)
 	if err != nil {
 		t.Fatalf("fixture manifest: %v", err)
 	}
@@ -80,12 +80,10 @@ func TestParseManifestAcceptsTheFixture(t *testing.T) {
 func TestParseManifestRefusesWhatP1AndTheSlicesDoNotAdmit(t *testing.T) {
 	cases := map[string]func(map[string]any){
 		"an unknown top-level field": func(v map[string]any) { v["legacy_kinds"] = []any{} },
-		"the wrong schema":           func(v map[string]any) { v["schema"] = "choir.app-package/v2" },
-		"an installed origin":        func(v map[string]any) { v["origin"] = "installed" },
-		"no origin":                  func(v map[string]any) { delete(v, "origin") },
-		"a desk":                     func(v map[string]any) { v["desk"] = map[string]any{"verbs": []any{}} },
-		"a backend":                  func(v map[string]any) { v["backend"] = map[string]any{"kind": "service"} },
-		"a grant":                    func(v map[string]any) { v["grants"] = []any{"net:*"} },
+		"the deleted v1 schema":      func(v map[string]any) { v["schema"] = "choir.app-package/v1" },
+		"a v1 desk field":            func(v map[string]any) { v["desk"] = nil },
+		"a v1 backend field":         func(v map[string]any) { v["backend"] = nil },
+		"a v1 grants field":          func(v map[string]any) { v["grants"] = []any{} },
 		"a bad version":              func(v map[string]any) { v["version"] = "1.0" },
 		"an empty title":             func(v map[string]any) { v["display"] = map[string]any{"title": " "} },
 		"the wrong abi":              func(v map[string]any) { v["app"].(map[string]any)["abi"] = "choir.app-frontend/v1" },
@@ -103,23 +101,23 @@ func TestParseManifestRefusesWhatP1AndTheSlicesDoNotAdmit(t *testing.T) {
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ParseManifest(fixtureJSON(t, mutate)); !errors.Is(err, ErrInvalidManifest) {
+			if _, err := ParseManifest(fixtureJSON(t, mutate), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
 				t.Fatalf("err = %v, want ErrInvalidManifest", err)
 			}
 		})
 	}
 	good, _ := os.ReadFile("testdata/p2btest.choir-package.json")
-	if _, err := ParseManifest(append(good, []byte(`{"x":1}`)...)); !errors.Is(err, ErrInvalidManifest) {
+	if _, err := ParseManifest(append(good, []byte(`{"x":1}`)...), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("trailing data: err = %v", err)
 	}
-	if _, err := ParseManifest([]byte(`{`)); !errors.Is(err, ErrInvalidManifest) {
+	if _, err := ParseManifest([]byte(`{`), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("truncated: err = %v", err)
 	}
 }
 
 // M2
 func TestParseManifestTakesAnSDKRange(t *testing.T) {
-	m, err := ParseManifest(fixtureJSON(t, func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = "^1.2" }))
+	m, err := ParseManifest(fixtureJSON(t, func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = "^1.2" }), OriginFirstParty)
 	if err != nil || m.App.RequiresSDK != "^1.2" {
 		t.Fatalf("requires_sdk = %q (%v)", m.App.RequiresSDK, err)
 	}
@@ -141,7 +139,7 @@ func TestParseManifestRefusesANameThatIsADeskOrTheShell(t *testing.T) {
 					k.(map[string]any)["kind"] = fmt.Sprintf("choir.app.%s.note%d", name, i)
 				}
 			})
-			_, err := ParseManifest(raw)
+			_, err := ParseManifest(raw, OriginFirstParty)
 			if !errors.Is(err, ErrInvalidManifest) {
 				t.Fatalf("name %q: err = %v, want ErrInvalidManifest", name, err)
 			}
@@ -175,7 +173,7 @@ func TestParseManifestRefusesBadKinds(t *testing.T) {
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ParseManifest(fixtureJSON(t, mutate)); !errors.Is(err, ErrInvalidManifest) {
+			if _, err := ParseManifest(fixtureJSON(t, mutate), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
 				t.Fatalf("err = %v, want ErrInvalidManifest", err)
 			}
 		})
@@ -318,7 +316,7 @@ func TestRegisterManifestRegistersTheKindsAndTheirSchemas(t *testing.T) {
 	changed := fixtureJSON(t, func(v map[string]any) {
 		v["kinds"].([]any)[0].(map[string]any)["schema"] = map[string]any{"type": "object"}
 	})
-	m2, err := ParseManifest(changed)
+	m2, err := ParseManifest(changed, OriginFirstParty)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +423,7 @@ func TestGeneratedTableMatchesTheFirstPartyManifests(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		m, err := ParseManifest(raw)
+		m, err := ParseManifest(raw, OriginFirstParty)
 		if err != nil {
 			t.Fatalf("%s: %v", e.Name(), err)
 		}
@@ -496,7 +494,7 @@ func TestParseManifestOpensDefaultFlag(t *testing.T) {
 			map[string]any{"media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "extensions": []any{"pptx"}, "default": false},
 			map[string]any{"media_type": "text/x-deck", "extensions": []any{"deck"}},
 		}
-	}))
+	}), OriginFirstParty)
 	if err != nil {
 		t.Fatalf("open-with-only entry refused: %v", err)
 	}
@@ -508,7 +506,7 @@ func TestParseManifestOpensDefaultFlag(t *testing.T) {
 	}
 	_, err = ParseManifest(fixtureJSON(t, func(v map[string]any) {
 		v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"x"}, "default": "no"}}
-	}))
+	}), OriginFirstParty)
 	if !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("string default: err = %v, want ErrInvalidManifest", err)
 	}

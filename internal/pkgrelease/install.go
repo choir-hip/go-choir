@@ -55,7 +55,7 @@ func (s *scratch) verifiedFull(ctx context.Context, rec Record, treePatch []byte
 	if err != nil || len(raw) > maxManifestBytes {
 		return "", refuse(ReasonManifestInvalid, "the release holds no readable %s/choir-package.json", root)
 	}
-	summary, version, err := CheckManifest(rec.Package.Name, raw)
+	summary, version, err := CheckManifest(rec.Package.Name, raw, treeFiles(ctx, s.dir, s.env, full, root))
 	if err != nil {
 		return "", err
 	}

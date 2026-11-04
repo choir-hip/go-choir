@@ -44,19 +44,17 @@ import (
 const draftRoot = "frontend/src/packages/reader"
 
 const draftManifest = `{
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "reader",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {"title": "Reader", "icon": "R", "description": "Read"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
     "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "public-preview"}, "theme": {}},
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": {"desks": []},
+  "capabilities": []
 }
 `
 

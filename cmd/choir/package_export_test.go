@@ -40,7 +40,16 @@ func exportGit(t *testing.T, dir string, env []string, stdin string, args ...str
 }
 
 func exportManifest(name, origin string) string {
-	return `{"schema":"choir.app-package/v1","name":"` + name + `","version":"1.0.0","origin":"` + origin + `"}` + "\n"
+	// origin is not a manifest field in v2: a non-first-party one is a
+	// publisher-declared platform fact, which main's gate refuses.
+	declared := ""
+	if origin != "first_party" {
+		declared = `"origin":"` + origin + `",`
+	}
+	return `{"schema":"choir.package/v2",` + declared + `"name":"` + name + `","version":"1.0.0",` +
+		`"display":{"title":"` + name + `","icon":"","description":""},` +
+		`"app":{"entry":"App.svelte","abi":"choir.app-frontend/svelte-inline/v1","aliases":[],"launcher":{"menu":true,"desktopIcon":false,"order":900},"window":{"singleton":false,"heavy":false},"auth":{"preview":"private"},"theme":{"surface":"standard","shellDataAttr":"data-x","contentClass":"x"}},` +
+		`"opens":[],"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}` + "\n"
 }
 
 func newExportWorld(t *testing.T) *exportWorld {
@@ -140,7 +149,7 @@ func (w *exportWorld) release(name string, files map[string]string, parentTree s
 			Root: root, Tree: tree, TreePatch: blob(blobs.TreePatch), ReviewPatch: blob(blobs.ReviewPatch),
 			ChangedPaths: []string{root + "/App.svelte"}, BuiltOn: w.base,
 		},
-		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), ABI: "choir.app-frontend/svelte-inline/v1"},
+		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), Schema: "choir.package/v2", ABI: "choir.app-frontend/svelte-inline/v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
 		Publisher: pkgrelease.Publisher{OwnerID: "owner-a", ComputerID: "computer-a1"},
 		Operation: pkgrelease.Operation{OperationID: "op-" + name, BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
 	}

@@ -163,7 +163,7 @@ func VerifyHostDescribed(ctx context.Context, in HostInput) (string, error) {
 	if err != nil || len(raw) > maxManifestBytes {
 		return "", refuse(ReasonManifestInvalid, "the release holds no readable %s/choir-package.json", root)
 	}
-	summary, version, err := CheckManifest(rec.Package.Name, raw)
+	summary, version, err := CheckManifest(rec.Package.Name, raw, treeFiles(ctx, s.dir, nil, full, root))
 	if err != nil {
 		return "", err
 	}

@@ -44,19 +44,17 @@ const installName = "demo-next"
 
 func installManifest(title string) string {
 	return `{
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "` + installName + `",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {"title": "` + title + `", "icon": "D", "description": "Demo"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
     "launcher": {"menu": true}, "window": {"singleton": false}, "auth": {"preview": "private"}, "theme": {}},
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": {"desks": []},
+  "capabilities": []
 }
 `
 }
@@ -87,7 +85,7 @@ func publishedPackage(t *testing.T, repo, base, track string, files map[string]s
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := pkgrelease.CheckManifest(installName, []byte(files["choir-package.json"]))
+	manifest, version, err := pkgrelease.CheckManifest(installName, []byte(files["choir-package.json"]), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

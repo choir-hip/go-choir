@@ -1,8 +1,7 @@
 {
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "image",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {
     "title": "Image",
     "icon": "🖼️",
@@ -34,7 +33,6 @@
   ],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": { "desks": [] },
+  "capabilities": []
 }

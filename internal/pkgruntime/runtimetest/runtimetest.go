@@ -18,17 +18,16 @@ import (
 // Manifest is a valid first-party manifest for name.
 func Manifest(name, extraApp string) string {
 	return `{
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "` + name + `",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {"title": "Fixture ` + name + `", "icon": "F", "description": "Runtime install fixture"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],` + extraApp + `
     "launcher": {"menu": true, "desktopIcon": false, "order": 900},
     "window": {"singleton": false, "heavy": false},
     "auth": {"preview": "private"},
     "theme": {"surface": "standard", "shellDataAttr": "data-fixture-window", "contentClass": "fixture-content"}},
-  "opens": [], "kinds": [], "uses_kinds": [], "desk": null, "backend": null, "grants": []
+  "opens": [], "kinds": [], "uses_kinds": [], "contributes": {"desks": []}, "capabilities": []
 }
 `
 }
@@ -92,7 +91,7 @@ func Release(t testing.TB, ownerID, name string, files map[string]string) (pkgre
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, version, err := pkgrelease.CheckManifest(name, []byte(files["choir-package.json"]))
+	manifest, version, err := pkgrelease.CheckManifest(name, []byte(files["choir-package.json"]), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

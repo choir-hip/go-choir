@@ -277,7 +277,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
     test.setTimeout(180_000);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'choir-contract-fixtures-'));
     const manifest = (name, extra = {}) => ({
-      schema: 'choir.app-package/v1', name, version: '1.0.0', origin: 'first_party',
+      schema: 'choir.package/v2', name, version: '1.0.0',
       display: { title: name, icon: 'F', description: 'Contract fixture' },
       app: {
         entry: 'App.svelte', abi: 'choir.app-frontend/svelte-inline/v1', aliases: [],
@@ -285,7 +285,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
         auth: { preview: 'private' }, theme: { surface: 'standard', shellDataAttr: `data-${name}-window`, contentClass: `${name}-content` },
         ...extra,
       },
-      opens: [], kinds: [], uses_kinds: [], desk: null, backend: null, grants: [],
+      opens: [], kinds: [], uses_kinds: [], contributes: { desks: [] }, capabilities: [],
     });
     const contract = (ready = '[data-fixture-app]', more = {}) => ({ schema: 'choir.package-contract/v1', ready, expect: [{ selector: '[data-fixture-title]', text: 'Fixture' }], ...more });
     const fixture = (name, app, { extra, ready, more } = {}) => {

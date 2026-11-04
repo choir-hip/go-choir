@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/release"
@@ -122,13 +123,23 @@ type Source struct {
 }
 
 // Manifest summarizes choir-package.json at the subtree; corpusd checks it
-// against the bytes.
+// against the bytes. Class, Level and BehaviourSurface are derived by the host
+// from the manifest and the source (apppackage), never read from a field the
+// publisher wrote. A release is source only: the platform builds from the
+// subtree the record binds, and the record carries no executable bytes.
 type Manifest struct {
-	SHA256      string `json:"sha256"`
-	ABI         string `json:"abi"`
+	SHA256 string `json:"sha256"`
+	Schema string `json:"schema"`
+	// ABI is the app's ABI; empty for a package with no app.
+	ABI         string `json:"abi,omitempty"`
 	RequiresSDK string `json:"requires_sdk,omitempty"`
 	KindsCount  int    `json:"kinds_count"`
 	OpensCount  int    `json:"opens_count"`
+	DesksCount  int    `json:"desks_count"`
+	Class       string `json:"class"`
+	Level       string `json:"level"`
+	// BehaviourSurface is the sha256 of apppackage.Manifest.BehaviourSurface.
+	BehaviourSurface string `json:"behaviour_surface"`
 }
 
 // Publisher is the computer that made and applied the change, and its owner.
@@ -275,8 +286,8 @@ func (r Record) Validate() error {
 			return fail("changed path %q is not a clean path under %s", path, r.Source.Root)
 		}
 	}
-	if !computerevent.IsSHA256(r.Manifest.SHA256) || strings.TrimSpace(r.Manifest.ABI) == "" || r.Manifest.KindsCount < 0 || r.Manifest.OpensCount < 0 {
-		return fail("manifest names a sha256, an abi and non-negative counts")
+	if err := r.Manifest.validate(); err != nil {
+		return err
 	}
 	if strings.TrimSpace(r.Operation.OperationID) == "" || !computerevent.IsSHA256(r.Operation.BundleDigest) || strings.TrimSpace(r.Operation.DecisionEvent) == "" {
 		return fail("operation_id, bundle_digest and decision_event are required")
@@ -364,6 +375,54 @@ func VerifyBlob(blob Blob, raw []byte) error {
 	}
 	if computerevent.DigestBytes(raw) != blob.SHA256 || len(raw) != blob.Bytes {
 		return refuse(ReasonBlobMismatch, "the blob bytes do not hash to %s with %d bytes", blob.SHA256, blob.Bytes)
+	}
+	return nil
+}
+
+// validate checks the manifest summary of a record: the schema is the current
+// one (a record of the deleted v1 manifest is refused, with no shim), the class
+// and level are the platform's vocabulary, the level is one a Library release
+// may carry, and a desk is refused while the platform lacks the Phase 6
+// isolation (R24), here again after the manifest check.
+func (m Manifest) validate() error {
+	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, format, args...) }
+	// A record published before manifest v2 summarized a v1 manifest and
+	// carried no schema or behaviour surface. The v1 reader is deleted with no
+	// shim (MA2.3), so such a release is refused with its own reason, which the
+	// catalog counts (LegacyV1).
+	if m.Schema == "" || m.BehaviourSurface == "" {
+		return refuse(ReasonManifestV1, "the release summarizes a v1 manifest; the v1 reader is deleted, so it can be republished on its track but not installed")
+	}
+	if m.Schema != apppackage.ManifestSchemaV2 {
+		return refuse(ReasonManifestInvalid, "manifest schema %q is not %s", m.Schema, apppackage.ManifestSchemaV2)
+	}
+	if !computerevent.IsSHA256(m.SHA256) || !computerevent.IsSHA256(m.BehaviourSurface) {
+		return fail("manifest names a sha256 and a behaviour_surface")
+	}
+	if m.KindsCount < 0 || m.OpensCount < 0 || m.DesksCount < 0 {
+		return fail("manifest counts are non-negative")
+	}
+	switch apppackage.Class(m.Class) {
+	case apppackage.ClassData, apppackage.ClassApp, apppackage.ClassDesk, apppackage.ClassAppDesk:
+	default:
+		return fail("manifest class %q is not inferred by the platform", m.Class)
+	}
+	hasApp := apppackage.Class(m.Class) == apppackage.ClassApp || apppackage.Class(m.Class) == apppackage.ClassAppDesk
+	hasDesk := apppackage.Class(m.Class) == apppackage.ClassDesk || apppackage.Class(m.Class) == apppackage.ClassAppDesk
+	if hasApp != (strings.TrimSpace(m.ABI) != "") || hasDesk != (m.DesksCount > 0) {
+		return fail("manifest class %q does not match its abi and desks_count", m.Class)
+	}
+	switch apppackage.Level(m.Level) {
+	case apppackage.LevelDefault:
+	case apppackage.LevelExtended:
+		return refuse(ReasonReviewRequired, "an extended-level release needs a platform review record, and the review pipeline (MA7.5) is not built")
+	case apppackage.LevelPrivileged:
+		return refuse(ReasonPrivilegedGrant, "a privileged grant is first-party only; a Library release cannot carry one")
+	default:
+		return fail("manifest level %q is not a level", m.Level)
+	}
+	if m.DesksCount > 0 && !apppackage.CurrentPlatform().DeskSandbox {
+		return refuse(ReasonDeskNeedsSandbox, "a desk-bearing release from a publisher waits for the Phase 6 sandbox (R24)")
 	}
 	return nil
 }

@@ -1,8 +1,7 @@
 {
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "files",
   "version": "1.0.0",
-  "origin": "first_party",
   "display": {
     "title": "Files",
     "icon": "📁",
@@ -27,7 +26,6 @@
   "opens": [],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": { "desks": [] },
+  "capabilities": []
 }

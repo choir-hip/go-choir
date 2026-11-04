@@ -265,7 +265,7 @@ func packageDraftFor(t *testing.T, owner string, mutate func(*pkgrelease.Record)
 			Root: "frontend/src/packages/reader", Tree: strings.Repeat("3", 40), TreePatch: blobRef(proxyTreePatch), ReviewPatch: blobRef(proxyReviewPatch),
 			ChangedPaths: []string{"frontend/src/packages/reader/App.svelte"}, BuiltOn: strings.Repeat("1", 40),
 		},
-		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), ABI: "choir.app-frontend/svelte-inline/v1"},
+		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("4", 64), Schema: "choir.package/v2", ABI: "choir.app-frontend/svelte-inline/v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
 		Publisher: pkgrelease.Publisher{OwnerID: owner, ComputerID: "computer-a"},
 		Operation: pkgrelease.Operation{OperationID: "op-1", BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
 		// Every release carries a screenshot; a test of the gate clears it.

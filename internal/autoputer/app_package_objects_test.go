@@ -59,7 +59,7 @@ func registerRouteFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := apppackage.ParseManifest(raw)
+	m, err := apppackage.ParseManifest(raw, apppackage.OriginFirstParty)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
@@ -38,7 +37,7 @@ import (
 //	    after the release was cut (onto_moved);
 //	F5  a package --onto does not hold (a new or third-party package)
 //	    without --new-package (not_first_party), or a release manifest whose
-//	    origin is not first_party, which main's build gate refuses
+//	    is not a valid first-party choir.package/v2 manifest, which main's build gate refuses
 //	    (manifest_not_first_party);
 //	F6  a dirty worktree, or one whose HEAD's package subtree differs from
 //	    --onto's: the commit would carry or revert unrelated changes
@@ -182,12 +181,8 @@ func packageExport(x *call) (any, error) {
 			return nil, err
 		}
 	}
-	origin, err := g.manifestOrigin(ctx, tree)
-	if err != nil {
+	if err := g.checkFirstPartyManifest(ctx, tree); err != nil {
 		return nil, err
-	}
-	if origin != "first_party" {
-		return nil, refuseExport("manifest_not_first_party", "the release's choir-package.json says origin %q; main builds only first_party packages (frontend/scripts/check-packages.mjs)", origin)
 	}
 
 	// Replace the package directory with the release tree and commit.
@@ -224,7 +219,7 @@ func packageExport(x *call) (any, error) {
 	return map[string]any{
 		"commit": commit, "parent_commit": head, "onto": onto, "onto_commit": ontoCommit,
 		"release_id": releaseID, "package": name, "track": record.Track, "tree": tree, "new_package": newPackage,
-		"source": source, "record_verified": true, "tree_verified": true, "manifest_origin": origin,
+		"source": source, "record_verified": true, "tree_verified": true, "manifest_origin": apppackage.OriginFirstParty,
 		"pr_body": packageExportPRBody(releaseID, record, view, onto, newPackage, source),
 	}, nil
 }
@@ -327,16 +322,17 @@ func (g worktreeGit) subtree(ctx context.Context, commit, root string) (string, 
 	return out, true
 }
 
-func (g worktreeGit) manifestOrigin(ctx context.Context, tree string) (string, error) {
+// checkFirstPartyManifest requires the release's choir-package.json to be a
+// valid choir.package/v2 manifest as main would build it: the origin is not a
+// manifest field (a manifest that states one is refused as publisher-declared),
+// and what main builds is first-party, so the manifest is validated as such.
+func (g worktreeGit) checkFirstPartyManifest(ctx context.Context, tree string) error {
 	raw, err := g.run(ctx, nil, "cat-file", "blob", tree+":choir-package.json")
 	if err != nil {
-		return "", refuseExport("manifest_not_first_party", "the release holds no choir-package.json")
+		return refuseExport("manifest_not_first_party", "the release holds no choir-package.json")
 	}
-	var m struct {
-		Origin string `json:"origin"`
+	if _, err := apppackage.ParseManifest(raw, apppackage.OriginFirstParty); err != nil {
+		return refuseExport("manifest_not_first_party", "the release's choir-package.json is not a manifest main builds (frontend/scripts/check-packages.mjs): %v", err)
 	}
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return "", errors.New("the release's choir-package.json is not JSON")
-	}
-	return m.Origin, nil
+	return nil
 }

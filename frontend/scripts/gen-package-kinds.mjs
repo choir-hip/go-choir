@@ -47,6 +47,7 @@ if (existsSync(packagesDir)) {
     } catch (err) {
       fail(`${manifestPath}: ${err.message}`);
     }
+    if (manifest.schema !== 'choir.package/v2') fail(`${manifestPath}: schema must be "choir.package/v2" (the v1 reader is deleted)`);
     if (manifest.name !== dir) fail(`${manifestPath}: name ${JSON.stringify(manifest.name)} must equal the directory name ${dir}`);
     const kinds = manifest.kinds ?? [];
     if (!Array.isArray(kinds)) fail(`${manifestPath}: kinds must be a list`);

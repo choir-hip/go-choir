@@ -17,13 +17,25 @@ const frontendRoot = resolve(
 );
 const packagesDir = join(frontendRoot, 'src/packages');
 
-const SCHEMA = 'choir.app-package/v1';
+const SCHEMA = 'choir.package/v2';
 const ABI = 'choir.app-frontend/svelte-inline/v1';
 const NAME_RE = /^[a-z][a-z0-9-]{1,39}$/;
 const EXT_RE = /^[a-z0-9]{1,16}$/;
 const RESERVED_NAMES = new Set([
   'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research',
 ]);
+// Facts only the platform sets (internal/apppackage/strict.go publisherDeclared):
+// a manifest that states one is refused apart from an unknown key. The Go
+// validator (apppackage.ParseManifest, run over every in-tree manifest by
+// TestInTreeManifestsParseAndHash) is the full check; this script is the
+// build-time shape gate.
+const PUBLISHER_DECLARED = new Set([
+  'origin', 'kind', 'class', 'level', 'tier', 'publisher', 'owner', 'owner_id', 'track', 'trust',
+  'review', 'reviewed', 'approved', 'behaviour_surface', 'behavior_surface', 'hash', 'digest',
+  'sha256', 'source_digest', 'artifact', 'artifact_digest', 'toolchain', 'binary', 'wasm',
+  'import_set', 'imports', 'first_party',
+]);
+const GRANT_RE = /^(ui|desk)(\.[a-z][a-z0-9_]*)+$/;
 const MIN_STATIC_IDS = 10;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
@@ -40,7 +52,11 @@ function strictKeys(obj, where, required, optional = []) {
     return false;
   }
   const allowed = new Set([...required, ...optional]);
-  for (const key of Object.keys(obj)) if (!allowed.has(key)) fail(where, `unknown field "${key}"`);
+  for (const key of Object.keys(obj)) {
+    if (allowed.has(key)) continue;
+    if (PUBLISHER_DECLARED.has(key.toLowerCase())) fail(where, `"${key}" is a platform fact; a manifest cannot state it`);
+    else fail(where, `unknown field "${key}"`);
+  }
   for (const key of required) if (!(key in obj)) fail(where, `missing field "${key}"`);
   return true;
 }
@@ -92,15 +108,14 @@ const inside = (dir, target) => target === dir || target.startsWith(dir + sep);
 function checkManifest(manifest, dirName, where) {
   const ok = strictKeys(
     manifest, where,
-    ['schema', 'name', 'version', 'origin', 'display', 'app', 'opens'],
-    ['kinds', 'uses_kinds', 'desk', 'backend', 'grants'],
+    ['schema', 'name', 'version', 'display', 'app', 'opens'],
+    ['kinds', 'uses_kinds', 'contributes', 'capabilities'],
   );
   if (!ok) return;
   if (manifest.schema !== SCHEMA) fail(where, `schema must be "${SCHEMA}"`);
   if (typeof manifest.name !== 'string' || !NAME_RE.test(manifest.name)) fail(where, `name must match ${NAME_RE}`);
   else if (manifest.name !== dirName) fail(where, `name "${manifest.name}" must equal its directory "${dirName}"`);
   if (typeof manifest.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(manifest.version)) fail(where, 'version must be major.minor.patch');
-  if (manifest.origin !== 'first_party') fail(where, 'origin must be "first_party" (installed packages are a later slice)');
 
   if (strictKeys(manifest.display, `${where} display`, ['title', 'icon', 'description'])) {
     for (const k of ['title', 'icon', 'description']) if (!str(manifest.display[k])) fail(`${where} display`, `"${k}" must be a non-empty string`);
@@ -152,12 +167,23 @@ function checkManifest(manifest, dirName, where) {
     });
   }
 
-  // P1 refuses what later slices own (P2: kinds, P4: desk, P5: backend and grants).
+  // Kinds are generated into Go (gen-package-kinds.mjs); the other lists carry no code yet.
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
-  if (manifest.desk !== undefined && manifest.desk !== null) fail(where, 'desk must be null in P1');
-  if (manifest.backend !== undefined && manifest.backend !== null) fail(where, 'backend must be null in P1');
-  if (manifest.grants !== undefined && !(Array.isArray(manifest.grants) && manifest.grants.length === 0)) fail(where, 'grants must be empty in P1');
+  // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, ['desks'])) {
+    if (!Array.isArray(manifest.contributes.desks) || manifest.contributes.desks.length > 0) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
+  }
+  if (manifest.capabilities !== undefined) {
+    if (!Array.isArray(manifest.capabilities)) fail(where, 'capabilities must be an array');
+    else {
+      manifest.capabilities.forEach((c, i) => {
+        if (!strictKeys(c, `${where} capabilities[${i}]`, ['grant'], ['args'])) return;
+        if (typeof c.grant !== 'string' || !GRANT_RE.test(c.grant)) fail(`${where} capabilities[${i}]`, 'grant must be a ui.* or desk.* name');
+        if (c.args !== undefined && (!Array.isArray(c.args) || c.args.some((a) => typeof a !== 'string'))) fail(`${where} capabilities[${i}]`, 'args must be an array of strings');
+      });
+    }
+  }
 }
 
 // ---- run ----

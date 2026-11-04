@@ -114,7 +114,7 @@ func installRecord(t *testing.T, tree []byte, publisherOwner string) (pkgrelease
 			Root: pkgrelease.Root("demo-next"), Tree: strings.Repeat("2", 40), TreePatch: blob, ReviewPatch: blob,
 			ChangedPaths: []string{pkgrelease.Root("demo-next") + "/App.svelte"}, BuiltOn: strings.Repeat("1", 40),
 		},
-		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("3", 64), ABI: "choir.app-frontend/svelte-inline/v1"},
+		Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("3", 64), Schema: "choir.package/v2", ABI: "choir.app-frontend/svelte-inline/v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
 		Publisher: pkgrelease.Publisher{OwnerID: publisherOwner, ComputerID: "computer-p"},
 		Operation: pkgrelease.Operation{OperationID: "op-1", BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
 	}

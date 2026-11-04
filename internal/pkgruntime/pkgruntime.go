@@ -124,9 +124,12 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if err != nil {
 		return Module{}, fmt.Errorf("pkgruntime: read the manifest: %w", err)
 	}
-	manifest, err := apppackage.ParseManifest(manifestRaw)
+	manifest, err := apppackage.ParseManifest(manifestRaw, apppackage.OriginPublished)
 	if err != nil {
 		return Module{}, err
+	}
+	if manifest.App == nil {
+		return Module{}, fmt.Errorf("pkgruntime: package %q has no app to build", manifest.Name)
 	}
 	requires := manifest.App.RequiresSDK
 	if requires == "" {

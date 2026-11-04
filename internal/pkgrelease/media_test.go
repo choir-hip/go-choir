@@ -61,7 +61,7 @@ func mediaRecord() Record {
 			Root: Root("reader"), Tree: strings.Repeat("d", 40), TreePatch: Blob{SHA256: strings.Repeat("1", 64), Bytes: 10},
 			ReviewPatch: Blob{SHA256: strings.Repeat("2", 64), Bytes: 10}, ChangedPaths: []string{Root("reader") + "/App.svelte"}, BuiltOn: strings.Repeat("c", 40),
 		},
-		Manifest:  Manifest{SHA256: strings.Repeat("3", 64), ABI: "choir.package.v1"},
+		Manifest:  Manifest{SHA256: strings.Repeat("3", 64), Schema: "choir.package/v2", ABI: "choir.package.v1", Class: "app", Level: "default", BehaviourSurface: strings.Repeat("5", 64)},
 		Publisher: Publisher{OwnerID: "owner-a", ComputerID: "computer-a1"},
 		Operation: Operation{OperationID: "op-1", BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
 	}
@@ -209,10 +209,10 @@ func TestRequireScreenshotRefusesNoneAndVideoOnly(t *testing.T) {
 // A manifest may hold a multi-line display description; the card's one-line
 // form is derived from it by the host.
 func TestManifestDescriptionIsOneBoundedLine(t *testing.T) {
-	raw := []byte(`{"schema":"choir.app-package/v1","name":"reader","version":"1.0.0","origin":"first_party",` +
+	raw := []byte(`{"schema":"choir.package/v2","name":"reader","version":"1.0.0",` +
 		`"display":{"title":"Reader","icon":"R","description":"Reads\n  the   news\r\n today"},` +
 		`"app":{"entry":"App.svelte","abi":"choir.app-frontend/svelte-inline/v1","aliases":[],"launcher":{"menu":true},"window":{"singleton":false},"auth":{"preview":"public-preview"},"theme":{}},` +
-		`"opens":[],"kinds":[],"uses_kinds":[],"desk":null,"backend":null}`)
+		`"opens":[],"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}`)
 	if got := ManifestDescription(raw); got != "Reads the news today" {
 		t.Fatalf("description = %q", got)
 	}

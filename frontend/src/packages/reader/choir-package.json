@@ -1,8 +1,7 @@
 {
-  "schema": "choir.app-package/v1",
+  "schema": "choir.package/v2",
   "name": "reader",
   "version": "1.0.1",
-  "origin": "first_party",
   "display": {
     "title": "Reader",
     "icon": "📖",
@@ -32,7 +31,6 @@
   ],
   "kinds": [],
   "uses_kinds": [],
-  "desk": null,
-  "backend": null,
-  "grants": []
+  "contributes": { "desks": [] },
+  "capabilities": []
 }
