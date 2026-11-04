@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/generate-source-contract.mjs --check && node scripts/check-packages.mjs && vite build",
+    "build": "node scripts/generate-source-contract.mjs --check && node scripts/check-packages.mjs && node scripts/check-kernel.mjs && vite build",
     "preview": "vite preview",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",
     "sdk:surface": "node scripts/sdk-surface.mjs",
+    "kernel": "node scripts/check-kernel.mjs && playwright test tests/kernel.spec.js",
     "modularity": "playwright test tests/package-modularity.spec.js",
     "auth:setup": "node scripts/setup-auth-state.mjs"
   },

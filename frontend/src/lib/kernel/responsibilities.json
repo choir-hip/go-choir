@@ -1,0 +1,12 @@
+{
+  "schema": "choir.kernel-responsibilities/v1",
+  "note": "The exported surface of the front-end kernel, per responsibility. Growth is a deliberate edit to this file; scripts/check-kernel.mjs fails when it and the source differ.",
+  "responsibilities": {
+    "scope tree": { "scope.ts": ["Scope", "ScopeState"] },
+    "effects": { "effect.ts": ["Disposer", "DisposeReport", "once", "runLifo"] },
+    "service resolution": { "service.ts": ["Services", "ProviderSpec", "ConsumeFn", "Tier", "TIER_ORDER", "WatchdogOptions"] },
+    "pipelines": { "pipeline.ts": ["Pipelines", "Item", "Handler", "HandlerSpec", "PipelineContext", "PipelineResult"] },
+    "snapshot": { "snapshot.ts": ["Snapshot", "takeSnapshot"] },
+    "assembly": { "index.ts": ["createKernel", "Kernel", "KernelOptions", "Scope", "Services", "Pipelines", "Disposer", "DisposeReport", "Item", "Handler", "HandlerSpec", "PipelineContext", "PipelineResult", "ProviderSpec", "ConsumeFn", "Tier", "WatchdogOptions", "Snapshot"] }
+  }
+}
