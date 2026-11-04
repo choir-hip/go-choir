@@ -157,7 +157,7 @@ func (rt *Runtime) wakeTextureForOwnerAct(ctx context.Context, ownerID string, o
 	rec, ok := types.NewSelfDevelopmentOwnerAct(types.SelfDevelopmentOwnerAct{
 		TextureInbox: inbox, ComputerID: computerID, OperationID: operation.OperationID,
 		TrajectoryID: operation.TrajectoryID, Act: act, DecisionEvent: operation.DecisionEvent,
-		Body: ownerActBody(ownerID, operation, act, reason) + rt.rebaseOwnerActSentence(operation, act),
+		Body: ownerActBody(ownerID, operation, act, reason) + rt.rebaseOwnerActSentence(operation, act) + rt.roundLineSentence(ctx, ownerID, computerID, operation, act),
 	})
 	if !ok {
 		return false, nil
@@ -179,6 +179,9 @@ func (rt *Runtime) wakeTextureForOwnerAct(ctx context.Context, ownerID string, o
 // notifyTextureOfOwnerAct is the call sites' form: the act already
 // happened, so a failure to wake is logged and never fails the act.
 func (rt *Runtime) notifyTextureOfOwnerAct(ctx context.Context, ownerID string, operation selfdev.Operation, act, reason string) {
+	// A round's receipt first, so Texture's record carries its line
+	// (round_receipt.go).
+	rt.recordRoundReceipt(ctx, ownerID, operation, act)
 	if _, err := rt.wakeTextureForOwnerAct(ctx, ownerID, operation, act, reason); err != nil {
 		log.Printf("selfdev owner act: %s %s: Texture not woken: %v", act, operation.OperationID, err)
 	}

@@ -834,6 +834,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	exec := rt.assignedCapsule()
 	cancelOpen := func(cause error) error { return rt.cancelUnboundAssignment(assignment, cause) }
 	phaseStarted := time.Now()
+	sagaStarted := phaseStarted
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()
 	memory, cpu, pids := engineeringAssignmentMemoryMax, engineeringAssignmentCPUQuota, engineeringAssignmentPidsMax
@@ -905,6 +906,9 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 			return AssignedEngineeringStart{}, cancelOpen(spawnErr)
 		}
 	}
+	// The round receipt's capsule spawn: the saga from its start to a spawned
+	// (or resumed) capsule (round_receipt.go).
+	rt.markAssignmentSpawn(assignmentID, attempt, time.Since(sagaStarted))
 	cleanupCapsule := func(cause error) error {
 		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr != nil {
