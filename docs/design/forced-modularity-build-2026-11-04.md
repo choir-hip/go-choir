@@ -164,10 +164,13 @@ acceptance, and the owner is never asked:
 - the verifier and consensus decision (`decisionpolicy`, corpusd as the
   decision poster, `internal/platform/standing_consensus.go`).
 
-On a pass the release publishes, installs locally, the candidate overlay is
-removed, and other installers pick it up by the automatic update (section 5).
-On a fail nothing publishes and the installed version stands. A build made on
-a test computer publishes and installs like any other.
+On a pass the release publishes, installs locally and the candidate overlay
+is removed. This no-approval path applies to **the builder's own computer
+only**: nobody approves a version on the computer that built it. Other
+installers do not get the update by this path; each follows their own update
+setting (section 5). On a fail nothing publishes and the installed version
+stands. A build made on a test computer publishes and installs like any
+other.
 
 *Which decision mode applies, and where the code does not fit.* The modes are
 `off`, `audit_only`, `propose_only`, `accept_once`, `qualified_consensus` and
@@ -367,22 +370,53 @@ M2:
 
 **Base: main, by ring walk.** Unchanged.
 
-**Apps: the Library.** Default, stated: **an installed app follows the
-newest listed release of the same track automatically.** At the next load or
-refresh the computer compares its install (package, track) with the track
-head the proxy reads from the catalog (`HeadEligible`,
-`internal/pkgrelease/listing.go:189`), and installs the head through
-`installPackage`. The update is the same path as install; it happens on the
-installer's computer, builds offline, and keeps the old module until the new
-one stores. A track change (a different publisher) is never automatic; that is
-an install. No switch. The threat this accepts is the one the owner named
-(a compromised publisher account): an automatic update reaches installers at
-their next load. The brakes are the platform's break-glass yank (below) and a
-**soak**: a release becomes eligible for auto-update only once it has been
-listed for 24 hours (a constant, not a setting). The soak holds
-only automatic updates back from installers. It never asks anyone to approve
-anything, and a publish is not delayed by it. Decision D2 keeps 24 hours as
-the default and leaves it open for the owner to confirm or drop.
+**Apps: the Library, and a per-user update setting.** Owner, 2026-11-04: "No,
+I don't think upgrades get installed automatically. That should be a per user
+setting. But people will want to approve upgrades manually... and there's
+security issues on both sides. Hmm, this is complex but we can't just rug
+users with forced updates except for security." So an installer other than
+the builder chooses:
+
+- **manual (the default).** When a newer listed release of the same track
+  exists, the Library shows "Update available" with what changed (the
+  release's review patch and its before/after screens), and the user presses
+  Update. The press is the existing install path (`installPackage`): it
+  builds offline on the installer's computer and keeps the old module until
+  the new one stores.
+- **automatic.** At the next load or refresh the computer installs the newest
+  eligible release of the same track through the same path. A release is
+  eligible only after the **soak**: listed for 24 hours (a constant, not a
+  setting). The soak is the default and applies **only to users who chose
+  automatic**. It never asks anyone to approve anything, it does not delay a
+  publish, and a manual user is not subject to it (they decide when).
+- A track change (a different publisher) is never an update in either mode;
+  it is an install.
+
+Where the setting lives: a **user preference**, not a platform switch and not
+a computer setting. Preferences are owner-scoped key and value rows that
+are written as events on the user's tape and projected
+(`store.SaveUserPreference`, `internal/store/media.go:153`;
+`projectUserPreference`, `internal/store/media_projection.go:116`; the
+shell already reads one at `/api/preferences/theme`,
+`internal/apihandler/routes.go:43`). The key is `packages.update_policy`,
+value `{"default": "manual", "apps": {"<package>": "automatic"}}`: a default
+and a per-app override, so a user can choose per app and one global toggle
+is not the only shape. Absent means manual. The Library offers the choice on
+each installed app and one default. The guest reads it when it compares
+installs with track heads; an unreadable preference is manual.
+
+Security on both sides, which is why neither mode is the whole answer:
+
+- *automatic* lets a compromised or malicious publisher account reach every
+  automatic installer at their next load. The soak and the platform yank
+  narrow that window; they do not close it.
+- *manual* leaves users on a known-vulnerable version when a release fixes a
+  security flaw and they do not press Update, or press it late.
+
+The remedy for both is the same single override: the platform's break-glass
+force or yank (below). It is the only thing that overrides a user's manual
+choice, and it never runs automatically. Everything else respects the setting.
+Nothing in this section forces an update on anyone.
 
 **Forced update and yank: platform only, manual, break glass.** The ruling
 excludes every other design:
@@ -391,8 +425,8 @@ excludes every other design:
   force a release onto every installer is exactly the supply-chain attack the
   security intent exists to guard against (`library-app-store-security-intent-2026-11-04.md`,
   "Remediation": "yank or force-update the release", by the platform). A
-  publisher can publish a new release; installers take it by the automatic
-  path above, after the soak. A publisher can *request* a forced update by
+  publisher can publish a new release; installers take it by pressing Update (manual)
+  or by the automatic path above, after the soak. A publisher can *request* a forced update by
   writing a note; the request only notifies the platform owner and executes
   nothing.
 - no automation triggers it: no scanner, no threshold, no publisher call.
@@ -616,14 +650,17 @@ a platform path on d@e's stack results in a clean rebase and a restart; a
 conflicting deploy results in the notice. Rollback: revert, which restores
 the tier gate. Order: R1 can land before M2 to M5; it needs only remat-serve.
 
-**F1. Auto-update and the platform yank (red, tier 2).**
-The soak, the load-time update, the corpusd operator route, listing writer,
+**F1. Update policy, "Update available" and the platform yank (red, tier 2).**
+The `packages.update_policy` user preference (default manual, per-app override),
+the Library's "Update available" with what changed and the Update press, the
+soak and the load-time update for users who chose automatic, the corpusd operator route, listing writer,
 install record fields, the Library line. Packages: `internal/platform`,
 `internal/pkgrelease`, `internal/agentcore`, `cmd/choir`, `frontend/src/packages/library-next`.
-Proof: on d@e, publish release 2 on a track; after the soak (a test clock
-constant, a compile-time test hook is not allowed, so the proof uses a real
-24h-old listing created by the harness on the tape) the installer's next load
-updates; the operator yanks release 2 by CLI; the installer's next load
+Proof: on d@e, publish release 2 on a track; a manual installer sees "Update
+available" with the change and is not updated until the press; an installer
+who chose automatic for that app is updated at the next load only after the
+soak (a test clock constant, a compile-time test hook is not allowed, so the
+proof uses a real 24h-old listing created by the harness on the tape); the operator yanks release 2 by CLI; the installer's next load
 removes it and shows "Removed by the platform: <reason>". A publisher
 request writes a note and executes nothing (asserted). Rollback: revert; a
 yank already written stays in the chain and is honoured by listing readers.
@@ -639,7 +676,7 @@ time after M1. F1 after M3 (it needs the install path to be the only path).
 | X2 | a mixed change strands an engineer | refusal names both lists; the engineer casts two operations |
 | X3 | migration drops an app's unpublished work | step (b) publishes before step (c) removes; the stack is rebuilt from non-package hunks only after the install record exists |
 | X4 | migration re-runs | the kind rename and stack rebuild are idempotent by tree id; no resumer; a crash mid-migration closes the work and the next boot's fold recomputes from the tape |
-| X5 | an auto-update installs a build that fails | the old module stays until the new one stores (S12); the module build is offline and fails closed |
+| X5 | an update (manual or automatic) installs a build that fails | the old module stays until the new one stores (S12); the module build is offline and fails closed |
 | X6 | a forced update loops (a yanked head, no eligible head) | no head: the package leaves the launcher; the base copy shows if one exists; no retry |
 | X7 | the platform operator token leaks | host transport and host credential, as the key-escrow gate; the act is recorded with the operator name and is not reachable from a guest |
 | X8 | a clean rebase silently changes behavior on the owner's computer | named residual until R2's contract run after the build; the rollback is the product restore, not a revert of main |
@@ -665,10 +702,11 @@ updates `objectgraph/registry.go`.
   computer's track.** Default: yes, on the computer's own track, decided by the
   migration's own record, with no owner act. Alternative:
   drop the unpublished app source. Default stays; it keeps the keep set.
-- **D2. Auto-update soak.** The ruling wants everything automatic but a
-  compromised publisher is the threat; auto-update with no soak delivers a
-  bad release at every load. Default: 24 hours listed before auto-update.
-  The owner may set none.
+- **D2. Auto-update soak.** A compromised publisher is the threat; automatic
+  update with no soak delivers a bad release at every load. Default: 24 hours
+  listed before an *automatic* update, applying only to users who chose
+  automatic. Still open for the owner to confirm, change or drop. The update
+  setting itself defaults to manual.
 - **D3. `lib/*App.svelte` apps.** They are app code in the base and can
   still enter the stack as platform edits (`engineer_lineage.go:46-47`). The
   target model, read strictly, says they are not allowed to. Default: allowed
