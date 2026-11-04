@@ -72,7 +72,7 @@ func always(v bool) func(string) bool { return func(string) bool { return v } }
 
 func TestShotReviewJudgesEveryShotInBoundedBatches(t *testing.T) {
 	judge := &scriptedJudge{answer: func(string) string { return allYes }}
-	review, err := reviewShots(context.Background(), judge.call, shotFixture(capsule.MaxScreens), always(true))
+	review, err := reviewShots(context.Background(), judge.call, shotFixture(capsule.MaxScreens), nil, always(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestShotReviewFailsOnADefectInAnyShotAndNamesIt(t *testing.T) {
 		}
 		return allYes
 	}}
-	review, err := reviewShots(context.Background(), judge.call, shotFixture(11), always(true))
+	review, err := reviewShots(context.Background(), judge.call, shotFixture(11), nil, always(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestShotReviewQuestionFourNeverRejectsAndNAIsOnlyForFour(t *testing.T) {
 		}
 		return `"q1":"n/a","q2":"yes","q3":"yes","q4":"n/a","q6":"yes"`
 	}}
-	review, err := reviewShots(context.Background(), judge.call, shotFixture(2), always(true))
+	review, err := reviewShots(context.Background(), judge.call, shotFixture(2), nil, always(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestShotReviewSizeBlankAndUnresolvableNeedNoModel(t *testing.T) {
 	screens[1].Blank = true
 	unresolvable := screens[2].SHA256
 	judge := &scriptedJudge{answer: func(string) string { return allYes }}
-	review, err := reviewShots(context.Background(), judge.call, screens, func(sha string) bool { return sha != unresolvable })
+	review, err := reviewShots(context.Background(), judge.call, screens, nil, func(sha string) bool { return sha != unresolvable })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,19 +191,19 @@ func TestShotSizes(t *testing.T) {
 // error, never a pass.
 func TestShotReviewNeverPassesAnUnreviewedShot(t *testing.T) {
 	failing := &scriptedJudge{err: errors.New("gateway 502")}
-	if _, err := reviewShots(context.Background(), failing.call, shotFixture(5), always(true)); err == nil {
+	if _, err := reviewShots(context.Background(), failing.call, shotFixture(5), nil, always(true)); err == nil {
 		t.Fatal("a failed call passed")
 	}
 	prose := func(context.Context, string, []string) (modelpolicy.VerifyOutcome, error) {
 		return modelpolicy.VerifyOutcome{Text: "All shots look good."}, nil
 	}
-	if _, err := reviewShots(context.Background(), prose, shotFixture(2), always(true)); err == nil {
+	if _, err := reviewShots(context.Background(), prose, shotFixture(2), nil, always(true)); err == nil {
 		t.Fatal("a prose answer passed")
 	}
 	short := func(context.Context, string, []string) (modelpolicy.VerifyOutcome, error) {
 		return modelpolicy.VerifyOutcome{Text: `[{"image":1,` + allYes + `}]`}, nil
 	}
-	if _, err := reviewShots(context.Background(), short, shotFixture(2), always(true)); err == nil || !strings.Contains(err.Error(), "misses image 2") {
+	if _, err := reviewShots(context.Background(), short, shotFixture(2), nil, always(true)); err == nil || !strings.Contains(err.Error(), "misses image 2") {
 		t.Fatalf("an answer missing a shot = %v", err)
 	}
 }
@@ -295,7 +295,7 @@ func TestReviewCandidateShotsReadsTheBoundBundleAndTheStore(t *testing.T) {
 	}
 	judge := &scriptedJudge{answer: func(string) string { return allYes }}
 	rt.shotReviewCall = judge.call
-	review, err := rt.reviewCandidateShots(ctx, "owner", operation)
+	review, err := rt.reviewCandidateShots(ctx, "owner", operation, "")
 	if err != nil || review == nil {
 		t.Fatalf("review = %v, %v", review, err)
 	}
@@ -307,5 +307,88 @@ func TestReviewCandidateShotsReadsTheBoundBundleAndTheStore(t *testing.T) {
 	}
 	if got := review.Shots[0].rejects(); len(got) != 1 || got[0] != "Q5" { // the fixture is 40x30
 		t.Fatalf("stored shot rejects = %v", got)
+	}
+}
+
+// FM9: crouton Library r5 (op selfdev-8d4532481b4aab23820dad0aeb264035) froze
+// 6 of the 12 shots the request named and passed; its "phone" shot 11 was
+// 1280x800. The request text below is the Library request's shot line.
+const libraryShotLine = "Screenshots: scripts/choir-shot.mjs alone, `--size 1100x750` (11 and 12 at 390x844), `--contrast <selector>` for contrast. Take 01 alone first and look at it. Twelve PNGs in /var/lib/artifact/screens/: 01 aero-chrome-heart the package list; 02 london-salmon a search with results; 03 futuristic-noir an empty search; 04 carbon-fiber-kintsugi package detail with its release history; 05 frutiger-aero release detail (publisher, time, track and seq, changed paths, precommitments) with the gallery's larger view open on one screenshot; 06 vector-heart the \"Install <package> <release>?\" confirm; 07 liquid-metal the install outcome; 08 aero-chrome-heart the installed list with releases marked \"Installed\"; 09 london-salmon a refused install shown with its reason; 10 futuristic-noir the error state (catalog unreachable) with Try again; 11 390 aero-chrome-heart the list on the phone; 12 390 futuristic-noir release detail on the phone, for a release with no screenshots, showing \"No screenshots yet\".\nThe owner wrote this at 04:10Z: 10 more later."
+
+func TestRequestedShotsParsesTheNumberedList(t *testing.T) {
+	shots := requestedShots(libraryShotLine)
+	if len(shots) != 12 {
+		t.Fatalf("parsed %d shots: %+v", len(shots), shots)
+	}
+	if shots[0].Number != "01" || shots[0].Text != "aero-chrome-heart the package list" || shots[11].Number != "12" {
+		t.Fatalf("ends = %+v, %+v", shots[0], shots[11])
+	}
+	for _, s := range shots {
+		if want := s.Number == "11" || s.Number == "12"; s.Phone != want {
+			t.Fatalf("shot %s phone = %v (%q)", s.Number, s.Phone, s.Text)
+		}
+	}
+	for _, text := range []string{"", "Fix the 10 issues from 04:10Z", "01 only one; 02 two"} {
+		if got := requestedShots(text); got != nil {
+			t.Fatalf("%q parsed as a shot list: %+v", text, got)
+		}
+	}
+}
+
+func TestShotReviewFailsMissingRequestedShotsWithoutAModelCall(t *testing.T) {
+	var screens []capsule.ScreenFile
+	for _, n := range []string{"01-aero-chrome-heart.aero-chrome-heart.png", "02-london-salmon.london-salmon.png", "03-futuristic-noir.futuristic-noir.png", "04-carbon-fiber-kintsugi.carbon-fiber-kintsugi.png", "10-futuristic-noir.futuristic-noir.png", "11-aero-chrome-heart.aero-chrome-heart.png"} {
+		screens = append(screens, capsule.ScreenFile{Name: n, SHA256: strings.Repeat("a", 64), Width: 1280, Height: 800})
+	}
+	judge := &scriptedJudge{answer: func(string) string { return allYes }}
+	review, err := reviewShots(context.Background(), judge.call, screens, requestedShots(libraryShotLine), always(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if judge.calls != 0 {
+		t.Fatalf("the judge was called %d times for a bundle missing shots", judge.calls)
+	}
+	if !review.rejected() || strings.Join(review.Missing, ",") != "05,06,07,08,09,12" {
+		t.Fatalf("missing = %v", review.Missing)
+	}
+	reason := review.reason("")
+	for _, want := range []string{"missing shots the request names: 05, 06, 07, 08, 09, 12", "11-aero-chrome-heart.aero-chrome-heart.png Q5", "a phone shot at 1280x800"} {
+		if !strings.Contains(reason, want) {
+			t.Fatalf("reason %q misses %q", reason, want)
+		}
+	}
+	// Only the phone shot is named among the present ones: the others were
+	// not judged, so they carry no invented answers.
+	if strings.Contains(reason, "01-aero") {
+		t.Fatalf("an unreviewed shot was named: %q", reason)
+	}
+}
+
+func TestShotReviewPhoneShotsMustBePhoneSizedAndCarryTheRequestDescription(t *testing.T) {
+	var screens []capsule.ScreenFile
+	for i := 1; i <= 12; i++ {
+		s := capsule.ScreenFile{Name: fmt.Sprintf("%02d-shot.png", i), SHA256: strings.Repeat("b", 64), Width: 1100, Height: 750}
+		if i >= 11 {
+			s.Width, s.Height = 1170, 2532 // 390x844 at DPR 3
+		}
+		screens = append(screens, s)
+	}
+	// A shot whose own name says phone, at desktop size.
+	screens[2] = capsule.ScreenFile{Name: "03-phone.png", SHA256: strings.Repeat("c", 64), Width: 1280, Height: 800}
+	judge := &scriptedJudge{answer: func(string) string { return allYes }}
+	review, err := reviewShots(context.Background(), judge.call, screens, requestedShots(libraryShotLine), always(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(review.Missing) != 0 || judge.calls != 3 {
+		t.Fatalf("missing %v, calls %d", review.Missing, judge.calls)
+	}
+	for _, a := range review.Shots {
+		if got, want := len(a.rejects()) > 0, a.Name == "03-phone.png"; got != want {
+			t.Fatalf("%s rejects %v (Q5 %s, %s)", a.Name, a.rejects(), a.Q5, a.Why)
+		}
+	}
+	if !strings.Contains(strings.Join(judge.prompts, "\n"), "(the request describes it as: frutiger-aero release detail") {
+		t.Fatal("the prompt does not carry the request's description of shot 05")
 	}
 }

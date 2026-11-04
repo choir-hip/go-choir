@@ -168,3 +168,35 @@ quote a vision answer's text_excerpt verbatim, never in its own words, and
 to ask about what the request names. Residual: a fail that management decides
 on its own still rests on management's prose. The per-shot review runs
 only on a pass, by design (the Verify admission work is elsewhere).
+
+## Follow-up: a candidate missing half its requested shots passed (2026-11-04)
+
+Crouton Library r5 (op selfdev-8d4532481b4aab23820dad0aeb264035, release
+1104c9890, before the per-shot review): management's Verify passed a
+candidate that froze 6 of the 12 shots the request named. Shots 05 to 09
+and 12 were missing, and shot 11 ("11 390 aero-chrome-heart the list on the
+phone"), named `11-aero-chrome-heart.aero-chrome-heart.png`, was 1280x800.
+The per-shot review judges only the shots present, so it would have passed
+the six that exist.
+
+Fix (FM9 in selfdev_shot_review.go): the review reads the owner's words the
+round answers, from the tape through the assignment's Cast chain, the same
+read that carries them to the engineer (`ownerWordsForAssignment`). It
+parses their numbered shot list (the longest run 01, 02, ... in text
+order; each item's text runs to the next number, ';' or line end).
+- A shot the list names that the bundle lacks (matched by the screen name's
+  leading two digits) fails the candidate: "missing shots the request names:
+  05, 06, 07, 08, 09, 12", with no model call.
+- A shot whose request item or own name says phone (or 390, or mobile) fails
+  question 5 unless it is portrait and a whole multiple of 390 wide.
+- Each image in the batch prompt carries the request's description of its
+  number, so question 2 judges against the request and not only the file
+  name.
+
+A request with no numbered list (fewer than three in a run) or one not
+reachable from the assignment checks nothing new. On all 44 Calendar,
+Library and Slides requests and rounds in lane C the parser finds exactly
+01 to 12 with 11 and 12 as phone shots; on the Files requests, which carry
+no numbered list, it finds none. Residual: a later round whose newest owner
+revision restates only the fixes, not the list, is not checked for missing
+shots.

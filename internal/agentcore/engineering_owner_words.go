@@ -138,18 +138,29 @@ func (rt *Runtime) ownerWordsForRun(rec *types.RunRecord) string {
 		log.Printf("owner words: assignment for %s: %v", agentID, err)
 		return ""
 	}
+	words, source, textureCastID, ok := rt.ownerWordsForAssignment(ctx, ownerID, computerID, assignment)
+	if !ok {
+		return ""
+	}
+	return ownerWordsBlock(words, source, textureCastID)
+}
+
+// ownerWordsForAssignment is the owner revision an engineering assignment's
+// Cast chain answers, checked as ownerWordsForRun checks it; the judge's
+// per-shot review reads its numbered shot list (selfdev_shot_review.go).
+func (rt *Runtime) ownerWordsForAssignment(ctx context.Context, ownerID, computerID string, assignment types.EngineeringAssignment) (castOwnerDirection, string, string, bool) {
 	binding := assignment.Binding
 	cast, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, binding.ParentControlID)
 	if err != nil || cast == nil || !cast.IsCast() || cast.SenderInbox != binding.ParentAgentID || strings.TrimSpace(cast.ParentID) == "" {
-		return ""
+		return castOwnerDirection{}, "", "", false
 	}
 	parent, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, cast.ParentID)
 	if err != nil || !isTextureCastTo(parent, binding.ParentAgentID) || parent.Directive == nil {
-		return ""
+		return castOwnerDirection{}, "", "", false
 	}
 	digest := parentRequestDigest(parent.SenderInbox, parent.Directive.Objective, parent.Directive.Body)
 	if engineeringRequestDigest(strings.TrimSpace(cast.Directive.Objective), cast.ParentID, cast.RecordID, digest) != binding.RequestDigest {
-		return ""
+		return castOwnerDirection{}, "", "", false
 	}
 	scope := ownerRevisionScope{OwnerID: ownerID, ComputerID: computerID,
 		DocID:        strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":"),
@@ -158,8 +169,5 @@ func (rt *Runtime) ownerWordsForRun(rec *types.RunRecord) string {
 	words, source, ok := latestOwnerWords(parent.Directive.Body, castAt, scope, func() ([]types.Revision, error) {
 		return rt.store.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, scope.DocID, 1<<30)
 	})
-	if !ok {
-		return ""
-	}
-	return ownerWordsBlock(words, source, parent.RecordID)
+	return words, source, parent.RecordID, ok
 }
