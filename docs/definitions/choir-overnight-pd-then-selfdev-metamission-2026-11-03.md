@@ -126,23 +126,24 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging e095686f0 (03:06Z): per-job leases (51 admitted, 1 refused in
-    the last hour), typed wait record, capsule install fixture, Texture
-    next-actor guard. In CI: 7efaaeae2, provider quota as a parked,
-    resumable provider_quota wait (Devin r3 approve after r2 BLOCK). The
-    Synthetic quota reset at 03:07Z; claude and pool rounds resumed on
-    their own, deepseek Calendar r2 lost to the quota and re-sent. Four
-    builds live (claude Library r2, pool repair, crouton Calendar r1,
-    deepseek Calendar r2). New loss: luna Calendar r2 froze a good
-    candidate at minute 48 and died with the 60-minute assignment deadline
-    before the judge decided; requests now say freeze by minute 40, and a
-    builder is separating the decision budget from the build deadline.
-    Ready next: waits-visible-2 369b1d8be (refresh hold as a typed wait,
-    selector fail-fast; Devin r2 nits only). Building: bound hang waits.
+    staging 3d46b0b04 (04:06Z): quota park (7efaaeae2), refresh hold as a
+    typed wait. Queued in CI: 30f617c01 (OpenRouter serves the DeepSeek
+    1017 snapshot; Devin r2 approve after r1 blocked on vision and effort
+    evidence) and 496610447 (per-round phase receipt). Synthetic refused
+    again from 03:36Z (trip 4, half-open 05:20Z), stalling claude, pool,
+    deepseek and luna's desks; their policy files move to OpenRouter on
+    deploy, then lane C re-sends. crouton (OpenRouter) is the live arm:
+    Calendar r3 in flight with the first staged predictions (freeze_within
+    40 min p=0.6, verify_pass 0.85, tests_pass 0.8). Ready to push after:
+    stall watchdog 60c8953ff (180 s first byte, 75 s between). Building:
+    calibration cut 1 (clock time, judge_accepts, mandatory at Cast,
+    expedited tier 1), frozen candidate survives the engineer's deadline,
+    engineer reuse after rejection, Library screenshots and video, hang
+    bounds. Node B: 18.7 GB available, 21 jobs admitted, 0 refused.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
   next_observation: live tracer alerts; pool slides-next publish after 5ee5f39dd; the first Library round's trace
   blocker: none
-  next_action: prove the quota park on staging; land 369b1d8be, then the hang bounds and the decision-deadline fix
+  next_action: deploy 496610447, switch the four arms to OpenRouter and re-send their rounds; push the stall watchdog; land calibration cut 1 the moment Devin approves
 receipts: []
