@@ -37,9 +37,9 @@ import (
 // which is why a rollback leaves nothing poisoned.
 //
 // Nothing calls the seam until P2b's boot registration, and that registers no
-// kind until a first-party manifest declares one. The per-computer switch that
-// makes package kinds writable is P2b's route (the app_packages.objects
-// computer setting); this file holds the checks it relies on.
+// kind until a first-party manifest declares one. The owner's route to package
+// kinds is P2b's (internal/autoputer/app_package_objects.go, no switch); this
+// file holds the checks it relies on.
 
 const packageKindNamespace = "choir.app."
 

@@ -89,7 +89,6 @@ var grantCatalogue = map[string]grantSpec{
 	"desk.cancel.assignment": {LevelPrivileged, argNone, false},
 	"desk.intake.dispose":    {LevelPrivileged, argNone, false},
 	"desk.precommit.rule":    {LevelPrivileged, argMany, false},
-	"desk.model.floor":       {LevelPrivileged, argOne, false},
 	"desk.run.deadline":      {LevelPrivileged, argOne, false},
 }
 

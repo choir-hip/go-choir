@@ -1577,36 +1577,6 @@
    }
   },
   {
-   "id": "app_packages_objects",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "orange",
-   "surface": "settings-selfdev",
-   "introduced": "2026-10-28",
-   "settings": [
-    "app_packages.objects"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "all",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
-  },
-  {
    "id": "files_object",
    "kind": "setting",
    "life": "release",

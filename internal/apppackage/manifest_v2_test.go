@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // MA2.3 failure modes, written before the code: what a hostile manifest (or a
@@ -237,7 +239,7 @@ func TestH4EachPrivilegedGrantRefusedFromAPublishedOrigin(t *testing.T) {
 		}
 		privileged = append(privileged, name)
 	}
-	if len(privileged) < 14 {
+	if len(privileged) < 13 { // 14 before the model floor was deleted (ec8b4e90d)
 		t.Fatalf("catalogue lost privileged grants: %v", privileged)
 	}
 	for _, name := range privileged {
@@ -952,5 +954,40 @@ func TestDeskAdmissionIsOneDecision(t *testing.T) {
 	if (Platform{}).AdmitsDesksFrom(OriginPublished) || !(Platform{DeskSandbox: true}).AdmitsDesksFrom(OriginPublished) ||
 		!(Platform{}).AdmitsDesksFrom(OriginFirstParty) {
 		t.Fatal("desk admission is wrong")
+	}
+}
+
+// The manifest's declared-ceiling catalogue (desk.*) and the runtime grant
+// catalogue (deskmanifest) name the same powers and agree on who may hold them
+// (MA4.1): a grant the runtime marks first-party only is privileged in the
+// manifest, and one a package may hold is not. A power the runtime no longer
+// has (the management task's model floor, deleted in ec8b4e90d) is in neither.
+func TestManifestAndRuntimeGrantCataloguesAgreeOnPrivilege(t *testing.T) {
+	pairs := map[string]string{
+		"desk.act.cancel":        "act.cancel",
+		"desk.captures.read":     "captures.read",
+		"desk.intake.read":       "intake.read",
+		"desk.cancel.assignment": "cancel.assignment",
+		"desk.intake.dispose":    "intake.dispose",
+		"desk.precommit.rule":    "precommit.rule",
+		"desk.run.deadline":      "run.deadline",
+		"desk.product.api":       "product.api",
+		"desk.delegate.task":     "delegate.task",
+		"desk.capsule.mutate":    "capsule.mutate",
+		"desk.world.read":        "world.read",
+	}
+	for manifestName, runtimeName := range pairs {
+		level, ok := GrantLevel(manifestName)
+		if !ok {
+			t.Errorf("%s is not in the manifest catalogue", manifestName)
+			continue
+		}
+		privileged := level == LevelPrivileged
+		if got := deskmanifest.GrantPrivileged(runtimeName); got != privileged {
+			t.Errorf("%s is privileged=%v in the manifest and %s privileged=%v at runtime", manifestName, privileged, runtimeName, got)
+		}
+	}
+	if _, ok := GrantLevel("desk.model.floor"); ok {
+		t.Error("desk.model.floor names a power that was deleted")
 	}
 }

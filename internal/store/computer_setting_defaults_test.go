@@ -22,7 +22,6 @@ var defaultOnFeatures = []string{
 	SettingEngineeringProgressToTexture,
 	SettingEngineeringCarryUnfinished,
 	SettingEngineeringSlotsGraph,
-	SettingAppPackageObjects,
 	SettingFilesObject,
 	SettingPackagesPublish,
 	SettingIntakeEvents,

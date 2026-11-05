@@ -18,12 +18,8 @@ import (
 // P2b route failure modes, written before the code (CLAUDE.md "Testing"). The
 // manifest, schema and registration modes are in internal/apppackage.
 //
-//	R1  the switch is off (the default) and a request is served: a GET reads, a
-//	    PUT writes. Off must answer 404 and touch nothing.
-//	R2  the switch for one computer turns on another's: the setting is keyed by
-//	    owner and computer.
-//	R3  turning the switch off does not take effect until a restart: it is read
-//	    live, so the next request after the flip must see it.
+//	R1  the route needs a setting to be reached (it has none: MA4.5 deleted
+//	    app_packages.objects).
 //	R4  an unauthenticated caller, or one that is not the host side of the
 //	    guest boundary, reaches the objects.
 //	R5  a path names a kind outside the package's namespace
@@ -81,14 +77,6 @@ func newRouteFixture(t *testing.T) *routeFixture {
 	return f
 }
 
-func (f *routeFixture) setSwitch(owner, computer string, on bool) {
-	f.t.Helper()
-	err := f.db.PutComputerSetting(context.Background(), choirstore.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: choirstore.SettingAppPackageObjects, Value: on})
-	if err != nil {
-		f.t.Fatal(err)
-	}
-}
-
 func (f *routeFixture) do(method, path, owner, body string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -123,85 +111,24 @@ func (f *routeFixture) countNotes(owner string) int {
 	return len(objs)
 }
 
-// R1. The route is on by default (owner, 2026-11-03); a stored off closes
-// it and touches nothing.
-func TestRouteIsOnByDefaultAndAStoredOffTouchesNothing(t *testing.T) {
+// R1. The route has no switch: an authenticated owner reaches it on a fresh
+// computer, with no setting stored.
+func TestRouteIsOpenToTheOwnerWithNoSetting(t *testing.T) {
 	f := newRouteFixture(t)
-	if w := f.do(http.MethodPut, noteURL+"/n0", routeOwner, goodNote); w.Code != http.StatusOK {
-		t.Fatalf("PUT with nothing stored: %d %s, want 200 (default on)", w.Code, w.Body.String())
+	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK && w.Code != http.StatusCreated {
+		t.Fatalf("PUT on a computer with no setting: %d %s", w.Code, w.Body.String())
 	}
-	f.setSwitch(routeOwner, routeComputer, false)
-	for _, tc := range []struct{ method, path, body string }{
-		{http.MethodGet, noteURL, ""},
-		{http.MethodGet, noteURL + "/n1", ""},
-		{http.MethodPut, noteURL + "/n1", goodNote},
-		{http.MethodDelete, noteURL + "/n1", ""},
-		{http.MethodGet, "/api/app-packages/", ""},
-	} {
-		if w := f.do(tc.method, tc.path, routeOwner, tc.body); w.Code != http.StatusNotFound {
-			t.Errorf("%s %s with the switch off: %d %s, want 404", tc.method, tc.path, w.Code, w.Body.String())
-		}
-	}
-	if n := f.countNotes(routeOwner); n != 1 {
-		t.Fatalf("the route holds %d objects; want only the one written before the switch went off", n)
-	}
-}
-
-func TestRouteSettingIsKnownAndDefaultsOn(t *testing.T) {
-	def, known := choirstore.KnownComputerSettings[choirstore.SettingAppPackageObjects]
-	if !known || !def {
-		t.Fatalf("known = %v, default = %v; want a known setting that defaults on (owner, 2026-11-03)", known, def)
-	}
-}
-
-// R2
-func TestRouteSwitchIsPerOwnerAndComputer(t *testing.T) {
-	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, false)
-	f.setSwitch(routeOwner, "computer-b", true)
-	f.setSwitch("owner-b@example.com", routeComputer, true)
-	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusNotFound {
-		t.Fatalf("another computer's switch turned this one on: %d", w.Code)
-	}
-	f.setSwitch(routeOwner, routeComputer, true)
-	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
-		t.Fatalf("the switch for this computer: %d %s", w.Code, w.Body.String())
-	}
-	// A route with no computer id stays closed.
-	closed := &appPackageObjects{store: f.db}
-	req := httptest.NewRequest(http.MethodGet, noteURL, nil)
-	req.Header.Set("X-Authenticated-User", routeOwner)
-	w := httptest.NewRecorder()
-	closed.serve(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("no computer id: %d", w.Code)
-	}
-}
-
-// R3
-func TestRouteSwitchIsReadLive(t *testing.T) {
-	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
-	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
-		t.Fatalf("on: %d %s", w.Code, w.Body.String())
-	}
-	f.setSwitch(routeOwner, routeComputer, false)
-	if w := f.do(http.MethodPut, noteURL+"/n2", routeOwner, goodNote); w.Code != http.StatusNotFound {
-		t.Fatalf("after switching off: %d, want 404", w.Code)
-	}
-	if w := f.do(http.MethodGet, noteURL+"/n1", routeOwner, ""); w.Code != http.StatusNotFound {
-		t.Fatalf("a read after switching off: %d, want 404", w.Code)
-	}
-	f.setSwitch(routeOwner, routeComputer, true)
 	if w := f.do(http.MethodGet, noteURL+"/n1", routeOwner, ""); w.Code != http.StatusOK {
-		t.Fatalf("the object written before the switch went off is gone: %d", w.Code)
+		t.Fatalf("GET: %d %s", w.Code, w.Body.String())
+	}
+	if _, known := choirstore.KnownComputerSettings["app_packages.objects"]; known {
+		t.Fatal("app_packages.objects is still a known setting")
 	}
 }
 
 // R4
 func TestRouteRefusesACallerThatIsNotTheHostSideOwner(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	if w := f.do(http.MethodPut, noteURL+"/n1", "", goodNote); w.Code != http.StatusUnauthorized {
 		t.Fatalf("no identity: %d", w.Code)
 	}
@@ -222,7 +149,6 @@ func TestRouteRefusesACallerThatIsNotTheHostSideOwner(t *testing.T) {
 // R5, R6
 func TestRouteCannotNameAKindOutsideThePackageNamespace(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	for _, path := range []string{
 		"/api/app-packages/p2btest/objects/choir.texture_revision/x",
 		"/api/app-packages/p2btest/objects/choir.app.mail.message/x",
@@ -252,7 +178,6 @@ func TestRouteCannotNameAKindOutsideThePackageNamespace(t *testing.T) {
 // R7
 func TestRouteValidatesTheBodyAgainstTheSchemaBeforeWriting(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	for name, tc := range map[string]struct {
 		body string
 		want int
@@ -278,7 +203,6 @@ func TestRouteValidatesTheBodyAgainstTheSchemaBeforeWriting(t *testing.T) {
 // R8
 func TestRouteKeepsAKindWithoutOwnerEditsReadOnly(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	url := "/api/app-packages/p2btest/objects/ledger"
 	if w := f.do(http.MethodPut, url+"/l1", routeOwner, `{"entry":"x"}`); w.Code != http.StatusForbidden {
 		t.Fatalf("owner write of a desk-only kind: %d %s, want 403", w.Code, w.Body.String())
@@ -294,8 +218,6 @@ func TestRouteKeepsAKindWithoutOwnerEditsReadOnly(t *testing.T) {
 // R9, R10
 func TestRouteRoundTripsAndScopesToTheOwner(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
-	f.setSwitch("owner-b@example.com", routeComputer, true)
 
 	put := f.do(http.MethodPut, noteURL+"/n1", routeOwner, `{"title":"first","priority":2,"extra":{"k":1}}`)
 	if put.Code != http.StatusOK {
@@ -359,7 +281,6 @@ func TestRouteRoundTripsAndScopesToTheOwner(t *testing.T) {
 // R11
 func TestRouteOnlyReadsAndWrites(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
 		t.Fatal(w.Code)
 	}
@@ -379,7 +300,6 @@ func TestRouteOnlyReadsAndWrites(t *testing.T) {
 // R12: the object is on the store's tape, not in memory.
 func TestRouteObjectsSurviveReopeningTheStore(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
 		t.Fatalf("put: %d %s", w.Code, w.Body.String())
 	}
@@ -405,7 +325,6 @@ func TestRouteObjectsSurviveReopeningTheStore(t *testing.T) {
 // owner, which the kind admits). That another desk is refused is P2a's test.
 func TestRouteWorksUnderTheEnforcingWriterGate(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	// The setting write above declares the shell as its writer in the store
 	// (MA3.2); the gate is enforced after it for the object write.
 	t.Cleanup(objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce))
@@ -417,7 +336,6 @@ func TestRouteWorksUnderTheEnforcingWriterGate(t *testing.T) {
 // R14
 func TestRouteRefusesABadObjectID(t *testing.T) {
 	f := newRouteFixture(t)
-	f.setSwitch(routeOwner, routeComputer, true)
 	for _, id := range []string{".hidden", "-x", "a%20b", "a%00b", strings.Repeat("i", 129), "a:b", "a%3Fb"} {
 		if w := f.do(http.MethodPut, noteURL+"/"+id, routeOwner, goodNote); w.Code != http.StatusBadRequest && w.Code != http.StatusNotFound {
 			t.Errorf("id %q: %d, want 400 or 404", id, w.Code)

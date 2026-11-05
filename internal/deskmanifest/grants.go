@@ -101,7 +101,7 @@ var catalogue = map[string]grantSpec{
 
 	// Management's powers.
 	"cancel.assignment": {Verbs: []string{"CancelAssignment"}, Privileged: true},
-	"intake.read":       {Verbs: []string{"Stories"}, Privileged: true},
+	"intake.read":       {Verbs: []string{"Stories"}},
 	"intake.dispose":    {Verbs: []string{"Feed", "Decline"}, Privileged: true},
 	"product.api":       {Verbs: []string{"ProductAPI"}, Privileged: true},
 	"delegate.task":     {Verbs: []string{"Delegate", "CancelTask"}, Privileged: true},
@@ -129,8 +129,8 @@ var catalogue = map[string]grantSpec{
 	"selfdev.complete": {Verbs: []string{"Complete"}, Privileged: true},
 
 	// Budgets.
-	"cell.deadline": {Arg: argDuration},
-	"run.deadline":  {Arg: argDuration},
+	"cell.deadline": {Arg: argDuration, Privileged: true},
+	"run.deadline":  {Arg: argDuration, Privileged: true},
 }
 
 // verbGrant maps each verb to the one grant that carries it.

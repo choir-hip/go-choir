@@ -177,7 +177,7 @@ func TestStoreColumnsWithCredentialShapedNamesAreRuledOn(t *testing.T) {
 func TestSnapshotToKindsKeepsOnlyTheLeasedKinds(t *testing.T) {
 	s, _ := compactTestStore(t, 3, 5, 0)
 	ctx := context.Background()
-	if err := s.PutComputerSetting(ctx, ComputerSetting{OwnerID: "owner-x6", ComputerID: "computer-x6", Key: SettingAppPackageObjects, Value: false}); err != nil {
+	if err := s.PutComputerSetting(ctx, ComputerSetting{OwnerID: "owner-x6", ComputerID: "computer-x6", Key: SettingIntakeLabels, Value: false}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Leases().PutLease(ctx, lease.Record{LeaseID: "lease-x6", OwnerID: "owner-x6", ComputerID: "computer-x6", Holder: "engineering", HolderRunID: "run:x6", State: lease.StateActive}); err != nil {

@@ -29,20 +29,20 @@ import (
 // path can name a kind outside the package's namespace. The kind must have been
 // registered through the package seam (a first-party manifest, at boot), the
 // body must satisfy the kind's schema, and a write needs a kind that admits
-// owner edits: the owner's own window is the only live writer until the
-// package has a desk (P4).
+// owner edits: the owner's own window is a live writer beside the
+// package's desk.
 //
 // It is an owner act: the caller must be the host side of the guest boundary
 // with an authenticated owner, and the route is not on management's ProductAPI
 // allowlist (a positive list), so no desk can reach it.
 //
-// The whole route is behind the app_packages.objects computer setting, read
-// live on every request and off by default. The setting is keyed by owner, so
-// the route authenticates first (an unauthenticated caller gets 401 whatever
-// the setting says, as on every route), except that the app gate (MA3.10)
-// runs before both and answers 403 to a missing or wrong app identity. Off, every authenticated path answers
-// 404 as if the route did not exist, and nothing is read or written. Turning it off is the
-// rollback; objects already written stay on the tape as inert rows.
+// The route has no switch (owner, 2026-11-03, "no switches"): an
+// authenticated owner reaches it, and an unauthenticated caller gets 401 (the
+// app gate, MA3.10, runs before both and answers 403 to a missing or wrong app
+// identity). It
+// answers 404 only for a kind the seam did not register, and writes only a kind
+// that admits owner edits. A package desk writes its kinds through its own seam
+// (the reducer's writer), never through this route.
 
 const (
 	appPackageObjectsPrefix   = "/api/app-packages/"
@@ -54,7 +54,6 @@ var appPackageObjectID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`
 
 // appPackageObjectStore is the slice of the runtime store the route uses.
 type appPackageObjectStore interface {
-	GetComputerSetting(ctx context.Context, ownerID, computerID, key string) (store.ComputerSetting, error)
 	PutPackageObject(ctx context.Context, kind objectgraph.ObjectKind, ownerID, id string, body json.RawMessage) (store.PackageObject, error)
 	GetPackageObject(ctx context.Context, kind objectgraph.ObjectKind, ownerID, id string) (store.PackageObject, error)
 	ListPackageObjects(ctx context.Context, kind objectgraph.ObjectKind, ownerID string, limit int) ([]store.PackageObject, error)
@@ -88,28 +87,6 @@ func packageNotFound(w http.ResponseWriter) {
 	writePackageJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 }
 
-func (h *appPackageObjects) enabled(ctx context.Context, ownerID string) (on bool, status int) {
-	if h.store == nil || h.computerID == "" {
-		return false, http.StatusNotFound
-	}
-	setting, err := h.store.GetComputerSetting(ctx, ownerID, h.computerID, store.SettingAppPackageObjects)
-	switch {
-	case err == nil:
-		if setting.Value {
-			return true, 0
-		}
-		return false, http.StatusNotFound
-	case errors.Is(err, store.ErrNotFound):
-		if store.KnownComputerSettings[store.SettingAppPackageObjects] {
-			return true, 0
-		}
-		return false, http.StatusNotFound
-	default:
-		log.Printf("app packages: read %s on %s: %v; the route stays closed", store.SettingAppPackageObjects, h.computerID, err)
-		return false, http.StatusServiceUnavailable
-	}
-}
-
 func (h *appPackageObjects) serve(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := server.AuthenticatedOwner(r)
 	if err != nil {
@@ -119,12 +96,8 @@ func (h *appPackageObjects) serve(w http.ResponseWriter, r *http.Request) {
 	// The route serves the authenticated owner, so its reads declare the
 	// owner as reader unless an earlier layer already declared one.
 	r = r.WithContext(objectgraph.WithReaderIfAbsent(r.Context(), objectgraph.WriterOwner))
-	if on, status := h.enabled(r.Context(), ownerID); !on {
-		if status == http.StatusNotFound {
-			packageNotFound(w)
-			return
-		}
-		writePackageJSON(w, status, map[string]string{"error": "app package objects are unavailable"})
+	if h.store == nil || h.computerID == "" {
+		packageNotFound(w)
 		return
 	}
 

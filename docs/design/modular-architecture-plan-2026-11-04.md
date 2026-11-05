@@ -694,6 +694,36 @@ design 4A.1 lacked these powers. Each gets a grant (names provisional):
 | A role holds `Done` that its parent lacks | role row `manifest.go:278` against `appDeskVerbs` `:471-475` | the role-narrow rule is corrected: a role may only narrow, except the lifecycle module (`done`) which a role marked `ends_run` receives |
 | Non-desk routing, open-new-subject | `inbox_records.go:77-83, 107-110, 113` | registered inbox classes and a custodian-handled `open_subject` request (MA1.2) |
 
+**As built (MA4.1; `internal/deskmanifest/grants.go`).** A desk's verbs, capsule
+verbs, modules and cell deadline are computed from its grants at registration;
+the table holds no verb list. Every verb is in exactly one grant, so a verb set
+and a grant set determine each other. The runtime catalogue (the manifest's
+declared ceiling, `internal/apppackage/grants.go`, adds the `desk.` prefix and
+publishing levels; a test pins the two agree on privilege):
+
+| Grant | Carries | Held by (today) |
+|---|---|---|
+| `act.cast`, `act.ask`, `act.reply`, `act.cancel`, `act.escalate`, `act.precommit`, `act.report`, `act.report_packet`, `act.resolve`, `act.disagree` | the semantic-act tier | management, research; texture and the task hold cast/ask or cast |
+| `captures.read`, `lease.request`, `lifecycle.done` | capture reads, lease requests, `Done` | management, texture, research, the task and the research child |
+| `updates.read` | the Updates module | management, texture |
+| `calibration.read`, `calibration.restate` | `Calibration`, `Restate` | management, engineering |
+| `cancel.assignment` (privileged) | `CancelAssignment` | management |
+| `intake.read`; `intake.dispose` (privileged) | `Stories`; `Feed`, `Decline` | management, the task |
+| `product.api`, `delegate.task`, `assignment.verify` (privileged) | `ProductAPI`; `Delegate`, `CancelTask`; `Verify` | management |
+| `precommit.rule(<12 closed kinds>)` (privileged) | rule-settled Precommit; `validateEngineeringPrecommit` reads it | engineering |
+| `doc.read`, `commit.texture_revision`, `texture.turn` | `ReadDoc`; `Write`; `Wait`, `Reject` | texture |
+| `world.read`, `source.poll`, `evidence.write`, `evidence.read`, `run.memory`, `research.spawn`, `system1.call`, `story.relate`, `capsule.read` | the world and evidence verbs | research (the child holds `world.read`, `captures.read`, `evidence.read`) |
+| `capsule.mutate`, `selfdev.freeze`, `selfdev.complete` (privileged) | `WriteFile`, `Exec`, `Start`, `Poll`, `Stop` and the 14 capsule verbs; `Freeze`; `Complete` | engineering |
+| `cell.deadline(<dur>)`, `run.deadline(<dur>)` | the cell bound; the run bound (`activationBudgetForRun` reads it) | management and the task; the task |
+
+`model.floor` has no row: the management task's model pin and free-model filter
+were deleted (`ec8b4e90d`), so there is no power left to name, and the manifest
+catalogue lost `desk.model.floor` with it. The role-narrow rule is checked at
+registration: a role's grants are a subset of its parent's (the system desk with
+the same worker uid, so no name is consulted) except `lifecycle.done` for a row
+marked `ends_run`. The registry state, epochs and candidates are in
+`epoch.go`, `internal/appdesk`.
+
 The user test stays: every power a desk has today appears as a grant, and no
 privilege keys on a desk name. The names gate (MA2.5) enforces it.
 
