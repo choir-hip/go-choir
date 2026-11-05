@@ -703,7 +703,31 @@ func (s *Store) GetRunOG(ctx context.Context, runID string) (types.RunRecord, er
 // UpdateRunOG updates an existing run record in the object graph.
 // Since CreateObject is an upsert (ON DUPLICATE KEY UPDATE), this is
 // the same as CreateRunOG but preserves the original created_at.
+//
+// The write is conditional on the content hash of the object it read, and the
+// run's label set (MA3.5) is merged from that same read: labels only grow, so
+// a writer holding an older copy cannot drop one, and a concurrent label
+// persist (UnionRunLabels) makes this write re-read and merge again, never
+// lose. The retry is bounded and has no sleep: a conflict means another
+// writer finished.
 func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
+	for attempt := 0; attempt < runWriteAttempts; attempt++ {
+		err := s.updateRunOGOnce(ctx, rec)
+		if !errors.Is(err, ErrConcurrentStateChange) {
+			return err
+		}
+	}
+	return ErrConcurrentStateChange
+}
+
+// runUpdateAfterRead is a test hook: it runs between the read and the
+// conditional write of updateRunOGOnce.
+var runUpdateAfterRead = func() {}
+
+// runWriteAttempts bounds the re-reads of a conditional run write.
+const runWriteAttempts = 8
+
+func (s *Store) updateRunOGOnce(ctx context.Context, rec types.RunRecord) error {
 	// Fetch the existing object to preserve identity and created_at. Legacy
 	// callers without owner identity retain the global not-found behavior.
 	var existing objectgraph.Object
@@ -723,6 +747,8 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 	if err := ogDecode(existing, &existingRec); err != nil {
 		return err
 	}
+	runUpdateAfterRead()
+	mergeStoredRunLabels(existingRec, &rec)
 	// Preserve created_at from the original.
 	created := existingRec.CreatedAt
 	if created.IsZero() {
@@ -750,13 +776,21 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 		metadata["finished_at"] = rec.FinishedAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	// Use PutObject directly to update in place (same canonical ID).
+	// Update in place (same canonical ID), conditional on what was read.
 	updated := existing
 	updated.UpdatedAt = now
 	bodyJSON, _ := json.Marshal(rec)
 	updated.Body = bodyJSON
 	updated.Metadata = mustMarshalMetadata(metadata)
-	return s.ogStore.PutObject(ctx, updated)
+	updated.ContentHash = objectgraph.ContentHash(updated.ObjectKind, updated.Body, updated.Metadata)
+	condition := objectgraph.ObjectCondition{CanonicalID: existing.CanonicalID, Exists: true, ExpectedContentHash: existing.ContentHash}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{updated}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return ErrConcurrentStateChange
+		}
+		return err
+	}
+	return nil
 }
 
 // ogListAllObjectsByKindOwnerNoComputer pages the objects of one kind and one

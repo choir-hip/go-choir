@@ -405,7 +405,9 @@ func restatementRecord(p0 types.CommitmentRecord, p1 types.CommitmentPrecommit, 
 			Answers: []string{types.PrecommitAnswerYes, types.PrecommitAnswerNo}, Probabilities: p1.Distribution}},
 		CommittedAt: now,
 	}
-	rec.Provenance = types.CommitmentProvenance{AgentID: scope.FromAgentID, ModelID: scope.ModelID, CommittedAt: now, ContextRef: scope.ChannelID}
+	rec.Provenance = types.CommitmentProvenance{AgentID: scope.FromAgentID, ModelID: scope.ModelID, CommittedAt: now, ContextRef: scope.ChannelID,
+		// The stored record's labels and the run's, never fewer (MA3.5).
+		Labels: types.NewLabelSet(p0.Provenance.Labels...).Union(scope.Labels).Strings()}
 	rec.RelatedIDs = append([]string{p0.RecordID}, p0.RelatedIDs...)
 	rec.SubjectRefs = make(map[string]string, len(p0.SubjectRefs)+6)
 	for k, v := range p0.SubjectRefs {

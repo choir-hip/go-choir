@@ -80,6 +80,10 @@ type Runtime struct {
 	// in each running desk run returned (run id -> int64): a cell's commit
 	// marks read only through it.
 	recordsRunShown sync.Map
+	// runLabels holds each running run's provenance label accumulator
+	// (run id -> *runLabelAccumulator, run_labels.go): the union of the
+	// labels of everything the run read, host-side, never in the cell.
+	runLabels sync.Map
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map

@@ -212,6 +212,11 @@ type CommitmentProvenance struct {
 	// record was written, stamped by the host (MA1.6): the grouping key of
 	// the inert rates beside desk and model. A cell never supplies it.
 	PromptVersion string `json:"prompt_version,omitempty"`
+	// Labels is the provenance label set (MA3.5, R15): the union of the
+	// labels of everything the writing run read, stamped by the reducer from
+	// the host's per-run accumulator. A cell can neither set nor clear it.
+	// Records written before the slice have none.
+	Labels []string `json:"labels,omitempty"`
 }
 
 // CommitmentRevision is the optional post-score model update: which

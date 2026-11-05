@@ -106,7 +106,7 @@ fmt.Println(string(b), err)`
 	if err := json.Unmarshal([]byte(out), &cell); err != nil || cell.Error != "" {
 		t.Fatalf("cell failed: %v %s", err, out)
 	}
-	line := strings.TrimSpace(cell.Stdout)
+	line := unframeLabelled(cell.Stdout)
 	line = strings.TrimSuffix(line, "<nil>")
 	var results []yaegikernel.ResearchChildResult
 	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &results); err != nil {
@@ -274,7 +274,7 @@ fmt.Println(string(b), err)`
 	if err := json.Unmarshal([]byte(out), &cell); err != nil || cell.Error != "" {
 		t.Fatalf("cell failed: %v %s", err, out)
 	}
-	line := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(cell.Stdout), "<nil>"))
+	line := strings.TrimSpace(strings.TrimSuffix(unframeLabelled(cell.Stdout), "<nil>"))
 	var results []yaegikernel.ResearchChildResult
 	if err := json.Unmarshal([]byte(line), &results); err != nil || len(results) != 2 {
 		t.Fatalf("decode results from %q: %v", cell.Stdout, err)
@@ -343,7 +343,7 @@ fmt.Println(string(b), err)`
 	if err := json.Unmarshal([]byte(out), &cell); err != nil || cell.Error != "" {
 		t.Fatalf("cell failed: %v %s", err, out)
 	}
-	line := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(cell.Stdout), "<nil>"))
+	line := strings.TrimSpace(strings.TrimSuffix(unframeLabelled(cell.Stdout), "<nil>"))
 	var results []yaegikernel.ResearchChildResult
 	if err := json.Unmarshal([]byte(line), &results); err != nil || len(results) != 3 {
 		t.Fatalf("decode results from %q: %v", cell.Stdout, err)

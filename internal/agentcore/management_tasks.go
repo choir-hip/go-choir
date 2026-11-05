@@ -255,6 +255,10 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 	}
 	closing := types.NewTaskClosingReport(current, reason, note, errText, runID, time.Now().UTC().Format(time.RFC3339Nano))
 	closing.ComputerID = current.ComputerID
+	// The Report that reaches the parent carries what the task read and
+	// what the delegating run read (MA3.5), both from their records: the
+	// caches of an ended run are gone.
+	closing.Provenance.Labels = rt.taskReportLabels(ctx, current, runID).Strings()
 	req := types.CommitInboxRecordsRequest{OwnerID: current.OwnerID, ComputerID: current.ComputerID, CommandID: "task-closure:" + closing.RecordID, Records: []types.CommitmentRecord{closing}}
 	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
 		log.Printf("runtime: close management task %s: %v", task.TaskID, err)
@@ -607,6 +611,9 @@ func (rt *Runtime) scoreClosedTask(ctx context.Context, task types.ManagementTas
 	}
 	report := buildSubCallReport(subCallReportParams{Cast: *cast, Child: task.TaskInbox, Model: model, Text: text.String(),
 		Error: taskErrText(closing), Sources: sources, Now: time.Now()})
+	// The closing record is host-stamped with the task's and the delegator's
+	// labels; the summary carries them (appendSubCallRecord adds the parent's).
+	report.Provenance.Labels = types.NewLabelSet(closing.Provenance.Labels...).Union(types.NewLabelSet(cast.Provenance.Labels...)).Strings()
 	if err := rt.appendSubCallRecord(ctx, task.OwnerID, task.ComputerID, report); err != nil {
 		log.Printf("runtime: record the Report of task %s as a sub-call: %v", task.TaskID, err)
 		return
@@ -622,4 +629,15 @@ func taskErrText(rec *types.CommitmentRecord) string {
 		return ""
 	}
 	return rec.TaskOutcome.Error
+}
+
+// taskReportLabels is the label set of a management task's closing Report:
+// the task run's labels and the delegating run's, each read from its run
+// record (and the opening Cast's stamp), whatever the caches still hold.
+func (rt *Runtime) taskReportLabels(ctx context.Context, task types.ManagementTask, runID string) types.LabelSet {
+	set := rt.runLabelsOf(ctx, task.OwnerID, task.ComputerID, firstNonEmpty(runID, task.RunID))
+	if cast, err := rt.store.GetCommitmentRecord(ctx, task.OwnerID, task.ComputerID, task.OpeningRecordID); err == nil && cast != nil {
+		set = set.Union(types.NewLabelSet(cast.Provenance.Labels...), rt.runLabelsOf(ctx, task.OwnerID, task.ComputerID, cast.Provenance.RunID))
+	}
+	return set
 }

@@ -345,3 +345,20 @@ func TestStoryAnalysisSaysWhenThePlatformCannotAnswer(t *testing.T) { // A3
 		t.Fatalf("judge calls = %d, want none without candidates", f.judgeCalls())
 	}
 }
+
+// MA3.5: the analysis carries the owner's document into the cell's frame, so
+// the run that was handed it carries the document's label.
+func TestStoryAnalysisTaintsTheRunItIsHandedTo(t *testing.T) {
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	if a := f.analyse(t, agentprofile.Research, "run-taint", "doc-story"); a == nil {
+		t.Fatal("no analysis built")
+	}
+	if got := f.rt.runLabelSet("run-taint"); !got.Has(types.OwnerPrivateLabel("document")) {
+		t.Errorf("run labels after the analysis = %v", got)
+	}
+	// A desk that is not handed one carries none.
+	if f.analyse(t, agentprofile.Texture, "run-no-taint", "doc-story") != nil || len(f.rt.runLabelSet("run-no-taint")) != 0 {
+		t.Errorf("a desk without an analysis carries labels")
+	}
+}

@@ -39,6 +39,9 @@ type cellRecords struct {
 	after   int64
 	through int64
 	view    []yaegikernel.InboxRecord
+	// labels are the provenance labels of the records in view, host-side
+	// only (run_labels.go): the view the cell sees carries none.
+	labels []recordLabel
 }
 
 // loadCellRecords reads the records in (cursor, head] of a records desk's
@@ -123,6 +126,7 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 			view.ParentConversationID, view.ParentRound = binding.ParentConversationID, binding.ParentRound
 		}
 		out.view = append(out.view, view)
+		out.labels = append(out.labels, recordLabel{seq: view.Seq, set: labelsOfRecord(rec)})
 		if _, task := types.ManagementTaskIDOfInbox(inbox); task && rec.IsCast() && rec.Cast != nil {
 			// A task's opening Cast names the captures records it was given
 			// (R2-14): each is shown as the captures record it is, cut to
@@ -134,6 +138,10 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 				return cellRecords{}, err
 			}
 			out.view = append(out.view, delegated...)
+			for _, d := range delegated {
+				// A delegated captures record is the captures read.
+				out.labels = append(out.labels, recordLabel{seq: d.Seq, set: captureReadLabels})
+			}
 		}
 	}
 	return out, nil
@@ -1127,6 +1135,10 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
 		rt.recordsRunStart.Delete(rec.RunID)
 		rt.recordsRunShown.Delete(rec.RunID)
+	}
+	if rt != nil && rec != nil && rec.State.Terminal() {
+		// A parked run keeps its labels: it resumes with what it read.
+		rt.dropRunLabels(rec.RunID)
 	}
 	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
 		rt.storyLibraryShown.Delete(rec.RunID)

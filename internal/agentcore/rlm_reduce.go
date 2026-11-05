@@ -78,6 +78,11 @@ type ReductionScope struct {
 	// whose cell this is (recordModelID); every record the cell authors
 	// carries it (docs/problems/desk-records-lack-model-id-2026-10-14.md).
 	ModelID string
+	// Labels is the union of the labels of everything the run has read
+	// (run_labels.go), taken from the host's per-run accumulator when the
+	// tray commits. The reducer stamps it on every record; a cell has no
+	// field to name a label and cannot clear one.
+	Labels types.LabelSet
 }
 
 // ReducedIntent pairs a cell-local ID with its durable sequence.
@@ -857,6 +862,17 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 			return err
 		}
 	}
+	// The run's labels at commit: everything its cells read, this one
+	// included, stamped on every record the tray writes (MA3.5).
+	if rt := r.rt(); rt != nil {
+		// The set is persisted on the run record first, so a stamped act
+		// never carries more than the record holds (MA3.5).
+		labels, err := rt.flushRunLabels(ctx, r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID)
+		if err != nil {
+			return fmt.Errorf("reduce: persist the run's labels: %w", err)
+		}
+		r.scope.Labels = labels
+	}
 	highWater := r.highWater
 	if highWater < r.scope.Cursor {
 		highWater = r.scope.Cursor
@@ -1464,6 +1480,9 @@ func stampRequestRecord(scope ReductionScope, in yaegikernel.StagedIntent, rec *
 	rec.Provenance.Desk = strings.TrimSpace(scope.DeskAgentID)
 	rec.Provenance.RunID = strings.TrimSpace(scope.RunID)
 	rec.Provenance.Origin = types.OriginDeskRun
+	// Labels are overwritten, never merged: whatever the record carried is
+	// discarded for the run's own set (MA3.5).
+	rec.Provenance.Labels = scope.Labels.Strings()
 	if _, ok := types.ManagementTaskIDOfInbox(scope.DeskAgentID); ok {
 		rec.Provenance.Origin = types.OriginTask
 	}

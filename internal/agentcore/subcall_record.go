@@ -197,7 +197,7 @@ func buildSubCallReport(p subCallReportParams) types.CommitmentRecord {
 		Report:      &types.CommitmentReport{Claims: claims, StopReason: stop},
 		Observation: types.CommitmentObservation{Excerpt: boundRunes(text, 500), SourceRef: p.Cast.RecordID, ObservedAt: stamp},
 		Provenance: types.CommitmentProvenance{AgentID: p.Child, ModelID: p.Model, CommittedAt: stamp,
-			Desk: p.Child, RunID: cb.ParentRunID, Origin: types.OriginDeskRun},
+			Desk: p.Child, RunID: cb.ParentRunID, Origin: types.OriginDeskRun, Labels: p.Cast.Provenance.Labels},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: p.Cast.ComputerID,
 		Addressee: types.SubCallLedgerAddressee, EvidenceRefs: cites,
 		ParentID: p.Cast.RecordID, Final: true,
@@ -229,7 +229,7 @@ func buildSubCallSelfScore(cast types.CommitmentRecord, now time.Time) (types.Co
 		Scores: []types.CommitmentScore{{ScorerModelID: cast.Provenance.ModelID, ScorerAgentID: cb.ParentAgent, Self: true,
 			Answers: answers, Probabilities: probs, ScoredAt: stamp}},
 		Provenance: types.CommitmentProvenance{AgentID: cb.ParentAgent, ModelID: cast.Provenance.ModelID, CommittedAt: stamp,
-			Desk: cb.ParentAgent, RunID: cb.ParentRunID, Origin: types.OriginDeskRun},
+			Desk: cb.ParentAgent, RunID: cb.ParentRunID, Origin: types.OriginDeskRun, Labels: cast.Provenance.Labels},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: cast.ComputerID, ParentID: cast.RecordID,
 		Addressee: types.SubCallLedgerAddressee,
 		SubCall: &types.CommitmentSubCall{Kind: types.SubCallSelfScore, FanOutID: cb.FanOutID, Role: cb.Role,
@@ -246,6 +246,18 @@ func (rt *Runtime) appendSubCallRecord(ctx context.Context, owner, computer stri
 	}
 	if err := types.ValidateRequestRecord(rec); err != nil {
 		return err
+	}
+	// A sub-call record summarizes work done under the parent's run: it
+	// carries the union of what the builder stamped from stored records (the
+	// Cast, the closed task) and what the parent's run read (MA3.5). The
+	// parent's set is read from its record, which outlives its cache. No cell
+	// supplies the builder's labels: they come from records the host wrote.
+	if rec.Provenance.RunID != "" {
+		parent, err := rt.flushRunLabels(ctx, owner, computer, rec.Provenance.RunID)
+		if err != nil {
+			return fmt.Errorf("sub-call record %s: persist the run's labels: %w", rec.RecordID, err)
+		}
+		rec.Provenance.Labels = types.NewLabelSet(rec.Provenance.Labels...).Union(parent).Strings()
 	}
 	_, err := rt.store.AppendCommitmentRecord(ctx, owner, computer, rec)
 	return err

@@ -143,6 +143,11 @@ func (rt *Runtime) storyAnalysisFor(ctx context.Context, deskRole string, exec t
 		rt.markAnalysisUnanswered(ctx, exec, owner, computer, runID, e.analysis)
 		e.done.Store(true)
 	})
+	if e.analysis != nil {
+		// The analysis carries the owner's document (its title, its
+		// entities): a segment of the cell's frame, read (MA3.5).
+		rt.taintRun(runID, documentReadLabels)
+	}
 	return e.analysis
 }
 

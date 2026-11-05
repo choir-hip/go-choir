@@ -106,6 +106,8 @@ type Store struct {
 	eventSource  atomic.Pointer[eventSourceHolder]
 	jsonPatchMu  sync.Mutex
 	trajectoryMu sync.Mutex
+	// runLabelsMu serializes the read-modify-write of UnionRunLabels.
+	runLabelsMu sync.Mutex
 	// graphHomeMu serializes every engineering-slot claim and release in both
 	// homes, and the table-to-graph imports (graph_home.go): a claim reads the
 	// setting, consults the other home and writes under it.
@@ -2311,4 +2313,102 @@ func (s *Store) SaveDesktopState(ctx context.Context, state types.DesktopState) 
 // owner/desktop pair using UPSERT.
 func (s *Store) SaveDesktopStateForDesktop(ctx context.Context, state types.DesktopState) error {
 	return s.SaveDesktopStateForSession(ctx, state, types.DesktopSessionContext{SessionID: "legacy", IsDriver: true})
+}
+
+// loadRunAnywhere reads a run from either home: the plain object or the
+// lifecycle projection.
+func (s *Store) loadRunAnywhere(ctx context.Context, ownerID, computerID, runID string) (types.RunRecord, error) {
+	rec, err := s.GetRunByOwnerOG(ctx, ownerID, runID)
+	if err == nil || !errors.Is(err, ErrNotFound) || strings.TrimSpace(computerID) == "" {
+		return rec, err
+	}
+	return s.GetLifecycleRun(ctx, ownerID, computerID, runID)
+}
+
+// mergeStoredRunLabels folds the stored run's labels into the run about to be
+// written: labels only grow (MA3.5). Callers hold the stored copy from the
+// read their write is conditional on.
+func mergeStoredRunLabels(stored types.RunRecord, proposed *types.RunRecord) {
+	proposed.Labels = types.NewLabelSet(proposed.Labels...).Union(types.NewLabelSet(stored.Labels...)).Strings()
+}
+
+// RunLabels is the label set recorded on a run: what its reducer commits
+// persisted. A run that is not stored has none (ErrNotFound).
+func (s *Store) RunLabels(ctx context.Context, ownerID, computerID, runID string) (types.LabelSet, error) {
+	rec, err := s.loadRunAnywhere(ctx, ownerID, computerID, runID)
+	if err != nil {
+		return nil, err
+	}
+	return types.NewLabelSet(rec.Labels...), nil
+}
+
+// UnionRunLabels folds labels into the run record's label set and returns the
+// set now recorded. It writes only when the set grows, and it writes only the
+// labels: the stored body is patched, not replaced, and the write is
+// conditional on the content hash it read. A state transition that lands
+// between the read and the write changes the hash, so the write re-reads and
+// unions again instead of overwriting the transition; the retry is bounded
+// and has no sleep. The same condition protects the other direction:
+// UpdateRunOG and the lifecycle projection merge the stored labels from the
+// read their own conditional write rests on.
+func (s *Store) UnionRunLabels(ctx context.Context, ownerID, computerID, runID string, labels types.LabelSet) (types.LabelSet, error) {
+	// The run record is the kernel's kind; the label persist is the
+	// platform's bookkeeping on it, whoever asks (MA3.2 writer declaration).
+	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterKernel)
+	for attempt := 0; attempt < runWriteAttempts; attempt++ {
+		set, err := s.unionRunLabelsOnce(ctx, ownerID, computerID, runID, labels)
+		if !errors.Is(err, ErrConcurrentStateChange) {
+			return set, err
+		}
+	}
+	return nil, ErrConcurrentStateChange
+}
+
+// runLabelsBeforeUnionWrite is a test hook: it runs between the read and the
+// conditional write of unionRunLabelsOnce.
+var runLabelsBeforeUnionWrite = func() {}
+
+func (s *Store) unionRunLabelsOnce(ctx context.Context, ownerID, computerID, runID string, labels types.LabelSet) (types.LabelSet, error) {
+	obj, err := s.getRunObjectByOwnerOG(ctx, ownerID, runID)
+	graph := s.ogStore
+	if errors.Is(err, ErrNotFound) && strings.TrimSpace(computerID) != "" {
+		obj, err = s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, runID)
+	}
+	if err != nil {
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(obj.Body, &body); err != nil {
+		return nil, fmt.Errorf("union run labels: decode run: %w", err)
+	}
+	var have []string
+	if raw, ok := body[types.LabelsMetadataKey]; ok {
+		_ = json.Unmarshal(raw, &have)
+	}
+	current := types.NewLabelSet(have...)
+	merged := current.Union(labels)
+	if len(merged) == len(current) {
+		return current, nil
+	}
+	runLabelsBeforeUnionWrite()
+	enc, _ := json.Marshal([]string(merged))
+	body[types.LabelsMetadataKey] = enc
+	patched, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	updated := obj
+	updated.Body = patched
+	updated.ContentHash = objectgraph.ContentHash(updated.ObjectKind, updated.Body, updated.Metadata)
+	condition := objectgraph.ObjectCondition{CanonicalID: obj.CanonicalID, Exists: true, ExpectedContentHash: obj.ContentHash}
+	if err := graph.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{updated}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return nil, ErrConcurrentStateChange
+		}
+		return nil, err
+	}
+	return merged, nil
 }

@@ -148,6 +148,12 @@ type RunRecord struct {
 
 	// Metadata holds extensible key-value data for the run.
 	Metadata map[string]any `json:"metadata,omitempty"`
+
+	// Labels is the run's provenance label set (MA3.5, R15): the union of
+	// the labels of everything the run read. The host unions into it and
+	// the store keeps it union-only, so a stale writer cannot drop one. A
+	// cell can neither set nor clear it.
+	Labels []string `json:"labels,omitempty"`
 }
 
 // EventKind represents the kind of a runtime event emitted during run execution.

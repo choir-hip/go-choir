@@ -68,12 +68,12 @@ func lifecycleControlBindingsEmpty(metadata map[string]any) bool {
 	}
 }
 
-// FailLifecycleControlActivation is the only durable handled-failure authority
+// failLifecycleControlActivationOnce is one attempt of FailLifecycleControlActivation. It is the only durable handled-failure authority
 // for a Research control activation. It accepts only the deterministic
 // missing run/work binding that BindLifecycleControlDelivery would reject and
 // atomically records the failed run, cleared agent activation, reducer advance,
 // typed event, and replay receipt.
-func (s *Store) FailLifecycleControlActivation(ctx context.Context, req types.FailLifecycleControlActivationRequest) (types.LifecycleResult, error) {
+func (s *Store) failLifecycleControlActivationOnce(ctx context.Context, req types.FailLifecycleControlActivationRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -321,4 +321,13 @@ func (s *Store) resolveLifecycleControlActivationFailure(ctx context.Context, ow
 		return nil, ErrLifecycleInvalidTransition
 	}
 	return &run, nil
+}
+
+// FailLifecycleControlActivation retries on a concurrent change to the run (MA3.5): the run object
+// is shared with the label persist, which writes on every reducer commit, so a
+// hash conflict here means another writer finished, not that the transition is
+// wrong. Each attempt re-reads and re-checks every precondition; the retry is
+// bounded and has no sleep.
+func (s *Store) FailLifecycleControlActivation(ctx context.Context, req types.FailLifecycleControlActivationRequest) (types.LifecycleResult, error) {
+	return retryRunConflict(func() (types.LifecycleResult, error) { return s.failLifecycleControlActivationOnce(ctx, req) })
 }

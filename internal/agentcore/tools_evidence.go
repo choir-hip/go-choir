@@ -110,6 +110,11 @@ func newSaveEvidenceTool(rt *Runtime) toolregistry.Tool {
 			if content == "" {
 				return "", fmt.Errorf("content must not be empty")
 			}
+			exec := toolregistry.ExecutionContextFrom(ctx)
+			labels, err := rt.flushRunLabels(ctx, ownerID, exec.ComputerID, exec.RunID)
+			if err != nil {
+				return "", fmt.Errorf("save_evidence: persist the run's labels: %w", err)
+			}
 			rec := types.EvidenceRecord{
 				EvidenceID: uuid.NewString(),
 				OwnerID:    ownerID,
@@ -118,8 +123,10 @@ func newSaveEvidenceTool(rt *Runtime) toolregistry.Tool {
 				SourceURI:  strings.TrimSpace(in.SourceURI),
 				Title:      strings.TrimSpace(in.Title),
 				Content:    in.Content,
-				Metadata:   in.Metadata,
-				CreatedAt:  time.Now().UTC(),
+				// The object carries the labels of everything the run read;
+				// a label the writer supplied is discarded (MA3.5).
+				Metadata:  types.StampMetadataLabels(in.Metadata, labels),
+				CreatedAt: time.Now().UTC(),
 			}
 			if err := rt.store.CreateEvidence(ctx, rec); err != nil {
 				return "", err

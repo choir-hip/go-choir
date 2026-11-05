@@ -117,6 +117,11 @@ type deskSession struct {
 	// searches is the session's async search table (desk_search.go); its
 	// streams end with the session.
 	searches *deskSearches
+	// labels is the union of the labels of everything any run read in this
+	// session (MA3.5): the REPL keeps values across runs, so a later run's
+	// acts carry what an earlier run read into them. It lives and dies with
+	// the session.
+	labels types.LabelSet
 }
 
 // close ends the session: its searches' streams, then its worker. Runs
@@ -161,6 +166,26 @@ func newResearchChildDeskWorkers(childKey string) *deskSessionWorkers {
 }
 
 // sessionLabel is the desk_session a trace event names for key.
+// sessionLabels is the label union of the lease's live session.
+func (m *deskSessionWorkers) sessionLabels(lease deskSessionLease) types.LabelSet {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s := m.sessions[lease.key]; s != nil && s.worker == lease.worker {
+		return s.labels
+	}
+	return nil
+}
+
+// taintSession folds labels into the lease's live session; a session that
+// was replaced or closed is not the lease's and is left alone.
+func (m *deskSessionWorkers) taintSession(lease deskSessionLease, labels types.LabelSet) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s := m.sessions[lease.key]; s != nil && s.worker == lease.worker {
+		s.labels = s.labels.Union(labels)
+	}
+}
+
 func (m *deskSessionWorkers) sessionLabel(key string) string {
 	return m.label + key
 }
@@ -561,6 +586,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 							}
 							rt.recordDeskEvent(context.WithoutCancel(egrCtx), cellExec, types.EventDeskEgress, ev)
 						})
+						if err == nil {
+							// An async search bypasses deskEgress; its read taints here.
+							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
+						}
 					} else {
 						out, err = rt.deskEgress(egrCtx, deskRole, cellExec, action, payload)
 					}
@@ -586,6 +615,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				return "", fmt.Errorf("desk_go_eval: spawn worker: %w", err)
 			}
 			defer workers.done(lease)
+			// Runs before done: what the run read joins the session's union.
+			defer func() { workers.taintSession(lease, rt.runLabelSet(execCtx.RunID)) }()
 			w := lease.worker
 			reduction := rlmReductionForDeskCall(ctx, rt)
 			// A Texture cell works against its frame (Cut 2 2a): the
@@ -594,6 +625,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			var docSnapshot *yaegikernel.DocSnapshot
 			if deskRole == agentprofile.Texture && execCtx.RunRecord != nil {
 				docSnapshot = textureDocSnapshotForRun(ctx, rt, execCtx.RunRecord, reduction.records)
+				if docSnapshot != nil {
+					// The frame showed the cell the owner's document.
+					rt.taintRun(execCtx.RunID, documentReadLabels)
+				}
 			}
 			// R4: the acting desk's commitment pack rides the same frame —
 			// score-free by construction (types.ActingPack), so the
@@ -634,6 +669,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			egressLog := &cellEgressLog{}
 			evalCtx = withCellEgressLog(evalCtx, egressLog)
 			evalStart := time.Now()
+			untrustedBefore := rt.runUntrustedReads(execCtx.RunID)
+			// A run on a session that earlier runs read into starts with
+			// their labels: the values they defined are still defined.
+			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
 				Updates: updates, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
@@ -712,6 +751,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				if deskRole != agentprofile.Texture {
 					reduction.records = reduction.records.capToShown(rt.noteRecordsShown(execCtx.RunID, result.RecordsShown))
 				}
+				// What choir.Records() showed taints the run before its acts
+				// are stamped (run_labels.go).
+				rt.taintRun(execCtx.RunID, reduction.records.labelsThrough())
 				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {
 					return "", rerr
 				}
@@ -730,8 +772,14 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					rt.noteTextureCell(execCtx.RunID, result.Intents)
 				}
 			}
+			// What a cell printed after it read outside content is data, not
+			// instructions (run_context.go frameLabelled).
+			stdout := result.Stdout
+			if rt.runUntrustedReads(execCtx.RunID) != untrustedBefore {
+				stdout = frameLabelled(rt.runLabelSet(execCtx.RunID), stdout)
+			}
 			cell := map[string]any{
-				"stdout":   result.Stdout,
+				"stdout":   stdout,
 				"stderr":   result.Stderr,
 				"error":    result.Error,
 				"duration": result.DurationMs,
@@ -1160,6 +1208,16 @@ func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) str
 // network/content actions go to researchDeps.HostEgress — one deps surface,
 // never an open socket.
 func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+	out, err := rt.deskEgressRead(egrCtx, deskRole, cellExec, action, payload)
+	if err == nil {
+		// Every read point the cell reaches taints the run (run_labels.go).
+		rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
+	}
+	return out, err
+}
+
+// deskEgressRead dispatches one egress call; deskEgress labels its result.
+func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 	if action == yaegikernel.ActionSystem1 {
 		return rt.system1Egress(egrCtx, deskRole, cellExec, payload)
 	}

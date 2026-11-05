@@ -3218,6 +3218,8 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		run.CreatedAt = storedRun.CreatedAt
+		// Labels only grow, merged from the read this write is conditional on (MA3.5).
+		mergeStoredRunLabels(storedRun, &run)
 		runCondition.Exists, runCondition.ExpectedContentHash = true, existingRunObj.ContentHash
 	} else if !errors.Is(getRunErr, objectgraph.ErrNotFound) {
 		return types.LifecycleResult{}, getRunErr
@@ -5348,12 +5350,12 @@ func (s *Store) SettleLifecycleTrajectory(ctx context.Context, req types.SettleL
 	})
 }
 
-// TerminalizeRun atomically moves a lifecycle-bound run to a terminal state
+// terminalizeRunOnce is one attempt of TerminalizeRun. It atomically moves a lifecycle-bound run to a terminal state
 // and records the transition as a canonical lifecycle event in the same
 // batch. It replaces the bare UpdateRun + separate AppendEvent path so the
 // state change and its event commit together, and the outbox fold derives
 // any wake from the committed objects.
-func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequest) (types.LifecycleResult, error) {
+func (s *Store) terminalizeRunOnce(ctx context.Context, req types.TerminalizeRunRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -5400,6 +5402,7 @@ func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequ
 		!(trajectory.Status == types.TrajectoryCancelled && req.TerminalState == types.RunCancelled) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
+	terminalizeRunAfterRead()
 	now := time.Now().UTC()
 	nextSeq := trajectory.ReducerSeq + 1
 	run.State = req.TerminalState
@@ -5482,12 +5485,12 @@ func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequ
 	})
 }
 
-// ReactivateRun atomically moves a passivated or interrupted lifecycle-bound
+// reactivateRunOnce is one attempt of ReactivateRun. It atomically moves a passivated or interrupted lifecycle-bound
 // run back to RunPending/RunRunning and records the transition as a
 // canonical run_reactivated event in the same batch. MetadataPatch merges
 // into the run's metadata. It replaces the bare UpdateRun reactivation path
 // so the state change and its event commit together.
-func (s *Store) ReactivateRun(ctx context.Context, req types.ReactivateRunRequest) (types.LifecycleResult, error) {
+func (s *Store) reactivateRunOnce(ctx context.Context, req types.ReactivateRunRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -6303,3 +6306,37 @@ func (s *Store) SettleLifecycleProducerReports(ctx context.Context, req types.Se
 	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result)
 }
+
+// TerminalizeRun retries on a concurrent change to the run (MA3.5): the run object
+// is shared with the label persist, which writes on every reducer commit, so a
+// hash conflict here means another writer finished, not that the transition is
+// wrong. Each attempt re-reads and re-checks every precondition; the retry is
+// bounded and has no sleep.
+func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequest) (types.LifecycleResult, error) {
+	return retryRunConflict(func() (types.LifecycleResult, error) { return s.terminalizeRunOnce(ctx, req) })
+}
+
+// ReactivateRun retries on a concurrent change to the run (MA3.5): the run object
+// is shared with the label persist, which writes on every reducer commit, so a
+// hash conflict here means another writer finished, not that the transition is
+// wrong. Each attempt re-reads and re-checks every precondition; the retry is
+// bounded and has no sleep.
+func (s *Store) ReactivateRun(ctx context.Context, req types.ReactivateRunRequest) (types.LifecycleResult, error) {
+	return retryRunConflict(func() (types.LifecycleResult, error) { return s.reactivateRunOnce(ctx, req) })
+}
+
+// retryRunConflict runs one attempt of a run transition until it stops
+// failing with ErrConcurrentStateChange, up to runWriteAttempts.
+func retryRunConflict(attempt func() (types.LifecycleResult, error)) (types.LifecycleResult, error) {
+	for i := 0; i < runWriteAttempts; i++ {
+		result, err := attempt()
+		if !errors.Is(err, ErrConcurrentStateChange) {
+			return result, err
+		}
+	}
+	return types.LifecycleResult{}, ErrConcurrentStateChange
+}
+
+// terminalizeRunAfterRead is a test hook: it runs between terminalizeRunOnce's
+// read of the run and its conditional write.
+var terminalizeRunAfterRead = func() {}

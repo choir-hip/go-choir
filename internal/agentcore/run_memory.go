@@ -176,6 +176,13 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 			return fmt.Errorf("load actor conversation: %w", err)
 		}
 	}
+	// The carried conversation holds what the earlier run read: the new run
+	// starts with that run's recorded labels (MA3.5).
+	if carried, err := m.store.RunLabels(ctx, ownerID, computerID, sourceRunID); err == nil && len(carried) > 0 {
+		if _, err := m.store.UnionRunLabels(ctx, ownerID, computerID, runID, carried); err != nil && !errors.Is(err, runtimestore.ErrNotFound) {
+			return fmt.Errorf("carry actor conversation labels: %w", err)
+		}
+	}
 	checkpoint, tail := latestRunMemoryCheckpointAndTail(priorEntries)
 	tail = carryableRunMemoryTail(tail)
 	if m.batchedAppends() {

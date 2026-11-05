@@ -1030,6 +1030,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			}
 			if reduction.active && result.Error == "" {
 				reduction.records = reduction.records.capToShown(rt.noteRecordsShown(reduction.scope.RunID, result.RecordsShown))
+				rt.taintRun(reduction.scope.RunID, reduction.records.labelsThrough())
 				if rerr := traceErr(rt, toolCtx.AgentRunID, "cell.reduce", func() error { return reduction.commit(ctx, result.Intents) }); rerr != nil {
 					return "", rerr // commit's error names a freeze it committed
 				}

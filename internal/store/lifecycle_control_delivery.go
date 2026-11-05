@@ -390,10 +390,10 @@ func (s *Store) resolveLifecycleControlActivationCompleted(ctx context.Context, 
 	}
 }
 
-// BindLifecycleControlDelivery atomically binds ordered committed controls to
+// bindLifecycleControlDeliveryOnce is one attempt of BindLifecycleControlDelivery. It atomically binds ordered committed controls to
 // one exact durable actor run. It is the delivery cursor authority; legacy
 // mailbox delivery tables never participate.
-func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.BindLifecycleControlDeliveryRequest) (types.LifecycleResult, error) {
+func (s *Store) bindLifecycleControlDeliveryOnce(ctx context.Context, req types.BindLifecycleControlDeliveryRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err
@@ -943,4 +943,13 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		return nil, ErrNotFound
 	}
 	return controls, nil
+}
+
+// BindLifecycleControlDelivery retries on a concurrent change to the run (MA3.5): the run object
+// is shared with the label persist, which writes on every reducer commit, so a
+// hash conflict here means another writer finished, not that the transition is
+// wrong. Each attempt re-reads and re-checks every precondition; the retry is
+// bounded and has no sleep.
+func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.BindLifecycleControlDeliveryRequest) (types.LifecycleResult, error) {
+	return retryRunConflict(func() (types.LifecycleResult, error) { return s.bindLifecycleControlDeliveryOnce(ctx, req) })
 }
