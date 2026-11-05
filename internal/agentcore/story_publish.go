@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -183,7 +184,8 @@ func (rt *Runtime) storyPublishesAuto(ctx context.Context, ownerID, computerID, 
 //
 // held is the reason when a publish-auto story's revision was held, so
 // the caller can say so; it is empty otherwise.
-func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc types.Document, rev types.Revision) (held string) {
+func (rt *Runtime) AutoPublishRevision(ctx context.Context, rec types.RunRecord, doc types.Document, rev types.Revision) (held string) {
+	ownerID := rec.OwnerID
 	if rt == nil || rt.store == nil {
 		log.Printf("story publish: %s revision %s not considered: no runtime store", doc.DocID, rev.RevisionID)
 		return ""
@@ -242,6 +244,15 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 	if publisher == nil {
 		log.Printf("story publish: %s v%d (revision %s) is a gap: no platform to publish to", v.DocID, v.Revision, v.RevisionID)
 		return ""
+	}
+	// Publication is a sink of the disclosure path (MA3.6): the run that wrote
+	// the revision carries its labels. The gate runs here, after every check
+	// that decides whether anything publishes and immediately before the
+	// publish act, so only a real publication is counted or asked. A built-in
+	// desk's decision is counted and passes; a refusal holds the publish.
+	if err := rt.GateDisclosure(ctx, rec, disclosure.SinkPublication, doc.DocID, "publish revision "+rev.RevisionID+" of document "+doc.DocID); err != nil {
+		log.Printf("story publish: %s revision %s not published: %v", doc.DocID, rev.RevisionID, err)
+		return err.Error()
 	}
 	rt.enqueueStoryPublish("doc:"+ownerID+":"+doc.DocID, func(ctx context.Context) {
 		rt.publishStoryVersion(ctx, publisher, v)

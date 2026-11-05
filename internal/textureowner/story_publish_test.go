@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
@@ -510,4 +511,60 @@ func TestLinkOnlyCaptureDoesNotCountAsAnOutlet(t *testing.T) {
 		t.Fatalf("published %+v; want v4 (two outlets plus a link-only capture)", v)
 	}
 	pub.none(t, "after the three-capture revision")
+}
+
+// The disclosure gate for publication (MA3.6). Ways it can fail, written
+// first (staging d@e 2026-11-05 counted publication|owner_private|ask four
+// times per trajectory):
+//   - a revision that publishes nothing (a manual story, a held revision)
+//     still counts a publication decision, because the gate ran on every
+//     commit before the publish checks;
+//   - a revision that publishes counts none, or more than one;
+//   - the decision comes after the publish act, so enforce could not refuse.
+
+func publicationDecisions() uint64 {
+	var n uint64
+	for k, v := range disclosure.Counts() {
+		if strings.HasPrefix(k, string(disclosure.SinkPublication)+"|") {
+			n += v
+		}
+	}
+	return n
+}
+
+func TestPublicationGateCountsOnlyRealPublishes(t *testing.T) {
+	disclosure.ResetCounts()
+	t.Cleanup(disclosure.ResetCounts)
+	_, h, s, pub := storySetup(t)
+
+	manual := openStoryForTexture(t, h, s, "gate-manual", "")
+	storyWrite(t, h, s, &manual, "write-1", cited("The harbor reopens Monday."))
+	pub.none(t, "a story without publish auto")
+	if n := publicationDecisions(); n != 0 {
+		t.Fatalf("a revision that publishes nothing counted %d publication decisions: %v", n, disclosure.Counts())
+	}
+
+	auto := openStoryForTexture(t, h, s, "gate-auto", types.CastPublishAuto)
+	storyWrite(t, h, s, &auto, "write-1", cited("The harbor reopens Monday."))
+	pub.next(t)
+	if n := publicationDecisions(); n != 1 {
+		t.Fatalf("one publish counted %d publication decisions; want exactly 1: %v", n, disclosure.Counts())
+	}
+	storyWrite(t, h, s, &auto, "write-2", cited("The harbor reopens Monday. Ferries resume Tuesday."))
+	pub.next(t)
+	if n := publicationDecisions(); n != 2 {
+		t.Fatalf("two publishes counted %d publication decisions; want 2: %v", n, disclosure.Counts())
+	}
+	// A revision held for citing no source publishes nothing and counts nothing.
+	base := headOf(t, s, auto)
+	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@all\n# Harbor\n\nUnverified.", Why: "uncited",
+	}})
+	if _, err := h.CommitCellTextureAuthor(context.Background(), &auto, turn, "write-held"); err != nil {
+		t.Fatal(err)
+	}
+	pub.none(t, "a held revision")
+	if n := publicationDecisions(); n != 2 {
+		t.Fatalf("a held revision counted a publication decision (%d total): %v", n, disclosure.Counts())
+	}
 }
