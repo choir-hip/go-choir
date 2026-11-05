@@ -140,6 +140,11 @@ func Fold(items []Item, in Inputs, p Params) []Row {
 			continue
 		}
 		for _, s := range subjectsOf(it, in) {
+			if in.SubjectSince != nil {
+				if since := in.SubjectSince(s); !since.IsZero() && it.At.Before(since) {
+					continue
+				}
+			}
 			k := groupKey{s, it.Action}
 			groups[k] = append(groups[k], it)
 		}
@@ -164,7 +169,11 @@ func Fold(items []Item, in Inputs, p Params) []Row {
 	}
 	var rows []Row
 	for k, its := range groups {
-		rows = append(rows, foldGroup(k, its, in, p))
+		a0, b0 := PlatformBase(k.c)
+		if in.Prior != nil {
+			a0, b0 = in.Prior(k.s, k.c)
+		}
+		rows = append(rows, foldGroup(k, its, a0, b0, p))
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
@@ -182,7 +191,7 @@ func Fold(items []Item, in Inputs, p Params) []Row {
 	return rows
 }
 
-func foldGroup(k groupKey, its []Item, in Inputs, p Params) Row {
+func foldGroup(k groupKey, its []Item, a0, b0 float64, p Params) Row {
 	sort.SliceStable(its, func(i, j int) bool {
 		a, b := its[i], its[j]
 		if !a.At.Equal(b.At) {
@@ -193,10 +202,6 @@ func foldGroup(k groupKey, its []Item, in Inputs, p Params) Row {
 		}
 		return a.Class < b.Class
 	})
-	a0, b0 := PlatformBase(k.c)
-	if in.Prior != nil {
-		a0, b0 = in.Prior(k.s, k.c)
-	}
 	row := Row{Subject: k.s, Class: k.c, Alpha0: a0, Beta0: b0, Evidence: map[EvidenceClass]int{}}
 	wbar := 0.0
 	for _, it := range its {

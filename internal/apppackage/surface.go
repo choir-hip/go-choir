@@ -255,6 +255,20 @@ type surfaceDoc struct {
 // set are refused here, so a hash is never issued for a package the gate
 // would refuse. files may be nil only when the manifest names no desk file.
 func (m Manifest) BehaviourSurface(src Source) (string, error) {
+	doc, err := m.surfaceDocument(src)
+	if err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// surfaceDocument builds the canonical document the behaviour surface hashes.
+func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 	imports := m.ImportSet()
 	sort.Strings(imports)
 	doc := surfaceDoc{
@@ -262,12 +276,12 @@ func (m Manifest) BehaviourSurface(src Source) (string, error) {
 		UsesKinds: []string{}, Capabilities: []string{}, Files: []surfaceFile{},
 	}
 	if src == nil && (m.App != nil || len(m.Contributes.Desks) > 0) {
-		return "", invalid("no source to hash: the behaviour surface covers every file of the package")
+		return surfaceDoc{}, invalid("no source to hash: the behaviour surface covers every file of the package")
 	}
 	if src != nil {
 		paths, err := src.List()
 		if err != nil {
-			return "", invalid("listing the package files: %v", err)
+			return surfaceDoc{}, invalid("listing the package files: %v", err)
 		}
 		sort.Strings(paths)
 		for _, p := range paths {
@@ -276,10 +290,10 @@ func (m Manifest) BehaviourSurface(src Source) (string, error) {
 			}
 			raw, err := src.Read(p)
 			if err != nil {
-				return "", invalid("%s: %v", p, err)
+				return surfaceDoc{}, invalid("%s: %v", p, err)
 			}
 			if len(raw) > MaxSourceFileBytes {
-				return "", invalid("%s: over %d bytes", p, MaxSourceFileBytes)
+				return surfaceDoc{}, invalid("%s: over %d bytes", p, MaxSourceFileBytes)
 			}
 			sum := sha256.Sum256(raw)
 			doc.Files = append(doc.Files, surfaceFile{Path: p, SHA256: hex.EncodeToString(sum[:])})
@@ -322,26 +336,26 @@ func (m Manifest) BehaviourSurface(src Source) (string, error) {
 		sd := surfaceDesk{Name: d.Name, Tools: []surfaceFile{}, Schedules: append([]Schedule{}, d.Schedules...)}
 		var err error
 		if sd.Prompt, err = read(d.Prompt, false); err != nil {
-			return "", err
+			return surfaceDoc{}, err
 		}
 		if d.Code != "" {
 			f, err := read(d.Code, true)
 			if err != nil {
-				return "", err
+				return surfaceDoc{}, err
 			}
 			sd.Code = &f
 		}
 		for _, t := range d.Tools {
 			f, err := read(t, true)
 			if err != nil {
-				return "", err
+				return surfaceDoc{}, err
 			}
 			sd.Tools = append(sd.Tools, f)
 		}
 		sort.Slice(sd.Tools, func(i, j int) bool { return sd.Tools[i].Path < sd.Tools[j].Path })
 		sort.Slice(sd.Schedules, func(i, j int) bool { return sd.Schedules[i].ID < sd.Schedules[j].ID })
 		if sd.Accepts, err = canonicalRaw(d.Accepts, "null"); err != nil {
-			return "", err
+			return surfaceDoc{}, err
 		}
 		doc.Desks = append(doc.Desks, sd)
 	}
@@ -349,7 +363,7 @@ func (m Manifest) BehaviourSurface(src Source) (string, error) {
 	for _, k := range m.Kinds {
 		schema, err := canonicalRaw(k.Schema, "null")
 		if err != nil {
-			return "", err
+			return surfaceDoc{}, err
 		}
 		reads := append([]int{}, k.ReadsSchemaVersions...)
 		doc.Kinds = append(doc.Kinds, surfaceKind{
@@ -364,12 +378,7 @@ func (m Manifest) BehaviourSurface(src Source) (string, error) {
 		doc.Capabilities = append(doc.Capabilities, c.key())
 	}
 	sort.Strings(doc.Capabilities)
-	raw, err := json.Marshal(doc)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:]), nil
+	return doc, nil
 }
 
 // canonicalRaw re-encodes a JSON value with sorted keys and exact numbers. An

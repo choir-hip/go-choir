@@ -221,6 +221,10 @@ type Inputs struct {
 	// Prior supplies the prior pseudo-counts of a subject in a class (MA7.3);
 	// nil means the platform base.
 	Prior PriorFunc
+	// SubjectSince, when set, starts a subject's own evidence at the given
+	// time (a new version's record starts at its install; what came before
+	// reaches it only through its prior, discounted by change).
+	SubjectSince func(Subject) time.Time
 }
 
 // PriorFunc returns (alpha0, beta0).
