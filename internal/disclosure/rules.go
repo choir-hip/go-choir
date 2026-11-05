@@ -125,8 +125,8 @@ func same(d Decision) Cell { return Cell{Unadmitted: d, Admitted: d} }
 // of this file and that test.
 var Table = map[Class]map[Sink]Cell{
 	// An owner-private label restricts: the owner's data goes to its custodian
-	// (or to a desk a live lease admits) without asking, and anywhere else on
-	// an ask. Nothing is denied outright by default: a deny is reserved for
+	// (or to a desk a live lease admits) and out through egress without
+	// asking, and anywhere else on an ask. Nothing is denied outright by default: a deny is reserved for
 	// the owner's own future rules, and Decide supports it.
 	ClassOwnerPrivate: {
 		SinkPublication: same(Ask),

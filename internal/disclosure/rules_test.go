@@ -11,8 +11,8 @@ import (
 //  1. A cell changes by accident. TestTableCellsPinned pins every cell.
 //  2. The paper stops publishing: a run labelled only world_untrusted (or
 //     platform, publisher) is asked or denied at a sink.
-//  3. An owner-private label reaches publication, egress or a release
-//     without an ask, or an unadmitted desk gets a free message.
+//  3. An owner-private label reaches publication or a release without an
+//     ask (egress is allowed, owner 2026-11-05), or an unadmitted desk gets a free message.
 //  4. A mixed label set decides by its most permissive label, not its
 //     strictest.
 //  5. System 1 decides alone: a distribution that is merely likely, or a

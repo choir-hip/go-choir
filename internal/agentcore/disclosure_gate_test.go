@@ -19,8 +19,8 @@ import (
 //
 //  1. The paper stops publishing: a run labelled only world_untrusted is asked
 //     at publication.
-//  2. A package desk carrying owner-private data publishes, fetches or
-//     messages anywhere with no ask.
+//  2. A package desk carrying owner-private data publishes or messages
+//     anywhere with no ask (fetch and search are allowed, owner 2026-11-05).
 //  3. A built-in desk is blocked (the observe mode is the rollout), or spends a
 //     System 1 call per publish.
 //  4. System 1 decides alone: a middling distribution passes.
