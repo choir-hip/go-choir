@@ -112,6 +112,3 @@ func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessag
 func runMemoryEntryInScope(callerRunID string, entry types.RunMemoryEntry) bool {
 	return callerRunID == "" || entry.RunID == callerRunID
 }
-
-// runMemoryEntryKind is the kind of a run-memory entry (a commons kind).
-const runMemoryEntryKind = objectgraph.ObjectKind("choir.run_memory_entry")

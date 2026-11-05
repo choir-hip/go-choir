@@ -867,18 +867,29 @@ func TestTextureRootRoundCrossesNoReader(t *testing.T) {
 }
 
 // MA3.7b: the settings the host reads to configure Texture's run are read as
-// the settings' custodian, so a Texture-declared context crosses nothing; and
-// a content-item ref Texture resolves into a source card is read as the
-// content item's custodian.
-func TestTextureHostReadsOfSettingsAndContentItemsCrossNothing(t *testing.T) {
+// the settings' custodian, so a Texture-declared context crosses nothing. A
+// content-item ref Texture resolves into a source card stays Texture's read
+// and is counted: the ref comes from a desk's record and the card's text
+// reaches Texture's prompt, so declaring the custodian would launder it.
+func TestTextureHostReadsOfSettingsCrossNothingAndContentItemsAreCounted(t *testing.T) {
 	rh := newRootHarness(t, true)
 	ctx := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
 	objectgraph.ResetReaderGateCounts()
 	if !rh.h.textureSettingOn(ctx, rootOwner, rootComputer, store.SettingTextureRootDesk) {
 		t.Fatal("the root desk setting reads off")
 	}
-	_ = sourceEntityFromEvidenceRef(ctx, rh.h, rootOwner, "content_item:no-such-item")
 	for key, n := range objectgraph.ReaderGateCounts() {
-		t.Errorf("reader gate counted: %s x%d", key, n)
+		t.Errorf("reader gate counted a settings read: %s x%d", key, n)
+	}
+	_ = sourceEntityFromEvidenceRef(ctx, rh.h, rootOwner, "content_item:no-such-item")
+	const want = "choir.content_item|desk:texture|wrong_reader"
+	counts := objectgraph.ReaderGateCounts()
+	if counts[want] == 0 {
+		t.Errorf("the content-item ref read was not counted as %s: %v", want, counts)
+	}
+	for key, n := range counts {
+		if key != want {
+			t.Errorf("reader gate counted: %s x%d", key, n)
+		}
 	}
 }

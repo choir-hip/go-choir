@@ -54,16 +54,14 @@ func newGetRunMemoryEntryTool(rt *Runtime) toolregistry.Tool {
 			if entryID == "" {
 				return "", fmt.Errorf("entry_id must not be empty")
 			}
-			entry, err := rt.store.GetRunMemoryEntry(ctx, ownerID, entryID)
-			if err != nil {
-				return "", err
-			}
 			// X18 (MA3.7b): a run reads only its own run's entries. A
 			// checkpoint names entry ids of the run that wrote it, so no
 			// cell needs another run's; an entry of another run reads as
-			// absent, which also hides that it exists.
-			if !runMemoryEntryInScope(toolregistry.ExecutionContextFrom(ctx).RunID, entry) {
-				return "", fmt.Errorf("run memory entry %q is not in this run", entryID)
+			// absent, with the same error as a missing one, which also
+			// hides that it exists.
+			entry, err := rt.store.GetRunMemoryEntry(ctx, ownerID, entryID)
+			if err != nil || !runMemoryEntryInScope(toolregistry.ExecutionContextFrom(ctx).RunID, entry) {
+				return "", fmt.Errorf("run memory entry %q not found in this run", entryID)
 			}
 			return toolregistry.ResultJSON(map[string]any{
 				"entry_id":            entry.EntryID,

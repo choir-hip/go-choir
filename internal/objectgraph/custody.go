@@ -137,7 +137,7 @@ func CustodianOf(kind ObjectKind) (Writer, bool) {
 // tracking is on (a test process), so a declaration naming a kind the registry
 // does not hold cannot pass silently. Production does nothing.
 func FailOnUnknownCustodian(kind ObjectKind) {
-	if trackUndeclared.Load() {
+	if trackUndeclared.Load() || trackUndeclaredR.Load() {
 		panic(fmt.Sprintf("objectgraph: declaration names kind %q, which has no custodian in the registry", kind))
 	}
 }
