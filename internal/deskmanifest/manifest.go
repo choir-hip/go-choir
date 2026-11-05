@@ -700,6 +700,18 @@ var reservedAppSlugs = map[string]bool{
 	"app": true,
 }
 
+// renamed maps a desk's former name to its current one, so a record written
+// before a rename keeps its meaning. The Mail desk absorbed the email row
+// (MA4.7).
+var renamed = map[string]string{"email": Mail}
+
+// Renamed reports the current name of a desk that was renamed, for records
+// written under the old name.
+func Renamed(name string) (string, bool) {
+	n, ok := renamed[name]
+	return n, ok
+}
+
 // IsReservedAppSlug reports whether slug (the part after "app:") is reserved,
 // or names a registered non-app desk.
 func IsReservedAppSlug(slug string) bool {

@@ -51,3 +51,16 @@ func TestRegisteredDeskBecomesAProfileAndRetiredOneRefuses(t *testing.T) {
 		t.Fatal("a retired desk still resolves")
 	}
 }
+
+// The Mail desk absorbed the email row (MA4.7): a record written before the
+// move names "email", and it resolves to the Mail desk, not to nothing.
+func TestTheEmailProfileOfOlderRecordsIsTheMailDesk(t *testing.T) {
+	for _, n := range []string{"email", " Email "} {
+		if got, err := Canonical(n); err != nil || got != Mail {
+			t.Errorf("Canonical(%q) = %q, %v; want %q", n, got, err, Mail)
+		}
+	}
+	if !IsLive("email") {
+		t.Error("an older email run does not resolve to the live Mail desk")
+	}
+}

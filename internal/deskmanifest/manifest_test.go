@@ -77,7 +77,7 @@ var pinnedFrame = map[string][]string{
 	ManagementTask: {"read_capture", "stories"},
 	Engineering:    {},
 	Conductor:      {},
-	Mail:          {},
+	Mail:           {},
 }
 
 func TestFrameActionsArePinned(t *testing.T) {

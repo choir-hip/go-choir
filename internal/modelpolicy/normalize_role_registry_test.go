@@ -19,3 +19,10 @@ func TestNormalizeRoleEqualsTheClosedList(t *testing.T) {
 		}
 	}
 }
+
+// An older record's "email" role is the Mail desk's (MA4.7).
+func TestNormalizeRoleFoldsEmailToMail(t *testing.T) {
+	if got := NormalizeRole(" email "); got != "mail" {
+		t.Errorf("NormalizeRole(email) = %q, want mail", got)
+	}
+}

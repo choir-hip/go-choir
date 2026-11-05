@@ -29,8 +29,9 @@ type LeaseAuthority interface {
 	// the first-party grant (a guarded custodian service, not a kind).
 	AdmitsGrant(holder Writer, runID, grant string) (leaseID string, ok bool)
 	// AdmitsGrantRef is AdmitsGrant for a grant scoped by ref (mail.read): the
-	// lease must name the grant and the one ref the use reads (MA4.7).
-	AdmitsGrantRef(holder Writer, runID, grant, ref string) (leaseID string, ok bool)
+	// lease must be the owner's, and name the grant and the one ref the use
+	// reads (MA4.7).
+	AdmitsGrantRef(holder Writer, runID, ownerID, grant, ref string) (leaseID string, ok bool)
 }
 
 type leaseHolderKey struct{}
@@ -91,14 +92,14 @@ func LeaseAdmitsGrant(ctx context.Context, holder Writer, grant string) (string,
 }
 
 // LeaseAdmitsGrantRef reports the id of the lease attached to ctx that gives
-// holder the grant for ref. The custodian's service calls it before it reads
-// that one ref as the custodian.
-func LeaseAdmitsGrantRef(ctx context.Context, holder Writer, grant, ref string) (string, bool) {
+// holder the grant for ref in ownerID's data. The custodian's service calls it
+// before it reads that one ref as the custodian.
+func LeaseAdmitsGrantRef(ctx context.Context, holder Writer, ownerID, grant, ref string) (string, bool) {
 	h, ok := leasesFrom(ctx)
-	if !ok || ref == "" {
+	if !ok || ref == "" || ownerID == "" {
 		return "", false
 	}
-	return h.auth.AdmitsGrantRef(holder, h.runID, grant, ref)
+	return h.auth.AdmitsGrantRef(holder, h.runID, ownerID, grant, ref)
 }
 
 // LeaseRunID is the run the lease context was attached for.

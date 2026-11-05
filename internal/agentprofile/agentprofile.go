@@ -78,6 +78,11 @@ func Canonical(profile string) (string, error) {
 	if isProfile, _ := deskmanifest.Profile(normalized); isProfile {
 		return normalized, nil
 	}
+	// A renamed desk's former name (email, now the Mail desk, MA4.7): a
+	// record written before the rename keeps its meaning.
+	if current, ok := deskmanifest.Renamed(normalized); ok {
+		return current, nil
+	}
 	switch normalized {
 	case "processor", "reconciler", "verifier":
 		return normalized, nil

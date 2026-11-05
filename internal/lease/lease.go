@@ -380,8 +380,13 @@ func (s *Service) decide(req Request) (string, objectgraph.Writer, []string, err
 			custodians = append(custodians, string(c))
 			byRef = byRef || grantByRef(g)
 		}
-		if byRef && (len(req.Scope.Grants) != 1 || len(req.Scope.Refs) == 0) {
-			return "", "", nil, refuse("a by-ref grant is asked for alone and names the refs it serves")
+		// The by-ref shape is the lease layer's, not only the custodian's:
+		// one grant, one ref, and the custodian's own rule decides it.
+		if byRef && (len(req.Scope.Grants) != 1 || len(req.Scope.Refs) != 1) {
+			return "", "", nil, refuse("a by-ref grant is asked for alone and names exactly one ref")
+		}
+		if byRef && req.rule == nil {
+			return "", "", nil, refuse("a by-ref grant is issued only under its custodian's rule")
 		}
 		if !byRef && len(req.Scope.Refs) > 0 {
 			return "", "", nil, refuse("refs scope only a by-ref grant")
@@ -591,22 +596,27 @@ func (s *Service) AdmitsGrant(holder objectgraph.Writer, runID, grant string) (s
 	if grantByRef(grant) {
 		return "", false
 	}
-	return s.admitsGrant(holder, runID, grant, "")
+	return s.admitsGrant(holder, runID, "", grant, "")
 }
 
 // AdmitsGrantRef implements objectgraph.LeaseAuthority: AdmitsGrant for a
-// by-ref grant, where the lease must also name ref.
-func (s *Service) AdmitsGrantRef(holder objectgraph.Writer, runID, grant, ref string) (string, bool) {
-	if !grantByRef(grant) || strings.TrimSpace(ref) == "" {
+// by-ref grant, where the lease must be ownerID's and name ref.
+func (s *Service) AdmitsGrantRef(holder objectgraph.Writer, runID, ownerID, grant, ref string) (string, bool) {
+	if !grantByRef(grant) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ownerID) == "" {
 		return "", false
 	}
-	return s.admitsGrant(holder, runID, grant, ref)
+	return s.admitsGrant(holder, runID, ownerID, grant, ref)
 }
 
-func (s *Service) admitsGrant(holder objectgraph.Writer, runID, grant, ref string) (string, bool) {
+// admitsGrant finds a live lease of holder in runID naming grant; a non-empty
+// ownerID binds it to that owner and a non-empty ref to that ref.
+func (s *Service) admitsGrant(holder objectgraph.Writer, runID, ownerID, grant, ref string) (string, bool) {
 	for _, r := range s.liveFor(holder, runID) {
 		desk, ok := deskOf(r)
 		if !ok || grantAllowed(desk, grant) != nil {
+			continue
+		}
+		if ownerID != "" && r.OwnerID != ownerID {
 			continue
 		}
 		named := false

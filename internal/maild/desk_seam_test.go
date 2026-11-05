@@ -34,13 +34,17 @@ import (
 //  9. a ref that is not a message in the owner's mailbox is leased;
 //  10. a mail.read lease admits through the ref-less grant check;
 //  11. a custodian other than Mail issues mail.read;
-//  12. the holder comes from anything but the trusted reader label.
+//  12. the holder comes from anything but the trusted reader label;
+//  13. a lease issued for owner A reads the same ref from owner B's mailbox;
+//  14. the lease layer issues a by-ref grant with no custodian rule or with
+//     more than one ref.
 
 const (
 	seamOwner    = "owner-mail-desk"
 	seamComputer = "computer-mail-desk"
 	fixturePkg   = "vidfixture"
 	plainPkg     = "vidplain"
+	otherOwner   = "owner-mail-desk-other"
 )
 
 type mailDeskFixture struct {
@@ -78,6 +82,8 @@ func newMailDeskFixture(t *testing.T) *mailDeskFixture {
 	ms, _ := newTestStore(t)
 	seedMessage(t, ms, seamOwner, "msg-a", "trusted")
 	seedMessage(t, ms, seamOwner, "msg-b", "trusted")
+	// Another owner's mailbox holds a message with the same ref.
+	seedMessage(t, ms, otherOwner, "msg-a", "trusted")
 	gs, err := guest.Open(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -182,6 +188,11 @@ func TestMailDeskLeasesOneEmailPerTaskAndRefusesASecond(t *testing.T) {
 	if _, err := f.mail.Read(objectgraph.WithLeases(context.Background(), f.leases, "run-1"), seamOwner, "msg-a"); !errors.Is(err, maildesk.ErrNoLease) {
 		t.Fatalf("a read with no declared reader was served: %v", err)
 	}
+	// (13) The lease is bound to its owner: the same ref in another owner's
+	// mailbox is refused.
+	if _, err := f.mail.Read(f.runCtx(f.fixture, "run-1"), otherOwner, "msg-a"); !errors.Is(err, maildesk.ErrNoLease) {
+		t.Fatalf("owner A's lease read owner B's msg-a: %v", err)
+	}
 	// (10) The ref-less grant check never admits a by-ref grant.
 	if _, ok := f.leases.AdmitsGrant(f.fixture, "run-1", lease.GrantMailRead); ok {
 		t.Fatal("mail.read admitted without a ref")
@@ -234,11 +245,23 @@ func TestMailDeskRefusesWhatItsRuleDoesNotAdmit(t *testing.T) {
 	if _, err := f.leases.Request(context.Background(), req); !errors.Is(err, lease.ErrRefused) {
 		t.Fatalf("a desk took mail.read without the custodian: %v", err)
 	}
+	// (14) The lease layer itself holds the by-ref shape: a by-ref grant needs
+	// the custodian's rule and exactly one ref.
+	if _, err := f.leases.IssueGrant(context.Background(), lease.WriterMail, req, nil); !errors.Is(err, lease.ErrRefused) {
+		t.Fatalf("a by-ref grant was issued with no custodian rule: %v", err)
+	}
+	admit := func([]lease.Record) error { return nil }
+	two := req
+	two.RunID = "run-8"
+	two.Scope = lease.Scope{Grants: []string{lease.GrantMailRead}, Refs: []string{"msg-a", "msg-b"}}
+	if _, err := f.leases.IssueGrant(context.Background(), lease.WriterMail, two, admit); !errors.Is(err, lease.ErrRefused) {
+		t.Fatalf("a by-ref grant was issued for two refs: %v", err)
+	}
 	req.Scope = lease.Scope{Grants: []string{lease.GrantTextureSearch}}
 	if _, err := f.leases.IssueGrant(context.Background(), lease.WriterMail, req, nil); !errors.Is(err, lease.ErrRefused) {
 		t.Fatalf("Mail issued texture.search: %v", err)
 	}
-	for _, run := range []string{"run-2", "run-3", "run-4", "run-5", "run-6", "run-7"} {
+	for _, run := range []string{"run-2", "run-3", "run-4", "run-5", "run-6", "run-7", "run-8"} {
 		if _, err := f.read(f.fixture, run, "msg-a"); !errors.Is(err, maildesk.ErrNoLease) {
 			t.Fatalf("a refused request in %s leased msg-a: %v", run, err)
 		}

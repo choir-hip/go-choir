@@ -347,9 +347,9 @@ var normalizeV2Live = map[string]string{
 	"conductor":   "conductor",
 	"processor":   "processor",
 	"reconciler":  "reconciler",
-	"email":       "email",
-	// The Mail desk (MA4.7) absorbed the email row; "email" stays for
-	// records written before it.
+	// The Mail desk (MA4.7) absorbed the email row: a record written before
+	// it folds to mail.
+	"email":               "mail",
 	"mail":                "mail",
 	"verifier":            "verifier",
 	"verifier_multimodal": "verifier_multimodal",

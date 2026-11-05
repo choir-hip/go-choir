@@ -82,7 +82,6 @@ type ReadRequest struct {
 	RunID      string
 	AgentID    string
 	ModelID    string
-	Origin     string
 	// Refs are the emails asked for. Mail grants exactly one.
 	Refs    []string
 	Purpose string
@@ -124,7 +123,8 @@ func (s *Service) RequestRead(ctx context.Context, req ReadRequest) (lease.Recor
 	}
 	return s.leases.IssueGrant(ctx, lease.WriterMail, lease.Request{
 		OwnerID: req.OwnerID, ComputerID: req.ComputerID, Desk: req.Desk, RunID: req.RunID,
-		AgentID: req.AgentID, ModelID: req.ModelID, Origin: req.Origin,
+		// A desk's run asks: the origin is stamped here, never supplied.
+		AgentID: req.AgentID, ModelID: req.ModelID, Origin: types.OriginDeskRun,
 		Scope:   lease.Scope{Grants: []string{lease.GrantMailRead}, Refs: req.Refs},
 		Purpose: req.Purpose, Fields: req.Fields,
 	}, rule)
@@ -132,8 +132,8 @@ func (s *Service) RequestRead(ctx context.Context, req ReadRequest) (lease.Recor
 
 // Read serves one email to the run ctx carries. The holder is the declared
 // reader of ctx (the run's desk, set by trusted code from the run record) and
-// the run is the one ctx's lease authority was attached for; the lease must
-// name this ref. Only then does Mail read maild, as the custodian, for that
+// the run is the one ctx's lease authority was attached for; the lease must be
+// ownerID's and name this ref. Only then does Mail read maild, as the custodian, for that
 // ref alone.
 func (s *Service) Read(ctx context.Context, ownerID, ref string) (Message, error) {
 	if s == nil || s.mailbox == nil {
@@ -144,7 +144,7 @@ func (s *Service) Read(ctx context.Context, ownerID, ref string) (Message, error
 		return Message{}, ErrNoLease
 	}
 	ref = strings.TrimSpace(ref)
-	if _, ok := objectgraph.LeaseAdmitsGrantRef(ctx, holder, lease.GrantMailRead, ref); !ok {
+	if _, ok := objectgraph.LeaseAdmitsGrantRef(ctx, holder, ownerID, lease.GrantMailRead, ref); !ok {
 		return Message{}, ErrNoLease
 	}
 	objectgraph.NoteLeaseRead(holder, "mail:"+ref)
