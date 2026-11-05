@@ -501,7 +501,9 @@ export function lockHistory({ base, dir = lockDir() }) {
   }
   for (const line of diff.stdout.split('\n').filter(Boolean)) {
     const [status, file] = line.split('\t');
-    if (!/\.json$/.test(file)) continue;
+    // Only the version locks (MAJOR.MINOR.PATCH.json) are history; sections.json,
+    // grants.json and legacy-events.json are inputs the next lock is written from.
+    if (!/(^|\/)\d+\.\d+\.\d+\.json$/.test(file)) continue;
     out.changed.push(`${status} ${file}`);
     if (status !== 'A') {
       const what = status === 'D' ? 'deleted (or renamed)' : status === 'M' ? 'modified' : `changed (${status})`;
