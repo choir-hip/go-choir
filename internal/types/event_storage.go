@@ -59,6 +59,7 @@ var eventStorage = map[EventKind]EventStorage{
 	EventChannelMessage:  StorageObjectGraph,
 	EventSystem1Judgment: StorageObjectGraph,
 	EventStoryRelation:   StorageObjectGraph,
+	EventDisclosure:      StorageObjectGraph,
 	// calibration.read (C6, 2026-11-04): rare, and the read metric of the
 	// calibration experiment rests on it, so it is held like any
 	// acknowledged kind, not batched.

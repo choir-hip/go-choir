@@ -246,6 +246,15 @@ const (
 	// (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md).
 	EventSystem1Judgment EventKind = "system1.judgment"
 
+	// EventDisclosure records one step of the disclosure path (MA3.6) on the
+	// disclosure:<computer> channel: "pending" (a run's sink is refused now
+	// and waits on the owner, with the rule cell, the System 1 distribution
+	// and the precommit record behind it), "allowed" (the rule cleared the
+	// distribution), "approved" or "denied" (the owner's tap, an owner act),
+	// "consumed" (an approval let one retry pass) and "refused" (the table
+	// said deny). The owner's tap is a fact on the tape.
+	EventDisclosure EventKind = "disclosure.decision"
+
 	// EventStoryRelation records a research cell's choir.RelateStories act on
 	// the tape, on the same system1:<computer> channel: a "recorded" event
 	// per judged pair with the relation, the probability read from the

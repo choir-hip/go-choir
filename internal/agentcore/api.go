@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
@@ -932,6 +933,11 @@ type guestObservabilityResponse struct {
 	// has seen since boot, keyed "kind|declared reader|reason" (MA3.3): the
 	// cross reads of the custody section show up here as wrong_reader.
 	ObjectGraphReaderGate *writerGateObservability `json:"objectgraph_reader_gate,omitempty"`
+	// DisclosureGate is the disclosure path's mode for built-in desks and the
+	// decisions it has made since boot, keyed "sink|class|decision|outcome"
+	// (MA3.6): a built-in desk's ask or deny shows as outcome observed, a
+	// package desk's as enforced.
+	DisclosureGate *writerGateObservability `json:"disclosure_gate,omitempty"`
 }
 
 type writerGateObservability struct {
@@ -1001,6 +1007,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		},
 		ObjectGraphReaderGate: &writerGateObservability{
 			Mode: objectgraph.CurrentReaderGateMode().String(), Counts: objectgraph.ReaderGateCounts(),
+		},
+		DisclosureGate: &writerGateObservability{
+			Mode: disclosure.CurrentMode().String(), Counts: disclosure.Counts(),
 		},
 	}
 	if r.URL.Query().Get("goroutines") == "1" {

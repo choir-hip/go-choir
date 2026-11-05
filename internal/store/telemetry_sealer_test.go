@@ -133,9 +133,11 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 	// relations) joined at d58d194cf; 35 with story.entities (the research
 	// desk's entity attachments, related-stories-no-entity-layer-2026-10-26.md);
 	// 36 with calibration.read (a desk's read of its own calibration record,
-	// calibration C6, docs/design/calibration-wiring-permutations-2026-11-04.md).
-	if batched != 10 || acknowledged != 36 {
-		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 36", batched, acknowledged)
+	// calibration C6, docs/design/calibration-wiring-permutations-2026-11-04.md);
+	// 37 with disclosure.decision (a run's refused sink and the owner's tap on
+	// it, MA3.6).
+	if batched != 10 || acknowledged != 37 {
+		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 37", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
 	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), ""); err == nil {

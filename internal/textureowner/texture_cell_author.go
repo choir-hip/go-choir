@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -419,6 +420,14 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	case h.Core == nil:
 		log.Printf("story publish: %s revision %s not considered: no runtime to publish through", doc.DocID, stored.RevisionID)
 	default:
+		// Publication is a sink of the disclosure path (MA3.6): the run that
+		// wrote the revision carries its labels. A built-in desk's decision is
+		// counted and passes; a refusal holds the publish with its fate.
+		if err := h.Core.GateDisclosure(ctx, *rec, disclosure.SinkPublication, doc.DocID, "publish revision "+stored.RevisionID+" of document "+doc.DocID); err != nil {
+			publishHeld = err.Error()
+			log.Printf("story publish: %s revision %s not published: %v", doc.DocID, stored.RevisionID, err)
+			break
+		}
 		publishHeld = h.Core.AutoPublishRevision(ctx, rec.OwnerID, doc, stored)
 	}
 	committed := map[string]any{

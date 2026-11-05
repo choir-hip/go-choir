@@ -1211,6 +1211,11 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	if err := r.checkAddresseeScope(ctx, in); err != nil {
 		return 0, err
 	}
+	// A message to a desk that is not a custodian admitted for a label the run
+	// carries is a disclosure sink (MA3.6).
+	if err := r.gateMessageDisclosure(ctx, in); err != nil {
+		return 0, err
+	}
 	// Mint the commitment record. The record id binds the act to its cell for
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.

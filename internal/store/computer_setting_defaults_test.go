@@ -27,7 +27,6 @@ var defaultOnFeatures = []string{
 	SettingPackagesPublish,
 	SettingIntakeEvents,
 	SettingIntakeLabels,
-	SettingResearchSystem1,
 	SettingTelemetryBatch,
 	SettingTelemetryRetire,
 }

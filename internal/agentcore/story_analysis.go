@@ -269,11 +269,6 @@ type analysisSlot struct {
 // phrase a type first) while the two-call budget holds; a candidate that
 // does not fit is listed without answers.
 func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID string, a *yaegikernel.StoryAnalysis) {
-	perRun, perDay := rt.system1Limits(ctx, owner, computer)
-	if perRun <= 0 || perDay <= 0 {
-		a.Error = "System 1 is off on this computer, so the candidates carry no answers; ask with choir.System1 when it is on"
-		return
-	}
 	if rt.candidateJudge == nil {
 		a.Error = "no decision model is bound on this computer, so the candidates carry no answers"
 		return
@@ -319,7 +314,7 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 			a.Error = "the analysis questions could not be asked: " + err.Error()
 			return
 		}
-		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, perRun, perDay, system1Ask{questions: valid, crossRun: true, subjects: subjects, story: a.Story.PublicationID})
+		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, system1Ask{questions: valid, crossRun: true, subjects: subjects, story: a.Story.PublicationID})
 		if err != nil {
 			log.Printf("story analysis: %s on run %s: System 1: %v", a.Story.DocID, runID, err)
 			a.Error = "System 1 did not answer every analysis question: " + err.Error()

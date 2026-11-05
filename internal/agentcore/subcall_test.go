@@ -174,9 +174,6 @@ type subCallFixture struct {
 
 func newSubCallFixture(t *testing.T, findings map[string]string) *subCallFixture {
 	t.Helper()
-	// The settler must not depend on the System 1 verb's caps or setting.
-	t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_RUN", "")
-	t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_DAY", "")
 	deskTestWorkerBin(t)
 	oldSpacing, oldRetry := subCallJudgeSpacing, subCallRuleRetryWait
 	subCallJudgeSpacing, subCallRuleRetryWait = 0, time.Millisecond
@@ -186,12 +183,6 @@ func newSubCallFixture(t *testing.T, findings map[string]string) *subCallFixture
 	judge := &subCallJudge{}
 	rt.SetCandidateJudge(judge)
 	f := &subCallFixture{rt: rt, s: s, judge: judge, owner: "owner-sub", computer: rt.TextureComputerID()}
-	// The System 1 verb is off on this computer: its setting is explicitly
-	// off and its caps are unset. Every settlement below runs that way.
-	if err := s.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computer,
-		Key: store.SettingResearchSystem1, Value: false, UpdatedAt: time.Now().UTC()}); err != nil {
-		t.Fatal(err)
-	}
 	f.parent = toolregistry.ExecutionContext{RunID: "run-sub-1", AgentID: "research:doc-sub", OwnerID: f.owner, ComputerID: f.computer,
 		Profile: "research", Role: "research", WorkingDir: t.TempDir()}
 	return f
@@ -426,23 +417,14 @@ func TestSubCallParentCannotSettleItsOwnRecord(t *testing.T) {
 	}
 }
 
-// Settlement runs with the System 1 caps unset and the research.system1
-// setting off: the settler does not go through the verb.
-func TestSubCallSettlerDoesNotDependOnSystem1CapsOrSetting(t *testing.T) {
+// Settlement does not go through the System 1 verb: it has no role gate, and
+// it writes no System 1 event.
+func TestSubCallSettlerDoesNotGoThroughTheSystem1Verb(t *testing.T) {
 	f := newSubCallFixture(t, map[string]string{"gamma": "findings"})
-	perRun, perDay := f.rt.system1Limits(context.Background(), f.owner, f.computer)
-	if perRun != 0 || perDay != 0 {
-		t.Fatalf("the verb is on in this fixture (%d, %d); the negative test needs it off", perRun, perDay)
-	}
-	// The verb refuses here: its gate is real.
-	if _, err := f.rt.system1Egress(context.Background(), yaegikernel.SessionRoleResearch, toolregistry.ExecutionContext{OwnerID: f.owner, ComputerID: f.computer, RunID: "r"}, json.RawMessage(`{}`)); err == nil || !strings.Contains(err.Error(), "off") {
-		t.Fatalf("the System 1 verb should be off: %v", err)
-	}
-	// A non-research role would be refused by the verb too; the settler has no role gate.
-	results := f.research(t, []yaegikernel.ResearchChild{{Objective: "gamma capless", Questions: []types.TypedQuestion{subCallYesNo(0.6)}, PSuccess: fp(0.6), Weight: fp(0.4)}})
+	results := f.research(t, []yaegikernel.ResearchChild{{Objective: "gamma", Questions: []types.TypedQuestion{subCallYesNo(0.6)}, PSuccess: fp(0.6), Weight: fp(0.4)}})
 	f.rt.waitSubCallJudge()
 	if f.judge.callCount() != 1 || !f.exists(types.SubCallSettlementRecordID(results[0].CastID, types.SubCallJudgeScorerID)) {
-		t.Fatalf("the settler did not settle with the caps unset (judge calls %d)", f.judge.callCount())
+		t.Fatalf("the settler did not settle (judge calls %d)", f.judge.callCount())
 	}
 	// And the verb's tape was not touched: no System1 event was written.
 	if tape, _ := f.rt.system1ChannelTape(context.Background(), f.owner, f.computer); len(tape) != 0 {

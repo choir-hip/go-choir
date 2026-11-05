@@ -70,6 +70,11 @@ var eventDurability = map[EventKind]EventDurability{
 	// lost record would be a second spend on replay.
 	EventSystem1Judgment: DurabilityAcknowledged,
 
+	// Acknowledged: a disclosure decision, and the owner's tap on one, is the
+	// authority a retry passes on; a lost record would re-ask or let a refusal
+	// stand after the owner approved.
+	EventDisclosure: DurabilityAcknowledged,
+
 	// Acknowledged: a judged pair relation is the authority for a public
 	// graph edge; a lost record would leave an edge with no record behind it.
 	EventStoryRelation: DurabilityAcknowledged,

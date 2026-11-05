@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,7 +15,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -33,12 +30,13 @@ import (
 // collapses a distribution into a decision: the desk decides (System 2).
 //
 // What it guarantees:
-//   - research only: the host refuses every other session role, whatever the
-//     worker sent;
-//   - off until both caps are configured (CHOIR_SYSTEM1_MAX_CALLS_PER_RUN and
-//     CHOIR_SYSTEM1_MAX_CALLS_PER_DAY, positive integers) or the owner turns
-//     on the research.system1 setting, which applies the default caps;
-//     attempts count, not only answers;
+//   - the cell verb is the research desk's: the host refuses every other
+//     session role, whatever the worker sent. The judge itself is a kernel
+//     service (system1Service, MA3.6): any host-side caller, such as the
+//     disclosure path, asks it directly with questions the host built;
+//   - no switch and no ceiling: a call is made whenever a decision model is
+//     bound (owner rulings 2026-11-03: too many model calls is a code problem
+//     to fix, not a limit to impose);
 //   - evidence by reference: context_refs name captures and story versions
 //     whose text the host reads itself, bounded; a cell cannot paste text
 //     into a question as evidence;
@@ -46,16 +44,12 @@ import (
 //     before the judge is called, then "answered" (digest, distributions,
 //     model as reported, usage and cost) or "failed";
 //   - replay: the same questions over the same context text, in the same run,
-//     return the recorded answer without a call, a cap or a second cost.
+//     return the recorded answer without a call or a second cost.
 //
 // Restarts: nothing resumes. A request record with no outcome (a crash
-// mid-call) still counts toward the caps and is never replayed; a retry is
-// new work.
+// mid-call) is never replayed; a retry is new work.
 
 const (
-	system1MaxCallsPerRunEnv = "CHOIR_SYSTEM1_MAX_CALLS_PER_RUN"
-	system1MaxCallsPerDayEnv = "CHOIR_SYSTEM1_MAX_CALLS_PER_DAY"
-
 	// system1ContextRunes bounds one resolved context text: the same order as
 	// the intake labeller's capture summary (600 runes) and Texture's cited
 	// passage; at most 16 distinct refs a call, so the state stays near 16k
@@ -70,6 +64,10 @@ const (
 	system1TapeLimit = 10000
 
 	system1StoryRefPrefix = "story:"
+
+	// system1HostRefPrefix names evidence the host composed for a host-built
+	// question (system1Ask.hostText).
+	system1HostRefPrefix = "host:"
 )
 
 // system1CallTimeout bounds one judge call. A var so a test can shorten it.
@@ -79,35 +77,6 @@ var system1CallTimeout = 60 * time.Second
 // indexed lookup that reads the computer's calls without scanning the
 // events of every run.
 func system1Channel(computerID string) string { return "system1:" + strings.TrimSpace(computerID) }
-
-// The caps the research.system1 setting applies: a review batch of about 20
-// stories at two calls each, and the backfill of about 1,000 stories in a day
-// or two (related-stories-phase3-research-review-2026-10-20.md §12).
-const (
-	system1DefaultCallsPerRun = 40
-	system1DefaultCallsPerDay = 3000
-)
-
-// system1Limits reads the caps. Runtime config wins when it sets both;
-// otherwise the owner's research.system1 setting applies the defaults. A cap
-// that is unset, not a number or not positive is 0, and either at 0 leaves
-// the verb off.
-func (rt *Runtime) system1Limits(ctx context.Context, ownerID, computerID string) (perRun, perDay int) {
-	read := func(name string) int {
-		n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
-		if err != nil || n < 0 {
-			return 0
-		}
-		return n
-	}
-	if perRun, perDay = read(system1MaxCallsPerRunEnv), read(system1MaxCallsPerDayEnv); perRun > 0 && perDay > 0 {
-		return perRun, perDay
-	}
-	if rt.computerSettingOn(ctx, ownerID, computerID, store.SettingResearchSystem1) {
-		return system1DefaultCallsPerRun, system1DefaultCallsPerDay
-	}
-	return 0, 0
-}
 
 // system1ChannelTape reads the computer's system1:<computer> channel: the
 // System1 judgments and the story.relation and story.entities records that
@@ -152,10 +121,6 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 	if owner == "" || computer == "" || runID == "" {
 		return nil, fmt.Errorf("choir.System1 needs a run with an owner and a computer")
 	}
-	perRun, perDay := rt.system1Limits(ctx, owner, computer)
-	if perRun <= 0 || perDay <= 0 {
-		return nil, fmt.Errorf("choir.System1 is off on this computer: the owner turns on the %s setting, or the runtime config sets %s and %s to positive numbers", store.SettingResearchSystem1, system1MaxCallsPerRunEnv, system1MaxCallsPerDayEnv)
-	}
 	var req yaegikernel.System1Payload
 	dec := json.NewDecoder(bytes.NewReader(payload))
 	dec.DisallowUnknownFields()
@@ -166,11 +131,38 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 	if err != nil {
 		return nil, err
 	}
+	return rt.System1().Ask(ctx, exec, owner, computer, system1Ask{questions: questions})
+}
+
+// system1Service is the System 1 kernel service (MA3.6): the one judge, asked
+// closed choice questions and returning full distributions, for any host-side
+// caller. The research verb above is one caller (it adds the research role
+// gate and validates the cell's questions); the disclosure path is another
+// (it asks questions the host built, over evidence the host composed). It has
+// no switch and no call ceiling.
+type system1Service struct{ rt *Runtime }
+
+// System1 is the runtime's System 1 service.
+func (rt *Runtime) System1() system1Service { return system1Service{rt: rt} }
+
+// Ask answers one validated ask for the run in exec: a same-run replay, or a
+// judge call, each on the tape.
+func (s system1Service) Ask(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer string, ask system1Ask) (json.RawMessage, error) {
+	rt := s.rt
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("choir.System1 host unavailable")
+	}
+	runID := strings.TrimSpace(exec.RunID)
+	if strings.TrimSpace(owner) == "" || strings.TrimSpace(computer) == "" || runID == "" {
+		return nil, fmt.Errorf("choir.System1 needs a run with an owner and a computer")
+	}
 	if rt.candidateJudge == nil {
 		return nil, fmt.Errorf("choir.System1: no decision model is bound on this computer")
 	}
-
-	return rt.system1Call(ctx, exec, owner, computer, runID, perRun, perDay, system1Ask{questions: questions})
+	if len(ask.labels) == 0 {
+		ask.labels = rt.runLabelsOf(ctx, owner, computer, runID)
+	}
+	return rt.system1Call(ctx, exec, owner, computer, runID, ask)
 }
 
 // system1Ask is one call's questions, validated, and how it may be answered.
@@ -187,6 +179,14 @@ type system1Ask struct {
 	// can read its basis from the tape.
 	subjects map[string]system1Subject
 	story    string
+	// hostText is evidence the host composed itself (never the cell), by
+	// "host:<name>" reference: the disclosure path's request and disclosure
+	// summary. A cell's reference of that form resolves against an empty map
+	// and is refused.
+	hostText map[string]string
+	// labels are the labels of the run the call serves, recorded with the
+	// call on the tape.
+	labels types.LabelSet
 }
 
 // system1Subject is what a host-built question asks about.
@@ -200,14 +200,14 @@ type system1Subject struct {
 }
 
 // system1Call answers one validated call: a same-run replay by digest, a
-// cross-run replay when the ask allows it, or a judge call under the caps,
-// each on the tape.
-func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID string, perRun, perDay int, ask system1Ask) (json.RawMessage, error) {
+// cross-run replay when the ask allows it, or a judge call, each on the tape.
+// It is the System 1 kernel service's one entry (system1Service wraps it).
+func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID string, ask system1Ask) (json.RawMessage, error) {
 	questions := ask.questions
 	rt.system1Mu.Lock()
 	defer rt.system1Mu.Unlock()
 
-	contexts, aliasOf, err := rt.system1ResolveContext(ctx, owner, computer, questions)
+	contexts, aliasOf, err := rt.system1ResolveContext(ctx, owner, computer, questions, ask.hostText)
 	if err != nil {
 		return nil, err
 	}
@@ -220,8 +220,6 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 	if err != nil {
 		return nil, fmt.Errorf("choir.System1: read the tape: %w", err)
 	}
-	dayStart := time.Now().UTC().Truncate(24 * time.Hour)
-	runCalls, dayCalls := 0, 0
 	var crossRun, crossRunModel string
 	var crossRunResult json.RawMessage
 	for _, ev := range tape {
@@ -248,23 +246,10 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 			}
 			// The tape is read oldest first: the newest answer wins.
 			crossRun, crossRunModel, crossRunResult = ev.EventID, rec.Model, rec.Result
-		case system1PhaseRequested:
-			if ev.RunID == runID {
-				runCalls++
-			}
-			if !ev.Timestamp.Before(dayStart) {
-				dayCalls++
-			}
 		}
 	}
 	if ask.crossRun && crossRun != "" {
 		return rt.system1CrossRunReplay(ctx, exec, owner, computer, runID, digest, questions, crossRun, crossRunModel, crossRunResult, ask.subjects, ask.story)
-	}
-	if runCalls >= perRun {
-		return nil, fmt.Errorf("choir.System1: this run has made its %d calls per run (%s); decide with what you have, or read closely", perRun, system1MaxCallsPerRunEnv)
-	}
-	if dayCalls >= perDay {
-		return nil, fmt.Errorf("choir.System1: this computer has made its %d calls per day (%s); try again tomorrow", perDay, system1MaxCallsPerDayEnv)
 	}
 
 	ids := make([]string, 0, len(questions))
@@ -274,6 +259,7 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 	requestID := uuid.New().String()
 	if err := rt.appendSystem1Event(ctx, exec, owner, computer, runID, requestID, system1PhaseRequested, map[string]any{
 		"request_digest": digest, "computer_id": computer, "question_ids": ids, "questions": len(questions), "context_refs": len(contexts),
+		"labels": ask.labels.Strings(),
 	}); err != nil {
 		return nil, fmt.Errorf("choir.System1: record the request on the tape (no call was made): %w", err)
 	}
@@ -322,11 +308,14 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 		return nil, err
 	}
 	model := firstNonEmpty(distribution.Model, candidateJudgmentModel)
+	// A model call is logged with its provider and the run's labels, never
+	// gated (R15, MA3.6).
+	log.Print(toolregistry.ModelCallLine(runID, "decision-model", model, ask.labels.Strings()))
 	if err := rt.appendSystem1Event(ctx, exec, owner, computer, runID, answeredID, system1PhaseAnswered, withSubjects(map[string]any{
 		"request_digest": digest, "request_event_id": requestID, "computer_id": computer, "question_ids": ids,
 		"model": model, "response_id": distribution.ID, "result": json.RawMessage(resultRaw),
 		"usage": distribution.Usage, "input_tokens": distribution.Usage.InputTokens, "output_tokens": distribution.Usage.OutputTokens,
-		"cost_usd": distribution.Usage.Cost,
+		"cost_usd": distribution.Usage.Cost, "labels": ask.labels.Strings(),
 	}, ask.subjects, ask.story)); err != nil {
 		// The call was paid for; an answer that is not on the tape would be
 		// unaudited and unreplayable, so it is not handed to the cell.
@@ -439,7 +428,7 @@ func system1Digest(computer string, questions []yaegikernel.System1Question, con
 // system1ResolveContext reads the text of every distinct ref the questions
 // name, for the run's owner, bounded. Any ref it cannot read refuses the whole
 // call.
-func (rt *Runtime) system1ResolveContext(ctx context.Context, owner, computer string, questions []yaegikernel.System1Question) (map[string]system1Context, map[string]string, error) {
+func (rt *Runtime) system1ResolveContext(ctx context.Context, owner, computer string, questions []yaegikernel.System1Question, hostText map[string]string) (map[string]system1Context, map[string]string, error) {
 	contexts := map[string]system1Context{}
 	aliasOf := map[string]string{}
 	for _, q := range questions {
@@ -447,7 +436,7 @@ func (rt *Runtime) system1ResolveContext(ctx context.Context, owner, computer st
 			if _, done := contexts[ref]; done {
 				continue
 			}
-			resolved, err := rt.system1ReadRef(ctx, owner, computer, ref)
+			resolved, err := rt.system1ReadRef(ctx, owner, computer, ref, hostText)
 			if err != nil {
 				return nil, nil, fmt.Errorf("choir.System1: question %q: context_refs %q: %w", q.ID, ref, err)
 			}
@@ -458,7 +447,14 @@ func (rt *Runtime) system1ResolveContext(ctx context.Context, owner, computer st
 	return contexts, aliasOf, nil
 }
 
-func (rt *Runtime) system1ReadRef(ctx context.Context, owner, computer, ref string) (system1Context, error) {
+func (rt *Runtime) system1ReadRef(ctx context.Context, owner, computer, ref string, hostText map[string]string) (system1Context, error) {
+	if strings.HasPrefix(ref, system1HostRefPrefix) {
+		text := system1Bound(hostText[ref])
+		if text == "" {
+			return system1Context{}, fmt.Errorf("a reference is a capture id or story:<revision_id>; text and URLs are not evidence here")
+		}
+		return system1Context{Kind: "host", Ref: ref, Text: text}, nil
+	}
 	if revisionID, ok := strings.CutPrefix(ref, system1StoryRefPrefix); ok {
 		revisionID = strings.TrimSpace(revisionID)
 		if revisionID == "" {

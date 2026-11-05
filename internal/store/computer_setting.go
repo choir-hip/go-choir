@@ -39,13 +39,6 @@ const SettingManagementSerialTasks = "management.serial_tasks"
 // CHOIR_TELEMETRY_BATCH=on turns it on regardless.
 const SettingTelemetryBatch = "telemetry.batch"
 
-// SettingResearchSystem1 lets the research desk ask System 1
-// (choir.System1) with the default caps, when the runtime config sets none
-// (owner notes §29: System 1 does the related-stories reading). On by
-// default (owner, 2026-11-03); a stored off is the rollback, unless the
-// runtime config sets both caps, which wins as before.
-const SettingResearchSystem1 = "research.system1"
-
 // SettingResearchRelatedStory lets the research desk record judged pair
 // relations (choir.RelateStories) and export them to Store B as related_story
 // edges (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md,
@@ -234,7 +227,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingIntakeLabels:                 true,
 	SettingManagementSerialTasks:        false,
 	SettingTelemetryBatch:               true,
-	SettingResearchSystem1:              true,
 	SettingResearchRelatedStory:         false,
 	SettingEventTable:                   false,
 	SettingEngineeringProgressToTexture: true,

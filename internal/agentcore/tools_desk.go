@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -1208,6 +1209,13 @@ func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) str
 // network/content actions go to researchDeps.HostEgress — one deps surface,
 // never an open socket.
 func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+	// A call that carries what the run composed to a destination is the
+	// egress sink of the disclosure path (disclosure_gate.go).
+	if target, summary, ok := egressDisclosure(action, payload); ok {
+		if err := rt.gateDisclosure(egrCtx, disclosureCall{exec: cellExec, deskRole: deskRole, sink: disclosure.SinkEgress, target: target, summary: summary}); err != nil {
+			return nil, err
+		}
+	}
 	out, err := rt.deskEgressRead(egrCtx, deskRole, cellExec, action, payload)
 	if err == nil {
 		if action == yaegikernel.ActionReadCapture {

@@ -28,8 +28,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/lease"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -347,9 +347,13 @@ type Runtime struct {
 	// candidateJudge is the decision model (Jev): support judgement and
 	// intake labels.
 	candidateJudge CandidateJudge
-	// system1Mu serializes choir.System1 calls, so a cap check, its request
+	// system1Mu serializes choir.System1 calls, so a replay check, its request
 	// record and the judge call are one step (system1_verb.go).
 	system1Mu sync.Mutex
+	// disclosureMu serializes the ask path of the disclosure gate, so reading
+	// a disclosure's state, asking System 1 and recording the answer, or
+	// consuming an approval, are one step (disclosure_gate.go).
+	disclosureMu sync.Mutex
 	// relationMu serializes choir.RelateStories and choir.Relate calls, so
 	// the tape check for a repeat and its record are one step
 	// (story_relation_verb.go, story_entities_verb.go); both release it
@@ -3912,6 +3916,16 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// may read; they end with the run.
 	ctx = objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID)
 	defer rt.endRunLeases(ctx, rec.RunID, lease.ReasonRunEnded)
+	// MA3.6: each model call of the run is logged with the run's labels.
+	// The accumulator is the live view; a resumed run's is empty until it
+	// reads, so the record is the source then.
+	labelRec := rec
+	ctx = toolregistry.WithLabelSource(ctx, func() []string {
+		if set := rt.runLabelSet(labelRec.RunID); len(set) > 0 {
+			return set.Strings()
+		}
+		return rt.storedRunLabels(context.Background(), labelRec.OwnerID, labelRec.ComputerID, labelRec.RunID).Strings()
+	})
 	assignedEngineeringOverlay := false
 	if rt.capsuleExecutor != nil && !isManagementTaskRun(rec) {
 		switch agentProfileForRun(rec) {

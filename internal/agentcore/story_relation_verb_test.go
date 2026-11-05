@@ -96,7 +96,6 @@ type relateFixture struct {
 func newRelateFixture(t *testing.T) *relateFixture {
 	t.Helper()
 	f := newSystem1Fixture(t)
-	f.enable(t, 10, 100)
 	pub := &fakeRelationPublisher{}
 	f.rt.SetStoryPublisher(pub)
 	id := func(suffix string) string {

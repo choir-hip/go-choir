@@ -1,0 +1,481 @@
+package agentcore
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
+)
+
+// The disclosure path (MA3.6, R15; plan section 7.2). A run carries the union
+// of the labels of everything it read (run_labels.go). When it tries a sink,
+// a place its data leaves its custody, three steps decide, in order:
+//
+//  1. the kernel rules table (internal/disclosure): label class by sink to
+//     allow, deny or ask. Most decisions end here;
+//  2. for an ask, the System 1 kernel service answers one typed question,
+//     "is this disclosure within what the owner's request implies", with a
+//     full distribution over yes, no and unsure. The distribution is recorded
+//     as a precommit-kind record carrying the run's labels, and the RULE
+//     (disclosure.FromDistribution) decides from it: System 1 never decides
+//     alone;
+//  3. a distribution the rule does not clear escalates to the owner tap: a
+//     disclosure.decision fact on the tape (phase pending) that the owner
+//     answers through POST /api/disclosures/{id}/approve or .../deny. The
+//     sink is refused now, with a fate saying it waits on the owner. Nothing
+//     blocks and nothing resumes: an approval lets the next attempt of the
+//     same disclosure pass once (phase consumed), and a restart closes the
+//     run that was refused like any other.
+//
+// The custodian-model step (the custodian desk's own cell decides) is a named
+// residual: it needs a cell decision wired into the sink, and no custodian
+// cell exists for the kinds that ask today.
+//
+// Enforcement mirrors the writer and reader gates, per desk class and not by a
+// setting. A built-in desk's decision is recorded and counted
+// (disclosure_gate on GET /api/runtime/observability) and a deny or an ask
+// does not block yet, and an ask does not spend a System 1 call on it; MA3.7
+// flips it, in code. An installed package desk (app:*) is enforced now.
+//
+// A model call is not a sink (owner ruling R15). It is logged with the
+// resolved provider and the run's labels (toolregistry.WithLabelSource).
+
+const (
+	disclosurePhasePending  = "pending"
+	disclosurePhaseAllowed  = "allowed"
+	disclosurePhaseApproved = "approved"
+	disclosurePhaseDenied   = "denied"
+	disclosurePhaseConsumed = "consumed"
+	disclosurePhaseRefused  = "refused"
+
+	// disclosureSummaryRunes bounds what is recorded of the disclosure.
+	disclosureSummaryRunes = 300
+	// disclosureRequestRunes bounds the owner's request given to System 1.
+	disclosureRequestRunes = 600
+
+	disclosureHostRequestRef = system1HostRefPrefix + "request"
+	disclosureHostSinkRef    = system1HostRefPrefix + "disclosure"
+)
+
+// disclosureChannel is the tape channel of a computer's disclosure facts.
+func disclosureChannel(computerID string) string {
+	return "disclosure:" + strings.TrimSpace(computerID)
+}
+
+// disclosureCall is one sink attempt. Every field is the host's: the run's
+// identity comes from the run record, the target and the summary from the
+// verb the cell called.
+type disclosureCall struct {
+	exec     toolregistry.ExecutionContext
+	deskRole string
+	sink     disclosure.Sink
+	// target is where the data goes: a desk, a URL or provider, a document,
+	// a package.
+	target string
+	// summary is what leaves, bounded.
+	summary string
+	// mailReply is set by the mail custodian's own reply path, and only when it
+	// replies in the owner's own thread (mail_send only). The gate names no
+	// desk: the custodian's path is the one that sets it.
+	mailReply bool
+}
+
+// disclosurePayload is the body of a disclosure.decision event.
+type disclosurePayload struct {
+	// DisclosureID is the pending event an owner answer, a consumption or an
+	// allowance refers to.
+	DisclosureID string              `json:"disclosure_id,omitempty"`
+	Digest       string              `json:"digest"`
+	Sink         string              `json:"sink"`
+	Target       string              `json:"target,omitempty"`
+	Desk         string              `json:"desk,omitempty"`
+	RunID        string              `json:"run_id,omitempty"`
+	Summary      string              `json:"summary,omitempty"`
+	Labels       []string            `json:"labels,omitempty"`
+	Verdict      *disclosure.Verdict `json:"verdict,omitempty"`
+	// Distribution is System 1's full answer to the typed question.
+	Distribution   map[string]float64 `json:"distribution,omitempty"`
+	Rule           string             `json:"rule,omitempty"`
+	System1Receipt string             `json:"system1_receipt,omitempty"`
+	RecordID       string             `json:"record_id,omitempty"`
+	Reason         string             `json:"reason,omitempty"`
+	Actor          string             `json:"actor,omitempty"`
+}
+
+// packageDesk reports whether the desk is an installed package desk, the
+// class the gate enforces now.
+func packageDesk(deskRole string) bool {
+	d, ok := deskmanifest.Lookup(canonicalDeskName(strings.TrimSpace(deskRole)))
+	if !ok {
+		d, ok = deskmanifest.Lookup("app:" + strings.TrimSpace(deskRole))
+	}
+	return ok && d.Kind == deskmanifest.KindApp
+}
+
+// labelObjectKinds are the object kinds a label's kind names, for custody and
+// lease lookups. A label's kind is the product's word (document, story,
+// capture); the registry's is the object kind.
+func labelObjectKinds(kind string) []objectgraph.ObjectKind {
+	switch kind {
+	case "document":
+		return []objectgraph.ObjectKind{"choir.texture_document", "choir.texture_revision"}
+	case "capture":
+		return []objectgraph.ObjectKind{objectgraph.WebCaptureObjectKind}
+	}
+	return []objectgraph.ObjectKind{objectgraph.ObjectKind("choir." + kind)}
+}
+
+// messageAdmitted reports whether the desk a message goes to is admitted for a
+// label: the custodian of the label's kind, or a holder of a live lease that
+// names the kind.
+func (rt *Runtime) messageAdmitted(owner, toDesk, label string) bool {
+	if !strings.HasPrefix(label, types.LabelOwnerPrivatePrefix) {
+		return true
+	}
+	kind := strings.TrimPrefix(label, types.LabelOwnerPrivatePrefix)
+	to := canonicalDeskName(strings.TrimSpace(toDesk))
+	writer, ok := objectgraph.DeskWriter(to)
+	if !ok {
+		return false
+	}
+	for _, k := range labelObjectKinds(kind) {
+		if custodian, found := objectgraph.CustodianOf(k); found && custodian == writer {
+			return true
+		}
+	}
+	if rt != nil && rt.leases != nil {
+		for _, rec := range rt.leases.Live(owner) {
+			if canonicalDeskName(rec.Holder) != to {
+				continue
+			}
+			for _, leased := range rec.Scope.Kinds {
+				for _, k := range labelObjectKinds(kind) {
+					if leased == string(k) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// egressDisclosure names the destination and the content of an egress call a
+// cell composed: a URL it fetches, a provider endpoint with its params, a
+// search query. The other host calls read stored objects or fixed registry
+// sources and carry nothing the run composed outward.
+func egressDisclosure(action yaegikernel.BrokerAction, payload json.RawMessage) (target, summary string, ok bool) {
+	switch action {
+	case yaegikernel.ActionRead:
+		var p yaegikernel.ReadPayload
+		if json.Unmarshal(payload, &p) != nil {
+			return "", "", false
+		}
+		return p.URL, "fetch " + p.URL, true
+	case yaegikernel.ActionSourceAPI:
+		var p yaegikernel.SourceAPIPayload
+		if json.Unmarshal(payload, &p) != nil {
+			return "", "", false
+		}
+		params, _ := json.Marshal(p.Params)
+		return p.Provider + " " + p.Endpoint, fmt.Sprintf("source API %s %s %s", p.Provider, p.Endpoint, params), true
+	case yaegikernel.ActionSearchStart:
+		var p yaegikernel.SearchStartPayload
+		if json.Unmarshal(payload, &p) != nil {
+			return "", "", false
+		}
+		return "search providers", "search query " + p.Query, true
+	}
+	return "", "", false
+}
+
+// disclosureFacts computes the admission facts of a sink attempt.
+func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
+	switch call.sink {
+	case disclosure.SinkDeskMessage:
+		owner := strings.TrimSpace(call.exec.OwnerID)
+		return disclosure.Facts{AdmittedFor: func(label string) bool { return rt.messageAdmitted(owner, call.target, label) }}
+	case disclosure.SinkMailSend:
+		// Only the mail custodian replying in the owner's own thread is
+		// admitted; any other mail leaves the owner's mailbox on an ask.
+		admitted := call.mailReply
+		return disclosure.Facts{AdmittedFor: func(string) bool { return admitted }}
+	}
+	return disclosure.Facts{}
+}
+
+// GateDisclosure is the exported entry for a sink the run reaches outside
+// this package (a story's publication in the Texture owner). rec is the run's
+// record; a refusal is the fate the caller shows.
+func (rt *Runtime) GateDisclosure(ctx context.Context, rec types.RunRecord, sink disclosure.Sink, target, summary string) error {
+	return rt.gateDisclosure(ctx, disclosureCall{
+		exec: toolregistry.ExecutionContext{
+			RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, AgentID: rec.AgentID, RunRecord: &rec,
+		},
+		deskRole: rec.AgentProfile, sink: sink, target: target, summary: summary,
+	})
+}
+
+// gateDisclosure decides one sink attempt: nil lets it proceed, an error is
+// the refusal the run reads.
+func (rt *Runtime) gateDisclosure(ctx context.Context, call disclosureCall) error {
+	if rt == nil {
+		return nil
+	}
+	owner, computer, runID := strings.TrimSpace(call.exec.OwnerID), strings.TrimSpace(call.exec.ComputerID), strings.TrimSpace(call.exec.RunID)
+	if computer == "" {
+		computer = strings.TrimSpace(rt.cfg.ComputerID)
+	}
+	labels := rt.runLabelsOf(ctx, owner, computer, runID)
+	verdict := disclosure.Decide(labels, call.sink, rt.disclosureFacts(call))
+	if verdict.Decision == disclosure.Allow {
+		disclosure.Note(verdict, "allowed")
+		return nil
+	}
+	enforced := packageDesk(call.deskRole) || disclosure.CurrentMode() == disclosure.ModeEnforce
+	if !enforced {
+		// A built-in desk observes: counted, logged once, not blocked, and no
+		// System 1 call is spent on it.
+		disclosure.Note(verdict, "observed")
+		return nil
+	}
+	disclosure.Note(verdict, "enforced")
+	if rt.store == nil || owner == "" {
+		return fmt.Errorf("disclosure refused: %s; no store to record the decision, so the sink stays closed", verdict.Reason())
+	}
+	payload := disclosurePayload{
+		Digest: disclosureDigest(owner, computer, call, labels), Sink: string(call.sink), Target: call.target,
+		Desk: call.deskRole, RunID: runID, Summary: disclosureBound(call.summary, disclosureSummaryRunes),
+		Labels: labels.Strings(), Verdict: &verdict, Reason: verdict.Reason(),
+	}
+	if verdict.Decision == disclosure.Deny {
+		payload.Rule = string(disclosure.Deny)
+		if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseRefused, payload); err != nil {
+			log.Printf("disclosure: record the refusal of %s on run %s: %v", call.sink, runID, err)
+		}
+		return fmt.Errorf("disclosure refused: %s", verdict.Reason())
+	}
+	return rt.disclosureAsk(ctx, call, owner, computer, labels, payload)
+}
+
+// disclosureAsk runs the ask path: an earlier answer to this exact disclosure
+// first, then System 1 and the rule, then the owner tap.
+func (rt *Runtime) disclosureAsk(ctx context.Context, call disclosureCall, owner, computer string, labels types.LabelSet, payload disclosurePayload) error {
+	rt.disclosureMu.Lock()
+	defer rt.disclosureMu.Unlock()
+
+	state, err := rt.disclosureState(ctx, owner, computer, payload.Digest)
+	if err != nil {
+		return fmt.Errorf("disclosure refused: %s; the tape could not be read (%v), so the sink stays closed", payload.Reason, err)
+	}
+	switch state.phase {
+	case disclosurePhaseApproved:
+		// The owner approved this exact disclosure: it passes once.
+		consumed := payload
+		consumed.DisclosureID = state.pendingID
+		consumed.Actor = "owner"
+		if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseConsumed, consumed); err != nil {
+			return fmt.Errorf("disclosure refused: the owner's approval could not be recorded as used (%v), so the sink stays closed", err)
+		}
+		return nil
+	case disclosurePhaseDenied:
+		return fmt.Errorf("disclosure refused: the owner denied this disclosure (%s) of %s to %s", state.pendingID, call.sink, call.target)
+	case disclosurePhasePending:
+		return fmt.Errorf("disclosure refused: this disclosure waits on the owner (%s); the owner answers it at /api/disclosures/%s/approve or /deny, and the same attempt then passes once", state.pendingID, state.pendingID)
+	}
+
+	dist, receipt, askErr := rt.disclosureJudge(ctx, call, owner, computer, labels, payload)
+	payload.Distribution, payload.System1Receipt = dist, receipt
+	if askErr != nil {
+		payload.Reason += "; System 1 did not answer: " + askErr.Error()
+	}
+	// The distribution is a precommit-kind record carrying the run's labels,
+	// whether or not the rule clears it.
+	if recordID, err := rt.recordDisclosurePrecommit(ctx, call, owner, computer, labels, dist, payload.Digest); err != nil {
+		log.Printf("disclosure: record the precommit of %s on run %s: %v", call.sink, call.exec.RunID, err)
+	} else {
+		payload.RecordID = recordID
+	}
+	outcome := disclosure.FromDistribution(dist)
+	payload.Rule = string(outcome)
+	if outcome == disclosure.OutcomeAllow {
+		if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseAllowed, payload); err != nil {
+			return fmt.Errorf("disclosure refused: the rule's allowance could not be recorded (%v), so the sink stays closed", err)
+		}
+		return nil
+	}
+	id, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhasePending, payload)
+	if err != nil {
+		return fmt.Errorf("disclosure refused: the owner tap could not be recorded (%v), so the sink stays closed", err)
+	}
+	return fmt.Errorf("disclosure refused: %s; System 1's answer does not clear the rule (P(yes) >= %.1f and P(no) <= %.1f), so this waits on the owner (%s); the owner answers it at /api/disclosures/%s/approve or /deny, and the same attempt then passes once",
+		payload.Reason, disclosure.MinYes, disclosure.MaxNo, id, id)
+}
+
+// disclosureJudge asks System 1 the typed question and returns the full
+// distribution it gave. The evidence is the owner's request and the
+// disclosure, both composed by the host.
+func (rt *Runtime) disclosureJudge(ctx context.Context, call disclosureCall, owner, computer string, labels types.LabelSet, payload disclosurePayload) (map[string]float64, string, error) {
+	if rt.candidateJudge == nil {
+		return nil, "", fmt.Errorf("no decision model is bound on this computer")
+	}
+	request := ""
+	if call.exec.RunRecord != nil {
+		request = call.exec.RunRecord.Prompt
+	}
+	if strings.TrimSpace(request) == "" && call.exec.RunID != "" {
+		if rec, err := rt.getRunForComputer(ctx, owner, call.exec.RunID); err == nil {
+			request = rec.Prompt
+		}
+	}
+	text := fmt.Sprintf("desk %s will send to %s (%s): %s. It carries data labelled %s.",
+		call.deskRole, call.sink, call.target, payload.Summary, strings.Join(labels, ", "))
+	questions := []yaegikernel.System1Question{{
+		ID: disclosure.QuestionID, Text: disclosure.Question, Choices: disclosure.Choices,
+		ContextRefs: []string{disclosureHostRequestRef, disclosureHostSinkRef},
+	}}
+	valid, err := yaegikernel.ValidateSystem1HostQuestions(questions)
+	if err != nil {
+		return nil, "", err
+	}
+	raw, err := rt.System1().Ask(ctx, call.exec, owner, computer, system1Ask{
+		questions: valid, labels: labels,
+		hostText: map[string]string{
+			disclosureHostRequestRef: "The owner's request: " + disclosureBound(request, disclosureRequestRunes),
+			disclosureHostSinkRef:    text,
+		},
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	var result system1Result
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, "", err
+	}
+	for _, a := range result.Answers {
+		if a.ID == disclosure.QuestionID {
+			if a.Error != "" {
+				return nil, result.ReceiptRef, fmt.Errorf("%s", a.Error)
+			}
+			return a.Probabilities, result.ReceiptRef, nil
+		}
+	}
+	return nil, result.ReceiptRef, fmt.Errorf("System 1 gave no answer to the disclosure question")
+}
+
+// recordDisclosurePrecommit writes the typed question and System 1's
+// distribution as a precommit-kind record on the commitment ledger, stamped
+// with the run's labels. The kernel service is its committer and resolver.
+func (rt *Runtime) recordDisclosurePrecommit(ctx context.Context, call disclosureCall, owner, computer string, labels types.LabelSet, dist map[string]float64, digest string) (string, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	recordID := call.exec.RunID + ":disclosure:" + digest[:12]
+	claim := fmt.Sprintf("the disclosure of %s to %s is within what the owner's request implies", call.sink, call.target)
+	rec := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID, Kind: types.CommitmentKindPrecommit,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Precommit: &types.CommitmentPrecommit{
+			Question: claim, Distribution: dist, Resolver: disclosureService,
+		},
+		Provenance: types.CommitmentProvenance{
+			AgentID: disclosureService, ModelID: "system1", Desk: call.deskRole, RunID: call.exec.RunID,
+			Origin: types.OriginSystem, CommittedAt: now, Labels: labels.Strings(),
+		},
+		Prediction: types.CommitmentPrediction{
+			Hypothesis: claim, CommittedAt: now,
+			Questions: []types.TypedQuestion{{Question: claim, Answers: disclosure.Choices, Probabilities: dist}},
+		},
+		EvidenceRefs: []string{"disclosure:" + digest},
+		Addressee:    disclosureService,
+	}
+	id, err := rt.store.AppendCommitmentRecord(ctx, owner, computer, rec)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// disclosureService names the kernel's disclosure path as the committer of
+// its own records.
+const disclosureService = "system:disclosure"
+
+// disclosureDigest identifies one disclosure: the same owner, computer, desk,
+// sink, target and summary under the same labels is the same disclosure, so
+// an approval is of that exact thing and a retry finds it.
+func disclosureDigest(owner, computer string, call disclosureCall, labels types.LabelSet) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		owner, computer, canonicalDeskName(strings.TrimSpace(call.deskRole)), string(call.sink), call.target, call.summary,
+		strings.Join(labels, ","),
+	}, "\x1f")))
+	return hex.EncodeToString(sum[:])
+}
+
+func disclosureBound(text string, runes int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if utf8.RuneCountInString(text) > runes {
+		return string([]rune(text)[:runes]) + "…"
+	}
+	return text
+}
+
+// appendDisclosure writes one disclosure.decision fact on the computer's
+// disclosure channel and returns its event id.
+func (rt *Runtime) appendDisclosure(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, phase string, payload disclosurePayload) (string, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	id := uuid.New().String()
+	ev := types.EventRecord{
+		EventID: id, Timestamp: time.Now().UTC(), RunID: firstNonEmpty(exec.RunID, payload.RunID), OwnerID: owner, AgentID: exec.AgentID,
+		ChannelID: disclosureChannel(computer), Kind: types.EventDisclosure, Phase: phase, Payload: raw,
+	}
+	if err := rt.store.AppendEvent(ctx, &ev); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// gateMessageDisclosure is the desk-message sink of the disclosure path: an
+// addressed act (Cast, Ask, Report, Reply, Feed, Escalate) from a desk whose
+// run carries labels. The target desk is admitted for a label when it is the
+// custodian of its kind or holds a live lease for it (messageAdmitted). A
+// message to the owner leaves no custody and is not a sink.
+func (r *rlmCallReduction) gateMessageDisclosure(ctx context.Context, in yaegikernel.StagedIntent) error {
+	rt := r.rt()
+	to := strings.TrimSpace(in.ToDesk)
+	if rt == nil || r.rec == nil || to == "" {
+		return nil
+	}
+	switch in.Kind {
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentReport, yaegikernel.IntentReply,
+		yaegikernel.IntentFeed, yaegikernel.IntentEscalate:
+	default:
+		return nil
+	}
+	desk, _, _ := strings.Cut(to, ":")
+	if d := strings.ToLower(strings.TrimSpace(desk)); d == "owner" || d == "user" || d == "" {
+		return nil
+	}
+	body := strings.Join([]string{in.Statement, in.Body, in.Objective, in.Claim, in.Question, in.Packet}, " ")
+	return rt.gateDisclosure(ctx, disclosureCall{
+		exec: toolregistry.ExecutionContext{
+			RunID: r.scope.RunID, OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID, AgentID: r.scope.DeskAgentID, RunRecord: r.rec,
+		},
+		deskRole: r.rec.AgentProfile, sink: disclosure.SinkDeskMessage, target: desk,
+		summary: in.Kind + " " + disclosureBound(body, disclosureSummaryRunes),
+	})
+}

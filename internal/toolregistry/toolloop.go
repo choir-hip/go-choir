@@ -1081,8 +1081,13 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		// Accumulate token usage.
 		totalUsage.Add(resp.Usage)
 
-		// Emit progress event for this iteration.
+		// Emit progress event for this iteration. It is the per-call record of
+		// the resolved provider and model, and carries the run's labels
+		// (MA3.6): a model call is logged, not gated.
+		callLabels := LabelsFrom(ctx)
+		log.Print(ModelCallLine(ExecutionContextFrom(ctx).RunID, activeLLMConfig.Provider, activeLLMConfig.Model, callLabels))
 		progressPayload, _ := json.Marshal(map[string]any{
+			"labels":               callLabels,
 			"iteration":            i + 1,
 			"stop_reason":          resp.StopReason,
 			"tool_calls":           len(resp.ToolCalls),
