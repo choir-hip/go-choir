@@ -29,7 +29,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		// Research is cell-only; it has no typed tool registry surface.
 		agentprofile.Research: {"desk_go_eval"},
 		agentprofile.Texture:  {"desk_go_eval"},
-		agentprofile.Email:    {},
+		agentprofile.Mail:     {},
 	}
 	for profile, want := range expected {
 		profile, want := profile, want

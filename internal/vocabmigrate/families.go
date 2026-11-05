@@ -340,14 +340,17 @@ var FrozenSQLIdentifiers = []string{
 // Processor and reconciler entries are frozen-history recognition only; they
 // remain to replay V2 records, not to admit live profiles.
 var normalizeV2Live = map[string]string{
-	"management":          "management",
-	"engineering":         "engineering",
-	"research":            "research",
-	"texture":             "texture",
-	"conductor":           "conductor",
-	"processor":           "processor",
-	"reconciler":          "reconciler",
-	"email":               "email",
+	"management":  "management",
+	"engineering": "engineering",
+	"research":    "research",
+	"texture":     "texture",
+	"conductor":   "conductor",
+	"processor":   "processor",
+	"reconciler":  "reconciler",
+	"email":       "email",
+	// The Mail desk (MA4.7) absorbed the email row; "email" stays for
+	// records written before it.
+	"mail":                "mail",
 	"verifier":            "verifier",
 	"verifier_multimodal": "verifier_multimodal",
 	"verifier-multimodal": "verifier_multimodal",

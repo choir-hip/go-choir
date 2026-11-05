@@ -270,7 +270,7 @@ func GrantsForVerbs(verbs []string) ([]Grant, error) {
 
 // resolve computes the verb, capsule verb, module and deadline fields from
 // the grants. A row that declares grants has no other source for them; a row
-// with none (the carrier-less conductor and email) is left as it is. It
+// with none (the carrier-less conductor and mail) is left as it is. It
 // refuses an unknown grant, a bad argument and a verb set the grants do not
 // produce.
 func (d *Desk) resolve() error {

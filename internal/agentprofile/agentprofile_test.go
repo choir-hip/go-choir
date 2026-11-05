@@ -12,7 +12,7 @@ func TestPolicyFor(t *testing.T) {
 		Conductor:   {Profile: Conductor},
 		Research:    {Profile: Research},
 		Texture:     {Profile: Texture},
-		Email:       {Profile: Email},
+		Mail:        {Profile: Mail},
 		Engineering: {Profile: Engineering},
 		Management:  {Profile: Management},
 	}

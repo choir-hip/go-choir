@@ -29,7 +29,7 @@ func TestVocabWriteGuardAcceptsEveryRegisteredRoleAfterCutover(t *testing.T) {
 	}
 	roles := []string{
 		agentprofile.Management, agentprofile.Engineering, agentprofile.Research,
-		agentprofile.Texture, agentprofile.Conductor, agentprofile.Email,
+		agentprofile.Texture, agentprofile.Conductor, agentprofile.Mail,
 		agentprofile.ManagementTask, "verifier", "verifier_multimodal",
 	}
 	for _, role := range roles {

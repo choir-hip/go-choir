@@ -15,7 +15,7 @@ const (
 	Engineering = "engineering"
 	Research    = "research"
 	Texture     = "texture"
-	Email       = "email"
+	Mail        = "mail"
 	// ManagementTask is the run role of a management task (management
 	// delegation S2a, design round 2 R2-1): a bounded sub-RLM of the
 	// management desk with its own run, session and inbox

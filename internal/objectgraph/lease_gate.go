@@ -28,6 +28,9 @@ type LeaseAuthority interface {
 	// AdmitsGrant reports the id of a live lease of holder in runID that names
 	// the first-party grant (a guarded custodian service, not a kind).
 	AdmitsGrant(holder Writer, runID, grant string) (leaseID string, ok bool)
+	// AdmitsGrantRef is AdmitsGrant for a grant scoped by ref (mail.read): the
+	// lease must name the grant and the one ref the use reads (MA4.7).
+	AdmitsGrantRef(holder Writer, runID, grant, ref string) (leaseID string, ok bool)
 }
 
 type leaseHolderKey struct{}
@@ -85,6 +88,17 @@ func LeaseAdmitsGrant(ctx context.Context, holder Writer, grant string) (string,
 		return "", false
 	}
 	return h.auth.AdmitsGrant(holder, h.runID, grant)
+}
+
+// LeaseAdmitsGrantRef reports the id of the lease attached to ctx that gives
+// holder the grant for ref. The custodian's service calls it before it reads
+// that one ref as the custodian.
+func LeaseAdmitsGrantRef(ctx context.Context, holder Writer, grant, ref string) (string, bool) {
+	h, ok := leasesFrom(ctx)
+	if !ok || ref == "" {
+		return "", false
+	}
+	return h.auth.AdmitsGrantRef(holder, h.runID, grant, ref)
 }
 
 // LeaseRunID is the run the lease context was attached for.

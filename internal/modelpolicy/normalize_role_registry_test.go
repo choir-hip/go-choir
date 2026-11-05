@@ -5,7 +5,7 @@ import "testing"
 // NormalizeRole reads the desk registry (MA2.5, F2); pinned against the closed
 // list it replaced.
 func TestNormalizeRoleEqualsTheClosedList(t *testing.T) {
-	for _, n := range []string{"management", "engineering", "research", "conductor", "texture", "email", "management_task", "verifier", "verifier_multimodal"} {
+	for _, n := range []string{"management", "engineering", "research", "conductor", "texture", "mail", "management_task", "verifier", "verifier_multimodal"} {
 		if got := NormalizeRole(" " + n + " "); got != n {
 			t.Errorf("NormalizeRole(%q) = %q", n, got)
 		}
