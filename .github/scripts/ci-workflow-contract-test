@@ -70,6 +70,47 @@ if ! grep -Fq '.github/workflows/ci.yml|.github/scripts/ci-impact-classify)' "$r
   echo "a change to ci.yml or the classifier must select the frontend lane (the modularity gate)" >&2
   exit 1
 fi
+# The desk protocol lock (docs/design/app-agent-desks-2026-11-04.md section 5)
+# is present, runs whenever the Go lane is selected, checks the lock history
+# against a base, runs the base's checker over the head's locks as well as the
+# head's, runs without continue-on-error, and check requires it.
+desk_segment="$(sed -n '/^  desk-protocol:/,/^  [a-z][a-z0-9-]*:$/p' "$ci")"
+if [[ -z "$desk_segment" ]]; then
+  echo "ci.yml has no desk-protocol job" >&2
+  exit 1
+fi
+for pattern in \
+  "if: needs.plan.outputs.go == 'true'" \
+  'runs-on: ubuntu-24.04' \
+  'fetch-depth: 0' \
+  'LOCK_BASE: ${{ steps.lockbase.outputs.base }}' \
+  'PR_BASE: ${{ github.event.pull_request.base.sha }}' \
+  'PLAN_BASE: ${{ needs.plan.outputs.base }}' \
+  'PUSH_BEFORE: ${{ github.event.before }}' \
+  'pull_request) base="$PR_BASE" ;;' \
+  'push) base="${PLAN_BASE:-$PUSH_BEFORE}" ;;' \
+  'go run ./cmd/deskprotocol-lock --locks-only --root "$GITHUB_WORKSPACE" --base "$LOCK_BASE"' \
+  'go run ./cmd/deskprotocol-lock --base "$LOCK_BASE"' \
+  'internal/deskprotocol/lock" 2>/dev/null; then' \
+  'go test ./internal/deskprotocol/...'; do
+  if ! grep -Fq -- "$pattern" <<<"$desk_segment"; then
+    echo "desk-protocol job is missing: $pattern" >&2
+    exit 1
+  fi
+done
+if grep -Eq 'continue-on-error' <<<"$desk_segment"; then
+  echo "desk-protocol must not set continue-on-error" >&2
+  exit 1
+fi
+desk_check_segment="$(sed -n '/^  check:/,/^  sbom-candidate:/p' "$ci")"
+if ! grep -F 'needs:' <<<"$desk_check_segment" | grep -Eq '[ ,\[]desk-protocol[],]'; then
+  echo "check must need desk-protocol" >&2
+  exit 1
+fi
+if ! grep -Fq 'require_success "${{ needs.plan.outputs.go }}" desk-protocol "${{ needs.desk-protocol.result }}"' <<<"$desk_check_segment"; then
+  echo "check must require desk-protocol when the Go lane is selected" >&2
+  exit 1
+fi
 require "$ci" 'HIGH_RISK_RACE: ${{ steps.classify.outputs.high_risk_race }}'
 require "$ci" 'SAMPLED_RACE: ${{ steps.classify.outputs.sampled_race }}'
 require "$ci" 'RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}'

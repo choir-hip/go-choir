@@ -639,7 +639,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, build-frontend, package-modularity]
+    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, build-frontend, package-modularity, desk-protocol]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -704,6 +704,7 @@ jobs:
           require_if_run guest-floor-commit-free "${{ needs.guest-floor-commit-free.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           require_success "${{ needs.plan.outputs.frontend }}" package-modularity "${{ needs.package-modularity.result }}"
+          require_success "${{ needs.plan.outputs.go }}" desk-protocol "${{ needs.desk-protocol.result }}"
           echo "All selected CI gates passed"
 
   sbom-candidate:
@@ -940,6 +941,79 @@ jobs:
           path: ${{ runner.temp }}/modularity
           if-no-files-found: warn
           retention-days: 30
+
+  # The desk protocol lock (docs/design/app-agent-desks-2026-11-04.md section 5,
+  # slice D0): the surface desks share (intents, the commitment ledger and PSA
+  # records, lifecycle transitions, choir verbs, the broker wire; no
+  # allowlist of who may address whom, MA1.4) against lock/<Version>.json, a change needing the bump its kind
+  # needs, and no existing lock ever changed, deleted or renamed. The base's
+  # copy of the checker runs over the head's locks as well as the head's, so a
+  # change cannot loosen the rules it is judged by in the same push. check
+  # requires it whenever the Go lane is selected.
+  desk-protocol:
+    name: Desk Protocol Lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # The lock-history check diffs against a merge base.
+          fetch-depth: 0
+
+      # The base: the pull request's base, or on main the live staging commit
+      # plan chose, else the push's before. A git failure fails the job.
+      - name: Pick the lock-history base
+        id: lockbase
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PLAN_BASE: ${{ needs.plan.outputs.base }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="${PLAN_BASE:-$PUSH_BEFORE}" ;;
+            *) base="" ;;
+          esac
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then base="origin/main"; fi
+          git rev-parse --verify --quiet "${base}^{commit}" >/dev/null || git fetch --no-tags origin "$base"
+          git rev-parse --verify "${base}^{commit}" >/dev/null
+          echo "Lock-history base: $base"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-build-cache
+        with:
+          lane: desk-protocol
+
+      - name: Base checker over the head's locks
+        shell: bash
+        env:
+          LOCK_BASE: ${{ steps.lockbase.outputs.base }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$LOCK_BASE:cmd/deskprotocol-lock/main.go" 2>/dev/null; then
+            git worktree add --detach "$RUNNER_TEMP/base-tree" "$LOCK_BASE"
+            (cd "$RUNNER_TEMP/base-tree" && go run ./cmd/deskprotocol-lock --locks-only --root "$GITHUB_WORKSPACE" --base "$LOCK_BASE")
+          elif git cat-file -e "$LOCK_BASE:internal/deskprotocol/lock" 2>/dev/null; then
+            echo "The base has locks but no cmd/deskprotocol-lock: the checker moved, and the base's copy cannot judge the head" >&2
+            exit 1
+          else
+            echo "The base has no desk protocol yet; the head's copy runs alone"
+          fi
+
+      - name: Surface against its lock, the lock steps and the lock history
+        shell: bash
+        env:
+          LOCK_BASE: ${{ steps.lockbase.outputs.base }}
+        run: go run ./cmd/deskprotocol-lock --base "$LOCK_BASE"
+
+      - name: Contract tests, golden corpus and extractor
+        run: go test ./internal/deskprotocol/... ./cmd/deskprotocol-lock/...
 
   # Report-only (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 4):
   # advisories against package-lock.json, the lock the Nix build ships.
