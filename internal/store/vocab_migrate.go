@@ -104,10 +104,41 @@ type OGEdgeProvEntry struct {
 	OldTo     string `json:"old_to"`
 }
 
+// v1InfixIDPrefixes are the leading segments of every V1 constructed id
+// that carries a desk infix: the run/work ids of the charter tie-break
+// (run-super-assignment, work-cosuper-assignment-NN, run-super-1), the V1
+// engineering command ids and digest refs (co-super-report:…,
+// co-super-grant:sha256:…), the queued producer update (queue-super-report:…)
+// and the recovery markers (persistent-super-recovery:v2:…,
+// lifecycle-researcher-admission-recovery:v1:…). The infix rule applies to
+// these shapes only. It once applied to every leaf, and rewrote the model id
+// nvidia/nemotron-3.5-super-vl:free into a model that does not exist
+// (problems/vocab-infix-rewrite-mangles-model-ids-2026-11-05.md).
+var v1InfixIDPrefixes = []string{
+	"run-", "work-", "co-super-", "queue-super-",
+	"persistent-super-", "lifecycle-researcher-",
+}
+
+// isV1InfixIDShape reports whether id is a V1 constructed id the infix rule
+// may rewrite. A leaf with "/" or "." (a model id, a path, a file name) never
+// is, whatever its prefix.
+func isV1InfixIDShape(id string) bool {
+	if strings.ContainsAny(id, "/.") {
+		return false
+	}
+	for _, prefix := range v1InfixIDPrefixes {
+		if strings.HasPrefix(id, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // migrateIDForward rewrites desk-bearing ID prefixes and hyphen-delimited
 // desk infixes (run-super-assignment / work-super-assignment style per the
 // charter tie-break). Command identities are never passed in: callers only
-// supply agent/address/constructed-ID columns.
+// supply agent/address/constructed-ID columns. The infix rule applies only
+// to V1 constructed-id shapes (isV1InfixIDShape).
 func migrateIDForward(id string) (string, bool) {
 	for _, prefix := range []string{"super:", "co-super:", "cosuper:", "researcher:"} {
 		if strings.HasPrefix(id, prefix) {
@@ -118,7 +149,10 @@ func migrateIDForward(id string) (string, bool) {
 			return id, false
 		}
 	}
-	// Longest-token-first: "-super-" is a substring of "-Engineering-", so a
+	if !isV1InfixIDShape(id) {
+		return id, false
+	}
+	// Longest-token-first: "-super-" is a substring of "-co-super-", so a
 	// shorter infix must never match before a longer one containing it.
 	for _, pair := range [][2]string{
 		{"-co-super-", "-engineering-"}, {"-cosuper-", "-engineering-"},

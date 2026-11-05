@@ -9,8 +9,9 @@ package store
 //
 //   1. Every string leaf in metadata and body is classified: exact V1 desk
 //      tokens map through the frozen ForwardV1ToV2; desk-bearing IDs
-//      (super:/Engineering:/cosuper:/researcher: prefixes, -super-/-Engineering-/
-//      -cosuper-/-researcher- infixes) rewrite through migrateIDForward;
+//      (super:/co-super:/cosuper:/researcher: prefixes; -super-/-co-super-/
+//      -cosuper-/-researcher- infixes in V1 constructed-id shapes only,
+//      isV1InfixIDShape) rewrite through migrateIDForward;
 //      frozen protocol values (owner, trusted-core) never move; everything
 //      else is untouched. Prose and URLs are safe: a leaf with any
 //      whitespace or a "://" is never rewritten, so a headline or slug

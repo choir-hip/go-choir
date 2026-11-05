@@ -61,9 +61,10 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 	if metadata == nil {
 		return LLMSelection{}
 	}
+	provider := strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMProvider))
 	return LLMSelection{
-		Provider:        strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMProvider)),
-		Model:           strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMModel)),
+		Provider:        provider,
+		Model:           repairVocabularyMangledModel(provider, strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMModel))),
 		ReasoningEffort: strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMReasoningEffort)),
 		MaxTokens:       metadataIntValue(metadata, runMetadataLLMMaxTokens),
 		Source:          strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicySource)),
@@ -87,13 +88,49 @@ func FallbackLLMConfigsFromMetadata(metadata map[string]any, primary LLMSelectio
 		}
 		out = append(out, LLMSelection{
 			Provider:        part[:slash],
-			Model:           part[slash+1:],
+			Model:           repairVocabularyMangledModel(part[:slash], part[slash+1:]),
 			ReasoningEffort: primary.ReasoningEffort,
 			MaxTokens:       primary.MaxTokens,
 			Source:          "model_failover",
 		})
 	}
 	return out
+}
+
+// vocabularyMangledInfixes inverts the desk infixes the V1→V2 vocabulary
+// rule rewrote in every stored leaf until 2026-11-05 (V2 infix, V1 infixes).
+var vocabularyMangledInfixes = [][2]string{
+	{"-management-", "-super-"},
+	{"-engineering-", "-co-super-"},
+	{"-engineering-", "-cosuper-"},
+	{"-research-", "-researcher-"},
+}
+
+// repairVocabularyMangledModel maps a model id the vocabulary rule rewrote
+// back to the catalog id it came from. Until 2026-11-05 that rule rewrote
+// every stored leaf with a desk infix, so a run record stored then names
+// "nvidia/nemotron-3.5-management-vl:free" for the catalog's
+// "nvidia/nemotron-3.5-super-vl:free"
+// (problems/vocab-infix-rewrite-mangles-model-ids-2026-11-05.md). A model
+// the catalog lists, a provider it does not list, and a model whose inverse
+// is not catalogued pass through unchanged.
+func repairVocabularyMangledModel(provider, model string) string {
+	if model == "" || !modelcatalog.ProviderCatalogued(provider) {
+		return model
+	}
+	if _, ok := modelcatalog.Lookup(provider, model); ok {
+		return model
+	}
+	for _, pair := range vocabularyMangledInfixes {
+		if !strings.Contains(model, pair[0]) {
+			continue
+		}
+		candidate := strings.ReplaceAll(model, pair[0], pair[1])
+		if _, ok := modelcatalog.Lookup(provider, candidate); ok {
+			return candidate
+		}
+	}
+	return model
 }
 
 func metadataStringValue(metadata map[string]any, key string) string {
