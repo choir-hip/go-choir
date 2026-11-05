@@ -19,8 +19,12 @@
  *   POST   /api/platform/publications/{id}/proposals — submit reader derivative proposal
  */
 
-import { fetchWithRenewal } from './auth.js';
+import { fetchWithRenewal as renewingFetch } from './auth.js';
+import { withAppIdentity } from './app-identity.js';
 import { withDesktopSelector } from './desktop-selector.js';
+
+// Every call names the Texture app (MA3.10).
+const fetchWithRenewal = (url, options = {}) => renewingFetch(url, withAppIdentity('texture', options));
 
 function texturePath(path) {
   return `/api/texture${path}`;
@@ -140,7 +144,7 @@ export async function createRevision(docId, { content, bodyDoc, sourceEntities, 
   }
   const document = await getDocument(docId);
   if (document?.trajectory_id) {
-    const lifecycleRes = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(document.trajectory_id)}`, {
+    const lifecycleRes = await fetchWithRenewal(`/api/texture/lifecycle/${encodeURIComponent(document.trajectory_id)}`, {
       method: 'GET',
     });
     if (!lifecycleRes.ok) {
@@ -280,7 +284,7 @@ export async function cancelAgentRevision(docId, options = {}) {
   }
   // The summary view is a single-object read; the full lifecycle snapshot
   // scans the whole computer and took 9-18 s on long-lived computers.
-  const summaryResponse = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}?view=summary`, { method: 'GET' });
+  const summaryResponse = await fetchWithRenewal(`/api/texture/lifecycle/${encodeURIComponent(trajectoryId)}?view=summary`, { method: 'GET' });
   if (!summaryResponse.ok) {
     await decodeError(summaryResponse, `Lifecycle summary failed (${summaryResponse.status})`);
   }
@@ -294,7 +298,7 @@ export async function cancelAgentRevision(docId, options = {}) {
     throw new Error('Lifecycle snapshot lacks cancellation preconditions');
   }
   const commandId = pending?.idempotency_key || options.commandId || `desktop-cancel:${trajectoryId}:${expectedVersion}:${expectedHead}`;
-  const res = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}/cancel`, {
+  const res = await fetchWithRenewal(`/api/texture/lifecycle/${encodeURIComponent(trajectoryId)}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

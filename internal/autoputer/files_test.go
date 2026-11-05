@@ -435,3 +435,48 @@ func TestFileByPathRejectsUnsupportedMethods(t *testing.T) {
 }
 
 // --- End-to-end workflow test ---
+
+// MA3.10: the owner's mailbox is the Mail agent's, not a file of the Files app.
+func TestFilesRouteDoesNotReachTheMailbox(t *testing.T) {
+	fh, root := setupFileTest(t)
+	os.MkdirAll(filepath.Join(root, "mail", "new"), 0o755)
+	os.WriteFile(filepath.Join(root, "mail", "new", "m1"), []byte("From: a@example.com"), 0o644)
+	os.WriteFile(filepath.Join(root, "readme.txt"), []byte("hello"), 0o644)
+
+	w := httptest.NewRecorder()
+	fh.HandleListRoot(w, authRequest(http.MethodGet, "/api/files"))
+	var entries []FileEntry
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name == "mail" {
+			t.Fatalf("root listing shows mail/: %v", entries)
+		}
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %v, want only readme.txt", entries)
+	}
+	for _, p := range []string{"/api/files/mail", "/api/files/mail/new", "/api/files/mail/new/m1", "/api/files/./mail/new/m1", "/api/files/x/../mail/new/m1"} {
+		w := httptest.NewRecorder()
+		fh.HandleFileByPath(w, authRequest(http.MethodGet, p))
+		if w.Code != http.StatusForbidden {
+			t.Errorf("GET %s = %d, want 403", p, w.Code)
+		}
+	}
+	del := httptest.NewRecorder()
+	fh.HandleFileByPath(del, authRequest(http.MethodDelete, "/api/files/mail/new/m1"))
+	if del.Code != http.StatusForbidden {
+		t.Errorf("DELETE in mail/ = %d, want 403", del.Code)
+	}
+	if _, err := os.Stat(filepath.Join(root, "mail", "new", "m1")); err != nil {
+		t.Errorf("mailbox file gone: %v", err)
+	}
+	// A file named like the mailbox deeper in the tree is an ordinary file.
+	os.MkdirAll(filepath.Join(root, "docs", "mail"), 0o755)
+	ok := httptest.NewRecorder()
+	fh.HandleFileByPath(ok, authRequest(http.MethodGet, "/api/files/docs/mail"))
+	if ok.Code != http.StatusOK {
+		t.Errorf("docs/mail = %d, want 200", ok.Code)
+	}
+}

@@ -427,3 +427,33 @@ func TestRouteRefusesABadObjectID(t *testing.T) {
 		t.Fatalf("%d objects written under bad ids", n)
 	}
 }
+
+// MA3.10: the registered package-objects route is gated by app identity: it
+// serves the package's own app and refuses another package or an undeclared
+// caller before anything is read.
+func TestAppPackageObjectsRouteRefusesOtherApps(t *testing.T) {
+	mux := http.NewServeMux()
+	RegisterAppPackageObjectRoutes(muxAdapter{mux}, nil, "computer-a")
+	for who, want := range map[string]int{"other": http.StatusForbidden, "": http.StatusForbidden} {
+		req := httptest.NewRequest(http.MethodGet, "/api/app-packages/notes/objects/note", nil)
+		if who != "" {
+			req.Header.Set("X-Choir-App", who)
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("caller %q = %d, want %d", who, rec.Code, want)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/app-packages/notes/objects/note", nil)
+	req.Header.Set("X-Choir-App", "notes")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code == http.StatusForbidden {
+		t.Errorf("the owning package was refused by the app gate")
+	}
+}
+
+type muxAdapter struct{ *http.ServeMux }
+
+func (m muxAdapter) HandleFunc(p string, h http.HandlerFunc) { m.ServeMux.HandleFunc(p, h) }

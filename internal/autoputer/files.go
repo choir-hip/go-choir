@@ -120,6 +120,12 @@ func (fh *FilesHandler) resolvePath(relativePath string) (string, error) {
 	rel := strings.TrimLeft(relativePath, "/")
 	cleaned := filepath.Clean(rel)
 
+	// The owner's mailbox is the Mail agent's custody, not a file of the Files
+	// app (modular plan 8.4, MA3.10): no Files verb reaches it.
+	if first, _, _ := strings.Cut(cleaned, string(filepath.Separator)); first == ownerfiles.MailDir {
+		return "", fmt.Errorf("the mailbox is not a file of the Files app")
+	}
+
 	// filepath.Join with a cleaned relative path will always produce a path
 	// under root. But if cleaned starts with "..", Join will walk up. Check
 	// for that explicitly.
@@ -285,6 +291,9 @@ func (fh *FilesHandler) listDirectory(w http.ResponseWriter, dirPath string) {
 
 	var fileEntries []FileEntry
 	for _, entry := range entries {
+		if dirPath == fh.rootDir && entry.Name() == ownerfiles.MailDir {
+			continue // the mailbox is the Mail agent's, not the Files app's
+		}
 		info, err := entry.Info()
 		if err != nil {
 			continue // skip entries we can't stat

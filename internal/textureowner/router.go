@@ -3,6 +3,8 @@ package textureowner
 import (
 	"net/http"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 )
 
 const (
@@ -27,6 +29,13 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	case relatedReviewPath:
 		h.HandleTextureRelatedReview(w, r)
+		return
+	}
+	if strings.HasPrefix(path, agentcore.TextureLifecyclePathPrefix) {
+		// The lifecycle and engineering-evidence projections the Texture UI
+		// reads (MA3.10): Texture serves them; the UI no longer calls the
+		// owner root /api/trajectories.
+		agentcore.NewAPIHandler(h.Core).ServeTextureLifecycleProjection(w, r)
 		return
 	}
 	if strings.HasPrefix(path, textureRevisionsPathPrefix) {

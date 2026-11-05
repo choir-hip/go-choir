@@ -1,4 +1,9 @@
-import { fetchWithRenewal } from './auth.js';
+import { fetchWithRenewal as renewingFetch } from './auth.js';
+import { withAppIdentity, withAppQuery } from './app-identity.js';
+
+// Lifecycle is read through Texture's projection endpoints and every call names
+// the Texture app (MA3.10).
+const fetchWithRenewal = (url, options = {}) => renewingFetch(url, withAppIdentity('texture', options));
 
 const DURABLE_WORK_SCHEMA = 'choir.durable_work.v1';
 
@@ -14,7 +19,7 @@ export async function getLifecycleSnapshot(trajectoryId) {
   if (!trajectoryId) {
     throw new Error('Trajectory ID is required');
   }
-  const response = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}`, { method: 'GET' });
+  const response = await fetchWithRenewal(`/api/texture/lifecycle/${encodeURIComponent(trajectoryId)}`, { method: 'GET' });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.reason || error.error || `Lifecycle snapshot failed (${response.status})`);
@@ -85,7 +90,7 @@ export async function observeLifecycle(trajectoryId, handlers = {}, options = {}
   };
 
   const connect = async (after) => {
-    const es = new EventSource(`/api/trajectories/${encodeURIComponent(trajectoryId)}/stream?after=${after}`, { withCredentials: true });
+    const es = new EventSource(withAppQuery('texture', `/api/texture/lifecycle/${encodeURIComponent(trajectoryId)}/stream?after=${after}`), { withCredentials: true });
     stream = es;
     const gate = attach(es);
     try {

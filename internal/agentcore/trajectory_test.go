@@ -996,3 +996,36 @@ func TestTrajectorySummaryViewHidesNonPublicCancellation(t *testing.T) {
 		t.Fatalf("summary offered a non-public intent: %+v err=%v", summary.PendingCancellation, err)
 	}
 }
+
+// MA3.10: the Texture projection path reaches the same lifecycle handlers as
+// the owner root, with escaped ids intact.
+func TestTextureLifecycleProjectionDispatchesLikeTheOwnerRoot(t *testing.T) {
+	h := &APIHandler{}
+	do := func(method, target string, authed bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, nil)
+		if authed {
+			req.Header.Set("X-Authenticated-User", "owner")
+		}
+		rec := httptest.NewRecorder()
+		h.ServeTextureLifecycleProjection(rec, req)
+		return rec
+	}
+	if got := do(http.MethodGet, "/api/texture/lifecycle/t/capsule-evidence/a?attempt=1", false).Code; got != http.StatusUnauthorized {
+		t.Fatalf("unauth = %d", got)
+	}
+	if got := do(http.MethodPost, "/api/texture/lifecycle/t/capsule-evidence/a?attempt=1", true).Code; got != http.StatusMethodNotAllowed {
+		t.Fatalf("post capsule-evidence = %d, want 405", got)
+	}
+	if got := do(http.MethodGet, "/api/texture/lifecycle/t/capsule-evidence/a?attempt=01", true).Code; got != http.StatusBadRequest {
+		t.Fatalf("noncanonical attempt = %d, want 400", got)
+	}
+	if got := do(http.MethodGet, "/api/texture/lifecycle/", true).Code; got != http.StatusNotFound {
+		t.Fatalf("empty = %d, want 404", got)
+	}
+	if got := do(http.MethodGet, "/api/texture/other/x", true).Code; got != http.StatusNotFound {
+		t.Fatalf("foreign prefix = %d, want 404", got)
+	}
+	if id, ok := trajectoryCancelIDFromPath("/api/trajectories/a%2Fb/cancel"); !ok || id != "a/b" {
+		t.Fatalf("cancel path with an escaped id = %q %v", id, ok)
+	}
+}

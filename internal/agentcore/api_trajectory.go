@@ -445,3 +445,41 @@ func (h *APIHandler) writeTrajectorySummary(w http.ResponseWriter, r *http.Reque
 	}
 	writeAPIJSON(w, http.StatusOK, summary)
 }
+
+// TextureLifecyclePathPrefix is where Texture, the custodian of the owner's
+// documents, serves the lifecycle projections its UI reads (MA3.10): the
+// lifecycle snapshot, summary, event page and stream of a trajectory, Cancel,
+// and the engineering capsule evidence bound to it. /api/trajectories stays
+// the owner root (modular plan 8.4, row 6.2-9); the Texture UI no longer
+// calls it.
+const TextureLifecyclePathPrefix = "/api/texture/lifecycle/"
+
+// ServeTextureLifecycleProjection answers a /api/texture/lifecycle/<tail>
+// request with the lifecycle handler that owns <tail> under /api/trajectories.
+// The projection is the same bounded read the owner root serves; what differs
+// is the caller's route: the Texture UI reaches lifecycle and engineering
+// evidence only through the Texture-custodian endpoints.
+func (h *APIHandler) ServeTextureLifecycleProjection(w http.ResponseWriter, r *http.Request) {
+	escaped := r.URL.EscapedPath()
+	if !strings.HasPrefix(escaped, TextureLifecyclePathPrefix) {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
+		return
+	}
+	tail := strings.TrimPrefix(escaped, TextureLifecyclePathPrefix)
+	if strings.Trim(tail, "/") == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
+		return
+	}
+	rewritten := "/api/trajectories/" + tail
+	unescaped, err := url.PathUnescape(rewritten)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle route"})
+		return
+	}
+	clone := r.Clone(r.Context())
+	u := *r.URL
+	u.Path = unescaped
+	u.RawPath = rewritten
+	clone.URL = &u
+	h.HandleTrajectoryDetail(w, clone)
+}

@@ -219,7 +219,7 @@ export function hydrateEmbedIdentity(root: any, fetchFn: (url: string, init?: an
     const key = `${computerID}\u0000${operationID}`;
     let pending = identityCache.get(key);
     if (!pending) {
-      pending = fetchFn(evidenceListingPath(computerID, operationID), { credentials: 'same-origin' })
+      pending = fetchFn(evidenceListingPath(computerID, operationID), { credentials: 'same-origin', headers: { 'X-Choir-App': 'texture' } })
         .then(async (res: any) => ({ status: res.status, listing: res.ok ? await res.json() : undefined }))
         .catch(() => ({ status: 0 }));
       identityCache.set(key, pending);

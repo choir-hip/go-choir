@@ -30,7 +30,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
@@ -651,13 +650,6 @@ func Run() {
 	RegisterAppPackageObjectRoutes(s, db, cfg.ComputerID)
 	RegisterFileObjectRoutes(s, fileObjectRecorder)
 	RegisterFileSyncRoute(s, fileSyncService)
-	maildir, err := NewMaildir(filepath.Join(filesRoot, ownerfiles.MailDir))
-	if err != nil {
-		log.Printf("autoputer: init maildir: %v", err)
-	} else {
-		RegisterMailRoutes(s, maildir)
-	}
-
 	// Install the per-profile tool registries.
 	if err := rt.Runtime.InstallDefaultAgentTools(); err != nil {
 		boot.fatalf("autoputer: install default agent tools: %v", err)

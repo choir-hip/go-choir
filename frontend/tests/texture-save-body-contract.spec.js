@@ -35,7 +35,7 @@ async function captureRevisionBody(args, document = { doc_id: 'doc-1' }) {
     if (method === 'GET' && String(url) === '/api/texture/documents/doc-1') {
       return new Response(JSON.stringify(document), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    if (method === 'GET' && String(url).startsWith('/api/trajectories/')) {
+    if (method === 'GET' && String(url).startsWith('/api/texture/lifecycle/')) {
       return new Response(JSON.stringify({ trajectory: { lifecycle_version: 7 }, current_document_head: { revision_id: 'rev-head' } }), { status: 200 });
     }
     if (method === 'POST' && String(url) === '/api/texture/documents/doc-1/revisions') {

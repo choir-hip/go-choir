@@ -3,6 +3,7 @@ package apihandler
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/routekinds"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
@@ -177,4 +179,94 @@ func registeredRouteRespondsGET(t *testing.T, srv *server.Server, path string) (
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	return w.Code != http.StatusNotFound
+}
+
+// MA3.10: a route test per app. Every row of the route-to-kind table is a
+// registered route, a foreign call to it is counted (advisory for built-in
+// kinds) and served, and the owning app's call is not counted.
+func TestRouteTableAppsAreRegisteredAndGated(t *testing.T) {
+	srv := server.NewServer("apihandler-routekinds-test", "0")
+	registerRoutesForTest(t, srv, false)
+
+	type app struct{ owner, pattern, path string }
+	var apps []app
+	for _, row := range routekinds.Table {
+		if row.PackageSegment {
+			continue // registered by the autoputer with the package objects
+		}
+		for _, p := range row.Patterns {
+			path := p
+			if strings.HasSuffix(p, "/") {
+				path = p + "probe"
+			}
+			apps = append(apps, app{row.Owner, p, path})
+		}
+	}
+	for _, a := range apps {
+		routekinds.ResetCounts()
+		for _, who := range []string{a.owner, "stranger", ""} {
+			req := httptest.NewRequest(http.MethodGet, a.path, nil)
+			if who != "" {
+				req.Header.Set(routekinds.AppHeader, who)
+			}
+			rec := httptest.NewRecorder()
+			func() {
+				defer func() { _ = recover() }()
+				srv.ServeHTTP(rec, req)
+			}()
+			if rec.Code == http.StatusForbidden && who != a.owner {
+				t.Errorf("%s (%s): built-in route refused %q in the advisory phase", a.pattern, a.owner, who)
+			}
+		}
+		got := routekinds.Counts()
+		if got[a.pattern+"|stranger|wrong_app"] != 1 || got[a.pattern+"|undeclared|undeclared_app"] != 1 || len(got) != 2 {
+			t.Errorf("%s (%s): counts = %v, want exactly one wrong_app and one undeclared_app", a.pattern, a.owner, got)
+		}
+	}
+}
+
+// The Texture lifecycle projections answer under /api/texture/lifecycle/ and
+// share the owner root's authentication.
+func TestTextureLifecycleProjectionRoutes(t *testing.T) {
+	srv := server.NewServer("apihandler-texture-lifecycle-test", "0")
+	registerRoutesForTest(t, srv, false)
+	for _, path := range []string{
+		"/api/texture/lifecycle/t1",
+		"/api/texture/lifecycle/t1?view=summary",
+		"/api/texture/lifecycle/t1/events",
+		"/api/texture/lifecycle/t1/capsule-evidence/a1?attempt=1",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(routekinds.AppHeader, "texture")
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET %s unauthenticated = %d, want 401 from the lifecycle handler (not 404)", path, rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/texture/lifecycle/", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("empty trajectory = %d, want 404", rec.Code)
+	}
+}
+
+// The Texture UI reads lifecycle and engineering evidence only through the
+// Texture projection endpoints, and names itself on those calls.
+func TestTextureUIUsesProjectionEndpoints(t *testing.T) {
+	for _, f := range []string{"texture.js", "lifecycle.js", "TextureEditor.svelte", "texture-embeds.ts"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "lib", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "/api/trajectories") {
+			t.Errorf("%s still calls the owner root /api/trajectories; use /api/texture/lifecycle/ (MA3.10)", f)
+		}
+	}
+	for _, f := range []string{"texture.js", "lifecycle.js"} {
+		raw, _ := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "lib", f))
+		if !strings.Contains(string(raw), "app-identity") {
+			t.Errorf("%s does not name its app on its calls", f)
+		}
+	}
 }

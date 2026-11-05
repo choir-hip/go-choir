@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/routekinds"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -73,7 +74,7 @@ func RegisterAppPackageObjectRoutes(s interface {
 }, st appPackageObjectStore, computerID string) {
 	apppackage.RegisterFirstPartyAtBoot()
 	h := &appPackageObjects{store: st, computerID: strings.TrimSpace(computerID)}
-	s.HandleFunc(appPackageObjectsPrefix, h.serve)
+	s.HandleFunc(appPackageObjectsPrefix, routekinds.Gate(routekinds.PackageRoutePrefix, h.serve))
 }
 
 func writePackageJSON(w http.ResponseWriter, status int, v any) {

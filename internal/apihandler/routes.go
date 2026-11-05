@@ -7,6 +7,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
+	"github.com/yusefmosiah/go-choir/internal/routekinds"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
@@ -27,11 +28,11 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
 	s.HandleFunc("/api/costs", api.HandleCosts)
 	s.HandleFunc("/api/plugins/state", api.HandlePluginsState)
-	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
-	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
-	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)
-	s.HandleFunc("/api/autopaper/sources/schedules", h.HandleSourceSchedules)
-	s.HandleFunc("/api/autopaper/events", h.HandleWorldEvents)
+	s.HandleFunc("/api/podcast/subscriptions/refresh", routekinds.Gate("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh))
+	s.HandleFunc("/api/podcast/subscriptions", routekinds.Gate("/api/podcast/subscriptions", h.HandlePodcastSubscriptions))
+	s.HandleFunc("/api/podcast/search", routekinds.Gate("/api/podcast/search", h.HandlePodcastSearch))
+	s.HandleFunc("/api/autopaper/sources/schedules", routekinds.Gate("/api/autopaper/sources/schedules", h.HandleSourceSchedules))
+	s.HandleFunc("/api/autopaper/events", routekinds.Gate("/api/autopaper/events", h.HandleWorldEvents))
 	s.HandleFunc("/api/computer-settings", h.HandleComputerSettings)
 	s.HandleFunc("/api/calibration", h.HandleCalibration)
 	s.HandleFunc("/api/calibration/settlements", h.HandleCalibrationSettlements)
@@ -46,8 +47,8 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/assets/", h.HandleAssets)
 	s.HandleFunc("/api/packages/", h.HandlePackages)
 	s.HandleFunc("/api/computers/", h.HandleComputersRouter)
-	s.HandleFunc("/api/trajectories", h.HandleTrajectoriesRoot)
-	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)
+	s.HandleFunc("/api/trajectories", routekinds.Gate("/api/trajectories", h.HandleTrajectoriesRoot))
+	s.HandleFunc("/api/trajectories/", routekinds.Gate("/api/trajectories/", h.HandleTrajectoryDetail))
 	s.HandleFunc("/api/acceptance/execution-identity", h.HandleExecutionIdentity)
 	s.HandleFunc("/api/runtime/observability", h.HandleGuestObservability)
 	s.HandleFunc("/api/leases", h.HandleLeases)
@@ -88,6 +89,6 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	// All routes are dispatched from a single prefix handler that inspects
 	// the URL path and method to route to the correct handler. This avoids
 	// ambiguity with Go's ServeMux prefix matching.
-	s.HandleFunc("/api/texture/documents", texture.HandleTextureDocumentsRoot)
-	s.HandleFunc("/api/texture/", texture.HandleTextureRouter)
+	s.HandleFunc("/api/texture/documents", routekinds.Gate("/api/texture/documents", texture.HandleTextureDocumentsRoot))
+	s.HandleFunc("/api/texture/", routekinds.Gate("/api/texture/", texture.HandleTextureRouter))
 }

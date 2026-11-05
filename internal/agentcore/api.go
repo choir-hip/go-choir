@@ -26,6 +26,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/routekinds"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
@@ -933,6 +934,9 @@ type guestObservabilityResponse struct {
 	// has seen since boot, keyed "kind|declared reader|reason" (MA3.3): the
 	// cross reads of the custody section show up here as wrong_reader.
 	ObjectGraphReaderGate *writerGateObservability `json:"objectgraph_reader_gate,omitempty"`
+	// RouteAppGate is the route layer's app identity check (MA3.10): calls to
+	// an app's routes from another app or from none, counted.
+	RouteAppGate *writerGateObservability `json:"route_app_gate,omitempty"`
 	// DisclosureGate is the disclosure path's mode for built-in desks and the
 	// decisions it has made since boot, keyed "sink|class|decision|outcome"
 	// (MA3.6): a built-in desk's ask or deny shows as outcome observed, a
@@ -1008,6 +1012,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		ObjectGraphReaderGate: &writerGateObservability{
 			Mode: objectgraph.CurrentReaderGateMode().String(), Counts: objectgraph.ReaderGateCounts(),
 		},
+		RouteAppGate: &writerGateObservability{Mode: "observe", Counts: routekinds.Counts()},
 		DisclosureGate: &writerGateObservability{
 			Mode: disclosure.CurrentMode().String(), Counts: disclosure.Counts(),
 		},
