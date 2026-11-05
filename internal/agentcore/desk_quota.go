@@ -108,7 +108,7 @@ func (rt *Runtime) admitDeskWake(profile string, now time.Time) error {
 		return nil
 	}
 	limit := rt.limitsForDesks().WakesPerHour
-	if held, ok := rt.deskRates.take("wake:"+profile, 1, limit, now); !ok {
+	if held, ok := rt.deskRates.take("wake:"+canonicalDeskName(profile), 1, limit, now); !ok {
 		return fmt.Errorf("%w: desk %s started %d runs in the last hour (at most %d)", ErrDeskWakeRate, profile, held, limit)
 	}
 	return nil

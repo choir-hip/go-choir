@@ -125,6 +125,15 @@ func objectIntent(in yaegikernel.StagedIntent) bool {
 	return in.Kind == yaegikernel.IntentObjectPut || in.Kind == yaegikernel.IntentObjectRetract
 }
 
+// The objects and bytes check below reads the owner's usage and then the
+// reducer commits, with nothing between that serializes the two. The guarantee
+// that two cells of one desk never pass a nearly full quota together lives in
+// the desk session: one agent id is one session lease, and the cell's
+// evaluation and its commit both run inside it (tools_desk.go, acquire and the
+// commit under it). A second committer for one desk, or a per-instance agent
+// identity for app desks, must add a per-desk commit lock here first. Owner
+// route writes are not counted against a desk's bound by design.
+//
 // preflightObjectIntents holds a cell's object writes against the desk's
 // quotas before anything commits (MA3.9): the live objects and stored bytes the
 // owner's package kinds would hold afterwards, and the writes in the rolling
@@ -147,7 +156,8 @@ func (r *rlmCallReduction) preflightObjectIntents(ctx context.Context, intents [
 	if err != nil {
 		return fmt.Errorf("reduce: %s %s: %w", writes[0].Kind, writes[0].LocalID, err)
 	}
-	limits := r.rt().limitsForDesks()
+	rt := r.rt()
+	limits := rt.limitsForDesks()
 	readCtx := objectgraph.WithReader(ctx, first.writer)
 	var kinds []objectgraph.ObjectKind
 	for _, reg := range objectgraph.PackageKindsOf(first.pkg) {
@@ -203,7 +213,10 @@ func (r *rlmCallReduction) preflightObjectIntents(ctx context.Context, intents [
 	if bytes > limits.Bytes {
 		return fmt.Errorf("reduce: %w: desk %s would keep %d bytes of objects (at most %d); Retract or shrink some first", ErrDeskQuota, role, bytes, limits.Bytes)
 	}
-	if held, ok := r.rt().deskRates.take("write:"+role, len(writes), limits.WritesPerHour, time.Now()); !ok {
+	if rt == nil {
+		return errors.New("reduce: object writes need the runtime")
+	}
+	if held, ok := rt.deskRates.take("write:"+canonicalDeskName(role), len(writes), limits.WritesPerHour, time.Now()); !ok {
 		return fmt.Errorf("reduce: %w: desk %s made %d object writes in the last hour (at most %d)", ErrDeskQuota, role, held, limits.WritesPerHour)
 	}
 	return nil

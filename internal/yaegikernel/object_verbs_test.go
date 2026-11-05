@@ -56,3 +56,24 @@ func TestOnlyAppDesksHoldTheObjectVerbs(t *testing.T) {
 		t.Fatal("Get dispatches no action")
 	}
 }
+
+// MA6.3: the object verbs' payload fields are bounded.
+func TestObjectVerbPayloadsAreBounded(t *testing.T) {
+	long := strings.Repeat("a", 129)
+	for name, c := range map[string]struct {
+		action  BrokerAction
+		payload string
+	}{
+		"get kind":   {ActionObjectGet, `{"kind":"` + long + `","id":"x"}`},
+		"get id":     {ActionObjectGet, `{"kind":"k","id":"` + long + `"}`},
+		"list kind":  {ActionObjectList, `{"kind":"` + long + `"}`},
+		"list limit": {ActionObjectList, `{"kind":"k","limit":201}`},
+	} {
+		if err := ValidatePayload(c.action, []byte(c.payload)); err == nil {
+			t.Errorf("%s past its bound was accepted", name)
+		}
+	}
+	if err := ValidatePayload(ActionObjectList, []byte(`{"kind":"k","limit":200}`)); err != nil {
+		t.Errorf("a list at the bound: %v", err)
+	}
+}
