@@ -235,14 +235,12 @@ boundaries:
 now:
   status: working
   slice: >-
-    Phase 0 close-out, then MA1.1 (delete the emit and message channels:
-    ActionEmit, ActionMessage, the emit payloads and stream, deskEmitSignal,
-    IntentMessage and its reducer branches, plus the receive path Devin's
-    amendment 1 lists; bump ProtocolVersion). The d0-protocol branch is not
-    merged; MA1.4 re-cuts it without MessageTargets or Addresses after MA1.3,
-    MA1.5 and MA1.6, and its tooling may be cherry-picked beside MA1.1.
-  source_ref: origin/main 9b5eb066b; modplan HEAD 84b99adbc (unpushed)
-  deploy_identity: staging 93706d53c1cbd170529a50466add51f8a586599e
+    Phases 1 and 2 closed 2026-11-05 04:31Z (every MA1 and MA2 slice on main,
+    staging 4b8cf26ad). Now: land 222d946f8 (desks see their own inert count)
+    after the committed baseline, then the Phase 3 prediction round (plan
+    rule 7), then Phase 3 custody and labels from MA3.1.
+  source_ref: origin/main 4b8cf26ad
+  deploy_identity: staging 4b8cf26ad35918109d7335a06185b284728151f2
   candidate:
     id: none
     state: none
@@ -295,25 +293,26 @@ now:
     owner_ratification_ref: MA0.5, owner 2026-11-04 ("Yes I sign off"), after the walkthrough that settled R39 to R42 and removed tool servers
   belief:
     believed_state: >-
-      The plan is accepted by Devin (R0-08) with all amendments and structural
-      fixes folded (5b61fea72, 48d47ba83); this goal file is accepted by Devin
-      (R0b-01) with its amendments folded. The gVisor evidence is in (runsc outer, cold builds
-      1.5x). Nothing is built; d0-protocol bakes the deleted allowlists.
-      Staging runs 93706d53c; self-development is paused.
+      Desks talk only through records; one data-driven resolver routes them;
+      requests carry p_success, weight and settler; sub-calls and delegations
+      are scored Casts with a blind asynchronous judge; inertness is counted;
+      the desk protocol 1.0.0 is locked with every registry authority field;
+      a final Report cannot close a round over an unread Cast. Security epoch
+      51. The sub-call path is not exercised on d@e (no prompt teaches
+      choir.Research); every typed request on d@e is inert (no typed question).
     main_uncertainty: >-
-      whether the owner's walkthrough changes Phase 1's shape (typed request
-      vocabulary, open question 3; engineering casts, open question 5) and
-      whether MA1.5's judge settler can run before the kernel service of
-      MA2.1 and MA3.6 exists
-    next_observation: MA1.1's citer grep and open question 11 evidence; MA0.6 committed before MA1.3
+      whether custody enforcement (Phase 3) breaks desks on paths d@e never
+      exercises, and whether the judge should settle desk-to-desk Casts
+      (owner question d)
+    next_observation: the Phase 3 prediction round committed, then MA3.1's custodian assignment against the writer registry
   blocker_or_risk: >-
-    MA0.5 signed off (2026-11-04). MA0.7: round 0b of the precommit ledger
-    (84b99adbc) is Phase 1's round, committed before MA1.1. Token
-    budget: Sonnet builders, Opus orchestrates.
+    Owner questions open (none blocking): (a) other publishers' front-end
+    packages before the iframe sandbox, (b) the 19 hidden v1 releases,
+    (d) judge on desk-to-desk Casts. Stranded d@e trajectory 5c725f71 needs
+    an owner revise. MA1.4 residuals N5, N6, N8, N9.
   next_action: >-
-    Running in parallel: MA1.1 (Sonnet builder, worktree go-choir-ma11),
-    MA1.7 (doctrine, go-choir-ma17), MA0.6 (pre-registration, go-choir-ma06).
-    Then MA1.2, MA1.3 (after MA0.6 lands), MA1.5, MA1.6, MA1.4.
+    Land 222d946f8; author and commit the Phase 3 prediction round; start
+    MA3.1 (custodian per WriterRuntime kind) with a Sonnet builder.
 
 receipts:
   - id: P0_plan_review
