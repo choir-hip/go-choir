@@ -32,6 +32,7 @@
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
+  import { links } from './lib/services/links';
   import { bindThemeHost, publishTheme, rememberWantedTheme } from './lib/services/theme';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
@@ -271,6 +272,9 @@
         },
       };
     }
+    // An app a package declares a link for (contributes.links): its parameters make the launch.
+    const linked = links.resolve(window.location.search || '');
+    if (linked) return linked;
     if (appId) {
       clearConsumedAppIntentFromURL();
     }
@@ -290,6 +294,7 @@
     url.searchParams.delete('title');
     url.searchParams.delete('intake');
     url.searchParams.delete('intake_id');
+    for (const name of links.consumedParams()) url.searchParams.delete(name);
     const next = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', next || '/');
   }

@@ -130,6 +130,53 @@ function normalizeKey(key) {
   return main ? [...['Mod', 'Alt', 'Shift'].filter((m) => mods.has(m)), main].join('+') : '';
 }
 
+// contributes.links: the rules of services/links.ts (L1 to L6), as data.
+const LINK_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+const LINK_CONTEXT_KEY = /^[a-z][A-Za-z0-9_]{0,31}$/;
+const LINK_RESERVED = new Set(['app', 'title', 'doc', 'doc_id']);
+function checkLinks(contributes, owner, where) {
+  if (contributes.links === undefined) return;
+  if (!Array.isArray(contributes.links)) {
+    fail(where, 'links must be an array');
+    return;
+  }
+  const apps = new Set();
+  contributes.links.forEach((link, i) => {
+    const at = `${where} links[${i}]`;
+    if (!strictKeys(link, at, ['app', 'params'], ['launch'])) return;
+    if (link.app !== owner) fail(at, `app must be the package's own ("${owner}")`);
+    if (apps.has(link.app)) fail(at, `app "${link.app}" is listed twice`);
+    apps.add(link.app);
+    const names = new Set();
+    if (!Array.isArray(link.params) || link.params.length === 0) fail(at, 'params must list at least one parameter');
+    (Array.isArray(link.params) ? link.params : []).forEach((p, j) => {
+      if (!strictKeys(p, `${at} params[${j}]`, ['name'], ['required', 'context'])) return;
+      if (typeof p.name !== 'string' || !LINK_NAME.test(p.name)) fail(`${at} params[${j}]`, 'name must be a lowercase word');
+      else if (LINK_RESERVED.has(p.name)) fail(`${at} params[${j}]`, `"${p.name}" is a parameter the shell owns`);
+      else if (names.has(p.name)) fail(`${at} params[${j}]`, `"${p.name}" is listed twice`);
+      else names.add(p.name);
+      if (p.required !== undefined && typeof p.required !== 'boolean') fail(`${at} params[${j}]`, 'required must be a boolean');
+      if (p.context !== undefined && !(typeof p.context === 'string' && LINK_CONTEXT_KEY.test(p.context))) fail(`${at} params[${j}]`, 'context must be a key word');
+    });
+    if (link.launch === undefined) return;
+    if (!strictKeys(link.launch, `${at} launch`, [], ['windowTitle', 'requireAny', 'context'])) return;
+    const l = link.launch;
+    if (l.windowTitle !== undefined && !str(l.windowTitle)) fail(`${at} launch`, 'windowTitle must be a non-empty string');
+    if (l.requireAny !== undefined && !(Array.isArray(l.requireAny) && l.requireAny.every((n) => names.has(n)))) fail(`${at} launch`, 'requireAny must name declared parameters');
+    if (l.context !== undefined) {
+      if (!isObject(l.context)) fail(`${at} launch`, 'context must be an object');
+      else {
+        for (const [key, value] of Object.entries(l.context)) {
+          if (!LINK_CONTEXT_KEY.test(key)) fail(`${at} launch`, `context key "${key}" is not a key word`);
+          if (typeof value === 'string' && value.startsWith('param:')) {
+            if (!names.has(value.slice(6))) fail(`${at} launch`, `context ${key} reads parameter "${value.slice(6)}", which is not declared`);
+          } else if (!['string', 'number', 'boolean'].includes(typeof value)) fail(`${at} launch`, `context ${key} must be a literal or "param:<name>"`);
+        }
+      }
+    }
+  });
+}
+
 // contributes.themes: { id, file } with the file in the package, JSON, schema 2, the same id.
 // The token, safe-value and contrast rules run when the theme registers (theme.ts) and in tests/theme-contract.spec.js.
 function checkThemes(contributes, dir, where) {
@@ -266,11 +313,12 @@ function checkManifest(manifest, dirName, where, pkgDir) {
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
-  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes'])) {
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links'])) {
     const c = manifest.contributes;
     if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
     checkCommands(c, manifest.name, `${where} contributes`);
     checkThemes(c, pkgDir, `${where} contributes`);
+    checkLinks(c, manifest.name, `${where} contributes`);
   }
   if (manifest.capabilities !== undefined) {
     if (!Array.isArray(manifest.capabilities)) fail(where, 'capabilities must be an array');
