@@ -382,6 +382,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		return engineeringCastPlan{}, err
 	}
 	cast.ParentID = parentID
+	stampInertness(&cast) // the parent edge is a named dependency
 	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast, Rebase: rebaseBase != "", SourceWarning: sourceWarning}, nil
 }
 

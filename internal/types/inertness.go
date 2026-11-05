@@ -166,7 +166,7 @@ func hasFalsifier(rec CommitmentRecord, kind string) bool {
 			}
 		}
 		for _, q := range rec.Prediction.Questions {
-			if len(q.Answers) >= 2 {
+			if len(q.Answers) >= 2 || len(q.Probabilities) >= 2 {
 				return true
 			}
 		}

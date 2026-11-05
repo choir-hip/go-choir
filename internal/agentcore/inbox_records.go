@@ -306,6 +306,17 @@ func recordsIntent(in yaegikernel.StagedIntent) bool {
 // addressed record. hasOpenRound says whether the sender is the recipient
 // of an open round in this conversation: only then can a Report be final.
 func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toInbox string, hasOpenRound bool) (types.CommitmentRecord, error) {
+	rec, err := buildInboxRecordForIntent(scope, in, toInbox, hasOpenRound)
+	if err == nil && types.InertKind(rec) != "" {
+		// The inert flags are stamped again once the record is fully
+		// enriched (its Cast body and addressee are set), so the stored
+		// flags match what the detector says of the stored record (MA1.6).
+		stampInertness(&rec)
+	}
+	return rec, err
+}
+
+func buildInboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toInbox string, hasOpenRound bool) (types.CommitmentRecord, error) {
 	rec := commitmentRecordForIntent(scope, in)
 	rec.Inbox = toInbox
 	rec.SenderInbox = outwardSender(scope)
@@ -728,6 +739,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			return nil, fmt.Errorf("reduce: commit records: %w", err)
 		}
 	}
+	// The committed requests (a records-route Cast, a Delegate's task Casts
+	// and a management Cast that opened an engineering assignment) are
+	// offered to the sampled inertness judge; it runs after the cell and
+	// never blocks it (MA1.6).
+	rt.sampleInertness(r.scope.OwnerID, r.scope.ComputerID, req.Records)
 	if req.StoryLibraryHead != nil && committed.StoryLibraryHead > 0 {
 		// A checked open passed: the run has seen the library up to the
 		// head after its own opens, so its next open is not refused by

@@ -279,6 +279,7 @@ func (rt *Runtime) openChildCast(ctx context.Context, parent toolregistry.Execut
 	if err := rt.appendSubCallRecord(context.WithoutCancel(ctx), owner, computer, cast); err != nil {
 		return nil, fmt.Errorf("the call's Cast could not be recorded, so the child did not run: %w", err)
 	}
+	rt.sampleInertness(owner, computer, []types.CommitmentRecord{cast})
 	return &subCallRecorded{cast: cast, owner: owner, comput: computer}, nil
 }
 

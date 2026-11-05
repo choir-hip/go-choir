@@ -58,14 +58,43 @@ type subCallJudge struct {
 	started  chan struct{}
 	model    string
 	answered string
+	// The sampled inertness judge (MA1.6) shares this entry point and fires
+	// on a hash of the record id, so its calls are kept apart: they never
+	// count in calls, states or asked, and never hold or fail. inertHold and
+	// inertStarted hold and signal them for the tests about that judge.
+	inertCalls              int
+	inertStates             []string
+	inertAsked              []map[string]json.RawMessage
+	inertHold, inertStarted chan struct{}
+}
+
+func isInertJudgeCall(questions map[string]json.RawMessage) bool {
+	if len(questions) == 0 {
+		return false
+	}
+	for id := range questions {
+		if !strings.HasSuffix(id, ".contradictable") {
+			return false
+		}
+	}
+	return true
 }
 
 func (j *subCallJudge) Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
 	j.mu.Lock()
-	j.calls++
-	j.states = append(j.states, string(state))
-	j.asked = append(j.asked, questions)
-	hold, started, err := j.hold, j.started, j.err
+	var hold, started chan struct{}
+	var err error
+	if isInertJudgeCall(questions) {
+		j.inertCalls++
+		j.inertStates = append(j.inertStates, string(state))
+		j.inertAsked = append(j.inertAsked, questions)
+		hold, started = j.inertHold, j.inertStarted
+	} else {
+		j.calls++
+		j.states = append(j.states, string(state))
+		j.asked = append(j.asked, questions)
+		hold, started, err = j.hold, j.started, j.err
+	}
 	if j.errFirst > 0 {
 		if j.calls > j.errFirst {
 			err = nil
@@ -120,6 +149,12 @@ func (j *subCallJudge) Judge(ctx context.Context, state json.RawMessage, questio
 	model := firstNonEmpty(j.model, "typesafe/jev-1.13")
 	return json.Marshal(map[string]any{"id": "gen-subcall", "model": model, "answers": answers,
 		"usage": map[string]any{"input_tokens": 900, "output_tokens": 40, "cost": 0.00004}})
+}
+
+func (j *subCallJudge) inertCallCount() int {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.inertCalls
 }
 
 func (j *subCallJudge) callCount() int {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -149,7 +150,7 @@ func TestInertCastStillCommitsAndRunsAndTheJudgeNeverBlocksIt(t *testing.T) {
 	oldSpacing := subCallJudgeSpacing
 	subCallJudgeSpacing = 0
 	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
-	judge := &subCallJudge{hold: make(chan struct{}), started: make(chan struct{}, 1), pick: map[string]string{"p0.contradictable": "no"}}
+	judge := &subCallJudge{inertHold: make(chan struct{}), inertStarted: make(chan struct{}, 1), pick: map[string]string{"p0.contradictable": "no"}}
 	rt.SetCandidateJudge(judge)
 	scope := inertReductionScope(rt, "cell-inert-cast")
 	// Flagged (no falsifier, near-certain) and sampled at the control rate.
@@ -191,11 +192,11 @@ func TestInertCastStillCommitsAndRunsAndTheJudgeNeverBlocksIt(t *testing.T) {
 	}
 	// The judge was asked, asynchronously; release it and read the judgement.
 	select {
-	case <-judge.started:
+	case <-judge.inertStarted:
 	case <-time.After(20 * time.Second):
 		t.Fatal("the sampled judge was never asked")
 	}
-	close(judge.hold)
+	close(judge.inertHold)
 	rt.waitSubCallJudge()
 	j, err := rt.store.GetCommitmentRecord(ctx, scope.OwnerID, scope.ComputerID, types.InertJudgementRecordID(recordID))
 	if err != nil || j == nil || j.SubCall == nil || j.SubCall.Inert == nil {
@@ -240,15 +241,15 @@ func TestInertJudgeSampleIsScoredAgainstTheRules(t *testing.T) {
 	recs := []types.CommitmentRecord{mk(0, true), mk(1, false), mk(2, true), mk(3, false)}
 	rt.sampleInertness(scope.OwnerID, scope.ComputerID, recs)
 	rt.waitSubCallJudge()
-	if judge.callCount() != 1 {
-		t.Fatalf("the sample took %d judge calls, want one", judge.callCount())
+	if judge.inertCallCount() != 1 {
+		t.Fatalf("the sample took %d judge calls, want one", judge.inertCallCount())
 	}
 	for _, banned := range []string{"secretdesk", "secretmodel", "run-9", "0.4123", "doc-9"} {
-		if strings.Contains(judge.states[0], banned) {
-			t.Fatalf("the blind judge saw %q: %s", banned, judge.states[0])
+		if strings.Contains(judge.inertStates[0], banned) {
+			t.Fatalf("the blind judge saw %q: %s", banned, judge.inertStates[0])
 		}
 	}
-	for id, raw := range judge.asked[0] {
+	for id, raw := range judge.inertAsked[0] {
 		if !strings.Contains(string(raw), "Could any plausible outcome have contradicted this prediction") {
 			t.Fatalf("question %s: %s", id, raw)
 		}
@@ -269,8 +270,8 @@ func TestInertJudgeSampleIsScoredAgainstTheRules(t *testing.T) {
 	// A second sample of the same records re-asks nothing.
 	rt.sampleInertness(scope.OwnerID, scope.ComputerID, recs)
 	rt.waitSubCallJudge()
-	if judge.callCount() != 1 {
-		t.Fatalf("judged again: %d calls", judge.callCount())
+	if judge.inertCallCount() != 1 {
+		t.Fatalf("judged again: %d calls", judge.inertCallCount())
 	}
 	_ = s
 }
@@ -304,4 +305,133 @@ func TestInertFlagCannotBeSetOrClearedByACell(t *testing.T) {
 	if len(rec.InertFlags) != 0 {
 		t.Fatalf("a planted flag survived: %v", rec.InertFlags)
 	}
+}
+
+// A stored record's flags are those of the fully enriched record: a Cast
+// whose packet carries a hypothesis criterion and no typed questions is not
+// stamped "no falsifier" (the stamp ran before the Cast body was set).
+func TestInertFlagsAreStampedAfterTheRecordIsEnriched(t *testing.T) {
+	scope := inertReductionScope(&Runtime{}, "cell-enrich")
+	p, w := 0.7, 0.4
+	mk := func(packet string) types.CommitmentRecord {
+		in := yaegikernel.StagedIntent{LocalID: "c1", Kind: yaegikernel.IntentCast, ToDesk: "research:doc-1", Objective: "Verify the migration kept every row",
+			Statement: packet, Req: &types.RequestFields{PSuccess: &p, Weight: &w, Settlement: types.SettlementRecipient}}
+		rec, err := inboxRecordForIntent(scope, in, "research:doc-1", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := types.DetectInertness("", rec, nil); strings.Join(got, ",") != strings.Join(rec.InertFlags, ",") {
+			t.Fatalf("stored flags %v differ from the stored record's %v", rec.InertFlags, got)
+		}
+		return rec
+	}
+	if rec := mk(`{"hypotheses":[{"statement":"s","probability":0.6,"criterion":"row counts match before and after"}]}`); types.HasFlag(rec.InertFlags, types.InertNoFalsifier) {
+		t.Fatalf("a Cast with a criterion is flagged: %v", rec.InertFlags)
+	}
+	if rec := mk(``); !types.HasFlag(rec.InertFlags, types.InertNoFalsifier) {
+		t.Fatalf("a Cast with neither is not flagged: %v", rec.InertFlags)
+	}
+}
+
+// Probabilities-only questions are a falsifier on a Cast, as on a precommit.
+func TestInertCastProbabilitiesOnlyQuestionIsAFalsifier(t *testing.T) {
+	rec := types.CommitmentRecord{RecordID: "c", Kind: types.CommitmentKindDirective, Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast},
+		Prediction: types.CommitmentPrediction{Hypothesis: "x", Questions: []types.TypedQuestion{{Question: "q", Probabilities: map[string]float64{"a": 0.6, "b": 0.4}}}},
+		Addressee:  "research:d"}
+	if types.HasFlag(types.DetectInertness("", rec, nil), types.InertNoFalsifier) {
+		t.Fatal("probabilities-only question not accepted")
+	}
+}
+
+// The sample universe is every request path: a sub-call Cast written by the
+// host (openChildCast) and a records-route Cast can both be picked.
+func TestInertSamplingCoversSubCallAndRecordsRouteCasts(t *testing.T) {
+	// Sub-call Cast: choose a fan-out id whose Cast the sampler picks.
+	f := newSubCallFixture(t, nil)
+	fan := researchFanOut{}
+	for i := 0; ; i++ {
+		fan = researchFanOut{id: fmt.Sprintf("fan-inert-%d", i)}
+		castID := types.SubCallCastRecordID(fan.id, 0)
+		if types.InertJudgeSampled(castID, false) {
+			break
+		}
+	}
+	lineage := researchLineage{ownerID: f.owner}
+	spec := yaegikernel.ResearchChild{Objective: "Find the filing date", PSuccess: fp(0.6), Weight: fp(0.5), Questions: []types.TypedQuestion{subCallYesNo(0.6)}}
+	if _, err := f.rt.openChildCast(context.Background(), f.parent, lineage, spec, fan, "k0"); err != nil {
+		t.Fatal(err)
+	}
+	f.rt.waitSubCallJudge()
+	if _, err := f.s.GetCommitmentRecord(context.Background(), f.owner, f.computer, types.InertJudgementRecordID(types.SubCallCastRecordID(fan.id, 0))); err != nil {
+		t.Fatalf("the sub-call Cast was not judged: %v", err)
+	}
+
+	// Records-route Cast: a management cell's Cast to research commits on the
+	// records route and is offered to the sampler.
+	rt, s := testRuntime(t)
+	judge := &subCallJudge{}
+	rt.SetCandidateJudge(judge)
+	oldSpacing := subCallJudgeSpacing
+	subCallJudgeSpacing = 0
+	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
+	owner, computer := "owner-rr", rt.cfg.ComputerID
+	management := "management:" + owner
+	scope := ReductionScope{FromAgentID: management, DeskAgentID: management, FromRole: agentprofile.Management, ChannelID: management,
+		RunID: "run-rr", OwnerID: owner, ComputerID: computer, CellID: "cell-rr", ModelID: "m"}
+	local := sampledLocalID(scope, yaegikernel.IntentCast, false)
+	rec := types.RunRecord{RunID: "run-rr", AgentID: management, OwnerID: owner, ComputerID: computer, ChannelID: management,
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning}
+	if err := s.CreateRun(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	p, w := 0.6, 0.5
+	in := yaegikernel.StagedIntent{LocalID: local, Kind: yaegikernel.IntentCast, ToDesk: "research:doc-rr", Objective: "Look into the filing",
+		Req: &types.RequestFields{PSuccess: &p, Weight: &w, Settlement: types.SettlementRecipient, Questions: []types.TypedQuestion{subCallYesNo(0.6)}}}
+	r := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &rec}
+	var receipt ReductionReceipt
+	rest, err := r.commitRecordsRoute(testReductionCtx(scope), []yaegikernel.StagedIntent{in}, &receipt)
+	if err != nil || len(rest) != 0 || len(receipt.Intents) != 1 {
+		t.Fatalf("records route: rest %d intents %d err %v", len(rest), len(receipt.Intents), err)
+	}
+	rt.waitSubCallJudge()
+	id := types.InertJudgementRecordID(fmt.Sprintf("%s:%s:%s", scope.CellID, yaegikernel.IntentCast, local))
+	if got, err := s.GetCommitmentRecord(context.Background(), owner, computer, id); err != nil || got == nil {
+		t.Fatalf("the records-route Cast was not judged: %v", err)
+	}
+}
+
+// A large sample is judged in chunks of the sub-call bound, and the
+// prediction text per record is bounded.
+func TestInertJudgeCallIsChunkedAndBounded(t *testing.T) {
+	rt, s := testRuntime(t)
+	oldSpacing := subCallJudgeSpacing
+	subCallJudgeSpacing = 0
+	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
+	judge := &subCallJudge{}
+	rt.SetCandidateJudge(judge)
+	n := subCallJudgeBatchMax*2 + 3
+	var recs []types.CommitmentRecord
+	for i := 0; i < n; i++ {
+		recs = append(recs, types.CommitmentRecord{RecordID: fmt.Sprintf("chunk-%d", i), Kind: types.CommitmentKindDirective,
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast}, EmitterKind: types.CommitmentEmitterAgent,
+			Prediction: types.CommitmentPrediction{Hypothesis: strings.Repeat("long ", 5000)}, PSuccess: fp(0.6), Weight: fp(0.5),
+			Provenance: types.CommitmentProvenance{Desk: "management:o", Origin: types.OriginDeskRun}})
+	}
+	if err := rt.judgeInertness(context.Background(), "owner-ch", "computer-ch", recs); err != nil {
+		t.Fatal(err)
+	}
+	if judge.inertCallCount() != 3 {
+		t.Fatalf("%d judge calls for %d records, want 3", judge.inertCallCount(), n)
+	}
+	for _, q := range judge.inertAsked {
+		if len(q) > subCallJudgeBatchMax {
+			t.Fatalf("a call carried %d questions", len(q))
+		}
+	}
+	for _, st := range judge.inertStates {
+		if len(st) > subCallJudgeBatchMax*(inertPredictionRunes*2+2000) {
+			t.Fatalf("state is %d bytes", len(st))
+		}
+	}
+	_ = s
 }

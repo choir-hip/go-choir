@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -36,6 +37,9 @@ const (
 	inertJudgeQuestionID = "p%d.contradictable"
 	// inertJudgeTimeout bounds one sampled call.
 	inertJudgeTimeout = 2 * time.Minute
+	// inertPredictionRunes bounds the prediction text the judge reads per
+	// record (cost: its input tokens scale with it).
+	inertPredictionRunes = 2000
 )
 
 // inertJudgeQuestionText is the sampled System 1 question.
@@ -110,7 +114,7 @@ func inertJudgeRequest(recs []types.CommitmentRecord) (json.RawMessage, map[stri
 	var questions []yaegikernel.System1Question
 	for i, rec := range recs {
 		ref := fmt.Sprintf("pred-%d", i)
-		contexts[ref] = system1Context{Kind: "prediction", Ref: ref, Text: boundRunes(types.InertPredictionText(rec), subCallReportRunes)}
+		contexts[ref] = system1Context{Kind: "prediction", Ref: ref, Text: boundRunes(types.InertPredictionText(rec), inertPredictionRunes)}
 		aliasOf[ref] = fmt.Sprintf("x%d", i+1)
 		questions = append(questions, yaegikernel.System1Question{
 			ID: fmt.Sprintf(inertJudgeQuestionID, i), Text: inertJudgeQuestionText,
@@ -144,6 +148,22 @@ func (rt *Runtime) judgeInertness(ctx context.Context, owner, computer string, r
 	if len(todo) == 0 {
 		return nil
 	}
+	// One paced call per chunk, at the same bound as the sub-call judge, so
+	// a large tray never makes one oversized request.
+	var firstErr error
+	for start := 0; start < len(todo); start += subCallJudgeBatchMax {
+		end := min(start+subCallJudgeBatchMax, len(todo))
+		if err := rt.judgeInertChunk(ctx, owner, computer, todo[start:end]); err != nil {
+			if ctx.Err() != nil {
+				return err
+			}
+			firstErr = errors.Join(firstErr, err)
+		}
+	}
+	return firstErr
+}
+
+func (rt *Runtime) judgeInertChunk(ctx context.Context, owner, computer string, todo []types.CommitmentRecord) error {
 	state, rawQuestions, err := inertJudgeRequest(todo)
 	if err != nil {
 		return err
@@ -172,9 +192,7 @@ func (rt *Runtime) judgeInertness(ctx context.Context, owner, computer string, r
 			log.Printf("inert judge: record %s: %v", rec.RecordID, err)
 		}
 	}
-	if len(todo) > 0 {
-		rt.recordJevCostFor(ctx, owner, todo[0].Provenance.RunID, todo[0].Provenance.Desk, "inert_judge", model, dist.Usage, len(rawQuestions))
-	}
+	rt.recordJevCostFor(ctx, owner, todo[0].Provenance.RunID, todo[0].Provenance.Desk, "inert_judge", model, dist.Usage, len(rawQuestions))
 	return nil
 }
 
