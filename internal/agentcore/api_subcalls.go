@@ -38,6 +38,10 @@ type subCallsSummary struct {
 	WindowLimit int            `json:"window_limit"`
 	ByKind      map[string]int `json:"by_kind"`
 	ByClass     map[string]int `json:"settlement_by_class"`
+	// ByPlane splits settlement_by_class by plane: "subcall" for sub-RLM
+	// calls, "desk_cast" for desk-to-desk Casts (plan 4.4, amendment
+	// 2026-11-05).
+	ByPlane map[string]map[string]int `json:"settlement_by_plane"`
 }
 
 type subCallsSelfFavor struct {
@@ -98,7 +102,7 @@ func (h *APIHandler) HandleSubCalls(w http.ResponseWriter, r *http.Request) {
 		Limit:      limit,
 		Records:    []types.CommitmentRecord{},
 		Summary: subCallsSummary{Window: len(ledger), WindowLimit: window,
-			ByKind: map[string]int{}, ByClass: map[string]int{}},
+			ByKind: map[string]int{}, ByClass: map[string]int{}, ByPlane: map[string]map[string]int{}},
 		SelfFavor: subCallsSelfFavor{Groups: []types.SelfFavorGroup{}, Rows: []types.SelfFavorRow{},
 			Window: "newest 5000 casts and 20000 settlements"},
 		Inert: subCallsInert{Rates: []types.InertRateRow{},
@@ -119,6 +123,11 @@ func (h *APIHandler) HandleSubCalls(w http.ResponseWriter, r *http.Request) {
 				class = "unclassed"
 			}
 			resp.Summary.ByClass[class]++
+			plane := firstNonEmpty(b.Plane, "subcall")
+			if resp.Summary.ByPlane[plane] == nil {
+				resp.Summary.ByPlane[plane] = map[string]int{}
+			}
+			resp.Summary.ByPlane[plane][class]++
 		}
 	}
 	groups, rows, err := rt.SubCallSelfFavor(ctx, ownerID, computerID)

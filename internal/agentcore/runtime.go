@@ -606,6 +606,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		rt.leases = lease.New(s.Leases())
 		// Every terminal run write ends the run's leases, whichever path made it.
 		s.SetRunTerminalObserver(func(runID string) { rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded) })
+		// A closed round with a scorable desk-to-desk Cast is judged
+		// (desk_cast_judge.go).
+		s.SetDeskCastOutcomeNotifier(rt.noteDeskCastOutcome)
 	}
 	if operations, err := selfdev.NewStore(s, s); err == nil {
 		rt.selfdevOperations = operations

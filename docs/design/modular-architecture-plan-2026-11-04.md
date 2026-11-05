@@ -505,6 +505,63 @@ Supersedes: desks 5 (D0 as written), desks 8.2 item 5. Keeps: desks 5.3 to 5.6
 (artifact, CI gate, contract tests, skew rules). Folds in Devin's D0
 amendments and the transition-table extraction risk.
 
+**Amendment, 2026-11-05: the judge settles desk-to-desk Casts.** Owner
+ruling (2026-11-05): "Yes, continue judging with system1 models." Since MA1.3
+every desk-to-desk Cast (Texture to research, management to Texture or
+engineering) carries `p_success`, `weight` and settlement `"recipient"`, but
+nothing settled them; MA1.5's judge settled only sub-call Casts, and on d@e
+the dominant traffic is Texture to research (ledger, 2026-11-05T03:45Z;
+prediction R1-07).
+
+*Choice.* `"recipient"` keeps its meaning and its spelling on new Casts: the
+recipient's answer (its Reports, Replies and Declines in the round) is the
+observation, and the judge, a host service, settles. The recipient never
+settles, as before: it is a party to the Cast (5.1). So no request field, no
+prompt and no lock value changes; the judge settles every `"recipient"` Cast
+with a stated `p_success` once its round closes. A Cast that names a rule kind
+is left to that rule (no desk-to-desk rule runner exists yet: a residual). A
+management task's round is excluded: its Cast is already scored as a sub-call
+(MA1.5 Delegate).
+
+*Mechanism.* The store writes two sub-call-ledger records in the same atomic
+batch as the inbox records: at the first scorable Cast of a round, the round's
+judge work (`deskjudge:<conversation>:r<round>`, plane `desk_cast`); at the
+record that closes that round (the recipient's final Report, an engineering
+Complete, a run-end or restart closure), the round's outcome record naming the
+closing record and its reason. After commit the store tells the runtime, which
+coalesces closed rounds for a few seconds and judges them in one call per 20
+Casts, with the same blind request as sub-calls (objective, the recipient's
+bounded text, the Cast's typed questions plus "did the answer achieve what
+was asked", yes/no with the sender's `p_success`). Settlements carry plane
+`desk_cast` and appear in GET /api/subcalls (`settlement_by_plane`).
+
+*Failure modes, and how each is handled:*
+
+1. **Double settlement (recipient and judge).** No desk writes a settlement
+   of a Cast: a Report settles hypotheses (`Settled`), not the Cast's
+   `p_success`. The judge's settlement id is deterministic per Cast and
+   scorer and is written with a not-exists condition, a Cast already judged
+   is skipped, and the independence check refuses any scorer that is a party
+   (caster, recipient inbox, desk, agent).
+2. **Settling before the outcome exists.** The judge runs only on a round
+   with an outcome record, which the store writes only in the batch that
+   closes the round. Work on a round with no outcome is left alone, by the
+   settler and by the boot sweep.
+3. **Judge cost per trajectory.** At most one call per 20 Casts of the closed
+   rounds coalesced together (3 s), each Cast at most `MaxSubCallQuestions + 2`
+   questions, the recipient's text bounded (6000 characters per Cast's own
+   answers, 6000 shared), paced by the same one-at-a-time spacer as sub-calls.
+   A 17-Cast round is one call. Usage rides on the work close; no ceiling (R8).
+4. **A Cast that never closes.** No outcome, no judgment: the work stays
+   open and visible, nothing is settled. A round closed with no answer from
+   the recipient is closed "never answered: not settled".
+5. **Restart mid-judging.** The work record is durable before any coalesce
+   sleep (it is written with the Cast). A crash boot closes open work whose
+   round has an outcome "interrupted by a restart" and never re-runs it; a
+   round closed by the restart closure itself is closed the same way (no
+   observation); a planned restart re-runs it once under a new attempt id.
+   Stop cancels the sleep and joins the settler.
+
 ## 5. Phase 2: kernels and manifest
 
 Goal: two small kernels with structural gates; manifest v2 where desks are

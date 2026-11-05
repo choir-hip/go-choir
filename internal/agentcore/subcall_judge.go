@@ -858,7 +858,8 @@ func (rt *Runtime) sweepSubCalls(ctx context.Context, owner, computer string, re
 	maxAttempt := map[string]int{}
 	for _, rec := range ledger {
 		b := rec.SubCall
-		if b == nil {
+		if b == nil || b.Plane == types.SubCallPlaneDeskCast {
+			// Desk-to-desk judgments are swept below (desk_cast_judge.go).
 			continue
 		}
 		switch b.Kind {
@@ -923,6 +924,7 @@ func (rt *Runtime) sweepSubCalls(ctx context.Context, owner, computer string, re
 		}
 		rt.interruptJudgeWork(ctx, owner, computer, cast.SubCall.FanOutID, castID)
 	}
+	rt.sweepDeskCastWork(ctx, owner, computer, ledger, resume)
 }
 
 // workAttempt reads the attempt number out of a judge work id.

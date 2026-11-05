@@ -136,6 +136,9 @@ type Store struct {
 	// announcedWakes are the outbox rows committed since the projector last
 	// took them, so a signalled sweep reads them by key.
 	announcedWakes announcedActorWakes
+	// deskCastOutcomes is told, after commit, of each round outcome a batch
+	// wrote (desk_cast_judge.go): the judge settles its Casts.
+	deskCastOutcomes atomic.Pointer[DeskCastOutcomeNotifier]
 	workerUpdateMu sync.Mutex
 	// runMemoryMu serialises run-memory appends per run (striped by run id):
 	// one run's seq and parent come from its previous entry, and different

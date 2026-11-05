@@ -467,6 +467,7 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 	var headOrder, conversationOrder []string
 	dirtyHeads, dirtyConversations := map[string]bool{}, map[string]bool{}
 	seenRecords := map[string]bool{}
+	judgePlan := &deskCastJudgePlan{work: map[string]bool{}, done: map[string]bool{}}
 
 	for _, rec := range records {
 		rec.RecordID, rec.Inbox, rec.SenderInbox = strings.TrimSpace(rec.RecordID), strings.TrimSpace(rec.Inbox), strings.TrimSpace(rec.SenderInbox)
@@ -545,6 +546,13 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 		}
 		objects = append(objects, recordObj)
 		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: recordObj.CanonicalID})
+		// The judge's work on a round with a scorable Cast, and the round's
+		// outcome when this record closes it (desk_cast_judge.go).
+		judgeObjects, judgeConditions, err := s.planDeskCastJudge(ctx, ownerID, computerID, rec, closed, judgePlan, now)
+		if err != nil {
+			return nil, nil, receipt, err
+		}
+		objects, conditions = append(objects, judgeObjects...), append(conditions, judgeConditions...)
 
 		row := types.InboxRecordReceipt{RecordID: rec.RecordID, Inbox: rec.Inbox, InboxSeq: rec.InboxSeq,
 			ConversationID: rec.ConversationID, Round: rec.Round, OpenedRound: opened, ClosedRound: closed, HypothesisIDs: ids}

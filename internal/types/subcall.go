@@ -106,6 +106,9 @@ type SubCallSelfAnswer struct {
 // are read.
 type CommitmentSubCall struct {
 	Kind string `json:"kind"`
+	// Plane is "desk_cast" for the judgment of a desk-to-desk Cast (plan
+	// 4.4, amendment 2026-11-05); empty for a sub-call.
+	Plane string `json:"plane,omitempty"`
 	// FanOutID names the fan-out the call belongs to; a judge scores one
 	// fan-out in one call.
 	FanOutID string `json:"fan_out_id,omitempty"`

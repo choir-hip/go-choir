@@ -30,7 +30,12 @@ func (s *Store) actorWakeSignalChan() chan struct{} {
 
 // signalActorWakesIfAny signals when the committed batch held outbox rows,
 // and announces those rows so the signalled sweep reads them by key.
+//
+// It is the one post-commit hook every inbox batch passes through, so it
+// also tells the runtime's judge of the round outcomes the batch wrote
+// (desk_cast_judge.go).
 func (s *Store) signalActorWakesIfAny(objects []objectgraph.Object) {
+	s.announceDeskCastOutcomes(objects)
 	announced := false
 	for _, obj := range objects {
 		if obj.ObjectKind == ogKindActorWakeOutbox {

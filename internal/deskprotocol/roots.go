@@ -105,6 +105,10 @@ var Roots = []Root{
 	{Name: "types.SubCallJudgeWork", Direction: Both},
 	{Name: "types.SubCallJudgeClose", Direction: Both},
 	{Name: "types.SubCallInertJudgement", Direction: Both},
+	// Desk-to-desk Casts judged by the host's judge (plan 4.4, amendment
+	// 2026-11-05).
+	{Name: "types.SubCallPlaneDeskCast", Direction: Both},
+	{Name: "types.SubCallDeskOutcome", Direction: Both},
 	{Name: "types.SubCallPhaseAnswered", Direction: Both},
 	{Name: "types.SubCallPhaseFailed", Direction: Both},
 	{Name: "types.SubCallPhaseInterrupted", Direction: Both},
