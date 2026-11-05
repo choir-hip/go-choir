@@ -137,9 +137,10 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 	// 37 with disclosure.decision (a run's refused sink and the owner's tap on
 	// it, MA3.6); 38 with texture.search.queried (a texture.search lease's
 	// query, MA3.7c); 39 with model.served (the models that served a run,
-	// docs/problems/model-provenance-unwired-2026-11-05.md).
-	if batched != 10 || acknowledged != 39 {
-		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 39", batched, acknowledged)
+	// docs/problems/model-provenance-unwired-2026-11-05.md); 40 with
+	// setting.updated (a package setting the owner changed, MA5.S6).
+	if batched != 10 || acknowledged != 40 {
+		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 40", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
 	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), ""); err == nil {
