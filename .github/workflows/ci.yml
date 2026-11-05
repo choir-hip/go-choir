@@ -509,6 +509,14 @@ jobs:
           scripts/check-kernel-names
           scripts/check-kernel-responsibilities
 
+      # No privilege keys on a desk name (plan MA2.5, R3): a new hard-coded desk
+      # name outside scripts/desk-names-allowlist.json fails.
+      - name: Run desk names gate
+        shell: bash
+        run: |
+          scripts/selftest-desk-names
+          python3 -I scripts/check-desk-names
+
       # Every write under the files root goes through internal/ownerfiles
       # (docs/design/capsule-overlay-computer-state-2026-11-03.md, S1).
       - name: Run files-root write gate
