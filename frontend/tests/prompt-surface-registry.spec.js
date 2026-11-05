@@ -68,7 +68,7 @@ test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async
 
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet].placement-bottom')).toBeVisible();
-  await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="email"]')).toBeVisible();
+  await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="mail"]')).toBeVisible();
 });
 
 test('PromptSurface supports top placement with explicit placement offsets', async ({ page }) => {

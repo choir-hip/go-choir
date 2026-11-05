@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+  import { fetchWithRenewal, AuthRequiredError, onDocumentEvent, onWindowEvent } from '../../lib/app-sdk';
 
   export let authenticated = false;
   export let appContext = {};
@@ -131,18 +131,21 @@
     }
   }
 
+  let offEvents = [];
+
   onMount(() => {
     mounted = true;
-    window.addEventListener('focus', handleVisibilityOrFocus);
-    window.addEventListener('keydown', handleKeydown);
-    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    offEvents = [
+      onWindowEvent('focus', handleVisibilityOrFocus),
+      onWindowEvent('keydown', handleKeydown),
+      onDocumentEvent('visibilitychange', handleVisibilityOrFocus),
+    ];
   });
 
   onDestroy(() => {
     mounted = false;
-    window.removeEventListener('focus', handleVisibilityOrFocus);
-    window.removeEventListener('keydown', handleKeydown);
-    document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    offEvents.forEach((off) => off());
+    offEvents = [];
     invalidateMailRequests();
     if (appStateEmitTimer) clearTimeout(appStateEmitTimer);
     if (noticeTimer) clearTimeout(noticeTimer);
@@ -667,7 +670,7 @@
 
   function requireAuth(kind) {
     if (authenticated) return false;
-    dispatch('authrequired', { kind, appId: 'email', appName: 'Mail' });
+    dispatch('authrequired', { kind, appId: 'mail', appName: 'Mail' });
     return true;
   }
 

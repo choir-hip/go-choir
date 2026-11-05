@@ -1,0 +1,100 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Mail lists the inbox, opens the compose panel and closes it, against stubbed /api/email routes.",
+  "ready": "[data-mail-app]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/email/aliases",
+      "status": 200,
+      "json": {
+        "aliases": [
+          {
+            "address": "me@example.com"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/email/messages",
+      "status": 200,
+      "json": {
+        "messages": [
+          {
+            "id": "m1",
+            "folder": "inbox",
+            "direction": "inbound",
+            "from": "Ada Example <ada@example.com>",
+            "subject": "Contract hello",
+            "snippet": "A contract message.",
+            "received_at": "2026-11-04T09:00:00Z",
+            "trust_status": "trusted",
+            "read_at": "2026-11-04T10:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/email/drafts",
+      "status": 200,
+      "json": {
+        "messages": [],
+        "drafts": []
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/email/digest",
+      "status": 200,
+      "json": {
+        "enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/email/messages/m1",
+      "status": 200,
+      "json": {
+        "message": {
+          "id": "m1",
+          "folder": "inbox",
+          "direction": "inbound",
+          "from": "Ada Example <ada@example.com>",
+          "subject": "Contract hello",
+          "snippet": "A contract message.",
+          "received_at": "2026-11-04T09:00:00Z",
+          "trust_status": "trusted",
+          "read_at": "2026-11-04T10:00:00Z",
+          "text_body": "Hello from the contract.",
+          "to": [
+            "me@example.com"
+          ]
+        },
+        "attachments": []
+      }
+    }
+  ],
+  "expect": [
+    {
+      "selector": "[data-mail-row]",
+      "text": "Contract hello",
+      "count": 1
+    },
+    {
+      "selector": "[data-mail-compose]"
+    }
+  ],
+  "steps": [
+    {
+      "click": "[data-mail-compose]"
+    },
+    {
+      "see": "[data-mail-compose-panel]"
+    },
+    {
+      "see": "[data-mail-compose-to]"
+    }
+  ]
+}

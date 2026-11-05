@@ -1,0 +1,53 @@
+{
+  "schema": "choir.package/v2",
+  "name": "mail",
+  "version": "1.0.0",
+  "display": {
+    "title": "Mail",
+    "icon": "📬",
+    "description": "Mail for your automatic computer"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [
+      "email"
+    ],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 30
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false,
+      "desktop": {
+        "width": 1180,
+        "height": 760,
+        "minWidth": 720,
+        "minHeight": 500
+      },
+      "compact": {
+        "width": 360,
+        "height": 560,
+        "minWidth": 340,
+        "minHeight": 520
+      }
+    },
+    "auth": {
+      "preview": "public-preview"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-mail-window",
+      "contentClass": "mail-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

@@ -200,7 +200,7 @@ test('email app view state persists through universal app context after reload',
     const res = await fetch('/api/desktop/state', { credentials: 'include' });
     if (!res.ok) return '';
     const state = await res.json();
-    const emailWindow = (state.windows || []).find((win) => win.app_id === 'email');
+    const emailWindow = (state.windows || []).find((win) => win.app_id === 'mail');
     return emailWindow?.app_context?.activeFolder || '';
   }), { timeout: 5000 }).toBe('sent');
 

@@ -55,24 +55,6 @@ export const TEXTURE_APP_ID = 'texture';
 // First-party packages (src/packages/<name>/) join them below.
 const STATIC_APPS = [
   {
-    id: 'email',
-    name: 'Mail',
-    icon: '📬',
-    description: 'Mail for your automatic computer',
-    component: () => import('../MailApp.svelte'),
-    launcher: { menu: true, desktopIcon: true, order: 30 },
-    window: {
-      singleton: true,
-      heavy: false,
-      // A list column plus a reading column, and a message body that fits
-      // under the list on shorter screens: Mail needs at least 1180x760.
-      desktop: { width: 1180, height: 760, minWidth: 720, minHeight: 500 },
-      compact: { width: 360, height: 560, minWidth: 340, minHeight: 520 },
-    },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'standard', shellDataAttr: 'data-mail-window', contentClass: 'mail-content' },
-  },
-  {
     id: TEXTURE_APP_ID,
     name: 'Texture',
     icon: '📝',

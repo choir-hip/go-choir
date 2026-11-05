@@ -18,6 +18,7 @@ var builtinPackageNames = []string{
 	"files",
 	"image",
 	"library-next",
+	"mail",
 	"podcast",
 	"pulse",
 	"reader",
@@ -30,7 +31,6 @@ var builtinPackageNames = []string{
 var shellAppNames = []string{
 	"desk",
 	"desktop",
-	"email",
 	"engineering",
 	"management",
 	"owner",
