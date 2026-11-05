@@ -75,6 +75,14 @@ type CalibrationLate struct {
 	Late   int `json:"late"`
 }
 
+// CalibrationInert is "N of your last M precommitments were uninformative"
+// (MA1.6): of the desk's M latest stated predictions, N were inert (true of
+// almost any outcome, at the base rate, or with no falsifier).
+type CalibrationInert struct {
+	N int `json:"n"`
+	M int `json:"m"`
+}
+
 // CalibrationDigest is one desk's track record as the digest shows it.
 // Text is the rendered block the desk reads; it carries no time, so it
 // changes only when the record does.
@@ -101,7 +109,10 @@ type CalibrationDigest struct {
 	// enough settled observations of its own.
 	Model *CalibrationStat `json:"model,omitempty"`
 	// Late is the desk's own late share, when it states rule claims (C11).
-	Late       *CalibrationLate `json:"late,omitempty"`
-	ComputedAt string           `json:"computed_at,omitempty"`
-	Text       string           `json:"text"`
+	Late *CalibrationLate `json:"late,omitempty"`
+	// Inert is the desk's inert count (MA1.6), when it has enough stated
+	// predictions to show one.
+	Inert      *CalibrationInert `json:"inert,omitempty"`
+	ComputedAt string            `json:"computed_at,omitempty"`
+	Text       string            `json:"text"`
 }

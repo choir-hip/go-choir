@@ -152,6 +152,9 @@ type calibrationSnapshot struct {
 	// Censored counts each digest desk's clock claims, by kind, left out
 	// because the round ended before the interval closed (C5, C7).
 	Censored map[string]map[string]int `json:"censored,omitempty"`
+	// Inert is each desk's "N of your last M precommitments were
+	// uninformative" count (MA1.6).
+	Inert map[string]types.CalibrationInert `json:"inert,omitempty"`
 }
 
 // digestOptions are a desk's digest bounds with its censored counts and
@@ -163,6 +166,9 @@ func (s *calibrationSnapshot) digestOptions(desk, modelID string) calibration.Op
 		return opts
 	}
 	opts.Censored = s.Censored[desk]
+	if c, ok := s.Inert[desk]; ok && c.M > 0 {
+		opts.Inert = &types.CalibrationInert{N: c.N, M: c.M}
+	}
 	if late, ok := s.Late[desk]; ok && late.Stated > 0 {
 		opts.Late = &types.CalibrationLate{Stated: late.Stated, Late: late.Late}
 	}
@@ -517,7 +523,7 @@ func (rt *Runtime) calibrationSnapshotFor(ctx context.Context, ownerID, computer
 		return nil, fmt.Errorf("calibration: computer %s has no salt", computerID)
 	}
 	obs, pending := collectCalibration(salt, records, checks, verdicts)
-	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending, Late: calibrationLateShares(records), Censored: calibrationCensoredCounts(records)}
+	snap := &calibrationSnapshot{At: time.Now().UTC(), Observations: obs, Pending: pending, Late: calibrationLateShares(records), Censored: calibrationCensoredCounts(records), Inert: types.InertCounts(records, types.InertDigestWindow, nil)}
 	if rt.calibration.byComputer == nil {
 		rt.calibration.byComputer = map[string]*calibrationSnapshot{}
 	}

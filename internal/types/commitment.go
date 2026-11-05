@@ -208,6 +208,10 @@ type CommitmentProvenance struct {
 	Desk   string `json:"desk,omitempty"`
 	RunID  string `json:"run_id,omitempty"`
 	Origin string `json:"origin,omitempty"`
+	// PromptVersion is the version of the desk's prompt in force when the
+	// record was written, stamped by the host (MA1.6): the grouping key of
+	// the inert rates beside desk and model. A cell never supplies it.
+	PromptVersion string `json:"prompt_version,omitempty"`
 }
 
 // CommitmentRevision is the optional post-score model update: which
@@ -294,7 +298,9 @@ type CommitmentRecord struct {
 	// (Prediction.Questions) carry the parent's precommitment about the
 	// result. WeightZero, when set, says why the Cast states no weight: no
 	// deciding model gave a probability, so none is invented. InertFlags are
-	// the cheap inertness flags the writer found (never a refusal). SubCall
+	// the inertness flags the reducer's detector found at commit (never a
+	// refusal; a cell can neither set nor clear them; absent on records
+	// written before MA1.6). SubCall
 	// is the body of the sub-call's own records (the Cast's tag, the child's
 	// Report, a settlement, a self-score, the judge's work). Optional on
 	// read: records written before the slice have none.

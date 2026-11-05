@@ -35,6 +35,10 @@ const (
 	SubCallSelfScore  = "self_score"
 	SubCallJudgeWork  = "judge_work"
 	SubCallJudgeClose = "judge_close"
+	// SubCallInertJudgement is the blind judge's answer to "could any
+	// plausible outcome have contradicted this prediction" for a sampled
+	// request record, with the rules' flags beside it (MA1.6).
+	SubCallInertJudgement = "inert_judgement"
 )
 
 // SubCallLedgerAddressee is the addressee of the sub-call plane's own records
@@ -139,6 +143,8 @@ type CommitmentSubCall struct {
 	Casts  []string `json:"casts,omitempty"`
 	WorkID string   `json:"work_id,omitempty"`
 	Phase  string   `json:"phase,omitempty"`
+	// Inert is the body of an inert_judgement record (MA1.6).
+	Inert *InertJudgement `json:"inert,omitempty"`
 	// Cost, tracked and never capped.
 	InputTokens  int     `json:"input_tokens,omitempty"`
 	OutputTokens int     `json:"output_tokens,omitempty"`
@@ -341,23 +347,17 @@ func SubCallWeightFloor(role string) float64 {
 	return math.Min(subCallFloorMax, subCallFloorBase+subCallFloorPerVerb*float64(n))
 }
 
-// Inertness flags the writer sets (never a refusal).
+// Inertness flags set by the sub-call writer (never a refusal). The rest of
+// the flags and the detector are in inertness.go (MA1.6).
 const (
 	InertWeightBelowFloor = "weight_below_floor"
 	InertNoFalsifier      = "no_typed_question"
 )
 
-// InertFlagsFor returns the cheap inertness flags of a Cast: a weight below
-// the callee's floor from its grants, and no typed question.
+// InertFlagsFor returns the inertness flags of a Cast written for a callee
+// role: the full MA1.6 detector with the default class base rates.
 func InertFlagsFor(role string, rec CommitmentRecord) []string {
-	var flags []string
-	if rec.Weight != nil && *rec.Weight < SubCallWeightFloor(role) {
-		flags = append(flags, InertWeightBelowFloor)
-	}
-	if !rec.IsTyped() {
-		flags = append(flags, InertNoFalsifier)
-	}
-	return flags
+	return DetectInertness(role, rec, nil)
 }
 
 // ModelFamily is the family a model id belongs to: the leading word of its id

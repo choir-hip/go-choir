@@ -674,6 +674,9 @@ type rlmCallReduction struct {
 	verifyResult map[string]any
 	// jobResults carry what became of the cell's job starts and stops.
 	jobResults []map[string]any
+	// inertCandidates are the request records this cell minted, offered to
+	// the sampled inertness judge once the tray commits (MA1.6).
+	inertCandidates []types.CommitmentRecord
 	// restateKinds are the rule kinds the cell's engineer Precommits stated
 	// first, and restateNotice a management Cast's restatement request
 	// (calibration experiment E1, calibration_e1.go).
@@ -1161,6 +1164,9 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	r.receipt = receipt
 	r.receipt.Cursor = highWater
 	r.receipt.Committed = true
+	// The sampled inertness judge runs after the cell has moved on and
+	// never blocks it (MA1.6).
+	r.sampleInertness()
 	return nil
 }
 
@@ -1183,6 +1189,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
+	r.noteInertCandidate(rec)
 	// SMG: cancel_assignment is the verb carrier for the deleted
 	// cancel_co_super_assignment tool — the commitment record mints, then the
 	// durable revoke runs under the exact persistent-Management gate.
@@ -1460,6 +1467,7 @@ func stampRequestRecord(scope ReductionScope, in yaegikernel.StagedIntent, rec *
 			// stamp fails, so no cell reaches an unstamped record here.
 			_ = rec.StampRequest(in.Kind, in.Req)
 		}
+		stampInertness(rec)
 	case yaegikernel.IntentPrecommit:
 		if rec.Precommit != nil && rec.Precommit.Weight != nil {
 			rec.Weight = rec.Precommit.Weight
@@ -1468,6 +1476,7 @@ func stampRequestRecord(scope ReductionScope, in yaegikernel.StagedIntent, rec *
 				rec.MaterialityProcedure = &m
 			}
 		}
+		stampInertness(rec)
 	}
 }
 

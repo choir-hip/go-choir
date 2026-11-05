@@ -73,7 +73,7 @@ func buildSubCallCast(p subCallCastParams) (types.CommitmentRecord, error) {
 		Prediction:  types.CommitmentPrediction{Hypothesis: p.Objective, CommittedAt: stamp},
 		Observation: types.CommitmentObservation{ObservedAt: stamp},
 		Provenance: types.CommitmentProvenance{AgentID: agent, ModelID: p.ParentModel, CommittedAt: stamp,
-			Desk: agent, RunID: p.ParentRunID, Origin: firstNonEmpty(p.Origin, types.OriginDeskRun)},
+			Desk: agent, RunID: p.ParentRunID, Origin: firstNonEmpty(p.Origin, types.OriginDeskRun), PromptVersion: inertPromptVersion(agent)},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: p.ComputerID,
 		Addressee: types.SubCallLedgerAddressee,
 		ChildIDs:  []string{types.SubCallReportRecordID(p.RecordID)},

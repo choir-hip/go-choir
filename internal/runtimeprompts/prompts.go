@@ -1,7 +1,9 @@
 package runtimeprompts
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -138,4 +140,33 @@ func mustRenderOverlay(name string, data any) string {
 		return ""
 	}
 	return "\n\n" + out
+}
+
+// Version is the version of a desk's prompt: a short hash of the overlays
+// that every desk shares and of the desk's own runtime overlay
+// (rlm_<desk>_runtime.yaml, when it has one). It changes whenever any of
+// those files changes, and only then, so the inert rates (MA1.6) can be
+// compared before and after a prompt change. desk is the desk name or an
+// agent id ("research:doc-1"); anything after a ":" is ignored.
+func Version(desk string) string {
+	desk, _, _ = strings.Cut(strings.TrimSpace(desk), ":")
+	names := []string{"overlays/peer_coordination.yaml", "overlays/run_context.yaml", "overlays/temporal_context.yaml"}
+	if desk != "" && !strings.ContainsAny(desk, "/.\\") {
+		own := "overlays/rlm_" + desk + "_runtime.yaml"
+		if _, err := overlayFS.ReadFile(own); err == nil {
+			names = append(names, own)
+		}
+	}
+	h := sha256.New()
+	for _, n := range names {
+		raw, err := overlayFS.ReadFile(n)
+		if err != nil {
+			continue
+		}
+		h.Write([]byte(n))
+		h.Write([]byte{0})
+		h.Write(raw)
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
 }

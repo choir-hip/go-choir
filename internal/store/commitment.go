@@ -364,7 +364,7 @@ func (s *Store) ListSubCallRecords(ctx context.Context, ownerID, computerID, kin
 	if kind == "" {
 		var all []types.CommitmentRecord
 		for _, k := range []string{types.SubCallCast, types.SubCallReport, types.SubCallSettlement, types.SubCallSelfScore,
-			types.SubCallJudgeWork, types.SubCallJudgeClose} {
+			types.SubCallJudgeWork, types.SubCallJudgeClose, types.SubCallInertJudgement} {
 			recs, err := s.ListSubCallRecords(ctx, ownerID, computerID, k, limit)
 			if err != nil {
 				return nil, err

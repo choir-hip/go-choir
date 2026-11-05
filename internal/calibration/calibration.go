@@ -88,6 +88,9 @@ type Options struct {
 	Censored map[string]int
 	// Late is the desk's own late share (C11).
 	Late *types.CalibrationLate
+	// Inert is the desk's "N of your last M precommitments were
+	// uninformative" count (MA1.6), when it has one to show.
+	Inert *types.CalibrationInert
 }
 
 // DigestExcluded are the claim types left out of every digest (C4):
@@ -307,6 +310,10 @@ func Compute(desk string, obs []Observation, opts Options) types.CalibrationDige
 	if opts.Late != nil && opts.Late.Stated > 0 {
 		late := *opts.Late
 		d.Late = &late
+	}
+	if opts.Inert != nil && opts.Inert.M >= types.InertDigestMinM {
+		inert := *opts.Inert
+		d.Inert = &inert
 	}
 	if d.N >= opts.MinN {
 		d.Text = Render(d)

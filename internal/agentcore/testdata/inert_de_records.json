@@ -1,0 +1,595 @@
+[
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:r1",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 1",
+   "committed_at": "2026-11-04T10:01:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.9,
+      "no": 0.1
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:01:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:01:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-research",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 1"
+  },
+  "cast": {},
+  "addressee": "subcall:ledger",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-i",
+   "role": "research_child",
+   "parent_run_id": "run-research",
+   "parent_agent": "research:doc-de",
+   "child_key": "r1"
+  },
+  "p_success": 0.9,
+  "weight": 0.5,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:r2",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Confirm the page loads",
+   "committed_at": "2026-11-04T10:02:00Z",
+   "questions": [
+    {
+     "question": "Will the page load?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.99,
+      "no": 0.01
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:02:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:02:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-research",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Confirm the page loads"
+  },
+  "cast": {},
+  "addressee": "subcall:ledger",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-i",
+   "role": "research_child",
+   "parent_run_id": "run-research",
+   "parent_agent": "research:doc-de",
+   "child_key": "r2"
+  },
+  "p_success": 0.99,
+  "weight": 0.5,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:r3",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Look up a date",
+   "committed_at": "2026-11-04T10:03:00Z",
+   "questions": [
+    {
+     "question": "Will the child find the date?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.7,
+      "no": 0.3
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:03:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:03:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-research",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Look up a date"
+  },
+  "cast": {},
+  "addressee": "subcall:ledger",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-i",
+   "role": "research_child",
+   "parent_run_id": "run-research",
+   "parent_agent": "research:doc-de",
+   "child_key": "r3"
+  },
+  "p_success": 0.7,
+  "weight": 0.01,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:r4",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Skim the archive",
+   "committed_at": "2026-11-04T10:04:00Z",
+   "questions": []
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:04:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:04:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-research",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Skim the archive"
+  },
+  "cast": {},
+  "addressee": "subcall:ledger",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-i",
+   "role": "research_child",
+   "parent_run_id": "run-research",
+   "parent_agent": "research:doc-de",
+   "child_key": "r4"
+  },
+  "weight_zero": "the parent stated no p_success and weight for this call"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:r5",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "The child returns a result",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "questions": [
+    {
+     "question": "The child returns a result",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.8,
+      "no": 0.2
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:05:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-research",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "The child returns a result"
+  },
+  "cast": {},
+  "addressee": "subcall:ledger",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-i",
+   "role": "research_child",
+   "parent_run_id": "run-research",
+   "parent_agent": "research:doc-de",
+   "child_key": "r5"
+  },
+  "p_success": 0.8,
+  "weight": 0.5,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:m1",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Assign the intake of the new captures",
+   "committed_at": "2026-11-04T10:06:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:06:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:06:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Assign the intake of the new captures",
+   "body": "Assign the intake of the new captures"
+  },
+  "addressee": "research:doc-de",
+  "p_success": 0.8,
+  "weight": 0.4,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:m2",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Assign the review of story 7",
+   "committed_at": "2026-11-04T10:07:00Z",
+   "questions": [
+    {
+     "question": "Will the review finish within the round?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.8,
+      "no": 0.2
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:07:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:07:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run",
+   "prompt_version": "pv-b"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Assign the review of story 7",
+   "body": "Assign the review of story 7"
+  },
+  "addressee": "research:doc-de",
+  "p_success": 0.8,
+  "weight": 0.4,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:m3",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "The source schedule has stalled",
+   "committed_at": "2026-11-04T10:08:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:08:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:08:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run",
+   "prompt_version": "pv-b"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "escalate",
+   "objective": "The source schedule has stalled",
+   "body": "The source schedule has stalled"
+  },
+  "addressee": "owner",
+  "p_success": 0.6,
+  "weight": 0.5,
+  "settlement": "recipient",
+  "impact_class": "I1"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:m4",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Is story 7 ready?",
+   "committed_at": "2026-11-04T10:09:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:09:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:09:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run",
+   "prompt_version": "pv-b"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "precommit",
+  "precommit": {
+   "question": "Is story 7 ready?",
+   "resolver": "research"
+  },
+  "addressee": "research",
+  "p_success": 0.5,
+  "weight": 0.3,
+  "settlement": "recipient",
+  "materiality_procedure": {
+   "kind": "ask",
+   "custodian": "x",
+   "procedure_ref": "",
+   "no_procedure": true,
+   "weight": 0.3,
+   "impact_class": "I0",
+   "hash": "h"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:m5",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Will the edition publish?",
+   "committed_at": "2026-11-04T10:10:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:10:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:10:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run",
+   "prompt_version": "pv-b"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "precommit",
+  "precommit": {
+   "question": "Will the edition publish?",
+   "distribution": {
+    "yes": 0.99,
+    "no": 0.01
+   },
+   "resolver": "research"
+  },
+  "addressee": "research",
+  "weight": 0.3
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:m6",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Will the edition lead with story 7?",
+   "committed_at": "2026-11-04T10:11:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:11:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:11:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run",
+   "prompt_version": "pv-b"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "precommit",
+  "precommit": {
+   "question": "Will the edition lead with story 7?",
+   "distribution": {
+    "yes": 0.6,
+    "no": 0.4
+   },
+   "resolver": "research"
+  },
+  "addressee": "research",
+  "weight": 0.3
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:l1",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "Assign the audit",
+   "committed_at": "2026-11-04T10:12:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:12:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "gpt-5.4-mini",
+   "committed_at": "2026-11-04T10:12:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Assign the audit"
+  },
+  "addressee": "research:doc-de",
+  "p_success": 0.97,
+  "weight": 0.4,
+  "settlement": "recipient"
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:n1",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "notice",
+   "committed_at": "2026-11-04T10:13:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:13:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "management:owner-de",
+   "model_id": "",
+   "committed_at": "2026-11-04T10:13:00Z",
+   "desk": "management:owner-de",
+   "run_id": "run-management",
+   "origin": "desk_run"
+  },
+  "emitter_kind": "system",
+  "computer_id": "computer-de",
+  "kind": "directive",
+  "directive": {
+   "subtype": "notice",
+   "body": "x"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "inert:rep1",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "done",
+   "committed_at": "2026-11-04T10:14:00Z"
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:14:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:14:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-research",
+   "origin": "desk_run",
+   "prompt_version": "pv-a"
+  },
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "kind": "report",
+  "report": {
+   "claims": [
+    {
+     "text": "done"
+    }
+   ],
+   "stop_reason": "done"
+  }
+ }
+]

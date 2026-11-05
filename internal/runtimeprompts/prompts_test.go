@@ -456,3 +456,16 @@ func TestRLMEngineeringOverlayDelegateFirstRuleOnlyWithTheDelegate(t *testing.T)
 		t.Fatal("plain overlay carries the delegate-first rule")
 	}
 }
+
+func TestVersionIsStablePerDeskAndOnlyChangesWithItsOverlays(t *testing.T) {
+	a, b := Version("research:doc-1"), Version("research")
+	if a != b || len(a) != 12 {
+		t.Fatalf("version %q vs %q", a, b)
+	}
+	if Version("management") == a {
+		t.Fatal("two desks with their own overlays share a version")
+	}
+	if Version("nosuchdesk") == "" || Version("../x") == "" {
+		t.Fatal("a desk with no overlay of its own still has the shared version")
+	}
+}

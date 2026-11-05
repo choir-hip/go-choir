@@ -126,7 +126,7 @@ func requestShapeHint() string {
 }
 
 // cellForbiddenRequestKeys are fields only the reducer stamps.
-var cellForbiddenRequestKeys = []string{"provenance", "origin", "origin_class", "materiality_procedure", "procedure", "agent_id", "model_id", "desk", "run_id", "hash"}
+var cellForbiddenRequestKeys = []string{"provenance", "origin", "origin_class", "materiality_procedure", "procedure", "agent_id", "model_id", "desk", "run_id", "hash", "inert", "inert_flags", "prompt_version"}
 
 // ParseRequestFields decodes the request fields a cell passed. Unknown keys
 // are refused, and the stamped ones (provenance, origin, the materiality
