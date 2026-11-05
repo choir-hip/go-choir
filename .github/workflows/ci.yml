@@ -855,8 +855,13 @@ jobs:
       - name: Build frontend
         run: cd frontend && pnpm build
 
-      - name: Front-end kernel contract tests and leak differential
-        run: cd frontend && pnpm exec playwright test tests/kernel.spec.js --reporter=line
+      - name: Front-end kernel contract tests, shell services and leak differentials
+        run: >-
+          cd frontend && pnpm exec playwright test
+          tests/kernel.spec.js tests/shell-services.spec.js tests/file-routes.spec.js
+          tests/commands.spec.js tests/theme-packs.spec.js tests/links.spec.js
+          tests/uses.spec.js tests/settings.spec.js tests/context-menu-slot.spec.js
+          --reporter=line
 
   # The package modularity gate (docs/design/modularity-check-build-2026-11-04.md):
   # the SDK surface against its lock (a change needs the bump its kind needs),
