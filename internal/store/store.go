@@ -348,7 +348,7 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if !stored.State.Terminal() || !lifecycleTerminalSettlementRequested(stored) {
+	if !lifecycleRunEndsActivation(stored.State) || !lifecycleTerminalSettlementRequested(stored) {
 		return nil
 	}
 	for attempt := 0; attempt < lifecycleTerminalSettlementAttempts; attempt++ {
@@ -357,6 +357,11 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 			return snapshotErr
 		}
 		if snapshot.Trajectory.Status != types.TrajectoryLive {
+			return nil
+		}
+		// A passivated run settles only while it is still the agent's
+		// activation: a later run has taken over the trajectory otherwise.
+		if stored.State == types.RunPassivated && snapshot.Activation.RunID != stored.RunID {
 			return nil
 		}
 		prospective := snapshot.Trajectory
@@ -435,7 +440,7 @@ func (s *Store) persistLifecycleRunWithEvent(ctx context.Context, rec types.RunR
 	if err != nil {
 		return true, err
 	}
-	if rec.State.Terminal() {
+	if lifecycleRunEndsActivation(rec.State) {
 		if reconcileErr := s.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); reconcileErr != nil {
 			log.Printf("store: reconcile terminal lifecycle settlement run=%s: %v", rec.RunID, reconcileErr)
 		}

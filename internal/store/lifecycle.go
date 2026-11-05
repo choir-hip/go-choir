@@ -3048,6 +3048,15 @@ func lifecycleRunOwnsActivation(state types.RunState) bool {
 	return state == types.RunPending || state == types.RunRunning
 }
 
+// lifecycleRunEndsActivation reports a state that releases the active slot
+// and may settle the trajectory: a terminal state, or a passivation (a
+// work-bound run passivates after the turn that settles its work; without
+// this its trajectory stayed live forever,
+// problems/passivated-final-turn-never-settles-trajectory-2026-11-05.md).
+func lifecycleRunEndsActivation(state types.RunState) bool {
+	return state.Terminal() || state == types.RunPassivated
+}
+
 func (s *Store) projectLifecycleRunWithRetry(ctx context.Context, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
 	for attempt := 0; attempt < 8; attempt++ {
 		result, err := s.projectLifecycleRun(ctx, req)
@@ -3299,8 +3308,11 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		}
 	}
 	run.Metadata = metadata
-	settlementRequested := getRunErr == nil && lifecycleTerminalSettlementRequested(storedRun)
-	if trajectory.Status == types.TrajectoryLive && run.State.Terminal() && getRunErr == nil &&
+	// A request carries over only from a terminal run (a re-projection of the
+	// same end); a passivated run that is later replaced and ends must not
+	// settle over its replacement.
+	settlementRequested := getRunErr == nil && storedRun.State.Terminal() && lifecycleTerminalSettlementRequested(storedRun)
+	if trajectory.Status == types.TrajectoryLive && lifecycleRunEndsActivation(run.State) && getRunErr == nil &&
 		lifecycleRunOwnsActivation(storedRun.State) && previousActiveRunID == run.RunID {
 		settlementRequested = true
 	}
