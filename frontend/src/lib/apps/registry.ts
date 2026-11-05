@@ -84,17 +84,6 @@ const STATIC_APPS = [
     theme: { surface: 'standard', shellDataAttr: 'data-mail-window', contentClass: 'mail-content' },
   },
   {
-    id: 'compute-monitor',
-    name: 'Compute Monitor',
-    icon: '📊',
-    description: 'User computer health and recovery',
-    component: () => import('../ComputeMonitorApp.svelte'),
-    launcher: { menu: true, desktopIcon: true, order: 40 },
-    window: { singleton: true, heavy: false, desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: compactDefault },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'standard', shellDataAttr: 'data-compute-monitor-window', contentClass: 'compute-monitor-content' },
-  },
-  {
     id: TEXTURE_APP_ID,
     name: 'Texture',
     icon: '📝',

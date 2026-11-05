@@ -1,10 +1,18 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { activeWindowId, focusWindow, isHeavyAppId, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
-  import { AuthRequiredError } from './auth.js';
+  import {
+    AuthRequiredError,
+    addLiveEventListener,
+    closeOtherWindows,
+    focus as focusWindow,
+    isHeavyAppId,
+    liveEventKind,
+    restore as restoreWindow,
+    suspendBackgroundHeavyWindows,
+    windowList,
+  } from '../../lib/app-sdk';
   import { fetchComputeStatus, wakeCurrentComputer } from './compute-monitor.js';
-  import { addLiveEventListener, liveEventKind } from './live-events.js';
-  import { previewComputeStatus } from './public-preview-data';
+  import { previewComputeStatus } from './preview-data';
 
   export let windowId = '';
   export let authenticated = false;
@@ -20,7 +28,8 @@
   $: computers = status?.computers || [];
   $: runtime = status?.runtime || {};
   $: persistentDisk = status?.persistent_disk || runtime?.persistent_disk || null;
-  $: currentWindows = ($windows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
+  $: currentWindows = $windowList;
+  $: activeWindowId = ($windowList.find((win) => win.focused) || {}).windowId || '';
   $: visibleWindows = currentWindows.filter((win) => win.mode !== 'minimized');
   $: heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
   $: suspendedWindows = visibleWindows.filter((win) => win.restoreSuspended);
@@ -94,7 +103,7 @@
   }
 
   function handleSuspendBackgroundApps() {
-    const count = suspendBackgroundHeavyWindows($activeWindowId || windowId);
+    const count = suspendBackgroundHeavyWindows(activeWindowId || windowId);
     actionStatus = count > 0
       ? `Suspended ${count} background heavy app${count === 1 ? '' : 's'}`
       : 'No background heavy apps needed suspension';
@@ -102,12 +111,12 @@
 
   function handleKeepMonitorOnly() {
     if (typeof window !== 'undefined' && !window.confirm('Keep only Compute Monitor and close other saved windows?')) return;
-    dispatch('keepwindowonly', { windowId });
+    void closeOtherWindows(windowId);
   }
 
   function handleClearDesktopWindows() {
     if (typeof window !== 'undefined' && !window.confirm('Clear all saved desktop windows? This does not delete files or documents.')) return;
-    dispatch('clearsavedwindows');
+    void closeOtherWindows('');
   }
 
   function handleFocusWindow(win) {
@@ -304,7 +313,7 @@
         {#each currentWindows as win (win.windowId)}
           <button
             type="button"
-            class:active={win.windowId === $activeWindowId}
+            class:active={win.windowId === activeWindowId}
             class:suspended={win.restoreSuspended}
             class="window-row"
             on:click={() => handleFocusWindow(win)}

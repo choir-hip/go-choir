@@ -11,6 +11,7 @@ var firstPartySettings = map[string]string{}
 var builtinPackageNames = []string{
 	"audio",
 	"calendar",
+	"compute-monitor",
 	"files",
 	"image",
 	"library-next",
@@ -25,7 +26,6 @@ var builtinPackageNames = []string{
 var shellAppNames = []string{
 	"autopaper",
 	"browser",
-	"compute-monitor",
 	"content",
 	"desk",
 	"desktop",

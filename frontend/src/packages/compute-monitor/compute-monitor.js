@@ -1,4 +1,4 @@
-import { fetchWithRenewal } from './auth.js';
+import { fetchWithRenewal } from '../../lib/app-sdk';
 
 export async function fetchComputeStatus() {
   const res = await fetchWithRenewal('/api/compute/status', {

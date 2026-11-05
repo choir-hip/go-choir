@@ -1,0 +1,66 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Compute Monitor shows the computer's health from the status route and lists the open windows, itself among them.",
+  "ready": "[data-compute-monitor-app]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/compute/status",
+      "status": 200,
+      "json": {
+        "status": "ok",
+        "current_computer": {
+          "current": true,
+          "role": "private-computer",
+          "desktop_id": "contract",
+          "state": "running",
+          "warmness_class": "hot",
+          "protection": "Contract stub"
+        },
+        "computers": [
+          {
+            "current": true,
+            "role": "private-computer",
+            "desktop_id": "contract",
+            "state": "running",
+            "warmness_class": "hot",
+            "protection": "Contract stub"
+          }
+        ],
+        "runtime": {
+          "reachable": true
+        }
+      }
+    }
+  ],
+  "expect": [
+    {
+      "selector": "[data-compute-monitor-summary]",
+      "text": "Computer health and recovery"
+    },
+    {
+      "selector": "[data-compute-monitor-metrics]"
+    },
+    {
+      "selector": "[data-compute-monitor-recovery]",
+      "text": "Safe Recovery"
+    },
+    {
+      "selector": "[data-compute-monitor-windows]",
+      "text": "Compute Monitor"
+    },
+    {
+      "selector": "[data-compute-monitor-window-row]",
+      "count": 1
+    }
+  ],
+  "steps": [
+    {
+      "click": "[data-compute-monitor-window-row]"
+    },
+    {
+      "see": "[data-compute-monitor-windows]",
+      "text": "1 OPEN"
+    }
+  ]
+}

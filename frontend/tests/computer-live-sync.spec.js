@@ -9,7 +9,7 @@ const frontendRoot = path.resolve(__dirname, '..');
 const syncedStateFiles = [
   'src/App.svelte',
   'src/packages/audio/App.svelte',
-  'src/lib/ComputeMonitorApp.svelte',
+  'src/packages/compute-monitor/App.svelte',
   'src/lib/Desktop.svelte',
   'src/packages/files/App.svelte',
   'src/packages/image/App.svelte',
