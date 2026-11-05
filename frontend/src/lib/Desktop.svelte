@@ -44,6 +44,7 @@
   import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
+  import { setTheme as setShellTheme } from './services/theme';
   import { bindCommandActions, commands, installKeyCapture } from './services/commands';
   import fileRoutes from './file-routes.json';
   import { openFileDocument } from './texture.js';
@@ -1676,6 +1677,7 @@
     openApp: (app) => handleLaunchApp({ detail: { appId: app } }),
     openFile: (path) => shellOpenFile(path),
     copyText: (text, label) => void shellCopyText(text, label),
+    setTheme: (theme) => { const result = setShellTheme(theme); if (!result.ok) showToast(`Could not apply the theme: ${result.errors[0] || theme}`, { kind: 'error' }); },
     toast: (message) => showToast(message),
   });
   onDestroy(() => {

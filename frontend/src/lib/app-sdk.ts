@@ -123,3 +123,10 @@ export { browserOpenableSourceURL, storedSnapshotApplies, webLensAddress } from 
 // key and never reads keys.
 export { registerCommand } from './services/commands';
 export type { CommandHandler, CommandRun, CommandScope, CommandSpec } from './services/commands';
+
+// Theme (1.1.0): the applied theme, selecting one by id or config (built-in or
+// a pack's), and following changes. Replaces the window choir-theme-change
+// event and reading the theme preference. A pack contributes themes in its
+// manifest (contributes.themes), as data.
+export { getTheme, onThemeChange, setTheme } from './services/theme';
+export type { ChoirTheme } from './theme';

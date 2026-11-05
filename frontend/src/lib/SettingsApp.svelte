@@ -2,11 +2,12 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { buildInfo, copyText } from './shell-services';
-  import { fetchThemePreference } from './preferences.js';
+    import { getTheme, onThemeChange, setTheme } from './services/theme';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import {
     DEFAULT_THEME,
-    THEME_PRESETS,
+    listThemes,
+    onThemeRegistryChange,
     normalizeThemeConfig,
     themeCSSVariables,
     validateThemeConfig,
@@ -265,19 +266,9 @@
     themeJSON = JSON.stringify(selectedTheme, null, 2);
   }
 
-  async function loadStoredTheme() {
-    try {
-      const stored = await fetchThemePreference();
-      const theme = stored && Object.keys(stored).length > 0 ? stored : DEFAULT_THEME;
-      const validation = validateThemeConfig(theme);
-      return validation.ok ? normalizeThemeConfig(theme) : DEFAULT_THEME;
-    } catch (_err) {
-      return DEFAULT_THEME;
-    }
-  }
-
   function applyTheme(theme) {
-    window.dispatchEvent(new CustomEvent('choir-theme-change', { detail: { theme } }));
+    const result = setTheme(theme);
+    if (!result.ok) themeError = result.errors.join('; ');
   }
 
   function selectTheme(theme) {
@@ -355,9 +346,19 @@
   $: hasThemeDraft = themeDraftJSON.length > 0 && themeDraftJSON !== lastAppliedThemeJSON;
 
   let removeLiveListener = () => {};
+  // The shell applied a different theme (another device's change, a pack's removal): show it.
+  const removeThemeListener = onThemeChange((theme) => {
+    selectedTheme = normalizeThemeConfig(theme);
+    themeJSON = JSON.stringify(selectedTheme, null, 2);
+    lastAppliedThemeJSON = themeJSON;
+    themeDraftJSON = '';
+  });
+  let themeChoices = listThemes();
+  const removeRegistryListener = onThemeRegistryChange(() => { themeChoices = listThemes(); });
+  onDestroy(() => { removeThemeListener(); removeRegistryListener(); });
 
   onMount(async () => {
-    selectedTheme = currentUser?.email ? await loadStoredTheme() : normalizeThemeConfig(currentTheme);
+    selectedTheme = currentUser?.email ? getTheme() : normalizeThemeConfig(currentTheme);
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     lastAppliedThemeJSON = themeJSON;
     void refreshStatus();
@@ -367,14 +368,6 @@
     }
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
-      if (kind === 'theme.updated') {
-        void loadStoredTheme().then((theme) => {
-          selectedTheme = theme;
-          themeJSON = JSON.stringify(selectedTheme, null, 2);
-          lastAppliedThemeJSON = themeJSON;
-          themeDraftJSON = '';
-        });
-      }
       if (kind === 'runtime.health' || kind === 'runtime.degraded') {
         void refreshStatus();
       }
@@ -567,7 +560,7 @@
         {selectedTheme.name}: {themeValidation.ok ? 'valid config' : themeValidation.errors.join(', ')}
       </p>
       <div class="theme-presets" data-theme-presets>
-        {#each THEME_PRESETS as theme}
+        {#each themeChoices as theme}
           <button
             class:active={theme.id === selectedTheme.id}
             class="theme-preset"

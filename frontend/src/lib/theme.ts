@@ -331,7 +331,31 @@ export const AERO_CHROME_HEART: ChoirTheme = {
 
 export const DEFAULT_THEME = AERO_CHROME_HEART;
 export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON, FRUTIGER_AERO, VECTOR_HEART, LIQUID_METAL, AERO_CHROME_HEART];
-const PRESET_IDS = new Set(THEME_PRESETS.map((theme) => theme.id));
+
+// The theme registry (slice S5): the built-in presets above, plus the themes
+// packs contribute (contributes.themes; services/theme.ts registers them).
+// Every lookup goes through it, so a contributed theme is selected, validated
+// and normalized exactly like a preset.
+const contributedThemes = new Map<string, ChoirTheme>();
+const builtInIds = new Set(THEME_PRESETS.map((theme) => theme.id));
+const themeListeners = new Set<() => void>();
+
+function presetFor(id: unknown): ChoirTheme | undefined {
+  return THEME_PRESETS.find((item) => item.id === id) || (typeof id === 'string' ? contributedThemes.get(id) : undefined);
+}
+export function isKnownThemeId(id: unknown): boolean {
+  return Boolean(presetFor(id));
+}
+/** Every theme that can be selected: the presets, then contributed ones in registration order. */
+export function listThemes(): ChoirTheme[] {
+  return [...THEME_PRESETS, ...contributedThemes.values()];
+}
+/** Called when the set of selectable themes changes. Returns the unsubscribe. */
+export function onThemeRegistryChange(fn: () => void): () => void {
+  themeListeners.add(fn);
+  return () => { themeListeners.delete(fn); };
+}
+
 const THEME_GROUPS = ['colors', 'radii', 'motion', 'fonts', 'effects'] as const;
 
 function isTheme(value: unknown): value is Partial<ChoirTheme> {
@@ -355,10 +379,10 @@ function mergeStringGroup(baseGroup: Record<string, string>, candidate: unknown)
 }
 
 export function normalizeThemeConfig(theme: unknown = DEFAULT_THEME): ChoirTheme {
-  if (!isTheme(theme) || theme.schema_version !== THEME_SCHEMA_VERSION || !theme.id || !PRESET_IDS.has(theme.id)) {
+  if (!isTheme(theme) || theme.schema_version !== THEME_SCHEMA_VERSION || !theme.id || !isKnownThemeId(theme.id)) {
     return DEFAULT_THEME;
   }
-  const preset = THEME_PRESETS.find((item) => item.id === theme.id) || DEFAULT_THEME;
+  const preset = presetFor(theme.id) || DEFAULT_THEME;
   const placement = theme.layout?.promptSurfacePlacement === 'top' ? 'top' : preset.layout.promptSurfacePlacement;
   return {
     ...preset,
@@ -385,12 +409,12 @@ export function validateThemeConfig(theme: unknown): { ok: boolean; errors: stri
   if (!isTheme(theme)) return { ok: false, errors: ['theme must be an object'] };
   const errors: string[] = [];
   if (theme.schema_version !== THEME_SCHEMA_VERSION) errors.push(`schema_version must be ${THEME_SCHEMA_VERSION}`);
-  if (!theme.id || !PRESET_IDS.has(theme.id)) errors.push(`theme id must be one of ${[...PRESET_IDS].join(', ')}`);
+  if (!theme.id || !isKnownThemeId(theme.id)) errors.push(`theme id must be one of ${listThemes().map((item) => item.id).join(', ')}`);
   if (theme.name !== undefined && (typeof theme.name !== 'string' || !theme.name.trim() || theme.name.length > 80)) {
     errors.push('name must be a non-empty string of at most 80 characters');
   }
 
-  const preset = THEME_PRESETS.find((item) => item.id === theme.id) || DEFAULT_THEME;
+  const preset = presetFor(theme.id) || DEFAULT_THEME;
   for (const groupName of THEME_GROUPS) {
     const group = theme[groupName];
     if (group === undefined) continue;
@@ -420,6 +444,87 @@ export function validateThemeConfig(theme: unknown): { ok: boolean; errors: stri
     }
   }
   return { ok: errors.length === 0, errors };
+}
+
+// ---- contributed themes ----
+
+function channels(value: string): [number, number, number] | null {
+  const color = String(value || '').trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color);
+  if (hex) {
+    const h = hex[1].length === 3 ? [...hex[1]].map((c) => c + c).join('') : hex[1];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(color);
+  return rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : null;
+}
+
+function luminance([r, g, b]: [number, number, number]): number {
+  const lin = (v: number) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio of two hex or rgb colors; null when either cannot be read. */
+export function contrastRatio(a: string, b: string): number | null {
+  const ca = channels(a);
+  const cb = channels(b);
+  if (!ca || !cb) return null;
+  const [hi, lo] = [luminance(ca), luminance(cb)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// The contrast gate: text on its surface. Every built-in preset passes it.
+const CONTRAST_PAIRS: Array<[string, string, number]> = [
+  ['fg', 'bg', 4.5], ['fg', 'panel', 4.5], ['muted', 'bg', 4.5], ['onAccent', 'accent', 3], ['onDanger', 'danger', 3],
+];
+
+/** Why a theme may not be contributed: every token key present, only safe values, no extras, and the contrast gate. */
+export function contributedThemeErrors(theme: unknown): string[] {
+  if (!isTheme(theme)) return ['theme must be an object'];
+  const errors: string[] = [];
+  if (theme.schema_version !== THEME_SCHEMA_VERSION) errors.push(`schema_version must be ${THEME_SCHEMA_VERSION}`);
+  if (typeof theme.id !== 'string' || !/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/.test(theme.id)) errors.push('id must be lowercase letters, digits and dashes');
+  if (typeof theme.name !== 'string' || !theme.name.trim() || theme.name.length > 80) errors.push('name must be a non-empty string of at most 80 characters');
+  for (const group of THEME_GROUPS) {
+    const given = theme[group];
+    if (!isTheme(given)) { errors.push(`${group} must be an object`); continue; }
+    for (const key of Object.keys(DEFAULT_THEME[group])) {
+      if (!(key in given)) errors.push(`${group}.${key} is missing`);
+      else if (!isSafeCSSValue(given[key])) errors.push(`${group}.${key} must be a safe CSS value`);
+    }
+    for (const key of Object.keys(given)) if (!(key in DEFAULT_THEME[group])) errors.push(`${group}.${key} is not supported`);
+  }
+  const layout = theme.layout;
+  if (!isTheme(layout)) errors.push('layout must be an object');
+  else {
+    if (layout.promptSurfacePlacement !== 'top' && layout.promptSurfacePlacement !== 'bottom') errors.push('layout.promptSurfacePlacement must be top or bottom');
+    for (const key of ['promptSurfaceMinHeight', 'deskSheetHeight'] as const) if (!isSafeCSSValue(layout[key])) errors.push(`layout.${key} must be a safe CSS value`);
+    for (const key of Object.keys(layout)) if (!(key in DEFAULT_THEME.layout)) errors.push(`layout.${key} is not supported`);
+  }
+  if (!errors.length) {
+    for (const [fg, bg, min] of CONTRAST_PAIRS) {
+      const ratio = contrastRatio(theme.colors![fg], theme.colors![bg]);
+      if (ratio === null) errors.push(`colors.${fg} and colors.${bg} must be hex or rgb colors so contrast can be checked`);
+      else if (ratio < min) errors.push(`colors.${fg} on colors.${bg} has contrast ${ratio.toFixed(2)}, below ${min}`);
+    }
+  }
+  return errors;
+}
+
+/** Make a contributed theme selectable. Throws with the reasons if it is refused; the disposer removes it. */
+export function registerTheme(theme: unknown): () => void {
+  const errors = contributedThemeErrors(theme);
+  const candidate = theme as ChoirTheme;
+  if (!errors.length && (builtInIds.has(candidate.id) || contributedThemes.has(candidate.id))) errors.push(`theme id "${candidate.id}" is already taken`);
+  if (errors.length) throw new Error(errors.join('; '));
+  const stored = JSON.parse(JSON.stringify(candidate)) as ChoirTheme;
+  contributedThemes.set(stored.id, stored);
+  themeListeners.forEach((fn) => fn());
+  return () => {
+    if (contributedThemes.get(stored.id) !== stored) return;
+    contributedThemes.delete(stored.id);
+    themeListeners.forEach((fn) => fn());
+  };
 }
 
 export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string, string> {

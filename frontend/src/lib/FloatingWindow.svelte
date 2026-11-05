@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { onMount, onDestroy } from 'svelte';
+  import { onThemeChange } from './services/theme';
   import { contextMenu } from './context-menu';
 
   export let windowId = '';
@@ -407,6 +408,7 @@
 
   // ---- Global pointer event wiring ----
 
+  let removeThemeListener = () => {};
   onMount(() => {
     refreshViewportBounds();
     window.addEventListener('pointermove', handleDragMove);
@@ -416,7 +418,7 @@
     window.addEventListener('pointercancel', handleDragEnd);
     window.addEventListener('pointercancel', handleResizeEnd);
     window.addEventListener('resize', refreshViewportBounds);
-    window.addEventListener('choir-theme-change', refreshViewportBoundsAfterThemeChange);
+    removeThemeListener = onThemeChange(() => refreshViewportBoundsAfterThemeChange());
 
     if (typeof ResizeObserver !== 'undefined') {
       const promptSurface = document.querySelector('[data-prompt-surface]');
@@ -442,7 +444,7 @@
     window.removeEventListener('pointercancel', handleDragEnd);
     window.removeEventListener('pointercancel', handleResizeEnd);
     window.removeEventListener('resize', refreshViewportBounds);
-    window.removeEventListener('choir-theme-change', refreshViewportBoundsAfterThemeChange);
+    removeThemeListener();
     promptSurfaceObserver?.disconnect();
     desktopAreaObserver?.disconnect();
   });

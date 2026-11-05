@@ -7,6 +7,7 @@
     type RichInlineItem,
   } from '@chenglou/pretext/rich-inline';
   import { onMount } from 'svelte';
+  import { onThemeChange } from './services/theme';
 
   export let prefix = '';
   export let subject = '';
@@ -152,10 +153,10 @@
       updateLayoutWidth();
     });
 
-    window.addEventListener('choir-theme-change', handleThemeChange);
+    const offTheme = onThemeChange(() => handleThemeChange());
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener('choir-theme-change', handleThemeChange);
+      offTheme();
     };
   });
 </script>

@@ -2,7 +2,7 @@
 // docs/design/modular-architecture-2026-11-04.md sections 2.2 and 5).
 //
 // A command is { id, title, scope, run, when? }. `run` is a declarative action
-// (openApp, openFile, copyText, toast: data, safe from the Library)
+// (openApp, openFile, copyText, setTheme, toast: data, safe from the Library)
 // or { handler: true }, meaning code registered the function (registerCommand
 // with a handler). A keybinding is { key, command, when? }: a package binds a
 // key and never reads keys; the shell captures keydown once (installKeyCapture)
@@ -29,6 +29,7 @@ export type DeclarativeAction =
   | { action: 'openApp'; app: string }
   | { action: 'openFile'; path: string }
   | { action: 'copyText'; text: string; label?: string }
+  | { action: 'setTheme'; theme: string }
   | { action: 'toast'; message: string };
 export type CommandRun = DeclarativeAction | { handler: true };
 export interface CommandSpec {
@@ -53,7 +54,7 @@ const TIER_RANK: Record<Tier, number> = { user: 0, app: 1, core: 2 };
 export const LOCKED_KEYS: ReadonlySet<string> = new Set(['Mod+K']);
 
 const ID = /^[a-z][a-z0-9-]*\.[A-Za-z][A-Za-z0-9._-]*$/;
-const ACTIONS = new Set(['openApp', 'openFile', 'copyText', 'toast']);
+const ACTIONS = new Set(['openApp', 'openFile', 'copyText', 'setTheme', 'toast']);
 const SCOPE = /^(global|app|target:[a-z][a-z0-9_-]*)$/;
 
 export function normalizeKey(key: string): string {
@@ -126,6 +127,7 @@ export interface Actions {
   openApp(app: string): void;
   openFile(path: string): void;
   copyText(text: string, label?: string): void;
+  setTheme(theme: string): void;
   toast(message: string): void;
 }
 
@@ -177,6 +179,7 @@ export function createCommands(deps: { scopeFor: (owner: string) => Scope; actio
       case 'openApp': deps.actions.openApp(String(run.app || '')); break;
       case 'openFile': deps.actions.openFile(String(run.path || '')); break;
       case 'copyText': deps.actions.copyText(String(run.text ?? ''), run.label); break;
+      case 'setTheme': deps.actions.setTheme(String(run.theme || '')); break;
       case 'toast': deps.actions.toast(String(run.message || '')); break;
     }
     return true;
@@ -238,7 +241,7 @@ const act = <K extends keyof Actions>(name: K) => ((...args: Parameters<Actions[
 
 export const commands = createCommands({
   scopeFor: packageScope,
-  actions: { openApp: act('openApp'), openFile: act('openFile'), copyText: act('copyText'), toast: act('toast') },
+  actions: { openApp: act('openApp'), openFile: act('openFile'), copyText: act('copyText'), setTheme: act('setTheme'), toast: act('toast') },
 });
 
 /** The shell's single keydown capture. Returns the disposer. */

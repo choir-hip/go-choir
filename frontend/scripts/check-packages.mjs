@@ -114,7 +114,7 @@ function staticFacts() {
 
 const COMMAND_ID = /^[a-z][a-z0-9-]*\.[A-Za-z][A-Za-z0-9._-]*$/;
 const COMMAND_SCOPE = /^(global|app|target:[a-z][a-z0-9_-]*)$/;
-const COMMAND_ACTIONS = new Set(['openApp', 'openFile', 'copyText', 'toast']);
+const COMMAND_ACTIONS = new Set(['openApp', 'openFile', 'copyText', 'setTheme', 'toast']);
 const LOCKED_KEYS = new Set(['Mod+K']);
 
 function normalizeKey(key) {
@@ -128,6 +128,37 @@ function normalizeKey(key) {
     else main = part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1);
   }
   return main ? [...['Mod', 'Alt', 'Shift'].filter((m) => mods.has(m)), main].join('+') : '';
+}
+
+// contributes.themes: { id, file } with the file in the package, JSON, schema 2, the same id.
+// The token, safe-value and contrast rules run when the theme registers (theme.ts) and in tests/theme-contract.spec.js.
+function checkThemes(contributes, dir, where) {
+  if (contributes.themes === undefined) return;
+  if (!Array.isArray(contributes.themes)) {
+    fail(where, 'themes must be an array');
+    return;
+  }
+  const ids = new Set();
+  contributes.themes.forEach((t, i) => {
+    const at = `${where} themes[${i}]`;
+    if (!strictKeys(t, at, ['id', 'file'])) return;
+    if (typeof t.id !== 'string' || !/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/.test(t.id)) fail(at, 'id must be lowercase letters, digits and dashes');
+    else if (ids.has(t.id)) fail(at, `id "${t.id}" is listed twice`);
+    else ids.add(t.id);
+    if (typeof t.file !== 'string' || !/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/.test(t.file) || t.file.split('/').includes('..')) {
+      fail(at, 'file must be a relative .json path inside the package');
+      return;
+    }
+    let theme;
+    try {
+      theme = JSON.parse(readFileSync(join(dir, t.file), 'utf8'));
+    } catch (err) {
+      fail(at, `file ${t.file} cannot be read as JSON: ${err.message}`);
+      return;
+    }
+    if (!isObject(theme) || theme.id !== t.id) fail(at, `file ${t.file} must be a theme with id "${t.id}"`);
+    else if (theme.schema_version !== 2) fail(at, `file ${t.file} must have schema_version 2`);
+  });
 }
 
 function checkCommands(contributes, owner, where) {
@@ -169,7 +200,7 @@ const inside = (dir, target) => target === dir || target.startsWith(dir + sep);
 
 // ---- manifest ----
 
-function checkManifest(manifest, dirName, where) {
+function checkManifest(manifest, dirName, where, pkgDir) {
   const ok = strictKeys(
     manifest, where,
     ['schema', 'name', 'version', 'display', 'app', 'opens'],
@@ -235,10 +266,11 @@ function checkManifest(manifest, dirName, where) {
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
-  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings'])) {
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes'])) {
     const c = manifest.contributes;
     if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
     checkCommands(c, manifest.name, `${where} contributes`);
+    checkThemes(c, pkgDir, `${where} contributes`);
   }
   if (manifest.capabilities !== undefined) {
     if (!Array.isArray(manifest.capabilities)) fail(where, 'capabilities must be an array');
@@ -304,7 +336,7 @@ function main() {
       continue;
     }
     const before = errors.length;
-    checkManifest(manifest, dir, where);
+    checkManifest(manifest, dir, where, pkgDir);
     if (!existsSync(join(pkgDir, 'App.svelte'))) fail(`src/packages/${dir}`, 'missing App.svelte');
     if (errors.length > before && !(typeof manifest?.name === 'string' && NAME_RE.test(manifest.name))) continue;
 

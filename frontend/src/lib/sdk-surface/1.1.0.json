@@ -16,6 +16,10 @@
       "kind": "class",
       "type": "{ new (message?: string): import(\"./auth\").AuthRequiredError; prototype: import(\"./auth\").AuthRequiredError; } & { name: string; message: string; stack?: string | undefined; cause?: unknown; }"
     },
+    "ChoirTheme": {
+      "kind": "type",
+      "type": "{ schema_version: number; id: string; name: string; colors: Record<string, string>; radii: Record<string, string>; motion: Record<string, string>; layout: { promptSurfacePlacement: PromptSurfacePlacement; promptSurfaceMinHeight: string; deskSheetHeight: string; }; fonts: Record<string, string>; effects: Record<string, string>; }"
+    },
     "CommandHandler": {
       "kind": "type",
       "type": "(context: Record<string, unknown>) => void | Promise<void>"
@@ -200,6 +204,10 @@
       "kind": "value",
       "type": "(appContext?: any) => import(\"./launch-file\").LaunchFile | null"
     },
+    "getTheme": {
+      "kind": "value",
+      "type": "() => import(\"./theme\").ChoirTheme"
+    },
     "isContextMenuOpen": {
       "kind": "value",
       "type": "() => boolean"
@@ -259,6 +267,10 @@
     "notifyPackagesChanged": {
       "kind": "value",
       "type": "() => void"
+    },
+    "onThemeChange": {
+      "kind": "value",
+      "type": "(fn: (theme: import(\"./theme\").ChoirTheme) => void) => () => void"
     },
     "openApp": {
       "kind": "value",
@@ -347,6 +359,10 @@
     "setAppContext": {
       "kind": "value",
       "type": "(change: import(\"./shell-services\").AppContextChange) => void"
+    },
+    "setTheme": {
+      "kind": "value",
+      "type": "(idOrConfig: string | Record<string, unknown>) => { ok: boolean; errors: string[]; }"
     },
     "sourceEntityKindLabel": {
       "kind": "value",
@@ -480,7 +496,7 @@
     },
     "import(\"./services/commands\").DeclarativeAction": {
       "kind": "type",
-      "type": "{ action: \"openApp\"; app: string; } | { action: \"openFile\"; path: string; } | { action: \"copyText\"; text: string; label?: string | undefined; } | { action: \"toast\"; message: string; }"
+      "type": "{ action: \"openApp\"; app: string; } | { action: \"openFile\"; path: string; } | { action: \"copyText\"; text: string; label?: string | undefined; } | { action: \"setTheme\"; theme: string; } | { action: \"toast\"; message: string; }"
     },
     "import(\"./shell-services\").AppContextChange": {
       "kind": "type",
@@ -505,6 +521,10 @@
     "import(\"./shell-services\").WindowSummary": {
       "kind": "type",
       "type": "{ windowId: string; appId: string; title: string; mode: string; focused: boolean; }"
+    },
+    "import(\"./theme\").ChoirTheme": {
+      "kind": "type",
+      "type": "{ schema_version: number; id: string; name: string; colors: Record<string, string>; radii: Record<string, string>; motion: Record<string, string>; layout: { promptSurfacePlacement: PromptSurfacePlacement; promptSurfaceMinHeight: string; deskSheetHeight: string; }; fonts: Record<string, string>; effects: Record<string, string>; }"
     }
   },
   "legacy_events": [
@@ -520,5 +540,5 @@
     "opentexture",
     "resetdesktop"
   ],
-  "digest": "sha256:d20e06cd77571819c2a38920068f75557009217b936e893f87d4ff8a5a195c4b"
+  "digest": "sha256:4906fffa322665d7669c3264c01753284666ace062871670b1ebb8e4f183b78d"
 }

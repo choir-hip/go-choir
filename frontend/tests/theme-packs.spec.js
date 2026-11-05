@@ -1,0 +1,99 @@
+// Theme service and contributes.themes, slice S5. A contributed theme is
+// selected, validated and normalized exactly like a preset; the leak
+// differential holds across install and uninstall.
+// Failure modes T1 to T5 are listed in services/theme.ts.
+import { test, expect } from '@playwright/test';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+let vite; let T; let S; let X; let K;
+test.beforeAll(async () => {
+  vite = await createServer({ root, server: { middlewareMode: true, hmr: false, watch: null }, appType: 'custom', logLevel: 'silent' });
+  T = await vite.ssrLoadModule('/src/lib/theme.ts');
+  S = await vite.ssrLoadModule('/src/lib/services/theme.ts');
+  X = await vite.ssrLoadModule('/src/lib/contributions.ts');
+  K = await vite.ssrLoadModule('/src/lib/shell-kernel.ts');
+});
+test.afterAll(async () => { await vite?.close(); });
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const night = () => ({ ...clone(T.DEFAULT_THEME), id: 'paper-night.dark', name: 'Paper Night' });
+
+test('every built-in preset passes the contributed-theme gate (the gate is not stricter than the shell)', () => {
+  for (const preset of T.THEME_PRESETS) expect(T.contributedThemeErrors(preset), preset.id).toEqual([]);
+});
+
+test('T1: a missing token, an unsafe value, an extra key and low contrast are each refused', () => {
+  const missing = night(); delete missing.colors.accent;
+  expect(T.contributedThemeErrors(missing)).toContain('colors.accent is missing');
+  const unsafe = night(); unsafe.effects.texture = 'url(https://example.com/x.png)';
+  expect(T.contributedThemeErrors(unsafe)).toContain('effects.texture must be a safe CSS value');
+  const extra = night(); extra.colors.sneaky = '#fff';
+  expect(T.contributedThemeErrors(extra)).toContain('colors.sneaky is not supported');
+  const grey = night(); grey.colors.fg = grey.colors.bg;
+  expect(T.contributedThemeErrors(grey).join(' ')).toMatch(/colors\.fg on colors\.bg has contrast 1\.00, below 4\.5/);
+  const odd = night(); odd.colors.bg = 'hsl(0 0% 0%)';
+  expect(T.contributedThemeErrors(odd).join(' ')).toMatch(/hex or rgb/);
+  expect(T.contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 0);
+});
+
+test('T2: a built-in id or a taken id is refused', () => {
+  expect(() => T.registerTheme({ ...night(), id: 'futuristic-noir' })).toThrow(/already taken/);
+  const off = T.registerTheme(night());
+  expect(() => T.registerTheme(night())).toThrow(/already taken/);
+  off();
+});
+
+test('a pack contributes a theme; selecting it normalizes to it; uninstall restores the baseline (T3, leak differential)', async () => {
+  const before = JSON.stringify(K.shellKernel.snapshot());
+  const idsBefore = T.listThemes().map((t) => t.id);
+  const restore = S.setThemeFileResolver((pkg, file) => (pkg === 'paper-night' && file === 'theme.json' ? night() : undefined));
+  const applied = [];
+  const unbind = S.bindThemeHost({ apply: (theme, persist) => { applied.push([theme.id, persist]); S.publishTheme(T.normalizeThemeConfig(theme)); return { ok: true }; } });
+  await X.setPackageContributions('paper-night', { themes: [{ id: 'paper-night.dark', file: 'theme.json' }] }, 'v1');
+  expect(T.listThemes().map((t) => t.id)).toEqual([...idsBefore, 'paper-night.dark']);
+  expect(T.normalizeThemeConfig(night()).id).toBe('paper-night.dark');
+  expect(T.validateThemeConfig(night()).ok).toBe(true);
+  expect(S.setTheme('paper-night.dark')).toEqual({ ok: true, errors: [] });
+  expect(S.getTheme().id).toBe('paper-night.dark');
+  const seen = [];
+  const off = S.onThemeChange((t) => seen.push(t.id));
+  // the pack goes while selected: the default shows, not persisted
+  await X.setPackageContributions('paper-night', null, '');
+  expect(applied.at(-1)).toEqual([T.DEFAULT_THEME.id, false]);
+  expect(seen).toEqual([T.DEFAULT_THEME.id]);
+  expect(T.listThemes().map((t) => t.id)).toEqual(idsBefore);
+  expect(S.setTheme('paper-night.dark').ok).toBe(false);
+  // the choice returns with the pack
+  await X.setPackageContributions('paper-night', { themes: [{ id: 'paper-night.dark', file: 'theme.json' }] }, 'v2');
+  expect(applied.at(-1)).toEqual(['paper-night.dark', false]);
+  await X.setPackageContributions('paper-night', null, '');
+  off(); unbind(); restore();
+  expect(JSON.stringify(K.shellKernel.snapshot())).toBe(before);
+});
+
+test('a stored contributed id that was not selectable at boot is applied when the pack registers (load order)', async () => {
+  const restore = S.setThemeFileResolver(() => night());
+  const applied = [];
+  const unbind = S.bindThemeHost({ apply: (theme, persist) => { applied.push([theme.id, persist]); return { ok: true }; } });
+  S.rememberWantedTheme(night());
+  await X.setPackageContributions('paper-night', { themes: [{ id: 'paper-night.dark', file: 'theme.json' }] }, 'v1');
+  expect(applied).toEqual([['paper-night.dark', false]]);
+  await X.setPackageContributions('paper-night', null, '');
+  unbind(); restore();
+});
+
+test('T4, T5: a missing file is skipped with the rest applied; unknown ids and invalid configs are not applied', async () => {
+  const restore = S.setThemeFileResolver((pkg, file) => (file === 'ok.json' ? { ...night(), id: 'px.ok' } : undefined));
+  const warn = console.warn; console.warn = () => {};
+  await X.setPackageContributions('px', { themes: [{ id: 'px.gone', file: 'gone.json' }, { id: 'px.ok', file: 'ok.json' }] }, 'v1');
+  console.warn = warn;
+  expect(T.listThemes().map((t) => t.id)).toContain('px.ok');
+  expect(T.listThemes().map((t) => t.id)).not.toContain('px.gone');
+  expect(S.setTheme('nope').ok).toBe(false);
+  expect(S.setTheme({ schema_version: 2, id: 'futuristic-noir', colors: { fg: 'url(x)' } }).ok).toBe(false);
+  await X.setPackageContributions('px', null, '');
+  restore();
+});

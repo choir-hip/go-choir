@@ -32,6 +32,7 @@
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
+  import { bindThemeHost, publishTheme, rememberWantedTheme } from './lib/services/theme';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
   /** @type {'checking' | 'signed_out' | 'signed_in' | 'reconnecting'} */
@@ -393,6 +394,7 @@
       return validation;
     }
     currentTheme = normalized;
+    publishTheme(normalized);
     applyThemeToElement(document.documentElement, normalized);
     saveThemeBootCache(normalized);
     if (persist && isAuthenticated) {
@@ -425,6 +427,7 @@
     try {
       const stored = await fetchThemePreference();
       const theme = stored && Object.keys(stored).length > 0 ? stored : DEFAULT_THEME;
+      rememberWantedTheme(theme);
       applyTheme(theme, false);
     } catch (_err) {
       // Theme sync should not block desktop recovery.
@@ -489,13 +492,13 @@
       }
     });
 
-    function handleThemeChange(event) {
-      applyTheme(event.detail?.theme || DEFAULT_THEME);
-    }
-    window.addEventListener('choir-theme-change', handleThemeChange);
+    // setTheme in the SDK (services/theme.ts) applies and persists through this host.
+    const unbindThemeHost = bindThemeHost({ apply: (theme, persist) => applyTheme(theme || DEFAULT_THEME, persist) });
     const removeLiveListener = addLiveEventListener((message) => {
       if (message.kind !== 'theme.updated' || isOwnLiveEvent(message)) return;
-      applyTheme(liveEventPayload(message).theme || DEFAULT_THEME, false);
+      const liveTheme = liveEventPayload(message).theme || DEFAULT_THEME;
+      rememberWantedTheme(liveTheme);
+      applyTheme(liveTheme, false);
     });
 
     // Prevent bfcache from resurrecting an authenticated shell after
@@ -524,7 +527,7 @@
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      window.removeEventListener('choir-theme-change', handleThemeChange);
+      unbindThemeHost();
       removeLiveListener();
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('focus', handleFocus);
