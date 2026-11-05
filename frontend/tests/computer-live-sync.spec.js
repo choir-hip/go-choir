@@ -15,7 +15,7 @@ const syncedStateFiles = [
   'src/packages/files/App.svelte',
   'src/packages/image/App.svelte',
   'src/lib/PdfApp.svelte',
-  'src/lib/PodcastApp.svelte',
+  'src/packages/podcast/App.svelte',
   'src/lib/SettingsApp.svelte',
   'src/lib/TextureEditor.svelte',
   'src/packages/video/App.svelte',

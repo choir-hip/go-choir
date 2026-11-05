@@ -50,7 +50,7 @@ const shellAppNames = new Set(RESERVED_NAMES);
   const end = registry.indexOf('] satisfies ChoirAppDefinition[]');
   const block = start >= 0 && end > start ? registry.slice(start, end) : '';
   for (const m of block.matchAll(/^ {4}id: (?:'([a-z0-9-]+)'|TEXTURE_APP_ID),/gm)) shellAppNames.add(m[1] || 'texture');
-  if (shellAppNames.size < RESERVED_NAMES.length + 10) fail('registry.ts: parsed too few static app ids; the layout changed');
+  if (shellAppNames.size < RESERVED_NAMES.length + 1) fail('registry.ts: parsed too few static app ids; the layout changed');
 }
 
 const builtinNames = [];

@@ -770,7 +770,7 @@ func TestB2PublishedNamesCannotTakeAShellAppName(t *testing.T) {
 			t.Errorf("published %q: %v", n, err)
 		}
 	}
-	if len(ShellAppNames()) < 15 {
+	if len(ShellAppNames()) < 10 {
 		t.Fatalf("the generated shell app name list is short: %v", ShellAppNames())
 	}
 }

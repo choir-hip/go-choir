@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
-  import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+  import { fetchWithRenewal, AuthRequiredError } from '../../lib/app-sdk';
   import { buildListenPath, formatTime, parsePodcastFeed } from './podcast.js';
-  import { loadMediaProgress, saveMediaPosition } from './media-utils.js';
-  import { addLiveEventListener, liveEventKind } from './live-events.js';
-  import { previewPodcastItems } from './public-preview-data';
+  import { loadMediaProgress, saveMediaPosition } from '../../lib/app-sdk';
+  import { addLiveEventListener, liveEventKind, repeatEvery } from '../../lib/app-sdk';
+  import { previewPodcastItems } from './preview-data';
 
   export let appContext = {};
   export let authenticated = false;
@@ -463,7 +463,7 @@
 
   onMount(() => {
     void loadInitialState().then(() => refreshPodcastLibrary());
-    refreshTimer = setInterval(() => {
+    refreshTimer = repeatEvery(() => {
       void refreshPodcastLibrary();
     }, 30 * 60 * 1000);
     removeLiveListener = addLiveEventListener((message) => {
@@ -483,7 +483,7 @@
 
   onDestroy(() => {
     removeLiveListener();
-    if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshTimer) refreshTimer();
   });
 </script>
 

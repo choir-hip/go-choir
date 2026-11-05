@@ -127,17 +127,6 @@ const STATIC_APPS = [
     theme: { surface: 'document', shellDataAttr: 'data-autopaper-window', contentClass: 'autopaper-content' },
   },
   {
-    id: 'podcast',
-    name: 'Podcast',
-    icon: '📡',
-    description: 'Podcast feed player',
-    component: () => import('../PodcastApp.svelte'),
-    launcher: { menu: true, desktopIcon: true, order: 70 },
-    window: { singleton: false, heavy: true, desktop: { width: 900, height: 660 }, compact: compactDefault },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'media', shellDataAttr: 'data-podcast-window', contentClass: 'podcast-content' },
-  },
-  {
     id: 'pdf',
     name: 'PDF',
     icon: '📄',

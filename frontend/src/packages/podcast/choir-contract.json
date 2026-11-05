@@ -1,0 +1,70 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Podcast lists the subscribed shows, opens one and lists its episodes.",
+  "ready": "[data-podcast-app]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/podcast/subscriptions",
+      "status": 200,
+      "json": {
+        "subscriptions": [
+          {
+            "feed_url": "https://example.com/feed.rss",
+            "content_item": {
+              "content_id": "c-1",
+              "title": "Contract feed",
+              "source_url": "https://example.com/feed.rss",
+              "media_type": "application/rss+xml",
+              "app_hint": "podcast",
+              "text_content": "<?xml version=\"1.0\"?><rss><channel><title>Contract feed</title><item><title>Episode one</title><enclosure url=\"https://example.com/one.mp3\" type=\"audio/mpeg\"/></item></channel></rss>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/podcast/subscriptions/refresh",
+      "status": 200,
+      "json": {
+        "subscriptions": [
+          {
+            "feed_url": "https://example.com/feed.rss",
+            "content_item": {
+              "content_id": "c-1",
+              "title": "Contract feed",
+              "source_url": "https://example.com/feed.rss",
+              "media_type": "application/rss+xml",
+              "app_hint": "podcast",
+              "text_content": "<?xml version=\"1.0\"?><rss><channel><title>Contract feed</title><item><title>Episode one</title><enclosure url=\"https://example.com/one.mp3\" type=\"audio/mpeg\"/></item></channel></rss>"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "expect": [
+    {
+      "selector": "[data-podcast-search]"
+    },
+    {
+      "selector": "[data-podcast-library-item]",
+      "text": "Contract feed",
+      "count": 1
+    }
+  ],
+  "steps": [
+    {
+      "click": "[data-podcast-library-item]"
+    },
+    {
+      "see": "[data-podcast-feed]"
+    },
+    {
+      "see": "[data-podcast-episode]",
+      "text": "Episode one",
+      "count": 1
+    }
+  ]
+}

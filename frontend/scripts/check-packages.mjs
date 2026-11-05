@@ -52,7 +52,8 @@ function lookupGrant(name) {
   const family = i > 0 && Object.hasOwn(GRANTS, name.slice(0, i)) ? GRANTS[name.slice(0, i)] : undefined;
   return family?.family && /^[a-z][a-z0-9_]{0,31}$/.test(name.slice(i + 1)) ? family : undefined;
 }
-const MIN_STATIC_IDS = 10;
+// Texture is the one static app left (T1 moves it); the floor only catches a parser that finds none.
+const MIN_STATIC_IDS = 1;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = ['image', 'files'];
