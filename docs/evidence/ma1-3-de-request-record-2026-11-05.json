@@ -1,0 +1,74 @@
+{
+ "slice": "MA1.3",
+ "what": "first d@e desk run after MA1.3 deployed: a Texture Cast to research read back through GET /api/inboxes/{inbox}/records",
+ "deployed_commit": "e385fd3495ff92c60972f1522af819911bc1ecef",
+ "computer": "d@e (computer-59c902c5d46caecc0a180a8557164e72)",
+ "trajectory_id": "f0044974-a06f-51ab-8bbc-f3aad9d86c94",
+ "doc_id": "98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+ "trajectory_status": "settled",
+ "request_record": {
+  "schema_id": "commitment_record.v1",
+  "record_id": "cell:c34b80d5-fd15-4a7d-a35b-79650f1d5b16:chatcmpl-tool-9eca55eeef4a5f57:cast:tray-2",
+  "prediction": {
+   "hypothesis": "",
+   "committed_at": ""
+  },
+  "observation": {
+   "excerpt": "",
+   "source_ref": "",
+   "observed_at": ""
+  },
+  "scores": null,
+  "discrepancy": "unresolved",
+  "provenance": {
+   "agent_id": "texture:98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+   "model_id": "",
+   "context_ref": "98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+   "committed_at": "2026-11-05T01:06:44.036220881Z",
+   "desk": "texture:98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+   "run_id": "c34b80d5-fd15-4a7d-a35b-79650f1d5b16",
+   "origin": "desk_run"
+  },
+  "revision": {},
+  "kind": "directive",
+  "directive": {
+   "subtype": "cast",
+   "body": "{\"kind\":\"question\",\"owner_directions\":[{\"revision_id\":\"cc5f0e29-51e9-5f49-b624-caa720455783\",\"kind\":\"request\",\"at\":\"2026-11-05T01:06:24.545105029Z\",\"text\":\"Write a short cited note on what gVisor's systrap platform is and how it differs from ptrace and KVM platforms.\",\"current\":true}],\"owner_revision\":\"cc5f0e29-51e9-5f49-b624-caa720455783\",\"questions\":[\"What is the systrap platform mechanically? H\u2026(truncated)",
+   "objective": "Evidence for a short cited note on gVisor's systrap platform and how it differs from ptrace and KVM: mechanism, cost and host requirements of each, with verbatim passages and URLs."
+  },
+  "p_success": 0.78,
+  "weight": 0.62,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "materiality_procedure": {
+   "kind": "cast",
+   "custodian": "management",
+   "procedure_ref": "request.cast.v1",
+   "window": "14d (F1), 30d (F2)",
+   "weight": 0.62,
+   "impact_class": "I1",
+   "hash": "f5aa5268e288f1d08ca9901841bb30e090b4dcfd109c20dd2a22cc69ecbd4d5c"
+  },
+  "addressee": "research:98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+  "emitter_kind": "agent",
+  "computer_id": "computer-59c902c5d46caecc0a180a8557164e72",
+  "inbox": "research:98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+  "sender_inbox": "texture:98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+  "inbox_seq": 1,
+  "conversation_id": "conv:research:98de8ba5-3634-572a-afe0-1e4bde1eefb5|texture:98de8ba5-3634-572a-afe0-1e4bde1eefb5",
+  "round": 1,
+  "cast": {}
+ },
+ "texture_inbox_summary": {
+  "head": 14,
+  "records": 14,
+  "by_sender": {
+   "research": 10,
+   "system": 4
+  }
+ },
+ "observations": [
+  "p_success 0.78, weight 0.62, settlement recipient on the Cast, reducer-stamped provenance with origin desk_run and the run id",
+  "provenance.model_id is empty on the Texture desk run's records while research's carry the served model id (noted, not fixed)"
+ ]
+}
