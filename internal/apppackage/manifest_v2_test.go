@@ -743,8 +743,9 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", p, err)
 		}
-		// A first-party app that calls shell functions (Settings, Compute Monitor) holds ui.shell, a privileged grant.
-		if m.Class() != ClassApp || (m.Level() != LevelDefault && m.Level() != LevelPrivileged) {
+		// Only the two apps that call shell functions hold ui.shell, a privileged grant.
+		privilegedOK := m.Name == "settings" || m.Name == "compute-monitor"
+		if m.Class() != ClassApp || (m.Level() != LevelDefault && !(privilegedOK && m.Level() == LevelPrivileged)) {
 			t.Errorf("%s: class %s level %s", p, m.Class(), m.Level())
 		}
 		if _, err := m.BehaviourSurface(DirSource(filepath.Dir(p))); err != nil {
@@ -758,7 +759,7 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 // B2: a published package cannot take a name the shell already holds as an app
 // id (static ids) or reserves (check-packages RESERVED_NAMES).
 func TestB2PublishedNamesCannotTakeAShellAppName(t *testing.T) {
-	names := []string{"texture", "desk", "prompt", "system", "owner", "management", "engineering", "research", "desktop", "shell"}
+	names := []string{"texture", "pdf", "epub", "email", "desk", "prompt", "system", "owner", "management", "engineering", "research", "desktop", "shell"}
 	for _, n := range names {
 		_, err := parseAs(t, OriginPublished, func(v map[string]any) {
 			v["name"] = n

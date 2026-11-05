@@ -84,6 +84,7 @@
     "showOverview": "ui.shell",
     "submitPrompt": "ui.shell",
     "suspendBackgroundHeavyWindows": "ui.shell",
-    "windowAction": "ui.shell"
+    "windowAction": "ui.shell",
+    "windowList": "ui.shell"
   }
 }

@@ -149,8 +149,8 @@ test.describe('desktop 1280x860', () => {
 
     // Mail maximized is the same rectangle, and its default fits a list and a
     // reading column.
-    await openApp(page, 'email');
-    const mail = windowFor(page, 'email');
+    await openApp(page, 'mail');
+    const mail = windowFor(page, 'mail');
     await expect(mail).toBeVisible({ timeout: 5000 });
     const mailNormal = await rect(page, mail);
     expect(mailNormal.width).toBeGreaterThanOrEqual(1100);
@@ -274,8 +274,8 @@ test.describe('desktop 1280x860', () => {
     await loadDesktop(page, authenticator, uniqueEmail(), DESKTOP);
 
     await openApp(page, 'files');
-    await openApp(page, 'email');
-    await windowFor(page, 'email').locator('[data-window-maximize]').click();
+    await openApp(page, 'mail');
+    await windowFor(page, 'mail').locator('[data-window-maximize]').click();
     await page.waitForTimeout(250);
 
     const prompt = await rect(page, page.locator('[data-prompt-surface]'));
@@ -303,8 +303,8 @@ test.describe('phone 390x844', () => {
     expectRectClose(await rect(page, files), await freeArea(page), 1, 'phone Files');
     await shot(page, 'phone-01-files-maximized.png');
 
-    await openApp(page, 'email');
-    const mail = windowFor(page, 'email');
+    await openApp(page, 'mail');
+    const mail = windowFor(page, 'mail');
     expect(await mail.getAttribute('data-window-mode')).toBe('maximized');
     expectRectClose(await rect(page, mail), await freeArea(page), 1, 'phone Mail');
     await shot(page, 'phone-02-mail-maximized.png');
@@ -377,7 +377,7 @@ test.describe('phone 390x844', () => {
     await loadDesktop(page, authenticator, uniqueEmail(), PHONE);
 
     await openApp(page, 'files');
-    await openApp(page, 'email');
+    await openApp(page, 'mail');
     const prompt = await rect(page, page.locator('[data-prompt-surface]'));
     for (const win of await page.locator('[data-window]').all()) {
       const box = await rect(page, win);

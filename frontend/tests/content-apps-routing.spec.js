@@ -1,3 +1,4 @@
+import { readerViewer, readerSearch, expectPdfRendered } from './helpers/reader.js';
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey } from './helpers/auth.js';
 import { buildEpubBytes, buildPdfBytes } from './helpers/media-fixtures.js';
@@ -160,6 +161,16 @@ test('bare content references open the dedicated content apps from the prompt ba
         : page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
       await expect(viewer).toBeVisible({ timeout: 30_000 });
 
+      if (reference.app === 'pdf') {
+        await expectPdfRendered(viewer);
+        await expect(viewer.locator('[data-reader-page-count]')).toContainText('/ 1');
+        await expect(await readerSearch(viewer, 'section seven')).toContainText(/^1 match/, { timeout: 10_000 });
+      } else if (reference.app === 'epub') {
+        await expect(viewer.locator('[data-reader-sheet]')).toBeVisible({ timeout: 15_000 });
+        await expect(viewer.locator('[data-reader-chapter]')).toContainText('Section Seven');
+        await expect(await readerSearch(viewer, 'real reader')).toContainText(/^1 match/, { timeout: 10_000 });
+      }
+
       if (reference.app === 'image') {
         await expect(viewer.locator('[data-image-toolbar]')).toHaveJSProperty('open', false);
         const controls = await openMediaControls(viewer, '[data-image-toolbar]');
@@ -213,7 +224,7 @@ test('media controls stay reachable in the mobile desktop window geometry', asyn
       app: 'pdf',
       mediaType: 'application/pdf',
       url: 'https://example.com/choir-mobile-doc.pdf',
-      required: ['[data-pdf-toolbar]', '[data-pdf-page]', '[data-pdf-zoom]', '[data-pdf-reader][data-pdf-rendered="true"]'],
+      required: ['[data-reader-toolbar]', '[data-reader-prev]', '[data-reader-next]', '[data-reader-page-canvas][data-reader-rendered="true"]'],
     },
   ];
 
@@ -223,12 +234,12 @@ test('media controls stay reachable in the mobile desktop window geometry', asyn
     expect(decision.app).toBe(reference.app);
     expect(decision.media_type).toBe(reference.mediaType);
 
-    const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
+    const viewer = reference.app === 'pdf'
+      ? readerViewer(page, 'pdf')
+      : page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
     await expect(viewer).toBeVisible({ timeout: 30_000 });
     if (reference.app === 'image') {
       await openMediaControls(viewer, '[data-image-toolbar]');
-    } else if (reference.app === 'pdf') {
-      await openMediaControls(viewer, '[data-pdf-toolbar]');
     }
     for (const selector of reference.required) {
       await expect(viewer.locator(selector)).toBeVisible();
@@ -237,7 +248,7 @@ test('media controls stay reachable in the mobile desktop window geometry', asyn
     const windowEl = page.locator('[data-window]').filter({ has: viewer }).last();
     const [windowBox, stageBox] = await Promise.all([
       windowEl.boundingBox(),
-      viewer.locator('[data-media-stage]').boundingBox(),
+      viewer.locator('[data-media-stage], [data-reader-stage]').first().boundingBox(),
     ]);
     expect(windowBox.width).toBeGreaterThanOrEqual(260);
     expect(windowBox.height).toBeGreaterThanOrEqual(320);

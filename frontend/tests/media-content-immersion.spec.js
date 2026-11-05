@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { readerViewer } from './helpers/reader.js';
 import path from 'node:path';
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey } from './helpers/auth.js';
@@ -147,7 +148,7 @@ async function seedPodcastFeed(page, title) {
 
 async function appGeometry(page, viewer, app, viewportLabel, phase) {
   const metrics = await viewer.evaluate((root) => {
-    const stage = root.querySelector('[data-media-stage]');
+    const stage = root.querySelector('[data-media-stage], [data-reader-stage]');
     if (!stage) return null;
     const rootBox = root.getBoundingClientRect();
     const stageBox = stage.getBoundingClientRect();
@@ -174,56 +175,17 @@ async function appGeometry(page, viewer, app, viewportLabel, phase) {
   return metrics;
 }
 
-async function expectFloatingNavAtEdges(viewer, app, viewportLabel) {
-  const metrics = await viewer.evaluate((root) => {
-    const rootBox = root.getBoundingClientRect();
-    return Array.from(root.querySelectorAll('[data-pdf-page-nav] button, [data-epub-page-nav] button')).map((button) => {
-      const rect = button.getBoundingClientRect();
-      const leftInset = rect.left - rootBox.left;
-      const rightInset = rootBox.right - rect.right;
-      const nearLeft = Math.abs(leftInset) <= Math.abs(rightInset);
-      return {
-        width: Math.round(rect.width),
-        edgeDistance: Math.round(Math.min(Math.abs(leftInset), Math.abs(rightInset))),
-        insideDepth: Math.round(nearLeft ? rect.right - rootBox.left : rootBox.right - rect.left),
-      };
-    });
-  });
-  for (const metric of metrics) {
-    expect(metric.width, `${app} ${viewportLabel} nav button width`).toBeLessThanOrEqual(34);
-    expect(metric.edgeDistance, `${app} ${viewportLabel} nav button edge distance`).toBeLessThanOrEqual(18);
-    expect(metric.insideDepth, `${app} ${viewportLabel} nav button content intrusion`).toBeLessThanOrEqual(24);
-  }
-}
-
-async function pinchPdfStage(page, viewer) {
-  const stage = viewer.locator('[data-pdf-stage]');
-  const box = await stage.boundingBox();
-  expect(box, 'PDF stage should have a box before pinch').toBeTruthy();
-  const y = Math.round(box.y + box.height * 0.5);
-  const startLeft = Math.round(box.x + box.width * 0.46);
-  const startRight = Math.round(box.x + box.width * 0.54);
-  const endLeft = Math.round(box.x + box.width * 0.34);
-  const endRight = Math.round(box.x + box.width * 0.66);
-  const client = await page.context().newCDPSession(page);
-  await client.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [
-      { id: 1, x: startLeft, y, radiusX: 2, radiusY: 2, force: 1 },
-      { id: 2, x: startRight, y, radiusX: 2, radiusY: 2, force: 1 },
-    ],
-  });
-  await client.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [
-      { id: 1, x: endLeft, y, radiusX: 2, radiusY: 2, force: 1 },
-      { id: 2, x: endRight, y, radiusX: 2, radiusY: 2, force: 1 },
-    ],
-  });
-  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await expect(viewer, 'PDF pinch should switch to explicit zoom percent').toHaveAttribute('data-pdf-zoom-mode', /^[0-9]+$/, {
-    timeout: 5_000,
-  });
+// The Reader has no pinch gesture; its PDF zoom is the toolbar control (non-compact windows).
+async function zoomPdfStage(viewer) {
+  const zoom = viewer.locator('[data-reader-zoom]');
+  const canvas = viewer.locator('[data-reader-page-canvas] canvas');
+  const before = await canvas.boundingBox();
+  expect(before, 'PDF page should be drawn before zooming').toBeTruthy();
+  const values = await zoom.locator('option').evaluateAll((options) => options.map((option) => option.value));
+  const explicit = values.find((value) => /^[0-9]+$/.test(value) && Number(value) > 100) || values[values.length - 1];
+  await zoom.selectOption(explicit);
+  await expect(viewer.locator('[data-reader-page-canvas]')).toHaveAttribute('data-reader-rendered', 'true', { timeout: 10_000 });
+  await expect.poll(async () => (await canvas.boundingBox()).width, { timeout: 10_000 }).not.toBe(before.width);
 }
 
 async function expectStageOccupancy(page, viewer, app, viewportLabel, threshold) {
@@ -248,7 +210,6 @@ async function expectStageOccupancy(page, viewer, app, viewportLabel, threshold)
     expect(chrome.text, `${app} ${viewportLabel} closed chrome label`).not.toMatch(/Controls|Info|Source|Provenance/i);
   }
   await expect(viewer.locator('[data-media-open-source]').first()).not.toBeVisible();
-  await expectFloatingNavAtEdges(viewer, app, viewportLabel);
 
   const before = await appGeometry(page, viewer, app, viewportLabel, 'closed');
   expect(before.ratio, `${app} ${viewportLabel} stage ratio`).toBeGreaterThanOrEqual(threshold);
@@ -275,7 +236,10 @@ async function openPromptRoutedApp(page, reference) {
   const decision = await submitBareReference(page, reference.url);
   expect(decision.action).toBe('open_app');
   expect(decision.app).toBe(reference.app);
-  const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
+  // PDF and EPUB are the Reader's (slice C7).
+  const viewer = reference.app === 'pdf' || reference.app === 'epub'
+    ? readerViewer(page, reference.app)
+    : page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
   await expect(viewer).toBeVisible({ timeout: 30_000 });
   if (reference.readySelector) {
     await expect(viewer.locator(reference.readySelector)).toBeVisible({ timeout: reference.readyTimeout || 30_000 });
@@ -318,14 +282,14 @@ for (const viewport of [
         app: 'pdf',
         url: 'https://example.com/choir-immersion.pdf',
         threshold: 0.85,
-        readySelector: '[data-pdf-reader][data-pdf-rendered="true"]',
+        readySelector: '[data-reader-page-canvas][data-reader-rendered="true"]',
         readyTimeout: 20_000,
       },
       {
         app: 'epub',
         url: 'https://example.com/choir-immersion.epub',
         threshold: 0.85,
-        readySelector: '[data-epub-reader]',
+        readySelector: '[data-reader-sheet]',
         readyTimeout: 20_000,
       },
       {
@@ -345,8 +309,8 @@ for (const viewport of [
     for (const reference of promptRoutedApps) {
       const viewer = await openPromptRoutedApp(page, reference);
       await expectStageOccupancy(page, viewer, reference.app, viewport.label, reference.threshold);
-      if (reference.app === 'pdf' && viewport.label === 'mobile390') {
-        await pinchPdfStage(page, viewer);
+      if (reference.app === 'pdf' && viewport.label === 'desktop') {
+        await zoomPdfStage(viewer);
       }
     }
   });

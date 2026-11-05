@@ -11,7 +11,7 @@ test('a failed app module offers a reload that recovers', async ({ page }) => {
 
   // The logged-out home opens the Autopaper window first.
   let autopaperModuleRequests = 0;
-  await page.route(/\/src\/lib\/AutopaperApp\.svelte(?:\?.*)?$/, async (route) => {
+  await page.route(/\/src\/packages\/autopaper\/App\.svelte(?:\?.*)?$/, async (route) => {
     autopaperModuleRequests += 1;
     if (autopaperModuleRequests === 1) {
       await route.fulfill({ status: 503, body: 'transient module failure' });

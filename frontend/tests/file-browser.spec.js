@@ -14,6 +14,7 @@
  * - VAL-FILES-016: Back/forward navigation
  * - VAL-FILES-018: Responsive on mobile
  */
+import { readerViewer, readerSearch, expectPdfRendered } from './helpers/reader.js';
 import { test, expect } from './helpers/fixtures.js';
 import { buildDocxBytes, buildEpubBytes, buildPdfBytes, putBinaryFile } from './helpers/media-fixtures.js';
 
@@ -337,7 +338,7 @@ test('clicking text file opens in Texture', async ({ desktopSession }) => {
   await expect(editorArea).toContainText(fileContent);
 });
 
-test('clicking PDF and EPUB opens dedicated reader apps instead of downloading', async ({ desktopSession }) => {
+test('clicking PDF and EPUB opens the Reader instead of downloading', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const downloads = [];
   page.on('download', (download) => downloads.push(download.suggestedFilename()));
@@ -360,44 +361,32 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   await openFilesApp(page);
 
   await page.locator('[data-file-item]').filter({ hasText: 'mission-report.pdf' }).click();
-  const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
+  const pdfViewer = readerViewer(page, 'pdf');
   await expect(pdfViewer).toBeVisible({ timeout: 5000 });
-  const pdfControls = await openMediaControls(pdfViewer, '[data-pdf-toolbar]');
-  await expect(pdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
-  await expect(pdfControls.locator('[data-pdf-page-count]')).toContainText('1 / 1');
-  await pdfControls.locator('[data-pdf-search]').fill('Mission report');
-  await expect(pdfControls.locator('[data-pdf-search-count]')).toContainText('1 matches', { timeout: 10_000 });
+  await expectPdfRendered(pdfViewer);
+  await expect(pdfViewer.locator('[data-reader-page-count]')).toContainText('/ 1');
+  await expect(await readerSearch(pdfViewer, 'Mission report')).toContainText(/^1 match/, { timeout: 10_000 });
 
   await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
 
   await page.locator('[data-file-item]').filter({ hasText: 'field-guide.epub' }).click();
-  const epubViewer = page.locator('[data-media-app][data-media-kind="epub"]').last();
+  const epubViewer = readerViewer(page, 'epub');
   await expect(epubViewer).toBeVisible({ timeout: 5000 });
-  await expect(epubViewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
-  await expect(epubViewer.locator('[data-epub-chapter-count]')).toContainText('1 / 2');
-  await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Reader Proof');
-  const epubControls = await openMediaControls(epubViewer, '[data-epub-toolbar]');
-  await epubControls.locator('[data-epub-toc]').selectOption('1');
-  await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Mobile Chapter');
+  await expect(epubViewer.locator('[data-reader-sheet]')).toBeVisible({ timeout: 15_000 });
+  await expect(epubViewer.locator('[data-reader-chapter]')).toContainText('1 / 2');
+  await expect(epubViewer.locator('[data-reader-sheet]')).toContainText('Reader Proof');
+  await epubViewer.locator('[data-reader-chapter]').selectOption('1');
+  await expect(epubViewer.locator('[data-reader-sheet]')).toContainText('Mobile Chapter');
 
   await page.locator('[data-window]').filter({ has: epubViewer }).last().locator('[data-window-close]').click();
 
+  // The launcher lists the Reader (the pdf and epub ids alias it); its recents reopen a file.
   await page.locator('[data-desk-menu-button]').click();
-  await page.locator('[data-desk-app-id="pdf"]').click();
-  const emptyPdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
-  await expect(emptyPdfViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });
-  await emptyPdfViewer.locator('[data-media-recent-item]').filter({ hasText: 'mission-report.pdf' }).click();
-  await expect(emptyPdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
-
-  await page.locator('[data-window]').filter({ has: emptyPdfViewer }).last().locator('[data-window-close]').click();
-
-  await page.locator('[data-desk-menu-button]').click();
-  await page.locator('[data-desk-app-id="epub"]').click();
-  const emptyEpubViewer = page.locator('[data-media-app][data-media-kind="epub"]').last();
-  await expect(emptyEpubViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });
-  await emptyEpubViewer.locator('[data-media-recent-item]').filter({ hasText: 'field-guide.epub' }).click();
-  await expect(emptyEpubViewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
-  await expect(emptyEpubViewer.locator('[data-epub-chapter-title]')).toContainText('Mobile Chapter');
+  await page.locator('[data-desk-app-id="reader"]').click();
+  const emptyViewer = page.locator('[data-reader-app]').last();
+  await expect(emptyViewer.locator('[data-reader-recents]')).toBeVisible({ timeout: 5000 });
+  await emptyViewer.locator('[data-reader-recent]').filter({ hasText: 'mission-report.pdf' }).click();
+  await expectPdfRendered(readerViewer(page, 'pdf'));
 
   expect(downloads).toEqual([]);
 });
@@ -413,7 +402,7 @@ test('PDF files expose explicit Texture import without replacing the PDF reader 
   await expect(fileItem.locator('[data-import-texture-btn]')).toBeVisible();
 
   await fileItem.click();
-  const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
+  const pdfViewer = readerViewer(page, 'pdf');
   await expect(pdfViewer).toBeVisible({ timeout: 5000 });
   await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
 

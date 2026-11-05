@@ -23,6 +23,8 @@ const SCHEMA = 'choir.package/v2';
 const ABI = 'choir.app-frontend/svelte-inline/v1';
 const NAME_RE = /^[a-z][a-z0-9-]{1,39}$/;
 const EXT_RE = /^[a-z0-9]{1,16}$/;
+// Retired app ids that live on as aliases of their successor package (slices C7, C13): no other package may take them.
+const RETIRED_APP_IDS = { pdf: 'reader', epub: 'reader', email: 'mail' };
 const RESERVED_NAMES = new Set([
   'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research', 'core',
 ]);
@@ -56,7 +58,10 @@ function lookupGrant(name) {
 const MIN_STATIC_IDS = 1;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
-const REQUIRED_PACKAGES = ['image', 'files'];
+const REQUIRED_PACKAGES = [
+  'audio', 'autopaper', 'browser', 'calendar', 'compute-monitor', 'content', 'files', 'image',
+  'library-next', 'mail', 'podcast', 'pulse', 'reader', 'settings', 'slides', 'video',
+];
 
 const fail = (where, message) => errors.push(`${where}: ${message}`);
 
@@ -457,6 +462,7 @@ async function main() {
   const claimedExts = new Map(); // ext -> package that holds it
   const claim = (id, owner, where) => {
     if (staticIds.has(id)) fail(where, `"${id}" is a static registry id (delete the static entry in the same change to take it)`);
+    else if (RETIRED_APP_IDS[id] && RETIRED_APP_IDS[id] !== owner) fail(where, `"${id}" is a retired app id held by package "${RETIRED_APP_IDS[id]}"`);
     else if (RESERVED_NAMES.has(id)) fail(where, `"${id}" is a reserved shell or system-desk name`);
     else if (claimedIds.has(id)) fail(where, `"${id}" is already held by package "${claimedIds.get(id)}"`);
     claimedIds.set(id, claimedIds.get(id) || owner);

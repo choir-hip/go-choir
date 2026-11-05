@@ -188,7 +188,7 @@ test('email app view state persists through universal app context after reload',
     timeout: 120000,
   });
 
-  await openApp(page, 'email');
+  await openApp(page, 'mail');
 
   const emailApp = page.locator('[data-mail-app]').last();
   await expect(emailApp).toBeVisible({ timeout: 10000 });

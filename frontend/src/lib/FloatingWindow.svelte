@@ -835,8 +835,6 @@
   .window[data-window-app-id='image'] .window-content,
   .window[data-window-app-id='audio'] .window-content,
   .window[data-window-app-id='video'] .window-content,
-  .window[data-window-app-id='pdf'] .window-content,
-  .window[data-window-app-id='epub'] .window-content,
   .window[data-window-app-id='features'] .window-content {
     overflow: hidden;
   }

@@ -31,9 +31,12 @@ var builtinPackageNames = []string{
 var shellAppNames = []string{
 	"desk",
 	"desktop",
+	"email",
 	"engineering",
+	"epub",
 	"management",
 	"owner",
+	"pdf",
 	"prompt",
 	"research",
 	"shell",

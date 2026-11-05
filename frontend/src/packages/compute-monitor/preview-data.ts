@@ -57,20 +57,3 @@ export const previewComputeStatus = {
     'Durable recovery controls are disabled in preview',
   ],
 };
-
-/**
- * The signed-out Texture document: "Introducing Choir".
- *
- * This is the third pane of the landing deck, restated. The deck says the
- * thing in two slides; this says all of it in prose, for the visitor who
- * scrolled to the machine and wants to read rather than be told.
- *
- * It used to be titled "What Choir Is" and opened with "a private,
- * Texture-centered computer for durable knowledge work" — accurate, and
- * meaningless to anyone not already briefed on the ontology. It named the
- * mechanism before the reader had a reason to want it.
- *
- * The shape now: the shared failure, the reframe, the machine, why you can
- * trust it, and what you can actually do. Jargon is introduced only after
- * the reader has a reason to want it.
- */

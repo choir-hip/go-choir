@@ -1442,7 +1442,7 @@
     }
 
     const detail = event.detail || {};
-    const appId = detail.appId || '';
+    const appId = normalizeAppId(detail.appId || '');
     // A package's `opens` routes its file types to its own id (PDF and EPUB to
     // 'reader'), so every app id the package routes name is accepted with the
     // static media apps, and so is any app Open with lists for this file.

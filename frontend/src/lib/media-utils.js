@@ -6,9 +6,8 @@ import fileRoutes from './file-routes.json';
 // PDFs and EPUBs route to the reader package (src/packages/reader): the
 // registry's PACKAGE_MEDIA_ROUTES carries those two extensions from that
 // package's manifest, and mediaRouteForFileName answers { appId: 'reader' }
-// for them, so this table does not list them. The dedicated PDF and EPUB
-// windows stay in the launcher under their own ids, but no file route sends
-// a document to them.
+// for them, so this table does not list them. The retired pdf and epub app
+// ids are aliases of the reader package.
 // The static routes are the shell's one file-route table (file-routes.json);
 // the ones that open on a click are these, the rest are Open with only.
 export const MEDIA_FILE_ROUTES = fileRoutes.routes

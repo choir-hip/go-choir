@@ -28,8 +28,8 @@ function makeFixture() {
   }
   fs.mkdirSync(path.join(root, 'src/lib'), { recursive: true });
   fs.writeFileSync(path.join(root, 'src/lib/app-sdk.ts'), 'export {};\n');
-  fs.cpSync(path.join(frontendRoot, 'src/packages/image'), path.join(root, 'src/packages/image'), { recursive: true });
-  fs.cpSync(path.join(frontendRoot, 'src/packages/files'), path.join(root, 'src/packages/files'), { recursive: true });
+  // Every first-party package: the required floor names them all.
+  fs.cpSync(path.join(frontendRoot, 'src/packages'), path.join(root, 'src/packages'), { recursive: true });
   return root;
 }
 
@@ -148,7 +148,7 @@ test.describe('check-packages.mjs', () => {
     m.app.theme = { ...m.app.theme, shellDataAttr: 'data-viewer2-window' };
     writeManifest(root, 'viewer2', m);
     const r = runCheck(root);
-    expect(r.out).toContain('3 package(s) ok');
+    expect(r.out).toContain('17 package(s) ok');
     expect(r.code).toBe(0);
   });
 
