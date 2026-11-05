@@ -3,6 +3,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -81,4 +82,14 @@ func (s *Service) IssueTextureSearch(ctx context.Context, ownerID, computerID, r
 		Fields:  &types.RequestFields{PSuccess: &p, Weight: &w, ImpactClass: types.ImpactI1, Settlement: types.SettlementRecipient},
 		grant:   true,
 	})
+}
+
+// GrantNames lists the first-party typed grants, sorted.
+func GrantNames() []string {
+	out := make([]string, 0, len(grantTable))
+	for name := range grantTable {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }

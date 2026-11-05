@@ -3,8 +3,8 @@
 > **Folded into the consolidated plan (2026-11-04).** This draft is folded into section 10 of
 > `modular-architecture-plan-2026-11-04.md` (with the leases of its section 7.2). The plan is the
 > authority; where the two differ, the plan wins. This document stays as the detailed companion.
-> Amendments (1) to (4) are the plan's and are worded into the text below by slice MA7.1; (5) and
-> (6) are already in the text. (1) "Trust never adds a
+> Amendments (1) to (4) are the plan's and were worded into the text below by slice MA7.1 (2026-11-05); (5) and
+> (6) were already in the text. (1) "Trust never adds a
 > capability" is revised: trust never exceeds the manifest ceiling and governs custodian-issued
 > leases within it (duration and scope; a fidelity event revokes at once). (2) A model provider
 > call is not I3 (owner: no rule constrains models); remove it from the impact table and log it.
@@ -60,13 +60,19 @@ Two layers, never merged:
 
 | Layer | Decides | Source | Can change by |
 |---|---|---|---|
-| **Grants** (ceiling) | what an agent can ever do | manifest, install record, first-party-only refusals | an owner act (install, widening) or a platform act (yank) |
-| **Trust** (dial) | how much of the granted envelope it may exercise without a gate | posterior over settled PSA evidence | evidence only |
+| **Ceiling** (manifest grants) | what an agent can ever ask for | manifest, install record, first-party-only refusals | an owner act (install, widening) or a platform act (yank) |
+| **Trust** (dial) | how much of the ceiling it holds on a durable lease and exercises without a gate | posterior over settled PSA evidence | evidence only |
 
-Trust never adds a capability. A perfect record does not let a desk exceed
-its grants, override a platform yank, or touch the restart rules. A collapsed
-record does not revoke grants; it turns autonomy off inside them, so every
-material act goes back through a gate.
+Trust never exceeds the ceiling, and it governs leases within it (owner,
+2026-11-04, R20). The **ceiling** is the manifest's declared capability list,
+reviewed at install and shown in the Library. A **lease** is a custodian-issued
+scoped grant on the tape (plan section 7.2) inside that ceiling. A perfect
+record does not let a desk exceed its ceiling, override a platform yank, or
+touch the restart rules. A strong record in an action class earns a durable
+lease that renews without asking; a thin or new desk holds per-task leases; a
+collapsed record, or one fidelity event, ends the class's leases and turns
+autonomy off inside the ceiling, so every material act goes back through a gate.
+See 5.6 for the lease policy.
 
 This is the practical form of section 3 of the PSA doc: "trust follows how
 fast discrepancies surface and corrections stick, not values certified in
@@ -169,8 +175,21 @@ memo's open question (PSA 8.3 item 6, "material action classes") closes:
 | I0 inert | read own objects, compute, draft into own kinds | 0 (no trust evidence, no gate) |
 | I1 local reversible | write own kinds, schedule within own desk, message a desk | 1 |
 | I2 shared reversible | write a kind another package reads, notify the owner, spend above the cost-anomaly line | 3 |
-| I3 outbound | mail send, publication, Library release, egress to a declared destination, a provider call carrying owner-private data | 10 |
+| I3 outbound | mail send, publication, Library release, egress to a declared destination | 10 |
 | I4 privileged or irreversible | capsule mutation, platform update, delete without history, credential or permission change, effects on other users | 30 |
+
+A model provider call is **not** an impact class (owner, R15: no rule
+constrains models). The example "a provider call carrying owner-private data"
+is removed from I3: a provider call is logged with its provider and labels
+(plan section 8, the disclosure path), and its spend is monitored (section 9).
+
+The table is **locked data**: `internal/trust/impact_table.json` (embedded, its
+digest pinned in code) holds the five classes with their numbers and tau, and a
+row for every grant in the catalogue and every first-party typed grant, so no
+grant runs unclassed (BT1). A test fails when a catalogue grant has no row, when
+a row names no grant, and when the file changes without the pin. The action
+class of a record is the higher of its declared grants' table class and the
+class frozen with the record, so a sender can raise a class and never lower it.
 
 `relevance` is zero for a prediction true of every action ("I will generate
 tokens"), so trivial predictions earn nothing. The numbers are a starting
@@ -332,7 +351,14 @@ layer anyway; trust cannot lift it.
 
 ## 5. What trust controls
 
-Inside the grant ceiling only:
+Inside the ceiling only. What the dial moves is **lease duration and scope**,
+whether an act is autonomous or goes to a gate, the order a recipient admits
+requests in, and the depth of install review. These decisions read the
+statistics; they are selection on a public record, the way a coach plays the
+better shooter, and not a penalty. A score is a score: the negative weights in
+section 4 are evidence strengths, not punishments, and an agent keeps its
+ceiling and may ask again. The owner-facing views say what a statistic is and
+who reads it. In order:
 
 1. **The act gate.** A material act (I2 and up) whose class is not autonomous
    goes to a gate instead of executing: a PSA request to management for
@@ -342,9 +368,10 @@ Inside the grant ceiling only:
    from the sandboxing discussion: the flow rule still decides *which* acts
    are material (owner-private data reaching a publisher-reachable sink is I3),
    and trust decides *whether* that act needs the tap.
-2. **The circuit breaker.** Any E3 fidelity or E7 platform event drops the
-   class to gated immediately, before the posterior is recomputed, and
-   notifies the owner. Autonomy returns only through new evidence.
+2. **The circuit breaker.** Any E3 fidelity or E7 platform event ends the
+   class's leases at once (lease revocation) and drops the class to gated,
+   before the posterior is recomputed, and notifies the owner. Autonomy returns
+   only through new evidence.
 3. **PSA request priority.** Every desk can message every desk (owner ruling),
    and a recipient orders and admits its inbound requests by the sender's
    record in the requested class. A spamming or failing desk is read later in
@@ -354,7 +381,16 @@ Inside the grant ceiling only:
    2026-11-04). The Library shows the new version's carried record and change
    discount so the owner can choose; trust never auto-installs.
 
-Never: grant a capability; override a platform yank or forced update; resume
+6. **Lease policy** (MA7.4). Inside the ceiling, a lease's duration and scope
+   come from the posterior's lower credible bound in the lease's action class:
+   below tau the lease is per-task (it ends with its run, and a crash closes
+   it); at or above tau, and with n above the minimum, it is durable for a
+   stated period and renews without asking, re-validated at boot against the
+   ceiling, revocations and expiry before first use. A durable lease never
+   widens scope past what the ceiling names, and a lease request is itself a
+   scored precommitment record.
+
+Never: exceed the ceiling; override a platform yank or forced update; resume
 work after a crash; touch first-party-only refusals.
 
 ## 6. Gaming, and the guards
@@ -466,8 +502,8 @@ Missing, as build slices (after D0 locks the PSA protocol):
 | BT7 | cost attribution and anomaly notice | orange |
 
 BT4 ships with the act gate on for d@e first (progressive delivery rings);
-until BT4, the conservative default from the sandboxing discussion holds:
-every I3 act by a non-first-party desk is gated.
+until BT4, leases are per-task and the conservative default holds: non-first-party
+I3 acts are gated by the label rules and the owner tap.
 
 ## 11. Conjecture
 

@@ -1,0 +1,42 @@
+{
+  "version": "impact-table/1",
+  "classes": [
+    {"class": "I0", "name": "inert", "impact": 0, "tau": null, "examples": "read own objects, compute, draft into own kinds"},
+    {"class": "I1", "name": "local reversible", "impact": 1, "tau": 0.0, "examples": "write own kinds, schedule within own desk, message a desk"},
+    {"class": "I2", "name": "shared reversible", "impact": 3, "tau": 0.80, "examples": "write a kind another package reads, notify the owner, spend above the cost-anomaly line"},
+    {"class": "I3", "name": "outbound", "impact": 10, "tau": 0.95, "examples": "mail send, publication, Library release, egress to a declared destination"},
+    {"class": "I4", "name": "privileged or irreversible", "impact": 30, "tau": 0.99, "examples": "capsule mutation, platform update, delete without history, credential or permission change, effects on other users"}
+  ],
+  "grants": [
+    {"grant": "ui.captures.read", "impact": "I0", "why": "reads the owner's own captures into a window"},
+    {"grant": "ui.read.kind", "impact": "I1", "why": "reads a kind another package keeps"},
+    {"grant": "ui.net.egress", "impact": "I3", "why": "a window reaching a declared destination is outbound"},
+    {"grant": "ui.shell", "impact": "I4", "why": "a shell is arbitrary effect on the computer"},
+    {"grant": "desk.act", "impact": "I1", "why": "the act set writes the desk's own kinds"},
+    {"grant": "desk.act.cancel", "impact": "I1", "why": "cancels the desk's own act"},
+    {"grant": "desk.captures.read", "impact": "I0", "why": "reads captures"},
+    {"grant": "desk.intake.read", "impact": "I0", "why": "reads the intake queue"},
+    {"grant": "desk.request", "impact": "I1", "why": "messages a desk by precommitment record"},
+    {"grant": "desk.texture.search", "impact": "I1", "why": "bounded read of Texture snippets under a lease"},
+    {"grant": "desk.mail.read", "impact": "I1", "why": "reads the owner's mail"},
+    {"grant": "desk.net.egress", "impact": "I3", "why": "egress to a declared destination is outbound"},
+    {"grant": "desk.read.kind", "impact": "I1", "why": "reads a kind another package keeps"},
+    {"grant": "desk.capsule.mutate", "impact": "I4", "why": "capsule mutation is privileged"},
+    {"grant": "desk.selfdev", "family": true, "impact": "I4", "why": "self-development acts change the computer's own code"},
+    {"grant": "desk.platform.update", "impact": "I4", "why": "a platform update"},
+    {"grant": "desk.product.api", "impact": "I4", "why": "the owner's product API acts as the owner"},
+    {"grant": "desk.commit", "impact": "I2", "why": "canonical write of a kind other packages read"},
+    {"grant": "desk.delegate.task", "impact": "I2", "why": "delegation spends and opens shared work"},
+    {"grant": "desk.admit.assignment", "impact": "I2", "why": "admits shared work to engineering"},
+    {"grant": "desk.world.read", "impact": "I1", "why": "reads the world record"},
+    {"grant": "desk.cancel.assignment", "impact": "I2", "why": "ends shared work another desk holds"},
+    {"grant": "desk.intake.dispose", "impact": "I2", "why": "feeds or declines captures, which other desks read"},
+    {"grant": "desk.precommit.rule", "impact": "I2", "why": "names the rule that settles a record"},
+    {"grant": "desk.model.floor", "impact": "I2", "why": "sets the model floor other desks run on"},
+    {"grant": "desk.run.deadline", "impact": "I1", "why": "bounds the desk's own run"},
+    {"grant": "texture.search", "impact": "I1", "why": "first-party typed lease: ranked refs and bounded snippets, labelled owner_private:texture"}
+  ],
+  "not_impact": [
+    {"name": "model.provider_call", "why": "owner, R15: no rule constrains models. A provider call is logged with its provider and labels (section 3.6 of the disclosure path), never classed I3; the draft's example 'a provider call carrying owner-private data' is removed."}
+  ]
+}

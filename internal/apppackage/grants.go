@@ -207,3 +207,22 @@ func (m Manifest) Class() Class {
 // CodeBearing reports whether the package runs code on a computer: a window or
 // a desk. Data-only packages run none (plan section 12.1).
 func (m Manifest) CodeBearing() bool { return m.Class() != ClassData }
+
+// GrantRow is one row of the grant catalogue as other packages read it (the
+// trust impact table maps every row to an impact class).
+type GrantRow struct {
+	Name   string
+	Level  Level
+	Family bool
+}
+
+// GrantCatalogueRows lists the catalogue, sorted by name. A Family row is a
+// prefix: name.<segment> is the grant.
+func GrantCatalogueRows() []GrantRow {
+	rows := make([]GrantRow, 0, len(grantCatalogue))
+	for name, s := range grantCatalogue {
+		rows = append(rows, GrantRow{Name: name, Level: s.level, Family: s.family})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+	return rows
+}
