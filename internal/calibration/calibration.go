@@ -401,6 +401,9 @@ func Render(d types.CalibrationDigest) string {
 	if d.Late != nil && d.Late.Late > 0 {
 		fmt.Fprintf(&b, "- Late: %d of your %d claims were stated late, after the work visibly progressed; they are kept and never scored.\n", d.Late.Late, d.Late.Stated)
 	}
+	if d.Inert != nil && d.Inert.N > 0 {
+		fmt.Fprintf(&b, "- Uninformative: %d of your last %d precommitments were uninformative (true of almost any outcome, at the base rate, or with no falsifier); they earn no skill and no trust.\n", d.Inert.N, d.Inert.M)
+	}
 	if d.Model != nil {
 		fmt.Fprintf(&b, "- Your model (%s): said %.2f, %.2f held, Brier %.3f (n=%d).\n", d.Model.Key, d.Model.MeanP, d.Model.Observed, d.Model.Brier, d.Model.N)
 	}

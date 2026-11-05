@@ -113,8 +113,8 @@ func TestInertDigestShowsTheInertCount(t *testing.T) {
 			Thread: "t", RecordID: fmt.Sprint("r", i), P: 0.7, Y: float64(i % 2), CommittedAt: fmt.Sprintf("2026-11-04T10:%02d:00Z", i)})
 	}
 	d := calibration.Compute("management", obs, snap.digestOptions("management", "m"))
-	if d.Inert == nil || d.Inert.N != 3 || d.Inert.M != 7 || strings.Contains(d.Text, "uninformative") {
-		t.Fatalf("digest: inert %+v (computed and stored, not rendered)\n%s", d.Inert, d.Text)
+	if d.Inert == nil || d.Inert.N != 3 || d.Inert.M != 7 || !strings.Contains(d.Text, "3 of your last 7 precommitments were uninformative") {
+		t.Fatalf("digest: inert %+v\n%s", d.Inert, d.Text)
 	}
 	// A desk with no inert precommitment sees no such line.
 	d = calibration.Compute("management", obs, calibration.Options{Inert: &types.CalibrationInert{N: 0, M: 9}})
