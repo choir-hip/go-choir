@@ -32,7 +32,6 @@
     {"grant": "desk.cancel.assignment", "impact": "I2", "why": "ends shared work another desk holds"},
     {"grant": "desk.intake.dispose", "impact": "I2", "why": "feeds or declines captures, which other desks read"},
     {"grant": "desk.precommit.rule", "impact": "I2", "why": "names the rule that settles a record"},
-    {"grant": "desk.model.floor", "impact": "I2", "why": "sets the model floor other desks run on"},
     {"grant": "desk.run.deadline", "impact": "I1", "why": "bounds the desk's own run"},
     {"grant": "texture.search", "impact": "I1", "why": "first-party typed lease: ranked refs and bounded snippets, labelled owner_private:texture"}
   ],
