@@ -770,8 +770,13 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 // deadline.
 func (rt *Runtime) activationBudgetForRun(rec *types.RunRecord) time.Duration {
 	budget := rt.cfg.ActivationBudget
-	if isManagementTaskRun(rec) && (budget <= 0 || budget > managementTaskDeadline) {
-		budget = managementTaskDeadline
+	// The run.deadline grant of the run's desk bounds the whole run (MA4.1).
+	if rec != nil {
+		if desk, ok := deskmanifest.Lookup(agentRoleForRun(rec)); ok {
+			if bound := desk.RunDeadline(); bound > 0 && (budget <= 0 || budget > bound) {
+				budget = bound
+			}
+		}
 	}
 	return budget
 }

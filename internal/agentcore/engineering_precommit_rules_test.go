@@ -55,7 +55,7 @@ func TestEngineeringPrecommitCellValidation(t *testing.T) {
 	}
 	// Only engineering's precommits are rule-settled.
 	management := ReductionScope{FromRole: agentprofile.Management}
-	if err := validateCellIntents(management, []yaegikernel.StagedIntent{good}); err == nil || !strings.Contains(err.Error(), "engineering's") {
+	if err := validateCellIntents(management, []yaegikernel.StagedIntent{good}); err == nil || !strings.Contains(err.Error(), "precommit.rule grant") {
 		t.Fatalf("management rule precommit = %v, want refused", err)
 	}
 	plain := yaegikernel.StagedIntent{LocalID: "p", Kind: yaegikernel.IntentPrecommit, Precommit: `{"question":"q","distribution":{"yes":0.5,"no":0.5},"resolver":"research"}`}

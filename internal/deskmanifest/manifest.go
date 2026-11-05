@@ -200,6 +200,15 @@ type Desk struct {
 	// Modules are named groups of observation verbs beyond the base tier
 	// (F12). "updates.read" is the packet observation Updates.
 	Modules []string
+
+	// Grants are the desk's authority (MA4.1, grants.go): the one source of
+	// Verbs, CapsuleVerbs, Modules and CellDeadline, which are computed from
+	// them at registration. A row with none (the carrier-less conductor and
+	// email) keeps those fields as written.
+	Grants []Grant
+	// EndsRun marks a role whose run ends with its own Done: it receives the
+	// lifecycle grant its parent lacks (plan section 6 B1).
+	EndsRun bool
 }
 
 // Identity is how a desk's agent id is minted (desks design F6).
@@ -273,13 +282,14 @@ var system = []Desk{
 		// touch the filesystem (mutation is capsule-bound under
 		// engineering). It reads the captures a capture arrival names and
 		// never fetches the world.
-		Verbs: []string{"Cast", "Ask", "Reply",
-			"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-			"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask", "Calibration", "Restate"},
-		CapsuleVerbs: []string{},
-		Sandbox:      Sandbox{Profile: "desk_cell", UID: 61001},
-		Taint:        TaintPrivileged,
-		Memory:       Memory{WorkerMaxBytes: 768 * mib},
+		Grants: []Grant{G("act.cast"), G("act.ask"), G("act.reply"), G("act.cancel"), G("cancel.assignment"),
+			G("act.escalate"), G("act.precommit"), G("act.report"), G("act.report_packet"), G("act.resolve"), G("act.disagree"),
+			G("product.api"), G("captures.read"), G("intake.read"), G("intake.dispose"), G("assignment.verify"),
+			G("delegate.task"), G("calibration.read"), G("calibration.restate"),
+			G("updates.read"), G("cell.deadline", "5m0s")},
+		Sandbox: Sandbox{Profile: "desk_cell", UID: 61001},
+		Taint:   TaintPrivileged,
+		Memory:  Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds: []string{
 			// Assignments and their admission, the owner's intake and the
 			// Autopaper source schedules (plan section 8.2).
@@ -289,7 +299,6 @@ var system = []Desk{
 		},
 		ModelRole: Management, Restart: RestartContract,
 		Profile: true, Prompt: true, Identity: IdentityOwner, OwnChannel: true,
-		CellDeadline: 300 * time.Second, Modules: []string{ModuleUpdatesRead},
 	},
 	{
 		Name: Texture, Kind: KindSystem, Carrier: CarrierDeskWorker,
@@ -298,7 +307,8 @@ var system = []Desk{
 		// turn with Done, Wait or Reject. It is the sole writer of canonical
 		// document revisions. It reads the captures its frame names; it
 		// never fetches the world.
-		Verbs:   []string{"Cast", "Ask", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
+		Grants: []Grant{G("act.cast"), G("act.ask"), G("doc.read"), G("captures.read"),
+			G("commit.texture_revision"), G("lifecycle.done"), G("texture.turn"), G("updates.read")},
 		Sandbox: Sandbox{Profile: "desk_cell", UID: 61002},
 		Taint:   TaintPrivileged,
 		Memory:  Memory{WorkerMaxBytes: 768 * mib},
@@ -309,24 +319,21 @@ var system = []Desk{
 		},
 		ModelRole: Texture, Restart: RestartContract,
 		Profile: true, Prompt: true, Identity: IdentitySubject,
-		Modules: []string{ModuleUpdatesRead},
 	},
 	{
 		Name: Research, Kind: KindSystem, Carrier: CarrierDeskWorker,
 		Instance: InstanceSubject,
 		// Research observes the world read-only but has full message
 		// authority: read-only world access is not read-only messaging.
-		Verbs: []string{"Cast", "Ask", "Reply", "CancelAct",
-			"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-			"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
-			"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
-			"System1", "RelateStories", "Relate", "StoryAnalysis"},
-		CapsuleVerbs: []string{"read_file", "list_dir", "stat", "go_eval"},
-		Sandbox:      Sandbox{Profile: "desk_cell", UID: 61003},
-		Taint:        TaintUntrustedInput,
-		Memory:       Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds:   []string{"choir.agent_evidence"},
-		ModelRole:    Research, Restart: RestartContract,
+		Grants: []Grant{G("act.cast"), G("act.ask"), G("act.reply"), G("act.cancel"),
+			G("act.escalate"), G("act.precommit"), G("act.report"), G("act.report_packet"), G("act.resolve"), G("act.disagree"),
+			G("world.read"), G("captures.read"), G("source.poll"), G("evidence.write"), G("evidence.read"), G("run.memory"),
+			G("research.spawn"), G("system1.call"), G("story.relate"), G("capsule.read")},
+		Sandbox:    Sandbox{Profile: "desk_cell", UID: 61003},
+		Taint:      TaintUntrustedInput,
+		Memory:     Memory{WorkerMaxBytes: 768 * mib},
+		OwnedKinds: []string{"choir.agent_evidence"},
+		ModelRole:  Research, Restart: RestartContract,
 		Profile: true, Prompt: true,
 	},
 	{
@@ -335,9 +342,9 @@ var system = []Desk{
 		// Engineering mutates inside its capsule, converses with
 		// management on records, and ends its assignment with Complete,
 		// freezing a candidate first.
-		Verbs: []string{"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Calibration", "Restate"},
-		CapsuleVerbs: []string{"exec", "read_file", "write_file", "list_dir", "stat", "mkdir", "remove",
-			"kill_session", "go_eval", "init_session", "close_session", "job_start", "job_status", "job_stop"},
+		Grants: []Grant{G("capsule.mutate"), G("selfdev.complete"), G("selfdev.freeze"),
+			G("act.precommit"), G("precommit.rule", PrecommitRuleKinds...), G("act.report"), G("act.ask"), G("act.reply"),
+			G("calibration.read"), G("calibration.restate")},
 		Sandbox: Sandbox{Profile: "capsule"},
 		Taint:   TaintPrivileged,
 		// A capsule asks for what the cmd/autoputer link needs (measured
@@ -355,20 +362,21 @@ var system = []Desk{
 		// A management task disposes of the captures its lease names. It
 		// has no filesystem, assignment, message, product API or ledger
 		// authority: one level of delegation.
-		Verbs:     []string{"Cast", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
+		Grants: []Grant{G("act.cast"), G("captures.read"), G("intake.read"), G("intake.dispose"), G("lifecycle.done"),
+			G("cell.deadline", "5m0s"), G("run.deadline", "10m0s")},
+		EndsRun:   true,
 		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61001},
 		Taint:     TaintPrivileged,
 		Memory:    Memory{WorkerMaxBytes: 384 * mib},
 		ModelRole: ManagementTask, Restart: RestartContract,
-		Profile: true, CellDeadline: 300 * time.Second,
+		Profile: true,
 	},
 	{
 		Name: ResearchChild, Kind: KindRole, Carrier: CarrierDeskWorker,
 		// A child research activation reads the world and returns its
 		// findings to the parent cell as a value. It cannot message,
 		// report or write.
-		Verbs: []string{"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
-			"ReadEvidence", "ListEvidence"},
+		Grants:    []Grant{G("world.read"), G("captures.read"), G("evidence.read")},
 		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:     TaintUntrustedInput,
 		Memory:    Memory{WorkerMaxBytes: 384 * mib},
@@ -396,8 +404,13 @@ var (
 // init loads the built-in table through register, the one path every desk
 // takes (MA2.5, desks design D1): nothing is a special case in code.
 func init() {
-	for _, d := range system {
-		if err := register(d); err != nil {
+	for i := range system {
+		// The table holds grants; resolve computes the verbs and budgets once,
+		// so the table and the registry hold the same rows.
+		if err := system[i].resolve(); err != nil {
+			panic("deskmanifest: " + err.Error())
+		}
+		if err := register(system[i]); err != nil {
 			panic("deskmanifest: " + err.Error())
 		}
 	}
@@ -409,11 +422,22 @@ func init() {
 // authority than its kind allows. It refuses a name that exists, so a desk can
 // never replace another.
 func register(d Desk) error {
+	d = d.clone()
+	if err := d.resolve(); err != nil {
+		return err
+	}
 	if err := validateStructure(d); err != nil {
 		return err
 	}
 	mu.Lock()
 	defer mu.Unlock()
+	if err := validateRole(d, func(f func(Desk)) {
+		for _, r := range registry {
+			f(r)
+		}
+	}); err != nil {
+		return err
+	}
 	if _, exists := registry[d.Name]; exists {
 		return fmt.Errorf("desk %s is already registered", d.Name)
 	}
@@ -433,6 +457,7 @@ func (d Desk) clone() Desk {
 	d.OwnedKinds = cp(d.OwnedKinds)
 	d.LeaseKinds = cp(d.LeaseKinds)
 	d.Modules = cp(d.Modules)
+	d.Grants = cloneGrants(d.Grants)
 	return d
 }
 
@@ -730,6 +755,14 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		LeaseKinds: append([]string{}, spec.LeaseKinds...), LeaseCaptures: spec.LeaseCaptures,
 		Profile: true,
 	}
+	grants, err := GrantsForVerbs(spec.Verbs)
+	if err != nil {
+		return Desk{}, fmt.Errorf("app desk %s: %w", spec.Name, err)
+	}
+	d.Grants = grants
+	if err := d.resolve(); err != nil {
+		return Desk{}, err
+	}
 	if err := validateStructure(d); err != nil {
 		return Desk{}, err
 	}
@@ -837,5 +870,6 @@ func (d Desk) Equal(o Desk) bool {
 		d.Instance == o.Instance && d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
 		same(d.OwnedKinds, o.OwnedKinds) && same(d.LeaseKinds, o.LeaseKinds) && d.LeaseCaptures == o.LeaseCaptures && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
 		d.Profile == o.Profile && d.Prompt == o.Prompt && d.Identity == o.Identity && d.OwnChannel == o.OwnChannel &&
-		d.CellDeadline == o.CellDeadline && same(d.Modules, o.Modules)
+		d.CellDeadline == o.CellDeadline && same(d.Modules, o.Modules) &&
+		sameGrants(d.Grants, o.Grants) && d.EndsRun == o.EndsRun
 }

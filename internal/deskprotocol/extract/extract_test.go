@@ -132,6 +132,14 @@ func TestDeskRowCarriesEveryFieldDeskEqualCompares(t *testing.T) {
 		case reflect.Uint, reflect.Uint32, reflect.Uint64:
 			v.SetUint(v.Uint() + 1)
 		case reflect.Slice:
+			if v.Type().Elem().Kind() == reflect.Struct {
+				elem := reflect.New(v.Type().Elem()).Elem()
+				if !perturb(elem) {
+					return false
+				}
+				v.Set(reflect.Append(v, elem))
+				break
+			}
 			if v.Type().Elem().Kind() != reflect.String {
 				return false
 			}
@@ -163,6 +171,7 @@ func TestDeskRowCarriesEveryFieldDeskEqualCompares(t *testing.T) {
 		d.CapsuleVerbs = append([]string{}, base.CapsuleVerbs...)
 		d.OwnedKinds = append([]string{}, base.OwnedKinds...)
 		d.Modules = append([]string{}, base.Modules...)
+		d.Grants = append([]deskmanifest.Grant{}, base.Grants...)
 		if !perturb(reflect.ValueOf(&d).Elem().Field(i)) {
 			t.Errorf("Desk.%s has a kind this test cannot perturb; teach the test, and put the field in DeskRow if Equal compares it", f.Name)
 			continue
@@ -188,6 +197,7 @@ func TestDeskRowCarriesEveryFieldDeskEqualCompares(t *testing.T) {
 	d.CapsuleVerbs = append([]string{}, base.CapsuleVerbs...)
 	d.OwnedKinds = append([]string{}, base.OwnedKinds...)
 	d.Modules = append([]string{}, base.Modules...)
+	d.Grants = append([]deskmanifest.Grant{}, base.Grants...)
 	dv := reflect.ValueOf(&d).Elem()
 	for i := 0; i < dv.NumField(); i++ {
 		if dv.Type().Field(i).IsExported() {

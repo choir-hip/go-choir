@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -64,14 +65,21 @@ func validateEngineeringPrecommit(fromDesk string, in yaegikernel.StagedIntent, 
 	if err := json.Unmarshal([]byte(in.Precommit), &precommit); err != nil {
 		return fmt.Errorf("reduce: precommit %s: invalid typed body: %w%s", in.LocalID, err, types.PrecommitShapeHint(fromDesk == agentprofile.Engineering))
 	}
-	if fromDesk != agentprofile.Engineering {
+	// The precommit.rule grant decides (MA4.1): a holder's Precommits are
+	// rule-settled over the grant's closed kinds; no other desk's may carry
+	// a rule.
+	desk, _ := deskmanifest.Lookup(fromDesk)
+	if !desk.RulePrecommit() {
 		if precommit.Rule != nil {
-			return fmt.Errorf("reduce: precommit %s: rule-settled precommits are engineering's", in.LocalID)
+			return fmt.Errorf("reduce: precommit %s: rule-settled precommits need the precommit.rule grant", in.LocalID)
 		}
 		return nil
 	}
 	if err := types.ValidateRulePrecommit(precommit); err != nil {
 		return fmt.Errorf("reduce: precommit %s: %w%s", in.LocalID, err, types.PrecommitShapeHint(true))
+	}
+	if precommit.Rule != nil && !desk.MayRule(string(precommit.Rule.Kind)) {
+		return fmt.Errorf("reduce: precommit %s: rule kind %q is outside the precommit.rule grant", in.LocalID, precommit.Rule.Kind)
 	}
 	for _, other := range intents {
 		if other.Kind == yaegikernel.IntentFreeze || other.Kind == yaegikernel.IntentComplete {
