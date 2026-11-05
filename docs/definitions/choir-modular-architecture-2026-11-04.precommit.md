@@ -242,3 +242,36 @@ options, the record covers each (R0-07 lesson).
 Typed precommitments flagged inert, by desk: Texture 44 of 44 (two prompt versions, 5 and 39), management 1 of 1, engineering 1 of 1; every flag is no_typed_question. Delegation Casts: Texture 89, management 42, none marked inert, though the no_typed_question flag fires on them too (Texture 91 flags, management 25). The legacy "agent" desk shows 1024 precommitments, none inert, model none. Judge agreement sampled 0. Read: on the desk-to-desk path every typed request is inert by the rule detector, which is a prompt and protocol fact (the desks never state a typed question), not a tuning margin; the delegation flag-versus-inert split is by design: a delegation is inert only when its weight is below the floor (internal/types/inert_rates.go:136), while by_flag tallies every flag, so no Cast tonight carried a weight under the floor. Raw: scratchpad subcalls-de.json, not committed.
 
 **R0b-02, settled contradicted (interval) (2026-11-05 04:31 UTC; settler: rule, timestamps).** Phase 1 closed with MA1.4 (3ff42209e, 4b8cf26ad; CI 41967088720 green at 04:31:14Z, staging serves 4b8cf26ad). From the owner's sign-off (a209cb739, 21:53:05Z) that is 6 h 38 min, 0.28 days, below the interval [0.5, 3]; log ratio ln(0.28/1.5) = -1.69. Phase 2 (MA2.1 to MA2.5) closed earlier in the same span. Assumption that failed: the base rate carried human-gated review latency; with Sonnet builders in parallel, review concurrent with landing, and runtime checks as the verifier, the critical path was CI and deploy time (about 12 to 15 minutes a slice) plus three review rounds on MA1.4. Learning for round 1: estimate Phase 3 from slices times the CI-plus-deploy cycle plus review rounds, not from the human base rate; MA1.4's three Devin rounds (one mechanism) are the expensive tail.
+
+## Round 1: Phase 3, custody and labels (committed 2026-11-05 04:45 UTC, before MA3.1 starts)
+
+Learned from rounds 0 and 0b, and applied here. Durations come from the measured cycle (one slice is about 12 to 15 minutes of CI and deploy, a builder is 10 to 20 minutes, and a review round is about 10 minutes) and not from the human base rate (R0b-02, log ratio -1.69). The unit is spelled out where "routes" against "routing rules" bit before (R0b-03, R0-06). Review rounds cluster on one mechanism (MA1.4 took three). R0-11 and R0-12 stand and are not restated.
+
+**R1-01.** Phase 3 (MA3.1 to MA3.10) is on main with CI green, measured from the commit of this round.
+- Estimate: 1.2 days, 80% interval [0.4, 3]. Unit: wall-clock from this round's commit to the CI-green commit that closes the last Phase 3 slice. Grounds: ten slices, eight of them red tier 2 (two seats), against Phase 1's seven slices in 6.6 hours. MA3.2 waits on a recorded d@e day of zero counters for built-in kinds, which is a floor of about 24 hours unless the counters are read as zero sooner on a shorter recorded window that the slice states.
+- Falsifier: outside the interval. Hard to measure: the MA3.2 day. Mitigation: the slice records its window's start and end.
+- Materiality: medium. Settler: rule (timestamps).
+
+**R1-02.** MA3.1's registry load finds at least one kind claimed by two manifests or by none (a load failure the slice must resolve) on its first run.
+- p = 0.70. Grounds: 52 WriterRuntime lines, OwnedKinds declared only for Texture and research evidence today, and service writers (corpusd, autoradio, store) with no manifest.
+- Falsifier: the first load passes clean. Settler: rule (the first test run's output, cited in the slice's commit).
+
+**R1-03.** At least one Phase 3 slice ships a fix after deploy that d@e acceptance found, not CI or review.
+- p = 0.55. Grounds: Phase 1's d@e runs found the stranded round (old) and the unexercised sub-call path, but no fix-after-deploy for a new slice; custody enforcement touches paths CI fixtures do not drive.
+- Falsifier: no post-deploy fix in Phase 3. Settler: rule (commit history: a fix commit citing a d@e trajectory).
+
+**R1-04.** Total Devin and DeepSeek review rounds across Phase 3 slices.
+- Estimate: 18, 80% interval [12, 28]. Unit: completed review outputs (one seat on one frozen candidate is one round), Phase 3 slices only. Grounds: Phase 1 and 2 took about 22 over twelve slices with a mix of tiers; Phase 3 is mostly tier 2.
+- Settler: rule (count of review-*/ outputs named in the ledger).
+
+**R1-05.** After MA3.3, at least one existing desk behaviour on d@e (Texture revise, research, management intake, engineering apply) fails until a custody resolution (MA3.7) or a lease (MA3.4) lands.
+- p = 0.60. Grounds: the plan sequences MA3.7 after MA3.3 and MA3.4; services convert in the order of section 8.4, so the reader gate may refuse a path whose resolution has not landed. Hard to measure: an unexercised path refuses silently. Mitigation: the reader gate's refusal counter, read through the product API, over the acceptance runs.
+- Falsifier: every acceptance run after MA3.3 settles with the refusal counter at zero for desk runs. Settler: rule (counter and trajectory states).
+
+**R1-06.** MA3.5's labels: a d@e run that reads an owner-private capture carries the label into every act it commits, on the first deployed run, with no fix.
+- p = 0.50. Grounds: R0b-05 read back first time (new record field), but labels propagate through a per-run accumulator across cells, a new mechanism with more seams.
+- Settler: rule (the run's records read through the product API).
+
+**R1-07.** The judge settles at least one desk-to-desk Cast on d@e during Phase 3.
+- p = 0.25. Grounds: today the judge only settles sub-call Casts and none are written on d@e; this needs owner question (d) answered or a prompt that teaches choir.Research. Recorded to keep the missing oracle visible.
+- Settler: rule (GET /api/subcalls settlement_by_class non-empty).
