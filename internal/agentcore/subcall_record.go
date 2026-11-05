@@ -75,7 +75,7 @@ func buildSubCallCast(p subCallCastParams) (types.CommitmentRecord, error) {
 		Provenance: types.CommitmentProvenance{AgentID: agent, ModelID: p.ParentModel, CommittedAt: stamp,
 			Desk: agent, RunID: p.ParentRunID, Origin: firstNonEmpty(p.Origin, types.OriginDeskRun)},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: p.ComputerID,
-		Addressee: p.ChildInbox,
+		Addressee: types.SubCallLedgerAddressee,
 		ChildIDs:  []string{types.SubCallReportRecordID(p.RecordID)},
 		SubCall: &types.CommitmentSubCall{Kind: types.SubCallCast, FanOutID: p.FanOutID, Role: p.ChildRole,
 			ParentRunID: p.ParentRunID, ParentAgent: agent, ChildKey: p.ChildKey},
@@ -125,9 +125,11 @@ func applySubCallPrecommitment(rec *types.CommitmentRecord, p subCallCastParams)
 	return types.ValidateSubCallCast(*rec)
 }
 
-var subCallURLPattern = regexp.MustCompile(`https?://[^\s<>"'\x60\]\)]+`)
+// subCallURLPattern finds what a child cites: web URLs, capture ids
+// (choir.web_capture:...) and evidence ids (evidence:...).
+var subCallURLPattern = regexp.MustCompile(`(?:https?://|choir\.web_capture:|evidence:)[^\s<>"'\x60\]\),;]+`)
 
-// subCallCitations returns the distinct URLs a child's text cites, in order,
+// subCallCitations returns the distinct sources a child's text cites, in order,
 // without trailing punctuation.
 func subCallCitations(text string) []string {
 	seen := map[string]bool{}
@@ -161,7 +163,10 @@ type subCallReportParams struct {
 	// Sources, when set, are the Report's citations instead of the URLs in
 	// its text (a task cites the captures it disposed).
 	Sources []string
-	Now     time.Time
+	// Interrupted marks a Report a crash boot writes for a call that never
+	// returned.
+	Interrupted bool
+	Now         time.Time
 }
 
 // buildSubCallReport builds the child's Report: its final text as one claim
@@ -178,6 +183,9 @@ func buildSubCallReport(p subCallReportParams) types.CommitmentRecord {
 	if p.Error != "" {
 		stop = "error: " + boundRunes(p.Error, 200)
 	}
+	if p.Interrupted {
+		stop = types.ClosureReasonInterruptedByRestart
+	}
 	var claims []types.ReportClaim
 	if text != "" {
 		claims = []types.ReportClaim{{Text: boundRunes(text, subCallReportRunes), Sources: cites}}
@@ -191,7 +199,7 @@ func buildSubCallReport(p subCallReportParams) types.CommitmentRecord {
 		Provenance: types.CommitmentProvenance{AgentID: p.Child, ModelID: p.Model, CommittedAt: stamp,
 			Desk: p.Child, RunID: cb.ParentRunID, Origin: types.OriginDeskRun},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: p.Cast.ComputerID,
-		Addressee: cb.ParentAgent, EvidenceRefs: cites,
+		Addressee: types.SubCallLedgerAddressee, EvidenceRefs: cites,
 		ParentID: p.Cast.RecordID, Final: true,
 		SubCall: &types.CommitmentSubCall{Kind: types.SubCallReport, FanOutID: cb.FanOutID, Role: cb.Role,
 			ParentRunID: cb.ParentRunID, ParentAgent: cb.ParentAgent, ChildKey: cb.ChildKey, CastID: p.Cast.RecordID, Model: p.Model},
@@ -223,6 +231,7 @@ func buildSubCallSelfScore(cast types.CommitmentRecord, now time.Time) (types.Co
 		Provenance: types.CommitmentProvenance{AgentID: cb.ParentAgent, ModelID: cast.Provenance.ModelID, CommittedAt: stamp,
 			Desk: cb.ParentAgent, RunID: cb.ParentRunID, Origin: types.OriginDeskRun},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: cast.ComputerID, ParentID: cast.RecordID,
+		Addressee: types.SubCallLedgerAddressee,
 		SubCall: &types.CommitmentSubCall{Kind: types.SubCallSelfScore, FanOutID: cb.FanOutID, Role: cb.Role,
 			CastID: cast.RecordID, Self: self},
 	}, true

@@ -706,6 +706,11 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 		len(in.TargetRef) + len(in.Claim) + len(in.ResolverID) + len(in.Question) + len(in.Answer) + len(in.Statement) +
 		len(in.Precommit) + len(in.Resolve) + len(in.Disagreement)
 	size += len(in.Reason) + len(in.JobOp) + len(in.JobID) + len(in.Cwd)
+	if in.Req != nil {
+		if raw, err := json.Marshal(in.Req); err == nil {
+			size += len(raw)
+		}
+	}
 	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs, in.Captures, in.Argv} {
 		for _, ref := range refs {
 			size += len(ref)

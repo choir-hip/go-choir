@@ -2,11 +2,11 @@ package types
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
@@ -29,13 +29,26 @@ import (
 
 // Sub-call record kinds.
 const (
-	SubCallCast         = "cast"
-	SubCallReport       = "report"
-	SubCallSettlement   = "settlement"
-	SubCallSelfScore    = "self_score"
-	SubCallJudgeWork    = "judge_work"
-	SubCallJudgeClose   = "judge_close"
-	SubCallDisagreement = "disagreement"
+	SubCallCast       = "cast"
+	SubCallReport     = "report"
+	SubCallSettlement = "settlement"
+	SubCallSelfScore  = "self_score"
+	SubCallJudgeWork  = "judge_work"
+	SubCallJudgeClose = "judge_close"
+)
+
+// SubCallLedgerAddressee is the addressee of the sub-call plane's own records
+// (research Casts, Reports, settlements, judge work and closes). It is a
+// constant so the boot sweep reads them through the indexed addressee lookup,
+// newest first and bounded, instead of scanning record bodies. A sub-call
+// record's real parties are in its SubCall body.
+const SubCallLedgerAddressee = "subcall:ledger"
+
+// Bounds on the text of a typed question, so a cell cannot push an unbounded
+// prompt into the judge request.
+const (
+	MaxSubCallQuestionRunes = 400
+	MaxSubCallAnswerRunes   = 80
 )
 
 // Judge work phases (a judge_close record's Phase).
@@ -151,15 +164,18 @@ func SubCallSettlementRecordID(castID, scorer string) string {
 	return castID + ":settle:" + slugID(scorer)
 }
 
-// SubCallDisagreementRecordID is the third-opinion request for a Cast.
+// SubCallDisagreementRecordID is the third-opinion request for a Cast. It is
+// a plain disagreement record (no sub-call body) addressed to management, so
+// management's pack reads it.
 func SubCallDisagreementRecordID(castID string) string { return castID + ":disagree" }
 
-// SubCallJudgeWorkID is the judge's work on one batch of Casts.
-func SubCallJudgeWorkID(fanOut string, casts []string) string {
-	ids := append([]string(nil), casts...)
-	sort.Strings(ids)
-	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
-	return "judgework:" + strings.TrimSpace(fanOut) + ":" + hex.EncodeToString(sum[:6])
+// SubCallJudgeWorkID is the judge's work on one Cast. attempt 0 is the first;
+// a planned restart's one resume is attempt 1 and so on.
+func SubCallJudgeWorkID(castID string, attempt int) string {
+	if attempt <= 0 {
+		return "judgework:" + castID
+	}
+	return fmt.Sprintf("judgework:%s:r%d", castID, attempt)
 }
 
 // SubCallJudgeCloseRecordID closes a judge work record.
@@ -226,8 +242,16 @@ func ValidateTypedQuestions(qs []TypedQuestion) error {
 		if strings.TrimSpace(q.Question) == "" {
 			return fmt.Errorf("question %d is empty", i)
 		}
+		if utf8.RuneCountInString(q.Question) > MaxSubCallQuestionRunes {
+			return fmt.Errorf("question %d is over %d characters", i, MaxSubCallQuestionRunes)
+		}
 		if len(q.Answers) < 2 || len(q.Answers) > MaxSubCallAnswers {
 			return fmt.Errorf("question %d needs 2 to %d answers", i, MaxSubCallAnswers)
+		}
+		for _, a := range q.Answers {
+			if utf8.RuneCountInString(a) > MaxSubCallAnswerRunes {
+				return fmt.Errorf("question %d: an answer is over %d characters", i, MaxSubCallAnswerRunes)
+			}
 		}
 		seen := map[string]bool{}
 		for _, a := range q.Answers {
@@ -471,6 +495,11 @@ func SelfFavorRows(casts, settlements []CommitmentRecord) []SelfFavorRow {
 		if b, ok := c.SubCallBody(SubCallCast); !ok || b == nil {
 			continue
 		}
+		// A weight-zero Cast states no weight: it has no materiality to
+		// weigh a gap by, and none is substituted for it.
+		if c.IsWeightZero() || c.Weight == nil {
+			continue
+		}
 		var judge *CommitmentSubCall
 		ruleContradicted := false
 		for _, s := range bySettled[c.RecordID] {
@@ -491,6 +520,14 @@ func SelfFavorRows(casts, settlements []CommitmentRecord) []SelfFavorRow {
 				verdict[v.Q] = v
 			}
 		}
+		// Questions are weighted by their stated weight; a Cast whose
+		// questions state none is an unweighted mean of them.
+		anyWeighted := false
+		for _, q := range c.Prediction.Questions {
+			if q.Weight > 0 {
+				anyWeighted = true
+			}
+		}
 		var selfSum, indepSum, wSum float64
 		n := 0
 		for i, q := range c.Prediction.Questions {
@@ -498,9 +535,12 @@ func SelfFavorRows(casts, settlements []CommitmentRecord) []SelfFavorRow {
 			if !ok {
 				continue
 			}
-			w := q.Weight
+			w := 1.0
+			if anyWeighted {
+				w = q.Weight
+			}
 			if w <= 0 {
-				w = 1
+				continue
 			}
 			ind := 0.0
 			if !ruleContradicted {
@@ -514,10 +554,7 @@ func SelfFavorRows(casts, settlements []CommitmentRecord) []SelfFavorRow {
 		if n == 0 {
 			continue
 		}
-		weight := SubCallWeightFloor(c.SubCall.Role)
-		if c.Weight != nil {
-			weight = *c.Weight
-		}
+		weight := *c.Weight
 		rows = append(rows, SelfFavorRow{CastID: c.RecordID, Agent: firstNonBlank(c.Provenance.Desk, c.Provenance.AgentID), Model: c.Provenance.ModelID,
 			Weight: weight, Self: selfSum / wSum, Independent: indepSum / wSum, Questions: n})
 	}

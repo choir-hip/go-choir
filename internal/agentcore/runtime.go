@@ -221,6 +221,12 @@ type Runtime struct {
 	subCallJudgePending map[string]*subCallPending
 	subCallJudgeActive  map[string]bool
 	subCallJudgeWG      sync.WaitGroup
+	subCallQueued       map[string]bool
+	subCallStopped      bool
+	subCallCtx          context.Context
+	subCallCancel       context.CancelFunc
+	subCallGate         chan struct{}
+	subCallNext         time.Time
 
 	// dispatchActor is the function hook that the actor runtime adapter
 	// sets. When the business logic needs to start a run or wake an agent,
@@ -1135,7 +1141,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	}
 	// Open judge work (subcall_judge.go) follows the same marker: a crash
 	// closes it "interrupted by a restart", a planned restart re-runs it once.
-	bootPhase("subcall_judge_work", func() { rt.closeOpenJudgeWorkAtBoot(ctx) })
+	bootPhase("subcall_judge_work", func() { rt.sweepSubCallsAtBoot(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	// P6: tell vmctl what this computer runs (background; never blocks boot).
 	rt.reportEffectiveReleaseAsync("boot")
@@ -1224,6 +1230,9 @@ func (rt *Runtime) Stop() {
 	rt.stopSourceScheduleSweep()
 	rt.stopEventLayer()
 	rt.bgStopOnce.Do(func() { close(rt.backgroundStop()) })
+	// The sub-call settler ends before the store can: its context is
+	// cancelled and Stop waits for it, bounded.
+	rt.stopSubCallJudge()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()

@@ -953,7 +953,8 @@ func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any, re
 		objective = "Open, feed or decline every capture these records name."
 	}
 	var fields *types.RequestFields
-	if len(req) > 0 {
+	// No argument, or an explicit nil, is "no request": the Cast is weight zero.
+	if len(req) > 0 && !(len(req) == 1 && req[0] == nil) {
 		if fields, err = requestArg("Delegate", req); err != nil {
 			return "", err
 		}

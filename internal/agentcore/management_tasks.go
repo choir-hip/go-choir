@@ -528,11 +528,32 @@ func (rt *Runtime) storyLibraryShownMark(runID string) int64 {
 // observation the settler scores (closeManagementTask).
 func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yaegikernel.StagedIntent, spec yaegikernel.DelegateSpec, group int, taskID string) error {
 	role, _, _ := strings.Cut(cast.Addressee, ":")
+	objective := ""
+	if cast.Directive != nil {
+		objective = cast.Directive.Objective
+	}
+	objective = strings.TrimSpace(firstNonEmpty(objective, spec.Objective, in.Objective))
+	// The judge is asked whether the Report answers the objective, so the
+	// objective rides on the Cast's prediction as it does for a research
+	// child (a Cast with none is never sent to the judge).
+	now := time.Now()
+	cast.Prediction.Hypothesis = objective
+	if cast.Prediction.CommittedAt == "" {
+		cast.Prediction.CommittedAt = now.UTC().Format(time.RFC3339Nano)
+	}
+	// The caller is the cell that staged the Delegate: a task re-delegating
+	// residuals is the task, not the management desk it sends as.
+	parent := firstNonEmpty(strings.TrimSpace(r.scope.DeskAgentID), cast.SenderInbox)
+	if len(cast.RelatedIDs) > 0 {
+		// The record the delegation works from is the walkable edge to the
+		// parent's side.
+		cast.ParentID = cast.RelatedIDs[0]
+	}
 	p := subCallCastParams{
 		RecordID: cast.RecordID, FanOutID: delegateFanOutID(r.scope.CellID, in.LocalID), ChildKey: taskID,
-		ChildRole: strings.ReplaceAll(role, "-", "_"), ChildInbox: cast.Addressee, Objective: spec.Objective,
-		ParentAgent: cast.SenderInbox, ParentRunID: r.scope.RunID, ParentModel: cast.Provenance.ModelID,
-		ComputerID: r.scope.ComputerID, Now: time.Now(),
+		ChildRole: strings.ReplaceAll(role, "-", "_"), ChildInbox: cast.Addressee, Objective: objective,
+		ParentAgent: parent, ParentRunID: r.scope.RunID, ParentModel: cast.Provenance.ModelID,
+		ComputerID: strings.TrimSpace(r.scope.ComputerID), Now: now,
 	}
 	if in.Req != nil {
 		p.Questions, p.PSuccess, p.Weight, p.Settlement = in.Req.Questions, in.Req.PSuccess, in.Req.Weight, in.Req.Settlement
@@ -577,7 +598,13 @@ func (rt *Runtime) scoreClosedTask(ctx context.Context, task types.ManagementTas
 			sources = append(sources, d.CaptureID)
 		}
 	}
-	report := buildSubCallReport(subCallReportParams{Cast: *cast, Child: task.TaskInbox, Text: text.String(),
+	model := ""
+	if task.RunID != "" {
+		if run, err := rt.store.GetRunByOwner(ctx, task.OwnerID, task.RunID); err == nil {
+			model = metadataStringValue(run.Metadata, "llm_model")
+		}
+	}
+	report := buildSubCallReport(subCallReportParams{Cast: *cast, Child: task.TaskInbox, Model: model, Text: text.String(),
 		Error: taskErrText(closing), Sources: sources, Now: time.Now()})
 	if err := rt.appendSubCallRecord(ctx, task.OwnerID, task.ComputerID, report); err != nil {
 		log.Printf("runtime: record the Report of task %s as a sub-call: %v", task.TaskID, err)

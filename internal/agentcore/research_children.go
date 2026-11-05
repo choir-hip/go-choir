@@ -190,7 +190,7 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 			castIDs = append(castIDs, r.CastID)
 		}
 	}
-	rt.enqueueSubCallJudge(firstNonEmpty(parent.OwnerID, lineage.ownerID), parent.ComputerID, fan.id, castIDs, 0)
+	rt.enqueueSubCallJudge(firstNonEmpty(parent.OwnerID, lineage.ownerID), strings.TrimSpace(parent.ComputerID), fan.id, castIDs, 0)
 	return json.Marshal(results)
 }
 
