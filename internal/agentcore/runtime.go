@@ -427,6 +427,10 @@ type Runtime struct {
 	ownerRecoveryControl  *selfdev.GuestCredentials
 	selfdevRoute          *vmctl.Client
 	selfdevRouteOwnerID   string
+
+	// costWatchLast is when the cost-anomaly scan last ran per owner (cost_anomaly.go).
+	costWatchMu           sync.Mutex
+	costWatchLast         map[string]time.Time
 	selfdevRouteDesktopID string
 	selfdevUpdaterRoot    string
 	selfdevComputerID     string
@@ -4235,6 +4239,7 @@ func (rt *Runtime) afterRunCompleted(persistCtx context.Context, rec *types.RunR
 	rt.settleRunRootTrajectory(persistCtx, rec)
 	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 	rt.recheckRecordsInbox(persistCtx, rec)
+	rt.watchCostAfterRun(rec)
 }
 
 const runtimeInjectionAppendFailurePassivationReason = "runtime_injection_append_failed"
