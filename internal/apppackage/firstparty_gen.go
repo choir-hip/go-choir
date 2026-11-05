@@ -11,8 +11,10 @@ var firstPartySettings = map[string]string{}
 var builtinPackageNames = []string{
 	"audio",
 	"autopaper",
+	"browser",
 	"calendar",
 	"compute-monitor",
+	"content",
 	"files",
 	"image",
 	"library-next",
@@ -25,8 +27,6 @@ var builtinPackageNames = []string{
 
 // shellAppNames are the names a published package may not take (see gen-package-kinds.mjs).
 var shellAppNames = []string{
-	"browser",
-	"content",
 	"desk",
 	"desktop",
 	"email",

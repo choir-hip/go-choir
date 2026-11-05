@@ -1,0 +1,15 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Source opens from a saved window with no content and says so; it has no launcher entry.",
+  "ready": "[data-content-viewer]",
+  "expect": [
+    {
+      "selector": ".empty-source",
+      "text": "registered in the shared substrate"
+    },
+    {
+      "selector": "[data-content-evidence]",
+      "text": "Source evidence"
+    }
+  ]
+}

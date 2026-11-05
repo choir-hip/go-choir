@@ -32,15 +32,15 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { AuthRequiredError } from './auth.js';
+  import { AuthRequiredError } from '../../lib/app-sdk';
   import {
     renderInlineMarkdown,
     sourceEntitySnapshotWarnings,
     sourceEntitySnapshotText,
     sourceEntityTitle,
-  } from './texture-source-renderer.ts';
-  import { webLensAddress, storedSnapshotApplies } from './source-url';
-  import { createContentItem } from './content-items.js';
+  } from '../../lib/app-sdk';
+  import { webLensAddress, storedSnapshotApplies } from '../../lib/app-sdk';
+  import { createContentItem } from '../../lib/app-sdk';
 
   export let appContext = {};
   export let authenticated = false;

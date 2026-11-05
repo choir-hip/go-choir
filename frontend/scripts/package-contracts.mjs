@@ -320,7 +320,7 @@ export function installedRecord(manifest, built) {
  * installed list and its modules, the contract's api entries, 404 otherwise.
  * Each request nothing answered is passed to onUnanswered("METHOD /path").
  */
-export async function stubBackend(page, { installed = [], modules = new Map(), api = [], onUnanswered = () => {}, onApi = () => {} } = {}) {
+export async function stubBackend(page, { installed = [], modules = new Map(), api = [], seedWindow = null, onUnanswered = () => {}, onApi = () => {} } = {}) {
   await page.routeWebSocket(/\/api\/ws\b/, () => {}); // the live channel opens and stays quiet
   await page.route(/\/(auth|api)\//, (route) => {
     const req = route.request();
@@ -333,7 +333,7 @@ export async function stubBackend(page, { installed = [], modules = new Map(), a
     }
     if (p === '/auth/session') return route.fulfill({ json: { authenticated: true, user: { id: STUB_USER, username: STUB_USER } } });
     if (p === '/api/shell/bootstrap') return route.fulfill({ json: { computer_id: STUB_COMPUTER_ID } });
-    if (p === '/api/desktop/state') return route.fulfill({ json: req.method() === 'GET' ? { windows: [], active_window_id: '' } : { ok: true } });
+    if (p === '/api/desktop/state') return route.fulfill({ json: req.method() === 'GET' ? (seedWindow ? { windows: [seedWindow], active_window_id: seedWindow.window_id } : { windows: [], active_window_id: '' }) : { ok: true } });
     if (p === '/api/packages/installed') return route.fulfill({ json: { packages: installed } });
     if (p === '/api/preferences/theme' && req.method() === 'GET') return route.fulfill({ json: { theme: {} } }); // no stored preference
     const m = /^\/api\/packages\/modules\/([0-9a-f]{64})\.js$/.exec(p);
@@ -370,7 +370,7 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
   const started = Date.now();
   const row = { mode, pass: false, ms: 0, problems: [], boot_errors: [], page_errors: [], console_errors: [], allowed_console: [], network: [], unanswered: [], allowed_unanswered: [] };
   const page = await context.newPage();
-  let opened = false;
+  let opened = pkg.manifest?.app?.launcher?.menu === false; // a saved-window open boots with the shell
   const allow = (pkg.contract.allow_console || []).map((r) => new RegExp(r));
   page.on('pageerror', (e) => (opened ? row.page_errors : row.boot_errors).push(String(e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e)));
   page.on('console', (m) => {
@@ -383,11 +383,14 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
   });
   try {
     const apiHits = [];
+    const noLauncher = pkg.manifest?.app?.launcher?.menu === false;
     const allowUnanswered = (pkg.contract.allow_unanswered || []).map((a) => requestPattern(a.request));
     await stubBackend(page, {
       installed,
       modules,
       api: pkg.contract.api || [],
+      // A package with no launcher entry (Source) opens from a saved window, as the shell opens it for a person.
+      seedWindow: noLauncher ? { window_id: `contract-${pkg.name}`, app_id: pkg.name, title: pkg.manifest?.display?.title || pkg.name, geometry: { x: 40, y: 40, width: 900, height: 640 }, mode: 'normal', z_index: 1, app_context: {} } : null,
       onApi: (hit) => apiHits.push(hit),
       onUnanswered: (request) => {
         if (!opened) return row.boot_errors.push(`unanswered ${request} (the stub no longer covers the shell's boot)`);
@@ -398,15 +401,19 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
     const name = pkg.name;
     await step(() => page.goto(base, { waitUntil: 'domcontentloaded' }), 'the shell did not load');
     await step(() => page.locator('[data-desktop][data-desktop-ready="true"]').waitFor({ timeout: STEP_MS }), 'the desktop never became ready (the stub backend or the shell boot is broken)');
-    await step(() => page.locator('[data-desk-menu-button]').first().click({ timeout: STEP_MS }), 'no app switcher button');
-    await step(() => page.locator('[data-desk-sheet]').first().waitFor({ timeout: STEP_MS }), 'the launcher sheet did not open');
-    const entry = page.locator(`[data-desk-sheet-app][data-desk-app-id="${name}"]`).first();
-    if (!(await entry.count())) {
-      const ids = await page.locator('[data-desk-sheet-app]').evaluateAll((els) => els.map((e) => e.getAttribute('data-desk-app-id')));
-      throw new Error(`no launcher entry for ${name}; the launcher has ${ids.join(', ') || 'no apps'}`);
+    if (noLauncher) {
+      opened = true; // from here, errors are the package's (C8)
+    } else {
+      await step(() => page.locator('[data-desk-menu-button]').first().click({ timeout: STEP_MS }), 'no app switcher button');
+      await step(() => page.locator('[data-desk-sheet]').first().waitFor({ timeout: STEP_MS }), 'the launcher sheet did not open');
+      const entry = page.locator(`[data-desk-sheet-app][data-desk-app-id="${name}"]`).first();
+      if (!(await entry.count())) {
+        const ids = await page.locator('[data-desk-sheet-app]').evaluateAll((els) => els.map((e) => e.getAttribute('data-desk-app-id')));
+        throw new Error(`no launcher entry for ${name}; the launcher has ${ids.join(', ') || 'no apps'}`);
+      }
+      opened = true; // from here, errors are the package's (C8)
+      await entry.click();
     }
-    opened = true; // from here, errors are the package's (C8)
-    await entry.click();
     await step(() => page.locator(windowSel(name)).first().waitFor({ timeout: STEP_MS }), `no ${name} window opened`);
     const content = page.locator(contentSel(name)).first();
     if (mode === 'installed') {

@@ -1,0 +1,39 @@
+{
+  "schema": "choir.package/v2",
+  "name": "browser",
+  "version": "1.0.0",
+  "display": {
+    "title": "Web Lens",
+    "icon": "🌐",
+    "description": "Open a page or read a snapshot"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 20
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false
+    },
+    "auth": {
+      "preview": "public-preview"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-browser-app-container",
+      "contentClass": "browser-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

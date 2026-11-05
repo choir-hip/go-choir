@@ -1,0 +1,29 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Web Lens takes an address, checks it and offers the original and the Source snapshot.",
+  "ready": "[data-browser-app]",
+  "expect": [
+    {
+      "selector": "[data-browser-url-input]"
+    },
+    {
+      "selector": "[data-browser-go-btn]"
+    }
+  ],
+  "steps": [
+    {
+      "fill": "[data-browser-url-input]",
+      "value": "https://example.com/article"
+    },
+    {
+      "click": "[data-browser-go-btn]"
+    },
+    {
+      "see": "[data-browser-target]",
+      "text": "example.com"
+    },
+    {
+      "see": "[data-browser-open-original]"
+    }
+  ]
+}

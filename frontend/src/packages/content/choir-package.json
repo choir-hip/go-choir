@@ -1,0 +1,49 @@
+{
+  "schema": "choir.package/v2",
+  "name": "content",
+  "version": "1.0.0",
+  "display": {
+    "title": "Source",
+    "icon": "📎",
+    "description": "Source substrate viewer"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": {
+      "menu": false,
+      "desktopIcon": false,
+      "order": 135
+    },
+    "window": {
+      "singleton": false,
+      "heavy": false,
+      "desktop": {
+        "width": 820,
+        "height": 620,
+        "minWidth": 560,
+        "minHeight": 420
+      },
+      "compact": {
+        "minWidth": 280,
+        "minHeight": 420
+      }
+    },
+    "auth": {
+      "preview": "public-readonly"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-content-window",
+      "contentClass": "content-viewer-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

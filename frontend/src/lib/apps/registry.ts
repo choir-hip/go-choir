@@ -55,17 +55,6 @@ export const TEXTURE_APP_ID = 'texture';
 // First-party packages (src/packages/<name>/) join them below.
 const STATIC_APPS = [
   {
-    id: 'browser',
-    name: 'Web Lens',
-    icon: '🌐',
-    description: 'Open a page or read a snapshot',
-    component: () => import('../BrowserApp.svelte'),
-    launcher: { menu: true, desktopIcon: true, order: 20 },
-    window: { ...windowDefaults },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'standard', shellDataAttr: 'data-browser-app-container', contentClass: 'browser-content' },
-  },
-  {
     id: 'email',
     name: 'Mail',
     icon: '📬',
@@ -98,17 +87,6 @@ const STATIC_APPS = [
     },
     auth: { preview: 'public-preview' },
     theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'texture-content' },
-  },
-  {
-    id: 'content',
-    name: 'Source',
-    icon: '📎',
-    description: 'Source substrate viewer',
-    component: () => import('../ContentViewer.svelte'),
-    launcher: { menu: false, desktopIcon: false, order: 135 },
-    window: { singleton: false, heavy: false, desktop: { width: 820, height: 620, minWidth: 560, minHeight: 420 }, compact: compactDefault },
-    auth: { preview: 'public-readonly' },
-    theme: { surface: 'standard', shellDataAttr: 'data-content-window', contentClass: 'content-viewer-content' },
   },
   {
     id: 'settings',

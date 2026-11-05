@@ -1,9 +1,9 @@
 <script>
   import { onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
-  import { fetchWithRenewal, AuthRequiredError } from './auth.js';
-  import { browserOpenableSourceURL } from './source-url';
-  import { renderMarkdownBlocks } from './texture-markdown-renderer';
+  import { fetchWithRenewal, AuthRequiredError } from '../../lib/app-sdk';
+  import { browserOpenableSourceURL } from '../../lib/app-sdk';
+  import { renderMarkdownBlocks } from '../../lib/app-sdk';
   import {
     normalizeSourceEvidenceState,
     readerArtifactStateLabel,
@@ -14,7 +14,7 @@
     sourceEvidenceResearchLabel,
     sourceEvidenceState,
     sourceEvidenceStateLabel,
-  } from './texture-source-renderer';
+  } from '../../lib/app-sdk';
 
   export let appContext = {};
 
