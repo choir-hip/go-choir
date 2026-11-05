@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const ProtocolVersion = 2
@@ -136,6 +138,14 @@ type ResearchPayload struct {
 type ResearchChild struct {
 	Objective string `json:"objective"`
 	Model     string `json:"model,omitempty"`
+	// Questions are the parent's precommitment about this child's result
+	// (MA1.5): typed questions with the parent's own probabilities.
+	// PSuccess and Weight are the parent's stated chance the child achieves
+	// its objective and how much it matters; neither is ever supplied by the
+	// host. A child without them is a Cast marked weight zero.
+	Questions []types.TypedQuestion `json:"questions,omitempty"`
+	PSuccess  *float64              `json:"p_success,omitempty"`
+	Weight    *float64              `json:"weight,omitempty"`
 }
 
 // ResearchChildResult is what one child returns to the calling cell.
@@ -145,6 +155,12 @@ type ResearchChildResult struct {
 	Findings   string `json:"findings,omitempty"`
 	Error      string `json:"error,omitempty"`
 	DurationMs int64  `json:"duration_ms"`
+	// CastID and ReportID name the child's records (MA1.5): the Cast the
+	// call is, and the Report whose text Findings repeats. WeightZero is why
+	// the Cast states no weight, when it does not.
+	CastID     string `json:"cast_id,omitempty"`
+	ReportID   string `json:"report_id,omitempty"`
+	WeightZero string `json:"weight_zero,omitempty"`
 	// What the child's model loop spent, tracked and never capped
 	// (ARCH-08 slice 1, docs/design/agent-tree-budgets-2026-10-21.md).
 	InputTokens       int `json:"input_tokens,omitempty"`

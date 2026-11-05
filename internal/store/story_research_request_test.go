@@ -63,6 +63,11 @@ func TestStoryResearchRequestCastsTheStorysResearchDeskOnce(t *testing.T) {
 	if rec.EmitterKind != types.CommitmentEmitterOwner || rec.Provenance.AgentID != "owner:"+storyOwner {
 		t.Fatalf("emitter %q agent %q; want the owner", rec.EmitterKind, rec.Provenance.AgentID)
 	}
+	// MA1.5: the host states no probability for the owner's ask. It is a
+	// Cast marked weight zero, with its questions typed and no p_success.
+	if !rec.IsWeightZero() || rec.PSuccess != nil || rec.Weight != nil || len(rec.Prediction.Questions) == 0 || len(rec.Prediction.Questions[0].Probabilities) != 0 {
+		t.Fatalf("the owner's ask is not a typed, weight-zero Cast: %+v", rec)
+	}
 	// Research is given the story it expands, from the head the ask checked.
 	if !strings.Contains(rec.Directive.Body, head) || !strings.Contains(rec.Directive.Body, "expand:pub-1:rev-1") {
 		t.Fatalf("cast body does not name the head and the request: %s", rec.Directive.Body)

@@ -202,8 +202,12 @@ func (s *Store) CommitStoryResearchRequest(ctx context.Context, req StoryResearc
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID,
 		Kind: types.CommitmentKindDirective, Discrepancy: types.DiscrepancyUnresolved,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: objective, Body: string(body)},
-		// Host-written Cast: no p_success, weight or procedure (unscored, host); MA1.5 types it.
+		// Host-written Cast (the owner pressed the button; no deciding model
+		// stated a probability, and none is invented): weight zero, with the
+		// questions typed so the research answer can be scored against them.
 		Cast:        &types.CommitmentCast{},
+		WeightZero:  storyResearchWeightZero,
+		Prediction:  types.CommitmentPrediction{Hypothesis: objective, Questions: storyResearchQuestions(kind)},
 		Provenance:  types.CommitmentProvenance{AgentID: "owner:" + ownerID},
 		EmitterKind: types.CommitmentEmitterOwner, ComputerID: computerID,
 		Inbox: research, SenderInbox: texture, Addressee: research,
@@ -452,4 +456,21 @@ func (s *Store) TextureWorkUnread(ctx context.Context, ownerID, computerID, text
 		}
 	}
 	return false, nil
+}
+
+// storyResearchWeightZero is why an owner-requested story research Cast
+// states no weight (MA1.5: a probability comes from a deciding model's own
+// statement, never from the host).
+const storyResearchWeightZero = "owner-originated host Cast: no deciding model stated a probability"
+
+// storyResearchQuestions types the questions of a story research request:
+// closed answers, with no probabilities because no one stated any.
+func storyResearchQuestions(kind string) []types.TypedQuestion {
+	if kind == StoryResearchKindEntities {
+		return nil
+	}
+	return []types.TypedQuestion{
+		{Question: "Does new reporting, a primary document or an official statement exist on this story that it does not cite yet?", Answers: []string{"yes", "no"}},
+		{Question: "Do other outlets confirm, add to or contradict what the story says?", Answers: []string{"confirm", "add", "contradict", "none"}},
+	}
 }

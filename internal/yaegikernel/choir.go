@@ -603,6 +603,16 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 	if len(kept) == 0 {
 		return nil, fmt.Errorf("choir: Research needs at least one objective")
 	}
+	for i, spec := range kept {
+		if err := types.ValidateTypedQuestions(spec.Questions); err != nil {
+			return nil, fmt.Errorf("choir: Research child %d: questions: %w", i+1, err)
+		}
+		for name, v := range map[string]*float64{"p_success": spec.PSuccess, "weight": spec.Weight} {
+			if v != nil && (*v < 0 || *v > 1 || *v != *v) {
+				return nil, fmt.Errorf("choir: Research child %d: %s %v is outside [0,1]", i+1, name, *v)
+			}
+		}
+	}
 	return kept, nil
 }
 
@@ -820,7 +830,12 @@ func (s *ChoirScope) Decline(captureIDs any, reason string, req ...any) (string,
 // MaxTaskCaptures captures per task; a ref no group names gets its own
 // task. Each task's outcome comes back later as a record from
 // management-task:<id>.
-func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any) (string, error) {
+//
+// req, when given, is your precommitment about the tasks' results (MA1.5):
+// {"p_success", "weight", "settlement", "questions": [{"question",
+// "answers", "probabilities", "weight"}]}. Without it each task's Cast is
+// marked weight zero: no probability is invented for you.
+func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any, req ...any) (string, error) {
 	t, err := s.boundTray("delegate")
 	if err != nil {
 		return "", err
@@ -937,7 +952,13 @@ func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any) (s
 	if strings.TrimSpace(objective) == "" {
 		objective = "Open, feed or decline every capture these records name."
 	}
-	return t.Delegate(DelegateSpec{Kind: kind, Objective: strings.TrimSpace(objective), Groups: out})
+	var fields *types.RequestFields
+	if len(req) > 0 {
+		if fields, err = requestArg("Delegate", req); err != nil {
+			return "", err
+		}
+	}
+	return t.DelegateWithRequest(DelegateSpec{Kind: kind, Objective: strings.TrimSpace(objective), Groups: out}, fields)
 }
 
 // CancelTask cancels a management task (R2-20): a running task's run is

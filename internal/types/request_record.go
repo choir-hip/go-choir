@@ -110,6 +110,10 @@ type RequestFields struct {
 	Weight      *float64    `json:"weight"`
 	ImpactClass ImpactClass `json:"impact_class,omitempty"`
 	Settlement  string      `json:"settlement"`
+	// Questions are the typed questions with the sender's probabilities: its
+	// precommitment about the result (MA1.5). Optional; a Cast to a child
+	// without them is weight-zero-marked by the writer.
+	Questions []TypedQuestion `json:"questions,omitempty"`
 }
 
 // RequestShapeExample is the shape the refusals name.
@@ -118,7 +122,7 @@ const RequestShapeExample = `{"p_success": 0.8, "weight": 0.3, "settlement": "re
 // requestShapeHint is appended to every refusal.
 func requestShapeHint() string {
 	return "; pass the request fields as the last argument: " + RequestShapeExample +
-		" (p_success in [0,1] is your chance the request achieves its outcome; weight in [0,1] is how much it matters; settlement is \"recipient\" or a rule kind; optional impact_class I0..I4)"
+		" (p_success in [0,1] is your chance the request achieves its outcome; weight in [0,1] is how much it matters; settlement is \"recipient\" or a rule kind; optional impact_class I0..I4; optional questions: [{\"question\", \"answers\", \"probabilities\", \"weight\"}])"
 }
 
 // cellForbiddenRequestKeys are fields only the reducer stamps.
@@ -220,6 +224,9 @@ func ValidateRequestFields(kind string, f *RequestFields) error {
 		return fmt.Errorf("%s: settlement %q is neither %q nor a rule kind", kind, f.Settlement, SettlementRecipient)
 	}
 	if err := ValidateImpactWeight(kind, f.ImpactClass, f.Weight); err != nil {
+		return fmt.Errorf("%s: %w", kind, err)
+	}
+	if err := ValidateTypedQuestions(f.Questions); err != nil {
 		return fmt.Errorf("%s: %w", kind, err)
 	}
 	return nil
@@ -343,6 +350,9 @@ func (rec *CommitmentRecord) StampRequest(kind string, f *RequestFields) error {
 	p, w := *f.PSuccess, *f.Weight
 	rec.PSuccess, rec.Weight = &p, &w
 	rec.Settlement = f.Settlement
+	if len(f.Questions) > 0 {
+		rec.Prediction.Questions = append([]TypedQuestion(nil), f.Questions...)
+	}
 	rec.ImpactClass = EffectiveImpact(kind, f.ImpactClass)
 	m, ok := FreezeMateriality(kind, w, f.ImpactClass)
 	if !ok {

@@ -528,14 +528,27 @@ func (t *Tray) Dispose(toDesk, disposition string, captureIDs []string, reason s
 // Delegate stages a batch delegation (management delegation S2a): one
 // management task per group of spec.Groups.
 func (t *Tray) Delegate(spec DelegateSpec) (string, error) {
+	return t.DelegateWithRequest(spec, nil)
+}
+
+// DelegateWithRequest stages a batch delegation with the delegator's own
+// precommitment about the results (MA1.5): req carries its p_success, weight
+// and typed questions. A nil req stages the delegation unscored: each task's
+// Cast is marked weight zero, and nothing is invented for the delegator.
+func (t *Tray) DelegateWithRequest(spec DelegateSpec, req *types.RequestFields) (string, error) {
 	if len(spec.Groups) == 0 {
 		return "", fmt.Errorf("tray: delegate requires at least one group of records")
+	}
+	if req != nil {
+		if err := types.ValidateRequestFields(types.RequestCast, req); err != nil {
+			return "", fmt.Errorf("tray: delegate: %w", err)
+		}
 	}
 	raw, err := json.Marshal(spec)
 	if err != nil {
 		return "", fmt.Errorf("tray: encode delegate: %w", err)
 	}
-	return t.stage(StagedIntent{Kind: IntentDelegate, Objective: spec.Objective, Body: string(raw)})
+	return t.stage(StagedIntent{Kind: IntentDelegate, Objective: spec.Objective, Body: string(raw), Req: req})
 }
 
 // CancelTask stages the cancellation of one management task.

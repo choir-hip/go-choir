@@ -215,6 +215,13 @@ type Runtime struct {
 	researchChildCalls     *callSpacer
 	researchChildCallsOnce sync.Once
 
+	// The sub-call judge (subcall_judge.go): batches waiting to be judged,
+	// the work in flight, and a wait group the tests and shutdown join.
+	subCallJudgeMu      sync.Mutex
+	subCallJudgePending map[string]*subCallPending
+	subCallJudgeActive  map[string]bool
+	subCallJudgeWG      sync.WaitGroup
+
 	// dispatchActor is the function hook that the actor runtime adapter
 	// sets. When the business logic needs to start a run or wake an agent,
 	// it calls this function. If nil, activate() panics — there is no
@@ -1126,6 +1133,9 @@ func (rt *Runtime) Start(ctx context.Context) {
 		bootPhase("close_pre_boot_runs_after_crash", func() { rt.closePreBootRunsAfterCrash(ctx) })
 		bootPhase("close_open_rounds_after_crash", func() { rt.closeOpenRoundsAfterCrash(ctx) })
 	}
+	// Open judge work (subcall_judge.go) follows the same marker: a crash
+	// closes it "interrupted by a restart", a planned restart re-runs it once.
+	bootPhase("subcall_judge_work", func() { rt.closeOpenJudgeWorkAtBoot(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	// P6: tell vmctl what this computer runs (background; never blocks boot).
 	rt.reportEffectiveReleaseAsync("boot")

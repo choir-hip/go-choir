@@ -24,6 +24,10 @@ import (
 // this protects guest memory; it never refuses a child, it queues it.
 const researchChildConcurrency = 4
 
+// researchChildRole is the role a research child runs as: the callee of the
+// Cast each child call is (subcall_record.go).
+const researchChildRole = yaegikernel.SessionRoleResearchChild
+
 // researchChildPreamble is prepended to the research desk prompt for a child
 // activation. It states the child's job, not a procedure.
 const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. Do this objective's work yourself with the read-only world verbs. You cannot fan out further, report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
@@ -156,6 +160,7 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	start := time.Now()
+	fan := researchFanOut{id: "research:" + firstNonEmpty(parent.RunID, "norun") + ":" + uuid.NewString()[:8]}
 	results := make([]yaegikernel.ResearchChildResult, len(req.Children))
 	sem := make(chan struct{}, researchChildConcurrency)
 	var wg sync.WaitGroup
@@ -163,18 +168,29 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 		wg.Add(1)
 		go func(i int, spec yaegikernel.ResearchChild) {
 			defer wg.Done()
+			f := fan
+			f.index = i
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
-				results[i] = yaegikernel.ResearchChildResult{Objective: spec.Objective, Model: spec.Model, Error: ctx.Err().Error()}
+				results[i] = rt.runResearchChildRefused(ctx, parent, lineage, spec, f, ctx.Err().Error())
 				return
 			}
-			results[i] = rt.runResearchChild(ctx, parent, lineage, spec)
+			results[i] = rt.runResearchChild(ctx, parent, lineage, spec, f)
 		}(i, spec)
 	}
 	wg.Wait()
 	log.Print(researchTreeSpendLine(parent.RunID, results, time.Since(start)))
+	// The fan-out is scored after the parent has its results: one judge call
+	// for all its children, asynchronously, never waited on (subcall_judge.go).
+	var castIDs []string
+	for _, r := range results {
+		if r.CastID != "" && r.ReportID != "" {
+			castIDs = append(castIDs, r.CastID)
+		}
+	}
+	rt.enqueueSubCallJudge(firstNonEmpty(parent.OwnerID, lineage.ownerID), parent.ComputerID, fan.id, castIDs, 0)
 	return json.Marshal(results)
 }
 
@@ -195,10 +211,44 @@ func researchTreeSpendLine(root string, results []yaegikernel.ResearchChildResul
 		root, len(results), errs, in, out, cached, elapsed.Milliseconds())
 }
 
-func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild) yaegikernel.ResearchChildResult {
+// researchFanOut names one choir.Research call's fan-out and a child's place
+// in it.
+type researchFanOut struct {
+	id    string
+	index int
+}
+
+// runResearchChildRefused records a child that never started (its parent's
+// time ran out while it queued): it is still a Cast with a Report, so no
+// sub-call goes unrecorded.
+func (rt *Runtime) runResearchChildRefused(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, fan researchFanOut, cause string) yaegikernel.ResearchChildResult {
+	result := yaegikernel.ResearchChildResult{Objective: spec.Objective, Model: spec.Model, Error: cause}
+	childKey := uuid.NewString()
+	cast, err := rt.openChildCast(ctx, parent, lineage, spec, fan, childKey)
+	if err != nil {
+		result.Error += "; " + err.Error()
+		return result
+	}
+	return rt.closeChildCast(ctx, cast, result, childKey)
+}
+
+// runResearchChild runs one child as a Cast: the parent's precommitment is
+// recorded before the child starts, the child's findings are recorded as its
+// Report, and the findings are handed to the parent cell only once that
+// Report is durable.
+func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, fan researchFanOut) yaegikernel.ResearchChildResult {
+	childKey := uuid.NewString()
+	cast, err := rt.openChildCast(ctx, parent, lineage, spec, fan, childKey)
+	if err != nil {
+		return yaegikernel.ResearchChildResult{Objective: spec.Objective, Model: spec.Model, Error: err.Error()}
+	}
+	result := rt.runResearchChildWork(ctx, parent, lineage, spec, childKey)
+	return rt.closeChildCast(ctx, cast, result, childKey)
+}
+
+func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, childKey string) yaegikernel.ResearchChildResult {
 	start := time.Now()
 	result := yaegikernel.ResearchChildResult{Objective: spec.Objective}
-	childKey := uuid.NewString()
 	selection, fallbacks, err := rt.researchChildSelection(ctx, lineage, spec.Model, childKey)
 	if err != nil {
 		result.Model = spec.Model
@@ -211,7 +261,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	childExec.ChannelID = ""
 	childExec.ToolCallID = ""
 	childExec.Profile = agentprofile.Research
-	childExec.Role = yaegikernel.SessionRoleResearchChild
+	childExec.Role = researchChildRole
 	share := researchChildDeadline(ctx)
 	ctx, cancel := context.WithDeadline(ctx, share)
 	defer cancel()
@@ -220,7 +270,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 
 	workers := newResearchChildDeskWorkers(childKey)
 	defer workers.release(deskWorkerActivationID(childExec))
-	registry, err := toolregistry.NewToolRegistryWithTools(newDeskGoEvalTool(rt, workers, yaegikernel.SessionRoleResearchChild))
+	registry, err := toolregistry.NewToolRegistryWithTools(newDeskGoEvalTool(rt, workers, researchChildRole))
 	if err != nil {
 		result.Error = err.Error()
 		return result

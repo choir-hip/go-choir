@@ -289,6 +289,19 @@ type CommitmentRecord struct {
 	Settlement           string             `json:"settlement,omitempty"`
 	MaterialityProcedure *MaterialityFreeze `json:"materiality_procedure,omitempty"`
 
+	// The sub-call record (MA1.5, subcall.go): every call that makes a child
+	// agent do work for a desk is a Cast whose typed questions
+	// (Prediction.Questions) carry the parent's precommitment about the
+	// result. WeightZero, when set, says why the Cast states no weight: no
+	// deciding model gave a probability, so none is invented. InertFlags are
+	// the cheap inertness flags the writer found (never a refusal). SubCall
+	// is the body of the sub-call's own records (the Cast's tag, the child's
+	// Report, a settlement, a self-score, the judge's work). Optional on
+	// read: records written before the slice have none.
+	WeightZero string             `json:"weight_zero,omitempty"`
+	InertFlags []string           `json:"inert_flags,omitempty"`
+	SubCall    *CommitmentSubCall `json:"subcall,omitempty"`
+
 	// Addressee is the desk/actor this act is addressed to (StagedIntent
 	// ToDesk, falling back to ResolverID). It is the ledger-side analogue of
 	// the packet envelope's target_agent_id for pending/evidence queries —

@@ -266,6 +266,7 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 		return
 	}
 	log.Printf("runtime: closed management task %s: %s", task.TaskID, reason)
+	rt.scoreClosedTask(ctx, current, closing.RecordID)
 }
 
 // closeManagementTaskOfEndedRun closes the task a run served when the run
@@ -414,9 +415,15 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		cast.RecordID = fmt.Sprintf("%s:delegate:%s:%d", r.scope.CellID, in.LocalID, i)
 		cast.Inbox, cast.SenderInbox, cast.Addressee = inbox, parent, inbox
 		cast.EmitterKind, cast.ComputerID = types.CommitmentEmitterAgent, r.scope.ComputerID
-		// Host-written Cast: no p_success, weight or procedure (unscored, host); MA1.5 types it.
 		cast.Cast = &types.CommitmentCast{Captures: leased}
 		cast.RelatedIDs = delegated
+		// The Cast is a sub-call (MA1.5): it carries the delegator's own typed
+		// questions and probabilities when its cell stated them, and is marked
+		// weight zero when not. The host states no probability for it.
+		stampRequestRecord(r.scope, in, &cast)
+		if err := r.typeDelegateCast(&cast, in, spec, i, taskID); err != nil {
+			return nil, nil, fmt.Errorf("delegate %s: %w", in.LocalID, err)
+		}
 		casts = append(casts, cast)
 		tasks = append(tasks, types.ManagementTask{
 			TaskID: taskID, OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID, Kind: types.ManagementTaskIntake,
@@ -512,4 +519,79 @@ func (rt *Runtime) storyLibraryShownMark(runID string) int64 {
 		}
 	}
 	return 0
+}
+
+// typeDelegateCast makes a Delegate's task Cast a sub-call Cast: its
+// fan-out is the Delegate (the tasks one call opened), its typed questions
+// and p_success and weight are the delegating cell's own (in.Req), and
+// without them it is marked weight zero. The task's closing Report is the
+// observation the settler scores (closeManagementTask).
+func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yaegikernel.StagedIntent, spec yaegikernel.DelegateSpec, group int, taskID string) error {
+	role, _, _ := strings.Cut(cast.Addressee, ":")
+	p := subCallCastParams{
+		RecordID: cast.RecordID, FanOutID: delegateFanOutID(r.scope.CellID, in.LocalID), ChildKey: taskID,
+		ChildRole: strings.ReplaceAll(role, "-", "_"), ChildInbox: cast.Addressee, Objective: spec.Objective,
+		ParentAgent: cast.SenderInbox, ParentRunID: r.scope.RunID, ParentModel: cast.Provenance.ModelID,
+		ComputerID: r.scope.ComputerID, Now: time.Now(),
+	}
+	if in.Req != nil {
+		p.Questions, p.PSuccess, p.Weight, p.Settlement = in.Req.Questions, in.Req.PSuccess, in.Req.Weight, in.Req.Settlement
+	}
+	cast.ChildIDs = nil
+	cast.SubCall = &types.CommitmentSubCall{Kind: types.SubCallCast, FanOutID: p.FanOutID, Role: p.ChildRole,
+		ParentRunID: p.ParentRunID, ParentAgent: p.ParentAgent, ChildKey: taskID}
+	return applySubCallPrecommitment(cast, p)
+}
+
+// delegateFanOutID names the fan-out of one Delegate: the tasks it opened.
+func delegateFanOutID(cellID, localID string) string {
+	return "delegate:" + cellID + ":" + localID
+}
+
+// scoreClosedTask makes a closed task's final Report the observation of its
+// Cast (MA1.5): the Report is recorded as a sub-call Report whose citations
+// are the captures the task disposed, and the Cast is queued for the
+// settler. It returns at once; a task that closes alongside its siblings
+// shares their judge call. A task whose Cast predates the slice has no
+// sub-call tag and is left alone.
+func (rt *Runtime) scoreClosedTask(ctx context.Context, task types.ManagementTask, closingID string) {
+	cast, err := rt.store.GetCommitmentRecord(ctx, task.OwnerID, task.ComputerID, task.OpeningRecordID)
+	if err != nil || cast == nil || cast.SubCall == nil || cast.SubCall.Kind != types.SubCallCast {
+		return
+	}
+	closing, err := rt.store.GetCommitmentRecord(ctx, task.OwnerID, task.ComputerID, closingID)
+	if err != nil || closing == nil || closing.Report == nil {
+		return
+	}
+	var text strings.Builder
+	for _, c := range closing.Report.Claims {
+		text.WriteString(c.Text + " ")
+	}
+	var sources []string
+	if o := closing.TaskOutcome; o != nil {
+		if o.Note != "" {
+			text.WriteString("Note: " + o.Note + ". ")
+		}
+		for _, d := range o.Dispositions {
+			text.WriteString(fmt.Sprintf("Capture %s: %s. ", d.CaptureID, d.Kind))
+			sources = append(sources, d.CaptureID)
+		}
+	}
+	report := buildSubCallReport(subCallReportParams{Cast: *cast, Child: task.TaskInbox, Text: text.String(),
+		Error: taskErrText(closing), Sources: sources, Now: time.Now()})
+	if err := rt.appendSubCallRecord(ctx, task.OwnerID, task.ComputerID, report); err != nil {
+		log.Printf("runtime: record the Report of task %s as a sub-call: %v", task.TaskID, err)
+		return
+	}
+	if self, ok := buildSubCallSelfScore(*cast, time.Now()); ok {
+		_ = rt.appendSubCallRecord(ctx, task.OwnerID, task.ComputerID, self)
+	}
+	rt.enqueueSubCallJudge(task.OwnerID, task.ComputerID, cast.SubCall.FanOutID, []string{cast.RecordID}, subCallDelegateCoalesce)
+}
+
+func taskErrText(rec *types.CommitmentRecord) string {
+	if rec == nil || rec.TaskOutcome == nil {
+		return ""
+	}
+	return rec.TaskOutcome.Error
 }

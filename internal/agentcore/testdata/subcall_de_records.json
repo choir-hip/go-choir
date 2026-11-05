@@ -1,0 +1,542 @@
+[
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c0",
+  "kind": "directive",
+  "discrepancy": "unresolved",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 0"
+  },
+  "cast": {},
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 0",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.9,
+      "no": 0.1
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:00:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-de-1",
+   "origin": "desk_run"
+  },
+  "p_success": 0.9,
+  "weight": 0.5,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "addressee": "research_child:k0",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "parent_run_id": "run-de-1",
+   "parent_agent": "research:doc-de",
+   "child_key": "k0"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c1",
+  "kind": "directive",
+  "discrepancy": "unresolved",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 1"
+  },
+  "cast": {},
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 1",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.8,
+      "no": 0.2
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:00:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-de-1",
+   "origin": "desk_run"
+  },
+  "p_success": 0.8,
+  "weight": 0.5,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "addressee": "research_child:k1",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "parent_run_id": "run-de-1",
+   "parent_agent": "research:doc-de",
+   "child_key": "k1"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c2",
+  "kind": "directive",
+  "discrepancy": "unresolved",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 2"
+  },
+  "cast": {},
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 2",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.7,
+      "no": 0.3
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:00:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-de-1",
+   "origin": "desk_run"
+  },
+  "p_success": 0.7,
+  "weight": 0.5,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "addressee": "research_child:k2",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "parent_run_id": "run-de-1",
+   "parent_agent": "research:doc-de",
+   "child_key": "k2"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c3",
+  "kind": "directive",
+  "discrepancy": "unresolved",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 3"
+  },
+  "cast": {},
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 3",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "no": 0.6,
+      "yes": 0.4
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:00:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-de-1",
+   "origin": "desk_run"
+  },
+  "p_success": 0.6,
+  "weight": 0.5,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "addressee": "research_child:k3",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "parent_run_id": "run-de-1",
+   "parent_agent": "research:doc-de",
+   "child_key": "k3"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c4",
+  "kind": "directive",
+  "discrepancy": "unresolved",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 4"
+  },
+  "cast": {},
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 4",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.55,
+      "no": 0.45
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:00:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-de-1",
+   "origin": "desk_run"
+  },
+  "p_success": 0.55,
+  "weight": 0.5,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "addressee": "research_child:k4",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "parent_run_id": "run-de-1",
+   "parent_agent": "research:doc-de",
+   "child_key": "k4"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c5",
+  "kind": "directive",
+  "discrepancy": "unresolved",
+  "directive": {
+   "subtype": "cast",
+   "objective": "Find a primary source for claim 5"
+  },
+  "cast": {},
+  "prediction": {
+   "hypothesis": "Find a primary source for claim 5",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "questions": [
+    {
+     "question": "Will the child find a primary source?",
+     "answers": [
+      "yes",
+      "no"
+     ],
+     "probabilities": {
+      "yes": 0.9,
+      "no": 0.1
+     },
+     "weight": 0.5
+    }
+   ]
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:00:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "research:doc-de",
+   "model_id": "deepseek-v4.1-flash",
+   "committed_at": "2026-11-04T10:00:00Z",
+   "desk": "research:doc-de",
+   "run_id": "run-de-1",
+   "origin": "desk_run"
+  },
+  "p_success": 0.9,
+  "weight": 0.5,
+  "impact_class": "I1",
+  "settlement": "recipient",
+  "emitter_kind": "agent",
+  "computer_id": "computer-de",
+  "addressee": "research_child:k5",
+  "subcall": {
+   "kind": "cast",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "parent_run_id": "run-de-1",
+   "parent_agent": "research:doc-de",
+   "child_key": "k5"
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c0:settle:system-judge",
+  "kind": "resolve",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "",
+   "committed_at": ""
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:05:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "system:judge",
+   "model_id": "typesafe/jev-1.13",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "origin": "system"
+  },
+  "emitter_kind": "system",
+  "computer_id": "computer-de",
+  "parent_id": "subcall:fan-de:c0",
+  "subcall": {
+   "kind": "settlement",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "cast_id": "subcall:fan-de:c0",
+   "method": "independent",
+   "scorer": "system:judge",
+   "class": "contradicted",
+   "contradicted": true,
+   "verdicts": [
+    {
+     "q": 0,
+     "answer": "no",
+     "probabilities": {
+      "yes": 0.3,
+      "no": 0.7
+     }
+    }
+   ]
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c1:settle:system-judge",
+  "kind": "resolve",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "",
+   "committed_at": ""
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:05:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "system:judge",
+   "model_id": "typesafe/jev-1.13",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "origin": "system"
+  },
+  "emitter_kind": "system",
+  "computer_id": "computer-de",
+  "parent_id": "subcall:fan-de:c1",
+  "subcall": {
+   "kind": "settlement",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "cast_id": "subcall:fan-de:c1",
+   "method": "independent",
+   "scorer": "system:judge",
+   "class": "confirmed",
+   "verdicts": [
+    {
+     "q": 0,
+     "answer": "yes",
+     "probabilities": {
+      "yes": 0.8,
+      "no": 0.2
+     }
+    }
+   ]
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c2:settle:system-rule-citations_resolve",
+  "kind": "resolve",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "",
+   "committed_at": ""
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:05:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "system:rule:citations_resolve",
+   "model_id": "",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "origin": "system"
+  },
+  "emitter_kind": "system",
+  "computer_id": "computer-de",
+  "parent_id": "subcall:fan-de:c2",
+  "subcall": {
+   "kind": "settlement",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "cast_id": "subcall:fan-de:c2",
+   "method": "rule",
+   "scorer": "system:rule:citations_resolve",
+   "class": "contradicted",
+   "rule": "citations_resolve",
+   "contradicted": true
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c3:settle:system-judge",
+  "kind": "resolve",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "",
+   "committed_at": ""
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:05:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "system:judge",
+   "model_id": "typesafe/jev-1.13",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "origin": "system"
+  },
+  "emitter_kind": "system",
+  "computer_id": "computer-de",
+  "parent_id": "subcall:fan-de:c3",
+  "subcall": {
+   "kind": "settlement",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "cast_id": "subcall:fan-de:c3",
+   "method": "independent",
+   "scorer": "system:judge",
+   "class": "confirmed",
+   "verdicts": [
+    {
+     "q": 0,
+     "answer": "no",
+     "probabilities": {
+      "yes": 0.1,
+      "no": 0.9
+     }
+    }
+   ]
+  }
+ },
+ {
+  "schema_id": "choir.commitment_record.v1",
+  "record_id": "subcall:fan-de:c5:settle:system-judge",
+  "kind": "resolve",
+  "discrepancy": "unresolved",
+  "prediction": {
+   "hypothesis": "",
+   "committed_at": ""
+  },
+  "observation": {
+   "observed_at": "2026-11-04T10:05:00Z"
+  },
+  "scores": null,
+  "provenance": {
+   "agent_id": "system:judge",
+   "model_id": "deepseek-judge-1",
+   "committed_at": "2026-11-04T10:05:00Z",
+   "origin": "system"
+  },
+  "emitter_kind": "system",
+  "computer_id": "computer-de",
+  "parent_id": "subcall:fan-de:c5",
+  "subcall": {
+   "kind": "settlement",
+   "fan_out_id": "fan-de",
+   "role": "research_child",
+   "cast_id": "subcall:fan-de:c5",
+   "method": "independent",
+   "scorer": "system:judge",
+   "class": "confirmed",
+   "same_family": true,
+   "verdicts": [
+    {
+     "q": 0,
+     "answer": "yes",
+     "probabilities": {
+      "yes": 0.95,
+      "no": 0.05
+     }
+    }
+   ]
+  }
+ }
+]

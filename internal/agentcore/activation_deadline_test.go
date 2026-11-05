@@ -178,12 +178,12 @@ func TestResearchChildSwitchesOnQuotaWithTheComputersLedgerAndChain(t *testing.T
 	parent := toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c", AgentID: "research:o", RunID: "run-parent"}
 	lineage := researchLineage{ownerID: "o", selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}
 	spec := yaegikernel.ResearchChild{Objective: "alpha"}
-	first := rt.runResearchChild(context.Background(), parent, lineage, spec)
+	first := rt.runResearchChild(context.Background(), parent, lineage, spec, researchFanOut{})
 	if first.Error != "" || !strings.HasPrefix(first.Findings, "done on chatgpt/") {
 		t.Fatalf("first child = %+v; want it to switch to the chain", first)
 	}
 	before := p.calls["synthetic"]
-	second := rt.runResearchChild(context.Background(), parent, lineage, spec)
+	second := rt.runResearchChild(context.Background(), parent, lineage, spec, researchFanOut{})
 	if second.Error != "" || p.calls["synthetic"] != before {
 		t.Fatalf("second child = %+v, synthetic calls %d -> %d; want the shared ledger to spare the doomed call", second, before, p.calls["synthetic"])
 	}
@@ -197,7 +197,7 @@ func TestResearchChildIncidentIsVisibleAndKeyedByTheChild(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		rt.runResearchChild(ctx, parent, lineage, yaegikernel.ResearchChild{Objective: "alpha"})
+		rt.runResearchChild(ctx, parent, lineage, yaegikernel.ResearchChild{Objective: "alpha"}, researchFanOut{})
 		close(done)
 	}()
 	deadline := time.Now().Add(5 * time.Second)

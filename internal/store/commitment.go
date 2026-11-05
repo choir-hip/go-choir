@@ -157,6 +157,7 @@ func (s *Store) ListCommitmentClaimRecords(ctx context.Context, ownerID, compute
 		matches := []objectgraph.JSONFieldMatch{
 			{JSONPath: "$.directive", Value: "", MissingMatchesEmpty: true},
 			{JSONPath: "$.calibration", Value: "", MissingMatchesEmpty: true},
+			{JSONPath: "$.subcall", Value: "", MissingMatchesEmpty: true},
 		}
 		if objs, err = s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit); err != nil {
 			return nil, err
@@ -328,9 +329,15 @@ func dropCalibrationRecords(objs []objectgraph.Object, limit int) []objectgraph.
 	for _, obj := range objs {
 		var probe struct {
 			Calibration json.RawMessage `json:"calibration"`
+			SubCall     json.RawMessage `json:"subcall"`
 		}
 		if len(obj.Body) > 0 && json.Unmarshal(obj.Body, &probe) == nil {
 			if c := strings.TrimSpace(string(probe.Calibration)); c != "" && c != "null" && c != `""` {
+				continue
+			}
+			// A sub-call's Reports, settlements and judge work belong to the
+			// sub-call plane (MA1.5), not to a desk's pack.
+			if c := strings.TrimSpace(string(probe.SubCall)); c != "" && c != "null" && c != `""` {
 				continue
 			}
 		}
@@ -340,4 +347,50 @@ func dropCalibrationRecords(objs []objectgraph.Object, limit int) []objectgraph.
 		}
 	}
 	return out
+}
+
+// ListSubCallRecords lists one computer's sub-call records of a kind (MA1.5:
+// cast, report, settlement, self_score, judge_work, judge_close,
+// disagreement), at most limit, in the store's stable order. kind "" lists
+// every sub-call record.
+func (s *Store) ListSubCallRecords(ctx context.Context, ownerID, computerID, kind string, limit int) ([]types.CommitmentRecord, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	ownerID, computerID, kind = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(kind)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("sub-call record list requires owner and computer")
+	}
+	if kind == "" {
+		var all []types.CommitmentRecord
+		for _, k := range []string{types.SubCallCast, types.SubCallReport, types.SubCallSettlement, types.SubCallSelfScore,
+			types.SubCallJudgeWork, types.SubCallJudgeClose, types.SubCallDisagreement} {
+			recs, err := s.ListSubCallRecords(ctx, ownerID, computerID, k, limit)
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, recs...)
+		}
+		return all, nil
+	}
+	matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.subcall.kind", Value: kind}}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("sub-call record decode %s: %w", obj.CanonicalID, err)
+		}
+		if rec.SubCall == nil {
+			continue
+		}
+		records = append(records, rec)
+	}
+	return records, nil
 }

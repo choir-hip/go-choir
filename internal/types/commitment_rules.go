@@ -146,6 +146,12 @@ const (
 	// engineer's re-Freezes are each one) and every later round's on the
 	// same trajectory (R19).
 	PrecommitRuleApprovedWithinRounds PrecommitRuleKind = "approved_within_rounds"
+	// PrecommitRuleReportSchemaValid: the child's Report is well-formed, with
+	// a claim or finding and a stop reason (MA1.5, research-style).
+	PrecommitRuleReportSchemaValid PrecommitRuleKind = "report_schema_valid"
+	// PrecommitRuleCitationsResolve: every source the Report cites resolves
+	// to a capture or evidence record (MA1.5, research-style).
+	PrecommitRuleCitationsResolve PrecommitRuleKind = "citations_resolve"
 	// precommitRuleVisualCapturedRetired read the platform capture, which is
 	// removed (docs/problems/selfdev-screens-are-not-files-2026-11-03.md). A
 	// new one is refused; one already on a tape settles unresolved.
@@ -168,6 +174,7 @@ var PrecommitRuleKinds = []PrecommitRuleKind{
 	PrecommitRuleVerifyPass, PrecommitRuleCompletes, PrecommitRuleJudgeAccepts,
 	PrecommitRuleFreezeMinutes, PrecommitRuleOwnerApproves, PrecommitRuleApprovalMinutes,
 	PrecommitRuleApprovedWithinRounds,
+	PrecommitRuleReportSchemaValid, PrecommitRuleCitationsResolve,
 }
 
 const (
@@ -237,6 +244,11 @@ func ValidateRulePrecommit(p CommitmentPrecommit) error {
 	if yes < PrecommitRuleMinP || yes > PrecommitRuleMaxP {
 		return fmt.Errorf("precommit: p(yes) must be in [%.2f, %.2f]; 0 and 1 cannot be recalibrated (got %v)", PrecommitRuleMinP, PrecommitRuleMaxP, yes)
 	}
+	if p.Rule.Kind == PrecommitRuleReportSchemaValid || p.Rule.Kind == PrecommitRuleCitationsResolve {
+		// These settle a sub-call's Report (subcall.go), not an assignment: a
+		// precommit naming one would wait forever.
+		return fmt.Errorf("precommit: rule %s settles a child's Report and is not a precommit rule", p.Rule.Kind)
+	}
 	return p.Rule.validate()
 }
 
@@ -293,7 +305,8 @@ func (r PrecommitRule) validate() error {
 				return err
 			}
 		}
-	case PrecommitRuleTestsPass, PrecommitRuleVerifyPass, PrecommitRuleCompletes, PrecommitRuleJudgeAccepts:
+	case PrecommitRuleTestsPass, PrecommitRuleVerifyPass, PrecommitRuleCompletes, PrecommitRuleJudgeAccepts,
+		PrecommitRuleReportSchemaValid, PrecommitRuleCitationsResolve:
 		if r.WithinMinutes != 0 || len(r.Paths) != 0 {
 			return fmt.Errorf("precommit rule %s takes no within_minutes or paths", r.Kind)
 		}
