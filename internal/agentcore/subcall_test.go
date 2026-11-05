@@ -53,6 +53,7 @@ type subCallJudge struct {
 	omit     map[string]bool
 	extra    []string
 	err      error
+	errFirst int // fail the first errFirst calls with err, then answer
 	hold     chan struct{}
 	started  chan struct{}
 	model    string
@@ -65,6 +66,11 @@ func (j *subCallJudge) Judge(ctx context.Context, state json.RawMessage, questio
 	j.states = append(j.states, string(state))
 	j.asked = append(j.asked, questions)
 	hold, started, err := j.hold, j.started, j.err
+	if j.errFirst > 0 {
+		if j.calls > j.errFirst {
+			err = nil
+		}
+	}
 	j.mu.Unlock()
 	if started != nil {
 		select {
@@ -993,13 +999,10 @@ func TestSubCallRateLimitedJudgeIsRetried(t *testing.T) {
 	subCallJudgeBackoff = 5 * time.Millisecond
 	t.Cleanup(func() { subCallJudgeBackoff = oldBackoff })
 	f := newSubCallFixture(t, map[string]string{"gamma": "findings"})
+	f.judge.mu.Lock()
 	f.judge.err = errors.New("gateway: 429 too many requests")
-	go func() {
-		time.Sleep(60 * time.Millisecond)
-		f.judge.mu.Lock()
-		f.judge.err = nil
-		f.judge.mu.Unlock()
-	}()
+	f.judge.errFirst = 1
+	f.judge.mu.Unlock()
 	results := f.research(t, []yaegikernel.ResearchChild{{Objective: "gamma limited", PSuccess: fp(0.7), Weight: fp(0.5)}})
 	f.rt.waitSubCallJudge()
 	if !f.exists(types.SubCallSettlementRecordID(results[0].CastID, types.SubCallJudgeScorerID)) || f.judge.callCount() < 2 {
