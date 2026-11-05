@@ -133,7 +133,7 @@ func TestABuiltInDeskIsCountedAndNotBlocked(t *testing.T) {
 		t.Fatalf("a built-in desk's ask spent System 1 (%d calls) or wrote the tape (%d)", f.judge.callCount(), len(f.events(t)))
 	}
 	counts := disclosure.Counts()
-	if counts["publication|owner_private|ask|observed"] != 1 || counts["egress|owner_private|ask|observed"] != 1 || counts["library_release|owner_private|ask|observed"] != 1 {
+	if counts["publication|owner_private|ask|observed"] != 1 || counts["egress|owner_private|ask|observed"] != 0 || counts["library_release|owner_private|ask|observed"] != 1 {
 		t.Fatalf("counts = %v", counts)
 	}
 	// Enforce mode, the MA3.7 flip, would park it.
@@ -271,17 +271,17 @@ func TestTheOwnerDenialHoldsForThatDisclosureOnly(t *testing.T) {
 	f := newDisclosureFixture(t, "denydesk", 62824)
 	f.escalating()
 	exec := f.run(t, "run-deny", f.desk, "tidy my notes", types.OwnerPrivateLabel("document"))
-	if err := f.gate(exec, f.desk, disclosure.SinkEgress, "https://example.com/upload", "post notes"); err == nil {
+	if err := f.gate(exec, f.desk, disclosure.SinkPublication, "doc-up", "post notes"); err == nil {
 		t.Fatal("first attempt passed")
 	}
 	id := f.pendingID(t)
 	if phase, err := f.rt.answerDisclosure(context.Background(), f.owner, id, false); err != nil || phase != disclosurePhaseDenied {
 		t.Fatalf("deny = %q, %v", phase, err)
 	}
-	if err := f.gate(exec, f.desk, disclosure.SinkEgress, "https://example.com/upload", "post notes"); err == nil || !strings.Contains(err.Error(), "denied") {
+	if err := f.gate(exec, f.desk, disclosure.SinkPublication, "doc-up", "post notes"); err == nil || !strings.Contains(err.Error(), "denied") {
 		t.Fatalf("after the denial = %v", err)
 	}
-	if err := f.gate(exec, f.desk, disclosure.SinkEgress, "https://example.com/other", "post other notes"); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
+	if err := f.gate(exec, f.desk, disclosure.SinkPublication, "doc-other", "post other notes"); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
 		t.Fatalf("a different disclosure = %v, want a fresh ask", err)
 	}
 }
@@ -337,10 +337,14 @@ func TestALabelledRunAtEachSinkGetsTheTablesDecision(t *testing.T) {
 	f := newDisclosureFixture(t, "eachsink", 62827)
 	f.escalating()
 	exec := f.run(t, "run-each", f.desk, "x", types.OwnerPrivateLabel("document"))
-	for _, sink := range []disclosure.Sink{disclosure.SinkPublication, disclosure.SinkEgress, disclosure.SinkLibraryRelease, disclosure.SinkMailSend, disclosure.SinkDeskMessage} {
+	for _, sink := range []disclosure.Sink{disclosure.SinkPublication, disclosure.SinkLibraryRelease, disclosure.SinkMailSend, disclosure.SinkDeskMessage} {
 		if err := f.gate(exec, f.desk, sink, "elsewhere", "send "+string(sink)); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
 			t.Errorf("%s: %v, want an ask that waits on the owner", sink, err)
 		}
+	}
+	// Egress (search, fetch) is allowed outright (owner, 2026-11-05).
+	if err := f.gate(exec, f.desk, disclosure.SinkEgress, "elsewhere", "search"); err != nil {
+		t.Errorf("egress: %v, want allowed", err)
 	}
 	// A message to the custodian of the label's kind is allowed outright.
 	if err := f.gate(exec, f.desk, disclosure.SinkDeskMessage, agentprofile.Texture, "cast to texture"); err != nil {
@@ -361,16 +365,17 @@ func TestMailSendIsAdmittedOnlyForTheCustodianRepliesInTheOwnersThread(t *testin
 	}
 }
 
-// 2: the egress call a package desk's cell makes is gated before it reaches
-// the host.
-func TestAPackageDeskEgressFetchIsGatedBeforeTheHost(t *testing.T) {
+// 2: the egress call a package desk's cell makes passes the gate before it
+// reaches the host; an owner-private label allows egress (owner, 2026-11-05),
+// so the fetch reaches the host (unbound here) rather than an ask.
+func TestAPackageDeskEgressFetchPassesTheGate(t *testing.T) {
 	f := newDisclosureFixture(t, "fetcher", 62829)
 	f.escalating()
 	exec := f.run(t, "run-fetch", f.desk, "x", types.OwnerPrivateLabel("document"))
 	payload, _ := json.Marshal(yaegikernel.ReadPayload{URL: "https://example.com/?q=my+private+notes"})
 	_, err := f.rt.deskEgress(context.Background(), f.desk, exec, yaegikernel.ActionRead, payload)
-	if err == nil || !strings.Contains(err.Error(), "waits on the owner") {
-		t.Fatalf("egress = %v", err)
+	if err != nil && (strings.Contains(err.Error(), "waits on the owner") || strings.Contains(err.Error(), "disclosure")) {
+		t.Fatalf("an owner-private fetch was gated: %v", err)
 	}
 	// A world-only run fetches (it reaches the host, which is unbound here).
 	world := f.run(t, "run-fetch-world", f.desk, "x", types.LabelWorldUntrusted)
@@ -439,8 +444,11 @@ func TestTheReducerGatesAMessageToANonCustodianDesk(t *testing.T) {
 }
 
 // B1: a search query is an egress sink, gated at the dispatch (gateEgressCall
-// is the step the async search dispatch runs before it starts a search).
-func TestALabelledSearchStartIsCountedForABuiltInAndRefusedForAPackageDesk(t *testing.T) {
+// is the step the async search dispatch runs before it starts a search). An
+// owner-private label allows egress for every desk (owner, 2026-11-05: "No,
+// no asking before each search"), so neither a built-in nor a package desk
+// asks.
+func TestALabelledSearchStartIsAllowedForEveryDesk(t *testing.T) {
 	f := newDisclosureFixture(t, "searcher", 62832)
 	f.escalating()
 	payload, _ := json.Marshal(yaegikernel.SearchStartPayload{Query: "my private notes about the merger"})
@@ -448,12 +456,15 @@ func TestALabelledSearchStartIsCountedForABuiltInAndRefusedForAPackageDesk(t *te
 	if err := f.rt.gateEgressCall(context.Background(), agentprofile.Research, builtin, yaegikernel.ActionSearchStart, payload); err != nil {
 		t.Fatalf("a built-in desk's search was blocked: %v", err)
 	}
-	if disclosure.Counts()["egress|owner_private|ask|observed"] != 1 {
-		t.Fatalf("counts = %v", disclosure.Counts())
-	}
 	pkg := f.run(t, "run-search-p", f.desk, "x", types.OwnerPrivateLabel("document"))
-	if err := f.rt.gateEgressCall(context.Background(), f.desk, pkg, yaegikernel.ActionSearchStart, payload); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
-		t.Fatalf("a package desk's search = %v", err)
+	if err := f.rt.gateEgressCall(context.Background(), f.desk, pkg, yaegikernel.ActionSearchStart, payload); err != nil {
+		t.Fatalf("a package desk's search was blocked: %v", err)
+	}
+	if n := disclosure.Counts()["egress|owner_private|ask|observed"]; n != 0 {
+		t.Fatalf("a search asked: counts = %v", disclosure.Counts())
+	}
+	if f.judge.callCount() != 0 {
+		t.Fatalf("a search spent System 1 (%d calls)", f.judge.callCount())
 	}
 }
 

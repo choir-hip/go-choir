@@ -29,7 +29,8 @@
 // publishes world content around the clock, so world_untrusted, platform and
 // publisher labels allow every sink the product uses. Only an owner_private
 // label restricts: its data may go to its own custodian (or a desk a live
-// lease admits) freely, and to anywhere else only on an ask.
+// lease admits) freely, out through egress (search, fetch) freely, and to
+// anywhere else only on an ask.
 package disclosure
 
 import (
@@ -128,9 +129,11 @@ var Table = map[Class]map[Sink]Cell{
 	// an ask. Nothing is denied outright by default: a deny is reserved for
 	// the owner's own future rules, and Decide supports it.
 	ClassOwnerPrivate: {
-		SinkPublication:    same(Ask),
-		SinkMailSend:       {Unadmitted: Ask, Admitted: Allow},
-		SinkEgress:         same(Ask),
+		SinkPublication: same(Ask),
+		SinkMailSend:    {Unadmitted: Ask, Admitted: Allow},
+		// A run that read the owner's data still searches and fetches
+		// freely (owner, 2026-11-05: "No, no asking before each search").
+		SinkEgress:         same(Allow),
 		SinkDeskMessage:    {Unadmitted: Ask, Admitted: Allow},
 		SinkLibraryRelease: same(Ask),
 	},

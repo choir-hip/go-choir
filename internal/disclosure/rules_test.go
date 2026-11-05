@@ -24,7 +24,7 @@ func TestTableCellsPinned(t *testing.T) {
 		ClassOwnerPrivate: {
 			SinkPublication:    {Ask, Ask},
 			SinkMailSend:       {Ask, Allow},
-			SinkEgress:         {Ask, Ask},
+			SinkEgress:         {Allow, Allow},
 			SinkDeskMessage:    {Ask, Allow},
 			SinkLibraryRelease: {Ask, Ask},
 		},
@@ -61,7 +61,7 @@ func TestEverySinkForEveryLabelClassGetsTheTablesDecision(t *testing.T) {
 		{types.PublisherLabel("example-news"), SinkPublication, false, Allow},
 		{types.OwnerPrivateLabel("document"), SinkPublication, false, Ask},
 		{types.OwnerPrivateLabel("document"), SinkPublication, true, Ask},
-		{types.OwnerPrivateLabel("document"), SinkEgress, false, Ask},
+		{types.OwnerPrivateLabel("document"), SinkEgress, false, Allow},
 		{types.OwnerPrivateLabel("document"), SinkLibraryRelease, false, Ask},
 		{types.OwnerPrivateLabel("document"), SinkDeskMessage, false, Ask},
 		{types.OwnerPrivateLabel("document"), SinkDeskMessage, true, Allow},
