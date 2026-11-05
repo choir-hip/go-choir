@@ -267,6 +267,10 @@
               base == "package-lock.json" ||
               base == "choir-package.json" ||
               base == "responsibilities.json" ||
+              # Data the build reads: the SDK surface and grant vocabulary,
+              # the CSS fetch list, the shell's route table.
+              ((pkgs.lib.hasSuffix ".json" path) &&
+                ((pkgs.lib.hasInfix "/frontend/src/" path) || (pkgs.lib.hasInfix "/frontend/scripts/" path))) ||
               base == "svelte.config.js" ||
               base == "vite.config.js";
         };
