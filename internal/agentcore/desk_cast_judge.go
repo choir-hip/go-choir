@@ -389,11 +389,6 @@ func deskScoredItem(c types.CommitmentRecord, key string, answers []types.Commit
 	return subCallItem{cast: cast, report: report}
 }
 
-func deskOfInbox(inbox string) string {
-	desk, _, _ := strings.Cut(strings.TrimSpace(inbox), ":")
-	return desk
-}
-
 // deskCastJudgeRequest builds one blind request for a chunk: each round's
 // shared answer text once, a Cast's targeted answers beside it, and per Cast
 // "did the answer achieve it" plus its questions. No probabilities, ids,

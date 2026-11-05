@@ -1,7 +1,7 @@
 {
   "schema": "choir.desk-protocol-surface/v1",
   "version": "5.0.0",
-  "sha256": "63bab04d77f6299cc717d9293e65d3ec3ea172a43fafae47f2424146d809ee8b",
+  "sha256": "7dfaf9e48b6d74c6f4191cda264bdbd52a93af0cb9135e958b5f6067745c3f03",
   "names": {
     "release.Precommitment": {
       "kind": "struct",
@@ -2130,6 +2130,11 @@
         "Phase": {
           "type": "string",
           "json": "phase",
+          "optional": true
+        },
+        "Plane": {
+          "type": "string",
+          "json": "plane",
           "optional": true
         },
         "Reason": {
@@ -4589,6 +4594,12 @@
       "underlying": "untyped string",
       "value": "\"cast\""
     },
+    "types.SubCallDeskOutcome": {
+      "kind": "const",
+      "direction": "both",
+      "underlying": "untyped string",
+      "value": "\"desk_outcome\""
+    },
     "types.SubCallInertJudgement": {
       "kind": "const",
       "direction": "both",
@@ -4636,6 +4647,12 @@
       "direction": "both",
       "underlying": "untyped string",
       "value": "\"interrupted\""
+    },
+    "types.SubCallPlaneDeskCast": {
+      "kind": "const",
+      "direction": "both",
+      "underlying": "untyped string",
+      "value": "\"desk_cast\""
     },
     "types.SubCallReport": {
       "kind": "const",
