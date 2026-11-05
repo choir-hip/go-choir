@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskprotocol"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -2310,15 +2311,21 @@ func (s *Store) CancelEngineeringAssignment(ctx context.Context, req types.Cance
 }
 
 func validEngineeringCapsuleTransition(current, next types.EngineeringCapsuleDisposition, intentRef, ackRef string) bool {
+	// The from-to moves are the desk protocol's table
+	// (internal/deskprotocol/transitions.go); the refs a move also needs stay
+	// here.
+	if !deskprotocol.Allowed(deskprotocol.MachineEngineeringCapsule, string(current), string(next)) {
+		return false
+	}
 	switch next {
 	case types.EngineeringCapsuleFreezeRequested:
-		return current == types.EngineeringCapsuleActive && intentRef != "" && ackRef == ""
+		return intentRef != "" && ackRef == ""
 	case types.EngineeringCapsuleFrozen:
-		return current == types.EngineeringCapsuleFreezeRequested && intentRef != "" && ackRef != ""
+		return intentRef != "" && ackRef != ""
 	case types.EngineeringCapsuleRevokeRequested:
-		return (current == types.EngineeringCapsuleUnbound || current == types.EngineeringCapsuleActive || current == types.EngineeringCapsuleFreezeRequested || current == types.EngineeringCapsuleFrozen) && intentRef != "" && ackRef == ""
+		return intentRef != "" && ackRef == ""
 	case types.EngineeringCapsuleRevoked:
-		return current == types.EngineeringCapsuleRevokeRequested && intentRef != "" && strings.HasPrefix(ackRef, "capsule-revoke:sha256:") &&
+		return intentRef != "" && strings.HasPrefix(ackRef, "capsule-revoke:sha256:") &&
 			types.ValidSHA256Digest(strings.TrimPrefix(ackRef, "capsule-revoke:"))
 	default:
 		return false

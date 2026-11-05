@@ -1,0 +1,53 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "subcall_settlement",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "subcall-settle-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "",
+      "model_id": "",
+      "committed_at": ""
+    },
+    "revision": {},
+    "kind": "directive",
+    "subcall": {
+      "kind": "settlement",
+      "fan_out_id": "fan-1",
+      "role": "research_child",
+      "parent_run_id": "run-contract",
+      "parent_agent": "texture:doc-1",
+      "cast_id": "cell-contract:cast:tray-1",
+      "method": "judge",
+      "scorer": "system:judge",
+      "verdicts": [
+        {
+          "q": 0,
+          "answer": "yes",
+          "probabilities": {
+            "no": 0.1,
+            "yes": 0.9
+          }
+        }
+      ],
+      "answered": {
+        "answered": 0.8,
+        "not_answered": 0.05,
+        "partly": 0.15
+      }
+    },
+    "emitter_kind": "system",
+    "computer_id": "computer-contract"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "type": "types.WorkItemRecord",
+  "case": "refused",
+  "body": {
+    "work_item_id": "work-2",
+    "trajectory_id": "traj-1",
+    "owner_id": "owner-contract",
+    "computer_id": "computer-contract",
+    "objective": "integrate the reports",
+    "reason": "verification failed",
+    "status": "refused",
+    "result_ref": "evidence://x",
+    "lifecycle_version": 2,
+    "created_at": "2026-11-04T00:00:00Z",
+    "updated_at": "2026-11-04T00:00:00Z"
+  }
+}

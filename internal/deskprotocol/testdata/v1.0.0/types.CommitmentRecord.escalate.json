@@ -1,0 +1,49 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "escalate",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:escalate:tray-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "management",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "desk": "management",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "kind": "directive",
+    "directive": {
+      "subtype": "escalate",
+      "body": "stuck"
+    },
+    "p_success": 0.8,
+    "weight": 0.3,
+    "impact_class": "I1",
+    "settlement": "recipient",
+    "materiality_procedure": {
+      "kind": "escalate",
+      "custodian": "management",
+      "procedure_ref": "request.escalate.v1",
+      "window": "7d",
+      "weight": 0.3,
+      "impact_class": "I1",
+      "hash": "cf0bc7f05850d3b9057472e87986ef48481c64ce25c2d097c0b0457a7e917216"
+    },
+    "addressee": "texture"
+  }
+}

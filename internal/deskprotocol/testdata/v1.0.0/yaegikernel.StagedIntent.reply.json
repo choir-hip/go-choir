@@ -1,0 +1,11 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "reply",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "reply",
+    "to_desk": "texture",
+    "target_ref": "rec-1",
+    "answer": "the answer"
+  }
+}

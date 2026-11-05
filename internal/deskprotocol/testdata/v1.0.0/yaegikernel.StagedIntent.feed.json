@@ -1,0 +1,20 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "feed",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "feed",
+    "to_desk": "texture:doc-1",
+    "body": "supports the story\n\nFed captures: capture-1",
+    "disposition": "feed",
+    "captures": [
+      "capture-1"
+    ],
+    "reason": "supports the story",
+    "req": {
+      "p_success": 0.8,
+      "weight": 0.3,
+      "settlement": "recipient"
+    }
+  }
+}

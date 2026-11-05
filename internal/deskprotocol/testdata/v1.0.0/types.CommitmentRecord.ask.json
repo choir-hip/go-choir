@@ -1,0 +1,59 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "ask",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:ask:tray-1",
+    "prediction": {
+      "hypothesis": "which sources?",
+      "questions": [
+        {
+          "question": "which sources?"
+        }
+      ],
+      "committed_at": "2026-11-04T00:00:00Z"
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "texture:doc-1",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "desk": "texture:doc-1",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "precommit": {
+      "question": "which sources?",
+      "distribution": null,
+      "resolver": "management"
+    },
+    "kind": "precommit",
+    "p_success": 0.8,
+    "weight": 0.3,
+    "impact_class": "I0",
+    "settlement": "recipient",
+    "materiality_procedure": {
+      "kind": "ask",
+      "custodian": "management",
+      "procedure_ref": "",
+      "no_procedure": true,
+      "weight": 0.3,
+      "impact_class": "I0",
+      "hash": "9c1ea6072d7cecbdae66fee38a9475698e78fc64f9075eacdf1329bd56fd6768"
+    },
+    "addressee": "management:owner-contract",
+    "emitter_kind": "agent",
+    "computer_id": "computer-contract",
+    "inbox": "management:owner-contract",
+    "sender_inbox": "texture:doc-1"
+  }
+}

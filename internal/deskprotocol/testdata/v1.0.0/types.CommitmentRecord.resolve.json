@@ -1,0 +1,45 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "resolve",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:resolve:tray-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "confirmed",
+      "source_ref": "e1",
+      "observed_at": "2026-11-04T00:00:00Z"
+    },
+    "scores": [],
+    "discrepancy": "confirmed",
+    "provenance": {
+      "agent_id": "management",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "resolved_at": "2026-11-04T00:00:00Z",
+      "desk": "management",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "resolve": {
+      "verdict": "confirmed",
+      "evidence_refs": [
+        "e1"
+      ]
+    },
+    "kind": "resolve",
+    "evidence_refs": [
+      "e1"
+    ],
+    "parent_id": "rec-1",
+    "related_ids": [
+      "rec-1"
+    ]
+  }
+}

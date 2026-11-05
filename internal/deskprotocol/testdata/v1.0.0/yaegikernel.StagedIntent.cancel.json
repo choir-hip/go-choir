@@ -1,0 +1,9 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "cancel",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "cancel",
+    "target_ref": "rec-1"
+  }
+}

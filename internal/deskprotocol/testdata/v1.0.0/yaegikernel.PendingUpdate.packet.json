@@ -1,0 +1,12 @@
+{
+  "type": "yaegikernel.PendingUpdate",
+  "case": "packet",
+  "body": {
+    "update_id": "update-1",
+    "from_agent_id": "research:doc-1",
+    "packet": {
+      "schema_version": "",
+      "kind": ""
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "subcall_self_score",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "subcall-self-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "",
+      "model_id": "",
+      "committed_at": ""
+    },
+    "revision": {},
+    "kind": "directive",
+    "subcall": {
+      "kind": "self_score",
+      "fan_out_id": "fan-1",
+      "cast_id": "cell-contract:cast:tray-1",
+      "self": [
+        {
+          "q": 0,
+          "answer": "yes",
+          "p": 0.7
+        }
+      ]
+    },
+    "emitter_kind": "system",
+    "computer_id": "computer-contract"
+  }
+}

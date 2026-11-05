@@ -1,0 +1,14 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "report",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "report",
+    "to_desk": "texture",
+    "evidence_refs": [
+      "evidence://1"
+    ],
+    "claim": "a claim",
+    "resolver_id": "texture"
+  }
+}

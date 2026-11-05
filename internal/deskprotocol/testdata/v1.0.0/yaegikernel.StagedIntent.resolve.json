@@ -1,0 +1,10 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "resolve",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "resolve",
+    "target_ref": "rec-1",
+    "resolve": "{\"verdict\":\"confirmed\",\"evidence_refs\":[\"e1\"]}"
+  }
+}

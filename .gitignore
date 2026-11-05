@@ -13,6 +13,7 @@
 /vmctl
 /choir
 /capsule-broker
+/deskprotocol-lock
 /result
 
 # Build

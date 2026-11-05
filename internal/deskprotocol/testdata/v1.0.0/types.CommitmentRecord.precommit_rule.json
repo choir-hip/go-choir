@@ -1,0 +1,52 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "precommit_rule",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:precommit:tray-1",
+    "prediction": {
+      "hypothesis": "Does it settle?",
+      "questions": [
+        {
+          "question": "Does it settle?",
+          "probabilities": {
+            "no": 0.4,
+            "yes": 0.6
+          }
+        }
+      ],
+      "committed_at": "2026-11-04T00:00:00Z"
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "engineering:a-1",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "desk": "engineering:a-1",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "precommit": {
+      "question": "Does it settle?",
+      "distribution": {
+        "no": 0.4,
+        "yes": 0.6
+      },
+      "resolver": "rule",
+      "rule": {
+        "kind": "tests_pass"
+      }
+    },
+    "kind": "precommit",
+    "addressee": "rule"
+  }
+}

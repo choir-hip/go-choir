@@ -1,0 +1,33 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "notice",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "notice-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "",
+      "model_id": "",
+      "committed_at": ""
+    },
+    "revision": {},
+    "kind": "directive",
+    "directive": {
+      "subtype": "notice",
+      "objective": "rebase notice"
+    },
+    "addressee": "management:owner-contract",
+    "emitter_kind": "system",
+    "computer_id": "computer-contract"
+  }
+}

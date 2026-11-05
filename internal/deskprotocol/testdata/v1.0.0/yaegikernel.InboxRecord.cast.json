@@ -1,0 +1,12 @@
+{
+  "type": "yaegikernel.InboxRecord",
+  "case": "cast",
+  "body": {
+    "seq": 1,
+    "record_id": "rec-1",
+    "kind": "directive",
+    "from": "management:owner-contract",
+    "objective": "write",
+    "created_at": "2026-11-04T00:00:00Z"
+  }
+}

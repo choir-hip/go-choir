@@ -1,0 +1,16 @@
+{
+  "type": "types.WorkItemRecord",
+  "case": "open",
+  "body": {
+    "work_item_id": "work-1",
+    "trajectory_id": "traj-1",
+    "owner_id": "owner-contract",
+    "computer_id": "computer-contract",
+    "objective": "integrate the reports",
+    "status": "open",
+    "lifecycle_version": 1,
+    "assigned_agent_id": "texture:doc-1",
+    "created_at": "2026-11-04T00:00:00Z",
+    "updated_at": "2026-11-04T00:00:00Z"
+  }
+}

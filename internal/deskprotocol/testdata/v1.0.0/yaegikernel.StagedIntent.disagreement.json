@@ -1,0 +1,9 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "disagreement",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "disagreement",
+    "disagreement": "{\"commitment_id\":\"rec-1\",\"scorer_verdict\":\"contradicted\",\"resolver_verdict\":\"confirmed\"}"
+  }
+}

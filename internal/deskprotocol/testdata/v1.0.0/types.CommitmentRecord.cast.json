@@ -1,0 +1,57 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "cast",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:cast:tray-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "texture:doc-1",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "desk": "texture:doc-1",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "kind": "directive",
+    "directive": {
+      "subtype": "cast",
+      "objective": "find sources"
+    },
+    "p_success": 0.8,
+    "weight": 0.3,
+    "impact_class": "I1",
+    "settlement": "recipient",
+    "materiality_procedure": {
+      "kind": "cast",
+      "custodian": "management",
+      "procedure_ref": "request.cast.v1",
+      "window": "14d (F1), 30d (F2)",
+      "weight": 0.3,
+      "impact_class": "I1",
+      "hash": "2f7458acc4fba014cfae620cf99178d2250de54683541e41e86779b9314829dd"
+    },
+    "inert_flags": [
+      "no_typed_question"
+    ],
+    "addressee": "research:doc-1",
+    "emitter_kind": "agent",
+    "computer_id": "computer-contract",
+    "inbox": "research:doc-1",
+    "sender_inbox": "texture:doc-1",
+    "cast": {}
+  }
+}

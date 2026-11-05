@@ -1,0 +1,9 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "precommit",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "precommit",
+    "precommit": "{\"question\":\"Will the build pass?\",\"distribution\":{\"yes\":0.8,\"no\":0.2},\"resolver\":\"management\"}"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "decline",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:decline:tray-1",
+    "prediction": {
+      "hypothesis": "",
+      "committed_at": ""
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "management",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "desk": "management",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "kind": "directive",
+    "directive": {
+      "subtype": "decline",
+      "body": "off topic\n\nDeclined captures: capture-2"
+    },
+    "p_success": 0.8,
+    "weight": 0.3,
+    "impact_class": "I0",
+    "settlement": "recipient",
+    "materiality_procedure": {
+      "kind": "decline",
+      "custodian": "management",
+      "procedure_ref": "",
+      "no_procedure": true,
+      "weight": 0.3,
+      "impact_class": "I0",
+      "hash": "bf4cd60dcec2e4d216d106f86000750d5fa7c0c396f6fe23b028b3c662566579"
+    },
+    "addressee": "source:src-1",
+    "emitter_kind": "agent",
+    "computer_id": "computer-contract",
+    "inbox": "source:src-1",
+    "sender_inbox": "management",
+    "disposition": {
+      "kind": "decline",
+      "captures": [
+        "capture-2"
+      ],
+      "reason": "off topic"
+    }
+  }
+}

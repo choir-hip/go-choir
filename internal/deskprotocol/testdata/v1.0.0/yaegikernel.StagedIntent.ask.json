@@ -1,0 +1,15 @@
+{
+  "type": "yaegikernel.StagedIntent",
+  "case": "ask",
+  "body": {
+    "local_id": "tray-1",
+    "kind": "ask",
+    "to_desk": "management",
+    "question": "which sources?",
+    "req": {
+      "p_success": 0.8,
+      "weight": 0.3,
+      "settlement": "recipient"
+    }
+  }
+}

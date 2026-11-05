@@ -1,0 +1,12 @@
+{
+  "type": "release.Precommitment",
+  "case": "settled",
+  "body": {
+    "record_id": "rec-1",
+    "kind": "tests_pass",
+    "question": "Do the tests pass?",
+    "p_yes_permille": 800,
+    "settled": "yes",
+    "resolve_record_id": "rec-2"
+  }
+}

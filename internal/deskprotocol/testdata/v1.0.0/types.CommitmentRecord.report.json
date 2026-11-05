@@ -1,0 +1,46 @@
+{
+  "type": "types.CommitmentRecord",
+  "case": "report",
+  "body": {
+    "schema_id": "commitment_record.v1",
+    "record_id": "cell-contract:report:tray-1",
+    "prediction": {
+      "hypothesis": "a claim",
+      "committed_at": "2026-11-04T00:00:00Z"
+    },
+    "observation": {
+      "excerpt": "",
+      "source_ref": "",
+      "observed_at": ""
+    },
+    "scores": [],
+    "discrepancy": "unresolved",
+    "provenance": {
+      "agent_id": "research:doc-1",
+      "model_id": "test/model",
+      "context_ref": "doc-1",
+      "committed_at": "2026-11-04T00:00:00Z",
+      "desk": "research:doc-1",
+      "run_id": "run-contract",
+      "origin": "desk_run",
+      "prompt_version": "fixture"
+    },
+    "revision": {},
+    "kind": "report",
+    "addressee": "texture:doc-1",
+    "evidence_refs": [
+      "evidence://1"
+    ],
+    "emitter_kind": "agent",
+    "computer_id": "computer-contract",
+    "inbox": "texture:doc-1",
+    "sender_inbox": "research:doc-1",
+    "report": {
+      "claims": [
+        {
+          "text": "a claim"
+        }
+      ]
+    }
+  }
+}

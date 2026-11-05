@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskprotocol"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -2794,8 +2795,17 @@ func (s *Store) lifecycleWorkObject(ctx context.Context, ownerID, computerID, wo
 	return obj, rec, err
 }
 
+// workItemTerminal reads the desk protocol's transition table
+// (internal/deskprotocol/transitions.go): a work item is terminal when the
+// table names its state and no move leaves it.
 func workItemTerminal(status types.WorkItemStatus) bool {
-	return status == types.WorkItemCompleted || status == types.WorkItemCancelled || status == types.WorkItemRefused
+	return deskprotocol.Terminal(deskprotocol.MachineWorkItem, string(status))
+}
+
+// trajectoryMayMoveTo reports whether the table lets a trajectory in status
+// move to next.
+func trajectoryMayMoveTo(status, next types.TrajectoryStatus) bool {
+	return deskprotocol.Allowed(deskprotocol.MachineTrajectory, string(status), string(next))
 }
 
 func (s *Store) lifecycleSettlementReady(ctx context.Context, trajectory types.TrajectoryRecord, prospectiveWork *types.WorkItemRecord, prospectiveUpdate *types.CoagentSourcePacket) (bool, error) {
@@ -5254,7 +5264,7 @@ func (s *Store) SettleLifecycleTrajectory(ctx context.Context, req types.SettleL
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if trajectory.Status != types.TrajectoryLive || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion {
+	if !trajectoryMayMoveTo(trajectory.Status, types.TrajectorySettled) || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
 	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
@@ -5856,7 +5866,7 @@ func (s *Store) CancelLifecycleTrajectory(ctx context.Context, req types.CancelL
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
 	}
-	if trajectory.Status != types.TrajectoryLive {
+	if !trajectoryMayMoveTo(trajectory.Status, types.TrajectoryCancelled) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
