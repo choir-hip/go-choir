@@ -96,7 +96,7 @@ func TestDeskCastJudgeWorkWithTheCastOutcomeWithTheClose(t *testing.T) {
 	cursor := readThrough(t, s, res)
 	mustCommitInbox(t, s, closeCmd, cursor, final)
 	outcome, ok := deskJudgeRecord(t, s, types.DeskCastOutcomeRecordID(key))
-	if !ok || outcome.SubCall.Kind != types.SubCallDeskOutcome || outcome.SubCall.Reason != "done" || outcome.Observation.SourceRef != "final" {
+	if !ok || outcome.SubCall.Kind != types.SubCallDeskOutcome || outcome.SubCall.Reason != "" || outcome.Observation.SourceRef != "final" {
 		t.Fatalf("the close wrote no outcome: %+v %v", outcome, ok)
 	}
 	if got := log.seen(); len(got) != 1 || got[0] != key {

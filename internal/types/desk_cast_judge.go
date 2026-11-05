@@ -81,11 +81,22 @@ func DeskCastJudgeWork(computerID, roundKey string, attempt int, committedAt str
 	}
 }
 
+// IsRestartRoundClosure reports whether the record is the host's boot
+// closure of an open round: a system-emitted final Report under the
+// deterministic restart closure id and the closure agent.
+func IsRestartRoundClosure(rec CommitmentRecord) bool {
+	return rec.EmitterKind == CommitmentEmitterSystem && rec.Provenance.AgentID == closureSystemAgentID &&
+		rec.Final && rec.RecordID == RoundClosureRecordID(rec.ConversationID, rec.Round, ClosureReasonInterruptedByRestart)
+}
+
 // DeskCastOutcome builds the outcome record of a round that closing closed.
 func DeskCastOutcome(computerID, roundKey string, closing CommitmentRecord, committedAt string) CommitmentRecord {
+	// The outcome's Reason is host-minted: it names the restart fate only
+	// for the store's own system closure record. A desk's Report.StopReason
+	// is desk-supplied text and never reaches it.
 	reason := ""
-	if closing.Report != nil {
-		reason = strings.TrimSpace(closing.Report.StopReason)
+	if IsRestartRoundClosure(closing) {
+		reason = ClosureReasonInterruptedByRestart
 	}
 	return CommitmentRecord{
 		SchemaID: CommitmentRecordSchemaV1, RecordID: DeskCastOutcomeRecordID(roundKey),

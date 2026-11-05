@@ -155,6 +155,8 @@ type deskRound struct {
 	casts           int
 	settled, failed int
 	reason          string
+	failedReason    string // set when the round could not be judged: a failure, not an answer
+	skipped         int    // Casts with no evidence
 	model           string
 	in, out         int
 	cost            float64
@@ -207,8 +209,11 @@ func (rt *Runtime) settleDeskCastRounds(ctx context.Context, owner, computer str
 			r.reason = "interrupted by a restart: the round closed with no observation"
 			continue
 		}
-		roundItems, reason := rt.deskRoundItems(ctx, owner, computer, r)
+		roundItems, reason, failed := rt.deskRoundItems(ctx, owner, computer, r)
 		r.reason = reason
+		if failed {
+			r.failedReason = reason
+		}
 		items = append(items, roundItems...)
 	}
 	for start := 0; start < len(items); start += deskCastJudgeBatchMax {
@@ -220,11 +225,17 @@ func (rt *Runtime) settleDeskCastRounds(ctx context.Context, owner, computer str
 		switch {
 		case strings.HasPrefix(reason, "interrupted"):
 			phase = types.SubCallPhaseInterrupted
-		case r.casts > 0 && r.failed == r.casts:
+		case r.failedReason != "" || r.failed > 0:
 			phase = types.SubCallPhaseFailed
 		}
-		if r.casts > 0 && reason == "" {
+		if r.casts > 0 && (reason == "" || r.failed > 0) {
 			reason = fmt.Sprintf("settled %d of %d Casts", r.settled, r.casts)
+			if r.skipped > 0 {
+				reason += fmt.Sprintf("; %d had no evidence for this Cast", r.skipped)
+			}
+			if r.failed > 0 && r.failedReason != "" {
+				reason += "; " + r.failedReason
+			}
 		}
 		rt.closeDeskJudgeWork(ctx, owner, computer, r, phase, reason)
 	}
@@ -247,14 +258,15 @@ func (rt *Runtime) closeDeskJudgeWork(ctx context.Context, owner, computer strin
 
 // deskRoundItems reads a closed round's scorable Casts and the recipient's
 // answers. reason is set when nothing is sent to the judge.
-func (rt *Runtime) deskRoundItems(ctx context.Context, owner, computer string, r *deskRound) ([]deskItem, string) {
+// failed is true when the reason is a read failure, not a verdict.
+func (rt *Runtime) deskRoundItems(ctx context.Context, owner, computer string, r *deskRound) ([]deskItem, string, bool) {
 	conv, round, ok := parseDeskRoundKey(r.key)
 	if !ok {
-		return nil, "unreadable round key"
+		return nil, "unreadable round key", true
 	}
 	records, err := rt.store.ConversationRecords(ctx, owner, computer, conv)
 	if err != nil {
-		return nil, "the round's records did not read: " + err.Error()
+		return nil, "the round's records did not read: " + err.Error(), true
 	}
 	var casts, answers []types.CommitmentRecord
 	for _, rec := range records {
@@ -266,7 +278,7 @@ func (rt *Runtime) deskRoundItems(ctx context.Context, owner, computer string, r
 		}
 	}
 	if len(casts) == 0 {
-		return nil, "no scorable Cast in the round"
+		return nil, "no scorable Cast in the round", false
 	}
 	recipient := casts[0].Inbox
 	for _, rec := range records {
@@ -275,7 +287,7 @@ func (rt *Runtime) deskRoundItems(ctx context.Context, owner, computer string, r
 		}
 	}
 	if len(answers) == 0 {
-		return nil, "never answered: not settled"
+		return nil, "never answered: not settled", false
 	}
 	castIDs := map[string]bool{}
 	for _, c := range casts {
@@ -302,13 +314,22 @@ func (rt *Runtime) deskRoundItems(ctx context.Context, owner, computer string, r
 			continue
 		}
 		r.casts++
+		if targeted[c.RecordID] == nil && sharedText == "" {
+			// No answer names this Cast and no untargeted answer covers
+			// it: nothing is evidence for it.
+			r.skipped++
+			continue
+		}
 		items = append(items, deskItem{cast: c, scored: deskScoredItem(c, r.key, answers),
 			round: r, shared: sharedText, targeted: boundRunes(strings.Join(targeted[c.RecordID], "\n\n"), deskCastAnswerRunes)})
 	}
-	if len(items) == 0 {
-		return nil, "already settled"
+	if len(items) == 0 && r.casts == r.skipped && r.casts > 0 {
+		return nil, "", false
 	}
-	return items, ""
+	if len(items) == 0 {
+		return nil, "already settled", false
+	}
+	return items, "", false
 }
 
 // deskAnswerText is the observable text of a recipient's record: a Report's
@@ -439,8 +460,8 @@ func (rt *Runtime) judgeDeskCastBatch(ctx context.Context, owner, computer strin
 	fail := func(reason string) {
 		for _, it := range items {
 			it.round.failed++
-			if it.round.reason == "" {
-				it.round.reason = reason
+			if it.round.failedReason == "" {
+				it.round.failedReason = reason
 			}
 		}
 	}
@@ -482,6 +503,10 @@ func (rt *Runtime) judgeDeskCastBatch(ctx context.Context, owner, computer strin
 		rec.ComputerID = computer
 		if err := rt.writeDeskCastSettlement(ctx, owner, computer, it.cast, rec); err != nil {
 			log.Printf("desk cast judge: settle %s: %v", it.cast.RecordID, err)
+			it.round.failed++
+			if it.round.failedReason == "" {
+				it.round.failedReason = "the settlement of " + it.cast.RecordID + " did not write: " + err.Error()
+			}
 			continue
 		}
 		it.round.settled++

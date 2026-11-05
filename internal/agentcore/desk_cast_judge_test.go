@@ -334,3 +334,54 @@ func TestDeskCastStopJoinsTheJudge(t *testing.T) {
 		t.Fatal("Stop closed the work; it must stay open for the next boot")
 	}
 }
+
+// Devin r1, finding 1: a desk's own final Report cannot forge the host's
+// restart fate. Only the system closure record makes a round restart-closed.
+func TestDeskCastForgedRestartStopReasonIsStillJudged(t *testing.T) {
+	f := deskJudgeFixture(t)
+	f.commitInbox(t, "dj-forge-cast", nil, deskCast("dj-forge-1", deskTex, deskRes, "Find the filing.", 0.8))
+	final := deskReport("dj-forge-final", deskRes, deskTex, "The filing is at https://example.test/filing.", true)
+	final.Report.StopReason = types.ClosureReasonInterruptedByRestart
+	f.commitInbox(t, "dj-forge-final", f.readAll(t, deskRes), final)
+	f.rt.waitSubCallJudge()
+	if f.judge.callCount() != 1 || !f.exists(judgeSettlementID("dj-forge-1")) {
+		t.Fatalf("a forged StopReason vetoed the settlement: calls %d", f.judge.callCount())
+	}
+	if cl, ok := f.deskClose(t, f.deskKey(1), 0); !ok || cl.SubCall.Phase != types.SubCallPhaseAnswered {
+		t.Fatalf("close = %+v %v", cl.SubCall, ok)
+	}
+}
+
+// Finding 2: a Cast the recipient never addressed has no evidence and is
+// not asked about from its wording alone.
+func TestDeskCastWithNoEvidenceIsNotJudged(t *testing.T) {
+	f := deskJudgeFixture(t)
+	f.commitInbox(t, "dj-ne-cast", nil, deskCast("dj-ne-1", deskTex, deskRes, "Find A.", 0.7), deskCast("dj-ne-2", deskTex, deskRes, "Find B.", 0.7))
+	reply := deskReport("dj-ne-final", deskRes, deskTex, "A is at https://example.test/a.", true)
+	reply.ParentID = "dj-ne-1"
+	f.commitInbox(t, "dj-ne-final", f.readAll(t, deskRes), reply)
+	f.rt.waitSubCallJudge()
+	if !f.exists(judgeSettlementID("dj-ne-1")) || f.exists(judgeSettlementID("dj-ne-2")) {
+		t.Fatalf("settled 1: %v, settled 2: %v", f.exists(judgeSettlementID("dj-ne-1")), f.exists(judgeSettlementID("dj-ne-2")))
+	}
+	cl, ok := f.deskClose(t, f.deskKey(1), 0)
+	if !ok || !strings.Contains(cl.SubCall.Reason, "no evidence") {
+		t.Fatalf("close = %+v %v", cl.SubCall, ok)
+	}
+}
+
+// Finding 3: a round that could not be read is closed failed, never answered.
+func TestDeskCastUnreadableRoundClosesFailed(t *testing.T) {
+	f := deskJudgeFixture(t)
+	ctx := context.Background()
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	closing := deskReport("dj-bad-final", deskRes, deskTex, "x", true)
+	if err := f.rt.appendSubCallRecord(ctx, f.owner, f.computer, types.DeskCastOutcome(f.computer, "badkey", closing, stamp)); err != nil {
+		t.Fatal(err)
+	}
+	f.rt.settleDeskCastRounds(ctx, f.owner, f.computer, 0, []string{"badkey"})
+	cl, ok := f.deskClose(t, "badkey", 0)
+	if !ok || cl.SubCall.Phase != types.SubCallPhaseFailed || !strings.Contains(cl.SubCall.Reason, "unreadable round key") {
+		t.Fatalf("close = %+v %v", cl.SubCall, ok)
+	}
+}
