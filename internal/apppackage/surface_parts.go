@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sort"
+	"strings"
 )
 
 // The components of the behaviour surface (trust draft 4.2, MA7.3). The
@@ -65,15 +66,27 @@ func (m Manifest) SurfaceParts(src Source) (map[string]string, error) {
 			owned[t.Path] = true
 		}
 	}
+	// Code outside the desks (the window's entry and any source file) is code,
+	// not an asset: rewriting it is a new code path. The hash format's domain
+	// moves with code too.
+	extraCode := []surfaceFile{}
 	var assets []surfaceFile
 	for _, f := range doc.Files {
-		if !owned[f.Path] {
+		switch {
+		case owned[f.Path]:
+		case isSourcePath(f.Path) || (doc.App != nil && f.Path == doc.App.Entry):
+			extraCode = append(extraCode, f)
+		default:
 			assets = append(assets, f)
 		}
 	}
 	parts := map[string]any{
-		PartPrompt:    prompts,
-		PartCode:      codes,
+		PartPrompt: prompts,
+		PartCode: struct {
+			Domain string
+			Desks  []codePart
+			Extra  []surfaceFile
+		}{doc.Domain, codes, extraCode},
 		PartSchedules: scheds,
 		PartAccepts:   accepts,
 		PartKinds: struct {
@@ -102,4 +115,14 @@ func (m Manifest) SurfaceParts(src Source) (map[string]string, error) {
 		out[k] = hex.EncodeToString(sum[:])
 	}
 	return out, nil
+}
+
+// isSourcePath reports a file that runs: Go, script or markup source.
+func isSourcePath(p string) bool {
+	for _, ext := range []string{".go", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".svelte", ".html", ".wasm"} {
+		if strings.HasSuffix(strings.ToLower(p), ext) {
+			return true
+		}
+	}
+	return false
 }

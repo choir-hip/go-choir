@@ -411,7 +411,16 @@ func TestFlipRateRelevanceReproducesOnReplay(t *testing.T) {
 		t.Fatalf("%v %d %+v", err, calls, rel)
 	}
 	// the sampled set is a pure function of the seed
-	fs := NewFlipSampler([]byte("flip-seed-flip-seed-1234"), 0.25)
+	fs, err := NewFlipSampler([]byte("flip-seed-flip-seed-1234"), 0.25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFlipSampler([]byte("x"), 0.25); err == nil {
+		t.Fatal("a short seed is guessable")
+	}
+	if (Choice{Share: 0.1}).PropensityOf("a") != 0 {
+		t.Fatal("no alternatives, no propensity")
+	}
 	n := 0
 	for i := 0; i < 4000; i++ {
 		x := fs.Sample("rec-"+itoa(i), "consequence")

@@ -49,6 +49,9 @@ type Choice struct {
 
 // PropensityOf is the probability that alt would be taken at this decision.
 func (c Choice) PropensityOf(alt string) float64 {
+	if c.Alternatives <= 0 {
+		return 0
+	}
 	p := c.Share / float64(c.Alternatives)
 	if alt == c.Preferred {
 		p += 1 - c.Share
@@ -103,8 +106,11 @@ type FlipSampler struct {
 }
 
 // NewFlipSampler builds a sampler; rate is clamped to [0,1].
-func NewFlipSampler(seed []byte, rate float64) *FlipSampler {
-	return &FlipSampler{seed: append([]byte(nil), seed...), Rate: math.Max(0, math.Min(1, rate))}
+func NewFlipSampler(seed []byte, rate float64) (*FlipSampler, error) {
+	if len(seed) < MinSeedBytes {
+		return nil, fmt.Errorf("trust: flip sampler seed needs at least %d bytes", MinSeedBytes)
+	}
+	return &FlipSampler{seed: append([]byte(nil), seed...), Rate: math.Max(0, math.Min(1, rate))}, nil
 }
 
 // Sample reports whether the consequence is measured.

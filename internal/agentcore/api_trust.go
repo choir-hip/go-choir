@@ -1,8 +1,10 @@
 package agentcore
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"sort"
 
 	"github.com/yusefmosiah/go-choir/internal/trust"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -20,11 +22,16 @@ import (
 // trustLedgerWindow bounds the newest ledger records the view reads.
 const trustLedgerWindow = 20000
 
+// trustReplayMaxRecords bounds the replay, which is quadratic in the evidence.
+const trustReplayMaxRecords = 3000
+
 type trustResponse struct {
 	ComputerID string              `json:"computer_id"`
 	Window     string              `json:"window"`
 	View       trust.View          `json:"view"`
 	Replay     *trust.ReplayReport `json:"replay,omitempty"`
+	// ReplayNote says when the replay read fewer records than the view.
+	ReplayNote string `json:"replay_note,omitempty"`
 }
 
 // HandleTrust serves GET /api/trust.
@@ -58,11 +65,20 @@ func (h *APIHandler) HandleTrust(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := trust.Inputs{Records: append(casts, settlements...)}
+	replayNote := ""
+	replayIn := in
+	if len(in.Records) > trustReplayMaxRecords {
+		recs := append([]types.CommitmentRecord(nil), in.Records...)
+		sort.SliceStable(recs, func(i, j int) bool { return recs[i].Provenance.CommittedAt > recs[j].Provenance.CommittedAt })
+		replayIn.Records = recs[:trustReplayMaxRecords]
+		replayNote = fmt.Sprintf("replay read the newest %d of %d records", trustReplayMaxRecords, len(in.Records))
+	}
 	resp := trustResponse{ComputerID: computerID, Window: "newest 5000 casts and 20000 settlements",
 		View: trust.Derive(in, trust.DefaultParams())}
 	if r.URL.Query().Get("replay") == "1" {
-		rep := trust.Replay(in, trust.DefaultParams())
+		rep := trust.Replay(replayIn, trust.DefaultParams())
 		resp.Replay = &rep
+		resp.ReplayNote = replayNote
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }

@@ -70,4 +70,26 @@ func TestCostAnomalyScanCommitsOneNoticeToManagement(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("want one notice in management's inbox, got %d of %d records", n, len(recs))
 	}
+	// A continuing anomaly (same hour, new figures: a new digest) must not
+	// abort the scan: a later desk's notice still goes out.
+	for i := 0; i < 5; i++ {
+		emit("research", now.Add(-time.Duration(i)*time.Minute-45*time.Second), 4_000_000, 400_000)
+	}
+	for i := 0; i < 40; i++ {
+		emit("texture", now.Add(-time.Duration(i)*time.Minute-30*time.Second), 4_000_000, 400_000)
+	}
+	got2, err := rt.scanCostAnomalies(context.Background(), owner, computer, now)
+	if err != nil || len(got2) != 2 {
+		t.Fatalf("rescan with a continuing anomaly: %v %+v", err, got2)
+	}
+	recs, _ = s.ListCommitmentRecords(context.Background(), owner, computer, agentprofile.Management+":"+owner, 50)
+	seen := map[string]bool{}
+	for _, r := range recs {
+		seen[r.RecordID] = true
+	}
+	for _, a := range got2 {
+		if !seen[a.NoticeRecordID()] {
+			t.Fatalf("no notice for %s", a.Desk)
+		}
+	}
 }

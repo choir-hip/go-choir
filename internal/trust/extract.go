@@ -374,7 +374,10 @@ func (x *extractor) subCast(rec types.CommitmentRecord, setts []types.Commitment
 			W: w, D: d, Skill: skill, M: 1, Settler: settler})
 	}
 	// E5: the callee role's report accepted or contradicted by the settler.
-	if role != "" {
+	if role != "" && judge != nil && rule == nil && x.scorerExclusion(judgeRec.Provenance.AgentID, role) != "" {
+		// the settler is not independent of the callee either
+		x.exclude(rec, role, x.scorerExclusion(judgeRec.Provenance.AgentID, role))
+	} else if role != "" {
 		cls := types.DiscrepancyUnresolved
 		if rule != nil {
 			cls = types.DiscrepancyContradicted

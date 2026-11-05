@@ -62,6 +62,9 @@ func TestSurfacePartsMoveWithTheirOwnInput(t *testing.T) {
 			v["capabilities"] = []any{map[string]any{"grant": "desk.act"}, map[string]any{"grant": "desk.act.cancel"}}
 		}, files, PartGrants},
 		"asset": {nil, with("README.md", "hello"), PartAssets},
+		// source outside the desks, and the window's entry, are code
+		"other source": {nil, with("lib/helper.js", "export const x = 1"), PartCode},
+		"app entry":    {nil, with("App.svelte", "<h1>rewritten</h1>"), PartCode},
 	}
 	for name, tc := range cases {
 		h, parts := build(t, tc.mut, tc.files)

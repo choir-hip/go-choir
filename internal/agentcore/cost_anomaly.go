@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -46,6 +47,12 @@ func (rt *Runtime) scanCostAnomalies(ctx context.Context, ownerID, computerID st
 			return anomalies, err
 		}
 		if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
+			// A continuing anomaly in the same hour has the same record id and
+			// a new digest (its figures moved): the notice is already
+			// committed, and a later desk's notice must still go.
+			if errors.Is(err, store.ErrLifecycleCommandConflict) {
+				continue
+			}
 			return anomalies, err
 		}
 	}

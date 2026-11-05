@@ -264,6 +264,9 @@ func (hh *hier) prior(s Subject, c ActionClass) (float64, float64) {
 	return a, b
 }
 
+// publisherOfPackage reads the publisher from the package's items, whose
+// desks the Resolver places (itemPublisher); the Resolver is keyed by desk, so
+// a package with no items yet has no desk to ask.
 func (hh *hier) publisherOfPackage(pkg string) string {
 	for _, it := range hh.items {
 		if hh.itemPackage(it) == pkg {

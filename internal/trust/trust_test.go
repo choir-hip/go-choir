@@ -507,3 +507,22 @@ func TestRulePrecommitIsE1FromItsResolve(t *testing.T) {
 		t.Fatalf("%+v %+v", v.Rows, v.Excluded)
 	}
 }
+
+func TestE5IsExcludedWhenTheSettlerIsNotIndependentOfTheCallee(t *testing.T) {
+	rec := subCast("c", "texture", "research_child", "m", 0, types.ImpactI1, 0.5, yesNo(0.9))
+	// the callee's own publisher settled it; the parent is of another publisher
+	in := Inputs{Records: []types.CommitmentRecord{rec, settlement("c", types.CalibrationScorerIndependent, "reviewer:r1", time.Hour, "yes", false)},
+		Resolver: func(d string) SubjectInfo {
+			if d == "texture" {
+				return SubjectInfo{Publisher: "pub-a"}
+			}
+			return SubjectInfo{Publisher: "pub-b"}
+		}}
+	v := Derive(in, baseParams())
+	if _, ok := row(v, SubjectAgent, "research_child", castI1); ok {
+		t.Fatalf("a same-publisher scorer settled the callee's E5: %+v", v.Rows)
+	}
+	if r, ok := row(v, SubjectAgent, "texture", castI1); !ok || r.Evidence[E1] != 1 {
+		t.Fatalf("the parent's E1 stands: %+v", r)
+	}
+}

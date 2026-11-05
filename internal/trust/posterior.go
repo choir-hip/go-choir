@@ -152,6 +152,11 @@ func Fold(items []Item, in Inputs, p Params) []Row {
 	// platform evidence with no class applies to every class its subjects hold
 	for _, it := range wild {
 		for _, s := range subjectsOf(it, in) {
+			if in.SubjectSince != nil {
+				if since := in.SubjectSince(s); !since.IsZero() && it.At.Before(since) {
+					continue
+				}
+			}
 			hit := false
 			for k := range groups {
 				if k.s == s && k.c != wildcardClass {
@@ -257,6 +262,8 @@ func foldGroup(k groupKey, its []Item, a0, b0 float64, p Params) Row {
 	} else {
 		row.AboveTau = true // I0: never gated
 	}
+	// Intended: autonomy returns only through new positive E1 or E5 evidence;
+	// an owner approval (E6) does not clear the breaker.
 	row.Breaker = !row.LastFidelityAt.IsZero() && !lastPositive.After(row.LastFidelityAt)
 	return row
 }
