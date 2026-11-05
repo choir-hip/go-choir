@@ -18,6 +18,7 @@ const frontendRoot = resolve(
 );
 const packagesDir = join(frontendRoot, 'src/packages');
 
+const errors = [];
 const SCHEMA = 'choir.package/v2';
 const ABI = 'choir.app-frontend/svelte-inline/v1';
 const NAME_RE = /^[a-z][a-z0-9-]{1,39}$/;
@@ -36,13 +37,26 @@ const PUBLISHER_DECLARED = new Set([
   'sha256', 'source_digest', 'artifact', 'artifact_digest', 'toolchain', 'binary', 'wasm',
   'import_set', 'imports', 'first_party',
 ]);
-const GRANT_RE = /^((ui|desk)(\.[a-z][a-z0-9_]*)+|agent\.prompt)$/;
+// The grant vocabulary is one catalogue (src/lib/sdk-surface/grants.json, a
+// copy of internal/apppackage/grants.go pinned equal by a Go test): a name that
+// is not in it is refused here exactly as ParseManifest refuses it.
+let GRANTS = {};
+try {
+  GRANTS = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src/lib/sdk-surface/grants.json'), 'utf8')).grants;
+} catch (err) {
+  errors.push(`sdk-surface/grants.json: cannot be read: ${err.message}`);
+}
+function lookupGrant(name) {
+  if (GRANTS[name] && !GRANTS[name].family) return GRANTS[name];
+  const i = name.lastIndexOf('.');
+  const family = i > 0 ? GRANTS[name.slice(0, i)] : undefined;
+  return family?.family && /^[a-z][a-z0-9_]{0,31}$/.test(name.slice(i + 1)) ? family : undefined;
+}
 const MIN_STATIC_IDS = 10;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = ['image', 'files'];
 
-const errors = [];
 const fail = (where, message) => errors.push(`${where}: ${message}`);
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -134,7 +148,7 @@ function normalizeKey(key) {
 // contributes.links: the rules of services/links.ts (L1 to L6), as data.
 const LINK_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const LINK_CONTEXT_KEY = /^[a-z][A-Za-z0-9_]{0,31}$/;
-const LINK_RESERVED = new Set(['app', 'title', 'doc', 'doc_id']);
+const LINK_RESERVED = new Set(['app', 'title', 'doc', 'doc_id', 'draft', 'approval', 'intake', 'intake_id']);
 function checkLinks(contributes, owner, where) {
   if (contributes.links === undefined) return;
   if (!Array.isArray(contributes.links)) {
@@ -326,7 +340,14 @@ function checkManifest(manifest, dirName, where, pkgDir) {
     else {
       manifest.capabilities.forEach((c, i) => {
         if (!strictKeys(c, `${where} capabilities[${i}]`, ['grant'], ['args'])) return;
-        if (typeof c.grant !== 'string' || !GRANT_RE.test(c.grant)) fail(`${where} capabilities[${i}]`, 'grant must be a ui.* or desk.* name, or agent.prompt');
+        const spec = typeof c.grant === 'string' ? lookupGrant(c.grant) : undefined;
+        if (!spec) fail(`${where} capabilities[${i}]`, `${JSON.stringify(c.grant)} is not a grant in the catalogue (src/lib/sdk-surface/grants.json)`);
+        else {
+          const n = Array.isArray(c.args) ? c.args.length : 0;
+          if (spec.args === 'none' && n !== 0) fail(`${where} capabilities[${i}]`, `${c.grant} takes no argument`);
+          if (spec.args === 'one' && n !== 1) fail(`${where} capabilities[${i}]`, `${c.grant} takes exactly one argument`);
+          if (spec.args === 'many' && (n === 0 || n > 16)) fail(`${where} capabilities[${i}]`, `${c.grant} takes one to 16 arguments`);
+        }
         if (c.args !== undefined && (!Array.isArray(c.args) || c.args.some((a) => typeof a !== 'string'))) fail(`${where} capabilities[${i}]`, 'args must be an array of strings');
       });
     }
@@ -335,7 +356,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
 
 // ---- run ----
 
-function main() {
+async function main() {
   const { ids: staticIds, exts: staticExts } = staticFacts();
   // Every entry under src/packages must be a real directory that stays under it:
   // a symlink or stray file would be skipped here while Vite's glob can still match it.
@@ -388,7 +409,7 @@ function main() {
     checkManifest(manifest, dir, where, pkgDir);
     // `uses` is extracted, never authored: the grants the SDK names a package imports imply must be declared.
     try {
-      for (const problem of usesProblems(extractUses(pkgDir), manifest)) fail(where, problem);
+      for (const problem of usesProblems(await extractUses(pkgDir), manifest)) fail(where, problem);
     } catch (err) {
       fail(where, err.message);
     }
@@ -426,4 +447,4 @@ function main() {
   console.log(`check-packages: ${dirs.length} package(s) ok (${dirs.join(', ') || 'none'})`);
 }
 
-main();
+await main();

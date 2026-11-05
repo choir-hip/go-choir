@@ -46,7 +46,7 @@ export type LinkIntent = {
 
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const CONTEXT_KEY = /^[a-z][A-Za-z0-9_]{0,31}$/;
-const RESERVED_PARAMS = new Set(['app', 'title', 'doc', 'doc_id']);
+const RESERVED_PARAMS = new Set(['app', 'title', 'doc', 'doc_id', 'draft', 'approval', 'intake', 'intake_id']);
 const MAX_VALUE = 512;
 
 export function validateLink(rule: LinkRule, owner: string): string | null {

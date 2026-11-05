@@ -22,6 +22,7 @@
 //     scope (the leak differential in tests/commands.spec.js).
 import { registerContributionPoint } from '../contributions';
 import { packageScope } from '../shell-kernel';
+import { currentPackageName } from '../package-identity';
 import type { Scope } from '../kernel';
 
 export type CommandScope = 'global' | 'app' | `target:${string}`;
@@ -50,6 +51,16 @@ export interface KeybindingSpec {
 type Tier = 'user' | 'app' | 'core';
 const TIER_RANK: Record<Tier, number> = { user: 0, app: 1, core: 2 };
 
+/**
+ * The shell's navigation keys. An owner's binding is on top of the shell's on
+ * other keys, but on these the shell's own binding wins over an app's (a
+ * command pack must not dead-key Escape on the overview); the owner's own
+ * (user tier) bindings still outrank it.
+ */
+export const CORE_NAV_KEYS: ReadonlySet<string> = new Set([
+  'Escape', 'Tab', 'Shift+Tab', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'F1',
+]);
+
 /** Keys no package may bind (the shell's own: the prompt bar). */
 export const LOCKED_KEYS: ReadonlySet<string> = new Set(['Mod+K']);
 
@@ -74,7 +85,7 @@ export function normalizeKey(key: string): string {
 
 export function keyOfEvent(event: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }): string {
   const main = event.key.length === 1 ? event.key.toUpperCase() : event.key;
-  const mods = [event.metaKey || event.ctrlKey ? 'Mod' : '', event.altKey ? 'Alt' : '', event.shiftKey && event.key.length > 1 ? 'Shift' : '']
+  const mods = [event.metaKey || event.ctrlKey ? 'Mod' : '', event.altKey ? 'Alt' : '', event.shiftKey && (event.key.length > 1 || /^[A-Za-z]$/.test(event.key)) ? 'Shift' : '']
     .filter(Boolean);
   return [...mods, main].join('+');
 }
@@ -195,18 +206,25 @@ export function createCommands(deps: { scopeFor: (owner: string) => Scope; actio
       });
     if (!live.length) return null;
     const locked = LOCKED_KEYS.has(key);
+    const nav = CORE_NAV_KEYS.has(key);
+    const rank = (t: Tier) => (nav && t !== 'user' ? (t === 'core' ? 0.5 : 1) : TIER_RANK[t]);
     live.sort((a, b) => {
       // A locked key belongs to the shell's own binding; an owner's own binding is on top elsewhere.
       if (locked && (a.tier === 'core') !== (b.tier === 'core')) return a.tier === 'core' ? -1 : 1;
-      return TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.priority - a.priority || a.seq - b.seq;
+      return rank(a.tier) - rank(b.tier) || b.priority - a.priority || a.seq - b.seq;
     });
     return live[0];
   }
 
   function handleKeydown(event: KeyboardEvent): boolean {
     if (event.defaultPrevented || event.isComposing) return false;
-    const key = keyOfEvent(event);
-    const hit = resolveKey(key);
+    let key = keyOfEvent(event);
+    let hit = resolveKey(key);
+    // Shift+<letter> falls back to the unshifted chord, as the shell's own Mod+K always has (Cmd+Shift+K opens the prompt bar).
+    if (!hit && key.includes('Shift+') && event.key.length === 1) {
+      key = key.replace('Shift+', '');
+      hit = resolveKey(key);
+    }
     if (!hit) return false;
     const target = event.target as HTMLElement | null;
     const typing = Boolean(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)));
@@ -251,10 +269,26 @@ export function installKeyCapture(target: Pick<Window, 'addEventListener' | 'rem
   return () => target.removeEventListener('keydown', onKey);
 }
 
-/** SDK: a package registers a command in code (a disposer comes back). The handler runs for { handler: true }. */
+/**
+ * A package's registerCommand: the owner is the package itself (the one the
+ * SDK instance was handed to), never read from the id being registered, so a
+ * package cannot register into `core.` or another app's namespace (M3).
+ */
+export function bindRegisterCommand(owner: string, service: Pick<typeof commands, 'registerCommand'> = commands) {
+  return (spec: CommandSpec, handler?: CommandHandler): () => void | Promise<void> => {
+    if (!owner || owner === 'core') throw new Error(`registerCommand: the ${owner ? "shell's" : 'calling package'} namespace is not a package's to register into`);
+    return service.registerCommand(spec, owner, handler);
+  };
+}
+
+/**
+ * SDK: a package registers a command in code (a disposer comes back). The
+ * handler runs for { handler: true }. An installed package gets its own bound
+ * copy on ctx.sdk; an in-tree package calls this during component setup, where
+ * the window host (AppHost) has provided the package's identity.
+ */
 export function registerCommand(spec: CommandSpec, handler?: CommandHandler): () => void | Promise<void> {
-  const owner = String(spec?.id || '').split('.')[0];
-  return commands.registerCommand(spec, owner, handler);
+  return bindRegisterCommand(currentPackageName())(spec, handler);
 }
 
 // contributes.commands and contributes.keybindings (data, T0).

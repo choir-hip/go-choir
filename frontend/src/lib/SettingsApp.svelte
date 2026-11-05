@@ -2,7 +2,7 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { buildInfo, copyText } from './shell-services';
-    import { getTheme, onThemeChange, setTheme } from './services/theme';
+  import { getTheme, onThemeChange, setTheme } from './services/theme';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import {
     DEFAULT_THEME,

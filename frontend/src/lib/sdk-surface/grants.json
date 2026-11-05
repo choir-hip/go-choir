@@ -1,0 +1,131 @@
+{
+  "schema": "choir.grants/v1",
+  "note": "The grant vocabulary: a copy of internal/apppackage/grants.go grantCatalogue, read by scripts/check-packages.mjs and the SDK lock's sections.grants. TestFrontEndGrantVocabularyIsTheCatalogue pins the two equal; change both together.",
+  "grants": {
+    "ui.captures.read": {
+      "level": "default",
+      "args": "none",
+      "family": false
+    },
+    "ui.read.kind": {
+      "level": "extended",
+      "args": "one",
+      "family": false
+    },
+    "ui.net.egress": {
+      "level": "extended",
+      "args": "one",
+      "family": false
+    },
+    "ui.shell": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.act": {
+      "level": "default",
+      "args": "none",
+      "family": false
+    },
+    "desk.act.cancel": {
+      "level": "default",
+      "args": "none",
+      "family": false
+    },
+    "desk.captures.read": {
+      "level": "default",
+      "args": "none",
+      "family": false
+    },
+    "desk.intake.read": {
+      "level": "default",
+      "args": "none",
+      "family": false
+    },
+    "desk.request": {
+      "level": "default",
+      "args": "many",
+      "family": false
+    },
+    "desk.texture.search": {
+      "level": "extended",
+      "args": "none",
+      "family": false
+    },
+    "desk.mail.read": {
+      "level": "extended",
+      "args": "one",
+      "family": false
+    },
+    "desk.net.egress": {
+      "level": "extended",
+      "args": "one",
+      "family": false
+    },
+    "desk.read.kind": {
+      "level": "extended",
+      "args": "one",
+      "family": false
+    },
+    "desk.capsule.mutate": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.selfdev": {
+      "level": "privileged",
+      "args": "none",
+      "family": true
+    },
+    "desk.platform.update": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.product.api": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.commit": {
+      "level": "privileged",
+      "args": "one",
+      "family": false
+    },
+    "desk.delegate.task": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.admit.assignment": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.world.read": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.cancel.assignment": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.intake.dispose": {
+      "level": "privileged",
+      "args": "none",
+      "family": false
+    },
+    "desk.precommit.rule": {
+      "level": "privileged",
+      "args": "many",
+      "family": false
+    },
+    "desk.run.deadline": {
+      "level": "privileged",
+      "args": "one",
+      "family": false
+    }
+  }
+}

@@ -112,7 +112,7 @@ test('M7: contributes.commands and keybindings apply in the package scope and un
   expect(live.has('fixture.hello')).toBe(true);
   expect(live.has('other.nope')).toBe(false); // refused (M3), the rest applied
   expect(live.bindings().filter((b) => b.owner === 'fixture').map((b) => b.key)).toEqual(['Mod+Shift+H']); // Mod+K refused (M1)
-  const dispose = C.registerCommand({ ...decl('fixture.code'), run: { handler: true } }, () => {});
+  const dispose = C.bindRegisterCommand('fixture')({ ...decl('fixture.code'), run: { handler: true } }, () => {});
   expect(live.has('fixture.code')).toBe(true);
   await dispose();
   await X.setPackageContributions('fixture', null, '');
@@ -151,4 +151,37 @@ test('the manifest gate (check-packages) refuses a bad command, a foreign id and
   expect(run((n) => ({ commands: [decl(`${n}.z`)], keybindings: [{ key: 'cmd+k', command: `${n}.z` }] })).out).toMatch(/locked to the shell/);
   expect(run((n) => ({ commands: [decl(`${n}.z`, { run: { action: 'format' } })] })).out).toMatch(/run.action/);
   expect(run((n) => ({ commands: [decl(`${n}.z`)], keybindings: [{ key: 'Mod+J', command: `${n}.missing` }] })).out).toMatch(/not in this package's commands/);
+});
+
+test('B5: a package registers only into its own namespace; the owner is the calling package, not the id', () => {
+  const { svc } = fresh();
+  const reg = C.bindRegisterCommand('calc', svc);
+  expect(() => reg(decl('calc.add'))).not.toThrow();
+  expect(() => reg(decl('core.toggleDesk'))).toThrow(/outside the namespace/);
+  expect(() => reg(decl('texture.new'))).toThrow(/outside the namespace/);
+  expect(() => C.bindRegisterCommand('core', svc)(decl('core.x'))).toThrow(/shell's/);
+  expect(svc.list().map((c) => [c.id, c.owner])).toEqual([['calc.add', 'calc']]);
+  // The SDK function outside a package component has no calling package.
+  expect(() => C.registerCommand(decl('core.sneak'))).toThrow(/calling package/);
+  expect(C.commands.has('core.sneak')).toBe(false);
+});
+
+test('N7: an app binding cannot take a core navigation key from core; elsewhere the app is on top', () => {
+  const { svc } = fresh();
+  svc.registerCommand({ ...decl('core.closeOverview'), run: { handler: true } }, 'core', () => {});
+  svc.registerCommand({ ...decl('calc.esc'), run: { handler: true } }, 'calc', () => {});
+  svc.registerKeybinding({ key: 'Escape', command: 'core.closeOverview' }, 'core');
+  svc.registerKeybinding({ key: 'Escape', command: 'calc.esc' }, 'calc');
+  expect(svc.resolveKey('Escape').owner).toBe('core');
+  svc.registerKeybinding({ key: 'Mod+J', command: 'core.closeOverview' }, 'core');
+  svc.registerKeybinding({ key: 'Mod+J', command: 'calc.esc' }, 'calc');
+  expect(svc.resolveKey('Mod+J').owner).toBe('calc');
+  // With no live core binding the app still has the key.
+  svc.registerKeybinding({ key: 'ArrowLeft', command: 'calc.esc' }, 'calc');
+  expect(svc.resolveKey('ArrowLeft').owner).toBe('calc');
+});
+
+test('N9: keyOfEvent yields Shift+<letter>, so such a binding can fire', () => {
+  expect(C.keyOfEvent({ key: 'Z', shiftKey: true, metaKey: true })).toBe('Mod+Shift+Z');
+  expect(C.normalizeKey('Mod+Shift+z')).toBe('Mod+Shift+Z');
 });

@@ -991,3 +991,55 @@ func TestManifestAndRuntimeGrantCataloguesAgreeOnPrivilege(t *testing.T) {
 		t.Error("desk.model.floor names a power that was deleted")
 	}
 }
+
+// MA5 review r1 B1: the front end's grant vocabulary (frontend/src/lib/sdk-surface/grants.json,
+// which check-packages and the SDK lock's sections.grants read) is this
+// catalogue, name for name; and the manifest the front-end gate accepts for a
+// submitPrompt use (the ui.shell grant) parses here too.
+func TestFrontEndGrantVocabularyIsTheCatalogue(t *testing.T) {
+	raw, err := os.ReadFile("../../frontend/src/lib/sdk-surface/grants.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var front struct {
+		Grants map[string]struct {
+			Level  string `json:"level"`
+			Args   string `json:"args"`
+			Family bool   `json:"family"`
+		} `json:"grants"`
+	}
+	if err := json.Unmarshal(raw, &front); err != nil {
+		t.Fatal(err)
+	}
+	argName := map[argRule]string{argNone: "none", argOne: "one", argMany: "many"}
+	if len(front.Grants) != len(grantCatalogue) {
+		t.Errorf("grants.json has %d grants, the catalogue %d", len(front.Grants), len(grantCatalogue))
+	}
+	for name, spec := range grantCatalogue {
+		f, ok := front.Grants[name]
+		if !ok {
+			t.Errorf("%s is in the catalogue and not in grants.json", name)
+			continue
+		}
+		if f.Level != string(spec.level) || f.Args != argName[spec.args] || f.Family != spec.family {
+			t.Errorf("%s: grants.json %+v, catalogue %+v", name, f, spec)
+		}
+	}
+}
+
+func TestSubmitPromptGrantManifestParses(t *testing.T) {
+	raw, err := os.ReadFile("../../frontend/tests/fixtures/ui-shell-manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParseManifest(raw, OriginFirstParty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Level() != LevelPrivileged {
+		t.Errorf("level %s, want privileged", m.Level())
+	}
+	if _, err := ParseManifest(raw, OriginPublished); err == nil {
+		t.Error("a published package declaring ui.shell must be refused")
+	}
+}

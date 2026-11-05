@@ -78,7 +78,7 @@ function buildModule(name, files) {
     fs.mkdirSync(path.dirname(path.join(pkg, rel)), { recursive: true });
     fs.writeFileSync(path.join(pkg, rel), content);
   }
-  for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
+  for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'legacy-events.json', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
   fs.copyFileSync(path.join(frontendRoot, 'package.json'), path.join(front, 'package.json'));
   fs.symlinkSync(path.join(frontendRoot, 'node_modules'), path.join(front, 'node_modules'));
   const out = path.join(tmp, 'module.js');

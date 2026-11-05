@@ -1,0 +1,14 @@
+{
+  "note": "CSS functions that take a URL (often as a bare string) and so fetch. No theme token and no package CSS may contain one: scripts/package-boundary-plugin.mjs (cssProblem) and src/lib/theme.ts (isSafeCSSValue) read this one list. url() has its own data:/# rule in package CSS; here it is banned outright.",
+  "functions": [
+    "url",
+    "image-set",
+    "-webkit-image-set",
+    "image",
+    "cross-fade",
+    "-webkit-cross-fade",
+    "src",
+    "element",
+    "paint"
+  ]
+}

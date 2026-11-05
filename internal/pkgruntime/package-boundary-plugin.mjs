@@ -15,6 +15,12 @@
 // in the backend.
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// The CSS functions that fetch (css-fetch-functions.json, beside this file; the
+// theme gate in src/lib/theme.ts reads the same list).
+const CSS_FETCH_FUNCTIONS = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'css-fetch-functions.json'), 'utf8')).functions;
+const FETCH_FN = new RegExp(`(^|[^a-z0-9_-])(?:${CSS_FETCH_FUNCTIONS.filter((f) => f !== 'url').map((f) => f.replace(/[-]/g, '\\-')).join('|')})\\s*\\(`);
 
 const SCRIPT_EXT = /\.(svelte|js|mjs|cjs|ts|mts|cts|tsx|jsx)$/i;
 const CSS_EXT = /\.(css|scss|sass|less|styl|stylus|pcss|postcss)$/i;
@@ -50,7 +56,7 @@ export function cssProblem(source) {
     .replace(/\\(.)/g, '$1')
     .toLowerCase();
   if (text.includes('@import')) return '@import is not allowed in package CSS';
-  if (/image-set\s*\(|(^|[^a-z-])src\s*\(/.test(text)) return 'image-set() and src() are not allowed in package CSS';
+  if (FETCH_FN.test(text)) return `${CSS_FETCH_FUNCTIONS.filter((f) => f !== 'url').join('(), ')}() are not allowed in package CSS`;
   for (const m of text.matchAll(/url\s*\(\s*(['"]?)\s*([^)'"]*)/g)) {
     const target = m[2].trim();
     if (!(target.startsWith('data:') || target.startsWith('#'))) {
@@ -73,6 +79,79 @@ function walk(node, parent, visit) {
     const value = node[key];
     if (value && typeof value === 'object') walk(value, node, visit);
   }
+}
+
+// ---- the SDK reach and the global object ----
+
+const SDK_SPECIFIER = /(^|\/)app-sdk(\.[a-z]+)?$/;
+const GLOBAL_NAMES = new Set(['window', 'globalThis', 'self']);
+const GLOBAL_LINKS = new Set(['window', 'globalThis', 'self', 'top', 'parent', 'frames']);
+const sdkSource = (node) => {
+  if (!node) return false;
+  if (node.type === 'Literal' && typeof node.value === 'string') return SDK_SPECIFIER.test(node.value);
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return SDK_SPECIFIER.test(node.quasis[0].value.cooked ?? '');
+  return false;
+};
+const isGlobalChain = (node) => (node.type === 'Identifier' && GLOBAL_NAMES.has(node.name))
+  || (node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' && GLOBAL_LINKS.has(node.property.name) && isGlobalChain(node.object));
+// An Identifier that only names something (a property, a parameter, a declaration), not a read of the binding.
+function namesOnly(node, parent) {
+  if (!parent) return false;
+  switch (parent.type) {
+    case 'MemberExpression': return parent.property === node && !parent.computed;
+    case 'Property': return parent.key === node && !parent.computed && !parent.shorthand;
+    case 'MethodDefinition': case 'PropertyDefinition': return parent.key === node && !parent.computed;
+    case 'VariableDeclarator': return parent.id === node;
+    case 'FunctionDeclaration': case 'FunctionExpression': case 'ArrowFunctionExpression': return parent.params.includes(node) || parent.id === node;
+    case 'ImportSpecifier': case 'ImportDefaultSpecifier': case 'ImportNamespaceSpecifier': case 'ExportSpecifier': return true;
+    case 'LabeledStatement': case 'BreakStatement': case 'ContinueStatement': return true;
+    default: return false;
+  }
+}
+
+/**
+ * What one parsed package module reaches (U1; review r1 B3, N6). The same
+ * analysis runs in the in-tree gate (package-uses.mjs, check-packages) and in
+ * the installed build (this plugin's transform), so both see the same names:
+ *  names    the SDK names the module imports or re-exports, one by one;
+ *  problems everything that would hide a reach: a namespace or default import,
+ *           `export *`, a dynamic import() of the SDK, computed access to the
+ *           global object (split-string keys), and a bare `window`,
+ *           `globalThis` or `self` (an alias, or what <svelte:window> compiles to).
+ */
+export function analyzeModule(ast, { checkMeta = true } = {}) {
+  const names = new Set();
+  const problems = [];
+  const oneByOne = 'must import SDK names one by one (no namespace, default, export * or import() of the SDK)';
+  for (const node of ast.body || []) {
+    if (node.type === 'ImportDeclaration' && sdkSource(node.source)) {
+      for (const spec of node.specifiers) {
+        if (spec.type === 'ImportSpecifier') names.add(spec.imported.name ?? spec.imported.value);
+        else problems.push(`a package ${oneByOne}`);
+      }
+    } else if (node.type === 'ExportNamedDeclaration' && node.source && sdkSource(node.source)) {
+      for (const spec of node.specifiers) {
+        if (spec.type === 'ExportSpecifier') names.add(spec.local.name ?? spec.local.value);
+        else problems.push(`a package ${oneByOne}`);
+      }
+    } else if (node.type === 'ExportAllDeclaration' && sdkSource(node.source)) {
+      problems.push(`a package ${oneByOne}`);
+    }
+  }
+  walk(ast, null, (node, parent) => {
+    if (node.type === 'ImportExpression' && sdkSource(node.source)) problems.push(`a package ${oneByOne}`);
+    else if (node.type === 'MemberExpression' && node.computed && node.property.type !== 'Literal' && isGlobalChain(node.object)) {
+      problems.push('computed access to the global object is not allowed in a package: name the property');
+    } else if (node.type === 'Identifier' && GLOBAL_NAMES.has(node.name) && parent) {
+      const memberObject = parent.type === 'MemberExpression' && parent.object === node;
+      const typeofOperand = parent.type === 'UnaryExpression' && parent.operator === 'typeof';
+      if (!memberObject && !typeofOperand && !namesOnly(node, parent)) {
+        problems.push(`bare "${node.name}" is not allowed in a package (an alias or <svelte:window> hides the listeners the shell must see): use ${node.name}.<name>, or onWindowEvent from the SDK`);
+      }
+    }
+  });
+  problems.push(...runtimeProblems(ast, { checkMeta }));
+  return { names, problems: [...new Set(problems)] };
 }
 
 function runtimeProblems(ast, { checkMeta }) {
@@ -205,7 +284,7 @@ export default function packageBoundary({ root }) {
         } catch (e) {
           this.error(`package "${pkg}": cannot parse ${path.relative(frontendRoot, splitQuery(id)[0])} to check it: ${e.message}`);
         }
-        const problems = runtimeProblems(ast, { checkMeta });
+        const { problems } = analyzeModule(ast, { checkMeta });
         if (problems.length) this.error(`package "${pkg}" ${path.relative(frontendRoot, splitQuery(id)[0])}: ${problems.join('; ')}`);
         return null;
       },

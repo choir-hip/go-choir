@@ -1,3 +1,5 @@
+import cssFetch from '../../scripts/css-fetch-functions.json';
+
 export const THEME_SCHEMA_VERSION = 2;
 
 type PromptSurfacePlacement = 'top' | 'bottom';
@@ -362,12 +364,29 @@ function isTheme(value: unknown): value is Partial<ChoirTheme> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+// The functions that fetch (url(), image-set(), image(), cross-fade(), src() ...)
+// are one list, scripts/css-fetch-functions.json, which the package-CSS gate
+// reads too. CSS escapes are decoded first, so `imag\65-set(` is image-set(.
+const FETCHING = new RegExp(
+  `(?:^|[^a-z0-9_-])(?:${[...cssFetch.functions, 'expression'].map((f) => f.replace(/-/g, '\\-')).join('|')})\\s*\\(|@import`,
+  'i',
+);
+function decodeCSSEscapes(value: string): string {
+  return value
+    .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hex) => {
+      const cp = parseInt(hex, 16);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+    })
+    .replace(/\\(.)/g, '$1')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
 function isSafeCSSValue(value: unknown): value is string {
   return typeof value === 'string' &&
     value.length > 0 &&
     value.length <= 512 &&
     !/[;{}\u0000-\u001f]/.test(value) &&
-    !/(?:url|expression)\s*\(|@import/i.test(value);
+    !FETCHING.test(decodeCSSEscapes(value));
 }
 
 function mergeStringGroup(baseGroup: Record<string, string>, candidate: unknown): Record<string, string> {
@@ -501,12 +520,17 @@ export function contributedThemeErrors(theme: unknown): string[] {
     for (const key of ['promptSurfaceMinHeight', 'deskSheetHeight'] as const) if (!isSafeCSSValue(layout[key])) errors.push(`layout.${key} must be a safe CSS value`);
     for (const key of Object.keys(layout)) if (!(key in DEFAULT_THEME.layout)) errors.push(`layout.${key} is not supported`);
   }
-  if (!errors.length) {
-    for (const [fg, bg, min] of CONTRAST_PAIRS) {
-      const ratio = contrastRatio(theme.colors![fg], theme.colors![bg]);
-      if (ratio === null) errors.push(`colors.${fg} and colors.${bg} must be hex or rgb colors so contrast can be checked`);
-      else if (ratio < min) errors.push(`colors.${fg} on colors.${bg} has contrast ${ratio.toFixed(2)}, below ${min}`);
-    }
+  if (!errors.length) errors.push(...contrastErrors(theme.colors!));
+  return errors;
+}
+
+/** The contrast gate over a complete colors group; selecting a theme runs it too (N8). */
+export function contrastErrors(colors: Record<string, string>): string[] {
+  const errors: string[] = [];
+  for (const [fg, bg, min] of CONTRAST_PAIRS) {
+    const ratio = contrastRatio(colors[fg], colors[bg]);
+    if (ratio === null) errors.push(`colors.${fg} and colors.${bg} must be hex or rgb colors so contrast can be checked`);
+    else if (ratio < min) errors.push(`colors.${fg} on colors.${bg} has contrast ${ratio.toFixed(2)}, below ${min}`);
   }
   return errors;
 }

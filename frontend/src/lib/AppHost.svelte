@@ -6,6 +6,7 @@
   import { handoffToComputerSurfaceIfStale, isDynamicImportError } from './computer-surface-handoff.js';
   import { writable } from 'svelte/store';
   import { provideLaunchContext } from './launch-file';
+  import { providePackageIdentity } from './package-identity';
   import legacyEvents from './sdk-surface/legacy-events.json';
 
   export let win: any;
@@ -31,6 +32,7 @@
   // getLaunchFile() / launchFileStore() in the app read the window's context.
   const launchContext = writable<any>({});
   provideLaunchContext(launchContext);
+  providePackageIdentity(() => win?.appId || '');
   $: launchContext.set(appContext);
   $: shellAttrs = app?.theme.shellDataAttr ? { [app.theme.shellDataAttr]: '' } : {};
   $: if (app && app !== loadedApp) {

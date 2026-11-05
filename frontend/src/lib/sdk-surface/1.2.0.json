@@ -673,8 +673,24 @@
       "windowId"
     ],
     "grants": {
-      "submitPrompt": "agent.prompt"
+      "closeOtherWindows": "ui.shell",
+      "focus": "ui.shell",
+      "listWindows": "ui.shell",
+      "logout": "ui.shell",
+      "openApp": "ui.shell",
+      "openFile": "ui.shell",
+      "requireAuth": "ui.shell",
+      "resetDesktop": "ui.shell",
+      "restore": "ui.shell",
+      "sessionExpired": "ui.shell",
+      "setAppContext": "ui.shell",
+      "setTheme": "ui.shell",
+      "showDesktop": "ui.shell",
+      "showOverview": "ui.shell",
+      "submitPrompt": "ui.shell",
+      "suspendBackgroundHeavyWindows": "ui.shell",
+      "windowAction": "ui.shell"
     }
   },
-  "digest": "sha256:16a9d09a626793946c54d8721555b930b11083ac4a5173590601a0bfc6729ce6"
+  "digest": "sha256:b4de7e467d4e0095ebf4a2a9fc3895f085db623a84faa09083ff5ebe1bcc8139"
 }

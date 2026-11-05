@@ -18,9 +18,9 @@
 //     toast, never an exception into the app.
 //  F4 a toast message that holds a secret: copyText names what was copied by
 //     the label the caller gives, never by the text.
-//  F6 windowAction with an action the shell has no meaning for: nothing happens;
 //  F5 openFile on a path the shell has no opener for: the same download the
 //     Files app gives, not a silent nothing.
+//  F6 windowAction with an action the shell has no meaning for: nothing happens;
 
 import { mediaRouteForFileName } from './media-utils.js';
 import { isTextFileName } from './open-with';

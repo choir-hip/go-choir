@@ -6,13 +6,19 @@
 //
 //   node scripts/package-uses.mjs [--json] [<package> ...]
 //
-// The extractor reads each package's source for imports of the SDK
-// (src/lib/app-sdk) and the names they bring in. Only imports of the SDK count;
-// the package boundary (package-boundary-plugin.mjs) already refuses every
-// other reach, so a name cannot arrive by another route.
+// The extractor reads each package's source as the build does: Svelte and
+// TypeScript are compiled, then the module AST goes through the boundary
+// plugin's analyzeModule (imports, re-exports, import(), the global object), so
+// the in-tree gate and the installed build see the same names and refuse the
+// same evasions. Only imports of the SDK count; the package boundary already
+// refuses every other reach, so a name cannot arrive by another route.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseAst, transformWithEsbuild } from 'vite';
+import { compile, preprocess } from 'svelte/compiler';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { analyzeModule } from './package-boundary-plugin.mjs';
 
 const FRONTEND = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,21 +32,27 @@ function sourceFiles(dir) {
   return out.sort();
 }
 
-/** The SDK names one source text imports. */
-export function sdkImportsOf(source) {
-  const names = new Set();
-  const re = /import\s+(type\s+)?(?:\{([^}]*)\}|\*\s+as\s+\w+|\w+)\s+from\s+['"][^'"]*\/app-sdk(?:\.[a-z]+)?['"]/g;
-  for (const m of source.matchAll(re)) {
-    if (m[1]) continue; // import type: no runtime use
-    if (!m[2]) {
-      names.add('*');
-      continue;
-    }
-    for (const part of m[2].split(',')) {
-      const name = part.trim().replace(/^type\s+.*/, '').split(/\s+as\s+/)[0].trim();
-      if (name) names.add(name);
-    }
+/** The compiled JavaScript of one package source file. */
+async function compiled(file) {
+  const source = readFileSync(file, 'utf8');
+  if (file.endsWith('.svelte')) {
+    const pre = await preprocess(source, vitePreprocess(), { filename: file });
+    return compile(pre.code, { filename: file, generate: 'dom', css: 'external' }).js.code;
   }
+  if (file.endsWith('.ts')) return (await transformWithEsbuild(source, file, { loader: 'ts', target: 'es2022' })).code;
+  return source;
+}
+
+/** The SDK names one package file uses, or a thrown refusal. */
+export async function sdkReachOf(file) {
+  let ast;
+  try {
+    ast = parseAst(await compiled(file));
+  } catch (err) {
+    throw new Error(`${file}: cannot be read to extract its uses: ${err.message}`);
+  }
+  const { names, problems } = analyzeModule(ast, { checkMeta: true });
+  if (problems.length) throw new Error(`${file}: ${problems.join('; ')}`);
   return names;
 }
 
@@ -49,10 +61,9 @@ export function readSections(frontendRoot = FRONTEND) {
 }
 
 /** { sdk: [names], grants: [implied grants], commands: [ids] } for the package at `dir`. */
-export function extractUses(dir, sections = readSections()) {
+export async function extractUses(dir, sections = readSections()) {
   const sdk = new Set();
-  for (const file of sourceFiles(dir)) for (const n of sdkImportsOf(readFileSync(file, 'utf8'))) sdk.add(n);
-  if (sdk.has('*')) throw new Error(`${dir}: a namespace import of the SDK hides which names are used; import them one by one`);
+  for (const file of sourceFiles(dir)) for (const n of await sdkReachOf(file)) sdk.add(n);
   const grants = new Set();
   for (const name of sdk) if (sections.grants?.[name]) grants.add(sections.grants[name]);
   let commands = [];
@@ -80,7 +91,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   for (const name of names.length ? names : readdirSync(root)) {
     const dir = join(root, name);
     if (!existsSync(join(dir, 'choir-package.json'))) continue;
-    const uses = extractUses(dir);
+    const uses = await extractUses(dir);
     out[name] = uses;
     for (const p of usesProblems(uses, JSON.parse(readFileSync(join(dir, 'choir-package.json'), 'utf8')))) {
       console.error(`${name}: ${p}`);

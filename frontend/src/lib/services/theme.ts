@@ -25,6 +25,7 @@ import { get, writable } from 'svelte/store';
 import { registerContributionPoint } from '../contributions';
 import {
   DEFAULT_THEME,
+  contrastErrors,
   isKnownThemeId,
   listThemes,
   normalizeThemeConfig,
@@ -64,8 +65,12 @@ export function setTheme(idOrConfig: string | Record<string, unknown>): { ok: bo
   if (!candidate) return { ok: false, errors: [`unknown theme "${String(idOrConfig)}"`] };
   const validation = validateThemeConfig(candidate);
   if (!validation.ok) return { ok: false, errors: validation.errors };
+  // The normalized theme is what would apply: refuse it if text on its surfaces is unreadable (N8, the same gate a contributed theme passes).
+  const normalized = normalizeThemeConfig(candidate);
+  const unreadable = contrastErrors(normalized.colors);
+  if (unreadable.length) return { ok: false, errors: unreadable };
   if (!host) return { ok: false, errors: ['no shell is mounted to apply the theme'] };
-  const applied = host.apply(normalizeThemeConfig(candidate), true);
+  const applied = host.apply(normalized, true);
   return { ok: applied.ok !== false, errors: applied.errors ?? [] };
 }
 

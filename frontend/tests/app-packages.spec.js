@@ -70,7 +70,7 @@ const badCases = [
     writeManifest(root, 'viewer', m);
   }, /"image" is already held by package "image"/],
   ['extension-clash-package', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer' }), /extension "png" is already opened by package "image"/],
-  ['extension-clash-static', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', opens: [{ media_type: 'application/pdf', extensions: ['pdf'] }] }), /extension "pdf" is still routed by the static/],
+  ['extension-clash-static', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', opens: [{ media_type: 'audio/mpeg', extensions: ['mp3'] }] }), /extension "mp3" is still routed by the static/],
   ['missing-entry', (root) => fs.rmSync(path.join(root, 'src/packages/image/App.svelte')), /missing App\.svelte/],
   ['bad-requires-sdk', (root) => {
     const m = imageManifest(root);
@@ -106,7 +106,7 @@ const badCases = [
     const m = imageManifest(root);
     m.capabilities = [{ grant: 'net:*' }];
     fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
-  }, /grant must be a ui\.\* or desk\.\* name/],
+  }, /is not a grant in the catalogue/],
   // F3: only real directories under src/packages.
   ['symlinked-package-dir', (root) => {
     fs.cpSync(path.join(root, 'src/packages/image'), path.join(root, 'elsewhere'), { recursive: true });
@@ -127,7 +127,7 @@ const badCases = [
     fs.writeFileSync(path.join(root, 'src/packages/ghost/App.svelte'), '<div/>\n');
   }, /ghost: missing choir-package\.json/],
   ['manifest-filtered-away', (root) => fs.rmSync(path.join(root, 'src/packages/image/choir-package.json')), /image: missing choir-package\.json/],
-  ['zero-packages', (root) => fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true }), /holds no package/],
+  ['zero-packages', (root) => fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true }), /required package "image" is missing/],
   ['empty-registry', (root) => fs.writeFileSync(path.join(root, 'src/lib/apps/registry.ts'), 'export const x = 1;\n'), /static app ids \(floor/],
 ];
 
@@ -212,6 +212,7 @@ const boundaryControls = [
   ['own files, sdk, svelte, svelte/store, a declared dependency, own asset',
     script("import { local } from './local.js';\nimport { sdk } from '../../lib/app-sdk';\nimport { onMount } from 'svelte';\nimport { writable } from 'svelte/store';\nimport JSZip from 'jszip';\nimport pic from './pic.png';\nimport s from './local.js?raw';\nconsole.log(local, sdk, onMount, writable, JSZip, pic, s, import.meta.env);\nimport('./local.js').then(console.log);")],
   ['the SDK helpers that register and schedule', script("import { sdk } from '../../lib/app-sdk';\nsdk.onWindowEvent('keydown', () => {});\nsdk.onDocumentEvent('keydown', () => {});\nsdk.repeatEvery(() => {}, 1000);")],
+  ['a named re-export and typeof window', script("export { sdk } from '../../lib/app-sdk';\nconsole.log(typeof window, window.innerWidth, window?.name, globalThis.location);")],
   ['own css, data: urls and fragments', style('.a { color: red; background: url(data:image/png;base64,AAAA); fill: url(#grad); }')],
 ];
 
@@ -240,6 +241,18 @@ const boundaryBad = [
   ['globalThis.addEventListener', script("globalThis.addEventListener('keydown', () => {});"), /globalThis\.addEventListener is not allowed/],
   ['setInterval', script("setInterval(() => {}, 1000);"), /setInterval is not allowed in a package: use repeatEvery/],
   ['window.setInterval', script("window.setInterval(() => {}, 1000);"), /window\.setInterval is not allowed/],
+  // review r1 B3 and N6: reaching the SDK or the window around the named-import and addEventListener checks
+  ['export * from the SDK', { ...script("import './h.js';"), 'src/packages/p/h.js': "export * from '../../lib/app-sdk';\n" }, /one by one/],
+  ['namespace import of the SDK', script("import * as s from '../../lib/app-sdk';\nconsole.log(s);"), /one by one/],
+  ['default import of the SDK', script("import s from '../../lib/app-sdk';\nconsole.log(s);"), /one by one/],
+  ['dynamic import of the SDK', script("import('../../lib/app-sdk').then((m) => console.log(m));"), /one by one/],
+  ['dynamic import of the SDK, no space', script("import('../../lib/app-sdk.ts').then(console.log);"), /one by one/],
+  ['split-string SDK global', script("console.log(globalThis['__choir' + 'AppSdk']);"), /computed access to the global object/],
+  ['split-string SDK global via window.top', script("const k = 'x';\nconsole.log(window.top[k]);"), /computed access to the global object/],
+  ['aliased window', script("const w = window;\nw.addEventListener('keydown', () => {});"), /bare "window"/],
+  ['aliased globalThis', script("const g = globalThis;\nconsole.log(g);"), /bare "globalThis"/],
+  ['svelte:window listener', { 'src/packages/p/App.svelte': '<svelte:window on:keydown={() => {}} />\n<div>ok</div>\n' }, /bare "window"/],
+  ['computed window method', script("window['add' + 'EventListener']('keydown', () => {});"), /computed access to the global object/],
   // the other query forms, absolute and bare traversal
   ['?raw of an outside file', script("import s from '../../lib/secret.js?raw';console.log(s);"), outside],
   ['?url of an outside file', script("import u from '../../lib/secret.png?url';console.log(u);"), outside],
@@ -261,6 +274,10 @@ const boundaryBad = [
   ['css @IMPORT upper case', style("@IMPORT '../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
   ['css @import no space', style("@import'../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
   ['css escaped @import', style("@\\69mport '../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
+  ['css image-set()', style('.a { background: image-set("../../lib/secret.png" 1x); }'), /not allowed in package CSS/],
+  ['css -webkit-image-set()', style('.a { background: -webkit-image-set("../../lib/secret.png" 1x); }'), /not allowed in package CSS/],
+  ['css image()', style('.a { background: image("../../lib/secret.png"); }'), /not allowed in package CSS/],
+  ['css cross-fade()', style('.a { background: cross-fade("../../lib/secret.png", red); }'), /not allowed in package CSS/],
   ['css url() outside', style('.a { background: url(../../lib/secret.png); }'), /url\(\) in package CSS/],
   ['css url() quoted, upper case', style(".a { background: URL('../../lib/secret.png'); }"), /url\(\) in package CSS/],
   ['css .css file import outside', { ...script("import '../../lib/secret.css';") }, outside],

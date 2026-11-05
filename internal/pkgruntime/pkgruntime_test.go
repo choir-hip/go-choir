@@ -37,6 +37,16 @@ func TestEmbeddedBoundaryPluginIsTheFrontends(t *testing.T) {
 	}
 }
 
+func TestEmbeddedCSSFetchFunctionsAreTheFrontends(t *testing.T) {
+	front, err := os.ReadFile(filepath.Join("..", "..", "frontend", "scripts", "css-fetch-functions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(front, cssFetchFunctions) {
+		t.Fatal("internal/pkgruntime/css-fetch-functions.json differs from frontend/scripts/css-fetch-functions.json; copy it")
+	}
+}
+
 func TestEmbeddedLegacyEventsAreTheFrontends(t *testing.T) {
 	front, err := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "lib", "sdk-surface", "legacy-events.json"))
 	if err != nil {

@@ -9,6 +9,7 @@
   import { createEventDispatcher, getContext, onDestroy } from 'svelte';
   import * as appSdk from '../app-sdk';
   import { SDK_VERSION, sdkSatisfies } from '../sdk-version';
+  import { bindRegisterCommand } from '../services/commands';
   import { installedPackages, loadPackageModule, PackageLoadError, type InstalledPackageRecord } from './packages';
 
   export let windowId = '';
@@ -86,8 +87,9 @@
       if (missing.length) {
         throw new PackageLoadError('refused', `${rec.name} uses SDK names this shell lacks: ${missing.join(', ')}.`);
       }
+      // registerCommand is bound to this package: its commands are owned by rec.name whatever id they ask for (B5).
       const result = mod.mount(el, {
-        sdk,
+        sdk: Object.freeze({ ...sdk, registerCommand: bindRegisterCommand(rec.name) }),
         package: rec.name,
         release: rec.release_id,
         windowId,

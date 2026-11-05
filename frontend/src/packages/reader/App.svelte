@@ -954,7 +954,16 @@
     const onHide = () => savePositionNow();
     const offPagehide = onWindowEvent('pagehide', onHide);
     const offVisibility = onDocumentEvent('visibilitychange', onHide);
+    // The window listeners <svelte:window> used to hold, through the SDK so the shell sees and reverses them.
+    const offWindow = [
+      onWindowEvent('keydown', handleKeydown),
+      onWindowEvent('dragenter', onDragEnter),
+      onWindowEvent('dragover', onDragOver),
+      onWindowEvent('dragleave', onDragLeave),
+      onWindowEvent('drop', onDrop),
+    ];
     return () => {
+      offWindow.forEach((off) => off());
       stopLive();
       offPagehide();
       offVisibility();
@@ -969,14 +978,6 @@
 
 
 </script>
-
-<svelte:window
-  on:keydown={handleKeydown}
-  on:dragenter={onDragEnter}
-  on:dragover={onDragOver}
-  on:dragleave={onDragLeave}
-  on:drop={onDrop}
-/>
 
 <section
   class="reader-shell {tone}"

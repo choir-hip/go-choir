@@ -234,7 +234,7 @@ export async function buildPackageModule({ name, dir, frontendRoot = FRONTEND_RO
     const front = path.join(tmp, 'frontend');
     fs.mkdirSync(path.join(front, 'src/packages'), { recursive: true });
     fs.cpSync(dir, path.join(front, 'src/packages', name), { recursive: true, dereference: false });
-    for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'legacy-events.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
+    for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'legacy-events.json', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
     fs.copyFileSync(path.join(frontendRoot, 'package.json'), path.join(front, 'package.json'));
     fs.symlinkSync(path.join(frontendRoot, 'node_modules'), path.join(front, 'node_modules'));
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'choir-package.json'), 'utf8'));

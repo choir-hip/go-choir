@@ -97,3 +97,41 @@ test('T4, T5: a missing file is skipped with the rest applied; unknown ids and i
   await X.setPackageContributions('px', null, '');
   restore();
 });
+
+// Review r1 B4: a safe value never fetches. image-set(), image(), cross-fade(),
+// src() and url() take URLs as bare strings; the one list is
+// scripts/css-fetch-functions.json (the package-CSS gate reads it too).
+const FETCHING = [
+  'image-set("https://example.com/p.png" 1x)',
+  '-webkit-image-set("https://example.com/p.png" 1x)',
+  'IMAGE-SET("https://example.com/p.png" 1x)',
+  'image("https://example.com/p.png")',
+  'cross-fade(url-less, "https://example.com/p.png")',
+  'src("https://example.com/p.png")',
+  'url(https://example.com/p.png)',
+  'url ( "https://example.com/p.png" )',
+  'imag\\65-set("https://example.com/p.png" 1x)',
+];
+test('B4: no fetching function passes the safe-value gate, in a contributed theme or a config', () => {
+  for (const value of FETCHING) {
+    const t = night(); t.colors.selected = value;
+    expect(T.contributedThemeErrors(t), value).toContain('colors.selected must be a safe CSS value');
+    const v = T.validateThemeConfig({ ...clone(T.DEFAULT_THEME), colors: { selected: value } });
+    expect(v.ok, value).toBe(false);
+    expect(T.normalizeThemeConfig({ ...clone(T.DEFAULT_THEME), colors: { selected: value } }).colors.selected).toBe(T.DEFAULT_THEME.colors.selected);
+  }
+  const fine = night(); fine.colors.selected = 'linear-gradient(#123456, #654321)';
+  expect(T.contributedThemeErrors(fine)).toEqual([]);
+});
+
+test('N8: setTheme runs the contrast gate; a config that makes the shell unreadable is refused and nothing applies', () => {
+  const applied = [];
+  const unbind = S.bindThemeHost({ apply: (theme) => { applied.push(theme.id); return { ok: true }; } });
+  const grey = clone(T.DEFAULT_THEME); grey.colors.fg = grey.colors.bg;
+  const r = S.setTheme(grey);
+  expect(r.ok).toBe(false);
+  expect(r.errors.join(' ')).toMatch(/contrast 1\.00/);
+  expect(applied).toEqual([]);
+  expect(S.setTheme(clone(T.DEFAULT_THEME)).ok).toBe(true);
+  unbind();
+});
