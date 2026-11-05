@@ -294,7 +294,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 		return nil, fmt.Errorf("Jev: decode its answer: %w", err)
 	}
 	model := firstNonEmpty(distribution.Model, candidateJudgmentModel)
-	rt.recordJevCost(ctx, owner, runID, model, distribution.Usage, len(questions))
+	rt.recordJevCost(ctx, owner, runID, model, distribution.Provider, distribution.Usage, len(questions))
 	judge := "jev:" + model
 	ordered := make([]string, 0, len(names))
 	for name := range names {
@@ -332,9 +332,12 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 // model that served it, each question's choice with the full probability
 // distribution, and the usage. The support judge and choir.System1 read it.
 type jevDistribution struct {
-	ID      string `json:"id"`
-	Model   string `json:"model"`
-	Answers map[string]struct {
+	ID    string `json:"id"`
+	Model string `json:"model"`
+	// Provider is the upstream provider the response says answered, when
+	// it says (model provenance, review r1 N5).
+	Provider string `json:"provider,omitempty"`
+	Answers  map[string]struct {
 		Choice        string             `json:"choice"`
 		Probabilities map[string]float64 `json:"probabilities"`
 	} `json:"answers"`
@@ -354,16 +357,23 @@ type jevUsage struct {
 // llmcost reads it beside tool_loop.
 const jevJudgmentPhase = "jev_judgment"
 
+// jevTransportProvider is the provider every Jev call goes through (the
+// gateway's /provider/v1/judgments, OpenRouter Decisions).
+const jevTransportProvider = "openrouter"
+
 // recordJevCost appends a Jev call's token usage as a run-progress event on
 // the run that caused it, where /api/costs reads it. Best effort: a call
 // with no usage or no run records nothing.
-func (rt *Runtime) recordJevCost(ctx context.Context, ownerID, runID, model string, usage jevUsage, questions int) {
-	rt.recordJevCostFor(ctx, ownerID, runID, types.SupportSystemAgentID, "support_judgement", model, usage, questions)
+func (rt *Runtime) recordJevCost(ctx context.Context, ownerID, runID, model, provider string, usage jevUsage, questions int) {
+	rt.recordJevCostFor(ctx, ownerID, runID, types.SupportSystemAgentID, "support_judgement", model, provider, usage, questions)
 }
 
 // recordJevCostFor is recordJevCost for a caller that is not the support
 // judge: it names the agent the cost is booked under and the purpose.
-func (rt *Runtime) recordJevCostFor(ctx context.Context, ownerID, runID, agentID, purpose, model string, usage jevUsage, questions int) {
+func (rt *Runtime) recordJevCostFor(ctx context.Context, ownerID, runID, agentID, purpose, model, provider string, usage jevUsage, questions int) {
+	// The judge answers through the gateway's OpenRouter Decisions
+	// transport; the response names the upstream provider when it can.
+	provider = firstNonEmpty(strings.TrimSpace(provider), jevTransportProvider)
 	input, output := usage.InputTokens, usage.OutputTokens
 	if input == 0 && output == 0 {
 		input, output = usage.PromptTokens, usage.CompletionTokens
@@ -372,7 +382,7 @@ func (rt *Runtime) recordJevCostFor(ctx context.Context, ownerID, runID, agentID
 		return
 	}
 	payload, err := json.Marshal(map[string]any{
-		"phase": jevJudgmentPhase, "llm_model": model, "llm_provider": "openrouter",
+		"phase": jevJudgmentPhase, "llm_model": model, "llm_provider": provider,
 		"input_tokens": input, "output_tokens": output, "cost_usd": usage.Cost,
 		"purpose": purpose, "questions": questions,
 	})
@@ -387,7 +397,7 @@ func (rt *Runtime) recordJevCostFor(ctx context.Context, ownerID, runID, agentID
 	// The decision model's call is model provenance of the run it served
 	// (docs/problems/model-provenance-unwired-2026-11-05.md).
 	var tally types.ModelServedTally
-	tally.Note("openrouter", model, "", input, output, 0)
+	tally.Note(provider, model, "", input, output, 0)
 	served := tally.Record(purpose)
 	served.Role = types.ModelServedRoleSystem1
 	servedRaw, err := json.Marshal(served)

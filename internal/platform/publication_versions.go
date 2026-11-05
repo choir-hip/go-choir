@@ -246,7 +246,8 @@ type publicationManifest struct {
 	AccessPolicy             json.RawMessage                `json:"access_policy"`
 	ExportPolicy             json.RawMessage                `json:"export_policy"`
 	// ModelProvenance is the models that served the source document's runs
-	// when the version was published (types.ModelProvenance), so a reader
+	// when the version was published, as the public projection
+	// (types.PublicModelProvenance: no run, document or policy ids), so a reader
 	// of the paper sees which models wrote it. Absent on older versions.
 	ModelProvenance json.RawMessage `json:"model_provenance,omitempty"`
 }

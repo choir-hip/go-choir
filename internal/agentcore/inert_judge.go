@@ -192,7 +192,7 @@ func (rt *Runtime) judgeInertChunk(ctx context.Context, owner, computer string, 
 			log.Printf("inert judge: record %s: %v", rec.RecordID, err)
 		}
 	}
-	rt.recordJevCostFor(ctx, owner, todo[0].Provenance.RunID, todo[0].Provenance.Desk, "inert_judge", model, dist.Usage, len(rawQuestions))
+	rt.recordJevCostFor(ctx, owner, todo[0].Provenance.RunID, todo[0].Provenance.Desk, "inert_judge", model, dist.Provider, dist.Usage, len(rawQuestions))
 	return nil
 }
 

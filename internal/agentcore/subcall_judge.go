@@ -590,7 +590,7 @@ func (rt *Runtime) judgeSubCallBatch(ctx context.Context, owner, computer, fanOu
 		rt.closeJudgeWork(ctx, owner, computer, it.workID(), fanOut, it.cast.RecordID, types.SubCallPhaseAnswered, reason, model, in, out, cost)
 	}
 	if first := items[0].cast.SubCall; first != nil {
-		rt.recordJevCostFor(ctx, owner, first.ParentRunID, first.ParentAgent, "subcall_judge", model, dist.Usage, len(rawQuestions))
+		rt.recordJevCostFor(ctx, owner, first.ParentRunID, first.ParentAgent, "subcall_judge", model, dist.Provider, dist.Usage, len(rawQuestions))
 	}
 	return nil
 }

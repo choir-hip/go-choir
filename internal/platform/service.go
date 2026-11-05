@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const (
@@ -273,10 +274,18 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		req.Metadata = json.RawMessage("{}")
 	}
 	if len(req.ModelProvenance) > 0 {
-		var provenance map[string]any
+		// Only the public projection is pinned: the owner's record names
+		// runs, the document and policy sources (file paths, overlay ids)
+		// that never leave the computer.
+		var provenance types.ModelProvenance
 		if err := json.Unmarshal(req.ModelProvenance, &provenance); err != nil {
 			return nil, fmt.Errorf("model_provenance must be a JSON object")
 		}
+		public, err := json.Marshal(provenance.Public())
+		if err != nil {
+			return nil, fmt.Errorf("model_provenance: %w", err)
+		}
+		req.ModelProvenance = public
 	}
 	if err := normalizePublishTextureStructuredInput(&req); err != nil {
 		return nil, err

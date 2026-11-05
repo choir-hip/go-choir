@@ -11,7 +11,7 @@ import (
 
 // The model provenance reads (docs/problems/model-provenance-unwired-2026-11-05.md):
 // a run's model.served lines, and the Claude delegate's use on the reports
-// an engineering run recorded.
+// recorded on a trajectory; both reads are indexed (review r1, B3).
 func TestModelProvenanceReadsServedLinesAndDelegateReports(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -31,12 +31,18 @@ func TestModelProvenanceReadsServedLinesAndDelegateReports(t *testing.T) {
 		t.Fatal(err)
 	}
 	runID := f.assignedRunIDs[0]
-	reports, err := s.ListEngineeringAssignmentReportsByRun(ctx, f.ownerID, runID)
-	if err != nil || len(reports) != 1 || reports[0].DelegateUse == nil || reports[0].DelegateUse.Calls != 3 {
-		t.Fatalf("reports of %s = %+v, %v", runID, reports, err)
+	reports, err := s.ListEngineeringAssignmentReportsByTrajectory(ctx, f.ownerID, f.trajectoryID)
+	if err != nil || len(reports) != 1 || reports[0].RunID != runID || reports[0].DelegateUse == nil || reports[0].DelegateUse.Calls != 3 {
+		t.Fatalf("reports of %s = %+v, %v", f.trajectoryID, reports, err)
 	}
-	if other, err := s.ListEngineeringAssignmentReportsByRun(ctx, "another-owner", runID); err != nil || len(other) != 0 {
+	if other, err := s.ListEngineeringAssignmentReportsByTrajectory(ctx, "another-owner", f.trajectoryID); err != nil || len(other) != 0 {
 		t.Fatalf("another owner read %d reports, %v", len(other), err)
+	}
+	if other, err := s.ListEngineeringAssignmentReportsByTrajectory(ctx, f.ownerID, "trajectory-elsewhere"); err != nil || len(other) != 0 {
+		t.Fatalf("another trajectory read %d reports, %v", len(other), err)
+	}
+	if _, err := s.ListRunsByLineageField(ctx, f.ownerID, f.computerID, "requested_by_run_id", runID); err == nil {
+		t.Fatal("an unindexed run field was accepted as a lineage read")
 	}
 
 	served, _ := json.Marshal(types.ModelServedRecord{Schema: types.ModelServedSchema, Purpose: types.ModelServedPurposeToolLoop,

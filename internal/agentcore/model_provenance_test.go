@@ -3,14 +3,18 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Ways the model provenance could be wrong, written before the code
@@ -102,8 +106,6 @@ func TestDocumentModelProvenanceShowsSwitchesChildrenEngineeringAndDelegate(t *t
 		Metadata: map[string]any{"llm_policy_source": "default_pool", "llm_assignment": "pool"}})
 	research := provenanceRun(t, s, types.RunRecord{RunID: "run-research", AgentID: "research:" + docID, ChannelID: docID, OwnerID: owner,
 		TrajectoryID: trajectory, AgentProfile: "research", AgentRole: "research"})
-	child := provenanceRun(t, s, types.RunRecord{RunID: "run-research-child", AgentID: "research-child-1", ChannelID: "research-child-1", OwnerID: owner,
-		RequestedByRunID: research.RunID, AgentProfile: "research", AgentRole: "research"})
 	other := provenanceRun(t, s, types.RunRecord{RunID: "run-other-doc", AgentID: "texture:other", ChannelID: "other-doc", OwnerID: owner,
 		TrajectoryID: "trajectory-other", AgentProfile: "texture", AgentRole: "texture"})
 
@@ -121,7 +123,8 @@ func TestDocumentModelProvenanceShowsSwitchesChildrenEngineeringAndDelegate(t *t
 			{FromProvider: "opencode-go", FromModel: "deepseek-v4.1-flash", ToProvider: "chatgpt", ToModel: "gpt-6-luna", Reason: "model_failover"},
 			{FromProvider: "chatgpt", FromModel: "gpt-6-luna", ToProvider: "openrouter", ToModel: "iceman", Reason: "provider_quota"},
 		}})
-	appendServed(t, s, child, types.ModelServedRecord{SelectedProvider: "openrouter", SelectedModel: "flint",
+	// A research child's line, written on its parent run (B2).
+	appendServed(t, s, research, types.ModelServedRecord{Role: researchChildRole, SelectedProvider: "openrouter", SelectedModel: "flint",
 		Models: []types.ModelServedUsage{{Provider: "openrouter", Model: "flint", Calls: 5}}})
 	appendServed(t, s, engRun, types.ModelServedRecord{SelectedProvider: "chatgpt", SelectedModel: "gpt-6",
 		Models: []types.ModelServedUsage{{Provider: "chatgpt", Model: "gpt-6", Calls: 7}}})
@@ -141,7 +144,10 @@ func TestDocumentModelProvenanceShowsSwitchesChildrenEngineeringAndDelegate(t *t
 		t.Fatalf("texture = %+v", provenanceRole(got, "texture"))
 	}
 	researchModels := provenanceRole(got, "research")
-	for model, calls := range map[string]int{"deepseek-v4.1-flash": 2, "gpt-6-luna": 3, "iceman": 1, "flint": 5} {
+	if m, ok := provenanceModel(provenanceRole(got, researchChildRole), "flint"); !ok || m.Calls != 5 {
+		t.Fatalf("research children = %+v", provenanceRole(got, researchChildRole))
+	}
+	for model, calls := range map[string]int{"deepseek-v4.1-flash": 2, "gpt-6-luna": 3, "iceman": 1} {
 		if m, ok := provenanceModel(researchModels, model); !ok || m.Calls != calls {
 			t.Fatalf("research %s = %+v (found %v); all research = %+v", model, m, ok, researchModels)
 		}
@@ -172,8 +178,50 @@ func TestDocumentModelProvenanceShowsSwitchesChildrenEngineeringAndDelegate(t *t
 	}
 	// The management turn that cast the engineering run is in the lineage
 	// (it recorded nothing, so it shows no model).
-	if got.Runs < 5 {
-		t.Fatalf("runs = %d, want texture, research, child, engineering and its caster", got.Runs)
+	if got.Runs < 4 {
+		t.Fatalf("runs = %d, want texture, research, engineering and its caster", got.Runs)
+	}
+}
+
+// B2 (review r1): a research run whose two children served two different
+// models, one after a quota switch, shows the parent's model, both
+// children's, and the switch, through the real child loop.
+func TestDocumentModelProvenanceReachesResearchChildren(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	p := &quotaThenOK{}
+	rt.provider, rt.researchChildCalls = p, &callSpacer{}
+	const owner, docID, trajectory = "owner-children", "doc-children", "trajectory-children"
+	research := provenanceRun(t, s, types.RunRecord{RunID: "run-children-research", AgentID: "research:" + docID, ChannelID: docID, OwnerID: owner,
+		TrajectoryID: trajectory, AgentProfile: "research", AgentRole: "research"})
+	appendServed(t, s, research, types.ModelServedRecord{SelectedProvider: "opencode-go", SelectedModel: "deepseek-v4.1-flash",
+		Models: []types.ModelServedUsage{{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Calls: 2}}})
+	parent := toolregistry.ExecutionContext{OwnerID: owner, AgentID: research.AgentID, RunID: research.RunID}
+	spec := yaegikernel.ResearchChild{Objective: "alpha"}
+	first := rt.runResearchChild(ctx, parent, researchLineage{ownerID: owner, selection: provideriface.LLMSelection{Provider: "openrouter", Model: "flint"}}, spec, researchFanOut{})
+	second := rt.runResearchChild(ctx, parent, researchLineage{ownerID: owner, selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}, spec, researchFanOut{})
+	if first.Error != "" || second.Error != "" || strings.Contains(second.Findings, "synthetic") {
+		t.Fatalf("children = %+v / %+v", first, second)
+	}
+	got, err := rt.DocumentModelProvenance(objectgraph.WithReader(ctx, objectgraph.WriterOwner), owner, docID, []string{trajectory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.MarshalIndent(got, "", "  ")
+	t.Logf("provenance:\n%s", raw)
+	if _, ok := provenanceModel(provenanceRole(got, "research"), "deepseek-v4.1-flash"); !ok {
+		t.Fatalf("parent model missing")
+	}
+	children := provenanceRole(got, researchChildRole)
+	if m, ok := provenanceModel(children, "flint"); !ok || m.Calls != 1 {
+		t.Fatalf("first child's model missing: %+v", children)
+	}
+	if len(children) != 2 {
+		t.Fatalf("children = %+v, want flint and the chain model the second child switched to", children)
+	}
+	if len(got.Switches) != 1 || got.Switches[0].Role != researchChildRole || got.Switches[0].FromProvider != "synthetic" ||
+		!strings.HasPrefix(got.Switches[0].Reason, "provider_quota") {
+		t.Fatalf("switches = %+v, want the second child's quota switch", got.Switches)
 	}
 }
 
@@ -222,5 +270,30 @@ func TestRunEmitterPersistsModelServedAfterCancel(t *testing.T) {
 	evs, err := s.ListRunEventsOfKind(objectgraph.WithReader(context.Background(), objectgraph.WriterOwner), run.OwnerID, run.RunID, types.EventModelServed)
 	if err != nil || len(evs) != 1 {
 		t.Fatalf("served lines = %d, %v", len(evs), err)
+	}
+}
+
+// N5 (review r1): the judge's served line names the provider the response
+// reported, and the transport's provider only when it reported none.
+func TestJevServedLineTakesTheProviderFromTheCall(t *testing.T) {
+	rt, s := testRuntime(t)
+	run := provenanceRun(t, s, types.RunRecord{RunID: "run-jev-provider", AgentID: "research:doc-jev", ChannelID: "doc-jev", OwnerID: "owner-jev", AgentProfile: "research", AgentRole: "research"})
+	ctx := context.Background()
+	rt.recordJevCostFor(ctx, run.OwnerID, run.RunID, run.AgentID, "system1", "jev-judge", "fireworks", jevUsage{InputTokens: 10, OutputTokens: 1}, 1)
+	rt.recordJevCostFor(ctx, run.OwnerID, run.RunID, run.AgentID, "system1", "jev-judge", "", jevUsage{InputTokens: 10, OutputTokens: 1}, 1)
+	evs, err := s.ListRunEventsOfKind(objectgraph.WithReader(ctx, objectgraph.WriterOwner), run.OwnerID, run.RunID, types.EventModelServed)
+	if err != nil || len(evs) != 2 {
+		t.Fatalf("served lines = %d, %v", len(evs), err)
+	}
+	var providers []string
+	for _, ev := range evs {
+		var rec types.ModelServedRecord
+		if err := json.Unmarshal(ev.Payload, &rec); err != nil || len(rec.Models) != 1 || rec.Role != types.ModelServedRoleSystem1 {
+			t.Fatalf("line = %s, %v", ev.Payload, err)
+		}
+		providers = append(providers, rec.Models[0].Provider)
+	}
+	if providers[0] != "fireworks" || providers[1] != jevTransportProvider {
+		t.Fatalf("providers = %v, want the reported one, then the transport's", providers)
 	}
 }

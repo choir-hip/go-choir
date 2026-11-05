@@ -42,7 +42,8 @@ type PublishTextureRequest struct {
 	// ModelProvenance is the source document's model provenance
 	// (types.ModelProvenance, GET /api/texture/documents/{id}/models), read
 	// by the proxy from the publishing computer and pinned into the version's
-	// manifest. Optional: a computer that cannot answer publishes without it.
+	// manifest as its public projection (types.PublicModelProvenance), never
+	// verbatim. Optional: a computer that cannot answer publishes without it.
 	ModelProvenance json.RawMessage `json:"model_provenance,omitempty"`
 }
 

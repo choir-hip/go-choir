@@ -287,12 +287,15 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 		"role":    "user",
 		"content": []any{map[string]string{"type": "text", "text": spec.Objective}},
 	})
-	noEmit := func(types.EventKind, string, json.RawMessage) {}
+	// A child is not a run: its one durable line is the models it served,
+	// written on the parent run under the research_child role so the
+	// parent's document reads them (review r1, B2).
+	childEmit := rt.researchChildServedEmitter(ctx, parent)
 	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.subRLMCallSpacer()}
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{runContextMessage(time.Now(), researchChildTime(share)), userMsg}, systemPrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),
-		noEmit, nil, toolregistry.WithToolLoopLLMConfig(selection),
+		childEmit, nil, toolregistry.WithToolLoopLLMConfig(selection),
 		toolregistry.WithToolLoopFallbackLLMConfigs(fallbacks),
 		// OpenCode refuses a call without a conversation id; each child is
 		// its own provider conversation.
@@ -315,6 +318,30 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	log.Printf("research child: root=%s model=%s duration_ms=%d input_tokens=%d output_tokens=%d findings_chars=%d error=%q",
 		childExec.RunID, selection.Model, result.DurationMs, usage.InputTokens, usage.OutputTokens, len(result.Findings), result.Error)
 	return result
+}
+
+// researchChildServedEmitter forwards a child's model.served line to its
+// parent run, role research_child; every other child event is dropped.
+func (rt *Runtime) researchChildServedEmitter(ctx context.Context, parent toolregistry.ExecutionContext) func(types.EventKind, string, json.RawMessage) {
+	return func(kind types.EventKind, _ string, payload json.RawMessage) {
+		if kind != types.EventModelServed {
+			return
+		}
+		var rec types.ModelServedRecord
+		if json.Unmarshal(payload, &rec) != nil {
+			return
+		}
+		rec.Role = researchChildRole
+		raw, err := json.Marshal(rec)
+		if err != nil {
+			return
+		}
+		var m map[string]any
+		if json.Unmarshal(raw, &m) != nil {
+			return
+		}
+		rt.recordDeskEvent(context.WithoutCancel(ctx), parent, types.EventModelServed, m)
+	}
 }
 
 // researchChildDeadline is a child's share of its parent's remaining time,

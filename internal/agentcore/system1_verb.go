@@ -320,7 +320,7 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 		log.Printf("system1: record the answer of %s on run %s: %v", requestID, runID, err)
 		return nil, fmt.Errorf("choir.System1: the answer could not be recorded on the tape, so it is not returned: %w", err)
 	}
-	rt.recordJevCostFor(ctx, owner, runID, firstNonEmpty(exec.AgentID, agentProfileResearchID), "system1", model, distribution.Usage, len(questions))
+	rt.recordJevCostFor(ctx, owner, runID, firstNonEmpty(exec.AgentID, agentProfileResearchID), "system1", model, distribution.Provider, distribution.Usage, len(questions))
 	return resultRaw, nil
 }
 

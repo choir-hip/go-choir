@@ -2484,15 +2484,15 @@ func (s *Store) ListRunEventsOfKind(ctx context.Context, ownerID, runID string, 
 }
 
 // ListRunsByLineageField returns the owner's runs whose indexed run metadata
-// field (channel_id, trajectory_id or requested_by_run_id) equals value: the
+// field (channel_id or trajectory_id, both generated, indexed columns) equals value: the
 // legacy rows and computerID's lifecycle projections, one per run id. It is
 // the indexed read a Texture document's model provenance walks its lineage
 // with, instead of scanning every run of the owner.
 func (s *Store) ListRunsByLineageField(ctx context.Context, ownerID, computerID, field, value string) ([]types.RunRecord, error) {
 	switch field {
-	case "channel_id", "trajectory_id", "requested_by_run_id":
+	case "channel_id", "trajectory_id":
 	default:
-		return nil, fmt.Errorf("list runs by lineage field: %q is not a lineage field", field)
+		return nil, fmt.Errorf("list runs by lineage field: %q is not an indexed lineage field", field)
 	}
 	value = strings.TrimSpace(value)
 	if value == "" {

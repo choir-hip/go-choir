@@ -2633,15 +2633,17 @@ func (s *Store) planEngineeringReportRecord(ctx context.Context, assignment type
 	return objects, conditions, err
 }
 
-// ListEngineeringAssignmentReportsByRun returns the reports one engineering
-// run recorded, by the loop_id their metadata carries. The model provenance
-// of a Texture document reads the Claude delegate's use from them.
-func (s *Store) ListEngineeringAssignmentReportsByRun(ctx context.Context, ownerID, runID string) ([]types.EngineeringAssignmentReport, error) {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
+// ListEngineeringAssignmentReportsByTrajectory returns the engineering
+// reports recorded on one trajectory, through the indexed trajectory_id
+// metadata column (og_meta_trajectory_id), never a scan of the kind. The
+// model provenance of a Texture document reads the Claude delegate's use
+// from them.
+func (s *Store) ListEngineeringAssignmentReportsByTrajectory(ctx context.Context, ownerID, trajectoryID string) ([]types.EngineeringAssignmentReport, error) {
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if trajectoryID == "" {
 		return nil, nil
 	}
-	objects, err := s.ogListAllByMetadata(ctx, ogKindEngineeringReport, "loop_id", runID)
+	objects, err := s.ogListAllByMetadata(ctx, ogKindEngineeringReport, "trajectory_id", trajectoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -2654,9 +2656,7 @@ func (s *Store) ListEngineeringAssignmentReportsByRun(ctx context.Context, owner
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if report.RunID == runID {
-			out = append(out, report)
-		}
+		out = append(out, report)
 	}
 	return out, nil
 }

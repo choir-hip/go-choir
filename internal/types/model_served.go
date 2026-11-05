@@ -146,12 +146,15 @@ type ModelProvenanceRole struct {
 
 // ModelProvenanceModel is one model's calls for a role.
 type ModelProvenanceModel struct {
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
-	Calls        int    `json:"calls"`
-	Runs         int    `json:"runs"`
-	InputTokens  int    `json:"input_tokens,omitempty"`
-	OutputTokens int    `json:"output_tokens,omitempty"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	// ReportedModel is the model id the provider reported answering, when
+	// it differs from the catalogued name the calls were routed to.
+	ReportedModel string `json:"reported_model,omitempty"`
+	Calls         int    `json:"calls"`
+	Runs          int    `json:"runs"`
+	InputTokens   int    `json:"input_tokens,omitempty"`
+	OutputTokens  int    `json:"output_tokens,omitempty"`
 	// Via names how the model came to serve: "selected" (the run's
 	// selection: policy, pool or owner override, Source naming which),
 	// or the switch reason that moved a run onto it.
@@ -265,6 +268,9 @@ func (b *ModelProvenanceBuilder) AddServed(runID, role string, rec ModelServedRe
 		m.Calls += u.Calls
 		m.InputTokens += u.InputTokens
 		m.OutputTokens += u.OutputTokens
+		if m.ReportedModel == "" && u.ReportedModel != "" && u.ReportedModel != u.Model {
+			m.ReportedModel = u.ReportedModel
+		}
 		via, ok := reached[provenanceModelKey(u.Provider, u.Model, false)]
 		if !ok {
 			via = "selected"
@@ -337,5 +343,71 @@ func (b *ModelProvenanceBuilder) Build(docID string) ModelProvenance {
 	}
 	sort.Slice(out.Roles, func(i, j int) bool { return out.Roles[i].Role < out.Roles[j].Role })
 	out.Switches = append(out.Switches, b.switches...)
+	return out
+}
+
+// PublicModelProvenanceSchema versions PublicModelProvenance.
+const PublicModelProvenanceSchema = "choir.model_provenance.public.v1"
+
+// PublicModelProvenance is the projection of a ModelProvenance that a
+// published version pins for anyone to read: desk roles, providers, models,
+// call and token counts, how each model was reached, switches as
+// role/from/to/reason, and the Claude delegate's use. It carries no run,
+// document or overlay id and no policy source (a policy source can be a
+// file path on the computer), so nothing internal leaves the computer.
+type PublicModelProvenance struct {
+	Schema   string                      `json:"schema"`
+	Roles    []PublicModelProvenanceRole `json:"roles"`
+	Switches []PublicModelSwitch         `json:"switches,omitempty"`
+}
+
+// PublicModelProvenanceRole is one desk role's served models, public.
+type PublicModelProvenanceRole struct {
+	Role   string              `json:"role"`
+	Models []PublicModelServed `json:"models"`
+}
+
+// PublicModelServed is one model's share of a role, public.
+type PublicModelServed struct {
+	Provider      string   `json:"provider"`
+	Model         string   `json:"model"`
+	ReportedModel string   `json:"reported_model,omitempty"`
+	Calls         int      `json:"calls"`
+	InputTokens   int      `json:"input_tokens,omitempty"`
+	OutputTokens  int      `json:"output_tokens,omitempty"`
+	Via           []string `json:"via,omitempty"`
+	Delegate      bool     `json:"delegate,omitempty"`
+}
+
+// PublicModelSwitch is one mid-run switch, public: no run id.
+type PublicModelSwitch struct {
+	Role         string `json:"role"`
+	FromProvider string `json:"from_provider"`
+	FromModel    string `json:"from_model"`
+	ToProvider   string `json:"to_provider"`
+	ToModel      string `json:"to_model"`
+	Reason       string `json:"reason"`
+}
+
+// Public is the projection a published version pins. It is built field by
+// field, so a field added to ModelProvenance later stays private until it
+// is named here.
+func (p ModelProvenance) Public() PublicModelProvenance {
+	out := PublicModelProvenance{Schema: PublicModelProvenanceSchema, Roles: []PublicModelProvenanceRole{}}
+	for _, r := range p.Roles {
+		pr := PublicModelProvenanceRole{Role: r.Role, Models: []PublicModelServed{}}
+		for _, m := range r.Models {
+			pr.Models = append(pr.Models, PublicModelServed{
+				Provider: m.Provider, Model: m.Model, ReportedModel: m.ReportedModel, Calls: m.Calls,
+				InputTokens: m.InputTokens, OutputTokens: m.OutputTokens,
+				Via: append([]string(nil), m.Via...), Delegate: m.Delegate,
+			})
+		}
+		out.Roles = append(out.Roles, pr)
+	}
+	for _, s := range p.Switches {
+		out.Switches = append(out.Switches, PublicModelSwitch{Role: s.Role, FromProvider: s.FromProvider, FromModel: s.FromModel,
+			ToProvider: s.ToProvider, ToModel: s.ToModel, Reason: s.Reason})
+	}
 	return out
 }

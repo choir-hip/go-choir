@@ -2,12 +2,14 @@
 // (docs/problems/model-provenance-unwired-2026-11-05.md): the models that
 // actually served the runs of its trajectory, by desk role, from the
 // computer's model.served record (GET /api/texture/documents/{id}/models),
-// and pinned into each published version's manifest (model_provenance). It
+// and pinned into each published version's manifest (model_provenance, the
+// public projection: no run ids, document ids or policy sources). It
 // is what ran, never the model policy's prediction.
 
 export type ProvenanceModel = {
   provider?: string;
   model?: string;
+  reported_model?: string;
   calls?: number;
   runs?: number;
   input_tokens?: number;
@@ -42,12 +44,13 @@ export type ProvenanceRow = {
 };
 
 // Desk order of the roles; an unknown role sorts after these, by name.
-const ROLE_ORDER = ['conductor', 'texture', 'research', 'management', 'management_task', 'engineering', 'verifier', 'system1'];
+const ROLE_ORDER = ['conductor', 'texture', 'research', 'research_child', 'management', 'management_task', 'engineering', 'verifier', 'system1'];
 
 const ROLE_LABELS: Record<string, string> = {
   conductor: 'Conductor',
   texture: 'Texture',
   research: 'Research',
+  research_child: 'Research children',
   management: 'Management',
   management_task: 'Management tasks',
   engineering: 'Engineering',
@@ -93,6 +96,8 @@ export function modelDetail(m: ProvenanceModel): string {
   const parts: string[] = [];
   const calls = count(m?.calls);
   if (calls) parts.push(`${calls} ${m?.delegate ? 'delegate run' : 'call'}${calls === 1 ? '' : 's'}`);
+  const reported = String(m?.reported_model || '');
+  if (reported && reported !== m?.model) parts.push(`reported as ${reported}`);
   const tin = count(m?.input_tokens);
   const tout = count(m?.output_tokens);
   if (tin || tout) parts.push(`${tokens(tin)} in / ${tokens(tout)} out`);
