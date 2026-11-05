@@ -47,3 +47,14 @@ Both sites read on Texture's behalf and declare the custodian with
 `withKindReader` (declares only where the context names no actor), the
 pattern `textureRunRevision` already uses. Regression tests use
 `TrackUndeclaredReadsFromProduct`.
+
+## Site observer
+
+The reader gate (and the writer gate) now records the call site of each
+violation: the first stack frame outside `internal/objectgraph` and
+`internal/store`. Read it on the runtime observability response, next to the
+counts: `objectgraph_reader_gate.sites`, keyed
+`kind|outcome|function (internal/pkg/file.go:line)`, capped at 64 distinct
+keys with the rest counted under `overflow`. After a research-brief
+trajectory on d@e, the `choir.texture_document|undeclared_reader|...` and
+`choir.texture_revision|undeclared_reader|...` keys name the real callers.

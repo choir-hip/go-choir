@@ -280,6 +280,7 @@ func ResetWriterGateCounts() {
 	writerGateMu.Lock()
 	defer writerGateMu.Unlock()
 	writerGateCounts = map[string]uint64{}
+	writerGateSites.reset()
 }
 
 // modeForKind is the mode in force for one kind: a package kind is enforced
@@ -297,6 +298,7 @@ func recordWriterViolation(kind ObjectKind, declared Writer, ok bool, reason str
 		who = string(declared)
 	}
 	key := fmt.Sprintf("%s|%s|%s", kind, who, reason)
+	writerGateSites.tally(kind, reason)
 	writerGateMu.Lock()
 	writerGateCounts[key]++
 	first := writerGateCounts[key] == 1

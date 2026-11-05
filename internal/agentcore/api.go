@@ -947,6 +947,9 @@ type guestObservabilityResponse struct {
 type writerGateObservability struct {
 	Mode   string            `json:"mode"`
 	Counts map[string]uint64 `json:"counts"`
+	// Sites, on the object-graph gates, tallies "kind|outcome|function
+	// (file:line)" of the first caller outside the graph and the store.
+	Sites map[string]uint64 `json:"sites,omitempty"`
 }
 
 // guestMemoryObservability is the guest's own memory as the kernel reports it.
@@ -1007,10 +1010,10 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		RecentLog:  h.rt.RecentBootLog(),
 		Steps:      &steps,
 		ObjectGraphWriterGate: &writerGateObservability{
-			Mode: objectgraph.CurrentWriterGateMode().String(), Counts: objectgraph.WriterGateCounts(),
+			Mode: objectgraph.CurrentWriterGateMode().String(), Counts: objectgraph.WriterGateCounts(), Sites: objectgraph.WriterGateSites(),
 		},
 		ObjectGraphReaderGate: &writerGateObservability{
-			Mode: objectgraph.CurrentReaderGateMode().String(), Counts: objectgraph.ReaderGateCounts(),
+			Mode: objectgraph.CurrentReaderGateMode().String(), Counts: objectgraph.ReaderGateCounts(), Sites: objectgraph.ReaderGateSites(),
 		},
 		RouteAppGate: &writerGateObservability{Mode: "observe", Counts: routekinds.Counts()},
 		DisclosureGate: &writerGateObservability{

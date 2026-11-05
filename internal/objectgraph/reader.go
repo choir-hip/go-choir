@@ -128,6 +128,7 @@ func ResetReaderGateCounts() {
 	readerGateMu.Lock()
 	defer readerGateMu.Unlock()
 	readerGateCounts = map[string]uint64{}
+	readerGateSites.reset()
 }
 
 // TrackUndeclaredReads turns on the undeclared-read tally for a test process
@@ -316,6 +317,7 @@ func recordReaderViolation(kind ObjectKind, declared Writer, ok bool, reason str
 		who = string(declared)
 	}
 	key := fmt.Sprintf("%s|%s|%s", kind, who, reason)
+	readerGateSites.tally(kind, reason)
 	readerGateMu.Lock()
 	readerGateCounts[key]++
 	first := readerGateCounts[key] == 1

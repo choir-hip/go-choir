@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -243,5 +245,32 @@ func TestSharedWorldContentKindsAreAdmittedToResearchAndTexture(t *testing.T) {
 	_ = CheckReadAs(WithReader(context.Background(), WriterResearch), "choir.capture_label_override")
 	if len(ReaderGateCounts()) != 2 {
 		t.Errorf("the admission is wider than E4's kinds and desks: %v", ReaderGateCounts())
+	}
+}
+
+// A violating read records its caller's site: the first frame outside the
+// graph and the store, here this test.
+func TestReaderGateRecordsCallSite(t *testing.T) {
+	readerMode(t, WriterGateObserve)
+	ResetReaderGateCounts()
+	if err := CheckReadAs(context.Background(), "choir.texture_document"); err != nil {
+		t.Fatalf("observe refused: %v", err)
+	}
+	var found bool
+	for k, n := range ReaderGateSites() {
+		if strings.HasPrefix(k, "choir.texture_document|undeclared_reader|") &&
+			strings.Contains(k, "TestReaderGateRecordsCallSite") &&
+			strings.Contains(k, "internal/objectgraph/reader_gate_test.go:") && n == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("site not recorded: %v", ReaderGateSites())
+	}
+	for i := 0; i < maxGateSites+5; i++ {
+		readerGateSites.tally(ObjectKind(fmt.Sprintf("k%d", i)), "x")
+	}
+	if got := ReaderGateSites(); len(got) > maxGateSites+1 || got[gateSitesOverflowKey] == 0 {
+		t.Errorf("map unbounded or no overflow: %d keys", len(got))
 	}
 }
