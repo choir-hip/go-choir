@@ -714,19 +714,17 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 
 // commitInboxRecordsLocked is CommitInboxRecords with trajectoryMu held.
 //
-// A command that opens stories commits in two steps (MA3.7a, X19), each by
-// its custodian. Management's step writes only management's rows and the
-// commons: its Cast, now addressed to the story's own inbox, its tasks and
-// dispositions, and the command receipt. Texture's step (openStories) creates
-// the stories as the Texture custodian. A failure between the steps, or a
-// retry after one, finds the receipt and runs the second step again
-// (repairStoryOpens), so a Cast is never left without its story.
+// A command that opens stories commits ONE atomic batch in two parts, each
+// written by its custodian (MA3.7a, X19). Management's part holds its own
+// rows and the commons: its Cast, now addressed to the story's own inbox,
+// its tasks and dispositions, and the command receipt. Texture's part
+// (planStoryOpenBatch, declared as the Texture custodian) holds the stories,
+// their index rows and the library head. The gate checks each part under its
+// writer; the transaction is one, so the Cast, its wake and its story exist
+// together or not at all, and a crash or a retry finds both or neither.
 func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitInboxRecordsRequest) (types.InboxCommitReceipt, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
 	if replay, found, err := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || err != nil {
-		if err == nil {
-			err = s.repairStoryOpens(ctx, req, replay)
-		}
 		return replay, err
 	}
 	// The library row Texture publishes must exist before management's stale
@@ -739,11 +737,24 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 			break
 		}
 	}
-	objects, conditions, openings, receipt, err := s.planInboxCommand(ctx, req, time.Now().UTC())
+	now := time.Now().UTC()
+	objects, conditions, openings, receipt, err := s.planInboxCommand(ctx, req, now)
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
+	parts := []objectgraph.WriterBatch{{Writer: s.inboxCommandWriter(ctx), Batch: objectgraph.Batch{Objects: objects}}}
+	signalled := objects
+	if len(openings) > 0 {
+		storyObjects, storyConditions, storyEdges, err := s.planStoryOpenBatch(ctx, openings, now)
+		if err != nil {
+			return types.InboxCommitReceipt{}, err
+		}
+		custodian, _ := objectgraph.CustodianOf(ogKindTexDoc)
+		parts = append(parts, objectgraph.WriterBatch{Writer: custodian, Batch: objectgraph.Batch{Objects: storyObjects, Edges: storyEdges}})
+		conditions = append(conditions, storyConditions...)
+		signalled = append(append([]objectgraph.Object(nil), objects...), storyObjects...)
+	}
+	if err := s.ogStore.PutBatchSegments(ctx, conditions, parts); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {
 			if replay, found, replayErr := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
 				return replay, replayErr
@@ -752,34 +763,15 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 		}
 		return types.InboxCommitReceipt{}, err
 	}
-	storyObjects, err := s.openStories(ctx, openings, time.Now().UTC())
-	if err != nil {
-		return types.InboxCommitReceipt{}, fmt.Errorf("open stories for command %s (retry the command to repair): %w", req.CommandID, err)
-	}
-	s.signalActorWakesIfAny(append(objects, storyObjects...))
+	s.signalActorWakesIfAny(signalled)
 	return receipt, nil
 }
 
-// repairStoryOpens runs Texture's step again for a command whose receipt is
-// committed: openStories skips every story that exists.
-func (s *Store) repairStoryOpens(ctx context.Context, req types.CommitInboxRecordsRequest, receipt types.InboxCommitReceipt) error {
-	opens := false
-	for _, row := range receipt.Records {
-		opens = opens || row.OpenedStory
-	}
-	if !opens {
-		return nil
-	}
-	_, openings, _, err := s.planStoryOpenings(req.OwnerID, req.ComputerID, req.CommandID, req.Records)
-	if err != nil {
-		return err
-	}
-	storyObjects, err := s.openStories(ctx, openings, time.Now().UTC())
-	if err != nil {
-		return err
-	}
-	s.signalActorWakesIfAny(storyObjects)
-	return nil
+// inboxCommandWriter is the writer the management part of an inbox command is
+// checked under: the caller's declared writer, or none.
+func (s *Store) inboxCommandWriter(ctx context.Context) objectgraph.Writer {
+	w, _ := objectgraph.WriterFrom(ctx)
+	return w
 }
 
 // planInboxCommand plans the management side of one inbox command's batch:

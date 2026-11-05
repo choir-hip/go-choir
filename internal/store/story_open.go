@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -114,45 +113,36 @@ func (s *Store) planStoryOpenings(ownerID, computerID, commandID string, records
 	return out, openings, opened, nil
 }
 
-// openStories is Texture's host-side handler for the opening requests: it
-// declares the Texture custodian (objectgraph.CustodianOf), creates each
-// story that does not exist yet (its trajectory, document, seed revision and
-// desk), writes its story-index row, and advances the story-library head with
-// its mirror. It takes no model turn. Ids are derived from the command, so a
-// retry or a repair after a crash between the request and this commit finds
-// the story and skips it. The caller holds trajectoryMu. It returns the
-// objects written, for the wake signal.
-func (s *Store) openStories(ctx context.Context, openings []storyOpening, now time.Time) ([]objectgraph.Object, error) {
+// planStoryOpenBatch is Texture's host-side handler for the opening requests:
+// the part of the command's batch the Texture custodian writes. It plans each
+// story (its trajectory, document, seed revision and desk), its story-index
+// row, and the story-library head with its mirror. It takes no model turn.
+// The caller commits it in the SAME atomic batch as management's rows, as a
+// part declared by the custodian (commitInboxRecordsLocked), so a Cast is
+// never delivered to a story that does not exist and a story never exists
+// without its Cast. Every object is conditioned absent or on the head it
+// read. The caller holds trajectoryMu.
+func (s *Store) planStoryOpenBatch(ctx context.Context, openings []storyOpening, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []objectgraph.Edge, error) {
 	if len(openings) == 0 {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 	ctx = textureCustodianCtx(ctx)
 	ownerID, computerID := openings[0].ownerID, openings[0].computerID
 	var objects []objectgraph.Object
 	var conditions []objectgraph.ObjectCondition
 	var edges []objectgraph.Edge
-	var fresh []storyOpening
 	for _, o := range openings {
-		if _, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, o.docID); err == nil {
-			continue
-		} else if !errors.Is(err, ErrNotFound) {
-			return nil, err
-		}
 		objs, conds, edge, err := planStoryObjects(ownerID, computerID, o.docID, o.trajectoryID, o.seedID, o.cast, now)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		objects, conditions, edges = append(objects, objs...), append(conditions, conds...), append(edges, edge)
-		fresh = append(fresh, o)
-	}
-	if len(fresh) == 0 {
-		return nil, nil
 	}
 	head, err := loadInboxCached[types.StoryLibraryHead](ctx, s, ogKindStoryLibraryHead, ownerID, computerID, storyLibraryKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	for _, o := range fresh {
+	for _, o := range openings {
 		head.value.Head++
 		entry := types.StoryOpenEntry{Seq: head.value.Head, Inbox: o.cast.Inbox}
 		if o.cast.Directive != nil {
@@ -168,11 +158,10 @@ func (s *Store) openStories(ctx context.Context, openings []storyOpening, now ti
 	}
 	headObj, headCond, err := head.write(ogKindStoryLibraryHead, ownerID, computerID, map[string]any{"head": head.value.Head}, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	objects, conditions = append(objects, headObj), append(conditions, headCond)
-	// The story's row and the library mirror, in the same batch.
-	for _, o := range fresh {
+	for _, o := range openings {
 		objective := ""
 		if o.cast.Directive != nil {
 			objective = o.cast.Directive.Objective
@@ -181,28 +170,21 @@ func (s *Store) openStories(ctx context.Context, openings []storyOpening, now ti
 			DocID: o.docID, TrajectoryID: o.trajectoryID, RevisionID: o.seedID, Headline: storyTitle(objective), Version: 1, UpdatedAt: now,
 		}, nil, now)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		objects, conditions = append(objects, row), append(conditions, cond)
 	}
 	mirror, err := loadInboxCached[types.StoryIndexEntry](ctx, s, ogKindStoryIndex, ownerID, computerID, types.StoryIndexLibraryKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	library := head.value
 	mirror.value = types.StoryIndexEntry{Library: &library}
 	mirrorObj, mirrorCond, err := mirror.write(ogKindStoryIndex, ownerID, computerID, map[string]any{}, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	objects, conditions = append(objects, mirrorObj), append(conditions, mirrorCond)
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {
-		if errors.Is(err, objectgraph.ErrConflict) {
-			return nil, ErrConcurrentStateChange
-		}
-		return nil, err
-	}
-	return objects, nil
+	return append(objects, mirrorObj), append(conditions, mirrorCond), edges, nil
 }
 
 // planStoryObjects builds one story's trajectory, document, seed revision,

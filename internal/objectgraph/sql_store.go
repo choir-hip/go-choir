@@ -973,12 +973,43 @@ func (s *SQLStore) PutBatch(ctx context.Context, batch Batch) error {
 func (s *SQLStore) PutBatchConditional(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	return s.putBatch(ctx, conditions, batch)
 }
+
+// WriterBatch is a part of an atomic batch written by one declared writer.
+type WriterBatch struct {
+	Writer Writer
+	Batch  Batch
+}
+
+// PutBatchSegments commits several writers' parts as ONE atomic batch. The
+// write gate checks each part under its own declared writer, so one commit
+// can hold management's rows and Texture's story without either crossing the
+// other's custody (MA3.7a). The parts are merged in order.
+func (s *SQLStore) PutBatchSegments(ctx context.Context, conditions []ObjectCondition, parts []WriterBatch) error {
+	var merged Batch
+	for _, part := range parts {
+		if err := CheckWriteAs(WithWriter(ctx, part.Writer), part.Batch.Objects, part.Batch.Edges); err != nil {
+			return err
+		}
+		merged.Objects = append(merged.Objects, part.Batch.Objects...)
+		merged.Edges = append(merged.Edges, part.Batch.Edges...)
+	}
+	return s.putBatchChecked(ctx, conditions, merged)
+}
+
 func (s *SQLStore) putBatch(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph sql: nil store")
 	}
 	if err := CheckWriteAs(ctx, batch.Objects, batch.Edges); err != nil {
 		return err
+	}
+	return s.putBatchChecked(ctx, conditions, batch)
+}
+
+// putBatchChecked is putBatch after the write gate has passed.
+func (s *SQLStore) putBatchChecked(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("objectgraph sql: nil store")
 	}
 	// validate + intercept run before any database work: intercept is the
 	// projection append path (network CAS + event write), and holding the

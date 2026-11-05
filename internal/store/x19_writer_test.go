@@ -89,46 +89,109 @@ func TestManagementStoryOpeningCrossesNoCustodian(t *testing.T) {
 	}
 }
 
-// A crash between management's request and Texture's open leaves the Cast
-// committed with no story. The command's retry repairs it: the receipt is
-// found, and the open runs again exactly once.
-func TestStoryOpeningRepairsAfterTheRequestCommittedAlone(t *testing.T) {
+// B1 (Devin review): the open is ONE atomic commit. If Texture's part cannot
+// commit (here its story's id is already taken), management's part does not
+// either: no Cast delivered to a missing story, no wake for it, no receipt.
+// Nothing is left to repair and no wake can be consumed against a missing
+// document.
+func TestStoryOpeningIsAtomicAcrossTheTwoCustodians(t *testing.T) {
 	s := openTestStore(t)
 	defer objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)()
 	ctx := objectgraph.WithWriter(context.Background(), objectgraph.WriterManagement)
-	req := managementOpeningCommand(t, "x19-repair", "x19:cast:r")
-	req, err := normalizeInboxCommand(req)
+	req, err := normalizeInboxCommand(managementOpeningCommand(t, "x19-atomic", "x19:cast:a"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, conditions, openings, _, err := s.planInboxCommand(ctx, req, time.Now().UTC())
+	_, openings, _, err := s.planStoryOpenings(req.OwnerID, req.ComputerID, req.CommandID, req.Records)
 	if err != nil || len(openings) != 1 {
-		t.Fatalf("plan: %v (%d openings)", err, len(openings))
-	}
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
 		t.Fatal(err)
 	}
-	docID := openings[0].docID
-	texture := textureCustodianCtx(context.Background())
-	if _, err := s.lifecycleGetObject(texture, ogKindTexDoc, inboxTestOwner, inboxTestComputer, docID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("story before the repair: err = %v; want not found", err)
+	o := openings[0]
+	// Occupy the story's trajectory id, so Texture's part conflicts.
+	objs, conds, edge, err := planStoryObjects(o.ownerID, o.computerID, o.docID, o.trajectoryID, o.seedID, o.cast, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
 	}
-	receipt, err := s.CommitInboxRecords(ctx, req)
-	if err != nil || !receipt.Replay {
-		t.Fatalf("retry: replay=%v err=%v", receipt.Replay, err)
+	tex := textureCustodianCtx(context.Background())
+	if err := s.ogStore.PutBatchConditional(tex, conds, objectgraph.Batch{Objects: objs[:1], Edges: nil}); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := s.lifecycleGetObject(texture, ogKindTexDoc, inboxTestOwner, inboxTestComputer, docID); err != nil {
-		t.Fatalf("story after the repair: %v", err)
+	_ = edge
+	wakesBefore := len(storyWakes(t, s))
+	if _, err := s.CommitInboxRecords(ctx, req); err == nil {
+		t.Fatal("the open committed over an occupied story id")
 	}
-	if head, _ := s.StoryLibraryHeadOf(textureCustodianCtx(context.Background()), inboxTestOwner, inboxTestComputer); head != 1 {
-		t.Fatalf("library head after the repair = %d; want 1", head)
+	if recs, _ := s.ListInboxRecords(ctx, inboxTestOwner, inboxTestComputer, "texture:"+o.docID, 0, 0); len(recs) != 0 {
+		t.Fatalf("the Cast was delivered to a story that was not opened: %d records", len(recs))
 	}
-	// A second retry opens nothing more.
+	if _, found, _ := s.replayInboxCommand(ctx, inboxTestOwner, inboxTestComputer, req.CommandID, req.CommandDigest); found {
+		t.Fatal("a receipt was committed for an open that did not happen")
+	}
+	if got := len(storyWakes(t, s)); got != wakesBefore {
+		t.Fatalf("a wake row was minted for the failed open: %d -> %d", wakesBefore, got)
+	}
+}
+
+// The success case: the Cast, its wake and the story are in the tape together
+// after the one commit, so a wake can never run ahead of its document.
+func TestStoryOpeningCastWakeAndStoryCommitTogether(t *testing.T) {
+	s := openTestStore(t)
+	ctx := objectgraph.WithWriter(context.Background(), objectgraph.WriterManagement)
+	before := len(storyWakes(t, s))
+	req := managementOpeningCommand(t, "x19-together", "x19:cast:t")
 	if _, err := s.CommitInboxRecords(ctx, req); err != nil {
 		t.Fatal(err)
 	}
+	docID, _, _ := storyOpeningIDs(inboxTestOwner, inboxTestComputer, "x19-together", "x19:cast:t")
+	if _, err := s.lifecycleGetObject(textureCustodianCtx(context.Background()), ogKindTexDoc, inboxTestOwner, inboxTestComputer, docID); err != nil {
+		t.Fatalf("story: %v", err)
+	}
+	if recs, _ := s.ListInboxRecords(ctx, inboxTestOwner, inboxTestComputer, "texture:"+docID, 0, 0); len(recs) != 1 {
+		t.Fatalf("Cast records = %d", len(recs))
+	}
+	if got := len(storyWakes(t, s)); got <= before {
+		t.Fatalf("no wake minted for the opening Cast (%d -> %d)", before, got)
+	}
+	// A retry of the committed command replays; it opens nothing more.
+	if r, err := s.CommitInboxRecords(ctx, req); err != nil || !r.Replay {
+		t.Fatalf("retry: %v replay=%v", err, r.Replay)
+	}
 	if head, _ := s.StoryLibraryHeadOf(textureCustodianCtx(context.Background()), inboxTestOwner, inboxTestComputer); head != 1 {
-		t.Fatalf("library head after a second retry = %d; want 1", head)
+		t.Fatalf("library head = %d", head)
+	}
+}
+
+// A withdrawn (tombstoned) index row reads as absent and is rewritten by the
+// next publish.
+func TestPublishStoryIndexRewritesAWithdrawnRow(t *testing.T) {
+	s := openTestStore(t)
+	ctx := objectgraph.WithWriter(context.Background(), objectgraph.WriterManagement)
+	if _, err := s.CommitInboxRecords(ctx, managementOpeningCommand(t, "x19-tomb", "x19:cast:w")); err != nil {
+		t.Fatal(err)
+	}
+	tex := textureCustodianCtx(context.Background())
+	objs, err := s.ogListAllObjectsByKind(tex, ogKindStoryIndex)
+	if err != nil || len(objs) == 0 {
+		t.Fatalf("rows: %d %v", len(objs), err)
+	}
+	for _, obj := range objs {
+		obj.Tombstone = true
+		if err := s.ogStore.PutBatch(tex, objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mgmt := objectgraph.WithReader(context.Background(), objectgraph.WriterManagement)
+	if rows, err := s.ListStoryIndex(mgmt, inboxTestOwner, inboxTestComputer, time.Time{}, "", 0); err != nil || len(rows) != 0 {
+		t.Fatalf("withdrawn rows listed: %d %v", len(rows), err)
+	}
+	if err := s.PublishStoryIndex(mgmt, inboxTestOwner, inboxTestComputer); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := s.ListStoryIndex(mgmt, inboxTestOwner, inboxTestComputer, time.Time{}, "", 0); err != nil || len(rows) != 1 {
+		t.Fatalf("after publish: %d %v", len(rows), err)
+	}
+	if head, _ := s.StoryLibraryHeadOf(mgmt, inboxTestOwner, inboxTestComputer); head != 1 {
+		t.Fatalf("mirror head = %d", head)
 	}
 }
 

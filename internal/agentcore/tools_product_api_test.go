@@ -48,7 +48,7 @@ func TestProductAPIRequestUsesCanonicalServerAndRunOwner(t *testing.T) {
 	rt := &Runtime{}
 	rt.SetProductAPIHandler(canonical, "")
 
-	raw, err := rt.productAPIRequest(context.Background(), "user-product-api", "owner@example.com",
+	raw, err := rt.productAPIRequest(withDeskReader(context.Background(), agentprofile.Management), "user-product-api", "owner@example.com",
 		" post ", "https://ignored.example/api/autopaper/sources/schedules?source=tool",
 		json.RawMessage(`{"title":"Product API verb owner proof"}`))
 	if err != nil {
@@ -120,7 +120,7 @@ func TestProductAPIRequestRejectsDisallowedRoutes(t *testing.T) {
 	}
 
 	oversized := json.RawMessage(`{"value":"` + strings.Repeat("x", productAPIMaxBodyBytes) + `"}`)
-	if _, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "POST", "/api/autopaper/sources/schedules", oversized); err == nil || !strings.Contains(err.Error(), "body exceeds 1048576 bytes") {
+	if _, err := rt.productAPIRequest(withDeskReader(context.Background(), agentprofile.Management), "user-product-api", "", "POST", "/api/autopaper/sources/schedules", oversized); err == nil || !strings.Contains(err.Error(), "body exceeds 1048576 bytes") {
 		t.Fatalf("oversized-body error = %v", err)
 	}
 }
@@ -239,14 +239,19 @@ func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 // write route names no such kind.
 func TestProductAPIAutopaperWritesAreLimitedToTheCallersKinds(t *testing.T) {
 	t.Parallel()
-	if err := validateProductAPIRoute(http.MethodPost, "/api/autopaper/sources/schedules"); err != nil {
+	mctx := withDeskReader(context.Background(), agentprofile.Management)
+	if err := validateProductAPIRouteFor(mctx, http.MethodPost, "/api/autopaper/sources/schedules"); err != nil {
 		t.Errorf("management's source-schedule write refused: %v", err)
 	}
-	if err := validateProductAPIRoute(http.MethodDelete, "/api/autopaper/sources/schedules?source_id=x"); err != nil {
+	if err := validateProductAPIRouteFor(mctx, http.MethodDelete, "/api/autopaper/sources/schedules?source_id=x"); err != nil {
 		t.Errorf("management's source-schedule stop refused: %v", err)
 	}
+	// No declared caller holds no authority: it fails closed.
+	if err := validateProductAPIRoute(http.MethodPost, "/api/autopaper/sources/schedules"); err == nil {
+		t.Error("an undeclared caller wrote source schedules")
+	}
 	for _, path := range []string{"/api/autopaper/events", "/api/autopaper/some-route-added-later", "/api/autopaper/"} {
-		if err := validateProductAPIRoute(http.MethodPost, path); err == nil || !strings.Contains(err.Error(), "not custodian") {
+		if err := validateProductAPIRouteFor(mctx, http.MethodPost, path); err == nil || !strings.Contains(err.Error(), "not custodian") {
 			t.Errorf("POST %s: error = %v, want a custodian refusal", path, err)
 		}
 	}

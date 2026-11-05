@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -65,19 +66,26 @@ func storyIndexObject(ownerID, computerID, key string, entry types.StoryIndexEnt
 }
 
 // storyIndexRows reads the scope's index rows by key.
-func (s *Store) storyIndexRows(ctx context.Context, ownerID, computerID string) (map[string]objectgraph.Object, error) {
+// A withdrawn (tombstoned) row has no body and reads as absent; it is
+// returned in tombs by canonical id so a rewrite conditions on it.
+func (s *Store) storyIndexRows(ctx context.Context, ownerID, computerID string) (map[string]objectgraph.Object, map[string]objectgraph.Object, error) {
 	objs, err := s.ogListAllObjectsByKind(ctx, ogKindStoryIndex)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rows := map[string]objectgraph.Object{}
+	tombs := map[string]objectgraph.Object{}
 	for _, obj := range objs {
 		if obj.OwnerID != ownerID || strings.TrimSpace(obj.ComputerID) != computerID {
 			continue
 		}
+		if obj.Tombstone {
+			tombs[obj.CanonicalID] = obj
+			continue
+		}
 		var e types.StoryIndexEntry
 		if err := json.Unmarshal(obj.Body, &e); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		key := types.StoryIndexLibraryKey
 		if e.Library == nil {
@@ -85,7 +93,7 @@ func (s *Store) storyIndexRows(ctx context.Context, ownerID, computerID string) 
 		}
 		rows[key] = obj
 	}
-	return rows, nil
+	return rows, tombs, nil
 }
 
 // PublishStoryIndex is the Texture custodian publishing its story index for
@@ -98,9 +106,17 @@ func (s *Store) PublishStoryIndex(ctx context.Context, ownerID, computerID strin
 		return fmt.Errorf("story index: owner_id and computer_id are required")
 	}
 	ctx = textureCustodianCtx(ctx)
-	s.trajectoryMu.Lock()
-	defer s.trajectoryMu.Unlock()
-	return s.reconcileStoryIndex(ctx, ownerID, computerID, true)
+	// No lock: the reads are a snapshot and every write is conditioned on the
+	// row (or the head) that was read, so a concurrent open or revision makes
+	// the write conflict and the pass reads again. Holding trajectoryMu for
+	// the O(stories) pass would stall every inbox writer.
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		if err = s.reconcileStoryIndex(ctx, ownerID, computerID, true); !errors.Is(err, objectgraph.ErrConflict) {
+			return err
+		}
+	}
+	return err
 }
 
 func sameStoryIndexEntry(a, b types.StoryIndexEntry) bool {
@@ -112,9 +128,22 @@ func sameStoryIndexEntry(a, b types.StoryIndexEntry) bool {
 // the custodian declared. stories false reconciles the library row only (the
 // opening path, which writes its own story row).
 func (s *Store) reconcileStoryIndex(ctx context.Context, ownerID, computerID string, stories bool) error {
-	rows, err := s.storyIndexRows(ctx, ownerID, computerID)
+	rows, tombs, err := s.storyIndexRows(ctx, ownerID, computerID)
 	if err != nil {
 		return err
+	}
+	// priorOf is the row to condition a write on: the live row, else a
+	// withdrawn one.
+	priorOf := func(key string) *objectgraph.Object {
+		if p, ok := rows[key]; ok {
+			return &p
+		}
+		if id, err := lifecycleCanonicalID(ogKindStoryIndex, ownerID, computerID, key); err == nil {
+			if p, ok := tombs[id]; ok {
+				return &p
+			}
+		}
+		return nil
 	}
 	now := time.Now().UTC()
 	var objects []objectgraph.Object
@@ -130,14 +159,13 @@ func (s *Store) reconcileStoryIndex(ctx context.Context, ownerID, computerID str
 			live[key] = true
 			want := types.StoryIndexEntry{DocID: sum.DocID, TrajectoryID: sum.TrajectoryID, RevisionID: sum.RevisionID,
 				Headline: sum.Headline, Lede: sum.Lede, Version: sum.Version, UpdatedAt: sum.UpdatedAt.UTC()}
-			var priorPtr *objectgraph.Object
 			if prior, had := rows[key]; had {
 				var cur types.StoryIndexEntry
 				if json.Unmarshal(prior.Body, &cur) == nil && sameStoryIndexEntry(cur, want) {
 					continue
 				}
-				priorPtr = &prior
 			}
+			priorPtr := priorOf(key)
 			obj, cond, err := storyIndexObject(ownerID, computerID, key, want, priorPtr, now)
 			if err != nil {
 				return err
@@ -165,10 +193,9 @@ func (s *Store) reconcileStoryIndex(ctx context.Context, ownerID, computerID str
 	if err != nil {
 		return err
 	}
-	var libPrior *objectgraph.Object
+	libPrior := priorOf(types.StoryIndexLibraryKey)
 	var libCur types.StoryIndexEntry
 	if prior, had := rows[types.StoryIndexLibraryKey]; had {
-		libPrior = &prior
 		_ = json.Unmarshal(prior.Body, &libCur)
 	}
 	if libPrior == nil || libCur.Library == nil || libCur.Library.Head != head.value.Head {
@@ -193,7 +220,7 @@ func (s *Store) ListStoryIndex(ctx context.Context, ownerID, computerID string, 
 	if ownerID == "" || computerID == "" {
 		return nil, fmt.Errorf("stories: owner_id and computer_id are required")
 	}
-	rows, err := s.storyIndexRows(ctx, ownerID, computerID)
+	rows, _, err := s.storyIndexRows(ctx, ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}

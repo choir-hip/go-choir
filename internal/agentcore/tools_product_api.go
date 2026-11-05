@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -183,22 +182,11 @@ var productAPIWriteKinds = map[string]objectgraph.ObjectKind{
 	"/api/autopaper/sources/schedules": "choir.source_schedule",
 }
 
-// productAPICallers are the writers a ProductAPI call may be: the declared
-// reader of the call's context, else the desks whose manifest holds the
-// ProductAPI verb.
-func productAPICallers(ctx context.Context) []objectgraph.Writer {
-	if w, ok := objectgraph.ReaderFrom(ctx); ok {
-		return []objectgraph.Writer{w}
-	}
-	var out []objectgraph.Writer
-	for _, name := range deskmanifest.Names() {
-		if d, ok := deskmanifest.Lookup(name); ok && d.HasVerb("ProductAPI") {
-			if w, ok := objectgraph.DeskWriter(name); ok {
-				out = append(out, w)
-			}
-		}
-	}
-	return out
+// productAPICaller is the desk a ProductAPI call is made as: the declared
+// reader of the call's context. A call that declares none has no caller and
+// holds no authority (it fails closed, never the union of every desk's).
+func productAPICaller(ctx context.Context) (objectgraph.Writer, bool) {
+	return objectgraph.ReaderFrom(ctx)
 }
 
 func validateProductAPIRouteFor(ctx context.Context, method, requestURI string) error {
@@ -255,11 +243,8 @@ func validateProductAPIRouteFor(ctx context.Context, method, requestURI string) 
 	if method != http.MethodGet && (path == "/api/autopaper" || strings.HasPrefix(path, "/api/autopaper/")) {
 		kind, known := productAPIWriteKinds[strings.TrimSuffix(path, "/")]
 		custodian, held := objectgraph.CustodianOf(kind)
-		allowed := false
-		for _, caller := range productAPICallers(ctx) {
-			allowed = allowed || (known && held && caller == custodian)
-		}
-		if !allowed {
+		caller, declared := productAPICaller(ctx)
+		if !(known && held && declared && caller == custodian) {
 			return fmt.Errorf("product_api refuses %s %s: the route writes a kind the calling desk is not custodian of", method, path)
 		}
 		return nil
