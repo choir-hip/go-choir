@@ -1363,6 +1363,11 @@ func (rt *Runtime) wakeCastersOfCastsAfterClose(ctx context.Context, rec *types.
 			// this run began.
 			continue
 		}
+		// The cheap point read goes first: a Cast already told needs no fold.
+		noticeID := types.CastAfterCloseNoticeID(cast.ConversationID, cast.Round, cast.InboxSeq)
+		if exists, err := rt.store.CommitmentRecordExists(ctx, rec.OwnerID, rec.ComputerID, noticeID); err != nil || exists {
+			continue
+		}
 		state, err := rt.store.ConversationState(ctx, rec.OwnerID, rec.ComputerID, cast.ConversationID)
 		if err != nil {
 			continue
@@ -1391,10 +1396,6 @@ func (rt *Runtime) wakeCastersOfCastsAfterClose(ctx context.Context, rec *types.
 			}
 		}
 		if !closedBefore || answered {
-			continue
-		}
-		noticeID := types.CastAfterCloseNoticeID(cast.ConversationID, cast.Round, cast.InboxSeq)
-		if exists, err := rt.store.CommitmentRecordExists(ctx, rec.OwnerID, rec.ComputerID, noticeID); err != nil || exists {
 			continue
 		}
 		notice := types.NewCastAfterCloseNotice(cast.SenderInbox, inbox, cast.Round, cast.InboxSeq, time.Now().UTC().Format(time.RFC3339Nano))
