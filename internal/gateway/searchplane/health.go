@@ -101,7 +101,9 @@ func (s *MemoryHealthStore) getLocked(provider string) ProviderHealth {
 }
 
 func normalizeExpiredLocked(rec ProviderHealth, now time.Time) ProviderHealth {
-	if rec.State == StateCoolingDown && rec.CooldownUntil != nil && !rec.CooldownUntil.After(now) {
+	// A disabled record is a pre-2026-11-05 auth bench; it expires like a
+	// cooldown so a stored record cannot block a provider for good.
+	if (rec.State == StateCoolingDown || rec.State == StateDisabled) && rec.CooldownUntil != nil && !rec.CooldownUntil.After(now) {
 		rec.State = StateActive
 		rec.CooldownUntil = nil
 	}
@@ -138,13 +140,6 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 		rec.LastErrorSummary = ""
 	case OutcomeSkippedCoolingDown:
 		return
-	case OutcomeAuthError:
-		rec.StrikeCount++
-		rec.LastFailureClass = string(outcome.Class)
-		rec.LastErrorSummary = truncateSummary(outcome.Error)
-		rec.State = StateDisabled
-		until := now.Add(policy.CooldownDuration(outcome.Class, rec.StrikeCount))
-		rec.CooldownUntil = &until
 	default:
 		rec.StrikeCount++
 		rec.LastFailureClass = string(outcome.Class)
@@ -169,10 +164,7 @@ func truncateSummary(msg string) string {
 // IsEligible reports whether a provider may receive HTTP traffic right now.
 func IsEligible(rec ProviderHealth, now time.Time) bool {
 	rec = normalizeExpiredLocked(rec, now)
-	if rec.State == StateDisabled {
-		return false
-	}
-	if rec.State == StateCoolingDown && rec.CooldownUntil != nil && rec.CooldownUntil.After(now) {
+	if (rec.State == StateCoolingDown || rec.State == StateDisabled) && rec.CooldownUntil != nil && rec.CooldownUntil.After(now) {
 		return false
 	}
 	return true

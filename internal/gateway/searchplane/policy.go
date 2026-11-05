@@ -41,10 +41,14 @@ func DefaultBackoffPolicy() BackoffPolicy {
 			// Quota exhaustion does not clear in minutes, but a probe is one
 			// call: an hour, doubling to six, sees an owner top-up the same day.
 			OutcomeQuotaLimited: 60 * 60,
-			OutcomeAuthError:    7 * 24 * 60 * 60,
-			OutcomeServerError:  2 * 60,
-			OutcomeTimeout:      2 * 60,
-			OutcomeError:        5 * 60,
+			// An auth error may be a passing upstream fault or a key the owner
+			// replaces the same day: probe it on the same doubling schedule as
+			// quota, never bench it for good (owner, 2026-11-05: "A single error
+			// shouldn't permanently block").
+			OutcomeAuthError:   15 * 60,
+			OutcomeServerError: 2 * 60,
+			OutcomeTimeout:     2 * 60,
+			OutcomeError:       5 * 60,
 		},
 		MaxByClass: map[OutcomeClass]time.Duration{
 			OutcomeRateLimited:  15 * time.Minute,
@@ -53,6 +57,7 @@ func DefaultBackoffPolicy() BackoffPolicy {
 			OutcomeError:        time.Hour,
 			OutcomeSuccessEmpty: 6 * time.Hour,
 			OutcomeQuotaLimited: 6 * time.Hour,
+			OutcomeAuthError:    6 * time.Hour,
 		},
 		MaxCooldown: 7 * 24 * time.Hour,
 		Multiplier:  2,

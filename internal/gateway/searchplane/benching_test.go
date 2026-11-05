@@ -138,7 +138,7 @@ func TestCooldownCapsByClass(t *testing.T) {
 		OutcomeServerError:  2 * time.Minute,
 		OutcomeError:        5 * time.Minute,
 		OutcomeQuotaLimited: time.Hour,
-		OutcomeAuthError:    7 * 24 * time.Hour,
+		OutcomeAuthError:    15 * time.Minute,
 	}
 	for class, want := range first {
 		if got := p.CooldownDuration(class, 1); got != want {
@@ -155,6 +155,7 @@ func TestCooldownCapsByClass(t *testing.T) {
 		OutcomeError:        time.Hour,
 		OutcomeSuccessEmpty: 6 * time.Hour,
 		OutcomeQuotaLimited: 6 * time.Hour,
+		OutcomeAuthError:    6 * time.Hour,
 	}
 	for class, cap := range caps {
 		if got := p.CooldownDuration(class, 40); got != cap {

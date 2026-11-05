@@ -49,3 +49,21 @@ written without fresh sources.
 - Search reuse: the earlier archived problems (search-is-duplicated-and-
   discarded, search-providers-cooling-most-of-the-time, 2026-10-14) named
   duplicate queries; whether the paper still repeats queries is unmeasured.
+
+## Keenable benched for good by one auth error (found 2026-11-05 19Z)
+
+Keenable is the provider with the most access (owner: about 100,000
+searches a month) and it has been skipped as `keenable=auth_error` on every
+search since at least 2026-11-03T18:54Z (the journal's start). Cause: an
+auth error set the provider's state to `disabled`, and
+`searchplane.IsEligible` refused a disabled provider regardless of its
+cooldown deadline, so no call ever probed it again and only an operator
+reset could clear it. Whether the original error was a passing fault or a
+bad key is unknown; a probe will tell.
+
+Fix (owner, 2026-11-05: "A single error shouldn't permanently block. ... we
+should be doing exponential backoff"): an auth error is a cooldown on the
+doubling schedule, 15 minutes first, capped at six hours; a stored
+disabled record clamps to six hours from its last update at gateway start
+and expires like a cooldown. If the key itself is bad, the probes keep
+failing and the owner replaces the key.
