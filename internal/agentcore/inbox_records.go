@@ -1151,6 +1151,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	parked := rec != nil && rec.State == types.RunPassivated
 	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
 		rt.recordsRunStart.Delete(rec.RunID)
+		rt.releaseRunDeskEpochs(rec.RunID)
 		rt.recordsRunShown.Delete(rec.RunID)
 	}
 	if rt != nil && rec != nil && rec.State.Terminal() {
@@ -1251,6 +1252,7 @@ func (rt *Runtime) closeOpenRoundsAfterCrash(ctx context.Context) {
 			log.Printf("runtime: crash boot round closure %s: %v", closure.RecordID, err)
 			continue
 		}
+		rt.bootTally.add(deskOfInbox(conversation.RecipientInbox))
 		log.Printf("runtime: closed round %d of %s after a crash restart", conversation.Round, conversation.ConversationID)
 	}
 }

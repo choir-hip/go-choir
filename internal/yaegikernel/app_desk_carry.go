@@ -15,14 +15,14 @@ import (
 // the static system table, so without it an app desk's cells hold no verbs
 // (docs/problems/app-desk-registration-does-not-cross-worker-execve-2026-10-21.md).
 // The daemon renders it only for a role its own manifest has as an app desk,
-// which only appdesk.Activate (CHOIR_APP_DESKS=on) registers. Frame admission
+// which only appdesk.Reconcile registers; the row carried is the one of the worker's desk epoch. Frame admission
 // stays the daemon's own lookup; the carry only sets the worker's exports.
 const appDeskEnv = "APP_DESK"
 
 // appDeskCarry is the env entry for role, or "" when role is not an app desk
 // the daemon has.
-func appDeskCarry(prefix, role string) string {
-	d, ok := deskmanifest.Lookup(role)
+func appDeskCarry(prefix, role string, epoch uint64) string {
+	d, ok := deskmanifest.LookupAt(role, epoch)
 	if !ok || d.Kind != deskmanifest.KindApp {
 		return ""
 	}

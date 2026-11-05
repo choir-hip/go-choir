@@ -292,7 +292,7 @@ func (c DeskSessionWorkerConfig) sessionEnv() []string {
 	if c.Session.KeepCellOutput {
 		env = append(env, prefix+"KEEP_CELL_OUTPUT=1")
 	}
-	if carry := appDeskCarry(prefix, c.Session.Role); carry != "" {
+	if carry := appDeskCarry(prefix, c.Session.Role, c.Session.DeskEpoch); carry != "" {
 		env = append(env, carry)
 	}
 	return env
@@ -575,7 +575,7 @@ func (w *DeskSessionWorker) admitFrame(ctx context.Context, stream byte, req Bro
 		return refuse(fmt.Sprintf("refused: epoch %d is not this worker's epoch %d", req.Epoch, w.cfg.Session.Epoch), false)
 	}
 	role := w.cfg.Session.Role
-	if !deskmanifest.FrameAllowed(role, string(req.Action)) {
+	if !deskmanifest.FrameAllowedAt(role, w.cfg.Session.DeskEpoch, string(req.Action)) {
 		return refuse(fmt.Sprintf("refused: desk %q may not call %s", role, req.Action), false)
 	}
 	// The shape of what the cell wrote: lengths, ranges, depth. Checked here

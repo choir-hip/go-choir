@@ -38,6 +38,13 @@ type SessionWorkerConfig struct {
 	// The worker sends it in its ready handshake and in every host-bound
 	// request. Empty for a capsule worker, whose broker does not verify it.
 	SlotToken string
+	// DeskEpoch is the epoch of the desk row the worker was started under
+	// (deskmanifest.CurrentEpoch at the run's first cell): the install event
+	// sequence, 0 for a built-in desk. The daemon's frame check resolves the
+	// row retained for it, so an update that narrows the desk never cuts a run
+	// already in flight (plan MA4.2, B2). It is not the broker Epoch above,
+	// which is the handle issuer's constant and counts worker generations.
+	DeskEpoch uint64
 }
 
 // ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one

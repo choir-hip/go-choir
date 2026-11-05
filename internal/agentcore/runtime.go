@@ -85,6 +85,14 @@ type Runtime struct {
 	// in each running desk run returned (run id -> int64): a cell's commit
 	// marks read only through it.
 	recordsRunShown sync.Map
+	// runDeskEpoch holds each running run's pin on the desk row it started
+	// under (run id|desk -> *runDeskHold, tools_desk.go).
+	runDeskEpoch sync.Map
+	// deskReconciler brings the desk registry to the tape's installed set at
+	// boot (deskreconcile.go); nil on a computer with no package desks.
+	deskReconciler func(ctx context.Context) error
+	// bootTally collects the obligations the crash boot's one pass closes.
+	bootTally *bootClosureTally
 	// runLabels holds each running run's provenance label accumulator
 	// (run id -> *runLabelAccumulator, run_labels.go): the union of the
 	// labels of everything the run read, host-side, never in the cell.
@@ -1160,14 +1168,18 @@ func (rt *Runtime) Start(ctx context.Context) {
 		fn()
 		log.Printf("runtime: boot phase end %s dur=%s", name, time.Since(started).Round(time.Millisecond))
 	}
+	// The desk registry is made to match the tape before anything is closed or
+	// resumed, so the one pass below is keyed on the desks this head has
+	// (deskreconcile.go). A failure is logged and the boot goes on: the desks
+	// that did register are exactly the ones the tape justifies.
+	bootPhase("desk_reconcile", func() { rt.reconcileDesksAtBoot(ctx) })
 	// A crash restart never resumes work: a markerless boot closes every
 	// pre-boot run with the fate interrupted_by_restart. A planned restart
 	// (marker consumed before Start) parks them for its one resume.
 	if rt.bootResumesWork() {
 		bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	} else {
-		bootPhase("close_pre_boot_runs_after_crash", func() { rt.closePreBootRunsAfterCrash(ctx) })
-		bootPhase("close_open_rounds_after_crash", func() { rt.closeOpenRoundsAfterCrash(ctx) })
+		bootPhase("close_open_obligations_after_crash", func() { rt.closeOpenObligationsAtBoot(ctx) })
 	}
 	// Open judge work (subcall_judge.go) follows the same marker: a crash
 	// closes it "interrupted by a restart", a planned restart re-runs it once.
@@ -2917,6 +2929,7 @@ func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
 		}
 		rt.emitEvent(ctx, rec, types.EventRunCancelled, events.CauseSupervisorRecovery,
 			crashClosePayload(rt.store.TelemetryBatchingConfigured(), rt.crashCloseNamesRunMemory()))
+		rt.bootTally.add(agentRoleForRun(rec))
 		log.Printf("runtime: closed run %s (was %s) after a crash restart", rec.RunID, was)
 		return true
 	})

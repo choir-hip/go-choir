@@ -806,6 +806,9 @@ func RetireApp(name string) error {
 		return fmt.Errorf("only app desks retire: %s is %s", name, d.Kind)
 	}
 	delete(registry, name)
+	// Activations that started under the row keep resolving against it
+	// (epoch.go); the live epoch ends with the row.
+	delete(current, name)
 	observers := append([]func(string){}, retireObservers...)
 	mu.Unlock()
 	for _, f := range observers {

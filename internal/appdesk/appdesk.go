@@ -96,6 +96,9 @@ type Action string
 const (
 	ActionInstall Action = "install"
 	ActionDisable Action = "disable"
+	// ActionUpdate replaces an installed package's desk manifest with a later
+	// one the owner approved. The event's Seq is the desk's new epoch.
+	ActionUpdate Action = "update"
 )
 
 // Event is one install or disable fact from the computer's tape.
@@ -218,6 +221,9 @@ type Set struct {
 	// kinds maps a live package kind to its writer; retired a disabled one.
 	kinds   map[string]string
 	retired map[string]string
+	// Epochs maps each live desk name to the Seq of the install or update
+	// event that produced its row: the desk epoch (deskmanifest epoch.go).
+	Epochs map[string]uint64
 }
 
 // Writer reports a package kind's writer and whether it may still write
@@ -243,7 +249,8 @@ func Derive(events []Event) (Set, []Refusal) {
 	var refusals []Refusal
 	live := map[string]deskmanifest.Desk{}
 	retiredPkgs := map[string]bool{}
-	set := Set{kinds: map[string]string{}, retired: map[string]string{}}
+	set := Set{kinds: map[string]string{}, retired: map[string]string{}, Epochs: map[string]uint64{}}
+	uids := map[string]uint32{}
 	nextUID := uint32(uidBase)
 	for i, ev := range ordered {
 		refuse := func(c Code, format string, args ...any) {
@@ -296,11 +303,59 @@ func Derive(events []Event) (Set, []Refusal) {
 				refuse(CodeDesk, "%v", err)
 				continue
 			}
+			uids[m.Package] = nextUID
 			nextUID++
 			live[m.Package] = d
+			set.Epochs[d.Name] = ev.Seq
 			for _, k := range m.OwnedKinds {
 				set.kinds[k] = WriterFor(m.Package)
 			}
+		case ActionUpdate:
+			prev, ok := live[ev.Package]
+			if !ok {
+				refuse(CodeNotInstalled, "package %s is not installed", ev.Package)
+				continue
+			}
+			if ev.Manifest == nil || ev.Manifest.Package != ev.Package || Digest(*ev.Manifest) != ev.ManifestDigest {
+				refuse(CodeDigestMismatch, "the desk manifest is not the one the update event binds")
+				continue
+			}
+			m := *ev.Manifest
+			if rs := Validate(m); len(rs) > 0 {
+				for _, r := range rs {
+					r.Seq = ev.Seq
+					refusals = append(refusals, r)
+				}
+				continue
+			}
+			conflict := false
+			for _, k := range m.OwnedKinds {
+				if w, _, claimed := set.Writer(k); claimed && w != WriterFor(m.Package) {
+					refuse(CodeKindTaken, "kind %s already has a writer", k)
+					conflict = true
+				}
+			}
+			if conflict {
+				continue
+			}
+			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
+				Taint: deskmanifest.TaintUntrustedInput, UID: uids[m.Package], WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
+			if err != nil {
+				refuse(CodeDesk, "%v", err)
+				continue
+			}
+			// A kind the update drops keeps its data and loses its writer.
+			for _, k := range prev.OwnedKinds {
+				delete(set.kinds, k)
+				set.retired[k] = WriterFor(m.Package)
+			}
+			for _, k := range m.OwnedKinds {
+				delete(set.retired, k)
+				set.kinds[k] = WriterFor(m.Package)
+			}
+			live[m.Package] = d
+			set.Epochs[d.Name] = ev.Seq
 		case ActionDisable:
 			d, ok := live[ev.Package]
 			if !ok {
@@ -308,6 +363,7 @@ func Derive(events []Event) (Set, []Refusal) {
 				continue
 			}
 			delete(live, ev.Package)
+			delete(set.Epochs, d.Name)
 			retiredPkgs[ev.Package] = true
 			for _, k := range d.OwnedKinds {
 				delete(set.kinds, k)
@@ -345,26 +401,51 @@ func ModeFromEnv(getenv func(string) string) Mode {
 	return ModeOff
 }
 
-// Activate makes the daemon's desk manifest hold exactly the derived set's
-// app desks: it registers the new ones and retires the app desks the set no
-// longer has. A live registration whose row differs from the derived one is
-// an error and is left as it is. With mode off it does nothing.
+// Activate is Reconcile behind the CHOIR_APP_DESKS mode; with mode off it does
+// nothing. MA4.5 deletes the mode and calls Reconcile.
 func Activate(mode Mode, set Set) error {
 	if mode != ModeOn {
 		return nil
 	}
+	return Reconcile(set)
+}
+
+// Reconcile makes the daemon's desk manifest hold exactly the derived set's
+// app desks (plan MA4.2, B2 and D3). A desk the registry lacks is registered
+// at the epoch of its install event. A desk whose derived epoch is later than
+// the live one is updated: the old row stays retained for the activations
+// that started under it and is dropped with the last of them, so an update
+// that narrows a verb set never cuts a run in flight. An app desk the set no
+// longer has is retired. A live desk whose epoch is ahead of the tape's means
+// the registry holds a fact the tape does not; that is an error and the row is
+// left as it is. Reconcile is idempotent: a second call with the same set
+// changes nothing, which is what lets the boot call it after a crash that fell
+// between an event and its reconcile.
+func Reconcile(set Set) error {
 	var errs []error
 	want := map[string]bool{}
 	for _, d := range set.Desks {
 		want[d.Name] = true
-		if have, ok := deskmanifest.Lookup(d.Name); ok {
-			if !have.Equal(d) {
-				errs = append(errs, fmt.Errorf("app desk %s: registered row differs from the derived one", d.Name))
-			}
+		epoch := set.Epochs[d.Name]
+		if epoch == 0 {
+			errs = append(errs, fmt.Errorf("app desk %s: the derived set carries no epoch", d.Name))
 			continue
 		}
-		if err := deskmanifest.RegisterApp(d); err != nil {
-			errs = append(errs, err)
+		have, ok := deskmanifest.Lookup(d.Name)
+		switch live := deskmanifest.CurrentEpoch(d.Name); {
+		case !ok:
+			if err := deskmanifest.RegisterAppAt(d, epoch); err != nil {
+				errs = append(errs, err)
+			}
+		case live == epoch && have.Equal(d):
+		case live == epoch:
+			errs = append(errs, fmt.Errorf("app desk %s: registered row differs from the derived one at epoch %d", d.Name, epoch))
+		case live > epoch:
+			errs = append(errs, fmt.Errorf("app desk %s: the registry is at epoch %d, ahead of the tape's %d", d.Name, live, epoch))
+		default:
+			if err := deskmanifest.UpdateApp(d, epoch); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 	for _, name := range deskmanifest.Names() {

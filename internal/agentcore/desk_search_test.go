@@ -147,7 +147,7 @@ func researchSearchToolWith(t *testing.T, client search.Client, configure func(*
 	execCtx.Profile = agentprofile.Research
 	execCtx.Role = agentprofile.Research
 	execCtx.RunRecord = &types.RunRecord{RunID: execCtx.RunID, AgentID: "research:search", OwnerID: execCtx.OwnerID}
-	key, _ := deskSessionKey(execCtx)
+	key, _ := deskSessionKey(execCtx, 0)
 	return newDeskGoEvalTool(rt, workers, agentprofile.Research), toolregistry.WithExecutionContext(context.Background(), execCtx), workers, key
 }
 

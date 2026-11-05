@@ -122,6 +122,9 @@ type deskSession struct {
 	// acts carry what an earlier run read into them. It lives and dies with
 	// the session.
 	labels types.LabelSet
+	// rowHold keeps the desk row of the worker's epoch retained while the
+	// worker lives (deskmanifest.RetainEpoch); close releases it.
+	rowHold func()
 }
 
 // close ends the session: its searches' streams, then its worker. Runs
@@ -134,6 +137,10 @@ func (s *deskSession) close() {
 	}
 	s.searches.close()
 	s.worker.Close()
+	if s.rowHold != nil {
+		s.rowHold()
+		s.rowHold = nil
+	}
 }
 
 // deskReaperTimer is the part of *time.Timer the reaper uses.
@@ -229,9 +236,17 @@ type deskSessionLease struct {
 // continues where the earlier one left off. A cell without a run record (a
 // choir.Research child) keeps a session of its own activation: a child that
 // joined its parent's session would wait on the parent's cell forever.
-func deskSessionKey(execCtx toolregistry.ExecutionContext) (string, bool) {
+//
+// The key carries the run's desk epoch (@e<N>, the install event sequence of
+// the desk row the run started under) for a package desk, so a run activated
+// after an update starts a new worker and a run in flight keeps its own.
+// A built-in desk is at epoch 0 and its key is unchanged.
+func deskSessionKey(execCtx toolregistry.ExecutionContext, deskEpoch uint64) (string, bool) {
 	if execCtx.RunRecord != nil {
 		if id := strings.TrimSpace(execCtx.RunRecord.AgentID); id != "" {
+			if deskEpoch > 0 {
+				return fmt.Sprintf("agent:%s@e%d", id, deskEpoch), true
+			}
 			return "agent:" + id, true
 		}
 	}
@@ -294,11 +309,18 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 		shared = ""
 	}
 	if s == nil {
+		// The worker holds its epoch's row until it ends, whatever the
+		// registry does meanwhile (plan MA4.2, B2).
+		rowHold, held := deskmanifest.RetainEpoch(cfg.Session.Role, cfg.Session.DeskEpoch)
+		if !held {
+			return deskSessionLease{}, fmt.Errorf("desk %q has no row at epoch %d: it was updated or retired before this cell started", cfg.Session.Role, cfg.Session.DeskEpoch)
+		}
 		w, err := yaegikernel.SpawnDeskSessionWorker(cfg)
 		if err != nil {
+			rowHold()
 			return deskSessionLease{}, err
 		}
-		s = &deskSession{worker: w, cfg: cfg.Session, started: now, lastUsed: now, searches: newDeskSearches()}
+		s = &deskSession{worker: w, cfg: cfg.Session, started: now, lastUsed: now, searches: newDeskSearches(), rowHold: rowHold}
 		m.sessions[key] = s
 	}
 	lease := deskSessionLease{key: key, worker: s.worker}
@@ -480,7 +502,7 @@ func (m *deskSessionWorkers) closeAll() {
 }
 
 func sameDeskSessionConfig(a, b yaegikernel.SessionWorkerConfig) bool {
-	return a.Role == b.Role && a.ComputerID == b.ComputerID && a.AllowedRoot == b.AllowedRoot
+	return a.Role == b.Role && a.DeskEpoch == b.DeskEpoch && a.ComputerID == b.ComputerID && a.AllowedRoot == b.AllowedRoot
 }
 
 // newDeskGoEvalTool evaluates model-authored Go source for a non-capsule desk
@@ -513,7 +535,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			if activationID == "" {
 				return "", fmt.Errorf("desk_go_eval: no activation identity for desk worker")
 			}
-			sessionKey, persistent := deskSessionKey(execCtx)
+			deskEpoch := rt.pinDeskEpoch(execCtx.RunID, deskRole)
+			sessionKey, persistent := deskSessionKey(execCtx, deskEpoch)
 			workerCfg := yaegikernel.DeskSessionWorkerConfig{
 				Bin:       deskWorkerBinary(),
 				WorkerArg: deskWorkerArg,
@@ -522,6 +545,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					ComputerID:       execCtx.ComputerID,
 					ActivationID:     activationID,
 					Epoch:            deskWorkerEpoch(execCtx),
+					DeskEpoch:        deskEpoch,
 					AllowedRoot:      deskWorkerRoot(execCtx),
 					Role:             deskRole,
 					MemoryLimitBytes: deskWorkerMemoryLimitBytes,
@@ -562,7 +586,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					// second check, on the host handler itself, so no caller of
 					// the handler can serve a desk an action its row lacks
 					// (SEC-02, defense in depth).
-					if !deskmanifest.FrameAllowed(deskRole, string(action)) {
+					if !deskmanifest.FrameAllowedAt(deskRole, deskEpoch, string(action)) {
 						return nil, fmt.Errorf("refused: desk %q may not call %s", deskRole, action)
 					}
 					if err := yaegikernel.ValidatePayload(action, payload); err != nil {
@@ -981,6 +1005,61 @@ func deskWorkerActivationID(execCtx toolregistry.ExecutionContext) string {
 		}
 	}
 	return strings.TrimSpace(execCtx.RunID)
+}
+
+// runDeskHold is a run's pin on the desk row it started under.
+type runDeskHold struct {
+	epoch   uint64
+	release func()
+}
+
+// pinDeskEpoch fixes the desk epoch a run evaluates under, at its first cell,
+// and holds that row until the run ends or parks (releaseRunDeskEpochs). Later
+// cells of the run, and every worker they spawn, use the same epoch however
+// the desk is updated meanwhile: a run is never cut by an update (plan MA4.2,
+// B2). A cell with no run id (a research child's) takes the live epoch.
+func (rt *Runtime) pinDeskEpoch(runID, deskRole string) uint64 {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return deskmanifest.CurrentEpoch(deskRole)
+	}
+	key := runID + "|" + deskRole
+	if v, ok := rt.runDeskEpoch.Load(key); ok {
+		return v.(*runDeskHold).epoch
+	}
+	// An update between reading the live epoch and holding it makes the hold
+	// fail; read again. Updates are event-ordered, so this settles at once.
+	for attempt := 0; attempt < 8; attempt++ {
+		epoch := deskmanifest.CurrentEpoch(deskRole)
+		release, ok := deskmanifest.RetainEpoch(deskRole, epoch)
+		if !ok {
+			if deskmanifest.CurrentEpoch(deskRole) != epoch {
+				continue
+			}
+			// No row (an unknown or just-retired desk): nothing to pin; the
+			// frame check refuses it.
+			return epoch
+		}
+		if actual, loaded := rt.runDeskEpoch.LoadOrStore(key, &runDeskHold{epoch: epoch, release: release}); loaded {
+			release()
+			return actual.(*runDeskHold).epoch
+		}
+		return epoch
+	}
+	return deskmanifest.CurrentEpoch(deskRole)
+}
+
+// releaseRunDeskEpochs drops the run's pins; the run ended or parked.
+func (rt *Runtime) releaseRunDeskEpochs(runID string) {
+	prefix := strings.TrimSpace(runID) + "|"
+	rt.runDeskEpoch.Range(func(k, v any) bool {
+		if key, _ := k.(string); strings.HasPrefix(key, prefix) {
+			if rt.runDeskEpoch.CompareAndDelete(k, v) {
+				v.(*runDeskHold).release()
+			}
+		}
+		return true
+	})
 }
 
 // deskWorkerEpoch returns the handle-issuer epoch the worker fences on. For a
