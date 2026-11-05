@@ -75,6 +75,50 @@ class JudgeOOM(unittest.TestCase):
             self.assertTrue(probe.judge_oom(r), name)
 
 
+def _desk_worker(role, uid, canary):
+    probes = {n: "" for n in probe.ALLOWED}
+    for n in probe.SECCOMP_DENIED:
+        probes[n] = "EPERM: operation not permitted"
+    for n in probe.MOUNT_HIDDEN:
+        probes[n] = "ENOENT: no such file or directory"
+    for n in probe.LANDLOCK_DENIED + ["write_etc"]:
+        probes[n] = "EROFS: read-only file system"
+    targets = ["/etc/passwd"] + ([canary] if canary else [])
+    for t in targets:
+        probes["read:" + t] = "ENOENT: no such file or directory"
+    return {"role": role, "user_uid": str(uid), "net_ns_isolated": True, "ipc_ns_isolated": True,
+            "mount_ns_isolated": True, "probes": probes, "read_targets": targets, "cell_serves": True,
+            "status": {"Uid": " ".join([str(uid)] * 4), "CapInh": "0", "CapPrm": "0", "CapEff": "0",
+                       "CapAmb": "0", "Groups": "", "NoNewPrivs": "1", "Seccomp": "2"}}
+
+
+def _good_desk_cells():
+    return {"mode": "required", "landlock_abi": 7, "spawner_uid": 0, "workers": [
+        _desk_worker("management", 200001, None),
+        _desk_worker("texture", 200002, "/tmp/a/selftest-canary"),
+        _desk_worker("research", 200003, "/tmp/b/selftest-canary")]}
+
+
+class JudgeDeskCells(unittest.TestCase):
+    def test_good(self):
+        self.assertEqual(probe.judge_desk_cells(_good_desk_cells()), [])
+
+    def test_each_shortfall(self):
+        cases = {
+            "manifest uid": lambda r: r["workers"][0].update(user_uid="61001"),
+            "shared uid": lambda r: r["workers"][1].update(user_uid="200001"),
+            "no mount ns": lambda r: r["workers"][0].update(mount_ns_isolated=False),
+            "io_uring allowed": lambda r: r["workers"][0]["probes"].update(io_uring_setup=""),
+            "ptrace allowed": lambda r: r["workers"][2]["probes"].update(ptrace=""),
+            "proc visible": lambda r: r["workers"][1]["probes"].update(proc_meminfo=""),
+            "dev visible": lambda r: r["workers"][1]["probes"].update(dev_extra_entries=""),
+        }
+        for name, mutate in cases.items():
+            r = _good_desk_cells()
+            mutate(r)
+            self.assertTrue(probe.judge_desk_cells(r), name)
+
+
 GOOD_SECCOMP = {
     "kind": "capsule_seccomp_selftest", "kernel": "6.1.155", "ok": True,
     "filters": [{

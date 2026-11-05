@@ -9,10 +9,12 @@ import (
 )
 
 type cellSpawnPlan struct {
-	attr   *syscall.SysProcAttr
-	env    []string
-	dir    string
-	tmpDir string
+	attr    *syscall.SysProcAttr
+	env     []string
+	dir     string
+	tmpDir  string
+	uid     uint32
+	release func()
 }
 
 // planCellConfinement: confinement is a Linux mechanism (the guest is
@@ -34,3 +36,14 @@ func ConfineDeskSessionWorker(getenv func(string) string, prefix string) error {
 	}
 	return nil
 }
+
+// discard undoes a plan whose worker did not start: its tmp dir and uid.
+func (p cellSpawnPlan) discard() {
+	removeCellTmpDir(p.tmpDir)
+	if p.release != nil {
+		p.release()
+	}
+}
+
+// CloseInheritedFDs: descriptor hygiene is a Linux worker step.
+func CloseInheritedFDs(keep ...int) {}

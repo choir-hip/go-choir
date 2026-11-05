@@ -79,16 +79,23 @@ import urllib.error
 import urllib.request
 
 ROLES = ["management", "texture", "research"]
-# The uid each desk's cells must run as: internal/deskmanifest Sandbox.UID.
-# Written out here on purpose, so a manifest edit that moves a desk onto
-# another desk's uid fails the probe instead of passing it.
-DESK_UIDS = {"management": 61001, "texture": 61002, "research": 61003}
+# Each activation's cells run as their own uid from the pool in
+# internal/yaegikernel/desk_cell_uid.go (MA6.2): written out here on purpose,
+# so a worker on a desk or system uid fails the probe instead of passing it.
+ACTIVATION_UID_RANGE = (200000, 260000)
 ALLOWED = ["write_own_tmp", "list_allowed_root"]
 SECCOMP_DENIED = [
     "socket_inet_stream", "socket_inet_dgram", "socket_inet6_stream", "socket_unix_stream",
     "socket_netlink", "socket_packet_raw", "socket_inet_raw",
     "fork_exec", "execve", "kill_pid1", "kill_parent", "setuid_root", "unshare_user", "unshare_net",
+    # MA6.2: the classes a red team named, denied by name.
+    "io_uring_setup", "keyctl", "bpf", "perf_event_open", "userfaultfd", "ptrace",
+    "clone_newns", "clone_newuser", "mount",
 ]
+# With its own mount namespace the worker has no /sys or /dev tree and a
+# /proc of its own pid directories only (hidepid=2, subset=pid):
+# each of these must fail, with any errno.
+MOUNT_HIDDEN = ["proc_meminfo", "proc_pid1_environ", "proc_parent_status", "sys_kernel", "dev_mem", "dev_extra_entries"]
 LANDLOCK_DENIED = ["write_allowed_root"]
 # The OOM leg: the class it runs and that class's hard budget per worker
 # (internal/deskmanifest, research WorkerMaxBytes), written out here so a
@@ -170,9 +177,9 @@ def judge_desk_cells(dc):
         st = w.get("status") or {}
         uid = str(w.get("user_uid") or "")
         fields = (st.get("Uid") or "").split()
-        want_uid = str(DESK_UIDS[role])
-        if not uid or uid == "0" or uid != want_uid or fields != [want_uid] * 4:
-            fails.append(p + "Uid=%r planned=%r, want %s (the desk manifest's uid for %s) on all four" % (st.get("Uid"), uid, want_uid, role))
+        lo, hi = ACTIVATION_UID_RANGE
+        if not uid.isdigit() or not (lo <= int(uid) < hi) or fields != [uid] * 4:
+            fails.append(p + "Uid=%r planned=%r, want one activation uid in [%d, %d) on all four" % (st.get("Uid"), uid, lo, hi))
         uids.add(uid)
         for k in ("CapInh", "CapPrm", "CapEff", "CapAmb"):
             if (st.get(k) or "x").strip("0") != "":
@@ -187,7 +194,12 @@ def judge_desk_cells(dc):
             fails.append(p + "shares the runtime's network namespace")
         if not w.get("ipc_ns_isolated"):
             fails.append(p + "shares the runtime's IPC namespace")
+        if not w.get("mount_ns_isolated"):
+            fails.append(p + "shares the runtime's mount namespace")
         probes = w.get("probes") or {}
+        for name in MOUNT_HIDDEN:
+            if probes.get(name, "") in ("", None):
+                fails.append(p + "%s succeeded (or did not run): the worker sees the host's /proc, /sys or /dev" % name)
         for name in ALLOWED:
             if probes.get(name, "missing") != "":
                 fails.append(p + "%s should succeed: %r" % (name, probes.get(name)))
@@ -207,15 +219,18 @@ def judge_desk_cells(dc):
             got = probes.get("read:" + t)
             if got in ("", None):
                 fails.append(p + "read %s succeeded (or did not run)" % t)
-            elif str(got).startswith("ENOENT"):
+            elif str(got).startswith("ENOENT") and not w.get("mount_ns_isolated"):
                 fails.append(p + "read %s: %s (a missing path proves nothing)" % (t, got))
+        # Another desk's tmp dir is not in this worker's mount namespace at
+        # all (ENOENT); without one it is another uid's 0700 dir (EACCES).
         for t in canaries:
-            if not str(probes.get("read:" + t, "")).startswith("EACCES"):
-                fails.append(p + "read of another desk's canary = %r, want EACCES" % probes.get("read:" + t))
+            want = ("ENOENT", "EACCES") if w.get("mount_ns_isolated") else ("EACCES",)
+            if not str(probes.get("read:" + t, "")).startswith(want):
+                fails.append(p + "read of another desk's canary = %r, want one of %s" % (probes.get("read:" + t), "/".join(want)))
         if not w.get("cell_serves"):
             fails.append(p + "the check cell did not run after confinement: %r" % w.get("cell_output"))
     if len(uids) != len(ROLES):
-        fails.append("desks do not have distinct uids: %r" % sorted(uids))
+        fails.append("workers do not have distinct uids (one per activation): %r" % sorted(uids))
     return fails
 
 

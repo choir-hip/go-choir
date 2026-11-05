@@ -132,6 +132,15 @@ func runEscapeProbes(cfg SessionWorkerConfig) probeResults {
 	out["prlimit_parent_set"] = errString(unix.Prlimit(os.Getppid(), unix.RLIMIT_NOFILE, &lim, nil))
 	out["setuid_root"] = errString(unix.Setresuid(0, 0, 0))
 	out["unshare_user"] = errString(unix.Unshare(unix.CLONE_NEWUSER))
+	// MA6.2: the denied classes, called with arguments the kernel would
+	// refuse itself (see desk_cell_selftest_linux.go).
+	for name, p := range deskCellClassProbes() {
+		out[name] = errString(p())
+	}
+	_, err = os.ReadFile("/proc/meminfo")
+	out["read_proc_meminfo"] = errString(err)
+	_, err = os.ReadDir("/sys/kernel")
+	out["read_sys_kernel"] = errString(err)
 	return out
 }
 
@@ -355,8 +364,7 @@ func TestDeskCellWorkerRunsAsTheDeskUser(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("needs a root spawner (the guest runtime is root)")
 	}
-	cellUID, known := DeskCellIdentity("research")
-	if !known {
+	if _, known := DeskCellIdentity("research"); !known {
 		t.Fatal("the manifest gives research no cell identity")
 	}
 	env := newConfinedTestEnv(t, "research", CellConfinementAuto)
@@ -376,9 +384,30 @@ func TestDeskCellWorkerRunsAsTheDeskUser(t *testing.T) {
 	if len(uid) != 4 {
 		t.Fatalf("status Uid = %q", status["Uid"])
 	}
+	cellUID := w.cellUID
+	if cellUID < activationUIDBase || cellUID >= activationUIDBase+activationUIDCount {
+		t.Fatalf("worker uid %d is outside the activation pool", cellUID)
+	}
 	for _, id := range uid {
 		if id != strconv.Itoa(int(cellUID)) {
-			t.Fatalf("worker Uid = %q, want all four = %d (research's manifest uid)", status["Uid"], cellUID)
+			t.Fatalf("worker Uid = %q, want all four = %d (its activation's uid)", status["Uid"], cellUID)
+		}
+	}
+	// A second worker of the same desk gets a uid of its own.
+	env2 := newConfinedTestEnv(t, "research", CellConfinementAuto)
+	w2, err := SpawnDeskSessionWorker(env2.cfg)
+	if err != nil {
+		t.Fatalf("second spawn: %v", err)
+	}
+	defer w2.Close()
+	if w2.cellUID == cellUID {
+		t.Errorf("two live research workers share uid %d", cellUID)
+	}
+	for _, field := range []string{"mnt"} {
+		mine, _ := os.Readlink("/proc/self/ns/" + field)
+		theirs, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/%s", w.PID(), field))
+		if err != nil || theirs == mine {
+			t.Errorf("worker %s namespace %q, want a private one (runtime's is %q)", field, theirs, mine)
 		}
 	}
 	if status["Groups"] != "" {
@@ -422,6 +451,9 @@ fmt.Println(r, err)`, nil, nil, nil, nil, nil)
 		"fork_exec", "execve", "kill_pid1", "kill_parent", "ptrace_parent",
 		"setuid_root", "unshare_user")
 	requireEPERM(t, probes, "socket_inet_stream", "socket_unix", "socket_packet_raw", "fork_exec", "execve", "ptrace_parent", "kill_parent", "prlimit_self_set", "prlimit_parent_set")
+	requireEPERM(t, probes, deskCellClassProbeNames()...)
+	// The worker's own mount namespace: no /sys, a /proc of its own pids.
+	requireDenied(t, probes, "read_proc_meminfo", "read_sys_kernel")
 	if probes["prlimit_self_read"] != "" {
 		t.Errorf("confined worker cannot read its own rlimit: %s", probes["prlimit_self_read"])
 	}
@@ -504,6 +536,7 @@ func TestDeskCellWorkerSandboxedWithoutRoot(t *testing.T) {
 		"socket_unix", "socket_netlink", "dial_host_port",
 		"fork_exec", "execve", "kill_pid1", "kill_parent", "ptrace_parent", "unshare_user")
 	requireEPERM(t, probes, "socket_inet_stream", "socket_unix", "socket_packet_raw", "fork_exec", "execve", "ptrace_parent", "kill_parent", "prlimit_self_set", "prlimit_parent_set")
+	requireEPERM(t, probes, deskCellClassProbeNames()...)
 	if probes["prlimit_self_read"] != "" {
 		t.Errorf("confined worker cannot read its own rlimit: %s", probes["prlimit_self_read"])
 	}

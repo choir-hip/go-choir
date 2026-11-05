@@ -80,7 +80,13 @@ var (
 		"socket_netlink", "socket_packet_raw", "socket_inet_raw",
 		"fork_exec", "execve", "kill_pid1", "kill_parent", "setuid_root", "unshare_user", "unshare_net",
 		"write_etc",
+		// MA6.2: the classes a red team named, denied by name.
+		"io_uring_setup", "keyctl", "bpf", "perf_event_open", "userfaultfd", "ptrace", "clone_newns", "clone_newuser", "mount",
 	}
+	// deskCellMountProbes must fail with any errno when the worker has its
+	// own mount namespace: the paths are not there, which is stronger than
+	// a refusal.
+	deskCellMountProbes = []string{"proc_meminfo", "proc_pid1_environ", "proc_parent_status", "sys_kernel", "dev_mem", "dev_extra_entries"}
 	// deskCellLandlockProbes are denied only by Landlock (DAC allows them:
 	// the allowed root is the guest's world-writable /tmp). Judged whenever
 	// the kernel has Landlock, which required mode demands.
@@ -101,6 +107,9 @@ type DeskCellSelfTestWorker struct {
 	// spawner's.
 	NetNSIsolated bool `json:"net_ns_isolated"`
 	IPCNSIsolated bool `json:"ipc_ns_isolated"`
+	// MountNSIsolated: the worker's mount namespace differs from the
+	// spawner's (MA6.2).
+	MountNSIsolated bool `json:"mount_ns_isolated"`
 	// Probes is the worker's own report, written before its first cell.
 	Probes DeskCellSelfTestProbes `json:"probes,omitempty"`
 	// ReadTargets are the paths the worker was asked to read (each exists).
@@ -271,8 +280,7 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 			if id == 0 {
 				id, _ = DeskCellIdentity(role)
 			}
-			out.User = fmt.Sprintf("manifest uid %d", id)
-			out.UserUID = strconv.FormatUint(uint64(id), 10)
+			_ = id
 		}
 		w, err := SpawnDeskSessionWorker(wcfg)
 		if err != nil {
@@ -283,6 +291,11 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 		}
 		live = append(live, w)
 		out.PID = w.PID()
+		if w.cellUID != 0 {
+			out.User = fmt.Sprintf("activation uid %d (desk %s)", w.cellUID, role)
+			out.UserUID = strconv.FormatUint(uint64(w.cellUID), 10)
+		}
+		out.MountNSIsolated = nsDiffers(w.PID(), "mnt")
 		out.Status = procStatusFields(w.PID())
 		out.NetNSIsolated = nsDiffers(w.PID(), "net")
 		out.IPCNSIsolated = nsDiffers(w.PID(), "ipc")
@@ -334,6 +347,7 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 	if len(rec.Workers) == 0 {
 		fail("no workers")
 	}
+	seenUID := map[string]bool{}
 	for _, w := range rec.Workers {
 		p := w.Role + ": "
 		if w.Error != "" {
@@ -369,6 +383,13 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 			if !w.IPCNSIsolated {
 				fail("%s", p+"shares the runtime's IPC namespace")
 			}
+			if !w.MountNSIsolated {
+				fail("%s", p+"shares the runtime's mount namespace")
+			}
+			if seenUID[w.UserUID] {
+				fail(p+"uid %s is shared with another worker (want one uid per activation)", w.UserUID)
+			}
+			seenUID[w.UserUID] = true
 		}
 		if w.Probes == nil {
 			fail("%s", p+"no probe report")
@@ -392,6 +413,17 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 					fail(p+"%s = %q, want EPERM from the cell seccomp filter", name, got)
 				}
 			}
+			if w.MountNSIsolated {
+				for _, name := range deskCellMountProbes {
+					got, ok := w.Probes[name]
+					switch {
+					case !ok:
+						fail(p+"%s did not run", name)
+					case got == "":
+						fail(p+"%s succeeded: the worker sees the host's /proc, /sys or /dev", name)
+					}
+				}
+			}
 			if rec.LandlockABI > 0 {
 				for _, name := range deskCellLandlockProbes {
 					got, ok := w.Probes[name]
@@ -413,7 +445,9 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 					if rec.LandlockABI > 0 || identity && strings.Contains(target, deskCellSelfTestCanary) {
 						fail(p+"read %s succeeded", target)
 					}
-				case strings.HasPrefix(got, "ENOENT"):
+				case strings.HasPrefix(got, "ENOENT") && !w.MountNSIsolated:
+					// With its own mount namespace the path is not in the
+					// worker's view at all, a stronger denial than Landlock's.
 					fail(p+"read %s: %s (a missing path proves nothing)", target, got)
 				}
 			}

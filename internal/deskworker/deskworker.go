@@ -12,6 +12,7 @@ import (
 // steps is the worker's startup seam: Run wires the real ones, the test
 // wires recorders to pin the order and that serving never precedes confinement.
 type steps struct {
+	closeFDs    func()
 	config      func() yaegikernel.SessionWorkerConfig
 	sockFD      func() (int, net.Conn, error)
 	appDesk     func() error
@@ -25,6 +26,7 @@ type steps struct {
 
 func realSteps() steps {
 	return steps{
+		closeFDs:    func() { yaegikernel.CloseInheritedFDs() },
 		config:      func() yaegikernel.SessionWorkerConfig { return yaegikernel.SessionWorkerConfigFromEnv(nil, "") },
 		sockFD:      func() (int, net.Conn, error) { return yaegikernel.SessionWorkerSockFD(nil, "") },
 		appDesk:     func() error { return yaegikernel.RegisterCarriedAppDesk(nil, "") },
@@ -49,6 +51,10 @@ func realSteps() steps {
 func Run() int { return run(realSteps()) }
 
 func run(s steps) int {
+	// Descriptors that survived execve from the spawner's side are not ours.
+	if s.closeFDs != nil {
+		s.closeFDs()
+	}
 	cfg := s.config()
 	fd, conn, err := s.sockFD()
 	if err != nil || fd < 0 || conn == nil {

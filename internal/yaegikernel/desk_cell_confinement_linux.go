@@ -23,18 +23,27 @@ type cellSpawnPlan struct {
 	env    []string
 	dir    string
 	tmpDir string
+	// uid is the activation's own uid (0 when the identity is not switched);
+	// release frees it for reuse at reap.
+	uid     uint32
+	release func()
 }
 
 // planCellConfinement resolves the spawner half (see desk_cell_confinement.go).
 // It refuses rather than weakens: a root spawner without a cell identity for
 // the role, or required mode where the identity switch is impossible, is an
 // error and no worker starts.
-func planCellConfinement(cfg DeskSessionWorkerConfig) (cellSpawnPlan, error) {
+func planCellConfinement(cfg DeskSessionWorkerConfig) (out cellSpawnPlan, err error) {
 	attr := workerSysProcAttr(cfg.ProcessGroup)
 	if attr == nil {
 		attr = &syscall.SysProcAttr{}
 	}
 	plan := cellSpawnPlan{attr: attr, dir: cfg.Session.AllowedRoot}
+	defer func() {
+		if err != nil && plan.release != nil {
+			plan.release()
+		}
+	}()
 	prefix := sessionEnvPrefix(cfg.EnvPrefix)
 	root := os.Geteuid() == 0
 	required := cfg.Confinement.Mode == CellConfinementRequired
@@ -48,14 +57,21 @@ func planCellConfinement(cfg DeskSessionWorkerConfig) (cellSpawnPlan, error) {
 	if switchIdentity {
 		id := cfg.Confinement.UID
 		if id == 0 {
-			var known bool
-			if id, known = DeskCellIdentity(cfg.Session.Role); !known {
+			// The manifest names the desk and gates the spawn; the uid the
+			// worker runs as is its activation's own (desk_cell_uid.go).
+			if _, known := DeskCellIdentity(cfg.Session.Role); !known {
 				return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: the manifest gives desk role %q no cell identity", cfg.Session.Role)
 			}
 		}
 		if !root {
-			return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: required mode needs a root spawner to run cells as uid %d (running as uid %d)", id, os.Geteuid())
+			return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: required mode needs a root spawner to run cells as a desk cell uid (running as uid %d)", os.Geteuid())
 		}
+		if id == 0 {
+			if id, plan.release, err = activationUIDs.acquire(); err != nil {
+				return cellSpawnPlan{}, err
+			}
+		}
+		plan.uid = id
 		uid, gid = int(id), int(id)
 		// Go sets Pdeathsig after the credential change, so the kernel's
 		// reset of the parent-death signal on setuid does not clear it.
@@ -63,6 +79,12 @@ func planCellConfinement(cfg DeskSessionWorkerConfig) (cellSpawnPlan, error) {
 		// An empty network namespace: the worker's only channel is fd 3.
 		// Abstract unix sockets live in the network namespace too.
 		attr.Cloneflags |= syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC
+		// A mount namespace of its own, built into a minimal root by the
+		// worker (isolateCellMounts) with CAP_SYS_ADMIN as an ambient
+		// capability it drops, on every thread, before it confines itself.
+		attr.Cloneflags |= syscall.CLONE_NEWNS
+		attr.AmbientCaps = []uintptr{capSysAdmin}
+		plan.env = append(plan.env, prefix+cellMountNSEnv+"=1")
 	}
 
 	tmp, err := os.MkdirTemp("", "choir-cell-"+safeCellRole(cfg.Session.Role)+"-")
@@ -134,6 +156,19 @@ func ConfineDeskSessionWorker(getenv func(string) string, prefix string) error {
 	tmp := getenv(prefix + cellTmpDirEnv)
 	if tmp == "" {
 		return fmt.Errorf("desk cell worker: no tmp dir")
+	}
+	if cellMountNSWanted(getenv, prefix) {
+		// Build the minimal root while the ambient capability is still held,
+		// then drop every capability on every thread: nothing below needs one.
+		if err := isolateCellMounts(getenv(prefix+"ALLOWED_ROOT"), tmp); err != nil {
+			return fmt.Errorf("desk cell worker: %w", err)
+		}
+		if err := dropAllCapabilities(); err != nil {
+			return fmt.Errorf("desk cell worker: %w", err)
+		}
+	}
+	if err := applyCellRlimits(); err != nil {
+		return fmt.Errorf("desk cell worker: %w", err)
 	}
 	if err := restrictCellFilesystem(level, getenv(prefix+"ALLOWED_ROOT"), tmp); err != nil {
 		return err
@@ -227,10 +262,53 @@ var deskCellSyscalls = []string{
 	"getrlimit", "getrusage", "sysinfo", "uname", "getrandom", "arch_prctl",
 }
 
+// deskCellDeniedSyscalls are the classes a red team named (items 3 and 5),
+// denied by name with EPERM. The profile is deny by default, so these are
+// already outside the allow list; naming them keeps them out when someone
+// adds to the list (the profile test fails if any name is both), and puts
+// the intent where a reader of the filter finds it. Names this architecture
+// lacks are dropped at build time. Namespace clones are denied by clone's
+// flag condition below, not by name.
+var deskCellDeniedSyscalls = []string{
+	// io_uring: its own syscall surface, repeatedly the source of local
+	// privilege escalations and a way around seccomp on the calls it queues.
+	"io_uring_setup", "io_uring_enter", "io_uring_register",
+	// kernel keyrings.
+	"keyctl", "add_key", "request_key",
+	// eBPF and perf events: kernel attack surface and side channels.
+	"bpf", "perf_event_open",
+	// userfaultfd: stalls the kernel on a fault the attacker controls, the
+	// classic race-widening primitive.
+	"userfaultfd",
+	// tracing and cross-process memory.
+	"ptrace", "process_vm_readv", "process_vm_writev", "kcmp", "pidfd_open", "pidfd_getfd", "pidfd_send_signal",
+	// namespaces, mounts, root.
+	"unshare", "setns", "mount", "umount2", "pivot_root", "chroot", "open_tree", "move_mount", "fsopen", "fsconfig", "fsmount", "fspick", "mount_setattr",
+	// process creation and replacement.
+	"execve", "execveat", "fork", "vfork",
+	// sockets: the worker's only channel is fd 3.
+	"socket", "socketpair", "connect", "bind", "listen", "accept", "accept4",
+	// credentials and capabilities.
+	"setuid", "setgid", "setresuid", "setresgid", "setreuid", "setregid", "setgroups", "setfsuid", "setfsgid", "capset",
+	// loading code into the kernel, reboot, clocks, swap.
+	"init_module", "finit_module", "delete_module", "kexec_load", "kexec_file_load", "reboot", "settimeofday", "clock_settime", "clock_adjtime", "adjtimex", "swapon", "swapoff",
+	// other fd factories and kernel interfaces that were never needed.
+	"memfd_create", "memfd_secret", "inotify_init", "inotify_init1", "fanotify_init", "name_to_handle_at", "open_by_handle_at",
+	"personality", "prctl", "seccomp", "modify_ldt", "iopl", "ioperm", "acct", "quotactl", "lookup_dcookie", "vhangup", "sysfs", "syslog", "_sysctl", "uselib", "ustat",
+	"landlock_create_ruleset", "landlock_add_rule", "landlock_restrict_self",
+}
+
+// cloneNamespaceFlags are the CLONE_NEW* flags: a thread clone never carries
+// one. (The kernel already refuses CLONE_NEWUSER and CLONE_NEWPID together
+// with CLONE_THREAD; the filter does not rely on that.)
+const cloneNamespaceFlags = unix.CLONE_NEWNS | unix.CLONE_NEWCGROUP | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC |
+	unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWTIME
+
 // DeskCellSeccompFilter is the worker's deny-by-default filter. pid is the
 // worker's own pid: kill and tgkill reach only it, prlimit64 only reads it (the Go runtime signals its
-// own threads for preemption). clone is admitted only with CLONE_THREAD, so
-// the worker can grow threads but never a process or a namespace.
+// own threads for preemption). clone is admitted only with CLONE_THREAD and
+// no CLONE_NEW* flag, so the worker can grow threads but never a process or
+// a namespace.
 func DeskCellSeccompFilter(pid int) seccomp.Filter {
 	names := deskCellSyscalls
 	if info, err := arch.GetInfo(""); err == nil {
@@ -241,6 +319,16 @@ func DeskCellSeccompFilter(pid int) seccomp.Filter {
 			}
 		}
 	}
+	denied := make([]string, 0, len(deskCellDeniedSyscalls))
+	if info, err := arch.GetInfo(""); err == nil {
+		for _, n := range deskCellDeniedSyscalls {
+			if _, ok := info.SyscallNames[n]; ok {
+				denied = append(denied, n)
+			}
+		}
+	} else {
+		denied = deskCellDeniedSyscalls
+	}
 	self := uint64(pid)
 	return seccomp.Filter{
 		NoNewPrivs: true,
@@ -248,9 +336,12 @@ func DeskCellSeccompFilter(pid int) seccomp.Filter {
 		Policy: seccomp.Policy{
 			DefaultAction: cellDeny,
 			Syscalls: []seccomp.SyscallGroup{
+				{Action: cellDeny, Names: denied},
 				{Action: cellAllow, Names: names},
 				{Action: cellAllow, NamesWithCondtions: []seccomp.NameWithConditions{
-					{Name: "clone", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.BitsSet, Value: unix.CLONE_THREAD}}},
+					{Name: "clone", Conditions: seccomp.ArgumentConditions{
+						{Argument: 0, Operation: seccomp.BitsSet, Value: unix.CLONE_THREAD},
+						{Argument: 0, Operation: seccomp.BitsNotSet, Value: cloneNamespaceFlags}}},
 					{Name: "kill", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: self}}},
 					{Name: "tgkill", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: self}}},
 					// prlimit64 reads only: the target is the worker itself (pid 0
@@ -267,5 +358,13 @@ func DeskCellSeccompFilter(pid int) seccomp.Filter {
 				{Action: cellENOSYS, Names: []string{"clone3"}},
 			},
 		},
+	}
+}
+
+// discard undoes a plan whose worker did not start: its tmp dir and uid.
+func (p cellSpawnPlan) discard() {
+	removeCellTmpDir(p.tmpDir)
+	if p.release != nil {
+		p.release()
 	}
 }

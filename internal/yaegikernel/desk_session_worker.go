@@ -113,6 +113,10 @@ type DeskSessionWorker struct {
 	slotToken []byte
 	// cellTmpDir is the worker's private tmp dir, removed at reap.
 	cellTmpDir string
+	// cellUID is the uid the worker runs as (0 when the identity is not
+	// switched); releaseUID returns it to the pool at reap.
+	cellUID    uint32
+	releaseUID func()
 	// budget is the worker's memory cgroup (nil without one), released at
 	// reap.
 	budget *workerCgroup
@@ -166,6 +170,9 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if workerArg == "" {
 		return nil, fmt.Errorf("desk worker arg required (worker mode entrypoint)")
 	}
+	if err := workerCrashes.admit(cfg.Session.Role); err != nil {
+		return nil, err
+	}
 	plan, err := planCellConfinement(cfg)
 	if err != nil {
 		return nil, err
@@ -174,20 +181,20 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	// manifest row (RES-02). Refused, not skipped, in required mode.
 	budget, err := planWorkerCgroup(cfg)
 	if err != nil {
-		removeCellTmpDir(plan.tmpDir)
+		plan.discard()
 		return nil, err
 	}
 	if budget != nil {
 		if err := attachCgroup(plan.attr, budget); err != nil {
 			budget.release()
-			removeCellTmpDir(plan.tmpDir)
+			plan.discard()
 			return nil, err
 		}
 	}
 	fds, err := unixSocketpairFiles()
 	if err != nil {
 		budget.release()
-		removeCellTmpDir(plan.tmpDir)
+		plan.discard()
 		return nil, fmt.Errorf("desk session socketpair: %w", err)
 	}
 	parentFile := fds[0]
@@ -197,7 +204,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if err != nil {
 		_ = childFile.Close()
 		budget.release()
-		removeCellTmpDir(plan.tmpDir)
+		plan.discard()
 		return nil, fmt.Errorf("desk session parent socket: %w", err)
 	}
 	token := make([]byte, 32)
@@ -205,7 +212,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		_ = parentConn.Close()
 		_ = childFile.Close()
 		budget.release()
-		removeCellTmpDir(plan.tmpDir)
+		plan.discard()
 		return nil, fmt.Errorf("desk session slot token: %w", err)
 	}
 	var stdoutBuf, stderrBuf lockedBuffer
@@ -231,7 +238,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		_ = childFile.Close()
 		_ = parentConn.Close()
 		budget.release()
-		removeCellTmpDir(plan.tmpDir)
+		plan.discard()
 		return nil, fmt.Errorf("start desk session worker: %w", err)
 	}
 	_ = childFile.Close()
@@ -242,6 +249,8 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		cfg:        cfg,
 		stderr:     &stderrBuf,
 		cellTmpDir: plan.tmpDir,
+		cellUID:    plan.uid,
+		releaseUID: plan.release,
 		budget:     budget,
 		// The worker returns the hex form; the host compares that.
 		slotToken: []byte(hex.EncodeToString(token)),
@@ -654,6 +663,16 @@ func (w *DeskSessionWorker) reapLocked(hostReason string, grace time.Duration) {
 	}
 	w.reaped = true
 	defer removeCellTmpDir(w.cellTmpDir)
+	defer func() {
+		if w.releaseUID != nil {
+			w.releaseUID()
+		}
+		// A worker that ended on its own is a crash for the intensity
+		// bound; one the host ended, or that closed on request, is not.
+		if w.transportLost && !strings.HasPrefix(w.exitCause, "closed by the host") {
+			workerCrashes.record(w.cfg.Session.Role, w.exitCause)
+		}
+	}()
 	defer func() {
 		if w.budget != nil {
 			// Say whether the memory budget ended the worker: a bare "signal:
