@@ -147,17 +147,17 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	if err != nil || string(content) != "live" {
 		t.Fatalf("overlay file = %q, %v", content, err)
 	}
-	// Note is the staged act.
-	res := evalCell(t, w, `choir.Escalate("owner", "hi", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
+	// An Ask is the staged act (engineering holds Ask, not Escalate).
+	res := evalCell(t, w, `choir.Ask("management", "hi", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if res.Error != "" {
-		t.Fatalf("note: %s", res.Error)
+		t.Fatalf("ask: %s", res.Error)
 	}
 	// RLM contract: bound cells stage into the tray for post-cell reduction
 	// instead of synchronously delivering. The intent ships on the result;
 	// worker-local receipts stay empty (nothing was delivered yet).
 	found := false
 	for _, in := range res.Intents {
-		if in.Kind == yaegikernel.IntentEscalate && in.ToDesk == "owner" && in.Body == "hi" {
+		if in.Kind == yaegikernel.IntentAsk && in.ToDesk == "management" && in.Question == "hi" {
 			found = true
 		}
 	}
