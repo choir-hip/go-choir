@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -62,7 +63,7 @@ type Route struct {
 var Table = []Route{
 	{
 		Patterns: []string{"/api/texture/", "/api/texture/documents"},
-		Owner:    "texture",
+		Owner:    deskmanifest.Texture,
 		Kinds: []objectgraph.ObjectKind{
 			"choir.texture_document", "choir.texture_revision", "choir.story_index", "choir.support_verdict",
 			// The lifecycle and engineering-evidence projections (MA3.10).
