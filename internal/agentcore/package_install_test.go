@@ -553,3 +553,88 @@ func TestRuntimeInstallNeverLetsAStrangerShadowABuiltInApp(t *testing.T) {
 		t.Fatal("the owner's own track was refused")
 	}
 }
+
+// Packs (themes, commands and keybindings with no app) install without a
+// module and serve their theme files:
+//
+//	K1  a pack is refused for want of a module, or leaves a module record;
+//	K2  the installed list does not name the pack's theme file, or serves
+//	    bytes that are not its digest;
+//	K3  the file route serves a file no install in force names (an
+//	    uninstalled or replaced pack's);
+//	K4  a theme file whose id is not the one the manifest declares is built;
+//	K5  a pack whose file left the store reads as available.
+
+func packManifest(themeID string) string {
+	return `{
+  "schema": "choir.package/v2",
+  "name": "` + installName + `",
+  "version": "1.0.0",
+  "display": {"title": "Night", "icon": "N", "description": "A dark theme"},
+  "contributes": {
+    "themes": [{"id": "demo-next.dark", "file": "theme.json"}],
+    "commands": [{"id": "demo-next.use", "title": "Use Night", "scope": "global", "run": {"action": "setTheme", "theme": "demo-next.dark"}}]
+  }
+}
+`
+}
+
+func TestRuntimeInstallPackServesItsThemeFile(t *testing.T) {
+	e := newInstallEnv(t)
+	e.rt.packageBuilder = pkgruntime.Builder{}
+	theme := `{"id": "demo-next.dark", "schema_version": 2, "name": "Night"}`
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{"choir-package.json": packManifest(""), "theme.json": theme})
+
+	code, view, reason := e.post(t, installBody(t, id, raw, tree, ""))
+	if code != http.StatusCreated || view.State != installStateInstalled || view.ModuleSHA256 != "" || !view.ModuleAvailable || len(view.Files) != 1 {
+		t.Fatalf("K1 = %d %s %+v", code, reason, view)
+	}
+	pkgs := e.installed(t)
+	if len(pkgs) != 1 || !pkgs[0].Available || pkgs[0].Module.URL != "" || len(pkgs[0].Files) != 1 || pkgs[0].Files[0].Path != "theme.json" {
+		t.Fatalf("K2 installed = %+v", pkgs)
+	}
+	w := packagesCall(t, e.h, pkgs[0].Files[0].URL, e.owner)
+	if w.Code != http.StatusOK || w.Body.String() != theme || computerevent.DigestBytes(w.Body.Bytes()) != pkgs[0].Files[0].SHA256 ||
+		!strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") || w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("K2 file = %d %q %v", w.Code, w.Body.String(), w.Header())
+	}
+	if w := packagesCall(t, e.h, pkgs[0].Files[0].URL, ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("K2: the file without an owner = %d", w.Code)
+	}
+	if w := packagesCall(t, e.h, packageFilesPrefix+strings.Repeat("a", 64)+".json", e.owner); w.Code != http.StatusNotFound {
+		t.Fatalf("K3: an unnamed file = %d", w.Code)
+	}
+
+	// K5: the file left the store.
+	if err := os.RemoveAll(e.rt.packageModules.Dir); err != nil {
+		t.Fatal(err)
+	}
+	if pkgs := e.installed(t); len(pkgs) != 1 || pkgs[0].Available {
+		t.Fatalf("K5 installed = %+v", pkgs)
+	}
+	if code, _, _ := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusCreated {
+		t.Fatalf("K5 rebuild = %d", code)
+	}
+
+	// K3: uninstalled, the file is no longer served.
+	if code, _, _ := e.post(t, installBody(t, id, raw, nil, "uninstall")); code != http.StatusCreated {
+		t.Fatalf("uninstall = %d", code)
+	}
+	if w := packagesCall(t, e.h, pkgs[0].Files[0].URL, e.owner); w.Code != http.StatusNotFound {
+		t.Fatalf("K3: an uninstalled pack's file = %d", w.Code)
+	}
+}
+
+func TestRuntimeInstallPackRefusesAThemeWithAnotherID(t *testing.T) {
+	e := newInstallEnv(t)
+	e.rt.packageBuilder = pkgruntime.Builder{}
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": packManifest(""), "theme.json": `{"id": "futuristic-noir", "schema_version": 2}`,
+	})
+	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusUnprocessableEntity || reason != "package_build_failed" {
+		t.Fatalf("K4 = %d %s", code, reason)
+	}
+	if n := e.records(t); n != 0 {
+		t.Fatalf("K4: a refusal left %d records", n)
+	}
+}

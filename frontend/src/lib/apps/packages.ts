@@ -144,26 +144,63 @@ export type InstalledPackageRecord = {
   publisher_computer_id?: string;
   requires_sdk: string;
   manifest: PackageManifest;
+  /** Empty for a pack (a package with no app). */
   module: { abi: string; sha256: string; url: string };
+  /** Data files the manifest names (theme files), served by digest. */
+  files?: { path: string; sha256: string; url: string }[];
   available: boolean;
 };
+
+/** A pack contributes data (themes, commands, keybindings) and has no app or module. */
+export const isPack = (record: Pick<InstalledPackageRecord, 'manifest'>): boolean => !isObject(record.manifest?.app);
 
 /** The computer's installed packages; empty until read, or signed out. */
 export const installedPackages = writable<InstalledPackageRecord[]>([]);
 
+function validInstalledFiles(files: any): boolean {
+  return files === undefined
+    || (Array.isArray(files)
+      && files.length <= 16
+      && files.every((f) => isObject(f) && typeof f.path === 'string' && SHA256_HEX.test(String(f.sha256 || '')) && f.url === `/api/packages/files/${f.sha256}.json`));
+}
+
 function validInstalled(record: any): record is InstalledPackageRecord {
-  return Boolean(
+  if (!(
     record
       && RUNTIME_NAME.test(String(record.name || ''))
       && isObject(record.manifest)
       && record.manifest.name === record.name
-      && isObject(record.manifest.app)
       && isObject(record.manifest.display)
-      && isObject(record.module)
+      && validInstalledFiles(record.files)
+  )) return false;
+  if (isPack(record)) return true;
+  return Boolean(
+    isObject(record.module)
       && record.module.abi === MODULE_ABI
       && SHA256_HEX.test(String(record.module.sha256 || ''))
       && record.module.url === `/api/packages/modules/${record.module.sha256}.js`,
   );
+}
+
+/**
+ * Fetches an installed package's data files and refuses bytes whose SHA-256 is
+ * not the listed digest. Returns path to parsed JSON for the files that pass;
+ * one that fails is left out (its theme then reports the missing file).
+ */
+export async function fetchInstalledFiles(record: InstalledPackageRecord): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  for (const file of record.files ?? []) {
+    try {
+      const res = await fetchWithRenewal(file.url);
+      if (!res.ok) continue;
+      const bytes = await res.arrayBuffer();
+      if ((await sha256Hex(bytes)) !== file.sha256) continue;
+      out[file.path] = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      // Left out: the theme that names it is skipped with a console note.
+    }
+  }
+  return out;
 }
 
 /**
@@ -214,6 +251,7 @@ if (typeof window !== 'undefined') {
 /** The app definition of an installed package; the window renders PackageAppFrame. */
 export function runtimeAppDefinition(record: InstalledPackageRecord): ChoirAppDefinition | null {
   const m = record.manifest;
+  if (isPack(record)) return null;
   const { launcher, window: windowPref, auth, theme } = m.app;
   if (![launcher, windowPref, auth, theme].every(isObject)) return null;
   return {

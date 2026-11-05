@@ -234,6 +234,9 @@ type surfaceDoc struct {
 	UsesKinds    []string       `json:"uses_kinds"`
 	Capabilities []string       `json:"capabilities"`
 	Files        []surfaceFile  `json:"files"`
+	// Contributes is omitted for a package with no commands, keybindings,
+	// themes or links, so every earlier hash holds.
+	Contributes json.RawMessage `json:"contributes,omitempty"`
 }
 
 // BehaviourSurface is the sha256 (lowercase hex) over what the package may do
@@ -275,7 +278,7 @@ func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 		Domain: SurfaceDomain, Desks: []surfaceDesk{}, Kinds: []surfaceKind{},
 		UsesKinds: []string{}, Capabilities: []string{}, Files: []surfaceFile{},
 	}
-	if src == nil && (m.App != nil || len(m.Contributes.Desks) > 0) {
+	if src == nil && (m.App != nil || len(m.Contributes.Desks) > 0 || len(m.Contributes.Themes) > 0) {
 		return surfaceDoc{}, invalid("no source to hash: the behaviour surface covers every file of the package")
 	}
 	if src != nil {
@@ -378,6 +381,11 @@ func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 		doc.Capabilities = append(doc.Capabilities, c.key())
 	}
 	sort.Strings(doc.Capabilities)
+	contributes, err := m.surfaceContributes()
+	if err != nil {
+		return surfaceDoc{}, err
+	}
+	doc.Contributes = contributes
 	return doc, nil
 }
 

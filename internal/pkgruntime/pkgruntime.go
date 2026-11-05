@@ -88,7 +88,21 @@ type Module struct {
 	RequiresSDK string          `json:"requires_sdk"`
 	Manifest    json.RawMessage `json:"manifest"`
 	Bytes       []byte          `json:"-"`
+	// Files are the data files the manifest names (a theme pack's themes),
+	// read from the verified tree. A pack, a package with no app, has Files
+	// and no Bytes: there is no code to build.
+	Files []File `json:"files,omitempty"`
 }
+
+// File is one data file of a package, by path in the package and digest.
+type File struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Bytes  []byte `json:"-"`
+}
+
+// MaxFileBytes bounds one data file of a package (a theme).
+const MaxFileBytes = apppackage.MaxThemeFileBytes
 
 // Available reports whether the builder can run: a node binary and the
 // locked dependencies.
@@ -121,9 +135,6 @@ func (b Builder) node() string {
 // publisher's declared commands are never run, and no package code runs at
 // build time.
 func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []byte) (Module, error) {
-	if err := b.Available(); err != nil {
-		return Module{}, err
-	}
 	rec = rec.Normalize()
 	tmp, err := os.MkdirTemp("", "choir-pkgmodule-")
 	if err != nil {
@@ -142,8 +153,20 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if err != nil {
 		return Module{}, err
 	}
+	files, err := readThemeFiles(manifest, filepath.Join(tree, filepath.FromSlash(rec.Source.Root)))
+	if err != nil {
+		return Module{}, err
+	}
 	if manifest.App == nil {
-		return Module{}, fmt.Errorf("pkgruntime: package %q has no app to build", manifest.Name)
+		// A pack contributes data (themes, commands, keybindings) and has no
+		// code to build. A desk or a kind with no app is not a pack.
+		if len(manifest.Contributes.Desks) > 0 || len(manifest.Kinds) > 0 {
+			return Module{}, fmt.Errorf("pkgruntime: package %q has no app to build", manifest.Name)
+		}
+		return Module{RequiresSDK: apppackage.DefaultRequiresSDK, Manifest: json.RawMessage(manifestRaw), Files: files}, nil
+	}
+	if err := b.Available(); err != nil {
+		return Module{}, err
 	}
 	requires := manifest.App.RequiresSDK
 	if requires == "" {
@@ -193,7 +216,39 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if len(raw) == 0 || len(raw) > MaxModuleBytes {
 		return Module{}, fmt.Errorf("%w: the module is %d bytes (at most %d)", ErrBuild, len(raw), MaxModuleBytes)
 	}
-	return Module{SHA256: digest(raw), Size: len(raw), ABI: ModuleABI, RequiresSDK: requires, Manifest: json.RawMessage(manifestRaw), Bytes: raw}, nil
+	return Module{SHA256: digest(raw), Size: len(raw), ABI: ModuleABI, RequiresSDK: requires, Manifest: json.RawMessage(manifestRaw), Bytes: raw, Files: files}, nil
+}
+
+// readThemeFiles reads the theme files the manifest names from the verified
+// tree: each a regular file (no symlink), at most MaxFileBytes, a JSON object
+// whose id is the one the manifest declares and whose schema_version is 2.
+// The token, safe-value and contrast rules run in the shell when the theme
+// registers (theme.ts); a theme carries no code.
+func readThemeFiles(m apppackage.Manifest, root string) ([]File, error) {
+	var out []File
+	for _, t := range m.Contributes.Themes {
+		full := filepath.Join(root, filepath.FromSlash(t.File))
+		fi, err := os.Lstat(full)
+		if err != nil || !fi.Mode().IsRegular() {
+			return nil, fmt.Errorf("%w: theme file %q is not a file in the package", ErrBuild, t.File)
+		}
+		if fi.Size() > MaxFileBytes {
+			return nil, fmt.Errorf("%w: theme file %q is over %d bytes", ErrBuild, t.File, MaxFileBytes)
+		}
+		raw, err := os.ReadFile(full)
+		if err != nil {
+			return nil, fmt.Errorf("%w: theme file %q: %w", ErrBuild, t.File, err)
+		}
+		var theme struct {
+			ID            string `json:"id"`
+			SchemaVersion int    `json:"schema_version"`
+		}
+		if json.Unmarshal(raw, &theme) != nil || theme.ID != t.ID || theme.SchemaVersion != 2 {
+			return nil, fmt.Errorf("%w: theme file %q must be a schema 2 theme with id %q", ErrBuild, t.File, t.ID)
+		}
+		out = append(out, File{Path: t.File, SHA256: digest(raw), Bytes: raw})
+	}
+	return out, nil
 }
 
 func tail(b []byte) string {
@@ -219,6 +274,41 @@ type Store struct {
 
 func (s Store) path(sha string) string { return filepath.Join(s.Dir, "modules", sha+".js") }
 
+func (s Store) filePath(sha string) string { return filepath.Join(s.Dir, "files", sha+".json") }
+
+// PutFile writes a data file (a theme) by its digest beside the modules.
+func (s Store) PutFile(raw []byte) (string, error) {
+	if strings.TrimSpace(s.Dir) == "" {
+		return "", errors.New("pkgruntime: no store directory")
+	}
+	if len(raw) == 0 || len(raw) > MaxFileBytes {
+		return "", fmt.Errorf("pkgruntime: a file of %d bytes", len(raw))
+	}
+	sha := digest(raw)
+	if _, err := s.ReadFile(sha); err == nil {
+		return sha, nil
+	}
+	return sha, writeOnce(s.filePath(sha), ".file-", raw)
+}
+
+// ReadFile returns a data file's bytes, refusing any whose digest is not its name.
+func (s Store) ReadFile(sha string) ([]byte, error) {
+	if !sha256Hex.MatchString(sha) || strings.TrimSpace(s.Dir) == "" {
+		return nil, ErrNotFound
+	}
+	raw, err := os.ReadFile(s.filePath(sha))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if digest(raw) != sha {
+		return nil, fmt.Errorf("pkgruntime: file %s does not match its digest", sha)
+	}
+	return raw, nil
+}
+
 // Put writes a module by its digest. Writing the same bytes again is a no-op.
 func (s Store) Put(raw []byte) (string, error) {
 	if strings.TrimSpace(s.Dir) == "" {
@@ -231,35 +321,38 @@ func (s Store) Put(raw []byte) (string, error) {
 	if _, err := s.Read(sha); err == nil {
 		return sha, nil
 	}
-	dir := filepath.Dir(s.path(sha))
+	return sha, writeOnce(s.path(sha), ".module-", raw)
+}
+
+// writeOnce writes raw to path read only, through a synced temporary file, and
+// replaces a tampered copy a read refused.
+func writeOnce(path, tmpPrefix string, raw []byte) error {
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+		return err
 	}
-	f, err := os.CreateTemp(dir, ".module-")
+	f, err := os.CreateTemp(dir, tmpPrefix)
 	if err != nil {
-		return "", err
+		return err
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	if _, err := f.Write(raw); err != nil {
 		f.Close()
-		return "", err
+		return err
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
-		return "", err
+		return err
 	}
 	if err := f.Close(); err != nil {
-		return "", err
+		return err
 	}
 	if err := os.Chmod(tmp, 0o444); err != nil {
-		return "", err
+		return err
 	}
-	_ = os.Remove(s.path(sha)) // a tampered copy Read refused
-	if err := os.Rename(tmp, s.path(sha)); err != nil {
-		return "", err
-	}
-	return sha, nil
+	_ = os.Remove(path)
+	return os.Rename(tmp, path)
 }
 
 // Read returns a module's bytes, refusing any whose digest is not its name.

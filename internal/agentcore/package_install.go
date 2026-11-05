@@ -154,7 +154,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 
 	// 3. Already installed, with its module in the store: nothing to do.
 	if current != nil && current.ReleaseID == releaseID {
-		if _, err := rt.packageModules.Read(current.ModuleSHA256); err == nil {
+		if rt.installBytesPresent(*current) {
 			return rt.installView(*current, prior), false, nil
 		}
 		// The module is gone (a restore onto a fresh store): rebuild it below.
@@ -189,12 +189,22 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 			return PackageInstallView{}, false, refuseInstall(http.StatusServiceUnavailable, "install_unavailable", "%v", err)
 		}
 	}
-	if module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0 {
+	// An app is a module/v1 module; a pack (no app) is data only: no module.
+	pack := len(module.Bytes) == 0 && module.ABI == ""
+	if !pack && (module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0) {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "package_build_failed", "the builder returned no module/v1 module")
 	}
-	sha, err := rt.packageModules.Put(module.Bytes)
-	if err != nil {
-		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "module_store", "%v", err)
+	sha := ""
+	if !pack {
+		if sha, err = rt.packageModules.Put(module.Bytes); err != nil {
+			return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "module_store", "%v", err)
+		}
+	}
+	for _, f := range module.Files {
+		if _, err := rt.packageModules.PutFile(f.Bytes); err != nil {
+			return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "module_store", "%v", err)
+		}
+		record.Files = append(record.Files, store.PackageInstallFile{Path: f.Path, SHA256: f.SHA256})
 	}
 	// 5. Record it. The record is the install: it is written after the
 	// module is stored, so a crash before it leaves only an unreferenced
@@ -205,6 +215,22 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
+}
+
+// installBytesPresent reports whether everything an install names is in the
+// module store: its module (an app) and each data file it carries.
+func (rt *Runtime) installBytesPresent(item store.PackageInstall) bool {
+	if item.ModuleSHA256 != "" {
+		if _, err := rt.packageModules.Read(item.ModuleSHA256); err != nil {
+			return false
+		}
+	}
+	for _, f := range item.Files {
+		if _, err := rt.packageModules.ReadFile(f.SHA256); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // uninstallPackage removes the runtime install of releaseID that is in
@@ -340,8 +366,7 @@ func (rt *Runtime) installView(item store.PackageInstall, all []store.PackageIns
 	switch {
 	case inForce && item.Action == packageActionInstall:
 		view.State = installStateInstalled
-		_, err := rt.packageModules.Read(item.ModuleSHA256)
-		view.ModuleAvailable = err == nil
+		view.ModuleAvailable = rt.installBytesPresent(item)
 	case inForce:
 		view.State = installStateUninstalled
 	default:

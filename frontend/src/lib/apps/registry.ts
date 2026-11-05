@@ -1,6 +1,7 @@
 import type { ComponentType } from 'svelte';
 import { writable } from 'svelte/store';
-import { installedPackages, loadPackageApps, runtimeAppDefinition, type InstalledPackageRecord } from './packages';
+import { fetchInstalledFiles, installedPackages, isPack, loadPackageApps, runtimeAppDefinition, type InstalledPackageRecord } from './packages';
+import { setInstalledThemeFiles } from '../services/theme';
 import { sdkSatisfies } from '../sdk-version';
 import { setPackageContributions } from '../contributions';
 
@@ -245,6 +246,7 @@ const PACKAGES = loadPackageApps(new Set(STATIC_APPS.map((app) => app.id)));
 const TREE_CONTRIBUTIONS = new Map(PACKAGES.contributions.map((c) => [c.name, c.contributes]));
 for (const [name, contributes] of TREE_CONTRIBUTIONS) void setPackageContributions(name, contributes, `tree:${name}`);
 let contributedByInstall = new Set<string>();
+const contributedFingerprints = new Map<string, string>();
 
 export const APP_REGISTRY: ChoirAppDefinition[] = [...STATIC_APPS, ...PACKAGES.apps];
 
@@ -299,14 +301,25 @@ export function applyInstalledPackages(records: InstalledPackageRecord[]): void 
   }
   runtimeDefinitions = kept;
   const nowInstalled = new Set<string>();
+  // Apps and packs both contribute (a pack has no window): the files are
+  // fetched and digest-checked first so a theme resolves when it registers.
   for (const record of records) {
-    const app = runtime.get(record.name);
-    if (!app) continue;
+    if (STATIC_IDS.has(record.name)) continue;
+    if (!isPack(record) && !runtime.has(record.name)) continue;
+    if (isPack(record) && !record.available) continue;
     nowInstalled.add(record.name);
-    void setPackageContributions(record.name, (record.manifest as any)?.contributes, `${record.install_id}|${record.module.sha256}`);
+    const fingerprint = `${record.install_id}|${record.module.sha256}`;
+    if (contributedFingerprints.get(record.name) === fingerprint) continue;
+    contributedFingerprints.set(record.name, fingerprint);
+    void fetchInstalledFiles(record).then((files) => {
+      setInstalledThemeFiles(record.name, files);
+      return setPackageContributions(record.name, (record.manifest as any)?.contributes, fingerprint);
+    });
   }
   for (const name of contributedByInstall) {
     if (nowInstalled.has(name)) continue;
+    setInstalledThemeFiles(name, null);
+    contributedFingerprints.delete(name);
     void setPackageContributions(name, TREE_CONTRIBUTIONS.get(name) ?? null, `tree:${name}`);
   }
   contributedByInstall = nowInstalled;

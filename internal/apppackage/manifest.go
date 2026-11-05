@@ -106,7 +106,11 @@ type Manifest struct {
 
 // Contributes is what the package adds to the computer beside its window.
 type Contributes struct {
-	Desks []Desk `json:"desks"`
+	Desks       []Desk       `json:"desks"`
+	Commands    []Command    `json:"commands"`
+	Keybindings []Keybinding `json:"keybindings"`
+	Themes      []ThemeFile  `json:"themes"`
+	Links       []Link       `json:"links"`
 }
 
 // Desk is one desk the package contributes (a persistent root agent desk,
@@ -278,8 +282,8 @@ func (m Manifest) ValidateOn(p Platform) error {
 	if utf8.RuneCountInString(m.Display.Description) > 200 {
 		return invalid("display.description is at most 200 characters")
 	}
-	if m.App == nil && len(m.Contributes.Desks) == 0 && len(m.Kinds) == 0 {
-		return invalid("the package contributes nothing: it needs an app, a desk or a kind")
+	if m.App == nil && len(m.Contributes.Desks) == 0 && len(m.Kinds) == 0 && m.contributesNothingElse() {
+		return invalid("the package contributes nothing: it needs an app, a desk, a kind, a command, a keybinding, a theme or a link")
 	}
 	if m.App != nil {
 		if err := m.validateApp(); err != nil {
@@ -310,6 +314,9 @@ func (m Manifest) ValidateOn(p Platform) error {
 		}
 	}
 	if err := m.validateDesks(); err != nil {
+		return err
+	}
+	if err := m.validateContributes(); err != nil {
 		return err
 	}
 	if err := m.validateCapabilities(); err != nil {

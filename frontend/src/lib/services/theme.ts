@@ -88,7 +88,18 @@ export function onThemeChange(fn: (theme: ChoirTheme) => void): () => void {
 // In-tree packages carry their theme files beside the manifest.
 const treeFiles = import.meta.glob('../../packages/**/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 export type ThemeFileResolver = (pkg: string, file: string) => unknown;
-let resolveFile: ThemeFileResolver = (pkg, file) => treeFiles[`../../packages/${pkg}/${file.replace(/^\.?\//, '')}`];
+const installedFiles = new Map<string, unknown>();
+const fileKey = (pkg: string, file: string) => `${pkg}/${file.replace(/^\.?\//, '')}`;
+let resolveFile: ThemeFileResolver = (pkg, file) => installedFiles.get(fileKey(pkg, file)) ?? treeFiles[`../../packages/${pkg}/${file.replace(/^\.?\//, '')}`];
+/**
+ * The theme files of an installed package, fetched and digest-checked by the
+ * loader (apps/packages.ts) before its contributions apply; null removes them.
+ * They win over an in-tree twin's.
+ */
+export function setInstalledThemeFiles(pkg: string, files: Record<string, unknown> | null): void {
+  for (const key of [...installedFiles.keys()]) if (key.startsWith(`${pkg}/`)) installedFiles.delete(key);
+  for (const [file, theme] of Object.entries(files ?? {})) installedFiles.set(fileKey(pkg, file), theme);
+}
 /** Tests and the installed-package loader supply where a package's theme files come from. */
 export function setThemeFileResolver(next: ThemeFileResolver): () => void {
   const previous = resolveFile;

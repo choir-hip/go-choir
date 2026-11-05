@@ -14,14 +14,16 @@ import (
 //
 //	GET /api/packages/installed              this computer's installed packages
 //	GET /api/packages/modules/<sha256>.js    one module, verified against its name
+//	GET /api/packages/files/<sha256>.json    one data file (a theme pack's theme)
 //
-// Both are the owner's reads on their own computer (the proxy forwards
+// All are the owner's reads on their own computer (the proxy forwards
 // /api/* with the authenticated owner). A module is served only when an
 // install in force names it, so the store is not a general file server.
 
 const (
 	packagesInstalledPath = "/api/packages/installed"
 	packageModulesPrefix  = "/api/packages/modules/"
+	packageFilesPrefix    = "/api/packages/files/"
 )
 
 // InstalledPackage is one installed package as the shell lists it.
@@ -36,8 +38,20 @@ type InstalledPackage struct {
 	Track       string          `json:"track,omitempty"`
 	RequiresSDK string          `json:"requires_sdk"`
 	Manifest    json.RawMessage `json:"manifest"`
-	Module      InstalledModule `json:"module"`
-	Available   bool            `json:"available"`
+	// Module is empty for a pack (a package with no app: its themes,
+	// commands and keybindings are data in the manifest and Files).
+	Module InstalledModule `json:"module"`
+	// Files are the data files the manifest names (theme files), each served
+	// at URL; the shell resolves contributes.themes[].file through them.
+	Files     []InstalledFile `json:"files,omitempty"`
+	Available bool            `json:"available"`
+}
+
+// InstalledFile is one data file of an installed package.
+type InstalledFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	URL    string `json:"url"`
 }
 
 // InstalledModule names the module the shell fetches and checks.
@@ -76,13 +90,20 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == packagesInstalledPath:
 		out := make([]InstalledPackage, 0, len(current))
 		for name, item := range current {
-			_, readErr := rt.packageModules.Read(item.ModuleSHA256)
+			var module InstalledModule
+			if item.ModuleSHA256 != "" {
+				module = InstalledModule{ABI: item.ModuleABI, SHA256: item.ModuleSHA256, URL: packageModulesPrefix + item.ModuleSHA256 + ".js"}
+			}
+			var files []InstalledFile
+			for _, f := range item.Files {
+				files = append(files, InstalledFile{Path: f.Path, SHA256: f.SHA256, URL: packageFilesPrefix + f.SHA256 + ".json"})
+			}
 			out = append(out, InstalledPackage{
 				Name: name, ReleaseID: item.ReleaseID, InstallID: item.InstallID,
 				InstalledAt: item.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 				Publisher:   item.PublisherComputerID, Track: item.PublisherTrack, RequiresSDK: item.RequiresSDK, Manifest: item.Manifest,
-				Module:    InstalledModule{ABI: item.ModuleABI, SHA256: item.ModuleSHA256, URL: packageModulesPrefix + item.ModuleSHA256 + ".js"},
-				Available: readErr == nil,
+				Module: module, Files: files,
+				Available: rt.installBytesPresent(*item),
 			})
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -110,6 +131,34 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 		header.Set("Content-Type", "text/javascript; charset=utf-8")
 		header.Set("X-Content-Type-Options", "nosniff")
 		// Content-addressed: the bytes behind a name never change.
+		header.Set("Cache-Control", "private, max-age=31536000, immutable")
+		header.Set("ETag", `"`+sha+`"`)
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = w.Write(raw)
+		}
+	case strings.HasPrefix(r.URL.Path, packageFilesPrefix):
+		sha, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, packageFilesPrefix), ".json")
+		named := false
+		for _, item := range current {
+			for _, f := range item.Files {
+				if ok && f.SHA256 == sha {
+					named = true
+				}
+			}
+		}
+		if !named {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "file not found"})
+			return
+		}
+		raw, err := rt.packageModules.ReadFile(sha)
+		if err != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "file not found"})
+			return
+		}
+		header := w.Header()
+		header.Set("Content-Type", "application/json; charset=utf-8")
+		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("Cache-Control", "private, max-age=31536000, immutable")
 		header.Set("ETag", `"`+sha+`"`)
 		w.WriteHeader(http.StatusOK)

@@ -62,6 +62,17 @@ type PackageInstall struct {
 	ModuleABI    string          `json:"module_abi,omitempty"`
 	RequiresSDK  string          `json:"requires_sdk,omitempty"`
 	Manifest     json.RawMessage `json:"manifest,omitempty"`
+	// Files are the data files the install carries (a theme pack's themes),
+	// each in the computer's module store by digest. A package with no app (a
+	// pack) has files or nothing and no ModuleSHA256.
+	Files []PackageInstallFile `json:"files,omitempty"`
+}
+
+// PackageInstallFile is one data file of an install: its path in the package
+// and its sha256.
+type PackageInstallFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
 }
 
 // packageInstallPage is the first page of an install listing.
