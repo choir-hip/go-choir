@@ -23,7 +23,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -59,11 +58,21 @@ type Route struct {
 	PackageSegment bool
 }
 
+// appOfKind is the app that owns a kind's route: its custodian desk's name,
+// from the registry, never a literal.
+func appOfKind(kind objectgraph.ObjectKind) string {
+	c, ok := objectgraph.CustodianOf(kind)
+	if !ok {
+		panic(fmt.Sprintf("routekinds: kind %s has no custodian", kind))
+	}
+	return strings.TrimPrefix(string(c), "desk:")
+}
+
 // Table is every app-facing route that serves kinds.
 var Table = []Route{
 	{
 		Patterns: []string{"/api/texture/", "/api/texture/documents"},
-		Owner:    deskmanifest.Texture,
+		Owner:    appOfKind("choir.texture_document"),
 		Kinds: []objectgraph.ObjectKind{
 			"choir.texture_document", "choir.texture_revision", "choir.story_index", "choir.support_verdict",
 			// The lifecycle and engineering-evidence projections (MA3.10).
