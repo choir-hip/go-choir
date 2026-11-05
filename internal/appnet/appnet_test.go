@@ -481,3 +481,24 @@ func TestRequestsRefusedWithModeOff(t *testing.T) {
 		t.Errorf("mode off, empty policy: %d grants, err %v; want none and no error", len(gs), err)
 	}
 }
+
+// MA4.3 B3: a candidate (<pkg>-candidate) declares no egress and no ingress.
+func TestACandidateDeclaresNoNetworkPolicy(t *testing.T) {
+	p := goodPolicy()
+	if ps := Validate("calendar", p); len(ps) != 0 {
+		t.Fatalf("the installed package's policy was refused: %+v", ps)
+	}
+	ps := Validate("calendar-candidate", p)
+	found := false
+	for _, pr := range ps {
+		if pr.Code == CodePackage && strings.Contains(pr.Detail, "candidate") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("a candidate's network policy was admitted: %+v", ps)
+	}
+	if ps := Validate("calendar-candidate", Policy{}); len(ps) != 0 {
+		t.Errorf("a candidate with no policy was refused: %+v", ps)
+	}
+}

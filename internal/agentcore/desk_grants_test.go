@@ -124,3 +124,23 @@ func TestCrashBootClosesRunsOfRegisteredAndUnregisteredDesks(t *testing.T) {
 		t.Error("deskOfInbox")
 	}
 }
+
+// B3: a candidate desk has no inbound routing: no request addressed to it
+// lands anywhere, whether or not its desk is registered.
+func TestACandidateDeskIsNotAddressable(t *testing.T) {
+	const name = "app:routecand-candidate"
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: name, Verbs: []string{"ReadCapture"}, Taint: deskmanifest.TaintUntrustedInput, UID: 62903, WorkerMaxBytes: 64 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deskmanifest.RegisterAppAt(d, 5); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = deskmanifest.RetireApp(name) })
+	for _, to := range []string{name, name + ":subject", "app:routecand-candidate"} {
+		route, _ := ResolveAddress("management:owner-1", "owner-1", to)
+		if route.OnRoute || route.Inbox != "" {
+			t.Errorf("a request to %s landed in %q", to, route.Inbox)
+		}
+	}
+}

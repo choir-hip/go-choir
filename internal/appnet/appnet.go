@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/egressgrant"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 // Mode gates whether a declaration may be admitted at all.
@@ -182,6 +183,12 @@ func Validate(pkg string, p Policy) []Problem {
 	}
 	if !packageName.MatchString(pkg) {
 		refuse(CodePackage, pkg, "package name %q must match %s", pkg, packageName)
+	}
+	// A self-development candidate has no egress and no inbound route (plan
+	// MA4.3, B3): it is a shadow of the installed package, not a second
+	// network citizen.
+	if objectgraph.IsCandidateName(pkg) && (len(p.Egress) > 0 || len(p.Ingress) > 0) {
+		refuse(CodePackage, pkg, "candidate %q declares network policy; a candidate has no egress and no inbound routing", pkg)
 	}
 	if len(p.Egress) > MaxEgressEntries {
 		refuse(CodeTooMany, "", "%d egress entries, at most %d", len(p.Egress), MaxEgressEntries)

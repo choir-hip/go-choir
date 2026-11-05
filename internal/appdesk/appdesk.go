@@ -31,8 +31,10 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 // Manifest is the desk member of an app package manifest: the desk the
@@ -80,6 +82,14 @@ const (
 	CodeBadAction         Code = "bad_action"
 	CodeCapacity          Code = "capacity"
 	CodeDesk              Code = "desk_refused"
+	// CodeReservedSuffix refuses an installed package named like a candidate;
+	// CodeNotCandidate a candidate manifest that is not one; CodeNoCandidate an
+	// event that needs a live candidate and finds none; CodeCandidateLive a
+	// second candidate for a package that has one.
+	CodeReservedSuffix Code = "reserved_suffix"
+	CodeNotCandidate   Code = "not_candidate"
+	CodeNoCandidate    Code = "no_candidate"
+	CodeCandidateLive  Code = "candidate_live"
 )
 
 // Refusal is one reason an install or event did not take effect.
@@ -96,6 +106,16 @@ type Action string
 const (
 	ActionInstall Action = "install"
 	ActionDisable Action = "disable"
+	// ActionCandidate installs the package's candidate: the manifest's package
+	// is <Package>-candidate. ActionSupplant is acceptance: the installed desk
+	// is updated to the candidate's manifest under the installed names and the
+	// candidate and its shadow are dropped. ActionDrop drops the candidate
+	// without supplanting (rejection, rollback). Event.Package is always the
+	// installed package. The candidate has no inbound routing, no schedule
+	// and no egress, and writes only its shadow kinds (plan MA4.3, B3).
+	ActionCandidate Action = "candidate"
+	ActionSupplant  Action = "supplant"
+	ActionDrop      Action = "drop_candidate"
 	// ActionUpdate replaces an installed package's desk manifest with a later
 	// one the owner approved. The event's Seq is the desk's new epoch.
 	ActionUpdate Action = "update"
@@ -120,7 +140,7 @@ const (
 )
 
 var (
-	packageName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+	packageName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`) // installed names are further limited to 22 by objectgraph.ValidPackageName
 	kindSuffix  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 )
 
@@ -161,7 +181,14 @@ func PackageOrigin(d deskmanifest.Desk) bool { return d.Kind == deskmanifest.Kin
 
 // Validate is pure: every reason the manifest may not be installed. Install
 // calls it before it appends anything.
-func Validate(m Manifest) []Refusal {
+func Validate(m Manifest) []Refusal { return validate(m, false) }
+
+// ValidateCandidate is Validate for a candidate manifest: the package is
+// <installed>-candidate, whose installed name is itself valid, and its kinds
+// are the shadow kinds choir.app.<installed>-candidate.<kind>.
+func ValidateCandidate(m Manifest) []Refusal { return validate(m, true) }
+
+func validate(m Manifest, candidate bool) []Refusal {
 	var out []Refusal
 	refuse := func(c Code, format string, args ...any) {
 		out = append(out, Refusal{Package: m.Package, Code: c, Detail: fmt.Sprintf(format, args...)})
@@ -169,6 +196,14 @@ func Validate(m Manifest) []Refusal {
 	nameOK := packageName.MatchString(m.Package)
 	if !nameOK {
 		refuse(CodeBadName, "package name %q must match %s", m.Package, packageName)
+	}
+	if candidate {
+		if !objectgraph.ValidCandidateName(m.Package) {
+			refuse(CodeNotCandidate, "candidate name %q must be <installed package>%s", m.Package, objectgraph.CandidateSuffix)
+			nameOK = false
+		}
+	} else if objectgraph.IsCandidateName(m.Package) || !objectgraph.ValidPackageName(m.Package) {
+		refuse(CodeReservedSuffix, "package name %q ends with %s (reserved for candidates) or is too long to have one", m.Package, objectgraph.CandidateSuffix)
 	}
 	if _, isDesk := deskmanifest.Lookup(m.Package); reservedNames[m.Package] || isDesk {
 		refuse(CodeReservedName, "package name %q is reserved", m.Package)
@@ -224,6 +259,9 @@ type Set struct {
 	// Epochs maps each live desk name to the Seq of the install or update
 	// event that produced its row: the desk epoch (deskmanifest epoch.go).
 	Epochs map[string]uint64
+	// Candidates maps an installed package to its live candidate package
+	// (<pkg>-candidate); the candidate's desk is in Desks like any other.
+	Candidates map[string]string
 }
 
 // Writer reports a package kind's writer and whether it may still write
@@ -249,7 +287,8 @@ func Derive(events []Event) (Set, []Refusal) {
 	var refusals []Refusal
 	live := map[string]deskmanifest.Desk{}
 	retiredPkgs := map[string]bool{}
-	set := Set{kinds: map[string]string{}, retired: map[string]string{}, Epochs: map[string]uint64{}}
+	set := Set{kinds: map[string]string{}, retired: map[string]string{}, Epochs: map[string]uint64{}, Candidates: map[string]string{}}
+	candManifests := map[string]Manifest{}
 	uids := map[string]uint32{}
 	nextUID := uint32(uidBase)
 	for i, ev := range ordered {
@@ -259,6 +298,70 @@ func Derive(events []Event) (Set, []Refusal) {
 		if i > 0 && ordered[i-1].Seq == ev.Seq {
 			refuse(CodeBadSequence, "seq %d appears twice", ev.Seq)
 			continue
+		}
+		// dropCandidate retires the package's candidate desk and its shadow
+		// kinds; it reports whether there was one.
+		dropCandidate := func(base string) bool {
+			cand, has := set.Candidates[base]
+			if !has {
+				return false
+			}
+			if d, ok := live[cand]; ok {
+				for _, k := range d.OwnedKinds {
+					delete(set.kinds, k)
+					set.retired[k] = WriterFor(cand)
+				}
+				delete(set.Epochs, d.Name)
+			}
+			delete(live, cand)
+			delete(set.Candidates, base)
+			delete(candManifests, base)
+			return true
+		}
+		// applyUpdate replaces an installed package's desk with the manifest m
+		// (already bound to its event). It reports whether the update took.
+		applyUpdate := func(m Manifest) bool {
+			prev, ok := live[m.Package]
+			if !ok {
+				refuse(CodeNotInstalled, "package %s is not installed", m.Package)
+				return false
+			}
+			if rs := Validate(m); len(rs) > 0 {
+				for _, r := range rs {
+					r.Seq = ev.Seq
+					refusals = append(refusals, r)
+				}
+				return false
+			}
+			conflict := false
+			for _, k := range m.OwnedKinds {
+				if w, _, claimed := set.Writer(k); claimed && w != WriterFor(m.Package) {
+					refuse(CodeKindTaken, "kind %s already has a writer", k)
+					conflict = true
+				}
+			}
+			if conflict {
+				return false
+			}
+			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
+				Taint: deskmanifest.TaintUntrustedInput, UID: uids[m.Package], WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
+			if err != nil {
+				refuse(CodeDesk, "%v", err)
+				return false
+			}
+			// A kind the update drops keeps its data and loses its writer.
+			for _, k := range prev.OwnedKinds {
+				delete(set.kinds, k)
+				set.retired[k] = WriterFor(m.Package)
+			}
+			for _, k := range m.OwnedKinds {
+				delete(set.retired, k)
+				set.kinds[k] = WriterFor(m.Package)
+			}
+			live[m.Package] = d
+			set.Epochs[d.Name] = ev.Seq
+			return true
 		}
 		switch ev.Action {
 		case ActionInstall:
@@ -311,26 +414,39 @@ func Derive(events []Event) (Set, []Refusal) {
 				set.kinds[k] = WriterFor(m.Package)
 			}
 		case ActionUpdate:
-			prev, ok := live[ev.Package]
-			if !ok {
-				refuse(CodeNotInstalled, "package %s is not installed", ev.Package)
-				continue
-			}
 			if ev.Manifest == nil || ev.Manifest.Package != ev.Package || Digest(*ev.Manifest) != ev.ManifestDigest {
 				refuse(CodeDigestMismatch, "the desk manifest is not the one the update event binds")
 				continue
 			}
+			applyUpdate(*ev.Manifest)
+		case ActionCandidate:
+			base := ev.Package
+			cand := objectgraph.CandidateName(base)
+			if _, ok := live[base]; !ok {
+				refuse(CodeNotInstalled, "package %s is not installed; a candidate shadows an installed package", base)
+				continue
+			}
+			if _, has := set.Candidates[base]; has {
+				refuse(CodeCandidateLive, "package %s already has a candidate", base)
+				continue
+			}
+			if ev.Manifest == nil || ev.Manifest.Package != cand || Digest(*ev.Manifest) != ev.ManifestDigest {
+				refuse(CodeDigestMismatch, "the candidate manifest is not %s or not the one the event binds", cand)
+				continue
+			}
 			m := *ev.Manifest
-			if rs := Validate(m); len(rs) > 0 {
+			if rs := ValidateCandidate(m); len(rs) > 0 {
 				for _, r := range rs {
 					r.Seq = ev.Seq
 					refusals = append(refusals, r)
 				}
 				continue
 			}
+			// A shadow kind an earlier, dropped candidate of this package held
+			// is free again; any other claim stands.
 			conflict := false
 			for _, k := range m.OwnedKinds {
-				if w, _, claimed := set.Writer(k); claimed && w != WriterFor(m.Package) {
+				if w, liveKind, claimed := set.Writer(k); claimed && (liveKind || w != WriterFor(cand)) {
 					refuse(CodeKindTaken, "kind %s already has a writer", k)
 					conflict = true
 				}
@@ -338,30 +454,67 @@ func Derive(events []Event) (Set, []Refusal) {
 			if conflict {
 				continue
 			}
-			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
-				Taint: deskmanifest.TaintUntrustedInput, UID: uids[m.Package], WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
+			uid, known := uids[cand]
+			if !known {
+				if nextUID > uidMax {
+					refuse(CodeCapacity, "no app desk uid left")
+					continue
+				}
+				uid = nextUID
+			}
+			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(cand), Verbs: m.Verbs,
+				Taint: deskmanifest.TaintUntrustedInput, UID: uid, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
 				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue
 			}
-			// A kind the update drops keeps its data and loses its writer.
-			for _, k := range prev.OwnedKinds {
-				delete(set.kinds, k)
-				set.retired[k] = WriterFor(m.Package)
+			if !known {
+				uids[cand] = uid
+				nextUID++
 			}
+			live[cand] = d
+			set.Epochs[d.Name] = ev.Seq
+			set.Candidates[base] = cand
+			candManifests[base] = m
 			for _, k := range m.OwnedKinds {
 				delete(set.retired, k)
-				set.kinds[k] = WriterFor(m.Package)
+				set.kinds[k] = WriterFor(cand)
 			}
-			live[m.Package] = d
-			set.Epochs[d.Name] = ev.Seq
+		case ActionDrop:
+			if !dropCandidate(ev.Package) {
+				refuse(CodeNoCandidate, "package %s has no candidate", ev.Package)
+			}
+		case ActionSupplant:
+			base := ev.Package
+			cm, has := candManifests[base]
+			if !has {
+				refuse(CodeNoCandidate, "package %s has no candidate to accept", base)
+				continue
+			}
+			// The accepted candidate becomes the installed desk's manifest under
+			// the installed names: the shadow kinds are renamed to the real ones
+			// and the package name drops the suffix. The same validation as any
+			// update then applies, so acceptance cannot admit what an update
+			// could not.
+			cand := objectgraph.CandidateName(base)
+			accepted := cm
+			accepted.Package = base
+			accepted.OwnedKinds = make([]string, len(cm.OwnedKinds))
+			for i, k := range cm.OwnedKinds {
+				accepted.OwnedKinds[i] = objectgraph.PackageKindNamespace(base) + strings.TrimPrefix(k, objectgraph.PackageKindNamespace(cand))
+			}
+			// A refused acceptance leaves the candidate as it was.
+			if applyUpdate(accepted) {
+				dropCandidate(base)
+			}
 		case ActionDisable:
 			d, ok := live[ev.Package]
 			if !ok {
 				refuse(CodeNotInstalled, "package %s is not installed", ev.Package)
 				continue
 			}
+			dropCandidate(ev.Package)
 			delete(live, ev.Package)
 			delete(set.Epochs, d.Name)
 			retiredPkgs[ev.Package] = true

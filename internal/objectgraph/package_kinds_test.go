@@ -57,7 +57,7 @@ func newTestSeam() (*Registry, *packageKindTable, *Registry) {
 }
 
 func register(r *Registry, tbl *packageKindTable, builtin *Registry, pkg string, k KindRegistration) error {
-	return registerPackageKindOn(r, tbl, builtin, pkg, k)
+	return registerPackageKindOn(r, tbl, builtin, pkg, k, validPackageName)
 }
 
 func TestRegisterPackageKindAdmitsTheDeclaredShape(t *testing.T) {

@@ -54,9 +54,12 @@ var (
 
 var (
 	// A package name is the app desk's name too (desk:<name>), so the grammar is
-	// the intersection of the manifest's name and appDeskWriter: 2 to 32
-	// characters, no underscore.
-	packageNameGrammar = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+	// the intersection of the manifest's name and appDeskWriter, with room for
+	// the candidate suffix: 2 to 22 characters, no underscore. Its candidate
+	// (<name>-candidate, MA4.3) then fits the 32 characters of the desk name.
+	packageNameGrammar = regexp.MustCompile(`^[a-z][a-z0-9-]{1,21}$`)
+	// A candidate's own name is the installed grammar plus the suffix.
+	candidateNameGrammar = regexp.MustCompile(`^[a-z][a-z0-9-]{1,21}-candidate$`)
 	packageKindGrammar = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
 	packageSchemaRef   = regexp.MustCompile(`^pkg:([a-z][a-z0-9-]{1,31})@([1-9][0-9]{0,8})$`)
 )
@@ -104,7 +107,43 @@ func reservedPackageName(name string) string {
 	return ""
 }
 
+// CandidateSuffix ends the name of a package's candidate: the package named
+// <pkg>-candidate, its desk app:<pkg>-candidate and its shadow kinds
+// choir.app.<pkg>-candidate.<kind> (plan MA4.3, B3). The kind grammar is not
+// changed: the candidate is a package of its own whose name carries the
+// suffix. The suffix is reserved: no installed package may end with it.
+const CandidateSuffix = "-candidate"
+
+// CandidateName is the candidate package of pkg.
+func CandidateName(pkg string) string { return pkg + CandidateSuffix }
+
+// IsCandidateName reports whether name is a candidate package's name.
+func IsCandidateName(name string) bool { return strings.HasSuffix(name, CandidateSuffix) }
+
+// CandidateBase is the installed package a candidate shadows.
+func CandidateBase(name string) (string, bool) {
+	if !IsCandidateName(name) {
+		return "", false
+	}
+	return strings.TrimSuffix(name, CandidateSuffix), true
+}
+
+// ValidCandidateName reports whether name is a candidate of a package that
+// could be installed.
+func ValidCandidateName(name string) bool { return validCandidateName(name) == nil }
+
+func validCandidateName(name string) error {
+	if !candidateNameGrammar.MatchString(name) {
+		return fmt.Errorf("%w: candidate name %q must match %s", ErrPackageKindRefused, name, candidateNameGrammar)
+	}
+	base, _ := CandidateBase(name)
+	return validPackageName(base)
+}
+
 func validPackageName(name string) error {
+	if IsCandidateName(name) {
+		return fmt.Errorf("%w: package name %q ends with %s, which is reserved for candidates", ErrPackageKindRefused, name, CandidateSuffix)
+	}
 	if !packageNameGrammar.MatchString(name) {
 		return fmt.Errorf("%w: package name %q must match %s", ErrPackageKindRefused, name, packageNameGrammar)
 	}
@@ -182,7 +221,17 @@ var packageKinds = newPackageKindTable()
 // pkg:<pkg>@<version>) and the writer desk:<pkg>; Store, Owner and the identity
 // default are filled in. An identical re-registration is a no-op.
 func RegisterPackageKind(pkg string, k KindRegistration) error {
-	return registerPackageKindOn(writeRegistry, packageKinds, DefaultRegistry(), pkg, k)
+	return registerPackageKindOn(writeRegistry, packageKinds, DefaultRegistry(), pkg, k, validPackageName)
+}
+
+// RegisterCandidateKind registers a shadow kind of a candidate package
+// <pkg>-candidate: choir.app.<pkg>-candidate.<kind>, written only by the
+// candidate's desk. It refuses a name that is not a candidate's, so an
+// installed package cannot register through it, and RegisterPackageKind
+// refuses a candidate's name for the same reason. The shadow kind never
+// collides with the installed kind: the package segment differs.
+func RegisterCandidateKind(pkg string, k KindRegistration) error {
+	return registerPackageKindOn(writeRegistry, packageKinds, DefaultRegistry(), pkg, k, validCandidateName)
 }
 
 // LookupPackageKind returns the registration of a package kind the seam
@@ -211,8 +260,8 @@ func (s *Service) lookupKind(kind ObjectKind) (KindRegistration, error) {
 	return KindRegistration{}, err
 }
 
-func registerPackageKindOn(r *Registry, tbl *packageKindTable, builtin *Registry, pkg string, k KindRegistration) error {
-	if err := validPackageName(pkg); err != nil {
+func registerPackageKindOn(r *Registry, tbl *packageKindTable, builtin *Registry, pkg string, k KindRegistration, validName func(string) error) error {
+	if err := validName(pkg); err != nil {
 		return err
 	}
 	refuse := func(format string, args ...any) error {
