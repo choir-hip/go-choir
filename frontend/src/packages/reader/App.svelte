@@ -21,6 +21,7 @@
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
+    toast,
     addLiveEventListener,
     liveEventKind,
     liveEventPayload,
@@ -108,8 +109,6 @@
   let searchTerm = '';
   let searchHits = [];
   let hitIndex = -1;
-  let toast = '';
-  let toastTimer = 0;
   let fileInputEl = null;
   let compact = false;
   let prefsOpen = false;
@@ -164,13 +163,9 @@
   $: isEmpty = status === 'empty' && !loading && !error && !model && !sourceKey;
   $: showContents = Boolean(chapterCount);
 
+  // One toast stack for every app: the shell's (SDK toast), not a private one.
   function flash(message) {
-    toast = message;
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      toast = '';
-      toastTimer = 0;
-    }, 2600);
+    toast(message);
   }
 
   function sourceFetchOptions(url) {
@@ -961,7 +956,6 @@
       stopLive();
       window.removeEventListener('pagehide', onHide);
       document.removeEventListener('visibilitychange', onHide);
-      if (toastTimer) clearTimeout(toastTimer);
       if (activeRenderTask) activeRenderTask.cancel();
       if (renderRaf) cancelAnimationFrame(renderRaf);
       observer?.disconnect();
@@ -1422,7 +1416,6 @@
     </div>
   </div>
 
-  <p class="reader-visually-hidden" aria-live="polite" data-reader-live>{toast}</p>
 </section>
 
 

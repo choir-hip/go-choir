@@ -169,6 +169,8 @@ export function extractSurface({ frontendRoot = DEFAULT_ROOT, sdkFile = path.joi
     names: sortObject(names),
     types: sortObject(types),
   };
+  const legacy = readLegacyEvents(frontendRoot);
+  if (legacy) surface.legacy_events = legacy;
   surface.digest = surfaceDigest(surface);
   return surface;
 }
@@ -179,13 +181,29 @@ export function readSdkVersion(frontendRoot = DEFAULT_ROOT) {
   return m[1];
 }
 
+/** The events an app may still dispatch (src/lib/sdk-surface/legacy-events.json), or null before 1.1.0. */
+export function readLegacyEvents(frontendRoot = DEFAULT_ROOT) {
+  const file = path.join(frontendRoot, LOCK_REL, 'legacy-events.json');
+  if (!existsSync(file)) return null;
+  const events = JSON.parse(readFileSync(file, 'utf8')).events;
+  if (!Array.isArray(events) || events.some((e) => !/^[a-z]{3,40}$/.test(e)) || new Set(events).size !== events.length) {
+    throw new Error(`${path.relative(frontendRoot, file)}: events must be a list of distinct lowercase names`);
+  }
+  return [...events].sort();
+}
+
 function sortObject(obj) {
   return Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]));
 }
 
 /** The digest of what a package can rely on: names, types and the module ABI (not the version or the TypeScript that printed it). */
 export function surfaceDigest(surface) {
-  const body = JSON.stringify({ module_abi: surface.module_abi, names: sortObject(surface.names), types: sortObject(surface.types) });
+  const body = JSON.stringify({
+    module_abi: surface.module_abi,
+    names: sortObject(surface.names),
+    types: sortObject(surface.types),
+    ...(surface.legacy_events ? { legacy_events: surface.legacy_events } : {}),
+  });
   return `sha256:${createHash('sha256').update(body).digest('hex')}`;
 }
 
@@ -275,6 +293,13 @@ export function compareSurfaces(before, after, { frontendRoot = DEFAULT_ROOT } =
   visit('types', 'type ');
   const verdicts = compatibility(pairs, frontendRoot);
   for (const p of pairs) changed.push({ name: p.key, kind: p.kind, need: verdicts[p.key], before: p.old, after: p.new });
+  // The events an app may dispatch: one leaving breaks the apps that send it (major); one joining is new (minor).
+  if (before.legacy_events || after.legacy_events) {
+    const a = new Set(before.legacy_events || []);
+    const b = new Set(after.legacy_events || []);
+    for (const e of a) if (!b.has(e)) removed.push(`event:${e}`);
+    for (const e of b) if (!a.has(e) && before.legacy_events) added.push(`event:${e}`);
+  }
   if ((before.module_abi || '') !== (after.module_abi || '')) changed.push({ name: 'module_abi', kind: 'abi', need: 'major', before: before.module_abi, after: after.module_abi });
 
   let required = 'none';

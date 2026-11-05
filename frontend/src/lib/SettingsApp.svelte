@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
-  import { BUILD_INFO } from './build-info.js';
+  import { buildInfo, copyText } from './shell-services';
   import { fetchThemePreference } from './preferences.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import {
@@ -200,7 +200,8 @@
 
   function copySecret() {
     if (newKeySecret) {
-      navigator.clipboard.writeText(newKeySecret).then(() => {
+      void copyText(newKeySecret, 'API key').then((copied) => {
+        if (!copied) return;
         copiedKey = true;
         setTimeout(() => { copiedKey = false; }, 2000);
       });
@@ -662,7 +663,7 @@
         <dl class="status-list">
           <div>
             <dt>Frontend commit</dt>
-            <dd data-settings-frontend-commit>{shortCommit(BUILD_INFO.commit)}</dd>
+            <dd data-settings-frontend-commit>{shortCommit(buildInfo().commit)}</dd>
           </div>
           <div>
             <dt>Proxy status</dt>

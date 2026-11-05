@@ -24,7 +24,8 @@ import (
 //	R6  the built module is not module/v1: no mount, no abi, no
 //	    sdk_imports, or the SDK is bundled instead of read from ctx.sdk;
 //	R7  requires_sdk is lost or malformed;
-//	R8  a build with no dependencies or node hangs or half-succeeds.
+//	R8  a build with no dependencies or node hangs or half-succeeds;
+//	R9  the shim's forwarded-event list drifts from the SDK lock's.
 
 func TestEmbeddedBoundaryPluginIsTheFrontends(t *testing.T) {
 	front, err := os.ReadFile(filepath.Join("..", "..", "frontend", "scripts", "package-boundary-plugin.mjs"))
@@ -33,6 +34,16 @@ func TestEmbeddedBoundaryPluginIsTheFrontends(t *testing.T) {
 	}
 	if !bytes.Equal(front, boundaryPlugin) {
 		t.Fatal("R1: internal/pkgruntime/package-boundary-plugin.mjs differs from frontend/scripts/package-boundary-plugin.mjs; copy it")
+	}
+}
+
+func TestEmbeddedLegacyEventsAreTheFrontends(t *testing.T) {
+	front, err := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "lib", "sdk-surface", "legacy-events.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(front, legacyEvents) {
+		t.Fatal("R9: internal/pkgruntime/legacy-events.json differs from frontend/src/lib/sdk-surface/legacy-events.json (the SDK lock's legacy_events); copy it")
 	}
 }
 

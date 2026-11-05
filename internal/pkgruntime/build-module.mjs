@@ -67,8 +67,9 @@ export const __sdk = new Proxy({}, {
 `);
 
 const ENTRY_ID = '\0choir-module-entry';
-const EVENTS = ['authexpired', 'authrequired', 'opentextfile', 'openmediafile', 'opentexture', 'launchapp', 'opentrace',
-  'clearsavedwindows', 'keepwindowonly', 'resetdesktop', 'opencomputemonitor', 'contextchange'];
+// The forwarded events: one list (the SDK lock's legacy_events), laid out
+// beside this script as legacy-events.json by the Go side.
+const EVENTS = JSON.parse(readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'legacy-events.json'), 'utf8')).events;
 
 const sdkImports = new Set();
 

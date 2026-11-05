@@ -43,6 +43,7 @@
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
+  import { bindShellHost } from './shell-services';
   import { openFileDocument } from './texture.js';
   import {
     windows,
@@ -1491,11 +1492,6 @@
     showToast(detail.toastMessage || 'Opened in Texture');
   }
 
-  function handleOpenTraceFromContent(event) {
-    const detail = event.detail || {};
-    showToast(detail.toastMessage || 'Trace UI is unshipped; machine-readable evidence remains in logs.');
-  }
-
   function handleIconPositionsChanged() {
     scheduleSave();
   }
@@ -1644,6 +1640,32 @@
   }
 
   // ---- Lifecycle ----
+
+  // The SDK's shell functions (lib/shell-services.ts) act through these.
+  const unbindShellHost = bindShellHost({
+    toast: (message, options) => showToast(message, options),
+    requireAuth: (request) => requestAuth(request),
+    sessionExpired: () => dispatch('authexpired'),
+    openApp: (appId, context) => {
+      const { appName, icon, appContext, ...rest } = context || {};
+      handleLaunchApp({ detail: { appId, appName, icon, appContext: appContext || rest } });
+    },
+    openTextFile: (detail) => handleOpenTextFile({ detail }),
+    openMediaFile: (detail) => handleOpenMediaFile({ detail }),
+    setAppContext: (change) => handleWindowAppContextChange({ detail: change }),
+    listWindows: () => windowsSnapshot()
+      .filter((win) => win.mode !== 'closed')
+      .map((win) => ({
+        windowId: win.windowId,
+        appId: win.appId,
+        title: win.title || '',
+        mode: win.mode,
+        focused: win.windowId === $activeWindowId,
+      })),
+    closeOtherWindows: (keepId) => (keepId ? handleKeepWindowOnly({ detail: { windowId: keepId } }) : handleClearDesktopWindows()),
+    resetDesktop: () => handleResetDesktop(),
+  });
+  onDestroy(unbindShellHost);
 
   onMount(() => {
     mounted = true;
@@ -1815,7 +1837,6 @@
                 on:openmediafile={handleOpenMediaFile}
                 on:opentexture={handleOpenTextureFromContent}
                 on:launchapp={handleLaunchApp}
-                on:opentrace={handleOpenTraceFromContent}
                 on:clearsavedwindows={handleClearDesktopWindows}
                 on:keepwindowonly={handleKeepWindowOnly}
                 on:resetdesktop={handleResetDesktop}

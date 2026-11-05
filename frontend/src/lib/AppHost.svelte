@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import AppSurface from './apps/AppSurface.svelte';
   import { getAppDefinition, registryRevision, type ChoirAppDefinition } from './apps/registry';
   import type { ComponentType } from 'svelte';
   import { handoffToComputerSurfaceIfStale, isDynamicImportError } from './computer-surface-handoff.js';
   import { writable } from 'svelte/store';
   import { provideLaunchContext } from './launch-file';
+  import legacyEvents from './sdk-surface/legacy-events.json';
 
   export let win: any;
   export let currentUser: any = null;
@@ -60,6 +61,21 @@
     window.location.reload();
   }
 
+  // The events an app dispatches to the shell (SDK 1.1.0 functions replace them;
+  // 2.0.0 deletes the list). One source: sdk-surface/legacy-events.json, the
+  // same list the lock records and the installed-package shim carries.
+  let instance: any = null;
+  let offs: Array<() => void> = [];
+  $: bindForwards(instance);
+
+  function bindForwards(component: any) {
+    offs.forEach((off) => off());
+    offs = component && typeof component.$on === 'function'
+      ? legacyEvents.events.map((type: string) => component.$on(type, (event: CustomEvent) => forward(type, event)))
+      : [];
+  }
+  onDestroy(() => offs.forEach((off) => off()));
+
   function forward(type: string, event: CustomEvent) {
     dispatch(type, event.detail || {});
   }
@@ -75,18 +91,7 @@
         {authenticated}
         {appContext}
         currentTheme={theme}
-        on:authexpired={(event) => forward('authexpired', event)}
-        on:authrequired={(event) => forward('authrequired', event)}
-        on:opentextfile={(event) => forward('opentextfile', event)}
-        on:openmediafile={(event) => forward('openmediafile', event)}
-        on:opentexture={(event) => forward('opentexture', event)}
-        on:launchapp={(event) => forward('launchapp', event)}
-        on:opentrace={(event) => forward('opentrace', event)}
-        on:clearsavedwindows={(event) => forward('clearsavedwindows', event)}
-        on:keepwindowonly={(event) => forward('keepwindowonly', event)}
-        on:resetdesktop={(event) => forward('resetdesktop', event)}
-        on:opencomputemonitor={(event) => forward('opencomputemonitor', event)}
-        on:contextchange={(event) => forward('contextchange', event)}
+        bind:this={instance}
       />
     {:else if loadError}
       <div class="app-load-state app-load-error" role="alert">

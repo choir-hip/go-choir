@@ -48,6 +48,13 @@ var buildScript []byte
 //go:embed package-boundary-plugin.mjs
 var boundaryPlugin []byte
 
+// legacyEvents is the events list the module shim forwards (SDK 1.1.0: one
+// source, frontend/src/lib/sdk-surface/legacy-events.json, which the SDK lock
+// records; a test keeps this copy equal).
+//
+//go:embed legacy-events.json
+var legacyEvents []byte
+
 var (
 	sha256Hex   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	sdkRange    = regexp.MustCompile(`^\^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$`)
@@ -139,7 +146,7 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 		return Module{}, fmt.Errorf("pkgruntime: requires_sdk %q is not ^MAJOR.MINOR", requires)
 	}
 	front := filepath.Join(tree, "frontend")
-	for name, body := range map[string][]byte{"build-module.mjs": buildScript, "package-boundary-plugin.mjs": boundaryPlugin} {
+	for name, body := range map[string][]byte{"build-module.mjs": buildScript, "package-boundary-plugin.mjs": boundaryPlugin, "legacy-events.json": legacyEvents} {
 		if err := os.WriteFile(filepath.Join(front, name), body, 0o444); err != nil {
 			return Module{}, err
 		}

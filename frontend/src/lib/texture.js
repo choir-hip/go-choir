@@ -34,10 +34,6 @@ function platformPath(path) {
   return `/api/platform${path}`;
 }
 
-function contentPath(path) {
-  return `/api/content${path}`;
-}
-
 async function decodeError(res, fallback) {
   const err = await res.json().catch(() => ({}));
   throw new Error(err.error || fallback);
@@ -243,20 +239,6 @@ export async function getTextureModelProvenance(docId, options = {}) {
 
   if (!res.ok) {
     await decodeError(res, `Get model provenance failed (${res.status})`);
-  }
-
-  return res.json();
-}
-
-export async function createContentItem(payload = {}) {
-  const res = await fetchWithRenewal(contentPath('/items'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    await decodeError(res, `Create content item failed (${res.status})`);
   }
 
   return res.json();

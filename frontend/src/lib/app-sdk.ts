@@ -18,7 +18,10 @@ export {
   appTitle,
   apiFileURL,
   clampNumber,
+  formatTime,
   loadContextContentItem,
+  loadMediaPosition,
+  loadMediaProgress,
   MEDIA_FILE_ROUTES,
   mediaRouteForFileName,
   loadRecentMedia,
@@ -26,7 +29,9 @@ export {
   recentMediaAppContext,
   rememberRecentMedia,
   resolveMediaSource,
+  saveMediaPosition,
   uploadMediaFile,
+  youtubeEmbedURL,
 } from './media-utils.js';
 
 // Live events (the synced computer state channel).
@@ -69,3 +74,46 @@ export {
   uploadFiles,
 } from './file-upload';
 export type { DropZoneOptions, UploadFailure, UploadOptions } from './file-upload';
+
+// Shell functions (1.1.0): what an app asks of the shell. They replace the
+// events an app dispatched (authexpired, authrequired, launchapp, opentextfile,
+// openmediafile, opentexture, contextchange, clearsavedwindows, keepwindowonly,
+// resetdesktop, opencomputemonitor), which stay forwarded until 2.0.0.
+export {
+  buildInfo,
+  closeOtherWindows,
+  copyText,
+  listWindows,
+  openApp,
+  openFile,
+  requireAuth,
+  resetDesktop,
+  sessionExpired,
+  setAppContext,
+  toast,
+} from './shell-services';
+export type {
+  AppContextChange,
+  AuthRequest,
+  OpenAppContext,
+  ToastKind,
+  ToastOptions,
+  WindowSummary,
+} from './shell-services';
+export { createContentItem } from './content-items.js';
+
+// Renderers shared by Source, Web Lens and Texture. Web Lens uses the source
+// renderer and source-url; Source uses all three.
+export { renderMarkdownBlocks } from './texture-markdown-renderer';
+export {
+  escapeHTML,
+  renderInlineSourceRef,
+  renderSourceEntityFacts,
+  renderSourceTransclusionBody,
+  sourceEntityKindLabel,
+  sourceEntityOpenAppID,
+  sourceEntityOpenPlan,
+  sourceEntityTargetURL,
+  sourceEntityTitle,
+} from './texture-source-renderer';
+export { browserOpenableSourceURL, storedSnapshotApplies, webLensAddress } from './source-url';

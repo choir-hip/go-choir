@@ -31,6 +31,7 @@
     submitPublicationProposal,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { copyText } from './shell-services';
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
@@ -467,13 +468,7 @@
 
   async function copyPublicURL(publicURL) {
     if (!publicURL) return false;
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
-    try {
-      await navigator.clipboard.writeText(publicURL);
-      return true;
-    } catch (_err) {
-      return false;
-    }
+    return copyText(publicURL, 'public link');
   }
 
   function buildPublishedTransclusionRef(bundle = publishedBundle) {
@@ -1496,8 +1491,7 @@
     if (!route) return;
     try {
       const exported = await exportPublication(route, 'txt');
-      await navigator.clipboard.writeText(exported.content || '');
-      saveStatus = 'Published text copied';
+      saveStatus = await copyText(exported.content || '', 'published text') ? 'Published text copied' : 'Could not copy published text';
     } catch (err) {
       saveStatus = err.message || 'Could not copy published text';
     }

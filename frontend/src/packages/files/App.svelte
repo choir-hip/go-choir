@@ -47,6 +47,7 @@
     addLiveEventListener,
     contextMenu,
     currentDeviceId,
+    copyText,
     dropZone,
     fetchWithRenewal,
     isOwnLiveEvent,
@@ -573,12 +574,8 @@
 
   async function copyPath(entry) {
     const path = entrySegments(entry).join('/');
-    try {
-      await navigator.clipboard.writeText(path);
-      showActionStatus(`Copied ${path}`);
-    } catch (_err) {
-      showActionStatus(path);
-    }
+    // One toast on success; when the browser refuses, the path itself is shown.
+    if (!(await copyText(path, path))) showActionStatus(path);
   }
 
   async function uploadInto(folderSegments) {

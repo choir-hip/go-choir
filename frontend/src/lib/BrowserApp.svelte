@@ -40,7 +40,7 @@
     sourceEntityTitle,
   } from './texture-source-renderer.ts';
   import { webLensAddress, storedSnapshotApplies } from './source-url';
-  import { createContentItem } from './texture.js';
+  import { createContentItem } from './content-items.js';
 
   export let appContext = {};
   export let authenticated = false;
