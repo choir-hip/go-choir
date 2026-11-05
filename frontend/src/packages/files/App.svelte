@@ -399,19 +399,19 @@
   }
 
   // Open with: the user's choice of app for this file (Open keeps the default).
-  function openWith(entry, opener: FileOpener) {
+  function openWith(entry, fileOpener: FileOpener) {
     const pathSegments = entrySegments(entry);
-    if (opener.via === 'text') {
+    if (fileOpener.via === 'text') {
       dispatch('opentextfile', { pathSegments, fileName: entry.name });
       return;
     }
     dispatch('openmediafile', {
-      appId: opener.appId,
-      mediaType: opener.mediaType,
+      appId: fileOpener.appId,
+      mediaType: fileOpener.mediaType,
       pathSegments,
       filePath: pathSegments.join('/'),
       fileName: entry.name,
-      openedWith: opener.isDefault ? 'default' : 'choice',
+      openedWith: fileOpener.isDefault ? 'default' : 'choice',
     });
   }
 
@@ -622,11 +622,11 @@
       items.push({
         id: 'open-with',
         label: 'Open with',
-        items: openers.map((opener) => ({
-          id: `open-with:${opener.appId}`,
-          label: opener.isDefault ? `${opener.name} (default)` : opener.name,
-          icon: opener.icon,
-          onSelect: () => openWith(entry, opener),
+        items: openers.map((fileOpener) => ({
+          id: `open-with:${fileOpener.appId}`,
+          label: fileOpener.isDefault ? `${fileOpener.name} (default)` : fileOpener.name,
+          icon: fileOpener.icon,
+          onSelect: () => openWith(entry, fileOpener),
         })),
       });
     }

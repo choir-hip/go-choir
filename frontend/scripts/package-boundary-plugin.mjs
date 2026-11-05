@@ -20,7 +20,9 @@
 // getRootNode(), a prototype walk or a callback that hands it over are not),
 // observers and requestAnimationFrame loops, handler properties (el.onclick =),
 // `(0, window.addEventListener)(...)`, member-callee timers with string bodies,
-// and any capability a dependency package exposes. The checks here make the
+// member-object chains (document.body.addEventListener, document.write,
+// document.head.appendChild(document.createElement('script'))), and any
+// capability a dependency package exposes. The checks here make the
 // honest reach visible (named imports, named globals) and refuse the common
 // ways around that; they cannot make hostile code safe. The enforcement
 // boundary for third-party code is the sandboxed iframe of MA6.1; until then
@@ -47,7 +49,7 @@ const splitQuery = (id) => {
 
 // Raw registrations a package does not make itself (SDK onWindowEvent,
 // onDocumentEvent and repeatEvery return disposers the shell can see).
-const RAW_TARGETS = new Set(['window', 'document', 'globalThis', 'self']);
+const RAW_TARGETS = new Set(['window', 'document', 'globalThis', 'self', 'top', 'parent', 'opener']);
 const memberName = (node) => (node.computed ? (node.property.type === 'Literal' ? String(node.property.value) : '') : node.property.name);
 function rawRegistration(callee) {
   if (callee.type === 'Identifier') return callee.name === 'setInterval' ? 'setInterval' : '';
@@ -101,7 +103,8 @@ const GLOBAL_NAMES = new Set(['window', 'globalThis', 'self', 'top', 'parent', '
 // Properties that hand back the window (or another one) from something else.
 const WINDOW_LINKS = new Set(['window', 'globalThis', 'self', 'top', 'parent', 'frames', 'opener']);
 const WINDOW_FROM_ANYTHING = new Set(['defaultView', 'contentWindow']);
-const BANNED_KEYS = new Set([...BANNED_IDENTIFIERS, 'constructor', '__proto__']);
+// A literal key may not name the window again (window['self']['eval'] would drop the chain) or an escape hatch.
+const BANNED_KEYS = new Set([...BANNED_IDENTIFIERS, 'constructor', '__proto__', ...GLOBAL_NAMES, ...WINDOW_LINKS, ...WINDOW_FROM_ANYTHING]);
 const sdkSource = (node) => {
   if (!node) return false;
   if (node.type === 'Literal' && typeof node.value === 'string') return SDK_SPECIFIER.test(node.value);
@@ -114,8 +117,10 @@ const isGlobalChain = (node, locals) => {
   if (WINDOW_FROM_ANYTHING.has(node.property.name)) return true;
   return (WINDOW_LINKS.has(node.property.name) || node.property.name === 'document') && isGlobalChain(node.object, locals);
 };
-// The names a module declares itself (a local `parent` or `top` is not the window).
-function declaredNames(ast) {
+// The names a module declares at module scope (a module-level `parent` is the module's own, not the window).
+// A root name declared in any nested scope (parameter, catch binding, inner let) is refused instead of
+// shadowing: a package has no reason to name one, and a scope-blind exemption disabled the gate file-wide.
+function moduleLevelNames(ast) {
   const names = new Set();
   const pattern = (p) => {
     if (!p) return;
@@ -125,16 +130,39 @@ function declaredNames(ast) {
     else if (p.type === 'AssignmentPattern') pattern(p.left);
     else if (p.type === 'RestElement') pattern(p.argument);
   };
-  walk(ast, null, (n) => {
-    if (n.type === 'VariableDeclarator') pattern(n.id);
-    else if (n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression') {
-      if (n.id) pattern(n.id);
-      n.params.forEach(pattern);
-    } else if (n.type === 'ClassDeclaration' && n.id) pattern(n.id);
-    else if (n.type === 'CatchClause') pattern(n.param);
-    else if (n.type === 'ImportSpecifier' || n.type === 'ImportDefaultSpecifier' || n.type === 'ImportNamespaceSpecifier') pattern(n.local);
-  });
+  for (const raw of ast.body || []) {
+    const n = (raw.type === 'ExportNamedDeclaration' || raw.type === 'ExportDefaultDeclaration') && raw.declaration ? raw.declaration : raw;
+    if (n.type === 'VariableDeclaration') n.declarations.forEach((d) => pattern(d.id));
+    else if ((n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') && n.id) pattern(n.id);
+    else if (n.type === 'ImportDeclaration') n.specifiers.forEach((sp) => pattern(sp.local));
+  }
   return names;
+}
+function nestedRootDeclarations(ast, moduleLevel) {
+  const found = new Set();
+  const pattern = (p) => {
+    if (!p) return;
+    if (p.type === 'Identifier') { if (GLOBAL_NAMES.has(p.name)) found.add(p.name); }
+    else if (p.type === 'ObjectPattern') p.properties.forEach((q) => pattern(q.type === 'RestElement' ? q.argument : q.value));
+    else if (p.type === 'ArrayPattern') p.elements.forEach(pattern);
+    else if (p.type === 'AssignmentPattern') pattern(p.left);
+    else if (p.type === 'RestElement') pattern(p.argument);
+  };
+  const topNodes = new Set();
+  for (const raw of ast.body || []) {
+    const n = (raw.type === 'ExportNamedDeclaration' || raw.type === 'ExportDefaultDeclaration') && raw.declaration ? raw.declaration : raw;
+    topNodes.add(n);
+    if (n.type === 'VariableDeclaration') n.declarations.forEach((d) => topNodes.add(d));
+  }
+  walk(ast, null, (n) => {
+    if (n.type === 'VariableDeclarator') { if (!topNodes.has(n)) pattern(n.id); }
+    else if (n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression') {
+      if (n.id && !topNodes.has(n)) pattern(n.id);
+      n.params.forEach(pattern);
+    } else if (n.type === 'ClassDeclaration' && n.id && !topNodes.has(n)) pattern(n.id);
+    else if (n.type === 'CatchClause') pattern(n.param);
+  });
+  return found;
 }
 // An Identifier that only names something (a property, a parameter, a declaration), not a read of the binding.
 function namesOnly(node, parent) {
@@ -188,7 +216,8 @@ export function analyzeModule(ast, { checkMeta = true } = {}) {
       problems.push(`a package ${oneByOne}`);
     }
   }
-  const locals = declaredNames(ast);
+  const locals = moduleLevelNames(ast);
+  for (const name of nestedRootDeclarations(ast, locals)) problems.push(`"${name}" is a name of the global object and may not be declared in a nested scope of a package (a parameter or inner variable would hide it from this check)`);
   walk(ast, null, (node, parent) => {
     if (node.type === 'ImportExpression' && sdkSource(node.source)) problems.push(`a package ${oneByOne}`);
     else if (node.type === 'MemberExpression' && node.computed && isGlobalChain(node.object, locals) && !plainKey(node.property)) {
@@ -196,12 +225,14 @@ export function analyzeModule(ast, { checkMeta = true } = {}) {
     } else if (node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier'
       && (WINDOW_LINKS.has(node.property.name) || WINDOW_FROM_ANYTHING.has(node.property.name))
       && isGlobalChain(node, locals) && !(parent?.type === 'MemberExpression' && parent.object === node)
-      && !(parent?.type === 'UnaryExpression' && parent.operator === 'typeof')) {
-      problems.push(`${node.property.name} hands back the window and is not allowed in a package unless it is accessed directly (no alias)`);
+      && !(parent?.type === 'UnaryExpression' && parent.operator === 'typeof')
+      && !(parent?.type === 'BinaryExpression' && ['===', '!==', '==', '!='].includes(parent.operator))) {
+      problems.push(`${node.property.name} hands back the window: use it directly (${node.property.name}.<name>) or compare it (window.top !== window); do not store or pass it`);
     } else if (node.type === 'Identifier' && GLOBAL_NAMES.has(node.name) && !locals.has(node.name) && parent) {
       const memberObject = parent.type === 'MemberExpression' && parent.object === node;
       const typeofOperand = parent.type === 'UnaryExpression' && parent.operator === 'typeof';
-      if (!memberObject && !typeofOperand && !namesOnly(node, parent)) {
+      const compared = parent.type === 'BinaryExpression' && ['===', '!==', '==', '!='].includes(parent.operator);
+      if (!memberObject && !typeofOperand && !compared && !namesOnly(node, parent)) {
         problems.push(`bare "${node.name}" is not allowed in a package (an alias or <svelte:window> hides the listeners the shell must see): use ${node.name}.<name>, or onWindowEvent from the SDK`);
       }
     }

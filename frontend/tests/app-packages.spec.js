@@ -213,7 +213,7 @@ const boundaryControls = [
     script("import { local } from './local.js';\nimport { sdk } from '../../lib/app-sdk';\nimport { onMount } from 'svelte';\nimport { writable } from 'svelte/store';\nimport JSZip from 'jszip';\nimport pic from './pic.png';\nimport s from './local.js?raw';\nconsole.log(local, sdk, onMount, writable, JSZip, pic, s, import.meta.env);\nimport('./local.js').then(console.log);")],
   ['the SDK helpers that register and schedule', script("import { sdk } from '../../lib/app-sdk';\nsdk.onWindowEvent('keydown', () => {});\nsdk.onDocumentEvent('keydown', () => {});\nsdk.repeatEvery(() => {}, 1000);")],
   ['a named re-export and typeof window', script("export { sdk } from '../../lib/app-sdk';\nconsole.log(typeof window, window.innerWidth, window?.name, globalThis.location);")],
-  ['document use, a local named parent, a literal key on the window', script("const parent = { a: 1 };\nconst top = ['x'];\nconsole.log(parent['a'], top[0], typeof document, document.body, document.createElement('div'), window['innerWidth']);")],
+  ['document use, a literal key and a comparison on the window', script("console.log(typeof document, document.body, document.createElement('div'), window['innerWidth'], window.top !== window, window.parent === window);")],
   ['own css, data: urls and fragments', style('.a { color: red; background: url(data:image/png;base64,AAAA); fill: url(#grad); }')],
 ];
 
@@ -264,6 +264,17 @@ const boundaryBad = [
   ['bare top alias', script("const t = top;\nconsole.log(t);"), /bare "top"/],
   ['window.top alias', script("const t = window.top;\nconsole.log(t);"), /hands back the window/],
   ['document.defaultView alias', script("const w = document.defaultView;\nconsole.log(w);"), /hands back the window/],
+  // review r3: a nested declaration of a root name cannot hide it; a literal key cannot name the window again
+  ['catch (window) hides nothing', script("try { 1; } catch (window) {}\nconst g = globalThis;\nconsole.log(g);"), /nested scope|bare "globalThis"/],
+  ['catch (window) then an alias', script("let w = null;\ntry { 1; } catch (window) {}\nw = window;\nconsole.log(w);"), /nested scope/],
+  ['a parameter named top', script("function f(top) { return top; }\nconsole.log(f(1));"), /nested scope/],
+  ['an inner let named parent', script("function f() { const parent = 1; return parent; }\nconsole.log(f());"), /nested scope/],
+  ['window[self][eval]', script("window['self']['eval']('1');"), /computed access to the global object/],
+  ['window[self][concatenated sdk key]', script("console.log(window['self']['__choir' + 'AppSdk']);"), /computed access to the global object/],
+  ['frames[0] literal hop to eval', script("console.log(frames['self']['Function']);"), /computed access to the global object/],
+  ['top.addEventListener', script("top.addEventListener('keydown', () => {});"), /top\.addEventListener is not allowed/],
+  ['parent.addEventListener', script("parent.addEventListener('keydown', () => {});"), /parent\.addEventListener is not allowed/],
+  ['opener.setInterval', script("opener.setInterval(() => {}, 1000);"), /opener\.setInterval is not allowed/],
   ['aliased window', script("const w = window;\nw.addEventListener('keydown', () => {});"), /bare "window"/],
   ['aliased globalThis', script("const g = globalThis;\nconsole.log(g);"), /bare "globalThis"/],
   ['svelte:window listener', { 'src/packages/p/App.svelte': '<svelte:window on:keydown={() => {}} />\n<div>ok</div>\n' }, /bare "window"/],
