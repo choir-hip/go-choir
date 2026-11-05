@@ -267,6 +267,8 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	defer cancel()
 	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection, fallbacks: fallbacks})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
+	// MA3.3: the child reads as the desk it runs as, not as its parent.
+	childCtx = withDeskReader(childCtx, childExec.Profile)
 
 	workers := newResearchChildDeskWorkers(childKey)
 	defer workers.release(deskWorkerActivationID(childExec))

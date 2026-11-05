@@ -327,6 +327,7 @@ func deskDocOf(agentID string) string {
 // document of the owner on this computer. A desk bound to no doc has no own
 // story to name.
 func (rt *Runtime) researchDeskDoc(ctx context.Context, agentID, owner, computer string) (string, error) {
+	ctx = withKernelReader(ctx)
 	doc, ok := strings.CutPrefix(strings.TrimSpace(agentID), yaegikernel.SessionRoleResearch+":")
 	doc = strings.TrimSpace(doc)
 	if !ok || doc == "" {

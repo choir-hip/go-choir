@@ -228,25 +228,49 @@ func recordUndeclaredWrite(kind ObjectKind) {
 	if !trackUndeclared.Load() {
 		return
 	}
-	pcs := make([]uintptr, 64)
-	n := runtime.Callers(2, pcs)
+	key, ok := undeclaredCaller(kind, false)
+	if !ok {
+		return
+	}
+	writerGateMu.Lock()
+	undeclaredWrites[key]++
+	writerGateMu.Unlock()
+}
+
+// undeclaredCaller names the first caller of a write or read outside the
+// store and the graph, as "kind <- function (file:line)". A caller that is a
+// test file is not a call site of the product: a fixture writing or reading
+// straight through the store returns false. For a read (anyTestFrame) the
+// rule is wider: a call a test body makes synchronously, through any product
+// function, is a fixture too, so any test frame in the stack exempts it.
+// What the read oracle catches is a product goroutine (a loop, a handler, a
+// run) that touches the graph with no declared actor.
+func undeclaredCaller(kind ObjectKind, anyTestFrame bool) (string, bool) {
+	pcs := make([]uintptr, 96)
+	n := runtime.Callers(3, pcs)
 	frames := runtime.CallersFrames(pcs[:n])
+	var first *runtime.Frame
 	for {
 		frame, more := frames.Next()
-		if !strings.Contains(frame.File, "/internal/store/") && !strings.Contains(frame.File, "/internal/objectgraph/") {
-			if strings.HasSuffix(frame.File, "_test.go") {
-				return
+		isTest := strings.HasSuffix(frame.File, "_test.go")
+		if isTest && (anyTestFrame || first == nil) {
+			return "", false
+		}
+		if first == nil && !strings.Contains(frame.File, "/internal/store/") && !strings.Contains(frame.File, "/internal/objectgraph/") {
+			f := frame
+			first = &f
+			if !anyTestFrame {
+				break
 			}
-			key := fmt.Sprintf("%s <- %s (%s:%d)", kind, frame.Function, filepath.Base(frame.File), frame.Line)
-			writerGateMu.Lock()
-			undeclaredWrites[key]++
-			writerGateMu.Unlock()
-			return
 		}
 		if !more {
-			return
+			break
 		}
 	}
+	if first == nil {
+		return "", false
+	}
+	return fmt.Sprintf("%s <- %s (%s:%d)", kind, first.Function, filepath.Base(first.File), first.Line), true
 }
 
 // ResetWriterGateCounts clears the counts (tests).

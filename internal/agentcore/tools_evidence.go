@@ -58,6 +58,7 @@ func newGetRunMemoryEntryTool(rt *Runtime) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
+			noteRunMemoryScope(ctx, toolregistry.ExecutionContextFrom(ctx).RunID, entry)
 			return toolregistry.ResultJSON(map[string]any{
 				"entry_id":            entry.EntryID,
 				"loop_id":             entry.RunID,

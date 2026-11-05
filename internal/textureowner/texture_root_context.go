@@ -34,6 +34,7 @@ const textureRootContextCut = "\n(the rest of the master document is cut here)"
 // head is not the root's own writing (its seed, or an owner edit the root
 // has not yet rendered).
 func (h *Handler) textureRootSharedContext(ctx context.Context, ownerID string, doc types.Document, root store.TextureRoot) (string, string) {
+	ctx = asTextureReader(ctx)
 	computerID := strings.TrimSpace(doc.ComputerID)
 	if h == nil || h.Store == nil || strings.TrimSpace(root.DocumentID) == "" || root.DocumentID == doc.DocID {
 		return "", ""
@@ -71,6 +72,7 @@ func (h *Handler) textureRootSharedContext(ctx context.Context, ownerID string, 
 // revised first, the ledger's bound plus the masters). A read error leaves
 // every section's order as the root wrote it.
 func (h *Handler) textureRootRevisedAt(ctx context.Context, ownerID, computerID string, root store.TextureRoot) map[string]time.Time {
+	ctx = asTextureReader(ctx)
 	list := h.textureRootListDocuments
 	if list == nil {
 		list = h.Store.ListDocumentsByScope

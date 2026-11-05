@@ -153,6 +153,7 @@ func (h *Handler) textureCaptures() texturewrite.CaptureSource {
 }
 
 func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, turn yaegikernel.TextureTurn, identity string) (string, error) {
+	ctx = asTextureReader(ctx)
 	h.textureEditMu.Lock()
 	defer h.textureEditMu.Unlock()
 	if turn.Write == nil && turn.Done == "" && turn.Wait == "" && len(turn.Rejects) == 0 && turn.Idle == "" {
@@ -250,6 +251,7 @@ func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, t
 
 // commitTextureWrite materializes a Write against the head and commits it.
 func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, doc types.Document, mutation *store.AgentMutation, turn yaegikernel.TextureTurn, args textureTurnArgs, reason string, durableLifecycle bool) (string, error) {
+	ctx = asTextureReader(ctx)
 	computerID := strings.TrimSpace(rec.ComputerID)
 	var baseRev types.Revision
 	var err error

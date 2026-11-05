@@ -158,6 +158,7 @@ func (rt *Runtime) judgeSupportJob(ownerID, computerID, runID, revisionID string
 // judgePendingSupport judges the listed, unjudged pairs among keys and
 // records their verdicts.
 func (rt *Runtime) judgePendingSupport(ctx context.Context, ownerID, computerID, runID, revisionID string, keys []string) error {
+	ctx = withKindReader(ctx, "choir.support_verdict")
 	var pending []types.SupportVerdict
 	for _, key := range keys {
 		if _, judged, err := rt.store.SupportVerdict(ctx, ownerID, computerID, key); err != nil {

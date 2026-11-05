@@ -51,6 +51,7 @@ type textureLifecycleCreateResponse struct {
 }
 
 func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return

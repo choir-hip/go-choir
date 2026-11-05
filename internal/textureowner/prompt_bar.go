@@ -80,6 +80,7 @@ type promptBarSubmissionStatusResponse struct {
 // HandlePromptBar is the browser-public product entrypoint. Agentcore records
 // the conductor decision; the selected app owner materializes product state.
 func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -247,6 +248,7 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 
 // HandlePromptBarSubmission returns product-level state for one owner-scoped submission.
 func (h *Handler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return

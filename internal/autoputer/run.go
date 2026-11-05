@@ -177,6 +177,9 @@ func Run() {
 	installHostFetchRoute(cfg.ComputerID)
 
 	s := server.NewServer("autoputer", cfg.Port)
+	// Every route this server serves is an owner route (E1): its reads declare
+	// the owner, unless a desk's in-process ProductAPI call names itself.
+	s.WrapHandler(agentcore.OwnerRouteReader)
 	boot := newStartupFailer(s, cfg.ComputerID)
 
 	// Initialize the placeholder shell handlers.

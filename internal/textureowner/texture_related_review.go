@@ -35,6 +35,7 @@ type relatedReviewHTTPReceipt struct {
 
 // HandleTextureRelatedReview serves POST /api/texture/related-review.
 func (h *Handler) HandleTextureRelatedReview(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})

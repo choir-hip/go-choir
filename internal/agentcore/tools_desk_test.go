@@ -54,8 +54,10 @@ var (
 // left one in the temp dir (283 of them, ~48 GB, on 2026-10-14).
 func TestMain(m *testing.M) {
 	stopTracking := objectgraph.TrackUndeclaredWrites()
+	stopReads := objectgraph.TrackUndeclaredReads()
 	code := dbxtest.Main(m)
 	stopTracking()
+	stopReads()
 	if deskTestWorkerBinDir != "" {
 		_ = os.RemoveAll(deskTestWorkerBinDir)
 	}
@@ -64,6 +66,11 @@ func TestMain(m *testing.M) {
 	// call site (a fixture writing from a test file is not one).
 	if undeclared := objectgraph.UndeclaredWrites(); len(undeclared) != 0 && code == 0 {
 		fmt.Fprintf(os.Stderr, "FAIL: the writer gate saw writes that declare no writer: %v\n", undeclared)
+		code = 1
+	}
+	// MA3.3: every object-graph read of the product declares its reader.
+	if undeclared := objectgraph.UndeclaredReads(); len(undeclared) != 0 && code == 0 {
+		fmt.Fprintf(os.Stderr, "FAIL: the reader gate saw reads that declare no reader: %v\n", undeclared)
 		code = 1
 	}
 	os.Exit(code)

@@ -163,6 +163,7 @@ type managementTaskObservability struct {
 }
 
 func (rt *Runtime) managementTaskObservability(ctx context.Context, ownerID, computerID string) *managementTaskObservability {
+	ctx = withKindReader(ctx, "choir.management_task")
 	out := &managementTaskObservability{
 		Slots:           rt.managementTaskSlots(ctx, ownerID, computerID),
 		ConfiguredSlots: provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots),

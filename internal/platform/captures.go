@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"io"
 	"log"
 	"net/http"
@@ -62,6 +63,10 @@ type CaptureReadResponse struct {
 	Body          string              `json:"body,omitempty"`
 	BodyChars     int                 `json:"body_chars"`
 	Truncated     bool                `json:"truncated,omitempty"`
+	// Labels are the provenance labels the capture record itself carries
+	// (MA3.3): the host's frame handler resolves a capture's labels from here,
+	// never from the cell. A world capture carries none beyond world_untrusted.
+	Labels []string `json:"labels,omitempty"`
 }
 
 // CaptureWriteRequest is one poll's items, or one page read, from a
@@ -291,6 +296,7 @@ func (h *ObjectGraphHandler) HandleCaptureRead(w http.ResponseWriter, r *http.Re
 		SourceID: meta.SourceID, Title: meta.Title, URL: meta.URL, PublishedAt: meta.PublishedAt,
 		FetchedAt: meta.FetchedAt, ContentBlobID: meta.ContentBlobID, BodyChars: len(text),
 		MediaType: meta.MediaType, RawBytes: meta.RawBytes, Extractor: meta.Extractor, DocHash: meta.DocHash, BlockCount: meta.BlockCount,
+		Labels: types.LabelsFromMetadata(obj.Metadata).Strings(),
 	}
 	if meta.BlocksBlobID == "" {
 		if len(text) > maxChars {

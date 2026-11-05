@@ -2,6 +2,7 @@ package textureowner
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -43,4 +44,27 @@ func asRequestingDesk(ctx context.Context, callerProfile string) context.Context
 		return objectgraph.WithWriter(ctx, w)
 	}
 	return asTextureCustodian(ctx)
+}
+
+// asOwnerRoute declares the owner as the reader of a request an owner route
+// serves (E1: every owner-authenticated HTTP read stays). A request that
+// already names a reader keeps it: a desk's in-process ProductAPI call reaches
+// these routes as that desk (MA3.3, X7).
+func asOwnerRoute(r *http.Request) *http.Request {
+	ctx := objectgraph.WithReaderIfAbsent(r.Context(), objectgraph.WriterOwner)
+	if ctx == r.Context() {
+		return r
+	}
+	return r.WithContext(ctx)
+}
+
+// asTextureReader declares the custodian of Texture's documents as the reader,
+// for Texture's own code the host runs on its behalf (the controller, the
+// occurrence resolver, the root).
+func asTextureReader(ctx context.Context) context.Context {
+	w, ok := objectgraph.CustodianOf("choir.texture_document")
+	if !ok {
+		return ctx
+	}
+	return objectgraph.WithReaderIfAbsent(ctx, w)
 }

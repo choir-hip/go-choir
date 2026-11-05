@@ -145,6 +145,7 @@ func (rt *Runtime) enqueueStoryPublish(key string, job func(context.Context)) {
 // storyPublishesAuto reports whether docID is a story opened with publish
 // auto.
 func (rt *Runtime) storyPublishesAuto(ctx context.Context, ownerID, computerID, docID string) (bool, error) {
+	ctx = withKernelReader(ctx)
 	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if err != nil || strings.TrimSpace(doc.TrajectoryID) == "" {
 		return false, err

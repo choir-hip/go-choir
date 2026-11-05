@@ -367,6 +367,7 @@ func writeSSEData(w http.ResponseWriter, payload any) {
 // HandleTextureCreateDocument handles POST /api/texture/documents.
 // It creates a new document with a durable document identity (VAL-ETEXT-001).
 func (h *Handler) HandleTextureCreateDocument(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -415,6 +416,7 @@ func (h *Handler) HandleTextureCreateDocument(w http.ResponseWriter, r *http.Req
 // HandleTextureImportMarkdownLineage migrates ordered Markdown snapshots into one
 // canonical Texture document with durable version-numbered revisions.
 func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -599,6 +601,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 // HandleTextureOpenFile resolves a file-browser path to one canonical texture
 // document. The first open creates the document + alias; later opens reuse it.
 func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -715,6 +718,7 @@ func contentIDOrEmpty(item *types.ContentItem) string {
 // filesystem shortcut so it appears in Files while the real document state
 // stays canonical in Dolt.
 func (h *Handler) HandleTextureEnsureManifest(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -752,6 +756,7 @@ func (h *Handler) HandleTextureEnsureManifest(w http.ResponseWriter, r *http.Req
 }
 
 func (h *Handler) HandleTextureExportDocument(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -814,6 +819,7 @@ func (h *Handler) HandleTextureExportDocument(w http.ResponseWriter, r *http.Req
 // HandleTextureListDocuments handles GET /api/texture/documents.
 // It returns documents owned by the authenticated user.
 func (h *Handler) HandleTextureListDocuments(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -890,6 +896,7 @@ func internalTextureRevisionIDFromPath(path string) string {
 }
 
 func (h *Handler) HandleInternalTextureDocument(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -917,6 +924,7 @@ func (h *Handler) HandleInternalTextureDocument(w http.ResponseWriter, r *http.R
 }
 
 func (h *Handler) HandleInternalTextureRevision(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -980,6 +988,7 @@ func (h *Handler) autoputerTextureRevisionResponseFromRecord(ctx context.Context
 }
 
 func (h *Handler) HandleTextureDocument(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	docID := extractDocID(r.URL.Path)
 	if docID == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
@@ -1060,6 +1069,7 @@ func (h *Handler) textureTurnInterruptedByRestart(ctx context.Context, doc types
 // HandleTextureRevisions handles POST and GET
 // /api/texture/documents/{id}/revisions.
 func (h *Handler) HandleTextureRevisions(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	docID := extractDocID(r.URL.Path)
 	if docID == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
@@ -1369,6 +1379,7 @@ func defaultDraftLine() textureDraftLineSummary {
 }
 
 func (h *Handler) textureDocumentResponse(ctx context.Context, doc types.Document) textureDocumentResponse {
+	ctx = asTextureReader(ctx)
 	resp := textureDocumentResponse{
 		DocID:             doc.DocID,
 		OwnerID:           doc.OwnerID,
@@ -1600,6 +1611,7 @@ func (h *Handler) handleTextureListRevisions(w http.ResponseWriter, r *http.Requ
 // Opening a historical revision does not mutate the document head
 // (VAL-ETEXT-007: historical snapshots can be opened without mutating head).
 func (h *Handler) HandleTextureRevision(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1630,6 +1642,7 @@ func (h *Handler) HandleTextureRevision(w http.ResponseWriter, r *http.Request) 
 // (VAL-ETEXT-006: version history lists revisions with explicit
 // attribution metadata).
 func (h *Handler) HandleTextureHistory(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1668,6 +1681,7 @@ func (h *Handler) HandleTextureHistory(w http.ResponseWriter, r *http.Request) {
 // It provides a document-scoped SSE transport so the editor can follow the
 // canonical document head instead of polling a specific loop ID.
 func (h *Handler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1837,6 +1851,7 @@ func textureStreamEventFromRecord(rec types.EventRecord) (textureDocumentStreamE
 }
 
 func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1920,6 +1935,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return

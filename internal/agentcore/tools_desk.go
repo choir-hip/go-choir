@@ -1210,6 +1210,9 @@ func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) str
 func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 	out, err := rt.deskEgressRead(egrCtx, deskRole, cellExec, action, payload)
 	if err == nil {
+		if action == yaegikernel.ActionReadCapture {
+			gateCaptureRead(egrCtx, deskRole, out)
+		}
 		// Every read point the cell reaches taints the run (run_labels.go).
 		rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
 	}

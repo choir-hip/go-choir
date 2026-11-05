@@ -141,6 +141,7 @@ func checkEvidenceListing(listing agentcore.ScreensListing, operationID string) 
 // commitEvidenceEmbeds writes one revision on the current head. retry is
 // true when the head moved under it.
 func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID, docID string, listing agentcore.ScreensListing) (string, bool, error) {
+	ctx = asTextureReader(ctx)
 	doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if err != nil {
 		return "", false, fmt.Errorf("texture evidence: document %s: %w", docID, err)

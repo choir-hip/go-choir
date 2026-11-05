@@ -173,7 +173,9 @@ var (
 func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawMessage) (types.LabelSet, bool) {
 	switch action {
 	case yaegikernel.ActionReadCapture:
-		return captureReadLabels, true
+		// The floor every capture read carries, plus what the capture record
+		// itself is labelled (MA3.3): the host reads it from the record.
+		return captureReadLabels.Union(captureRecordLabels(result)), true
 	case yaegikernel.ActionRead, yaegikernel.ActionPollSource, yaegikernel.ActionSourceAPI,
 		yaegikernel.ActionSearchStart, yaegikernel.ActionSearchWireCorpus, yaegikernel.ActionResearch:
 		return worldReadLabels, true

@@ -125,6 +125,7 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 }
 
 func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref string) textureSourceEntity {
+	ctx = asTextureReader(ctx)
 	key, value := splitTypedEvidenceRef(ref)
 	if key == "" || value == "" {
 		return textureSourceEntity{}

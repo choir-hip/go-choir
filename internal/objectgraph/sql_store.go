@@ -555,12 +555,24 @@ func (s *SQLStore) GetObject(ctx context.Context, id string) (Object, error) {
 	if s == nil || s.db == nil {
 		return Object{}, fmt.Errorf("objectgraph sql: nil store")
 	}
-	return scanObject(s.db.QueryRowContext(ctx, objectSelectSQL+` WHERE h.canonical_id = ?`, id))
+	obj, err := scanObject(s.db.QueryRowContext(ctx, objectSelectSQL+` WHERE h.canonical_id = ?`, id))
+	if err != nil {
+		return obj, err
+	}
+	if err := checkReadKind(ctx, obj.ObjectKind); err != nil {
+		return Object{}, err
+	}
+	return obj, nil
 }
 
 func (s *SQLStore) ListObjects(ctx context.Context, filter ListFilter) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if filter.Kind != "" {
+		if err := checkReadKind(ctx, filter.Kind); err != nil {
+			return nil, err
+		}
 	}
 	query := objectSelectSQL + ` WHERE 1=1`
 	var args []any
@@ -597,6 +609,9 @@ func (s *SQLStore) ListObjects(ctx context.Context, filter ListFilter) ([]Object
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("objectgraph sql: iterate objects: %w", err)
+	}
+	if filter.Kind == "" {
+		return readableObjects(ctx, out), nil
 	}
 	return out, nil
 }
@@ -636,7 +651,7 @@ func (s *SQLStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID s
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("objectgraph sql: snapshot commit: %w", err)
 	}
-	return objects, nil
+	return readableObjects(ctx, objects), nil
 }
 
 // snapshotFetchBatch bounds each phase-2 IN list (attachBodies,
@@ -665,6 +680,9 @@ func snapshotHeadersSQL(nKinds int) string {
 func (s *SQLStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, computerID string, kinds []ObjectKind, keep func(kind ObjectKind, metadata json.RawMessage) bool) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKinds(ctx, kinds); err != nil {
+		return nil, err
 	}
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if ownerID == "" || computerID == "" {
@@ -716,6 +734,9 @@ func (s *SQLStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, comp
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("objectgraph sql: snapshot commit: %w", err)
 	}
+	if len(kinds) == 0 {
+		return readableObjects(ctx, objects), nil
+	}
 	return objects, nil
 }
 
@@ -756,6 +777,9 @@ func (s *SQLStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computer
 	}
 	if trajectoryID == "" {
 		return nil, false, nil
+	}
+	if err := checkReadKinds(ctx, kinds); err != nil {
+		return nil, false, err
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -1023,6 +1047,9 @@ func (s *SQLStore) GetObjectByMetadata(ctx context.Context, kind, jsonPath, valu
 	if s == nil || s.db == nil {
 		return Object{}, fmt.Errorf("objectgraph sql: nil store")
 	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return Object{}, err
+	}
 	return scanObject(s.db.QueryRowContext(ctx,
 		objectSelectSQL+`
 		 WHERE h.object_kind = ? AND `+jsonTextSQL(`h.metadata`, `?`)+` = ?
@@ -1078,6 +1105,9 @@ func (s *SQLStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, va
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
+	}
 	query, args := metadataListSQL(kind, jsonPath, value, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -1106,6 +1136,9 @@ const objectsPageSQL = objectSelectSQL + `
 func (s *SQLStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID string, limit int) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, objectsPageSQL, kind, afterCanonicalID, NormalizedLimit(limit))
 	if err != nil {
@@ -1143,6 +1176,9 @@ func (s *SQLStore) ListObjectsByKindOwnerComputerPage(ctx context.Context, kind,
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, ObjectsByKindOwnerComputerPageSQL,
 		kind, ownerID, computerID, afterCanonicalID, NormalizedLimit(limit))
 	if err != nil {
@@ -1166,6 +1202,9 @@ func (s *SQLStore) ListObjectsByKindOwnerComputerPage(ctx context.Context, kind,
 func (s *SQLStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPath, value, afterCanonicalID string, limit int) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
 	}
 	if !strings.HasPrefix(jsonPath, "$.") {
 		return nil, fmt.Errorf("objectgraph sql: invalid metadata JSON path %q", jsonPath)
@@ -1216,6 +1255,9 @@ func (s *SQLStore) ListObjectsByEdgeTo(ctx context.Context, toID string, edgeKin
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
+	if err := checkReadKind(ctx, ObjectKind(objKind)); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, objectsByEdgeToSQL, toID, string(edgeKind), objKind)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph sql: list objects by edge to: %w", err)
@@ -1247,6 +1289,9 @@ func (s *SQLStore) CountObjectsByEdgeTo(ctx context.Context, toID string, edgeKi
 	if s == nil || s.db == nil {
 		return 0, -1, fmt.Errorf("objectgraph sql: nil store")
 	}
+	if err := checkReadKind(ctx, ObjectKind(objKind)); err != nil {
+		return 0, -1, err
+	}
 	maxVersion = -1
 	err = s.db.QueryRowContext(ctx, countObjectsByEdgeToSQL,
 		toID, string(edgeKind), objKind).Scan(&count, &maxVersion)
@@ -1263,6 +1308,9 @@ func (s *SQLStore) CountObjectsByEdgeTo(ctx context.Context, toID string, edgeKi
 func (s *SQLStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID string, matches []JSONFieldMatch, limit int) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
 	}
 	if fam := s.derivedAddresseeRead(kind, matches); fam != nil {
 		// The owner's newest rows of the key, from the validated side table;
@@ -1510,6 +1558,9 @@ func (s *SQLStore) ListObjectsByKindOwnerWhere(ctx context.Context, kind, ownerI
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
+	}
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("objectgraph sql: owner_id is required")
@@ -1577,6 +1628,9 @@ const jsonBodyFieldsFromSQL = objectFromSQL + ` WHERE h.object_kind = ? AND h.ow
 func (s *SQLStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, ownerID string, jsonPaths []string, limit int) ([]JSONBodyFieldRow, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
 	}
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {

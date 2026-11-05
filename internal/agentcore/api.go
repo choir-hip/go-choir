@@ -928,6 +928,10 @@ type guestObservabilityResponse struct {
 	// (ARCH-04): the oracle for the observe-to-enforce flip, read here
 	// instead of over SSH. This process's counts only (corpusd keeps its own).
 	ObjectGraphWriterGate *writerGateObservability `json:"objectgraph_writer_gate,omitempty"`
+	// ObjectGraphReaderGate is the reader gate's mode and the violations it
+	// has seen since boot, keyed "kind|declared reader|reason" (MA3.3): the
+	// cross reads of the custody section show up here as wrong_reader.
+	ObjectGraphReaderGate *writerGateObservability `json:"objectgraph_reader_gate,omitempty"`
 }
 
 type writerGateObservability struct {
@@ -994,6 +998,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		Steps:      &steps,
 		ObjectGraphWriterGate: &writerGateObservability{
 			Mode: objectgraph.CurrentWriterGateMode().String(), Counts: objectgraph.WriterGateCounts(),
+		},
+		ObjectGraphReaderGate: &writerGateObservability{
+			Mode: objectgraph.CurrentReaderGateMode().String(), Counts: objectgraph.ReaderGateCounts(),
 		},
 	}
 	if r.URL.Query().Get("goroutines") == "1" {

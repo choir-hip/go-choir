@@ -13,6 +13,7 @@ const (
 
 // HandleTextureRouter dispatches all document and revision Texture routes.
 func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	path := r.URL.Path
 	switch path {
 	case "/api/texture/files/open":
@@ -70,6 +71,7 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 
 // HandleTextureDocumentsRoot routes create and list requests.
 func (h *Handler) HandleTextureDocumentsRoot(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	switch r.Method {
 	case http.MethodPost:
 		h.HandleTextureCreateDocument(w, r)

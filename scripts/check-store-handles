@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""The store-handles gate (modular architecture plan MA3.3, section 8, R15 "No cross reads!").
+
+A read of the object graph declares its reader (objectgraph.WithReader, or
+store.As(reader) for a scoped handle). The graph's read primitives
+(GetObject, ListObjects*, ReadObjectSnapshot*, ReadTrajectorySnapshot,
+GetObjectByMetadata, CountObjectsByEdgeTo, ListJSONBodyFieldsByKindOwner) are
+the store's own business: desk and host code reaches the graph only through
+the typed methods of internal/store, which the reader gate sees. This gate
+counts, per non-test Go file, a call to one of those primitives outside the
+packages that own a graph:
+
+  internal/store, internal/objectgraph   the graph and the VM store;
+  internal/platform, internal/sourcegraph  corpusd's own Store B (kinds every
+                                         desk may read, E4).
+
+scripts/store-handles-allowlist.json holds the residue per file. The gate
+FAILS when a file has more calls than its entry (a new file has an entry of
+zero), so a new raw read of the graph from agentcore, textureowner, autoputer
+or any other package is refused. A file below its entry only warns;
+`--tighten` lowers entries to the current count and drops files at zero, and
+never raises one. The allowlist starts empty and must stay so.
+
+What it does not see: a typed Store method that reads a desk-owned kind (for
+example SearchDocuments over Texture documents) called from another desk's
+code. The runtime oracle covers that (objectgraph.TrackUndeclaredReads, armed
+in the agentcore and textureowner suites, and the reader gate's counters on
+GET /api/runtime/observability); MA3.7 converts those methods to scoped
+handles with the cross reads of section 8.4.
+
+Usage: scripts/check-store-handles [--root DIR] [--allowlist FILE] [--tighten]
+"""
+import argparse, json, os, re, sys
+
+PRIMITIVES = re.compile(
+    r"\.\s*(?:GetObject|ListObjects\w*|ReadObjectSnapshot\w*|ReadTrajectorySnapshot|GetObjectByMetadata|"
+    r"CountObjectsByEdgeTo|ListJSONBodyFieldsByKindOwner|ListRecordsByInboxSeq|ListCommitmentClaimObjects)\s*\(")
+OWNERS = ("internal/store/", "internal/objectgraph/", "internal/platform/", "internal/sourcegraph/")
+SKIP_TOP = {".git", "node_modules", "testdata", "frontend", "vendor", "docs", "nix", "skills"}
+
+
+def strip_comments(text):
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "\"`":
+            j = i + 1
+            while j < n and text[j] != c:
+                j += 2 if (c == '"' and text[j] == "\\") else 1
+            out.append(text[i:j + 1]); i = j + 1
+        elif c == "'":
+            j = i + 1
+            while j < n and text[j] != "'":
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1]); i = j + 1
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+
+def scan(root):
+    counts = {}
+    for dp, dns, fns in os.walk(root):
+        dns[:] = [d for d in dns if d not in SKIP_TOP and not d.startswith(".")]
+        for fn in fns:
+            if not fn.endswith(".go") or fn.endswith("_test.go"):
+                continue
+            path = os.path.join(dp, fn)
+            rel = os.path.relpath(path, root).replace(os.sep, "/")
+            if rel.startswith(OWNERS):
+                continue
+            with open(path, encoding="utf-8") as f:
+                n = len(PRIMITIVES.findall(strip_comments(f.read())))
+            if n:
+                counts[rel] = n
+    return counts
+
+
+def write(path, counts):
+    with open(path, "w") as f:
+        json.dump({"files": dict(sorted(counts.items()))}, f, indent=1, sort_keys=True)
+        f.write("\n")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=None)
+    ap.add_argument("--allowlist", default=None)
+    ap.add_argument("--tighten", action="store_true")
+    a = ap.parse_args()
+    root = a.root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    allow_path = a.allowlist or os.path.join(root, "scripts", "store-handles-allowlist.json")
+    counts = scan(root)
+    try:
+        with open(allow_path) as f:
+            allow = json.load(f)["files"]
+    except FileNotFoundError:
+        allow = {}
+    if a.tighten:
+        lowered = {p: min(cap, counts.get(p, 0)) for p, cap in allow.items()}
+        lowered = {p: n for p, n in lowered.items() if n > 0}
+        write(allow_path, lowered)
+        print("check-store-handles: allowlist tightened: %d files (was %d)" % (len(lowered), len(allow)))
+        return 0
+    bad = [(p, n, allow.get(p, 0)) for p, n in sorted(counts.items()) if n > allow.get(p, 0)]
+    for p, n, cap in bad:
+        print("FAIL %s: %d raw graph reads, allowlist %d (read through a typed store method; declare the reader)" % (p, n, cap), file=sys.stderr)
+    for p in sorted(allow):
+        if counts.get(p, 0) < allow[p]:
+            print("warn %s: allowlist %d, now %d (run --tighten)" % (p, allow[p], counts.get(p, 0)))
+    if bad:
+        return 1
+    print("check-store-handles: ok (%d files outside the graph's owners read it raw, allowlist %d)" % (len(counts), sum(allow.values())))
+    return 0
+
+
+sys.exit(main())

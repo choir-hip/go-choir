@@ -120,6 +120,7 @@ func (h *Handler) textureRootScopeLocked(ownerID, computerID string) *textureRoo
 // textureRootFor returns the marker when the root desk is on and docID is
 // the master document: the one condition that makes a Texture run the root.
 func (h *Handler) textureRootFor(ctx context.Context, ownerID, computerID, docID string) (store.TextureRoot, bool) {
+	ctx = asTextureReader(ctx)
 	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
 	if h == nil || h.Store == nil || docID == "" || !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
 		return store.TextureRoot{}, false
@@ -236,6 +237,7 @@ func (h *Handler) NoteTextureRootTrajectoryChange(ctx context.Context, ownerID, 
 
 // noteTextureRootChangeOn is the note with the switch already read on.
 func (h *Handler) noteTextureRootChangeOn(ctx context.Context, ownerID, computerID, docID string) {
+	ctx = asTextureReader(ctx)
 	if root, err := h.Store.GetTextureRoot(ctx, ownerID, computerID); err == nil && root.DocumentID == docID {
 		return // the root's own document never wakes the root
 	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -425,6 +427,7 @@ func (h *Handler) reconcileTextureRootDigest(ctx context.Context, master types.D
 // creating it, or replacing a master that is no longer live, first; it is
 // idempotent on liveness, and refuses with texture.root_desk off.
 func (h *Handler) ensureTextureRoot(ctx context.Context, ownerID, computerID string) (store.TextureRoot, bool, error) {
+	ctx = asTextureReader(ctx)
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if h == nil || h.Store == nil {
 		return store.TextureRoot{}, false, fmt.Errorf("texture root: store unavailable")
@@ -521,6 +524,7 @@ func (h *Handler) createTextureRootDocument(ctx context.Context, root store.Text
 // take a root run: its trajectory is live with no cancellation intent, and
 // its standing item is open.
 func (h *Handler) textureRootLive(ctx context.Context, ownerID, computerID string, root store.TextureRoot) (exists, live bool, err error) {
+	ctx = asTextureReader(ctx)
 	doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, root.DocumentID)
 	if errors.Is(err, store.ErrNotFound) {
 		return false, false, nil
@@ -563,6 +567,7 @@ type textureRootLedgerEntry struct {
 // (owner input on the master, a fresh master) it is a full refresh of the
 // most recently revised documents. Both are bounded.
 func (h *Handler) textureRootRequestSection(ctx context.Context, ownerID string, doc types.Document, root store.TextureRoot, req textureAgentRevisionRequest) string {
+	ctx = asTextureReader(ctx)
 	computerID := strings.TrimSpace(doc.ComputerID)
 	full := req.RootFullRefresh || len(req.RootDocuments) == 0
 	masters := textureRootMasterIDs(root)
@@ -723,6 +728,7 @@ func textureRootRefsLine(docID string, open []types.WorkItemRecord) string {
 // else the first revision the owner wrote. The walk reads at most
 // textureRootAskWalk revisions.
 func (h *Handler) textureRootOwnerAsk(ctx context.Context, ownerID, computerID string, head types.Revision) string {
+	ctx = asTextureReader(ctx)
 	if ask := textureRootHeadAsk(head); ask != "" {
 		return ask
 	}

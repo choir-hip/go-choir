@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"math"
 	"sort"
 	"strings"
@@ -135,6 +136,9 @@ func (s *Store) headEntries(ctx context.Context, docs []types.Document) []*searc
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				// The pool is the store filling its own index: a caller that
+				// declared a reader keeps it (research's search reads as research).
+				ctx := objectgraph.WithReaderIfAbsent(ctx, objectgraph.WriterStore)
 				for i := range work {
 					doc := docs[i]
 					rev, err := s.searchHeadRevision(ctx, doc)

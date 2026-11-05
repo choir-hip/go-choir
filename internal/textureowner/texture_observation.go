@@ -148,6 +148,7 @@ func (h *Handler) projectTextureLifecycleEvent(ctx context.Context, doc types.Do
 }
 
 func (h *Handler) projectTextureLifecycleEventForCommand(ctx context.Context, doc types.Document, event types.LifecycleEvent, textureTurnCommand bool) (textureDurableEvent, error) {
+	ctx = asTextureReader(ctx)
 	status, workState := textureStatusAtEvent(event.Kind)
 	out := textureDurableEvent{
 		Schema: textureObservationSchemaV1, Cursor: event.ReducerSeq, EventID: event.EventID,
@@ -210,6 +211,7 @@ func textureStatusAtEvent(kind types.LifecycleEventKind) (types.TrajectoryStatus
 }
 
 func (h *Handler) textureRevisionSourceIdentities(ctx context.Context, revision types.Revision) ([]textureSourceIdentity, error) {
+	ctx = asTextureReader(ctx)
 	refs, err := h.Store.ListTextureSourceRefsForRevisionByScope(ctx, revision.OwnerID, revision.ComputerID, revision.DocID, revision.RevisionID)
 	if err != nil {
 		return nil, err
@@ -266,6 +268,7 @@ func textureExactSourceOpenPath(docID, revisionID, sourceRefID, sourceRefVersion
 }
 
 func (h *Handler) HandleTextureDocumentEvents(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -382,6 +385,7 @@ func (h *Handler) handleLifecycleTextureDocumentStream(w http.ResponseWriter, r 
 }
 
 func (h *Handler) HandleTextureSourceOpen(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return

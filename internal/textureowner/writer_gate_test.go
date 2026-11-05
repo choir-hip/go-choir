@@ -14,10 +14,17 @@ import (
 // package's product code with no writer fails it.
 func TestMain(m *testing.M) {
 	stop := objectgraph.TrackUndeclaredWrites()
+	stopReads := objectgraph.TrackUndeclaredReads()
 	code := m.Run()
 	stop()
+	stopReads()
 	if undeclared := objectgraph.UndeclaredWrites(); len(undeclared) != 0 && code == 0 {
 		fmt.Fprintf(os.Stderr, "FAIL: the writer gate saw writes that declare no writer: %v\n", undeclared)
+		code = 1
+	}
+	// MA3.3: every read of the product declares its reader.
+	if undeclared := objectgraph.UndeclaredReads(); len(undeclared) != 0 && code == 0 {
+		fmt.Fprintf(os.Stderr, "FAIL: the reader gate saw reads that declare no reader: %v\n", undeclared)
 		code = 1
 	}
 	os.Exit(code)

@@ -487,6 +487,7 @@ func textureCancellationIntentPermitsActivation(cancelErr error) (bool, error) {
 }
 
 func (rt *Handler) textureLifecycleActivationEligible(ctx context.Context, doc types.Document) (bool, error) {
+	ctx = asTextureReader(ctx)
 	if rt == nil || rt.Store == nil {
 		return false, fmt.Errorf("classify Texture lifecycle activation: Store unavailable")
 	}
@@ -1232,6 +1233,7 @@ func revisionOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, revision
 
 // retryable in the actor log.
 func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, computerID, agentID, content string) (agentcore.TextureActorOccurrence, TextureActorOccurrenceState, error) {
+	ctx = asTextureReader(ctx)
 	var zero agentcore.TextureActorOccurrence
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	o, err := agentcore.DecodeTextureActorOccurrence(content)

@@ -54,6 +54,7 @@ type textureAgentRevisionRequest struct {
 // canonical revisions when renewal/retry occurs mid-mutation
 // (VAL-CROSS-122).
 func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -509,6 +510,7 @@ func textureRevisionMatchesDocument(revision types.Revision, doc types.Document,
 }
 
 func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, scheduledMessageSeq int64) (*types.RunRecord, error) {
+	ctx = asTextureReader(ctx)
 	requestIntent := strings.TrimSpace(req.Intent)
 	if requestIntent == "" {
 		requestIntent = "revise"

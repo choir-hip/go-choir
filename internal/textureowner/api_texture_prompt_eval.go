@@ -42,6 +42,7 @@ type texturePromptEvalStartResponse struct {
 // and any researcher it spawns (via coagent overlay inheritance). Verification
 // reuses the public submission/trace/texture product endpoints.
 func (h *Handler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return

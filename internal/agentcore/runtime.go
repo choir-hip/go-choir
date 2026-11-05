@@ -1203,7 +1203,7 @@ func (rt *Runtime) warmCorpusSearchIndex(ctx context.Context) {
 		return
 	}
 	started := time.Now()
-	docs, reads, err := rt.store.WarmSearchIndex(ctx)
+	docs, reads, err := rt.store.WarmSearchIndex(withKernelReader(ctx))
 	log.Printf("runtime: corpus search index warm docs=%d heads_read=%d dur=%s err=%v", docs, reads, time.Since(started).Round(time.Millisecond), err)
 }
 
@@ -3892,6 +3892,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
+	// MA3.3: every object-graph read of this run's tools and cell verbs
+	// declares the run record's desk as its reader.
+	ctx = withDeskReader(ctx, rec.AgentProfile)
 	assignedEngineeringOverlay := false
 	if rt.capsuleExecutor != nil && !isManagementTaskRun(rec) {
 		switch agentProfileForRun(rec) {

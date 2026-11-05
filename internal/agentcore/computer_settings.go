@@ -70,7 +70,7 @@ func (rt *Runtime) computerSettingOn(ctx context.Context, ownerID, computerID, k
 	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}
-	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, key)
+	setting, err := rt.store.GetComputerSetting(withKernelReader(ctx), ownerID, computerID, key)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			// Never set on this computer: the declared default.

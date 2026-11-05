@@ -187,6 +187,15 @@ func NewServer(serviceName, port string) *Server {
 	return s
 }
 
+// WrapHandler wraps the server's whole handler, in front of the build identity
+// and the host credential check. It must be called before Start. A service
+// uses it to put request-wide context on every route (the autoputer declares
+// the owner as the reader of its owner routes).
+func (s *Server) WrapHandler(wrap func(http.Handler) http.Handler) {
+	s.handler = wrap(s.handler)
+	s.httpServer.Handler = s.handler
+}
+
 // SetHealthHandler replaces the default /health handler with a custom
 // one. This must be called before Start. It allows services like the
 // proxy to report upstream reachability or other custom health state

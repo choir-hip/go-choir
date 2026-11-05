@@ -137,6 +137,7 @@ func (h *Handler) refuseUnattendedTurn(ctx context.Context, rec *types.RunRecord
 // UnattendedRequestReason and management gets a notice. Both commits are
 // idempotent in the work item and the run.
 func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunRecord, docID string, turn yaegikernel.TextureTurn) error {
+	ctx = asTextureReader(ctx)
 	if h == nil || h.Store == nil || rec == nil || strings.TrimSpace(docID) == "" || strings.TrimSpace(turn.Idle) != agentcore.TextureIdleNoActReason {
 		return nil
 	}

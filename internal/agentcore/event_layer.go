@@ -222,6 +222,7 @@ func (idx *eventIndex) loadLocked(ctx context.Context, s *store.Store, ownerID, 
 	if idx.loaded {
 		return nil
 	}
+	ctx = withKindReader(ctx, "choir.world_event")
 	events, err := s.RecentWorldEvents(ctx, ownerID, computerID, eventIndexLoadEvents)
 	if err != nil {
 		return fmt.Errorf("event layer: load events: %w", err)

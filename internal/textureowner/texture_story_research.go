@@ -38,6 +38,7 @@ type storyResearchRefusal struct {
 // HandleTextureStoryResearch serves POST .../research and
 // GET .../research/{client_request_id}.
 func (h *Handler) HandleTextureStoryResearch(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	docID := extractDocID(r.URL.Path)
 	if docID == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})

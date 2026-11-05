@@ -113,6 +113,7 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 }
 
 func (h *Handler) getTextureDocument(ctx context.Context, ownerID, docID string) (types.Document, error) {
+	ctx = asTextureReader(ctx)
 	if h == nil || h.Store == nil {
 		return types.Document{}, fmt.Errorf("texture store unavailable")
 	}
@@ -140,6 +141,7 @@ func (h *Handler) getTextureDocument(ctx context.Context, ownerID, docID string)
 }
 
 func (h *Handler) getTextureRevision(ctx context.Context, ownerID, revisionID string) (types.Revision, error) {
+	ctx = asTextureReader(ctx)
 	if h == nil || h.Store == nil {
 		return types.Revision{}, fmt.Errorf("texture store unavailable")
 	}
