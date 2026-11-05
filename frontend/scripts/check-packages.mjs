@@ -9,6 +9,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractUses, usesProblems } from './package-uses.mjs';
 
 const argv = process.argv.slice(2);
 const rootFlag = argv.indexOf('--root');
@@ -35,7 +36,7 @@ const PUBLISHER_DECLARED = new Set([
   'sha256', 'source_digest', 'artifact', 'artifact_digest', 'toolchain', 'binary', 'wasm',
   'import_set', 'imports', 'first_party',
 ]);
-const GRANT_RE = /^(ui|desk)(\.[a-z][a-z0-9_]*)+$/;
+const GRANT_RE = /^((ui|desk)(\.[a-z][a-z0-9_]*)+|agent\.prompt)$/;
 const MIN_STATIC_IDS = 10;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
@@ -325,7 +326,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
     else {
       manifest.capabilities.forEach((c, i) => {
         if (!strictKeys(c, `${where} capabilities[${i}]`, ['grant'], ['args'])) return;
-        if (typeof c.grant !== 'string' || !GRANT_RE.test(c.grant)) fail(`${where} capabilities[${i}]`, 'grant must be a ui.* or desk.* name');
+        if (typeof c.grant !== 'string' || !GRANT_RE.test(c.grant)) fail(`${where} capabilities[${i}]`, 'grant must be a ui.* or desk.* name, or agent.prompt');
         if (c.args !== undefined && (!Array.isArray(c.args) || c.args.some((a) => typeof a !== 'string'))) fail(`${where} capabilities[${i}]`, 'args must be an array of strings');
       });
     }
@@ -385,6 +386,12 @@ function main() {
     }
     const before = errors.length;
     checkManifest(manifest, dir, where, pkgDir);
+    // `uses` is extracted, never authored: the grants the SDK names a package imports imply must be declared.
+    try {
+      for (const problem of usesProblems(extractUses(pkgDir), manifest)) fail(where, problem);
+    } catch (err) {
+      fail(where, err.message);
+    }
     if (!existsSync(join(pkgDir, 'App.svelte'))) fail(`src/packages/${dir}`, 'missing App.svelte');
     if (errors.length > before && !(typeof manifest?.name === 'string' && NAME_RE.test(manifest.name))) continue;
 

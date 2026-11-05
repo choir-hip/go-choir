@@ -27,6 +27,19 @@ const splitQuery = (id) => {
   return i < 0 ? [id, ''] : [id.slice(0, i), id.slice(i)];
 };
 
+// Raw registrations a package does not make itself (SDK onWindowEvent,
+// onDocumentEvent and repeatEvery return disposers the shell can see).
+const RAW_TARGETS = new Set(['window', 'document', 'globalThis', 'self']);
+const memberName = (node) => (node.computed ? (node.property.type === 'Literal' ? String(node.property.value) : '') : node.property.name);
+function rawRegistration(callee) {
+  if (callee.type === 'Identifier') return callee.name === 'setInterval' ? 'setInterval' : '';
+  if (callee.type !== 'MemberExpression' || callee.object.type !== 'Identifier' || !RAW_TARGETS.has(callee.object.name)) return '';
+  const name = memberName(callee);
+  if (name === 'addEventListener') return `${callee.object.name}.addEventListener`;
+  if (name === 'setInterval') return `${callee.object.name}.setInterval`;
+  return '';
+}
+
 export function cssProblem(source) {
   const text = source
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -83,6 +96,9 @@ function runtimeProblems(ast, { checkMeta }) {
       if (!ALLOWED_META.has(prop)) problems.push('import.meta is only allowed as import.meta.env or import.meta.hot in a package');
     } else if (node.type === 'ImportExpression' && node.source?.type !== 'Literal') {
       problems.push('import() must take a string literal in a package');
+    } else if (node.type === 'CallExpression' && rawRegistration(node.callee)) {
+      const raw = rawRegistration(node.callee);
+      problems.push(`${raw} is not allowed in a package: use ${raw === 'document.addEventListener' ? 'onDocumentEvent' : raw.endsWith('addEventListener') ? 'onWindowEvent' : 'repeatEvery'} from the SDK`);
     } else if (
       node.type === 'CallExpression' && node.callee.type === 'Identifier'
       && (node.callee.name === 'setTimeout' || node.callee.name === 'setInterval')

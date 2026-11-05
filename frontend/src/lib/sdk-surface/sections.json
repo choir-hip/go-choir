@@ -1,0 +1,28 @@
+{
+  "schema": "choir.sdk-sections/v1",
+  "note": "What packages can rely on beside the SDK's names: the pipelines (name and payload type), the services (ABI ids), the contributes keys (their entry schemas and the when keys), the mount ctx, and the SDK names that imply a grant. Each lock records it as `sections` (SDK 1.2.0, slice U1). scripts/sdk-surface.mjs diffs it: adding an entry is a minor change, removing or retyping one is a major change. The static `uses` check reads the same file.",
+  "pipelines": {
+    "commands.resolve": { "payload": "{ commands: CommandEntry[]; context: Record<string, unknown> }" },
+    "contextMenu.build": { "payload": "{ items: ContextMenuEntry[]; target: { kind: string; ext?: string; name?: string } }" },
+    "files.openWith": { "payload": "{ openers: FileOpener[]; file: { name: string; ext: string; mediaType: string } }" },
+    "notification.post": { "payload": "{ notification: { title: string; body: string; kind: string } }" }
+  },
+  "services": {
+    "contextMenu.renderer": { "abi": "choir.service/contextMenu.renderer/v1" },
+    "commands": { "abi": "choir.service/commands/v1" },
+    "links": { "abi": "choir.service/links/v1" },
+    "theme": { "abi": "choir.service/theme/v1" }
+  },
+  "contributes": {
+    "commands": { "entry": "{ id: string; title: string; scope: 'global' | 'app' | `target:${string}`; run: { action: 'openApp' | 'openFile' | 'copyText' | 'setTheme' | 'toast' } | { handler: true }; when?: string }" },
+    "keybindings": { "entry": "{ key: string; command: string; when?: string }" },
+    "themes": { "entry": "{ id: string; file: string }" },
+    "links": { "entry": "{ app: string; params: { name: string; required?: boolean; context?: string }[]; launch?: { windowTitle?: string; requireAny?: string[]; context?: Record<string, string | number | boolean> } }" },
+    "desks": { "entry": "reserved" },
+    "when_keys": ["overview.open", "target.kind", "window.app"]
+  },
+  "ctx": ["dispatch", "launchContext", "package", "props", "release", "sdk", "windowId"],
+  "grants": {
+    "submitPrompt": "agent.prompt"
+  }
+}

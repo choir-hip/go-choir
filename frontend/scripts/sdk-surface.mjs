@@ -171,6 +171,8 @@ export function extractSurface({ frontendRoot = DEFAULT_ROOT, sdkFile = path.joi
   };
   const legacy = readLegacyEvents(frontendRoot);
   if (legacy) surface.legacy_events = legacy;
+  const sections = readSections(frontendRoot);
+  if (sections) surface.sections = sections;
   surface.digest = surfaceDigest(surface);
   return surface;
 }
@@ -179,6 +181,33 @@ export function readSdkVersion(frontendRoot = DEFAULT_ROOT) {
   const m = /export const SDK_VERSION = '(\d+\.\d+\.\d+)'/.exec(readFileSync(path.join(frontendRoot, 'src/lib/sdk-version.ts'), 'utf8'));
   if (!m) throw new Error('src/lib/sdk-version.ts has no SDK_VERSION = \'MAJOR.MINOR.PATCH\'');
   return m[1];
+}
+
+/** The lock sections beyond names (src/lib/sdk-surface/sections.json): pipelines, services, contributes, ctx, grants; null before 1.2.0. */
+export function readSections(frontendRoot = DEFAULT_ROOT) {
+  const file = path.join(frontendRoot, LOCK_REL, 'sections.json');
+  if (!existsSync(file)) return null;
+  const { schema: _schema, note: _note, ...sections } = JSON.parse(readFileSync(file, 'utf8'));
+  for (const key of ['pipelines', 'services', 'contributes', 'ctx', 'grants']) {
+    if (!(key in sections)) throw new Error(`${path.relative(frontendRoot, file)}: section "${key}" is missing`);
+  }
+  if (!Array.isArray(sections.ctx) || !Array.isArray(sections.contributes.when_keys)) throw new Error(`${path.relative(frontendRoot, file)}: ctx and contributes.when_keys must be lists`);
+  return JSON.parse(JSON.stringify(sections, (k, v) => (Array.isArray(v) ? [...v].sort() : v)));
+}
+
+/** Flatten sections to path -> text, so a diff names the entry that moved. */
+function flattenSections(sections) {
+  const out = {};
+  const put = (key, value) => { out[key] = typeof value === 'string' ? value : JSON.stringify(value); };
+  for (const [name, v] of Object.entries(sections?.pipelines || {})) put(`pipelines.${name}.payload`, v.payload);
+  for (const [name, v] of Object.entries(sections?.services || {})) put(`services.${name}.abi`, v.abi);
+  for (const [name, v] of Object.entries(sections?.contributes || {})) {
+    if (name === 'when_keys') for (const k of v) put(`contributes.when_keys.${k}`, 'true');
+    else put(`contributes.${name}.entry`, v.entry);
+  }
+  for (const k of sections?.ctx || []) put(`ctx.${k}`, 'true');
+  for (const [name, grant] of Object.entries(sections?.grants || {})) put(`grants.${name}`, grant);
+  return out;
 }
 
 /** The events an app may still dispatch (src/lib/sdk-surface/legacy-events.json), or null before 1.1.0. */
@@ -203,6 +232,7 @@ export function surfaceDigest(surface) {
     names: sortObject(surface.names),
     types: sortObject(surface.types),
     ...(surface.legacy_events ? { legacy_events: surface.legacy_events } : {}),
+    ...(surface.sections ? { sections: surface.sections } : {}),
   });
   return `sha256:${createHash('sha256').update(body).digest('hex')}`;
 }
@@ -299,6 +329,16 @@ export function compareSurfaces(before, after, { frontendRoot = DEFAULT_ROOT } =
     const b = new Set(after.legacy_events || []);
     for (const e of a) if (!b.has(e)) removed.push(`event:${e}`);
     for (const e of b) if (!a.has(e) && before.legacy_events) added.push(`event:${e}`);
+  }
+  // The sections beyond names: an entry joining is a minor change; one leaving or retyped breaks the packages that rely on it.
+  if (before.sections || after.sections) {
+    const a = flattenSections(before.sections);
+    const b = flattenSections(after.sections);
+    for (const key of Object.keys(a)) {
+      if (!(key in b)) removed.push(`section:${key}`);
+      else if (a[key] !== b[key]) changed.push({ name: `section:${key}`, kind: 'section', need: 'major', before: a[key], after: b[key] });
+    }
+    for (const key of Object.keys(b)) if (!(key in a)) added.push(`section:${key}`);
   }
   if ((before.module_abi || '') !== (after.module_abi || '')) changed.push({ name: 'module_abi', kind: 'abi', need: 'major', before: before.module_abi, after: after.module_abi });
 

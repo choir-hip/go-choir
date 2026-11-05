@@ -143,3 +143,8 @@ export type { ChoirTheme } from './theme';
 // host (geometry, z-order, saved windows) stays the shell's; these are its
 // public verbs. listWindows (above) answers what is open.
 export { focusWindow as focus, isHeavyAppId, restoreWindow as restore, suspendBackgroundHeavyWindows } from './stores/desktop.js';
+
+// Events and timers (1.1.0, slice U1): a package listens and schedules through
+// these, which return disposers; the package boundary refuses the raw calls.
+export { onDocumentEvent, onWindowEvent, repeatEvery } from './event-helpers';
+export type { Disposer } from './event-helpers';

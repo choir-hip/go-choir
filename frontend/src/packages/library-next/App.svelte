@@ -6,7 +6,7 @@
   // shows an id: the catalog, the install route and the install list are the
   // platform's, read through app-sdk's renewing fetch.
   import { onMount, createEventDispatcher } from 'svelte';
-  import { fetchWithRenewal } from '../../lib/app-sdk';
+  import { fetchWithRenewal, onWindowEvent } from '../../lib/app-sdk';
   import Icon from './Icon.svelte';
   import {
     installListOf,
@@ -84,9 +84,9 @@
 
   onMount(() => {
     void boot();
-    window.addEventListener('keydown', onKeydown);
+    const offKeydown = onWindowEvent('keydown', onKeydown);
     return () => {
-      window.removeEventListener('keydown', onKeydown);
+      offKeydown();
       if (searchTimer) clearTimeout(searchTimer);
     };
   });

@@ -21,6 +21,8 @@
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
+    onDocumentEvent,
+    onWindowEvent,
     toast,
     addLiveEventListener,
     liveEventKind,
@@ -931,8 +933,8 @@
       query.addEventListener('change', onChange);
       closeQuery = () => query.removeEventListener('change', onChange);
     }
-    document.addEventListener('pointerdown', onDocumentPointerDown, true);
-    document.addEventListener('keydown', onDocumentKeydown);
+    const offPointerdown = onDocumentEvent('pointerdown', onDocumentPointerDown, true);
+    const offDocumentKeydown = onDocumentEvent('keydown', onDocumentKeydown);
     void refreshRecentFiles();
     if (sourceKey) void loadSource();
     else if (authenticated) {
@@ -950,18 +952,18 @@
       }
     });
     const onHide = () => savePositionNow();
-    window.addEventListener('pagehide', onHide);
-    document.addEventListener('visibilitychange', onHide);
+    const offPagehide = onWindowEvent('pagehide', onHide);
+    const offVisibility = onDocumentEvent('visibilitychange', onHide);
     return () => {
       stopLive();
-      window.removeEventListener('pagehide', onHide);
-      document.removeEventListener('visibilitychange', onHide);
+      offPagehide();
+      offVisibility();
       if (activeRenderTask) activeRenderTask.cancel();
       if (renderRaf) cancelAnimationFrame(renderRaf);
       observer?.disconnect();
       closeQuery?.();
-      document.removeEventListener('pointerdown', onDocumentPointerDown, true);
-      document.removeEventListener('keydown', onDocumentKeydown);
+      offPointerdown();
+      offDocumentKeydown();
     };
   });
 

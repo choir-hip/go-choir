@@ -22,7 +22,7 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 
 function makeFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'choir-pkg-'));
-  for (const rel of ['package.json', 'src/lib/apps/registry.ts', 'src/lib/media-utils.js']) {
+  for (const rel of ['package.json', 'src/lib/apps/registry.ts', 'src/lib/media-utils.js', 'src/lib/file-routes.json']) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.copyFileSync(path.join(frontendRoot, rel), path.join(root, rel));
   }
@@ -211,6 +211,7 @@ const outside = /may not import/;
 const boundaryControls = [
   ['own files, sdk, svelte, svelte/store, a declared dependency, own asset',
     script("import { local } from './local.js';\nimport { sdk } from '../../lib/app-sdk';\nimport { onMount } from 'svelte';\nimport { writable } from 'svelte/store';\nimport JSZip from 'jszip';\nimport pic from './pic.png';\nimport s from './local.js?raw';\nconsole.log(local, sdk, onMount, writable, JSZip, pic, s, import.meta.env);\nimport('./local.js').then(console.log);")],
+  ['the SDK helpers that register and schedule', script("import { sdk } from '../../lib/app-sdk';\nsdk.onWindowEvent('keydown', () => {});\nsdk.onDocumentEvent('keydown', () => {});\nsdk.repeatEvery(() => {}, 1000);")],
   ['own css, data: urls and fragments', style('.a { color: red; background: url(data:image/png;base64,AAAA); fill: url(#grad); }')],
 ];
 
@@ -232,6 +233,13 @@ const boundaryBad = [
   ['import.meta computed member', script("console.log(import.meta['resolve']('../../lib/secret.js'));"), /import\.meta is only allowed/],
   ['import.meta destructured', script("const { glob } = import.meta;\nconsole.log(glob);"), /import\.meta is only allowed/],
   ['import.meta aliased', script("const m = import.meta;\nconsole.log(m.resolve('x'));"), /import\.meta is only allowed/],
+  // raw registrations (U1): the SDK's onWindowEvent, onDocumentEvent and repeatEvery instead
+  ['window.addEventListener', script("window.addEventListener('keydown', () => {});"), /window\.addEventListener is not allowed in a package: use onWindowEvent/],
+  ['document.addEventListener', script("document.addEventListener('keydown', () => {});"), /document\.addEventListener is not allowed in a package: use onDocumentEvent/],
+  ['window["addEventListener"]', script("window['addEventListener']('keydown', () => {});"), /window\.addEventListener is not allowed/],
+  ['globalThis.addEventListener', script("globalThis.addEventListener('keydown', () => {});"), /globalThis\.addEventListener is not allowed/],
+  ['setInterval', script("setInterval(() => {}, 1000);"), /setInterval is not allowed in a package: use repeatEvery/],
+  ['window.setInterval', script("window.setInterval(() => {}, 1000);"), /window\.setInterval is not allowed/],
   // the other query forms, absolute and bare traversal
   ['?raw of an outside file', script("import s from '../../lib/secret.js?raw';console.log(s);"), outside],
   ['?url of an outside file', script("import u from '../../lib/secret.png?url';console.log(u);"), outside],
