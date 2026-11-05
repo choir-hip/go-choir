@@ -90,6 +90,10 @@ func sanitizeStoreText(value string) string {
 type Store struct {
 	db     *sql.DB
 	readDB *sql.DB
+	// runTerminal is told the id of every run the store persists in a
+	// terminal state (SetRunTerminalObserver); the lease service ends the
+	// run's leases through it (MA3.4), so no terminal path can forget to.
+	runTerminal atomic.Pointer[func(runID string)]
 	// retireCited is the cited-event-id snapshot (a JSON array) of the
 	// telemetry run in flight, nil outside one (telemetry_retire.go).
 	retireCited atomic.Pointer[string]
@@ -467,6 +471,29 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 // For non-lifecycle runs the event is appended separately after the run
 // write (the projection batch does not exist for them).
 func (s *Store) UpdateRunWithEvent(ctx context.Context, rec types.RunRecord, event *types.EventRecord) error {
+	err := s.updateRunWithEvent(ctx, rec, event)
+	// Any non-active state ends the run's leases, passivation included: a
+	// reactivated run asks again (per-activation leases, MA3.4). Narrowing
+	// this to State.Terminal() would let a passivated run keep its leases.
+	if err == nil && !rec.State.Active() {
+		s.noteRunTerminal(rec.RunID)
+	}
+	return err
+}
+
+// SetRunTerminalObserver registers f, called with the run id after the store
+// persists a run in a terminal state: through UpdateRun and UpdateRunWithEvent
+// (the activation paths, the management controller, the boot closures) and
+// through TerminalizeRun.
+func (s *Store) SetRunTerminalObserver(f func(runID string)) { s.runTerminal.Store(&f) }
+
+func (s *Store) noteRunTerminal(runID string) {
+	if f := s.runTerminal.Load(); f != nil && *f != nil && strings.TrimSpace(runID) != "" {
+		(*f)(runID)
+	}
+}
+
+func (s *Store) updateRunWithEvent(ctx context.Context, rec types.RunRecord, event *types.EventRecord) error {
 	if handled, err := s.persistLifecycleRunWithEvent(ctx, rec, event); handled {
 		return err
 	}

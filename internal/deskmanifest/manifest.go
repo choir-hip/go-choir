@@ -168,6 +168,15 @@ type Desk struct {
 	// holder admits engineering work and receives forwarded engineering
 	// requests (a test pins one holder).
 	OwnedKinds []string
+	// LeaseKinds and LeaseCaptures are the desk's lease ceiling (MA3.4, R20):
+	// the most it may ever REQUEST of a custodian. LeaseKinds names the object
+	// kinds a lease may cover for the desk; LeaseCaptures admits a lease whose
+	// scope names captures by id or label. The ceiling is declared at install
+	// and shown by the Library; the lease service issues inside it and never
+	// widens it. A system desk declares none: its reads are the custody
+	// table's, not leases.
+	LeaseKinds    []string
+	LeaseCaptures bool
 	// ModelRole is the modelpolicy role key. Declared; no consumer yet.
 	ModelRole string
 	// Restart is the restart contract. Declared; every desk has the same.
@@ -241,6 +250,7 @@ var verbDispatch = map[string]dispatch{
 	"System1":          {"system1", false},
 	"RelateStories":    {"relate_stories", false},
 	"Relate":           {"relate", false},
+	"RequestLease":     {"request_lease", false},
 }
 
 // VerbAction reports the action a verb dispatches, whether the worker serves
@@ -421,6 +431,7 @@ func (d Desk) clone() Desk {
 	d.Verbs = cp(d.Verbs)
 	d.CapsuleVerbs = cp(d.CapsuleVerbs)
 	d.OwnedKinds = cp(d.OwnedKinds)
+	d.LeaseKinds = cp(d.LeaseKinds)
 	d.Modules = cp(d.Modules)
 	return d
 }
@@ -661,7 +672,7 @@ var appName = regexp.MustCompile(`^app:[a-z][a-z0-9-]{0,31}$`)
 var appDeskVerbs = map[string]bool{
 	"Cast": true, "Ask": true, "Reply": true, "CancelAct": true, "Escalate": true,
 	"Precommit": true, "Report": true, "ReportPacket": true, "Resolve": true, "Disagreement": true,
-	"ReadCapture": true, "Done": true,
+	"ReadCapture": true, "RequestLease": true, "Done": true,
 }
 
 // AppDeskSpec is what an app package's desk manifest declares (ARCH-03).
@@ -672,6 +683,9 @@ type AppDeskSpec struct {
 	UID            uint32
 	WorkerMaxBytes uint64
 	OwnedKinds     []string
+	// LeaseKinds and LeaseCaptures are the lease ceiling (Desk.LeaseKinds).
+	LeaseKinds    []string
+	LeaseCaptures bool
 }
 
 // NewAppDesk validates an app desk. It can only give an app desk less than a
@@ -699,6 +713,11 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 			return Desk{}, fmt.Errorf("app desk %s: verb %s is not available to app desks", spec.Name, v)
 		}
 	}
+	for _, k := range spec.LeaseKinds {
+		if len(k) <= len("choir.") || k[:len("choir.")] != "choir." || k == "choir.lease" {
+			return Desk{}, fmt.Errorf("app desk %s: lease ceiling kind %q is not a leasable object kind", spec.Name, k)
+		}
+	}
 	d := Desk{
 		Name: spec.Name, Kind: KindApp, Carrier: CarrierDeskWorker,
 		Verbs: append([]string{}, spec.Verbs...), CapsuleVerbs: []string{},
@@ -706,6 +725,7 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		Taint:      spec.Taint,
 		Memory:     Memory{WorkerMaxBytes: spec.WorkerMaxBytes},
 		OwnedKinds: append([]string{}, spec.OwnedKinds...), ModelRole: spec.Name, Restart: RestartContract,
+		LeaseKinds: append([]string{}, spec.LeaseKinds...), LeaseCaptures: spec.LeaseCaptures,
 		Profile: true,
 	}
 	if err := validateStructure(d); err != nil {
@@ -741,16 +761,42 @@ func RegisterApp(d Desk) error {
 // unknown, which is deny.
 func RetireApp(name string) error {
 	mu.Lock()
-	defer mu.Unlock()
 	d, ok := registry[name]
 	if !ok {
+		mu.Unlock()
 		return fmt.Errorf("desk %s is not registered", name)
 	}
 	if d.Kind != KindApp {
+		mu.Unlock()
 		return fmt.Errorf("only app desks retire: %s is %s", name, d.Kind)
 	}
 	delete(registry, name)
+	observers := append([]func(string){}, retireObservers...)
+	mu.Unlock()
+	for _, f := range observers {
+		f(name)
+	}
 	return nil
+}
+
+var retireObservers []func(name string)
+
+// OnRetireApp registers f to be called with the name of every app desk
+// RetireApp removes (an uninstall, a yank the computer applied, a package
+// disabled). The lease service revokes the desk's leases through it (MA3.4).
+// It returns the function that unregisters f.
+func OnRetireApp(f func(name string)) (remove func()) {
+	mu.Lock()
+	defer mu.Unlock()
+	retireObservers = append(retireObservers, f)
+	i := len(retireObservers) - 1
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if i < len(retireObservers) {
+			retireObservers[i] = func(string) {}
+		}
+	}
 }
 
 // AppSpec renders an app desk back to the spec NewAppDesk builds it from. A
@@ -760,7 +806,8 @@ func RetireApp(name string) error {
 func (d Desk) AppSpec() AppDeskSpec {
 	c := d.clone()
 	return AppDeskSpec{Name: c.Name, Verbs: c.Verbs, Taint: c.Taint, UID: c.Sandbox.UID,
-		WorkerMaxBytes: c.Memory.WorkerMaxBytes, OwnedKinds: c.OwnedKinds}
+		WorkerMaxBytes: c.Memory.WorkerMaxBytes, OwnedKinds: c.OwnedKinds,
+		LeaseKinds: c.LeaseKinds, LeaseCaptures: c.LeaseCaptures}
 }
 
 // AdmissionKind is the object kind whose custodian admits engineering work and
@@ -786,7 +833,7 @@ func (d Desk) Equal(o Desk) bool {
 	return d.Name == o.Name && d.Kind == o.Kind && d.Carrier == o.Carrier &&
 		same(d.Verbs, o.Verbs) && same(d.CapsuleVerbs, o.CapsuleVerbs) &&
 		d.Instance == o.Instance && d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
-		same(d.OwnedKinds, o.OwnedKinds) && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
+		same(d.OwnedKinds, o.OwnedKinds) && same(d.LeaseKinds, o.LeaseKinds) && d.LeaseCaptures == o.LeaseCaptures && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
 		d.Profile == o.Profile && d.Prompt == o.Prompt && d.Identity == o.Identity && d.OwnChannel == o.OwnChannel &&
 		d.CellDeadline == o.CellDeadline && same(d.Modules, o.Modules)
 }

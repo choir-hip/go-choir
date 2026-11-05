@@ -452,6 +452,7 @@ func DeskRowOf(d deskmanifest.Desk) deskprotocol.DeskRow {
 		Identity: string(d.Identity), OwnChannel: d.OwnChannel, CellDeadlineNs: int64(d.CellDeadline),
 		WorkerMaxBytes: d.Memory.WorkerMaxBytes, WorkerHighBytes: d.Memory.WorkerHighBytes,
 		CapsuleRequestedBytes: d.Memory.CapsuleRequestedBytes,
+		LeaseKinds:            srt(d.LeaseKinds), LeaseCaptures: d.LeaseCaptures,
 	}
 }
 

@@ -159,7 +159,7 @@ func ResetUndeclaredReads() {
 // supplementalReaders are the readers section 8.2 lists beside a custodian:
 // management's supervisory read of engineering's slots, lineage and
 // self-development operations. The owner (E1) and the commons are admitted
-// elsewhere. Leases (MA3.4) will extend a read; this table is not it.
+// elsewhere. A lease (lease_gate.go) extends a read; this table is not it.
 var supplementalReaders = map[Writer][]Writer{
 	WriterEngineering: {WriterManagement},
 }
@@ -218,6 +218,11 @@ func checkReadKind(ctx context.Context, kind ObjectKind) error {
 	}
 	reg, err := writeRegistry.LookupKind(kind)
 	if err != nil || readerAdmits(reg, declared, ok) {
+		return nil
+	}
+	// A live lease adds a reader the custody table did not admit (MA3.4).
+	if ok && LeaseAdmitsKind(ctx, declared, kind) {
+		NoteLeaseRead(declared, string(kind))
 		return nil
 	}
 	mode := modeForKind(kind, global)

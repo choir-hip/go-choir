@@ -132,9 +132,15 @@ func (e *Executor) SetComputerStore(source ComputerStoreSource) { e.computerStor
 // that does not fit or cannot be taken leaves nothing, and the receipt names
 // why. The charge keeps the state volume's floor after the copy and an
 // allowance for the capsule's own writes there.
-func (e *Executor) writeComputerStoreCopy(ctx context.Context, upperDir string, receipt *ComputerStateReceipt) {
+func (e *Executor) writeComputerStoreCopy(ctx context.Context, upperDir string, spec SpawnSpec, receipt *ComputerStateReceipt) {
 	if e.computerStore == nil {
 		receipt.StoreRefused = "no store configured"
+		return
+	}
+	// The kinds copied are the kinds a lease for this assignment names
+	// (MA3.4, X6): no lease, no copy.
+	if len(spec.StoreKinds) == 0 {
+		receipt.StoreRefused = "no lease names store kinds for this assignment"
 		return
 	}
 	estimate, err := e.computerStore.SnapshotEstimate(ctx)
@@ -157,7 +163,8 @@ func (e *Executor) writeComputerStoreCopy(ctx context.Context, upperDir string, 
 		receipt.StoreRefused = "create: " + err.Error()
 		return
 	}
-	copyResult, err := e.computerStore.SnapshotForCapsule(ctx, dir)
+	copyResult, err := e.computerStore.SnapshotForCapsule(ctx, dir, spec.StoreKinds)
+	copyResult.LeaseID = spec.StoreLeaseID
 	if err == nil {
 		err = chownTreeNoFollow(dir, computerLayerOwner, computerLayerGroup)
 	}

@@ -38,6 +38,10 @@ const (
 	// Shell is the shell and owner-act state: settings, content, the
 	// desktop.
 	Shell = "shell"
+	// Lease is the lease service (MA3.4, R20): the custodian-issued grants
+	// that let a desk read a kind or capture it does not keep. Its records are
+	// readable by the owner and the service only.
+	Lease = "lease"
 	// Autoradio is the radio's media kinds; reserved, no code writes them.
 	Autoradio = "autoradio"
 )
@@ -99,6 +103,7 @@ var builtin = []Manifest{
 		"choir.computer_setting", "choir.content_item", "choir.podcast_subscription", "choir.browser_session",
 		"choir.desktop_session", "choir.desktop_app_instance",
 	}},
+	{Name: Lease, OwnedKinds: []string{"choir.lease"}},
 	{Name: Autoradio, OwnedKinds: []string{
 		"choir.media_item", "choir.audio_recording", "choir.transcript", "choir.autoradio_run_sheet",
 	}},

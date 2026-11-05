@@ -862,6 +862,18 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	// The request is the size chosen above, a Claude capsule's included:
 	// doctrine's memory.high never sits below what the capsule used to get.
 	spec := engineeringAssignmentSpawnSpec(capsuleID, runID, binding, preflight, memory, cpu, pids, claude)
+	// X6 (MA3.4): the store copy is a lease. The kinds the capsule is given
+	// are the kinds the lease for this assignment names; no lease, no copy.
+	if spec.ComputerState && rt.leases != nil {
+		// A refused or failed lease fails the spawn visibly, with the cause on
+		// the assignment, rather than starting a capsule that silently lacks
+		// its store copy.
+		granted, leaseErr := rt.leases.IssueCapsule(ctx, ownerID, computerID, assignmentID, runID, "engineering")
+		if leaseErr != nil {
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("the capsule's store lease was refused: %w", leaseErr))
+		}
+		spec.StoreKinds, spec.StoreLeaseID = granted.Scope.Kinds, granted.LeaseID
+	}
 	// Option A (failure 15, problem 1): an earlier failed round's work on this
 	// trajectory is offered as an inert patch the engineer may apply in this
 	// fresh capsule. Never fatal: a refusal is recorded and the capsule starts

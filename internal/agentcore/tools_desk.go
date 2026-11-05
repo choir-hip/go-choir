@@ -1211,7 +1211,9 @@ func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec 
 	out, err := rt.deskEgressRead(egrCtx, deskRole, cellExec, action, payload)
 	if err == nil {
 		if action == yaegikernel.ActionReadCapture {
-			gateCaptureRead(egrCtx, deskRole, out)
+			if gateErr := gateCaptureRead(egrCtx, deskRole, out); gateErr != nil {
+				return nil, gateErr
+			}
 		}
 		// Every read point the cell reaches taints the run (run_labels.go).
 		rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
@@ -1229,6 +1231,9 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	}
 	if action == yaegikernel.ActionRelate {
 		return rt.relateEgress(egrCtx, deskRole, cellExec, payload)
+	}
+	if action == yaegikernel.ActionRequestLease {
+		return rt.requestLeaseEgress(egrCtx, deskRole, cellExec, payload)
 	}
 	if action == yaegikernel.ActionProductAPI {
 		return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)

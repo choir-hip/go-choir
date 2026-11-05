@@ -6313,7 +6313,11 @@ func (s *Store) SettleLifecycleProducerReports(ctx context.Context, req types.Se
 // wrong. Each attempt re-reads and re-checks every precondition; the retry is
 // bounded and has no sleep.
 func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequest) (types.LifecycleResult, error) {
-	return retryRunConflict(func() (types.LifecycleResult, error) { return s.terminalizeRunOnce(ctx, req) })
+	result, err := retryRunConflict(func() (types.LifecycleResult, error) { return s.terminalizeRunOnce(ctx, req) })
+	if err == nil {
+		s.noteRunTerminal(req.RunID)
+	}
+	return result, err
 }
 
 // ReactivateRun retries on a concurrent change to the run (MA3.5): the run object

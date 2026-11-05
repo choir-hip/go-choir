@@ -90,11 +90,13 @@ func TestDigestBindsEveryField(t *testing.T) {
 		t.Fatal("digest is not deterministic")
 	}
 	for name, mutate := range map[string]func(*Manifest){
-		"verb":   func(m *Manifest) { m.Verbs = append(m.Verbs, "Ask") },
-		"kind":   func(m *Manifest) { m.OwnedKinds = append(m.OwnedKinds, "choir.app.reader.x") },
-		"memory": func(m *Manifest) { m.WorkerMaxBytes++ },
-		"taint":  func(m *Manifest) { m.Taint = deskmanifest.TaintUntrustedInput },
-		"egress": func(m *Manifest) { m.Egress = []string{"x"} },
+		"verb":           func(m *Manifest) { m.Verbs = append(m.Verbs, "Ask") },
+		"kind":           func(m *Manifest) { m.OwnedKinds = append(m.OwnedKinds, "choir.app.reader.x") },
+		"memory":         func(m *Manifest) { m.WorkerMaxBytes++ },
+		"taint":          func(m *Manifest) { m.Taint = deskmanifest.TaintUntrustedInput },
+		"egress":         func(m *Manifest) { m.Egress = []string{"x"} },
+		"lease kinds":    func(m *Manifest) { m.LeaseKinds = []string{"choir.web_capture"} },
+		"lease captures": func(m *Manifest) { m.LeaseCaptures = true },
 	} {
 		m := goodManifest("reader")
 		mutate(&m)
@@ -288,5 +290,29 @@ func TestActivateRegistersAndRetires(t *testing.T) {
 	}
 	if deskmanifest.FrameAllowed("app:activated", "read_capture") {
 		t.Fatal("a retired app desk is still served")
+	}
+}
+
+// MA3.4: the lease ceiling a package declares reaches the derived desk, and a
+// ceiling naming the lease kind itself is refused at install.
+func TestDeriveCarriesTheLeaseCeiling(t *testing.T) {
+	m := goodManifest("reader")
+	m.Verbs = append(m.Verbs, "RequestLease")
+	m.LeaseKinds = []string{"choir.web_capture"}
+	m.LeaseCaptures = true
+	set, rs := Derive([]Event{install(1, m)})
+	if len(rs) != 0 {
+		t.Fatalf("refusals: %+v", rs)
+	}
+	d := set.Desks[0]
+	if len(d.LeaseKinds) != 1 || d.LeaseKinds[0] != "choir.web_capture" || !d.LeaseCaptures {
+		t.Fatalf("desk ceiling %v captures=%v, want the manifest's", d.LeaseKinds, d.LeaseCaptures)
+	}
+
+	bad := goodManifest("other")
+	bad.LeaseKinds = []string{"choir.lease"}
+	set, rs = Derive([]Event{install(1, bad)})
+	if len(set.Desks) != 0 || len(rs) == 0 {
+		t.Fatalf("a ceiling naming choir.lease installed: desks %d refusals %+v", len(set.Desks), rs)
 	}
 }

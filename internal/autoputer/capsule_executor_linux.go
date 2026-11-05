@@ -149,8 +149,8 @@ func (s capsuleStoreCopySource) SnapshotEstimate(ctx context.Context) (int64, er
 	return s.db.SnapshotEstimate(ctx)
 }
 
-func (s capsuleStoreCopySource) SnapshotForCapsule(ctx context.Context, dir string) (capsule.ComputerStoreCopy, error) {
-	r, err := s.db.SnapshotTo(ctx, dir)
+func (s capsuleStoreCopySource) SnapshotForCapsule(ctx context.Context, dir string, kinds []string) (capsule.ComputerStoreCopy, error) {
+	r, err := s.db.SnapshotToKinds(ctx, dir, kinds)
 	return capsule.ComputerStoreCopy{ComputerID: r.ComputerID, Sequence: r.Sequence, Head: r.Head, Bytes: r.Bytes,
-		CopyMS: r.CopyMS, ScanMS: r.ScanMS, ScannedBytes: r.ScannedBytes, Blanked: r.Blanked, LeftOut: r.LeftOut}, err
+		CopyMS: r.CopyMS, ScanMS: r.ScanMS, ScannedBytes: r.ScannedBytes, Blanked: r.Blanked, LeftOut: r.LeftOut, Withheld: r.Withheld}, err
 }

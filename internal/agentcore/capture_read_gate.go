@@ -3,8 +3,10 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -26,7 +28,9 @@ import (
 //
 // Built-in desks only observe in this slice: a capture the reader may not read
 // is counted (choir.web_capture|reader|wrong_reader on the reader gate's
-// counters) and served. MA3.7 flips it, in code.
+// counters) and served. MA3.7 flips it, in code. An installed package desk is
+// enforced now (MA3.4): it is served an owner-private capture only against a
+// lease that names it.
 
 // captureRecordLabels is the label set of the capture a ReadCapture result
 // describes, as the capture record carries it.
@@ -62,17 +66,44 @@ func captureServedTo(reader objectgraph.Writer, ok bool, labels types.LabelSet) 
 	return true
 }
 
-// gateCaptureRead observes one ReadCapture result against the desk that
-// asked. The desk is the session's role, bound by the frame layer.
-func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessage) {
+// captureRecordID is the id the capture record carries.
+func captureRecordID(result json.RawMessage) string {
+	var rec struct {
+		CaptureID string `json:"capture_id"`
+	}
+	if len(result) == 0 || json.Unmarshal(result, &rec) != nil {
+		return ""
+	}
+	return rec.CaptureID
+}
+
+// gateCaptureRead decides one ReadCapture result against the desk that asked.
+// The desk is the session's role, bound by the frame layer.
+//
+// A capture the reader is not the custodian of is still served against a live
+// lease that names the capture by id or by one of its labels (MA3.4); the
+// lease and the run it is for come from the run's context, never the cell. A
+// reader that is an installed package desk and holds no such lease is refused
+// (enforce, as its kinds are); a built-in desk only observes until MA3.7.
+func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessage) error {
 	reader, ok := objectgraph.DeskWriter(canonicalDeskName(strings.TrimSpace(deskRole)))
 	if !ok {
 		reader, ok = objectgraph.ReaderFrom(ctx)
 	}
-	if captureServedTo(reader, ok, captureRecordLabels(result)) {
-		return
+	labels := captureRecordLabels(result)
+	if captureServedTo(reader, ok, labels) {
+		return nil
+	}
+	if ok && objectgraph.LeaseAdmitsCapture(ctx, reader, captureRecordID(result), labels.Strings()) {
+		objectgraph.NoteLeaseRead(reader, "capture "+captureRecordID(result))
+		return nil
+	}
+	if d, found := deskmanifest.Lookup(canonicalDeskName(strings.TrimSpace(deskRole))); found && d.Kind == deskmanifest.KindApp {
+		objectgraph.NoteWrongReader(objectgraph.WebCaptureObjectKind, reader, ok)
+		return fmt.Errorf("read_capture: capture %q is owner-private and desk %q holds no lease for it; ask its custodian for a lease", captureRecordID(result), deskRole)
 	}
 	objectgraph.NoteWrongReader(objectgraph.WebCaptureObjectKind, reader, ok)
+	return nil
 }
 
 // noteRunMemoryScope observes the one scope check the kind gate cannot see

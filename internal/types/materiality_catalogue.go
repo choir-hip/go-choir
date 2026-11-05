@@ -60,6 +60,11 @@ var MaterialityCatalogue = withCustodian([]MaterialityEntry{
 	{Kind: RequestFeed, ImpactFloor: ImpactI0},
 	{Kind: RequestDecline, ImpactFloor: ImpactI0},
 	{Kind: RequestPrecommit, ImpactFloor: ImpactI0},
+	// A lease request reaches into a kind its desk does not keep (MA3.4): the
+	// floor is I1, so a weight of 0 is refused. Whether the purpose matched
+	// the reads that followed is scored from the lease's use log; the
+	// procedure is defined with the trust policy (MA7.x), so none is frozen.
+	{Kind: RequestLease, ImpactFloor: ImpactI1},
 })
 
 func withCustodian(entries []MaterialityEntry) []MaterialityEntry {

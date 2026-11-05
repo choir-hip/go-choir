@@ -27,6 +27,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
+	"github.com/yusefmosiah/go-choir/internal/lease"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
@@ -69,6 +71,9 @@ var ErrPreGenesis = errors.New("computer is pre-genesis")
 // the store so that run handles and events survive autoputer process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
+	// leases is the lease service (leases.go, MA3.4): custodian-issued,
+	// per-task grants the reader gate and the capture frame handler consult.
+	leases *lease.Service
 	// engineerClockFired holds the assignments whose budget line has been
 	// shown (assignment id:attempt:revision -> struct{}); engineer_clock.go.
 	engineerClockFired sync.Map
@@ -588,6 +593,11 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	}
 	for _, opt := range opts {
 		opt(rt)
+	}
+	if s != nil {
+		rt.leases = lease.New(s.Leases())
+		// Every terminal run write ends the run's leases, whichever path made it.
+		s.SetRunTerminalObserver(func(runID string) { rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded) })
 	}
 	if operations, err := selfdev.NewStore(s, s); err == nil {
 		rt.selfdevOperations = operations
@@ -1146,6 +1156,9 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// Open judge work (subcall_judge.go) follows the same marker: a crash
 	// closes it "interrupted by a restart", a planned restart re-runs it once.
 	bootPhase("subcall_judge_work", func() { rt.sweepSubCallsAtBoot(ctx) })
+	// Every lease is per-task and a run is never resumed with its lease: the
+	// boot ends the leases the previous process left open (leases.go).
+	bootPhase("leases_end_at_boot", func() { rt.endLeasesAtBoot(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	// P6: tell vmctl what this computer runs (background; never blocks boot).
 	rt.reportEffectiveReleaseAsync("boot")
@@ -3895,6 +3908,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// MA3.3: every object-graph read of this run's tools and cell verbs
 	// declares the run record's desk as its reader.
 	ctx = withDeskReader(ctx, rec.AgentProfile)
+	// MA3.4: the run's leases (and only this run's) widen what that reader
+	// may read; they end with the run.
+	ctx = objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID)
+	defer rt.endRunLeases(ctx, rec.RunID, lease.ReasonRunEnded)
 	assignedEngineeringOverlay := false
 	if rt.capsuleExecutor != nil && !isManagementTaskRun(rec) {
 		switch agentProfileForRun(rec) {

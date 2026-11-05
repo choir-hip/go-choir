@@ -50,6 +50,8 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)
 	s.HandleFunc("/api/acceptance/execution-identity", h.HandleExecutionIdentity)
 	s.HandleFunc("/api/runtime/observability", h.HandleGuestObservability)
+	s.HandleFunc("/api/leases", h.HandleLeases)
+	s.HandleFunc("/api/leases/", h.HandleLeaseRouter)
 	s.HandleFunc("/api/runtime/obligations", h.HandleObligations)
 	s.HandleFunc("/api/runtime/census", h.HandleCensus)
 	s.HandleFunc("/api/runtime/isolation-selftest", h.HandleIsolationSelfTest)

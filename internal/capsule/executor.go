@@ -774,7 +774,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		// The store copy goes straight into the upper, before the mount: a
 		// private file the capsule's SQLite writes in place, one charge.
 		if computerState.ComputerState == ComputerStateProvided {
-			e.writeComputerStoreCopy(ctx, caps.UpperDir, computerState)
+			e.writeComputerStoreCopy(ctx, caps.UpperDir, spec, computerState)
 		}
 		if err := writeComputerStateReceipt(caps.UpperDir, *computerState); err != nil {
 			// The copies are data, not a precondition: the capsule starts,

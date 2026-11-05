@@ -53,6 +53,11 @@ type Manifest struct {
 	// Egress is the network the desk asks for. Refused while non-empty: owner
 	// grants are NET-10's.
 	Egress []string `json:"egress_verbs,omitempty"`
+	// LeaseKinds and LeaseCaptures are the desk's lease ceiling (MA3.4): the
+	// most it may ever request of a custodian. The custodian still decides
+	// each lease inside it.
+	LeaseKinds    []string `json:"lease_kinds,omitempty"`
+	LeaseCaptures bool     `json:"lease_captures,omitempty"`
 }
 
 // Code is a typed refusal.
@@ -285,7 +290,8 @@ func Derive(events []Event) (Set, []Refusal) {
 				continue
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
-				Taint: deskmanifest.TaintUntrustedInput, UID: nextUID, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds})
+				Taint: deskmanifest.TaintUntrustedInput, UID: nextUID, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue

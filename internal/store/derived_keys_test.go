@@ -45,6 +45,14 @@ var maintainedOGWriters = map[string][]string{
 	"store/vocab_migrate_og.go": {"applyOGMigration", "revertOGMigration"},
 }
 
+// privateCopyOGWriters write og_objects of a private offline copy of the store,
+// never the live one, so the live derived-key maintainer has nothing to do for
+// them: each deletes the copy's own og_key_index rows itself. The capsule's
+// leased store copy withholds the kinds no lease names (MA3.4, X6).
+var privateCopyOGWriters = map[string][]string{
+	"store/snapshot_to.go": {"withholdUnleasedKinds"},
+}
+
 // ogStatementPreparers prepare a maintained writer's statement and never run
 // it; the writer that runs it calls Maintain.
 var ogStatementPreparers = map[string][]string{
@@ -146,6 +154,15 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 			}
 		}
 		if preparer {
+			continue
+		}
+		privateCopy := false
+		for _, fn := range privateCopyOGWriters[s.file] {
+			if fn == s.fn {
+				privateCopy = true
+			}
+		}
+		if privateCopy {
 			continue
 		}
 		allowed := usesUpsertFn[s] && s.file == "objectgraph/sql_store.go" // PutObject, putBatchTx

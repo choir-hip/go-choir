@@ -94,6 +94,11 @@ const (
 	RequestEscalate = "escalate"
 	RequestFeed     = "feed"
 	RequestDecline  = "decline"
+	// RequestLease asks a custodian for a lease on a kind or a capture
+	// (MA3.4); the grant is a lease record. Like an Ask it is a precommit
+	// record (scored: a lease request is not an operational directive), told
+	// apart by the procedure the reducer froze.
+	RequestLease = "lease_request"
 	// RequestPrecommit is not a request, but its weight is catalogued and
 	// frozen the same way.
 	RequestPrecommit = "precommit"
@@ -280,8 +285,8 @@ func requestKindOfRecord(rec CommitmentRecord) string {
 		// An Ask and a Precommit share the record kind; the frozen
 		// procedure names which the reducer stamped. A precommit with no
 		// freeze is a Precommit.
-		if rec.MaterialityProcedure != nil && rec.MaterialityProcedure.Kind == RequestAsk {
-			return RequestAsk
+		if rec.MaterialityProcedure != nil && (rec.MaterialityProcedure.Kind == RequestAsk || rec.MaterialityProcedure.Kind == RequestLease) {
+			return rec.MaterialityProcedure.Kind
 		}
 		return RequestPrecommit
 	}

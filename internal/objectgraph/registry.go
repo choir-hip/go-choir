@@ -131,6 +131,7 @@ func DefaultRegistry() *Registry {
 		// (docs/design/package-install-2026-11-04.md). The kind was renamed
 		// from its pre-MA2.4 name; records of the old kind stay registered
 		// and readable until the store converts them (store/package_install_legacy.go).
+		{Kind: "choir.lease", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "lease.Record"},
 		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file

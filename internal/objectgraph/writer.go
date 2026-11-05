@@ -72,6 +72,8 @@ const (
 	// WriterShell is the shell and owner-act state: settings, content, the
 	// desktop.
 	WriterShell Writer = "system:shell"
+	// WriterLease is the lease service (MA3.4): the issuer of lease records.
+	WriterLease Writer = "system:lease"
 	// WriterCorpusd is the publication layer (Store B).
 	WriterCorpusd Writer = "system:corpusd"
 	// WriterStore is the VM store acting for itself, not for a desk: the
@@ -88,7 +90,7 @@ const (
 var BuiltinWriters = map[Writer]bool{
 	WriterTexture: true, WriterManagement: true, WriterEngineering: true, WriterResearch: true,
 	WriterAutoradio: true, WriterKernel: true, WriterOwnerFiles: true, WriterShell: true,
-	WriterCorpusd: true, WriterStore: true,
+	WriterCorpusd: true, WriterStore: true, WriterLease: true,
 }
 
 var appDeskWriter = regexp.MustCompile(`^desk:[a-z][a-z0-9_-]{1,31}$`)

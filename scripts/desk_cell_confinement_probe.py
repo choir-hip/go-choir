@@ -232,7 +232,8 @@ FRAME_ALLOWED = {
 }
 FRAME_ACTIONS = {"exec", "read_file", "write_file", "list_dir", "search_start", "read", "search_wire_corpus",
                  "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "product_api", "research",
-                 "poll_source", "read_capture", "stories", "system1", "relate_stories", "relate", "source_api"}
+                 "poll_source", "read_capture", "stories", "system1", "relate_stories", "relate", "source_api",
+                 "request_lease"}
 
 
 def judge_frames(fb):

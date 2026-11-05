@@ -1,6 +1,7 @@
 package yaegikernel
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -25,7 +26,25 @@ import (
 //  5. An undefined choir name, a bare choir call, or a wrong argument count
 //     fails without naming what exists.
 
+// registerSurfaceProbeApp registers one app desk holding every verb an app
+// desk may hold, so the surface tests cover the app tier (RequestLease is
+// callable by app desks only).
+func registerSurfaceProbeApp() {
+	if _, ok := deskmanifest.Lookup("app:surfaceprobe"); ok {
+		return
+	}
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:surfaceprobe", Verbs: []string{"Cast", "ReadCapture", "RequestLease", "Done"},
+		Taint: deskmanifest.TaintUntrustedInput, UID: 62950, WorkerMaxBytes: 64 << 20})
+	if err != nil {
+		panic(err)
+	}
+	if err := deskmanifest.RegisterApp(d); err != nil {
+		panic(err)
+	}
+}
+
 func allSurfaceScopes() []*ChoirScope {
+	registerSurfaceProbeApp()
 	scopes := []*ChoirScope{{desk: "engineering", slot: "verifier"}, {desk: "research", readOnly: true}}
 	for desk := range deskModuleSets() {
 		scopes = append(scopes, &ChoirScope{desk: desk})

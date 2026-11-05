@@ -49,6 +49,10 @@ const (
 	// ActionRelate records the research desk's entity attachments of a
 	// published story for choir.Relate (relate.go).
 	ActionRelate BrokerAction = "relate"
+	// ActionRequestLease asks the lease service for a lease on kinds or
+	// captures an app desk does not keep: choir.RequestLease (MA3.4). The host
+	// sets the holder desk and run from the session, never from the cell.
+	ActionRequestLease BrokerAction = "request_lease"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -248,6 +252,21 @@ type SourceAPIPayload struct {
 	Params   map[string]any `json:"params,omitempty"`
 }
 
+// RequestLeasePayload defines ActionRequestLease (MA3.4): the scope asked for
+// (object kinds, capture ids, owner-private capture labels), a stated purpose,
+// an optional duration beyond which the lease ends sooner than its run, and
+// the request fields (p_success, weight, settlement) that make the ask a
+// scored precommitment. The holder desk and run are not here: the host takes
+// them from the session.
+type RequestLeasePayload struct {
+	Kinds           []string             `json:"kinds,omitempty"`
+	CaptureIDs      []string             `json:"capture_ids,omitempty"`
+	CaptureLabels   []string             `json:"capture_labels,omitempty"`
+	Purpose         string               `json:"purpose"`
+	DurationSeconds int                  `json:"duration_seconds,omitempty"`
+	Req             *types.RequestFields `json:"req"`
+}
+
 // ReadCapturePayload defines ActionReadCapture: read one shared capture's
 // blocks from FromBlock (Autopaper W1; Cut 2 unit 2a).
 type ReadCapturePayload struct {
@@ -307,7 +326,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

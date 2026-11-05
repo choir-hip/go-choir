@@ -106,6 +106,11 @@ type DeskRow struct {
 	WorkerMaxBytes        uint64 `json:"worker_max_bytes"`
 	WorkerHighBytes       uint64 `json:"worker_high_bytes"`
 	CapsuleRequestedBytes int64  `json:"capsule_requested_bytes"`
+	// LeaseKinds and LeaseCaptures are the desk's lease ceiling (MA3.4). They
+	// are omitted when empty so a lock written before the ceiling existed
+	// keeps its hash.
+	LeaseKinds    []string `json:"lease_kinds,omitempty"`
+	LeaseCaptures bool     `json:"lease_captures,omitempty"`
 }
 
 // Canonical returns the surface as compact JSON with the hash field blank.
@@ -308,6 +313,8 @@ func Classify(old, cur *Surface) Result {
 		setDiffMajor(&r, "desk "+d+" capsule verb", o.CapsuleVerbs, c.CapsuleVerbs)
 		setDiffMajor(&r, "desk "+d+" module", o.Modules, c.Modules)
 		setDiffMajor(&r, "desk "+d+" owned kind", o.OwnedKinds, c.OwnedKinds)
+		// The lease ceiling is authority: a widening is major.
+		setDiffMajor(&r, "desk "+d+" lease kind", o.LeaseKinds, c.LeaseKinds)
 		for _, f := range []struct{ what, o, c string }{
 			{"carrier", o.Carrier, c.Carrier}, {"instance", o.Instance, c.Instance},
 			{"taint", o.Taint, c.Taint}, {"sandbox", o.Sandbox, c.Sandbox},
@@ -317,6 +324,7 @@ func Classify(old, cur *Surface) Result {
 			{"prompt", fmt.Sprint(o.Prompt), fmt.Sprint(c.Prompt)},
 			{"identity", o.Identity, c.Identity},
 			{"own channel", fmt.Sprint(o.OwnChannel), fmt.Sprint(c.OwnChannel)},
+			{"lease captures", fmt.Sprint(o.LeaseCaptures), fmt.Sprint(c.LeaseCaptures)},
 			{"cell deadline ns", fmt.Sprint(o.CellDeadlineNs), fmt.Sprint(c.CellDeadlineNs)},
 			{"worker max bytes", fmt.Sprint(o.WorkerMaxBytes), fmt.Sprint(c.WorkerMaxBytes)},
 			{"worker high bytes", fmt.Sprint(o.WorkerHighBytes), fmt.Sprint(c.WorkerHighBytes)},

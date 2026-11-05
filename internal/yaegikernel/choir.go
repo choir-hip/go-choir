@@ -412,6 +412,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"System1":          func() reflect.Value { return reflect.ValueOf(s.System1) },
 		"RelateStories":    func() reflect.Value { return reflect.ValueOf(s.RelateStories) },
 		"Relate":           func() reflect.Value { return reflect.ValueOf(s.Relate) },
+		"RequestLease":     func() reflect.Value { return reflect.ValueOf(s.RequestLease) },
 		"StoryAnalysis":    func() reflect.Value { return reflect.ValueOf(s.StoryAnalysis) },
 		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
 		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
@@ -641,6 +642,39 @@ func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 func (s *ChoirScope) SourceAPI(provider, endpoint string, params map[string]any) (JSON, error) {
 	var out JSON
 	err := s.call(ActionSourceAPI, SourceAPIPayload{Provider: provider, Endpoint: endpoint, Params: params}, &out)
+	return out, err
+}
+
+// RequestLease asks the lease service for read access an app desk does not
+// have (MA3.4): scope is a map with kinds, capture_ids and capture_labels
+// (owner-private labels only) and an optional duration_seconds; purpose says
+// why; req is the request fields every request verb takes. It returns the
+// lease as JSON, or an error naming why it was refused (outside the manifest
+// ceiling, an unknown kind, no purpose). The lease is the run's: it ends with
+// the run, and the owner may revoke it.
+func (s *ChoirScope) RequestLease(scope any, purpose string, req ...any) (JSON, error) {
+	raw, err := jsonCellArg(scope)
+	if err != nil {
+		return nil, fmt.Errorf("choir: RequestLease: scope: %w", err)
+	}
+	var sc struct {
+		Kinds           []string `json:"kinds"`
+		CaptureIDs      []string `json:"capture_ids"`
+		CaptureLabels   []string `json:"capture_labels"`
+		DurationSeconds int      `json:"duration_seconds"`
+	}
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&sc); err != nil {
+		return nil, fmt.Errorf("choir: RequestLease: scope is a map {kinds, capture_ids, capture_labels, duration_seconds}: %w", err)
+	}
+	fields, err := requestArg("RequestLease", req)
+	if err != nil {
+		return nil, err
+	}
+	var out JSON
+	err = s.call(ActionRequestLease, RequestLeasePayload{Kinds: sc.Kinds, CaptureIDs: sc.CaptureIDs, CaptureLabels: sc.CaptureLabels,
+		Purpose: purpose, DurationSeconds: sc.DurationSeconds, Req: fields}, &out)
 	return out, err
 }
 

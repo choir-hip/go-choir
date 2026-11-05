@@ -44,6 +44,9 @@ type SnapshotReceipt struct {
 	Blanked      map[string]int `json:"blanked,omitempty"`
 	// LeftOut names the sidecar parts the copy does not carry.
 	LeftOut []string `json:"left_out,omitempty"`
+	// Withheld counts, by kind, the objects the copy leaves out because no
+	// lease names their kind (MA3.4, X6). Nil when the copy is whole.
+	Withheld map[string]int `json:"withheld,omitempty"`
 }
 
 // snapshotSidecarFiles are the sidecar files a reopened store reads: the
@@ -72,6 +75,15 @@ func (s *Store) SnapshotEstimate(ctx context.Context) (int64, error) {
 // dir must exist; any earlier copy in it is replaced. On error nothing it
 // wrote is left.
 func (s *Store) SnapshotTo(ctx context.Context, dir string) (SnapshotReceipt, error) {
+	return s.SnapshotToKinds(ctx, dir, nil)
+}
+
+// SnapshotToKinds is SnapshotTo for a lease (MA3.4, X6): when kinds is not
+// nil, the copy keeps only the objects of the kinds the lease names, and the
+// edges that touch no withheld object. A kind the lease does not name (a
+// Texture body, a package's kind) is deleted from the copy, never the live
+// store, before the copy is closed. A nil kinds copies every kind.
+func (s *Store) SnapshotToKinds(ctx context.Context, dir string, kinds []string) (SnapshotReceipt, error) {
 	receipt := SnapshotReceipt{}
 	if s == nil || s.statePath == "" || s.ReadDB() == nil {
 		return receipt, errors.New("store: no store to copy")
@@ -103,7 +115,7 @@ func (s *Store) SnapshotTo(ctx context.Context, dir string) (SnapshotReceipt, er
 	}
 	receipt.CopyMS = time.Since(started).Milliseconds()
 	scanStarted := time.Now()
-	if err := sanitizeSnapshot(ctx, tmp, &receipt); err != nil {
+	if err := sanitizeSnapshot(ctx, tmp, kinds, &receipt); err != nil {
 		cleanup()
 		return receipt, err
 	}
@@ -167,7 +179,7 @@ func (s *Store) SnapshotTo(ctx context.Context, dir string) (SnapshotReceipt, er
 // scans every text value with the tape's private-secret patterns, blanks
 // each hit under secure_delete, vacuums again when anything was blanked, and
 // closes the copy to one file.
-func sanitizeSnapshot(ctx context.Context, path string, receipt *SnapshotReceipt) error {
+func sanitizeSnapshot(ctx context.Context, path string, kinds []string, receipt *SnapshotReceipt) error {
 	db, err := sql.Open("sqlite", dbx.SQLiteDSN(path, dbx.SQLiteOptions{}, false))
 	if err != nil {
 		return err
@@ -186,6 +198,14 @@ func sanitizeSnapshot(ctx context.Context, path string, receipt *SnapshotReceipt
 	}
 	if _, err := conn.ExecContext(ctx, `PRAGMA secure_delete=ON`); err != nil {
 		return fmt.Errorf("secure_delete: %w", err)
+	}
+	withheld := 0
+	if kinds != nil {
+		n, err := withholdUnleasedKinds(ctx, conn, kinds, receipt)
+		if err != nil {
+			return err
+		}
+		withheld = n
 	}
 	tables, err := snapshotTables(ctx, conn)
 	if err != nil {
@@ -233,7 +253,7 @@ func sanitizeSnapshot(ctx context.Context, path string, receipt *SnapshotReceipt
 			}
 		}
 	}
-	if hitsTotal > 0 {
+	if hitsTotal > 0 || withheld > 0 {
 		// secure_delete zeroed the freed cells; the second VACUUM rewrites
 		// the file so no old page remains.
 		if _, err := conn.ExecContext(ctx, `VACUUM`); err != nil {
@@ -364,4 +384,158 @@ func copyRegularFile(src, dst string) error {
 	}
 	_, copyErr := io.Copy(out, in)
 	return errors.Join(copyErr, out.Close())
+}
+
+// snapshotTableKinds is the table-level disposition of the copy (MA3.4, X6,
+// review B1). Every table that holds content names the kind that content is;
+// the copy keeps the table's rows only when the lease names that kind, and
+// empties it otherwise. The copy is a VACUUM INTO of the whole state.db, so a
+// table not listed here and not in snapshotInfraTables is emptied too: the
+// disposition fails closed, and a new table ships empty until it is mapped.
+//
+// A kind with no registered kind (the self-development tables, the debounce
+// buffer) is never in a lease, so those tables are always emptied.
+var snapshotTableKinds = map[string]string{
+	"events":                         "choir.event",
+	"run_memory_entries":             "choir.run_memory_entry",
+	"agent_evidence":                 "choir.agent_evidence",
+	"co_super_slots":                 "choir.co_super_slot",
+	"texture_revisions":              "choir.texture_revision",
+	"texture_source_entities":        "choir.texture_revision",
+	"texture_source_refs":            "choir.texture_revision",
+	"texture_agent_mutations":        "choir.texture_revision",
+	"texture_document_aliases":       "choir.texture_document",
+	"desktop_workspaces":             "choir.desktop_session",
+	"desktop_sessions":               "choir.desktop_session",
+	"desktop_app_instances":          "choir.desktop_app_instance",
+	"desktop_window_placements":      "choir.desktop_session",
+	"media_progress":                 "choir.media_item",
+	"media_recents":                  "choir.media_item",
+	"user_preferences":               "choir.computer_setting",
+	"self_development_operations":    "store.self_development_operations",
+	"self_development_start_intents": "store.self_development_operations",
+	"wire_publish_debounce_entries":  "store.wire_publish_debounce",
+	"wire_publish_debounce_state":    "store.wire_publish_debounce",
+}
+
+// snapshotInfraTables are copied whole: they hold event heads and counters,
+// no owner content. store_meta is trimmed to its schema version.
+var snapshotInfraTables = map[string]bool{
+	"computer_event_projection_heads": true,
+	"computer_event_index":            true,
+	"telemetry_partitions_retired":    true,
+	"sqlite_sequence":                 true,
+}
+
+// objectKindTables are the tables whose rows carry their own object_kind: the
+// object graph, and the tape that records its mutations. Rows of a kind the
+// lease does not name are deleted (bodies and edges with them).
+var objectKindTables = map[string]bool{"og_objects": true, "choir_events": true}
+
+// derivedOfObjects are removed by the object tables' own deletes or rebuilt.
+var derivedOfObjects = map[string]bool{"og_bodies": true, "og_edges": true, "og_key_index": true, "choir_event_bodies": true}
+
+// withholdUnleasedKinds applies the lease to the copy: every table gets a
+// disposition (see snapshotTableKinds). It returns the number of rows removed.
+func withholdUnleasedKinds(ctx context.Context, conn *sql.Conn, kinds []string, receipt *SnapshotReceipt) (int, error) {
+	leased := make(map[string]bool, len(kinds))
+	for _, k := range kinds {
+		leased[k] = true
+	}
+	total := 0
+	note := func(key string, n int64) {
+		if n <= 0 {
+			return
+		}
+		if receipt.Withheld == nil {
+			receipt.Withheld = map[string]int{}
+		}
+		receipt.Withheld[key] += int(n)
+		total += int(n)
+	}
+	tables, err := snapshotTables(ctx, conn)
+	if err != nil {
+		return 0, err
+	}
+	for _, table := range tables {
+		switch {
+		case strings.HasPrefix(table, "sqlite_") && table != "sqlite_sequence", derivedOfObjects[table], snapshotInfraTables[table]:
+			continue
+		case table == "store_meta":
+			res, err := conn.ExecContext(ctx, `DELETE FROM store_meta WHERE key <> 'schema_version'`)
+			if err != nil {
+				return 0, fmt.Errorf("withhold store_meta: %w", err)
+			}
+			n, _ := res.RowsAffected()
+			note("store_meta", n)
+		case objectKindTables[table]:
+			n, err := withholdObjectKinds(ctx, conn, table, leased, note)
+			if err != nil {
+				return 0, err
+			}
+			_ = n
+		default:
+			if kind, mapped := snapshotTableKinds[table]; mapped && leased[kind] {
+				continue
+			}
+			res, err := conn.ExecContext(ctx, `DELETE FROM `+sqlIdent(table))
+			if err != nil {
+				return 0, fmt.Errorf("withhold %s: %w", table, err)
+			}
+			n, _ := res.RowsAffected()
+			note("table:"+table, n)
+		}
+	}
+	return total, nil
+}
+
+// withholdObjectKinds deletes, from og_objects or choir_events, the rows of
+// kinds the lease does not name. For og_objects the edges and derived keys of
+// the deleted objects go first.
+func withholdObjectKinds(ctx context.Context, conn *sql.Conn, table string, leased map[string]bool, note func(string, int64)) (int, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT DISTINCT object_kind FROM `+sqlIdent(table))
+	if err != nil {
+		return 0, fmt.Errorf("withhold: list kinds of %s: %w", table, err)
+	}
+	var withheld []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if !leased[k] {
+			withheld = append(withheld, k)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+	count := 0
+	for _, k := range withheld {
+		if table == "og_objects" {
+			// The copy's derived-key rows and edges for the objects go first
+			// (the key table is absent on a store that never built it).
+			if _, err := conn.ExecContext(ctx, `DELETE FROM og_key_index WHERE canonical_id IN (SELECT canonical_id FROM og_objects WHERE object_kind = ?)`, k); err != nil && !strings.Contains(err.Error(), "no such table") {
+				return 0, fmt.Errorf("withhold %s: derived keys: %w", k, err)
+			}
+			if _, err := conn.ExecContext(ctx, `DELETE FROM og_edges WHERE from_id IN (SELECT canonical_id FROM og_objects WHERE object_kind = ?) OR to_id IN (SELECT canonical_id FROM og_objects WHERE object_kind = ?)`, k, k); err != nil {
+				return 0, fmt.Errorf("withhold %s: edges: %w", k, err)
+			}
+		}
+		res, err := conn.ExecContext(ctx, `DELETE FROM `+sqlIdent(table)+` WHERE object_kind = ?`, k)
+		if err != nil {
+			return 0, fmt.Errorf("withhold %s from %s: %w", k, table, err)
+		}
+		n, _ := res.RowsAffected()
+		key := k
+		if table != "og_objects" {
+			key = "tape:" + k
+		}
+		note(key, n)
+		count += int(n)
+	}
+	return count, nil
 }

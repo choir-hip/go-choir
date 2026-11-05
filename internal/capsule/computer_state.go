@@ -93,14 +93,19 @@ type ComputerStoreCopy struct {
 	ScannedBytes int64          `json:"scanned_bytes"`
 	Blanked      map[string]int `json:"blanked,omitempty"`
 	LeftOut      []string       `json:"left_out,omitempty"`
+	// LeaseID names the lease that chose the kinds the copy holds (MA3.4);
+	// Withheld counts the objects of the kinds it does not name, by kind.
+	LeaseID  string         `json:"lease_id,omitempty"`
+	Withheld map[string]int `json:"withheld,omitempty"`
 }
 
 // ComputerStoreSource takes the store copy for a capsule: the guest store
-// (store.Store.SnapshotTo, adapted by the guest core). The capsule never gets
-// a store handle, only the copy's file.
+// (store.Store.SnapshotToKinds, adapted by the guest core). kinds are the
+// object kinds the assignment's lease names; the copy holds those and no
+// others. The capsule never gets a store handle, only the copy's file.
 type ComputerStoreSource interface {
 	SnapshotEstimate(ctx context.Context) (int64, error)
-	SnapshotForCapsule(ctx context.Context, dir string) (ComputerStoreCopy, error)
+	SnapshotForCapsule(ctx context.Context, dir string, kinds []string) (ComputerStoreCopy, error)
 }
 
 // ComputerStateProvided marks a spawn that got the layers (each may still

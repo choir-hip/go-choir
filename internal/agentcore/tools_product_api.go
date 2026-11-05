@@ -184,6 +184,8 @@ func validateProductAPIRoute(method, requestURI string) error {
 		"/api/agent/",
 		"/api/prompts",
 		"/api/test/",
+		// The owner's lease view and revoke (MA3.4): an owner act no desk reaches.
+		"/api/leases",
 	} {
 		if path == strings.TrimSuffix(blocked, "/") || strings.HasPrefix(path, blocked) {
 			return fmt.Errorf("product_api refuses non-product route %s", path)
