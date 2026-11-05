@@ -191,7 +191,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		ownerID = rec.OwnerID
 	}
 	rolePrompt := fmt.Sprintf("This is the system prompt for the %s agent in Choir.", profile)
-	if rt != nil && rt.promptStore != nil {
+	// A desk with no stored role prompt (an app desk: its instructions come
+	// with its package) takes the generic role line above.
+	if d, registered := deskmanifest.Lookup(profile); rt != nil && rt.promptStore != nil && !(registered && !d.Prompt) {
 		prompt, err := rt.promptStore.Load(ownerID, profile)
 		if err != nil {
 			return "", err
@@ -420,6 +422,8 @@ func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *toolregistry.ToolRe
 	if profile == "" {
 		return nil
 	}
+	rt.lateToolMu.RLock()
+	defer rt.lateToolMu.RUnlock()
 	if isManagementTaskRun(rec) {
 		// A task's desk_go_eval binds the task role's module set, not
 		// management's (R2-2). With no task registry it gets no tools.
@@ -433,10 +437,18 @@ func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *toolregistry.ToolRe
 			return registry
 		}
 	}
+	rt.lateToolMu.RUnlock()
+	registry := rt.lateDeskCellRegistry(profile)
+	rt.lateToolMu.RLock() // balanced by the deferred RUnlock
+	if registry != nil {
+		return registry
+	}
 	return rt.toolRegistry
 }
 
 func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegistry {
+	rt.lateToolMu.RLock()
+	defer rt.lateToolMu.RUnlock()
 	if rt.toolProfiles == nil {
 		return nil
 	}
@@ -511,4 +523,25 @@ func textureRunSelfDevelopmentOperation(rt *Runtime, rec *types.RunRecord) (oper
 		return "", ""
 	}
 	return operation.OperationID, operation.State
+}
+
+// lateDeskCellRegistry builds the sealed desk_go_eval registry for a root desk
+// registered after InstallDefaultAgentTools ran (an app desk installed at
+// runtime), and keeps it. It fails closed: a name that is not a live
+// desk-worker desk, or a runtime that has not installed its tools, gets nil.
+func (rt *Runtime) lateDeskCellRegistry(profile string) *toolregistry.ToolRegistry {
+	if rt == nil || rt.toolProfiles == nil || rt.researchDeps == nil || !deskCarrierLive(profile) {
+		return nil
+	}
+	rt.lateToolMu.Lock()
+	defer rt.lateToolMu.Unlock()
+	if registry := rt.toolProfiles[profile]; registry != nil {
+		return registry
+	}
+	registry, err := buildDeskCellRegistry(rt, profile, *rt.researchDeps)
+	if err != nil {
+		return nil
+	}
+	rt.toolProfiles[profile] = registry
+	return registry
 }

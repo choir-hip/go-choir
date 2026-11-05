@@ -76,7 +76,7 @@ func TestStageGrantedReleaseReusesRunningBinaryForANonGoChange(t *testing.T) {
 		capability := &Capability{
 			CapabilityID: "cap-reuse", Handle: "grant-reuse", CapsuleID: "capsule-reuse",
 			TargetCapsule: "capsule-reuse", AgentRunID: "run-reuse", AgentRole: RoleEngineering,
-			Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
+			Verbs: RoleVerbSets()[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 		}
 		if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 			t.Fatal(err)

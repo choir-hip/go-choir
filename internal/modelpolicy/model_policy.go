@@ -520,7 +520,7 @@ func (p Policy) Selections() []provideriface.LLMSelection {
 func NormalizeRole(role string) string {
 	normalized := strings.TrimSpace(strings.ToLower(role))
 	// The role set is the desk registry's profiles (MA2.5, desks design F2).
-	if d, ok := deskmanifest.Lookup(normalized); ok && d.Profile {
+	if isProfile, _ := deskmanifest.Profile(normalized); isProfile {
 		return normalized
 	}
 	switch normalized {

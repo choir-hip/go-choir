@@ -343,8 +343,8 @@ func requireEngineeringCommandDigest(got, want string, err error) error {
 }
 
 func engineeringCompiledVerbs() []string {
-	verbs := make([]string, 0, len(capsule.RoleVerbSets[capsule.RoleEngineering]))
-	for verb, allowed := range capsule.RoleVerbSets[capsule.RoleEngineering] {
+	verbs := make([]string, 0, len(capsule.RoleVerbSets()[capsule.RoleEngineering]))
+	for verb, allowed := range capsule.RoleVerbSets()[capsule.RoleEngineering] {
 		if allowed {
 			verbs = append(verbs, verb)
 		}

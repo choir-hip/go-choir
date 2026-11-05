@@ -50,6 +50,15 @@ func ManagementTaskInbox(taskID string) string {
 	return ManagementTaskDesk + ":" + strings.TrimSpace(taskID)
 }
 
+// ManagementTaskIDOfRef returns the task id a cell-supplied ref names: the
+// bare id, the management-task:<id> inbox or the management_task:<id> spelling
+// of it. Nothing is added or doubled, so no "management-task:management_task:x"
+// can be minted from a ref.
+func ManagementTaskIDOfRef(ref string) string {
+	ref = NormalizeManagementTaskRef(strings.TrimSpace(ref))
+	return strings.TrimSpace(strings.TrimPrefix(ref, ManagementTaskDesk+":"))
+}
+
 // ManagementTaskIDOfInbox returns the task id an inbox names, if it is a
 // task inbox.
 func ManagementTaskIDOfInbox(inbox string) (string, bool) {

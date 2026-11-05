@@ -103,6 +103,9 @@ func (c InboxClass) accepts(fromDesk string) bool {
 		return true
 	}
 	for _, s := range c.Senders {
+		if types.IsManagementTaskDesk(s) && types.IsManagementTaskDesk(fromDesk) {
+			return true
+		}
 		if s == fromDesk {
 			return true
 		}

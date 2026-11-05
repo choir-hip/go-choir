@@ -188,6 +188,8 @@ type Runtime struct {
 	bgStop       chan struct{}
 	toolRegistry *toolregistry.ToolRegistry
 	toolProfiles map[string]*toolregistry.ToolRegistry
+	// lateToolMu guards toolProfiles writes after boot (lateDeskCellRegistry).
+	lateToolMu sync.RWMutex
 	// deskWorkers owns the host session workers for non-capsule desks on the
 	// in-cell carrier (R3b). Lazy; nil until the first desk_go_eval call.
 	deskWorkers   *deskSessionWorkers

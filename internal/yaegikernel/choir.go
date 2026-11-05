@@ -943,7 +943,7 @@ func (s *ChoirScope) CancelTask(taskID, reason string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return t.CancelTask(strings.TrimPrefix(strings.TrimSpace(taskID), "management-task:"), reason)
+	return t.CancelTask(types.ManagementTaskIDOfRef(taskID), reason)
 }
 
 // captureIDsArg reads a list of capture ids: a []string, a list of

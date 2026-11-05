@@ -8,8 +8,18 @@ F=scripts/testdata/desk-names
 fail() { echo "selftest-desk-names FAIL: $*" >&2; exit 1; }
 python3 -I scripts/check-desk-names --root $F/good --allowlist $F/good/allowlist.json >/dev/null || fail "refused the good fixture"
 python3 -I scripts/check-desk-names --root $F/bad --allowlist $F/bad/allowlist.json >/dev/null 2>&1 && fail "accepted a new hard-coded desk name"
+for b in bad-prefix bad-alias bad-registry; do
+  python3 -I scripts/check-desk-names --root $F/$b --allowlist $F/$b/allowlist.json >/dev/null 2>&1 && fail "accepted $b"
+done
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 echo '{"files": {"internal/x/a.go": 0}}' > "$tmp/grew.json"
 python3 -I scripts/check-desk-names --root $F/good --allowlist "$tmp/grew.json" >/dev/null 2>&1 && fail "accepted a count above its entry"
+# --tighten lowers entries and never raises them or adds a file.
+echo '{"files": {"internal/x/a.go": 5, "internal/x/gone.go": 2}}' > "$tmp/t.json"
+python3 -I scripts/check-desk-names --root $F/good --allowlist "$tmp/t.json" --tighten >/dev/null
+[ "$(tr -d ' \n' < "$tmp/t.json")" = '{"files":{"internal/x/a.go":1}}' ] || fail "tighten did not lower to 1 and drop the gone file"
+echo '{"files": {}}' > "$tmp/t.json"
+python3 -I scripts/check-desk-names --root $F/good --allowlist "$tmp/t.json" --tighten >/dev/null
+[ "$(tr -d ' \n' < "$tmp/t.json")" = '{"files":{}}' ] || fail "tighten added a file"
 python3 -I scripts/check-desk-names >/dev/null || fail "refused the real tree"
 echo "selftest-desk-names: ok"

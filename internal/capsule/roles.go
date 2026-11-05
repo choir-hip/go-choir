@@ -22,12 +22,12 @@ type VerbSet map[string]bool
 // covers the rest. A grant without a handler only turns a role check into
 // "unknown verb"
 // (docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
-var RoleVerbSets = func() map[AgentRole]VerbSet {
+// RoleVerbSets is computed from the live desk registry on each call (F4): a
+// desk registered after init has an entry too, and a role the manifest does not
+// name has none, so HasVerb is false for every verb and unknown roles fail
+// closed. Run roles (management task, research child) have no broker verbs.
+func RoleVerbSets() map[AgentRole]VerbSet {
 	sets := map[AgentRole]VerbSet{}
-	// Every desk the manifest names that is not a run role has an entry (F4):
-	// the table is the fold of the registry, not a list of three names. A
-	// role the manifest does not name has no entry, so HasVerb is false for
-	// every verb: unknown roles fail closed.
 	for _, name := range deskmanifest.Names() {
 		d, _ := deskmanifest.Lookup(name)
 		if d.Kind == deskmanifest.KindRole {
@@ -40,8 +40,17 @@ var RoleVerbSets = func() map[AgentRole]VerbSet {
 		sets[AgentRole(name)] = set
 	}
 	return sets
-}()
+}
 
 func (r AgentRole) HasVerb(verb string) bool {
-	return RoleVerbSets[r][verb]
+	d, ok := deskmanifest.Lookup(string(r))
+	if !ok || d.Kind == deskmanifest.KindRole {
+		return false
+	}
+	for _, v := range d.CapsuleVerbs {
+		if v == verb {
+			return true
+		}
+	}
+	return false
 }

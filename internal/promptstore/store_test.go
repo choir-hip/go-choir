@@ -2,6 +2,7 @@ package promptstore
 
 import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"strings"
 	"testing"
 )
@@ -101,5 +102,40 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 	corpus, web := strings.Index(prompt.Content, "choir.SearchWireCorpus("), strings.Index(prompt.Content, "choir.SearchStart(")
 	if corpus < 0 || web < 0 || corpus > web {
 		t.Fatalf("research prompt does not search the corpus before the web: %q", prompt.Content)
+	}
+}
+
+// Registering an app desk leaves the prompt store alone: only rows with a
+// stored role prompt are prompt roles, so Load, List and Save for every
+// built-in desk work, and the app desk has no prompt role.
+func TestAppDeskRowLeavesPromptStoreWorking(t *testing.T) {
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:promptstore", Verbs: []string{"Cast"}, Taint: deskmanifest.TaintUntrustedInput, UID: 62900, WorkerMaxBytes: 64 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deskmanifest.RegisterApp(d); err != nil {
+		t.Fatal(err)
+	}
+	defer deskmanifest.RetireApp("app:promptstore")
+	for _, r := range promptRoles() {
+		if r == "app:promptstore" {
+			t.Fatal("an app desk is a prompt role")
+		}
+	}
+	store := New(t.TempDir())
+	prompts, err := store.List("user-alice")
+	if err != nil || len(prompts) != len(promptRoles()) {
+		t.Fatalf("List = %d prompts, %v", len(prompts), err)
+	}
+	for _, r := range promptRoles() {
+		if _, err := store.Load("user-alice", r); err != nil {
+			t.Errorf("Load(%s): %v", r, err)
+		}
+		if _, err := store.Save("user-alice", r, "custom "+r); err != nil {
+			t.Errorf("Save(%s): %v", r, err)
+		}
+	}
+	if _, err := store.Load("user-alice", "app:promptstore"); err == nil {
+		t.Error("Load accepted the app desk")
 	}
 }

@@ -998,7 +998,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	readinessCapability := &Capability{
 		CapabilityID: "broker-readiness-" + caps.ID, Handle: "broker-readiness", CapsuleID: caps.ID,
 		AgentRunID: "guest-core-readiness", AgentRole: RoleResearch, TargetCapsule: caps.ID,
-		Verbs: RoleVerbSets[RoleResearch], ExpiresAt: time.Now().UTC().Add(time.Minute),
+		Verbs: RoleVerbSets()[RoleResearch], ExpiresAt: time.Now().UTC().Add(time.Minute),
 	}
 	if err := SignCapability(readinessCapability, e.privateKey, "guest-ephemeral"); err != nil {
 		return fmt.Errorf("capsule sign broker readiness capability: %w", err)
@@ -1213,7 +1213,7 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	}
 	capability := &Capability{
 		CapabilityID: capabilityID, Handle: handle, CapsuleID: capsuleID, AgentRunID: agentRunID,
-		AgentRole: role, Slot: slot, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets[role]),
+		AgentRole: role, Slot: slot, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets()[role]),
 		ExpiresAt: time.Now().UTC().Add(ttl),
 	}
 	if err := SignCapability(capability, e.privateKey, "guest-ephemeral"); err != nil {

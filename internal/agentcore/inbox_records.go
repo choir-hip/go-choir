@@ -473,7 +473,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// desk than its profile is not on a records route. A management task
 	// reads management-task:<id> on profile management (R2-1).
 	deskOfAgent, _, _ := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":")
-	task := isManagementTaskRun(r.rec) && deskOfAgent == types.ManagementTaskDesk
+	task := isManagementTaskRun(r.rec) && types.IsManagementTaskDesk(deskOfAgent)
 	if deskOfAgent != strings.TrimSpace(r.rec.AgentProfile) && !task {
 		return intents, nil
 	}
@@ -520,7 +520,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 				if err := r.cancelManagementTask(ctx, in); err != nil {
 					return nil, fmt.Errorf("reduce: %w", err)
 				}
-				receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind, Inbox: types.ManagementTaskInbox(strings.TrimPrefix(in.TargetRef, types.ManagementTaskDesk+":"))})
+				receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind, Inbox: types.ManagementTaskInbox(types.ManagementTaskIDOfRef(in.TargetRef))})
 			}
 		}
 	}

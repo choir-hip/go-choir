@@ -107,7 +107,7 @@ func (c *spawningCapsule) InspectCapsuleRaw(id string) (*capsule.CapsuleDiagnost
 
 func (c *spawningCapsule) MintCapabilityHandle(runID string, role capsule.AgentRole, capsuleID, handle string, ttl time.Duration, slot string) (*capsule.Capability, error) {
 	verbs := capsule.VerbSet{}
-	for verb, allowed := range capsule.RoleVerbSets[role] {
+	for verb, allowed := range capsule.RoleVerbSets()[role] {
 		if allowed {
 			verbs[verb] = true
 		}

@@ -24,3 +24,14 @@ func TestManagementTaskSpellingsResolveToOne(t *testing.T) {
 		t.Error("IsManagementTaskDesk")
 	}
 }
+
+func TestManagementTaskIDOfRefTakesEverySpellingAndNeverDoubles(t *testing.T) {
+	for _, ref := range []string{"mt-1", "management-task:mt-1", "management_task:mt-1", "  management_task:mt-1 "} {
+		if got := ManagementTaskIDOfRef(ref); got != "mt-1" {
+			t.Errorf("ManagementTaskIDOfRef(%q) = %q", ref, got)
+		}
+		if got := ManagementTaskInbox(ManagementTaskIDOfRef(ref)); got != "management-task:mt-1" {
+			t.Errorf("inbox from %q = %q", ref, got)
+		}
+	}
+}

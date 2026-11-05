@@ -8,12 +8,12 @@ import (
 
 func TestRoleVerbSets(t *testing.T) {
 	// Management should have no broker verbs.
-	if len(RoleVerbSets[RoleManagement]) != 0 {
-		t.Errorf("super should have no broker verbs, got %d", len(RoleVerbSets[RoleManagement]))
+	if len(RoleVerbSets()[RoleManagement]) != 0 {
+		t.Errorf("super should have no broker verbs, got %d", len(RoleVerbSets()[RoleManagement]))
 	}
 
 	// Cosuper should have exec, read_file, write_file, etc.
-	comanagement := RoleVerbSets[RoleEngineering]
+	comanagement := RoleVerbSets()[RoleEngineering]
 	if !comanagement["exec"] {
 		t.Error("cosuper should have exec verb")
 	}
@@ -41,7 +41,7 @@ func TestRoleVerbSets(t *testing.T) {
 		"mkdir": true, "remove": true, "kill_session": true, "go_eval": true,
 		"init_session": true, "close_session": true, "job_start": true, "job_status": true, "job_stop": true,
 	}
-	for role, verbs := range RoleVerbSets {
+	for role, verbs := range RoleVerbSets() {
 		for verb := range verbs {
 			if !brokerVerbs[verb] {
 				t.Errorf("%s is granted %s, which the broker does not implement", role, verb)
@@ -50,7 +50,7 @@ func TestRoleVerbSets(t *testing.T) {
 	}
 
 	// Research should have read_file but not exec or write_file.
-	research := RoleVerbSets[RoleResearch]
+	research := RoleVerbSets()[RoleResearch]
 	if !research["read_file"] {
 		t.Error("researcher should have read_file verb")
 	}
@@ -69,7 +69,7 @@ func TestRoleVerbSets(t *testing.T) {
 	if !research["go_eval"] {
 		t.Error("researcher should have go_eval verb (Go-only profile)")
 	}
-	if RoleVerbSets[RoleManagement]["go_eval"] {
+	if RoleVerbSets()[RoleManagement]["go_eval"] {
 		t.Error("super should NOT have go_eval verb")
 	}
 }
@@ -87,11 +87,11 @@ func TestUnknownRoleHasNoVerbs(t *testing.T) {
 }
 
 // RoleVerbSets is the fold of the desk registry (MA2.5, F4): every root desk has
-// an entry, the sets equal the manifest rows, and a run role has none.
+// an entry, one registered after init included, the sets equal the manifest rows, and a run role has none.
 func TestRoleVerbSetsFoldTheRegistry(t *testing.T) {
 	for _, name := range deskmanifest.Names() {
 		d, _ := deskmanifest.Lookup(name)
-		set, ok := RoleVerbSets[AgentRole(name)]
+		set, ok := RoleVerbSets()[AgentRole(name)]
 		if d.Kind == deskmanifest.KindRole {
 			if ok {
 				t.Errorf("run role %s has a broker verb set", name)
@@ -112,5 +112,27 @@ func TestRoleVerbSetsFoldTheRegistry(t *testing.T) {
 	}
 	if AgentRole("texture").HasVerb("exec") {
 		t.Error("texture holds a broker verb")
+	}
+}
+
+func TestRoleVerbSetsSeeLateRegisteredDesks(t *testing.T) {
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:rolesets", Verbs: []string{"Cast"}, Taint: deskmanifest.TaintUntrustedInput, UID: 62700, WorkerMaxBytes: 64 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deskmanifest.RegisterApp(d); err != nil {
+		t.Fatal(err)
+	}
+	defer deskmanifest.RetireApp("app:rolesets")
+	set, ok := RoleVerbSets()["app:rolesets"]
+	if !ok || len(set) != 0 {
+		t.Fatalf("late app desk set = %v, %v", set, ok)
+	}
+	if AgentRole("app:rolesets").HasVerb("exec") || AgentRole("nobody").HasVerb("exec") || AgentRole("management_task").HasVerb("exec") {
+		t.Fatal("a desk without capsule verbs holds one")
+	}
+	deskmanifest.RetireApp("app:rolesets")
+	if _, ok := RoleVerbSets()["app:rolesets"]; ok {
+		t.Fatal("a retired desk keeps an entry")
 	}
 }

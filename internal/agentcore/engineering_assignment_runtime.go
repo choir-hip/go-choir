@@ -1003,8 +1003,8 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if err != nil {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
 	}
-	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets[capsule.RoleEngineering]))
-	for verb, allowed := range capsule.RoleVerbSets[capsule.RoleEngineering] {
+	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets()[capsule.RoleEngineering]))
+	for verb, allowed := range capsule.RoleVerbSets()[capsule.RoleEngineering] {
 		if allowed {
 			compiledVerbs = append(compiledVerbs, verb)
 		}

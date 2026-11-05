@@ -448,7 +448,7 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 	if cap.CapsuleID != b.capsuleID || cap.TargetCapsule != b.capsuleID || cap.AgentRunID == "" {
 		return BrokerRPCResponse{Error: "capability binding mismatch"}
 	}
-	if !capsule.RoleVerbSets[cap.AgentRole][req.Verb] {
+	if !capsule.RoleVerbSets()[cap.AgentRole][req.Verb] {
 		return BrokerRPCResponse{Error: fmt.Sprintf("role %s does not allow verb %s", cap.AgentRole, req.Verb)}
 	}
 

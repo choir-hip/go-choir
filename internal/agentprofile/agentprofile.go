@@ -75,7 +75,7 @@ func Canonical(profile string) (string, error) {
 	// The desk registry is the vocabulary (MA2.5, desks design F1): a name is
 	// a profile when a registered desk says so. The frozen history names and
 	// the verifier roles are not desks.
-	if d, ok := deskmanifest.Lookup(normalized); ok && d.Profile {
+	if isProfile, _ := deskmanifest.Profile(normalized); isProfile {
 		return normalized, nil
 	}
 	switch normalized {
@@ -98,10 +98,10 @@ func IsLive(profile string) bool {
 	if err != nil {
 		return false
 	}
-	if d, ok := deskmanifest.Lookup(canonical); ok {
+	if isProfile, isRole := deskmanifest.Profile(canonical); isProfile {
 		// A run role (a management task) is a profile but not a desk anyone
 		// addresses or starts work on.
-		return d.Profile && d.Kind != deskmanifest.KindRole
+		return !isRole
 	}
 	return canonical == "verifier" || canonical == "verifier_multimodal"
 }

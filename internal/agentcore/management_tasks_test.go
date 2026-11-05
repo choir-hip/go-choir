@@ -484,7 +484,7 @@ func TestManagementTaskDeadlineAndCancelReturnResiduals(t *testing.T) {
 	// CancelTask (R2-20) closes the queued task's round with its capture
 	// as a residual.
 	cell := managementCell(t, f.rt, f.owner, f.computer, "run-cancel-task")
-	if out := cell(`choir.CancelTask("` + waiting.TaskID + `", "the parent takes it back")`); !strings.Contains(out, "rlm:cancel_task:") {
+	if out := cell(`choir.CancelTask("management_task:` + waiting.TaskID + `", "the parent takes it back")`); !strings.Contains(out, "rlm:cancel_task:") {
 		t.Fatalf("cancel: %s", out)
 	}
 	cancelled := f.task(waiting.TaskID)

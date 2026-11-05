@@ -5,45 +5,105 @@ No privilege keys on a desk name: a desk is a row in the deskmanifest registry
 and code asks the registry, not a literal. This gate counts, per non-test Go
 file, the hard-coded desk names:
 
-  ref:  agentprofile.X / deskmanifest.X for a built-in desk constant;
-  lit:  a quoted exact desk name ("texture", "management_task", ...).
+  ref:    X.Texture, X.Management, ... for any import alias X of agentprofile or
+          deskmanifest (aliases are read from the file's imports);
+  vocab:  types.ManagementTaskDesk / IsManagementTaskDesk, yaegikernel.SessionRole*,
+          capsule.RoleManagement|RoleEngineering|RoleResearch (the alias vocabulary);
+  lit:    a quoted or backticked desk name, exact ("texture") or as a prefix
+          ("management-task:", "texture:new");
+  bare:   inside internal/agentprofile and internal/deskmanifest only, an
+          unqualified constant (Texture, Management, ...) outside comments.
 
 scripts/desk-names-allowlist.json holds the residue per file. The gate FAILS
 when a file has more references than its allowlist entry (a new file has an
-entry of zero), so a new hard-coded desk name is refused. A file below its
-entry only warns; run `scripts/check-desk-names --tighten` to lower the
-entries. The allowlist must reach zero over time (MA4.11 cuts it to Texture's
-residue; Phase 5 to zero). The declaring packages (internal/deskmanifest,
-internal/agentprofile) and the kernel are not counted: they are the registry.
+entry of zero), so a new hard-coded desk name is refused, in the registry's own
+packages too. A file below its entry only warns; `--tighten` lowers entries to
+the current count and drops files at zero, and never raises one (raising is a
+hand edit of the json, which review sees). `--init` writes the allowlist when
+none exists. The allowlist must reach zero over time (MA4.11 cuts it to
+Texture's residue; Phase 5 to zero). internal/kernel is skipped: it has its own
+names gate (scripts/check-kernel-names); internal/yaegikernel is counted.
 
-Usage: scripts/check-desk-names [--root DIR] [--allowlist FILE] [--tighten]
+Usage: scripts/check-desk-names [--root DIR] [--allowlist FILE] [--tighten | --init]
 """
 import argparse, json, os, re, sys
 
 NAMES = "Texture|Management|Engineering|Research|Conductor|Email|ManagementTask|ResearchChild"
-REF = re.compile(r"\b(?:agentprofile|deskmanifest)\.(?:%s)\b" % NAMES)
-LIT = re.compile(r'"(?:texture|management|engineering|research|conductor|email|management_task|management-task|research_child)"')
-SKIP_DIRS = ("internal/deskmanifest/", "internal/agentprofile/", "internal/kernel/")
+LOWER = "texture|management|engineering|research|conductor|email|management_task|management-task|research_child|research-child"
+IMPORT = re.compile(r'(?:(\w+)\s+)?"github\.com/yusefmosiah/go-choir/internal/(agentprofile|deskmanifest)"')
+VOCAB = re.compile(r"\b(?:types\.(?:ManagementTaskDesk|IsManagementTaskDesk)|yaegikernel\.SessionRole\w+|capsule\.Role(?:Management|Engineering|Research))\b")
+# A desk name as a whole quoted string, or as the head of one ("texture:new").
+LIT = re.compile(r'["`](?:%s)(?::[^"`]*)?["`]' % LOWER)
+BARE = re.compile(r"\b(?:%s)\b" % NAMES)
+SKIP_DIRS = ("internal/kernel/",)
+SKIP_TOP = {".git", "node_modules", "testdata", "frontend", "vendor", "docs", "nix", "skills"}
+REGISTRY_PKGS = ("internal/agentprofile/", "internal/deskmanifest/")
+
+
+def strip_comments(text):
+    """Drop // comments and /* */ blocks, keeping string contents."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "\"`":
+            j = i + 1
+            while j < n and text[j] != c:
+                j += 2 if (c == '"' and text[j] == "\\") else 1
+            out.append(text[i:j + 1]); i = j + 1
+        elif c == "'":
+            j = i + 1
+            while j < n and text[j] != "'":
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1]); i = j + 1
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+
+def count_file(rel, text):
+    code = strip_comments(text)
+    n = len(LIT.findall(code)) + len(VOCAB.findall(code))
+    aliases = set(["agentprofile", "deskmanifest"])
+    for alias, pkg in IMPORT.findall(code):
+        aliases.add(alias or pkg)
+    aliases.discard("_")
+    aliases.discard(".")
+    ref = re.compile(r"\b(?:%s)\s*\.\s*(?:%s)\b" % ("|".join(sorted(aliases)), NAMES))
+    n += len(ref.findall(code))
+    if rel.startswith(REGISTRY_PKGS):
+        n += len(BARE.findall(code))
+    return n
 
 
 def scan(root):
     counts = {}
-    for top in ("internal", "cmd"):
-        for dp, dns, fns in os.walk(os.path.join(root, top)):
-            dns[:] = [d for d in dns if d != "testdata"]
-            for fn in fns:
-                if not fn.endswith(".go") or fn.endswith("_test.go"):
-                    continue
-                path = os.path.join(dp, fn)
-                rel = os.path.relpath(path, root).replace(os.sep, "/")
-                if rel.startswith(SKIP_DIRS):
-                    continue
-                with open(path, encoding="utf-8") as f:
-                    text = f.read()
-                n = len(REF.findall(text)) + len(LIT.findall(text))
-                if n:
-                    counts[rel] = n
+    for dp, dns, fns in os.walk(root):
+        dns[:] = [d for d in dns if d not in SKIP_TOP and not d.startswith(".")]
+        for fn in fns:
+            if not fn.endswith(".go") or fn.endswith("_test.go"):
+                continue
+            path = os.path.join(dp, fn)
+            rel = os.path.relpath(path, root).replace(os.sep, "/")
+            if rel.startswith(SKIP_DIRS):
+                continue
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            n = count_file(rel, text)
+            if n:
+                counts[rel] = n
     return counts
+
+
+def write(path, counts):
+    with open(path, "w") as f:
+        json.dump({"files": dict(sorted(counts.items()))}, f, indent=1, sort_keys=True)
+        f.write("\n")
 
 
 def main():
@@ -51,6 +111,7 @@ def main():
     ap.add_argument("--root", default=None)
     ap.add_argument("--allowlist", default=None)
     ap.add_argument("--tighten", action="store_true")
+    ap.add_argument("--init", action="store_true")
     a = ap.parse_args()
     root = a.root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     allow_path = a.allowlist or os.path.join(root, "scripts", "desk-names-allowlist.json")
@@ -60,11 +121,18 @@ def main():
             allow = json.load(f)["files"]
     except FileNotFoundError:
         allow = {}
-    if a.tighten:
-        with open(allow_path, "w") as f:
-            json.dump({"files": dict(sorted(counts.items()))}, f, indent=1, sort_keys=True)
-            f.write("\n")
+    if a.init:
+        if os.path.exists(allow_path):
+            print("check-desk-names: allowlist exists; --init refuses to overwrite it", file=sys.stderr)
+            return 1
+        write(allow_path, counts)
         print("check-desk-names: allowlist written: %d files, %d references" % (len(counts), sum(counts.values())))
+        return 0
+    if a.tighten:
+        lowered = {p: min(cap, counts.get(p, 0)) for p, cap in allow.items()}
+        lowered = {p: n for p, n in lowered.items() if n > 0}
+        write(allow_path, lowered)
+        print("check-desk-names: allowlist tightened: %d files, %d references (was %d)" % (len(lowered), sum(lowered.values()), sum(allow.values())))
         return 0
     bad = [(p, n, allow.get(p, 0)) for p, n in sorted(counts.items()) if n > allow.get(p, 0)]
     for p, n, cap in bad:

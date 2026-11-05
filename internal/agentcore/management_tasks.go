@@ -336,7 +336,7 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		if view.Captures != nil && len(view.Captures.Items) > 0 {
 			byID[view.RecordID] = view
 		}
-		if view.TaskOutcome != nil && len(view.TaskOutcome.Residuals) > 0 && strings.HasPrefix(view.From, types.ManagementTaskDesk+":") {
+		if view.TaskOutcome != nil && len(view.TaskOutcome.Residuals) > 0 && strings.HasPrefix(types.NormalizeManagementTaskRef(view.From), types.ManagementTaskDesk+":") {
 			byID[view.RecordID] = view
 		}
 	}
@@ -462,7 +462,7 @@ func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, ca
 // residuals.
 func (r *rlmCallReduction) cancelManagementTask(ctx context.Context, in yaegikernel.StagedIntent) error {
 	rt := r.rt()
-	taskID := strings.TrimPrefix(strings.TrimSpace(in.TargetRef), types.ManagementTaskDesk+":")
+	taskID := types.ManagementTaskIDOfRef(in.TargetRef)
 	task, err := rt.store.GetManagementTask(ctx, r.scope.OwnerID, r.scope.ComputerID, taskID)
 	if errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("cancel_task %s: no task %s", in.LocalID, taskID)

@@ -367,21 +367,22 @@ var (
 	registry = map[string]Desk{}
 )
 
-// init loads the built-in table through Register, the one path every desk
+// init loads the built-in table through register, the one path every desk
 // takes (MA2.5, desks design D1): nothing is a special case in code.
 func init() {
 	for _, d := range system {
-		if err := Register(d); err != nil {
+		if err := register(d); err != nil {
 			panic("deskmanifest: " + err.Error())
 		}
 	}
 }
 
-// Register validates a desk and adds it to the registry. It is the one way a
-// desk becomes known: the built-in table, an app package's desk and a
-// worker's rebuilt row all come through it. It refuses a name that exists, so
-// a desk can never replace another.
-func Register(d Desk) error {
+// register validates a desk and adds it to the registry. It is unexported:
+// only init (the built-in table) and RegisterApp (which applies the app
+// discipline first) call it, so no other path can place a row with more
+// authority than its kind allows. It refuses a name that exists, so a desk can
+// never replace another.
+func register(d Desk) error {
 	if err := validateStructure(d); err != nil {
 		return err
 	}
@@ -406,6 +407,20 @@ func (d Desk) clone() Desk {
 	d.OwnedKinds = cp(d.OwnedKinds)
 	d.Modules = cp(d.Modules)
 	return d
+}
+
+// Profile reports whether name is a registered agent profile and whether it
+// is a run role. It reads the registry without cloning the row: the hot
+// paths (agentprofile.Canonical, IsLive, modelpolicy.NormalizeRole) run per
+// record and per run.
+func Profile(name string) (isProfile, isRole bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	d, ok := registry[name]
+	if !ok {
+		return false, false
+	}
+	return d.Profile, d.Kind == KindRole
 }
 
 // Lookup returns a copy of the desk named name. An unknown name returns
@@ -443,7 +458,9 @@ func (d Desk) HasModule(module string) bool {
 	return false
 }
 
-// ProfileNames lists the desks whose name is an agent profile, sorted.
+// ProfileNames lists the names that are agent profiles, sorted. It includes a
+// run role (management_task): a profile is a name Canonical and NormalizeRole
+// resolve, not a desk anyone starts work on; Profile reports the role.
 func ProfileNames() []string {
 	return namesWhere(func(d Desk) bool { return d.Profile })
 }
@@ -543,6 +560,13 @@ func validateStructure(d Desk) error {
 	if d.Name == "" {
 		return fmt.Errorf("a desk has no name")
 	}
+	// The verifier roles and the frozen history profiles are resolved by
+	// agentprofile and modelpolicy after the registry; a row under one of
+	// their names would shadow them.
+	switch d.Name {
+	case "verifier", "verifier_multimodal", "verifier-multimodal", "processor", "reconciler":
+		return fmt.Errorf("desk name %q is reserved", d.Name)
+	}
 	if d.Restart != RestartContract {
 		return fmt.Errorf("desk %s: restart contract %q is not %q", d.Name, d.Restart, RestartContract)
 	}
@@ -574,13 +598,41 @@ func validateStructure(d Desk) error {
 		}
 	}
 	for _, v := range d.Verbs {
-		if a, local, ok := VerbAction(v); ok && local && d.Name != Engineering && d.Kind != KindApp {
+		if a, local, ok := VerbAction(v); ok && local && d.Name != Engineering {
 			if a == "write_file" || a == "exec" {
 				return fmt.Errorf("desk %s: only engineering holds %s", d.Name, a)
 			}
 		}
 	}
 	return nil
+}
+
+// reservedAppSlugs are the slugs no app desk may take: every built-in desk
+// and role and every shell app name of the package manifest
+// (internal/apppackage firstparty_gen.go shellAppNames, which a published
+// package may not take; a test there pins that this list covers it). The
+// built-in packages (files, image, library-next, reader) may carry a desk
+// through the owner's own track, so they are not reserved here and the first-party desks the plan names ahead of their move.
+var reservedAppSlugs = map[string]bool{
+	"audio": true, "autopaper": true, "browser": true, "calendar": true, "compute-monitor": true,
+	"conductor": true, "content": true, "desk": true, "desktop": true, "email": true, "engineering": true,
+	"epub": true, "mail": true,
+	"management": true, "management-task": true, "management_task": true, "owner": true, "pdf": true,
+	"podcast": true, "prompt": true, "pulse": true, "research": true,
+	"research-child": true, "research_child": true, "settings": true, "shell": true, "slides": true,
+	"system": true, "texture": true, "video": true,
+}
+
+// IsReservedAppSlug reports whether slug (the part after "app:") is reserved,
+// or names a registered non-app desk.
+func IsReservedAppSlug(slug string) bool {
+	if reservedAppSlugs[slug] {
+		return true
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	d, ok := registry[slug]
+	return ok && d.Kind != KindApp
 }
 
 var appName = regexp.MustCompile(`^app:[a-z][a-z0-9-]{0,31}$`)
@@ -613,6 +665,9 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 	if !appName.MatchString(spec.Name) {
 		return Desk{}, fmt.Errorf("app desk name %q must match app:<slug>", spec.Name)
 	}
+	if IsReservedAppSlug(spec.Name[len("app:"):]) {
+		return Desk{}, fmt.Errorf("app desk %s: the name is reserved for a built-in or first-party desk or app", spec.Name)
+	}
 	if spec.Taint != TaintPrivileged && spec.Taint != TaintUntrustedInput {
 		return Desk{}, fmt.Errorf("app desk %s: taint class is required", spec.Name)
 	}
@@ -642,22 +697,26 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 	return d, nil
 }
 
-// RegisterApp adds a validated app desk. It refuses a name that exists, so an
-// app can never replace a system desk or another app. ARCH-03 calls it at
-// package install.
+// RegisterApp adds an app desk. It is the registry's only door for a row
+// from outside the built-in table, and it applies the whole app discipline:
+// the row must be exactly what NewAppDesk builds from the row's own spec (name
+// grammar and reserved slugs, uid range, memory budget, appDeskVerbs, no
+// capsule verbs, no module, prompt, identity, channel or deadline authority).
+// A row with any more authority is refused, never trimmed. It also refuses a
+// name that exists, so an app can never replace a built-in desk or another app.
+// ARCH-03 calls it at package install.
 func RegisterApp(d Desk) error {
 	if d.Kind != KindApp {
 		return fmt.Errorf("only app desks register: %s is %s", d.Name, d.Kind)
 	}
-	if err := validateStructure(d); err != nil {
+	canonical, err := NewAppDesk(d.AppSpec())
+	if err != nil {
 		return err
 	}
-	for _, v := range d.Verbs {
-		if !appDeskVerbs[v] {
-			return fmt.Errorf("app desk %s: verb %s is not available to app desks", d.Name, v)
-		}
+	if !d.Equal(canonical) {
+		return fmt.Errorf("app desk %s: the row carries authority an app desk does not have (carrier, sandbox, capsule verbs, modules, prompt, identity, channel, deadline or profile differ from what NewAppDesk builds)", d.Name)
 	}
-	return Register(d)
+	return register(canonical)
 }
 
 // RetireApp removes an app desk (ARCH-03: a disabled package's desk). A
