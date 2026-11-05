@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { isHeavyAppId } from './stores/desktop.js';
+  import { commands } from './services/commands';
   import {
     getOverviewPreviewDecision,
     summarizeOverviewPreviewDecisions,
@@ -70,10 +71,6 @@
     dispatch('keepactiveonly', { windowId: activeWindowId });
   }
 
-  function handleKeydown(event) {
-    if (event.key === 'Escape') closeOverview();
-  }
-
   function modeLabel(win) {
     if (win.windowId === activeWindowId) return 'active';
     if (win.restoreSuspended) return 'suspended';
@@ -114,17 +111,29 @@
     return `left:${left}%; top:${top}%; width:${width}%; height:${height}%; z-index:${layer};`;
   }
 
+  // Escape closes the overview: a core command and a keybinding the shell's key
+  // capture resolves (services/commands.ts), live while this overview is open.
+  let removeCommands = [];
   onMount(() => {
     refreshViewport();
     window.addEventListener('resize', refreshViewport);
+    commands.setContext('overview.open', true);
+    removeCommands = [
+      commands.registerCommand(
+        { id: 'core.closeOverview', title: 'Close Desktop Overview', scope: 'global', run: { handler: true }, when: 'overview.open' },
+        'core',
+        () => closeOverview(),
+      ),
+      commands.registerKeybinding({ key: 'Escape', command: 'core.closeOverview', allowInInput: true }, 'core'),
+    ];
   });
 
   onDestroy(() => {
     window.removeEventListener('resize', refreshViewport);
+    commands.setContext('overview.open', false);
+    removeCommands.forEach((remove) => remove());
   });
 </script>
-
-<svelte:window on:keydown={handleKeydown} />
 
 <section class="desktop-overview" data-desktop-overview aria-modal="true" role="dialog" aria-labelledby="desktop-overview-title">
   <button class="overview-backdrop" type="button" aria-label="Close Desktop Overview" on:click={closeOverview}></button>

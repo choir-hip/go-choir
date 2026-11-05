@@ -117,3 +117,9 @@ export {
   sourceEntityTitle,
 } from './texture-source-renderer';
 export { browserOpenableSourceURL, storedSnapshotApplies, webLensAddress } from './source-url';
+
+// Commands: a package registers one in code (a disposer comes back); data
+// commands and keybindings go in the manifest's contributes. A package binds a
+// key and never reads keys.
+export { registerCommand } from './services/commands';
+export type { CommandHandler, CommandRun, CommandScope, CommandSpec } from './services/commands';

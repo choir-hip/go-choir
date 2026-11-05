@@ -16,6 +16,22 @@
       "kind": "class",
       "type": "{ new (message?: string): import(\"./auth\").AuthRequiredError; prototype: import(\"./auth\").AuthRequiredError; } & { name: string; message: string; stack?: string | undefined; cause?: unknown; }"
     },
+    "CommandHandler": {
+      "kind": "type",
+      "type": "(context: Record<string, unknown>) => void | Promise<void>"
+    },
+    "CommandRun": {
+      "kind": "type",
+      "type": "import(\"./services/commands\").DeclarativeAction | { handler: true; }"
+    },
+    "CommandScope": {
+      "kind": "type",
+      "type": "\"global\" | \"app\" | `target:${string}`"
+    },
+    "CommandSpec": {
+      "kind": "type",
+      "type": "{ id: string; title: string; scope: import(\"./services/commands\").CommandScope; run: import(\"./services/commands\").CommandRun; when?: string | undefined; }"
+    },
     "ContextMenuEntry": {
       "kind": "type",
       "type": "import(\"./context-menu-state\").ContextMenuItem | import(\"./context-menu-state\").ContextMenuSeparator"
@@ -280,6 +296,10 @@
       "kind": "value",
       "type": "(entry?: {}) => { windowTitle: any; title: any; fileName: any; filePath: any; sourcePath: any; sourceUrl: any; mediaType: any; contentId: any; }"
     },
+    "registerCommand": {
+      "kind": "value",
+      "type": "(spec: import(\"./services/commands\").CommandSpec, handler?: import(\"./services/commands\").CommandHandler | undefined) => () => void | Promise<void>"
+    },
     "rememberRecentMedia": {
       "kind": "value",
       "type": "(kind: any, source?: {}) => Promise<boolean>"
@@ -442,6 +462,26 @@
       "kind": "type",
       "type": "{ appId: string; name: string; icon: string; mediaType: string; isDefault: boolean; via: \"media\" | \"text\"; }"
     },
+    "import(\"./services/commands\").CommandHandler": {
+      "kind": "type",
+      "type": "(context: Record<string, unknown>) => void | Promise<void>"
+    },
+    "import(\"./services/commands\").CommandRun": {
+      "kind": "type",
+      "type": "import(\"./services/commands\").DeclarativeAction | { handler: true; }"
+    },
+    "import(\"./services/commands\").CommandScope": {
+      "kind": "type",
+      "type": "\"global\" | \"app\" | `target:${string}`"
+    },
+    "import(\"./services/commands\").CommandSpec": {
+      "kind": "type",
+      "type": "{ id: string; title: string; scope: import(\"./services/commands\").CommandScope; run: import(\"./services/commands\").CommandRun; when?: string | undefined; }"
+    },
+    "import(\"./services/commands\").DeclarativeAction": {
+      "kind": "type",
+      "type": "{ action: \"openApp\"; app: string; } | { action: \"openFile\"; path: string; } | { action: \"copyText\"; text: string; label?: string | undefined; } | { action: \"toast\"; message: string; }"
+    },
     "import(\"./shell-services\").AppContextChange": {
       "kind": "type",
       "type": "{ windowId: string; appContext?: Record<string, unknown> | undefined; title?: string | undefined; }"
@@ -480,5 +520,5 @@
     "opentexture",
     "resetdesktop"
   ],
-  "digest": "sha256:9ad97956700886a2116a09e4780b6e24c5b95e586f1e6bd3b52f9ea34054c40d"
+  "digest": "sha256:d20e06cd77571819c2a38920068f75557009217b936e893f87d4ff8a5a195c4b"
 }

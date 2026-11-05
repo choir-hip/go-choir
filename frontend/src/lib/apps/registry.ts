@@ -2,6 +2,7 @@ import type { ComponentType } from 'svelte';
 import { writable } from 'svelte/store';
 import { installedPackages, loadPackageApps, runtimeAppDefinition, type InstalledPackageRecord } from './packages';
 import { sdkSatisfies } from '../sdk-version';
+import { setPackageContributions } from '../contributions';
 
 export type AppPreviewPolicy = 'public-preview' | 'public-readonly' | 'private';
 export type AppSurfaceKind = 'standard' | 'document' | 'media';
@@ -238,6 +239,13 @@ const STATIC_APPS = [
 
 const PACKAGES = loadPackageApps(new Set(STATIC_APPS.map((app) => app.id)));
 
+// What a package contributes beside its window (commands, keybindings, ...):
+// handed to the owning services in the package's scope; an installed release
+// replaces the in-tree twin's set and uninstall restores it.
+const TREE_CONTRIBUTIONS = new Map(PACKAGES.contributions.map((c) => [c.name, c.contributes]));
+for (const [name, contributes] of TREE_CONTRIBUTIONS) void setPackageContributions(name, contributes, `tree:${name}`);
+let contributedByInstall = new Set<string>();
+
 export const APP_REGISTRY: ChoirAppDefinition[] = [...STATIC_APPS, ...PACKAGES.apps];
 
 // File routes contributed by packages' `opens`; media-utils.js consults them first.
@@ -290,6 +298,18 @@ export function applyInstalledPackages(records: InstalledPackageRecord[]): void 
     }
   }
   runtimeDefinitions = kept;
+  const nowInstalled = new Set<string>();
+  for (const record of records) {
+    const app = runtime.get(record.name);
+    if (!app) continue;
+    nowInstalled.add(record.name);
+    void setPackageContributions(record.name, (record.manifest as any)?.contributes, `${record.install_id}|${record.module.sha256}`);
+  }
+  for (const name of contributedByInstall) {
+    if (nowInstalled.has(name)) continue;
+    void setPackageContributions(name, TREE_CONTRIBUTIONS.get(name) ?? null, `tree:${name}`);
+  }
+  contributedByInstall = nowInstalled;
   const next = [...BUILT_IN.filter((app) => !runtime.has(app.id)), ...runtime.values()];
   APP_REGISTRY.splice(0, APP_REGISTRY.length, ...next);
   LAUNCHER_APPS.splice(0, LAUNCHER_APPS.length, ...next.filter((app) => app.launcher.menu).sort((a, b) => a.launcher.order - b.launcher.order));

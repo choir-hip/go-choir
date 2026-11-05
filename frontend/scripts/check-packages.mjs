@@ -110,6 +110,57 @@ function staticFacts() {
   return { ids, exts };
 }
 
+// ---- contributes.commands and contributes.keybindings (services/commands.ts has the runtime rules) ----
+
+const COMMAND_ID = /^[a-z][a-z0-9-]*\.[A-Za-z][A-Za-z0-9._-]*$/;
+const COMMAND_SCOPE = /^(global|app|target:[a-z][a-z0-9_-]*)$/;
+const COMMAND_ACTIONS = new Set(['openApp', 'openFile', 'copyText', 'toast']);
+const LOCKED_KEYS = new Set(['Mod+K']);
+
+function normalizeKey(key) {
+  const mods = new Set();
+  let main = '';
+  for (const part of String(key).split('+').map((p) => p.trim()).filter(Boolean)) {
+    const lower = part.toLowerCase();
+    if (['mod', 'cmd', 'ctrl', 'meta'].includes(lower)) mods.add('Mod');
+    else if (['alt', 'option'].includes(lower)) mods.add('Alt');
+    else if (lower === 'shift') mods.add('Shift');
+    else main = part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1);
+  }
+  return main ? [...['Mod', 'Alt', 'Shift'].filter((m) => mods.has(m)), main].join('+') : '';
+}
+
+function checkCommands(contributes, owner, where) {
+  const ids = new Set();
+  if (contributes.commands !== undefined && !Array.isArray(contributes.commands)) fail(where, 'commands must be an array');
+  (Array.isArray(contributes.commands) ? contributes.commands : []).forEach((cmd, i) => {
+    const at = `${where} commands[${i}]`;
+    if (!strictKeys(cmd, at, ['id', 'title', 'scope', 'run'], ['when'])) return;
+    if (typeof cmd.id !== 'string' || !COMMAND_ID.test(cmd.id)) fail(at, 'id must be <package>.<name>');
+    else if (cmd.id.split('.')[0] !== owner) fail(at, `id "${cmd.id}" is outside the namespace of "${owner}"`);
+    else if (ids.has(cmd.id)) fail(at, `id "${cmd.id}" is listed twice`);
+    else ids.add(cmd.id);
+    if (!str(cmd.title)) fail(at, 'title must be a non-empty string');
+    if (typeof cmd.scope !== 'string' || !COMMAND_SCOPE.test(cmd.scope)) fail(at, 'scope must be global, app or target:<kind>');
+    if (cmd.when !== undefined && typeof cmd.when !== 'string') fail(at, 'when must be a string');
+    if (!isObject(cmd.run)) fail(at, 'run must be an action or { "handler": true }');
+    else if (cmd.run.handler !== undefined) {
+      if (cmd.run.handler !== true || Object.keys(cmd.run).length !== 1) fail(at, 'run.handler must be exactly { "handler": true }');
+    } else if (!COMMAND_ACTIONS.has(cmd.run.action)) fail(at, `run.action must be one of ${[...COMMAND_ACTIONS].join(', ')}`);
+  });
+  if (contributes.keybindings !== undefined && !Array.isArray(contributes.keybindings)) fail(where, 'keybindings must be an array');
+  (Array.isArray(contributes.keybindings) ? contributes.keybindings : []).forEach((kb, i) => {
+    const at = `${where} keybindings[${i}]`;
+    if (!strictKeys(kb, at, ['key', 'command'], ['when'])) return;
+    const key = typeof kb.key === 'string' ? normalizeKey(kb.key) : '';
+    if (!key) fail(at, 'key must name a key, for example "Mod+Shift+P"');
+    else if (LOCKED_KEYS.has(key)) fail(at, `key ${key} is locked to the shell`);
+    if (typeof kb.command !== 'string' || !kb.command.startsWith(`${owner}.`)) fail(at, `command must be one of the package's own (${owner}.<name>)`);
+    else if (!ids.has(kb.command)) fail(at, `command "${kb.command}" is not in this package's commands`);
+    if (kb.when !== undefined && typeof kb.when !== 'string') fail(at, 'when must be a string');
+  });
+}
+
 // ---- imports ----
 // Not checked here. What a package may import is enforced on the resolved
 // module graph by scripts/package-boundary-plugin.mjs, run by vite build.
@@ -184,8 +235,10 @@ function checkManifest(manifest, dirName, where) {
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
-  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, ['desks'])) {
-    if (!Array.isArray(manifest.contributes.desks) || manifest.contributes.desks.length > 0) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings'])) {
+    const c = manifest.contributes;
+    if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
+    checkCommands(c, manifest.name, `${where} contributes`);
   }
   if (manifest.capabilities !== undefined) {
     if (!Array.isArray(manifest.capabilities)) fail(where, 'capabilities must be an array');

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import TetraMark from './TetraMark.svelte';
+  import { commands } from './services/commands';
   import DeskSheet from './DeskSheet.svelte';
   import {
     activeWindowId,
@@ -36,6 +37,7 @@
   let promptFocused = false;
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
+  let removeCommands: Array<() => unknown> = [];
   let promptWasDisabled = promptDisabled;
   // The owner's one-tap choice of target ('continue' or 'new'; '' is the
   // default). It belongs to the document in view and to one send: a
@@ -174,13 +176,6 @@
     if (restoreFocus) tick().then(() => deskButtonEl?.focus());
   }
 
-  function handleGlobalKeydown(event: KeyboardEvent) {
-    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
-      event.preventDefault();
-      handleDeskButtonClick();
-    }
-  }
-
   function focusPromptWhenReady() {
     if (promptDisabled || isMobileViewport()) return;
     tick().then(() => {
@@ -242,7 +237,15 @@
       resizeObserver.observe(surfaceEl);
     }
     window.addEventListener('resize', resizePromptInput);
-    window.addEventListener('keydown', handleGlobalKeydown);
+    // Cmd/Ctrl+K opens the desk: a core command on a locked key (services/commands.ts).
+    removeCommands = [
+      commands.registerCommand(
+        { id: 'core.toggleDesk', title: 'Open the desk', scope: 'global', run: { handler: true } },
+        'core',
+        () => handleDeskButtonClick(),
+      ),
+      commands.registerKeybinding({ key: 'Mod+K', command: 'core.toggleDesk', allowInInput: true }, 'core'),
+    ];
     focusPromptWhenReady();
   });
 
@@ -260,7 +263,7 @@
     removeLiveListener();
     resizeObserver?.disconnect();
     window.removeEventListener('resize', resizePromptInput);
-    window.removeEventListener('keydown', handleGlobalKeydown);
+    removeCommands.forEach((remove) => remove());
   });
 </script>
 

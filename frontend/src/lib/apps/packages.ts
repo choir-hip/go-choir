@@ -27,6 +27,7 @@ type PackageManifest = {
     theme: ChoirAppDefinition['theme'];
   };
   opens?: { media_type: string; extensions: string[]; default?: boolean }[];
+  contributes?: Record<string, unknown>;
 };
 
 // `default: false` routes offer the package under Open with only; the
@@ -37,6 +38,8 @@ export type LoadedPackages = {
   apps: ChoirAppDefinition[];
   aliases: Record<string, string>;
   mediaRoutes: PackageMediaRoute[];
+  /** What each package's manifest contributes (commands, keybindings, ...), applied by contributions.ts. */
+  contributions: { name: string; contributes: Record<string, unknown> }[];
 };
 
 const manifestModules = import.meta.glob('../../packages/*/choir-package.json', {
@@ -55,6 +58,7 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
   const apps: ChoirAppDefinition[] = [];
   const aliases: Record<string, string> = {};
   const mediaRoutes: PackageMediaRoute[] = [];
+  const contributions: LoadedPackages['contributions'] = [];
   const taken = new Set(reservedIds);
 
   for (const [manifestPath, manifest] of Object.entries(manifestModules).sort(([a], [b]) => a.localeCompare(b))) {
@@ -106,11 +110,12 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
       });
       apps.push(app);
       mediaRoutes.push(...routes);
+      if (isObject(manifest.contributes)) contributions.push({ name, contributes: manifest.contributes });
     } catch (error) {
       console.warn(`[packages] skipped ${manifestPath}:`, error);
     }
   }
-  return { apps, aliases, mediaRoutes };
+  return { apps, aliases, mediaRoutes, contributions };
 }
 
 // ---- Runtime install (S12; docs/design/s12-runtime-install-build-2026-11-04.md) ----

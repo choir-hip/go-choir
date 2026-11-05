@@ -43,7 +43,8 @@
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
-  import { bindShellHost } from './shell-services';
+  import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
+  import { bindCommandActions, commands, installKeyCapture } from './services/commands';
   import fileRoutes from './file-routes.json';
   import { openFileDocument } from './texture.js';
   import {
@@ -1667,7 +1668,21 @@
     closeOtherWindows: (keepId) => (keepId ? handleKeepWindowOnly({ detail: { windowId: keepId } }) : handleClearDesktopWindows()),
     resetDesktop: () => handleResetDesktop(),
   });
-  onDestroy(unbindShellHost);
+  // Commands and shortcuts (services/commands.ts): the shell captures keydown once,
+  // and a declarative command acts through these.
+  $: commands.setContext('window.app', ($windows.find((win) => win.windowId === $activeWindowId) || {}).appId || '');
+  const removeKeyCapture = installKeyCapture();
+  const unbindCommandActions = bindCommandActions({
+    openApp: (app) => handleLaunchApp({ detail: { appId: app } }),
+    openFile: (path) => shellOpenFile(path),
+    copyText: (text, label) => void shellCopyText(text, label),
+    toast: (message) => showToast(message),
+  });
+  onDestroy(() => {
+    unbindShellHost();
+    removeKeyCapture();
+    unbindCommandActions();
+  });
 
   onMount(() => {
     mounted = true;
