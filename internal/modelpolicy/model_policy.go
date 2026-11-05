@@ -437,7 +437,7 @@ func managementTaskSelection(p Policy) provideriface.LLMSelection {
 	}
 	model := strings.ToLower(strings.TrimSpace(selection.Model))
 	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) || strings.TrimSpace(selection.Provider) == "" ||
-		strings.HasSuffix(model, "-free") || strings.Contains(model, "preview") {
+		!ManagementTaskModelAllowed(selection) {
 		return pin
 	}
 	return fillSelection(selection, p.Defaults)
@@ -445,10 +445,10 @@ func managementTaskSelection(p Policy) provideriface.LLMSelection {
 
 // ManagementTaskModelAllowed is the R2-9 rule: a management task never runs
 // on a free or preview model. The quota switch applies it to the task's
-// whole chain.
+// whole chain. OpenRouter spells a free variant with ":free".
 func ManagementTaskModelAllowed(sel provideriface.LLMSelection) bool {
 	model := strings.ToLower(strings.TrimSpace(sel.Model))
-	return !strings.HasSuffix(model, "-free") && !strings.Contains(model, "preview")
+	return !strings.HasSuffix(model, "-free") && !strings.HasSuffix(model, ":free") && !strings.Contains(model, "preview")
 }
 
 // managementTaskFallbacks is the pinned task's failover order: the default

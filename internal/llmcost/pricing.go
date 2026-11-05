@@ -107,6 +107,10 @@ var pricingTable = []ModelPricing{
 	// docs/problems/openrouter-provider-crouton-alpha-2026-11-03.md).
 	// Revisit when the free window closes, about 2026-11-10.
 	{Provider: "openrouter", Model: "crouton-alpha", InputPerMillion: 0, OutputPerMillion: 0},
+	// OpenRouter's free variants (owner 2026-11-05), probed that day at
+	// usage.cost 0. The paid nemotron endpoints do not match this entry.
+	{Provider: "openrouter", Model: "flint-v1.0:free", InputPerMillion: 0, OutputPerMillion: 0},
+	{Provider: "openrouter", Model: "nemotron-3.5-super-vl:free", InputPerMillion: 0, OutputPerMillion: 0},
 }
 
 // LookupPricing returns the pricing entry for the given model identifier. The

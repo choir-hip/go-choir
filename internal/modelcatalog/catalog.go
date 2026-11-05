@@ -75,6 +75,7 @@ func TextOnlyModels() map[string]string {
 		"step-5-preview-free":             unverified,
 		"iceman-contributor-free":         unverified,
 		"beam-free":                       unverified,
+		"recursive/flint-v1.0:free":       "text-only: the OpenRouter listing gives text input only (2026-11-05)",
 	}
 }
 
@@ -285,6 +286,25 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: 1048576,
 		},
+		// OpenRouter free variants (owner 2026-11-05: "add these 2 models
+		// with openrouter as well"). Each passed a two-turn tool loop at
+		// usage.cost 0 and every reasoning effort from minimal to max that
+		// day. Flint: a 262144-token window, text only. Nemotron 3.5 Super
+		// VL: a 1000000-token window, text, image and video input.
+		{
+			ID:                  "recursive/flint-v1.0:free",
+			DisplayName:         "Flint 1.0 (OpenRouter free)",
+			Provider:            "openrouter",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 262144,
+		},
+		{
+			ID:                  "nvidia/nemotron-3.5-super-vl:free",
+			DisplayName:         "Nemotron 3.5 Super VL (OpenRouter free)",
+			Provider:            "openrouter",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 1000000,
+		},
 
 		// No DeepSeek through OpenRouter (owner, 2026-11-04: "only use Jev
 		// via openrouter, and free models like crouton"). The arms that ran
@@ -372,18 +392,21 @@ func (m PoolMember) SlotWeight() int {
 // a thread whose member is out of quota moves to the other.
 // Owner 2026-11-05: the free promotional iceman-contributor-free "we should
 // use it as much as we can ... run autopaper with it in a pool with gpt",
-// "in addition to crouton", and then "use all that work in a pool". The
-// default pool, which the paper and every other computer name, is the two
-// free OpenCode models that answer outside the OpenCode app (iceman and
-// beam), OpenRouter's crouton-alpha and gpt-6-luna at 1:1:1:1, failing over
-// in order; Synthetic's DeepSeek 1017 (its quota ran out on 2026-11-05) is a
-// fallback-only last member.
+// "in addition to crouton", then "use all that work in a pool", then
+// OpenRouter's free flint and nemotron. The default pool, which the paper
+// and every other computer name, is the two free OpenCode models that
+// answer outside the OpenCode app (iceman and beam), OpenRouter's
+// crouton-alpha, flint and nemotron, and gpt-6-luna, one share each,
+// failing over in order; Synthetic's DeepSeek 1017 (its quota ran out on
+// 2026-11-05) is a fallback-only last member.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
 			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
 			{Provider: "opencode-go", Model: "beam-free", Weight: 1},
 			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
+			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", Weight: 1},
+			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", Weight: 1},
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
