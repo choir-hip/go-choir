@@ -1011,7 +1011,32 @@ jobs:
           set -euo pipefail
           if git cat-file -e "$LOCK_BASE:cmd/deskprotocol-lock/main.go" 2>/dev/null; then
             git worktree add --detach "$RUNNER_TEMP/base-tree" "$LOCK_BASE"
-            (cd "$RUNNER_TEMP/base-tree" && go run ./cmd/deskprotocol-lock --locks-only --root "$GITHUB_WORKSPACE" --base "$LOCK_BASE")
+            # A lock written in a format newer than the base's checker (a
+            # field it does not know) cannot be read by that checker. That is
+            # tolerated only for a lock the base does not hold, and only when
+            # every complaint is of that kind. The base's checker stops at the
+            # first unreadable lock, so in that case it judges nothing else;
+            # the head's checker (the next step) judges every lock, the new
+            # ones included, and the merge-base history.
+            set +e
+            out=$(cd "$RUNNER_TEMP/base-tree" && go run ./cmd/deskprotocol-lock --locks-only --root "$GITHUB_WORKSPACE" --base "$LOCK_BASE" 2>&1)
+            rc=$?
+            set -e
+            printf '%s\n' "$out"
+            if [ "$rc" -ne 0 ]; then
+              problems=$(printf '%s\n' "$out" | grep -v '^exit status ' | grep -v '^$' || true)
+              tolerated=1
+              while IFS= read -r line; do
+                if [[ "$line" =~ ^desk-protocol:\ ([0-9]+\.[0-9]+\.[0-9]+\.json):\ json:\ unknown\ field\  ]]; then
+                  lock="${BASH_REMATCH[1]}"
+                  if git cat-file -e "$LOCK_BASE:internal/deskprotocol/lock/$lock" 2>/dev/null; then tolerated=0; fi
+                else
+                  tolerated=0
+                fi
+              done <<< "$problems"
+              if [ "$tolerated" -ne 1 ]; then exit 1; fi
+              echo "::notice::the base's checker cannot read a lock newer than its format; the head's checker judges it"
+            fi
           elif git cat-file -e "$LOCK_BASE:internal/deskprotocol/lock" 2>/dev/null; then
             echo "The base has locks but no cmd/deskprotocol-lock: the checker moved, and the base's copy cannot judge the head" >&2
             exit 1
