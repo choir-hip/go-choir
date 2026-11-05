@@ -31,7 +31,7 @@ var FrameBoundaryActions = []BrokerAction{
 	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
-	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease,
+	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList,
 }
 
 // FrameBoundaryRole is one desk role's observations.

@@ -190,6 +190,12 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 					return fmt.Errorf("reduce: restate %s: restate before the evidence, not in the cell that stages %s", in.LocalID, other.Kind)
 				}
 			}
+		case yaegikernel.IntentObjectPut, yaegikernel.IntentObjectRetract:
+			// A package desk's own objects (MA3.8): the desk is the scope's,
+			// from the run record, and the intent names no writer.
+			if err := validateObjectIntent(scope.FromRole, in); err != nil {
+				return err
+			}
 		case yaegikernel.IntentDelegate, yaegikernel.IntentCancelTask, yaegikernel.IntentTaskDone:
 			// Management delegation (S2a): the records route reduces them;
 			// a desk off that route has no arm for them.
@@ -1174,6 +1180,10 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 					r.rt().noteCalibrationPredicted(r.scope.RunID, time.Now())
 				}
 			}
+		case yaegikernel.IntentObjectPut, yaegikernel.IntentObjectRetract:
+			// A package desk's object write: no mailbox envelope, no record;
+			// the object is the commit (MA3.8).
+			err = r.commitObjectIntent(ctx, in)
 		case yaegikernel.IntentTextureTurn:
 			// A Texture turn: no mailbox envelope — commit it through
 			// ApplyTextureTurn via the bound owner.

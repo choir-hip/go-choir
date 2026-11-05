@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // The generic object seam for app package kinds (doctrine I27; P2b of
@@ -23,19 +24,26 @@ import (
 
 // PackageObject is one stored object of a package kind.
 type PackageObject struct {
-	Kind      string          `json:"kind"`
-	ID        string          `json:"id"`
-	Body      json.RawMessage `json:"body"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	Kind string          `json:"kind"`
+	ID   string          `json:"id"`
+	Body json.RawMessage `json:"body"`
+	// SchemaVersion is the schema version of the kind the body was written
+	// under (0 for an object the owner wrote before versions were stamped).
+	SchemaVersion int `json:"schema_version,omitempty"`
+	// Labels are the labels the writing run held (MA3.5); a reader's run
+	// inherits them.
+	Labels    []string  `json:"labels,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func packageObjectFrom(obj objectgraph.Object) PackageObject {
 	var meta struct {
-		ID string `json:"object_id"`
+		ID            string `json:"object_id"`
+		SchemaVersion int    `json:"schema_version"`
 	}
 	_ = json.Unmarshal(obj.Metadata, &meta)
-	return PackageObject{Kind: string(obj.ObjectKind), ID: meta.ID, Body: json.RawMessage(obj.Body), CreatedAt: obj.CreatedAt, UpdatedAt: obj.UpdatedAt}
+	return PackageObject{Kind: string(obj.ObjectKind), ID: meta.ID, Body: json.RawMessage(obj.Body), SchemaVersion: meta.SchemaVersion, Labels: types.LabelsFromMetadata(obj.Metadata).Strings(), CreatedAt: obj.CreatedAt, UpdatedAt: obj.UpdatedAt}
 }
 
 // PutPackageObject writes one object of a registered package kind as the

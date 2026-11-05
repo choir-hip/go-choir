@@ -33,7 +33,7 @@ func registerSurfaceProbeApp() {
 	if _, ok := deskmanifest.Lookup("app:surfaceprobe"); ok {
 		return
 	}
-	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:surfaceprobe", Verbs: []string{"Cast", "ReadCapture", "RequestLease", "Done"},
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:surfaceprobe", Verbs: []string{"Cast", "ReadCapture", "RequestLease", "Put", "Get", "List", "Retract", "Done"},
 		Taint: deskmanifest.TaintUntrustedInput, UID: 62950, WorkerMaxBytes: 64 << 20})
 	if err != nil {
 		panic(err)

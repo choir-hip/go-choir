@@ -260,6 +260,8 @@ var verbDispatch = map[string]dispatch{
 	"RelateStories":    {"relate_stories", false},
 	"Relate":           {"relate", false},
 	"RequestLease":     {"request_lease", false},
+	"Get":              {"object_get", false},
+	"List":             {"object_list", false},
 }
 
 // VerbAction reports the action a verb dispatches, whether the worker serves
@@ -700,6 +702,7 @@ var appDeskVerbs = map[string]bool{
 	"Cast": true, "Ask": true, "Reply": true, "CancelAct": true, "Escalate": true,
 	"Precommit": true, "Report": true, "ReportPacket": true, "Resolve": true, "Disagreement": true,
 	"ReadCapture": true, "RequestLease": true, "Done": true,
+	"Put": true, "Get": true, "List": true, "Retract": true,
 }
 
 // AppDeskSpec is what an app package's desk manifest declares (ARCH-03).

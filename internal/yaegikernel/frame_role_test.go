@@ -35,7 +35,7 @@ var allBrokerActions = []BrokerAction{
 	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
-	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease,
+	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList,
 }
 
 const testSlotToken = "slot-token-0123456789abcdef0123456789abcdef"

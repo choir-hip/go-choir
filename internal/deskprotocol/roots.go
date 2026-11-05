@@ -232,6 +232,8 @@ var Roots = []Root{
 	{Name: "yaegikernel.SourceAPIPayload", Direction: Emitted},
 	{Name: "yaegikernel.ReadCapturePayload", Direction: Emitted},
 	{Name: "yaegikernel.RequestLeasePayload", Direction: Emitted},
+	{Name: "yaegikernel.ObjectGetPayload", Direction: Emitted},
+	{Name: "yaegikernel.ObjectListPayload", Direction: Emitted},
 	{Name: "yaegikernel.SearchWireCorpusPayload", Direction: Emitted},
 	{Name: "yaegikernel.SaveEvidencePayload", Direction: Emitted},
 	{Name: "yaegikernel.ReadEvidencePayload", Direction: Emitted},

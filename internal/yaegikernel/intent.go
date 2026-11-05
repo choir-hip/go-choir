@@ -91,6 +91,12 @@ const (
 	// host then mints the task's final Report from its durable
 	// dispositions.
 	IntentTaskDone = "task_done"
+	// IntentObjectPut stages a package desk's write of one object of its own
+	// package's kinds (MA3.8): ObjectKind and ObjectID name it, Body is the
+	// JSON body. The writer is not in the intent: the reducer declares it from
+	// the run record. IntentObjectRetract withdraws one.
+	IntentObjectPut     = "object_put"
+	IntentObjectRetract = "object_retract"
 )
 
 // DelegateSpec is the body of a Delegate intent: the task kind, the
@@ -172,6 +178,9 @@ const (
 	MaxIntentsPerCell = 16
 	MaxIntentBody     = 16 << 10
 	MaxTrayBytes      = 256 << 10
+	// MaxObjectBody bounds one object a package desk puts (MA3.8). It is
+	// larger than a message body: an object is data the desk keeps.
+	MaxObjectBody = 64 << 10
 )
 
 // IncomingMessage is one mailbox message delivered as a cell-start snapshot.
@@ -375,6 +384,10 @@ type StagedIntent struct {
 	Cwd         string   `json:"cwd,omitempty"`
 	WallClockMS int64    `json:"wall_clock_ms,omitempty"`
 	MemoryMiB   int      `json:"memory_mib,omitempty"`
+	// Object fields (IntentObjectPut, IntentObjectRetract): the package kind
+	// and the object id. Never a writer.
+	ObjectKind string `json:"object_kind,omitempty"`
+	ObjectID   string `json:"object_id,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -569,6 +582,29 @@ func (t *Tray) TaskDone(note string) (string, error) {
 	return t.stage(StagedIntent{Kind: IntentTaskDone, Body: strings.TrimSpace(note)})
 }
 
+// ObjectPut stages the write of one object of the desk's own package kinds. The
+// reducer checks the kind, the id, the body against the kind's schema and the
+// desk's quota, and writes it as the run's desk; a refusal reaches the cell as
+// the cell's error. The object is readable with Get from the next cell.
+func (t *Tray) ObjectPut(kind, id, bodyJSON string) (string, error) {
+	if strings.TrimSpace(kind) == "" || strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("tray: put requires a kind and an id")
+	}
+	if strings.TrimSpace(bodyJSON) == "" || !json.Valid([]byte(bodyJSON)) {
+		return "", fmt.Errorf("tray: put requires a JSON body")
+	}
+	return t.stage(StagedIntent{Kind: IntentObjectPut, ObjectKind: strings.TrimSpace(kind), ObjectID: strings.TrimSpace(id), Body: bodyJSON})
+}
+
+// ObjectRetract stages the withdrawal of one object of the desk's own package
+// kinds.
+func (t *Tray) ObjectRetract(kind, id string) (string, error) {
+	if strings.TrimSpace(kind) == "" || strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("tray: retract requires a kind and an id")
+	}
+	return t.stage(StagedIntent{Kind: IntentObjectRetract, ObjectKind: strings.TrimSpace(kind), ObjectID: strings.TrimSpace(id)})
+}
+
 // Reply answers a staged Ask; targetRef is the Ask's correlation id.
 func (t *Tray) Reply(toDesk, targetRef, answer string) (string, error) {
 	if toDesk == "" || targetRef == "" {
@@ -716,7 +752,12 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 			size += len(ref)
 		}
 	}
-	if in.Kind != IntentTextureTurn && len(in.Body) > MaxIntentBody {
+	size += len(in.ObjectKind) + len(in.ObjectID)
+	if in.Kind == IntentObjectPut {
+		if len(in.Body) > MaxObjectBody {
+			return "", fmt.Errorf("tray: object body %d bytes exceeds %d", len(in.Body), MaxObjectBody)
+		}
+	} else if in.Kind != IntentTextureTurn && len(in.Body) > MaxIntentBody {
 		return "", fmt.Errorf("tray: message body %d bytes exceeds %d", len(in.Body), MaxIntentBody)
 	}
 	if t.bytes+size > MaxTrayBytes {

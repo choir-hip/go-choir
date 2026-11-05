@@ -1332,6 +1332,25 @@ func (s *SQLStore) CountObjectsByEdgeTo(ctx context.Context, toID string, edgeKi
 	return count, maxVersion, nil
 }
 
+// KindUsage is the live object count and stored body bytes of one kind for one
+// owner (tombstones excluded): the figure a package desk's storage quota is
+// held against (MA3.9).
+func (s *SQLStore) KindUsage(ctx context.Context, kind ObjectKind, ownerID string) (objects int, bytes int64, err error) {
+	if s == nil || s.db == nil {
+		return 0, 0, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKind(ctx, kind); err != nil {
+		return 0, 0, err
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(LENGTH(b.body)), 0)
+		FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id
+		WHERE h.object_kind = ? AND h.owner_id = ? AND h.tombstone = 0`, string(kind), ownerID).Scan(&objects, &bytes)
+	if err != nil {
+		return 0, 0, fmt.Errorf("objectgraph sql: kind usage: %w", err)
+	}
+	return objects, bytes, nil
+}
+
 // ListObjectsByOwnerAndBody finds objects by kind, owner, and an exact set of
 // predicates evaluated against the persisted JSON body. The body is the
 // canonical authority for record fields that must not be duplicated into

@@ -413,6 +413,10 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"RelateStories":    func() reflect.Value { return reflect.ValueOf(s.RelateStories) },
 		"Relate":           func() reflect.Value { return reflect.ValueOf(s.Relate) },
 		"RequestLease":     func() reflect.Value { return reflect.ValueOf(s.RequestLease) },
+		"Put":              func() reflect.Value { return reflect.ValueOf(s.Put) },
+		"Get":              func() reflect.Value { return reflect.ValueOf(s.Get) },
+		"List":             func() reflect.Value { return reflect.ValueOf(s.List) },
+		"Retract":          func() reflect.Value { return reflect.ValueOf(s.Retract) },
 		"StoryAnalysis":    func() reflect.Value { return reflect.ValueOf(s.StoryAnalysis) },
 		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
 		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
@@ -675,6 +679,50 @@ func (s *ChoirScope) RequestLease(scope any, purpose string, req ...any) (JSON, 
 	var out JSON
 	err = s.call(ActionRequestLease, RequestLeasePayload{Kinds: sc.Kinds, CaptureIDs: sc.CaptureIDs, CaptureLabels: sc.CaptureLabels,
 		Purpose: purpose, DurationSeconds: sc.DurationSeconds, Req: fields}, &out)
+	return out, err
+}
+
+// Put stages the write of one object of your package's own kinds: kind is the
+// full kind name (choir.app.<package>.<kind>), id names the object within it,
+// and body is a map or JSON that satisfies the kind's schema. The write is
+// made as your desk when the cell returns; a refusal (a kind that is not your
+// package's, a body that breaks the schema or the size bound, an exhausted
+// quota) is the cell's error. Get reads it from the next cell.
+func (s *ChoirScope) Put(kind, id string, body any) (string, error) {
+	t, err := s.boundTray("put")
+	if err != nil {
+		return "", err
+	}
+	raw, err := jsonCellArg(body)
+	if err != nil {
+		return "", fmt.Errorf("choir: Put: body: %w", err)
+	}
+	return t.ObjectPut(kind, id, raw)
+}
+
+// Retract stages the withdrawal of one object of your package's own kinds.
+func (s *ChoirScope) Retract(kind, id string) (string, error) {
+	t, err := s.boundTray("retract")
+	if err != nil {
+		return "", err
+	}
+	return t.ObjectRetract(kind, id)
+}
+
+// Get reads one live object of your package's own kinds as the committed
+// state stands: {kind, id, body, schema_version, created_at, updated_at}.
+// A Put staged in this cell is not in it yet.
+func (s *ChoirScope) Get(kind, id string) (JSON, error) {
+	var out JSON
+	err := s.call(ActionObjectGet, ObjectGetPayload{Kind: kind, ID: id}, &out)
+	return out, err
+}
+
+// List returns your live objects of one of your package's kinds, newest
+// first, as {objects: [...]}. limit 0 means 50 (at most 200).
+func (s *ChoirScope) List(kind string, limit int) (JSON, error) {
+	var out JSON
+	err := s.call(ActionObjectList, ObjectListPayload{Kind: kind, Limit: limit}, &out)
 	return out, err
 }
 

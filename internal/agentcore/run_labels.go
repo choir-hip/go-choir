@@ -203,6 +203,8 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 		}
 		_ = json.Unmarshal(result, &obj)
 		return types.NewLabelSet(types.OwnerPrivateLabel("evidence")).Union(types.LabelsFromMetadata(obj.Metadata)), true
+	case yaegikernel.ActionObjectGet, yaegikernel.ActionObjectList:
+		return objectReadLabels(result), true
 	case yaegikernel.ActionListEvidence:
 		return types.NewLabelSet(types.OwnerPrivateLabel("evidence")), true
 	case yaegikernel.ActionStories:

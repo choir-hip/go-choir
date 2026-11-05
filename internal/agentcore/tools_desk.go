@@ -1330,6 +1330,12 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	if action == yaegikernel.ActionRequestLease {
 		return rt.requestLeaseEgress(egrCtx, deskRole, cellExec, payload)
 	}
+	if action == yaegikernel.ActionObjectGet {
+		return rt.objectGetEgress(egrCtx, deskRole, cellExec, payload)
+	}
+	if action == yaegikernel.ActionObjectList {
+		return rt.objectListEgress(egrCtx, deskRole, cellExec, payload)
+	}
 	if action == yaegikernel.ActionProductAPI {
 		return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)
 	}

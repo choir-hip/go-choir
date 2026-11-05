@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -49,8 +48,6 @@ const (
 	appPackageObjectMaxBody   = 256 << 10
 	appPackageObjectListLimit = 200
 )
-
-var appPackageObjectID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // appPackageObjectStore is the slice of the runtime store the route uses.
 type appPackageObjectStore interface {
@@ -122,7 +119,7 @@ func (h *appPackageObjects) serve(w http.ResponseWriter, r *http.Request) {
 		packageNotFound(w)
 		return
 	}
-	if len(parts) == 4 && !appPackageObjectID.MatchString(id) {
+	if len(parts) == 4 && !objectgraph.ValidPackageObjectID(id) {
 		writePackageJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid object id"})
 		return
 	}

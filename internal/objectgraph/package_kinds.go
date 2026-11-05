@@ -167,6 +167,28 @@ func ValidPackageKindName(pkg string, kind ObjectKind) error {
 	return nil
 }
 
+// packageObjectID is the grammar of an object id inside a package kind: the
+// owner's route and a desk's Put share it.
+var packageObjectID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+// ValidPackageObjectID reports whether id may name an object of a package kind.
+func ValidPackageObjectID(id string) bool { return packageObjectID.MatchString(id) }
+
+// PackageOfKind returns the package a choir.app.<pkg>.<kind> name belongs to,
+// or false for any other name. It reads the name only; the registry says
+// whether the kind exists.
+func PackageOfKind(kind ObjectKind) (string, bool) {
+	rest, ok := strings.CutPrefix(string(kind), packageKindNamespace)
+	if !ok {
+		return "", false
+	}
+	pkg, name, ok := strings.Cut(rest, ".")
+	if !ok || !packageNameGrammar.MatchString(pkg) || !packageKindGrammar.MatchString(name) {
+		return "", false
+	}
+	return pkg, true
+}
+
 // PackageDeskWriter is the one writer of a package's kinds.
 func PackageDeskWriter(pkg string) Writer { return Writer("desk:" + pkg) }
 

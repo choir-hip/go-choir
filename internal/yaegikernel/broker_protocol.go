@@ -53,6 +53,11 @@ const (
 	// captures an app desk does not keep: choir.RequestLease (MA3.4). The host
 	// sets the holder desk and run from the session, never from the cell.
 	ActionRequestLease BrokerAction = "request_lease"
+	// ActionObjectGet and ActionObjectList read a package desk's own objects:
+	// choir.Get and choir.List (MA3.8). The host takes the reading desk from
+	// the session, never from the cell.
+	ActionObjectGet  BrokerAction = "object_get"
+	ActionObjectList BrokerAction = "object_list"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -267,6 +272,20 @@ type RequestLeasePayload struct {
 	Req             *types.RequestFields `json:"req"`
 }
 
+// ObjectGetPayload defines ActionObjectGet: one object of the desk's package
+// by kind and id (MA3.8).
+type ObjectGetPayload struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+}
+
+// ObjectListPayload defines ActionObjectList: the desk's live objects of one of
+// its package kinds, newest first (MA3.8). Limit 0 means the default page.
+type ObjectListPayload struct {
+	Kind  string `json:"kind"`
+	Limit int    `json:"limit,omitempty"`
+}
+
 // ReadCapturePayload defines ActionReadCapture: read one shared capture's
 // blocks from FromBlock (Autopaper W1; Cut 2 unit 2a).
 type ReadCapturePayload struct {
@@ -326,7 +345,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)
