@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // WithDeskReconciler binds the boot-time reconcile of the desk registry to the
@@ -100,4 +101,16 @@ func (rt *Runtime) closeOpenObligationsAtBoot(ctx context.Context) {
 	}()
 	rt.closePreBootRunsAfterCrash(ctx)
 	rt.closeOpenRoundsAfterCrash(ctx)
+}
+
+// deskOfRun is the desk a run belongs to for the boot tally: its role, or for a
+// package desk the app:<pkg> head of its agent id.
+func deskOfRun(rec *types.RunRecord) string {
+	if rec == nil {
+		return ""
+	}
+	if d := deskOfInbox(rec.AgentID); strings.HasPrefix(d, "app:") {
+		return d
+	}
+	return agentRoleForRun(rec)
 }

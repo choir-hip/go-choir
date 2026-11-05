@@ -90,6 +90,9 @@ const (
 	CodeNotCandidate   Code = "not_candidate"
 	CodeNoCandidate    Code = "no_candidate"
 	CodeCandidateLive  Code = "candidate_live"
+	// CodeTooLongForCandidate refuses an installed name of 23 to 32 characters:
+	// its candidate's desk name would not fit.
+	CodeTooLongForCandidate Code = "too_long_for_candidate"
 	// CodeRequired refuses a disable of a package the running image requires.
 	CodeRequired Code = "required_package"
 )
@@ -207,8 +210,10 @@ func validate(m Manifest, candidate bool) []Refusal {
 			refuse(CodeNotCandidate, "candidate name %q must be <installed package>%s", m.Package, objectgraph.CandidateSuffix)
 			nameOK = false
 		}
-	} else if objectgraph.IsCandidateName(m.Package) || !objectgraph.ValidPackageName(m.Package) {
-		refuse(CodeReservedSuffix, "package name %q ends with %s (reserved for candidates) or is too long to have one", m.Package, objectgraph.CandidateSuffix)
+	} else if objectgraph.IsCandidateName(m.Package) {
+		refuse(CodeReservedSuffix, "package name %q ends with %s, which is reserved for candidates", m.Package, objectgraph.CandidateSuffix)
+	} else if nameOK && !objectgraph.ValidPackageName(m.Package) && len(m.Package) > 22 {
+		refuse(CodeTooLongForCandidate, "package name %q is %d characters; at most 22 so that %s%s fits a 32-character desk name", m.Package, len(m.Package), m.Package[:3]+"...", objectgraph.CandidateSuffix)
 	}
 	if _, isDesk := deskmanifest.Lookup(m.Package); reservedNames[m.Package] || isDesk {
 		refuse(CodeReservedName, "package name %q is reserved", m.Package)

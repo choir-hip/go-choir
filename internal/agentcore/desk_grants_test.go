@@ -144,3 +144,38 @@ func TestACandidateDeskIsNotAddressable(t *testing.T) {
 		}
 	}
 }
+
+// A cancelled run (terminalizeRun, the cancel and deadline path) releases its
+// desk epoch pins, so the registry's holders do not drift.
+func TestTerminalizedRunReleasesItsDeskEpochHold(t *testing.T) {
+	t.Setenv("CHOIR_OWNER_ID", "owner-telemetry")
+	rt := telemetryRuntime(t, "computer-term-hold")
+	rt.bus = events.NewEventBus()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	rec := types.RunRecord{RunID: "run-term-hold", AgentID: "research:term", AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research,
+		OwnerID: "owner-telemetry", ComputerID: rt.cfg.ComputerID, State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	if err := rt.store.CreateRun(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	base := deskmanifest.EpochStateNow()
+	rt.pinDeskEpoch(rec.RunID, agentprofile.Research)
+	if got := deskmanifest.EpochStateNow(); got.Holders != base.Holders+1 {
+		t.Fatalf("holders %d after the pin, want %d", got.Holders, base.Holders+1)
+	}
+	if err := rt.terminalizeRun(ctx, rec.RunID, rec.OwnerID, "cancelled"); err != nil {
+		t.Fatal(err)
+	}
+	if got := deskmanifest.EpochStateNow(); got.Holders != base.Holders {
+		t.Fatalf("a terminalized run left %d holds, baseline %d", got.Holders, base.Holders)
+	}
+}
+
+func TestBootTallyLabelsPackageDeskRunsByTheirDesk(t *testing.T) {
+	if got := deskOfRun(&types.RunRecord{AgentID: "app:pkg:inst", AgentRole: "app:pkg"}); got != "app:pkg" {
+		t.Errorf("app run labelled %q", got)
+	}
+	if got := deskOfRun(&types.RunRecord{AgentID: "research:doc", AgentRole: agentprofile.Research}); got != agentprofile.Research {
+		t.Errorf("research run labelled %q", got)
+	}
+}

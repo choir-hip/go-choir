@@ -389,7 +389,7 @@ func validateRole(d Desk, rows func(func(Desk))) error {
 			}
 			continue
 		}
-		if spec.Arg != argNone {
+		if spec.Arg == argDuration {
 			continue // a budget is the role's own
 		}
 		if !parent.HasGrant(g.Name) {

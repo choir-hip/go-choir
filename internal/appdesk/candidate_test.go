@@ -45,7 +45,7 @@ func TestInstalledNamesCannotTakeTheCandidateSuffix(t *testing.T) {
 	}
 	long := goodManifest(strings.Repeat("a", 23))
 	long.OwnedKinds = []string{"choir.app." + long.Package + ".episode_note"}
-	if rs := Validate(long); !hasCode(rs, CodeReservedSuffix) {
+	if rs := Validate(long); !hasCode(rs, CodeTooLongForCandidate) {
 		t.Fatalf("a name too long to have a candidate: %+v", rs)
 	}
 }

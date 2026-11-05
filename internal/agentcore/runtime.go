@@ -2064,6 +2064,9 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		}
 		return fmt.Errorf("lookup run: %w", err)
 	}
+	// A cancelled or deadlined run ends here, not through the records recheck:
+	// its desk epoch pins end with it (idempotent).
+	defer rt.releaseRunDeskEpochs(rec.RunID)
 	assignmentProjected := false
 	if rec.State.Active() && metadataStringValue(rec.Metadata, "assignment_id") != "" {
 		// Do not terminalize the generic run projection first: durable exact
@@ -2136,6 +2139,7 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 // run_terminalized event commit in one atomic batch. Runs without a
 // lifecycle trajectory fall back to the bare UpdateRun write.
 func (rt *Runtime) terminalizeRunCanonical(ctx context.Context, rec *types.RunRecord, reason string) error {
+	defer rt.releaseRunDeskEpochs(rec.RunID)
 	trajectoryID := strings.TrimSpace(trajectoryIDForRun(rec))
 	if trajectoryID == "" || rec.OwnerID == "" || rec.ComputerID == "" {
 		return rt.store.UpdateRun(ctx, *rec)
@@ -2929,7 +2933,7 @@ func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
 		}
 		rt.emitEvent(ctx, rec, types.EventRunCancelled, events.CauseSupervisorRecovery,
 			crashClosePayload(rt.store.TelemetryBatchingConfigured(), rt.crashCloseNamesRunMemory()))
-		rt.bootTally.add(agentRoleForRun(rec))
+		rt.bootTally.add(deskOfRun(rec))
 		log.Printf("runtime: closed run %s (was %s) after a crash restart", rec.RunID, was)
 		return true
 	})

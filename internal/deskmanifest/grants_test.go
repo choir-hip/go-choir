@@ -172,6 +172,9 @@ func TestRoleMayOnlyNarrowExceptDone(t *testing.T) {
 	if err := register(role(true, G("act.cast"), G("capsule.mutate"))); err == nil {
 		t.Error("a role that widens its parent must be refused")
 	}
+	if err := register(role(false, G("act.cast"), G("precommit.rule", "tests_pass"))); err == nil {
+		t.Error("a role may not take precommit.rule its parent lacks")
+	}
 	if err := register(role(false, G("act.cast"))); err != nil {
 		t.Fatalf("a narrowing role registers: %v", err)
 	}
