@@ -184,6 +184,9 @@ func newReadEvidenceTool(rt *Runtime) toolregistry.Tool {
 		}}
 }
 
+// maxListEvidenceLimit is the most evidence records one list_evidence call returns.
+const maxListEvidenceLimit = 200
+
 func newListEvidenceTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		AgentID string `json:"agent_id,omitempty"`
@@ -207,6 +210,14 @@ func newListEvidenceTool(rt *Runtime) toolregistry.Tool {
 			agentID := strings.TrimSpace(in.AgentID)
 			if agentID == "" {
 				agentID = toolregistry.ExecutionContextFrom(ctx).AgentID
+			}
+			// The cell chooses the limit (MA6.3): a page is bounded here as
+			// well as in the frame check.
+			if in.Limit < 0 {
+				in.Limit = 0
+			}
+			if in.Limit > maxListEvidenceLimit {
+				in.Limit = maxListEvidenceLimit
 			}
 			recs, err := rt.store.ListEvidenceByAgent(ctx, ownerID, agentID, in.Limit)
 			if err != nil {

@@ -1023,6 +1023,11 @@ jobs:
       - name: Contract tests, golden corpus and extractor
         run: go test ./internal/deskprotocol/... ./cmd/deskprotocol-lock/...
 
+      # MA6.3: the broker protocol as hostile input, fuzzed for a fixed time
+      # per target (the checked-in seeds also run in the Go test shards).
+      - name: Broker protocol fuzz (fixed time)
+        run: scripts/fuzz-broker-protocol.sh 15s
+
   # Report-only (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 4):
   # advisories against package-lock.json, the lock the Nix build ships.
   # Runtime dependencies are what users' browsers run; dev dependencies are

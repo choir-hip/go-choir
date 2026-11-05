@@ -574,6 +574,11 @@ func (w *DeskSessionWorker) admitFrame(ctx context.Context, stream byte, req Bro
 	if !deskmanifest.FrameAllowed(role, string(req.Action)) {
 		return refuse(fmt.Sprintf("refused: desk %q may not call %s", role, req.Action), false)
 	}
+	// The shape of what the cell wrote: lengths, ranges, depth. Checked here
+	// so no handler decodes an unbounded field (MA6.3, broker_bounds.go).
+	if err := req.ValidateBounds(); err != nil {
+		return refuse("refused: "+err.Error(), false)
+	}
 	return "", false
 }
 

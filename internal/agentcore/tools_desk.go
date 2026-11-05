@@ -565,6 +565,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if !deskmanifest.FrameAllowed(deskRole, string(action)) {
 						return nil, fmt.Errorf("refused: desk %q may not call %s", deskRole, action)
 					}
+					if err := yaegikernel.ValidatePayload(action, payload); err != nil {
+						return nil, fmt.Errorf("refused: %w", err)
+					}
 					started := time.Now().UTC()
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
 					var out json.RawMessage
