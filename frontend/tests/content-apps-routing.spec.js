@@ -154,7 +154,10 @@ test('bare content references open the dedicated content apps from the prompt ba
       await expect(viewer.locator('[data-podcast-seek]').first()).toBeVisible();
       await expect(viewer.locator('[data-podcast-audio]').first()).toHaveAttribute('src', /.+/);
     } else {
-      const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
+      // PDF and EPUB are the Reader package's (slice C7): the 'pdf' and 'epub' app ids alias it.
+      const viewer = reference.app === 'pdf' || reference.app === 'epub'
+        ? page.locator(`[data-reader-app][data-reader-format="${reference.app}"]`).last()
+        : page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
       await expect(viewer).toBeVisible({ timeout: 30_000 });
 
       if (reference.app === 'image') {
@@ -179,21 +182,6 @@ test('bare content references open the dedicated content apps from the prompt ba
         const controls = await openMediaControls(viewer, '[data-video-toolbar]');
         await expect(controls.locator('[data-video-embedded-controls]')).toBeVisible();
         await expect(viewer.locator('[data-video-frame]')).toHaveAttribute('src', /youtube\.com\/embed/);
-        await expectCollapsedMediaInfo(viewer);
-      } else if (reference.app === 'pdf') {
-        const controls = await openMediaControls(viewer, '[data-pdf-toolbar]');
-        await expect(controls.locator('[data-pdf-page]')).toBeVisible();
-        await expect(controls.locator('[data-pdf-zoom]')).toBeVisible();
-        await expect(viewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
-        await controls.locator('[data-pdf-search]').fill('section seven');
-        await expect(controls.locator('[data-pdf-search-count]')).toContainText('1 matches', { timeout: 10_000 });
-        await expectCollapsedMediaInfo(viewer);
-      } else if (reference.app === 'epub') {
-        await expect(viewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
-        await expect(viewer.locator('[data-epub-chapter-title]')).toContainText('Section Seven');
-        const controls = await openMediaControls(viewer, '[data-epub-toolbar]');
-        await controls.locator('[data-epub-search]').fill('real reader');
-        await expect(controls.locator('[data-epub-search-count]')).toContainText('1 matches');
         await expectCollapsedMediaInfo(viewer);
       }
     }

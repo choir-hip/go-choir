@@ -20,14 +20,6 @@
     "via": "media"
    },
    {
-    "appId": "pdf",
-    "name": "PDF",
-    "icon": "📄",
-    "mediaType": "application/pdf",
-    "isDefault": false,
-    "via": "media"
-   },
-   {
     "appId": "slides",
     "name": "Slides",
     "icon": "🖥️",
@@ -84,14 +76,6 @@
     "icon": "📖",
     "mediaType": "application/epub+zip",
     "isDefault": true,
-    "via": "media"
-   },
-   {
-    "appId": "epub",
-    "name": "EPUB",
-    "icon": "📚",
-    "mediaType": "application/epub+zip",
-    "isDefault": false,
     "via": "media"
    }
   ],
@@ -295,14 +279,6 @@
     "via": "media"
    },
    {
-    "appId": "pdf",
-    "name": "PDF",
-    "icon": "📄",
-    "mediaType": "application/pdf",
-    "isDefault": false,
-    "via": "media"
-   },
-   {
     "appId": "slides",
     "name": "Slides",
     "icon": "🖥️",
@@ -404,14 +380,6 @@
     "via": "text"
    },
    {
-    "appId": "epub",
-    "name": "EPUB",
-    "icon": "📚",
-    "mediaType": "application/epub+zip",
-    "isDefault": false,
-    "via": "media"
-   },
-   {
     "appId": "reader",
     "name": "Reader",
     "icon": "📖",
@@ -428,14 +396,6 @@
     "mediaType": "text/plain",
     "isDefault": true,
     "via": "text"
-   },
-   {
-    "appId": "pdf",
-    "name": "PDF",
-    "icon": "📄",
-    "mediaType": "application/pdf",
-    "isDefault": false,
-    "via": "media"
    },
    {
     "appId": "reader",
@@ -687,9 +647,7 @@
   "calendar": [
    "ics"
   ],
-  "epub": [
-   "epub"
-  ],
+  "epub": [],
   "files": [],
   "image": [
    "avif",
@@ -701,9 +659,7 @@
    "svg",
    "webp"
   ],
-  "pdf": [
-   "pdf"
-  ],
+  "pdf": [],
   "reader": [
    "epub",
    "pdf"
@@ -730,7 +686,7 @@
   "epub": false,
   "files": false,
   "image": false,
-  "pdf": true,
+  "pdf": false,
   "reader": true,
   "slides": true,
   "texture": false,

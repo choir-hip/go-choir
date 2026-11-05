@@ -10,7 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
-    "aliases": [],
+    "aliases": ["pdf", "epub"],
     "requires_sdk": "^1.2",
     "launcher": { "menu": true, "desktopIcon": false, "order": 110 },
     "window": {

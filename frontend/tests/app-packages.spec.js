@@ -59,9 +59,9 @@ const badCases = [
   ['static-id', (root) => writeManifest(root, 'browser', { ...imageManifest(root), name: 'browser', opens: [] }), /"browser" is a static registry id/],
   ['static-id-alias', (root) => {
     const m = imageManifest(root);
-    m.app.aliases = ['pdf'];
+    m.app.aliases = ['content'];
     fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
-  }, /"pdf" is a static registry id/],
+  }, /"content" is a static registry id/],
   ['texture-static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', opens: [] }), /"texture" is a static registry id/],
   ['reserved', (root) => writeManifest(root, 'management', { ...imageManifest(root), name: 'management', opens: [] }), /reserved shell or system-desk name/],
   ['package-alias-clash', (root) => {
