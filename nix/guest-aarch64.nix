@@ -42,21 +42,6 @@
     })
   ];
 
-  # microvm.nix builds rootfs.ext4 with libguestfs, which exists only for
-  # x86. The disk is never read by the guest (the root is a tmpfs, the store
-  # is the erofs layers); the host still attaches it first, so the data drive
-  # keeps its /dev/vdb position, and releases still carry the file. A GPT disk
-  # with an empty FAT ESP of the same shape, 16 MiB, stands in for it.
-  microvm.bootDisk = lib.mkForce (pkgs.runCommand "microvm-bootdisk.img" {
-    nativeBuildInputs = [ pkgs.buildPackages.gptfdisk pkgs.buildPackages.dosfstools ];
-  } ''
-    truncate -s 16M $out
-    sgdisk --new=1:2048:0 --typecode=1:EF00 --change-name=1:ESP $out >/dev/null
-    truncate -s 14M esp.img
-    mkfs.vfat -n ESP esp.img >/dev/null
-    dd if=esp.img of=$out bs=512 seek=2048 conv=notrunc status=none
-  '');
-
   # With no ip= on the command line the Firecracker guest's network unit has
   # nothing to configure and exits 1; skip it instead of failing the boot.
   systemd.services.go-choir-configure-network.unitConfig.ConditionKernelCommandLine = "ip";

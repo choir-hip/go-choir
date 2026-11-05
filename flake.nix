@@ -205,7 +205,6 @@
           packages = [
             devPkgs.git
             (mkChoirGo devPkgs)
-            devPkgs.pkg-config
             # PostgreSQL for dbxtest.Postgres (initdb, pg_ctl) and local dev.
             devPkgs.postgresql_17
           ];
@@ -229,7 +228,6 @@
       # Common buildGoModule args for all Go services
       commonGoArgs = {
         vendorHash = "sha256-MUe7lLobr0jv9Th0/+PwrWr1f9yF3kVwgh5t4A9kJj0=";
-        nativeBuildInputs = [ pkgs.pkg-config ];
         ldflags = [
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${buildCommit}"
