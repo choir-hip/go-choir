@@ -39,5 +39,5 @@
   "contributes": {
     "desks": []
   },
-  "capabilities": []
+  "capabilities": [{ "grant": "ui.shell" }]
 }

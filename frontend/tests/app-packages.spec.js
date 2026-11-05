@@ -56,12 +56,12 @@ const badCases = [
   ['wrong-schema', (root) => writeManifest(root, 'extra', { ...imageManifest(root), name: 'extra', schema: 'nope/v0', opens: [] }), /schema must be/],
   ['bad-name', (root) => writeManifest(root, 'Bad_Name', { ...imageManifest(root), name: 'Bad_Name', opens: [] }), /name must match/],
   ['dir-mismatch', (root) => writeManifest(root, 'other', { ...imageManifest(root), name: 'another', opens: [] }), /must equal its directory/],
-  ['static-id', (root) => writeManifest(root, 'browser', { ...imageManifest(root), name: 'browser', opens: [] }), /"browser" is a static registry id/],
+  ['static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', opens: [] }), /"texture" is a static registry id/],
   ['static-id-alias', (root) => {
     const m = imageManifest(root);
-    m.app.aliases = ['content'];
+    m.app.aliases = ['texture'];
     fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
-  }, /"content" is a static registry id/],
+  }, /"texture" is a static registry id/],
   ['texture-static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', opens: [] }), /"texture" is a static registry id/],
   ['reserved', (root) => writeManifest(root, 'management', { ...imageManifest(root), name: 'management', opens: [] }), /reserved shell or system-desk name/],
   ['package-alias-clash', (root) => {

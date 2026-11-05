@@ -743,7 +743,8 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", p, err)
 		}
-		if m.Class() != ClassApp || m.Level() != LevelDefault {
+		// A first-party app that calls shell functions (Settings, Compute Monitor) holds ui.shell, a privileged grant.
+		if m.Class() != ClassApp || (m.Level() != LevelDefault && m.Level() != LevelPrivileged) {
 			t.Errorf("%s: class %s level %s", p, m.Class(), m.Level())
 		}
 		if _, err := m.BehaviourSurface(DirSource(filepath.Dir(p))); err != nil {

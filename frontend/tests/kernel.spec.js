@@ -340,6 +340,11 @@ function makeFixture(mutate) {
   fs.cpSync(path.join(frontendRoot, 'src/lib/kernel'), path.join(root, 'src/lib/kernel'), { recursive: true });
   fs.mkdirSync(path.join(root, 'src/lib/apps'), { recursive: true });
   fs.copyFileSync(path.join(frontendRoot, 'src/lib/apps/registry.ts'), path.join(root, 'src/lib/apps/registry.ts'));
+  // The gate reads package names from the manifests (every app but Texture is a package).
+  fs.cpSync(path.join(frontendRoot, 'src/packages'), path.join(root, 'src/packages'), {
+    recursive: true,
+    filter: (src) => fs.statSync(src).isDirectory() || src.endsWith('choir-package.json'),
+  });
   if (mutate) mutate(root);
   return root;
 }
