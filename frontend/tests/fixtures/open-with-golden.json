@@ -736,7 +736,8 @@
   "texture": false,
   "video": false
  },
- "mediaFileRoutes": [
+ "mediaFileRoutes": [],
+ "packageRoutes": [
   {
    "appId": "audio",
    "mediaType": "audio/mpeg",
@@ -749,31 +750,9 @@
     "wav",
     "flac",
     "opus"
-   ]
+   ],
+   "default": true
   },
-  {
-   "appId": "video",
-   "mediaType": "video/mp4",
-   "extensions": [
-    "mp4",
-    "m4v",
-    "webm",
-    "mov",
-    "avi",
-    "mkv"
-   ]
-  },
-  {
-   "appId": "slides",
-   "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-   "extensions": [
-    "pptx",
-    "html",
-    "htm"
-   ]
-  }
- ],
- "packageRoutes": [
   {
    "appId": "calendar",
    "mediaType": "text/calendar",
@@ -810,6 +789,37 @@
    "mediaType": "application/epub+zip",
    "extensions": [
     "epub"
+   ],
+   "default": true
+  },
+  {
+   "appId": "slides",
+   "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+   "extensions": [
+    "pptx",
+    "html",
+    "htm"
+   ],
+   "default": true
+  },
+  {
+   "appId": "slides",
+   "mediaType": "application/pdf",
+   "extensions": [
+    "pdf"
+   ],
+   "default": false
+  },
+  {
+   "appId": "video",
+   "mediaType": "video/mp4",
+   "extensions": [
+    "mp4",
+    "m4v",
+    "webm",
+    "mov",
+    "avi",
+    "mkv"
    ],
    "default": true
   }

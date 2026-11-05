@@ -12,13 +12,14 @@
     rememberRecentMedia,
     resolveMediaSource,
     saveMediaPosition,
-  } from './media-utils.js';
-  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+    youtubeEmbedURL,
+  } from '../../lib/app-sdk';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from '../../lib/app-sdk';
 
   export let appContext = {};
   export let windowId = '';
 
-  const kind = 'audio';
+  const kind = 'video';
   const dispatch = createEventDispatcher();
 
   let item = appContext?.contentItem || null;
@@ -37,9 +38,12 @@
 
   $: effectiveContext = selectedContext || appContext || {};
   $: source = resolveMediaSource(effectiveContext, item, kind);
+  $: embedUrl = source.mediaType === 'video/youtube' || /youtube\.com|youtu\.be/.test(source.sourceUrl)
+    ? youtubeEmbedURL(source.sourceUrl)
+    : '';
   $: mediaSeekPercent = mediaDuration > 0 ? Math.min(100, Math.max(0, (mediaCurrentTime / mediaDuration) * 100)) : 0;
   $: sourceIdentity = mediaSourceIdentity(source);
-  $: if (source.displayUrl && sourceIdentity && sourceIdentity !== rememberedIdentity) {
+  $: if ((source.displayUrl || embedUrl) && sourceIdentity && sourceIdentity !== rememberedIdentity) {
     void rememberCurrentSource();
   }
 
@@ -160,16 +164,16 @@
   });
 </script>
 
-<section class="audio-app" data-media-app data-media-kind="audio" data-audio-app>
+<section class="video-app" data-media-app data-media-kind="video" data-video-app>
   {#if loading}
-    <p class="audio-status">Loading audio...</p>
+    <p class="video-status">Loading video...</p>
   {:else if error}
-    <p class="audio-error" role="alert">{error}</p>
-  {:else if !source.displayUrl}
-    <div class="audio-empty" data-media-empty data-media-recent-empty>
-      <p class="audio-status">No playable audio source is attached to this window.</p>
+    <p class="video-error" role="alert">{error}</p>
+  {:else if !source.displayUrl && !embedUrl}
+    <div class="video-empty" data-media-empty data-media-recent-empty>
+      <p class="video-status">No playable video source is attached to this window.</p>
       {#if recentFiles.length}
-        <div class="audio-recent" data-media-recent-list>
+        <div class="video-recent" data-media-recent-list>
           <span>Recently opened</span>
           {#each recentFiles as recent}
             <button type="button" data-media-recent-item on:click={() => openRecentFile(recent)}>
@@ -180,51 +184,69 @@
         </div>
       {/if}
     </div>
+  {:else if embedUrl}
+    <div class="video-theater video-embed-stage" data-media-stage data-video-embed-stage>
+      <details class="video-embed-controls" data-media-toolbar data-video-toolbar data-media-controls>
+        <summary aria-label="Video controls" title="Video controls"><span aria-hidden="true">...</span></summary>
+        <span data-video-embedded-controls>Embedded player controls active</span>
+      </details>
+      <iframe
+        title={source.title}
+        src={embedUrl}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+        data-video-frame
+      />
+    </div>
   {:else}
-    <div class="audio-stage" data-media-stage data-audio-stage>
-      <div class="audio-player" data-media-player data-audio-player>
-        <div class="audio-art">
-          <span>Audio</span>
-        </div>
-        <div class="audio-transport" data-media-transport>
-          <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-audio-skip-back>15s back</button>
-          <button type="button" class="audio-play" on:click={togglePlayback} data-media-play data-audio-play>
-            {mediaPlaying ? 'Pause' : 'Play'}
-          </button>
-          <button type="button" on:click={() => seekBy(30)} data-media-skip-forward data-audio-skip-forward>30s forward</button>
-          <label>
-            Speed
-            <select bind:value={playbackSpeed} on:change={setPlaybackSpeed} data-media-speed data-audio-speed>
-              <option value={0.75}>0.75x</option>
-              <option value={1}>1x</option>
-              <option value={1.25}>1.25x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </label>
-        </div>
-        <div class="audio-seek-row">
-          <span data-media-current-time>{formatTime(mediaCurrentTime)}</span>
-          <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-audio-seek />
-          <span data-media-duration>{formatTime(mediaDuration)}</span>
-        </div>
-        <p class="audio-position-note" data-media-position-status>Playback position syncs across your devices.</p>
-      </div>
-      <audio
+    <div class="video-theater video-stage" data-media-stage data-video-stage>
+      <video
         src={source.displayUrl}
-        preload="metadata"
+        playsinline
         bind:this={mediaEl}
         on:loadedmetadata={restoreMediaPosition}
         on:timeupdate={() => updateMediaState()}
         on:play={() => updateMediaState()}
         on:pause={() => updateMediaState(true)}
         on:ended={() => updateMediaState(true)}
-        data-audio-element
-      />
+        data-video-player
+      >
+        <track kind="captions" />
+      </video>
+      <details class="video-controls" data-media-player data-video-controls data-media-controls>
+        <summary aria-label="Video controls" title="Video controls"><span aria-hidden="true">...</span></summary>
+        <div class="video-control-panel">
+          <div class="video-transport" data-media-transport>
+            <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-video-skip-back>15s back</button>
+            <button type="button" class="video-play" on:click={togglePlayback} data-media-play data-video-play>
+              {mediaPlaying ? 'Pause' : 'Play'}
+            </button>
+            <button type="button" on:click={() => seekBy(30)} data-media-skip-forward data-video-skip-forward>30s forward</button>
+            <label>
+              Speed
+              <select bind:value={playbackSpeed} on:change={setPlaybackSpeed} data-media-speed data-video-speed>
+                <option value={0.75}>0.75x</option>
+                <option value={1}>1x</option>
+                <option value={1.25}>1.25x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2}>2x</option>
+              </select>
+            </label>
+          </div>
+          <div class="video-seek-row">
+            <span data-media-current-time>{formatTime(mediaCurrentTime)}</span>
+            <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-video-seek />
+            <span data-media-duration>{formatTime(mediaDuration)}</span>
+          </div>
+          <p class="video-position-note" data-media-position-status>Playback position syncs across your devices.</p>
+        </div>
+      </details>
     </div>
+  {/if}
 
-    <details class="audio-info">
-      <summary aria-label="Audio info" title="Audio info"><span aria-hidden="true">i</span></summary>
+  {#if !loading && !error}
+    <details class="video-info">
+      <summary aria-label="Video info" title="Video info"><span aria-hidden="true">i</span></summary>
       <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
@@ -237,68 +259,124 @@
 </section>
 
 <style>
-  .audio-app {
+  .video-app {
     position: relative;
     display: block;
     height: 100%;
     min-height: 0;
-    padding: 0;
     color: var(--choir-text-accent);
-    background:
-      radial-gradient(circle at 50% 26%, var(--choir-state-selected), transparent 38%),
-      linear-gradient(150deg, var(--choir-state-selected) 0%, var(--choir-state-selected) 52%, var(--choir-state-selected) 100%);
+    background: var(--choir-state-selected);
     overflow: hidden;
   }
 
-  .audio-stage {
+  .video-theater {
     position: absolute;
     inset: 0;
-    display: flex;
+    display: grid;
+    width: 100%;
+    height: 100%;
     min-height: 0;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    padding: clamp(16px, 5vw, 48px);
-  }
-
-  .audio-player {
-    display: grid;
-    width: min(100%, 820px);
-    gap: 16px;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 18px;
-    padding: clamp(18px, 4vw, 34px);
-    background: var(--choir-state-selected);
-    box-shadow: 0 22px 80px color-mix(in srgb, var(--choir-shadow-color) 32%, transparent);
-  }
-
-  .audio-art {
-    display: grid;
     place-items: center;
-    min-height: 150px;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 16px;
     background:
-      linear-gradient(135deg, var(--choir-state-selected), var(--choir-state-hover)),
-      color-mix(in srgb, var(--choir-text-primary) 4%, transparent);
-    color: var(--choir-text-accent);
-    font-size: clamp(1.4rem, 6vw, 3.2rem);
-    font-weight: 860;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+      radial-gradient(circle at 50% 45%, var(--choir-state-selected), transparent 42%),
+      var(--choir-surface-media);
+    overflow: hidden;
   }
 
-  .audio-transport {
+  .video-stage video,
+  .video-embed-stage iframe {
+    width: 100%;
+    height: 100%;
+    min-height: 240px;
+    border: 0;
+    object-fit: contain;
+    background: var(--choir-surface-media);
+  }
+
+  .video-embed-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    color: var(--choir-text-accent);
+    font-size: 0.82rem;
+    width: max-content;
+  }
+
+  .video-embed-controls summary,
+  .video-controls summary {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    background: var(--choir-state-selected);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    font-size: 0;
+    font-weight: 820;
+    list-style: none;
+    padding: 0;
+  }
+
+  .video-embed-controls summary::-webkit-details-marker,
+  .video-controls summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .video-embed-controls summary span,
+  .video-controls summary span {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .video-embed-controls[open] {
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 12px;
+    background: var(--choir-state-selected);
+    backdrop-filter: blur(12px);
+  }
+
+  .video-controls {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: max-content;
+    color: var(--choir-text-accent);
+  }
+
+  .video-controls[open] {
+    left: 12px;
+    width: auto;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 14px;
+    background: var(--choir-state-selected);
+    box-shadow: 0 18px 60px color-mix(in srgb, var(--choir-shadow-color) 40%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .video-control-panel {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+  }
+
+  .video-embed-controls span {
+    display: block;
+    padding: 0 10px 8px;
+  }
+
+  .video-transport {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
   }
 
-  .audio-transport button,
-  .audio-transport select {
-    min-height: 40px;
+  .video-transport button,
+  .video-transport select {
+    min-height: 36px;
     border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
     background: var(--choir-state-selected);
@@ -306,28 +384,28 @@
     cursor: pointer;
     font: inherit;
     font-weight: 760;
-    padding: 8px 14px;
+    padding: 7px 12px;
   }
 
-  .audio-transport button:hover,
-  .audio-transport select:hover {
+  .video-transport button:hover,
+  .video-transport select:hover {
     background: var(--choir-state-selected);
   }
 
-  .audio-transport .audio-play {
-    min-width: 94px;
+  .video-transport .video-play {
+    min-width: 92px;
     background: var(--choir-state-selected);
   }
 
-  .audio-transport label {
+  .video-transport label {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     color: var(--choir-text-accent);
-    font-size: 0.86rem;
+    font-size: 0.84rem;
   }
 
-  .audio-seek-row {
+  .video-seek-row {
     display: grid;
     grid-template-columns: auto minmax(100px, 1fr) auto;
     align-items: center;
@@ -336,42 +414,32 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .audio-seek-row input[type='range'] {
+  .video-seek-row input[type='range'] {
     width: 100%;
   }
 
-  .audio-position-note {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+  .video-position-note {
+    margin: 0;
+    color: var(--choir-text-accent);
+    font-size: 0.82rem;
+    text-align: center;
   }
 
-  .audio-stage audio {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .audio-status,
-  .audio-error {
-    margin: auto;
+  .video-status,
+  .video-error {
+    place-self: center;
+    margin: 0;
     border-radius: 14px;
     padding: 14px 16px;
     background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
     color: var(--choir-text-accent);
   }
 
-  .audio-error {
+  .video-error {
     color: var(--choir-status-danger);
   }
 
-  .audio-empty {
+  .video-empty {
     display: grid;
     width: min(100% - 24px, 520px);
     height: 100%;
@@ -380,7 +448,7 @@
     gap: 12px;
   }
 
-  .audio-recent {
+  .video-recent {
     display: grid;
     gap: 8px;
     border: 1px solid var(--choir-border-strong);
@@ -389,7 +457,7 @@
     padding: 12px;
   }
 
-  .audio-recent > span {
+  .video-recent > span {
     color: var(--choir-text-accent);
     font-size: 0.74rem;
     font-weight: 820;
@@ -397,7 +465,7 @@
     text-transform: uppercase;
   }
 
-  .audio-recent button {
+  .video-recent button {
     display: grid;
     gap: 2px;
     border: 1px solid var(--choir-border-strong);
@@ -409,36 +477,36 @@
     text-align: left;
   }
 
-  .audio-recent button:hover,
-  .audio-recent button:focus-visible {
+  .video-recent button:hover,
+  .video-recent button:focus-visible {
     border-color: var(--choir-border-strong);
     background: var(--choir-state-hover);
   }
 
-  .audio-recent strong,
-  .audio-recent small {
+  .video-recent strong,
+  .video-recent small {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .audio-recent small {
+  .video-recent small {
     color: var(--choir-text-accent);
     font-size: 0.74rem;
   }
 
-  .audio-info {
+  .video-info {
     position: absolute;
-    z-index: 2;
-    right: 10px;
-    bottom: 10px;
+    top: 12px;
+    left: 12px;
+    z-index: 3;
     width: max-content;
-    max-width: min(520px, calc(100% - 20px));
+    max-width: min(520px, calc(100% - 24px));
     color: var(--choir-text-accent);
   }
 
-  .audio-info summary {
+  .video-info summary {
     display: grid;
     width: 34px;
     height: 34px;
@@ -452,84 +520,90 @@
     font-size: 0;
     font-weight: 820;
     list-style: none;
-    margin-left: auto;
     padding: 0;
   }
 
-  .audio-info summary::-webkit-details-marker {
+  .video-info summary::-webkit-details-marker {
     display: none;
   }
 
-  .audio-info summary span {
+  .video-info summary span {
     font-size: 0.95rem;
     line-height: 1;
   }
 
-  .audio-info[open] {
-    left: 10px;
-    width: auto;
+  .video-info[open] {
     border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
     padding: 8px 10px;
     background: var(--choir-state-selected);
-    backdrop-filter: blur(12px);
   }
 
-  .audio-info h2 {
+  .video-info h2 {
     margin: 10px 0;
     color: var(--choir-text-accent);
     font-size: 1rem;
     overflow-wrap: anywhere;
   }
 
-  .audio-info dl {
+  .video-info dl {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 6px 10px;
     margin: 0 0 4px;
   }
 
-  .audio-info dt {
+  .video-info dt {
     color: var(--choir-text-accent);
     font-weight: 760;
   }
 
-  .audio-info dd {
+  .video-info dd {
     margin: 0;
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .audio-info a {
+  .video-info a {
     color: var(--choir-text-accent);
   }
 
   @media (max-width: 720px) {
-    .audio-stage {
-      align-items: stretch;
-      padding: 12px;
+    .video-controls {
+      right: 8px;
+      bottom: 8px;
     }
 
-    .audio-player {
-      padding: 14px;
+    .video-controls[open] {
+      left: 8px;
     }
 
-    .audio-art {
-      min-height: 96px;
-    }
-
-    .audio-transport {
+    .video-transport {
       justify-content: stretch;
     }
 
-    .audio-transport button,
-    .audio-transport label {
-      flex: 1 1 108px;
+    .video-transport button,
+    .video-transport label {
+      flex: 1 1 104px;
       justify-content: center;
     }
 
-    .audio-seek-row {
+    .video-seek-row {
       grid-template-columns: auto minmax(80px, 1fr) auto;
+    }
+
+    .video-info,
+    .video-embed-controls {
+      top: 8px;
+    }
+
+    .video-info {
+      left: 8px;
+      max-width: calc(100% - 16px);
+    }
+
+    .video-embed-controls {
+      right: 8px;
     }
   }
 </style>

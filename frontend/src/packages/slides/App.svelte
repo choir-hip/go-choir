@@ -9,9 +9,9 @@
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
-  } from './media-utils.js';
-  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
-  import { dropZone, pickFiles, uploadFiles } from './file-upload';
+  } from '../../lib/app-sdk';
+  import { addLiveEventListener, liveEventKind, liveEventPayload, onDocumentEvent } from '../../lib/app-sdk';
+  import { dropZone, pickFiles, uploadFiles } from '../../lib/app-sdk';
 
   export let appContext = {};
   export let windowId = '';
@@ -428,14 +428,14 @@
   onMount(() => {
     void refreshRecentFiles();
     void loadContentItem();
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    const removeFullscreen = onDocumentEvent('fullscreenchange', handleFullscreenChange);
     const removeLiveListener = addLiveEventListener((message) => {
       if (liveEventKind(message) === 'media.recent.updated' && liveEventPayload(message).kind === kind) {
         void refreshRecentFiles();
       }
     });
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      removeFullscreen();
       removeLiveListener();
     };
   });

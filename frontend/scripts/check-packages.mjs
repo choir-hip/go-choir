@@ -121,7 +121,8 @@ function staticFacts() {
   if (ids.size < MIN_STATIC_IDS) {
     fail('registry.ts', `parsed ${ids.size} static app ids (floor ${MIN_STATIC_IDS}); the layout changed, so the clash check cannot be trusted`);
   }
-  if (exts.size === 0) fail('file-routes.json', 'holds no click-to-open routes; the clash check cannot be trusted');
+  // Every app is a package now, so the table may hold no click route; it must still parse.
+  if (!Array.isArray(table?.routes)) fail('file-routes.json', 'routes must be an array; the clash check cannot be trusted');
   return { ids, exts };
 }
 

@@ -44,6 +44,11 @@ test('R3: the clash gate reads the table, and refuses a package that claims a st
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   manifest.opens.push({ media_type: 'audio/mpeg', extensions: ['mp3'] });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  // The shell's table holds no click route of its own now (every app is a package): the copy gets one.
+  const tablePath = path.join(dir, 'src/lib/file-routes.json');
+  const table = JSON.parse(fs.readFileSync(tablePath, 'utf8'));
+  table.routes.push({ appId: 'texture', mediaType: 'audio/mpeg', extensions: ['mp3'] });
+  fs.writeFileSync(tablePath, JSON.stringify(table, null, 2));
   const r = spawnSync(process.execPath, ['scripts/check-packages.mjs'], { cwd: dir, encoding: 'utf8' });
   fs.rmSync(dir, { recursive: true, force: true });
   expect(r.status).not.toBe(0);

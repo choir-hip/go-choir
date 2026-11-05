@@ -1,0 +1,21 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Video opens from the launcher with no file and says so.",
+  "ready": "[data-video-app]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/media/recents",
+      "status": 200,
+      "json": {
+        "items": []
+      }
+    }
+  ],
+  "expect": [
+    {
+      "selector": "[data-media-empty]",
+      "text": "No playable video source"
+    }
+  ]
+}

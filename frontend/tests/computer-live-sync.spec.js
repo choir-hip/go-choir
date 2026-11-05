@@ -8,7 +8,7 @@ const frontendRoot = path.resolve(__dirname, '..');
 
 const syncedStateFiles = [
   'src/App.svelte',
-  'src/lib/AudioApp.svelte',
+  'src/packages/audio/App.svelte',
   'src/lib/ComputeMonitorApp.svelte',
   'src/lib/Desktop.svelte',
   'src/lib/EpubApp.svelte',
@@ -18,7 +18,7 @@ const syncedStateFiles = [
   'src/lib/PodcastApp.svelte',
   'src/lib/SettingsApp.svelte',
   'src/lib/TextureEditor.svelte',
-  'src/lib/VideoApp.svelte',
+  'src/packages/video/App.svelte',
   'src/lib/media-utils.js',
   'src/lib/preferences.js',
   'src/lib/theme.ts',

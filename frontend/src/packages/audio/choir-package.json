@@ -1,0 +1,61 @@
+{
+  "schema": "choir.package/v2",
+  "name": "audio",
+  "version": "1.0.0",
+  "display": {
+    "title": "Audio",
+    "icon": "🎧",
+    "description": "Audio player"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": false,
+      "order": 90
+    },
+    "window": {
+      "singleton": false,
+      "heavy": true,
+      "desktop": {
+        "width": 760,
+        "height": 420
+      },
+      "compact": {
+        "minWidth": 280,
+        "minHeight": 320
+      }
+    },
+    "auth": {
+      "preview": "public-preview"
+    },
+    "theme": {
+      "surface": "media",
+      "shellDataAttr": "data-audio-window",
+      "contentClass": "audio-content"
+    }
+  },
+  "opens": [
+    {
+      "media_type": "audio/mpeg",
+      "extensions": [
+        "mp3",
+        "m4a",
+        "aac",
+        "ogg",
+        "oga",
+        "wav",
+        "flac",
+        "opus"
+      ]
+    }
+  ],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

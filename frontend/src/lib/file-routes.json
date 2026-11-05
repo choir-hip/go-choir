@@ -2,11 +2,21 @@
   "schema": "choir.file-routes/v1",
   "note": "The shell's one table of static file routes (slice S3). default true (or absent): the app opens the extension on a click, and mediaRouteForFileName answers it. default false: the app only appears under Open with. Packages add theirs through contributes/opens in their manifest; nothing else lists a file route. Order is the order Open with lists ties in.",
   "routes": [
-    { "appId": "audio", "mediaType": "audio/mpeg", "extensions": ["mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus"] },
-    { "appId": "video", "mediaType": "video/mp4", "extensions": ["mp4", "m4v", "webm", "mov", "avi", "mkv"] },
-    { "appId": "slides", "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "extensions": ["pptx", "html", "htm"] },
-    { "appId": "pdf", "mediaType": "application/pdf", "extensions": ["pdf"], "default": false },
-    { "appId": "epub", "mediaType": "application/epub+zip", "extensions": ["epub"], "default": false },
-    { "appId": "slides", "mediaType": "application/pdf", "extensions": ["pdf"], "default": false }
+    {
+      "appId": "pdf",
+      "mediaType": "application/pdf",
+      "extensions": [
+        "pdf"
+      ],
+      "default": false
+    },
+    {
+      "appId": "epub",
+      "mediaType": "application/epub+zip",
+      "extensions": [
+        "epub"
+      ],
+      "default": false
+    }
   ]
 }

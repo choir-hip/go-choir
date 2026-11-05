@@ -1,0 +1,13 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Slides opens on its welcome panel with the upload entry and no recent decks.",
+  "ready": "[data-slides-app]",
+  "api": [
+    { "method": "GET", "path": "/api/media/recents", "status": 200, "json": { "items": [] } }
+  ],
+  "expect": [
+    { "selector": ".welcome", "text": "Upload a PPTX, PDF, or HTML file" },
+    { "selector": "[data-slides-upload]" },
+    { "selector": ".recent-panel", "text": "Your recently opened decks will appear here" }
+  ]
+}
