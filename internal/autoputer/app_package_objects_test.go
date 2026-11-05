@@ -404,9 +404,11 @@ func TestRouteObjectsSurviveReopeningTheStore(t *testing.T) {
 // R13: the route works under the enforcing gate (the writer it declares is the
 // owner, which the kind admits). That another desk is refused is P2a's test.
 func TestRouteWorksUnderTheEnforcingWriterGate(t *testing.T) {
-	t.Cleanup(objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce))
 	f := newRouteFixture(t)
 	f.setSwitch(routeOwner, routeComputer, true)
+	// The setting write declares no writer (the shell's kind; MA3.2 declares
+	// it at the call site), so the gate is enforced after it.
+	t.Cleanup(objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce))
 	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
 		t.Fatalf("owner write under enforce: %d %s", w.Code, w.Body.String())
 	}

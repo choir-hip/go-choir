@@ -54,10 +54,12 @@ func applyOne(t *testing.T, s *Store, change FileChange) FileApplyResult {
 }
 
 func TestFileObjectKeepsItsIDThroughWriteMoveAndDelete(t *testing.T) {
-	restore := objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)
-	defer restore()
 	s := openTestStore(t)
 	enableFileObjects(t, s, fileObjComputer)
+	// The setting write above declares no writer (the shell's kind; MA3.2
+	// declares it at the call site), so the gate is enforced after it.
+	restore := objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)
+	defer restore()
 	ctx := context.Background()
 
 	res := applyOne(t, s, FileChange{Op: FileOpWrite, Record: fileRecord("docs/a.txt", "sha256:aa", 3), RecordedBy: "files_api"})
@@ -191,8 +193,8 @@ func TestFileObjectKindsAndSwitchAreRegistered(t *testing.T) {
 	reg := objectgraph.DefaultRegistry()
 	for _, kind := range []objectgraph.ObjectKind{ogKindFile, ogKindFilePath} {
 		k, err := reg.LookupKind(kind)
-		if err != nil || k.Writer != objectgraph.WriterRuntime || k.IdentityMode != objectgraph.IdentityExternalKey || k.Versioned {
-			t.Fatalf("%s = %+v, %v; want external_key, unversioned, system:runtime", kind, k, err)
+		if err != nil || k.Writer != objectgraph.WriterOwnerFiles || k.IdentityMode != objectgraph.IdentityExternalKey || k.Versioned {
+			t.Fatalf("%s = %+v, %v; want external_key, unversioned, system:ownerfiles", kind, k, err)
 		}
 	}
 	def, known := KnownComputerSettings[SettingFilesObject]

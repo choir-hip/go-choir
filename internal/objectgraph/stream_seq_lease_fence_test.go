@@ -16,7 +16,7 @@ import (
 //     that can burn the number space or, if low, reissue numbers.
 //  2. The fence refuses the store itself: the capability does not admit the
 //     lease write under enforce.
-//  3. The kind is registered under system:runtime, which admits every
+//  3. The kind is registered under system:kernel, which admits every
 //     declared writer (writerAdmits), so the registry alone would not refuse.
 //  4. system:store is not a built-in writer, so the kind fails the coverage
 //     test that every registered kind names one known writer.
@@ -45,7 +45,7 @@ func TestStreamSeqLeaseKindIsRegisteredUnderTheStoreWriter(t *testing.T) {
 		t.Fatalf("kind = %q", KindStreamSeqLease)
 	}
 	if reg.Writer != WriterStore || WriterStore != "system:store" {
-		t.Fatalf("writer = %q, want system:store (not system:runtime, which admits every writer)", reg.Writer)
+		t.Fatalf("writer = %q, want system:store (not system:kernel, which admits every writer)", reg.Writer)
 	}
 	if reg.IdentityMode != IdentityExternalKey {
 		t.Fatalf("identity mode = %q, want external key", reg.IdentityMode)
@@ -68,7 +68,7 @@ func TestLeaseWriteWithoutTheCapabilityIsRefusedInEveryMode(t *testing.T) {
 		"desk:research": WithWriter(context.Background(), WriterResearch),
 		"system:store":  WithWriter(context.Background(), WriterStore),
 		"owner":         WithWriter(context.Background(), WriterOwner),
-		"runtime":       WithWriter(context.Background(), WriterRuntime),
+		"runtime":       WithWriter(context.Background(), WriterKernel),
 	}
 	for _, mode := range []WriterGateMode{WriterGateOff, WriterGateObserve, WriterGateEnforce} {
 		for name, ctx := range writers {

@@ -88,7 +88,7 @@ func TestClassifyRules(t *testing.T) {
 		{"desk module added", func(s *Surface) { d := s.Desks["m"]; d.Modules = []string{"updates.read"}; s.Desks["m"] = d }, LevelMajor},
 		{"desk capsule verb added", func(s *Surface) { d := s.Desks["m"]; d.CapsuleVerbs = []string{"exec", "go_eval"}; s.Desks["m"] = d }, LevelMajor},
 		{"desk capsule verb leaves", func(s *Surface) { d := s.Desks["m"]; d.CapsuleVerbs = nil; s.Desks["m"] = d }, LevelMajor},
-		{"desk owned kind added", func(s *Surface) { d := s.Desks["m"]; d.OwnedKinds = []string{"assignment"}; s.Desks["m"] = d }, LevelMajor},
+		{"desk owned kind added", func(s *Surface) { d := s.Desks["m"]; d.OwnedKinds = []string{"choir.co_super_assignment"}; s.Desks["m"] = d }, LevelMajor},
 		{"desk taint changes", func(s *Surface) { d := s.Desks["m"]; d.Taint = "privileged"; s.Desks["m"] = d }, LevelMajor},
 		{"desk carrier changes", func(s *Surface) { d := s.Desks["m"]; d.Carrier = "capsule"; s.Desks["m"] = d }, LevelMajor},
 		{"edge leaves a terminal state of an enforced machine", func(s *Surface) {

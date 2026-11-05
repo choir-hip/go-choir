@@ -128,7 +128,7 @@ func TestLookupReturnsCopies(t *testing.T) {
 	d, _ := Lookup(Research)
 	d.Verbs[0] = "Exec"
 	d.CapsuleVerbs[0] = "exec"
-	d.OwnedKinds = append(d.OwnedKinds, "assignment")
+	d.OwnedKinds = append(d.OwnedKinds, AdmissionKind)
 	again, _ := Lookup(Research)
 	if again.Verbs[0] == "Exec" || again.CapsuleVerbs[0] == "exec" || len(again.OwnedKinds) != 1 {
 		t.Fatal("a caller changed the manifest through a returned copy")
@@ -470,7 +470,7 @@ func TestInstanceIsValidatedAndExactlyOneDeskHoldsAssignments(t *testing.T) {
 	for _, n := range Names() {
 		d, _ := Lookup(n)
 		for _, k := range d.OwnedKinds {
-			if k == "assignment" {
+			if k == AdmissionKind {
 				holders++
 			}
 		}

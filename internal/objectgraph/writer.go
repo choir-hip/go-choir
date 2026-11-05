@@ -26,9 +26,10 @@ import (
 // before the event tape.
 //
 // Mixed batches are normal: a Texture turn commits its revision with the
-// runtime's inbox and event bookkeeping in one transaction. So a kind written
-// by the runtime store on behalf of any desk (WriterRuntime) is admitted under
-// every declared writer; a desk-owned kind is admitted under its desk (or the
+// kernel's inbox and event bookkeeping in one transaction. So a kind of the
+// commons (WriterKernel), written by the store on behalf of any desk, is
+// admitted under every declared writer, even an undeclared one; MA3.2 declares
+// the run's desk at the reducer and ends that exemption; a desk-owned kind is admitted under its desk (or the
 // owner where OwnerEdits); a corpusd kind under corpusd.
 //
 // Rollout. The classification of the VM store's own kinds into per-desk
@@ -47,17 +48,25 @@ const (
 	WriterManagement  Writer = "desk:management"
 	WriterEngineering Writer = "desk:engineering"
 	WriterResearch    Writer = "desk:research"
+	// The kernel services that are custodians (kernelservice): each writer is
+	// "system:" plus the service's name, derived from its registration.
+	//
+	// WriterKernel is the commons: lifecycle, inbox, event and run
+	// bookkeeping every desk shares.
+	WriterKernel Writer = "system:kernel"
 	// WriterAutoradio is reserved for kinds no code writes yet.
-	WriterAutoradio Writer = "desk:autoradio"
-	// WriterRuntime is the VM store acting for the desks: lifecycle, inbox,
-	// event and assignment bookkeeping. Its per-desk split is ARCH-02's.
-	WriterRuntime Writer = "system:runtime"
+	WriterAutoradio Writer = "system:autoradio"
+	// WriterOwnerFiles is the owner's files and file objects.
+	WriterOwnerFiles Writer = "system:ownerfiles"
+	// WriterShell is the shell and owner-act state: settings, content, the
+	// desktop.
+	WriterShell Writer = "system:shell"
 	// WriterCorpusd is the publication layer (Store B).
 	WriterCorpusd Writer = "system:corpusd"
 	// WriterStore is the VM store acting for itself, not for a desk: the
 	// stream_seq lease (choir.stream_seq_lease), written only by the store's
 	// allocator behind the capability fence in CheckWriteAs. It is not
-	// WriterRuntime: a runtime kind admits every declared writer.
+	// WriterKernel: a commons kind admits every declared writer.
 	WriterStore Writer = "system:store"
 	// WriterOwner is the owner's own edit path. It is declared by a write; it
 	// is never a kind's writer. A kind admits it only with OwnerEdits.
@@ -67,7 +76,8 @@ const (
 // BuiltinWriters are the writers a built-in kind may name.
 var BuiltinWriters = map[Writer]bool{
 	WriterTexture: true, WriterManagement: true, WriterEngineering: true, WriterResearch: true,
-	WriterAutoradio: true, WriterRuntime: true, WriterCorpusd: true, WriterStore: true,
+	WriterAutoradio: true, WriterKernel: true, WriterOwnerFiles: true, WriterShell: true,
+	WriterCorpusd: true, WriterStore: true,
 }
 
 var appDeskWriter = regexp.MustCompile(`^desk:[a-z][a-z0-9_-]{1,31}$`)
@@ -199,11 +209,11 @@ func recordWriterViolation(kind ObjectKind, declared Writer, ok bool, reason str
 }
 
 // writerAdmits reports whether a write declared as (declared, ok) may write
-// kind: the kind's own writer, any writer for a runtime kind, the owner where
+// kind: the kind's own writer, any writer for a commons kind (until MA3.2), the owner where
 // the kind admits owner edits.
 func writerAdmits(reg KindRegistration, declared Writer, ok bool) bool {
 	switch {
-	case reg.Writer == WriterRuntime:
+	case reg.Writer == WriterKernel:
 		return true
 	case !ok:
 		return false

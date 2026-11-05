@@ -23,7 +23,7 @@ import (
 //
 //   - the kind is choir.app.<pkg>.<kind>, in the package's own namespace;
 //   - the writer is desk:<pkg>, the package's own desk, and no other (not a
-//     built-in desk, not system:runtime which every desk may write through, not
+//     built-in desk, not system:kernel which every desk may write through, not
 //     the owner: the owner is admitted by OwnerEdits, never named as a writer);
 //   - the package is not named like a built-in desk, since desk:texture is
 //     Texture whoever declares it;

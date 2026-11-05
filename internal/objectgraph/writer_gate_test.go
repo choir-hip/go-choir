@@ -73,7 +73,7 @@ func TestTextureKindsHaveTextureAsTheOnlyDeskWriter(t *testing.T) {
 	}
 }
 
-// F7 (mixed batches): runtime kinds pass under any declared desk; a desk-owned
+// F7 (mixed batches): commons kinds pass under any declared desk; a desk-owned
 // kind passes only under its desk, or the owner where OwnerEdits; a corpusd
 // kind only under corpusd.
 func TestCheckWriteAsAdmitsOnlyTheKindsWriter(t *testing.T) {
@@ -108,7 +108,7 @@ func TestCheckWriteAsAdmitsOnlyTheKindsWriter(t *testing.T) {
 }
 
 // F2: a write that declares no writer. In enforce it is refused when the kind
-// is desk or corpusd owned; the runtime's own kinds are written by the runtime
+// is desk or corpusd owned; the commons are written by the kernel
 // and need no declaration.
 func TestCheckWriteAsEnforceRefusesAnUndeclaredWriteOfADeskKind(t *testing.T) {
 	writerMode(t, WriterGateEnforce)

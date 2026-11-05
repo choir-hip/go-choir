@@ -71,158 +71,171 @@ func NewRegistry() *Registry {
 
 func DefaultRegistry() *Registry {
 	r := NewRegistry()
-	for _, k := range []KindRegistration{
+	kinds := []KindRegistration{
 		// --- Source graph, captures and media ---
-		{Kind: "choir.source_entity", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterTexture},
-		{Kind: "choir.source_ref", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterTexture},
-		{Kind: "choir.web_capture", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "objectgraph.WebCaptureMetadata"},
+		{Kind: "choir.source_entity", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.source_ref", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.web_capture", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Schema: "objectgraph.WebCaptureMetadata"},
 		// Reserved for Autoradio and Autopaper media
 		// (docs/research/autopaper-media-and-rights-2026-10-14/repo-media-survey.md).
-		{Kind: "choir.media_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Writer: WriterAutoradio, Reserved: true},
-		{Kind: "choir.audio_recording", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Writer: WriterAutoradio, Reserved: true},
-		{Kind: "choir.transcript", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Writer: WriterAutoradio, Reserved: true},
-		{Kind: "choir.autoradio_run_sheet", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Versioned: true, Owner: OwnerAutoradio, Writer: WriterAutoradio, Reserved: true},
+		{Kind: "choir.media_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Reserved: true},
+		{Kind: "choir.audio_recording", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Reserved: true},
+		{Kind: "choir.transcript", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Reserved: true},
+		{Kind: "choir.autoradio_run_sheet", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Versioned: true, Owner: OwnerAutoradio, Reserved: true},
 
 		// --- VM store: audited computer ---
-		{Kind: "choir.agent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.run", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.event", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.channel_message", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.inbox_delivery", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.run_memory_entry", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.trajectory", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.work_item", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.run_acceptance", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.run_continuation", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.texture_document", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterTexture, OwnerEdits: true},
-		{Kind: "choir.texture_revision", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Versioned: true, Owner: OwnerVMStore, Writer: WriterTexture, OwnerEdits: true},
-		{Kind: "choir.texture_decision", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterTexture},
-		{Kind: "choir.agent_evidence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterResearch, Schema: "types.EvidenceRecord"},
-		{Kind: "choir.content_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.podcast_subscription", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.browser_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.desktop_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.desktop_app_instance", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.worker_update", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
+		{Kind: "choir.agent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.run", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.event", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.channel_message", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.inbox_delivery", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.run_memory_entry", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.trajectory", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.work_item", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.run_acceptance", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.run_continuation", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.texture_document", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, OwnerEdits: true},
+		{Kind: "choir.texture_revision", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Versioned: true, Owner: OwnerVMStore, OwnerEdits: true},
+		{Kind: "choir.texture_decision", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.agent_evidence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.EvidenceRecord"},
+		{Kind: "choir.content_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore},
+		{Kind: "choir.podcast_subscription", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.browser_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.desktop_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.desktop_app_instance", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.worker_update", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, OwnerEdits: true},
+		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		// An app's engineering lineage: the handoff its last engineer left
 		// (docs/design/engineer-reuse-2026-11-04.md, phase B).
-		{Kind: "choir.engineering_lineage", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EngineeringLineage"},
+		{Kind: "choir.engineering_lineage", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.EngineeringLineage"},
 		// The Texture root marker (PD3 S1): which document is the computer's
 		// master document, and its generation, claimed by compare-and-set.
-		{Kind: "choir.texture_root", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.TextureRoot"},
+		{Kind: "choir.texture_root", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.TextureRoot"},
 		// The claim of a stack rebase notice by the assignment that serves it
 		// (U4): one per (operation, booted base), written by the assignment
 		// open's own transaction.
-		{Kind: "choir.rebase_notice_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.StackRebaseClaim"},
-		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
-		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
+		{Kind: "choir.rebase_notice_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.StackRebaseClaim"},
+		// The intake kinds (capture_label, capture_label_override,
+		// capture_disposition, world_event, event_membership) are written by
+		// background loops with no run record; under MA3.2 they declare
+		// desk:management from the host loop. source_schedule is a standing
+		// owner intent, so the owner's route writes it too (OwnerEdits).
+		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		// The event layer's V1 (docs/reports/event-layer-at-ingestion-design-2026-10-16.md).
-		{Kind: "choir.world_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.WorldEvent"},
-		{Kind: "choir.event_membership", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EventMembership"},
+		{Kind: "choir.world_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.WorldEvent"},
+		{Kind: "choir.event_membership", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.EventMembership"},
 		// An owner's install or uninstall of a Library package release
 		// (docs/design/package-install-2026-11-04.md). The kind was renamed
 		// from its pre-MA2.4 name; records of the old kind stay registered
 		// and readable until the store converts them (store/package_install_legacy.go).
-		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.PackageInstall"},
-		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.PackageInstall"},
+		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
+		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file
 		// with a stable id and its plaintext digest, and the path view from a
 		// live path to that id. Written by the runtime for the Files API and
 		// the reconcile pass, behind the files.object computer setting.
-		{Kind: "choir.file", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.FileObject"},
-		{Kind: "choir.file_path", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.filePathView"},
+		{Kind: "choir.file", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.FileObject"},
+		{Kind: "choir.file_path", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.filePathView"},
 
 		// The stream_seq lease: the highest stream_seq the computer may hand
 		// out, an external-key singleton written ahead in blocks by the
 		// store's allocator (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md).
-		// system:store, not system:runtime (which admits every writer); the
+		// system:store, not system:kernel (which admits every writer); the
 		// hard fence in CheckWriteAs refuses any other writer in every gate
 		// mode.
-		{Kind: KindStreamSeqLease, Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterStore},
+		{Kind: KindStreamSeqLease, Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 
 		// --- VM store: written through PutBatch before the write gate
 		// existed (H-OG1, docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 		// Identity is lifecycleCanonicalID: a key scoped by computer.
-		{Kind: "choir.actor_wake_outbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ActorWakeOutbox"},
-		{Kind: "choir.capture_disposition", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.CaptureDisposition"},
-		{Kind: "choir.citation_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterTexture, Schema: "types.CitationCheck"},
-		{Kind: "choir.commitment_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.CommitmentRecord"},
-		{Kind: "choir.conversation_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.ConversationHead"},
-		{Kind: "choir.inbox_command", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.InboxCommitReceipt"},
-		{Kind: "choir.inbox_cursor", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.InboxCursor"},
-		{Kind: "choir.inbox_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.InboxHead"},
-		{Kind: "choir.lifecycle_cancel_intent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.LifecycleCancellationIntent"},
-		{Kind: "choir.lifecycle_command", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.LifecycleCommandReceipt"},
-		{Kind: "choir.lifecycle_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.LifecycleEvent"},
-		{Kind: "choir.lifecycle_sequence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.lifecycleSequence"},
-		{Kind: "choir.management_task", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.ManagementTask"},
-		{Kind: "choir.migration_marker", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.actorWakeOutboxMigrationMarker"},
-		{Kind: "choir.scheduler_sequence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.arrivalSequence"},
-		{Kind: "choir.story_library_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.StoryLibraryHead"},
-		{Kind: "choir.support_verdict", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.SupportVerdict"},
+		{Kind: "choir.actor_wake_outbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.ActorWakeOutbox"},
+		{Kind: "choir.capture_disposition", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.CaptureDisposition"},
+		{Kind: "choir.citation_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.CitationCheck"},
+		{Kind: "choir.commitment_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.CommitmentRecord"},
+		{Kind: "choir.conversation_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.ConversationHead"},
+		{Kind: "choir.inbox_command", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.InboxCommitReceipt"},
+		{Kind: "choir.inbox_cursor", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.InboxCursor"},
+		{Kind: "choir.inbox_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.InboxHead"},
+		{Kind: "choir.lifecycle_cancel_intent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.LifecycleCancellationIntent"},
+		{Kind: "choir.lifecycle_command", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.LifecycleCommandReceipt"},
+		{Kind: "choir.lifecycle_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.LifecycleEvent"},
+		{Kind: "choir.lifecycle_sequence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.lifecycleSequence"},
+		{Kind: "choir.management_task", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.ManagementTask"},
+		{Kind: "choir.migration_marker", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.actorWakeOutboxMigrationMarker"},
+		{Kind: "choir.scheduler_sequence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.arrivalSequence"},
+		{Kind: "choir.story_library_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.StoryLibraryHead"},
+		{Kind: "choir.support_verdict", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.SupportVerdict"},
 		// Engineering records keep their frozen V1 kind spelling
 		// (vocabmigrate frozenOGObjectKinds).
-		{Kind: "choir.co_super_assignment", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.EngineeringAssignment"},
-		{Kind: "choir.co_super_assignment_report", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.EngineeringAssignmentReport"},
-		{Kind: "choir.co_super_subject_candidate", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.EngineeringSubjectCandidate"},
-		{Kind: "choir.co_super_capability_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.engineeringCapabilityClaim"},
-		{Kind: "choir.co_super_capsule_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.engineeringCapsuleClaim"},
+		{Kind: "choir.co_super_assignment", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.EngineeringAssignment"},
+		{Kind: "choir.co_super_assignment_report", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.EngineeringAssignmentReport"},
+		{Kind: "choir.co_super_subject_candidate", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.EngineeringSubjectCandidate"},
+		{Kind: "choir.co_super_capability_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.engineeringCapabilityClaim"},
+		{Kind: "choir.co_super_capsule_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.engineeringCapsuleClaim"},
 		// The slot claim of a trajectory: one object per (trajectory, slot)
 		// holding the run that owns it. Written by the store's slot claim
 		// (docs/problems/data-has-more-than-one-home-2026-10-24.md, step 3).
-		{Kind: "choir.co_super_slot", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EngineeringSlotRecord"},
-		{Kind: "choir.co_super_run_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.engineeringRunClaim"},
+		{Kind: "choir.co_super_slot", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.EngineeringSlotRecord"},
+		{Kind: "choir.co_super_run_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.engineeringRunClaim"},
 
 		// --- corpusd: publication layer ---
-		{Kind: "choir.subject", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.publication", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.publication_version", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Versioned: true, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.publication_proposal", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.public_route", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.artifact_manifest", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.artifact_blob", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.provenance_entity", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.provenance_activity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.provenance_agent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.consent_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.review_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.retrieval_source", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.retrieval_span", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.retrieval_manifest", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.publication_source_entity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.publication_transclusion", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.publication_policy", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd, Writer: WriterCorpusd},
-		{Kind: "choir.verifier_attestation", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd},
+		{Kind: "choir.subject", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.publication", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.publication_version", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Versioned: true, Owner: OwnerCorpusd},
+		{Kind: "choir.publication_proposal", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.public_route", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.artifact_manifest", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.artifact_blob", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.provenance_entity", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.provenance_activity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.provenance_agent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.consent_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.review_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.retrieval_source", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.retrieval_span", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.retrieval_manifest", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.publication_source_entity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		{Kind: "choir.publication_transclusion", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.publication_policy", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
+		{Kind: "choir.verifier_attestation", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
 		// Written before the write gate existed (H-OG1).
-		{Kind: "choir.publication_resolved_blocks", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.resolvedBlocksDoc"},
-		{Kind: "choir.publication_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.publicationCheck"},
-		{Kind: "choir.support_judgement", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.supportJudgement"},
+		{Kind: "choir.publication_resolved_blocks", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.resolvedBlocksDoc"},
+		{Kind: "choir.publication_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.publicationCheck"},
+		{Kind: "choir.support_judgement", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.supportJudgement"},
 		// The entity layer (docs/problems/related-stories-no-entity-layer-2026-10-26.md;
 		// ontology claims-events-entities-ontology-2026-10-14.md D3/D4): a
 		// person, organization, place, product, work or law the paper's
 		// stories are about, keyed by its Wikidata QID or its normalised
 		// name. Written once by corpusd, as the export of the research desk's
 		// story.entities tape records.
-		{Kind: "choir.entity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityRow"},
+		{Kind: "choir.entity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.entityRow"},
 		// The entity lexicon's learning loop (slice c0 §6): one review of a
 		// story's entities per tape record, and a phrase's not-an-entity
 		// evidence and stoplist state. Written by corpusd from the export.
-		{Kind: "choir.entity_review", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityReviewRow"},
-		{Kind: "choir.entity_stopword", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityStopwordRow"},
+		{Kind: "choir.entity_review", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.entityReviewRow"},
+		{Kind: "choir.entity_stopword", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.entityStopwordRow"},
 		// A published software release record (P7). Retired: its routes are
 		// deleted and nothing writes one (docs/design/package-install-2026-11-04.md);
 		// the records it left stay readable.
-		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "release.Record"},
+		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "release.Record"},
 		// The Choir Library (S2, docs/design/library-package-propagation-2026-10-26.md
 		// section 13): a package release, one package's own change as source,
 		// immutable; and a record's listing, one object per version, naming its
 		// predecessor. corpusd writes both, on the owner's act.
-		{Kind: "choir.package_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "pkgrelease.Record"},
-		{Kind: "choir.release_listing", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "pkgrelease.Listing"},
-	} {
+		{Kind: "choir.package_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "pkgrelease.Record"},
+		{Kind: "choir.release_listing", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "pkgrelease.Listing"},
+	}
+	// The custodian of each kind is not written here: it is derived from the
+	// desk and kernel-service manifests, and the load fails when a kind has
+	// none or two (MA3.1).
+	derived, err := DeriveCustody(kinds, ManifestClaims())
+	if err != nil {
+		panic(err)
+	}
+	for _, k := range derived {
 		r.RegisterKind(k)
 	}
 	for _, e := range []EdgeRegistration{

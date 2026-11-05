@@ -358,7 +358,7 @@ func (b *fileBatch) write(rec FileRecord, p, by string) (string, bool, error) {
 }
 
 // ApplyFileChanges records changes to the files tree in one object graph batch
-// (one projection batch on the tape when it is bound). Writer: system:runtime,
+// (one projection batch on the tape when it is bound). Writer: system:ownerfiles,
 // acting for the Files API or the reconcile pass.
 func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string, changes []FileChange, now time.Time) (FileApplyResult, error) {
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
@@ -385,7 +385,7 @@ func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string
 	if now.IsZero() {
 		now = time.Now()
 	}
-	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterRuntime)
+	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwnerFiles)
 	b := &fileBatch{s: s, ctx: ctx, ownerID: ownerID, computerID: computerID, now: now.UTC(), objects: map[string]objectgraph.Object{}}
 	var res FileApplyResult
 	for _, change := range changes {

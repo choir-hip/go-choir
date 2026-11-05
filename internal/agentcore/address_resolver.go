@@ -151,9 +151,6 @@ func init() {
 	RegisterInboxClass(InboxClass{Name: jobInboxClass, Addressable: false})
 }
 
-// assignmentKind is the owned kind whose holder admits engineering work.
-const assignmentKind = "assignment"
-
 // assignmentHolder is the system desk that owns the assignment kind.
 func assignmentHolder() (deskmanifest.Desk, bool) {
 	for _, name := range deskmanifest.Names() {
@@ -162,7 +159,7 @@ func assignmentHolder() (deskmanifest.Desk, bool) {
 			continue
 		}
 		for _, k := range d.OwnedKinds {
-			if k == assignmentKind {
+			if k == deskmanifest.AdmissionKind {
 				return d, true
 			}
 		}
@@ -318,7 +315,7 @@ func holdsAssignments(d deskmanifest.Desk) bool {
 		return false
 	}
 	for _, k := range d.OwnedKinds {
-		if k == assignmentKind {
+		if k == deskmanifest.AdmissionKind {
 			return true
 		}
 	}

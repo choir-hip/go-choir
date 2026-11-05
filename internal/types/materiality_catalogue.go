@@ -26,11 +26,9 @@ type MaterialityEntry struct {
 	ImpactFloor ImpactClass
 }
 
-// admissionKind is the owned kind whose holder admits every request kind
+// The custodian of deskmanifest.AdmissionKind admits every request kind
 // today; its owner in the deskmanifest registry is the custodian of the
 // catalogue's kinds (no desk name is written here, R3).
-const admissionKind = "admission"
-
 func admissionCustodian() string {
 	for _, name := range deskmanifest.Names() {
 		d, ok := deskmanifest.Lookup(name)
@@ -38,7 +36,7 @@ func admissionCustodian() string {
 			continue
 		}
 		for _, k := range d.OwnedKinds {
-			if k == admissionKind {
+			if k == deskmanifest.AdmissionKind {
 				return d.Name
 			}
 		}

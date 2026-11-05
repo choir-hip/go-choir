@@ -24,7 +24,7 @@ import (
 //	    satisfies (pkg "slides" and kind choir.app.slides-x.deck), or that
 //	    admits an empty or malformed kind name (dots, upper case, ':').
 //	F3  the writer is anything but desk:<pkg>: empty, a built-in desk,
-//	    system:runtime (admitted under every desk), owner, corpusd, another
+//	    system:kernel (admitted under every desk), owner, corpusd, another
 //	    package's desk.
 //	F4  a package named like a built-in desk (texture, management, ...) gets
 //	    that desk's writer for its kinds.
@@ -118,7 +118,7 @@ func TestRegisterPackageKindRefusesAKindOutsideTheNamespace(t *testing.T) {
 func TestRegisterPackageKindRefusesAnyWriterButTheDeskOfThePackage(t *testing.T) {
 	for _, w := range []Writer{
 		"", WriterTexture, WriterManagement, WriterEngineering, WriterResearch, WriterAutoradio,
-		WriterRuntime, WriterCorpusd, WriterStore, WriterOwner,
+		WriterKernel, WriterCorpusd, WriterStore, WriterOwner,
 		"desk:mail", "desk:slides-x", "desk:Slides", "desk:slides ", "desk: slides",
 	} {
 		t.Run(string(w), func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestRegisterPackageKindRefusesEveryReservedDeskAgentOrShellName(t *testing.
 		"conductor", "email", // system desks the built-in writer set omits
 		"super", "co-super", "cosuper", "coagent", "co-agent", "researcher", "web-research", // frozen V1 desk spellings
 		"processor", "reconciler", "verifier", "verifier-multimodal", // retained historical roles
-		"runtime", "corpusd", "store", // non-desk built-in writers
+		"kernel", "corpusd", "store", "ownerfiles", "autoradio", // non-desk built-in writers
 		"desktop", "shell", "owner", "choir", "system", "trace", "terminal", // the shell
 	}, deskmanifest.Names()...)
 	for _, pkg := range names {

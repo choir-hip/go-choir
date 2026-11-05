@@ -160,10 +160,13 @@ type Desk struct {
 	Taint   Taint
 	Memory  Memory
 
-	// OwnedKinds are the object kinds the desk is the only writer of.
-	// Declared and parity-pinned. The address resolver reads the
-	// "assignment" kind: its single holder admits engineering work and
-	// receives forwarded engineering requests (a test pins one holder).
+	// OwnedKinds are the object kinds the desk is the custodian of, the only
+	// writer of, in the spelling of the object graph (objectgraph.ObjectKind).
+	// It is the one source of custody: the object graph derives each kind's
+	// writer from it at load and refuses a kind claimed twice or not at all
+	// (MA3.1). The address resolver reads the assignment kind: its single
+	// holder admits engineering work and receives forwarded engineering
+	// requests (a test pins one holder).
 	OwnedKinds []string
 	// ModelRole is the modelpolicy role key. Declared; no consumer yet.
 	ModelRole string
@@ -267,8 +270,14 @@ var system = []Desk{
 		Sandbox:      Sandbox{Profile: "desk_cell", UID: 61001},
 		Taint:        TaintPrivileged,
 		Memory:       Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds:   []string{"assignment", "admission"},
-		ModelRole:    Management, Restart: RestartContract,
+		OwnedKinds: []string{
+			// Assignments and their admission, the owner's intake and the
+			// Autopaper source schedules (plan section 8.2).
+			"choir.capture_disposition",
+			"choir.management_task", "choir.capture_label", "choir.capture_label_override",
+			"choir.world_event", "choir.event_membership", "choir.source_schedule",
+		},
+		ModelRole: Management, Restart: RestartContract,
 		Profile: true, Prompt: true, Identity: IdentityOwner, OwnChannel: true,
 		CellDeadline: 300 * time.Second, Modules: []string{ModuleUpdatesRead},
 	},
@@ -279,12 +288,16 @@ var system = []Desk{
 		// turn with Done, Wait or Reject. It is the sole writer of canonical
 		// document revisions. It reads the captures its frame names; it
 		// never fetches the world.
-		Verbs:      []string{"Cast", "Ask", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
-		Sandbox:    Sandbox{Profile: "desk_cell", UID: 61002},
-		Taint:      TaintPrivileged,
-		Memory:     Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds: []string{"document_revision"},
-		ModelRole:  Texture, Restart: RestartContract,
+		Verbs:   []string{"Cast", "Ask", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
+		Sandbox: Sandbox{Profile: "desk_cell", UID: 61002},
+		Taint:   TaintPrivileged,
+		Memory:  Memory{WorkerMaxBytes: 768 * mib},
+		OwnedKinds: []string{
+			"choir.texture_document", "choir.texture_revision", "choir.texture_decision", "choir.texture_root",
+			"choir.source_entity", "choir.source_ref", "choir.citation_check", "choir.support_verdict",
+			"choir.story_library_head",
+		},
+		ModelRole: Texture, Restart: RestartContract,
 		Profile: true, Prompt: true, Identity: IdentitySubject,
 		Modules: []string{ModuleUpdatesRead},
 	},
@@ -302,7 +315,7 @@ var system = []Desk{
 		Sandbox:      Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:        TaintUntrustedInput,
 		Memory:       Memory{WorkerMaxBytes: 768 * mib},
-		OwnedKinds:   []string{"evidence"},
+		OwnedKinds:   []string{"choir.agent_evidence"},
 		ModelRole:    Research, Restart: RestartContract,
 		Profile: true, Prompt: true,
 	},
@@ -319,9 +332,12 @@ var system = []Desk{
 		Taint:   TaintPrivileged,
 		// A capsule asks for what the cmd/autoputer link needs (measured
 		// peak 1.50 GiB stripped, 1.80 GiB with DWARF).
-		Memory:     Memory{CapsuleRequestedBytes: 2 << 30},
-		OwnedKinds: []string{"capsule_effect_bundle"},
-		ModelRole:  Engineering, Restart: RestartContract,
+		Memory: Memory{CapsuleRequestedBytes: 2 << 30},
+		OwnedKinds: []string{
+
+			"choir.co_super_slot", "choir.engineering_lineage",
+		},
+		ModelRole: Engineering, Restart: RestartContract,
 		Profile: true, Prompt: true,
 	},
 	{
@@ -746,6 +762,12 @@ func (d Desk) AppSpec() AppDeskSpec {
 	return AppDeskSpec{Name: c.Name, Verbs: c.Verbs, Taint: c.Taint, UID: c.Sandbox.UID,
 		WorkerMaxBytes: c.Memory.WorkerMaxBytes, OwnedKinds: c.OwnedKinds}
 }
+
+// AdmissionKind is the object kind whose custodian admits engineering work and
+// every request kind today: the disposition of an arrival. The assignment
+// records themselves are the kernel's commons (the lifecycle batches mix
+// desks), so the holder of this kind is the marker for who admits.
+const AdmissionKind = "choir.capture_disposition"
 
 // Equal reports whether two rows grant the same authority. A nil and an
 // empty list are equal.
