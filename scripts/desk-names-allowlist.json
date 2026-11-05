@@ -79,7 +79,7 @@
   "internal/agentcore/verify_owed.go": 3,
   "internal/agentprofile/agentprofile.go": 14,
   "internal/appdesk/appdesk.go": 2,
-  "internal/apppackage/firstparty_gen.go": 5,
+  "internal/apppackage/firstparty_gen.go": 4,
   "internal/auth/email_signin.go": 2,
   "internal/auth/handlers.go": 3,
   "internal/auth/recovery.go": 1,
