@@ -1525,7 +1525,8 @@ func openCodeEndpoint(baseURL, suffix string) string {
 func openCodeWireShapeForModel(modelID string) (openCodeWireShape, error) {
 	switch strings.TrimSpace(modelID) {
 	case "deepseek-v4.1-flash", "glm-5.3-flash", "hy3",
-		"cat-jam-free", "longcat-2.5-preview-free", "step-5-preview-free":
+		"cat-jam-free", "longcat-2.5-preview-free", "step-5-preview-free",
+		"iceman-contributor-free", "beam-free":
 		return openCodeChatCompletions, nil
 	case "muse-spark-1.3-contributor", "muse-spark-1.3-contributor-free":
 		return openCodeResponses, nil

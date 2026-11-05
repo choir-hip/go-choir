@@ -179,7 +179,7 @@ func TestResearchChildSwitchesOnQuotaWithTheComputersLedgerAndChain(t *testing.T
 	lineage := researchLineage{ownerID: "o", selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}
 	spec := yaegikernel.ResearchChild{Objective: "alpha"}
 	first := rt.runResearchChild(context.Background(), parent, lineage, spec, researchFanOut{})
-	if first.Error != "" || !strings.HasPrefix(first.Findings, "done on chatgpt/") {
+	if first.Error != "" || !strings.HasPrefix(first.Findings, "done on ") || strings.Contains(first.Findings, "synthetic") {
 		t.Fatalf("first child = %+v; want it to switch to the chain", first)
 	}
 	before := p.calls["synthetic"]

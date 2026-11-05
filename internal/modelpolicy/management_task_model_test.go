@@ -82,8 +82,8 @@ model = "gpt-6-luna"
 	if meta[MetadataProvider] != ManagementTaskProvider || meta[MetadataModel] != ManagementTaskModel {
 		t.Fatalf("task run metadata = %+v", meta)
 	}
-	if meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
-		t.Fatalf("the pinned task's fallback = %+v, want the default pool's other member", meta)
+	if meta[MetadataFallbacks] != "openrouter/stealth/crouton-alpha,synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
+		t.Fatalf("the pinned task's fallback = %+v, want the default pool's other members but the -free one", meta)
 	}
 	// An owner override naming the other member falls back to the pin's model.
 	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"synthetic\"\nmodel = \"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017\"\n"), 0o644); err != nil {
@@ -111,7 +111,7 @@ model = "gpt-6-luna"
 		t.Fatal(err)
 	}
 	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataModel] != ManagementTaskModel || meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
+	if meta[MetadataModel] != ManagementTaskModel || meta[MetadataFallbacks] != "openrouter/stealth/crouton-alpha,synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
 		t.Fatalf("pool-valued task role = %+v", meta)
 	}
 	// The crouton arm: an uncatalogued provider's concrete model, no fallbacks.

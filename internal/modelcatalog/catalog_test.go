@@ -27,9 +27,14 @@ import "testing"
 // out moves to the other.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
+	// Owner 2026-11-05: iceman, beam, crouton and luna at 1:1:1:1,
+	// Synthetic's DeepSeek 1017 a fallback-only last member.
 	want := []PoolMember{
-		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
+		{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
+		{Provider: "opencode-go", Model: "beam-free", Weight: 1},
+		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
 		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 	}
 	if len(pool) != len(want) {
 		t.Fatalf("default pool = %v, want %v", pool, want)
@@ -47,7 +52,9 @@ func TestDefaultPoolMembers(t *testing.T) {
 	}
 	for name, members := range Pools() {
 		for _, m := range members {
-			if m.Provider == "opencode-go" || m.Provider == "opencode-zen" {
+			// The OpenCode members are the free iceman and beam in the
+			// default pool (owner 2026-11-05); OpenCode's paid models stay out.
+			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && (name != DefaultPool || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
 				t.Fatalf("pool %s carries OpenCode member %v", name, m)
 			}
 		}
@@ -130,7 +137,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 2 || d[0].Provider != "synthetic" || d[1] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1}) {
+	if d := Pools()[DefaultPool]; len(d) != 5 || d[3] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1}) || !d[4].FallbackOnly {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {
@@ -140,7 +147,8 @@ func TestLunaSyntheticPool(t *testing.T) {
 
 // stealth/crouton-alpha on OpenRouter (owner 2026-11-03), from the public
 // models listing and a keyed probe that day: a 1048576-token window, tools,
-// image input answered correctly. In one pool only: crouton-synthetic-luna.
+// image input answered correctly. In crouton-synthetic-luna and, from
+// 2026-11-05 (owner), the default pool.
 func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
 	info, ok := Lookup("openrouter", "stealth/crouton-alpha")
 	if !ok {
@@ -154,7 +162,7 @@ func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
 	}
 	for name, members := range Pools() {
 		for _, m := range members {
-			if m.Provider == "openrouter" && (name != CroutonSyntheticLunaPool || m.Model != "stealth/crouton-alpha") {
+			if m.Provider == "openrouter" && ((name != CroutonSyntheticLunaPool && name != DefaultPool) || m.Model != "stealth/crouton-alpha") {
 				t.Fatalf("pool %s carries openrouter member %v", name, m)
 			}
 		}

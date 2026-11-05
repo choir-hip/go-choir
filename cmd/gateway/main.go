@@ -171,6 +171,8 @@ func loadProviderConfig() provider.ProviderConfig {
 			"cat-jam-free",
 			"longcat-2.5-preview-free",
 			"step-5-preview-free",
+			"iceman-contributor-free",
+			"beam-free",
 		},
 		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
 		SyntheticModels:   []string{"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"},

@@ -97,6 +97,11 @@ var pricingTable = []ModelPricing{
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.
 	{Provider: "opencode-go", Model: "longcat-2.5-preview-free", InputPerMillion: 0, OutputPerMillion: 0},
 	{Provider: "opencode-go", Model: "cat-jam-free", InputPerMillion: 0, OutputPerMillion: 0},
+	// Iceman Contributor, a promotional free model on opencode-go
+	// (probed 2026-11-05: usage.cost 0, billing_source go). Rate limits
+	// unknown; a 429 fails the thread over to the next pool member.
+	{Provider: "opencode-go", Model: "iceman-contributor-free", InputPerMillion: 0, OutputPerMillion: 0},
+	{Provider: "opencode-go", Model: "beam-free", InputPerMillion: 0, OutputPerMillion: 0},
 	// Crouton Alpha, OpenRouter's stealth model: free for one week from
 	// 2026-11-03 (models listing pricing 0/0; usage.cost 0 in the probe,
 	// docs/problems/openrouter-provider-crouton-alpha-2026-11-03.md).

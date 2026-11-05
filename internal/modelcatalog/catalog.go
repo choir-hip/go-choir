@@ -73,6 +73,8 @@ func TextOnlyModels() map[string]string {
 		"cat-jam-free":                    unverified,
 		"longcat-2.5-preview-free":        unverified,
 		"step-5-preview-free":             unverified,
+		"iceman-contributor-free":         unverified,
+		"beam-free":                       unverified,
 	}
 }
 
@@ -229,6 +231,28 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
 		},
+		// Iceman Contributor (free), a promotional opencode-go model (owner
+		// 2026-11-05: "we should use it as much as we can"). Chat
+		// completions with a tool call, probed 2026-11-05: about 1.5 s,
+		// cost 0. The opencode listing gives a 262K window, 131K output.
+		{
+			ID:                  "iceman-contributor-free",
+			DisplayName:         "Iceman Contributor (free)",
+			Provider:            "opencode-go",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 262144,
+		},
+		// Beam (free) on opencode-go, probed the same day with a two-turn
+		// tool loop: about 1 s a turn, cost 0; the listing gives a 1M window.
+		// Of OpenCode's free models only beam and iceman answer outside the
+		// OpenCode app: the Zen free tier refuses with FreeUsageLimitError.
+		{
+			ID:                  "beam-free",
+			DisplayName:         "Beam (free)",
+			Provider:            "opencode-go",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 1048576,
+		},
 
 		// Synthetic (synthetic.new), probed 2026-10-22 before any traffic:
 		// the window is 524288 tokens (512 Ki, prompt plus completion; a
@@ -346,11 +370,22 @@ func (m PoolMember) SlotWeight() int {
 // falling back to one or the other if one is unavailable": Synthetic's
 // DeepSeek 1017 and gpt-6-luna at 1:1, failing over in the normal way, so
 // a thread whose member is out of quota moves to the other.
+// Owner 2026-11-05: the free promotional iceman-contributor-free "we should
+// use it as much as we can ... run autopaper with it in a pool with gpt",
+// "in addition to crouton", and then "use all that work in a pool". The
+// default pool, which the paper and every other computer name, is the two
+// free OpenCode models that answer outside the OpenCode app (iceman and
+// beam), OpenRouter's crouton-alpha and gpt-6-luna at 1:1:1:1, failing over
+// in order; Synthetic's DeepSeek 1017 (its quota ran out on 2026-11-05) is a
+// fallback-only last member.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
+			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
+			{Provider: "opencode-go", Model: "beam-free", Weight: 1},
+			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 		SyntheticLunaPool: {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},

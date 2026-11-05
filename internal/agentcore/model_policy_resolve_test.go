@@ -53,8 +53,8 @@ func TestModelPolicyResolveReportsLunaWithSyntheticFallback(t *testing.T) {
 		t.Fatalf("texture effort = %q", got.ReasoningEffort)
 	}
 	// The management task is pinned, not pooled; it falls back to the
-	// default pool's other member (owner 2026-10-28).
-	if got := resolve("management_task"); got.Model != "gpt-6-luna" || got.Fallbacks != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
+	// default pool's other members but the free iceman (owner 2026-11-05).
+	if got := resolve("management_task"); got.Model != "gpt-6-luna" || got.Fallbacks != "openrouter/stealth/crouton-alpha,synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
 		t.Fatalf("management_task resolves to %+v", got)
 	}
 	// A pool with no failover reports none.
