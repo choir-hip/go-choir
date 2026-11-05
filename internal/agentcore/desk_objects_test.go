@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
@@ -265,5 +266,90 @@ func TestADeskReadsOnlyItsOwnPackagesObjects(t *testing.T) {
 	labels, ok := egressReadLabels(yaegikernel.ActionObjectGet, nil, raw)
 	if !ok || !labels.Has(types.OwnerPrivateLabel("app_object")) || !labels.Has(types.OwnerPrivateLabel("capture")) {
 		t.Fatalf("read labels = %v, %v", labels, ok)
+	}
+}
+
+// MA3.9: a desk past its object quota, storage quota or write rate is refused
+// and its whole cell stays uncommitted.
+func TestADeskPastItsObjectQuotaIsRefused(t *testing.T) {
+	registerObjectsPackage(t)
+	rt, _ := testRuntime(t)
+	rt.deskLimits = deskLimits{Objects: 2, Bytes: 4096, WritesPerHour: 100}
+	r, ctx := objectReduction(rt, "app:p2btest", "owner-quota")
+	body := func(n string) string { return `{"title":"` + n + `","priority":1}` }
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{put("a", objNote, "n1", body("a")), put("b", objNote, "n2", body("b"))}); err != nil {
+		t.Fatal(err)
+	}
+	// A third object is refused, and so is the cell that carried it.
+	err := r.commit(ctx, []yaegikernel.StagedIntent{put("c", objNote, "n1", body("changed")), put("d", objNote, "n3", body("c"))})
+	if !errors.Is(err, ErrDeskQuota) {
+		t.Fatalf("err = %v, want ErrDeskQuota", err)
+	}
+	raw, _ := deskCall(t, rt, "app:p2btest", "owner-quota", yaegikernel.ActionObjectGet, yaegikernel.ObjectGetPayload{Kind: objNote, ID: "n1"})
+	if strings.Contains(string(raw), "changed") {
+		t.Fatal("a refused cell committed one of its writes")
+	}
+	// A replacement at the quota is allowed; so is a Put after a Retract.
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{put("e", objNote, "n1", body("replaced"))}); err != nil {
+		t.Fatalf("replacing at the quota: %v", err)
+	}
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{retract("f", objNote, "n2"), put("g", objNote, "n3", body("c"))}); err != nil {
+		t.Fatalf("retract then put in one cell: %v", err)
+	}
+	// Another owner has its own quota.
+	other, octx := objectReduction(rt, "app:p2btest", "owner-quota-2")
+	if err := other.commit(octx, []yaegikernel.StagedIntent{put("h", objNote, "n1", body("a"))}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestADeskPastItsStorageQuotaOrWriteRateIsRefused(t *testing.T) {
+	registerObjectsPackage(t)
+	rt, _ := testRuntime(t)
+	rt.deskLimits = deskLimits{Objects: 100, Bytes: 120, WritesPerHour: 3}
+	r, ctx := objectReduction(rt, "app:p2btest", "owner-bytes")
+	small := `{"title":"a","priority":1}`
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{put("a", objNote, "n1", small)}); err != nil {
+		t.Fatal(err)
+	}
+	fat := `{"title":"a","priority":1,"meta":{"by":"` + strings.Repeat("y", 150) + `"}}`
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{put("b", objNote, "n2", fat)}); !errors.Is(err, ErrDeskQuota) || !strings.Contains(err.Error(), "bytes") {
+		t.Fatalf("storage quota: %v", err)
+	}
+	// Two writes so far counted one (the refused cell's rate is not spent);
+	// two more fit, a fourth write does not.
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{put("c", objNote, "n3", small), put("d", objNote, "n4", small)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{put("e", objNote, "n5", small)}); !errors.Is(err, ErrDeskQuota) || !strings.Contains(err.Error(), "writes") {
+		t.Fatalf("write rate: %v", err)
+	}
+}
+
+func TestADeskPastItsWakeRateIsRefused(t *testing.T) {
+	registerObjectsPackage(t)
+	rt, _ := testRuntime(t)
+	rt.deskLimits = deskLimits{WakesPerHour: 3}
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		if err := rt.admitDeskWake("app:p2btest", now); err != nil {
+			t.Fatalf("wake %d: %v", i, err)
+		}
+	}
+	if err := rt.admitDeskWake("app:p2btest", now); !errors.Is(err, ErrDeskWakeRate) {
+		t.Fatalf("a fourth wake: %v", err)
+	}
+	// Another desk and a built-in desk are not counted against it.
+	if err := rt.admitDeskWake("app:otherpkg", now); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 10; i++ {
+		if err := rt.admitDeskWake(agentprofile.Management, now); err != nil {
+			t.Fatalf("a built-in desk was bounded: %v", err)
+		}
+	}
+	// The window rolls.
+	if err := rt.admitDeskWake("app:p2btest", now.Add(deskRateWindowSpan+time.Minute)); err != nil {
+		t.Fatalf("after the hour: %v", err)
 	}
 }

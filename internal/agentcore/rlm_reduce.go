@@ -857,6 +857,9 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	if err := validateCellIntents(r.scope, intents); err != nil {
 		return err
 	}
+	if err := r.preflightObjectIntents(ctx, intents); err != nil {
+		return err
+	}
 	if rt := r.rt(); rt != nil {
 		runID := r.scope.RunID
 		if r.toolCtx != nil && r.toolCtx.AgentRunID != "" {

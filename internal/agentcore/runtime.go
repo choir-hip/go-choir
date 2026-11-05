@@ -71,6 +71,10 @@ var ErrPreGenesis = errors.New("computer is pre-genesis")
 // the store so that run handles and events survive autoputer process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
+	// deskLimits and deskRates hold the per-desk resource bounds of the
+	// package desks (desk_quota.go, MA3.9). The zero value is the defaults.
+	deskLimits deskLimits
+	deskRates  deskRateWindow
 	// leases is the lease service (leases.go, MA3.4): custodian-issued,
 	// per-task grants the reader gate and the capture frame handler consult.
 	leases *lease.Service
@@ -1379,6 +1383,10 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	}
 	metadata = ensureTrajectoryID(metadata, nil, runID)
 	role := firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentRole), metadataStringValue(metadata, runMetadataAgentProfile))
+	// A package desk's wake rate is bounded (MA3.9).
+	if err := rt.admitDeskWake(agentRecProfile, now); err != nil {
+		return nil, err
+	}
 	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
 	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
 		metadata[runMetadataModel] = model

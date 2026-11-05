@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -122,6 +123,90 @@ func (r *rlmCallReduction) objectRole() string {
 
 func objectIntent(in yaegikernel.StagedIntent) bool {
 	return in.Kind == yaegikernel.IntentObjectPut || in.Kind == yaegikernel.IntentObjectRetract
+}
+
+// preflightObjectIntents holds a cell's object writes against the desk's
+// quotas before anything commits (MA3.9): the live objects and stored bytes the
+// owner's package kinds would hold afterwards, and the writes in the rolling
+// hour. A refusal leaves the whole cell uncommitted.
+func (r *rlmCallReduction) preflightObjectIntents(ctx context.Context, intents []yaegikernel.StagedIntent) error {
+	var writes []yaegikernel.StagedIntent
+	for _, in := range intents {
+		if objectIntent(in) {
+			writes = append(writes, in)
+		}
+	}
+	if len(writes) == 0 {
+		return nil
+	}
+	role := r.objectRole()
+	if r.ledger == nil {
+		return errors.New("reduce: object writes need the store")
+	}
+	first, err := resolveDeskObject(role, writes[0].ObjectKind)
+	if err != nil {
+		return fmt.Errorf("reduce: %s %s: %w", writes[0].Kind, writes[0].LocalID, err)
+	}
+	limits := r.rt().limitsForDesks()
+	readCtx := objectgraph.WithReader(ctx, first.writer)
+	var kinds []objectgraph.ObjectKind
+	for _, reg := range objectgraph.PackageKindsOf(first.pkg) {
+		kinds = append(kinds, reg.Kind)
+	}
+	objects, bytes, err := r.ledger.DeskObjectUsage(readCtx, r.scope.OwnerID, kinds)
+	if err != nil {
+		return fmt.Errorf("reduce: read %s's object usage: %w", role, err)
+	}
+	// The cell's writes in order against what the owner holds: a Put adds an
+	// object or replaces one, a Retract frees one, and a Retract then a Put in
+	// one cell nets out.
+	held := map[string]int64{} // kind|id -> body bytes, -1 when none is live
+	size := func(in yaegikernel.StagedIntent) (int64, error) {
+		key := in.ObjectKind + "|" + in.ObjectID
+		if n, ok := held[key]; ok {
+			return n, nil
+		}
+		prior, err := r.ledger.GetPackageObject(readCtx, objectgraph.ObjectKind(in.ObjectKind), r.scope.OwnerID, in.ObjectID)
+		switch {
+		case err == nil:
+			held[key] = int64(len(prior.Body))
+		case errors.Is(err, store.ErrNotFound):
+			held[key] = -1
+		default:
+			return 0, fmt.Errorf("reduce: read %s %s: %w", in.ObjectKind, in.ObjectID, err)
+		}
+		return held[key], nil
+	}
+	for _, in := range writes {
+		key := in.ObjectKind + "|" + in.ObjectID
+		prior, err := size(in)
+		if err != nil {
+			return err
+		}
+		switch {
+		case in.Kind == yaegikernel.IntentObjectPut && prior >= 0:
+			bytes += int64(len(in.Body)) - prior
+			held[key] = int64(len(in.Body))
+		case in.Kind == yaegikernel.IntentObjectPut:
+			objects++
+			bytes += int64(len(in.Body))
+			held[key] = int64(len(in.Body))
+		case prior >= 0:
+			objects--
+			bytes -= prior
+			held[key] = -1
+		}
+	}
+	if objects > limits.Objects {
+		return fmt.Errorf("reduce: %w: desk %s would keep %d objects (at most %d); Retract some first", ErrDeskQuota, role, objects, limits.Objects)
+	}
+	if bytes > limits.Bytes {
+		return fmt.Errorf("reduce: %w: desk %s would keep %d bytes of objects (at most %d); Retract or shrink some first", ErrDeskQuota, role, bytes, limits.Bytes)
+	}
+	if held, ok := r.rt().deskRates.take("write:"+role, len(writes), limits.WritesPerHour, time.Now()); !ok {
+		return fmt.Errorf("reduce: %w: desk %s made %d object writes in the last hour (at most %d)", ErrDeskQuota, role, held, limits.WritesPerHour)
+	}
+	return nil
 }
 
 // commitObjectIntent writes one Put or Retract as the run's desk. The writer

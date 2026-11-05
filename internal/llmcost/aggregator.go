@@ -20,6 +20,11 @@ type CostEntry struct {
 	// AgentID is the agent that made the call, when available.
 	AgentID string
 
+	// Desk is the desk whose run made the call ("management", "app:notes"),
+	// from the event when it names one and otherwise filled by the caller from
+	// the run record (AttributeDesks). Empty when it cannot be told.
+	Desk string
+
 	// Provider is the LLM provider name.
 	Provider string
 
@@ -117,6 +122,7 @@ func extractFromToolLoopEvent(ev types.EventRecord, payload map[string]any) (Cos
 		RunID:             ev.RunID,
 		TrajectoryID:      ev.TrajectoryID,
 		AgentID:           ev.AgentID,
+		Desk:              strings.TrimSpace(payloadString(payload, "desk")),
 		Provider:          provider,
 		Model:             model,
 		InputTokens:       inputTokens,
@@ -127,6 +133,43 @@ func extractFromToolLoopEvent(ev types.EventRecord, payload map[string]any) (Cos
 		Cost:              cost,
 		EventID:           ev.EventID,
 	}, true
+}
+
+// SystemPackage is the package name spend by a built-in desk is grouped under.
+const SystemPackage = "system"
+
+// Unattributed groups spend whose desk could not be told.
+const Unattributed = "unattributed"
+
+// PackageOfDesk is the package a desk's spend is grouped under: the package of
+// an app desk (app:<pkg>), SystemPackage for a built-in desk.
+func PackageOfDesk(desk string) string {
+	desk = strings.TrimSpace(desk)
+	switch {
+	case desk == "":
+		return Unattributed
+	case strings.HasPrefix(desk, "app:"):
+		return strings.TrimPrefix(desk, "app:")
+	}
+	return SystemPackage
+}
+
+// AttributeDesks fills the Desk of every entry that has none from deskOf, which
+// maps a run id to the desk that ran it (the run record's profile). Entries
+// whose run is unknown keep an empty desk and aggregate as Unattributed.
+func AttributeDesks(entries []CostEntry, deskOf func(runID string) string) {
+	seen := map[string]string{}
+	for i := range entries {
+		if entries[i].Desk != "" || entries[i].RunID == "" {
+			continue
+		}
+		desk, ok := seen[entries[i].RunID]
+		if !ok {
+			desk = strings.TrimSpace(deskOf(entries[i].RunID))
+			seen[entries[i].RunID] = desk
+		}
+		entries[i].Desk = desk
+	}
 }
 
 func extractFromExecutionEvent(ev types.EventRecord, payload map[string]any) (CostEntry, bool) {
@@ -154,6 +197,7 @@ func extractFromExecutionEvent(ev types.EventRecord, payload map[string]any) (Co
 		RunID:             ev.RunID,
 		TrajectoryID:      ev.TrajectoryID,
 		AgentID:           ev.AgentID,
+		Desk:              strings.TrimSpace(payloadString(payload, "desk")),
 		Provider:          provider,
 		Model:             model,
 		InputTokens:       inputTokens,
@@ -211,6 +255,14 @@ type CostSummary struct {
 	// ByModel breaks the summary down by model identifier.
 	ByModel map[string]CostSummary `json:"by_model,omitempty"`
 
+	// ByDesk breaks the summary down by the desk whose run made the call
+	// (MA3.9): spend is attributed and watched, never capped (R8).
+	ByDesk map[string]CostSummary `json:"by_desk,omitempty"`
+
+	// ByPackage groups the same spend by package: an app desk's package, or
+	// "system" for the built-in desks.
+	ByPackage map[string]CostSummary `json:"by_package,omitempty"`
+
 	// ByRun breaks the summary down by run (cycle) ID.
 	ByRun map[string]CostSummary `json:"by_run,omitempty"`
 
@@ -229,6 +281,8 @@ func Aggregate(entries []CostEntry) CostSummary {
 	summary := CostSummary{
 		ByProvider:   make(map[string]CostSummary),
 		ByModel:      make(map[string]CostSummary),
+		ByDesk:       make(map[string]CostSummary),
+		ByPackage:    make(map[string]CostSummary),
 		ByRun:        make(map[string]CostSummary),
 		ByTrajectory: make(map[string]CostSummary),
 		ByDay:        make(map[string]CostSummary),
@@ -237,12 +291,18 @@ func Aggregate(entries []CostEntry) CostSummary {
 		summary.add(entry)
 		addToBucket(summary.ByProvider, entry.Provider, entry)
 		addToBucket(summary.ByModel, entry.Model, entry)
+		desk := entry.Desk
+		if desk == "" {
+			desk = Unattributed
+		}
+		addToBucket(summary.ByDesk, desk, entry)
+		addToBucket(summary.ByPackage, PackageOfDesk(entry.Desk), entry)
 		addToBucket(summary.ByRun, entry.RunID, entry)
 		addToBucket(summary.ByTrajectory, entry.TrajectoryID, entry)
 		addToBucket(summary.ByDay, entry.Timestamp.UTC().Format("2006-01-02"), entry)
 	}
 	summary.finishHitRate()
-	for _, bucket := range []map[string]CostSummary{summary.ByProvider, summary.ByModel, summary.ByRun, summary.ByTrajectory, summary.ByDay} {
+	for _, bucket := range []map[string]CostSummary{summary.ByProvider, summary.ByModel, summary.ByDesk, summary.ByPackage, summary.ByRun, summary.ByTrajectory, summary.ByDay} {
 		for key, sub := range bucket {
 			sub.finishHitRate()
 			bucket[key] = sub

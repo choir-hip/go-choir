@@ -1,6 +1,7 @@
 package apihandler
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strconv"
@@ -94,6 +95,7 @@ func (h *Handler) HandleCosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entries := llmcost.ExtractCostEntries(events)
+	h.attributeDesks(r.Context(), ownerID, entries)
 	summary := llmcost.Aggregate(entries)
 
 	resp := costsResponse{
@@ -119,4 +121,27 @@ func (h *Handler) HandleCosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+// maxCostRunLookups bounds the run records one /api/costs request reads to tell
+// which desk made a call; a call whose event names no desk and whose run is past
+// the bound is grouped as unattributed.
+const maxCostRunLookups = 400
+
+// attributeDesks fills each entry's desk from its run record when the event did
+// not name one (MA3.9). A run of another owner is never read: the lookup is by
+// owner and run.
+func (h *Handler) attributeDesks(ctx context.Context, ownerID string, entries []llmcost.CostEntry) {
+	lookups := 0
+	llmcost.AttributeDesks(entries, func(runID string) string {
+		if lookups >= maxCostRunLookups {
+			return ""
+		}
+		lookups++
+		rec, err := h.store.GetRunByOwner(store.WithReadConsistency(ctx, store.ReadRelaxed), ownerID, runID)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(rec.AgentProfile)
+	})
 }

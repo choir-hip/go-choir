@@ -1083,6 +1083,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		served.Note(activeLLMConfig.Provider, activeLLMConfig.Model, resp.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CachedInputTokens)
 		progressPayload, _ := json.Marshal(map[string]any{
 			"labels":               callLabels,
+			"desk":                 costDesk(ctx),
 			"iteration":            i + 1,
 			"stop_reason":          resp.StopReason,
 			"tool_calls":           len(resp.ToolCalls),
@@ -2152,4 +2153,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// costDesk names the desk whose run makes a model call, for the cost page's
+// per-desk and per-package grouping (MA3.9).
+func costDesk(ctx context.Context) string {
+	exec := ExecutionContextFrom(ctx)
+	if exec.RunRecord != nil && strings.TrimSpace(exec.RunRecord.AgentProfile) != "" {
+		return strings.TrimSpace(exec.RunRecord.AgentProfile)
+	}
+	return exec.Profile
 }

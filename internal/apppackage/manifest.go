@@ -26,6 +26,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -442,6 +443,7 @@ func (m Manifest) validateDesks() error {
 			return invalid("%s.schedules: at most %d", w, maxSchedules)
 		}
 		seen := map[string]bool{}
+		wakesPerHour := 0.0
 		for _, s := range d.Schedules {
 			if !scheduleIDRe.MatchString(s.ID) || seen[s.ID] {
 				return invalid("%s.schedules: %q is not a unique schedule id", w, s.ID)
@@ -450,6 +452,10 @@ func (m Manifest) validateDesks() error {
 			if s.EverySeconds < minScheduleSeconds || s.EverySeconds > 31*24*3600 {
 				return invalid("%s.schedules[%s].every_seconds must be from %d to 2678400", w, s.ID, minScheduleSeconds)
 			}
+			wakesPerHour += 3600 / float64(s.EverySeconds)
+		}
+		if wakesPerHour > float64(deskmanifest.MaxWakesPerHour) {
+			return invalid("%s.schedules: together they wake the desk %.0f times an hour; at most %d", w, wakesPerHour, deskmanifest.MaxWakesPerHour)
 		}
 		if err := checkAccepts(d.Accepts); err != nil {
 			return invalid("%s.accepts: %v", w, err)

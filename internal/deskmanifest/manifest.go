@@ -223,6 +223,13 @@ const (
 	IdentitySubject Identity = "subject"
 )
 
+// MaxWakesPerHour bounds how often an app desk wakes: the runtime refuses a
+// run of an app desk past it in a rolling hour, and a package manifest whose
+// schedules would wake one desk more often than this is refused at install
+// (MA3.9). It is a rate bound on a computer's own resources, not a spend
+// ceiling (R8).
+const MaxWakesPerHour = 120
+
 // ModuleUpdatesRead is the module that grants the Updates observation.
 const ModuleUpdatesRead = "updates.read"
 

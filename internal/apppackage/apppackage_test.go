@@ -511,3 +511,21 @@ func TestParseManifestOpensDefaultFlag(t *testing.T) {
 		t.Fatalf("string default: err = %v, want ErrInvalidManifest", err)
 	}
 }
+
+// MA3.9: a package whose schedules together wake one desk past the bound is
+// refused at parse.
+func TestManifestRefusesSchedulesThatWakeADeskTooOften(t *testing.T) {
+	desk := func(schedules []any) []byte {
+		return fixtureJSON(t, func(v map[string]any) {
+			v["contributes"] = map[string]any{"desks": []any{map[string]any{
+				"name": "p2btest", "prompt": "prompts/desk.md", "code": "desk/main.go", "schedules": schedules,
+			}}}
+		})
+	}
+	_, err := ParseManifest(desk([]any{
+		map[string]any{"id": "a", "every_seconds": 60}, map[string]any{"id": "b", "every_seconds": 60}, map[string]any{"id": "c", "every_seconds": 60},
+	}), OriginFirstParty)
+	if err == nil || !strings.Contains(err.Error(), "times an hour") {
+		t.Fatalf("three one-minute schedules: %v", err)
+	}
+}
