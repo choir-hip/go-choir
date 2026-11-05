@@ -82,18 +82,31 @@ function staticFacts() {
   for (const m of block.matchAll(/^ {4}id: (?:'([a-z0-9-]+)'|TEXTURE_APP_ID),/gm)) {
     ids.add(m[1] || 'texture');
   }
-  const media = readFileSync(join(frontendRoot, 'src/lib/media-utils.js'), 'utf8');
-  const rStart = media.indexOf('export const MEDIA_FILE_ROUTES = [');
-  const rEnd = rStart >= 0 ? media.indexOf('\n];', rStart) : -1;
-  const routeBlock = rEnd > rStart ? media.slice(rStart, rEnd) : '';
+  // The one file-route table is data (src/lib/file-routes.json), read as data.
   const exts = new Set();
-  for (const m of routeBlock.matchAll(/extensions:\s*\[([^\]]*)\]/g)) {
-    for (const e of m[1].matchAll(/'([a-z0-9]+)'/g)) exts.add(e[1]);
+  let table = null;
+  try {
+    table = JSON.parse(readFileSync(join(frontendRoot, 'src/lib/file-routes.json'), 'utf8'));
+  } catch (err) {
+    fail('file-routes.json', `cannot be read: ${err.message}`);
+  }
+  for (const [i, route] of (Array.isArray(table?.routes) ? table.routes : []).entries()) {
+    const where = `file-routes.json routes[${i}]`;
+    if (!route || typeof route.appId !== 'string' || typeof route.mediaType !== 'string' || !route.appId || !route.mediaType) {
+      fail(where, 'needs a non-empty appId and mediaType');
+      continue;
+    }
+    if (!Array.isArray(route.extensions) || route.extensions.length === 0 || !route.extensions.every((e) => /^[a-z0-9]+$/.test(e))) {
+      fail(where, 'extensions must be a non-empty array of lowercase extensions without a dot');
+      continue;
+    }
+    if (route.default !== undefined && typeof route.default !== 'boolean') fail(where, 'default must be a boolean');
+    if (route.default !== false) route.extensions.forEach((e) => exts.add(e));
   }
   if (ids.size < MIN_STATIC_IDS) {
     fail('registry.ts', `parsed ${ids.size} static app ids (floor ${MIN_STATIC_IDS}); the layout changed, so the clash check cannot be trusted`);
   }
-  if (exts.size === 0) fail('media-utils.js', 'parsed no static file routes; the clash check cannot be trusted');
+  if (exts.size === 0) fail('file-routes.json', 'holds no click-to-open routes; the clash check cannot be trusted');
   return { ids, exts };
 }
 
@@ -258,7 +271,7 @@ function main() {
         }
         if (ownExts.has(e)) fail(where, `extension "${e}" is listed twice`);
         ownExts.add(e);
-        if (staticExts.has(e)) fail(where, `extension "${e}" is still routed by the static MEDIA_FILE_ROUTES (delete that row in the same change)`);
+        if (staticExts.has(e)) fail(where, `extension "${e}" is still routed by the static file-routes.json (delete that row in the same change)`);
         else if (claimedExts.has(e) && claimedExts.get(e) !== name) fail(where, `extension "${e}" is already opened by package "${claimedExts.get(e)}"`);
         claimedExts.set(e, claimedExts.get(e) || name);
       }

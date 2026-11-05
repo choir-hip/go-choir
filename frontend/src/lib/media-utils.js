@@ -1,6 +1,7 @@
 import { fetchWithRenewal, AuthRequiredError } from './auth.js';
 import { currentDeviceId } from './live-events.js';
 import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
+import fileRoutes from './file-routes.json';
 
 // PDFs and EPUBs route to the reader package (src/packages/reader): the
 // registry's PACKAGE_MEDIA_ROUTES carries those two extensions from that
@@ -8,12 +9,11 @@ import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
 // for them, so this table does not list them. The dedicated PDF and EPUB
 // windows stay in the launcher under their own ids, but no file route sends
 // a document to them.
-export const MEDIA_FILE_ROUTES = [
-  { appId: 'audio', mediaType: 'audio/mpeg', extensions: ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'wav', 'flac', 'opus'] },
-  { appId: 'video', mediaType: 'video/mp4', extensions: ['mp4', 'm4v', 'webm', 'mov', 'avi', 'mkv'] },
-  { appId: 'slides', mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extensions: ['pptx', 'html', 'htm'] },
-  { appId: 'calendar', mediaType: 'text/calendar', extensions: ['ics'] },
-];
+// The static routes are the shell's one file-route table (file-routes.json);
+// the ones that open on a click are these, the rest are Open with only.
+export const MEDIA_FILE_ROUTES = fileRoutes.routes
+  .filter((route) => route.default !== false)
+  .map(({ appId, mediaType, extensions }) => ({ appId, mediaType, extensions }));
 
 // The shell's upload, offered to packages through app-sdk.ts (the package
 // boundary refuses any other import): one file to top-level Files, by the same

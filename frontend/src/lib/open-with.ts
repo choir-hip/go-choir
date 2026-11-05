@@ -8,6 +8,7 @@
 import { PACKAGE_MEDIA_ROUTES, getAppDefinition, type ChoirAppDefinition } from './apps/registry';
 import type { PackageMediaRoute } from './apps/packages';
 import { MEDIA_FILE_ROUTES, mediaRouteForFileName } from './media-utils.js';
+import fileRoutes from './file-routes.json';
 
 export type FileOpener = {
   appId: string;
@@ -21,12 +22,11 @@ export type FileOpener = {
 
 export const TEXT_OPENER_APP_ID = 'texture';
 
-// Built-in apps that read a format some other app opens by default.
-const STATIC_ALSO_OPENS: { appId: string; mediaType: string; extensions: string[] }[] = [
-  { appId: 'pdf', mediaType: 'application/pdf', extensions: ['pdf'] },
-  { appId: 'epub', mediaType: 'application/epub+zip', extensions: ['epub'] },
-  { appId: 'slides', mediaType: 'application/pdf', extensions: ['pdf'] },
-];
+// Built-in apps that read a format some other app opens by default: the table's
+// default-false rows (file-routes.json).
+const STATIC_ALSO_OPENS: { appId: string; mediaType: string; extensions: string[] }[] = fileRoutes.routes
+  .filter((route) => route.default === false)
+  .map(({ appId, mediaType, extensions }) => ({ appId, mediaType, extensions }));
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'rst', 'org', 'texture',

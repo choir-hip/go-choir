@@ -1,0 +1,816 @@
+{
+ "byExtension": {
+  "Mp3": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "PDF": [
+   {
+    "appId": "reader",
+    "name": "Reader",
+    "icon": "📖",
+    "mediaType": "application/pdf",
+    "isDefault": true,
+    "via": "media"
+   },
+   {
+    "appId": "pdf",
+    "name": "PDF",
+    "icon": "📄",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   },
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "aac": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "avi": [
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "avif": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "bin": [],
+  "bmp": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "epub": [
+   {
+    "appId": "reader",
+    "name": "Reader",
+    "icon": "📖",
+    "mediaType": "application/epub+zip",
+    "isDefault": true,
+    "via": "media"
+   },
+   {
+    "appId": "epub",
+    "name": "EPUB",
+    "icon": "📚",
+    "mediaType": "application/epub+zip",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "flac": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "gif": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "go": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   }
+  ],
+  "htm": [
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "html": [
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "ics": [
+   {
+    "appId": "calendar",
+    "name": "Calendar",
+    "icon": "📅",
+    "mediaType": "text/calendar",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "jpeg": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "jpg": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "json": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   }
+  ],
+  "m4a": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "m4v": [
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "md": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   }
+  ],
+  "mkv": [
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "mov": [
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "mp3": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "mp4": [
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "oga": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "ogg": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "opus": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "pdf": [
+   {
+    "appId": "reader",
+    "name": "Reader",
+    "icon": "📖",
+    "mediaType": "application/pdf",
+    "isDefault": true,
+    "via": "media"
+   },
+   {
+    "appId": "pdf",
+    "name": "PDF",
+    "icon": "📄",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   },
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "png": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "pptx": [
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "svg": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/svg+xml",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "txt": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   }
+  ],
+  "wav": [
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "webm": [
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "webp": [
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": true,
+    "via": "media"
+   }
+  ],
+  "xyz": [],
+  "": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   }
+  ]
+ },
+ "byMediaType": {
+  "application/epub+zip": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "epub",
+    "name": "EPUB",
+    "icon": "📚",
+    "mediaType": "application/epub+zip",
+    "isDefault": false,
+    "via": "media"
+   },
+   {
+    "appId": "reader",
+    "name": "Reader",
+    "icon": "📖",
+    "mediaType": "application/epub+zip",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "application/pdf": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "pdf",
+    "name": "PDF",
+    "icon": "📄",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   },
+   {
+    "appId": "reader",
+    "name": "Reader",
+    "icon": "📖",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   },
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/pdf",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "slides",
+    "name": "Slides",
+    "icon": "🖥️",
+    "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "audio/mpeg": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "audio",
+    "name": "Audio",
+    "icon": "🎧",
+    "mediaType": "audio/mpeg",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "image/png": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "image",
+    "name": "Image",
+    "icon": "🖼️",
+    "mediaType": "image/png",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "text/calendar": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "calendar",
+    "name": "Calendar",
+    "icon": "📅",
+    "mediaType": "text/calendar",
+    "isDefault": false,
+    "via": "media"
+   }
+  ],
+  "video/mp4": [
+   {
+    "appId": "texture",
+    "name": "Texture",
+    "icon": "📝",
+    "mediaType": "text/plain",
+    "isDefault": true,
+    "via": "text"
+   },
+   {
+    "appId": "video",
+    "name": "Video",
+    "icon": "🎬",
+    "mediaType": "video/mp4",
+    "isDefault": false,
+    "via": "media"
+   }
+  ]
+ },
+ "route": {
+  "Mp3": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "PDF": {
+   "appId": "reader",
+   "mediaType": "application/pdf"
+  },
+  "aac": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "avi": {
+   "appId": "video",
+   "mediaType": "video/mp4"
+  },
+  "avif": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "bin": null,
+  "bmp": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "epub": {
+   "appId": "reader",
+   "mediaType": "application/epub+zip"
+  },
+  "flac": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "gif": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "go": null,
+  "htm": {
+   "appId": "slides",
+   "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  },
+  "html": {
+   "appId": "slides",
+   "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  },
+  "ics": {
+   "appId": "calendar",
+   "mediaType": "text/calendar"
+  },
+  "jpeg": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "jpg": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "json": null,
+  "m4a": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "m4v": {
+   "appId": "video",
+   "mediaType": "video/mp4"
+  },
+  "md": null,
+  "mkv": {
+   "appId": "video",
+   "mediaType": "video/mp4"
+  },
+  "mov": {
+   "appId": "video",
+   "mediaType": "video/mp4"
+  },
+  "mp3": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "mp4": {
+   "appId": "video",
+   "mediaType": "video/mp4"
+  },
+  "oga": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "ogg": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "opus": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "pdf": {
+   "appId": "reader",
+   "mediaType": "application/pdf"
+  },
+  "png": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "pptx": {
+   "appId": "slides",
+   "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  },
+  "svg": {
+   "appId": "image",
+   "mediaType": "image/svg+xml"
+  },
+  "txt": null,
+  "wav": {
+   "appId": "audio",
+   "mediaType": "audio/mpeg"
+  },
+  "webm": {
+   "appId": "video",
+   "mediaType": "video/mp4"
+  },
+  "webp": {
+   "appId": "image",
+   "mediaType": "image/png"
+  },
+  "xyz": null
+ },
+ "extensionsOpenedBy": {
+  "audio": [
+   "aac",
+   "flac",
+   "m4a",
+   "mp3",
+   "oga",
+   "ogg",
+   "opus",
+   "wav"
+  ],
+  "calendar": [
+   "ics"
+  ],
+  "epub": [
+   "epub"
+  ],
+  "files": [],
+  "image": [
+   "avif",
+   "bmp",
+   "gif",
+   "jpeg",
+   "jpg",
+   "png",
+   "svg",
+   "webp"
+  ],
+  "pdf": [
+   "pdf"
+  ],
+  "reader": [
+   "epub",
+   "pdf"
+  ],
+  "slides": [
+   "htm",
+   "html",
+   "pdf",
+   "pptx"
+  ],
+  "texture": [],
+  "video": [
+   "avi",
+   "m4v",
+   "mkv",
+   "mov",
+   "mp4",
+   "webm"
+  ]
+ },
+ "canOpenWith": {
+  "audio": false,
+  "calendar": false,
+  "epub": false,
+  "files": false,
+  "image": false,
+  "pdf": true,
+  "reader": true,
+  "slides": true,
+  "texture": false,
+  "video": false
+ },
+ "mediaFileRoutes": [
+  {
+   "appId": "audio",
+   "mediaType": "audio/mpeg",
+   "extensions": [
+    "mp3",
+    "m4a",
+    "aac",
+    "ogg",
+    "oga",
+    "wav",
+    "flac",
+    "opus"
+   ]
+  },
+  {
+   "appId": "video",
+   "mediaType": "video/mp4",
+   "extensions": [
+    "mp4",
+    "m4v",
+    "webm",
+    "mov",
+    "avi",
+    "mkv"
+   ]
+  },
+  {
+   "appId": "slides",
+   "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+   "extensions": [
+    "pptx",
+    "html",
+    "htm"
+   ]
+  },
+  {
+   "appId": "calendar",
+   "mediaType": "text/calendar",
+   "extensions": [
+    "ics"
+   ]
+  }
+ ],
+ "packageRoutes": [
+  {
+   "appId": "image",
+   "mediaType": "image/png",
+   "extensions": [
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "avif",
+    "bmp",
+    "svg"
+   ],
+   "default": true
+  },
+  {
+   "appId": "reader",
+   "mediaType": "application/pdf",
+   "extensions": [
+    "pdf"
+   ],
+   "default": true
+  },
+  {
+   "appId": "reader",
+   "mediaType": "application/epub+zip",
+   "extensions": [
+    "epub"
+   ],
+   "default": true
+  }
+ ]
+}

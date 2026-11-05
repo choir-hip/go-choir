@@ -44,6 +44,7 @@
   import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
   import { bindShellHost } from './shell-services';
+  import fileRoutes from './file-routes.json';
   import { openFileDocument } from './texture.js';
   import {
     windows,
@@ -1421,7 +1422,8 @@
     }
   }
 
-  const MEDIA_APP_IDS = new Set(['image', 'audio', 'video', 'pdf', 'epub', 'slides', 'calendar', ...PACKAGE_MEDIA_ROUTES.map((route) => route.appId)]);
+  // Every app a file route names: the static table (file-routes.json) and the installed packages' `opens`.
+  const isMediaAppId = (appId) => [...fileRoutes.routes, ...PACKAGE_MEDIA_ROUTES].some((route) => route.appId === appId);
 
   function handleOpenMediaFile(event) {
     if (!desktopReady) {
@@ -1435,7 +1437,7 @@
     // 'reader'), so every app id the package routes name is accepted with the
     // static media apps, and so is any app Open with lists for this file.
     const fileName = detail.fileName || (detail.pathSegments || []).slice(-1)[0] || '';
-    if (!MEDIA_APP_IDS.has(appId) && !(fileName && canOpenWith(appId, fileName))) {
+    if (!isMediaAppId(appId) && !(fileName && canOpenWith(appId, fileName))) {
       showToast(`Could not open ${detail.fileName || 'media file'}`);
       return;
     }
