@@ -120,6 +120,10 @@ type Store struct {
 	// the table check and before the slot is read (graph_home.go).
 	slotClaimHook func()
 	textureRevMu  sync.Mutex
+	// textureSearchQueries counts the queries each texture.search lease has
+	// served (the rate bound, texture.go).
+	textureSearchMu      sync.Mutex
+	textureSearchQueries map[string]int
 	// closeMu serializes Close and Reopen: a second Close waits for the
 	// first. closedOK (under closeMu) is set once a Close has closed the
 	// pools, and cleared by Reopen.

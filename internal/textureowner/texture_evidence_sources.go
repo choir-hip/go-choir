@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -124,6 +125,32 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 	return entity
 }
 
+type carrierDeskKey struct{}
+
+// withCarrierDesk records, for the refs resolved from one commitment record,
+// the provenance desk the REDUCER stamped on it (stampRequestRecord). Never
+// pass a cell-authored field: the stamp is the only authority.
+func withCarrierDesk(ctx context.Context, provenanceDesk string) context.Context {
+	return context.WithValue(ctx, carrierDeskKey{}, strings.TrimSpace(provenanceDesk))
+}
+
+// carrierIsCustodian reports whether the record whose refs are being resolved
+// was stamped by the custodian desk of kind. The stamp is an agent id
+// ("research:<id>") or a desk name; its desk part decides.
+func carrierIsCustodian(ctx context.Context, kind objectgraph.ObjectKind) bool {
+	carrier, _ := ctx.Value(carrierDeskKey{}).(string)
+	if carrier == "" {
+		return false
+	}
+	deskName, _, _ := strings.Cut(carrier, ":")
+	w, ok := objectgraph.DeskWriter(deskName)
+	if !ok {
+		return false
+	}
+	custodian, ok := objectgraph.CustodianOf(kind)
+	return ok && custodian == w
+}
+
 func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref string) textureSourceEntity {
 	ctx = asTextureReader(ctx)
 	key, value := splitTypedEvidenceRef(ref)
@@ -154,6 +181,13 @@ func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref 
 	case "evidence", "evidence_id":
 		if rt == nil || rt.Store == nil {
 			return textureSourceEntity{}
+		}
+		// Plan 8.1 rule (b): research evidence carried to Texture in a record
+		// the evidence's own custodian stamped is carried data, read as that
+		// custodian and not counted. Any other carrier's ref (a record some
+		// other desk wrote) stays Texture's read and is counted.
+		if carrierIsCustodian(ctx, "choir.agent_evidence") {
+			ctx = objectgraph.WithCustodianReader(ctx, "choir.agent_evidence")
 		}
 		rec, err := rt.Store.GetEvidence(ctx, value, ownerID)
 		if err != nil {
@@ -722,7 +756,7 @@ func (rt *Handler) evidenceSourceEntitiesFromCommitmentRecords(ctx context.Conte
 		}
 		syntheticUpdate := types.CoagentSourcePacket{OwnerID: ownerID, AgentID: rec.Provenance.AgentID}
 		appendSource := func(source types.CoagentPacketSource) {
-			entity := sourceEntityFromCoagentPacketSource(ctx, rt, ownerID, source, syntheticUpdate)
+			entity := sourceEntityFromCoagentPacketSource(withCarrierDesk(ctx, rec.Provenance.Desk), rt, ownerID, source, syntheticUpdate)
 			key := sourceEntityKey(entity)
 			if entity.EntityID == "" || key == "" {
 				rej := coagentSourceRejectionFromPacketSource(syntheticUpdate, source)

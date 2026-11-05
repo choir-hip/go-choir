@@ -347,6 +347,12 @@ const (
 	// document revisions.
 	EventTextureDecisionRecorded EventKind = "texture.decision.recorded"
 
+	// EventTextureSearchQueried is emitted for every query the Texture
+	// custodian's guarded search serves under a texture.search lease (MA3.7c).
+	// The payload names the lease, the run, the query and the count of hits,
+	// never a snippet or a body.
+	EventTextureSearchQueried EventKind = "texture.search.queried"
+
 	// EventDesktopDriverLeaseUpdated is emitted when a browser session becomes
 	// the current interaction driver for a desktop.
 	EventDesktopDriverLeaseUpdated EventKind = "desktop.driver_lease.updated"

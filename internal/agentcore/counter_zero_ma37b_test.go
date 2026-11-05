@@ -3,6 +3,8 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -29,20 +31,14 @@ import (
 //     (they write and read through the store from test code); the oracles
 //     (UndeclaredReads, UndeclaredWrites) skip a stack with a test frame and
 //     see the product's call sites, so those are asserted empty instead.
-//   - The research corpus search (choir.SearchWireCorpus) is the one named
-//     residual: it lists Texture documents and revisions (X1, a texture.search
-//     lease held by a research child, MA4.6) and reads world events and capture
-//     labels (X15 and E4, shared world content that the reader gate does not
-//     yet admit to research). They are counted, not blocked, and the enforce
-//     flip must close them first.
-//   - Nothing else is excused. A key landing here is a crossing the next slice
-//     (the enforce flip) would block.
-var counterZeroJustified = map[string]string{
-	"choir.texture_document|desk:research|wrong_reader": "X1: corpus search lists Texture documents; the texture.search lease (MA4.6)",
-	"choir.texture_revision|desk:research|wrong_reader": "X1: corpus search reads a story's head revision; the texture.search lease (MA4.6)",
-	"choir.world_event|desk:research|wrong_reader":      "X15/E4: world events are shared world content; admit research to the kind before the flip",
-	"choir.capture_label|desk:research|wrong_reader":    "X15/E4: capture labels ride the corpus search; admit research before the flip",
-}
+//   - Nothing else is excused. A key landing here is a crossing the enforce
+//     flip would block. MA3.7c closed the corpus search: world events and
+//     capture labels are admitted to research (E4, reader table), and the
+//     Texture part reads under a texture.search lease the research run holds.
+//   - The one residual a representative day may show is content_item (a
+//     desk-authored content ref Texture resolves, counted as Texture's read; a
+//     content lease replaces it). It does not occur in this day.
+var counterZeroJustified = map[string]string{}
 
 func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
 	f := newDelegationFixture(t, "owner-counter-zero")
@@ -58,6 +54,12 @@ func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
 	objectgraph.ResetReaderGateCounts()
 	objectgraph.ResetUndeclaredWrites()
 	objectgraph.ResetUndeclaredReads()
+	// MA3.7c: attribute a read to its direct caller, so the product paths the
+	// day drives synchronously are seen (d@e showed texture_document and
+	// texture_revision reads with no reader that the exempt-any-test-frame
+	// oracle hid).
+	stopReads := objectgraph.TrackUndeclaredReadsFromProduct()
+	t.Cleanup(stopReads)
 	disclosure.ResetCounts()
 	t.Cleanup(disclosure.ResetCounts)
 
@@ -109,6 +111,7 @@ func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
 		// The run's execution context carries its desk as the reader
 		// (runtime.go), which an in-process cell must do as the run does.
 		cellCtx := withDeskReader(withDeskWriter(ctx, exec.Profile), exec.Profile)
+		cellCtx = objectgraph.WithLeases(cellCtx, rt.leaseAuthority(), exec.RunID)
 		out, err := tool.Func(toolregistry.WithExecutionContext(cellCtx, exec), payload)
 		if err != nil {
 			out += err.Error()
@@ -148,6 +151,11 @@ choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","
 	rexec := toolregistry.ExecutionContext{RunID: rrec.RunID, AgentID: rrec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: f.computer,
 		Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rrec}
 	rtool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
+	// The research run holds the texture.search lease (as executeWithToolLoop
+	// issues it), so its corpus search reads Texture as the custodian.
+	if _, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rrec.RunID, rrec.AgentID); err != nil {
+		t.Fatal(err)
+	}
 	out = runCell(rtool, rexec, `rs := choir.Records()
 fmt.Println(len(rs))
 r, err := choir.SearchWireCorpus("harbor", 5)
@@ -156,6 +164,26 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	got, err := s.ListInboxRecords(ctx, owner, f.computer, texture, 0, 10)
 	if err != nil || len(got) == 0 {
 		t.Fatalf("research did not report to Texture: %+v, %v\n%s", got, err, out)
+	}
+
+	// MA3.7c: the host paths a real Texture and research trajectory takes
+	// outside any desk context. d@e counted texture_document and
+	// texture_revision reads with no reader there; each is driven here with a
+	// bare context and must read as its custodian (or the owner on a route).
+	host := context.Background()
+	if _, _, _, err := rt.textureRunRevision(host, &trec, ""); err != nil {
+		t.Fatalf("texture frame read: %v", err)
+	}
+	if _, _, _, err := rt.rebaseRoot(host, owner, f.computer); err != nil {
+		t.Fatalf("rebase root: %v", err)
+	}
+	if _, err := rt.calibrationSnapshotFor(host, owner, f.computer, 0); err != nil {
+		t.Fatalf("calibration snapshot: %v", err)
+	}
+	for _, method := range []string{http.MethodGet} {
+		req := httptest.NewRequest(method, "/api/computer-settings", nil)
+		req.Header.Set("X-Authenticated-User", owner)
+		(&APIHandler{rt: rt}).HandleComputerSettings(httptest.NewRecorder(), req)
 	}
 
 	// The gates.

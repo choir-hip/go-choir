@@ -126,3 +126,11 @@ func (rt *Runtime) requestLeaseEgress(ctx context.Context, deskRole string, exec
 	}
 	return json.Marshal(granted)
 }
+
+// runHoldsTextureSearch reports whether the run's desk is the one the grant
+// table names for texture.search (research until MA4.6), by the registry's
+// writer rather than a desk name.
+func runHoldsTextureSearch(rec *types.RunRecord) bool {
+	w, ok := objectgraph.DeskWriter(agentProfileForRun(rec))
+	return ok && lease.GrantHeldBy(lease.GrantTextureSearch, w)
+}

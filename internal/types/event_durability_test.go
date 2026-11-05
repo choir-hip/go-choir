@@ -130,8 +130,10 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	// experiment's read mark (C6), rare, and a lost one reads as no read.
 	// And disclosure.decision (acknowledged, 2026-11-05, MA3.6): an owner tap
 	// and its answer are tape facts; a lost one would re-ask or lose consent.
-	if n := len(eventDurability); n != 47 {
-		t.Fatalf("eventDurability has %d entries, want 47 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read and disclosure.decision)", n)
+	// And texture.search.queried (acknowledged, 2026-11-05, MA3.7c): each query
+	// of a texture.search lease is a visible tape fact.
+	if n := len(eventDurability); n != 48 {
+		t.Fatalf("eventDurability has %d entries, want 48 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision and texture.search.queried)", n)
 	}
 }
 

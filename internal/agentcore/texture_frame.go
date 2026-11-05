@@ -74,6 +74,10 @@ func (rt *Runtime) textureRunRevision(ctx context.Context, rec *types.RunRecord,
 		return types.Document{}, types.Revision{}, nil, fmt.Errorf("texture frame: run %s has no document", rec.RunID)
 	}
 	ownerID, computerID := strings.TrimSpace(rec.OwnerID), strings.TrimSpace(rec.ComputerID)
+	// MA3.7c: the host builds a Texture run's frame on Texture's behalf; the
+	// document and its revisions are read as their custodian, where the call
+	// carries no reader of its own.
+	ctx = withKindReader(ctx, "choir.texture_document")
 	var doc types.Document
 	var err error
 	if subject, subErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, rec.AgentID); subErr == nil && subject.LifecycleVersion > 0 {

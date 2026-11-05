@@ -590,6 +590,9 @@ func (rt *Runtime) rebaseTextureTakesRun(ctx context.Context, ownerID, computerI
 // and document, and whether it can take a root run now (its trajectory is
 // live, has no cancellation intent, and its standing item is open).
 func (rt *Runtime) rebaseRoot(ctx context.Context, ownerID, computerID string) (inbox, docID string, live bool, err error) {
+	// MA3.7c: the root marker and its document are Texture's; the host
+	// resolves them on its behalf.
+	ctx = withKindReader(ctx, "choir.texture_root")
 	marker, err := rt.store.GetTextureRoot(ctx, ownerID, computerID)
 	if errors.Is(err, store.ErrNotFound) {
 		return "", "", false, nil

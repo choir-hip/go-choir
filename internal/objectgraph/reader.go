@@ -103,6 +103,11 @@ var (
 	readerGateCounts = map[string]uint64{}
 	undeclaredReads  = map[string]uint64{}
 	trackUndeclaredR atomic.Bool
+	// strictUndeclaredR makes the read oracle exempt only a read whose first
+	// caller outside the store and the graph is a test file. The default
+	// oracle exempts any stack holding a test frame, which hides every
+	// product path a test drives synchronously (a cell turn, a handler call).
+	strictUndeclaredR atomic.Bool
 )
 
 // ReaderGateCounts returns the violations seen, keyed
@@ -135,6 +140,16 @@ func ResetReaderGateCounts() {
 func TrackUndeclaredReads() (stop func()) {
 	trackUndeclaredR.Store(true)
 	return func() { trackUndeclaredR.Store(false) }
+}
+
+// TrackUndeclaredReadsFromProduct is TrackUndeclaredReads with the strict
+// attribution: a read is a fixture's only when its direct caller is a test
+// file, so a product path that a test drives (a Texture turn, a research run)
+// is tallied when it reads with no declared reader (MA3.7c).
+func TrackUndeclaredReadsFromProduct() (stop func()) {
+	trackUndeclaredR.Store(true)
+	strictUndeclaredR.Store(true)
+	return func() { trackUndeclaredR.Store(false); strictUndeclaredR.Store(false) }
 }
 
 // UndeclaredReads returns the tally, keyed "kind <- caller function (file:line)".
@@ -170,6 +185,14 @@ var supplementalReaders = map[Writer][]Writer{
 // kinds, so the crossing into Texture's documents stays visible.
 var supplementalKindReaders = map[ObjectKind][]Writer{
 	"choir.story_index": {WriterManagement},
+	// E4 (MA3.7c): world events, their memberships and capture labels are
+	// shared world content. Management keeps them (the intake loops write
+	// them); research and Texture read them, as the corpus search and the
+	// story prompts do. The owner-private labelling of a capture's body is
+	// the capture frame handler's, not these index kinds'.
+	"choir.world_event":      {WriterResearch, WriterTexture},
+	"choir.event_membership": {WriterResearch, WriterTexture},
+	"choir.capture_label":    {WriterResearch, WriterTexture},
 }
 
 // readerAdmits reports whether a read declared as (declared, ok) may read a
@@ -303,7 +326,7 @@ func recordReaderViolation(kind ObjectKind, declared Writer, ok bool, reason str
 }
 
 func recordUndeclaredRead(kind ObjectKind) {
-	key, ok := undeclaredCaller(kind, true)
+	key, ok := undeclaredCaller(kind, !strictUndeclaredR.Load())
 	if !ok {
 		return
 	}

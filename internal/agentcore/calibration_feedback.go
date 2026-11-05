@@ -510,11 +510,13 @@ func (rt *Runtime) calibrationSnapshotFor(ctx context.Context, ownerID, computer
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list records: %w", err)
 	}
-	checks, err := rt.store.ListCitationChecks(ctx, ownerID, computerID, calibrationListLimit)
+	// MA3.7c: the calibration snapshot is host bookkeeping over Texture's
+	// citation checks and support verdicts, read as their custodian.
+	checks, err := rt.store.ListCitationChecks(withKindReader(ctx, "choir.citation_check"), ownerID, computerID, calibrationListLimit)
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list citation checks: %w", err)
 	}
-	verdicts, err := rt.store.ListSupportVerdicts(ctx, ownerID, computerID, calibrationListLimit)
+	verdicts, err := rt.store.ListSupportVerdicts(withKindReader(ctx, "choir.support_verdict"), ownerID, computerID, calibrationListLimit)
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list support verdicts: %w", err)
 	}

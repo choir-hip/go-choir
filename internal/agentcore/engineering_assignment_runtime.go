@@ -295,7 +295,9 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		return engineeringCastPlan{}, err
 	}
 	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
-	document, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	// MA3.7c: the cast's sender is Texture; the reducer reads its document on
+	// Texture's behalf, where the call carries no reader.
+	document, err := rt.store.GetLifecycleDocument(withKindReader(ctx, "choir.texture_document"), ownerID, computerID, docID)
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: document %s: %w", docID, err)
 	}
@@ -492,7 +494,10 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, plan enginee
 	if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	result, err := rt.store.OpenEngineeringAssignment(ctx, open)
+	// MA3.7c: the open composes Texture's story document with management's
+	// rows (X19); the reads inside it carry the custodian of the document
+	// where the call declares no actor.
+	result, err := rt.store.OpenEngineeringAssignment(withKindReader(ctx, "choir.texture_document"), open)
 	if err == nil {
 		rt.recordRematerializedCastWarning(ctx, plan.Binding.OwnerID, plan.Binding.ComputerID, plan.SourceWarning)
 		// The round's predictions, from the Cast just committed; a failure

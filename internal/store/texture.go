@@ -1949,3 +1949,121 @@ func (s *Store) aliasComputerID() string {
 	}
 	return strings.TrimSpace(s.projectionTape.computerID)
 }
+
+// The Texture custodian's guarded search (MA3.7c, plan 8.6, X1).
+//
+// SearchDocuments reads every owner Texture document and revision. A desk that
+// is not Texture does not call it; it calls TextureSearchUnderLease, which
+// serves only a run that holds a texture.search lease, reads as the Texture
+// custodian for that one search and returns ranked refs with bounded snippets
+// labelled owner_private:texture. It never returns a document body. Each query
+// is recorded as an EventTextureSearchQueried event (the existing event tape,
+// visible in the owner's trace), naming the lease and the query.
+const (
+	// TextureSearchMaxResults bounds the hits of one query.
+	TextureSearchMaxResults = 10
+	// TextureSearchDefaultResults is the count when the caller names none.
+	TextureSearchDefaultResults = 5
+	// TextureSearchSnippetRunes bounds a snippet.
+	TextureSearchSnippetRunes = 240
+	// TextureSearchMaxQueriesPerLease is the rate bound: queries one lease
+	// serves before it must be asked for again (a lease is per run).
+	TextureSearchMaxQueriesPerLease = 40
+)
+
+// ErrTextureSearchNoLease refuses a search by a run that holds no
+// texture.search lease.
+var ErrTextureSearchNoLease = errors.New("store: texture.search needs a lease held by this run")
+
+// ErrTextureSearchRate refuses a search past the lease's query bound.
+var ErrTextureSearchRate = errors.New("store: texture.search query bound reached for this lease")
+
+// TextureSearchHit is a ranked ref with a bounded, labelled snippet.
+type TextureSearchHit struct {
+	Ref       string    `json:"ref"`
+	Title     string    `json:"title"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Snippet   string    `json:"snippet,omitempty"`
+	Label     string    `json:"label"`
+}
+
+// TextureSearchUnderLease runs the guarded search for the run ctx carries. The
+// holder is the declared reader of ctx (the run's desk, set by trusted code).
+// This function is the custodian's side of the lease.
+func (s *Store) TextureSearchUnderLease(ctx context.Context, ownerID, query string, limit int) ([]TextureSearchHit, error) {
+	holder, ok := objectgraph.ReaderFrom(ctx)
+	if !ok {
+		return nil, ErrTextureSearchNoLease
+	}
+	leaseID, ok := objectgraph.LeaseAdmitsGrant(ctx, holder, "texture.search")
+	if !ok {
+		return nil, ErrTextureSearchNoLease
+	}
+	if n := s.textureSearchCount(leaseID); n > TextureSearchMaxQueriesPerLease {
+		return nil, ErrTextureSearchRate
+	}
+	if limit <= 0 {
+		limit = TextureSearchDefaultResults
+	}
+	if limit > TextureSearchMaxResults {
+		limit = TextureSearchMaxResults
+	}
+	custodian, ok := objectgraph.CustodianOf(ogKindTexDoc)
+	if !ok {
+		return nil, fmt.Errorf("store: texture custodian is not registered")
+	}
+	// The lease is valid: this search reads as Texture, and no wider.
+	results, err := s.SearchDocuments(objectgraph.WithReader(ctx, custodian), query, ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	hits := make([]TextureSearchHit, 0, len(results))
+	for _, r := range results {
+		hits = append(hits, TextureSearchHit{
+			Ref: r.DocID, Title: r.Title, UpdatedAt: r.UpdatedAt,
+			Snippet: boundSnippet(r.Snippet, TextureSearchSnippetRunes),
+			Label:   textureSearchLabel(),
+		})
+	}
+	q := strings.TrimSpace(query)
+	if r := []rune(q); len(r) > 200 {
+		q = string(r[:200])
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"lease_id": leaseID, "run_id": objectgraph.LeaseRunID(ctx), "query": q, "hits": len(hits),
+		"label": textureSearchLabel(),
+	})
+	exec := types.EventRecord{
+		EventID: fmt.Sprintf("texture-search-%s-%d", leaseID, time.Now().UnixNano()), Timestamp: time.Now().UTC(),
+		RunID: objectgraph.LeaseRunID(ctx), OwnerID: ownerID, Kind: types.EventTextureSearchQueried, Payload: payload,
+	}
+	if err := s.AppendEvent(objectgraph.WithWriter(ctx, objectgraph.WriterKernel), &exec); err != nil {
+		return nil, fmt.Errorf("store: record the texture.search query: %w", err)
+	}
+	return hits, nil
+}
+
+func (s *Store) textureSearchCount(leaseID string) int {
+	s.textureSearchMu.Lock()
+	defer s.textureSearchMu.Unlock()
+	if s.textureSearchQueries == nil {
+		s.textureSearchQueries = map[string]int{}
+	}
+	s.textureSearchQueries[leaseID]++
+	return s.textureSearchQueries[leaseID]
+}
+
+func boundSnippet(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// textureSearchLabel is the owner-private label of every snippet, kinded by the
+// Texture custodian's own name.
+func textureSearchLabel() string {
+	return types.OwnerPrivateLabel(strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"))
+}

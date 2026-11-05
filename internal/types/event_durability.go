@@ -106,6 +106,7 @@ var eventDurability = map[EventKind]EventDurability{
 	EventTextureAgentRevisionFailed:     DurabilityAcknowledged,
 	EventTextureDocumentRevisionCreated: DurabilityAcknowledged,
 	EventTextureDecisionRecorded:        DurabilityAcknowledged,
+	EventTextureSearchQueried:           DurabilityAcknowledged,
 
 	// Acknowledged: product state events (owner acts), low volume.
 	EventDesktopDriverLeaseUpdated:     DurabilityAcknowledged,

@@ -105,6 +105,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	// MA3.7c: an owner-authenticated route reads as the owner (E1).
+	r = r.WithContext(objectgraph.WithReaderIfAbsent(r.Context(), objectgraph.WriterOwner))
 	rt := h.rt
 	if rt == nil || rt.store == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "store unavailable"})

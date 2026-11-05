@@ -81,6 +81,7 @@ var eventStorage = map[EventKind]EventStorage{
 	EventTextureAgentRevisionFailed:     StorageObjectGraph,
 	EventTextureDocumentRevisionCreated: StorageObjectGraph,
 	EventTextureDecisionRecorded:        StorageObjectGraph,
+	EventTextureSearchQueried:           StorageObjectGraph,
 	EventDesktopDriverLeaseUpdated:      StorageObjectGraph,
 	EventDesktopAppInstancesUpdated:     StorageObjectGraph,
 	EventDesktopWindowPlacementUpdated:  StorageObjectGraph,

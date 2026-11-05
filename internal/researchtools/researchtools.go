@@ -3,6 +3,7 @@ package researchtools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,7 +33,7 @@ type Dependencies struct {
 }
 
 // newSearchWireCorpusTool is choir.SearchWireCorpus: a keyword search of
-// this computer's own corpus, its stories (Texture documents, in results)
+// this computer's own corpus, its stories (Texture documents, in results, only under a texture.search lease)
 // and its captures (the shared store's web_capture objects this computer
 // wrote, with Jev's labels as topic and outlet hints, in captures).
 // Research calls it before the web, so what the paper already holds is
@@ -67,27 +68,38 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			limit := corpusLimit(in.Limit)
 			exec := toolregistry.ExecutionContextFrom(ctx)
 			ownerID := firstNonEmptyString(exec.OwnerID, in.OwnerID, universalWirePlatformOwnerID())
+			// X1 (MA3.7c): the Texture part is the custodian's guarded search
+			// under a texture.search lease held by this run. Without the
+			// lease the Texture part is omitted and the world parts stay.
+			// The research desk's run holds the lease until MA4.6 moves it
+			// to the research_texture child (plan 8.6).
 			storiesStart := time.Now()
-			results, err := deps.Store.SearchDocuments(ctx, query, ownerID, limit)
+			hits, searchErr := deps.Store.TextureSearchUnderLease(ctx, ownerID, query, limit)
 			storiesElapsed := time.Since(storiesStart)
-			if err != nil {
-				return "", fmt.Errorf("search wire corpus: %w", err)
+			textureNote := ""
+			switch {
+			case errors.Is(searchErr, store.ErrTextureSearchNoLease):
+				textureNote = "Texture stories not searched: this run holds no texture.search lease"
+			case errors.Is(searchErr, store.ErrTextureSearchRate):
+				textureNote = "Texture stories not searched: " + searchErr.Error()
+			case searchErr != nil:
+				return "", fmt.Errorf("search wire corpus: %w", searchErr)
 			}
 			type searchResult struct {
-				DocID       string `json:"doc_id"`
-				Title       string `json:"title"`
-				UpdatedAt   string `json:"updated_at"`
-				Snippet     string `json:"snippet,omitempty"`
-				MatchSource string `json:"match_source"`
+				DocID     string `json:"doc_id"`
+				Title     string `json:"title"`
+				UpdatedAt string `json:"updated_at"`
+				Snippet   string `json:"snippet,omitempty"`
+				Label     string `json:"label"`
 			}
-			out := make([]searchResult, 0, len(results))
-			for _, r := range results {
+			out := make([]searchResult, 0, len(hits))
+			for _, r := range hits {
 				out = append(out, searchResult{
-					DocID:       r.DocID,
-					Title:       r.Title,
-					UpdatedAt:   r.UpdatedAt.Format(time.RFC3339),
-					Snippet:     r.Snippet,
-					MatchSource: r.MatchSource,
+					DocID:     r.Ref,
+					Title:     r.Title,
+					UpdatedAt: r.UpdatedAt.Format(time.RFC3339),
+					Snippet:   r.Snippet,
+					Label:     r.Label,
 				})
 			}
 			// A capture-store outage keeps the stories and says so; it never
@@ -122,6 +134,9 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			}
 			if eventsNote != "" {
 				body["events_note"] = eventsNote
+			}
+			if textureNote != "" {
+				body["results_note"] = textureNote
 			}
 			return toolregistry.ResultJSON(body)
 		}}

@@ -25,6 +25,9 @@ type LeaseAuthority interface {
 	// AdmitsCapture reports whether a live lease of holder in runID covers the
 	// capture, by its id or by any label its record carries.
 	AdmitsCapture(holder Writer, runID, captureID string, labels []string) bool
+	// AdmitsGrant reports the id of a live lease of holder in runID that names
+	// the first-party grant (a guarded custodian service, not a kind).
+	AdmitsGrant(holder Writer, runID, grant string) (leaseID string, ok bool)
 }
 
 type leaseHolderKey struct{}
@@ -64,6 +67,23 @@ func LeaseAdmitsKind(ctx context.Context, holder Writer, kind ObjectKind) bool {
 func LeaseAdmitsCapture(ctx context.Context, holder Writer, captureID string, labels []string) bool {
 	h, ok := leasesFrom(ctx)
 	return ok && h.auth.AdmitsCapture(holder, h.runID, captureID, labels)
+}
+
+// LeaseAdmitsGrant reports the id of the lease attached to ctx that gives
+// holder the grant. The custodian's service calls it before it reads as the
+// custodian.
+func LeaseAdmitsGrant(ctx context.Context, holder Writer, grant string) (string, bool) {
+	h, ok := leasesFrom(ctx)
+	if !ok {
+		return "", false
+	}
+	return h.auth.AdmitsGrant(holder, h.runID, grant)
+}
+
+// LeaseRunID is the run the lease context was attached for.
+func LeaseRunID(ctx context.Context) string {
+	h, _ := leasesFrom(ctx)
+	return h.runID
 }
 
 var (

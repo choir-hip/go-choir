@@ -65,10 +65,15 @@ type Scope struct {
 	Kinds         []string `json:"kinds,omitempty"`
 	CaptureIDs    []string `json:"capture_ids,omitempty"`
 	CaptureLabels []string `json:"capture_labels,omitempty"`
+	// Grants name first-party typed grants (GrantTextureSearch): a guarded
+	// service API the custodian owns, not a read of a kind. A grant lease
+	// opens no kind to the reader gate; the custodian's service checks it
+	// (objectgraph.LeaseAdmitsGrant) and then reads as the custodian.
+	Grants []string `json:"grants,omitempty"`
 }
 
 func (s Scope) empty() bool {
-	return len(s.Kinds) == 0 && len(s.CaptureIDs) == 0 && len(s.CaptureLabels) == 0
+	return len(s.Kinds) == 0 && len(s.CaptureIDs) == 0 && len(s.CaptureLabels) == 0 && len(s.Grants) == 0
 }
 
 // Record is the lease record on the tape (kind choir.lease).
@@ -111,6 +116,9 @@ func (r Record) Sentence() string {
 	}
 	if len(r.Scope.CaptureLabels) > 0 {
 		what = append(what, "captures labelled "+strings.Join(r.Scope.CaptureLabels, ", "))
+	}
+	if len(r.Scope.Grants) > 0 {
+		what = append(what, "the grants "+strings.Join(r.Scope.Grants, ", "))
 	}
 	s := fmt.Sprintf("%s may read %s in run %s, for: %s (%s)", r.Holder, strings.Join(what, " and "), r.HolderRunID, r.Purpose, r.State)
 	if r.EndReason != "" {
@@ -199,6 +207,9 @@ type Request struct {
 	// bound is the built-in kind table minus the withheld kinds, not a desk
 	// ceiling. Unexported: only this package can ask.
 	capsule bool
+	// grant marks a platform-issued first-party grant lease (IssueTextureSearch):
+	// its bound is the grant table (grants.go), not a desk ceiling.
+	grant bool
 }
 
 // ErrRefused wraps every refusal of a request.
@@ -319,6 +330,24 @@ func (s *Service) decide(req Request) (string, objectgraph.Writer, []string, err
 	if !ok {
 		return "", "", nil, refuse("desk %q has no writer", req.Desk)
 	}
+	if req.grant {
+		if len(req.Scope.Kinds) > 0 || len(req.Scope.CaptureIDs) > 0 || len(req.Scope.CaptureLabels) > 0 {
+			return "", "", nil, refuse("a grant lease names grants only")
+		}
+		var custodians []string
+		for _, g := range req.Scope.Grants {
+			if err := grantAllowed(desk.Name, g); err != nil {
+				return "", "", nil, err
+			}
+			c, _ := grantCustodian(g)
+			custodians = append(custodians, string(c))
+		}
+		sort.Strings(custodians)
+		return desk.Name, holder, custodians, nil
+	}
+	if len(req.Scope.Grants) > 0 {
+		return "", "", nil, refuse("a first-party grant is issued by its custodian, never asked for")
+	}
 	if req.capsule {
 		allowed := map[string]bool{}
 		for _, k := range CapsuleStoreKinds() {
@@ -399,7 +428,7 @@ func normalizeScope(s Scope) Scope {
 		sort.Strings(out)
 		return out
 	}
-	return Scope{Kinds: clean(s.Kinds), CaptureIDs: clean(s.CaptureIDs), CaptureLabels: clean(s.CaptureLabels)}
+	return Scope{Kinds: clean(s.Kinds), CaptureIDs: clean(s.CaptureIDs), CaptureLabels: clean(s.CaptureLabels), Grants: clean(s.Grants)}
 }
 
 func scopeSummary(s Scope) string {
@@ -412,6 +441,9 @@ func scopeSummary(s Scope) string {
 	}
 	if len(s.CaptureLabels) > 0 {
 		parts = append(parts, "labels="+strings.Join(s.CaptureLabels, ","))
+	}
+	if len(s.Grants) > 0 {
+		parts = append(parts, "grants="+strings.Join(s.Grants, ","))
 	}
 	return strings.Join(parts, " ")
 }
@@ -499,6 +531,25 @@ func (s *Service) AdmitsCapture(holder objectgraph.Writer, runID, captureID stri
 		}
 	}
 	return false
+}
+
+// AdmitsGrant implements objectgraph.LeaseAuthority: it reports the id of a
+// live lease of holder in runID that names grant, and counts the use. The grant
+// table is re-checked on every use, as the ceiling is for kinds.
+func (s *Service) AdmitsGrant(holder objectgraph.Writer, runID, grant string) (string, bool) {
+	for _, r := range s.liveFor(holder, runID) {
+		desk, ok := deskOf(r)
+		if !ok || grantAllowed(desk.Name, grant) != nil {
+			continue
+		}
+		for _, g := range r.Scope.Grants {
+			if g == grant {
+				s.noteUse(r.LeaseID)
+				return r.LeaseID, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (s *Service) noteUse(id string) {

@@ -383,3 +383,42 @@ func TestTheCapsuleStoreCopyIsALease(t *testing.T) {
 		t.Fatal("the capsule lease admitted a read of a withheld kind")
 	}
 }
+
+// MA3.7c: texture.search is a first-party grant lease. Only the research desk
+// run it was issued for holds it; it opens no kind to the reader gate and ends
+// with the run.
+func TestTextureSearchGrantIsHeldByTheIssuedRunOnly(t *testing.T) {
+	f := newFixture(t)
+	rec, err := f.svc.IssueTextureSearch(context.Background(), ownerID, computer, "run-g", "research:doc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Holder != deskmanifest.Research || len(rec.Scope.Grants) != 1 || len(rec.Custodians) != 1 || rec.Custodians[0] != "desk:texture" {
+		t.Fatalf("unexpected grant lease: %+v", rec)
+	}
+	research := objectgraph.WriterResearch
+	if _, ok := f.svc.AdmitsGrant(research, "run-g", lease.GrantTextureSearch); !ok {
+		t.Error("the issued run does not hold the grant")
+	}
+	if _, ok := f.svc.AdmitsGrant(research, "run-other", lease.GrantTextureSearch); ok {
+		t.Error("another run of the desk holds the grant")
+	}
+	if _, ok := f.svc.AdmitsGrant(objectgraph.WriterManagement, "run-g", lease.GrantTextureSearch); ok {
+		t.Error("another desk holds the grant")
+	}
+	if f.svc.AdmitsKind(research, "run-g", "choir.texture_document") {
+		t.Error("a grant lease opened a kind to the reader gate")
+	}
+	f.svc.EndRun(context.Background(), "run-g", lease.ReasonRunEnded)
+	if _, ok := f.svc.AdmitsGrant(research, "run-g", lease.GrantTextureSearch); ok {
+		t.Error("the grant outlived its run")
+	}
+	// A request through the public path cannot name a grant (no ceiling row).
+	_, err = f.svc.Request(context.Background(), lease.Request{
+		OwnerID: ownerID, ComputerID: computer, Desk: deskmanifest.Research, RunID: "run-h", AgentID: "research:doc",
+		Scope: lease.Scope{Grants: []string{lease.GrantTextureSearch}}, Purpose: "self-grant", Fields: fields(0.9, 0.2),
+	})
+	if err == nil {
+		t.Error("a desk's own request obtained the grant")
+	}
+}

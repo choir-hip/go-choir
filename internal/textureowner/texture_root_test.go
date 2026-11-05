@@ -893,3 +893,87 @@ func TestTextureHostReadsOfSettingsCrossNothingAndContentItemsAreCounted(t *test
 		}
 	}
 }
+
+// MA3.7c (plan 8.1 rule (b)): an evidence ref carried in a record the
+// evidence's own custodian (research) stamped is carried data, read as that
+// custodian and not counted; the same ref carried by any other desk's record,
+// or by none, stays Texture's read and is counted.
+func TestEvidenceRefCarriedByItsCustodianIsUncountedAndOtherwiseCounted(t *testing.T) {
+	rh := newRootHarness(t, true)
+	base := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
+	if err := rh.s.CreateEvidence(objectgraph.WithWriter(t.Context(), objectgraph.WriterResearch), types.EvidenceRecord{
+		EvidenceID: "ev-ma37c", OwnerID: rootOwner, AgentID: "research:doc-1", Kind: "web_page",
+		SourceURI: "https://example.com/a", Title: "Harbor", Content: "the harbor reopened", CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const crossing = "choir.agent_evidence|desk:texture|wrong_reader"
+
+	for _, carrier := range []string{"research:doc-1", "research"} {
+		objectgraph.ResetReaderGateCounts()
+		entity := sourceEntityFromEvidenceRef(withCarrierDesk(base, carrier), rh.h, rootOwner, "evidence:ev-ma37c")
+		if entity.EntityID == "" {
+			t.Fatalf("carrier %q: the carried evidence did not resolve", carrier)
+		}
+		if counts := objectgraph.ReaderGateCounts(); counts[crossing] != 0 {
+			t.Errorf("carrier %q: carried evidence was counted: %v", carrier, counts)
+		}
+	}
+	for _, carrier := range []string{"management:x", "engineering:y", "texture:doc", "not-a-desk:z", ""} {
+		objectgraph.ResetReaderGateCounts()
+		ctx := base
+		if carrier != "" {
+			ctx = withCarrierDesk(base, carrier)
+		}
+		_ = sourceEntityFromEvidenceRef(ctx, rh.h, rootOwner, "evidence_id:ev-ma37c")
+		if counts := objectgraph.ReaderGateCounts(); counts[crossing] == 0 {
+			t.Errorf("carrier %q: another desk's evidence ref was not counted as %s: %v", carrier, crossing, counts)
+		}
+	}
+}
+
+// The carrier is the record's reducer-stamped provenance desk, end to end: a
+// pending record stamped by research that carries an evidence ref resolves
+// uncounted; the same ref in a record stamped by management is counted.
+func TestEvidenceRefsOfPendingRecordsUseTheStampedProvenanceDesk(t *testing.T) {
+	rh := newRootHarness(t, true)
+	ctx := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
+	if err := rh.s.CreateEvidence(objectgraph.WithWriter(t.Context(), objectgraph.WriterResearch), types.EvidenceRecord{
+		EvidenceID: "ev-ma37c-2", OwnerID: rootOwner, AgentID: "research:doc-2", Kind: "web_page",
+		SourceURI: "https://example.com/b", Title: "Port", Content: "the port opened", CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	commit := func(id, desk string) {
+		rec := types.CommitmentRecord{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "o"},
+			Cast:      &types.CommitmentCast{}, Inbox: "texture:doc-2", SenderInbox: desk + ":doc-2", Addressee: "texture:doc-2",
+			EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
+			EvidenceRefs: []string{"evidence:ev-ma37c-2"},
+			Provenance:   types.CommitmentProvenance{AgentID: desk + ":doc-2", Desk: desk + ":doc-2"},
+		}
+		req := types.CommitInboxRecordsRequest{OwnerID: rootOwner, ComputerID: rootComputer, CommandID: "seed-" + id, Records: []types.CommitmentRecord{rec}}
+		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+		if _, err := rh.s.CommitInboxRecords(t.Context(), req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const crossing = "choir.agent_evidence|desk:texture|wrong_reader"
+	commit("rec-by-research", "research")
+	objectgraph.ResetReaderGateCounts()
+	entities, _ := rh.h.evidenceSourceEntitiesFromCommitmentRecords(ctx, rootOwner, rootComputer, "texture:doc-2", 20)
+	if len(entities) == 0 {
+		t.Fatal("the research-carried evidence did not resolve")
+	}
+	if n := objectgraph.ReaderGateCounts()[crossing]; n != 0 {
+		t.Errorf("research-stamped carrier was counted x%d", n)
+	}
+	commit("rec-by-management", "management")
+	objectgraph.ResetReaderGateCounts()
+	_, _ = rh.h.evidenceSourceEntitiesFromCommitmentRecords(ctx, rootOwner, rootComputer, "texture:doc-2", 20)
+	// Both records carry the ref: the management-stamped one is counted.
+	if n := objectgraph.ReaderGateCounts()[crossing]; n == 0 {
+		t.Errorf("a management-stamped carrier was not counted: %v", objectgraph.ReaderGateCounts())
+	}
+}

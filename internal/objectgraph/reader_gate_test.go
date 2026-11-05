@@ -223,3 +223,25 @@ func TestUndeclaredReadOracleSkipsTestFilesAndTheCommons(t *testing.T) {
 		t.Fatalf("tallied a read called from a test file: %v", got)
 	}
 }
+
+// MA3.7c (E4): world events, memberships and capture labels are shared world
+// content, read by research and Texture without a count; Texture's documents
+// are still not research's.
+func TestSharedWorldContentKindsAreAdmittedToResearchAndTexture(t *testing.T) {
+	readerMode(t, WriterGateObserve)
+	for _, kind := range []ObjectKind{"choir.world_event", "choir.event_membership", "choir.capture_label"} {
+		for _, reader := range []Writer{WriterResearch, WriterTexture, WriterManagement} {
+			ResetReaderGateCounts()
+			_ = CheckReadAs(WithReader(context.Background(), reader), kind)
+			if len(ReaderGateCounts()) != 0 {
+				t.Errorf("%s read of %s was counted: %v", reader, kind, ReaderGateCounts())
+			}
+		}
+	}
+	ResetReaderGateCounts()
+	_ = CheckReadAs(WithReader(context.Background(), WriterEngineering), "choir.world_event")
+	_ = CheckReadAs(WithReader(context.Background(), WriterResearch), "choir.capture_label_override")
+	if len(ReaderGateCounts()) != 2 {
+		t.Errorf("the admission is wider than E4's kinds and desks: %v", ReaderGateCounts())
+	}
+}

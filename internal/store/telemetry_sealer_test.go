@@ -135,9 +135,10 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 	// 36 with calibration.read (a desk's read of its own calibration record,
 	// calibration C6, docs/design/calibration-wiring-permutations-2026-11-04.md);
 	// 37 with disclosure.decision (a run's refused sink and the owner's tap on
-	// it, MA3.6).
-	if batched != 10 || acknowledged != 37 {
-		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 37", batched, acknowledged)
+	// it, MA3.6); 38 with texture.search.queried (a texture.search lease's
+	// query, MA3.7c).
+	if batched != 10 || acknowledged != 38 {
+		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 38", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
 	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), ""); err == nil {
