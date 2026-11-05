@@ -72,7 +72,7 @@ Caveats: (1) the registry's `ring` column is a hand-kept snapshot (FACT: header 
 | CHOIR_COMPUTE_CAPSULES (design app-desk-compute-capsule-2026-10-21 S2) | compute capsules | docs say off by default; NOT FOUND in internal/cmd/nix grep | | HYPOTHESIS unbuilt or renamed: verify, else DELETE from docs |
 | CHOIR_EGRESS_GRANTS (fp10-net-05) | egress grants | docs say default off; NOT FOUND in code grep | registry says internal/egressgrant unwired | HYPOTHESIS dead/unwired: wire (R0) or delete |
 | AUTH_DEVICE_RELEASE (mac-device-key-release-2026-11-01 line 213) | device key release | "stays off" in design; NOT FOUND in code | | design-only, no switch yet |
-| CHOIR_OG_WRITER_GATE (internal/objectgraph/writer.go:137) | og writer gate, code default observe | observe | registry exp 2026-11-25 | decide enforce on d@e |
+| CHOIR_OG_WRITER_GATE (deleted in MA3.2: no env, no registry entry) | og writer gate; package kinds enforce, built-in kinds observe until MA3.7 flips them in code | observe (built-in) | none | MA3.7 |
 | CHOIR_TELEMETRY_BATCH env (telemetry_sealer.go:72) | env twin of telemetry.batch | now redundant (setting default true) | | DELETE env twin |
 | CORPUSD_RELATED_STORY | read half of A19 | on in nix | registry: verify unit-env file and nix agree | verify |
 | CHOIR_PACKAGE_SHARE_READS, CHOIR_RELEASE_READS | read scope | normal state | | EXCLUDE (not feature switches) |

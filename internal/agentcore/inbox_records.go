@@ -1214,7 +1214,11 @@ func (rt *Runtime) closeOpenRoundsAfterCrash(ctx context.Context) {
 			log.Printf("runtime: crash boot round closure %s: %v", closure.RecordID, err)
 			continue
 		}
-		if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
+		// The closure is the kernel's own act, for any desk's conversation. When
+		// the conversation is a management task's, the batch also settles the
+		// task and its dispositions, which the counters then read as the
+		// kernel crossing into management's kinds.
+		if _, err := rt.store.CommitInboxRecords(withKernelWriter(ctx), req); err != nil {
 			log.Printf("runtime: crash boot round closure %s: %v", closure.RecordID, err)
 			continue
 		}

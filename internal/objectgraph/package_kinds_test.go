@@ -459,3 +459,77 @@ func TestDefaultRegistryHoldsNoPackageKinds(t *testing.T) {
 		}
 	}
 }
+
+// MA3.2: package kinds enforce now, whatever the gate's mode; a built-in kind
+// still only observes. This runs in the production default (observe).
+func TestPackageKindsEnforceWhileBuiltInKindsObserve(t *testing.T) {
+	writerMode(t, WriterGateObserve)
+	ResetWriterGateCounts()
+	pkg := "ma32class"
+	k := pkgKind(pkg, "note")
+	if err := RegisterPackageKind(pkg, k); err != nil {
+		t.Fatal(err)
+	}
+	for name, ctx := range map[string]context.Context{
+		"another desk":   WithWriter(context.Background(), WriterManagement),
+		"texture":        WithWriter(context.Background(), WriterTexture),
+		"kernel":         WithWriter(context.Background(), WriterKernel),
+		"no declaration": context.Background(),
+	} {
+		err := CheckWriteAs(ctx, []Object{gateObject(t, k.Kind, name)}, nil)
+		if !errors.Is(err, ErrWrongWriter) && !errors.Is(err, ErrUndeclaredWriter) {
+			t.Errorf("%s writing a package kind in observe mode: err = %v, want a refusal", name, err)
+		}
+	}
+	if err := CheckWriteAs(WithWriter(context.Background(), Writer("desk:"+pkg)), []Object{gateObject(t, k.Kind, "own")}, nil); err != nil {
+		t.Errorf("the package's desk: %v", err)
+	}
+	// A built-in kind written by another desk is counted and allowed.
+	if err := CheckWriteAs(WithWriter(context.Background(), WriterManagement), []Object{gateObject(t, "choir.texture_document", "x")}, nil); err != nil {
+		t.Errorf("built-in kind in observe mode was refused: %v", err)
+	}
+	if n := WriterGateCounts()["choir.texture_document|desk:management|wrong_writer"]; n != 1 {
+		t.Errorf("crossing counted %d times, want 1: %v", n, WriterGateCounts())
+	}
+	// Off still checks nothing, package kinds included.
+	writerMode(t, WriterGateOff)
+	if err := CheckWriteAs(context.Background(), []Object{gateObject(t, k.Kind, "off")}, nil); err != nil {
+		t.Errorf("off mode refused: %v", err)
+	}
+}
+
+func TestDeskWriterResolvesThroughTheManifest(t *testing.T) {
+	if w, ok := DeskWriter("management"); !ok || w != WriterManagement {
+		t.Fatalf("DeskWriter(management) = %q, %v; want %q", w, ok, WriterManagement)
+	}
+	if _, ok := DeskWriter("no-such-desk"); ok {
+		t.Fatal("an unregistered desk resolved to a writer")
+	}
+}
+
+// N1: an app desk is registered as "app:<slug>" and its package kinds name
+// desk:<slug>; the reducer's writer for the app desk's run must be the one the
+// package kind expects, so MA3.8 does not meet ErrWrongWriter.
+func TestDeskWriterOfAnAppDeskIsThePackageKindsWriter(t *testing.T) {
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:ma32notes", Verbs: []string{"Cast"}, Taint: deskmanifest.TaintUntrustedInput, UID: 62990, WorkerMaxBytes: 64 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deskmanifest.RegisterApp(d); err != nil {
+		t.Fatal(err)
+	}
+	defer deskmanifest.RetireApp("app:ma32notes")
+	k := pkgKind("ma32notes", "note")
+	if err := RegisterPackageKind("ma32notes", k); err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range []string{"app:ma32notes", "ma32notes"} {
+		w, ok := DeskWriter(profile)
+		if !ok || w != k.Writer {
+			t.Fatalf("DeskWriter(%q) = %q, %v; want %q", profile, w, ok, k.Writer)
+		}
+		if err := CheckWriteAs(WithWriter(context.Background(), w), []Object{gateObject(t, k.Kind, profile)}, nil); err != nil {
+			t.Errorf("the app desk's run writing its package kind: %v", err)
+		}
+	}
+}

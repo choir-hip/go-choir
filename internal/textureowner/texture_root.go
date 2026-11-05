@@ -455,7 +455,7 @@ func (h *Handler) ensureTextureRoot(ctx context.Context, ownerID, computerID str
 			return store.TextureRoot{}, false, err
 		}
 		docID := textureRootDocumentID(ownerID, computerID, generation)
-		claimed, err := h.Store.ClaimTextureRoot(ctx, expected, store.TextureRoot{
+		claimed, err := h.Store.ClaimTextureRoot(asTextureCustodian(ctx), expected, store.TextureRoot{
 			OwnerID: ownerID, ComputerID: computerID, DocumentID: docID,
 			Generation: generation, PredecessorDocumentID: predecessor,
 		})
@@ -505,7 +505,7 @@ func (h *Handler) createTextureRootDocument(ctx context.Context, root store.Text
 	if root.PredecessorDocumentID != "" {
 		seed += " It replaces the master document " + root.PredecessorDocumentID + "."
 	}
-	created, err := h.startLifecycleTextureDocument(ctx, root.OwnerID, root.ComputerID, textureRootClientRequestID(root.Generation), textureRootTitle, seed)
+	created, err := h.startLifecycleTextureDocument(asTextureCustodian(ctx), root.OwnerID, root.ComputerID, textureRootClientRequestID(root.Generation), textureRootTitle, seed)
 	if err == nil {
 		return !created.Replay, nil
 	}

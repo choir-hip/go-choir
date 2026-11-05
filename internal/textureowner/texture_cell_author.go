@@ -301,7 +301,7 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 		}
 	}
 	if strings.TrimSpace(doc.TrajectoryID) == "" {
-		if err := h.canonicalizeAliasedTextureDocumentTitle(ctx, rec.OwnerID, &doc, time.Now().UTC()); err != nil {
+		if err := h.canonicalizeAliasedTextureDocumentTitle(asTextureCustodian(ctx), rec.OwnerID, &doc, time.Now().UTC()); err != nil {
 			return "", fmt.Errorf("canonicalize texture document title: %w", err)
 		}
 	}

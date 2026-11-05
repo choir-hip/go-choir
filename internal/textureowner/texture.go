@@ -398,7 +398,7 @@ func (h *Handler) HandleTextureCreateDocument(w http.ResponseWriter, r *http.Req
 		UpdatedAt: now,
 	}
 
-	if err := h.Store.CreateDocument(r.Context(), doc); err != nil {
+	if err := h.Store.CreateDocument(asOwner(r.Context()), doc); err != nil {
 		log.Printf("texture api: create document: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create document"})
 		return
@@ -500,7 +500,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := h.Store.CreateDocument(r.Context(), doc); err != nil {
+	if err := h.Store.CreateDocument(asOwner(r.Context()), doc); err != nil {
 		log.Printf("texture api: create markdown lineage document: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create document"})
 		return
@@ -564,7 +564,7 @@ func (h *Handler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r *h
 			ParentRevisionID: parentID,
 			CreatedAt:        versionNow,
 		}
-		if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+		if err := h.Store.CreateRevision(asOwner(r.Context()), rev); err != nil {
 			log.Printf("texture api: create markdown lineage revision %s[%d]: %v", sourcePath, i, err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create markdown lineage revision"})
 			return
@@ -670,7 +670,7 @@ func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) 
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := h.Store.CreateDocument(r.Context(), doc); err != nil {
+	if err := h.Store.CreateDocument(asOwner(r.Context()), doc); err != nil {
 		log.Printf("texture api: create aliased document: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create aliased document"})
 		return
@@ -685,7 +685,7 @@ func (h *Handler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Request) 
 		Metadata:    buildFileOpenTextureMetadata(projection, original),
 		CreatedAt:   now,
 	}
-	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+	if err := h.Store.CreateRevision(asOwner(r.Context()), rev); err != nil {
 		log.Printf("texture api: create aliased initial revision: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create aliased initial revision"})
 		return
@@ -1109,7 +1109,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 
 	now := time.Now().UTC()
 	if !lifecycleBound {
-		if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, now); err != nil {
+		if err := h.canonicalizeAliasedTextureDocumentTitle(asOwner(r.Context()), ownerID, &doc, now); err != nil {
 			log.Printf("texture api: canonicalize aliased document title: %v", err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
 			return
@@ -1236,7 +1236,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 			return
 		}
 		command.CommandDigest = commandDigest
-		result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(r.Context(), command, graph)
+		result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(asOwner(r.Context()), command, graph)
 		if commitErr != nil {
 			if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
 				writeAPIJSON(w, http.StatusConflict, apiError{Error: commitErr.Error()})
@@ -1261,7 +1261,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+	if err := h.Store.CreateRevision(asOwner(r.Context()), rev); err != nil {
 		log.Printf("texture api: create revision: %v", err)
 		if errors.Is(err, store.ErrStaleDocumentHead) {
 			if req.AllowRebase && parentID != "" && len(strings.TrimSpace(string(req.BodyDoc))) == 0 {
@@ -1339,7 +1339,7 @@ func (h *Handler) createRebasedUserRevision(ctx context.Context, docID, ownerID 
 		ParentRevisionID: headRev.RevisionID,
 		CreatedAt:        now,
 	}
-	if err := h.Store.CreateRevision(ctx, rev); err != nil {
+	if err := h.Store.CreateRevision(asOwner(ctx), rev); err != nil {
 		return types.Revision{}, fmt.Errorf("create rebased user revision: %w", err)
 	}
 	storedRev, err := h.getTextureRevision(ctx, ownerID, rev.RevisionID)
@@ -1866,7 +1866,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
 	}
-	if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
+	if err := h.canonicalizeAliasedTextureDocumentTitle(asOwner(r.Context()), ownerID, &doc, time.Now().UTC()); err != nil {
 		log.Printf("texture api: canonicalize restore document title: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
 		return
@@ -1898,7 +1898,7 @@ func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Re
 		ParentRevisionID: doc.CurrentRevisionID,
 		CreatedAt:        time.Now().UTC(),
 	}
-	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {
+	if err := h.Store.CreateRevision(asOwner(r.Context()), rev); err != nil {
 		log.Printf("texture api: restore revision: %v", err)
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to restore revision; document head may have changed"})
 		return

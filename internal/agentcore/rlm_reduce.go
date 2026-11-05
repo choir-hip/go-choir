@@ -839,6 +839,7 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	if r == nil || !r.active {
 		return nil
 	}
+	ctx = r.declareWriter(ctx)
 	if err := validateCellIntents(r.scope, intents); err != nil {
 		return err
 	}
@@ -953,6 +954,15 @@ func (r *rlmCallReduction) abort(ctx context.Context, fate, reason string) error
 		return nil
 	}
 	return r.recordFate(ctx, fate, reason)
+}
+
+// declareWriter makes the run's desk the writer of every store batch this
+// reduction commits (MA3.2).
+func (r *rlmCallReduction) declareWriter(ctx context.Context) context.Context {
+	if r.rec == nil {
+		return ctx
+	}
+	return withDeskWriter(ctx, r.rec.AgentProfile)
 }
 
 func (r *rlmCallReduction) recordFate(ctx context.Context, fate, reason string) error {

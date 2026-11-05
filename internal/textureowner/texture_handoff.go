@@ -135,6 +135,8 @@ func (h *Handler) EnsureTextureHandoff(ctx context.Context, parentRec *types.Run
 }
 
 func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.RunRecord, objective, initialContent string) (ConductorDecision, error) {
+	// The conductor route is the owner's prompt becoming a Texture document.
+	ctx = asOwner(ctx)
 	if rec == nil || agentProfileForRun(rec) != agentprofile.Conductor {
 		return ConductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
 	}

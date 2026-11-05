@@ -2785,7 +2785,7 @@ func (s *Store) CreateContentItemOG(ctx context.Context, rec types.ContentItem) 
 		"updated_at":    rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
-	_, err := s.ogPut(ctx, ogKindContentItem, rec.OwnerID, rec.ContentID, rec, metadata, now)
+	_, err := s.ogPut(objectgraph.WithWriter(ctx, objectgraph.WriterShell), ogKindContentItem, rec.OwnerID, rec.ContentID, rec, metadata, now)
 	return err
 }
 
@@ -2863,7 +2863,7 @@ func (s *Store) CreatePodcastSubscriptionOG(ctx context.Context, rec types.Podca
 		metadata["last_fetched_at"] = rec.LastFetchedAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	obj, err := s.ogPut(ctx, ogKindPodcastSub, rec.OwnerID, rec.SubscriptionID, rec, metadata, now)
+	obj, err := s.ogPut(objectgraph.WithWriter(ctx, objectgraph.WriterShell), ogKindPodcastSub, rec.OwnerID, rec.SubscriptionID, rec, metadata, now)
 	if err != nil {
 		return err
 	}
@@ -2955,7 +2955,7 @@ func (s *Store) CreateBrowserSessionOG(ctx context.Context, rec types.BrowserSes
 		"updated_at":         rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
-	obj, err := s.ogPut(ctx, ogKindBrowserSess, rec.OwnerID, rec.SessionID, rec, metadata, now)
+	obj, err := s.ogPut(objectgraph.WithWriter(ctx, objectgraph.WriterShell), ogKindBrowserSess, rec.OwnerID, rec.SessionID, rec, metadata, now)
 	if err != nil {
 		return err
 	}
@@ -3029,7 +3029,7 @@ func (s *Store) SaveDesktopStateOG(ctx context.Context, state types.DesktopState
 		"updated_at":       now.UTC().Format(time.RFC3339Nano),
 	}
 
-	_, err := s.ogPut(ctx, ogKindDesktopSess, state.OwnerID, state.DesktopID, state, metadata, now)
+	_, err := s.ogPut(objectgraph.WithWriter(ctx, objectgraph.WriterShell), ogKindDesktopSess, state.OwnerID, state.DesktopID, state, metadata, now)
 	return err
 }
 

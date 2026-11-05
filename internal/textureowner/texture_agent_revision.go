@@ -115,6 +115,7 @@ func writeOwnerRevisionRefusal(w http.ResponseWriter, err error) {
 // The document is read owner-scoped, so another owner's document is the
 // same 404 as a missing one.
 func (h *Handler) reviseOwnerDocument(ctx context.Context, ownerID, docID string, req textureAgentRevisionRequest) (textureOwnerRevisionResponse, error) {
+	ctx = asOwner(ctx)
 	doc, err := h.getTextureDocument(ctx, ownerID, docID)
 	if err != nil {
 		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusNotFound, "document not found")
@@ -273,6 +274,7 @@ func textureContinueIdentity(ownerID, computerID, docID, settledTrajectoryID str
 // document and the live snapshot the owner's revise then commits on. A lost
 // race joins whichever continue moved the document.
 func (h *Handler) continueSettledDocumentForOwner(ctx context.Context, ownerID string, doc types.Document, settled types.LifecycleSnapshot) (types.Document, types.LifecycleSnapshot, error) {
+	ctx = asOwner(ctx)
 	settledID := settled.Trajectory.TrajectoryID
 	trajectoryID, commandID, workItemID := textureContinueIdentity(ownerID, doc.ComputerID, doc.DocID, settledID)
 	req := types.ContinueLifecycleDocumentRequest{

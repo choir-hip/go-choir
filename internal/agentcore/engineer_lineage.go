@@ -89,6 +89,14 @@ func lineageAppsOfPaths(paths []string) map[string][]string {
 	return out
 }
 
+// putEngineeringLineage writes one lineage as engineering: every path that
+// ends an implementation round (the report, the reuse fallback, the resume of a
+// stranded frozen assignment) records through recordEngineeringLineage, so the
+// declaration is made once, here, and not by the caller that reached it.
+func (rt *Runtime) putEngineeringLineage(ctx context.Context, lineage store.EngineeringLineage) error {
+	return rt.store.PutEngineeringLineage(withKindCustodian(ctx, "choir.engineering_lineage"), lineage)
+}
+
 // recordEngineeringLineage records the lineage of each app the ended
 // implementation assignment's candidate changed. Best effort: a failure is
 // logged and never touches the round.
@@ -140,7 +148,7 @@ func (rt *Runtime) recordEngineeringLineage(ctx context.Context, assignment type
 			TrajectoryID: assignment.Binding.TrajectoryID, OperationID: op.OperationID, BundleDigest: op.BundleDigest,
 			BaseCommit: bundle.SourcePatchBaseCommit, Result: string(assignment.Disposition), Files: files, Summary: summary,
 		}
-		if err := rt.store.PutEngineeringLineage(ctx, lineage); err != nil {
+		if err := rt.putEngineeringLineage(ctx, lineage); err != nil {
 			log.Printf("engineering lineage: assignment %s app %s: %v", assignment.AssignmentID, app, err)
 			continue
 		}

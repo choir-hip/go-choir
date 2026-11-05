@@ -289,7 +289,7 @@ func (s *Store) PutComputerSetting(ctx context.Context, setting ComputerSetting)
 		"value":       setting.Value,
 		"updated_at":  setting.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
-	_, err := s.ogPut(ctx, ogKindComputerSetting, setting.OwnerID, computerSettingKey(setting.ComputerID, setting.Key), setting, metadata, setting.UpdatedAt)
+	_, err := s.ogPut(objectgraph.WithWriter(ctx, objectgraph.WriterShell), ogKindComputerSetting, setting.OwnerID, computerSettingKey(setting.ComputerID, setting.Key), setting, metadata, setting.UpdatedAt)
 	return err
 }
 

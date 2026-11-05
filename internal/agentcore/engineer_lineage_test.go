@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -109,5 +110,26 @@ func TestEngineerLineageNoticeFromTheStore(t *testing.T) {
 		Metadata: map[string]any{"assignment_kind": string(types.EngineeringAssignmentVerification)}}
 	if got := rt.lineageNoticeForRun(verification); got != "" {
 		t.Fatal("a verification run got a brief")
+	}
+}
+
+// MA3.2 (DeepSeek B2): the lineage an ended round records declares engineering
+// as its writer whichever path reached it, so it is neither undeclared nor a
+// crossing in the counters.
+func TestEngineerLineageIsWrittenAsEngineering(t *testing.T) {
+	rt, _ := testRuntime(t)
+	objectgraph.ResetWriterGateCounts()
+	objectgraph.ResetUndeclaredWrites()
+	err := rt.putEngineeringLineage(context.Background(), store.EngineeringLineage{
+		OwnerID: "owner-lineage", ComputerID: "computer-lineage", App: "calendar", AssignmentID: "assignment-w", Summary: "x",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := objectgraph.UndeclaredWrites(); len(got) != 0 {
+		t.Fatalf("undeclared writes: %v", got)
+	}
+	if got := objectgraph.WriterGateCounts(); len(got) != 0 {
+		t.Fatalf("lineage counted as a violation: %v", got)
 	}
 }

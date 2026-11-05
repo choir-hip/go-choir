@@ -189,6 +189,7 @@ func (rt *Runtime) managementTaskObservability(ctx context.Context, ownerID, com
 // task that cannot start is closed with the error, so its captures return
 // to the parent as residuals.
 func (rt *Runtime) startManagementTask(ctx context.Context, task types.ManagementTask, slots int) (*types.RunRecord, error) {
+	ctx = withKindCustodian(ctx, "choir.management_task")
 	claimed, err := rt.store.ClaimManagementTask(ctx, task.OwnerID, task.ComputerID, task.TaskID, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrInboxRefused) {
@@ -240,7 +241,7 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 	if rt == nil || rt.store == nil {
 		return
 	}
-	ctx = context.WithoutCancel(ctx)
+	ctx = withKindCustodian(context.WithoutCancel(ctx), "choir.management_task")
 	current, err := rt.store.GetManagementTask(ctx, task.OwnerID, task.ComputerID, task.TaskID)
 	if err != nil {
 		log.Printf("runtime: close management task %s: %v", task.TaskID, err)

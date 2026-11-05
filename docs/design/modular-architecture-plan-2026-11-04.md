@@ -699,7 +699,8 @@ propagate; the disclosure path; app UIs reading only their own desk's kinds.
   one choke point for cell reads; it is where leases are enforced for cells.
 - Write custody exists as a registry field `Writer`
   (`internal/objectgraph/registry.go:36-52`); the gate defaults to **observe**:
-  an unknown or empty `CHOIR_OG_WRITER_GATE` reads as observe, a wrong writer
+  the env `CHOIR_OG_WRITER_GATE` was deleted in MA3.2 (package kinds enforce;
+  built-in kinds observe until MA3.7 flips them in code), a wrong writer
   is counted and allowed (`internal/objectgraph/writer.go:134-148`; mode
   setter `:156`; `writerAdmits` `:204`; a `WriterRuntime` kind admits every
   declared writer, `:206`). The writer is a label the caller puts on the

@@ -117,7 +117,7 @@ func (rt *Runtime) recordLabelOverrides(ctx context.Context, ownerID, computerID
 				CaptureTitle: label.Title, JevSaid: captureLabelView(label).Says, Disposition: disposition,
 				DocID: docID, Headline: headline, RecordID: rec.RecordID, Reason: strings.TrimSpace(reason), CreatedAt: time.Now().UTC(),
 			}
-			if err := rt.store.PutCaptureLabelOverride(ctx, o); err != nil {
+			if err := rt.store.PutCaptureLabelOverride(withKindCustodian(ctx, "choir.capture_label_override"), o); err != nil {
 				log.Printf("label overrides: record the override of %s (label v%d) by %s: %v", captureID, label.Version, rec.RecordID, err)
 			}
 		}

@@ -151,6 +151,7 @@ func TestHandlePromptBarInProcessCallerStillStartsATexture(t *testing.T) {
 // today, validateProductAPIRoute refuses a non-GET under /api/texture/; the
 // marker keeps the two owner-start handlers alike).
 func TestTextureLifecycleCreateOwnerTextLiteralInProcessStrict(t *testing.T) {
+	requireNoUndeclaredWrites(t)
 	_, handler := testAPISetup(t)
 	post := func(clientRequestID, content string, inProcess bool) *httptest.ResponseRecorder {
 		t.Helper()

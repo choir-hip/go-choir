@@ -243,7 +243,7 @@ func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID,
 	if command.CommandDigest, err = store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(command, graph); err != nil {
 		return "", false, fmt.Errorf("texture evidence: digest the commit: %w", err)
 	}
-	result, err := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(ctx, command, graph)
+	result, err := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(asTextureCustodian(ctx), command, graph)
 	if err != nil {
 		// Each attempt re-reads the document and the lifecycle, so a head or
 		// status that moved (live to settled) is retried on the new state.

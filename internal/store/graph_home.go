@@ -285,6 +285,13 @@ func (s *Store) engineeringSlotGraphObject(ctx context.Context, ownerID, traject
 // graphHomeMu (one live store per computer) is what makes the claim safe, not
 // the condition alone.
 func (s *Store) putEngineeringSlotGraph(ctx context.Context, prior *objectgraph.Object, rec EngineeringSlotRecord) error {
+	// A slot is engineering's lineage state. Whoever requests the claim (a
+	// management Cast opening an assignment, a run end releasing it), the store
+	// writes it on engineering's behalf, in a batch of its own, so the kind
+	// stays with engineering and is not a commons kind (MA3.2).
+	if w, ok := objectgraph.CustodianOf("choir.co_super_slot"); ok {
+		ctx = objectgraph.WithWriter(ctx, w)
+	}
 	createdAt := rec.ClaimedAt
 	cond := objectgraph.ObjectCondition{}
 	obj, err := engineeringSlotObject(rec, createdAt)

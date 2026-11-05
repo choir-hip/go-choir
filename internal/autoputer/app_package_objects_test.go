@@ -406,8 +406,8 @@ func TestRouteObjectsSurviveReopeningTheStore(t *testing.T) {
 func TestRouteWorksUnderTheEnforcingWriterGate(t *testing.T) {
 	f := newRouteFixture(t)
 	f.setSwitch(routeOwner, routeComputer, true)
-	// The setting write declares no writer (the shell's kind; MA3.2 declares
-	// it at the call site), so the gate is enforced after it.
+	// The setting write above declares the shell as its writer in the store
+	// (MA3.2); the gate is enforced after it for the object write.
 	t.Cleanup(objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce))
 	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
 		t.Fatalf("owner write under enforce: %d %s", w.Code, w.Body.String())

@@ -202,7 +202,9 @@ func (rt *Runtime) judgePendingSupport(ctx context.Context, ownerID, computerID,
 	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
 		return err
 	}
-	committed, err := rt.store.CommitInboxRecords(ctx, req)
+	// Acts for the custodian: the verdict is Texture's kind and the judge job
+	// writes it for Texture. An exception to revisit in MA3.6.
+	committed, err := rt.store.CommitInboxRecords(withKindCustodian(ctx, "choir.support_verdict"), req)
 	if err != nil {
 		return fmt.Errorf("record verdicts: %w", err)
 	}

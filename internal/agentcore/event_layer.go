@@ -513,7 +513,7 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 					ev.Follows, best = f.ev.EventID, decisions[j].followsP
 				}
 			}
-			stored, created, err := rt.store.PutWorldEvent(ctx, ev)
+			stored, created, err := rt.store.PutWorldEvent(withKindCustodian(ctx, "choir.world_event"), ev)
 			if err != nil {
 				report.Unresolved += len(members)
 				log.Printf("event layer: mint event for %s: %v", first.Item.CaptureID, err)
@@ -566,7 +566,7 @@ func (rt *Runtime) writeMembership(ctx context.Context, idx *eventIndex, target 
 	m := store.EventMembership{OwnerID: ownerID, ComputerID: computerID, CaptureID: in.Item.CaptureID, EventID: target.ev.EventID,
 		Opened: opened, Tentative: tentative, P: p, Outlet: outlet.Of(in.Item.URL), Origin: wireOrigin(in.Item.Summary, in.Item.Title),
 		URL: in.Item.URL, Title: strings.TrimSpace(in.Item.Title), SourceID: in.SourceID, CapturedAt: in.At, Model: model, CostUSD: cost}
-	stored, created, err := rt.store.PutEventMembership(ctx, m)
+	stored, created, err := rt.store.PutEventMembership(withKindCustodian(ctx, "choir.event_membership"), m)
 	if err != nil {
 		log.Printf("event layer: membership of %s: %v", in.Item.CaptureID, err)
 		return false, false

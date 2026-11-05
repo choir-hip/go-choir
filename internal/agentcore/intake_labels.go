@@ -206,7 +206,7 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 			defer func() { <-sem }()
 			label, err := rt.labelOneCapture(budget, judge, lib, ownerID, computerID, sourceID, items, i)
 			if err == nil {
-				_, err = rt.store.AppendCaptureLabel(ctx, label)
+				_, err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), label)
 			}
 			if err != nil {
 				log.Printf("intake labels: %s: %s unlabelled: %v", sourceID, items[i].CaptureID, err)

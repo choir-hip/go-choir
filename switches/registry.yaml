@@ -1350,32 +1350,6 @@
    }
   },
   {
-   "id": "choir_og_writer_gate",
-   "kind": "code",
-   "life": "release",
-   "owner": "texture",
-   "class": "red",
-   "surface": "objectgraph",
-   "introduced": "2026-10-28",
-   "ladder": [
-    "observe",
-    "enforce"
-   ],
-   "target_ring": "R4",
-   "soak_x": 2,
-   "expires": "2026-11-25",
-   "ring": "all",
-   "promote": [
-    {
-     "metric": "og_writer_gate_would_refuse",
-     "bound": "== 0 (Texture first, paper last)"
-    }
-   ],
-   "retire": "delete the observe mode once enforce",
-   "where": "internal/objectgraph/writer.go:134 (CHOIR_OG_WRITER_GATE unset, code default observe)",
-   "blocked_by": "a counts reader (no SSH), the story-seeding declaration, install kinds (audit row 20)"
-  },
-  {
    "id": "choir_release_reads",
    "kind": "code",
    "life": "ops",

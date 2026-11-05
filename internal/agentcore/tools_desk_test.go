@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -52,9 +53,18 @@ var (
 // holds a ~170 MB autoputer, and without cleanup every agentcore test run
 // left one in the temp dir (283 of them, ~48 GB, on 2026-10-14).
 func TestMain(m *testing.M) {
+	stopTracking := objectgraph.TrackUndeclaredWrites()
 	code := dbxtest.Main(m)
+	stopTracking()
 	if deskTestWorkerBinDir != "" {
 		_ = os.RemoveAll(deskTestWorkerBinDir)
+	}
+	// MA3.2: every object-graph write of the product declares its writer, so
+	// the gate saw no desk or service kind written without one from a product
+	// call site (a fixture writing from a test file is not one).
+	if undeclared := objectgraph.UndeclaredWrites(); len(undeclared) != 0 && code == 0 {
+		fmt.Fprintf(os.Stderr, "FAIL: the writer gate saw writes that declare no writer: %v\n", undeclared)
+		code = 1
 	}
 	os.Exit(code)
 }

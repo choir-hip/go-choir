@@ -23,6 +23,7 @@ import (
 )
 
 func TestHandleTexturePromptEvalPinsOverlayAcrossTextureRoute(t *testing.T) {
+	requireNoUndeclaredWrites(t)
 	t.Parallel()
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")

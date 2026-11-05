@@ -518,7 +518,9 @@ func (rt *Runtime) continueRebaseDocument(ctx context.Context, ownerID, computer
 		return err
 	}
 	req.CommandDigest = digest
-	_, continueErr := rt.store.ContinueLifecycleDocument(ctx, req)
+	// Acts for the custodian (the host continues Texture's document on its
+	// behalf): an exception to revisit in MA3.6.
+	_, continueErr := rt.store.ContinueLifecycleDocument(withKindCustodian(ctx, "choir.texture_document"), req)
 	// A lost race (the owner's revise, another attempt) has moved it too.
 	current, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, addr.DocID)
 	if err != nil {

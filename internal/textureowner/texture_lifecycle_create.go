@@ -87,7 +87,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture"})
 		return
 	}
-	created, err := h.startLifecycleTextureDocument(ownerTextContext(r.Context(), r), ownerID, computerID, input.ClientRequestID, input.Title, input.InitialContent)
+	created, err := h.startLifecycleTextureDocument(asOwner(ownerTextContext(r.Context(), r)), ownerID, computerID, input.ClientRequestID, input.Title, input.InitialContent)
 	if err != nil {
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "create occurrence conflicts with its durable receipt"})

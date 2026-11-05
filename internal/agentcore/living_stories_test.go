@@ -194,6 +194,7 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 	"captures":   ids,
 	"publish":    "auto",
 }, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
+	objectgraph.ResetWriterGateCounts()
 	out := cell(open)
 	if !strings.Contains(out, "1 captures rss:port capture-1") {
 		t.Fatalf("management did not read the arrival: %s", out)
@@ -203,6 +204,14 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 		t.Fatalf("the Cast's receipt does not name the story it opened: %s", out)
 	}
 	story := m[1]
+	// X19 through the reducer: the writer is the run record's desk, not a
+	// hand-supplied one, so the opening counts as management writing Texture's
+	// kinds (MA3.2; MA3.7 turns this into a refusal).
+	for _, kind := range []string{"choir.texture_document", "choir.texture_revision", "choir.story_library_head"} {
+		if key := kind + "|" + string(objectgraph.WriterManagement) + "|wrong_writer"; objectgraph.WriterGateCounts()[key] == 0 {
+			t.Errorf("counter %q = 0 after a management Cast opened a story: %v", key, objectgraph.WriterGateCounts())
+		}
+	}
 	docID := strings.TrimPrefix(story, "texture:")
 	records, err := s.ListInboxRecords(ctx, owner, computer, story, 0, 0)
 	if err != nil || len(records) != 1 || records[0].Cast == nil || records[0].Cast.Publish != types.CastPublishAuto ||

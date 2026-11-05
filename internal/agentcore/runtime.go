@@ -4917,7 +4917,7 @@ func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Cont
 	if decision.ActorID == "" {
 		decision.ActorID = currentTextureAgentID(docID)
 	}
-	if err := rt.store.CreateTextureDecision(ctx, decision); err != nil {
+	if err := rt.store.CreateTextureDecision(withKindCustodian(ctx, "choir.texture_decision"), decision); err != nil {
 		return fmt.Errorf("record initial Texture decision: %w", err)
 	}
 	rec.Metadata["texture_initial_decision_recorded"] = true

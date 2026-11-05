@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -66,6 +67,14 @@ func (rt *Runtime) armSourcePoll(ctx context.Context, sched store.SourceSchedule
 		sourcePollDueKind, string(content), "", "", sched.NextDue)
 }
 
+// putSourceScheduleAsCustodian saves a schedule from a host loop (the poll
+// tick, the boot recovery, the lost-wake sweep). Source schedules are
+// management's intake kinds, so the loop declares their custodian (MA3.2). The
+// owner's start and stop declare the owner themselves.
+func (rt *Runtime) putSourceScheduleAsCustodian(ctx context.Context, sched store.SourceSchedule) error {
+	return rt.store.PutSourceSchedule(withKindCustodian(ctx, "choir.source_schedule"), sched)
+}
+
 // StartSourceSchedule starts (or restarts) polling sourceID every interval.
 // The first poll is due now. Any earlier chain for the source goes stale.
 // A test_fixture source is refused; StartSourceScheduleRun marks a fixture
@@ -104,6 +113,9 @@ func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computer
 	if interval < minSourcePollInterval {
 		interval = minSourcePollInterval
 	}
+	// Starting and stopping a schedule are the owner's acts, made through the
+	// owner route and nowhere else (MA3.2): the owner is the declared writer.
+	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
 	sched, err := rt.store.GetSourceSchedule(ctx, ownerID, sourceID)
@@ -133,6 +145,7 @@ func (rt *Runtime) StopSourceSchedule(ctx context.Context, ownerID, sourceID, re
 	if rt == nil || rt.store == nil {
 		return store.SourceSchedule{}, fmt.Errorf("source schedule: store unavailable")
 	}
+	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
 	sched, err := rt.store.GetSourceSchedule(ctx, ownerID, strings.TrimSpace(sourceID))
@@ -173,7 +186,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		// durably so: a crash boot that finds the mark closes this poll and
 		// counts the crash against the schedule (the crash-loop bound).
 		sched.PollInFlightSince, sched.UpdatedAt = started, started
-		err = rt.store.PutSourceSchedule(ctx, sched)
+		err = rt.putSourceScheduleAsCustodian(ctx, sched)
 	}
 	sourceScheduleMu.Unlock()
 	if err != nil || !live {
@@ -274,7 +287,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	interval := sourcePollInterval(sched)
 	sched.UpdatedAt = now
 	put := func() error {
-		err := rt.store.PutSourceSchedule(ctx, sched)
+		err := rt.putSourceScheduleAsCustodian(ctx, sched)
 		if err != nil && len(sched.PendingArrivals) > 0 {
 			log.Printf("source schedule: %s: %d pending captures not saved: %v", sched.SourceID, len(sched.PendingArrivals), err)
 		}
@@ -363,7 +376,7 @@ func (rt *Runtime) recoverSourceScheduleAfterPlannedBoot(ctx context.Context, sc
 		// The planned restart cut a poll; its wake is redelivered (a planned
 		// boot may resume) and marks it again. Not a crash: nothing counts.
 		sched.PollInFlightSince, sched.UpdatedAt = time.Time{}, now
-		if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
+		if err := rt.putSourceScheduleAsCustodian(ctx, sched); err != nil {
 			log.Printf("source schedule: planned boot: %s: %v", sched.SourceID, err)
 			return
 		}
@@ -400,7 +413,7 @@ func (rt *Runtime) rearmOverdueSourceSchedule(ctx context.Context, sched store.S
 	sched.Generation++
 	sched.NextDue = now.Add(time.Duration(index) * sourceScheduleRearmStagger)
 	sched.PollInFlightSince, sched.UpdatedAt = time.Time{}, now
-	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
+	if err := rt.putSourceScheduleAsCustodian(ctx, sched); err != nil {
 		return err
 	}
 	log.Printf("source schedule: %s: %s: overdue since %s with no wake; re-armed as generation %d, next tick %s",
@@ -439,7 +452,7 @@ func (rt *Runtime) recoverSourceScheduleAfterCrash(ctx context.Context, sched st
 		sched.ArrivalsClosedReason = sourceScheduleInterruptedWhy
 	}
 	sched.UpdatedAt = now
-	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
+	if err := rt.putSourceScheduleAsCustodian(ctx, sched); err != nil {
 		log.Printf("source schedule: crash boot: %s: %v", sched.SourceID, err)
 		return
 	}

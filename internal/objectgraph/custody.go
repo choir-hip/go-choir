@@ -96,3 +96,47 @@ func DeriveCustody(kinds []KindRegistration, claims []Claim) ([]KindRegistration
 	}
 	return out, nil
 }
+
+// DeskWriter is the writer of a registered desk, system or app: "desk:" plus
+// the name the manifest holds. The reducer resolves the writer of a run's
+// desk through it (MA3.2), so no caller spells a desk's writer by hand.
+//
+// An app desk is registered as "app:<slug>", and a package's kinds name
+// desk:<slug> as their writer (RegisterPackageKind), so DeskWriter("app:notes")
+// is "desk:notes", the writer of choir.app.notes.*. A bare slug that is no
+// system desk is read as the app desk of that name.
+func DeskWriter(desk string) (Writer, bool) {
+	desk = strings.TrimSpace(desk)
+	d, ok := deskmanifest.Lookup(desk)
+	if !ok {
+		d, ok = deskmanifest.Lookup("app:" + desk)
+	}
+	if !ok {
+		return "", false
+	}
+	return Writer("desk:" + strings.TrimPrefix(d.Name, "app:")), true
+}
+
+// CustodianOf is the writer the registry holds for kind: the desk or service
+// whose manifest claims it. A host loop that writes a custodian's kind on its
+// behalf (the intake loops writing management's labels and events, the
+// support job writing Texture's verdicts) declares this writer, so the loop
+// names no desk. Such a declaration is true by construction and so is never a
+// crossing; the crossings the counters find are the declarations made from a
+// run record, which differ from the kind's custodian.
+func CustodianOf(kind ObjectKind) (Writer, bool) {
+	reg, err := writeRegistry.LookupKind(kind)
+	if err != nil || reg.Writer == "" {
+		return "", false
+	}
+	return reg.Writer, true
+}
+
+// FailOnUnknownCustodian panics when kind has no custodian and undeclared
+// tracking is on (a test process), so a declaration naming a kind the registry
+// does not hold cannot pass silently. Production does nothing.
+func FailOnUnknownCustodian(kind ObjectKind) {
+	if trackUndeclared.Load() {
+		panic(fmt.Sprintf("objectgraph: declaration names kind %q, which has no custodian in the registry", kind))
+	}
+}

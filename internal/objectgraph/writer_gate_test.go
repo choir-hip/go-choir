@@ -169,17 +169,8 @@ func TestCheckWriteAsOffIgnoresWriters(t *testing.T) {
 }
 
 func TestWriterGateDefaultsToObserve(t *testing.T) {
-	t.Setenv("CHOIR_OG_WRITER_GATE", "")
-	if got := WriterGateModeFromEnv(); got != WriterGateObserve {
+	if got := CurrentWriterGateMode(); got != WriterGateObserve {
 		t.Fatalf("default mode = %v, want observe", got)
-	}
-	t.Setenv("CHOIR_OG_WRITER_GATE", "enforce")
-	if got := WriterGateModeFromEnv(); got != WriterGateEnforce {
-		t.Fatalf("enforce env = %v", got)
-	}
-	t.Setenv("CHOIR_OG_WRITER_GATE", "nonsense")
-	if got := WriterGateModeFromEnv(); got != WriterGateObserve {
-		t.Fatalf("an unknown value must not turn the gate off: %v", got)
 	}
 }
 

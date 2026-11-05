@@ -91,6 +91,7 @@ func decodeContinueReceipt(t *testing.T, w *httptest.ResponseRecorder) continueR
 // its head carrying the owner's text unchanged and wakes the desk; no new
 // document, trajectory or conductor run.
 func TestPromptBarContinueRevisesLiveDocument(t *testing.T) {
+	requireNoUndeclaredWrites(t)
 	core, handler := testAPISetup(t)
 	s := core.Store()
 	start := startObservationLifecycle(t, s)
@@ -151,6 +152,7 @@ func TestPromptBarContinueRevisesLiveDocument(t *testing.T) {
 // P3: a continue on a settled document moves it to a new live trajectory
 // (F1) and the receipt names that trajectory.
 func TestPromptBarContinueSettledDocumentStartsNextTrajectory(t *testing.T) {
+	requireNoUndeclaredWrites(t)
 	core, handler := testAPISetup(t)
 	s := core.Store()
 	start := startObservationLifecycle(t, s)
@@ -257,6 +259,7 @@ func TestPromptBarContinueRefusesCancelledDocument(t *testing.T) {
 // P6: without continue_doc_id the prompt bar still creates a new document
 // through the conductor, and leaves an existing document alone.
 func TestPromptBarWithoutContinueCreatesNewDocument(t *testing.T) {
+	requireNoUndeclaredWrites(t)
 	core, handler := testAPISetup(t)
 	s := core.Store()
 	start := startObservationLifecycle(t, s)
