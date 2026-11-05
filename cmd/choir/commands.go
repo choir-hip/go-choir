@@ -353,6 +353,14 @@ func buildRegistry() []*command {
 			handler: func(x *call) (any, error) { return getRaw(x, fmt.Sprintf("/api/runs?limit=%d", x.num("limit"))) },
 		},
 		{
+			path: []string{"subcalls"}, tool: "subcalls",
+			summary: "Read the sub-call ledger: newest records, counts by kind and settlement class, self-favor and inert rates",
+			params:  []param{pInt("limit", "Maximum ledger records to return").dflt(100).between(1, 500)},
+			usage:   "--limit must be between 1 and 500",
+			scopes:  readRuntime, readOnly: true,
+			handler: func(x *call) (any, error) { return getRaw(x, fmt.Sprintf("/api/subcalls?limit=%d", x.num("limit"))) },
+		},
+		{
 			path: []string{"run", "cancel"}, summary: "Cancel a run",
 			params: []param{pStr("run_id", "Run id").req().one()},
 			scopes: writeRuntime, destructive: true, idempotent: true,
