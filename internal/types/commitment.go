@@ -577,6 +577,41 @@ func NewRoundClosureRecord(casterInbox, recipientInbox string, round int, reason
 	}
 }
 
+// ClosureReasonCastAfterRoundClosed names the notice a recipient's run end
+// sends when it was started by, or read, a Cast whose round a final Report
+// had already closed: the Cast can no longer be answered.
+const ClosureReasonCastAfterRoundClosed = "cast_after_round_closed"
+
+// CastAfterCloseNoticeID is the deterministic id of that notice, one per
+// stranded Cast: "<conversation_id>:r<round>:cast-after-closed:<seq>".
+func CastAfterCloseNoticeID(conversationID string, round int, castSeq int64) string {
+	return RoundClosureRecordID(conversationID, round, ClosureReasonCastAfterRoundClosed) + ":" + strconv.FormatInt(castSeq, 10)
+}
+
+// NewCastAfterCloseNotice builds the system Report that tells a caster its
+// Cast (inbox seq castSeq, round) reached the recipient after a final Report
+// closed the round, so nothing will answer it. It is not final: the round
+// is already closed, and a final Report on a closed round is refused. It is
+// a round-0 note (or a note in a newer open round) the caster reads with
+// choir.Records() and answers by casting again.
+func NewCastAfterCloseNotice(casterInbox, recipientInbox string, round int, castSeq int64, committedAt string) CommitmentRecord {
+	conversationID := InboxConversationID(casterInbox, recipientInbox)
+	text := "Your Cast (seq " + strconv.FormatInt(castSeq, 10) + ") reached " + strings.TrimSpace(recipientInbox) +
+		" after round " + strconv.Itoa(round) + " had been closed by a final Report, so it was not answered. Cast again to ask it."
+	return CommitmentRecord{
+		SchemaID:    CommitmentRecordSchemaV1,
+		RecordID:    CastAfterCloseNoticeID(conversationID, round, castSeq),
+		Kind:        CommitmentKindReport,
+		Discrepancy: DiscrepancyUnresolved,
+		Provenance:  CommitmentProvenance{AgentID: closureSystemAgentID, CommittedAt: committedAt},
+		Observation: CommitmentObservation{Excerpt: ClosureReasonCastAfterRoundClosed, ObservedAt: committedAt},
+		EmitterKind: CommitmentEmitterSystem,
+		Inbox:       strings.TrimSpace(casterInbox), SenderInbox: strings.TrimSpace(recipientInbox),
+		ConversationID: conversationID,
+		Report:         &CommitmentReport{Claims: []ReportClaim{{Text: text}}, StopReason: ClosureReasonCastAfterRoundClosed},
+	}
+}
+
 // InboxConversationID derives the conversation id from the two inboxes.
 // The pair is unordered so a Cast and the Reports answering it share one
 // conversation; who cast a round is on the conversation head.

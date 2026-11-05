@@ -149,12 +149,21 @@ func (f *rebaseFixture) closeRound(t *testing.T, recordID string) {
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: f.computer, Inbox: f.root, SenderInbox: f.management, Addressee: f.root,
 		Final: true, Report: &types.CommitmentReport{StopReason: "completed"},
 	}
-	f.commit(t, recordID, rec)
+	// Management has read its inbox (the root's Cast) before it answers.
+	ctx := context.Background()
+	read, _ := f.s.ReaderCursor(ctx, f.owner, f.computer, f.management, f.management)
+	head, _ := f.s.InboxHead(ctx, f.owner, f.computer, f.management)
+	f.commitWithCursor(t, recordID, rec, &types.InboxCursorAdvance{ReaderAgentID: f.management, Inbox: f.management, ExpectedSeq: read, Seq: head})
 }
 
 func (f *rebaseFixture) commit(t *testing.T, commandID string, rec types.CommitmentRecord) {
 	t.Helper()
-	req := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: commandID, Records: []types.CommitmentRecord{rec}}
+	f.commitWithCursor(t, commandID, rec, nil)
+}
+
+func (f *rebaseFixture) commitWithCursor(t *testing.T, commandID string, rec types.CommitmentRecord, cursor *types.InboxCursorAdvance) {
+	t.Helper()
+	req := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: commandID, Records: []types.CommitmentRecord{rec}, Cursor: cursor}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
 	if err != nil {
 		t.Fatal(err)

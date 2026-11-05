@@ -158,7 +158,10 @@ func TestStoryEntitiesBackfillRoundLeavesTextureNoWork(t *testing.T) {
 	final := types.CommitmentRecord{SchemaID: types.CommitmentRecordSchemaV1, RecordID: "quiet-final", Kind: types.CommitmentKindReport,
 		Discrepancy: types.DiscrepancyUnresolved, EmitterKind: types.CommitmentEmitterAgent, Provenance: types.CommitmentProvenance{AgentID: research},
 		Inbox: texture, SenderInbox: research, Addressee: texture, Final: true, Report: &types.CommitmentReport{StopReason: "empty"}}
-	req := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "cell-records:quiet-final", Records: []types.CommitmentRecord{final}}
+	researchCursor, _ := f.s.ReaderCursor(ctx, f.owner, f.computer, research, research)
+	researchHead, _ := f.s.InboxHead(ctx, f.owner, f.computer, research)
+	req := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "cell-records:quiet-final", Records: []types.CommitmentRecord{final},
+		Cursor: &types.InboxCursorAdvance{ReaderAgentID: research, Inbox: research, ExpectedSeq: researchCursor, Seq: researchHead}}
 	req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
 	receipt, err := f.s.CommitInboxRecords(ctx, req)
 	if err != nil || receipt.Records[0].WakeID != "" {

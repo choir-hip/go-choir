@@ -213,7 +213,7 @@ func TestInboxRoundsOpenStayOpenAndClose(t *testing.T) {
 		t.Fatalf("open rounds = %+v, %v", open, err)
 	}
 
-	closed := mustCommitInbox(t, s, "cmd-final-1", nil, inboxReport("final-1", res, tex, true, types.CommitmentReport{StopReason: "answered"}))
+	closed := mustCommitInbox(t, s, "cmd-final-1", readThrough(t, s, res), inboxReport("final-1", res, tex, true, types.CommitmentReport{StopReason: "answered"}))
 	if r := closed.Records[0]; r.Round != 1 || !r.ClosedRound {
 		t.Fatalf("final report receipt = %+v", r)
 	}
@@ -249,6 +249,9 @@ func TestInboxCastRacingFinalReportNeverLandsInClosedRound(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		tex, res := fmt.Sprintf("texture:race-%d", i), fmt.Sprintf("research:race-%d", i)
 		mustCommitInbox(t, s, fmt.Sprintf("cmd-open-%d", i), nil, inboxCast(fmt.Sprintf("open-%d", i), tex, res, types.CommitmentCast{}))
+		// The recipient has read the opening Cast; the race is a follow-up
+		// Cast against its final Report.
+		mustCommitInbox(t, s, fmt.Sprintf("cmd-race-read-%d", i), readThrough(t, s, res))
 		var wg sync.WaitGroup
 		var castReceipt, finalReceipt types.InboxCommitReceipt
 		var castErr, finalErr error
@@ -262,8 +265,19 @@ func TestInboxCastRacingFinalReportNeverLandsInClosedRound(t *testing.T) {
 			finalReceipt, finalErr = commitInbox(t, s, fmt.Sprintf("cmd-race-final-%d", i), nil, inboxReport(fmt.Sprintf("race-final-%d", i), res, tex, true, types.CommitmentReport{StopReason: "done"}))
 		}()
 		wg.Wait()
-		if castErr != nil || finalErr != nil {
-			t.Fatalf("race %d: cast %v, final %v", i, castErr, finalErr)
+		if castErr != nil {
+			t.Fatalf("race %d: cast %v", i, castErr)
+		}
+		if finalErr != nil {
+			// The Cast landed first, joined round 1 and sits unread: the
+			// final Report is refused and the round stays open.
+			if !errors.Is(finalErr, ErrInboxRefused) || !strings.Contains(finalErr.Error(), "unread Cast") || castReceipt.Records[0].Round != 1 {
+				t.Fatalf("race %d: final %v, cast round %d", i, finalErr, castReceipt.Records[0].Round)
+			}
+			if state, err := s.ConversationState(ctx, inboxTestOwner, inboxTestComputer, types.InboxConversationID(tex, res)); err != nil || !state.Open || state.Round != 1 {
+				t.Fatalf("race %d: refused final left state %+v, %v", i, state, err)
+			}
+			continue
 		}
 		state, err := s.ConversationState(ctx, inboxTestOwner, inboxTestComputer, types.InboxConversationID(tex, res))
 		if err != nil {
@@ -307,7 +321,7 @@ func TestInboxHypothesisIdsAndStates(t *testing.T) {
 	mustRefuseInbox(t, s, "cmd-hyp-opener-settles", inboxReport("hyp-opener-settles", tex, res, false, types.CommitmentReport{Settled: []types.HypothesisSettlement{{ID: "H1", Outcome: "confirmed"}}}))
 	mustRefuseInbox(t, s, "cmd-hyp-recipient-withdraws", inboxCast("hyp-recipient-withdraws", res, tex, types.CommitmentCast{Withdrawals: []types.CastWithdrawal{{ID: "H1"}}}))
 
-	mustCommitInbox(t, s, "cmd-hyp-final-1", nil, inboxReport("hyp-final-1", res, tex, true, types.CommitmentReport{
+	mustCommitInbox(t, s, "cmd-hyp-final-1", readThrough(t, s, res), inboxReport("hyp-final-1", res, tex, true, types.CommitmentReport{
 		Findings:   []types.ReportFinding{{Text: "a filing", BearsOn: []string{"H1"}}, {Text: "a side note", Outside: true}},
 		Settled:    []types.HypothesisSettlement{{ID: "H1", Outcome: "confirmed"}},
 		Dropped:    []types.HypothesisDrop{{ID: "H2", Reason: "no source reachable"}},

@@ -81,7 +81,7 @@ func TestSettlementWaitsForTextureRecords(t *testing.T) {
 	}
 	// Research's final Report closes the round and is unread by Texture.
 	commit("report-1", types.CommitmentRecord{Kind: types.CommitmentKindReport, Report: &types.CommitmentReport{StopReason: "completed"}, Final: true,
-		Inbox: texture, SenderInbox: research, Addressee: texture}, nil)
+		Inbox: texture, SenderInbox: research, Addressee: texture}, &types.InboxCursorAdvance{ReaderAgentID: research, Inbox: research, ExpectedSeq: 0, Seq: 1})
 	if ready() {
 		t.Fatal("the trajectory is ready to settle while Texture has an unread Report")
 	}

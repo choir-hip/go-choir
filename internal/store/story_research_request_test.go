@@ -133,7 +133,7 @@ func TestStoryResearchRequestStateAndPending(t *testing.T) {
 	}
 	mustCommitInbox(t, s, "cell-records:interim", nil, inboxReport("rep-1", research, texture, false, types.CommitmentReport{}))
 	final := inboxReport("rep-2", research, texture, true, types.CommitmentReport{StopReason: "completed"})
-	receipt := mustCommitInbox(t, s, "cell-records:final", nil, final)
+	receipt := mustCommitInbox(t, s, "cell-records:final", readThrough(t, s, research), final)
 	state, _ = s.StoryResearchRequestState(ctx, storyOwner, storyComputer, docID, "expand:d")
 	if state.Open || state.Reports != 2 || state.StopReason != "completed" || state.Interrupted {
 		t.Fatalf("closed state = %+v", state)

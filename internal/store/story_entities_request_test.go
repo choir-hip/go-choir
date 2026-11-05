@@ -85,7 +85,7 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 		mustCommitInbox(t, s, "turn-records-read:q0", &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: cur, Seq: head})
 	}
 	interim := mustCommitInbox(t, s, "cell-records:q-interim", nil, inboxReport("q-1", research, texture, false, types.CommitmentReport{}))
-	final := mustCommitInbox(t, s, "cell-records:q-final", nil, inboxReport("q-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
+	final := mustCommitInbox(t, s, "cell-records:q-final", readThrough(t, s, research), inboxReport("q-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
 	for _, r := range []types.InboxCommitReceipt{interim, final} {
 		if r.Records[0].WakeID != "" {
 			t.Fatalf("an empty Report of the entities round woke Texture: %+v", r.Records[0])
@@ -102,7 +102,7 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 	if _, err := askStoryResearch(s, docID, "expand:q", head); err != nil {
 		t.Fatal(err)
 	}
-	reader := mustCommitInbox(t, s, "cell-records:r-final", nil, inboxReport("r-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
+	reader := mustCommitInbox(t, s, "cell-records:r-final", readThrough(t, s, research), inboxReport("r-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
 	if reader.Records[0].WakeID == "" {
 		t.Fatal("an empty final Report of a reader's round did not wake Texture")
 	}
@@ -117,7 +117,7 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 		ClientRequestID: "related-review-f:" + docID, ExpectedHeadRevisionID: head, Kind: StoryResearchKindEntities}); err != nil {
 		t.Fatal(err)
 	}
-	found := mustCommitInbox(t, s, "cell-records:f-final", nil, inboxReport("f-2", research, texture, true,
+	found := mustCommitInbox(t, s, "cell-records:f-final", readThrough(t, s, research), inboxReport("f-2", research, texture, true,
 		types.CommitmentReport{Findings: []types.ReportFinding{{Text: "the story names the wrong minister", Outside: true}}, StopReason: "completed"}))
 	if found.Records[0].WakeID == "" {
 		t.Fatal("a Report with a finding in an entities round did not wake Texture")
@@ -130,7 +130,7 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 	}
 	cited := inboxReport("e-2", research, texture, true, types.CommitmentReport{StopReason: "completed"})
 	cited.EvidenceRefs = []string{"https://wire.example/harbor"}
-	if got := mustCommitInbox(t, s, "cell-records:e-final", nil, cited); got.Records[0].WakeID == "" {
+	if got := mustCommitInbox(t, s, "cell-records:e-final", readThrough(t, s, research), cited); got.Records[0].WakeID == "" {
 		t.Fatal("a Report citing sources in an entities round did not wake Texture")
 	}
 }

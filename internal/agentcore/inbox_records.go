@@ -1265,6 +1265,12 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 		return
 	}
 	inbox := strings.TrimSpace(rec.AgentID)
+	deskReadsItsInbox := profile != agentprofile.Engineering
+	if deskReadsItsInbox {
+		// A Cast this run was started by or could read, whose round a final
+		// Report had already closed, can no longer be answered.
+		rt.wakeCastersOfCastsAfterClose(ctx, rec)
+	}
 	if active, found, err := rt.activeRunByAgent(ctx, rec.OwnerID, inbox); err != nil || (found && active.RunID != rec.RunID) {
 		return
 	}
@@ -1277,7 +1283,7 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 		return
 	}
 	var unseen map[roundKey]bool
-	if profile != agentprofile.Engineering {
+	if deskReadsItsInbox {
 		// An engineering round is its assignment's; D7 settles it above.
 		unseen = rt.roundsOpenedAfterRunBegan(ctx, rec, rounds)
 	}
@@ -1309,6 +1315,103 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 		content, _ := json.Marshal(map[string]string{"inbox": round.CasterInbox, "closure": closure.RecordID})
 		if err := rt.DispatchActor(ctx, rec.OwnerID, rec.ComputerID, round.CasterInbox, "inbox_record", string(content), "", ""); err != nil {
 			log.Printf("runtime: round closure wake for %s: %v", round.CasterInbox, err)
+		}
+	}
+}
+
+// wakeCastersOfCastsAfterClose is the net under the store's unread-Cast
+// check (docs/problems/final-report-strands-unread-cast-2026-11-05.md): a
+// tape written before the check can hold a Cast inside a round that a final
+// Report closed first. The run that is started by or reads such a Cast can
+// answer nothing (a final Report on a closed round is refused), and no open
+// round is left for closeRoundsOfEndedRun, so its caster would wait forever.
+// At the run's end, each Cast in the inbox range the run began at, past its
+// cursor and through the head, whose round was closed by a final Report
+// committed before the run began, and which the run's desk did not answer
+// itself, gets one system notice to its caster and a wake. The notice id is
+// deterministic per Cast, so it fires once. A crash-closed run never gets
+// here (the caller returns first), and a crash boot has no run end: crash
+// closes work, it never resumes it. An engineering round is its
+// assignment's and is not checked.
+func (rt *Runtime) wakeCastersOfCastsAfterClose(ctx context.Context, rec *types.RunRecord) {
+	if rec.CreatedAt.IsZero() {
+		return
+	}
+	inbox := strings.TrimSpace(rec.AgentID)
+	start, ok := rt.recordsRunStart.Load(rec.RunID)
+	from, _ := start.(int64)
+	if !ok {
+		return
+	}
+	head, err := rt.store.InboxHead(ctx, rec.OwnerID, rec.ComputerID, inbox)
+	if err != nil || head <= from {
+		return
+	}
+	span, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, inbox, from, head)
+	if err != nil {
+		log.Printf("runtime: cast-after-close check after %s: %v", rec.RunID, err)
+		return
+	}
+	conversations := map[string][]types.CommitmentRecord{}
+	for _, cast := range span {
+		if !cast.IsCast() || cast.Round == 0 || cast.EmitterKind == types.CommitmentEmitterSystem {
+			continue
+		}
+		if committed, perr := time.Parse(time.RFC3339Nano, cast.Provenance.CommittedAt); perr == nil && committed.After(rec.CreatedAt) {
+			// A Cast committed after the run began can still be closed by
+			// the next run's own work; the stranded case is a close before
+			// this run began.
+			continue
+		}
+		state, err := rt.store.ConversationState(ctx, rec.OwnerID, rec.ComputerID, cast.ConversationID)
+		if err != nil {
+			continue
+		}
+		if cast.Round == state.Round && state.Open {
+			continue
+		}
+		records, seen := conversations[cast.ConversationID]
+		if !seen {
+			if records, err = rt.store.ConversationRecords(ctx, rec.OwnerID, rec.ComputerID, cast.ConversationID); err != nil {
+				continue
+			}
+			conversations[cast.ConversationID] = records
+		}
+		closedBefore, answered := false, false
+		for _, r := range records {
+			committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt)
+			if perr != nil {
+				continue
+			}
+			switch {
+			case r.Final && r.Round == cast.Round && r.SenderInbox == inbox && r.EmitterKind != types.CommitmentEmitterSystem && !committed.After(rec.CreatedAt):
+				closedBefore = true
+			case r.SenderInbox == inbox && r.EmitterKind != types.CommitmentEmitterSystem && !committed.Before(rec.CreatedAt):
+				answered = true
+			}
+		}
+		if !closedBefore || answered {
+			continue
+		}
+		noticeID := types.CastAfterCloseNoticeID(cast.ConversationID, cast.Round, cast.InboxSeq)
+		if exists, err := rt.store.CommitmentRecordExists(ctx, rec.OwnerID, rec.ComputerID, noticeID); err != nil || exists {
+			continue
+		}
+		notice := types.NewCastAfterCloseNotice(cast.SenderInbox, inbox, cast.Round, cast.InboxSeq, time.Now().UTC().Format(time.RFC3339Nano))
+		notice.ComputerID = rec.ComputerID
+		req := types.CommitInboxRecordsRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "cast-after-close:" + notice.RecordID, Records: []types.CommitmentRecord{notice}}
+		if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
+			log.Printf("runtime: cast-after-close notice %s: %v", notice.RecordID, err)
+			continue
+		}
+		if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
+			log.Printf("runtime: cast-after-close notice %s: %v", notice.RecordID, err)
+			continue
+		}
+		log.Printf("runtime: cast %s (seq %d) of %s reached %s after round %d closed; told the caster", cast.RecordID, cast.InboxSeq, cast.ConversationID, inbox, cast.Round)
+		content, _ := json.Marshal(map[string]string{"inbox": cast.SenderInbox, "closure": notice.RecordID})
+		if err := rt.DispatchActor(ctx, rec.OwnerID, rec.ComputerID, cast.SenderInbox, "inbox_record", string(content), "", ""); err != nil {
+			log.Printf("runtime: cast-after-close wake for %s: %v", cast.SenderInbox, err)
 		}
 	}
 }

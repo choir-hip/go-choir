@@ -239,6 +239,7 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 
 	out = cell(`import "choir"
 func() {
+	_ = choir.Records()
 	c := choir.StoryAnalysis().Candidates[0]
 	r, err := choir.Relate("", []map[string]any{{"entity_id": c.EntityID, "role": "central", "judgment_ref": c.Role.ReceiptRef, "question_id": c.Role.QuestionID}})
 	fmt.Println("relate", err == nil, string(r))

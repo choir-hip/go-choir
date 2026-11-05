@@ -277,6 +277,8 @@ func inboxRecordWakes(rec types.CommitmentRecord) bool {
 	return RecordWakesReader(rec)
 }
 
+func isEngineeringInbox(inbox string) bool { return strings.HasPrefix(inbox, "engineering:") }
+
 // stepConversation validates rec against its conversation head, stamps its
 // round and new hypothesis ids, and advances the head. It is the only
 // writer of round and hypothesis state; any error refuses the whole plan.
@@ -303,7 +305,7 @@ func stepConversation(head *types.ConversationHead, rec *types.CommitmentRecord)
 		}
 	case head.Open:
 		round = head.Round
-	case strings.HasPrefix(sender, "engineering:"):
+	case isEngineeringInbox(sender):
 		// C1e D3: an engineering conversation is one assignment's one round.
 		// Other desks send round-0 notes; engineering never speaks outside
 		// its open round, so a late progress Report cannot land after the
@@ -519,6 +521,11 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 		if err != nil {
 			return nil, nil, receipt, err
 		}
+		if closed && rec.EmitterKind != types.CommitmentEmitterSystem {
+			if err := s.refuseFinalOverUnreadCast(ctx, ownerID, computerID, rec, conversation.value, cursor, loadHead); err != nil {
+				return nil, nil, receipt, err
+			}
+		}
 		if after, _ := json.Marshal(conversation.value); (!conversation.exists || string(before) != string(after)) && !dirtyConversations[rec.ConversationID] {
 			dirtyConversations[rec.ConversationID] = true
 			conversationOrder = append(conversationOrder, rec.ConversationID)
@@ -618,6 +625,55 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 		objects, conditions = append(objects, obj), append(conditions, condition)
 	}
 	return objects, conditions, receipt, nil
+}
+
+// refuseFinalOverUnreadCast is the write-time check that a final Report
+// cannot close a round over a Cast the recipient has not read. A Cast sent
+// into an open round joins it, so a final Report composed before the
+// recipient read the follow-up Cast would close the round with that Cast
+// unanswered and strand its caster
+// (docs/problems/final-report-strands-unread-cast-2026-11-05.md). The
+// recipient's cursor is the batch's own advance for that inbox when the
+// commit carries one, else the stored cursor; only the unread range
+// (cursor, head] of the recipient's inbox is read, from the sequence index.
+// Admission only: replay and VerifyInboxHeads fold records and never run
+// it. System closures (a run end, a crash boot, a task's close) are exempt:
+// they close a round on purpose. Engineering and management-task inboxes
+// are exempt too: their rounds close from the assignment or task row, not
+// from a desk reading its inbox.
+func (s *Store) refuseFinalOverUnreadCast(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord, conversation types.ConversationHead, cursor *types.InboxCursorAdvance, loadHead func(string) (*inboxCached[types.InboxHead], error)) error {
+	recipient := strings.TrimSpace(rec.SenderInbox)
+	if isEngineeringInbox(recipient) {
+		return nil
+	}
+	if _, task := types.ManagementTaskIDOfInbox(recipient); task {
+		return nil
+	}
+	head, err := loadHead(recipient)
+	if err != nil {
+		return err
+	}
+	stored, err := loadInboxCached[types.InboxCursor](ctx, s, ogKindInboxCursor, ownerID, computerID, recipient)
+	if err != nil {
+		return err
+	}
+	read := stored.value.Cursors[recipient]
+	if cursor != nil && strings.TrimSpace(cursor.ReaderAgentID) == recipient && strings.TrimSpace(cursor.Inbox) == recipient && cursor.Seq > read {
+		read = cursor.Seq
+	}
+	if head.value.Seq <= read {
+		return nil
+	}
+	unread, err := s.ListInboxRecords(ctx, ownerID, computerID, recipient, read, head.value.Seq)
+	if err != nil {
+		return err
+	}
+	for _, other := range unread {
+		if other.IsCast() && other.ConversationID == rec.ConversationID && other.Round == conversation.Round {
+			return inboxRefused("final report %s: round %d has an unread Cast (seq %d); read it with choir.Records() before your final Report", rec.RecordID, conversation.Round, other.InboxSeq)
+		}
+	}
+	return nil
 }
 
 // normalizeInboxCommand trims an inbox command's scope and identity and

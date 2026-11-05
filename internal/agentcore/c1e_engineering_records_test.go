@@ -326,6 +326,9 @@ func TestC1eItems2And11CastWithoutValidParentCommitsNothing(t *testing.T) {
 	// Item 12: the paper path's own management answer: no assignment was
 	// opened for this round, so D6 lets the final Report through.
 	reduction, cellCtx := c1eManagementReduction(rt, seed, run, "c1e-2-answer")
+	if head, err := s.InboxHead(context.Background(), seed.OwnerID, seed.ComputerID, seed.ParentAgentID); err == nil {
+		reduction.records = cellRecords{inbox: seed.ParentAgentID, through: head} // the cell read its inbox with choir.Records()
+	}
 	if err := reduction.commitTray(cellCtx, []yaegikernel.StagedIntent{c1eAnswer(seed.TextureInbox)}, 1); err != nil {
 		t.Fatalf("management's answer with no child assignment was refused: %v", err)
 	}
