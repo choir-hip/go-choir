@@ -1017,7 +1017,7 @@
               aria-label="{entry.type === 'directory' ? 'Folder' : 'File'} {entry.name}"
               on:click={() => { if (renameTarget !== entry.name) handleFileClick(entry); }}
               on:keydown={(event) => handleRowKeydown(event, entry)}
-              use:contextMenu={{ label: `${entry.name} actions`, items: () => entryMenuItems(entry), target: entry.type === 'directory' ? { kind: 'folder', name: entry.name } : { kind: 'file', name: entry.name, data: { openWith: (opener) => openWith(entry, opener) } } }}
+              use:contextMenu={{ label: `${entry.name} actions`, items: () => entryMenuItems(entry), target: entry.type === 'directory' ? { kind: 'folder', name: entry.name } : { kind: 'file', name: entry.name, data: { openWith: (fileOpener) => openWith(entry, fileOpener) } } }}
             >
               <span class="file-icon" data-file-icon>{fileIconFor(entry)}</span>
               {#if renameTarget === entry.name}

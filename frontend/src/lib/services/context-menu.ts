@@ -130,6 +130,7 @@ const interceptors = new Map<string, string[] | null>();
 
 /** A handler on contextMenu.build for some targets (null: all). The first item it sees is { type: 'target', kind, ext, name }. */
 export function useContextMenuBuild(scope: Scope, spec: { id: string; tier?: 'policy' | 'user' | 'app' | 'core'; priority?: number; targets?: string[] | null }, fn: HandlerFn): () => void {
+  if (interceptors.has(spec.id)) throw new Error(`build handler ${spec.id} is already registered`);
   const targets = spec.targets ?? null;
   const dispose = shellKernel.pipelines.use(scope, BUILD_PIPELINE, { id: spec.id, tier: spec.tier ?? 'app', priority: spec.priority }, (items) => {
     const t = items[0] as { type?: string; kind?: string } | undefined;

@@ -61,6 +61,8 @@ type SettingField struct {
 	Enum    []string        `json:"enum,omitempty"`
 }
 
+var packageSegmentRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
+
 var settingKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,39}$`)
 
 // SettingPreferenceKey is the preference key of a package's setting.
@@ -73,7 +75,7 @@ func SplitSettingKey(pref string) (pkg, key string, ok bool) {
 		return "", "", false
 	}
 	pkg, key, found = strings.Cut(rest, ".")
-	if !found || pkg == "" || !settingKeyRe.MatchString(key) {
+	if !found || !packageSegmentRe.MatchString(pkg) || !settingKeyRe.MatchString(key) {
 		return "", "", false
 	}
 	return pkg, key, true

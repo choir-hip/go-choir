@@ -144,7 +144,11 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 			for _, f := range item.Files {
 				if ok && f.SHA256 == sha {
 					named = true
+					break
 				}
+			}
+			if named {
+				break
 			}
 		}
 		if !named {
