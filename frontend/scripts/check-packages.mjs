@@ -163,7 +163,8 @@ function checkLinks(contributes, owner, where) {
     if (apps.has(link.app)) fail(at, `app "${link.app}" is listed twice`);
     apps.add(link.app);
     const names = new Set();
-    if (!Array.isArray(link.params) || link.params.length === 0) fail(at, 'params must list at least one parameter');
+    const isHome = isObject(link.launch) && link.launch.home === true;
+    if (!Array.isArray(link.params) || (link.params.length === 0 && !isHome)) fail(at, 'params must list at least one parameter');
     (Array.isArray(link.params) ? link.params : []).forEach((p, j) => {
       if (!strictKeys(p, `${at} params[${j}]`, ['name'], ['required', 'context'])) return;
       if (typeof p.name !== 'string' || !LINK_NAME.test(p.name)) fail(`${at} params[${j}]`, 'name must be a lowercase word');
@@ -174,8 +175,9 @@ function checkLinks(contributes, owner, where) {
       if (p.context !== undefined && !(typeof p.context === 'string' && LINK_CONTEXT_KEY.test(p.context))) fail(`${at} params[${j}]`, 'context must be a key word');
     });
     if (link.launch === undefined) return;
-    if (!strictKeys(link.launch, `${at} launch`, [], ['windowTitle', 'requireAny', 'context'])) return;
+    if (!strictKeys(link.launch, `${at} launch`, [], ['windowTitle', 'requireAny', 'context', 'home'])) return;
     const l = link.launch;
+    if (l.home !== undefined && typeof l.home !== 'boolean') fail(`${at} launch`, 'home must be a boolean');
     if (l.windowTitle !== undefined && !str(l.windowTitle)) fail(`${at} launch`, 'windowTitle must be a non-empty string');
     if (l.requireAny !== undefined && !(Array.isArray(l.requireAny) && l.requireAny.every((n) => names.has(n)))) fail(`${at} launch`, 'requireAny must name declared parameters');
     if (l.context !== undefined) {

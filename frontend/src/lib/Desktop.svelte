@@ -19,6 +19,7 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { links } from './services/links';
   import { onMount } from 'svelte';
   import { onDestroy } from 'svelte';
   import { tick } from 'svelte';
@@ -275,24 +276,31 @@
   // The logged-out home opens Autopaper: the front list of living stories.
   // A story opens from it as a read-only published Texture window.
   function seedPublicPreviewWindows() {
+    // The home window is a data rule (services/links.ts: a link launch with
+    // home: true), not a name in this file.
+    const home = links.homeIntent();
+    if (!home) return;
     const geometry = largePublicWindowGeometry();
-    const previewWindows = [
-      {
-        windowId: 'public-preview-autopaper',
-        appId: 'autopaper',
-        title: 'Autopaper',
-        icon: getAppIcon('autopaper'),
-        x: geometry.x,
-        y: geometry.y,
-        width: geometry.width,
-        height: geometry.height,
-        mode: 'normal',
-        zIndex: 1,
-        restoredGeometry: null,
-        appContext: { preview: true, windowTitle: 'Autopaper' },
-      },
-    ];
-    setWindows(previewWindows, 'public-preview-autopaper');
+    const windowId = `public-preview-${home.appId}`;
+    setWindows(
+      [
+        {
+          windowId,
+          appId: home.appId,
+          title: home.appName,
+          icon: getAppIcon(home.appId),
+          x: geometry.x,
+          y: geometry.y,
+          width: geometry.width,
+          height: geometry.height,
+          mode: 'normal',
+          zIndex: 1,
+          restoredGeometry: null,
+          appContext: home.appContext,
+        },
+      ],
+      windowId,
+    );
   }
 
   async function startAuthenticatedDesktop() {

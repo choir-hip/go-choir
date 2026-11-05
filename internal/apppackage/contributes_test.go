@@ -247,3 +247,23 @@ func TestMenusNameTheOwnCommands(t *testing.T) {
 		})
 	}
 }
+
+func TestLinkHomeIsFirstPartyAndNeedsNoParams(t *testing.T) {
+	home := func(v map[string]any) {
+		withApp(v)
+		contrib(v)["links"] = []any{map[string]any{"app": "paper-night", "params": []any{}, "launch": map[string]any{"home": true, "windowTitle": "Home", "context": map[string]any{"preview": true}}}}
+	}
+	if _, err := ParseManifest(packJSON(t, home), OriginFirstParty); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseManifest(packJSON(t, home), OriginPublished); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("a published package must not claim the home, got %v", err)
+	}
+	noHome := func(v map[string]any) {
+		withApp(v)
+		contrib(v)["links"] = []any{map[string]any{"app": "paper-night", "params": []any{}}}
+	}
+	if _, err := ParseManifest(packJSON(t, noHome), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("a link without parameters or home must be refused, got %v", err)
+	}
+}

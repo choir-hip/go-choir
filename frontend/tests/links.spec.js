@@ -95,3 +95,15 @@ test('the manifest gate refuses a bad link and accepts a good one', () => {
   expect(run(link({ params: [{ name: 'doc' }] })).out).toMatch(/parameter the shell owns/);
   expect(run(link({ launch: { context: { a: 'param:zzz' } } })).out).toMatch(/not declared/);
 });
+
+test('L7: the signed-out home is a data rule: autopaper by default, one claimant, params optional only for it', () => {
+  const home = L.links.homeIntent();
+  expect(home).toMatchObject({ appId: 'autopaper', appContext: { preview: true, windowTitle: 'Autopaper' } });
+  const s = svc();
+  s.add({ app: 'notes', params: [], launch: { home: true, context: { preview: true } } }, 'notes');
+  expect(s.homeIntent().appId).toBe('notes');
+  expect(() => s.add({ app: 'other', params: [], launch: { home: true } }, 'other')).toThrow(/already the signed-out home/);
+  expect(() => svc().add({ app: 'notes', params: [] }, 'notes')).toThrow(/at least one parameter/);
+  expect(() => svc().add({ app: 'notes', params: [], launch: { home: 'yes' } }, 'notes')).toThrow(/home must be a boolean/);
+  expect(svc().homeIntent()).toBeNull();
+});

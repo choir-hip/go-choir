@@ -23,6 +23,7 @@
 //  L4 two packages declare the same `app`: the second is refused;
 //  L5 uninstall: the rule leaves with its package scope, and its params stop
 //     being cleared (the leak differential);
+//  L7 more than one rule claiming the signed-out home: the second is refused;
 //  L6 a context value that is not a literal or `param:<name>` of this rule:
 //     the rule is refused (no expressions in data).
 import { getAppDefinition } from '../apps/registry';
@@ -30,6 +31,8 @@ import { registerContributionPoint } from '../contributions';
 
 export type LinkParam = { name: string; required?: boolean; context?: string };
 export type LinkLaunch = {
+  /** The signed-out home opens this app's window (the preview seed): at most one rule is the home. */
+  home?: boolean;
   windowTitle?: string;
   requireAny?: string[];
   context?: Record<string, string | number | boolean>;
@@ -52,7 +55,8 @@ const MAX_VALUE = 512;
 export function validateLink(rule: LinkRule, owner: string): string | null {
   if (!rule || typeof rule !== 'object' || typeof rule.app !== 'string') return 'a link is { app, params, launch }';
   if (rule.app !== owner) return `link for app "${rule.app}" is not the package's own ("${owner}")`;
-  if (!Array.isArray(rule.params) || rule.params.length === 0) return `link ${rule.app}: params must list at least one parameter`;
+  if (rule.launch?.home !== undefined && typeof rule.launch.home !== 'boolean') return `link ${rule.app}: home must be a boolean`;
+  if (!Array.isArray(rule.params) || (rule.params.length === 0 && rule.launch?.home !== true)) return `link ${rule.app}: params must list at least one parameter`;
   const names = new Set<string>();
   for (const p of rule.params) {
     if (!p || typeof p.name !== 'string' || !NAME.test(p.name)) return `link ${rule.app}: parameter names are lowercase words`;
@@ -83,6 +87,7 @@ export function createLinks(describeApp: (appId: string) => { name: string; icon
     const problem = validateLink(rule, owner);
     if (problem) throw new Error(problem);
     if (rules.has(rule.app)) throw new Error(`a link for app "${rule.app}" is already declared`);
+    if (rule.launch?.home && [...rules.values()].some((r) => r.launch?.home)) throw new Error(`link ${rule.app}: another app is already the signed-out home`);
     const frozen = JSON.parse(JSON.stringify(rule)) as LinkRule;
     rules.set(rule.app, frozen);
     return () => { if (rules.get(rule.app) === frozen) rules.delete(rule.app); };
@@ -91,6 +96,16 @@ export function createLinks(describeApp: (appId: string) => { name: string; icon
   /** The parameters packages' links consume, to clear them from the address bar with the shell's own. */
   function consumedParams(): string[] {
     return [...new Set([...rules.values()].flatMap((r) => r.params.map((p) => p.name)))].sort();
+  }
+
+  /** The window the signed-out home opens (the preview seed), or null when no rule is the home. */
+  function homeIntent(): LinkIntent | null {
+    const rule = [...rules.values()].find((r) => r.launch?.home);
+    if (!rule) return null;
+    const app = describeApp(rule.app);
+    const appContext: Record<string, unknown> = { ...(rule.launch?.context ?? {}) };
+    appContext.windowTitle = rule.launch?.windowTitle || app?.name || rule.app;
+    return { kind: 'app_launch', source: 'url', appId: rule.app, appName: app?.name || rule.app, icon: app?.icon || '', appContext };
   }
 
   /** The launch a URL asks for, or null (no rule, a missing required parameter, an unsafe value). */
@@ -123,7 +138,7 @@ export function createLinks(describeApp: (appId: string) => { name: string; icon
     return { kind: 'app_launch', source: 'url', appId: rule.app, appName: app?.name || rule.app, icon: app?.icon || '', appContext };
   }
 
-  return { add, resolve, consumedParams, has: (app: string) => rules.has(app) };
+  return { add, resolve, homeIntent, consumedParams, has: (app: string) => rules.has(app) };
 }
 
 // ---- the shell's service ----
@@ -132,6 +147,11 @@ export const links = createLinks((appId) => {
   const app = getAppDefinition(appId);
   return app ? { name: app.name, icon: app.icon } : null;
 });
+
+// The signed-out home: the front list of living stories. Autopaper is a
+// built-in app until its row moves into a manifest (C8); then this rule moves
+// with it as contributes.links[].launch.home.
+links.add({ app: 'autopaper', params: [], launch: { home: true, windowTitle: 'Autopaper', context: { preview: true } } }, 'autopaper');
 
 registerContributionPoint('links', (pkg, entries, scope) => {
   for (const entry of entries) {

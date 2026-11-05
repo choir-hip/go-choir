@@ -85,6 +85,9 @@ type LinkParam struct {
 // LinkLaunch is the window a link opens. Context values are literals or
 // "param:<name>"; there are no expressions.
 type LinkLaunch struct {
+	// Home makes the app's window the signed-out home (the preview seed). Only
+	// a first-party package may claim it.
+	Home        bool           `json:"home,omitempty"`
 	WindowTitle string         `json:"windowTitle,omitempty"`
 	RequireAny  []string       `json:"requireAny,omitempty"`
 	Context     map[string]any `json:"context,omitempty"`
@@ -374,7 +377,10 @@ func (m Manifest) validateLinks() error {
 			return invalid("%s.app %q is declared twice", w, l.App)
 		}
 		apps[l.App] = true
-		if len(l.Params) == 0 || len(l.Params) > maxLinkParams {
+		if l.Launch != nil && l.Launch.Home && m.Origin != OriginFirstParty {
+			return invalid("%s.launch.home: the signed-out home is first-party only", w)
+		}
+		if (len(l.Params) == 0 && !(l.Launch != nil && l.Launch.Home)) || len(l.Params) > maxLinkParams {
 			return invalid("%s.params must list one to %d parameters", w, maxLinkParams)
 		}
 		names := map[string]bool{}
