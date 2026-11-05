@@ -29,7 +29,7 @@ func TestSearchWireCorpusFindsTheOwnersStories(t *testing.T) {
 	harbor := openTestStory(t, s, owner, computer, "Harbor reopens after the storm")
 	openTestStory(t, s, "owner-other", computer, "Harbor strike enters second week")
 	deps := researchtools.Dependencies{Store: s}
-	ectx := toolregistry.WithExecutionContext(ctx, toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research})
+	ectx := toolregistry.WithExecutionContext(leasedResearchCtx(ctx), toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research})
 	raw, err := deps.HostEgress(ectx, "search_wire_corpus", json.RawMessage(`{"query":"harbor","owner_id":"`+owner+`"}`))
 	if err != nil {
 		t.Fatalf("search_wire_corpus: %v", err)

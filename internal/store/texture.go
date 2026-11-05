@@ -1999,7 +1999,7 @@ func (s *Store) TextureSearchUnderLease(ctx context.Context, ownerID, query stri
 	if !ok {
 		return nil, ErrTextureSearchNoLease
 	}
-	if n := s.textureSearchCount(leaseID); n > TextureSearchMaxQueriesPerLease {
+	if s.textureSearchServed(leaseID) >= TextureSearchMaxQueriesPerLease {
 		return nil, ErrTextureSearchRate
 	}
 	if limit <= 0 {
@@ -2040,17 +2040,31 @@ func (s *Store) TextureSearchUnderLease(ctx context.Context, ownerID, query stri
 	if err := s.AppendEvent(objectgraph.WithWriter(ctx, objectgraph.WriterKernel), &exec); err != nil {
 		return nil, fmt.Errorf("store: record the texture.search query: %w", err)
 	}
+	// A query counts against the budget once it is served.
+	s.textureSearchServe(leaseID)
 	return hits, nil
 }
 
-func (s *Store) textureSearchCount(leaseID string) int {
+func (s *Store) textureSearchServed(leaseID string) int {
+	s.textureSearchMu.Lock()
+	defer s.textureSearchMu.Unlock()
+	return s.textureSearchQueries[leaseID]
+}
+
+func (s *Store) textureSearchServe(leaseID string) {
 	s.textureSearchMu.Lock()
 	defer s.textureSearchMu.Unlock()
 	if s.textureSearchQueries == nil {
 		s.textureSearchQueries = map[string]int{}
 	}
 	s.textureSearchQueries[leaseID]++
-	return s.textureSearchQueries[leaseID]
+}
+
+// textureSearchForget drops a lease's query count when the lease ends.
+func (s *Store) textureSearchForget(leaseID string) {
+	s.textureSearchMu.Lock()
+	defer s.textureSearchMu.Unlock()
+	delete(s.textureSearchQueries, leaseID)
 }
 
 func boundSnippet(s string, max int) string {

@@ -47,6 +47,13 @@ func WithLeases(ctx context.Context, auth LeaseAuthority, runID string) context.
 	return context.WithValue(ctx, leaseHolderKey{}, leaseHolder{auth: auth, runID: runID})
 }
 
+// WithoutLeases returns ctx with no lease authority: a read made on it is
+// admitted by the custody table alone. A research child shares its parent's run
+// id, so it must not inherit the parent's leases (MA3.7c).
+func WithoutLeases(ctx context.Context) context.Context {
+	return context.WithValue(ctx, leaseHolderKey{}, nil)
+}
+
 func leasesFrom(ctx context.Context) (leaseHolder, bool) {
 	if ctx == nil {
 		return leaseHolder{}, false

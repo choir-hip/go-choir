@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"strings"
 	"sync"
@@ -268,7 +269,7 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection, fallbacks: fallbacks})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
 	// MA3.3: the child reads as the desk it runs as, not as its parent.
-	childCtx = withDeskReader(childCtx, childExec.Profile)
+	childCtx = researchChildReadContext(childCtx, childExec.Profile)
 
 	workers := newResearchChildDeskWorkers(childKey)
 	defer workers.release(deskWorkerActivationID(childExec))
@@ -399,4 +400,12 @@ func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchL
 		ids = append(ids, info.Provider+"/"+info.ID)
 	}
 	return inherited, lineage.fallbacks, fmt.Errorf("research: model %q is not in the catalog; use a role name such as %q, %q, or one of: %s", model, agentprofile.Research, modelcatalog.PoolSpecPrefix+modelcatalog.DefaultPool, strings.Join(ids, ", "))
+}
+
+// researchChildReadContext is the reading identity of a research child: the
+// desk it runs as, and no lease. The child shares its parent's run id and so
+// would read the parent's leases, among them texture.search; a web-capable
+// child must not hold owner-private Texture text (MA3.7c).
+func researchChildReadContext(ctx context.Context, profile string) context.Context {
+	return objectgraph.WithoutLeases(withDeskReader(ctx, profile))
 }

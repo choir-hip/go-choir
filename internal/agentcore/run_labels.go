@@ -176,8 +176,25 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 		// The floor every capture read carries, plus what the capture record
 		// itself is labelled (MA3.3): the host reads it from the record.
 		return captureReadLabels.Union(captureRecordLabels(result)), true
+	case yaegikernel.ActionSearchWireCorpus:
+		// Stories come only under a texture.search lease, each hit labelled
+		// by the custodian; the run carries every label a hit carries
+		// (MA3.7c) so the disclosure gate sees owner-private Texture text.
+		var body struct {
+			Results []struct {
+				Label string `json:"label"`
+			} `json:"results"`
+		}
+		_ = json.Unmarshal(result, &body)
+		labels := worldReadLabels
+		for _, r := range body.Results {
+			if strings.HasPrefix(r.Label, types.LabelOwnerPrivatePrefix) {
+				labels = labels.Union(types.NewLabelSet(r.Label))
+			}
+		}
+		return labels, true
 	case yaegikernel.ActionRead, yaegikernel.ActionPollSource, yaegikernel.ActionSourceAPI,
-		yaegikernel.ActionSearchStart, yaegikernel.ActionSearchWireCorpus, yaegikernel.ActionResearch:
+		yaegikernel.ActionSearchStart, yaegikernel.ActionResearch:
 		return worldReadLabels, true
 	case yaegikernel.ActionReadEvidence:
 		// An evidence object carries the labels its writer's run held.

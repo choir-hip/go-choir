@@ -34,6 +34,9 @@ func (l LeaseStore) PutLease(ctx context.Context, rec lease.Record) error {
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.LeaseID) == "" {
 		return fmt.Errorf("lease: owner and lease id are required")
 	}
+	if rec.State != lease.StateActive {
+		l.s.textureSearchForget(rec.LeaseID)
+	}
 	metadata := map[string]any{
 		"computer_id": rec.ComputerID, "lease_id": rec.LeaseID, "holder": rec.Holder,
 		"run_id": rec.HolderRunID, "state": rec.State, "issued_at": rec.IssuedAt.UTC().Format(time.RFC3339Nano),

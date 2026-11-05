@@ -145,7 +145,7 @@ type corpusSearchOut struct {
 // the payload carries no owner, the execution context carries the run's.
 func searchCorpusAsCell(t *testing.T, deps *researchtools.Dependencies, owner, computer, payload string) corpusSearchOut {
 	t.Helper()
-	ectx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research})
+	ectx := toolregistry.WithExecutionContext(leasedResearchCtx(context.Background()), toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research})
 	raw, err := deps.HostEgress(ectx, "search_wire_corpus", json.RawMessage(payload))
 	if err != nil {
 		t.Fatalf("search_wire_corpus %s: %v", payload, err)
@@ -337,7 +337,7 @@ func TestSearchWireCorpusReturnsMatchingEventsFirst(t *testing.T) {
 	put(owner, "computer-other", "ev-other", "Harbor reopens elsewhere",
 		store.EventMembership{CaptureID: "cap-o1", Title: "Harbor reopens elsewhere", Outlet: "example.org", Opened: true})
 
-	raw, err := deps.HostEgress(toolregistry.WithExecutionContext(ctx, toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research}),
+	raw, err := deps.HostEgress(toolregistry.WithExecutionContext(leasedResearchCtx(ctx), toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research}),
 		"search_wire_corpus", json.RawMessage(`{"query":"harbor"}`))
 	if err != nil {
 		t.Fatal(err)

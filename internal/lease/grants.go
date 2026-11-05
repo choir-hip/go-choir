@@ -66,9 +66,15 @@ func (s *Service) IssueTextureSearch(ctx context.Context, ownerID, computerID, r
 	if strings.TrimSpace(runID) == "" {
 		return Record{}, fmt.Errorf("lease: texture.search needs the run it is for")
 	}
+	// The holder is the run's own desk (agent ids are <desk>:<id>), checked
+	// against the grant table when the lease is decided.
+	desk, _, ok := strings.Cut(agentID, ":")
+	if !ok || desk == "" {
+		return Record{}, fmt.Errorf("lease: texture.search agent id %q names no desk", agentID)
+	}
 	p, w := 0.9, 0.2
 	return s.Request(ctx, Request{
-		OwnerID: ownerID, ComputerID: computerID, Desk: strings.TrimPrefix(string(grantTable[GrantTextureSearch].holders[0]), "desk:"), RunID: runID, AgentID: agentID,
+		OwnerID: ownerID, ComputerID: computerID, Desk: desk, RunID: runID, AgentID: agentID,
 		Origin:  types.OriginSystem,
 		Scope:   Scope{Grants: []string{GrantTextureSearch}},
 		Purpose: "research's corpus search over Texture: ranked refs and bounded snippets, never a document body",
