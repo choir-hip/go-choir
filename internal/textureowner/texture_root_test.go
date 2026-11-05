@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -840,5 +841,44 @@ func TestTextureRootDocumentStartedAfterTheMarkerIsOrdinary(t *testing.T) {
 	rh.write(rh.h, &runD, "ferry", "The ferry runs hourly.", "answered")
 	if open := openWorkFor(rh.snapshot(d)); len(open) != 0 {
 		t.Fatalf("Done on an ordinary document left its work open (the root clamp applied): %+v", open)
+	}
+}
+
+// MA3.7b counter-zero: a root digest round (documents written, a digest
+// minted, the root ensured and started) reads no kind through a reader that is
+// not its custodian or admitted, and reads nothing undeclared. The settings
+// the root reads to configure itself are read as the shell, and the rows it
+// reads are Texture's own.
+func TestTextureRootRoundCrossesNoReader(t *testing.T) {
+	objectgraph.ResetReaderGateCounts()
+	objectgraph.ResetUndeclaredReads()
+	rootStarted(t)
+	for key, n := range objectgraph.ReaderGateCounts() {
+		// An undeclared read counted here may be the fixture's own (it seeds
+		// through the store); the oracle below sees the product's call sites.
+		if strings.Contains(key, "|undeclared|") {
+			continue
+		}
+		t.Errorf("reader gate counted during a root digest round: %s x%d", key, n)
+	}
+	for key, n := range objectgraph.UndeclaredReads() {
+		t.Errorf("undeclared read during a root digest round: %s x%d", key, n)
+	}
+}
+
+// MA3.7b: the settings the host reads to configure Texture's run are read as
+// the settings' custodian, so a Texture-declared context crosses nothing; and
+// a content-item ref Texture resolves into a source card is read as the
+// content item's custodian.
+func TestTextureHostReadsOfSettingsAndContentItemsCrossNothing(t *testing.T) {
+	rh := newRootHarness(t, true)
+	ctx := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
+	objectgraph.ResetReaderGateCounts()
+	if !rh.h.textureSettingOn(ctx, rootOwner, rootComputer, store.SettingTextureRootDesk) {
+		t.Fatal("the root desk setting reads off")
+	}
+	_ = sourceEntityFromEvidenceRef(ctx, rh.h, rootOwner, "content_item:no-such-item")
+	for key, n := range objectgraph.ReaderGateCounts() {
+		t.Errorf("reader gate counted: %s x%d", key, n)
 	}
 }

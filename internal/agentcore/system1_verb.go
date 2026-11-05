@@ -63,8 +63,6 @@ const (
 	// system1TapeLimit bounds the tape read of one computer's System1 events.
 	system1TapeLimit = 10000
 
-	system1StoryRefPrefix = "story:"
-
 	// system1HostRefPrefix names evidence the host composed for a host-built
 	// question (system1Ask.hostText).
 	system1HostRefPrefix = "host:"
@@ -431,12 +429,20 @@ func system1Digest(computer string, questions []yaegikernel.System1Question, con
 func (rt *Runtime) system1ResolveContext(ctx context.Context, owner, computer string, questions []yaegikernel.System1Question, hostText map[string]string) (map[string]system1Context, map[string]string, error) {
 	contexts := map[string]system1Context{}
 	aliasOf := map[string]string{}
+	// The passages a cell passed (X2): a text: ref resolves to the passage
+	// whose digest it names, and to nothing else.
+	passages := map[string]string{}
+	for _, q := range questions {
+		for _, passage := range q.Passages {
+			passages[yaegikernel.System1PassageRef(passage)] = passage
+		}
+	}
 	for _, q := range questions {
 		for _, ref := range q.ContextRefs {
 			if _, done := contexts[ref]; done {
 				continue
 			}
-			resolved, err := rt.system1ReadRef(ctx, owner, computer, ref, hostText)
+			resolved, err := rt.system1ReadRef(ctx, owner, computer, ref, hostText, passages)
 			if err != nil {
 				return nil, nil, fmt.Errorf("choir.System1: question %q: context_refs %q: %w", q.ID, ref, err)
 			}
@@ -447,31 +453,23 @@ func (rt *Runtime) system1ResolveContext(ctx context.Context, owner, computer st
 	return contexts, aliasOf, nil
 }
 
-func (rt *Runtime) system1ReadRef(ctx context.Context, owner, computer, ref string, hostText map[string]string) (system1Context, error) {
+func (rt *Runtime) system1ReadRef(ctx context.Context, owner, computer, ref string, hostText, passages map[string]string) (system1Context, error) {
 	if strings.HasPrefix(ref, system1HostRefPrefix) {
 		text := system1Bound(hostText[ref])
 		if text == "" {
-			return system1Context{}, fmt.Errorf("a reference is a capture id or story:<revision_id>; text and URLs are not evidence here")
+			return system1Context{}, fmt.Errorf("a reference is a capture id; text and URLs are not evidence here")
 		}
 		return system1Context{Kind: "host", Ref: ref, Text: text}, nil
 	}
-	if revisionID, ok := strings.CutPrefix(ref, system1StoryRefPrefix); ok {
-		revisionID = strings.TrimSpace(revisionID)
-		if revisionID == "" {
-			return system1Context{}, fmt.Errorf("a story version is story:<revision_id>")
-		}
-		rev, err := rt.store.GetLifecycleRevision(ctx, owner, computer, revisionID)
-		if err != nil {
-			return system1Context{}, fmt.Errorf("cannot read that story version: %w", err)
-		}
-		text := system1Bound(rev.Content)
+	if strings.HasPrefix(ref, yaegikernel.System1TextRefPrefix) {
+		text := system1Bound(passages[ref])
 		if text == "" {
-			return system1Context{}, fmt.Errorf("that story version has no text")
+			return system1Context{}, fmt.Errorf("a reference is a capture id; pass text as a passage")
 		}
-		return system1Context{Kind: "story", Ref: ref, Text: text}, nil
+		return system1Context{Kind: "passage", Ref: ref, Text: text}, nil
 	}
 	if kind, _, _, err := objectgraph.ParseCanonicalID(ref); err != nil || kind != objectgraph.WebCaptureObjectKind {
-		return system1Context{}, fmt.Errorf("a reference is a capture id or story:<revision_id>; text and URLs are not evidence here")
+		return system1Context{}, fmt.Errorf("a reference is a capture id; text and URLs are not evidence here")
 	}
 	captures := rt.TextureCaptures()
 	if captures == nil {

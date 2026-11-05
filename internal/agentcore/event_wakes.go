@@ -346,7 +346,7 @@ func (rt *Runtime) mintEventWakes(layerCtx context.Context, ownerID, computerID 
 	if !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes) {
 		return
 	}
-	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
+	setting, err := rt.store.GetComputerSetting(settingsCustodian(ctx), ownerID, computerID, store.SettingIntakeEventWakes)
 	if err != nil {
 		log.Printf("event layer: read %s: %v", store.SettingIntakeEventWakes, err)
 		return

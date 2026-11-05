@@ -519,6 +519,10 @@ func (r *rlmCallReduction) gateMessageDisclosure(ctx context.Context, in yaegike
 	switch in.Kind {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentReport, yaegikernel.IntentReply,
 		yaegikernel.IntentFeed, yaegikernel.IntentDecline, yaegikernel.IntentEscalate:
+	case yaegikernel.IntentResolve, yaegikernel.IntentDisagreement, yaegikernel.IntentCancel:
+		// Addressed acts that are not envelopes (MA3.7b, MA3.6 N1): they are
+		// gated when they name a desk, and a retract also reaches the desk
+		// the retracted act addressed.
 	default:
 		return nil
 	}
@@ -531,8 +535,28 @@ func (r *rlmCallReduction) gateMessageDisclosure(ctx context.Context, in yaegike
 		}
 		r.gatedMessages[in.LocalID] = true
 	}
-	body := strings.Join([]string{in.Statement, in.Body, in.Objective, in.Claim, in.Question, in.Packet}, " ")
-	return r.gateMessage(ctx, in.Kind, in.ToDesk, body)
+	body := strings.Join([]string{in.Statement, in.Body, in.Objective, in.Claim, in.Question, in.Packet, in.Resolve, in.Disagreement}, " ")
+	to := in.ToDesk
+	if in.Kind == yaegikernel.IntentCancel && strings.TrimSpace(to) == "" {
+		to = r.retractAddressee(ctx, in)
+	}
+	return r.gateMessage(ctx, in.Kind, to, body)
+}
+
+// retractAddressee is the desk the retracted act addressed, which a retract
+// stands down (the intent itself is unaddressed). A record that cannot be
+// read names none: the gate does not guess a sink.
+func (r *rlmCallReduction) retractAddressee(ctx context.Context, in yaegikernel.StagedIntent) string {
+	rt := r.rt()
+	if rt == nil || rt.store == nil || strings.TrimSpace(in.TargetRef) == "" {
+		return ""
+	}
+	computer := firstNonEmpty(strings.TrimSpace(r.scope.ComputerID), rt.TextureComputerID())
+	target, err := rt.store.GetCommitmentRecord(ctx, strings.TrimSpace(r.scope.OwnerID), computer, strings.TrimSpace(in.TargetRef))
+	if err != nil || target == nil {
+		return ""
+	}
+	return strings.TrimSpace(target.Addressee)
 }
 
 // gateMessage gates one message of kind to the address to.

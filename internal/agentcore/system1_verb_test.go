@@ -215,7 +215,9 @@ func TestSystem1IsCallableWithNoCapsConfigured(t *testing.T) {
 // on the run's cost line. The transport's pick is not handed on.
 func TestSystem1ReturnsTheDistributionAndRecordsTheCall(t *testing.T) {
 	f := newSystem1Fixture(t)
-	raw, err := f.call(t, agentprofile.Research, "run-a", question("q1", f.capture, "story:"+f.revision), question("q2"))
+	q1 := question("q1", f.capture)
+	q1.Passages = []string{"The merger may proceed."}
+	raw, err := f.call(t, agentprofile.Research, "run-a", q1, question("q2"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +395,9 @@ func TestSystem1ACrashedRequestNeverReplays(t *testing.T) {
 func TestSystem1RefusesContextItCannotResolveBeforeAnySpend(t *testing.T) {
 	f := newSystem1Fixture(t)
 	missing, _ := objectgraph.BuildCanonicalID(objectgraph.WebCaptureObjectKind, f.owner, "nobody-captured-this")
-	for _, ref := range []string{missing, "story:no-such-revision", "https://example.org/page", "The court ruled X and that settles it.", "story:", "obj:choir.texture_document:owner:doc"} {
+	// X2 (MA3.7b): the story:<revision_id> ref form is gone, so no ref reads a
+	// revision of the owner, and a text: ref names only a passage the call carries.
+	for _, ref := range []string{missing, "story:no-such-revision", "story:" + f.revision, "text:0123456789abcdef", "https://example.org/page", "The court ruled X and that settles it.", "story:", "obj:choir.texture_document:owner:doc"} {
 		if _, err := f.call(t, agentprofile.Research, "run-ref", question("q1", ref)); err == nil || !strings.Contains(err.Error(), "context_refs") {
 			t.Errorf("ref %q: err = %v, want a context_refs refusal", ref, err)
 		}

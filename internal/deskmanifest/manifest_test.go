@@ -479,3 +479,11 @@ func TestInstanceIsValidatedAndExactlyOneDeskHoldsAssignments(t *testing.T) {
 		t.Errorf("%d desks own the assignment kind, want exactly 1", holders)
 	}
 }
+
+// MA3.7b (MA3.6 N6): "app" is the namespace prefix of every app desk and no
+// app may take it as its slug.
+func TestAppIsAReservedAppSlug(t *testing.T) {
+	if !IsReservedAppSlug("app") {
+		t.Fatal(`"app" is not reserved`)
+	}
+}

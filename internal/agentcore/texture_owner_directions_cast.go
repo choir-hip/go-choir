@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -449,6 +450,11 @@ func truncateForError(s string) string {
 // the lifecycle store. The document is the desk's own (texture:<doc>); a
 // run whose metadata names another document names none.
 func (r *rlmCallReduction) attachTextureOwnerDirections(ctx context.Context, intents []yaegikernel.StagedIntent) ([]yaegikernel.StagedIntent, error) {
+	// X5 (MA3.7b, E3): the reducer acts as Texture's agent for this one read.
+	// The document and its revisions are Texture's, the directions are the
+	// owner's words carried on the Cast, and no cell reads them here, so the
+	// read is declared as the custodian and is no crossing.
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_revision")
 	scope := ownerRevisionScope{OwnerID: strings.TrimSpace(r.scope.OwnerID), ComputerID: strings.TrimSpace(r.scope.ComputerID)}
 	if desk, subject, ok := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":"); ok && desk == agentprofile.Texture {
 		scope.DocID = strings.TrimSpace(subject)

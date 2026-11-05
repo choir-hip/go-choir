@@ -582,6 +582,15 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 				return nil, fmt.Errorf("reduce: %w", err)
 			}
 			for _, cast := range casts {
+				// The synthesized per-group Cast is a desk message too
+				// (MA3.7b, MA3.6 N1): counted for a built-in desk.
+				castBody := ""
+				if cast.Directive != nil {
+					castBody = cast.Directive.Objective + " " + cast.Directive.Body
+				}
+				if err := r.gateMessage(ctx, yaegikernel.IntentCast, cast.Addressee, castBody); err != nil {
+					return nil, err
+				}
 				records = append(records, cast)
 				localIDs = append(localIDs, in)
 			}

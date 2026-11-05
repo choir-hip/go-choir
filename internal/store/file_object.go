@@ -372,7 +372,8 @@ func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string
 	// a caller that forgets it, or a switch turned off during a long pass,
 	// still cannot write.
 	// Nothing stored reads as the declared default.
-	setting, err := s.GetComputerSetting(ctx, ownerID, computerID, SettingFilesObject)
+	// The store reads the switch for itself, not as the writer of the batch.
+	setting, err := s.GetComputerSetting(objectgraph.WithReader(ctx, objectgraph.WriterStore), ownerID, computerID, SettingFilesObject)
 	switch {
 	case errors.Is(err, ErrNotFound):
 		setting.Value = KnownComputerSettings[SettingFilesObject]

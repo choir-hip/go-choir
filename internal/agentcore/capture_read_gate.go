@@ -106,18 +106,11 @@ func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessag
 	return nil
 }
 
-// noteRunMemoryScope observes the one scope check the kind gate cannot see
-// (X18, section 8.4). Run-memory entries are a commons kind kept in their own
-// table, so a read by id passes the reader gate, but a desk's tool reads any
-// run's entry by its id. The ruling self-scopes it to the caller's own run
-// (MA3.7); until then the read is served and an entry of another run is
-// counted as the desk reading it.
-func noteRunMemoryScope(ctx context.Context, callerRunID string, entry types.RunMemoryEntry) {
-	if callerRunID == "" || entry.RunID == callerRunID {
-		return
-	}
-	reader, ok := objectgraph.ReaderFrom(ctx)
-	objectgraph.NoteWrongReader(runMemoryEntryKind, reader, ok)
+// runMemoryEntryInScope reports whether a run may read entry: its own run's
+// entries only (X18, MA3.7b). A call that names no run (a host caller) is
+// not a cell and reads as before.
+func runMemoryEntryInScope(callerRunID string, entry types.RunMemoryEntry) bool {
+	return callerRunID == "" || entry.RunID == callerRunID
 }
 
 // runMemoryEntryKind is the kind of a run-memory entry (a commons kind).

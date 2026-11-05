@@ -34,7 +34,9 @@ func (s *Store) graphHomeOn(ctx context.Context, ownerID, key string) bool {
 	if s == nil || s.projectionTape == nil || s.og == nil || strings.TrimSpace(ownerID) == "" {
 		return false
 	}
-	setting, err := s.GetComputerSetting(ctx, ownerID, s.projectionTape.computerID, key)
+	// The store reads its own switch (MA3.7b): the declared writer of the
+	// write that asked is not reading a setting, so it must not cross.
+	setting, err := s.GetComputerSetting(objectgraph.WithReader(ctx, objectgraph.WriterStore), ownerID, s.projectionTape.computerID, key)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			// Never set on this computer: the declared default.

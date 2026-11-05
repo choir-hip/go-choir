@@ -118,7 +118,7 @@ func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computer
 	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
-	sched, err := rt.store.GetSourceSchedule(ctx, ownerID, sourceID)
+	sched, err := rt.store.GetSourceSchedule(scheduleCustodian(ctx), ownerID, sourceID)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.SourceSchedule{}, err
 	}
@@ -148,7 +148,7 @@ func (rt *Runtime) StopSourceSchedule(ctx context.Context, ownerID, sourceID, re
 	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
-	sched, err := rt.store.GetSourceSchedule(ctx, ownerID, strings.TrimSpace(sourceID))
+	sched, err := rt.store.GetSourceSchedule(scheduleCustodian(ctx), ownerID, strings.TrimSpace(sourceID))
 	if err != nil {
 		return store.SourceSchedule{}, err
 	}
@@ -169,7 +169,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		return fmt.Errorf("source schedule: decode wake: %w", err)
 	}
 	current := func() (store.SourceSchedule, bool, error) {
-		sched, err := rt.store.GetSourceSchedule(ctx, ownerID, due.SourceID)
+		sched, err := rt.store.GetSourceSchedule(scheduleCustodian(ctx), ownerID, due.SourceID)
 		if errors.Is(err, store.ErrNotFound) {
 			return sched, false, nil
 		}
@@ -355,7 +355,7 @@ func (rt *Runtime) recoverSourceSchedulesAtBoot(ctx context.Context) {
 	_, planned := rt.BootWasPlannedRestart()
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
-	schedules, err := rt.store.ListSourceSchedules(ctx, "")
+	schedules, err := rt.store.ListSourceSchedules(scheduleCustodian(ctx), "")
 	if err != nil {
 		log.Printf("source schedule: boot: list schedules: %v", err)
 		return
@@ -529,7 +529,7 @@ func (rt *Runtime) sweepOverdueSourceSchedules(ctx context.Context, now time.Tim
 	}
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
-	schedules, err := rt.store.ListSourceSchedules(ctx, "")
+	schedules, err := rt.store.ListSourceSchedules(scheduleCustodian(ctx), "")
 	if err != nil {
 		return 0, fmt.Errorf("list schedules: %w", err)
 	}
@@ -691,4 +691,12 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// scheduleCustodian declares the source schedules' custodian (management,
+// section 8.2) as the reader of the schedule reads the boot recovery, the
+// sweep and the tick make. They are the host's standing-intent bookkeeping,
+// not a desk's read, so the desk a context carries does not cross (MA3.7b).
+func scheduleCustodian(ctx context.Context) context.Context {
+	return objectgraph.WithCustodianReader(ctx, "choir.source_schedule")
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -140,7 +141,13 @@ func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref 
 		if rt == nil || rt.Store == nil {
 			return textureSourceEntity{}
 		}
-		item, err := rt.Store.GetContentItem(ctx, ownerID, value)
+		// A content item is the shell's kind (section 8.2). The host resolves
+		// the ref the owner saved into a source card (title and URL) as the
+		// custodian, for a surface the owner sees; no cell reads the item
+		// here and Texture's document keeps only the ref and the card
+		// (MA3.7b). Carrying the card on every evidence ref would move the
+		// same read to the writer of each ref.
+		item, err := rt.Store.GetContentItem(objectgraph.WithCustodianReader(ctx, "choir.content_item"), ownerID, value)
 		if err != nil {
 			return textureSourceEntity{}
 		}

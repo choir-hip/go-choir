@@ -366,7 +366,7 @@ func TestRLMResearchOverlayListsSystem1WithItsContract(t *testing.T) {
 		t.Fatalf("overlay has no cell surface: %q", overlay)
 	}
 	surface := overlay[at:]
-	for _, want := range []string{"choir.System1(", "distribution", "you decide", "flat", "read the sources closely", "context_refs", "story:<revision_id>", "may be off on this computer"} {
+	for _, want := range []string{"choir.System1(", "distribution", "you decide", "flat", "read the sources closely", "context_refs", "passages", "may be off on this computer"} {
 		if !strings.Contains(surface, want) {
 			t.Errorf("research overlay does not say %q about choir.System1", want)
 		}

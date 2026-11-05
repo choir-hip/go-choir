@@ -1093,6 +1093,12 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			return err
 		}
 		for _, in := range folded {
+			// The folded Cast or Ask never reaches the act path, so it is
+			// gated here as a desk message (MA3.7b, MA3.6 N1); a built-in
+			// desk is counted and not blocked.
+			if err := r.gateMessageDisclosure(ctx, in); err != nil {
+				return err
+			}
 			receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: 0, Kind: in.Kind})
 		}
 	}

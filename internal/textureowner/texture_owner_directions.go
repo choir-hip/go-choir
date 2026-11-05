@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -116,7 +117,10 @@ func (rt *Handler) textureOwnerDirectionsOn(ctx context.Context, ownerID, comput
 // textureSettingOn reads one computer setting; a never-stored setting reads
 // its declared default, and any other read failure is off.
 func (rt *Handler) textureSettingOn(ctx context.Context, ownerID, computerID, key string) bool {
-	ctx = asTextureReader(ctx)
+	// A setting the host reads to configure Texture's run is the shell's
+	// kind, read as its custodian (MA3.7b); the value is a host-supplied
+	// scalar and no cell reads it.
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.computer_setting")
 	if rt == nil || rt.Store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}

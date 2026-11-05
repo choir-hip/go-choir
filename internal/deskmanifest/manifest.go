@@ -649,6 +649,8 @@ var reservedAppSlugs = map[string]bool{
 	"podcast": true, "prompt": true, "pulse": true, "research": true,
 	"research-child": true, "research_child": true, "settings": true, "shell": true, "slides": true,
 	"system": true, "texture": true, "video": true,
+	// "app" is the namespace prefix itself (MA3.6 N6).
+	"app": true,
 }
 
 // IsReservedAppSlug reports whether slug (the part after "app:") is reserved,

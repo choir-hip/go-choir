@@ -15,6 +15,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/entitytext"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -273,7 +274,21 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 		a.Error = "no decision model is bound on this computer, so the candidates carry no answers"
 		return
 	}
-	story := []string{system1StoryRefPrefix + a.Story.RevisionID}
+	// The host reads the story's revision as Texture's agent (E3): the
+	// analysis is of the desk's own story, and the text rides as host
+	// evidence, so no System 1 ref reads a revision for a cell (X2).
+	rev, err := rt.store.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, "choir.texture_revision"), owner, computer, a.Story.RevisionID)
+	if err != nil || strings.TrimSpace(rev.Content) == "" {
+		if err == nil {
+			err = fmt.Errorf("that story version has no text")
+		}
+		log.Printf("story analysis: %s on run %s: read the story: %v", a.Story.DocID, runID, err)
+		a.Error = "the story could not be read for the analysis: " + err.Error()
+		return
+	}
+	const storyRef = system1HostRefPrefix + "story"
+	story := []string{storyRef}
+	storyText := map[string]string{storyRef: rev.Content}
 	slots := []analysisSlot{{
 		question: yaegikernel.System1Question{ID: "novelty", Text: noveltyQuestion(a.Candidates), Choices: []string{analysisNoveltyYes, analysisNoveltyNo}, ContextRefs: story},
 		subject:  system1Subject{Kind: analysisSubjectNovelty},
@@ -314,7 +329,7 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 			a.Error = "the analysis questions could not be asked: " + err.Error()
 			return
 		}
-		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, system1Ask{questions: valid, crossRun: true, subjects: subjects, story: a.Story.PublicationID})
+		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, system1Ask{questions: valid, crossRun: true, subjects: subjects, story: a.Story.PublicationID, hostText: storyText})
 		if err != nil {
 			log.Printf("story analysis: %s on run %s: System 1: %v", a.Story.DocID, runID, err)
 			a.Error = "System 1 did not answer every analysis question: " + err.Error()

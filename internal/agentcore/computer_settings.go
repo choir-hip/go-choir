@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -35,7 +36,7 @@ func (rt *Runtime) intakeLabelsEnabled(ctx context.Context, ownerID, computerID 
 	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}
-	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, store.SettingIntakeLabels)
+	setting, err := rt.store.GetComputerSetting(settingsCustodian(ctx), ownerID, computerID, store.SettingIntakeLabels)
 	switch {
 	case err == nil:
 		return setting.Value
@@ -51,7 +52,7 @@ func (rt *Runtime) intakeLabelsEnabled(ctx context.Context, ownerID, computerID 
 // computerHasSourceSchedule reports whether the owner has a source schedule
 // on this computer. A read error is no.
 func (rt *Runtime) computerHasSourceSchedule(ctx context.Context, ownerID, computerID string) bool {
-	schedules, err := rt.store.ListSourceSchedules(ctx, ownerID)
+	schedules, err := rt.store.ListSourceSchedules(scheduleCustodian(ctx), ownerID)
 	if err != nil {
 		log.Printf("computer settings: list source schedules on %s: %v; intake.labels reads off", computerID, err)
 		return false
@@ -64,13 +65,22 @@ func (rt *Runtime) computerHasSourceSchedule(ctx context.Context, ownerID, compu
 	return false
 }
 
+// settingsCustodian declares the settings' custodian (the shell, section 8.2)
+// as the reader of a setting the host reads to configure a desk's run (MA3.7b).
+// The value is a host-supplied scalar, like ProviderWaits (X14b): no cell
+// reads a setting through it, so the desk the context carries does not cross.
+// The owner route that lists and sets settings declares the owner itself.
+func settingsCustodian(ctx context.Context) context.Context {
+	return objectgraph.WithCustodianReader(ctx, "choir.computer_setting")
+}
+
 // computerSettingOn reports whether a boolean setting is on for the
 // computer. Anything but a stored true (no setting, a store error) is off.
 func (rt *Runtime) computerSettingOn(ctx context.Context, ownerID, computerID, key string) bool {
 	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}
-	setting, err := rt.store.GetComputerSetting(withKernelReader(ctx), ownerID, computerID, key)
+	setting, err := rt.store.GetComputerSetting(settingsCustodian(ctx), ownerID, computerID, key)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			// Never set on this computer: the declared default.

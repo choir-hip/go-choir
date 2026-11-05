@@ -118,10 +118,10 @@ func TestIntakeLabelerReadsTheStoryIndexNotTextureKinds(t *testing.T) {
 	requireNoManagementTextureRead(t)
 }
 
-// X18: research's get_run_memory_entry reads any run's entry by id. The
-// entry kind is a commons kind in its own table, so the scope check is the
-// tool's: an entry of another run counts as the desk reading it.
-func TestRunMemoryEntryOfAnotherRunCountsAsACrossing(t *testing.T) {
+// X18 (MA3.7b): research's get_run_memory_entry is self-scoped: a run reads
+// its own run's entries, and an entry of another run reads as absent. The
+// entry kind is a commons kind, so nothing is counted either way.
+func TestRunMemoryEntryIsSelfScopedToTheRun(t *testing.T) {
 	rt, st := testRuntime(t)
 	ctx := context.Background()
 	for _, e := range []types.RunMemoryEntry{
@@ -133,22 +133,19 @@ func TestRunMemoryEntryOfAnotherRunCountsAsACrossing(t *testing.T) {
 		}
 	}
 	tool := newGetRunMemoryEntryTool(rt)
-	key := "choir.run_memory_entry|" + string(objectgraph.WriterResearch) + "|wrong_reader"
-	moved := readerDelta(key)
-	call := func(entryID string) {
-		t.Helper()
+	objectgraph.ResetReaderGateCounts()
+	call := func(entryID string) (string, error) {
 		c := toolregistry.WithExecutionContext(withDeskReader(ctx, agentprofile.Research), toolregistry.ExecutionContext{OwnerID: "owner-x18", RunID: "run-x18-self"})
-		if _, err := tool.Func(c, json.RawMessage(`{"entry_id":"`+entryID+`"}`)); err != nil {
-			t.Fatal(err)
-		}
+		return tool.Func(c, json.RawMessage(`{"entry_id":"`+entryID+`"}`))
 	}
-	call("x18-own")
-	if n := moved(); n != 0 {
-		t.Fatalf("the run's own entry was counted: %d", n)
+	if out, err := call("x18-own"); err != nil || !strings.Contains(out, "x18-own") {
+		t.Fatalf("the run's own entry: %q, %v", out, err)
 	}
-	call("x18-other")
-	if moved() == 0 {
-		t.Fatalf("counter %q did not move (counts: %v)", key, objectgraph.ReaderGateCounts())
+	if out, err := call("x18-other"); err == nil || strings.Contains(out, `\"b\"`) {
+		t.Fatalf("another run's entry was served: %q, %v", out, err)
+	}
+	if counts := objectgraph.ReaderGateCounts(); len(counts) != 0 {
+		t.Fatalf("reader counts = %v; want none", counts)
 	}
 }
 

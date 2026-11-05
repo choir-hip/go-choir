@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -120,7 +121,9 @@ func (f *fileObjects) enabled(ctx context.Context, ownerID string) bool {
 	if f == nil || strings.TrimSpace(ownerID) == "" || f.computerID == "" {
 		return false
 	}
-	setting, err := f.store.GetComputerSetting(ctx, ownerID, f.computerID, choirstore.SettingFilesObject)
+	// The switch is the shell's kind; the recorder reads it as the settings
+	// custodian, a host-supplied scalar (MA3.7b).
+	setting, err := f.store.GetComputerSetting(objectgraph.WithCustodianReader(ctx, "choir.computer_setting"), ownerID, f.computerID, choirstore.SettingFilesObject)
 	if err != nil {
 		if errors.Is(err, choirstore.ErrNotFound) {
 			return choirstore.KnownComputerSettings[choirstore.SettingFilesObject]
@@ -200,6 +203,9 @@ func (f *fileObjects) Record(ctx context.Context, ownerID string, event FileChan
 	if rel == "" || exemptFilePath(rel) {
 		return
 	}
+	// The recorder is the owner files service: its reads of choir.file are
+	// the custodian's own (MA3.7b).
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.file")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var change choirstore.FileChange
@@ -318,6 +324,8 @@ func (f *fileObjects) Reconcile(ctx context.Context) (fileReconcileResult, error
 	}
 	f.passMu.Lock()
 	defer f.passMu.Unlock()
+	// A pass is the owner files service reconciling its own kind (MA3.7b).
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.file")
 	key, err := f.key(ctx)
 	if err != nil {
 		return fileReconcileResult{}, err

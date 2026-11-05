@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -814,5 +816,42 @@ func TestFileObjectReconcileSkipsAnUnreadableDirectoryWithoutDeletingWhatIsInIt(
 	}
 	if _, err := f.byPath("locked/inside.txt"); err != nil {
 		t.Fatalf("a file in an unreadable directory was deleted: %v", err)
+	}
+}
+
+// MA3.7b: the recorder's boot and tick passes read choir.file and the
+// files.object setting as their custodians. The pass runs on a goroutine of
+// its own so the undeclared-read oracle (which skips a stack with a test
+// frame in it) sees the product's call sites, as on d@e at boot: before the
+// slice a reconcile tallied 28 choir.file reads and the setting read with no
+// declared reader.
+func TestFileObjectReconcileDeclaresItsReaders(t *testing.T) {
+	f := newFileObjectFixture(t)
+	for i := 0; i < 5; i++ {
+		f.write(t, fmt.Sprintf("notes/n%d.md", i), "x")
+	}
+	f.setSwitch(t, true)
+	stop := objectgraph.TrackUndeclaredReads()
+	defer stop()
+	objectgraph.ResetUndeclaredReads()
+	objectgraph.ResetReaderGateCounts()
+	done := make(chan error, 1)
+	go func() {
+		for i := 0; i < 2; i++ {
+			if _, err := f.fo.Reconcile(context.Background()); err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	for key, n := range objectgraph.UndeclaredReads() {
+		t.Errorf("undeclared read: %s x%d", key, n)
+	}
+	for key, n := range objectgraph.ReaderGateCounts() {
+		t.Errorf("reader gate counted: %s x%d", key, n)
 	}
 }

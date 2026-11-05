@@ -1,6 +1,7 @@
 package objectgraph
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -139,4 +140,22 @@ func FailOnUnknownCustodian(kind ObjectKind) {
 	if trackUndeclared.Load() {
 		panic(fmt.Sprintf("objectgraph: declaration names kind %q, which has no custodian in the registry", kind))
 	}
+}
+
+// WithCustodianReader declares the custodian of kind as the reader of the
+// reads made with the returned context, replacing any desk the context
+// carries. It is for the host reading a kind on its custodian's behalf to
+// configure a run (a computer setting that gates a desk's behaviour, the
+// owner's directions the reducer attaches to a Cast, E3): the value is a
+// host-supplied scalar or a carried fact, and no cell reads the kind. Call it
+// only from trusted in-process code, on a context used for that one read; a
+// cell-reachable path that returns the kind's content declares nothing here
+// and stays counted. A kind with no custodian declares nothing.
+func WithCustodianReader(ctx context.Context, kind ObjectKind) context.Context {
+	w, ok := CustodianOf(kind)
+	if !ok {
+		FailOnUnknownCustodian(kind)
+		return ctx
+	}
+	return WithReader(ctx, w)
 }

@@ -38,8 +38,8 @@ type StoryAnalysisStory struct {
 	// PublicationID is the story's id in the public graph, published or not.
 	PublicationID string `json:"publication_id"`
 	DocID         string `json:"doc_id"`
-	// RevisionID is the head revision analysed; System 1 read it as
-	// story:<revision_id>.
+	// RevisionID is the head revision analysed; the host read it as Texture's agent
+	// and gave it to System 1 as evidence.
 	RevisionID string `json:"revision_id"`
 	Title      string `json:"title"`
 }

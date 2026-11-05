@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -293,6 +294,17 @@ func TestTextureReductionAttachesFromTheLifecycleStore(t *testing.T) {
 	}
 	if _, directions := castOwnerDirectionsOf(t, out[0].Statement); len(directions) != 1 || directions[0].Text != request || directions[0].Kind != "request" {
 		t.Fatalf("owner_directions = %+v, want the request verbatim", directions)
+	}
+	// X5 (MA3.7b, E3): the read is the reducer acting as Texture's agent, so
+	// even on a context that carries another desk it crosses nothing.
+	objectgraph.ResetReaderGateCounts()
+	if _, err := r.attachTextureOwnerDirections(withDeskReader(ctx, agentprofile.Research), []yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","owner_revision":"rev-sd07-a"}`)}); err != nil {
+		t.Fatalf("attach as the custodian's agent: %v", err)
+	}
+	for key, n := range objectgraph.ReaderGateCounts() {
+		if !strings.Contains(key, "|undeclared|") {
+			t.Errorf("owner directions attach counted %s x%d", key, n)
+		}
 	}
 	if _, err := r.attachTextureOwnerDirections(ctx, []yaegikernel.StagedIntent{ownerCast(`{"owner_revision":"rev-sd07-b"}`)}); err == nil || !strings.Contains(err.Error(), "rev-sd07-b") {
 		t.Fatalf("another document's revision = %v, want refused", err)

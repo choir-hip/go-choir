@@ -58,7 +58,13 @@ func newGetRunMemoryEntryTool(rt *Runtime) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			noteRunMemoryScope(ctx, toolregistry.ExecutionContextFrom(ctx).RunID, entry)
+			// X18 (MA3.7b): a run reads only its own run's entries. A
+			// checkpoint names entry ids of the run that wrote it, so no
+			// cell needs another run's; an entry of another run reads as
+			// absent, which also hides that it exists.
+			if !runMemoryEntryInScope(toolregistry.ExecutionContextFrom(ctx).RunID, entry) {
+				return "", fmt.Errorf("run memory entry %q is not in this run", entryID)
+			}
 			return toolregistry.ResultJSON(map[string]any{
 				"entry_id":            entry.EntryID,
 				"loop_id":             entry.RunID,

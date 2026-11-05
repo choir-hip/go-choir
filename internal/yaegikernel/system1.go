@@ -2,6 +2,8 @@ package yaegikernel
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -35,13 +37,35 @@ const (
 var system1IDRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
 // System1Question is one closed question: choose among Choices, judged only on
-// the text the host resolves from ContextRefs (capture ids or story:<revision
-// id>). Text is the desk's wording of the question, not evidence.
+// the text the host resolves from ContextRefs (capture ids) and the passages
+// the cell passes itself. Text is the desk's wording of the question, not
+// evidence. A passage is text the cell read through its own custody (X2,
+// MA3.7b: the story:<revision_id> ref form is gone, so the host no longer
+// reads any revision of the owner for a cell); validation turns each into a
+// text:<digest> context ref the host resolves from the passage itself.
 type System1Question struct {
 	ID          string   `json:"id"`
 	Text        string   `json:"text"`
 	Choices     []string `json:"choices"`
 	ContextRefs []string `json:"context_refs,omitempty"`
+	Passages    []string `json:"passages,omitempty"`
+}
+
+// System1TextRefPrefix names a passage the cell passed.
+const System1TextRefPrefix = "text:"
+
+// System1MaxPassagesPerQuestion and System1MaxPassageRunes bound the text a
+// cell passes; the host keeps the first 1000 runes of each in the judge's
+// evidence.
+const (
+	System1MaxPassagesPerQuestion = 2
+	System1MaxPassageRunes        = 20000
+)
+
+// System1PassageRef is the context ref of a passage.
+func System1PassageRef(passage string) string {
+	sum := sha256.Sum256([]byte(passage))
+	return System1TextRefPrefix + hex.EncodeToString(sum[:8])
 }
 
 // System1Payload defines ActionSystem1.
@@ -113,7 +137,7 @@ func validateSystem1Questions(in []System1Question, maxChoices int) ([]System1Qu
 		for _, r := range q.ContextRefs {
 			r = strings.TrimSpace(r)
 			if r == "" || len(r) > system1MaxRefLen {
-				return nil, fmt.Errorf("question %q: context_refs entries must be capture ids or story:<revision_id>, 1-%d characters", id, system1MaxRefLen)
+				return nil, fmt.Errorf("question %q: context_refs entries must be capture ids, 1-%d characters (pass story text in passages)", id, system1MaxRefLen)
 			}
 			if seenRef[r] {
 				continue
@@ -122,7 +146,34 @@ func validateSystem1Questions(in []System1Question, maxChoices int) ([]System1Qu
 			distinct[r] = true
 			refs = append(refs, r)
 		}
-		out = append(out, System1Question{ID: id, Text: text, Choices: choices, ContextRefs: refs})
+		if len(q.Passages) > System1MaxPassagesPerQuestion {
+			return nil, fmt.Errorf("question %q: passages takes at most %d, got %d", id, System1MaxPassagesPerQuestion, len(q.Passages))
+		}
+		var passages []string
+		seenPassage := map[string]bool{}
+		for _, passage := range q.Passages {
+			passage = strings.TrimSpace(passage)
+			if n := utf8.RuneCountInString(passage); n == 0 || n > System1MaxPassageRunes {
+				return nil, fmt.Errorf("question %q: each passage must be 1-%d characters, got %d", id, System1MaxPassageRunes, n)
+			}
+			ref := System1PassageRef(passage)
+			if seenPassage[ref] {
+				continue
+			}
+			seenPassage[ref] = true
+			passages = append(passages, passage)
+			// Validating twice (the cell, then the host) meets the ref the
+			// first pass added; the passage still rides along.
+			if !seenRef[ref] {
+				seenRef[ref] = true
+				distinct[ref] = true
+				refs = append(refs, ref)
+			}
+		}
+		if len(refs) > System1MaxRefsPerQuestion {
+			return nil, fmt.Errorf("question %q: context_refs and passages together take at most %d, got %d", id, System1MaxRefsPerQuestion, len(refs))
+		}
+		out = append(out, System1Question{ID: id, Text: text, Choices: choices, ContextRefs: refs, Passages: passages})
 	}
 	if len(distinct) > System1MaxDistinctRefs {
 		return nil, fmt.Errorf("choir.System1 takes at most %d distinct context_refs per call, got %d", System1MaxDistinctRefs, len(distinct))
@@ -149,7 +200,7 @@ func system1Questions(arg any) ([]System1Question, error) {
 	dec.DisallowUnknownFields()
 	var qs []System1Question
 	if err := dec.Decode(&qs); err != nil {
-		return nil, fmt.Errorf("choir.System1 takes a list of {id, text, choices, context_refs} maps; evidence is named by context_refs (capture ids, story:<revision_id>), never pasted: %w", err)
+		return nil, fmt.Errorf("choir.System1 takes a list of {id, text, choices, context_refs, passages} maps; evidence is named by context_refs (capture ids) or passed as passages: %w", err)
 	}
 	return ValidateSystem1Questions(qs)
 }
@@ -158,8 +209,8 @@ func system1Questions(arg any) ([]System1Question, error) {
 // probability of each choice as the judge gave it (no threshold, no pick):
 // {receipt_ref, replayed, answers: [{id, choices, probabilities}]}.
 // Read the distributions and decide yourself; a flat one means read the
-// sources closely. context_refs name captures and story versions
-// (story:<revision_id>) whose text the host reads itself.
+// sources closely. context_refs name captures whose text the host reads
+// itself; passages are text you pass.
 func (s *ChoirScope) System1(questions any) (JSON, error) {
 	qs, err := system1Questions(questions)
 	if err != nil {
