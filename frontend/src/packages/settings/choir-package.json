@@ -1,0 +1,43 @@
+{
+  "schema": "choir.package/v2",
+  "name": "settings",
+  "version": "1.0.0",
+  "display": {
+    "title": "Settings",
+    "icon": "⚙️",
+    "description": "Desktop settings"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 150
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false,
+      "desktop": {
+        "width": 940,
+        "height": 720
+      }
+    },
+    "auth": {
+      "preview": "public-readonly"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-settings-window",
+      "contentClass": "settings-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

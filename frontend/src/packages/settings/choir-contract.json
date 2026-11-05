@@ -1,0 +1,48 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Settings lists the themes, applies one, switches the prompt surface placement and opens the Compute Monitor through the shell.",
+  "ready": "[data-settings-app]",
+  "expect": [
+    {
+      "selector": "[data-theme-presets]"
+    },
+    {
+      "selector": "[data-settings-prompt-placement]",
+      "text": "Prompt surface"
+    },
+    {
+      "selector": "[data-settings-open-compute-monitor]"
+    }
+  ],
+  "steps": [
+    {
+      "click": "[data-settings-prompt-placement-top]"
+    },
+    {
+      "see": "[data-settings-prompt-placement]",
+      "text": "Pinned to top"
+    },
+    {
+      "click": "[data-settings-prompt-placement-bottom]"
+    },
+    {
+      "see": "[data-settings-prompt-placement]",
+      "text": "Pinned to bottom"
+    }
+  ],
+  "api": [
+    {
+      "method": "PUT",
+      "path": "/api/preferences/theme",
+      "status": 200,
+      "json": {
+        "ok": true
+      }
+    }
+  ],
+  "expect_requests": [
+    {
+      "request": "PUT /api/preferences/theme"
+    }
+  ]
+}

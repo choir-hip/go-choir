@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { AuthRequiredError, fetchWithRenewal } from './auth.js';
-  import { buildInfo, copyText } from './shell-services';
-  import { getTheme, onThemeChange, setTheme } from './services/theme';
-  import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { AuthRequiredError, fetchWithRenewal } from '../../lib/app-sdk';
+  import { buildInfo, copyText, openApp, resetDesktop } from '../../lib/app-sdk';
+  import { getTheme, onThemeChange, setTheme } from '../../lib/app-sdk';
+  import { addLiveEventListener, liveEventKind } from '../../lib/app-sdk';
+  import { settingSections } from '../../lib/app-sdk';
   import PackageSettings from './PackageSettings.svelte';
-  import { settingSections } from './services/settings';
   import {
     DEFAULT_THEME,
     listThemes,
@@ -13,7 +13,7 @@
     normalizeThemeConfig,
     themeCSSVariables,
     validateThemeConfig,
-  } from './theme';
+  } from '../../lib/app-sdk';
 
   export let currentUser = null;
   export let currentTheme = DEFAULT_THEME;
@@ -256,11 +256,11 @@
   }
 
   function handleResetDesktop() {
-    dispatch('resetdesktop');
+    resetDesktop();
   }
 
   function handleOpenComputeMonitor() {
-    dispatch('opencomputemonitor');
+    openApp('compute-monitor', { appName: 'Compute Monitor', appContext: { windowTitle: 'Compute Monitor' } });
   }
 
   $: if (!currentUser?.email && currentTheme?.id && currentTheme.id !== selectedTheme.id) {

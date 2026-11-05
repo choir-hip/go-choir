@@ -154,8 +154,8 @@ export type { Disposer } from './event-helpers';
 // package's name; an installed module is bound to its own name by the loader,
 // so it can touch no other package's settings. The base Settings app renders
 // the declared sections.
-export { getSetting, onSetting, setSetting } from './services/settings';
-export type { SettingField, SettingResult, SettingsSection } from './services/settings';
+export { getSetting, onSetting, setSetting, settingSections } from './services/settings';
+export type { PackageSettingsSection, SettingField, SettingResult, SettingsSection } from './services/settings';
 
 // The open windows as a store, and which window has focus (1.4.0, slice C9).
 export { windowList } from './window-list';

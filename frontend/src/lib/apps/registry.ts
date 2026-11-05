@@ -88,17 +88,6 @@ const STATIC_APPS = [
     auth: { preview: 'public-preview' },
     theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'texture-content' },
   },
-  {
-    id: 'settings',
-    name: 'Settings',
-    icon: '⚙️',
-    description: 'Desktop settings',
-    component: () => import('../SettingsApp.svelte'),
-    launcher: { menu: true, desktopIcon: true, order: 150 },
-    window: { singleton: true, heavy: false, desktop: { width: 940, height: 720 } },
-    auth: { preview: 'public-readonly' },
-    theme: { surface: 'standard', shellDataAttr: 'data-settings-window', contentClass: 'settings-content' },
-  },
 ] satisfies ChoirAppDefinition[];
 
 const PACKAGES = loadPackageApps(new Set(STATIC_APPS.map((app) => app.id)));

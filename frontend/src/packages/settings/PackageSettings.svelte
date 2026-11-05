@@ -4,7 +4,7 @@
   // in the shell's preference store; a field the server refuses shows its
   // reason and keeps the last good value.
   import { onDestroy } from 'svelte';
-  import { getSetting, onSetting, setSetting, settingSections, type SettingField } from './services/settings';
+  import { getSetting, onSetting, setSetting, settingSections, type SettingField } from '../../lib/app-sdk';
 
   let values: Record<string, unknown> = {};
   let errors: Record<string, string> = {};

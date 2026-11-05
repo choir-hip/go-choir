@@ -21,6 +21,7 @@ var builtinPackageNames = []string{
 	"podcast",
 	"pulse",
 	"reader",
+	"settings",
 	"slides",
 	"video",
 }
@@ -35,7 +36,6 @@ var shellAppNames = []string{
 	"owner",
 	"prompt",
 	"research",
-	"settings",
 	"shell",
 	"system",
 	"texture",
