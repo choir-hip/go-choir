@@ -64,7 +64,10 @@ var eventStorage = map[EventKind]EventStorage{
 	// calibration experiment rests on it, so it is held like any
 	// acknowledged kind, not batched.
 	EventCalibrationRead: StorageObjectGraph,
-	EventStoryEntities:   StorageObjectGraph,
+	// model.served: a few per run, read per run as a document's model
+	// provenance and never retired.
+	EventModelServed:   StorageObjectGraph,
+	EventStoryEntities: StorageObjectGraph,
 
 	// Object graph: owner acts and evidence.
 	EventEmailDraftApprovalRecorded:     StorageObjectGraph,

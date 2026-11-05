@@ -80,6 +80,7 @@ var ogKindEventFunctions = map[string]string{
 	"ListEventsByOwnerAfter":          "union",
 	"ListEventsByTrajectory":          "union",
 	"ListAcknowledgedEventsByChannel": "og_objects only: acknowledged kinds never leave it (F10)",
+	"ListRunEventsOfKind":             "og_objects only: refuses any kind whose storage is not the object graph",
 	"projectChoirEvent":               "the projector",
 	"decodeChoirEventRow":             "the projector (choir_events and the telemetry partitions)",
 }

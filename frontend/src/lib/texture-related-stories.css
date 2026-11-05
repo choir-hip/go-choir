@@ -99,3 +99,47 @@
   font-size: 0.85em;
   opacity: 0.75;
 }
+
+/* The models that served a published story (texture-model-provenance.ts),
+   after the disclosure and before the related block. */
+.rendered-doc .texture-model-provenance {
+  margin: 1rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid currentColor;
+  font-size: 0.82em;
+  opacity: 0.8;
+}
+
+.rendered-doc .texture-model-provenance-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rendered-doc .texture-model-provenance dl {
+  margin: 0;
+}
+
+.rendered-doc .texture-model-provenance dt {
+  margin-top: 0.3rem;
+  font-weight: 700;
+}
+
+.rendered-doc .texture-model-provenance dd {
+  margin: 0 0 0 0.75rem;
+}
+
+.rendered-doc .texture-model-detail {
+  opacity: 0.75;
+}
+
+.rendered-doc .texture-model-switches-heading {
+  margin: 0.5rem 0 0.2rem;
+  font-weight: 700;
+}
+
+.rendered-doc .texture-model-switches {
+  margin: 0;
+  padding-left: 1.1rem;
+}

@@ -534,6 +534,11 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	relaxInitialExactToolChoice := false
 	initialToolChoiceAttempts := 0
 	activeLLMConfig := options.llmConfig
+	// served is the activation's record of which models answered, written
+	// as one model.served line whichever way the loop returns
+	// (docs/problems/model-provenance-unwired-2026-11-05.md).
+	served := &types.ModelServedTally{}
+	defer emitModelServed(emit, options.llmConfig, served)
 	var requiredNextTool *pendingRequiredTool
 	var maxTokenContinuationAttempts int
 	var completionGuardAttempts int
@@ -715,6 +720,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		rest = append(rest, order[0])
 		options.fallbackLLMConfigs, nextFallback = rest, 0
 		activeLLMConfig = next
+		served.Switch(modelSwitch(from, next, why))
 		if baseConversationID != "" {
 			options.conversationID = baseConversationID
 			if !sameServingSelection(options.llmConfig, next) {
@@ -986,6 +992,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				left[servingSelectionID(from)] = true
 				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[nextFallback], from)
 				nextFallback++
+				served.Switch(modelSwitch(from, activeLLMConfig, "model_failover"))
 				// Only an error the backoff would have waited on owes the
 				// last member a round: a 5xx or an open circuit never had one.
 				if IsProviderRateLimitError(err) && failsOverWithoutRetry(err) {
@@ -1073,6 +1080,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		// (MA3.6): a model call is logged, not gated.
 		callLabels := LabelsFrom(ctx)
 		log.Print(ModelCallLine(ExecutionContextFrom(ctx).RunID, activeLLMConfig.Provider, activeLLMConfig.Model, callLabels))
+		served.Note(activeLLMConfig.Provider, activeLLMConfig.Model, resp.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CachedInputTokens)
 		progressPayload, _ := json.Marshal(map[string]any{
 			"labels":               callLabels,
 			"iteration":            i + 1,

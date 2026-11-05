@@ -245,6 +245,10 @@ type publicationManifest struct {
 	ResolvedBlocksHash       string                         `json:"resolved_blocks_hash"`
 	AccessPolicy             json.RawMessage                `json:"access_policy"`
 	ExportPolicy             json.RawMessage                `json:"export_policy"`
+	// ModelProvenance is the models that served the source document's runs
+	// when the version was published (types.ModelProvenance), so a reader
+	// of the paper sees which models wrote it. Absent on older versions.
+	ModelProvenance json.RawMessage `json:"model_provenance,omitempty"`
 }
 
 // resolvedBlocksDoc is the stored body of a version's resolved blocks.

@@ -150,6 +150,8 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 				TextContent:  "Cleaned public source text that should be available to publication readers.",
 				ContentHash:  "hash-public-source",
 			})
+		case "/api/texture/documents/doc-1/models":
+			_, _ = w.Write([]byte(`{"schema":"choir.model_provenance.v1","roles":[{"role":"research","models":[{"provider":"chatgpt","model":"gpt-6-luna","calls":3}]}]}`))
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
@@ -189,6 +191,9 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	}
 	if !strings.Contains(string(gotPlatformReq.ExportPolicy), `"download_allowed":false`) || !strings.Contains(string(gotPlatformReq.ExportPolicy), `"formats":["md"]`) {
 		t.Fatalf("platform export policy not forwarded: %s", string(gotPlatformReq.ExportPolicy))
+	}
+	if !strings.Contains(string(gotPlatformReq.ModelProvenance), `"gpt-6-luna"`) {
+		t.Fatalf("model provenance not pinned into the publish: %s", gotPlatformReq.ModelProvenance)
 	}
 	if gotPlatformReq.Content != "public projection content [1]" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
@@ -261,6 +266,8 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 		case "/api/content/import-url":
 			contentFetches += 1
 			t.Fatalf("source import should not be called for detached source_entities")
+		case "/api/texture/documents/doc-detached/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
@@ -451,6 +458,8 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 				Metadata:     json.RawMessage(`{"retrieval_strategy":"direct_http_then_readability_lite"}`),
 				Provenance:   json.RawMessage(`{"warnings":["extracted text is low-content","used html readable fallback"]}`),
 			})
+		case "/api/texture/documents/doc-url/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
@@ -555,6 +564,8 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 			})
 		case "/api/content/import-url":
 			http.Error(w, `{"error":"URL import failed: 403 Forbidden"}`, http.StatusBadGateway)
+		case "/api/texture/documents/doc-url/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
@@ -644,6 +655,8 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 				OwnerID:     "user-1",
 				TextContent: "private full source text",
 			})
+		case "/api/texture/documents/doc-private/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}

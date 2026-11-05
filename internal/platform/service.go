@@ -272,6 +272,12 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	if req.Metadata == nil {
 		req.Metadata = json.RawMessage("{}")
 	}
+	if len(req.ModelProvenance) > 0 {
+		var provenance map[string]any
+		if err := json.Unmarshal(req.ModelProvenance, &provenance); err != nil {
+			return nil, fmt.Errorf("model_provenance must be a JSON object")
+		}
+	}
 	if err := normalizePublishTextureStructuredInput(&req); err != nil {
 		return nil, err
 	}
@@ -445,6 +451,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		ResolvedBlocksHash:       resolvedBlocksHash,
 		AccessPolicy:             sourceMetadata.AccessPolicy,
 		ExportPolicy:             sourceMetadata.ExportPolicy,
+		ModelProvenance:          req.ModelProvenance,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("platform publish: marshal artifact manifest: %w", err)

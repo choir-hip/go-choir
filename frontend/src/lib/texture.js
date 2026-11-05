@@ -229,6 +229,21 @@ export async function getTextureDiagnosis(docId, limit = 50, options = {}) {
   return res.json();
 }
 
+// The models that actually served a document's runs, by desk role
+// (docs/problems/model-provenance-unwired-2026-11-05.md).
+export async function getTextureModelProvenance(docId, options = {}) {
+  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/models`), {
+    method: 'GET',
+    signal: options.signal,
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Get model provenance failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 export async function createContentItem(payload = {}) {
   const res = await fetchWithRenewal(contentPath('/items'), {
     method: 'POST',

@@ -39,6 +39,11 @@ type PublishTextureRequest struct {
 	// derives from the signed-in session (never an email). It is required
 	// for PublishModeOpinion and fixed by the publication's first version.
 	AuthorLabel string `json:"author_label,omitempty"`
+	// ModelProvenance is the source document's model provenance
+	// (types.ModelProvenance, GET /api/texture/documents/{id}/models), read
+	// by the proxy from the publishing computer and pinned into the version's
+	// manifest. Optional: a computer that cannot answer publishes without it.
+	ModelProvenance json.RawMessage `json:"model_provenance,omitempty"`
 }
 
 // Publish modes (PublishTextureRequest.PublishMode).

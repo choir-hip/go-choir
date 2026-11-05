@@ -283,6 +283,8 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				OwnerID:    "reader-1",
 				Content:    "reader proposal content",
 			})
+		case "/api/texture/documents/doc-1/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}

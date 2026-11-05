@@ -2632,3 +2632,31 @@ func (s *Store) planEngineeringReportRecord(ctx context.Context, assignment type
 	objects, conditions, _, err := s.planInboxRecords(ctx, binding.OwnerID, binding.ComputerID, []types.CommitmentRecord{rec}, nil, now)
 	return objects, conditions, err
 }
+
+// ListEngineeringAssignmentReportsByRun returns the reports one engineering
+// run recorded, by the loop_id their metadata carries. The model provenance
+// of a Texture document reads the Claude delegate's use from them.
+func (s *Store) ListEngineeringAssignmentReportsByRun(ctx context.Context, ownerID, runID string) ([]types.EngineeringAssignmentReport, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, nil
+	}
+	objects, err := s.ogListAllByMetadata(ctx, ogKindEngineeringReport, "loop_id", runID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]types.EngineeringAssignmentReport, 0, len(objects))
+	for _, obj := range objects {
+		if obj.OwnerID != strings.TrimSpace(ownerID) || obj.Tombstone {
+			continue
+		}
+		report, decodeErr := decodeLifecycleObject[types.EngineeringAssignmentReport](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if report.RunID == runID {
+			out = append(out, report)
+		}
+	}
+	return out, nil
+}

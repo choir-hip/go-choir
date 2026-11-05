@@ -3857,6 +3857,11 @@ func (rt *Runtime) emitRunEvent(ctx context.Context, rec *types.RunRecord, kind 
 		rt.publishEvent(rec, kind, cause, payload)
 		return
 	}
+	if kind == types.EventModelServed {
+		// Written as the tool loop returns, cancelled or not: the record of
+		// which models served the run must outlive the run's context.
+		ctx = context.WithoutCancel(ctx)
+	}
 	rt.emitEvent(ctx, rec, kind, cause, payload)
 }
 

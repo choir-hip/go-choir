@@ -314,6 +314,14 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	h.lifecycle.record("platform_publish.private_read", "ok", time.Since(started))
+	// The models that served the document's runs ride into the version
+	// (docs/problems/model-provenance-unwired-2026-11-05.md). A computer
+	// that cannot answer publishes without them; the read is logged.
+	var modelProvenance json.RawMessage
+	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/documents/"+url.PathEscape(req.DocID)+"/models", authResult.UserID, &modelProvenance); err != nil {
+		log.Printf("proxy: platform publish fetch model provenance for %s: %v", req.DocID, err)
+		modelProvenance = nil
+	}
 
 	platformReq := platform.PublishTextureRequest{
 		OwnerID:          authResult.UserID,
@@ -331,10 +339,11 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 		RequestedBy:      authResult.UserID,
 		// The revision publishes as version n of the doc's one publication,
 		// n its number on the revision chain (Cut 2 unit 2b).
-		RevisionNumber: types.RevisionNumber(rev.VersionNumber),
-		RevisionHash:   rev.RevisionHash,
-		PublishMode:    publishMode,
-		AuthorLabel:    req.AuthorLabel,
+		RevisionNumber:  types.RevisionNumber(rev.VersionNumber),
+		RevisionHash:    rev.RevisionHash,
+		PublishMode:     publishMode,
+		AuthorLabel:     req.AuthorLabel,
+		ModelProvenance: modelProvenance,
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {

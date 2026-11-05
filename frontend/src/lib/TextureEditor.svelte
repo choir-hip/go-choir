@@ -18,6 +18,7 @@
     getDocument,
     getRevision,
     getTextureDiagnosis,
+    getTextureModelProvenance,
     listDocuments,
     lifecycleCurrentDocumentRevisionID,
     listRevisions,
@@ -85,6 +86,7 @@
   import './texture-embeds.css';
   import { hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
   import { opinionLabelHTML, pieceDisclosureHTML } from './texture-ai-disclosure';
+  import { publishedModelProvenance, renderModelProvenanceHTML } from './texture-model-provenance';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -165,9 +167,9 @@
   let sourceDiagnosisAbortController = null;
   let sourceDiagnosisAbortReason = '';
   let sourcePanelError = '';
-  let modelPolicyRoles = [];
-  let modelPolicyPending = false;
-  let modelPolicyError = '';
+  let modelProvenance = null;
+  let modelProvenancePending = false;
+  let modelProvenanceError = '';
   let sourceOpenPointerHandledAt = 0;
   let sourceOpenPointerHandledEntityID = '';
   let relatedOpenPointerHandledAt = 0;
@@ -182,7 +184,6 @@
   const SOURCE_FLOW_GAP = 24;
   const SOURCE_FLOW_LINE_HEIGHT = 29;
   const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
-  const SOURCE_PANEL_MODEL_ROLES = ['conductor', 'texture', 'research', 'management'];
   const PUBLISHED_POLL_MS = 60_000;
 
   function revisionSourceEntities(revision = currentRevision, bundle = publishedBundle) {
@@ -914,6 +915,8 @@
     publishedSourcesOpen = false;
     sourceDiagnosis = null;
     sourceDiagnosisPending = false;
+    modelProvenance = null;
+    modelProvenanceError = '';
     cancelSourceDiagnosis();
     sourcePanelError = '';
     clearAutosaveTimer();
@@ -1387,33 +1390,26 @@
       return;
     }
     if (sourcePanelOpen) {
-      void loadModelPolicyRoles();
+      void loadModelProvenance();
     }
   }
 
-  async function loadModelPolicyRoles() {
-    if (!authenticated || modelPolicyPending) return;
-    modelPolicyPending = true;
-    modelPolicyError = '';
+  // The models that actually served this document's runs (the computer's
+  // model.served record), not the model policy's prediction.
+  async function loadModelProvenance() {
+    if (!authenticated || modelProvenancePending || !currentDoc?.doc_id) return;
+    modelProvenancePending = true;
+    modelProvenanceError = '';
     try {
-      const rows = await Promise.all(SOURCE_PANEL_MODEL_ROLES.map(async (role) => {
-        const res = await fetchWithRenewal(`/api/model-policy/resolve?role=${encodeURIComponent(role)}`, {
-          method: 'GET',
-        });
-        if (!res.ok) {
-          throw new Error(`model policy ${role} failed (${res.status})`);
-        }
-        return res.json();
-      }));
-      modelPolicyRoles = rows;
+      modelProvenance = await getTextureModelProvenance(currentDoc.doc_id);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      modelPolicyError = err?.message || 'Model policy unavailable';
+      modelProvenanceError = err?.message || 'Model provenance unavailable';
     } finally {
-      modelPolicyPending = false;
+      modelProvenancePending = false;
     }
   }
 
@@ -1917,8 +1913,9 @@
   // human-author notice of an opinion piece, chosen by the server's record
   // (owner notes §28). An opinion piece also opens with its Opinion label.
   $: disclosureHTML = isPublishedReadOnly && publishedBundle ? pieceDisclosureHTML(appContext, publishedBundle.publication) : '';
+  $: publishedModelsHTML = isPublishedReadOnly && publishedBundle ? renderModelProvenanceHTML(publishedModelProvenance(publishedBundle)) : '';
   $: opinionHeadHTML = isPublishedReadOnly && publishedBundle ? opinionLabelHTML(publishedBundle.publication) : '';
-  $: syncEditorSurface(opinionHeadHTML + renderedMarkdown + disclosureHTML + relatedHTML);
+  $: syncEditorSurface(opinionHeadHTML + renderedMarkdown + disclosureHTML + publishedModelsHTML + relatedHTML);
 
   onMount(() => {
     if (!initializedKey) {
@@ -2069,9 +2066,9 @@
           {editEvidence}
           {sourceDiagnosisPending}
           {sourcePanelError}
-          {modelPolicyRoles}
-          {modelPolicyPending}
-          {modelPolicyError}
+          {modelProvenance}
+          {modelProvenancePending}
+          {modelProvenanceError}
           on:diagnosis={handleSourceDiagnosisButton}
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
         />

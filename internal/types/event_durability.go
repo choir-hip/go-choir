@@ -81,6 +81,9 @@ var eventDurability = map[EventKind]EventDurability{
 	// calibration.read (C6): a read mark of the calibration experiment;
 	// rare, and a lost mark would read as no read.
 	EventCalibrationRead: DurabilityAcknowledged,
+	// model.served: the record of which models served a run, a few per run
+	// and read as provenance for as long as the document lives.
+	EventModelServed: DurabilityAcknowledged,
 
 	// Acknowledged: a story's entity attachments are the authority for public
 	// graph rows and edges, as a judged pair is.

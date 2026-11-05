@@ -33,6 +33,8 @@ func TestHandleTexturePublicationRefusesCapsuleEvidence(t *testing.T) {
 		case "/api/texture/revisions/rev-ev":
 			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{RevisionID: "rev-ev", DocID: "doc-ev", OwnerID: "user-1",
 				Content: "Evidence follows.\n\n[evidence: Screenshot of /reader]", BodyDoc: body, Metadata: json.RawMessage(`{}`)})
+		case "/api/texture/documents/doc-ev/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Errorf("autoputer path: got %s", r.URL.Path)
 		}

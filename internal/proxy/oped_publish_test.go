@@ -50,6 +50,8 @@ func TestOpinionPublishRequiresCookieSessionAndRefusesBodyPolicy(t *testing.T) {
 		case "/api/texture/revisions/rev-1":
 			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{RevisionID: "rev-1", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 0,
 				RevisionHash: "h", Content: "I think the harbor matters.", Metadata: json.RawMessage(`{"access_policy":{"visibility":"private"}}`)})
+		case "/api/texture/documents/doc-1/models":
+			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
 			t.Errorf("autoputer path %s", r.URL.Path)
 		}

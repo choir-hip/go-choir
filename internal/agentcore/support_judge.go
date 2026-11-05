@@ -384,6 +384,21 @@ func (rt *Runtime) recordJevCostFor(ctx context.Context, ownerID, runID, agentID
 	if err := rt.store.AppendEvent(ctx, &ev); err != nil {
 		log.Printf("support judge: record Jev cost on run %s: %v", runID, err)
 	}
+	// The decision model's call is model provenance of the run it served
+	// (docs/problems/model-provenance-unwired-2026-11-05.md).
+	var tally types.ModelServedTally
+	tally.Note("openrouter", model, "", input, output, 0)
+	served := tally.Record(purpose)
+	served.Role = types.ModelServedRoleSystem1
+	servedRaw, err := json.Marshal(served)
+	if err != nil {
+		return
+	}
+	servedEv := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: ownerID,
+		AgentID: agentID, Kind: types.EventModelServed, Payload: servedRaw}
+	if err := rt.store.AppendEvent(context.WithoutCancel(ctx), &servedEv); err != nil {
+		log.Printf("support judge: record served model on run %s: %v", runID, err)
+	}
 }
 
 // judgeLegacySupportPairs hands the pairs of a support_pairs record minted

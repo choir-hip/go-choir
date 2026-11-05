@@ -7,6 +7,7 @@
     sourceEvidenceState,
     sourceEvidenceStateLabel,
   } from './texture-source-renderer';
+  import { modelProvenanceRows, modelSwitchLines } from './texture-model-provenance';
 
   export let currentDoc = null;
   export let isPublishedReadOnly = false;
@@ -17,19 +18,19 @@
   export let editEvidence = null;
   export let sourceDiagnosisPending = false;
   export let sourcePanelError = '';
-  export let modelPolicyRoles = [];
-  export let modelPolicyPending = false;
-  export let modelPolicyError = '';
+  export let modelProvenance = null;
+  export let modelProvenancePending = false;
+  export let modelProvenanceError = '';
 
   const dispatch = createEventDispatcher();
 
   $: heading = `${sourceEntities.length} represented source${sourceEntities.length === 1 ? '' : 's'}`;
 
-  function modelPolicyLabel(row) {
-    const model = row?.model || 'unknown';
-    const reasoning = row?.reasoning_effort ? ` / ${row.reasoning_effort}` : '';
-    return `${row?.provider || 'provider'} / ${model}${reasoning}`;
-  }
+  $: modelRows = modelProvenanceRows(modelProvenance);
+  $: modelSwitches = modelSwitchLines(modelProvenance);
+  $: modelRunsNote = modelProvenance
+    ? `${Number(modelProvenance.runs_served) || 0} of ${Number(modelProvenance.runs) || 0} runs recorded`
+    : '';
 </script>
 
 <section class="source-panel" data-texture-source-diagnostics>
@@ -89,24 +90,37 @@
     </div>
   {/if}
 
-  <div class="source-model-policy" data-texture-source-model-policy>
+  <div class="source-model-policy" data-texture-source-model-provenance>
     <div class="source-artifact-heading">
       <span class="evidence-label">Models</span>
-      <strong>{modelPolicyPending ? 'Resolving policy' : 'Effective roles'}</strong>
+      <strong>{modelProvenancePending ? 'Reading runs' : 'Served this document'}</strong>
     </div>
-    {#if modelPolicyError}
-      <p class="source-model-error" role="status">{modelPolicyError}</p>
-    {:else if modelPolicyRoles.length}
+    {#if modelProvenanceError}
+      <p class="source-model-error" role="status">{modelProvenanceError}</p>
+    {:else if modelRows.length}
       <dl>
-        {#each modelPolicyRoles as row}
+        {#each modelRows as row}
           <div data-texture-source-model-role={row.role}>
-            <dt>{row.role === 'texture' ? 'Texture' : row.role}</dt>
-            <dd title={row.source || 'model policy'}>{modelPolicyLabel(row)}</dd>
+            <dt>{row.label}</dt>
+            {#each row.models as model}
+              <dd data-texture-source-model={model.key} data-texture-source-model-delegate={model.delegate ? '' : undefined}>
+                <span class="source-model-name">{model.name}</span>
+                {#if model.detail}<span class="source-model-detail">{model.detail}</span>{/if}
+              </dd>
+            {/each}
           </div>
         {/each}
       </dl>
+      {#if modelSwitches.length}
+        <ul class="source-model-switches" data-texture-source-model-switches>
+          {#each modelSwitches as line}
+            <li>{line}</li>
+          {/each}
+        </ul>
+      {/if}
+      {#if modelRunsNote}<p class="source-model-error">{modelRunsNote}</p>{/if}
     {:else}
-      <p class="source-model-error" role="status">{modelPolicyPending ? 'Loading model policy...' : 'Model policy not loaded.'}</p>
+      <p class="source-model-error" role="status">{modelProvenancePending ? 'Loading served models...' : 'No served models recorded for this document.'}</p>
     {/if}
   </div>
 
@@ -337,6 +351,20 @@
     font-size: 0.68rem;
     font-weight: 800;
     text-transform: uppercase;
+  }
+
+  .source-model-detail {
+    display: block;
+    color: var(--choir-text-muted);
+    font-size: 0.68rem;
+  }
+
+  .source-model-switches {
+    margin: 0;
+    padding-left: 1rem;
+    color: var(--choir-text-secondary);
+    font-size: 0.7rem;
+    line-height: 1.3;
   }
 
   .source-model-policy dd,

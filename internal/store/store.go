@@ -2447,3 +2447,79 @@ func (s *Store) unionRunLabelsOnce(ctx context.Context, ownerID, computerID, run
 	}
 	return merged, nil
 }
+
+// ListRunEventsOfKind returns one run's events of an object-graph kind (a
+// kind whose Storage is StorageObjectGraph), oldest first. It reads only the
+// og_objects half: such a kind is never stamped for choir_events. The model
+// provenance of a Texture document reads its runs' model.served lines here.
+func (s *Store) ListRunEventsOfKind(ctx context.Context, ownerID, runID string, kind types.EventKind) ([]types.EventRecord, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, nil
+	}
+	if kind.Storage() != types.StorageObjectGraph {
+		return nil, fmt.Errorf("list run events of kind %s: not an object-graph kind", kind)
+	}
+	objs, err := s.ogListAllByMetadata(ctx, ogKindEvent, "run_id", runID)
+	if err != nil {
+		return nil, fmt.Errorf("list run events of kind %s: %w", kind, err)
+	}
+	entries, err := objectEventEntries(objs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]types.EventRecord, 0)
+	for _, e := range entries {
+		if e.rec.Kind == kind && e.rec.OwnerID == ownerID {
+			out = append(out, e.rec)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Timestamp.Equal(out[j].Timestamp) {
+			return out[i].Timestamp.Before(out[j].Timestamp)
+		}
+		return out[i].EventID < out[j].EventID
+	})
+	return out, nil
+}
+
+// ListRunsByLineageField returns the owner's runs whose indexed run metadata
+// field (channel_id, trajectory_id or requested_by_run_id) equals value: the
+// legacy rows and computerID's lifecycle projections, one per run id. It is
+// the indexed read a Texture document's model provenance walks its lineage
+// with, instead of scanning every run of the owner.
+func (s *Store) ListRunsByLineageField(ctx context.Context, ownerID, computerID, field, value string) ([]types.RunRecord, error) {
+	switch field {
+	case "channel_id", "trajectory_id", "requested_by_run_id":
+	default:
+		return nil, fmt.Errorf("list runs by lineage field: %q is not a lineage field", field)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, field, value)
+	if err != nil {
+		return nil, fmt.Errorf("list runs by %s: %w", field, err)
+	}
+	seen := map[string]bool{}
+	out := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.OwnerID != ownerID || obj.Tombstone {
+			continue
+		}
+		if c := strings.TrimSpace(obj.ComputerID); c != "" && c != strings.TrimSpace(computerID) {
+			continue
+		}
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.RunID == "" || seen[rec.RunID] {
+			continue
+		}
+		seen[rec.RunID] = true
+		out = append(out, rec)
+	}
+	return out, nil
+}
