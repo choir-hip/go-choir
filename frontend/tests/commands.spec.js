@@ -135,7 +135,7 @@ test('an unchanged fingerprint is not re-applied; a changed one replaces the set
 test('the manifest gate (check-packages) refuses a bad command, a foreign id and a locked key', () => {
   const run = (mutate) => {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-cmds-'));
-    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
     fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
     const p = path.join(dir, 'src/packages/image/choir-package.json');
     const m = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -191,7 +191,7 @@ test('review r2: no package registration carries core; core is a reserved packag
   expect(C.commands.bindings().some((b) => b.owner === 'core' && b.tier === 'app')).toBe(false);
   expect(C.CORE_OWNER).toBe('core');
   const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-core-'));
-  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
   fs.cpSync(path.join(dir, 'src/packages/image'), path.join(dir, 'src/packages/core'), { recursive: true });
   const p = path.join(dir, 'src/packages/core/choir-package.json');

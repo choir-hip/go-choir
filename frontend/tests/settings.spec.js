@@ -136,7 +136,7 @@ test('two packages with the same key do not collide', async () => {
 test('the manifest gate (check-packages) refuses a bad settings declaration and accepts a good one', () => {
   const run = (mutate) => {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-settings-'));
-    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
     fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
     const p = path.join(dir, 'src/packages/image/choir-package.json');
     const m = JSON.parse(fs.readFileSync(p, 'utf8'));

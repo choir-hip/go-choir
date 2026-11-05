@@ -78,7 +78,7 @@ test('L5: the shell service applies a package link in its scope and uninstall le
 test('the manifest gate refuses a bad link and accepts a good one', () => {
   const run = (mutate) => {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-links-'));
-    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
     fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
     const p = path.join(dir, 'src/packages/image/choir-package.json');
     const m = JSON.parse(fs.readFileSync(p, 'utf8'));

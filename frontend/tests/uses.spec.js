@@ -62,7 +62,7 @@ test('review r2: every file the build analyzes is read for uses, tsx and jsx inc
 
 test('check-packages refuses a grant name that is a prototype property', () => {
   const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-grant2-'));
-  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
   const p = path.join(dir, 'src/packages/image/choir-package.json');
   const m = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -105,7 +105,7 @@ test('every in-tree package has its uses extracted, and none exceeds its grants'
 test('B1: submitPrompt without ui.shell fails the build gate; with it passes check-packages (and ParseManifest, in the Go test, on the same fixture)', () => {
   const run = (declare) => {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-uses-'));
-    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
     fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
     const app = path.join(dir, 'src/packages/image/App.svelte');
     fs.writeFileSync(app, fs.readFileSync(app, 'utf8').replace('<script', "<script context=\"module\">\n  import { submitPrompt } from '../../lib/app-sdk';\n  export const sendIt = submitPrompt;\n</script>\n<script"));
@@ -129,7 +129,7 @@ test('B1: submitPrompt without ui.shell fails the build gate; with it passes che
 test('check-packages validates a grant against the catalogue, not a shape', () => {
   const run = (grant) => {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-grant-'));
-    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+    fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
     fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
     const p = path.join(dir, 'src/packages/image/choir-package.json');
     const m = JSON.parse(fs.readFileSync(p, 'utf8'));

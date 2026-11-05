@@ -38,7 +38,7 @@ test('R1, R2: openersForFile and its siblings equal the golden before-answers', 
 
 test('R3: the clash gate reads the table, and refuses a package that claims a static extension', () => {
   const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-routes-'));
-  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results|\.timestamp-/.test(src) });
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
   const manifestPath = path.join(dir, 'src/packages/image/choir-package.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
