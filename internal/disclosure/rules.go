@@ -362,3 +362,11 @@ func ResetCounts() {
 	logged = map[string]bool{}
 	countMu.Unlock()
 }
+
+// NoteUnreadable counts a sink attempt whose run labels could not be read:
+// "sink|unreadable|labels|outcome".
+func NoteUnreadable(sink Sink, outcome string) {
+	countMu.Lock()
+	counts[fmt.Sprintf("%s|unreadable|labels|%s", sink, outcome)]++
+	countMu.Unlock()
+}

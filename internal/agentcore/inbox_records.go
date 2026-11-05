@@ -496,6 +496,14 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	if deskOfAgent != strings.TrimSpace(r.rec.AgentProfile) && !task {
 		return intents, nil
 	}
+	// The records route commits addressed acts before the per-intent loop of
+	// the reducer, so the desk-message sink is gated here too (MA3.6): counted
+	// for a built-in desk, which only observes.
+	for _, in := range intents {
+		if err := r.gateMessageDisclosure(ctx, in); err != nil {
+			return nil, err
+		}
+	}
 	var rest []yaegikernel.StagedIntent
 	var records []types.CommitmentRecord
 	// choir.Feed and choir.Decline are refused while the computer's

@@ -140,11 +140,12 @@ func (h *APIHandler) HandleDisclosureRouter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/disclosures/"), "/")
-	id, action, _ := strings.Cut(rest, "/")
-	if id == "" || (action != "approve" && action != "deny") {
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 || parts[0] == "" || (parts[1] != "approve" && parts[1] != "deny") {
 		http.NotFound(w, r)
 		return
 	}
+	id, action := parts[0], parts[1]
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return

@@ -19,7 +19,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
-	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -571,6 +570,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					var out json.RawMessage
 					var err error
 					if action == yaegikernel.ActionSearchStart {
+						// An async search never reaches deskEgress, so its query is
+						// gated here, as an egress call is.
+						if gateErr := rt.gateEgressCall(egrCtx, deskRole, cellExec, action, payload); gateErr != nil {
+							return nil, gateErr
+						}
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(egrCtx, sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
@@ -1211,10 +1215,8 @@ func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) str
 func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 	// A call that carries what the run composed to a destination is the
 	// egress sink of the disclosure path (disclosure_gate.go).
-	if target, summary, ok := egressDisclosure(action, payload); ok {
-		if err := rt.gateDisclosure(egrCtx, disclosureCall{exec: cellExec, deskRole: deskRole, sink: disclosure.SinkEgress, target: target, summary: summary}); err != nil {
-			return nil, err
-		}
+	if err := rt.gateEgressCall(egrCtx, deskRole, cellExec, action, payload); err != nil {
+		return nil, err
 	}
 	out, err := rt.deskEgressRead(egrCtx, deskRole, cellExec, action, payload)
 	if err == nil {

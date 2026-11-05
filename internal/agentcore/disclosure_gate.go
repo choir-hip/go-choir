@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -147,11 +149,11 @@ func (rt *Runtime) messageAdmitted(owner, toDesk, label string) bool {
 		return true
 	}
 	kind := strings.TrimPrefix(label, types.LabelOwnerPrivatePrefix)
-	to := canonicalDeskName(strings.TrimSpace(toDesk))
-	writer, ok := objectgraph.DeskWriter(to)
+	to, ok := resolveMessageDesk(toDesk)
 	if !ok {
 		return false
 	}
+	writer, _ := objectgraph.DeskWriter(to)
 	for _, k := range labelObjectKinds(kind) {
 		if custodian, found := objectgraph.CustodianOf(k); found && custodian == writer {
 			return true
@@ -159,7 +161,7 @@ func (rt *Runtime) messageAdmitted(owner, toDesk, label string) bool {
 	}
 	if rt != nil && rt.leases != nil {
 		for _, rec := range rt.leases.Live(owner) {
-			if canonicalDeskName(rec.Holder) != to {
+			if holder, found := objectgraph.DeskWriter(rec.Holder); !found || holder != writer {
 				continue
 			}
 			for _, leased := range rec.Scope.Kinds {
@@ -203,6 +205,17 @@ func egressDisclosure(action yaegikernel.BrokerAction, payload json.RawMessage) 
 	return "", "", false
 }
 
+// gateEgressCall is the egress sink's gate step: deskEgress runs it for the
+// host calls it dispatches, and the async search dispatch runs it before it
+// starts a search, which never reaches deskEgress.
+func (rt *Runtime) gateEgressCall(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) error {
+	target, summary, ok := egressDisclosure(action, payload)
+	if !ok {
+		return nil
+	}
+	return rt.gateDisclosure(ctx, disclosureCall{exec: exec, deskRole: deskRole, sink: disclosure.SinkEgress, target: target, summary: summary})
+}
+
 // disclosureFacts computes the admission facts of a sink attempt.
 func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
 	switch call.sink {
@@ -240,14 +253,30 @@ func (rt *Runtime) gateDisclosure(ctx context.Context, call disclosureCall) erro
 	if computer == "" {
 		computer = strings.TrimSpace(rt.cfg.ComputerID)
 	}
-	labels := rt.runLabelsOf(ctx, owner, computer, runID)
+	enforcedDesk := packageDesk(call.deskRole) || disclosure.CurrentMode() == disclosure.ModeEnforce
+	labels := rt.runLabelSet(runID)
+	if rt.store != nil && owner != "" && runID != "" {
+		stored, err := rt.store.RunLabels(ctx, owner, computer, runID)
+		switch {
+		case err == nil:
+			labels = labels.Union(stored)
+		case errors.Is(err, store.ErrNotFound):
+		case enforcedDesk:
+			// The run's labels cannot be read: an enforced desk's sink stays
+			// closed rather than reading an empty set.
+			disclosure.NoteUnreadable(call.sink, "enforced")
+			return fmt.Errorf("disclosure refused: the labels of run %s could not be read (%v), so the %s sink stays closed", runID, err, call.sink)
+		default:
+			log.Printf("disclosure: labels of run %s unreadable: %v", runID, err)
+			disclosure.NoteUnreadable(call.sink, "observed")
+		}
+	}
 	verdict := disclosure.Decide(labels, call.sink, rt.disclosureFacts(call))
 	if verdict.Decision == disclosure.Allow {
 		disclosure.Note(verdict, "allowed")
 		return nil
 	}
-	enforced := packageDesk(call.deskRole) || disclosure.CurrentMode() == disclosure.ModeEnforce
-	if !enforced {
+	if !enforcedDesk {
 		// A built-in desk observes: counted, logged once, not blocked, and no
 		// System 1 call is spent on it.
 		disclosure.Note(verdict, "observed")
@@ -275,27 +304,35 @@ func (rt *Runtime) gateDisclosure(ctx context.Context, call disclosureCall) erro
 // disclosureAsk runs the ask path: an earlier answer to this exact disclosure
 // first, then System 1 and the rule, then the owner tap.
 func (rt *Runtime) disclosureAsk(ctx context.Context, call disclosureCall, owner, computer string, labels types.LabelSet, payload disclosurePayload) error {
-	rt.disclosureMu.Lock()
-	defer rt.disclosureMu.Unlock()
-
-	state, err := rt.disclosureState(ctx, owner, computer, payload.Digest)
-	if err != nil {
-		return fmt.Errorf("disclosure refused: %s; the tape could not be read (%v), so the sink stays closed", payload.Reason, err)
-	}
-	switch state.phase {
-	case disclosurePhaseApproved:
-		// The owner approved this exact disclosure: it passes once.
-		consumed := payload
-		consumed.DisclosureID = state.pendingID
-		consumed.Actor = "owner"
-		if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseConsumed, consumed); err != nil {
-			return fmt.Errorf("disclosure refused: the owner's approval could not be recorded as used (%v), so the sink stays closed", err)
+	// standing answers from an earlier step on the tape. The mutex covers the
+	// check and the consume, not the judge call: a slow judge must not
+	// serialize every gated attempt.
+	standing := func() (bool, error) {
+		rt.disclosureMu.Lock()
+		defer rt.disclosureMu.Unlock()
+		state, err := rt.disclosureState(ctx, owner, computer, payload.Digest)
+		if err != nil {
+			return true, fmt.Errorf("disclosure refused: %s; the tape could not be read (%v), so the sink stays closed", payload.Reason, err)
 		}
-		return nil
-	case disclosurePhaseDenied:
-		return fmt.Errorf("disclosure refused: the owner denied this disclosure (%s) of %s to %s", state.pendingID, call.sink, call.target)
-	case disclosurePhasePending:
-		return fmt.Errorf("disclosure refused: this disclosure waits on the owner (%s); the owner answers it at /api/disclosures/%s/approve or /deny, and the same attempt then passes once", state.pendingID, state.pendingID)
+		switch state.phase {
+		case disclosurePhaseApproved:
+			// The owner approved this exact disclosure: it passes once.
+			consumed := payload
+			consumed.DisclosureID = state.pendingID
+			consumed.Actor = "owner"
+			if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseConsumed, consumed); err != nil {
+				return true, fmt.Errorf("disclosure refused: the owner's approval could not be recorded as used (%v), so the sink stays closed", err)
+			}
+			return true, nil
+		case disclosurePhaseDenied:
+			return true, fmt.Errorf("disclosure refused: the owner denied this disclosure (%s) of %s to %s", state.pendingID, call.sink, call.target)
+		case disclosurePhasePending:
+			return true, fmt.Errorf("disclosure refused: this disclosure waits on the owner (%s); the owner answers it at /api/disclosures/%s/approve or /deny, and the same attempt then passes once", state.pendingID, state.pendingID)
+		}
+		return false, nil
+	}
+	if done, err := standing(); done {
+		return err
 	}
 
 	dist, receipt, askErr := rt.disclosureJudge(ctx, call, owner, computer, labels, payload)
@@ -312,6 +349,13 @@ func (rt *Runtime) disclosureAsk(ctx context.Context, call disclosureCall, owner
 	}
 	outcome := disclosure.FromDistribution(dist)
 	payload.Rule = string(outcome)
+	// Another attempt may have asked, or the owner answered, while the judge
+	// ran: the tape is re-read before this one writes.
+	if done, err := standing(); done {
+		return err
+	}
+	rt.disclosureMu.Lock()
+	defer rt.disclosureMu.Unlock()
 	if outcome == disclosure.OutcomeAllow {
 		if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseAllowed, payload); err != nil {
 			return fmt.Errorf("disclosure refused: the rule's allowance could not be recorded (%v), so the sink stays closed", err)
@@ -449,33 +493,64 @@ func (rt *Runtime) appendDisclosure(ctx context.Context, exec toolregistry.Execu
 	return id, nil
 }
 
-// gateMessageDisclosure is the desk-message sink of the disclosure path: an
-// addressed act (Cast, Ask, Report, Reply, Feed, Escalate) from a desk whose
-// run carries labels. The target desk is admitted for a label when it is the
-// custodian of its kind or holds a live lease for it (messageAdmitted). A
-// message to the owner leaves no custody and is not a sink.
-func (r *rlmCallReduction) gateMessageDisclosure(ctx context.Context, in yaegikernel.StagedIntent) error {
-	rt := r.rt()
-	to := strings.TrimSpace(in.ToDesk)
-	if rt == nil || r.rec == nil || to == "" {
-		return nil
+// resolveMessageDesk names the registered desk an address reaches: the full
+// name when it is a desk ("app:notes"), else the desk before a subject
+// ("texture:doc-1" is the texture desk). ok is false for an address that is no
+// desk (the owner, a system inbox).
+func resolveMessageDesk(to string) (name string, ok bool) {
+	to = strings.TrimSpace(to)
+	if _, found := objectgraph.DeskWriter(canonicalDeskName(to)); found {
+		return canonicalDeskName(to), true
 	}
+	head, _, _ := strings.Cut(to, ":")
+	if _, found := objectgraph.DeskWriter(canonicalDeskName(head)); found {
+		return canonicalDeskName(head), true
+	}
+	return "", false
+}
+
+// gateMessageDisclosure is the desk-message sink of the disclosure path: an
+// addressed act (Cast, Ask, Report, Reply, Feed, Decline, Escalate) from a
+// desk whose run carries labels. The target desk is admitted for a label when
+// it is the custodian of its kind or holds a live lease for it
+// (messageAdmitted). A message to the owner leaves no custody and is not a
+// sink.
+func (r *rlmCallReduction) gateMessageDisclosure(ctx context.Context, in yaegikernel.StagedIntent) error {
 	switch in.Kind {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentReport, yaegikernel.IntentReply,
-		yaegikernel.IntentFeed, yaegikernel.IntentEscalate:
+		yaegikernel.IntentFeed, yaegikernel.IntentDecline, yaegikernel.IntentEscalate:
 	default:
 		return nil
 	}
-	desk, _, _ := strings.Cut(to, ":")
-	if d := strings.ToLower(strings.TrimSpace(desk)); d == "owner" || d == "user" || d == "" {
-		return nil
+	if in.LocalID != "" {
+		if r.gatedMessages[in.LocalID] {
+			return nil
+		}
+		if r.gatedMessages == nil {
+			r.gatedMessages = map[string]bool{}
+		}
+		r.gatedMessages[in.LocalID] = true
 	}
 	body := strings.Join([]string{in.Statement, in.Body, in.Objective, in.Claim, in.Question, in.Packet}, " ")
+	return r.gateMessage(ctx, in.Kind, in.ToDesk, body)
+}
+
+// gateMessage gates one message of kind to the address to.
+func (r *rlmCallReduction) gateMessage(ctx context.Context, kind, to, body string) error {
+	rt := r.rt()
+	to = strings.TrimSpace(to)
+	if rt == nil || r.rec == nil || to == "" {
+		return nil
+	}
+	head, _, _ := strings.Cut(to, ":")
+	if d := strings.ToLower(strings.TrimSpace(head)); d == "owner" || d == "user" || d == "" {
+		return nil
+	}
 	return rt.gateDisclosure(ctx, disclosureCall{
 		exec: toolregistry.ExecutionContext{
 			RunID: r.scope.RunID, OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID, AgentID: r.scope.DeskAgentID, RunRecord: r.rec,
 		},
-		deskRole: r.rec.AgentProfile, sink: disclosure.SinkDeskMessage, target: desk,
-		summary: in.Kind + " " + disclosureBound(body, disclosureSummaryRunes),
+		deskRole: r.rec.AgentProfile, sink: disclosure.SinkDeskMessage, target: to,
+		summary: kind + " " + disclosureBound(body, disclosureSummaryRunes),
 	})
 }

@@ -669,6 +669,9 @@ type rlmCallReduction struct {
 	// one transaction.
 	records cellRecords
 	receipt ReductionReceipt
+	// gatedMessages are the staged acts the disclosure gate already decided,
+	// so the records route and the per-intent loop count one act once.
+	gatedMessages map[string]bool
 	// fateTerminal is set when a Complete intent committed a terminal
 	// assignment fate; the eval tool surfaces it so the run loop can end.
 	fateTerminal bool
@@ -1125,7 +1128,8 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 				}
 				if r.requesterIsLifecycle() {
 					seq = 0
-				} else {
+				} else if err = r.gateMessage(ctx, in.Kind, r.scope.ReturnTo, in.Summary+" "+in.Result); err == nil {
+					// The child's result goes to its requester: a message sink.
 					seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 				}
 			}

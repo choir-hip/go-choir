@@ -437,3 +437,94 @@ func TestTheReducerGatesAMessageToANonCustodianDesk(t *testing.T) {
 		t.Fatalf("an unaddressed act = %v", err)
 	}
 }
+
+// B1: a search query is an egress sink, gated at the dispatch (gateEgressCall
+// is the step the async search dispatch runs before it starts a search).
+func TestALabelledSearchStartIsCountedForABuiltInAndRefusedForAPackageDesk(t *testing.T) {
+	f := newDisclosureFixture(t, "searcher", 62832)
+	f.escalating()
+	payload, _ := json.Marshal(yaegikernel.SearchStartPayload{Query: "my private notes about the merger"})
+	builtin := f.run(t, "run-search-b", agentprofile.Research, "x", types.OwnerPrivateLabel("document"))
+	if err := f.rt.gateEgressCall(context.Background(), agentprofile.Research, builtin, yaegikernel.ActionSearchStart, payload); err != nil {
+		t.Fatalf("a built-in desk's search was blocked: %v", err)
+	}
+	if disclosure.Counts()["egress|owner_private|ask|observed"] != 1 {
+		t.Fatalf("counts = %v", disclosure.Counts())
+	}
+	pkg := f.run(t, "run-search-p", f.desk, "x", types.OwnerPrivateLabel("document"))
+	if err := f.rt.gateEgressCall(context.Background(), f.desk, pkg, yaegikernel.ActionSearchStart, payload); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
+		t.Fatalf("a package desk's search = %v", err)
+	}
+}
+
+// B2: the address keys on the full desk name; admission is checked against
+// the resolved desk; Decline and a child's Complete are message sinks.
+func TestMessageApprovalsDoNotSpanPackageDesks(t *testing.T) {
+	f := newDisclosureFixture(t, "notes", 62833)
+	registerLeaseApp(t, "weather", 62834, true)
+	f.escalating()
+	exec := f.run(t, "run-two", f.desk, "x", types.OwnerPrivateLabel("document"))
+	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID, ReturnTo: "app:weather"}}
+	in := func(id, to string) yaegikernel.StagedIntent {
+		return yaegikernel.StagedIntent{LocalID: id, Kind: yaegikernel.IntentDecline, ToDesk: to, Body: "same text"}
+	}
+	if err := r.gateMessageDisclosure(context.Background(), in("a", "app:notes")); err == nil {
+		t.Fatal("a decline to a non-custodian passed")
+	}
+	id := f.pendingID(t)
+	if _, err := f.rt.answerDisclosure(context.Background(), f.owner, id, true); err != nil {
+		t.Fatal(err)
+	}
+	// The approval is for app:notes; app:weather is a different disclosure.
+	if err := r.gateMessageDisclosure(context.Background(), in("b", "app:weather")); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
+		t.Fatalf("an approval for app:notes passed a message to app:weather: %v", err)
+	}
+	if err := r.gateMessageDisclosure(context.Background(), in("c", "app:notes")); err != nil {
+		t.Fatalf("the approved disclosure: %v", err)
+	}
+	a := disclosureDigest("o", "c", disclosureCall{deskRole: "d", sink: disclosure.SinkDeskMessage, target: "app:notes", summary: "s"}, nil)
+	b := disclosureDigest("o", "c", disclosureCall{deskRole: "d", sink: disclosure.SinkDeskMessage, target: "app:weather", summary: "s"}, nil)
+	if a == b {
+		t.Fatal("digests of two app desks are equal")
+	}
+	if name, ok := resolveMessageDesk("app:weather"); !ok || name != "app:weather" {
+		t.Fatalf("resolve = %q %v", name, ok)
+	}
+	if name, ok := resolveMessageDesk(agentprofile.Texture + ":doc-1"); !ok || name != agentprofile.Texture {
+		t.Fatalf("resolve texture subject = %q %v", name, ok)
+	}
+	// A child's Complete returns to its requester: gated like a Reply.
+	if err := r.gateMessage(context.Background(), yaegikernel.IntentComplete, r.scope.ReturnTo, "result"); err == nil {
+		t.Fatal("a Complete to a non-custodian requester was not gated")
+	}
+}
+
+// 11: the approve route matches exactly.
+func TestDisclosureRouteRefusesTrailingSegments(t *testing.T) {
+	f := newDisclosureFixture(t, "routes", 62835)
+	h := &APIHandler{rt: f.rt}
+	req := httptest.NewRequest(http.MethodPost, "/api/disclosures/abc/approve/extra", nil)
+	req.Header.Set("X-Authenticated-User", f.owner)
+	w := httptest.NewRecorder()
+	h.HandleDisclosureRouter(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("trailing segment = %d", w.Code)
+	}
+}
+
+// 6: a store error reading the run's labels fails an enforced desk closed.
+func TestAnUnreadableLabelSetFailsAPackageDeskClosed(t *testing.T) {
+	f := newDisclosureFixture(t, "closed", 62836)
+	exec := f.run(t, "run-closed", f.desk, "x", types.LabelWorldUntrusted)
+	_ = f.s.Close()
+	err := f.gate(exec, f.desk, disclosure.SinkPublication, "d", "s")
+	if err == nil || !strings.Contains(err.Error(), "could not be read") {
+		t.Fatalf("package desk with unreadable labels = %v", err)
+	}
+	if err := f.gate(exec, agentprofile.Texture, disclosure.SinkPublication, "d", "s"); err != nil {
+		t.Fatalf("a built-in desk was blocked: %v", err)
+	}
+	if disclosure.Counts()["publication|unreadable|labels|observed"] == 0 {
+		t.Fatalf("counts = %v", disclosure.Counts())
+	}
+}
