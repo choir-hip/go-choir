@@ -185,3 +185,21 @@ test('N9: keyOfEvent yields Shift+<letter>, so such a binding can fire', () => {
   expect(C.keyOfEvent({ key: 'Z', shiftKey: true, metaKey: true })).toBe('Mod+Shift+Z');
   expect(C.normalizeKey('Mod+Shift+z')).toBe('Mod+Shift+Z');
 });
+
+test('review r2: no package registration carries core; core is a reserved package name', async () => {
+  await expect(X.setPackageContributions('core', { keybindings: [{ key: 'Mod+K', command: 'texture.x' }] }, 'v1')).rejects.toThrow(/shell's name/);
+  expect(C.commands.bindings().some((b) => b.owner === 'core' && b.tier === 'app')).toBe(false);
+  expect(C.CORE_OWNER).toBe('core');
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-core-'));
+  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
+  fs.cpSync(path.join(dir, 'src/packages/image'), path.join(dir, 'src/packages/core'), { recursive: true });
+  const p = path.join(dir, 'src/packages/core/choir-package.json');
+  const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+  m.name = 'core'; m.opens = [];
+  fs.writeFileSync(p, JSON.stringify(m, null, 2));
+  const r = spawnSync(process.execPath, ['scripts/check-packages.mjs'], { cwd: dir, encoding: 'utf8' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  expect(r.status).not.toBe(0);
+  expect(r.stdout + r.stderr).toMatch(/reserved shell or system-desk name/);
+});

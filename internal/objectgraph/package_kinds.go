@@ -69,7 +69,7 @@ var (
 var shellNames = map[string]bool{
 	"desktop": true, "shell": true, "package": true, "packages": true,
 	"app-packages": true, "system": true, "trace": true, "terminal": true,
-	"features": true, "choir": true, "owner": true,
+	"features": true, "choir": true, "owner": true, "core": true,
 }
 
 // IsShellName reports whether name belongs to the shell (also barred as an app

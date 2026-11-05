@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { parseAst, transformWithEsbuild } from 'vite';
 import { compile, preprocess } from 'svelte/compiler';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { analyzeModule } from './package-boundary-plugin.mjs';
+import { SCRIPT_EXT, analyzeModule } from './package-boundary-plugin.mjs';
 
 const FRONTEND = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -27,7 +27,7 @@ function sourceFiles(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...sourceFiles(full));
-    else if (/\.(svelte|js|mjs|ts)$/.test(entry.name)) out.push(full);
+    else if (SCRIPT_EXT.test(entry.name)) out.push(full); // the boundary's own set: what the build analyzes, extraction reads
   }
   return out.sort();
 }
@@ -39,7 +39,8 @@ async function compiled(file) {
     const pre = await preprocess(source, vitePreprocess(), { filename: file });
     return compile(pre.code, { filename: file, generate: 'dom', css: 'external' }).js.code;
   }
-  if (file.endsWith('.ts')) return (await transformWithEsbuild(source, file, { loader: 'ts', target: 'es2022' })).code;
+  const loader = /\.(ts|mts|cts)$/i.test(file) ? 'ts' : /\.tsx$/i.test(file) ? 'tsx' : /\.jsx$/i.test(file) ? 'jsx' : '';
+  if (loader) return (await transformWithEsbuild(source, file, { loader, target: 'es2022' })).code;
   return source;
 }
 

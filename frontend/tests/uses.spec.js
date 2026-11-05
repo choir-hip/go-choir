@@ -50,6 +50,29 @@ test('B3: extraction refuses every way around the named import, the same as the 
   }
 });
 
+test('review r2: every file the build analyzes is read for uses, tsx and jsx included', async () => {
+  for (const [file, body] of [['helper.tsx', `import { submitPrompt } from ${SDK};\nexport const f = () => submitPrompt;\n`], ['helper.jsx', `import { logout } from ${SDK};\nexport const f = () => logout;\n`], ['helper.mts', `import { openApp } from ${SDK};\nexport const f = openApp;\n`], ['helper.cjs', `import { showOverview } from ${SDK};\nexport const f = showOverview;\n`]]) {
+    const dir = tmpPackage({ 'App.svelte': svelteWith(''), [file]: body });
+    const uses = await extractUses(dir);
+    expect(uses.grants, file).toEqual(['ui.shell']);
+    expect(usesProblems(uses, { capabilities: [] }).length, file).toBe(1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('check-packages refuses a grant name that is a prototype property', () => {
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'choir-grant2-'));
+  fs.cpSync(root, dir, { recursive: true, filter: (src) => !/node_modules|dist|test-results/.test(src) });
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
+  const p = path.join(dir, 'src/packages/image/choir-package.json');
+  const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+  m.capabilities = [{ grant: 'constructor' }];
+  fs.writeFileSync(p, JSON.stringify(m, null, 2));
+  const r = spawnSync(process.execPath, ['scripts/check-packages.mjs'], { cwd: dir, encoding: 'utf8' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  expect(r.stdout + r.stderr).toMatch(/not a grant in the catalogue/);
+});
+
 test('B2: every shell-wide function implies ui.shell; the pure helpers imply nothing', async () => {
   const sections = readSections(root);
   for (const name of ['logout', 'windowAction', 'setAppContext', 'openApp', 'openFile', 'listWindows', 'setTheme', 'submitPrompt', 'showOverview', 'showDesktop', 'closeOtherWindows', 'resetDesktop', 'requireAuth', 'sessionExpired', 'focus', 'restore', 'suspendBackgroundHeavyWindows']) {

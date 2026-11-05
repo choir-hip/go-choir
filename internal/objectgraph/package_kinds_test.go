@@ -159,7 +159,7 @@ func TestRegisterPackageKindRefusesEveryReservedDeskAgentOrShellName(t *testing.
 		"super", "co-super", "cosuper", "coagent", "co-agent", "researcher", "web-research", // frozen V1 desk spellings
 		"processor", "reconciler", "verifier", "verifier-multimodal", // retained historical roles
 		"kernel", "corpusd", "store", "ownerfiles", "autoradio", // non-desk built-in writers
-		"desktop", "shell", "owner", "choir", "system", "trace", "terminal", // the shell
+		"desktop", "shell", "owner", "choir", "system", "trace", "terminal", "core", // the shell
 	}, deskmanifest.Names()...)
 	for _, pkg := range names {
 		if packageNameGrammar.MatchString(pkg) == false {

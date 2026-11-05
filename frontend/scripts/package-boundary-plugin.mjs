@@ -13,6 +13,18 @@
 // This is an architectural boundary, not a security boundary: package code
 // runs same-origin and can call any /api route the user can. Authority lives
 // in the backend.
+//
+// What a static lint cannot see, said plainly: anything reached by a value
+// rather than a name. A reference to the window obtained through an element
+// (el.ownerDocument.defaultView is refused by name, but event.view,
+// getRootNode(), a prototype walk or a callback that hands it over are not),
+// observers and requestAnimationFrame loops, handler properties (el.onclick =),
+// `(0, window.addEventListener)(...)`, member-callee timers with string bodies,
+// and any capability a dependency package exposes. The checks here make the
+// honest reach visible (named imports, named globals) and refuse the common
+// ways around that; they cannot make hostile code safe. The enforcement
+// boundary for third-party code is the sandboxed iframe of MA6.1; until then
+// this gate only holds first-party and reviewed code to the contract.
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 const CSS_FETCH_FUNCTIONS = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'css-fetch-functions.json'), 'utf8')).functions;
 const FETCH_FN = new RegExp(`(^|[^a-z0-9_-])(?:${CSS_FETCH_FUNCTIONS.filter((f) => f !== 'url').map((f) => f.replace(/[-]/g, '\\-')).join('|')})\\s*\\(`);
 
-const SCRIPT_EXT = /\.(svelte|js|mjs|cjs|ts|mts|cts|tsx|jsx)$/i;
+export const SCRIPT_EXT = /\.(svelte|js|mjs|cjs|ts|mts|cts|tsx|jsx)$/i;
 const CSS_EXT = /\.(css|scss|sass|less|styl|stylus|pcss|postcss)$/i;
 const BANNED_IDENTIFIERS = new Set(['eval', 'Function', 'Worker', 'SharedWorker', 'importScripts']);
 const ALLOWED_META = new Set(['env', 'hot']);
@@ -84,16 +96,46 @@ function walk(node, parent, visit) {
 // ---- the SDK reach and the global object ----
 
 const SDK_SPECIFIER = /(^|\/)app-sdk(\.[a-z]+)?$/;
-const GLOBAL_NAMES = new Set(['window', 'globalThis', 'self']);
-const GLOBAL_LINKS = new Set(['window', 'globalThis', 'self', 'top', 'parent', 'frames']);
+// Roots of the global object: a bare reference is an alias the lint cannot follow.
+const GLOBAL_NAMES = new Set(['window', 'globalThis', 'self', 'top', 'parent', 'frames', 'opener', 'document']);
+// Properties that hand back the window (or another one) from something else.
+const WINDOW_LINKS = new Set(['window', 'globalThis', 'self', 'top', 'parent', 'frames', 'opener']);
+const WINDOW_FROM_ANYTHING = new Set(['defaultView', 'contentWindow']);
+const BANNED_KEYS = new Set([...BANNED_IDENTIFIERS, 'constructor', '__proto__']);
 const sdkSource = (node) => {
   if (!node) return false;
   if (node.type === 'Literal' && typeof node.value === 'string') return SDK_SPECIFIER.test(node.value);
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return SDK_SPECIFIER.test(node.quasis[0].value.cooked ?? '');
   return false;
 };
-const isGlobalChain = (node) => (node.type === 'Identifier' && GLOBAL_NAMES.has(node.name))
-  || (node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' && GLOBAL_LINKS.has(node.property.name) && isGlobalChain(node.object));
+const isGlobalChain = (node, locals) => {
+  if (node.type === 'Identifier') return GLOBAL_NAMES.has(node.name) && !locals.has(node.name);
+  if (node.type !== 'MemberExpression' || node.computed || node.property.type !== 'Identifier') return false;
+  if (WINDOW_FROM_ANYTHING.has(node.property.name)) return true;
+  return (WINDOW_LINKS.has(node.property.name) || node.property.name === 'document') && isGlobalChain(node.object, locals);
+};
+// The names a module declares itself (a local `parent` or `top` is not the window).
+function declaredNames(ast) {
+  const names = new Set();
+  const pattern = (p) => {
+    if (!p) return;
+    if (p.type === 'Identifier') names.add(p.name);
+    else if (p.type === 'ObjectPattern') p.properties.forEach((q) => pattern(q.type === 'RestElement' ? q.argument : q.value));
+    else if (p.type === 'ArrayPattern') p.elements.forEach(pattern);
+    else if (p.type === 'AssignmentPattern') pattern(p.left);
+    else if (p.type === 'RestElement') pattern(p.argument);
+  };
+  walk(ast, null, (n) => {
+    if (n.type === 'VariableDeclarator') pattern(n.id);
+    else if (n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression') {
+      if (n.id) pattern(n.id);
+      n.params.forEach(pattern);
+    } else if (n.type === 'ClassDeclaration' && n.id) pattern(n.id);
+    else if (n.type === 'CatchClause') pattern(n.param);
+    else if (n.type === 'ImportSpecifier' || n.type === 'ImportDefaultSpecifier' || n.type === 'ImportNamespaceSpecifier') pattern(n.local);
+  });
+  return names;
+}
 // An Identifier that only names something (a property, a parameter, a declaration), not a read of the binding.
 function namesOnly(node, parent) {
   if (!parent) return false;
@@ -107,6 +149,14 @@ function namesOnly(node, parent) {
     case 'LabeledStatement': case 'BreakStatement': case 'ContinueStatement': return true;
     default: return false;
   }
+}
+// A key the gate can read: a plain string literal that is not an escape hatch. A concatenation, template or variable is refused (constant folding would only prove the ones that are harmless).
+function plainKey(node) {
+  if (node.type === 'Literal' && (typeof node.value === 'string' || typeof node.value === 'number')) {
+    const key = String(node.value);
+    return !BANNED_KEYS.has(key) && !key.includes(SDK_GLOBAL);
+  }
+  return false;
 }
 
 /**
@@ -138,11 +188,17 @@ export function analyzeModule(ast, { checkMeta = true } = {}) {
       problems.push(`a package ${oneByOne}`);
     }
   }
+  const locals = declaredNames(ast);
   walk(ast, null, (node, parent) => {
     if (node.type === 'ImportExpression' && sdkSource(node.source)) problems.push(`a package ${oneByOne}`);
-    else if (node.type === 'MemberExpression' && node.computed && node.property.type !== 'Literal' && isGlobalChain(node.object)) {
-      problems.push('computed access to the global object is not allowed in a package: name the property');
-    } else if (node.type === 'Identifier' && GLOBAL_NAMES.has(node.name) && parent) {
+    else if (node.type === 'MemberExpression' && node.computed && isGlobalChain(node.object, locals) && !plainKey(node.property)) {
+      problems.push('computed access to the global object is not allowed in a package: name the property with a plain string literal');
+    } else if (node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier'
+      && (WINDOW_LINKS.has(node.property.name) || WINDOW_FROM_ANYTHING.has(node.property.name))
+      && isGlobalChain(node, locals) && !(parent?.type === 'MemberExpression' && parent.object === node)
+      && !(parent?.type === 'UnaryExpression' && parent.operator === 'typeof')) {
+      problems.push(`${node.property.name} hands back the window and is not allowed in a package unless it is accessed directly (no alias)`);
+    } else if (node.type === 'Identifier' && GLOBAL_NAMES.has(node.name) && !locals.has(node.name) && parent) {
       const memberObject = parent.type === 'MemberExpression' && parent.object === node;
       const typeofOperand = parent.type === 'UnaryExpression' && parent.operator === 'typeof';
       if (!memberObject && !typeofOperand && !namesOnly(node, parent)) {

@@ -51,6 +51,8 @@ export function registerContributionPoint(key: string, point: ContributionPoint)
  * is not re-applied (C3).
  */
 export function setPackageContributions(pkg: string, contributes: unknown, fingerprint: string): Promise<void> {
+  // `core` is the shell's own identity (the commands service gives it privileges a package never has); no package carries it.
+  if (pkg === 'core') return Promise.reject(new Error('"core" is the shell\'s name, not a package\'s'));
   // One change at a time, in call order: a dispose that is still awaiting never interleaves with the next apply (C4).
   const next = chain.then(() => change(pkg, contributes, fingerprint));
   chain = next.catch(() => undefined);

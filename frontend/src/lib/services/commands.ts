@@ -48,6 +48,8 @@ export interface KeybindingSpec {
   /** Fire while an input has focus. Mod chords always do. */
   allowInInput?: boolean;
 }
+/** The host's own owner name. Reserved as a package name (check-packages, the Go seam) and refused by setPackageContributions and bindRegisterCommand, so no package registration carries it. */
+export const CORE_OWNER = 'core';
 type Tier = 'user' | 'app' | 'core';
 const TIER_RANK: Record<Tier, number> = { user: 0, app: 1, core: 2 };
 
@@ -128,8 +130,8 @@ export function validateKeybinding(binding: KeybindingSpec, owner: string): stri
   } catch (err) {
     return (err as Error).message;
   }
-  if (owner !== 'core' && LOCKED_KEYS.has(key)) return `key ${key} is locked to the shell`;
-  if (owner !== 'core' && !binding.command.startsWith(`${owner}.`)) return `keybinding ${key} names command "${binding.command}" outside "${owner}"`;
+  if (owner !== CORE_OWNER && LOCKED_KEYS.has(key)) return `key ${key} is locked to the shell`;
+  if (owner !== CORE_OWNER && !binding.command.startsWith(`${owner}.`)) return `keybinding ${key} names command "${binding.command}" outside "${owner}"`;
   if (binding.when !== undefined && typeof binding.when !== 'string') return `keybinding ${key}: when must be a string`;
   return null;
 }
@@ -160,7 +162,7 @@ export function createCommands(deps: { scopeFor: (owner: string) => Scope; actio
     return deps.scopeFor(owner).effect(() => { commands.delete(spec.id); });
   }
 
-  function registerKeybinding(spec: KeybindingSpec, owner: string, tier: Tier = owner === 'core' ? 'core' : 'app', priority = 0) {
+  function registerKeybinding(spec: KeybindingSpec, owner: string, tier: Tier = owner === CORE_OWNER ? 'core' : 'app', priority = 0) {
     const problem = validateKeybinding(spec, owner);
     if (problem) throw new Error(problem);
     const rec: BindingRec = { spec: Object.freeze({ ...spec }), key: normalizeKey(spec.key), owner, tier, priority, seq: ++seq };
@@ -276,7 +278,7 @@ export function installKeyCapture(target: Pick<Window, 'addEventListener' | 'rem
  */
 export function bindRegisterCommand(owner: string, service: Pick<typeof commands, 'registerCommand'> = commands) {
   return (spec: CommandSpec, handler?: CommandHandler): () => void | Promise<void> => {
-    if (!owner || owner === 'core') throw new Error(`registerCommand: the ${owner ? "shell's" : 'calling package'} namespace is not a package's to register into`);
+    if (!owner || owner === CORE_OWNER) throw new Error(`registerCommand: the ${owner ? "shell's" : 'calling package'} namespace is not a package's to register into`);
     return service.registerCommand(spec, owner, handler);
   };
 }

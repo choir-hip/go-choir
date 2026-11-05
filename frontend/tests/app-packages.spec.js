@@ -213,6 +213,7 @@ const boundaryControls = [
     script("import { local } from './local.js';\nimport { sdk } from '../../lib/app-sdk';\nimport { onMount } from 'svelte';\nimport { writable } from 'svelte/store';\nimport JSZip from 'jszip';\nimport pic from './pic.png';\nimport s from './local.js?raw';\nconsole.log(local, sdk, onMount, writable, JSZip, pic, s, import.meta.env);\nimport('./local.js').then(console.log);")],
   ['the SDK helpers that register and schedule', script("import { sdk } from '../../lib/app-sdk';\nsdk.onWindowEvent('keydown', () => {});\nsdk.onDocumentEvent('keydown', () => {});\nsdk.repeatEvery(() => {}, 1000);")],
   ['a named re-export and typeof window', script("export { sdk } from '../../lib/app-sdk';\nconsole.log(typeof window, window.innerWidth, window?.name, globalThis.location);")],
+  ['document use, a local named parent, a literal key on the window', script("const parent = { a: 1 };\nconst top = ['x'];\nconsole.log(parent['a'], top[0], typeof document, document.body, document.createElement('div'), window['innerWidth']);")],
   ['own css, data: urls and fragments', style('.a { color: red; background: url(data:image/png;base64,AAAA); fill: url(#grad); }')],
 ];
 
@@ -249,6 +250,20 @@ const boundaryBad = [
   ['dynamic import of the SDK, no space', script("import('../../lib/app-sdk.ts').then(console.log);"), /one by one/],
   ['split-string SDK global', script("console.log(globalThis['__choir' + 'AppSdk']);"), /computed access to the global object/],
   ['split-string SDK global via window.top', script("const k = 'x';\nconsole.log(window.top[k]);"), /computed access to the global object/],
+  // review r2: the other roots of the global object, and keys the gate cannot read
+  ['top[concatenated key]', script("console.log(top['__choir' + 'AppSdk']);"), /computed access to the global object/],
+  ['parent[variable key]', script("const k = 'x';\nconsole.log(parent[k]);"), /computed access to the global object/],
+  ['frames[variable key]', script("const k = 'x';\nconsole.log(frames[k]);"), /computed access to the global object/],
+  ['opener[variable key]', script("const k = 'x';\nconsole.log(opener[k]);"), /computed access to the global object/],
+  ['document.defaultView[concatenated key]', script("console.log(document.defaultView['__choir' + 'AppSdk']);"), /computed access to the global object/],
+  ['element.ownerDocument.defaultView[key]', script("export let el;\nconst k = 'x';\nconsole.log(el.ownerDocument.defaultView[k]);"), /computed access to the global object/],
+  ['template-literal key on window', script("console.log(window[`__choir${'AppSdk'}`]);"), /computed access to the global object/],
+  ['literal eval key on window', script("window['eval']('1');"), /computed access to the global object/],
+  ['literal constructor key on window', script("console.log(window['constructor']);"), /computed access to the global object/],
+  ['bare document alias', script("const d = document;\nconsole.log(d);"), /bare "document"/],
+  ['bare top alias', script("const t = top;\nconsole.log(t);"), /bare "top"/],
+  ['window.top alias', script("const t = window.top;\nconsole.log(t);"), /hands back the window/],
+  ['document.defaultView alias', script("const w = document.defaultView;\nconsole.log(w);"), /hands back the window/],
   ['aliased window', script("const w = window;\nw.addEventListener('keydown', () => {});"), /bare "window"/],
   ['aliased globalThis', script("const g = globalThis;\nconsole.log(g);"), /bare "globalThis"/],
   ['svelte:window listener', { 'src/packages/p/App.svelte': '<svelte:window on:keydown={() => {}} />\n<div>ok</div>\n' }, /bare "window"/],

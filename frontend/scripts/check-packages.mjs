@@ -24,7 +24,7 @@ const ABI = 'choir.app-frontend/svelte-inline/v1';
 const NAME_RE = /^[a-z][a-z0-9-]{1,39}$/;
 const EXT_RE = /^[a-z0-9]{1,16}$/;
 const RESERVED_NAMES = new Set([
-  'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research',
+  'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research', 'core',
 ]);
 // Facts only the platform sets (internal/apppackage/strict.go publisherDeclared):
 // a manifest that states one is refused apart from an unknown key. The Go
@@ -47,9 +47,9 @@ try {
   errors.push(`sdk-surface/grants.json: cannot be read: ${err.message}`);
 }
 function lookupGrant(name) {
-  if (GRANTS[name] && !GRANTS[name].family) return GRANTS[name];
+  if (Object.hasOwn(GRANTS, name) && !GRANTS[name].family) return GRANTS[name];
   const i = name.lastIndexOf('.');
-  const family = i > 0 ? GRANTS[name.slice(0, i)] : undefined;
+  const family = i > 0 && Object.hasOwn(GRANTS, name.slice(0, i)) ? GRANTS[name.slice(0, i)] : undefined;
   return family?.family && /^[a-z][a-z0-9_]{0,31}$/.test(name.slice(i + 1)) ? family : undefined;
 }
 const MIN_STATIC_IDS = 10;

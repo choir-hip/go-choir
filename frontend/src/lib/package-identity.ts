@@ -5,7 +5,8 @@
 // component there is none, and the function refuses.
 import { getContext, setContext } from 'svelte';
 
-const KEY = Symbol.for('choir.package-identity');
+// Module-private: a package cannot name this key, so it cannot assert another package's identity through setContext.
+const KEY = Symbol('choir.package-identity');
 
 /** AppHost calls this once per window; `get` reads the window's app id. */
 export function providePackageIdentity(get: () => string): void {
