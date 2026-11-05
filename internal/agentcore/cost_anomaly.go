@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/llmcost"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/trust"
@@ -39,7 +38,7 @@ func (rt *Runtime) scanCostAnomalies(ctx context.Context, ownerID, computerID st
 	}
 	points := trust.PointsFromEntries(llmcost.ExtractCostEntries(events))
 	anomalies := trust.DetectCostAnomalies(points, now, trust.DefaultAnomalyParams(), nil)
-	inbox := agentprofile.Management + ":" + ownerID
+	inbox := persistentManagementAgentID(ownerID)
 	for _, a := range anomalies {
 		notice := a.Notice(inbox, computerID)
 		req := types.CommitInboxRecordsRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "cost-anomaly:" + notice.RecordID, Records: []types.CommitmentRecord{notice}}

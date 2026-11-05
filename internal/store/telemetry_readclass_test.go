@@ -22,6 +22,7 @@ import (
 // Key: path from the repository root, then the method called.
 var listEventsCallSiteClass = map[string]ReadConsistency{
 	"internal/apihandler/costs.go ListEventsByOwner":                            ReadRelaxed,    // polled cost estimate
+	"internal/agentcore/cost_anomaly.go ListEventsByOwner":                      ReadRelaxed,    // periodic cost anomaly scan
 	"internal/textureowner/texture.go ListEventsByOwner":                        ReadRelaxed,    // polled owner events page
 	"internal/agentcore/api_run_events.go ListEventsAfter":                      ReadRelaxed,    // polled run events page
 	"internal/textureowner/texture_workflow_verifier.go ListEventsByTrajectory": ReadConsistent, // reads tool.result as evidence
