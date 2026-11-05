@@ -16,8 +16,8 @@ export function excerpt(value, limit = 260) {
   return `${clean.slice(0, limit - 1).trim()}...`;
 }
 
-function textFromFirst(parent, tagName) {
-  return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
+function textFromFirst(node, tagName) {
+  return node.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
 }
 
 function firstTagText(source, tagName) {
