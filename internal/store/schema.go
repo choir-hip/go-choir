@@ -91,6 +91,17 @@ CREATE TABLE IF NOT EXISTS events (
 	PRIMARY KEY (event_id)
 );
 
+-- The desk package event log (plan MA4.2 and MA4.4): the install, update,
+-- candidate, supplant and disable facts the registry of package desks is
+-- folded from. seq is the event sequence and the desk epoch. A restore of the
+-- store to an earlier state is a restore of this log, and the boot re-seeds the
+-- image's required packages after it (appdesk.Desired).
+CREATE TABLE IF NOT EXISTS desk_package_events (
+	seq INTEGER PRIMARY KEY AUTOINCREMENT,
+	body TEXT NOT NULL,
+	created_at DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS run_memory_entries (
 	entry_id TEXT PRIMARY KEY,
 	loop_id TEXT NOT NULL,

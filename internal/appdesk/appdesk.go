@@ -6,9 +6,10 @@
 // manifest the owner approved. The live desk set, each package kind's one
 // writer and the retired kinds are never written to a table: Derive folds
 // them from the install and disable events, at boot and on every event, so a
-// restore to an earlier head selects the earlier set by replay. Activate puts
-// a derived set into the daemon's desk manifest; it does nothing unless
-// CHOIR_APP_DESKS=on.
+// restore to an earlier head selects the earlier set by replay. Reconcile puts
+// a derived set into the daemon's desk manifest, and Boot (required.go) runs
+// at every boot: it re-seeds the image's required packages after the log's
+// head and reconciles. There is no switch: a derived desk is registered.
 //
 // A package desk is least-authority by construction: its verbs come from the
 // app set deskmanifest.NewAppDesk allows, its taint class is the untrusted
@@ -28,7 +29,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -90,6 +90,8 @@ const (
 	CodeNotCandidate   Code = "not_candidate"
 	CodeNoCandidate    Code = "no_candidate"
 	CodeCandidateLive  Code = "candidate_live"
+	// CodeRequired refuses a disable of a package the running image requires.
+	CodeRequired Code = "required_package"
 )
 
 // Refusal is one reason an install or event did not take effect.
@@ -128,6 +130,9 @@ type Event struct {
 	Package        string
 	ManifestDigest string
 	Manifest       *Manifest
+	// Version is the package version an install, update or candidate event
+	// binds (MAJOR.MINOR.PATCH); the required set compares against it.
+	Version string
 }
 
 // App desk uid range: 62000 and up (deskmanifest.NewAppDesk), one per
@@ -262,6 +267,9 @@ type Set struct {
 	// Candidates maps an installed package to its live candidate package
 	// (<pkg>-candidate); the candidate's desk is in Desks like any other.
 	Candidates map[string]string
+	// Versions maps each live installed package to the version of its last
+	// install or update event.
+	Versions map[string]string
 }
 
 // Writer reports a package kind's writer and whether it may still write
@@ -280,14 +288,24 @@ func (s Set) Writer(kind string) (writer string, live, ok bool) {
 // Derive folds install and disable events, in seq order, into the desk set.
 // It is the only way a package desk comes to exist. An event that cannot take
 // effect is skipped with a refusal; the earlier claim always wins.
-func Derive(events []Event) (Set, []Refusal) {
+func Derive(events []Event) (Set, []Refusal) { return DeriveRequired(events, nil) }
+
+// DeriveRequired is Derive with the running image's required set: the desired
+// state is the fold of the events union that set (plan MA4.4, B4). A required
+// package cannot be disabled, so a disable event for one is refused and the
+// package stays installed; what the fold lacks of the set is Desired's to add.
+func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
+	isRequired := map[string]bool{}
+	for _, r := range required {
+		isRequired[r.Package] = true
+	}
 	ordered := append([]Event(nil), events...)
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Seq < ordered[j].Seq })
 
 	var refusals []Refusal
 	live := map[string]deskmanifest.Desk{}
 	retiredPkgs := map[string]bool{}
-	set := Set{kinds: map[string]string{}, retired: map[string]string{}, Epochs: map[string]uint64{}, Candidates: map[string]string{}}
+	set := Set{kinds: map[string]string{}, retired: map[string]string{}, Epochs: map[string]uint64{}, Candidates: map[string]string{}, Versions: map[string]string{}}
 	candManifests := map[string]Manifest{}
 	uids := map[string]uint32{}
 	nextUID := uint32(uidBase)
@@ -361,6 +379,7 @@ func Derive(events []Event) (Set, []Refusal) {
 			}
 			live[m.Package] = d
 			set.Epochs[d.Name] = ev.Seq
+			set.Versions[m.Package] = ev.Version
 			return true
 		}
 		switch ev.Action {
@@ -410,6 +429,7 @@ func Derive(events []Event) (Set, []Refusal) {
 			nextUID++
 			live[m.Package] = d
 			set.Epochs[d.Name] = ev.Seq
+			set.Versions[m.Package] = ev.Version
 			for _, k := range m.OwnedKinds {
 				set.kinds[k] = WriterFor(m.Package)
 			}
@@ -514,8 +534,13 @@ func Derive(events []Event) (Set, []Refusal) {
 				refuse(CodeNotInstalled, "package %s is not installed", ev.Package)
 				continue
 			}
+			if isRequired[ev.Package] {
+				refuse(CodeRequired, "package %s is required by the running image and cannot be disabled or uninstalled", ev.Package)
+				continue
+			}
 			dropCandidate(ev.Package)
 			delete(live, ev.Package)
+			delete(set.Versions, ev.Package)
 			delete(set.Epochs, d.Name)
 			retiredPkgs[ev.Package] = true
 			for _, k := range d.OwnedKinds {
@@ -531,36 +556,6 @@ func Derive(events []Event) (Set, []Refusal) {
 	}
 	sort.Slice(set.Desks, func(i, j int) bool { return set.Desks[i].Name < set.Desks[j].Name })
 	return set, refusals
-}
-
-// Mode gates activation. Off by default: new red behavior ships off.
-type Mode string
-
-const (
-	ModeOff Mode = "off"
-	ModeOn  Mode = "on"
-	// EnvMode is read once by whoever activates; only "on" turns it on.
-	EnvMode = "CHOIR_APP_DESKS"
-)
-
-// ModeFromEnv reads EnvMode. Anything but "on" is off.
-func ModeFromEnv(getenv func(string) string) Mode {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if getenv(EnvMode) == string(ModeOn) {
-		return ModeOn
-	}
-	return ModeOff
-}
-
-// Activate is Reconcile behind the CHOIR_APP_DESKS mode; with mode off it does
-// nothing. MA4.5 deletes the mode and calls Reconcile.
-func Activate(mode Mode, set Set) error {
-	if mode != ModeOn {
-		return nil
-	}
-	return Reconcile(set)
 }
 
 // Reconcile makes the daemon's desk manifest hold exactly the derived set's

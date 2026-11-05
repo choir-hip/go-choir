@@ -287,6 +287,11 @@ func Run() {
 		agentcore.WithDesktopStateOwner(desktopHandler),
 		agentcore.WithContentService(contentService),
 	}
+	deskReconcile, err := deskReconcileOption(db)
+	if err != nil {
+		boot.fatalf("autoputer: the image's required desk set is malformed: %v", err)
+	}
+	coreOpts = append(coreOpts, deskReconcile)
 	capsuleExecutor, capsuleConfigured, err := configuredCapsuleExecutor(db)
 	if err != nil {
 		boot.fatalf("autoputer: configure production capsule executor: %v", err)

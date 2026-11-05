@@ -246,43 +246,21 @@ func TestPackageDeskWorkerClassIsItsOwn(t *testing.T) {
 	}
 }
 
-func TestActivateIsOffByDefault(t *testing.T) {
-	set, _ := Derive([]Event{install(1, goodManifest("offdefault"))})
-	if err := Activate(ModeFromEnv(func(string) string { return "" }), set); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := deskmanifest.Lookup("app:offdefault"); ok {
-		t.Fatal("Activate registered a desk with CHOIR_APP_DESKS unset")
-	}
-	if ModeFromEnv(func(string) string { return "yes" }) != ModeOff {
-		t.Fatal("an unknown mode must read as off")
-	}
-}
-
-func TestActivateRegistersAndRetires(t *testing.T) {
-	on := ModeFromEnv(func(k string) string {
-		if k == EnvMode {
-			return "on"
-		}
-		return ""
-	})
-	if on != ModeOn {
-		t.Fatalf("mode %q", on)
-	}
+func TestReconcileRegistersAndRetires(t *testing.T) {
 	events := []Event{install(1, goodManifest("activated"))}
 	set, _ := Derive(events)
-	if err := Activate(on, set); err != nil {
+	if err := Reconcile(set); err != nil {
 		t.Fatal(err)
 	}
 	if !deskmanifest.FrameAllowed("app:activated", "read_capture") {
-		t.Fatal("an activated app desk is not served its frame")
+		t.Fatal("a reconciled app desk is not served its frame")
 	}
-	// Activating the same set again is a no-op (every install event re-derives).
-	if err := Activate(on, set); err != nil {
-		t.Fatalf("re-activation of the same set: %v", err)
+	// Reconciling the same set again is a no-op (every install event re-derives).
+	if err := Reconcile(set); err != nil {
+		t.Fatalf("re-reconcile of the same set: %v", err)
 	}
 	gone, _ := Derive(append(events, disable(2, "activated")))
-	if err := Activate(on, gone); err != nil {
+	if err := Reconcile(gone); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := deskmanifest.Lookup("app:activated"); ok {
