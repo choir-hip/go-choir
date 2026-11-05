@@ -42,15 +42,19 @@
     },
     "ContextMenuItem": {
       "kind": "type",
-      "type": "{ id?: string | undefined; label: string; icon?: string | undefined; shortcut?: string | undefined; disabled?: boolean | undefined; danger?: boolean | undefined; onSelect?: (() => unknown) | undefined; items?: import(\"./context-menu-state\").ContextMenuEntry[] | undefined; separator?: false | undefined; }"
+      "type": "{ id?: string | undefined; label: string; icon?: string | undefined; shortcut?: string | undefined; disabled?: boolean | undefined; danger?: boolean | undefined; onSelect?: (() => unknown) | undefined; items?: import(\"./context-menu-state\").ContextMenuEntry[] | undefined; command?: string | undefined; essential?: boolean | undefined; separator?: false | undefined; }"
     },
     "ContextMenuOptions": {
       "kind": "type",
-      "type": "import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]) | { items: import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]); label?: string | undefined; longPress?: boolean | undefined; enabled?: boolean | undefined; }"
+      "type": "import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]) | { items: import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]); label?: string | undefined; longPress?: boolean | undefined; enabled?: boolean | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
     },
     "ContextMenuRequest": {
       "kind": "type",
-      "type": "{ x: number; y: number; items: import(\"./context-menu-state\").ContextMenuEntry[]; label?: string | undefined; returnFocus?: HTMLElement | null | undefined; }"
+      "type": "{ x: number; y: number; items: import(\"./context-menu-state\").ContextMenuEntry[]; label?: string | undefined; returnFocus?: HTMLElement | null | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
+    },
+    "ContextMenuTarget": {
+      "kind": "type",
+      "type": "{ kind: string; name?: string | undefined; ext?: string | undefined; data?: Record<string, unknown> | undefined; }"
     },
     "Disposer": {
       "kind": "type",
@@ -520,7 +524,7 @@
     },
     "import(\"./context-menu\").ContextMenuOptions": {
       "kind": "type",
-      "type": "import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]) | { items: import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]); label?: string | undefined; longPress?: boolean | undefined; enabled?: boolean | undefined; }"
+      "type": "import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]) | { items: import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]); label?: string | undefined; longPress?: boolean | undefined; enabled?: boolean | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
     },
     "import(\"./context-menu-state\").ContextMenuEntry": {
       "kind": "type",
@@ -528,15 +532,19 @@
     },
     "import(\"./context-menu-state\").ContextMenuItem": {
       "kind": "type",
-      "type": "{ id?: string | undefined; label: string; icon?: string | undefined; shortcut?: string | undefined; disabled?: boolean | undefined; danger?: boolean | undefined; onSelect?: (() => unknown) | undefined; items?: import(\"./context-menu-state\").ContextMenuEntry[] | undefined; separator?: false | undefined; }"
+      "type": "{ id?: string | undefined; label: string; icon?: string | undefined; shortcut?: string | undefined; disabled?: boolean | undefined; danger?: boolean | undefined; onSelect?: (() => unknown) | undefined; items?: import(\"./context-menu-state\").ContextMenuEntry[] | undefined; command?: string | undefined; essential?: boolean | undefined; separator?: false | undefined; }"
     },
     "import(\"./context-menu-state\").ContextMenuRequest": {
       "kind": "type",
-      "type": "{ x: number; y: number; items: import(\"./context-menu-state\").ContextMenuEntry[]; label?: string | undefined; returnFocus?: HTMLElement | null | undefined; }"
+      "type": "{ x: number; y: number; items: import(\"./context-menu-state\").ContextMenuEntry[]; label?: string | undefined; returnFocus?: HTMLElement | null | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
     },
     "import(\"./context-menu-state\").ContextMenuSeparator": {
       "kind": "type",
       "type": "{ separator: true; }"
+    },
+    "import(\"./context-menu-state\").ContextMenuTarget": {
+      "kind": "type",
+      "type": "{ kind: string; name?: string | undefined; ext?: string | undefined; data?: Record<string, unknown> | undefined; }"
     },
     "import(\"./event-helpers\").Disposer": {
       "kind": "type",
@@ -693,11 +701,15 @@
       "settings": {
         "entry": "{ section: string; fields: { key: string; type: 'boolean' | 'string' | 'number'; default: unknown; label: string; enum?: string[] }[] }"
       },
+      "menus": {
+        "entry": "{ target: string; command: string; group?: string; order?: number; when?: string }"
+      },
       "desks": {
         "entry": "reserved"
       },
       "when_keys": [
         "overview.open",
+        "target.ext",
         "target.kind",
         "window.app"
       ]
@@ -731,5 +743,5 @@
       "windowAction": "ui.shell"
     }
   },
-  "digest": "sha256:8063263bdaf9cf3b9c250d0cc9127c5877ffc8c2481ba2f0a4b02c23a2c91fbc"
+  "digest": "sha256:f857a6c99819095e46e95bdd84dd78ed78cf1fae2c60b21b499ff5da4f4b7cb4"
 }

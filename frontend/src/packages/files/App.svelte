@@ -55,7 +55,6 @@
     liveEventKind,
     liveEventPayload,
     mediaRouteForFileName,
-    openersForFile,
     pickFiles,
     uploadFiles,
   } from '../../lib/app-sdk';
@@ -614,22 +613,10 @@
         { id: 'delete', label: 'Delete…', danger: true, onSelect: () => startDelete(entry) },
       ];
     }
-    const openers = openersForFile(entry.name);
+    // Open with is the shell's contribution on a file target (see use:contextMenu).
     const items: ContextMenuEntry[] = [
       { id: 'open', label: 'Open', onSelect: () => handleFileClick(entry) },
     ];
-    if (openers.length) {
-      items.push({
-        id: 'open-with',
-        label: 'Open with',
-        items: openers.map((fileOpener) => ({
-          id: `open-with:${fileOpener.appId}`,
-          label: fileOpener.isDefault ? `${fileOpener.name} (default)` : fileOpener.name,
-          icon: fileOpener.icon,
-          onSelect: () => openWith(entry, fileOpener),
-        })),
-      });
-    }
     items.push(
       { separator: true },
       { id: 'rename', label: 'Rename…', onSelect: () => startRename(entry) },
@@ -1030,7 +1017,7 @@
               aria-label="{entry.type === 'directory' ? 'Folder' : 'File'} {entry.name}"
               on:click={() => { if (renameTarget !== entry.name) handleFileClick(entry); }}
               on:keydown={(event) => handleRowKeydown(event, entry)}
-              use:contextMenu={{ label: `${entry.name} actions`, items: () => entryMenuItems(entry) }}
+              use:contextMenu={{ label: `${entry.name} actions`, items: () => entryMenuItems(entry), target: entry.type === 'directory' ? { kind: 'folder', name: entry.name } : { kind: 'file', name: entry.name, data: { openWith: (opener) => openWith(entry, opener) } } }}
             >
               <span class="file-icon" data-file-icon>{fileIconFor(entry)}</span>
               {#if renameTarget === entry.name}

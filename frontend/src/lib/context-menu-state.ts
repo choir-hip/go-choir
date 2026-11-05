@@ -17,7 +17,27 @@ export type ContextMenuItem = {
   onSelect?: () => unknown;
   /** One level of submenu ("Open with ▸"). */
   items?: ContextMenuEntry[];
+  /**
+   * A command to run on select (the contextMenu.build pipeline, and a package's
+   * contributes.menus, name a command and never a callback). A package item
+   * carries this, not onSelect.
+   */
+  command?: string;
+  /** Window close, minimize, dismiss, "Use default menu": no handler removes or edits these. */
+  essential?: boolean;
   separator?: false;
+};
+
+/**
+ * What a menu is for. kind, ext and name are public: the contextMenu.build
+ * pipeline and contributes.menus see them. data is the opener's own and never
+ * leaves the host (a file row's open-with callback, for one).
+ */
+export type ContextMenuTarget = {
+  kind: string;
+  name?: string;
+  ext?: string;
+  data?: Record<string, unknown>;
 };
 
 export type ContextMenuSeparator = { separator: true };
@@ -33,6 +53,8 @@ export type ContextMenuRequest = {
   label?: string;
   /** Where focus returns when the menu closes (defaults to the focused element). */
   returnFocus?: HTMLElement | null;
+  /** What the menu is for; absent means kind "other". */
+  target?: ContextMenuTarget;
 };
 
 export const contextMenuState = writable<(ContextMenuRequest & { seq: number }) | null>(null);

@@ -54,7 +54,7 @@ export {
   placeMenu,
   placeSubmenu,
 } from './context-menu';
-export type { ContextMenuEntry, ContextMenuItem, ContextMenuOptions, ContextMenuRequest } from './context-menu';
+export type { ContextMenuEntry, ContextMenuItem, ContextMenuOptions, ContextMenuRequest, ContextMenuTarget } from './context-menu';
 
 // Open with: the apps that open a file, and the file a window was launched on.
 export { canOpenWith, extensionsOpenedBy, fileExtension, isTextFileName, openersForFile } from './open-with';

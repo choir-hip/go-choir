@@ -111,6 +111,7 @@ type Contributes struct {
 	Keybindings []Keybinding `json:"keybindings"`
 	Themes      []ThemeFile  `json:"themes"`
 	Links       []Link       `json:"links"`
+	Menus       []Menu       `json:"menus"`
 	// Settings are the sections of the Settings app the package adds (S6).
 	Settings []SettingsSection `json:"settings"`
 }

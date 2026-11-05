@@ -19,30 +19,40 @@ import {
   type ContextMenuItem,
   type ContextMenuRequest,
   type ContextMenuSeparator,
+  type ContextMenuTarget,
 } from './context-menu-state';
+import { installBaseRenderer, presentMenu } from './services/context-menu';
+import './services/open-with-menu';
 
 export { contextMenuState, placeMenu, placeSubmenu };
-export type { ContextMenuEntry, ContextMenuItem, ContextMenuRequest, ContextMenuSeparator };
+export type { ContextMenuEntry, ContextMenuItem, ContextMenuRequest, ContextMenuSeparator, ContextMenuTarget };
 
 export const LONG_PRESS_MS = 550;
 const LONG_PRESS_SLOP_PX = 10;
 
 let host: ContextMenu | null = null;
-let seq = 0;
 
 function ensureHost() {
   if (host || typeof document === 'undefined') return;
   host = new ContextMenu({ target: document.body });
 }
 
-/** Opens a menu at viewport point (x, y). An empty item list opens nothing. */
-export function openContextMenu(request: ContextMenuRequest): boolean {
-  const items = (request?.items || []).filter(Boolean);
-  if (!items.length) return false;
+// The default menu is the base provider of the contextMenu.renderer slot
+// (services/context-menu.ts): a package's renderer ranks over it, and it
+// answers when that renderer fails.
+installBaseRenderer((request) => {
   ensureHost();
-  seq += 1;
-  contextMenuState.set({ ...request, items, seq });
-  return true;
+  contextMenuState.set(request);
+});
+
+/**
+ * Opens a menu at viewport point (x, y): host contributions (Open with on a
+ * file), the contextMenu.build pipeline for a target something intercepts, then
+ * the active renderer. An empty item list opens nothing.
+ */
+export function openContextMenu(request: ContextMenuRequest): boolean {
+  if (!(request?.items || []).some(Boolean) && !request?.target) return false;
+  return presentMenu(request);
 }
 
 export function closeContextMenu() {
@@ -63,17 +73,20 @@ export type ContextMenuOptions =
       longPress?: boolean;
       /** Off when false or when items resolve to an empty list. */
       enabled?: boolean;
+      /** What this menu is for ({ kind: 'file', name }): contributions and the build pipeline key on it. */
+      target?: ContextMenuTarget;
     };
 
 function normalize(options: ContextMenuOptions) {
   if (Array.isArray(options) || typeof options === 'function') {
-    return { items: options, label: undefined as string | undefined, longPress: true, enabled: true };
+    return { items: options, label: undefined as string | undefined, longPress: true, enabled: true, target: undefined as ContextMenuTarget | undefined };
   }
   return {
     items: options?.items || [],
     label: options?.label,
     longPress: options?.longPress !== false,
     enabled: options?.enabled !== false,
+    target: options?.target,
   };
 }
 
@@ -99,8 +112,8 @@ export function contextMenu(node: HTMLElement, options: ContextMenuOptions) {
   const open = (x: number, y: number, returnFocus: HTMLElement | null) => {
     if (!opts.enabled) return false;
     const items = resolveItems(opts.items);
-    if (!items.length) return false;
-    return openContextMenu({ x, y, items, label: opts.label, returnFocus });
+    if (!items.length && !opts.target) return false;
+    return openContextMenu({ x, y, items, label: opts.label, returnFocus, target: opts.target });
   };
 
   const anchorPoint = () => {

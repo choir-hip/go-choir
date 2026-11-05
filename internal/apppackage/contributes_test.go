@@ -222,3 +222,28 @@ func TestSurfaceHashCoversContributes(t *testing.T) {
 		t.Fatal("no contributions must leave the hash input unchanged")
 	}
 }
+
+func TestMenusNameTheOwnCommands(t *testing.T) {
+	menu := func(v map[string]any) map[string]any { return contrib(v)["menus"].([]any)[0].(map[string]any) }
+	good := func(v map[string]any) {
+		contrib(v)["menus"] = []any{map[string]any{"target": "file", "command": "paper-night.use", "group": "theme", "order": 2, "when": "target.ext == json"}}
+	}
+	if _, err := ParseManifest(packJSON(t, good), OriginPublished); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(map[string]any){
+		"X1 another package's command": func(v map[string]any) { good(v); menu(v)["command"] = "core.search" },
+		"X1 undeclared command":        func(v map[string]any) { good(v); menu(v)["command"] = "paper-night.gone" },
+		"target shape":                 func(v map[string]any) { good(v); menu(v)["target"] = "File Row" },
+		"group shape":                  func(v map[string]any) { good(v); menu(v)["group"] = "A B" },
+		"order is a string":            func(v map[string]any) { good(v); menu(v)["order"] = "first" },
+		"callback member":              func(v map[string]any) { good(v); menu(v)["onSelect"] = "x" },
+		"same entry twice":             func(v map[string]any) { good(v); c := contrib(v); c["menus"] = append(c["menus"].([]any), menu(v)) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseManifest(packJSON(t, mutate), OriginPublished); !errors.Is(err, ErrInvalidManifest) {
+				t.Fatalf("want ErrInvalidManifest, got %v", err)
+			}
+		})
+	}
+}

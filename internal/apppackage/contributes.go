@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -144,7 +145,7 @@ func tooLong(s string, n int) bool { return utf8.RuneCountInString(s) > n }
 
 func (m Manifest) contributesNothingElse() bool {
 	c := m.Contributes
-	return len(c.Commands) == 0 && len(c.Keybindings) == 0 && len(c.Themes) == 0 && len(c.Links) == 0 && len(c.Settings) == 0
+	return len(c.Commands) == 0 && len(c.Keybindings) == 0 && len(c.Themes) == 0 && len(c.Links) == 0 && len(c.Menus) == 0 && len(c.Settings) == 0
 }
 
 func (m Manifest) validateContributes() error {
@@ -157,7 +158,59 @@ func (m Manifest) validateContributes() error {
 	if err := m.validateLinks(); err != nil {
 		return err
 	}
+	if err := m.validateMenus(); err != nil {
+		return err
+	}
 	return m.validateSettings()
+}
+
+// Menu adds one of the package's commands to the context menu of a target kind
+// (file, window, desktop, ...); items name a command, never a callback.
+type Menu struct {
+	Target  string   `json:"target"`
+	Command string   `json:"command"`
+	Group   string   `json:"group,omitempty"`
+	Order   *float64 `json:"order,omitempty"`
+	When    string   `json:"when,omitempty"`
+}
+
+const maxMenus = 64
+
+var menuWordRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+
+func (m Manifest) validateMenus() error {
+	menus := m.Contributes.Menus
+	if len(menus) > maxMenus {
+		return invalid("contributes.menus: at most %d", maxMenus)
+	}
+	own := map[string]bool{}
+	for _, c := range m.Contributes.Commands {
+		own[c.ID] = true
+	}
+	seen := map[string]bool{}
+	for i, e := range menus {
+		w := fmt.Sprintf("contributes.menus[%d]", i)
+		switch {
+		case !menuWordRe.MatchString(e.Target):
+			return invalid("%s.target %q must be a lowercase word", w, e.Target)
+		case !strings.HasPrefix(e.Command, m.Name+"."):
+			return invalid("%s.command %q must be one of the package's own (%s.<name>)", w, e.Command, m.Name)
+		case !own[e.Command]:
+			return invalid("%s.command %q is not in this package's commands", w, e.Command)
+		case e.Group != "" && !menuWordRe.MatchString(e.Group):
+			return invalid("%s.group %q must be a lowercase word", w, e.Group)
+		case e.Order != nil && (math.IsNaN(*e.Order) || math.IsInf(*e.Order, 0)):
+			return invalid("%s.order must be a finite number", w)
+		case tooLong(e.When, 200):
+			return invalid("%s.when is at most 200 characters", w)
+		}
+		if k := e.Target + "\x00" + e.Command; seen[k] {
+			return invalid("%s: command %q is on target %q twice", w, e.Command, e.Target)
+		} else {
+			seen[k] = true
+		}
+	}
+	return nil
 }
 
 func (m Manifest) validateCommands() error {
@@ -400,6 +453,10 @@ func (m Manifest) surfaceContributes() (json.RawMessage, error) {
 	c.Themes = append([]ThemeFile{}, c.Themes...)
 	c.Links = append([]Link{}, c.Links...)
 	c.Settings = append([]SettingsSection{}, c.Settings...)
+	c.Menus = append([]Menu{}, c.Menus...)
+	sort.Slice(c.Menus, func(i, j int) bool {
+		return c.Menus[i].Target+"\x00"+c.Menus[i].Command < c.Menus[j].Target+"\x00"+c.Menus[j].Command
+	})
 	sort.Slice(c.Commands, func(i, j int) bool { return c.Commands[i].ID < c.Commands[j].ID })
 	sort.Slice(c.Keybindings, func(i, j int) bool {
 		return c.Keybindings[i].Key+"\x00"+c.Keybindings[i].When < c.Keybindings[j].Key+"\x00"+c.Keybindings[j].When
@@ -413,7 +470,8 @@ func (m Manifest) surfaceContributes() (json.RawMessage, error) {
 		Themes      []ThemeFile       `json:"themes"`
 		Links       []Link            `json:"links"`
 		Settings    []SettingsSection `json:"settings,omitempty"`
-	}{c.Commands, c.Keybindings, c.Themes, c.Links, c.Settings})
+		Menus       []Menu            `json:"menus,omitempty"`
+	}{c.Commands, c.Keybindings, c.Themes, c.Links, c.Settings, c.Menus})
 	if err != nil {
 		return nil, err
 	}

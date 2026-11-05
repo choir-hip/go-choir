@@ -45,11 +45,15 @@
     "settings": {
       "entry": "{ section: string; fields: { key: string; type: 'boolean' | 'string' | 'number'; default: unknown; label: string; enum?: string[] }[] }"
     },
+    "menus": {
+      "entry": "{ target: string; command: string; group?: string; order?: number; when?: string }"
+    },
     "desks": {
       "entry": "reserved"
     },
     "when_keys": [
       "overview.open",
+      "target.ext",
       "target.kind",
       "window.app"
     ]

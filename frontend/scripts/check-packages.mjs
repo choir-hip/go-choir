@@ -269,6 +269,26 @@ function checkSettings(contributes, where) {
   });
 }
 
+// contributes.menus: { target, command, group?, order?, when? } naming one of the package's own commands.
+function checkMenus(contributes, owner, commandIds, where) {
+  if (contributes.menus === undefined) return;
+  if (!Array.isArray(contributes.menus)) {
+    fail(where, 'menus must be an array');
+    return;
+  }
+  contributes.menus.forEach((m, i) => {
+    const at = `${where} menus[${i}]`;
+    if (!strictKeys(m, at, ['target', 'command'], ['group', 'order', 'when'])) return;
+    if (typeof m.target !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(m.target)) fail(at, 'target must be a lowercase word');
+    if (typeof m.command !== 'string' || !m.command.startsWith(`${owner}.`)) fail(at, `command must be one of the package's own (${owner}.<name>)`);
+    else if (!commandIds.has(m.command)) fail(at, `command "${m.command}" is not in this package's commands`);
+    if (m.group !== undefined && !(typeof m.group === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(m.group))) fail(at, 'group must be a lowercase word');
+    if (m.order !== undefined && !(typeof m.order === 'number' && Number.isFinite(m.order))) fail(at, 'order must be a number');
+    if (m.when !== undefined && typeof m.when !== 'string') fail(at, 'when must be a string');
+  });
+}
+const ids = (c) => new Set((Array.isArray(c.commands) ? c.commands : []).map((x) => x && x.id));
+
 function checkCommands(contributes, owner, where) {
   const ids = new Set();
   if (contributes.commands !== undefined && !Array.isArray(contributes.commands)) fail(where, 'commands must be an array');
@@ -374,13 +394,14 @@ function checkManifest(manifest, dirName, where, pkgDir) {
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
-  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links', 'settings'])) {
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links', 'settings', 'menus'])) {
     const c = manifest.contributes;
     if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
     checkCommands(c, manifest.name, `${where} contributes`);
     checkThemes(c, pkgDir, `${where} contributes`);
     checkLinks(c, manifest.name, `${where} contributes`);
     checkSettings(c, `${where} contributes`);
+    checkMenus(c, manifest.name, ids(c), `${where} contributes`);
   }
   if (manifest.capabilities !== undefined) {
     if (!Array.isArray(manifest.capabilities)) fail(where, 'capabilities must be an array');
