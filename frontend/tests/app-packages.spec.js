@@ -70,7 +70,14 @@ const badCases = [
     writeManifest(root, 'viewer', m);
   }, /"image" is already held by package "image"/],
   ['extension-clash-package', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer' }), /extension "png" is already opened by package "image"/],
-  ['extension-clash-static', (root) => writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', opens: [{ media_type: 'audio/mpeg', extensions: ['mp3'] }] }), /extension "mp3" is still routed by the static/],
+  ['extension-clash-static', (root) => {
+    // Every app is a package now, so the shell's table is empty: give the copy a static route to clash with.
+    const tablePath = path.join(root, 'src/lib/file-routes.json');
+    const table = JSON.parse(fs.readFileSync(tablePath, 'utf8'));
+    table.routes.push({ appId: 'texture', mediaType: 'audio/midi', extensions: ['mid'] });
+    fs.writeFileSync(tablePath, JSON.stringify(table, null, 2));
+    writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', opens: [{ media_type: 'audio/midi', extensions: ['mid'] }] });
+  }, /extension "mid" is still routed by the static/],
   ['missing-entry', (root) => fs.rmSync(path.join(root, 'src/packages/image/App.svelte')), /missing App\.svelte/],
   ['bad-requires-sdk', (root) => {
     const m = imageManifest(root);

@@ -84,7 +84,7 @@ async function mockEmail(page, digest, { putStatus = 200, calls = [] } = {}) {
 
 async function openMail(page) {
   await page.goto(BASE_URL);
-  await page.locator('[data-desktop-icon-id="email"]').click({ timeout: 20_000 });
+  await page.locator('[data-desktop-icon-id="mail"]').click({ timeout: 20_000 });
   const mail = page.locator('[data-mail-app]').last();
   await expect(mail).toBeVisible({ timeout: 10_000 });
   return mail;
