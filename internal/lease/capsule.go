@@ -2,6 +2,7 @@ package lease
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -48,9 +49,14 @@ func CapsuleStoreKinds() []string {
 // so the reader gate never admits a read against it; it names what the copy
 // holds.
 func (s *Service) IssueCapsule(ctx context.Context, ownerID, computerID, assignmentID, runID, agentID string) (Record, error) {
+	// The holder is the assigned agent's desk (agent ids are <desk>:<id>).
+	desk, _, ok := strings.Cut(agentID, ":")
+	if !ok || desk == "" {
+		return Record{}, fmt.Errorf("lease: capsule agent id %q names no desk", agentID)
+	}
 	p, w := 0.9, 0.3
 	req := Request{
-		OwnerID: ownerID, ComputerID: computerID, Desk: "engineering", RunID: runID, AgentID: agentID,
+		OwnerID: ownerID, ComputerID: computerID, Desk: desk, RunID: runID, AgentID: agentID,
 		Assignment: assignmentID, Origin: types.OriginSystem,
 		Scope:   Scope{Kinds: CapsuleStoreKinds()},
 		Purpose: "store copy for the engineering capsule of assignment " + assignmentID,

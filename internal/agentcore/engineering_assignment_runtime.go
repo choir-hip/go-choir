@@ -868,7 +868,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		// A refused or failed lease fails the spawn visibly, with the cause on
 		// the assignment, rather than starting a capsule that silently lacks
 		// its store copy.
-		granted, leaseErr := rt.leases.IssueCapsule(ctx, ownerID, computerID, assignmentID, runID, "engineering")
+		granted, leaseErr := rt.leases.IssueCapsule(ctx, ownerID, computerID, assignmentID, runID, binding.AssignedAgentID)
 		if leaseErr != nil {
 			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("the capsule's store lease was refused: %w", leaseErr))
 		}

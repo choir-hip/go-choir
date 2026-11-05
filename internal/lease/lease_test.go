@@ -371,7 +371,7 @@ func TestTheCapsuleStoreCopyIsALease(t *testing.T) {
 		t.Errorf("the default capsule lease lacks the kernel's kinds: %v", kinds)
 	}
 	f := newFixture(t)
-	rec, err := f.svc.IssueCapsule(context.Background(), ownerID, computer, "asg-1", "run:asg-1", "engineering")
+	rec, err := f.svc.IssueCapsule(context.Background(), ownerID, computer, "asg-1", "run:asg-1", "engineering:asg-1")
 	if err != nil {
 		t.Fatal(err)
 	}
