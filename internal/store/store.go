@@ -339,6 +339,10 @@ func LifecycleTerminalSettlementRequested(rec types.RunRecord) bool {
 // reducer for a durable active-to-terminal trigger. The trigger is evidence
 // that a product caller should try; it is not settlement authority.
 func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, rec types.RunRecord) error {
+	// Settlement is the store's own bookkeeping: its snapshot reads Texture's
+	// document and revision as the store, whatever context the terminal write
+	// arrived on.
+	ctx = objectgraph.WithReaderIfAbsent(ctx, objectgraph.WriterStore)
 	rec.TrajectoryID = runTrajectoryID(rec)
 	stored, err := s.GetLifecycleRun(ctx, rec.OwnerID, rec.ComputerID, rec.RunID)
 	if err != nil {
