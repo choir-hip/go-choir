@@ -1668,6 +1668,11 @@
       })),
     closeOtherWindows: (keepId) => (keepId ? handleKeepWindowOnly({ detail: { windowId: keepId } }) : handleClearDesktopWindows()),
     resetDesktop: () => handleResetDesktop(),
+    windowAction: (windowId, action) => handleTrayWindowAction({ detail: { windowId, action } }),
+    showOverview: () => handleShowDesktopOverview(),
+    showDesktop: () => handleShowDesktop(),
+    logout: () => handleLogout(),
+    submitPrompt: (text, options) => handlePromptSubmit({ detail: { text, ...options } }),
   });
   // Commands and shortcuts (services/commands.ts): the shell captures keydown once,
   // and a declarative command acts through these.

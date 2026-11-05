@@ -18,6 +18,7 @@
 //     toast, never an exception into the app.
 //  F4 a toast message that holds a secret: copyText names what was copied by
 //     the label the caller gives, never by the text.
+//  F6 windowAction with an action the shell has no meaning for: nothing happens;
 //  F5 openFile on a path the shell has no opener for: the same download the
 //     Files app gives, not a silent nothing.
 
@@ -30,6 +31,8 @@ export type ToastOptions = { kind?: ToastKind; durationMs?: number };
 export type AuthRequest = { kind?: string; appId?: string; appName?: string };
 export type OpenAppContext = { appName?: string; icon?: string; appContext?: Record<string, unknown> } & Record<string, unknown>;
 export type WindowSummary = { windowId: string; appId: string; title: string; mode: string; focused: boolean };
+export type WindowAction = 'focus' | 'restore' | 'minimize' | 'maximize' | 'close';
+export type PromptOptions = { continueDocId?: string; continueWindowId?: string };
 export type AppContextChange = { windowId: string; appContext?: Record<string, unknown>; title?: string };
 
 /** What the desktop binds. Every member is optional so a host binds what it has. */
@@ -44,6 +47,11 @@ export interface ShellHost {
   listWindows?(): WindowSummary[];
   closeOtherWindows?(keepId: string): Promise<void> | void;
   resetDesktop?(): void;
+  windowAction?(windowId: string, action: WindowAction): void;
+  showOverview?(): void;
+  showDesktop?(): void;
+  logout?(): void;
+  submitPrompt?(text: string, options: PromptOptions): Promise<void> | void;
 }
 
 let bound: ShellHost | null = null;
@@ -139,6 +147,36 @@ export function listWindows(): WindowSummary[] {
 /** Close every window except `keepId` and save that desktop; an empty id clears them all. */
 export async function closeOtherWindows(keepId = ''): Promise<void> {
   await host().closeOtherWindows?.(String(keepId || ''));
+}
+
+const WINDOW_ACTIONS = new Set<string>(['focus', 'restore', 'minimize', 'maximize', 'close']);
+
+/** Raise, restore, minimize, maximize or close one window (what the tray and the overview do). */
+export function windowAction(windowId: string, action: WindowAction): void {
+  if (!windowId || !WINDOW_ACTIONS.has(action)) return;
+  host().windowAction?.(windowId, action);
+}
+
+/** The window overview (every open window at once). */
+export function showOverview(): void {
+  host().showOverview?.();
+}
+
+/** Minimize everything to show the desktop, or bring it back. */
+export function showDesktop(): void {
+  host().showDesktop?.();
+}
+
+/** Sign out. */
+export function logout(): void {
+  host().logout?.();
+}
+
+/** Send text through the prompt bar's door: the conductor routes it, or the window named continues. */
+export async function submitPrompt(text: string, options: PromptOptions = {}): Promise<void> {
+  const value = String(text ?? '').trim();
+  if (!value) return;
+  await host().submitPrompt?.(value, { continueDocId: options.continueDocId || '', continueWindowId: options.continueWindowId || '' });
 }
 
 /** The running shell's build: service, version, commit and built_at. */

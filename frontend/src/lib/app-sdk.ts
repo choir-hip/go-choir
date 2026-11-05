@@ -89,15 +89,22 @@ export {
   requireAuth,
   resetDesktop,
   sessionExpired,
+  logout,
   setAppContext,
+  showDesktop,
+  showOverview,
+  submitPrompt,
   toast,
+  windowAction,
 } from './shell-services';
 export type {
   AppContextChange,
   AuthRequest,
   OpenAppContext,
+  PromptOptions,
   ToastKind,
   ToastOptions,
+  WindowAction,
   WindowSummary,
 } from './shell-services';
 export { createContentItem } from './content-items.js';
@@ -130,3 +137,9 @@ export type { CommandHandler, CommandRun, CommandScope, CommandSpec } from './se
 // manifest (contributes.themes), as data.
 export { getTheme, onThemeChange, setTheme } from './services/theme';
 export type { ChoirTheme } from './theme';
+
+// Window API (1.1.0, slice W1): raise or restore one window, find out whether an
+// app is heavy, and suspend the heavy windows behind the active one. The window
+// host (geometry, z-order, saved windows) stays the shell's; these are its
+// public verbs. listWindows (above) answers what is open.
+export { focusWindow as focus, isHeavyAppId, restoreWindow as restore, suspendBackgroundHeavyWindows } from './stores/desktop.js';

@@ -6,6 +6,7 @@
 //  F2 a later bind wins, and the earlier disposer does not unbind it;
 //  F3 a refused clipboard gives false and one error toast;
 //  F4 the toast names the label, never the copied text;
+//  F6 windowAction ignores an action the shell has no meaning for; submitPrompt ignores empty text;
 //  F5 openFile routes media, text and an unknown type.
 import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +34,8 @@ function fakeHost() {
       toast: rec('toast'), requireAuth: rec('requireAuth'), sessionExpired: rec('sessionExpired'),
       openApp: rec('openApp'), openTextFile: rec('openTextFile'), openMediaFile: rec('openMediaFile'),
       setAppContext: rec('setAppContext'), resetDesktop: rec('resetDesktop'),
+      windowAction: rec('windowAction'), showOverview: rec('showOverview'), showDesktop: rec('showDesktop'), logout: rec('logout'),
+      submitPrompt: async (text, options) => { calls.push(['submitPrompt', text, options]); },
       listWindows: () => [{ windowId: 'w1', appId: 'files', title: 'Files', mode: 'normal', focused: true }],
       closeOtherWindows: async (id) => { calls.push(['closeOtherWindows', id]); },
     },
@@ -105,4 +108,29 @@ test('F5: openFile routes a media file, a text file, and a type nothing opens', 
   S.openFile('Misc/thing.bin');
   expect(calls.filter((c) => c[0] === 'openMediaFile' || c[0] === 'openTextFile')).toHaveLength(2);
   off();
+});
+
+test('F6: window verbs reach the host; an unknown action and an empty prompt do not', async () => {
+  const { host, calls } = fakeHost();
+  const off = S.bindShellHost(host);
+  S.windowAction('w1', 'minimize');
+  S.windowAction('w1', 'explode');
+  S.windowAction('', 'close');
+  S.showOverview(); S.showDesktop(); S.logout();
+  await S.submitPrompt('   ');
+  await S.submitPrompt(' hello ', { continueWindowId: 'w2' });
+  expect(calls).toEqual([
+    ['windowAction', 'w1', 'minimize'], ['showOverview'], ['showDesktop'], ['logout'],
+    ['submitPrompt', 'hello', { continueDocId: '', continueWindowId: 'w2' }],
+  ]);
+  off();
+});
+
+test('W1: the SDK exports the window names the Compute Monitor and the prompt bar use', async () => {
+  const sdk = await vite.ssrLoadModule('/src/lib/app-sdk.ts');
+  for (const name of ['focus', 'restore', 'suspendBackgroundHeavyWindows', 'isHeavyAppId', 'listWindows', 'closeOtherWindows',
+    'windowAction', 'showOverview', 'showDesktop', 'logout', 'submitPrompt']) {
+    expect(typeof sdk[name], name).toBe('function');
+  }
+  expect(sdk.isHeavyAppId('no-such-app')).toBe(false);
 });

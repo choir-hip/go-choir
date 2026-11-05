@@ -80,6 +80,10 @@
       "kind": "type",
       "type": "{ appId: string; mediaType: string; extensions: string[]; default: boolean; }"
     },
+    "PromptOptions": {
+      "kind": "type",
+      "type": "{ continueDocId?: string | undefined; continueWindowId?: string | undefined; }"
+    },
     "SDK_VERSION": {
       "kind": "value",
       "type": "string"
@@ -103,6 +107,10 @@
     "UploadOptions": {
       "kind": "type",
       "type": "{ folder?: string | undefined; onProgress?: ((progress: { file: File; index: number; loaded: number; total: number; fraction: number; }) => void) | undefined; signal?: AbortSignal | undefined; }"
+    },
+    "WindowAction": {
+      "kind": "type",
+      "type": "\"focus\" | \"restore\" | \"minimize\" | \"maximize\" | \"close\""
     },
     "WindowSummary": {
       "kind": "type",
@@ -192,6 +200,10 @@
       "kind": "value",
       "type": "(file: { name?: string | undefined; type?: string | undefined; }, accept?: string | string[] | undefined) => boolean"
     },
+    "focus": {
+      "kind": "value",
+      "type": "(windowId: any) => void"
+    },
     "formatTime": {
       "kind": "value",
       "type": "(seconds: any) => string"
@@ -211,6 +223,10 @@
     "isContextMenuOpen": {
       "kind": "value",
       "type": "() => boolean"
+    },
+    "isHeavyAppId": {
+      "kind": "value",
+      "type": "(appId: string) => boolean"
     },
     "isOwnLiveEvent": {
       "kind": "value",
@@ -255,6 +271,10 @@
     "loadRecentMedia": {
       "kind": "value",
       "type": "(kind: any) => Promise<any>"
+    },
+    "logout": {
+      "kind": "value",
+      "type": "() => void"
     },
     "mediaRouteForFileName": {
       "kind": "value",
@@ -344,6 +364,10 @@
       "kind": "value",
       "type": "(appContext?: {}, item?: null, fallbackKind?: string) => { sourceUrl: any; filePath: any; mediaType: any; contentId: any; title: any; displayUrl: any; }"
     },
+    "restore": {
+      "kind": "value",
+      "type": "(windowId: any) => void"
+    },
     "saveMediaPosition": {
       "kind": "value",
       "type": "(kind: any, source?: {}, currentTime?: number, duration?: number, options?: {}) => void"
@@ -363,6 +387,14 @@
     "setTheme": {
       "kind": "value",
       "type": "(idOrConfig: string | Record<string, unknown>) => { ok: boolean; errors: string[]; }"
+    },
+    "showDesktop": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "showOverview": {
+      "kind": "value",
+      "type": "() => void"
     },
     "sourceEntityKindLabel": {
       "kind": "value",
@@ -388,6 +420,14 @@
       "kind": "value",
       "type": "(snapshotURL: string, target: string) => boolean"
     },
+    "submitPrompt": {
+      "kind": "value",
+      "type": "(text: string, options?: import(\"./shell-services\").PromptOptions) => Promise<void>"
+    },
+    "suspendBackgroundHeavyWindows": {
+      "kind": "value",
+      "type": "(activeId?: string) => number"
+    },
     "toast": {
       "kind": "value",
       "type": "(message: string, options?: import(\"./shell-services\").ToastOptions) => void"
@@ -403,6 +443,10 @@
     "webLensAddress": {
       "kind": "value",
       "type": "(value: unknown) => string"
+    },
+    "windowAction": {
+      "kind": "value",
+      "type": "(windowId: string, action: import(\"./shell-services\").WindowAction) => void"
     },
     "youtubeEmbedURL": {
       "kind": "value",
@@ -510,6 +554,10 @@
       "kind": "type",
       "type": "{ appName?: string | undefined; icon?: string | undefined; appContext?: Record<string, unknown> | undefined; } & Record<string, unknown>"
     },
+    "import(\"./shell-services\").PromptOptions": {
+      "kind": "type",
+      "type": "{ continueDocId?: string | undefined; continueWindowId?: string | undefined; }"
+    },
     "import(\"./shell-services\").ToastKind": {
       "kind": "type",
       "type": "\"error\" | \"info\""
@@ -517,6 +565,10 @@
     "import(\"./shell-services\").ToastOptions": {
       "kind": "type",
       "type": "{ kind?: import(\"./shell-services\").ToastKind | undefined; durationMs?: number | undefined; }"
+    },
+    "import(\"./shell-services\").WindowAction": {
+      "kind": "type",
+      "type": "\"focus\" | \"restore\" | \"minimize\" | \"maximize\" | \"close\""
     },
     "import(\"./shell-services\").WindowSummary": {
       "kind": "type",
@@ -540,5 +592,5 @@
     "opentexture",
     "resetdesktop"
   ],
-  "digest": "sha256:4906fffa322665d7669c3264c01753284666ace062871670b1ebb8e4f183b78d"
+  "digest": "sha256:570a6957115c1e410977219ea609d4004c7cc63ecccc14b65ab6b445b4de1645"
 }
