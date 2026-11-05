@@ -101,7 +101,12 @@ func isolateCellMounts(allowedRoot, tmp string) error {
 			return err
 		}
 		_ = f.Close()
-		return syscall.Mount(src, dst, "", syscall.MS_BIND, "")
+		if err := syscall.Mount(src, dst, "", syscall.MS_BIND, ""); err != nil {
+			return err
+		}
+		// Read-only like the directories; the device nodes keep their
+		// device access (no MS_NODEV).
+		return syscall.Mount("", dst, "", keptMountFlags(dst)&^syscall.MS_NODEV|syscall.MS_REMOUNT|syscall.MS_BIND|syscall.MS_RDONLY|syscall.MS_NOSUID|syscall.MS_NOEXEC, "")
 	}
 	if allowedRoot != "" && cellCanOpen(allowedRoot) {
 		if err := bindDir(allowedRoot, true); err != nil {
@@ -214,13 +219,27 @@ func dropAllCapabilities() error {
 // and is not the worker's to hold. Called first thing in the worker, before
 // anything of its own is open at those numbers.
 func CloseInheritedFDs(keep ...int) {
-	entries, err := os.ReadDir("/proc/self/fd")
-	if err != nil {
-		return
-	}
 	keepSet := map[int]bool{0: true, 1: true, 2: true, 3: true}
 	for _, k := range keep {
 		keepSet[k] = true
+	}
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		// No /proc: scan the descriptor table by number instead.
+		var lim unix.Rlimit
+		max := 65536
+		if unix.Getrlimit(unix.RLIMIT_NOFILE, &lim) == nil && lim.Cur < uint64(max) {
+			max = int(lim.Cur)
+		}
+		for fd := 4; fd < max; fd++ {
+			if keepSet[fd] {
+				continue
+			}
+			if flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil && flags&unix.FD_CLOEXEC == 0 {
+				_ = unix.Close(fd)
+			}
+		}
+		return
 	}
 	for _, e := range entries {
 		fd, err := strconv.Atoi(e.Name())

@@ -14,10 +14,11 @@ import (
 // worker. Doctrine I18: Yaegi is not the security boundary, so the worker
 // process is confined as if the interpreter had already been escaped:
 //
-//   - spawner (a root guest runtime): the worker runs as its desk's own
-//     unprivileged user (no supplementary groups, so no capabilities after
-//     exec) in a private, empty network namespace and IPC namespace, with
-//     its own 0700 tmp dir as cwd and TMPDIR;
+//   - spawner (a root guest runtime): the worker runs as an unprivileged uid
+//     of its own activation (desk_cell_uid.go; the desk manifest gates the
+//     spawn; no supplementary groups) in a private, empty network, IPC and
+//     mount namespace (desk_cell_hardening_linux.go), with its own 0700 tmp
+//     dir as cwd and TMPDIR;
 //   - worker, before it serves a cell: no_new_privs, Landlock (read-only on
 //     the allowed root, read-write on its tmp dir, nothing else; no TCP bind
 //     or connect), and a deny-by-default seccomp filter that admits no

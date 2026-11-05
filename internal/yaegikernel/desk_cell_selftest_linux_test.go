@@ -118,20 +118,27 @@ func TestDeskCellSelfTestPassesTheProductionShape(t *testing.T) {
 		t.Fatalf("workers = %d, want 3", len(rec.Workers))
 	}
 	canaryReads := 0
+	seenUIDs := map[string]bool{}
 	for _, w := range rec.Workers {
-		id, _ := DeskCellIdentity(w.Role)
-		want := strconv.FormatUint(uint64(id), 10)
-		if f := strings.Fields(w.Status["Uid"]); w.UserUID != want || len(f) != 4 || f[0] != want {
-			t.Errorf("%s: Uid %q, want %s", w.Role, w.Status["Uid"], want)
+		uid, perr := strconv.ParseUint(w.UserUID, 10, 32)
+		if perr != nil || uint32(uid) < activationUIDBase || uint32(uid) >= activationUIDBase+activationUIDCount {
+			t.Errorf("%s: UserUID %q is outside the activation pool", w.Role, w.UserUID)
 		}
+		if f := strings.Fields(w.Status["Uid"]); len(f) != 4 || f[0] != w.UserUID {
+			t.Errorf("%s: Uid %q, want %s", w.Role, w.Status["Uid"], w.UserUID)
+		}
+		if seenUIDs[w.UserUID] {
+			t.Errorf("%s: uid %s shared with another activation", w.Role, w.UserUID)
+		}
+		seenUIDs[w.UserUID] = true
 		if got := w.Probes["socket_inet_stream"]; !strings.HasPrefix(got, "EPERM") {
 			t.Errorf("%s: socket_inet_stream = %q, want EPERM", w.Role, got)
 		}
 		for _, target := range w.ReadTargets {
 			if strings.Contains(target, deskCellSelfTestCanary) {
 				canaryReads++
-				if got := w.Probes["read:"+target]; !strings.HasPrefix(got, "EACCES") {
-					t.Errorf("%s: read of another desk's canary %s = %q, want EACCES", w.Role, target, got)
+				if got := w.Probes["read:"+target]; !strings.HasPrefix(got, "EACCES") && !strings.HasPrefix(got, "ENOENT") {
+					t.Errorf("%s: read of another desk's canary %s = %q, want ENOENT (absent from the private mount namespace) or EACCES", w.Role, target, got)
 				}
 			}
 		}

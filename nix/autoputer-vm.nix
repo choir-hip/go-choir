@@ -617,14 +617,17 @@ EOF
   };
 
   # Desk cell workers (management, Texture, research) run model-authored Go
-  # as one unprivileged user per desk, never as the runtime's root: no
+  # as an unprivileged uid of their own activation (a numeric uid from a pool,
+  # 200000 and up, internal/yaegikernel/desk_cell_uid.go), never as the
+  # runtime's root: no
   # capabilities, no_new_privs, Landlock, a cell seccomp filter and an empty
   # network namespace (internal/yaegikernel/desk_cell_confinement*.go;
   # docs/problems/desk-boundary-residuals-2026-10-21.md).
   # No home, no shell, no supplementary groups. The uid and gid of each are the
-  # desk manifest's (internal/deskmanifest, Sandbox.UID): the spawner uses the
-  # number and never looks a user up, so these entries exist for operators
-  # (ps, ls -l) and a test pins them to the manifest.
+  # desk manifest's (internal/deskmanifest, Sandbox.UID), which gates the
+  # spawn; the spawner never looks a user up, so these entries exist for operators
+  # (ps, ls -l) and a test pins them to the manifest. They name the desks;
+  # workers run as pool uids, which need no entry.
   users.groups.choir-cell-management = { gid = 61001; };
   users.groups.choir-cell-texture = { gid = 61002; };
   users.groups.choir-cell-research = { gid = 61003; };

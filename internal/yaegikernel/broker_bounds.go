@@ -14,17 +14,17 @@ import (
 // generous for real calls and small enough that no field makes a handler
 // allocate or loop without bound.
 const (
-	maxRequestIDLen   = 128
-	maxHandleRefLen   = 2048
-	maxSlotTokenLen   = 128
-	maxTimeoutMs      = int64(60 * 60 * 1000)
-	maxPayloadDepth   = 32
-	maxPayloadItems   = 4096    // elements of one array, keys of one object
-	maxPayloadTokens  = 200_000 // tokens in one payload
-	maxPayloadString  = 3 << 20 // one string value (save_evidence content is the largest field)
-	maxResearchKids   = 16
-	maxLeaseListItems = 256
-	maxLeaseDuration  = 31 * 24 * 60 * 60 // seconds
+	maxRequestIDLen     = 128
+	maxHandleRefLen     = 2048
+	maxSlotTokenLen     = 128
+	maxTimeoutMs        = int64(60 * 60 * 1000)
+	maxPayloadDepth     = 32
+	maxPayloadItems     = 4096    // elements of one array, keys of one object
+	maxPayloadTokens    = 200_000 // tokens in one payload
+	maxPayloadString    = 3 << 20 // one string value (save_evidence content is the largest field)
+	MaxResearchChildren = 16
+	maxLeaseListItems   = 256
+	maxLeaseDuration    = 31 * 24 * 60 * 60 // seconds
 )
 
 // payloadFieldBound limits one top-level field of an action's payload: a
@@ -70,7 +70,7 @@ var payloadListBounds = map[BrokerAction]map[string]struct{ n, elemLen int }{
 		"capture_ids":    {maxLeaseListItems, 256},
 		"capture_labels": {maxLeaseListItems, 256},
 	},
-	ActionResearch: {"children": {maxResearchKids, 0}},
+	ActionResearch: {"children": {MaxResearchChildren, 0}},
 	ActionExec:     {"args": {1024, 8192}},
 }
 
@@ -173,9 +173,29 @@ func boundJSON(raw []byte) error {
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
-	type frame struct{ items int }
+	// items counts elements: an array's values, an object's key and value
+	// together as one (the key token is not counted).
+	type frame struct {
+		items  int
+		object bool
+		key    bool // the next token is a key (true until it is read)
+	}
 	var stack []frame
 	tokens := 0
+	// value records one value (a scalar or an opened container) in the
+	// enclosing container; in an object the key before it is not an element.
+	value := func() error {
+		if len(stack) == 0 {
+			return nil
+		}
+		top := &stack[len(stack)-1]
+		top.items++
+		top.key = top.object
+		if top.items > maxPayloadItems {
+			return fmt.Errorf("a container with more than %d elements", maxPayloadItems)
+		}
+		return nil
+	}
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -191,35 +211,27 @@ func boundJSON(raw []byte) error {
 		if tokens > maxPayloadTokens {
 			return fmt.Errorf("more than %d tokens", maxPayloadTokens)
 		}
-		switch v := tok.(type) {
-		case json.Delim:
-			switch v {
-			case '{', '[':
-				if len(stack) >= maxPayloadDepth {
-					return fmt.Errorf("nests deeper than %d", maxPayloadDepth)
-				}
-				if len(stack) > 0 {
-					stack[len(stack)-1].items++
-				}
-				stack = append(stack, frame{})
-			case '}', ']':
-				stack = stack[:len(stack)-1]
+		if s, ok := tok.(string); ok {
+			if len(s) > maxPayloadString {
+				return fmt.Errorf("a string of %d bytes, over %d", len(s), maxPayloadString)
 			}
-		case string:
-			if len(v) > maxPayloadString {
-				return fmt.Errorf("a string of %d bytes, over %d", len(v), maxPayloadString)
-			}
-			if len(stack) > 0 {
-				stack[len(stack)-1].items++
-			}
-		default:
-			if len(stack) > 0 {
-				stack[len(stack)-1].items++
+			if n := len(stack); n > 0 && stack[n-1].object && stack[n-1].key {
+				stack[n-1].key = false // an object key: not an element
+				continue
 			}
 		}
-		// An object counts keys and values both; the limit is on elements.
-		if len(stack) > 0 && stack[len(stack)-1].items > 2*maxPayloadItems {
-			return fmt.Errorf("a container with more than %d elements", maxPayloadItems)
+		if d, ok := tok.(json.Delim); ok && (d == '}' || d == ']') {
+			stack = stack[:len(stack)-1]
+			continue
+		}
+		if err := value(); err != nil {
+			return err
+		}
+		if d, ok := tok.(json.Delim); ok {
+			if len(stack) >= maxPayloadDepth {
+				return fmt.Errorf("nests deeper than %d", maxPayloadDepth)
+			}
+			stack = append(stack, frame{object: d == '{', key: d == '{'})
 		}
 	}
 	return nil

@@ -150,6 +150,9 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 	if len(req.Children) == 0 {
 		return nil, fmt.Errorf("research: no children")
 	}
+	if len(req.Children) > yaegikernel.MaxResearchChildren {
+		return nil, fmt.Errorf("research: %d children, at most %d per call", len(req.Children), yaegikernel.MaxResearchChildren)
+	}
 	if rt == nil || rt.provider == nil {
 		return nil, fmt.Errorf("research: no model provider on this computer")
 	}

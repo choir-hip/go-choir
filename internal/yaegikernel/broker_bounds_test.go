@@ -142,12 +142,12 @@ func TestAdmitFrameRefusesAnOutOfBoundPayload(t *testing.T) {
 	var refused []FrameRefusal
 	w.cfg.Refused = func(_ context.Context, r FrameRefusal) { refused = append(refused, r) }
 	req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "r", HandleRef: "h", Epoch: 2, SlotToken: "tok",
-		Action: ActionResearch, Payload: mustPayload("children", make([]any, maxResearchKids+1))}
+		Action: ActionResearch, Payload: mustPayload("children", make([]any, MaxResearchChildren+1))}
 	reason, forged := w.admitFrame(context.Background(), StreamBrokerEgress, req)
 	if reason == "" || forged {
 		t.Fatalf("reason=%q forged=%v, want a plain refusal", reason, forged)
 	}
-	if len(refused) != 1 || !strings.Contains(refused[0].Reason, fmt.Sprintf("over %d", maxResearchKids)) {
+	if len(refused) != 1 || !strings.Contains(refused[0].Reason, fmt.Sprintf("over %d", MaxResearchChildren)) {
 		t.Fatalf("refusal not recorded with the bound: %+v", refused)
 	}
 	req.Payload = mustPayload("children", []any{map[string]any{"objective": "o"}})

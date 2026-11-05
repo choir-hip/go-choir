@@ -261,6 +261,10 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	}
 	if err := w.awaitReady(timeout); err != nil {
 		w.killLocked()
+		// A worker that dies before it is ready (a refused confinement, a
+		// startup crash) is a crash for the intensity bound too; no cell
+		// reaches this path, but a broken image loops here fastest.
+		workerCrashes.record(cfg.Session.Role, "did not become ready: "+err.Error())
 		return nil, fmt.Errorf("%w (worker stdout=%q stderr=%q)", err, stdoutBuf.String(), stderrBuf.String())
 	}
 	return w, nil

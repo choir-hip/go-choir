@@ -275,13 +275,6 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 			prefix+cellSelfTestEnv+"=1",
 			prefix+cellSelfTestReadEnv+"="+strings.Join(reads, string(os.PathListSeparator)),
 		)
-		if os.Geteuid() == 0 || wcfg.Confinement.Mode == CellConfinementRequired {
-			id := wcfg.Confinement.UID
-			if id == 0 {
-				id, _ = DeskCellIdentity(role)
-			}
-			_ = id
-		}
 		w, err := SpawnDeskSessionWorker(wcfg)
 		if err != nil {
 			out.Error = "spawn: " + err.Error()
