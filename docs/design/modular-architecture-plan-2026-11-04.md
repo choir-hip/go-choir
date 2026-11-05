@@ -887,8 +887,8 @@ the same categories and marked unverified.
 | Mail: messages, recipients, attachments, source packets, drafts, approvals, risk alerts, aliases, digest (maild stores, host side) | Mail desk, through the maild service | the owner through the Mail app; nothing else; no guest verb reads mail today |
 | Texture documents, revisions, decisions, root, source entity and ref, citation check, support verdict, story library head (`registry.go:76-77, 97-99, 115, 149, 162-163`) | Texture desk | owner (E1); research through `texture.search` lease; management through a Texture-published story index; engineering and reducers only by carried data (8.4) |
 | Research evidence (`registry.go:100`) | research desk | Texture reads carried excerpts in report packets, not the store |
-| Assignments, subject candidates, admission, capture disposition (`registry.go:148, 166-175` in part) | management | engineering sees its own assignment through its inbox |
-| Capability, capsule and run claims, slots, engineering lineage, self-development operations, capsule effect bundle (`registry.go:112, 166-175` in part; `manifest.go:270`) | engineering | management supervisory |
+| Admission, capture disposition (`registry.go:148, 166-175` in part). Amended 2026-11-05 (MA3.1, 14ee014bd): assignments, subject candidates, assignment reports, rebase notice claims and the capability, capsule and run claims are store-mediated assignment-lifecycle state written in single atomic batches that cross management and engineering, so they are `system:kernel` commons kinds | management | engineering sees its own assignment through its inbox |
+| Slots, engineering lineage, self-development operations (`registry.go:112, 166-175` in part; `manifest.go:270`); the claims moved to the commons (row above); there is no capsule-effect-bundle kind | engineering | management supervisory |
 | Capture labels and overrides, world events, event membership, source schedules (`registry.go:108, 120-124`) | management (intake and the Autopaper source schedules, until Autopaper is an app agent; excluded from this mission, R37) | research polls through `PollSource` requests |
 | Commitment records, inboxes, conversation heads, lifecycle events and commands, wake outbox, channel messages, coagent mailbox, runs, agents, events, trajectories, work items, run acceptances, run continuations, run memory entries (`registry.go:87-96, 90, 107, 147-158`) | kernel (`system:kernel`), the commons | self-scoped views per desk; management supervisory; owner (E1) |
 | Install records (was release adoption, `registry.go:128`) | kernel | owner, Library |
@@ -896,6 +896,8 @@ the same categories and marked unverified.
 | Files, file objects (`registry.go:133-134`) | `ownerfiles` (owner) | the owner's apps; Files route excludes `mail/` |
 | Computer settings, content items, podcast subscriptions, browser sessions, media progress, desktop state, theme (`registry.go:101-103, 109`; `schema.go:195-237`) | shell and owner-act services | owner |
 | Package kinds `choir.app.<pkg>.*` | that package's desk | none without a lease |
+
+**MA3.2 preconditions (added 2026-11-05 from the MA3.1 reviews).** Built-in kinds do not enforce until each of these is closed: X19 (the one store batch that mixes desk custodians, 25 occurrences across the test suites); `choir.co_super_slot` is written by the store for a requester (`graph_home.go:287, 299`), so decide its class (commons like the claims, or engineering with the writer declared at the call site); owner-route and background-loop writes declare their writer at the call site (`source_schedule` through the owner route; the intake kinds from the host loop as `desk:management`); the writer counter keys on the declared writer, so a crossing reads as "management wrote Texture's document" before the soak starts.
 
 ### 8.3 Reads that already comply
 
@@ -918,7 +920,8 @@ which reads only the submitted text (inventory X11).
 | X8, X9 | Management `Stories` (`agentcore/intake_view.go:67`) and the intake labeler's judge prompt (`intake_labels.go` ~`:240-300`, unverified) read story summaries | Texture publishes a story-index projection; management reads the projection | MA3.7 |
 | X10 | Management reads mail: none found | no change | none |
 | X11 | Conductor reads anything: no | no change; router (MA4.8) keeps it so | none |
-| X14 | `Pack.Waits` for management (`tools_desk.go:1062-1068`) | custodian read; management is custodian of assignments and admission (`manifest.go:219`) | MA3.1 |
+| X14 | `Pack.Waits` for management (`tools_desk.go:1062-1068`) | custodian read; management is custodian of admission (`manifest.go:219`); assignment state is commons since MA3.1 | MA3.1 |
+| X19 | Management opens a story by writing Texture's story document, revision, story library head and support verdict in one batch with its own task and disposition rows (`store/inbox.go:725` `planInboxCommand`, `story_open.go:182, 188`; also composed into `OpenEngineeringAssignment`, `engineering_assignments.go:1274-1335`) | management casts to Texture and Texture opens the story; the batch splits by custodian | MA3.7 |
 | X14b | `ProviderWaits` to every desk (`tools_desk.go:1074-1076`) | a host-supplied scalar; no kind crosses | none |
 | X15 | Cross-kind search (`researchtools.go:71, 96, 107, 114`) | split: Texture part is X1, the rest is E4 | MA3.7 |
 | X16 | Texture reads research evidence by id (`textureowner/texture_evidence_sources.go:147-155`, unverified) | report packets carry the excerpts and claims; evidence by id becomes a request to research | MA4.6 |
