@@ -15,7 +15,7 @@ func TestPromptCoreTeachesWriteCitationsAndTurnVerbs(t *testing.T) {
 		"choir.Write(edits, why)", "@replace", "@insert", "@delete", "@move", "@section", "@all",
 		`{{cite r2.c1 "`, "{{ref", "names its line",
 		"choir.Done(why)", "choir.Wait(why)", "choir.Reject(record, why)",
-		`choir.Cast("research", objective, packet)`, `choir.Cast("management", objective, packet)`, "execution_request",
+		`choir.Cast("research", objective, packet, req)`, `choir.Cast("management", objective, packet, req)`, "execution_request",
 		"choir.ReadDoc()", "frame", "r1..rM", "b1..bN",
 	} {
 		if !strings.Contains(prompt, want) {

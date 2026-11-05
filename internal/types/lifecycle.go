@@ -313,7 +313,7 @@ type ApplyTextureTurnRequest struct {
 	Inbound                        []TextureTurnInboundDisposition `json:"inbound"`
 	Controls                       []TextureTurnControl            `json:"controls,omitempty"`
 	// InboxRecords are the turn's own addressed records (Texture's Cast,
-	// Ask and Note to research), committed with the turn; InboxCursor
+	// Ask to research), committed with the turn; InboxCursor
 	// advances Texture's cursor over the range the turn read (Cut 1).
 	InboxRecords []CommitmentRecord  `json:"inbox_records,omitempty"`
 	InboxCursor  *InboxCursorAdvance `json:"inbox_cursor,omitempty"`

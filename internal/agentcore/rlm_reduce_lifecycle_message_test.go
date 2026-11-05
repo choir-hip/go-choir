@@ -452,11 +452,13 @@ func TestCommitTrayLifecycleAskPrecommitMintRecordNative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	engineeringID := agentprofile.Engineering + ":" + caller.ChannelID
+	// Texture reaches research only; engineering is management's (MA1.3: an Ask
+	// is never forwarded).
+	engineeringID := agentprofile.Research + ":" + caller.ChannelID
 	now := time.Now().UTC()
 	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
 		AgentID: engineeringID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
-		Profile: agentprofile.Engineering, Role: agentprofile.Engineering, ChannelID: caller.ChannelID,
+		Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: caller.ChannelID,
 		CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
@@ -479,7 +481,7 @@ func TestCommitTrayLifecycleAskPrecommitMintRecordNative(t *testing.T) {
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
 	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "engineering", Question: "does the build pass?"},
+		{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, Req: testRequest(), ToDesk: "research", Question: "does the build pass?"},
 		{LocalID: "pre-1", Kind: yaegikernel.IntentPrecommit, Precommit: `{"question":"will deploy land today?"}`},
 	}, 1); err != nil {
 		t.Fatal(err)

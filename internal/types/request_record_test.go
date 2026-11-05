@@ -312,3 +312,28 @@ func TestWriteCheckRefusesOutOfRangeFieldsOnARecord(t *testing.T) {
 		t.Error("an unknown settlement passed the record check")
 	}
 }
+
+// TestFlippingCustodianOrNoProcedureOrWindowFailsVerify: the freeze hash
+// covers the custodian, no_procedure and the window, not only the procedure
+// ref and the weights.
+func TestFlippingCustodianOrNoProcedureOrWindowFailsVerify(t *testing.T) {
+	m, ok := FreezeMateriality(RequestCast, 0.4, ImpactI1)
+	if !ok || !m.Verify() || m.Window == "" {
+		t.Fatalf("freeze = %+v ok=%v", m, ok)
+	}
+	for name, flip := range map[string]func(*MaterialityFreeze){
+		"custodian":    func(f *MaterialityFreeze) { f.Custodian = "research" },
+		"no_procedure": func(f *MaterialityFreeze) { f.NoProcedure = !f.NoProcedure },
+		"window":       func(f *MaterialityFreeze) { f.Window = "1d" },
+	} {
+		c := m
+		flip(&c)
+		if c.Verify() {
+			t.Errorf("flipping %s still verifies", name)
+		}
+	}
+	pre := CommitmentRecord{Kind: CommitmentKindPrecommit, Precommit: &CommitmentPrecommit{}}
+	if got := requestKindOfRecord(pre); got != RequestPrecommit {
+		t.Errorf("a precommit record's request kind = %q", got)
+	}
+}

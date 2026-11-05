@@ -201,7 +201,8 @@ func (s *Store) CommitStoryResearchRequest(ctx context.Context, req StoryResearc
 	rec := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID,
 		Kind: types.CommitmentKindDirective, Discrepancy: types.DiscrepancyUnresolved,
-		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: objective, Body: string(body)},
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: objective, Body: string(body)},
+		// Host-written Cast: no p_success, weight or procedure (unscored, host); MA1.5 types it.
 		Cast:        &types.CommitmentCast{},
 		Provenance:  types.CommitmentProvenance{AgentID: "owner:" + ownerID},
 		EmitterKind: types.CommitmentEmitterOwner, ComputerID: computerID,

@@ -34,9 +34,10 @@
     "kind": "escalate",
     "custodian": "management",
     "procedure_ref": "request.escalate.v1",
+    "window": "7d",
     "weight": 0.3,
     "impact_class": "I1",
-    "hash": "230af827876a3f692ebe52d6950f9975583c90ddbd2eee80d4437a254f93c685"
+    "hash": "cf0bc7f05850d3b9057472e87986ef48481c64ce25c2d097c0b0457a7e917216"
   },
   "addressee": "management:o",
   "emitter_kind": "agent",

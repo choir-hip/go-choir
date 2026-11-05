@@ -414,6 +414,7 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		cast.RecordID = fmt.Sprintf("%s:delegate:%s:%d", r.scope.CellID, in.LocalID, i)
 		cast.Inbox, cast.SenderInbox, cast.Addressee = inbox, parent, inbox
 		cast.EmitterKind, cast.ComputerID = types.CommitmentEmitterAgent, r.scope.ComputerID
+		// Host-written Cast: no p_success, weight or procedure (unscored, host); MA1.5 types it.
 		cast.Cast = &types.CommitmentCast{Captures: leased}
 		cast.RelatedIDs = delegated
 		casts = append(casts, cast)

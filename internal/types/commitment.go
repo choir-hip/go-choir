@@ -270,7 +270,7 @@ type CommitmentRecord struct {
 	// classify without decoding intent names out of the RecordID string.
 	Kind CommitmentRecordKind `json:"kind,omitempty"`
 	// Directive is the typed operational-act body for Kind==directive
-	// (note/escalate/cast/retract). Directives are operational records —
+	// (escalate/cast/retract). Directives are operational records —
 	// excluded from claim accrual and materiality projection.
 	Directive *CommitmentDirective `json:"directive,omitempty"`
 
@@ -278,7 +278,11 @@ type CommitmentRecord struct {
 	// feed or decline carries the sender's stated p_success, proposed
 	// weight, impact class and settlement, plus the materiality procedure
 	// the reducer froze with them. Optional on read (older records have
-	// none), required on write by the reducer.
+	// none), required on write by the reducer. A record with none of them and
+	// a host author (a delegation or story-research Cast) is unscored, host:
+	// it is not a request whose catalogue entry has no procedure (that one
+	// carries a materiality_procedure with no_procedure true). MA1.5 types
+	// the host-written Casts.
 	PSuccess             *float64           `json:"p_success,omitempty"`
 	Weight               *float64           `json:"weight,omitempty"`
 	ImpactClass          ImpactClass        `json:"impact_class,omitempty"`

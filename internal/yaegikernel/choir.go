@@ -744,7 +744,7 @@ func (s *ChoirScope) Feed(doc string, captureIDs any, reason string, req ...any)
 	}
 	doc = strings.TrimPrefix(strings.TrimSpace(doc), "texture:")
 	if doc == "" || doc == "new" {
-		return "", fmt.Errorf("choir: Feed needs an existing story's doc id or inbox (texture:<doc>); open a new story with choir.Cast(\"texture:new\", headline, spec)")
+		return "", fmt.Errorf("choir: Feed needs an existing story's doc id or inbox (texture:<doc>); open a new story with choir.Cast(\"texture:new\", headline, spec, req)")
 	}
 	ids, err := captureIDsArg(captureIDs)
 	if err != nil {

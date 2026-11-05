@@ -996,7 +996,7 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 }
 
 // textureActivationCells is what one Texture activation's completed cells
-// staged: a turn (a texture_turn, or a Cast, Ask or Note, which commits as
+// staged: a turn (a texture_turn, or a Cast or Ask, which commits as
 // a Wait) or any other act.
 type textureActivationCells struct {
 	applied bool
@@ -1059,7 +1059,7 @@ const (
 // before the model had read or acted on it.
 //
 // The decision_kind says what the activation actually did. A staged act
-// (Ask/Resolve/Note/Report) is real work routed off the doc, so the wake is
+// (Ask/Resolve/Report) is real work routed off the doc, so the wake is
 // disposed as delegation_skipped; recording no_worker_needed for it would
 // launder a real act into "no act" (the s0m idle-mask defect). Only an
 // activation that staged nothing is a true no_worker_needed.

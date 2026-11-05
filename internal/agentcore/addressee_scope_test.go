@@ -123,3 +123,33 @@ func TestDeclineAndFeedRefuseAnUnresolvableAddress(t *testing.T) {
 }
 
 func ptrF(f float64) *float64 { return &f }
+
+// TestNonRecordsPathActsResolveOrAreRefused: an app desk (no records inbox)
+// Casting, Asking, Reporting or Replying to another subject's desk is refused;
+// a CancelAct whose author cannot be read is refused; a bare Precommit
+// resolver must be the rule resolver or a registered desk.
+func TestNonRecordsPathActsResolveOrAreRefused(t *testing.T) {
+	rt, st := testRuntime(t)
+	app := ReductionScope{FromAgentID: "ledgerapp:u1", DeskAgentID: "ledgerapp:u1", RunID: "run-app", OwnerID: "owner-app", ComputerID: "computer-app", CellID: "cell-app"}
+	r := &rlmCallReduction{active: true, mb: rt, st: st, ledger: st, scope: app}
+	for _, kind := range []string{yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentReport, yaegikernel.IntentReply} {
+		err := r.checkAddresseeScope(context.Background(), yaegikernel.StagedIntent{Kind: kind, LocalID: "a1", ToDesk: "research:other-doc"})
+		if err == nil || !strings.Contains(err.Error(), "may name") {
+			t.Errorf("app desk %s to research:other-doc: %v", kind, err)
+		}
+	}
+	// No runtime to read the target's author: a CancelAct is refused.
+	bare := &rlmCallReduction{active: true, scope: ReductionScope{DeskAgentID: "research:d1", FromAgentID: "research:d1"}}
+	if err := bare.checkAddresseeScope(context.Background(), yaegikernel.StagedIntent{Kind: yaegikernel.IntentCancel, LocalID: "c1", TargetRef: "x"}); err == nil {
+		t.Error("a CancelAct with no readable author was not refused")
+	}
+	res := ReductionScope{FromAgentID: "research:d1", DeskAgentID: "research:d1", OwnerID: "owner-app", ComputerID: "computer-app"}
+	rr := &rlmCallReduction{active: true, mb: rt, st: st, ledger: st, scope: res}
+	for resolver, wantRefused := range map[string]bool{"rule": false, "research": false, "management": false, "nosuchdesk": true} {
+		err := rr.checkAddresseeScope(context.Background(), yaegikernel.StagedIntent{Kind: yaegikernel.IntentPrecommit, LocalID: "p1",
+			Precommit: `{"question":"q","p":0.6,"resolver":"` + resolver + `"}`})
+		if (err != nil) != wantRefused {
+			t.Errorf("bare resolver %q: refused=%v err=%v", resolver, err != nil, err)
+		}
+	}
+}

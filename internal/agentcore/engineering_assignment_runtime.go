@@ -285,7 +285,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	// R5-2 (docs/evidence/selfdev-trace-reviews-2026-10-25.md round 5): a
 	// request whose assignment is still open gets no second one. A Texture
 	// re-cast into the same round (a correction, "continue the repair") is
-	// for the bound engineer, as a Note (P1); a second assignment would
+	// for the bound engineer, as an Ask (P1); a second assignment would
 	// start from the base beside it.
 	// The store replays an open for a replayed cell (recoverPartialActCommit
 	// re-derives the same Cast record), so the assignment this same Cast
@@ -452,7 +452,7 @@ func (rt *Runtime) bindCastRebaseNotice(ctx context.Context, ownerID, computerID
 
 // refuseCastOntoOpenAssignment refuses an engineering Cast for a Texture
 // round that already has a non-terminal assignment, and names the bound
-// engineer's inbox to Note instead. The assignment opened by this same Cast
+// engineer's inbox to Ask instead. The assignment opened by this same Cast
 // (castRecordID from casterRunID) is its replay, not a second assignment.
 func (rt *Runtime) refuseCastOntoOpenAssignment(ctx context.Context, ownerID, computerID, conversation string, round int, castRecordID, casterRunID string) error {
 	children, err := rt.store.ListEngineeringAssignmentsByParentRound(ctx, ownerID, computerID, conversation, round)

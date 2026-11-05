@@ -1,5 +1,7 @@
 package types
 
+import "github.com/yusefmosiah/go-choir/internal/deskmanifest"
+
 // The materiality catalogue (plan section 10.1, MA1.3): for each record kind,
 // the desk that is its custodian and the realized-materiality procedure the
 // custodian froze for it. The committing desk never picks the procedure: the
@@ -24,22 +26,50 @@ type MaterialityEntry struct {
 	ImpactFloor ImpactClass
 }
 
+// admissionKind is the owned kind whose holder admits every request kind
+// today; its owner in the deskmanifest registry is the custodian of the
+// catalogue's kinds (no desk name is written here, R3).
+const admissionKind = "admission"
+
+func admissionCustodian() string {
+	for _, name := range deskmanifest.Names() {
+		d, ok := deskmanifest.Lookup(name)
+		if !ok {
+			continue
+		}
+		for _, k := range d.OwnedKinds {
+			if k == admissionKind {
+				return d.Name
+			}
+		}
+	}
+	return ""
+}
+
 // MaterialityCatalogue lists the entries, in a stable order.
-var MaterialityCatalogue = []MaterialityEntry{
+var MaterialityCatalogue = withCustodian([]MaterialityEntry{
 	// A Cast opens work. For an engineering Cast the procedure reads the
 	// floor measures of section 10.3: rollback or hotfix within 14 days (F1)
 	// and escaped defects over 30 days (F2); for other casts, whether the
 	// round it opened ended with its stated outcome.
-	{Kind: RequestCast, Custodian: "management", ProcedureRef: "request.cast.v1", Window: "14d (F1), 30d (F2)", ImpactFloor: ImpactI1},
+	{Kind: RequestCast, ProcedureRef: "request.cast.v1", Window: "14d (F1), 30d (F2)", ImpactFloor: ImpactI1},
 	// An Escalate surfaces an issue to management or the owner: the
 	// procedure reads whether the owner or management acted on it.
-	{Kind: RequestEscalate, Custodian: "management", ProcedureRef: "request.escalate.v1", Window: "7d", ImpactFloor: ImpactI1},
+	{Kind: RequestEscalate, ProcedureRef: "request.escalate.v1", Window: "7d", ImpactFloor: ImpactI1},
 	// No realized-materiality procedure is defined for these: no importance
 	// score, which is not a score of zero.
-	{Kind: RequestAsk, Custodian: "management", ImpactFloor: ImpactI0},
-	{Kind: RequestFeed, Custodian: "management", ImpactFloor: ImpactI0},
-	{Kind: RequestDecline, Custodian: "management", ImpactFloor: ImpactI0},
-	{Kind: RequestPrecommit, Custodian: "management", ImpactFloor: ImpactI0},
+	{Kind: RequestAsk, ImpactFloor: ImpactI0},
+	{Kind: RequestFeed, ImpactFloor: ImpactI0},
+	{Kind: RequestDecline, ImpactFloor: ImpactI0},
+	{Kind: RequestPrecommit, ImpactFloor: ImpactI0},
+})
+
+func withCustodian(entries []MaterialityEntry) []MaterialityEntry {
+	c := admissionCustodian()
+	for i := range entries {
+		entries[i].Custodian = c
+	}
+	return entries
 }
 
 // MaterialityEntryFor returns the catalogue row of a kind.

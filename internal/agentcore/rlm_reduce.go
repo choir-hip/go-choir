@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -245,6 +246,11 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentEscalate,
 		yaegikernel.IntentFeed, yaegikernel.IntentDecline:
 		if err := types.ValidateRequestFields(in.Kind, in.Req); err != nil {
+			return fmt.Errorf("reduce: %s %s: %w", in.Kind, in.LocalID, err)
+		}
+		// The stamp itself can refuse (a kind the catalogue lacks): it
+		// refuses the act here, before anything mints, never discarded.
+		if err := (&types.CommitmentRecord{}).StampRequest(in.Kind, in.Req); err != nil {
 			return fmt.Errorf("reduce: %s %s: %w", in.Kind, in.LocalID, err)
 		}
 	}
@@ -1033,7 +1039,7 @@ func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents 
 
 func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel.StagedIntent, highWater uint64) error {
 	receipt := ReductionReceipt{Cursor: r.scope.Cursor}
-	// Texture dispatches with the turn (protocol P2a): its Cast, Ask and Note
+	// Texture dispatches with the turn (protocol P2a): its Cast and Ask
 	// fold into the cell's turn before the loop, so they never
 	// reach the act path. commitTray is shared by commit and crash recovery,
 	// so both fold the same way.
@@ -1450,6 +1456,8 @@ func stampRequestRecord(scope ReductionScope, in yaegikernel.StagedIntent, rec *
 		// A refused request never reaches here (validateSemanticActIntent);
 		// a nil Req leaves the record unstamped rather than inventing one.
 		if in.Req != nil {
+			// validateSemanticActIntent has already refused a request whose
+			// stamp fails, so no cell reaches an unstamped record here.
 			_ = rec.StampRequest(in.Kind, in.Req)
 		}
 	case yaegikernel.IntentPrecommit:
@@ -2473,6 +2481,25 @@ func (r *rlmCallReduction) checkAddresseeScope(ctx context.Context, in yaegikern
 		return nil
 	}
 	switch in.Kind {
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentReport, yaegikernel.IntentReply,
+		yaegikernel.IntentFeed, yaegikernel.IntentDecline:
+		// An act that reaches here was not carried by the records route (a
+		// sender with no records inbox, or an address off it). It still
+		// resolves, or is refused: a sender with no records inbox has none to
+		// send from. A Cast may be forwarded to its admission.
+		if to := strings.TrimSpace(in.ToDesk); to != "" {
+			if in.Kind == yaegikernel.IntentCast {
+				route, err := ResolveAddress(from, r.scope.OwnerID, to)
+				if err != nil {
+					return refuse(to, err)
+				}
+				if !route.OnRoute {
+					return refuse(to, fmt.Errorf("it is not on the records path"))
+				}
+				return nil
+			}
+			return resolve(to)
+		}
 	case yaegikernel.IntentEscalate:
 		if to := strings.TrimSpace(in.ToDesk); to != "" {
 			return resolve(to)
@@ -2485,20 +2512,32 @@ func (r *rlmCallReduction) checkAddresseeScope(ctx context.Context, in yaegikern
 			Resolver string `json:"resolver"`
 		}
 		_ = json.Unmarshal([]byte(in.Precommit), &body)
-		if resolver := strings.TrimSpace(body.Resolver); strings.Contains(resolver, ":") {
+		resolver := strings.TrimSpace(body.Resolver)
+		switch {
+		case resolver == "":
+		case strings.Contains(resolver, ":"):
 			return resolve(resolver)
+		case resolver == "rule":
+		default:
+			// A bare resolver is a registered desk name, or it is refused.
+			if _, ok := deskmanifest.Lookup(canonicalDeskName(resolver)); !ok {
+				return refuse(resolver, fmt.Errorf("it is neither the rule resolver nor a registered desk"))
+			}
 		}
 	case yaegikernel.IntentCancel:
 		rt := r.rt()
 		if rt == nil || rt.store == nil {
-			return nil
+			return refuse(in.TargetRef, fmt.Errorf("the commitment's author cannot be read, so ownership cannot be shown"))
 		}
 		computerID := strings.TrimSpace(r.scope.ComputerID)
 		if computerID == "" {
 			computerID = rt.TextureComputerID()
 		}
 		target, err := rt.store.GetCommitmentRecord(ctx, strings.TrimSpace(r.scope.OwnerID), computerID, strings.TrimSpace(in.TargetRef))
-		if err != nil || target == nil {
+		if err != nil {
+			return refuse(in.TargetRef, fmt.Errorf("the commitment's author cannot be read: %w", err))
+		}
+		if target == nil {
 			return nil // nothing to stand down: a ledger-only retract
 		}
 		own := strings.TrimSpace(target.Provenance.AgentID) == strings.TrimSpace(r.scope.FromAgentID) ||

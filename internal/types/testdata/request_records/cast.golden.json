@@ -35,9 +35,10 @@
     "kind": "cast",
     "custodian": "management",
     "procedure_ref": "request.cast.v1",
+    "window": "14d (F1), 30d (F2)",
     "weight": 0.3,
     "impact_class": "I1",
-    "hash": "42e01777ce031126e8039e44dc5dc515463d9d8657595afed5f92d4d10f9446c"
+    "hash": "2f7458acc4fba014cfae620cf99178d2250de54683541e41e86779b9314829dd"
   },
   "addressee": "management:o",
   "emitter_kind": "agent",

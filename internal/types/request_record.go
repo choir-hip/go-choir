@@ -269,8 +269,14 @@ func requestKindOfRecord(rec CommitmentRecord) string {
 		}
 		return ""
 	}
-	if rec.Kind == CommitmentKindPrecommit && rec.Precommit != nil {
-		return RequestAsk
+	if rec.Kind == CommitmentKindPrecommit {
+		// An Ask and a Precommit share the record kind; the frozen
+		// procedure names which the reducer stamped. A precommit with no
+		// freeze is a Precommit.
+		if rec.MaterialityProcedure != nil && rec.MaterialityProcedure.Kind == RequestAsk {
+			return RequestAsk
+		}
+		return RequestPrecommit
 	}
 	return ""
 }
@@ -285,7 +291,9 @@ type MaterialityFreeze struct {
 	// NoProcedure says the catalogue has no realized-materiality procedure
 	// for the kind: the record gets no importance score, which is not a
 	// score of zero.
-	NoProcedure bool        `json:"no_procedure,omitempty"`
+	NoProcedure bool `json:"no_procedure,omitempty"`
+	// Window is the procedure's reading window, frozen with it.
+	Window      string      `json:"window,omitempty"`
 	Weight      float64     `json:"weight"`
 	ImpactClass ImpactClass `json:"impact_class"`
 	Hash        string      `json:"hash"`
@@ -294,14 +302,17 @@ type MaterialityFreeze struct {
 // materialityHashInput is the hashed form: field order is fixed by the struct.
 type materialityHashInput struct {
 	Kind         string      `json:"kind"`
+	Custodian    string      `json:"custodian"`
 	ProcedureRef string      `json:"procedure_ref"`
+	NoProcedure  bool        `json:"no_procedure"`
+	Window       string      `json:"window"`
 	Weight       float64     `json:"weight"`
 	ImpactClass  ImpactClass `json:"impact_class"`
 }
 
 // Digest recomputes the hash over the procedure ref and the frozen weights.
 func (m MaterialityFreeze) Digest() string {
-	raw, _ := json.Marshal(materialityHashInput{m.Kind, m.ProcedureRef, m.Weight, m.ImpactClass})
+	raw, _ := json.Marshal(materialityHashInput{m.Kind, m.Custodian, m.ProcedureRef, m.NoProcedure, m.Window, m.Weight, m.ImpactClass})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -316,7 +327,7 @@ func FreezeMateriality(kind string, weight float64, stated ImpactClass) (Materia
 	if !ok {
 		return MaterialityFreeze{}, false
 	}
-	m := MaterialityFreeze{Kind: kind, Custodian: e.Custodian, ProcedureRef: e.ProcedureRef, NoProcedure: e.ProcedureRef == "",
+	m := MaterialityFreeze{Kind: kind, Custodian: e.Custodian, ProcedureRef: e.ProcedureRef, NoProcedure: e.ProcedureRef == "", Window: e.Window,
 		Weight: weight, ImpactClass: EffectiveImpact(kind, stated)}
 	m.Hash = m.Digest()
 	return m, true
