@@ -120,7 +120,6 @@ type toolLoopOptions struct {
 	providerIncident       ToolLoopProviderIncidentFunc
 	quotaLedger            *QuotaLedger
 	continuation           ToolLoopContinuationFunc
-	quotaModelFilter       func(provideriface.LLMSelection) bool
 }
 
 type pendingRequiredTool struct {
@@ -394,16 +393,6 @@ func WithContinuationChain(fn ToolLoopContinuationFunc) ToolLoopOption {
 	}
 }
 
-// WithQuotaModelFilter names the role's own restriction on which models may
-// serve the run (management tasks never run on a free or preview model).
-// A quota switch never moves the run to a model the filter refuses, whether
-// it comes from the pool or the continuation chain.
-func WithQuotaModelFilter(allow func(provideriface.LLMSelection) bool) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		opts.quotaModelFilter = allow
-	}
-}
-
 // messagesCarryImage reports whether any message holds an image block.
 func messagesCarryImage(messages []json.RawMessage) bool {
 	for _, raw := range messages {
@@ -674,16 +663,14 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		}
 		order := []provideriface.LLMSelection{activeLLMConfig}
 		// A model that cannot serve the run is never a candidate: an image
-		// in the history needs a vision model, and the role may restrict
-		// models (management tasks: no free or preview). Nothing capable
-		// left is the all-exhausted path.
+		// in the history needs a vision model. Nothing capable left is the
+		// all-exhausted path.
 		needsImage := messagesCarryImage(messages)
 		add := func(sel provideriface.LLMSelection) {
 			if strings.TrimSpace(sel.Provider) == "" || strings.TrimSpace(sel.Model) == "" {
 				return
 			}
-			if left[servingSelectionID(sel)] || (needsImage && !modelcatalog.SupportsImage(sel.Model)) ||
-				(options.quotaModelFilter != nil && !options.quotaModelFilter(sel)) {
+			if left[servingSelectionID(sel)] || (needsImage && !modelcatalog.SupportsImage(sel.Model)) {
 				return
 			}
 			for _, have := range order {

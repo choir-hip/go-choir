@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -326,9 +325,9 @@ func TestManagementDelegatesIntakeToTasks(t *testing.T) {
 		t.Fatalf("running tasks = %+v", running)
 	}
 	// FM27, R2-1: the task's run is management's profile in the task role,
-	// on the pinned model, reading its own inbox.
+	// on the default pool (owner 2026-11-05), reading its own inbox.
 	if runA.AgentProfile != agentprofile.Management || runA.AgentRole != agentprofile.ManagementTask || runA.AgentID != taskA.TaskInbox ||
-		metadataStringValue(runA.Metadata, "llm_model") != modelpolicy.ManagementTaskModel || metadataStringValue(runA.Metadata, "llm_provider") != modelpolicy.ManagementTaskProvider {
+		metadataStringValue(runA.Metadata, "llm_spec") != "pool:default" || metadataStringValue(runA.Metadata, "llm_model") == "" {
 		t.Fatalf("task run = profile %s role %s agent %s model %s/%s", runA.AgentProfile, runA.AgentRole, runA.AgentID,
 			metadataStringValue(runA.Metadata, "llm_provider"), metadataStringValue(runA.Metadata, "llm_model"))
 	}
@@ -415,8 +414,8 @@ func TestManagementDelegatesIntakeToTasks(t *testing.T) {
 		t.Fatalf("the re-check after a residual Report started %d parent turns, want 1", n)
 	}
 	for _, model := range f.model.taskModels {
-		if model != modelpolicy.ManagementTaskProvider+"/"+modelpolicy.ManagementTaskModel {
-			t.Fatalf("FM27: a task call went to %s", model)
+		if model == "" || model == "/" {
+			t.Fatalf("FM27: a task call named no model: %q", model)
 		}
 	}
 }

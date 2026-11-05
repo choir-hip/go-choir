@@ -477,9 +477,9 @@ func TestPolicyAcceptsLunaSyntheticPool(t *testing.T) {
 	if !models["synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"] || !models["chatgpt/gpt-6-luna"] || len(models) != 2 {
 		t.Fatalf("policy selections = %v", models)
 	}
-	// The management task never takes a pool; its only fallback is the
-	// default pool's other member (owner 2026-10-28), not this pool's.
-	if got := policy.Resolve(agentprofile.ManagementTask); got.Provider != "chatgpt" || got.Model != "gpt-6-luna" {
+	// The management task runs on the computer's pool like any role (owner
+	// 2026-11-05): here luna-synthetic, falling back to its other member.
+	if got := policy.Resolve(agentprofile.ManagementTask); got.Model != "pool:luna-synthetic" {
 		t.Fatalf("management task = %+v", got)
 	}
 	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
@@ -490,7 +490,7 @@ func TestPolicyAcceptsLunaSyntheticPool(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataFallbacks] != "openrouter/stealth/crouton-alpha,synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
-		t.Fatalf("management task carries fallbacks %v", meta[MetadataFallbacks])
+	if meta[MetadataModel] != "gpt-6-luna" || meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
+		t.Fatalf("management task = %v with fallbacks %v", meta[MetadataModel], meta[MetadataFallbacks])
 	}
 }

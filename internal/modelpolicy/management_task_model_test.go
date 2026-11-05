@@ -7,122 +7,42 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
-// The management task model (management delegation S2a, R2-9). Ways it can
-// fail, written before the code:
-//   - the role is unknown to the policy, so a task resolves the defaults:
-//     the default pool, whose members include a free model, assigned per
-//     thread (a free preview took up to 932 s a call on the paper);
-//   - an owner-edited policy file that names no task role (the paper's)
-//     resolves the defaults the same way;
-//   - a policy that sets the task role to a pool, or to a free or preview
-//     model, is honoured;
-//   - an explicit, non-free provider and model for the role (the owner's
-//     override, O5) is ignored.
-func TestManagementTaskModelIsPinned(t *testing.T) {
+// Owner 2026-11-05: the management task runs on the pool like every other
+// role, "to spread the load, and also to see which models fail at this".
+// Ways it could fail: the task still resolves a platform pin; an owner's
+// explicit model or pool for the role is ignored; the task's run carries
+// no fallbacks, so a quota fails it instead of moving it along the pool.
+func TestManagementTaskResolvesLikeAnyRole(t *testing.T) {
 	if NormalizeRole(agentprofile.ManagementTask) != ManagementTaskRole {
 		t.Fatalf("NormalizeRole(%q) = %q", agentprofile.ManagementTask, NormalizeRole(agentprofile.ManagementTask))
 	}
-	pinned := func(source string, p Policy) {
-		t.Helper()
-		got := p.Resolve(agentprofile.ManagementTask)
-		if got.Provider != ManagementTaskProvider || got.Model != ManagementTaskModel {
-			t.Fatalf("%s: task selection = %+v, want %s/%s", source, got, ManagementTaskProvider, ManagementTaskModel)
-		}
-	}
-	pinned("platform fallback", fallbackPolicy(provideriface.Config{}))
-	paper, err := parsePolicy(`# owner-edited
-[defaults]
-model = "pool:default"
-reasoning = "low"
-
-[roles.management]
-provider = "opencode-go"
-model = "deepseek-v4.1-flash"
-
-[roles.texture]
-provider = "chatgpt"
-model = "gpt-6-luna"
-`, "/System/model-policy.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	pinned("owner-edited file with no task role", paper)
-	for _, configured := range []string{
-		"[roles.management_task]\nmodel = \"pool:default\"\n",
-		"[roles.management_task]\nprovider = \"opencode-go\"\nmodel = \"cat-jam-free\"\n",
-		"[roles.management_task]\nprovider = \"opencode-go\"\nmodel = \"longcat-2.5-preview-free\"\n",
+	for _, text := range []string{
+		"[defaults]\nmodel = \"pool:default\"\n",
+		"# owner-edited\n[defaults]\nmodel = \"pool:default\"\n",
 	} {
-		p, err := parsePolicy("[defaults]\nmodel = \"pool:default\"\n\n"+configured, "/System/model-policy.toml")
+		p, err := parsePolicy(text, "/System/model-policy.toml")
 		if err != nil {
-			t.Fatalf("parse %q: %v", configured, err)
+			t.Fatal(err)
 		}
-		pinned(configured, p)
+		if got := p.Resolve(agentprofile.ManagementTask); got.Model != "pool:default" {
+			t.Fatalf("management task resolves %+v from %q, want the default pool", got, text)
+		}
 	}
-	override, err := parsePolicy("[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"opencode-go\"\nmodel = \"deepseek-v4.1-flash\"\n", "/System/model-policy.toml")
+	override, err := parsePolicy("[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"chatgpt\"\nmodel = \"gpt-6-luna\"\n", "/System/model-policy.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := override.Resolve(agentprofile.ManagementTask); got.Provider != "opencode-go" || got.Model != "deepseek-v4.1-flash" {
+	if got := override.Resolve(agentprofile.ManagementTask); got.Provider != "chatgpt" || got.Model != "gpt-6-luna" {
 		t.Fatalf("the owner's override was ignored: %+v", got)
 	}
-	// Through the manager and the run metadata: one model. Owner
-	// 2026-10-28: every desk falls back to the other default-pool model
-	// when one is out, so the pin's only fallback is the default pool's
-	// other member; never a free or preview model (R2-9).
-	dir := t.TempDir()
-	path := filepath.Join(dir, "model-policy.toml")
+	path := filepath.Join(t.TempDir(), "model-policy.toml")
 	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := NewManager(ManagerConfig{PolicyPath: path})
-	meta := m.EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataProvider] != ManagementTaskProvider || meta[MetadataModel] != ManagementTaskModel {
-		t.Fatalf("task run metadata = %+v", meta)
-	}
-	if meta[MetadataFallbacks] != "openrouter/stealth/crouton-alpha,synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
-		t.Fatalf("the pinned task's fallback = %+v, want the default pool's other members but the -free one", meta)
-	}
-	// An owner override naming the other member falls back to the pin's model.
-	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"synthetic\"\nmodel = \"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataProvider] != "synthetic" {
-		t.Fatalf("synthetic task override metadata = %+v", meta)
-	}
-	if _, has := meta[MetadataFallbacks]; has {
-		t.Fatalf("an explicit concrete task pin must have no fallbacks: %+v", meta)
-	}
-	// An override outside the default pool fails over to the default pool's
-	// members, never to a free or preview model.
-	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"opencode-go\"\nmodel = \"deepseek-v4.1-flash\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if _, has := meta[MetadataFallbacks]; has {
-		t.Fatalf("opencode task override must have no fallbacks: %+v", meta)
-	}
-	// A pool, a free or a preview model in the role is replaced by the
-	// platform pin, which keeps the default pool's other member.
-	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nmodel = \"pool:default\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataModel] != ManagementTaskModel || meta[MetadataFallbacks] != "openrouter/stealth/crouton-alpha,synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
-		t.Fatalf("pool-valued task role = %+v", meta)
-	}
-	// The crouton arm: an uncatalogued provider's concrete model, no fallbacks.
-	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nprovider = \"openrouter\"\nmodel = \"stealth/crouton-alpha\"\n\n[roles.management_task]\nprovider = \"openrouter\"\nmodel = \"stealth/crouton-alpha\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataModel] != "stealth/crouton-alpha" {
-		t.Fatalf("crouton task = %+v", meta)
-	}
-	if _, has := meta[MetadataFallbacks]; has {
-		t.Fatalf("crouton task must have no fallbacks: %+v", meta)
+	meta := NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
+	if meta[MetadataSpec] != "pool:default" || meta[MetadataAssignment] != "hash" || meta[MetadataFallbacks] == nil || meta[MetadataFallbacks] == "" {
+		t.Fatalf("task run metadata = %+v, want a pool assignment with fallbacks", meta)
 	}
 }

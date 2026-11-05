@@ -84,14 +84,6 @@ func TestContinuationChainSurvivesAnUnreadablePolicy(t *testing.T) {
 	}
 }
 
-func TestManagementTaskNeverRunsOnFreeOrPreviewModels(t *testing.T) {
-	for model, want := range map[string]bool{"gpt-6-luna": true, "muse-spark-1.3-contributor-free": false, "longcat-2.5-preview-free": false, "x-Preview": false} {
-		if got := ManagementTaskModelAllowed(provideriface.LLMSelection{Model: model}); got != want {
-			t.Fatalf("%s allowed = %v, want %v", model, got, want)
-		}
-	}
-}
-
 // The chain is read on the quota path and must never write the policy file.
 func TestContinuationChainDoesNotWriteThePolicyFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "model-policy.toml")

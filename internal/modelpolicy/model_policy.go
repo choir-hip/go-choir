@@ -245,15 +245,6 @@ func (m *Manager) stampResolved(policy Policy, role string, metadata map[string]
 	thread := ThreadKey(metadata)
 	spec := SpecOf(selection)
 	selection, fallbacks, assignment := Assign(selection, thread)
-	if NormalizeRole(role) == ManagementTaskRole && selection.Source == "management_task_pin" {
-		// A pinned task never fails over to a free or preview model (R2-9).
-		// Owner 2026-10-28: every desk falls back to the other model when
-		// one is out, so the platform's pin fails over to the default
-		// pool's other members only. A concrete model the computer's own
-		// policy file names is a pin like any role's: no fallbacks (owner
-		// 2026-10-23: "I'd rather them fail than fallback").
-		fallbacks = managementTaskFallbacks(selection)
-	}
 	if assignment == AssignmentUnknownPool {
 		// Fail closed, visibly: never run the role on another pool's model.
 		metadata[MetadataPolicyError] = joinPolicyErrors(metadata, fmt.Sprintf("model policy names unknown pool %q", strings.TrimPrefix(strings.TrimSpace(selection.Model), modelcatalog.PoolSpecPrefix)))
@@ -415,62 +406,16 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
-// The management task model (management delegation S2a, design round 2
-// R2-9 and O5): a task has a 10-minute deadline, so it runs on one
-// non-preview model with bounded latency, never on a pool that assigns a
-// model per thread. The owner may name another provider and model for the
-// role; a pool, a free model or a preview model is not honoured. The pin
-// was deepseek-v4.1-flash until the owner's 3:1 GPT split (2026-10-15),
-// which it kept at a fifth of the paper's calls on DeepSeek
-// (docs/archive/problems/pool-split-misses-three-to-one-management-task-pin-2026-10-15.md).
-const (
-	ManagementTaskRole     = agentprofile.ManagementTask
-	ManagementTaskProvider = "chatgpt"
-	ManagementTaskModel    = "gpt-6-luna"
-)
-
-func managementTaskSelection(p Policy) provideriface.LLMSelection {
-	pin := provideriface.LLMSelection{Provider: ManagementTaskProvider, Model: ManagementTaskModel, ReasoningEffort: "high", Source: "management_task_pin"}
-	selection, ok := p.Roles[ManagementTaskRole]
-	if !ok {
-		return pin
-	}
-	model := strings.ToLower(strings.TrimSpace(selection.Model))
-	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) || strings.TrimSpace(selection.Provider) == "" ||
-		!ManagementTaskModelAllowed(selection) {
-		return pin
-	}
-	return fillSelection(selection, p.Defaults)
-}
-
-// ManagementTaskModelAllowed is the R2-9 rule: a management task never runs
-// on a free or preview model. The quota switch applies it to the task's
-// whole chain. OpenRouter spells a free variant with ":free".
-func ManagementTaskModelAllowed(sel provideriface.LLMSelection) bool {
-	model := strings.ToLower(strings.TrimSpace(sel.Model))
-	return !strings.HasSuffix(model, "-free") && !strings.HasSuffix(model, ":free") && !strings.Contains(model, "preview")
-}
-
-// managementTaskFallbacks is the pinned task's failover order: the default
-// pool's members other than the pin, in pool order, never a free or preview
-// model.
-func managementTaskFallbacks(pin provideriface.LLMSelection) []provideriface.LLMSelection {
-	var out []provideriface.LLMSelection
-	for _, member := range poolSelections(catalogPools()[modelcatalog.DefaultPool], pin) {
-		if (member.Provider == pin.Provider && member.Model == pin.Model) || !ManagementTaskModelAllowed(member) {
-			continue
-		}
-		out = append(out, member)
-	}
-	return out
-}
+// ManagementTaskRole is the management task's role. It resolves like any
+// role: the computer's policy, else the default pool. Owner 2026-11-05: "im
+// fine using a pool for management too. i want to spread the load, and also
+// to see which models fail at this". This deletes the R2-9 pin to one
+// non-free, non-preview model (management delegation design round 2, O5).
+const ManagementTaskRole = agentprofile.ManagementTask
 
 // Resolve returns the effective selection for role.
 func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	normalized := NormalizeRole(role)
-	if normalized == ManagementTaskRole {
-		return managementTaskSelection(p)
-	}
 	if p.Roles != nil {
 		if selection, ok := p.Roles[normalized]; ok {
 			return fillSelection(selection, p.Defaults)
