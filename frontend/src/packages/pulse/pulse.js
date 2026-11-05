@@ -1,5 +1,7 @@
+import { fetchWithRenewal } from '../../lib/app-sdk';
+
 export async function fetchPulseSummary() {
-  const res = await fetch('/api/pulse/summary', {
+  const res = await fetchWithRenewal('/api/pulse/summary', {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });

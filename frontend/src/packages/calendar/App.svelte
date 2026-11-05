@@ -1,13 +1,14 @@
 <script>
   import { createEventDispatcher, onMount, tick } from 'svelte';
   import {
+    loadContextContentItem,
     loadRecentMedia,
     mediaSourceIdentity,
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
-  } from './media-utils.js';
-  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+  } from '../../lib/app-sdk';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from '../../lib/app-sdk';
 
   export let appContext = {};
   export let windowId = '';
@@ -363,7 +364,6 @@
   async function loadContentItem() {
     loading = true;
     error = '';
-    const { loadContextContentItem } = await import('./media-utils.js');
     const result = await loadContextContentItem(effectiveContext, item, 'Calendar');
     loading = false;
     if (result.authRequired) {

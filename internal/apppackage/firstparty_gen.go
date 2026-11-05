@@ -9,9 +9,11 @@ var firstPartySettings = map[string]string{}
 
 // builtinPackageNames are the in-tree first-party packages: an installed package of such a name replaces the built-in app, so only the owner's own track may install one.
 var builtinPackageNames = []string{
+	"calendar",
 	"files",
 	"image",
 	"library-next",
+	"pulse",
 	"reader",
 }
 
@@ -20,7 +22,6 @@ var shellAppNames = []string{
 	"audio",
 	"autopaper",
 	"browser",
-	"calendar",
 	"compute-monitor",
 	"content",
 	"desk",
@@ -33,7 +34,6 @@ var shellAppNames = []string{
 	"pdf",
 	"podcast",
 	"prompt",
-	"pulse",
 	"research",
 	"settings",
 	"shell",

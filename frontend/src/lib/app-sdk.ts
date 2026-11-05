@@ -156,3 +156,59 @@ export type { Disposer } from './event-helpers';
 // the declared sections.
 export { getSetting, onSetting, setSetting } from './services/settings';
 export type { SettingField, SettingResult, SettingsSection } from './services/settings';
+
+// The open windows as a store, and which window has focus (1.4.0, slice C9).
+export { windowList } from './window-list';
+export type { WindowEntry } from './window-list';
+
+// Autopaper (1.4.0, slice C8): the front page, its rank and layout, sections
+// and routes of the Autopaper object graph.
+export {
+  AUTOPAPER_SECTIONS,
+  FRONT_FIRST_PAGE_SIZE,
+  FRONT_SECTION_ID,
+  editionTime,
+  fetchFrontPage,
+  fetchOpinionPage,
+  formatWhen,
+  layoutFrontPage,
+  loadSavedSection,
+  loadSectionVisits,
+  parsePublicationRoute,
+  publicationRoute,
+  rankFrontStories,
+  recordSectionVisit,
+  saveSection,
+  sectionShares,
+  storyPath,
+  storyPathForRoute,
+  storyTextureContext,
+  usesSections,
+} from './autopaper';
+export type { FrontStory } from './autopaper';
+
+// Source evidence labels and snapshot text (1.4.0, slices C10 and C11).
+export {
+  normalizeSourceEvidenceState,
+  readerArtifactStateLabel,
+  renderInlineMarkdown,
+  sourceEntityExcerptText,
+  sourceEntityReaderFallbackText,
+  sourceEntityReaderSnapshotStatus,
+  sourceEntityReaderSnapshotText,
+  sourceEntitySnapshotText,
+  sourceEntitySnapshotWarnings,
+  sourceEvidenceResearchLabel,
+  sourceEvidenceState,
+  sourceEvidenceStateLabel,
+} from './texture-source-renderer';
+
+// Theme catalogue and validation (1.4.0, slice C12): what Settings lists and edits.
+export {
+  DEFAULT_THEME,
+  listThemes,
+  normalizeThemeConfig,
+  onThemeRegistryChange,
+  themeCSSVariables,
+  validateThemeConfig,
+} from './theme';

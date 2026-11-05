@@ -5,7 +5,6 @@
     { "appId": "audio", "mediaType": "audio/mpeg", "extensions": ["mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus"] },
     { "appId": "video", "mediaType": "video/mp4", "extensions": ["mp4", "m4v", "webm", "mov", "avi", "mkv"] },
     { "appId": "slides", "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "extensions": ["pptx", "html", "htm"] },
-    { "appId": "calendar", "mediaType": "text/calendar", "extensions": ["ics"] },
     { "appId": "pdf", "mediaType": "application/pdf", "extensions": ["pdf"], "default": false },
     { "appId": "epub", "mediaType": "application/epub+zip", "extensions": ["epub"], "default": false },
     { "appId": "slides", "mediaType": "application/pdf", "extensions": ["pdf"], "default": false }

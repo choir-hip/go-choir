@@ -771,16 +771,17 @@
     "html",
     "htm"
    ]
-  },
+  }
+ ],
+ "packageRoutes": [
   {
    "appId": "calendar",
    "mediaType": "text/calendar",
    "extensions": [
     "ics"
-   ]
-  }
- ],
- "packageRoutes": [
+   ],
+   "default": true
+  },
   {
    "appId": "image",
    "mediaType": "image/png",

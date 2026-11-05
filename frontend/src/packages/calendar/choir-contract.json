@@ -1,0 +1,43 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Calendar opens on the month grid, switches to the agenda and back, and offers the .ics import.",
+  "ready": "[data-calendar-app]",
+  "expect": [
+    {
+      "selector": ".cal-month-view"
+    },
+    {
+      "selector": ".cal-weekday",
+      "count": 7
+    },
+    {
+      "selector": ".cal-import-btn",
+      "text": "Import .ics"
+    }
+  ],
+  "steps": [
+    {
+      "click": ".cal-view-toggle button:has-text(\"Agenda\")"
+    },
+    {
+      "see": ".cal-view-toggle button.active",
+      "text": "Agenda"
+    },
+    {
+      "click": ".cal-view-toggle button:has-text(\"Month\")"
+    },
+    {
+      "see": ".cal-month-view"
+    }
+  ],
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/media/recents",
+      "status": 200,
+      "json": {
+        "items": []
+      }
+    }
+  ]
+}

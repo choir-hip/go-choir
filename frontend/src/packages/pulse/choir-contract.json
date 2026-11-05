@@ -1,0 +1,30 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Pulse reads the public aggregate summary and refreshes it on demand.",
+  "ready": "[data-pulse-app]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/pulse/summary",
+      "status": 200,
+      "json": {
+        "accounts": { "total": 3, "by_class": { "real": 2, "internal": 1 }, "new_real_last_24h": 1 },
+        "computers": { "real_primary_total": 2, "real_primary_usable": 2, "real_primary_by_state": { "running": 2 } },
+        "privacy": { "data_mode": "aggregate-only", "surface": "public-readonly" },
+        "freshness": { "generated_by": "vmctl" }
+      }
+    }
+  ],
+  "expect": [
+    { "selector": "[data-pulse-summary]", "text": "Public aggregate health" },
+    { "selector": "[data-pulse-metrics]", "text": "REAL USERS" },
+    { "selector": "[data-pulse-privacy]" }
+  ],
+  "steps": [
+    { "click": "[aria-label=\"Refresh Pulse\"]" },
+    { "see": "[data-pulse-summary]", "text": "aggregate-only" }
+  ],
+  "expect_requests": [
+    { "request": "GET /api/pulse/summary" }
+  ]
+}

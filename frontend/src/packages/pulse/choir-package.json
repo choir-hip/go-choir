@@ -1,0 +1,49 @@
+{
+  "schema": "choir.package/v2",
+  "name": "pulse",
+  "version": "1.0.0",
+  "display": {
+    "title": "Pulse",
+    "icon": "📈",
+    "description": "Public aggregate Choir health"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 45
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false,
+      "desktop": {
+        "width": 980,
+        "height": 720,
+        "minWidth": 700,
+        "minHeight": 520
+      },
+      "compact": {
+        "minWidth": 280,
+        "minHeight": 420
+      }
+    },
+    "auth": {
+      "preview": "public-readonly"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-pulse-window",
+      "contentClass": "pulse-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}
