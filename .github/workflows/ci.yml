@@ -29,11 +29,6 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # Prove once (docs/design/ci-prove-once-2026-10-24.md): when 'true', a push
-  # to main whose exact commit a green pull-request run already tested (the
-  # run's lanes and base checked through the API) skips the Go test lanes.
-  # Anything not provable runs them. Shipped off; flip it in a reviewed commit.
-  CI_REUSE_GREEN_PR_RUN: 'false'
   # Node B's public host keys, pinned (SDC SEC-14): every ssh to Node B
   # checks them strictly under the alias go-choir-node-b, so a host that
   # answers at Node B's address with another key is refused instead of
@@ -158,8 +153,12 @@ jobs:
           echo "race_selected=$race_selected" >> "$GITHUB_OUTPUT"
 
       - name: Find a green pull-request run of this exact commit (prove once)
+        # Prove once (docs/design/ci-prove-once-2026-10-24.md): a push to main
+        # whose exact commit a green pull-request run already tested (the run's
+        # lanes and base checked through the API) skips the Go test lanes.
+        # Anything not provable runs them.
         id: reuse
-        if: env.CI_REUSE_GREEN_PR_RUN == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.classify.outputs.go == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.classify.outputs.go == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -97,11 +97,11 @@ reject "$ci" 'needs.plan.outputs.sampled_race'
 require "$ci" 'case "${{ needs.plan.outputs.race_selected }}" in'
 require "$ci" 'sbom-semantic-fingerprint-test'
 
-# Prove once (docs/design/ci-prove-once-2026-10-24.md, red): the switch ships
-# off, only the four Go lanes honor a reuse, and check lets a lane be skipped
-# only with plan's reuse output.
-require "$ci" "  CI_REUSE_GREEN_PR_RUN: 'false'"
-reject "$ci" "CI_REUSE_GREEN_PR_RUN: 'true'"
+# Prove once (docs/design/ci-prove-once-2026-10-24.md, red): no switch (the
+# CI_REUSE_GREEN_PR_RUN env was retired 2026-11-05), only the four Go lanes
+# honor a reuse, and check lets a lane be skipped only with plan's reuse output.
+reject "$ci" "CI_REUSE_GREEN_PR_RUN"
+require "$ci" "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.classify.outputs.go == 'true'"
 require "$ci" 'reuse_pr_run: ${{ steps.reuse.outputs.reuse_pr_run }}'
 require "$ci" "python3 -I scripts/ci-find-green-pr-run"
 require "$ci" 'require_go_lane go-vet-build'

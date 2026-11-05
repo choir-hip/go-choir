@@ -129,3 +129,5 @@ Go lanes again, no state to clean. Nothing is written to GitHub.
 
 Dispatch and rerun are not used: a rerun reuses the same run id and attempt
 and is not a new proof.
+
+**Update 2026-11-05.** The `CI_REUSE_GREEN_PR_RUN` switch is retired: prove-once is the CI default (no switch, per the owner's 2026-11-03 no-switches rule). The registry entry was deleted when its grandfather date passed; Devin reviewed the flip.

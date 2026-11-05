@@ -1420,36 +1420,6 @@
    "grandfathered_off_until": "2026-11-25"
   },
   {
-   "id": "ci_reuse_green_pr_run",
-   "kind": "ci_env",
-   "life": "release",
-   "owner": "ci",
-   "class": "red",
-   "surface": "ci",
-   "introduced": "2026-10-28",
-   "ci": [
-    "CI_REUSE_GREEN_PR_RUN"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "reuse_skips_only_green_lanes",
-     "bound": "true"
-    }
-   ],
-   "retire": "delete the env; prove-once is the CI default",
-   "gate": {
-    "act": "one green draft PR run"
-   },
-   "grandfathered_off_until": "2026-11-04",
-   "note": "Audit row 42: CI, not a runtime switch."
-  },
-  {
    "id": "texture_owner_directions",
    "kind": "setting",
    "life": "release",

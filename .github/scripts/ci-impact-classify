@@ -93,7 +93,7 @@ else
     fi
 
     case "$path" in
-      .github/*)
+      .github/*|scripts/ci-find-green-pr-run)
         mark ci "$path -> CI tooling verification"
         ;;
     esac
