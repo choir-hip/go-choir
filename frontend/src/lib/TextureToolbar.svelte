@@ -32,6 +32,7 @@
   // A published Texture's numbered sources, shown above its text when open.
   export let publishedSourceCount = 0;
   export let publishedSourcesOpen = false;
+  export let publishedModelsAvailable = false;
   export let hasCurrentDoc = false;
   export let hasCurrentRevision = false;
   /**
@@ -264,7 +265,7 @@
       </div>
     {/if}
     {#if isPublishedReader}
-      {#if publishedSourceCount}
+      {#if publishedSourceCount || publishedModelsAvailable}
         <div class="tb-item" data-tb-item data-tb-slot="2" data-tb-priority="5">
           <button
             class="secondary-action"
@@ -330,7 +331,7 @@
         </div>
       {/if}
       {#if isPublishedMode}
-        {#if publishedSourceCount}
+        {#if publishedSourceCount || publishedModelsAvailable}
           <div class="tb-item" data-tb-item data-tb-slot="2" data-tb-priority="5">
             <button
               class="secondary-action"

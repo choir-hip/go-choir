@@ -101,20 +101,15 @@
 }
 
 /* The models that served a published story (texture-model-provenance.ts),
-   after the disclosure and before the related block. */
+   a section of the published Sources panel after the source list. */
 .rendered-doc .texture-model-provenance {
   margin: 1rem 0 0;
-  padding: 0.5rem 0.75rem;
-  border-left: 3px solid currentColor;
-  font-size: 0.82em;
-  opacity: 0.8;
+  font-size: 0.9em;
 }
 
 .rendered-doc .texture-model-provenance-heading {
   margin: 0 0 0.35rem;
-  font-size: 0.85em;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 1.05rem;
 }
 
 .rendered-doc .texture-model-provenance dl {

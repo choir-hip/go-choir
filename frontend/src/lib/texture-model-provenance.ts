@@ -60,7 +60,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const VIA_LABELS: Record<string, string> = {
   selected: '',
-  selected_unrecorded: 'selection only, calls not recorded',
+  selected_unrecorded: 'chosen, before call logging',
   model_failover: 'pool fallback',
   provider_quota: 'quota failover',
   provider_quota_retry: 'quota failover',
@@ -101,7 +101,12 @@ export function modelDetail(m: ProvenanceModel): string {
   const tin = count(m?.input_tokens);
   const tout = count(m?.output_tokens);
   if (tin || tout) parts.push(`${tokens(tin)} in / ${tokens(tout)} out`);
-  const via = (Array.isArray(m?.via) ? m.via : []).map(viaLabel).filter(Boolean);
+  // A model with recorded calls needs no "before call logging" note: a mix
+  // of recorded and older runs shows the recorded counts only.
+  const via = (Array.isArray(m?.via) ? m.via : [])
+    .filter((v) => !(v === 'selected_unrecorded' && calls > 0))
+    .map(viaLabel)
+    .filter(Boolean);
   if (via.length) parts.push(via.join(', '));
   return parts.join(' · ');
 }
@@ -144,7 +149,7 @@ function escapeHTML(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** The published reader's "Models" block; empty when the version carries none. */
+/** The "Models" section of the published Sources panel; empty when the version carries none. */
 export function renderModelProvenanceHTML(provenance: ModelProvenance | null | undefined): string {
   const rows = modelProvenanceRows(provenance);
   if (!rows.length) return '';

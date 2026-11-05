@@ -1907,9 +1907,10 @@
   // human-author notice of an opinion piece, chosen by the server's record
   // (owner notes §28). An opinion piece also opens with its Opinion label.
   $: disclosureHTML = isPublishedReadOnly && publishedBundle ? pieceDisclosureHTML(appContext, publishedBundle.publication) : '';
-  $: publishedModelsHTML = isPublishedReadOnly && publishedBundle ? renderModelProvenanceHTML(publishedModelProvenance(publishedBundle)) : '';
+  // Model provenance reads in the Sources panel, never in the article body.
+  $: publishedModelsHTML = isPublishedMode && publishedBundle ? renderModelProvenanceHTML(publishedModelProvenance(publishedBundle)) : '';
   $: opinionHeadHTML = isPublishedReadOnly && publishedBundle ? opinionLabelHTML(publishedBundle.publication) : '';
-  $: syncEditorSurface(opinionHeadHTML + renderedMarkdown + disclosureHTML + publishedModelsHTML + relatedHTML);
+  $: syncEditorSurface(opinionHeadHTML + renderedMarkdown + disclosureHTML + relatedHTML);
 
   onMount(() => {
     if (!initializedKey) {
@@ -2005,6 +2006,7 @@
       {promptLabel}
       sourceCandidateCount={sourceEntities.length}
       publishedSourceCount={publishedCitations?.sources?.length || 0}
+      publishedModelsAvailable={!!publishedModelsHTML}
       {publishedSourcesOpen}
       {expandRoute}
       hasCurrentDoc={!!currentDoc}
@@ -2068,9 +2070,9 @@
         />
       {/if}
 
-      {#if isPublishedMode && publishedSourcesOpen && publishedCitations?.sources?.length}
+      {#if isPublishedMode && publishedSourcesOpen && (publishedCitations?.sources?.length || publishedModelsHTML)}
         <div class="rendered-doc published-sources-panel" data-texture-published-sources-panel>
-          {@html renderPublishedSourcesHTML(publishedCitations)}
+          {@html renderPublishedSourcesHTML(publishedCitations)}{@html publishedModelsHTML}
         </div>
       {/if}
 
