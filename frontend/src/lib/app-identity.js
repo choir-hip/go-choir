@@ -13,7 +13,12 @@ export function withAppIdentity(app, options = {}) {
   return { ...options, headers };
 }
 
-/** Appends the identity to a URL, for a call that cannot set a header (EventSource). */
+/**
+ * Appends the identity to a URL, for a call that cannot set a header
+ * (EventSource). Only for routes that accept the extra query parameter: the
+ * capsule-evidence projection refuses any query but its one key, so name the
+ * app with a header there.
+ */
 export function withAppQuery(app, url) {
   return `${url}${url.includes('?') ? '&' : '?'}${APP_QUERY}=${encodeURIComponent(app)}`;
 }

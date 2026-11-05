@@ -39,7 +39,8 @@ import (
 // The whole route is behind the app_packages.objects computer setting, read
 // live on every request and off by default. The setting is keyed by owner, so
 // the route authenticates first (an unauthenticated caller gets 401 whatever
-// the setting says, as on every route). Off, every authenticated path answers
+// the setting says, as on every route), except that the app gate (MA3.10)
+// runs before both and answers 403 to a missing or wrong app identity. Off, every authenticated path answers
 // 404 as if the route did not exist, and nothing is read or written. Turning it off is the
 // rollback; objects already written stay on the tape as inert rows.
 
