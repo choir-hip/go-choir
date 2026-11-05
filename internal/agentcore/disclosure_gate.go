@@ -16,6 +16,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
+	"github.com/yusefmosiah/go-choir/internal/lease"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -142,9 +143,10 @@ func labelObjectKinds(kind string) []objectgraph.ObjectKind {
 }
 
 // messageAdmitted reports whether the desk a message goes to is admitted for a
-// label: the custodian of the label's kind, or a holder of a live lease that
-// names the kind.
-func (rt *Runtime) messageAdmitted(owner, toDesk, label string) bool {
+// label: the custodian of the label's kind, a holder of a live lease that
+// names the kind, or a holder of a live disclosure grant bound to the sending
+// run (runID) whose grant names the label (lease.GrantTextureBrief).
+func (rt *Runtime) messageAdmitted(owner, runID, toDesk, label string) bool {
 	if !strings.HasPrefix(label, types.LabelOwnerPrivatePrefix) {
 		return true
 	}
@@ -160,6 +162,9 @@ func (rt *Runtime) messageAdmitted(owner, toDesk, label string) bool {
 		}
 	}
 	if rt != nil && rt.leases != nil {
+		if rt.leases.AdmitsMessageLabel(writer, runID, label) {
+			return true
+		}
 		for _, rec := range rt.leases.Live(owner) {
 			if holder, found := objectgraph.DeskWriter(rec.Holder); !found || holder != writer {
 				continue
@@ -220,8 +225,8 @@ func (rt *Runtime) gateEgressCall(ctx context.Context, deskRole string, exec too
 func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
 	switch call.sink {
 	case disclosure.SinkDeskMessage:
-		owner := strings.TrimSpace(call.exec.OwnerID)
-		return disclosure.Facts{AdmittedFor: func(label string) bool { return rt.messageAdmitted(owner, call.target, label) }}
+		owner, runID := strings.TrimSpace(call.exec.OwnerID), strings.TrimSpace(call.exec.RunID)
+		return disclosure.Facts{AdmittedFor: func(label string) bool { return rt.messageAdmitted(owner, runID, call.target, label) }}
 	case disclosure.SinkMailSend:
 		// Only the mail custodian replying in the owner's own thread is
 		// admitted; any other mail leaves the owner's mailbox on an ask.
@@ -570,6 +575,7 @@ func (r *rlmCallReduction) gateMessage(ctx context.Context, kind, to, body strin
 	if d := strings.ToLower(strings.TrimSpace(head)); d == "owner" || d == "user" || d == "" {
 		return nil
 	}
+	r.issueCustodianBrief(ctx, to)
 	return rt.gateDisclosure(ctx, disclosureCall{
 		exec: toolregistry.ExecutionContext{
 			RunID: r.scope.RunID, OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID, AgentID: r.scope.DeskAgentID, RunRecord: r.rec,
@@ -577,4 +583,36 @@ func (r *rlmCallReduction) gateMessage(ctx context.Context, kind, to, body strin
 		deskRole: r.rec.AgentProfile, sink: disclosure.SinkDeskMessage, target: to,
 		summary: kind + " " + disclosureBound(body, disclosureSummaryRunes),
 	})
+}
+
+// issueCustodianBrief mints the Texture custodian's texture.brief grant when a
+// Texture run messages research (lease.IssueTextureBrief): the brief carries
+// the owner-private labels of the run's documents, and the custodian admits
+// research for them, for messages from this run only, until the run ends. The
+// sender is the run record's desk and the run the reduction's, both the
+// host's; the lease service refuses any other sender or holder. Any other
+// message mints nothing. A failure is logged and the gate decides without the
+// grant, which asks.
+func (r *rlmCallReduction) issueCustodianBrief(ctx context.Context, to string) {
+	rt := r.rt()
+	if rt == nil || rt.leases == nil || r.rec == nil {
+		return
+	}
+	sender := canonicalDeskName(strings.TrimSpace(r.rec.AgentProfile))
+	senderWriter, ok := objectgraph.DeskWriter(sender)
+	if !ok || senderWriter != objectgraph.WriterTexture {
+		return
+	}
+	holder, ok := resolveMessageDesk(to)
+	if !ok {
+		return
+	}
+	holderWriter, ok := objectgraph.DeskWriter(holder)
+	if !ok || !lease.GrantHeldBy(lease.GrantTextureBrief, holderWriter) {
+		return
+	}
+	computer := firstNonEmpty(strings.TrimSpace(r.scope.ComputerID), strings.TrimSpace(rt.cfg.ComputerID))
+	if _, err := rt.leases.IssueTextureBrief(ctx, r.scope.OwnerID, computer, sender, r.scope.RunID, r.scope.DeskAgentID, holder); err != nil {
+		log.Printf("disclosure: texture.brief lease for run %s to %s: %v", r.scope.RunID, holder, err)
+	}
 }

@@ -422,3 +422,105 @@ func TestTextureSearchGrantIsHeldByTheIssuedRunOnly(t *testing.T) {
 		t.Error("a desk's own request obtained the grant")
 	}
 }
+
+// texture.brief: the Texture custodian's disclosure grant to research for one
+// Texture run. Ways it could fail (written before the code):
+//
+//	B1. a desk other than Texture mints it, for itself or for another desk
+//	    (research self-mints; management mints for research);
+//	B2. a desk asks for it through the public request path;
+//	B3. it is minted for a desk the grant table does not name;
+//	B4. it admits messages from another run (another trajectory's documents);
+//	B5. it admits a label outside the custodian's data (a capture, mail);
+//	B6. it outlives its run, or its expiry;
+//	B7. it opens a kind to the reader gate, or the texture.search service;
+//	B8. a second message of the same run mints a second lease.
+func TestTextureBriefGrantIsMintedByTheCustodianOnly(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	research := objectgraph.WriterResearch
+	doc := types.OwnerPrivateLabel("document")
+	for _, sender := range []string{deskmanifest.Research, deskmanifest.Management, "app:" + readerPkg, ""} {
+		if _, err := f.svc.IssueTextureBrief(ctx, ownerID, computer, sender, "run-t", "x:1", deskmanifest.Research); !errors.Is(err, lease.ErrRefused) {
+			t.Errorf("B1: sender %q minted texture.brief: %v", sender, err)
+		}
+	}
+	if _, err := f.svc.IssueTextureBrief(ctx, ownerID, computer, deskmanifest.Texture, "run-t", "texture:1", deskmanifest.Management); !errors.Is(err, lease.ErrRefused) {
+		t.Errorf("B3: texture.brief minted for management: %v", err)
+	}
+	if _, err := f.svc.IssueTextureBrief(ctx, ownerID, computer, deskmanifest.Texture, "run-t", "texture:1", "app:"+readerPkg); !errors.Is(err, lease.ErrRefused) {
+		t.Errorf("B3: texture.brief minted for a package desk: %v", err)
+	}
+	_, err := f.svc.Request(ctx, lease.Request{
+		OwnerID: ownerID, ComputerID: computer, Desk: deskmanifest.Research, RunID: "run-t", AgentID: "research:1",
+		Scope: lease.Scope{Grants: []string{lease.GrantTextureBrief}}, Purpose: "self-grant", Fields: fields(0.9, 0.2),
+	})
+	if !errors.Is(err, lease.ErrRefused) {
+		t.Errorf("B2: a desk's own request obtained texture.brief: %v", err)
+	}
+	if f.svc.AdmitsMessageLabel(research, "run-t", doc) {
+		t.Fatal("a refused mint admitted a message")
+	}
+
+	start := time.Now().UTC()
+	now := start
+	f.svc.SetClock(func() time.Time { return now })
+	rec, err := f.svc.IssueTextureBrief(ctx, ownerID, computer, deskmanifest.Texture, "run-t", "texture:1", deskmanifest.Research)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Holder != deskmanifest.Research || rec.HolderRunID != "run-t" || len(rec.Custodians) != 1 || rec.Custodians[0] != "desk:texture" ||
+		rec.ExpiresAt.IsZero() || rec.ExpiresAt.Sub(rec.IssuedAt) > lease.MaxDuration {
+		t.Fatalf("unexpected texture.brief lease: %+v", rec)
+	}
+	// On the tape.
+	all, err := f.svc.All(ctx, ownerID, computer)
+	if err != nil || len(all) != 1 || all[0].LeaseID != rec.LeaseID {
+		t.Fatalf("the lease is not on the tape: %v %+v", err, all)
+	}
+	again, err := f.svc.IssueTextureBrief(ctx, ownerID, computer, deskmanifest.Texture, "run-t", "texture:1", deskmanifest.Research)
+	if err != nil || again.LeaseID != rec.LeaseID || len(f.svc.Live(ownerID)) != 1 {
+		t.Errorf("B8: a second message minted a second lease: %v %s %s", err, again.LeaseID, rec.LeaseID)
+	}
+	if !f.svc.AdmitsMessageLabel(research, "run-t", doc) || !f.svc.AdmitsMessageLabel(research, "run-t", types.OwnerPrivateLabel("texture")) {
+		t.Error("the custodian's labels are not admitted for its run")
+	}
+	if f.svc.AdmitsMessageLabel(research, "run-other", doc) {
+		t.Error("B4: another run's message is admitted")
+	}
+	if f.svc.AdmitsMessageLabel(objectgraph.WriterManagement, "run-t", doc) {
+		t.Error("B4: another desk is admitted")
+	}
+	for _, l := range []string{types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("mail"), types.OwnerPrivateLabel("evidence")} {
+		if f.svc.AdmitsMessageLabel(research, "run-t", l) {
+			t.Errorf("B5: %s is admitted", l)
+		}
+	}
+	if f.svc.AdmitsKind(research, "run-t", "choir.texture_document") || f.svc.AdmitsKind(research, "run-t", "choir.texture_revision") {
+		t.Error("B7: the grant opened a kind to the reader gate")
+	}
+	if _, ok := f.svc.AdmitsGrant(research, "run-t", lease.GrantTextureSearch); ok {
+		t.Error("B7: the grant opened texture.search")
+	}
+	// The texture.search grant admits no message.
+	if _, err := f.svc.IssueTextureSearch(ctx, ownerID, computer, "run-s", "research:2"); err != nil {
+		t.Fatal(err)
+	}
+	if f.svc.AdmitsMessageLabel(research, "run-s", doc) {
+		t.Error("texture.search admitted a message")
+	}
+	// Expiry.
+	now = start.Add(lease.MaxDuration)
+	if f.svc.AdmitsMessageLabel(research, "run-t", doc) {
+		t.Error("B6: the grant admitted past its expiry")
+	}
+	// The run's end.
+	now = start
+	if _, err := f.svc.IssueTextureBrief(ctx, ownerID, computer, deskmanifest.Texture, "run-u", "texture:1", deskmanifest.Research); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.EndRun(ctx, "run-u", lease.ReasonRunEnded)
+	if f.svc.AdmitsMessageLabel(research, "run-u", doc) {
+		t.Error("B6: the grant outlived its run")
+	}
+}

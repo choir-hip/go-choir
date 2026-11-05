@@ -22,16 +22,46 @@ import (
 // body (store.TextureSearchUnderLease).
 const GrantTextureSearch = "texture.search"
 
+// GrantTextureBrief is the Texture custodian's disclosure grant to research
+// for one trajectory run: the brief a Texture run Casts (or Asks) research
+// carries the owner-private labels of that run's documents, and the grant
+// admits exactly those labels at the desk-message sink, for messages from
+// that run only. It opens no kind and no service read: research reads nothing
+// it could not read before. The host mints it (IssueTextureBrief) when the
+// Texture run messages research; a desk never asks for it.
+const GrantTextureBrief = "texture.brief"
+
 type grantRow struct {
 	custodian objectgraph.Writer
 	// holders are the writers of the desks whose ceiling may name the grant.
 	holders []objectgraph.Writer
+	// labels are the owner-private labels a disclosure grant admits at the
+	// desk-message sink (AdmitsMessageLabel). A grant with none admits no
+	// message.
+	labels []string
 }
 
 var grantTable = map[string]grantRow{
 	// Until MA4.6 the research desk's own run holds texture.search; MA4.6
 	// moves it to the research_texture child and removes research from this row.
 	GrantTextureSearch: {custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{objectgraph.WriterResearch}},
+	// The labels of the data Texture is the custodian of: a document the
+	// Texture frame showed (owner_private:document) and the custodian's own
+	// search snippets (owner_private:texture, store.textureSearchLabel).
+	GrantTextureBrief: {
+		custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{objectgraph.WriterResearch},
+		labels: []string{types.OwnerPrivateLabel("document"), types.OwnerPrivateLabel(strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"))},
+	},
+}
+
+// grantAdmitsLabel reports whether the grant table admits label for grant.
+func grantAdmitsLabel(grant, label string) bool {
+	for _, l := range grantTable[grant].labels {
+		if l == label {
+			return true
+		}
+	}
+	return false
 }
 
 func grantCustodian(grant string) (objectgraph.Writer, bool) {
@@ -82,6 +112,83 @@ func (s *Service) IssueTextureSearch(ctx context.Context, ownerID, computerID, r
 		Fields:  &types.RequestFields{PSuccess: &p, Weight: &w, ImpactClass: types.ImpactI1, Settlement: types.SettlementRecipient},
 		grant:   true,
 	})
+}
+
+// IssueTextureBrief issues the texture.brief grant of a Texture run that
+// messages research. The caller is the host's reducer, never a cell: sender
+// is the desk of the run record that stages the message, runID that run, and
+// holder the desk the message is addressed to. The lease is refused unless the
+// sender is the grant's custodian (Texture) and the holder is a desk the grant
+// table names, so no other desk can mint it, for itself or for anyone. It is
+// bound to the custodian's run (HolderRunID is the run whose messages it
+// admits), ends with that run (the store's terminal observer) or at
+// MaxDuration, whichever is first, and a crash ends it at boot. A live lease
+// of the same holder and run is returned as is.
+func (s *Service) IssueTextureBrief(ctx context.Context, ownerID, computerID, sender, runID, agentID, holder string) (Record, error) {
+	if strings.TrimSpace(runID) == "" {
+		return Record{}, refuse("texture.brief needs the custodian run it is for")
+	}
+	senderWriter, ok := objectgraph.DeskWriter(strings.TrimSpace(sender))
+	if !ok || senderWriter != grantTable[GrantTextureBrief].custodian {
+		return Record{}, refuse("texture.brief is issued by its custodian %s, not by %q", grantTable[GrantTextureBrief].custodian, sender)
+	}
+	holderDesk, ok := lookupDesk(holder)
+	if !ok {
+		return Record{}, refuse("desk %q is not registered", holder)
+	}
+	if err := grantAllowed(holderDesk.Name, GrantTextureBrief); err != nil {
+		return Record{}, err
+	}
+	holderWriter, _ := objectgraph.DeskWriter(holderDesk.Name)
+	if r, ok := s.liveGrant(holderWriter, runID, GrantTextureBrief); ok {
+		return r, nil
+	}
+	p, w := 0.9, 0.2
+	return s.Request(ctx, Request{
+		OwnerID: ownerID, ComputerID: computerID, Desk: holderDesk.Name, RunID: runID, AgentID: agentID,
+		Origin:   types.OriginSystem,
+		Scope:    Scope{Grants: []string{GrantTextureBrief}},
+		Purpose:  "Texture's brief to " + holderDesk.Name + " from run " + runID + " carries that run's documents; the custodian admits the message, and nothing is opened to read",
+		Duration: MaxDuration,
+		Fields:   &types.RequestFields{PSuccess: &p, Weight: &w, ImpactClass: types.ImpactI1, Settlement: types.SettlementRecipient},
+		grant:    true,
+	})
+}
+
+// liveGrant returns a live lease of holder in runID that names grant, without
+// counting a use.
+func (s *Service) liveGrant(holder objectgraph.Writer, runID, grant string) (Record, bool) {
+	for _, r := range s.liveFor(holder, runID) {
+		for _, g := range r.Scope.Grants {
+			if g == grant {
+				return *r, true
+			}
+		}
+	}
+	return Record{}, false
+}
+
+// AdmitsMessageLabel reports whether holder is admitted for label on a
+// message from runID: a live disclosure grant of holder, bound to that run,
+// whose grant table row names the label. The grant table and the holder's
+// registration are re-checked on every use, as the ceiling is for kinds.
+func (s *Service) AdmitsMessageLabel(holder objectgraph.Writer, runID, label string) bool {
+	if strings.TrimSpace(runID) == "" {
+		return false
+	}
+	for _, r := range s.liveFor(holder, runID) {
+		desk, ok := deskOf(r)
+		if !ok {
+			continue
+		}
+		for _, g := range r.Scope.Grants {
+			if grantAdmitsLabel(g, label) && grantAllowed(desk.Name, g) == nil {
+				s.noteUse(r.LeaseID)
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // GrantNames lists the first-party typed grants, sorted.

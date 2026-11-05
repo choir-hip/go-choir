@@ -228,15 +228,17 @@ func countStr(n uint64) string {
 // MA3.7b 7b: Resolve, Disagreement and Cancel are addressed non-envelope acts;
 // when they name a desk (or, for a retract, the desk the retracted act
 // addressed) a built-in desk's run carrying owner-private labels is counted at
-// the desk-message sink and not blocked.
+// the desk-message sink and not blocked. The addressee is management: Texture's
+// messages to research are admitted by the texture.brief lease
+// (TestATextureBriefToResearchIsAdmittedByTheCustodianLease).
 func TestResolveDisagreementAndCancelAreGatedAndCounted(t *testing.T) {
 	f := newDisclosureFixture(t, "unusedgate7b", 62841)
 	exec := f.run(t, "run-7b", agentprofile.Texture, "write", types.OwnerPrivateLabel("document"))
 	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
 	for i, in := range []yaegikernel.StagedIntent{
-		{LocalID: "r1", Kind: yaegikernel.IntentResolve, ToDesk: agentprofile.Research, TargetRef: "rec-1", Resolve: `{"verdict":"confirmed"}`},
-		{LocalID: "d1", Kind: yaegikernel.IntentDisagreement, ToDesk: agentprofile.Research, Disagreement: `{"commitment_id":"rec-1"}`},
-		{LocalID: "c1", Kind: yaegikernel.IntentCancel, ToDesk: agentprofile.Research, TargetRef: "rec-1"},
+		{LocalID: "r1", Kind: yaegikernel.IntentResolve, ToDesk: agentprofile.Management, TargetRef: "rec-1", Resolve: `{"verdict":"confirmed"}`},
+		{LocalID: "d1", Kind: yaegikernel.IntentDisagreement, ToDesk: agentprofile.Management, Disagreement: `{"commitment_id":"rec-1"}`},
+		{LocalID: "c1", Kind: yaegikernel.IntentCancel, ToDesk: agentprofile.Management, TargetRef: "rec-1"},
 	} {
 		disclosure.ResetCounts()
 		if err := r.gateMessageDisclosure(context.Background(), in); err != nil {
@@ -250,7 +252,7 @@ func TestResolveDisagreementAndCancelAreGatedAndCounted(t *testing.T) {
 	target := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:7b", Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips"},
-		Cast:      &types.CommitmentCast{}, Inbox: "research:doc-7b", SenderInbox: "texture:doc-7b", Addressee: "research:doc-7b",
+		Cast:      &types.CommitmentCast{}, Inbox: "management:doc-7b", SenderInbox: "texture:doc-7b", Addressee: "management:doc-7b",
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{AgentID: "texture:doc-7b"},
 	}

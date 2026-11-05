@@ -83,6 +83,8 @@ type Record struct {
 	ComputerID string `json:"computer_id"`
 	// Holder is the desk, HolderWriter its writer, HolderRunID the run the
 	// lease is for. The holder comes from the run record, never from a cell.
+	// A disclosure grant (GrantTextureBrief) is for the custodian's run whose
+	// messages it admits, so it ends with that run.
 	Holder       string `json:"holder"`
 	HolderWriter string `json:"holder_writer"`
 	HolderRunID  string `json:"holder_run_id"`

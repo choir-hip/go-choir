@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
+	"github.com/yusefmosiah/go-choir/internal/lease"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -537,5 +539,92 @@ func TestAnUnreadableLabelSetFailsAPackageDeskClosed(t *testing.T) {
 	}
 	if disclosure.Counts()["publication|unreadable|labels|observed"] == 0 {
 		t.Fatalf("counts = %v", disclosure.Counts())
+	}
+}
+
+// texture.brief (the enforce-flip prerequisite): when the Texture custodian's
+// run Casts research, the host mints a custodian lease bound to that run, so
+// the brief carrying the run's documents is admitted. Ways it could fail
+// (written before the code):
+//
+//	T1. the brief still asks (no lease, or the gate does not consult it);
+//	T2. another run's message (another trajectory's documents) is admitted by
+//	    the lease, or a label outside Texture's custody rides along unasked;
+//	T3. a non-Texture desk's message to research mints a lease, or Texture's
+//	    message to another desk does;
+//	T4. the lease outlives its run or its expiry;
+//	T5. the lease is not on the tape.
+func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
+	f := newDisclosureFixture(t, "briefs", 62851)
+	f.escalating()
+	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	ctx := context.Background()
+	reduction := func(exec toolregistry.ExecutionContext) *rlmCallReduction {
+		return &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
+	}
+	cast := func(id, to string) yaegikernel.StagedIntent {
+		return yaegikernel.StagedIntent{LocalID: id, Kind: yaegikernel.IntentCast, ToDesk: to, Objective: "research the claims in this draft"}
+	}
+	asks := func(err error) bool { return err != nil && strings.Contains(err.Error(), "waits on the owner") }
+	doc := types.OwnerPrivateLabel("document")
+
+	// T1: Texture's brief to research is admitted, and the lease is on the tape.
+	texA := f.run(t, "run-tex-a", agentprofile.Texture, "draft", doc, types.LabelWorldUntrusted, types.OwnerPrivateLabel("texture"))
+	if err := reduction(texA).gateMessageDisclosure(ctx, cast("c1", agentprofile.Research)); err != nil {
+		t.Fatalf("T1: Texture's brief to research = %v", err)
+	}
+	live := f.rt.leases.Live(f.owner)
+	if len(live) != 1 || live[0].Holder != agentprofile.Research || live[0].HolderRunID != "run-tex-a" || live[0].Scope.Grants[0] != "texture.brief" {
+		t.Fatalf("T5: live leases = %+v", live)
+	}
+	stored, err := f.rt.leases.All(ctx, f.owner, f.computer)
+	if err != nil || len(stored) != 1 {
+		t.Fatalf("T5: the lease is not on the tape: %v %+v", err, stored)
+	}
+	if f.judge.callCount() != 0 {
+		t.Fatalf("T1: the admitted brief spent System 1 (%d calls)", f.judge.callCount())
+	}
+
+	// T2: another Texture run's message is not admitted by run A's lease (the
+	// gate is consulted directly, so nothing is minted for run B).
+	texB := f.run(t, "run-tex-b", agentprofile.Texture, "draft", doc)
+	if err := f.gate(texB, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "Cast other"); !asks(err) {
+		t.Fatalf("T2: another run's message under run A's lease = %v", err)
+	}
+	// A label outside Texture's custody still asks, lease or not.
+	texC := f.run(t, "run-tex-c", agentprofile.Texture, "draft", doc, types.OwnerPrivateLabel("capture"))
+	if err := reduction(texC).gateMessageDisclosure(ctx, cast("c2", agentprofile.Research)); !asks(err) {
+		t.Fatalf("T2: a capture label rode the brief = %v", err)
+	}
+
+	// T3: management's message to research and Texture's to management mint
+	// nothing and ask.
+	before := len(f.rt.leases.Live(f.owner))
+	mgmt := f.run(t, "run-mgmt", agentprofile.Management, "x", doc)
+	if err := reduction(mgmt).gateMessageDisclosure(ctx, cast("c3", agentprofile.Research)); !asks(err) {
+		t.Fatalf("T3: management's message to research = %v", err)
+	}
+	texD := f.run(t, "run-tex-d", agentprofile.Texture, "draft", doc)
+	if err := reduction(texD).gateMessageDisclosure(ctx, cast("c4", agentprofile.Management)); !asks(err) {
+		t.Fatalf("T3: Texture's message to management = %v", err)
+	}
+	if n := len(f.rt.leases.Live(f.owner)); n != before {
+		t.Fatalf("T3: a lease was minted for another path (%d -> %d)", before, n)
+	}
+
+	// T4: the lease ends with its run.
+	f.rt.endRunLeases(ctx, "run-tex-a", "run ended")
+	if err := f.gate(texA, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "Cast after the run"); !asks(err) {
+		t.Fatalf("T4: the lease outlived its run = %v", err)
+	}
+	// And at its expiry.
+	texE := f.run(t, "run-tex-e", agentprofile.Texture, "draft", doc)
+	if err := reduction(texE).gateMessageDisclosure(ctx, cast("c5", agentprofile.Research)); err != nil {
+		t.Fatalf("T1: Texture's brief to research = %v", err)
+	}
+	later := time.Now().UTC().Add(2 * lease.MaxDuration)
+	f.rt.leases.SetClock(func() time.Time { return later })
+	if err := f.gate(texE, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "Cast after expiry"); !asks(err) {
+		t.Fatalf("T4: the lease outlived its expiry = %v", err)
 	}
 }
