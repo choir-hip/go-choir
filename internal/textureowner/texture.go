@@ -850,6 +850,10 @@ func (h *Handler) HandleTextureListDocuments(w http.ResponseWriter, r *http.Requ
 		after = &cursor
 	}
 
+	if h.listedByDesk(r.Context()) {
+		h.writeStoryIndexList(w, r, ownerID, limit, after)
+		return
+	}
 	docs, next, err := h.listTextureDocumentsPage(r.Context(), ownerID, limit, after)
 	if err != nil {
 		log.Printf("texture api: list documents: %v", err)

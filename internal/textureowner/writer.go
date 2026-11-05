@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -67,4 +68,65 @@ func asTextureReader(ctx context.Context) context.Context {
 		return ctx
 	}
 	return objectgraph.WithReaderIfAbsent(ctx, w)
+}
+
+// listedByDesk reports whether the document list is asked for by a desk other
+// than Texture: a desk's in-process ProductAPI call (management's list route,
+// X7). The owner, the kernel and Texture list its documents; a desk lists the
+// story-index projection Texture publishes (writeStoryIndexList).
+func (h *Handler) listedByDesk(ctx context.Context) bool {
+	reader, ok := objectgraph.ReaderFrom(ctx)
+	if !ok {
+		return false
+	}
+	switch reader {
+	case objectgraph.WriterOwner, objectgraph.WriterKernel, objectgraph.WriterStore:
+		return false
+	}
+	if custodian, found := objectgraph.CustodianOf("choir.texture_document"); found && reader == custodian {
+		return false
+	}
+	return true
+}
+
+// writeStoryIndexList answers the list route for a desk from the story index
+// (MA3.7a, X7): the custodian publishes the index first, and the desk reads
+// headlines, ledes and ids, never a document or a revision.
+func (h *Handler) writeStoryIndexList(w http.ResponseWriter, r *http.Request, ownerID string, limit int, after *textureDocumentCursor) {
+	computerID := ""
+	if h.Core != nil {
+		computerID = strings.TrimSpace(h.Core.TextureComputerID())
+	}
+	if h.Store == nil || computerID == "" {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "story index unavailable"})
+		return
+	}
+	if err := h.Store.PublishStoryIndex(r.Context(), ownerID, computerID); err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to publish the story index"})
+		return
+	}
+	var before time.Time
+	beforeDoc := ""
+	if after != nil {
+		before, beforeDoc = after.UpdatedAt, after.DocID
+	}
+	sums, err := h.Store.ListStoryIndex(r.Context(), ownerID, computerID, before, beforeDoc, limit+1)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list stories"})
+		return
+	}
+	resp := textureListDocsResponse{Documents: make([]textureDocumentResponse, 0, len(sums))}
+	if len(sums) > limit {
+		sums = sums[:limit]
+		last := sums[len(sums)-1]
+		resp.NextCursor = (&textureDocumentCursor{UpdatedAt: last.UpdatedAt, DocID: last.DocID}).encode()
+	}
+	for _, sum := range sums {
+		resp.Documents = append(resp.Documents, textureDocumentResponse{
+			DocID: sum.DocID, OwnerID: ownerID, Title: sum.Headline, ComputerID: computerID, TrajectoryID: sum.TrajectoryID,
+			CurrentRevisionID: sum.RevisionID, CurrentVersionNumber: sum.Version,
+			UpdatedAt: sum.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	writeAPIJSON(w, http.StatusOK, resp)
 }

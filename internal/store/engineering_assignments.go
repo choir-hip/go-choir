@@ -1271,9 +1271,12 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	inboxObjects, inboxConditions, inboxEdges, inboxReceipt, err := s.planInboxCommand(ctx, records, now)
+	inboxObjects, inboxConditions, inboxOpenings, inboxReceipt, err := s.planInboxCommand(ctx, records, now)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	if len(inboxOpenings) > 0 {
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("co-super assignment: a story opens by its own command, not inside an assignment: %w", ErrEngineeringAssignmentInvalid)
 	}
 	openedOne := false
 	for _, row := range inboxReceipt.Records {
@@ -1310,7 +1313,7 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	edges := append([]objectgraph.Edge(nil), inboxEdges...)
+	var edges []objectgraph.Edge
 	for _, target := range []struct {
 		obj  objectgraph.Object
 		kind objectgraph.EdgeKind

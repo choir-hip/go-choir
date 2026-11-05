@@ -305,7 +305,7 @@ var system = []Desk{
 		OwnedKinds: []string{
 			"choir.texture_document", "choir.texture_revision", "choir.texture_decision", "choir.texture_root",
 			"choir.source_entity", "choir.source_ref", "choir.citation_check", "choir.support_verdict",
-			"choir.story_library_head",
+			"choir.story_library_head", "choir.story_index",
 		},
 		ModelRole: Texture, Restart: RestartContract,
 		Profile: true, Prompt: true, Identity: IdentitySubject,

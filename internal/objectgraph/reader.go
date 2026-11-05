@@ -164,6 +164,14 @@ var supplementalReaders = map[Writer][]Writer{
 	WriterEngineering: {WriterManagement},
 }
 
+// supplementalKindReaders are readers admitted to one kind of another
+// custodian: a projection the custodian publishes for them (MA3.7a). Unlike
+// supplementalReaders it never admits a reader to the custodian's other
+// kinds, so the crossing into Texture's documents stays visible.
+var supplementalKindReaders = map[ObjectKind][]Writer{
+	"choir.story_index": {WriterManagement},
+}
+
 // readerAdmits reports whether a read declared as (declared, ok) may read a
 // kind registered as reg.
 func readerAdmits(reg KindRegistration, declared Writer, ok bool) bool {
@@ -183,6 +191,11 @@ func readerAdmits(reg KindRegistration, declared Writer, ok bool) bool {
 		return true
 	}
 	for _, r := range supplementalReaders[reg.Writer] {
+		if r == declared {
+			return true
+		}
+	}
+	for _, r := range supplementalKindReaders[reg.Kind] {
 		if r == declared {
 			return true
 		}

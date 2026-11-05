@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -216,14 +217,49 @@ func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 			}
 		}
 	}
+	// MA3.7a (X7): a desk reads the list; the rest of /api/texture/ is
+	// Texture's content and comes through a Cast.
+	if err := validateProductAPIRoute(http.MethodGet, "/api/texture/documents?limit=20"); err != nil {
+		t.Errorf("GET the list refused: %v", err)
+	}
 	for _, path := range []string{
-		"/api/texture/documents",
 		"/api/texture/documents/doc-1/revisions",
 		"/api/texture/documents/doc-1/history",
 		"/api/texture/documents/doc-1",
+		"/api/texture/revisions/rev-1",
 	} {
-		if err := validateProductAPIRoute(http.MethodGet, path); err != nil {
-			t.Errorf("GET %s refused: %v", path, err)
+		if err := validateProductAPIRoute(http.MethodGet, path); err == nil || !strings.Contains(err.Error(), "Cast to the Texture desk") {
+			t.Errorf("GET %s: error = %v, want a refusal toward a Cast", path, err)
 		}
+	}
+}
+
+// 6.2-8 (MA3.7a): a write under /api/autopaper/ is allowed only for a kind the
+// calling desk is custodian of. Source schedules are management's; any other
+// write route names no such kind.
+func TestProductAPIAutopaperWritesAreLimitedToTheCallersKinds(t *testing.T) {
+	t.Parallel()
+	if err := validateProductAPIRoute(http.MethodPost, "/api/autopaper/sources/schedules"); err != nil {
+		t.Errorf("management's source-schedule write refused: %v", err)
+	}
+	if err := validateProductAPIRoute(http.MethodDelete, "/api/autopaper/sources/schedules?source_id=x"); err != nil {
+		t.Errorf("management's source-schedule stop refused: %v", err)
+	}
+	for _, path := range []string{"/api/autopaper/events", "/api/autopaper/some-route-added-later", "/api/autopaper/"} {
+		if err := validateProductAPIRoute(http.MethodPost, path); err == nil || !strings.Contains(err.Error(), "not custodian") {
+			t.Errorf("POST %s: error = %v, want a custodian refusal", path, err)
+		}
+	}
+	if err := validateProductAPIRoute(http.MethodGet, "/api/autopaper/events"); err != nil {
+		t.Errorf("GET events refused: %v", err)
+	}
+	// A call that names another desk as its caller is refused the schedule write.
+	ctx := withDeskReader(context.Background(), agentprofile.Research)
+	if err := validateProductAPIRouteFor(ctx, http.MethodPost, "/api/autopaper/sources/schedules"); err == nil {
+		t.Error("research's source-schedule write was allowed; management is the custodian")
+	}
+	ctx = withDeskReader(context.Background(), agentprofile.Management)
+	if err := validateProductAPIRouteFor(ctx, http.MethodPost, "/api/autopaper/sources/schedules"); err != nil {
+		t.Errorf("management's declared write refused: %v", err)
 	}
 }

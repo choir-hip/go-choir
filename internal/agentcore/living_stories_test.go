@@ -204,12 +204,12 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 		t.Fatalf("the Cast's receipt does not name the story it opened: %s", out)
 	}
 	story := m[1]
-	// X19 through the reducer: the writer is the run record's desk, not a
-	// hand-supplied one, so the opening counts as management writing Texture's
-	// kinds (MA3.2; MA3.7 turns this into a refusal).
-	for _, kind := range []string{"choir.texture_document", "choir.texture_revision", "choir.story_library_head"} {
-		if key := kind + "|" + string(objectgraph.WriterManagement) + "|wrong_writer"; objectgraph.WriterGateCounts()[key] == 0 {
-			t.Errorf("counter %q = 0 after a management Cast opened a story: %v", key, objectgraph.WriterGateCounts())
+	// X19 through the reducer (MA3.7a): the writer is the run record's desk,
+	// and the opening crosses no custodian. Management's batch holds its own
+	// rows; Texture's handler wrote the story as the custodian.
+	for key, n := range objectgraph.WriterGateCounts() {
+		if n > 0 && strings.HasSuffix(key, "|wrong_writer") {
+			t.Errorf("counter %q = %d after a management Cast opened a story; the opening must cross no custodian", key, n)
 		}
 	}
 	docID := strings.TrimPrefix(story, "texture:")

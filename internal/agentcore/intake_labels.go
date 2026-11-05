@@ -77,11 +77,9 @@ func (lib *intakeLibrary) summaryOf(ctx context.Context, doc types.Document) sto
 	if ok {
 		return cached
 	}
-	sum := lib.rt.store.StorySummaryOf(ctx, doc)
-	lib.mu.Lock()
-	lib.summary[doc.DocID] = sum
-	lib.mu.Unlock()
-	return sum
+	// Every candidate comes from the story index (X9), so a miss is a story
+	// the index no longer lists: the document's own fields stand in.
+	return store.StorySummary{DocID: doc.DocID, TrajectoryID: doc.TrajectoryID, Headline: doc.Title, UpdatedAt: doc.UpdatedAt, RevisionID: doc.CurrentRevisionID}
 }
 
 // intakeShortlistSplit splits stories (any order) into the newest within
@@ -180,9 +178,19 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 	budget, cancel := context.WithTimeout(ctx, intakeLabelPollBudget)
 	defer cancel()
 	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
-	if docs, err := rt.store.ListStoryDocuments(budget, ownerID, computerID, time.Time{}, "", 0); err != nil {
+	// The labeler is management's: it reads the story index Texture
+	// publishes, never Texture's documents or revisions (X9).
+	budget = withKindReader(budget, "choir.capture_label")
+	if err := rt.store.PublishStoryIndex(budget, ownerID, computerID); err != nil {
+		log.Printf("intake labels: %s: publish story index: %v; labelling against siblings only", sourceID, err)
+	} else if sums, err := rt.store.ListStoryIndex(budget, ownerID, computerID, time.Time{}, "", 0); err != nil {
 		log.Printf("intake labels: %s: list stories: %v; labelling against siblings only", sourceID, err)
 	} else {
+		docs := make([]types.Document, 0, len(sums))
+		for _, sum := range sums {
+			lib.summary[sum.DocID] = sum
+			docs = append(docs, types.Document{DocID: sum.DocID, TrajectoryID: sum.TrajectoryID, Title: sum.Headline, UpdatedAt: sum.UpdatedAt, CurrentRevisionID: sum.RevisionID})
+		}
 		lib.recent, lib.rest = intakeShortlistSplit(docs, time.Now().UTC())
 	}
 	if examples, err := rt.store.RecentCaptureLabelOverrides(budget, ownerID, computerID, intakeOverrideExamples); err != nil {

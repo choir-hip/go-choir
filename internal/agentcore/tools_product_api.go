@@ -10,6 +10,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 // SMG: the management desk's product API call is an in-cell verb
@@ -59,7 +62,7 @@ func (rt *Runtime) productAPIRequest(ctx context.Context, ownerID, ownerEmail, m
 	if err != nil {
 		return "", err
 	}
-	if err := validateProductAPIRoute(method, norm); err != nil {
+	if err := validateProductAPIRouteFor(ctx, method, norm); err != nil {
 		return "", err
 	}
 	var rdr io.Reader
@@ -169,6 +172,36 @@ func normalizeProductAPIPath(raw string) (string, error) {
 }
 
 func validateProductAPIRoute(method, requestURI string) error {
+	return validateProductAPIRouteFor(context.Background(), method, requestURI)
+}
+
+// productAPIWriteKinds names, for each ProductAPI route a desk may write, the
+// object kind the write lands in. A route absent here has no kind, hence no
+// custodian that could be the caller, and is refused for a write (6.2-8).
+var productAPIWriteKinds = map[string]objectgraph.ObjectKind{
+	// Management is the custodian of source schedules (plan section 8.2).
+	"/api/autopaper/sources/schedules": "choir.source_schedule",
+}
+
+// productAPICallers are the writers a ProductAPI call may be: the declared
+// reader of the call's context, else the desks whose manifest holds the
+// ProductAPI verb.
+func productAPICallers(ctx context.Context) []objectgraph.Writer {
+	if w, ok := objectgraph.ReaderFrom(ctx); ok {
+		return []objectgraph.Writer{w}
+	}
+	var out []objectgraph.Writer
+	for _, name := range deskmanifest.Names() {
+		if d, ok := deskmanifest.Lookup(name); ok && d.HasVerb("ProductAPI") {
+			if w, ok := objectgraph.DeskWriter(name); ok {
+				out = append(out, w)
+			}
+		}
+	}
+	return out
+}
+
+func validateProductAPIRouteFor(ctx context.Context, method, requestURI string) error {
 	switch method {
 	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete:
 	default:
@@ -206,6 +239,31 @@ func validateProductAPIRoute(method, requestURI string) error {
 	if method != http.MethodGet && (path == "/api/texture" || strings.HasPrefix(path, "/api/texture/")) {
 		return fmt.Errorf("product_api refuses %s %s: only the Texture desk writes a Texture; read it with GET, or address the Texture desk", method, path)
 	}
+	// A desk lists the stories and reads their summaries; a story's content is
+	// Texture's, so it comes through a request to Texture (a Cast), never a
+	// document or revision route (MA3.7a, X7). The list route answers a desk
+	// from the story index Texture publishes.
+	if path == "/api/texture" || strings.HasPrefix(path, "/api/texture/") {
+		if path != "/api/texture/documents" {
+			return fmt.Errorf("product_api refuses GET %s: a desk reads the story list (GET /api/texture/documents) and summaries; a story's content comes through a Cast to the Texture desk", path)
+		}
+		return nil
+	}
+	// A desk writes only the kinds it is custodian of: the Autopaper routes
+	// that write (source schedules) are management's, and any other write
+	// under /api/autopaper/ names no kind the caller is custodian of (6.2-8).
+	if method != http.MethodGet && (path == "/api/autopaper" || strings.HasPrefix(path, "/api/autopaper/")) {
+		kind, known := productAPIWriteKinds[strings.TrimSuffix(path, "/")]
+		custodian, held := objectgraph.CustodianOf(kind)
+		allowed := false
+		for _, caller := range productAPICallers(ctx) {
+			allowed = allowed || (known && held && caller == custodian)
+		}
+		if !allowed {
+			return fmt.Errorf("product_api refuses %s %s: the route writes a kind the calling desk is not custodian of", method, path)
+		}
+		return nil
+	}
 	// Management scores a candidate's screens with one bounded model call that
 	// may carry an image ref (problems/models-configured-text-only-
 	// 2026-10-15.md, desk seam). Only the verify route: policy reads and
@@ -218,7 +276,6 @@ func validateProductAPIRoute(method, requestURI string) error {
 	}
 	for _, allowed := range []string{
 		"/api/prompt-bar",
-		"/api/texture/",
 		"/api/computers/",
 		"/api/run-acceptances",
 		"/api/run-acceptances/",

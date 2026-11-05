@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -70,13 +71,21 @@ func storyTitleAfterRevision(trajectory types.TrajectoryRecord, title string, re
 	return storyTitle(headline)
 }
 
+// storyOpening is one story a management Cast asks Texture to open: the ids
+// the opening command derives, and the Cast delivered to the new texture.
+type storyOpening struct {
+	ownerID, computerID         string
+	docID, trajectoryID, seedID string
+	cast                        types.CommitmentRecord
+}
+
 // planStoryOpenings rewrites every Cast to StoryOpenInbox to its new
-// story's inbox and returns the objects, conditions and edges that create
-// the stories, for the caller's batch. opened names the opening records.
-func (s *Store) planStoryOpenings(ctx context.Context, ownerID, computerID, commandID string, records []types.CommitmentRecord, now time.Time) ([]types.CommitmentRecord, []objectgraph.Object, []objectgraph.ObjectCondition, []objectgraph.Edge, map[string]bool, error) {
-	var objects []objectgraph.Object
-	var conditions []objectgraph.ObjectCondition
-	var edges []objectgraph.Edge
+// story's inbox and returns the openings it asks of Texture. opened names the
+// opening records. It writes nothing: the request is the Cast, committed with
+// management's own rows (MA3.7a, X19); Texture's handler (openStories) opens
+// the story as the custodian.
+func (s *Store) planStoryOpenings(ownerID, computerID, commandID string, records []types.CommitmentRecord) ([]types.CommitmentRecord, []storyOpening, map[string]bool, error) {
+	var openings []storyOpening
 	opened := map[string]bool{}
 	out := records
 	copied := false
@@ -86,28 +95,114 @@ func (s *Store) planStoryOpenings(ctx context.Context, ownerID, computerID, comm
 		}
 		management := agentprofile.Management + ":" + ownerID
 		if !rec.IsCast() || strings.TrimSpace(rec.SenderInbox) != management {
-			return nil, nil, nil, nil, nil, inboxRefused("record %s: only a Cast from %s opens a story at %s", rec.RecordID, management, types.StoryOpenInbox)
+			return nil, nil, nil, inboxRefused("record %s: only a Cast from %s opens a story at %s", rec.RecordID, management, types.StoryOpenInbox)
 		}
 		if strings.TrimSpace(rec.RecordID) == "" {
-			return nil, nil, nil, nil, nil, inboxRefused("an opening Cast needs a record id")
+			return nil, nil, nil, inboxRefused("an opening Cast needs a record id")
 		}
 		docID, trajectoryID, seedID := storyOpeningIDs(ownerID, computerID, commandID, strings.TrimSpace(rec.RecordID))
 		textureInbox := agentprofile.Texture + ":" + docID
-		objs, conds, edge, err := planStoryObjects(ownerID, computerID, docID, trajectoryID, seedID, rec, now)
-		if err != nil {
-			return nil, nil, nil, nil, nil, err
-		}
-		objects, conditions, edges = append(objects, objs...), append(conditions, conds...), append(edges, edge)
 		if !copied {
 			out = append([]types.CommitmentRecord(nil), records...)
 			copied = true
 		}
 		rec.Inbox, rec.Addressee = textureInbox, textureInbox
 		out[i] = rec
+		openings = append(openings, storyOpening{ownerID: ownerID, computerID: computerID, docID: docID, trajectoryID: trajectoryID, seedID: seedID, cast: rec})
 		opened[strings.TrimSpace(rec.RecordID)] = true
 	}
-	_ = ctx
-	return out, objects, conditions, edges, opened, nil
+	return out, openings, opened, nil
+}
+
+// openStories is Texture's host-side handler for the opening requests: it
+// declares the Texture custodian (objectgraph.CustodianOf), creates each
+// story that does not exist yet (its trajectory, document, seed revision and
+// desk), writes its story-index row, and advances the story-library head with
+// its mirror. It takes no model turn. Ids are derived from the command, so a
+// retry or a repair after a crash between the request and this commit finds
+// the story and skips it. The caller holds trajectoryMu. It returns the
+// objects written, for the wake signal.
+func (s *Store) openStories(ctx context.Context, openings []storyOpening, now time.Time) ([]objectgraph.Object, error) {
+	if len(openings) == 0 {
+		return nil, nil
+	}
+	ctx = textureCustodianCtx(ctx)
+	ownerID, computerID := openings[0].ownerID, openings[0].computerID
+	var objects []objectgraph.Object
+	var conditions []objectgraph.ObjectCondition
+	var edges []objectgraph.Edge
+	var fresh []storyOpening
+	for _, o := range openings {
+		if _, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, o.docID); err == nil {
+			continue
+		} else if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		objs, conds, edge, err := planStoryObjects(ownerID, computerID, o.docID, o.trajectoryID, o.seedID, o.cast, now)
+		if err != nil {
+			return nil, err
+		}
+		objects, conditions, edges = append(objects, objs...), append(conditions, conds...), append(edges, edge)
+		fresh = append(fresh, o)
+	}
+	if len(fresh) == 0 {
+		return nil, nil
+	}
+	head, err := loadInboxCached[types.StoryLibraryHead](ctx, s, ogKindStoryLibraryHead, ownerID, computerID, storyLibraryKey)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range fresh {
+		head.value.Head++
+		entry := types.StoryOpenEntry{Seq: head.value.Head, Inbox: o.cast.Inbox}
+		if o.cast.Directive != nil {
+			entry.Headline = o.cast.Directive.Objective
+		}
+		if o.cast.Cast != nil {
+			entry.Captures = append([]string(nil), o.cast.Cast.Captures...)
+		}
+		head.value.Recent = append(head.value.Recent, entry)
+	}
+	if n := len(head.value.Recent); n > storyLibraryRecent {
+		head.value.Recent = append([]types.StoryOpenEntry(nil), head.value.Recent[n-storyLibraryRecent:]...)
+	}
+	headObj, headCond, err := head.write(ogKindStoryLibraryHead, ownerID, computerID, map[string]any{"head": head.value.Head}, now)
+	if err != nil {
+		return nil, err
+	}
+	objects, conditions = append(objects, headObj), append(conditions, headCond)
+	// The story's row and the library mirror, in the same batch.
+	for _, o := range fresh {
+		objective := ""
+		if o.cast.Directive != nil {
+			objective = o.cast.Directive.Objective
+		}
+		row, cond, err := storyIndexObject(ownerID, computerID, storyIndexRowKey(o.docID), types.StoryIndexEntry{
+			DocID: o.docID, TrajectoryID: o.trajectoryID, RevisionID: o.seedID, Headline: storyTitle(objective), Version: 1, UpdatedAt: now,
+		}, nil, now)
+		if err != nil {
+			return nil, err
+		}
+		objects, conditions = append(objects, row), append(conditions, cond)
+	}
+	mirror, err := loadInboxCached[types.StoryIndexEntry](ctx, s, ogKindStoryIndex, ownerID, computerID, types.StoryIndexLibraryKey)
+	if err != nil {
+		return nil, err
+	}
+	library := head.value
+	mirror.value = types.StoryIndexEntry{Library: &library}
+	mirrorObj, mirrorCond, err := mirror.write(ogKindStoryIndex, ownerID, computerID, map[string]any{}, now)
+	if err != nil {
+		return nil, err
+	}
+	objects, conditions = append(objects, mirrorObj), append(conditions, mirrorCond)
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return nil, ErrConcurrentStateChange
+		}
+		return nil, err
+	}
+	return objects, nil
 }
 
 // planStoryObjects builds one story's trajectory, document, seed revision,

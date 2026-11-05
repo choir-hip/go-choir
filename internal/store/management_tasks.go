@@ -611,30 +611,25 @@ func (p *taskPlan) objects(records []types.CommitmentRecord) ([]objectgraph.Obje
 	return objects, conditions, nil
 }
 
-// planStoryLibrary advances the story-library head for each story this
-// command opens, and refuses the opens when the committing run's last read
-// of the library (seen) is behind the head (R2-5). When seen was checked,
-// it returns the head after the opens: the run has seen every open up to
-// it, its own included, so its next open is not refused by its own (S2b,
-// FM28). Otherwise it returns 0.
-func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string, seen *int64, records []types.CommitmentRecord, opened map[string]bool, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, int64, error) {
-	var opens []types.CommitmentRecord
-	for _, rec := range records {
-		if opened[strings.TrimSpace(rec.RecordID)] {
-			opens = append(opens, rec)
-		}
+// checkStoryLibrary refuses the opens in records when the committing run's
+// last read of the library (seen) is behind the head (R2-5), reading the head
+// from the story-index projection Texture publishes (MA3.7a): management
+// never reads Texture's head. When seen was checked, it returns the head after
+// the opens: the run has seen every open up to it, its own included, so its
+// next open is not refused by its own (S2b, FM28). Otherwise it returns 0.
+// Texture's handler advances the head itself (openStories).
+func (s *Store) checkStoryLibrary(ctx context.Context, ownerID, computerID string, seen *int64, openings []storyOpening) (int64, error) {
+	if len(openings) == 0 {
+		return 0, nil
 	}
-	if len(opens) == 0 {
-		return nil, nil, 0, nil
-	}
-	head, err := loadInboxCached[types.StoryLibraryHead](ctx, s, ogKindStoryLibraryHead, ownerID, computerID, storyLibraryKey)
+	head, err := s.storyLibraryMirror(ctx, ownerID, computerID)
 	if err != nil {
-		return nil, nil, 0, err
+		return 0, err
 	}
-	if seen != nil && *seen < head.value.Head {
+	if seen != nil && *seen < head.Head {
 		var since []string
-		for i := len(head.value.Recent) - 1; i >= 0 && len(since) < storyLibraryRefusalList; i-- {
-			e := head.value.Recent[i]
+		for i := len(head.Recent) - 1; i >= 0 && len(since) < storyLibraryRefusalList; i-- {
+			e := head.Recent[i]
 			if e.Seq <= *seen {
 				break
 			}
@@ -645,36 +640,17 @@ func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string
 			since = append(since, line)
 		}
 		more := ""
-		if missed := head.value.Head - *seen; missed > int64(len(since)) {
+		if missed := head.Head - *seen; missed > int64(len(since)) {
 			more = fmt.Sprintf(" and %d more; read choir.Stories() for them", missed-int64(len(since)))
 		}
-		return nil, nil, 0, fmt.Errorf("%w: %w", ErrStoryLibraryMoved, inboxRefused(
+		return 0, fmt.Errorf("%w: %w", ErrStoryLibraryMoved, inboxRefused(
 			"the story library moved since this run last read choir.Stories() (head %d, now %d); stories opened since, newest first: %s%s. Feed the story that covers this event, or, if none does, cast texture:new again",
-			*seen, head.value.Head, strings.Join(since, "; "), more))
+			*seen, head.Head, strings.Join(since, "; "), more))
 	}
-	for _, rec := range opens {
-		head.value.Head++
-		entry := types.StoryOpenEntry{Seq: head.value.Head, Inbox: rec.Inbox}
-		if rec.Directive != nil {
-			entry.Headline = rec.Directive.Objective
-		}
-		if rec.Cast != nil {
-			entry.Captures = append([]string(nil), rec.Cast.Captures...)
-		}
-		head.value.Recent = append(head.value.Recent, entry)
+	if seen == nil {
+		return 0, nil
 	}
-	if n := len(head.value.Recent); n > storyLibraryRecent {
-		head.value.Recent = append([]types.StoryOpenEntry(nil), head.value.Recent[n-storyLibraryRecent:]...)
-	}
-	obj, condition, err := head.write(ogKindStoryLibraryHead, ownerID, computerID, map[string]any{"head": head.value.Head}, now)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	seenAfter := int64(0)
-	if seen != nil {
-		seenAfter = head.value.Head
-	}
-	return []objectgraph.Object{obj}, []objectgraph.ObjectCondition{condition}, seenAfter, nil
+	return head.Head + int64(len(openings)), nil
 }
 
 // ErrStoryLibraryMoved marks a texture:new refused by the library head
@@ -684,11 +660,11 @@ var ErrStoryLibraryMoved = errors.New("story library moved")
 // StoryLibraryHeadOf returns the computer's story-library head (0 before
 // the first open).
 func (s *Store) StoryLibraryHeadOf(ctx context.Context, ownerID, computerID string) (int64, error) {
-	head, err := loadInboxCached[types.StoryLibraryHead](ctx, s, ogKindStoryLibraryHead, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), storyLibraryKey)
+	head, err := s.storyLibraryMirror(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID))
 	if err != nil {
 		return 0, err
 	}
-	return head.value.Head, nil
+	return head.Head, nil
 }
 
 // GetManagementTask returns one task row.

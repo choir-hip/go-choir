@@ -105,26 +105,31 @@ func (rt *Runtime) storiesEgress(ctx context.Context, exec toolregistry.Executio
 		}
 		beforeDoc = doc
 	}
+	// Management reads the story index Texture publishes, never Texture's
+	// documents or revisions (X8): the custodian reconciles it first.
+	if err := rt.store.PublishStoryIndex(ctx, owner, computer); err != nil {
+		return nil, fmt.Errorf("publish the story index: %w", err)
+	}
 	if before.IsZero() {
 		// The newest page: the run has now seen the library's head, which
 		// its texture:new commits carry (management delegation R2-5).
 		rt.noteStoryLibraryShown(ctx, exec.RunID, owner, computer)
 	}
-	docs, err := rt.store.ListStoryDocuments(ctx, owner, computer, before, beforeDoc, limit+1)
+	sums, err := rt.store.ListStoryIndex(ctx, owner, computer, before, beforeDoc, limit+1)
 	if err != nil {
 		return nil, err
 	}
 	page := yaegikernel.StoriesPage{Stories: []yaegikernel.StoryEntry{}}
-	more := len(docs) > limit
+	more := len(sums) > limit
 	if more {
-		docs = docs[:limit]
+		sums = sums[:limit]
 	}
-	for _, sum := range rt.store.StorySummariesOf(ctx, docs) {
+	for _, sum := range sums {
 		page.Stories = append(page.Stories, yaegikernel.StoryEntry{DocID: sum.DocID, Inbox: agentprofile.Texture + ":" + sum.DocID,
 			Headline: sum.Headline, Lede: sum.Lede, UpdatedAt: sum.UpdatedAt.UTC().Format(time.RFC3339Nano), Version: sum.Version})
 	}
-	if more && len(docs) > 0 {
-		last := docs[len(docs)-1]
+	if more && len(sums) > 0 {
+		last := sums[len(sums)-1]
 		page.Next = last.UpdatedAt.UTC().Format(time.RFC3339Nano) + "|" + last.DocID
 	}
 	if before.IsZero() {

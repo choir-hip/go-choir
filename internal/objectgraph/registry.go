@@ -168,6 +168,8 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.migration_marker", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.actorWakeOutboxMigrationMarker"},
 		{Kind: "choir.scheduler_sequence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.arrivalSequence"},
 		{Kind: "choir.story_library_head", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.StoryLibraryHead"},
+		// The story-index projection (MA3.7a): Texture publishes it; management reads it.
+		{Kind: "choir.story_index", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.StoryIndexEntry"},
 		{Kind: "choir.support_verdict", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.SupportVerdict"},
 		// Engineering records keep their frozen V1 kind spelling
 		// (vocabmigrate frozenOGObjectKinds).

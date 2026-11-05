@@ -4,13 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // The cross reads of the custody section (plan section 8.4) that live in
@@ -23,35 +28,94 @@ func readerDelta(key string) func() uint64 {
 	return func() uint64 { return objectgraph.ReaderGateCounts()[key] - before }
 }
 
-// X7: management's ProductAPI GET /api/texture/ reaches the Texture routes on
-// the run's context, so the route's store reads declare management.
-func TestProductAPITextureReadByManagementCountsAsACrossing(t *testing.T) {
-	rt, _ := testRuntime(t)
+// X7 (MA3.7a): management's ProductAPI reaches the Texture list route and
+// nothing else under /api/texture/. The list answers a desk from the story
+// index Texture publishes, so the route's reads are no crossing into
+// Texture's documents; a document, revision or history route is refused (a
+// story's content comes through a Cast to Texture).
+func TestProductAPITextureListByManagementCrossesNothing(t *testing.T) {
+	rt, st := testRuntime(t)
+	owner, computer := "owner-x7", rt.cfg.ComputerID
+	openTestStory(t, st, owner, computer, "Harbor reopens")
 	canonical := server.NewServer("x7-reader-test", "0")
 	canonical.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
-		// The route's own store read, on the request context.
-		_, _ = rt.store.SearchDocuments(r.Context(), "anything", "owner-x7", 1)
+		// A handler that read Texture's documents on the request context
+		// would be the crossing; this one lists from the index.
+		if _, err := st.ListStoryIndex(r.Context(), owner, computer, time.Time{}, "", 0); err != nil {
+			t.Error(err)
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 	rt.SetProductAPIHandler(canonical, "")
-	key := "choir.texture_document|" + string(objectgraph.WriterManagement) + "|wrong_reader"
-	moved := readerDelta(key)
-
-	run := func(ctx context.Context) {
-		t.Helper()
-		if _, err := rt.productAPIRequest(ctx, "owner-x7", "", "GET", "/api/texture/documents", nil); err != nil {
-			t.Fatal(err)
+	objectgraph.ResetReaderGateCounts()
+	ctx := withDeskReader(context.Background(), agentprofile.Management)
+	if _, err := rt.productAPIRequest(ctx, owner, "", "GET", "/api/texture/documents", nil); err != nil {
+		t.Fatal(err)
+	}
+	for key, n := range objectgraph.ReaderGateCounts() {
+		if n > 0 && strings.Contains(key, "|"+string(objectgraph.WriterManagement)+"|") {
+			t.Errorf("management's list counted %q = %d", key, n)
 		}
 	}
-	run(withDeskReader(context.Background(), agentprofile.Texture))
-	run(objectgraph.WithReader(context.Background(), objectgraph.WriterOwner))
-	if n := moved(); n != 0 {
-		t.Fatalf("texture's and the owner's reads were counted as management's: %d", n)
+	for _, path := range []string{
+		"/api/texture/documents/doc-1", "/api/texture/documents/doc-1/revisions", "/api/texture/documents/doc-1/history",
+		"/api/texture/revisions/rev-1", "/api/texture/documents/doc-1/export",
+	} {
+		if _, err := rt.productAPIRequest(ctx, owner, "", "GET", path, nil); err == nil || !strings.Contains(err.Error(), "Cast to the Texture desk") {
+			t.Errorf("GET %s: err = %v; want refused toward a Cast to Texture", path, err)
+		}
 	}
-	run(withDeskReader(context.Background(), agentprofile.Management))
-	if moved() == 0 {
-		t.Fatalf("counter %q did not move (counts: %v)", key, objectgraph.ReaderGateCounts())
+}
+
+// X8 (MA3.7a): management's choir.Stories reads the story index, and the
+// reads count nothing against Texture's documents, revisions or library head.
+func TestStoriesByManagementReadsTheIndexNotTextureKinds(t *testing.T) {
+	ctx := withDeskReader(context.Background(), agentprofile.Management)
+	rt, st := testRuntime(t)
+	owner, computer := "owner-x8", rt.cfg.ComputerID
+	storeIntakeLabelsOn(t, st, owner, computer)
+	openTestStory(t, st, owner, computer, "Harbor reopens after the storm")
+	objectgraph.ResetReaderGateCounts()
+	exec := toolregistry.ExecutionContext{OwnerID: owner, ComputerID: computer, RunID: "run-x8", Role: agentprofile.Management, Profile: agentprofile.Management}
+	raw, err := rt.storiesEgress(ctx, exec, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var page yaegikernel.StoriesPage
+	if err := json.Unmarshal(raw, &page); err != nil || len(page.Stories) != 1 || page.Stories[0].Headline != "Harbor reopens after the storm" {
+		t.Fatalf("stories = %s, %v", raw, err)
+	}
+	requireNoManagementTextureRead(t)
+}
+
+func requireNoManagementTextureRead(t *testing.T) {
+	t.Helper()
+	for _, kind := range []string{"choir.texture_document", "choir.texture_revision", "choir.story_library_head"} {
+		key := kind + "|" + string(objectgraph.WriterManagement) + "|wrong_reader"
+		if n := objectgraph.ReaderGateCounts()[key]; n != 0 {
+			t.Errorf("counter %q = %d; management must read the story index, not %s", key, n, kind)
+		}
+	}
+}
+
+// X9 (MA3.7a): the intake labeler's candidates come from the story index.
+func TestIntakeLabelerReadsTheStoryIndexNotTextureKinds(t *testing.T) {
+	ctx := context.Background()
+	rt, st := testRuntime(t)
+	owner, computer, sourceID := "owner-x9", rt.cfg.ComputerID, "rss:x9"
+	storeIntakeLabelsOn(t, st, owner, computer)
+	pope := openTestStory(t, st, owner, computer, "Pope has lung surgery")
+	captured := []sourcegraph.CapturedItem{{CaptureID: "choir.web_capture:x9-1", Title: "Papst operiert", URL: "https://x9.example/1", Language: "de", Summary: "Vatikan", Outlet: "DW"}}
+	rt.SetCandidateJudge(&fakeIntakeJudge{answers: map[string]string{"Papst operiert": "Pope has lung surgery"}})
+	objectgraph.ResetReaderGateCounts()
+	if labelled, _ := rt.labelCaptures(ctx, owner, computer, sourceID, captured); labelled != 1 {
+		t.Fatalf("labelled %d", labelled)
+	}
+	labels, err := st.CaptureLabels(ctx, owner, computer, "choir.web_capture:x9-1")
+	if err != nil || len(labels) != 1 || labels[0].EventDocID != pope {
+		t.Fatalf("labels = %+v, %v; want the story from the index", labels, err)
+	}
+	requireNoManagementTextureRead(t)
 }
 
 // X18: research's get_run_memory_entry reads any run's entry by id. The
@@ -139,5 +203,12 @@ func TestReadCaptureResolvesLabelsFromTheCaptureRecord(t *testing.T) {
 	// A label naming a kind no desk is custodian of serves no desk.
 	if captureServedTo(objectgraph.WriterTexture, true, types.NewLabelSet("owner_private:nonesuch")) {
 		t.Error("a label with no custodian was served to a desk")
+	}
+}
+
+func storeIntakeLabelsOn(t *testing.T, s *store.Store, owner, computer string) {
+	t.Helper()
+	if err := s.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: true}); err != nil {
+		t.Fatal(err)
 	}
 }

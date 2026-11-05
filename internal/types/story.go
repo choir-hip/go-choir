@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Living stories (Cut 2 unit 2b,
@@ -213,3 +214,26 @@ type StoryVerdict struct {
 	Why     string `json:"why,omitempty"`
 	Judge   string `json:"judge"`
 }
+
+// StoryIndexEntry is one row of the story-index projection (MA3.7a, X8/X9):
+// the fields management reads of a story, published by the Texture desk (its
+// custodian) so management never reads Texture's documents or revisions.
+// A story row carries the story's headline, lede and ids; the single library
+// row (key StoryIndexLibraryKey) mirrors the story-library head, which
+// management's stale-library check and its post-open bookkeeping read.
+type StoryIndexEntry struct {
+	DocID        string    `json:"doc_id,omitempty"`
+	TrajectoryID string    `json:"trajectory_id,omitempty"`
+	RevisionID   string    `json:"revision_id,omitempty"`
+	Headline     string    `json:"headline,omitempty"`
+	Lede         string    `json:"lede,omitempty"`
+	Version      int       `json:"version,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	// Archived marks a story the library no longer lists.
+	Archived bool `json:"archived,omitempty"`
+	// Library is set on the library row only.
+	Library *StoryLibraryHead `json:"library,omitempty"`
+}
+
+// StoryIndexLibraryKey is the key of the library row.
+const StoryIndexLibraryKey = "library"

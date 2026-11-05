@@ -713,16 +713,37 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 }
 
 // commitInboxRecordsLocked is CommitInboxRecords with trajectoryMu held.
+//
+// A command that opens stories commits in two steps (MA3.7a, X19), each by
+// its custodian. Management's step writes only management's rows and the
+// commons: its Cast, now addressed to the story's own inbox, its tasks and
+// dispositions, and the command receipt. Texture's step (openStories) creates
+// the stories as the Texture custodian. A failure between the steps, or a
+// retry after one, finds the receipt and runs the second step again
+// (repairStoryOpens), so a Cast is never left without its story.
 func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitInboxRecordsRequest) (types.InboxCommitReceipt, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
 	if replay, found, err := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || err != nil {
+		if err == nil {
+			err = s.repairStoryOpens(ctx, req, replay)
+		}
 		return replay, err
 	}
-	objects, conditions, storyEdges, receipt, err := s.planInboxCommand(ctx, req, time.Now().UTC())
+	// The library row Texture publishes must exist before management's stale
+	// check reads it (a tape from before the projection has the head only).
+	for _, rec := range req.Records {
+		if strings.TrimSpace(rec.Inbox) == types.StoryOpenInbox {
+			if err := s.reconcileStoryIndex(textureCustodianCtx(ctx), ownerID, computerID, false); err != nil {
+				return types.InboxCommitReceipt{}, err
+			}
+			break
+		}
+	}
+	objects, conditions, openings, receipt, err := s.planInboxCommand(ctx, req, time.Now().UTC())
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: storyEdges}); err != nil {
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {
 			if replay, found, replayErr := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
 				return replay, replayErr
@@ -731,18 +752,47 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 		}
 		return types.InboxCommitReceipt{}, err
 	}
-	s.signalActorWakesIfAny(objects)
+	storyObjects, err := s.openStories(ctx, openings, time.Now().UTC())
+	if err != nil {
+		return types.InboxCommitReceipt{}, fmt.Errorf("open stories for command %s (retry the command to repair): %w", req.CommandID, err)
+	}
+	s.signalActorWakesIfAny(append(objects, storyObjects...))
 	return receipt, nil
 }
 
-// planInboxCommand plans one inbox command's whole batch: support verdicts,
-// story openings, the records and cursor advance, and the inbox_command
-// object that makes the command replayable. It takes no lock; the caller
-// holds trajectoryMu and has already checked replay. CommitInboxRecords
-// commits the plan alone; OpenEngineeringAssignment composes it into the
-// assignment's transaction (C1e D4), so a cell's records, cursor, the
-// assignment row and its binding commit together.
-func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecordsRequest, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []objectgraph.Edge, types.InboxCommitReceipt, error) {
+// repairStoryOpens runs Texture's step again for a command whose receipt is
+// committed: openStories skips every story that exists.
+func (s *Store) repairStoryOpens(ctx context.Context, req types.CommitInboxRecordsRequest, receipt types.InboxCommitReceipt) error {
+	opens := false
+	for _, row := range receipt.Records {
+		opens = opens || row.OpenedStory
+	}
+	if !opens {
+		return nil
+	}
+	_, openings, _, err := s.planStoryOpenings(req.OwnerID, req.ComputerID, req.CommandID, req.Records)
+	if err != nil {
+		return err
+	}
+	storyObjects, err := s.openStories(ctx, openings, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	s.signalActorWakesIfAny(storyObjects)
+	return nil
+}
+
+// planInboxCommand plans the management side of one inbox command's batch:
+// support verdicts, the records and cursor advance, tasks, and the
+// inbox_command object that makes the command replayable. It also returns the
+// stories the command's Casts ask Texture to open; those are not in the batch
+// (commitInboxRecordsLocked hands them to openStories). It takes no lock; the
+// caller holds trajectoryMu and has already checked replay.
+// CommitInboxRecords commits the plan alone; OpenEngineeringAssignment
+// composes it into the assignment's transaction (C1e D4), so a cell's
+// records, cursor, the assignment row and its binding commit together, and
+// refuses a command that opens a story.
+func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecordsRequest, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []storyOpening, types.InboxCommitReceipt, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
 	// Support verdicts (the runtime's Jev job, as system:support) commit
 	// their memos here, and their failure records ride the same plan.
@@ -750,20 +800,21 @@ func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecor
 	if err != nil {
 		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
-	// A management Cast to texture:new opens its story in this commit (Cut 2
-	// 2b): the story's objects join the batch and the Cast is delivered to
-	// the new texture:<doc>.
-	records, storyObjects, storyConditions, storyEdges, opened, err := s.planStoryOpenings(ctx, ownerID, computerID, req.CommandID, req.Records, now)
+	// A management Cast to texture:new asks Texture to open its story (Cut 2
+	// 2b): the Cast is delivered to the new texture:<doc>, and Texture's
+	// handler creates the story after this command's batch commits.
+	records, openings, opened, err := s.planStoryOpenings(ownerID, computerID, req.CommandID, req.Records)
 	if err != nil {
 		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
 	// The story-library head (management delegation R2-5) refuses an open
 	// from a run whose last read of the library is behind it.
-	libraryObjects, libraryConditions, libraryHead, err := s.planStoryLibrary(ctx, ownerID, computerID, req.StoryLibraryHead, records, opened, now)
+	libraryHead, err := s.checkStoryLibrary(ctx, ownerID, computerID, req.StoryLibraryHead, openings)
 	if err != nil {
 		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
-	storyObjects, storyConditions = append(storyObjects, libraryObjects...), append(storyConditions, libraryConditions...)
+	var storyObjects []objectgraph.Object
+	var storyConditions []objectgraph.ObjectCondition
 	// Management tasks (S2a): task rows with their opening Casts, the
 	// task-scope precondition, the capture disposition index, and each task
 	// closure's outcome, all under this command's lock.
@@ -800,7 +851,7 @@ func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecor
 	}
 	objects = append(objects, commandObj)
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: commandObj.CanonicalID})
-	return objects, conditions, storyEdges, receipt, nil
+	return objects, conditions, openings, receipt, nil
 }
 
 func (s *Store) replayInboxCommand(ctx context.Context, ownerID, computerID, commandID, digest string) (types.InboxCommitReceipt, bool, error) {
