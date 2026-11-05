@@ -114,6 +114,9 @@ func (h *appPackageObjects) serve(w http.ResponseWriter, r *http.Request) {
 		writePackageJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
 		return
 	}
+	// The route serves the authenticated owner, so its reads declare the
+	// owner as reader unless an earlier layer already declared one.
+	r = r.WithContext(objectgraph.WithReaderIfAbsent(r.Context(), objectgraph.WriterOwner))
 	if on, status := h.enabled(r.Context(), ownerID); !on {
 		if status == http.StatusNotFound {
 			packageNotFound(w)

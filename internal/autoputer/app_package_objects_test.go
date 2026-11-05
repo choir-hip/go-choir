@@ -116,7 +116,7 @@ func decodeObject(t *testing.T, w *httptest.ResponseRecorder) choirstore.Package
 
 func (f *routeFixture) countNotes(owner string) int {
 	f.t.Helper()
-	objs, err := f.db.ListPackageObjects(context.Background(), "choir.app.p2btest.note", owner, 100)
+	objs, err := f.db.ListPackageObjects(objectgraph.WithReader(context.Background(), objectgraph.WriterOwner), "choir.app.p2btest.note", owner, 100)
 	if err != nil {
 		f.t.Fatal(err)
 	}
