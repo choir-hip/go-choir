@@ -287,7 +287,7 @@ func Run() {
 		agentcore.WithDesktopStateOwner(desktopHandler),
 		agentcore.WithContentService(contentService),
 	}
-	deskReconcile, err := deskReconcileOption(db)
+	deskReconcile, err := deskReconcileOption(db, os.Getenv("CHOIR_OWNER_ID"))
 	if err != nil {
 		boot.fatalf("autoputer: the image's required desk set is malformed: %v", err)
 	}

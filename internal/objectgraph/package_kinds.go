@@ -60,8 +60,8 @@ var (
 	packageNameGrammar = regexp.MustCompile(`^[a-z][a-z0-9-]{1,21}$`)
 	// A candidate's own name is the installed grammar plus the suffix.
 	candidateNameGrammar = regexp.MustCompile(`^[a-z][a-z0-9-]{1,21}-candidate$`)
-	packageKindGrammar = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
-	packageSchemaRef   = regexp.MustCompile(`^pkg:([a-z][a-z0-9-]{1,31})@([1-9][0-9]{0,8})$`)
+	packageKindGrammar   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
+	packageSchemaRef     = regexp.MustCompile(`^pkg:([a-z][a-z0-9-]{1,31})@([1-9][0-9]{0,8})$`)
 )
 
 // shellNames are names the shell owns; no package may take one (the static app

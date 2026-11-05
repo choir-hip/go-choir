@@ -26,7 +26,7 @@ func TestRestoreToAPreInstallHeadReinstallsTheRequiredSet(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = st.Close() })
-		set, refusals, err := appdesk.Boot(context.Background(), deskLog{st: st}, req)
+		set, refusals, err := appdesk.Boot(context.Background(), deskLog{st: st, owner: "owner-desks"}, req)
 		if err != nil || len(refusals) != 0 {
 			t.Fatalf("boot: %v %+v", err, refusals)
 		}
@@ -37,20 +37,20 @@ func TestRestoreToAPreInstallHeadReinstallsTheRequiredSet(t *testing.T) {
 	if _, ok := deskmanifest.Lookup("app:reqstore"); !ok || set.Versions["reqstore"] != "1.0.0" {
 		t.Fatal("the required package is not installed after the first boot")
 	}
-	first, _ := st.ListDeskPackageEvents(context.Background())
+	first, _ := st.ListDeskPackageEvents(context.Background(), "owner-desks")
 	if len(first) != 1 {
 		t.Fatalf("log after first boot: %d events", len(first))
 	}
 	// A second boot of the same store appends nothing.
 	_ = deskmanifest.RetireApp("app:reqstore")
 	st2, _ := boot(path)
-	if again, _ := st2.ListDeskPackageEvents(context.Background()); len(again) != 1 {
+	if again, _ := st2.ListDeskPackageEvents(context.Background(), "owner-desks"); len(again) != 1 {
 		t.Fatalf("a second boot appended: %d events", len(again))
 	}
 	// Restore to a pre-install head: a store with no log.
 	_ = deskmanifest.RetireApp("app:reqstore")
 	restored, set := boot(filepath.Join(dir, "restored.db"))
-	rows, _ := restored.ListDeskPackageEvents(context.Background())
+	rows, _ := restored.ListDeskPackageEvents(context.Background(), "owner-desks")
 	if len(rows) != 1 || set.Versions["reqstore"] != "1.0.0" {
 		t.Fatalf("restored head: %d events, versions %v", len(rows), set.Versions)
 	}
@@ -68,7 +68,7 @@ func TestTheImagesRequiredSetParsesAndBuildsAnOption(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	if _, err := deskReconcileOption(st); err != nil {
+	if _, err := deskReconcileOption(st, "owner-desks"); err != nil {
 		t.Fatal(err)
 	}
 }

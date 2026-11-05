@@ -75,7 +75,7 @@ func TestRunPinsItsDeskEpochAcrossAnUpdate(t *testing.T) {
 	rt.releaseRunDeskEpochs("run-b")
 	rt.releaseRunDeskEpochs("run-b")
 	_ = deskmanifest.RetireApp(role)
-	if got := deskmanifest.EpochStateNow(); got.Retained != base.Retained || got.Holders != 0 {
+	if got := deskmanifest.EpochStateNow(); got.Retained != base.Retained || got.Holders != base.Holders {
 		t.Fatalf("state %+v, baseline %+v", got, base)
 	}
 }

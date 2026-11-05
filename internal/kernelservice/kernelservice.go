@@ -86,6 +86,8 @@ var builtin = []Manifest{
 		"choir.rebase_notice_claim",
 		// Install records and worker updates.
 		"choir.package_install", "choir.release_adoption", "choir.worker_update",
+		// The desk package event log (MA4.4).
+		"choir.desk_package_event",
 	}},
 	{Name: Corpusd, OwnedKinds: []string{
 		"choir.web_capture", "choir.subject", "choir.publication", "choir.publication_version",

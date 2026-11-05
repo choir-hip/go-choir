@@ -131,6 +131,10 @@ func DefaultRegistry() *Registry {
 		// (docs/design/package-install-2026-11-04.md). The kind was renamed
 		// from its pre-MA2.4 name; records of the old kind stay registered
 		// and readable until the store converts them (store/package_install_legacy.go).
+		// The desk package event log (MA4.4): install, update, candidate, supplant
+		// and disable facts the package desk registry is folded from; appended
+		// by the boot reconcile (the kernel), keyed by sequence.
+		{Kind: "choir.desk_package_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.DeskPackageEvent"},
 		{Kind: "choir.lease", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "lease.Record"},
 		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
