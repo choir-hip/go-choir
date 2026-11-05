@@ -325,7 +325,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       expect(problems('fx-console')).toMatch(/console\.error: fixture logged an error/);
       expect(problems('fx-late-throw')).toMatch(/uncaught: .*fixture throws later/);
       expect(problems('fx-no-name')).toMatch(/state refused\).*uses SDK names this shell lacks: noSuchSdkName/);
-      expect(problems('fx-future-sdk')).toMatch(/state refused\).*needs SDK \^9\.0; this shell has 1\.0\.0/);
+      expect(problems('fx-future-sdk')).toMatch(/state refused\).*needs SDK \^9\.0; this shell has \d+\.\d+\.\d+/);
       // A refused or failed app never takes the shell down with it.
       for (const n of ['fx-throws', 'fx-no-name', 'fx-future-sdk']) expect(by[n].modes.installed.boot_errors).toEqual([]);
       for (const n of Object.keys(by).filter((k) => !['fx-good', 'fx-allowed', 'fx-stubbed'].includes(k))) expect(by[n].pass, n).toBe(false);
