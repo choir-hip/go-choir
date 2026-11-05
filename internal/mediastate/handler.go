@@ -24,6 +24,9 @@ import (
 type Handler struct {
 	store *store.Store
 	bus   *events.EventBus
+	// settings names the settings a package declares for an owner's computer
+	// (preferences.go); nil declares none, so every package setting is refused.
+	settings SettingSource
 }
 
 // NewHandler constructs the media-state control plane.

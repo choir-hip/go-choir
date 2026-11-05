@@ -217,6 +217,30 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
 }
 
+// PackageSettings is the contributes.settings package pkg declares on the
+// owner's computer: its runtime install's manifest if one is in force (an
+// installed package replaces the in-tree one), otherwise the in-tree
+// package's. The preference route takes only keys declared here.
+func PackageSettings(ctx context.Context, st *store.Store, ownerID, computerID, pkg string) []apppackage.SettingsSection {
+	if st == nil {
+		return nil
+	}
+	list, err := st.ListPackageInstalls(ctx, ownerID, computerID)
+	if err == nil {
+		records := make([]store.PackageInstall, 0, len(list))
+		for _, item := range list {
+			if item.Kind == installKindPackage {
+				records = append(records, item)
+			}
+		}
+		sort.SliceStable(records, func(i, j int) bool { return records[i].RequestedAt.After(records[j].RequestedAt) })
+		if item := currentPackageInstalls(records)[pkg]; item != nil {
+			return apppackage.SettingsOf(item.Manifest)
+		}
+	}
+	return apppackage.FirstPartySettings(pkg)
+}
+
 // installBytesPresent reports whether everything an install names is in the
 // module store: its module (an app) and each data file it carries.
 func (rt *Runtime) installBytesPresent(item store.PackageInstall) bool {

@@ -223,6 +223,52 @@ function checkThemes(contributes, dir, where) {
   });
 }
 
+// contributes.settings: the rules of services/settings.ts and apppackage/settings.go, as data.
+const SETTING_KEY = /^[a-z][a-z0-9_-]{0,39}$/;
+const SETTING_TYPES = new Set(['boolean', 'string', 'number']);
+function settingDefaultOk(field) {
+  if (field.type === 'boolean') return typeof field.default === 'boolean';
+  if (field.type === 'number') return typeof field.default === 'number' && Number.isFinite(field.default);
+  if (typeof field.default !== 'string' || [...field.default].length > 1024) return false;
+  return !Array.isArray(field.enum) || field.enum.length === 0 || field.enum.includes(field.default);
+}
+function checkSettings(contributes, where) {
+  if (contributes.settings === undefined) return;
+  if (!Array.isArray(contributes.settings)) {
+    fail(where, 'settings must be an array');
+    return;
+  }
+  const sections = new Set();
+  const keys = new Set();
+  contributes.settings.forEach((sec, i) => {
+    const at = `${where} settings[${i}]`;
+    if (!strictKeys(sec, at, ['section', 'fields'])) return;
+    if (!str(sec.section)) fail(at, 'section must be a non-empty string');
+    else if (sections.has(sec.section)) fail(at, `section "${sec.section}" is listed twice`);
+    else sections.add(sec.section);
+    if (!Array.isArray(sec.fields) || sec.fields.length === 0 || sec.fields.length > 32) {
+      fail(at, 'fields must list one to 32 fields');
+      return;
+    }
+    sec.fields.forEach((f, j) => {
+      const fat = `${at} fields[${j}]`;
+      if (!strictKeys(f, fat, ['key', 'type', 'default', 'label'], ['enum'])) return;
+      if (typeof f.key !== 'string' || !SETTING_KEY.test(f.key)) fail(fat, 'key must be a lowercase word (letters, digits, _ and -)');
+      else if (keys.has(f.key)) fail(fat, `key "${f.key}" is listed twice in the package`);
+      else keys.add(f.key);
+      if (!str(f.label)) fail(fat, 'label must be a non-empty string');
+      if (!SETTING_TYPES.has(f.type)) {
+        fail(fat, 'type must be boolean, string or number');
+        return;
+      }
+      if (f.enum !== undefined && (f.type !== 'string' || !Array.isArray(f.enum) || f.enum.length > 32 || new Set(f.enum).size !== f.enum.length || !f.enum.every((o) => str(o) && [...o].length <= 64))) {
+        fail(fat, 'enum is a list of up to 32 distinct strings, for a string field');
+      }
+      if (!settingDefaultOk(f)) fail(fat, `default must be a ${f.type}${f.enum ? ' in the enum' : ''}`);
+    });
+  });
+}
+
 function checkCommands(contributes, owner, where) {
   const ids = new Set();
   if (contributes.commands !== undefined && !Array.isArray(contributes.commands)) fail(where, 'commands must be an array');
@@ -328,12 +374,13 @@ function checkManifest(manifest, dirName, where, pkgDir) {
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
-  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links'])) {
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links', 'settings'])) {
     const c = manifest.contributes;
     if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
     checkCommands(c, manifest.name, `${where} contributes`);
     checkThemes(c, pkgDir, `${where} contributes`);
     checkLinks(c, manifest.name, `${where} contributes`);
+    checkSettings(c, `${where} contributes`);
   }
   if (manifest.capabilities !== undefined) {
     if (!Array.isArray(manifest.capabilities)) fail(where, 'capabilities must be an array');

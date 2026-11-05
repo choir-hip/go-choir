@@ -144,7 +144,7 @@ func tooLong(s string, n int) bool { return utf8.RuneCountInString(s) > n }
 
 func (m Manifest) contributesNothingElse() bool {
 	c := m.Contributes
-	return len(c.Commands) == 0 && len(c.Keybindings) == 0 && len(c.Themes) == 0 && len(c.Links) == 0
+	return len(c.Commands) == 0 && len(c.Keybindings) == 0 && len(c.Themes) == 0 && len(c.Links) == 0 && len(c.Settings) == 0
 }
 
 func (m Manifest) validateContributes() error {
@@ -157,7 +157,7 @@ func (m Manifest) validateContributes() error {
 	if err := m.validateLinks(); err != nil {
 		return err
 	}
-	return nil
+	return m.validateSettings()
 }
 
 func (m Manifest) validateCommands() error {
@@ -399,18 +399,21 @@ func (m Manifest) surfaceContributes() (json.RawMessage, error) {
 	c.Keybindings = append([]Keybinding{}, c.Keybindings...)
 	c.Themes = append([]ThemeFile{}, c.Themes...)
 	c.Links = append([]Link{}, c.Links...)
+	c.Settings = append([]SettingsSection{}, c.Settings...)
 	sort.Slice(c.Commands, func(i, j int) bool { return c.Commands[i].ID < c.Commands[j].ID })
 	sort.Slice(c.Keybindings, func(i, j int) bool {
 		return c.Keybindings[i].Key+"\x00"+c.Keybindings[i].When < c.Keybindings[j].Key+"\x00"+c.Keybindings[j].When
 	})
 	sort.Slice(c.Themes, func(i, j int) bool { return c.Themes[i].ID < c.Themes[j].ID })
 	sort.Slice(c.Links, func(i, j int) bool { return c.Links[i].App < c.Links[j].App })
+	sort.Slice(c.Settings, func(i, j int) bool { return c.Settings[i].Section < c.Settings[j].Section })
 	raw, err := json.Marshal(struct {
-		Commands    []Command    `json:"commands"`
-		Keybindings []Keybinding `json:"keybindings"`
-		Themes      []ThemeFile  `json:"themes"`
-		Links       []Link       `json:"links"`
-	}{c.Commands, c.Keybindings, c.Themes, c.Links})
+		Commands    []Command         `json:"commands"`
+		Keybindings []Keybinding      `json:"keybindings"`
+		Themes      []ThemeFile       `json:"themes"`
+		Links       []Link            `json:"links"`
+		Settings    []SettingsSection `json:"settings,omitempty"`
+	}{c.Commands, c.Keybindings, c.Themes, c.Links, c.Settings})
 	if err != nil {
 		return nil, err
 	}

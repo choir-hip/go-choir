@@ -4,6 +4,9 @@ package apppackage
 
 var firstPartyPackages = []firstPartyPackage{}
 
+// firstPartySettings is each in-tree package's contributes.settings, as canonical JSON.
+var firstPartySettings = map[string]string{}
+
 // builtinPackageNames are the in-tree first-party packages: an installed package of such a name replaces the built-in app, so only the owner's own track may install one.
 var builtinPackageNames = []string{
 	"files",

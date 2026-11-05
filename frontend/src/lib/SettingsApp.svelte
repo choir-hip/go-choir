@@ -4,6 +4,8 @@
   import { buildInfo, copyText } from './shell-services';
   import { getTheme, onThemeChange, setTheme } from './services/theme';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import PackageSettings from './PackageSettings.svelte';
+  import { settingSections } from './services/settings';
   import {
     DEFAULT_THEME,
     listThemes,
@@ -641,6 +643,16 @@
         </button>
       </div>
     </section>
+
+    {#if $settingSections.length > 0}
+      <section class="settings-card" data-settings-packages>
+        <div>
+          <h3>Packages</h3>
+          <p class="muted">Settings the installed packages declare.</p>
+        </div>
+        <PackageSettings />
+      </section>
+    {/if}
 
     <section class="settings-card status-card" data-settings-runtime-status>
       <div class="status-header">

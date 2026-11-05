@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
@@ -251,6 +252,9 @@ func Run() {
 	desktopHandler := desktopstate.NewHandler(db, bus)
 	contentService := content.NewService(db, bus)
 	mediaHandler := mediastate.NewHandler(db, bus)
+	mediaHandler.SetSettingSource(func(ctx context.Context, ownerID, pkg string) []apppackage.SettingsSection {
+		return agentcore.PackageSettings(ctx, db, ownerID, cfg.ComputerID, pkg)
+	})
 
 	// Resolve the runtime provider. VM guests route through the host-side
 	// gateway so provider credentials and upstream adapter code stay out of

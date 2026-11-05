@@ -46,7 +46,13 @@ let bound = null;
 export function bindSdk(sdk) { if (sdk) bound = sdk; }
 const base = () => bound || globalThis.__choirAppSdk || {};
 const launchStore = () => { try { return getContext(KEY) || null; } catch { return null; } };
+// A module's settings are its own: the loader binds the package name, so no
+// argument a module passes can name another package's setting.
+const PACKAGE = ${JSON.stringify(name)};
 const local = {
+  getSetting(key) { return base().getSetting(key, PACKAGE); },
+  setSetting(key, value) { return base().setSetting(key, value, PACKAGE); },
+  onSetting(key, fn) { return base().onSetting(key, fn, PACKAGE); },
   getLaunchFile(appContext) {
     const b = base();
     if (appContext !== undefined) return b.launchFileFromAppContext(appContext);

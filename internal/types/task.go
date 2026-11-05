@@ -379,6 +379,10 @@ const (
 	// EventThemeUpdated is emitted when a user's theme preference changes.
 	EventThemeUpdated EventKind = "theme.updated"
 
+	// EventSettingUpdated is emitted when a package setting (pkg.<package>.<key>)
+	// changes, so the owner's other windows follow it (SDK onSetting).
+	EventSettingUpdated EventKind = "setting.updated"
+
 	// EventFileChanged is emitted when the authenticated Files surface creates,
 	// updates, or deletes a file-system entry.
 	EventFileChanged EventKind = "file.changed"

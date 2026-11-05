@@ -1,0 +1,145 @@
+package mediastate
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+// /api/preferences/{key} (slice S6; system modularity design section 2.6).
+// The shell custodian keeps the owner's preferences. Two kinds of key:
+//
+//	theme                  the owner's theme (HandleThemePreference, unchanged)
+//	pkg.<package>.<key>    a setting a package declares in contributes.settings
+//
+// A package setting is taken only when an installed manifest (or an in-tree
+// one) declares the key, the value fits the declared type and enum, and the
+// body is small. A value the declaration no longer fits reads as the default.
+// Uninstall keeps the values (data, not code); the key is refused until the
+// package is installed again.
+
+// maxSettingBody bounds a setting write: one value of at most
+// apppackage.MaxSettingStringLen characters, with room for JSON framing.
+const maxSettingBody = 8 << 10
+
+// SettingSource names the settings package pkg declares on the owner's
+// computer: the installed manifest if the package is installed, otherwise the
+// in-tree one. It returns nil for a package that declares none.
+type SettingSource func(ctx context.Context, ownerID, pkg string) []apppackage.SettingsSection
+
+// SetSettingSource wires the declarations the preference route checks against.
+func (h *Handler) SetSettingSource(src SettingSource) { h.settings = src }
+
+type settingRequest struct {
+	Value json.RawMessage `json:"value"`
+}
+
+type settingResponse struct {
+	Key       string `json:"key"`
+	Value     any    `json:"value"`
+	Default   bool   `json:"default"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// HandlePreference serves /api/preferences/{key}.
+func (h *Handler) HandlePreference(w http.ResponseWriter, r *http.Request) {
+	key := strings.TrimPrefix(r.URL.Path, "/api/preferences/")
+	if key == "theme" {
+		h.HandleThemePreference(w, r)
+		return
+	}
+	pkg, field, ok := apppackage.SplitSettingKey(key)
+	if !ok {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "unknown preference"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodPut {
+		w.Header().Set("Allow", "GET, PUT")
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	var sections []apppackage.SettingsSection
+	if h.settings != nil {
+		sections = h.settings(r.Context(), ownerID, pkg)
+	}
+	decl, declared := apppackage.Field(sections, field)
+	if !declared {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "setting not declared by an installed package"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		h.getSetting(w, r, ownerID, key, decl)
+		return
+	}
+	h.putSetting(w, r, ownerID, key, decl)
+}
+
+func (h *Handler) getSetting(w http.ResponseWriter, r *http.Request, ownerID, key string, decl apppackage.SettingField) {
+	rec, err := h.store.GetUserPreference(r.Context(), ownerID, key)
+	switch {
+	case err == store.ErrNotFound:
+		writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: decl.DefaultValue(), Default: true})
+		return
+	case err != nil:
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get setting"})
+		return
+	}
+	// G4: a stored value the declaration no longer fits reads as the default.
+	stored, _ := json.Marshal(rec.Value["value"])
+	value, err := decl.Check(stored)
+	if err != nil {
+		writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: decl.DefaultValue(), Default: true})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: value, UpdatedAt: rec.UpdatedAt.UTC().Format(time.RFC3339Nano)})
+}
+
+func (h *Handler) putSetting(w http.ResponseWriter, r *http.Request, ownerID, key string, decl apppackage.SettingField) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxSettingBody))
+	if err != nil {
+		writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "setting body too large"})
+		return
+	}
+	var req settingRequest
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || dec.More() || len(req.Value) == 0 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "a setting write is {\"value\": ...}"})
+		return
+	}
+	value, err := decl.Check(req.Value)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid setting value: " + err.Error()})
+		return
+	}
+	rec, err := h.store.SaveUserPreference(r.Context(), types.UserPreference{
+		OwnerID:       ownerID,
+		PreferenceKey: key,
+		Value:         map[string]any{"value": value},
+		UpdatedAt:     time.Now().UTC(),
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save setting"})
+		return
+	}
+	updated := rec.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	_, _ = h.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventSettingUpdated, map[string]any{
+		"key":              key,
+		"value":            value,
+		"updated_at":       updated,
+		"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
+	})
+	writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: value, UpdatedAt: updated})
+}

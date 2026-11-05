@@ -119,6 +119,7 @@ var eventDurability = map[EventKind]EventDurability{
 	EventMediaProgressUpdated:          DurabilityAcknowledged,
 	EventMediaRecentUpdated:            DurabilityAcknowledged,
 	EventThemeUpdated:                  DurabilityAcknowledged,
+	EventSettingUpdated:                DurabilityAcknowledged,
 	EventFileChanged:                   DurabilityAcknowledged,
 }
 

@@ -148,3 +148,11 @@ export { focusWindow as focus, isHeavyAppId, restoreWindow as restore, suspendBa
 // these, which return disposers; the package boundary refuses the raw calls.
 export { onDocumentEvent, onWindowEvent, repeatEvery } from './event-helpers';
 export type { Disposer } from './event-helpers';
+
+// Settings (1.3.0): a package's own settings, declared in its manifest
+// (contributes.settings) and stored by the shell as preferences. Pass the
+// package's name; an installed module is bound to its own name by the loader,
+// so it can touch no other package's settings. The base Settings app renders
+// the declared sections.
+export { getSetting, onSetting, setSetting } from './services/settings';
+export type { SettingField, SettingResult, SettingsSection } from './services/settings';

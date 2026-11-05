@@ -92,6 +92,7 @@ var eventStorage = map[EventKind]EventStorage{
 	EventMediaProgressUpdated:           StorageObjectGraph,
 	EventMediaRecentUpdated:             StorageObjectGraph,
 	EventThemeUpdated:                   StorageObjectGraph,
+	EventSettingUpdated:                 StorageObjectGraph,
 	EventFileChanged:                    StorageObjectGraph,
 }
 

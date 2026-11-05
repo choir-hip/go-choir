@@ -42,6 +42,9 @@
     "links": {
       "entry": "{ app: string; params: { name: string; required?: boolean; context?: string }[]; launch?: { windowTitle?: string; requireAny?: string[]; context?: Record<string, string | number | boolean> } }"
     },
+    "settings": {
+      "entry": "{ section: string; fields: { key: string; type: 'boolean' | 'string' | 'number'; default: unknown; label: string; enum?: string[] }[] }"
+    },
     "desks": {
       "entry": "reserved"
     },

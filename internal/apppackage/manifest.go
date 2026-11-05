@@ -111,6 +111,8 @@ type Contributes struct {
 	Keybindings []Keybinding `json:"keybindings"`
 	Themes      []ThemeFile  `json:"themes"`
 	Links       []Link       `json:"links"`
+	// Settings are the sections of the Settings app the package adds (S6).
+	Settings []SettingsSection `json:"settings"`
 }
 
 // Desk is one desk the package contributes (a persistent root agent desk,

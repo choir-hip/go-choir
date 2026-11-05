@@ -55,6 +55,9 @@ const shellAppNames = new Set(RESERVED_NAMES);
 
 const builtinNames = [];
 const packages = [];
+// contributes.settings of each in-tree package, as canonical JSON: the settings
+// route (internal/mediastate) takes only a key a manifest declares.
+const settings = [];
 if (existsSync(packagesDir)) {
   for (const dir of readdirSync(packagesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
     const manifestPath = resolve(packagesDir, dir, 'choir-package.json');
@@ -68,6 +71,10 @@ if (existsSync(packagesDir)) {
     if (manifest.schema !== 'choir.package/v2') fail(`${manifestPath}: schema must be "choir.package/v2" (the v1 reader is deleted)`);
     if (manifest.name !== dir) fail(`${manifestPath}: name ${JSON.stringify(manifest.name)} must equal the directory name ${dir}`);
     builtinNames.push(manifest.name);
+    if (manifest.contributes?.settings !== undefined) {
+      if (!Array.isArray(manifest.contributes.settings)) fail(`${manifestPath}: contributes.settings must be a list`);
+      if (manifest.contributes.settings.length > 0) settings.push({ name: manifest.name, json: JSON.stringify(canonical(manifest.contributes.settings)) });
+    }
     const kinds = manifest.kinds ?? [];
     if (!Array.isArray(kinds)) fail(`${manifestPath}: kinds must be a list`);
     if (kinds.length === 0) continue;
@@ -111,6 +118,15 @@ if (packages.length === 0) {
     }
     lines.push('\t}},');
   }
+  lines.push('}');
+}
+lines.push('');
+lines.push('// firstPartySettings is each in-tree package\'s contributes.settings, as canonical JSON.');
+if (settings.length === 0) {
+  lines.push('var firstPartySettings = map[string]string{}');
+} else {
+  lines.push('var firstPartySettings = map[string]string{');
+  for (const e of settings) lines.push(`\t${goString(e.name)}: ${goString(e.json)},`);
   lines.push('}');
 }
 lines.push('');

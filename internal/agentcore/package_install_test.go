@@ -638,3 +638,35 @@ func TestRuntimeInstallPackRefusesAThemeWithAnotherID(t *testing.T) {
 		t.Fatalf("K4: a refusal left %d records", n)
 	}
 }
+
+// S6: the settings route reads declarations from the install in force, and
+// nothing once the pack is uninstalled (the values stay in the store).
+func TestPackageSettingsFollowTheInstallInForce(t *testing.T) {
+	e := newInstallEnv(t)
+	e.rt.packageBuilder = pkgruntime.Builder{}
+	manifest := strings.Replace(packManifest(""), `"contributes": {`, `"contributes": {
+    "settings": [{"section": "Night", "fields": [{"key": "dim", "type": "number", "default": 3, "label": "Dim"}]}],`, 1)
+	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
+		"choir-package.json": manifest, "theme.json": `{"id": "demo-next.dark", "schema_version": 2}`,
+	})
+	ctx := context.Background()
+	if got := PackageSettings(ctx, e.rt.store, e.owner, e.computer, installName); got != nil {
+		t.Fatalf("before the install: %+v", got)
+	}
+	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusCreated {
+		t.Fatalf("install = %d %s", code, reason)
+	}
+	got := PackageSettings(ctx, e.rt.store, e.owner, e.computer, installName)
+	if len(got) != 1 || got[0].Fields[0].Key != "dim" {
+		t.Fatalf("installed: %+v", got)
+	}
+	if other := PackageSettings(ctx, e.rt.store, "someone-else", e.computer, installName); other != nil {
+		t.Fatalf("another owner: %+v", other)
+	}
+	if code, _, _ := e.post(t, installBody(t, id, raw, nil, "uninstall")); code != http.StatusCreated {
+		t.Fatal("uninstall")
+	}
+	if got := PackageSettings(ctx, e.rt.store, e.owner, e.computer, installName); got != nil {
+		t.Fatalf("after the uninstall: %+v", got)
+	}
+}
