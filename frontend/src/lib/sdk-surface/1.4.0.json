@@ -94,7 +94,7 @@
     },
     "MEDIA_FILE_ROUTES": {
       "kind": "value",
-      "type": "{ appId: string; mediaType: string; extensions: string[]; }[]"
+      "type": "{ appId: never; mediaType: never; extensions: never; }[]"
     },
     "OpenAppContext": {
       "kind": "type",
@@ -107,6 +107,10 @@
     "PackageMediaRoute": {
       "kind": "type",
       "type": "{ appId: string; mediaType: string; extensions: string[]; default: boolean; }"
+    },
+    "PackageSettingsSection": {
+      "kind": "type",
+      "type": "{ pkg: string; section: string; fields: import(\"./services/settings\").SettingField[]; }"
     },
     "PromptOptions": {
       "kind": "type",
@@ -532,6 +536,10 @@
       "kind": "value",
       "type": "(idOrConfig: string | Record<string, unknown>) => { ok: boolean; errors: string[]; }"
     },
+    "settingSections": {
+      "kind": "value",
+      "type": "import(\"svelte/store\").Writable<import(\"./services/settings\").PackageSettingsSection[]>"
+    },
     "showDesktop": {
       "kind": "value",
       "type": "() => void"
@@ -774,6 +782,10 @@
       "kind": "type",
       "type": "{ action: \"openApp\"; app: string; } | { action: \"openFile\"; path: string; } | { action: \"copyText\"; text: string; label?: string | undefined; } | { action: \"setTheme\"; theme: string; } | { action: \"toast\"; message: string; }"
     },
+    "import(\"./services/settings\").PackageSettingsSection": {
+      "kind": "type",
+      "type": "{ pkg: string; section: string; fields: import(\"./services/settings\").SettingField[]; }"
+    },
     "import(\"./services/settings\").SettingField": {
       "kind": "type",
       "type": "{ key: string; type: import(\"./services/settings\").SettingType; default: unknown; label: string; enum?: string[] | undefined; }"
@@ -924,8 +936,9 @@
       "showOverview": "ui.shell",
       "submitPrompt": "ui.shell",
       "suspendBackgroundHeavyWindows": "ui.shell",
-      "windowAction": "ui.shell"
+      "windowAction": "ui.shell",
+      "windowList": "ui.shell"
     }
   },
-  "digest": "sha256:8b00159f8fb69d4e6badb15add5ec66f8d5685b2997ef30fe9ffa38293a50e8a"
+  "digest": "sha256:bcea8a3b1de95e665c5841ec826bdadc29ca365892eae6fde31b12bca6b6b6cf"
 }

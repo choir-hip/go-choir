@@ -1,4 +1,4 @@
-// The open windows as a store (SDK 1.3.0): what the Compute Monitor lists and
+// The open windows as a store (SDK 1.4.0): what the Compute Monitor lists and
 // follows. listWindows answers once; this follows changes. Read-only: acting on
 // a window goes through focus, restore, windowAction and the other W1 verbs.
 import { derived, type Readable } from 'svelte/store';
