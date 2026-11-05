@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -456,7 +457,7 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 	if err := json.Unmarshal([]byte(u.Content), &content); err != nil || strings.TrimSpace(content.RevisionID) == "" {
 		return nil, nil
 	}
-	revision, err := h.rt.Store().GetLifecycleRevision(ctx, ownerID, computerID, content.RevisionID)
+	revision, err := h.rt.Store().GetLifecycleRevision(objectgraph.WithReaderIfAbsent(ctx, objectgraph.WriterKernel), ownerID, computerID, content.RevisionID)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, nil
 	}

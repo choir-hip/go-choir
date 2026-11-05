@@ -1002,7 +1002,9 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 		"request_source":        inboxRecordRequestSource,
 	}
 	if profile == agentprofile.Research {
-		doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, agent.ChannelID)
+		// Wake routing, platform bookkeeping: the host reads the document only
+		// for its trajectory id, as the kernel, not as the research desk.
+		doc, err := rt.store.GetLifecycleDocument(withKernelReader(ctx), ownerID, computerID, agent.ChannelID)
 		if err != nil {
 			return nil, fmt.Errorf("records inbox: document %s: %w", agent.ChannelID, err)
 		}

@@ -1521,6 +1521,8 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 // Model visibility alone is insufficient: the exact canonical trigger must no
 // longer be pending before its actor row may be acknowledged.
 func (rt *Handler) TextureActorOccurrencePostcondition(ctx context.Context, o agentcore.TextureActorOccurrence, runID string) (TextureActorOccurrenceState, error) {
+	// Texture's own controller checking its own occurrence: the custodian reads.
+	ctx = asTextureReader(ctx)
 	snapshot, err := rt.Store.GetLifecycleSnapshot(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID)
 	if err != nil {
 		return "", err
@@ -1615,7 +1617,7 @@ func (rt *Handler) CloseUndisposedTextureTrigger(ctx context.Context, o agentcor
 	// A newer owner revision (or a turn that consumed this head) since the
 	// re-check makes the trigger terminal: its work now belongs to the newer
 	// head, so it is not refused (review round 2).
-	snapshot, err := rt.Store.GetLifecycleSnapshot(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID)
+	snapshot, err := rt.Store.GetLifecycleSnapshot(asTextureReader(ctx), o.OwnerID, o.ComputerID, o.TrajectoryID)
 	if err != nil {
 		return fmt.Errorf("load undisposed Texture trigger trajectory: %w", err)
 	}
