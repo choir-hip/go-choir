@@ -1,0 +1,53 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Autopaper reads the public front list and lays out the front page, the newest story as the lead.",
+  "ready": "[data-autopaper]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/platform/publications/front",
+      "status": 200,
+      "json": {
+        "stories": [
+          {
+            "publication_id": "pub-1",
+            "title": "Lead contract story",
+            "dek": "The lead dek.",
+            "updated_at": "2026-11-01T09:00:00Z",
+            "version_count": 1,
+            "latest_revision": 1,
+            "route": {
+              "bare": "story-1",
+              "permalink": "story-1~1"
+            }
+          },
+          {
+            "publication_id": "pub-2",
+            "title": "Second contract story",
+            "dek": "Another dek.",
+            "updated_at": "2026-11-02T09:00:00Z",
+            "version_count": 1,
+            "latest_revision": 1,
+            "route": {
+              "bare": "story-2",
+              "permalink": "story-2~1"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "expect": [
+    {
+      "selector": "[data-autopaper-masthead]"
+    },
+    {
+      "selector": "[data-autopaper-lead]",
+      "text": "Second contract story"
+    },
+    {
+      "selector": "[data-autopaper-headline]",
+      "count": 2
+    }
+  ]
+}

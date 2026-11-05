@@ -1,0 +1,49 @@
+{
+  "schema": "choir.package/v2",
+  "name": "autopaper",
+  "version": "1.0.0",
+  "display": {
+    "title": "Autopaper",
+    "icon": "📰",
+    "description": "Living stories with checked sources"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 65
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false,
+      "desktop": {
+        "width": 880,
+        "height": 760,
+        "minWidth": 360,
+        "minHeight": 480
+      },
+      "compact": {
+        "minWidth": 280,
+        "minHeight": 420
+      }
+    },
+    "auth": {
+      "preview": "public-readonly"
+    },
+    "theme": {
+      "surface": "document",
+      "shellDataAttr": "data-autopaper-window",
+      "contentClass": "autopaper-content"
+    }
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

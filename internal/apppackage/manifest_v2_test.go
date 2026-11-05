@@ -757,7 +757,7 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 // B2: a published package cannot take a name the shell already holds as an app
 // id (static ids) or reserves (check-packages RESERVED_NAMES).
 func TestB2PublishedNamesCannotTakeAShellAppName(t *testing.T) {
-	names := []string{"settings", "browser", "email", "autopaper", "desk", "prompt", "system", "owner", "management", "engineering", "research", "desktop", "shell"}
+	names := []string{"texture", "desk", "prompt", "system", "owner", "management", "engineering", "research", "desktop", "shell"}
 	for _, n := range names {
 		_, err := parseAs(t, OriginPublished, func(v map[string]any) {
 			v["name"] = n

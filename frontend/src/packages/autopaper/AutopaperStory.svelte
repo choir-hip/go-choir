@@ -16,7 +16,7 @@
     storyPath,
     storyPathForRoute,
     type FrontStory,
-  } from './autopaper';
+  } from '../../lib/app-sdk';
 
   export let story: FrontStory;
   export let tier: 'lead' | 'top' | 'brief' | 'more' = 'top';

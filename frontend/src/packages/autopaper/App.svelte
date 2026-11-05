@@ -48,7 +48,7 @@
     storyTextureContext,
     usesSections,
     type FrontStory,
-  } from './autopaper';
+  } from '../../lib/app-sdk';
 
   export let windowId = '';
 
