@@ -1218,7 +1218,10 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 	if docID == "" {
 		return nil
 	}
-	doc, err := rt.store.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, docID)
+	// The activation ended: the host reads the document on Texture's behalf,
+	// outside the cell's context, so it declares the custodian as the reader
+	// (undeclared-texture-reads-at-settlement-2026-11-05.md).
+	doc, err := rt.store.GetLifecycleDocument(withKindReader(ctx, "choir.texture_document"), rec.OwnerID, rec.ComputerID, docID)
 	if err != nil {
 		// The doc moved out from under the desk: the trigger either consumed
 		// or the head is gone.

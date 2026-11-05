@@ -291,7 +291,9 @@ func (rt *Runtime) textureRunOwnerRevision(ctx context.Context, rec *types.RunRe
 	current := framed
 	if strings.TrimSpace(framed.RevisionID) != id {
 		var err error
-		if current, err = rt.store.GetLifecycleRevision(ctx, strings.TrimSpace(rec.OwnerID), strings.TrimSpace(rec.ComputerID), id); err != nil {
+		// The host builds the frame on Texture's behalf: the revision is read
+		// as its custodian where the call carries no reader (MA3.7c).
+		if current, err = rt.store.GetLifecycleRevision(withKindReader(ctx, "choir.texture_revision"), strings.TrimSpace(rec.OwnerID), strings.TrimSpace(rec.ComputerID), id); err != nil {
 			return ""
 		}
 	}
