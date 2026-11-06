@@ -69,6 +69,9 @@ type fixture struct {
 	base string // base commit
 }
 
+// testContract is a window app's contract fixture (L3: listed with one).
+const testContract = `{"schema": "choir.package-contract/v1", "ready": "[data-reader]"}` + "\n"
+
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -79,6 +82,7 @@ func newFixture(t *testing.T) *fixture {
 	for path, content := range map[string]string{
 		testRoot + "/choir-package.json": testManifest,
 		testRoot + "/App.svelte":         "<p>reader</p>\n",
+		testRoot + "/" + ContractFile:    testContract,
 		"frontend/src/app.css":           "body {}\n",
 	} {
 		full := filepath.Join(repo, filepath.FromSlash(path))
@@ -307,7 +311,7 @@ func TestHostAcceptsANewPackageOnlyWhenTheBaseLacksIt(t *testing.T) {
 	f := newFixture(t)
 	const root = "frontend/src/packages/notes"
 	manifest := strings.Replace(testManifest, `"name": "reader"`, `"name": "notes"`, 1)
-	full := f.tree(map[string]entry{root + "/choir-package.json": {"100644", manifest}, root + "/App.svelte": {"100644", "<p>notes</p>\n"}})
+	full := f.tree(map[string]entry{root + "/choir-package.json": {"100644", manifest}, root + "/App.svelte": {"100644", "<p>notes</p>\n"}, root + "/" + ContractFile: {"100644", testContract}})
 	tree, _, err := Subtree(context.Background(), f.repo, full, root)
 	if err != nil {
 		t.Fatal(err)

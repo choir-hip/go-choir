@@ -47,6 +47,18 @@ const (
 	// ReasonListingConflict: the listing's canonical id is already held by
 	// an object that is not this listing.
 	ReasonListingConflict = "package_listing_conflict"
+	// Tiered review (L3, review.go). ReasonPlatformReviewRequired: a T2
+	// release (ui.shell) without a platform review record.
+	ReasonPlatformReviewRequired = "package_platform_review_required"
+	// ReasonUnsafeValue: a contributed value that fetches or breaks out.
+	ReasonUnsafeValue = "package_unsafe_value"
+	// ReasonThemeContrast: a contributed theme below the contrast gate.
+	ReasonThemeContrast = "package_theme_contrast"
+	// ReasonContractRequired: a window app listed without its contract fixture.
+	ReasonContractRequired = "package_contract_required"
+	// ReasonUsesExceedGrants: the module calls an SDK name whose grant the
+	// manifest does not hold.
+	ReasonUsesExceedGrants = "package_uses_exceed_grants"
 	// Publisher-side (guest) refusals.
 	ReasonChangeNotConfined = "package_change_not_confined"
 	ReasonParentUnpublished = "package_parent_unpublished"

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
@@ -589,7 +590,7 @@ func packManifest(themeID string) string {
 func TestRuntimeInstallPackServesItsThemeFile(t *testing.T) {
 	e := newInstallEnv(t)
 	e.rt.packageBuilder = pkgruntime.Builder{}
-	theme := `{"id": "demo-next.dark", "schema_version": 2, "name": "Night"}`
+	theme := nightTheme("demo-next.dark")
 	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{"choir-package.json": packManifest(""), "theme.json": theme})
 
 	code, view, reason := e.post(t, installBody(t, id, raw, tree, ""))
@@ -632,17 +633,20 @@ func TestRuntimeInstallPackServesItsThemeFile(t *testing.T) {
 	}
 }
 
+// nightTheme is a contributed theme the tiered review (L3) accepts.
+func nightTheme(id string) string {
+	return `{"id": "` + id + `", "schema_version": 2, "name": "Night",
+  "colors": {"bg": "#101418", "panel": "#1a2028", "fg": "#f4f4f4", "muted": "#b8c0c8", "accent": "#3a6ea5", "onAccent": "#ffffff", "danger": "#a52a2a", "onDanger": "#ffffff"},
+  "radii": {}, "motion": {}, "fonts": {}, "effects": {},
+  "layout": {"promptSurfacePlacement": "bottom", "promptSurfaceMinHeight": "56px", "deskSheetHeight": "70vh"}}`
+}
+
 func TestRuntimeInstallPackRefusesAThemeWithAnotherID(t *testing.T) {
-	e := newInstallEnv(t)
-	e.rt.packageBuilder = pkgruntime.Builder{}
-	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
-		"choir-package.json": packManifest(""), "theme.json": `{"id": "futuristic-noir", "schema_version": 2}`,
-	})
-	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusUnprocessableEntity || reason != "package_build_failed" {
-		t.Fatalf("K4 = %d %s", code, reason)
-	}
-	if n := e.records(t); n != 0 {
-		t.Fatalf("K4: a refusal left %d records", n)
+	// K4: since L3 the tiered review refuses it before it can be listed or
+	// installed (the same check runs in the install's content verification).
+	files := apppackage.MapSource(map[string]string{"theme.json": nightTheme("futuristic-noir")})
+	if _, _, err := pkgrelease.CheckManifest(installName, []byte(packManifest("")), files); pkgrelease.ReasonOf(err) != pkgrelease.ReasonManifestInvalid {
+		t.Fatalf("K4 = %v", err)
 	}
 }
 
@@ -654,7 +658,7 @@ func TestPackageSettingsFollowTheInstallInForce(t *testing.T) {
 	manifest := strings.Replace(packManifest(""), `"contributes": {`, `"contributes": {
     "settings": [{"section": "Night", "fields": [{"key": "dim", "type": "number", "default": 3, "label": "Dim"}]}],`, 1)
 	_, id, raw, tree := publishedPackage(t, e.repo, e.base, e.owner, map[string]string{
-		"choir-package.json": manifest, "theme.json": `{"id": "demo-next.dark", "schema_version": 2}`,
+		"choir-package.json": manifest, "theme.json": nightTheme("demo-next.dark"),
 	})
 	ctx := context.Background()
 	if got := PackageSettings(ctx, e.rt.store, e.owner, e.computer, installName); got != nil {

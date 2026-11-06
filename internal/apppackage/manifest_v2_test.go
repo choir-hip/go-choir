@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1052,5 +1053,22 @@ func TestSubmitPromptGrantManifestParses(t *testing.T) {
 	}
 	if _, err := ParseManifest(raw, OriginPublished); err == nil {
 		t.Error("a published package declaring ui.shell must be refused")
+	}
+}
+
+// L3: the SDK names that imply a grant are the lock's sections.grants.
+func TestSDKNameGrantsAreTheLock(t *testing.T) {
+	raw, err := os.ReadFile("../../frontend/src/lib/sdk-surface/sections.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var front struct {
+		Grants map[string]string `json:"grants"`
+	}
+	if err := json.Unmarshal(raw, &front); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(front.Grants, SDKNameGrants) {
+		t.Fatalf("sections.json grants %v, SDKNameGrants %v", front.Grants, SDKNameGrants)
 	}
 }

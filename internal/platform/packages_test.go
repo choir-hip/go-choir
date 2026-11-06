@@ -110,9 +110,10 @@ func newPkgWorld(t *testing.T) *pkgWorld {
 	repo := t.TempDir()
 	pkgGit(t, repo, nil, "", "init", "-q")
 	for path, content := range map[string]string{
-		pkgRoot + "/choir-package.json": pkgManifest,
-		pkgRoot + "/App.svelte":         "<p>reader</p>\n",
-		"frontend/src/app.css":          "body {}\n",
+		pkgRoot + "/choir-package.json":  pkgManifest,
+		pkgRoot + "/App.svelte":          "<p>reader</p>\n",
+		pkgRoot + "/choir-contract.json": `{"schema": "choir.package-contract/v1", "ready": "[data-reader]"}` + "\n",
+		"frontend/src/app.css":           "body {}\n",
 	} {
 		full := filepath.Join(repo, filepath.FromSlash(path))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {

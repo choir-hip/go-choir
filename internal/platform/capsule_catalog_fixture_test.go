@@ -62,19 +62,22 @@ type fixtureRelease struct {
 // platform commit carries them: the files each starts with.
 var fixturePackages = map[string]map[string]string{
 	"files-next": {
-		"App.svelte":      "<script>\n  import FileTree from './FileTree.svelte';\n</script>\n<FileTree />\n",
-		"FileTree.svelte": "<ul class=\"tree\"></ul>\n",
-		"files-store.js":  "export const files = [];\n",
+		"App.svelte":          "<script>\n  import FileTree from './FileTree.svelte';\n</script>\n<FileTree />\n",
+		"FileTree.svelte":     "<ul class=\"tree\"></ul>\n",
+		"files-store.js":      "export const files = [];\n",
+		"choir-contract.json": `{"schema": "choir.package-contract/v1", "ready": ".tree"}` + "\n",
 	},
 	"slides-next": {
-		"App.svelte":      "<script>\n  import Deck from './Deck.svelte';\n</script>\n<Deck />\n",
-		"Deck.svelte":     "<section class=\"deck\"></section>\n",
-		"slide-render.js": "export function render(slide) { return slide.title; }\n",
+		"App.svelte":          "<script>\n  import Deck from './Deck.svelte';\n</script>\n<Deck />\n",
+		"Deck.svelte":         "<section class=\"deck\"></section>\n",
+		"slide-render.js":     "export function render(slide) { return slide.title; }\n",
+		"choir-contract.json": `{"schema": "choir.package-contract/v1", "ready": ".deck"}` + "\n",
 	},
 	"library-next": {
-		"App.svelte":        "<script>\n  import Catalog from './Catalog.svelte';\n</script>\n<Catalog />\n",
-		"Catalog.svelte":    "<div class=\"catalog\"></div>\n",
-		"catalog-client.js": "export async function packages() { return []; }\n",
+		"App.svelte":          "<script>\n  import Catalog from './Catalog.svelte';\n</script>\n<Catalog />\n",
+		"Catalog.svelte":      "<div class=\"catalog\"></div>\n",
+		"catalog-client.js":   "export async function packages() { return []; }\n",
+		"choir-contract.json": `{"schema": "choir.package-contract/v1", "ready": ".catalog"}` + "\n",
 	},
 }
 

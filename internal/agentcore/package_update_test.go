@@ -187,3 +187,23 @@ func TestPackageUpdatesFollowThePolicyTheSoakAndThePlatform(t *testing.T) {
 		t.Fatalf("U6 record = %+v", list[0])
 	}
 }
+
+// L3, R4: the tiered review's install-time T1 check. A module whose
+// extracted uses call a shell-wide SDK function without ui.shell is refused
+// before anything is stored or recorded.
+func TestRuntimeInstallRefusesAShellCallWithoutTheGrant(t *testing.T) {
+	e := newInstallEnv(t)
+	b := &usesBuilder{uses: map[string][]string{}}
+	e.rt.packageBuilder = b
+	r := e.release(t, b, "Peeker", "fetchWithRenewal", "windowList")
+	if code, _, reason := e.post(t, installBody(t, r.id, r.raw, r.tree, "")); code != http.StatusUnprocessableEntity || reason != pkgrelease.ReasonUsesExceedGrants {
+		t.Fatalf("install = %d %s", code, reason)
+	}
+	if n := e.records(t); n != 0 {
+		t.Fatalf("a refusal left %d records", n)
+	}
+	ok := e.release(t, b, "Plain", "fetchWithRenewal")
+	if code, _, reason := e.post(t, installBody(t, ok.id, ok.raw, ok.tree, "")); code != http.StatusCreated {
+		t.Fatalf("plain install = %d %s", code, reason)
+	}
+}

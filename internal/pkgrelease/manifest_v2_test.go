@@ -13,7 +13,8 @@ import (
 //
 //	R1  a publisher's manifest states origin, level or a hash, and the release
 //	    is accepted (package_publisher_declared).
-//	R2  a published manifest asks for a privileged grant (package_privileged_grant).
+//	R2  a published manifest asks for a privileged grant (package_privileged_grant;
+//	    ui.shell is tier T2: package_platform_review_required, L3).
 //	R3  a published manifest carries a desk before the Phase 6 sandbox
 //	    (package_desk_needs_sandbox).
 //	R4  a record claims a level the platform refuses (privileged, extended
@@ -65,7 +66,7 @@ func TestCheckManifestRefusalReasons(t *testing.T) {
 		{"declared origin", func(v map[string]any) { v["origin"] = "first_party" }, ReasonPublisherDeclared},
 		{"declared level", func(v map[string]any) { v["level"] = "default" }, ReasonPublisherDeclared},
 		{"declared hash", func(v map[string]any) { v["behaviour_surface"] = strings.Repeat("a", 64) }, ReasonPublisherDeclared},
-		{"privileged grant", func(v map[string]any) { v["capabilities"] = []any{map[string]any{"grant": "ui.shell"}} }, ReasonPrivilegedGrant},
+		{"T2 grant", func(v map[string]any) { v["capabilities"] = []any{map[string]any{"grant": "ui.shell"}} }, ReasonPlatformReviewRequired},
 		{"desk", deskPkg, ReasonDeskNeedsSandbox},
 		{"desk with privileged grant", func(v map[string]any) {
 			deskPkg(v)

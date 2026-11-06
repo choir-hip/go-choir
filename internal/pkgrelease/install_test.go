@@ -72,7 +72,7 @@ func TestPlanInstallAddsANewPackage(t *testing.T) {
 	f := newFixture(t)
 	record, blobs := f.release(f.tree(changed("<p>reader v2</p>\n")))
 	// A commit with no package at the root: the computer never had it.
-	bare := f.tree(map[string]entry{testRoot + "/App.svelte": {"-", ""}, testRoot + "/choir-package.json": {"-", ""}})
+	bare := f.tree(map[string]entry{testRoot + "/App.svelte": {"-", ""}, testRoot + "/choir-package.json": {"-", ""}, testRoot + "/" + ContractFile: {"-", ""}})
 	commit := gitT(t, f.repo, nil, "", "commit-tree", bare, "-m", "bare")
 	plan, err := PlanInstall(context.Background(), f.repo, commit, record, blobs.TreePatch, false)
 	if err != nil || plan.LocalPresent {

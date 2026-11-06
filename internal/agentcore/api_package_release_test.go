@@ -57,9 +57,10 @@ func packageSourceRepo(t *testing.T) (repo, base string) {
 	t.Helper()
 	repo, _ = releaseSourceRepo(t)
 	for path, content := range map[string]string{
-		draftRoot + "/choir-package.json": draftManifest,
-		draftRoot + "/App.svelte":         "<p>reader</p>\n",
-		"frontend/src/app.css":            "body {}\n",
+		draftRoot + "/choir-package.json":  draftManifest,
+		draftRoot + "/App.svelte":          "<p>reader</p>\n",
+		draftRoot + "/choir-contract.json": `{"schema": "choir.package-contract/v1", "ready": "[data-reader]"}` + "\n",
+		"frontend/src/app.css":             "body {}\n",
 	} {
 		full := filepath.Join(repo, filepath.FromSlash(path))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {

@@ -217,6 +217,11 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if !pack && (module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0) {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "package_build_failed", "the builder returned no module/v1 module")
 	}
+	// The tiered review's install-time T1 check (L3): the SDK names this
+	// computer's build extracted imply no grant the manifest does not hold.
+	if err := pkgrelease.CheckUses(module.Manifest, module.Uses); err != nil {
+		return PackageInstallView{}, false, refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonUsesExceedGrants, "%v", err)
+	}
 	// The install review gate (MA7.5): a widened ceiling stores its module
 	// and records only with a sealed accepting verdict for exactly these
 	// bytes.

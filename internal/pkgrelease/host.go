@@ -170,8 +170,14 @@ func VerifyHostFacts(ctx context.Context, in HostInput) (Verified, error) {
 	if err != nil || len(raw) > maxManifestBytes {
 		return Verified{}, refuse(ReasonManifestInvalid, "the release holds no readable %s/choir-package.json", root)
 	}
-	summary, version, manifest, err := checkManifest(rec.Package.Name, raw, treeFiles(ctx, s.dir, nil, full, root))
+	files := treeFiles(ctx, s.dir, nil, full, root)
+	summary, version, manifest, err := checkManifest(rec.Package.Name, raw, files)
 	if err != nil {
+		return Verified{}, err
+	}
+	// Check 6: the tiered review's listing requirement (L3): a window app
+	// is listed with its contract fixture.
+	if err := reviewListing(manifest, files); err != nil {
 		return Verified{}, err
 	}
 	if summary != rec.Manifest || version != rec.Package.ManifestVersion {

@@ -68,7 +68,7 @@ func (m Manifest) validateProvides() error {
 	}
 	shell := false
 	for _, c := range m.Capabilities {
-		if c.Grant == "ui.shell" {
+		if c.Grant == GrantUIShell {
 			shell = true
 		}
 	}

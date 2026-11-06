@@ -170,6 +170,9 @@ func (t treeSource) Read(path string) ([]byte, error) {
 // (package_kinds_need_platform). files reads the package's source files for the
 // behaviour-surface hash and the desk import gate. It returns the record's
 // manifest summary and the manifest version.
+//
+// It runs the tiered review's install-time part (L3, review.go): T2 refused,
+// the T0 data review; the listing's T1 contract requirement runs at publish.
 func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, string, error) {
 	summary, version, _, err := checkManifest(name, raw, files)
 	return summary, version, err
@@ -186,6 +189,11 @@ func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 	}
 	if err := json.Unmarshal(raw, &probe); err == nil && len(probe.Kinds) > 0 {
 		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonKindsNeedPlatform, "the manifest declares %d kinds; a package's kinds need the platform until runtime install (S12)", len(probe.Kinds))
+	}
+	// The tiered review (L3, review.go): a T2 release is refused with its
+	// own reason before the manifest checks would name its privileged grant.
+	if err := reviewPlatform(raw); err != nil {
+		return Manifest{}, "", apppackage.Manifest{}, err
 	}
 	manifest, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
 	if err != nil {
@@ -205,6 +213,9 @@ func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 	surface, err := manifest.BehaviourSurface(files)
 	if err != nil {
 		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonManifestInvalid, "%v", err)
+	}
+	if err := reviewData(manifest, files); err != nil {
+		return Manifest{}, "", apppackage.Manifest{}, err
 	}
 	summary := Manifest{
 		SHA256: computerevent.DigestBytes(raw), Schema: manifest.Schema,
@@ -379,8 +390,13 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	if err != nil || len(raw) > maxManifestBytes {
 		return DraftSource{}, refuse(ReasonManifestInvalid, "%s/choir-package.json is missing or unreadable", root)
 	}
-	manifest, version, err := CheckManifest(in.Name, raw, treeFiles(ctx, s.dir, s.env, full, root))
+	files := treeFiles(ctx, s.dir, s.env, full, root)
+	manifest, version, parsed, err := checkManifest(in.Name, raw, files)
 	if err != nil {
+		return DraftSource{}, err
+	}
+	// The publisher sees the listing's T1 requirement before the host does.
+	if err := reviewListing(parsed, files); err != nil {
 		return DraftSource{}, err
 	}
 	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version}, nil
