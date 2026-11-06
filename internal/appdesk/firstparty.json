@@ -1,0 +1,9 @@
+{"packages": [
+  {"package": "mail", "version": "1.0.0", "manifest": {
+    "package": "mail",
+    "verbs": ["Reply", "Report", "Done"],
+    "taint_class": "untrusted_input",
+    "worker_max_bytes": 134217728,
+    "owned_object_kinds": []
+  }}
+]}

@@ -15,7 +15,8 @@ const (
 	Engineering = "engineering"
 	Research    = "research"
 	Texture     = "texture"
-	Email       = "email"
+	// Mail is the Mail desk: the first-party Mail package's desk (MA4.7).
+	Mail = deskmanifest.Mail
 	// ManagementTask is the run role of a management task (management
 	// delegation S2a, design round 2 R2-1): a bounded sub-RLM of the
 	// management desk with its own run, session and inbox
@@ -77,6 +78,11 @@ func Canonical(profile string) (string, error) {
 	// the verifier roles are not desks.
 	if isProfile, _ := deskmanifest.Profile(normalized); isProfile {
 		return normalized, nil
+	}
+	// A renamed desk's former name (email, now the Mail desk, MA4.7): a
+	// record written before the rename keeps its meaning.
+	if current, ok := deskmanifest.Renamed(normalized); ok {
+		return current, nil
 	}
 	switch normalized {
 	case "processor", "reconciler", "verifier":

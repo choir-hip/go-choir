@@ -21,7 +21,7 @@ func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
 	switch profile {
 	case frozenProcessorProfile:
 		return types.TrajectoryKindPublication
-	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Email:
+	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Mail:
 		return types.TrajectoryKindDocument
 	default:
 		return types.TrajectoryKindTask

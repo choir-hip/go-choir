@@ -49,7 +49,7 @@ func TestDefaultAgentAndChannelIdentityFollowTheRow(t *testing.T) {
 		}
 	}
 	// Per-run identities mint a fresh id and have no channel.
-	for _, p := range []string{agentprofile.Research, agentprofile.Engineering, agentprofile.Email} {
+	for _, p := range []string{agentprofile.Research, agentprofile.Engineering} {
 		a, b := defaultAgentID(p, "o1", meta), defaultAgentID(p, "o1", meta)
 		if a == b || strings.Contains(a, ":") {
 			t.Errorf("%s agent ids %q %q are not per run", p, a, b)

@@ -60,6 +60,9 @@ type Manifest struct {
 	// each lease inside it.
 	LeaseKinds    []string `json:"lease_kinds,omitempty"`
 	LeaseCaptures bool     `json:"lease_captures,omitempty"`
+	// LeaseGrants is the grant part of the ceiling (MA4.7): the first-party
+	// typed grants, such as mail.read, the desk may ask their custodian for.
+	LeaseGrants []string `json:"lease_grants,omitempty"`
 }
 
 // Code is a typed refusal.
@@ -218,6 +221,11 @@ func validate(m Manifest, candidate bool) []Refusal {
 	if _, isDesk := deskmanifest.Lookup(m.Package); reservedNames[m.Package] || isDesk {
 		refuse(CodeReservedName, "package name %q is reserved", m.Package)
 	}
+	// A slug the registry reserves for an in-tree first-party desk (the Mail
+	// desk, MA4.7) admits only the manifest the image ships for it.
+	if !candidate && deskmanifest.IsReservedAppSlug(m.Package) && !firstParty(m) {
+		refuse(CodeReservedName, "package name %q is reserved for the in-tree first-party package's own desk", m.Package)
+	}
 	prefix := "choir.app." + m.Package + "."
 	seen := map[string]bool{}
 	for _, k := range m.OwnedKinds {
@@ -368,7 +376,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: uids[m.Package], WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants, FirstParty: firstParty(m)})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				return false
@@ -425,7 +433,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: nextUID, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants, FirstParty: firstParty(m)})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue
@@ -489,7 +497,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(cand), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: uid, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue

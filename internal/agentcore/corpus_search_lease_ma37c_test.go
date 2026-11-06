@@ -320,3 +320,6 @@ func (grantEverything) AdmitsCapture(objectgraph.Writer, string, string, []strin
 func (grantEverything) AdmitsGrant(objectgraph.Writer, string, string) (string, bool) {
 	return "lease-stub", true
 }
+func (grantEverything) AdmitsGrantRef(objectgraph.Writer, string, string, string, string) (string, bool) {
+	return "lease-stub", true
+}

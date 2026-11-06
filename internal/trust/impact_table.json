@@ -1,5 +1,5 @@
 {
-  "version": "impact-table/2",
+  "version": "impact-table/3",
   "classes": [
     {"class": "I0", "name": "inert", "impact": 0, "tau": null, "examples": "read own objects, compute, draft into own kinds"},
     {"class": "I1", "name": "local reversible", "impact": 1, "tau": 0.0, "examples": "write own kinds, schedule within own desk, message a desk"},
@@ -34,7 +34,8 @@
     {"grant": "desk.precommit.rule", "impact": "I2", "why": "names the rule that settles a record"},
     {"grant": "desk.run.deadline", "impact": "I1", "why": "bounds the desk's own run"},
     {"grant": "texture.search", "impact": "I1", "why": "first-party typed lease: ranked refs and bounded snippets, labelled owner_private:texture"},
-    {"grant": "texture.brief", "impact": "I1", "why": "host-minted disclosure lease: a Texture run's messages to research carry that run's owner_private:document and owner_private:texture labels; opens no read"}
+    {"grant": "texture.brief", "impact": "I1", "why": "host-minted disclosure lease: a Texture run's messages to research carry that run's owner_private:document and owner_private:texture labels; opens no read"},
+    {"grant": "mail.read", "impact": "I1", "why": "first-party typed lease the Mail custodian issues per task: one owner email by ref, labelled owner_private:mail; the same class as the desk.mail.read ceiling"}
   ],
   "not_impact": [
     {"name": "model.provider_call", "why": "owner, R15: no rule constrains models. A provider call is logged with its provider and labels (section 3.6 of the disclosure path), never classed I3; the draft's example 'a provider call carrying owner-private data' is removed."}

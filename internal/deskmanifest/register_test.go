@@ -63,7 +63,7 @@ func TestRegistryFlagsEqualTheClosedLists(t *testing.T) {
 	// agentprofile.Canonical and modelpolicy.NormalizeRole: the V2 live
 	// vocabulary plus the management task role; the research child is a role
 	// that borrows its parent's policy and is not a profile.
-	want(ProfileNames(), "conductor", "email", "engineering", "management", "management_task", "research", "texture")
+	want(ProfileNames(), "conductor", "engineering", "management", "management_task", "research", "texture")
 	// promptstore.promptRoles.
 	want(PromptNames(), "conductor", "engineering", "management", "research", "texture")
 	// deskCarrierLive plus the management task's registry.

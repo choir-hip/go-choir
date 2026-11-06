@@ -354,7 +354,8 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 
 // InstallDefaultAgentTools installs role-bound registries. Management, Texture
 // and research get the sealed desk-cell registry (desk_go_eval only). The
-// conductor, email and engineering have empty static registries; an exact
+// conductor and engineering have empty static registries (the Mail desk is a
+// package desk, MA4.7, and gets a package desk's); an exact
 // assigned Engineering run receives a fresh closed capsule-local registry with
 // capsule_go_eval as its sole capsule-effect entry. Reporting, freeze, and
 // verification are in-cell affordances.
@@ -399,7 +400,6 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	}
 
 	conductorRegistry := toolregistry.MustNewToolRegistry()
-	emailRegistry := toolregistry.MustNewToolRegistry()
 
 	// D5: no fallback registry. A run whose profile has no entry below (the
 	// verifier roles, frozen processor/reconciler records) gets no tools.
@@ -409,7 +409,6 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	}
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
 	rt.toolProfiles[agentprofile.Engineering] = engineeringRegistry
-	rt.toolProfiles[agentprofile.Email] = emailRegistry
 	// Install the sealed desk-cell registry for every promoted desk profile.
 	for deskProfile, deskReg := range deskCellRegistries {
 		rt.toolProfiles[deskProfile] = deskReg

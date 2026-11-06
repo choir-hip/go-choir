@@ -34,12 +34,19 @@ import (
 
 // Desk names, in the spelling the code already uses.
 const (
-	Management     = "management"
-	Texture        = "texture"
-	Research       = "research"
-	Engineering    = "engineering"
-	Conductor      = "conductor"
-	Email          = "email"
+	Management  = "management"
+	Texture     = "texture"
+	Research    = "research"
+	Engineering = "engineering"
+	Conductor   = "conductor"
+	// Mail is the Mail app agent desk (plan MA4.7): the package desk of the
+	// first-party Mail package, app:mail, with the package writer desk:mail.
+	// There is no system Mail desk; the carrier-less email row was absorbed
+	// into it (Renamed keeps older records' "email" meaning it). It is the
+	// custodian of the owner's mail, which stays in maild and is reached only
+	// through the Mail desk's service seam (internal/maildesk). Only the
+	// in-tree first-party Mail package registers it (FirstPartyAppSlug).
+	Mail           = "app:mail"
 	ManagementTask = "management_task"
 	// ResearchWeb and ResearchTexture are the two child roles of the research
 	// desk's fan-out (plan MA4.6, section 8.6). The web child reads the world
@@ -71,7 +78,7 @@ const (
 	CarrierDeskWorker Carrier = "desk_worker"
 	// CarrierCapsule is a guest capsule (engineering).
 	CarrierCapsule Carrier = "capsule"
-	// CarrierNone is a desk with no cell carrier (conductor, email).
+	// CarrierNone is a desk with no cell carrier (the conductor).
 	CarrierNone Carrier = "none"
 )
 
@@ -80,7 +87,7 @@ type Taint string
 
 const (
 	// TaintUntrustedInput desks read attacker-controlled content from the
-	// world directly (research: web pages; the email desk: mail bodies).
+	// world directly (research: web pages; the Mail desk: mail bodies).
 	TaintUntrustedInput Taint = "untrusted_input"
 	// TaintPrivileged desks hold authority to act (product API, canonical
 	// writes, capsule mutation). Untrusted content reaches them only as
@@ -183,6 +190,14 @@ type Desk struct {
 	// table's, not leases.
 	LeaseKinds    []string
 	LeaseCaptures bool
+	// LeaseGrants names the first-party typed grants (a custodian's guarded
+	// service API, such as mail.read) the desk may ask the grant's custodian
+	// for: the grant part of the same ceiling. The lease service checks the
+	// name against its grant table at issue and at every use.
+	LeaseGrants []string
+	// FirstParty marks an app desk an in-tree first-party package carries
+	// under a reserved slug (the Mail desk, MA4.7). Only NewAppDesk sets it.
+	FirstParty bool
 	// ModelRole is the modelpolicy role key. Declared; no consumer yet.
 	ModelRole string
 	// Restart is the restart contract. Declared; every desk has the same.
@@ -423,12 +438,6 @@ var system = []Desk{
 		Taint:   TaintPrivileged, ModelRole: Conductor, Restart: RestartContract,
 		Profile: true, Prompt: true, Identity: IdentityOwner,
 	},
-	{
-		Name: Email, Kind: KindSystem, Carrier: CarrierNone,
-		Sandbox: Sandbox{Profile: "none"},
-		Taint:   TaintUntrustedInput, ModelRole: Email, Restart: RestartContract,
-		Profile: true,
-	},
 }
 
 var (
@@ -491,6 +500,7 @@ func (d Desk) clone() Desk {
 	d.CapsuleVerbs = cp(d.CapsuleVerbs)
 	d.OwnedKinds = cp(d.OwnedKinds)
 	d.LeaseKinds = cp(d.LeaseKinds)
+	d.LeaseGrants = cp(d.LeaseGrants)
 	d.Modules = cp(d.Modules)
 	d.Grants = cloneGrants(d.Grants)
 	return d
@@ -714,6 +724,28 @@ var reservedAppSlugs = map[string]bool{
 	"app": true,
 }
 
+// renamed maps a desk's former name to its current one, so a record written
+// before a rename keeps its meaning. The Mail desk absorbed the email row
+// (MA4.7).
+var renamed = map[string]string{"email": Mail}
+
+// Renamed reports the current name of a desk that was renamed, for records
+// written under the old name.
+func Renamed(name string) (string, bool) {
+	n, ok := renamed[name]
+	return n, ok
+}
+
+// firstPartyAppSlugs are the reserved slugs an in-tree first-party package
+// carries its own desk under (MA4.7): the slug stays reserved for every other
+// package, and only a spec marked FirstParty, which internal/appdesk sets
+// solely for the manifest the image ships for that package, may take it.
+var firstPartyAppSlugs = map[string]bool{"mail": true}
+
+// FirstPartyAppSlug reports whether slug is a reserved slug an in-tree
+// first-party package registers its desk under.
+func FirstPartyAppSlug(slug string) bool { return firstPartyAppSlugs[slug] }
+
 // IsReservedAppSlug reports whether slug (the part after "app:") is reserved,
 // or names a registered non-app desk.
 func IsReservedAppSlug(slug string) bool {
@@ -727,6 +759,9 @@ func IsReservedAppSlug(slug string) bool {
 }
 
 var appName = regexp.MustCompile(`^app:[a-z][a-z0-9-]{0,31}$`)
+
+// leaseGrantName is the grammar of a typed grant name (mail.read).
+var leaseGrantName = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
 
 // appDeskVerbs is every verb an app desk may be given: the semantic-act tier
 // Texture, management and research share, and capture reads. No egress and no
@@ -750,6 +785,12 @@ type AppDeskSpec struct {
 	// LeaseKinds and LeaseCaptures are the lease ceiling (Desk.LeaseKinds).
 	LeaseKinds    []string
 	LeaseCaptures bool
+	// LeaseGrants is the grant part of the ceiling (Desk.LeaseGrants).
+	LeaseGrants []string
+	// FirstParty admits a reserved first-party slug (FirstPartyAppSlug):
+	// internal/appdesk sets it only for the desk manifest the image ships for
+	// that in-tree package, never from a manifest on the tape alone.
+	FirstParty bool
 }
 
 // NewAppDesk validates an app desk. It can only give an app desk less than a
@@ -760,7 +801,11 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 	if !appName.MatchString(spec.Name) {
 		return Desk{}, fmt.Errorf("app desk name %q must match app:<slug>", spec.Name)
 	}
-	if IsReservedAppSlug(spec.Name[len("app:"):]) {
+	slug := spec.Name[len("app:"):]
+	if spec.FirstParty && !firstPartyAppSlugs[slug] {
+		return Desk{}, fmt.Errorf("app desk %s: only the reserved first-party slugs %v are registered first-party", spec.Name, sortedKeys(firstPartyAppSlugs))
+	}
+	if IsReservedAppSlug(slug) && !spec.FirstParty {
 		return Desk{}, fmt.Errorf("app desk %s: the name is reserved for a built-in or first-party desk or app", spec.Name)
 	}
 	if spec.Taint != TaintPrivileged && spec.Taint != TaintUntrustedInput {
@@ -782,6 +827,11 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 			return Desk{}, fmt.Errorf("app desk %s: lease ceiling kind %q is not a leasable object kind", spec.Name, k)
 		}
 	}
+	for _, g := range spec.LeaseGrants {
+		if !leaseGrantName.MatchString(g) {
+			return Desk{}, fmt.Errorf("app desk %s: lease ceiling grant %q is not a grant name", spec.Name, g)
+		}
+	}
 	d := Desk{
 		Name: spec.Name, Kind: KindApp, Carrier: CarrierDeskWorker,
 		Verbs: append([]string{}, spec.Verbs...), CapsuleVerbs: []string{},
@@ -790,7 +840,9 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		Memory:     Memory{WorkerMaxBytes: spec.WorkerMaxBytes},
 		OwnedKinds: append([]string{}, spec.OwnedKinds...), ModelRole: spec.Name, Restart: RestartContract,
 		LeaseKinds: append([]string{}, spec.LeaseKinds...), LeaseCaptures: spec.LeaseCaptures,
-		Profile: true,
+		LeaseGrants: append([]string{}, spec.LeaseGrants...),
+		FirstParty:  spec.FirstParty,
+		Profile:     true,
 	}
 	grants, err := GrantsForVerbs(spec.Verbs)
 	if err != nil {
@@ -882,7 +934,8 @@ func (d Desk) AppSpec() AppDeskSpec {
 	c := d.clone()
 	return AppDeskSpec{Name: c.Name, Verbs: c.Verbs, Taint: c.Taint, UID: c.Sandbox.UID,
 		WorkerMaxBytes: c.Memory.WorkerMaxBytes, OwnedKinds: c.OwnedKinds,
-		LeaseKinds: c.LeaseKinds, LeaseCaptures: c.LeaseCaptures}
+		LeaseKinds: c.LeaseKinds, LeaseCaptures: c.LeaseCaptures, LeaseGrants: c.LeaseGrants,
+		FirstParty: c.FirstParty}
 }
 
 // AdmissionKind is the object kind whose custodian admits engineering work and
@@ -908,7 +961,7 @@ func (d Desk) Equal(o Desk) bool {
 	return d.Name == o.Name && d.Kind == o.Kind && d.Carrier == o.Carrier &&
 		same(d.Verbs, o.Verbs) && same(d.CapsuleVerbs, o.CapsuleVerbs) &&
 		d.Instance == o.Instance && d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
-		same(d.OwnedKinds, o.OwnedKinds) && same(d.LeaseKinds, o.LeaseKinds) && d.LeaseCaptures == o.LeaseCaptures && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
+		same(d.OwnedKinds, o.OwnedKinds) && same(d.LeaseKinds, o.LeaseKinds) && d.LeaseCaptures == o.LeaseCaptures && same(d.LeaseGrants, o.LeaseGrants) && d.FirstParty == o.FirstParty && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
 		d.Profile == o.Profile && d.Prompt == o.Prompt && d.Identity == o.Identity && d.OwnChannel == o.OwnChannel &&
 		d.CellDeadline == o.CellDeadline && same(d.Modules, o.Modules) &&
 		sameGrants(d.Grants, o.Grants) && d.EndsRun == o.EndsRun

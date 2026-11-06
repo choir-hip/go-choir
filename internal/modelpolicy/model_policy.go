@@ -468,6 +468,10 @@ func NormalizeRole(role string) string {
 	if isProfile, _ := deskmanifest.Profile(normalized); isProfile {
 		return normalized
 	}
+	// A renamed desk's former name (email, now the Mail desk, MA4.7).
+	if current, ok := deskmanifest.Renamed(normalized); ok {
+		return current
+	}
 	switch normalized {
 	case VerifierRole:
 		return normalized
