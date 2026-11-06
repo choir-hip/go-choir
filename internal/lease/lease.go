@@ -619,6 +619,16 @@ func (s *Service) EndAll(ctx context.Context, reason string) int {
 	return n
 }
 
+// End ends one live lease whose task finished before its run (a research
+// Texture child's texture.search, MA4.6). It is not a revocation: the holder
+// did nothing wrong.
+func (s *Service) End(ctx context.Context, id, reason string) error {
+	if !s.end(ctx, id, StateEnded, reason) {
+		return fmt.Errorf("lease: %q is not a live lease", id)
+	}
+	return nil
+}
+
 // Revoke is the owner's act (and the breaker's, later): the lease ends at
 // once.
 func (s *Service) Revoke(ctx context.Context, id, reason string) error {

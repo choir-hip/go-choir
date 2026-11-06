@@ -226,7 +226,7 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 	// Cut 2 unit 2a: Read (fetch into a capture) replaced the fetch, import
 	// and ContentItem selector verbs on research and its children.
-	child, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearchChild, "")
+	child, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearchWeb, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +406,7 @@ func TestNoDeskJudgesSupport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range []string{"management", SessionRoleResearch, SessionRoleResearchChild, "engineering", "texture"} {
+	for _, role := range []string{"management", SessionRoleResearch, SessionRoleResearchWeb, "engineering", "texture"} {
 		scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, role, "")
 		if err != nil {
 			t.Fatal(err)

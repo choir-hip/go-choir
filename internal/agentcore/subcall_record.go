@@ -274,14 +274,14 @@ type subCallRecorded struct {
 // them, otherwise the weight-zero mark. A computer with no store (a test
 // harness) records nothing and the child runs as before; with a store, a Cast
 // that cannot be recorded means the child does not run.
-func (rt *Runtime) openChildCast(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, fan researchFanOut, childKey string) (*subCallRecorded, error) {
+func (rt *Runtime) openChildCast(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, role string, fan researchFanOut, childKey string) (*subCallRecorded, error) {
 	owner, computer := firstNonEmpty(parent.OwnerID, lineage.ownerID), strings.TrimSpace(parent.ComputerID)
 	if rt == nil || rt.store == nil || owner == "" || computer == "" {
 		return nil, nil
 	}
 	cast, err := buildSubCallCast(subCallCastParams{
 		RecordID: types.SubCallCastRecordID(fan.id, fan.index), FanOutID: fan.id, ChildKey: childKey,
-		ChildRole: researchChildRole, ChildInbox: researchChildRole + ":" + childKey, Objective: spec.Objective,
+		ChildRole: role, ChildInbox: role + ":" + childKey, Objective: spec.Objective,
 		ParentAgent: parent.AgentID, ParentRunID: parent.RunID, ParentModel: lineage.selection.Model, ComputerID: computer,
 		Questions: spec.Questions, PSuccess: spec.PSuccess, Weight: spec.Weight, Now: time.Now(),
 	})
@@ -304,8 +304,13 @@ func (rt *Runtime) closeChildCast(ctx context.Context, rec *subCallRecorded, res
 	}
 	ctx = context.WithoutCancel(ctx)
 	now := time.Now()
-	report := buildSubCallReport(subCallReportParams{Cast: rec.cast, Child: researchChildRole + ":" + childKey,
+	report := buildSubCallReport(subCallReportParams{Cast: rec.cast, Child: rec.cast.SubCall.Role + ":" + childKey,
 		Model: result.Model, Text: result.Findings, Error: result.Error, Now: now})
+	// The Texture child's Report carries the owner's private Texture text
+	// (MA4.6, plan 8.6): it is labelled so, whatever else the run read.
+	if rec.cast.SubCall.Role == researchTextureRole {
+		report.Provenance.Labels = types.NewLabelSet(report.Provenance.Labels...).Union(researchTextureLabels).Strings()
+	}
 	result.CastID, result.WeightZero = rec.cast.RecordID, rec.cast.WeightZero
 	if err := rt.appendSubCallRecord(ctx, rec.owner, rec.comput, report); err != nil {
 		log.Printf("subcall: record the Report of %s: %v", rec.cast.RecordID, err)

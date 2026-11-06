@@ -24,7 +24,7 @@ import (
 // script holds the expected table itself.
 
 // FrameBoundaryRoles are the desk roles the probe covers.
-var FrameBoundaryRoles = []string{"management", "texture", "research", SessionRoleResearchChild, SessionRoleManagementTask}
+var FrameBoundaryRoles = []string{"management", "texture", "research", SessionRoleResearchWeb, SessionRoleResearchTexture, SessionRoleManagementTask}
 
 // FrameBoundaryActions are every action a frame can name.
 var FrameBoundaryActions = []BrokerAction{
@@ -32,6 +32,7 @@ var FrameBoundaryActions = []BrokerAction{
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
 	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList,
+	ActionTextureSearch,
 }
 
 // FrameBoundaryRole is one desk role's observations.

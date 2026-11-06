@@ -60,7 +60,7 @@ func TestStoryAnalysisIsExportedToTheResearchDeskOnly(t *testing.T) { // G9a
 		{"management", "", false},
 		{"engineering", "implementation", false},
 		{"texture", "", false},
-		{SessionRoleResearchChild, "", false},
+		{SessionRoleResearchWeb, "", false},
 		{SessionRoleManagementTask, "", false},
 		{"", "", false},
 	}

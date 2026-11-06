@@ -184,7 +184,7 @@ func TestRelateIsResearchOnlyAndOffUntilTheOwnerTurnsItOn(t *testing.T) { // E1
 		t.Fatalf("setting off: err = %v, want the refusal to name research.related_story", err)
 	}
 	f.turnOn(t)
-	for _, role := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Engineering, yaegikernel.SessionRoleResearchChild, yaegikernel.SessionRoleManagementTask, ""} {
+	for _, role := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Engineering, yaegikernel.SessionRoleResearchWeb, yaegikernel.SessionRoleResearchTexture, yaegikernel.SessionRoleManagementTask, ""} {
 		if _, err := f.attach(role, "run-e1", ent); err == nil || !strings.Contains(err.Error(), "research") {
 			t.Errorf("role %q: err = %v, want a refusal naming the research desk", role, err)
 		}

@@ -93,7 +93,7 @@ func TestManagementTaskRoleReverseParity(t *testing.T) {
 			t.Errorf("the parent management desk must export choir.%s", need)
 		}
 	}
-	for _, other := range []string{"engineering", "texture", SessionRoleResearch, SessionRoleResearchChild} {
+	for _, other := range []string{"engineering", "texture", SessionRoleResearch, SessionRoleResearchWeb} {
 		s, err := NewChoirScope(broker, issuer, "computer-choir", "activation-other", 1, other, "")
 		if err != nil {
 			t.Fatal(err)
@@ -144,7 +144,7 @@ func TestUnknownDeskRoleFailsClosed(t *testing.T) {
 	// Every desk the kernel knows is a role agentprofile knows, so a run
 	// identity can carry it.
 	for desk := range deskModuleSets() {
-		if desk == SessionRoleResearchChild {
+		if desk == SessionRoleResearchWeb || desk == SessionRoleResearchTexture {
 			continue
 		}
 		if _, err := agentprofile.Canonical(desk); err != nil {

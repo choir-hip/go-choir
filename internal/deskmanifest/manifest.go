@@ -41,7 +41,13 @@ const (
 	Conductor      = "conductor"
 	Email          = "email"
 	ManagementTask = "management_task"
-	ResearchChild  = "research_child"
+	// ResearchWeb and ResearchTexture are the two child roles of the research
+	// desk's fan-out (plan MA4.6, section 8.6). The web child reads the world
+	// and holds no lease; the Texture child holds the Texture custodian's
+	// texture.search lease and reads nothing else. They replaced the single
+	// research_child role.
+	ResearchWeb     = "research_web"
+	ResearchTexture = "research_texture"
 )
 
 // Kind separates the desks a person addresses from the roles a desk spawns.
@@ -185,7 +191,7 @@ type Desk struct {
 	// Profile reports that the desk's name is an agent profile and a model
 	// policy role: agentprofile.Canonical and modelpolicy.NormalizeRole
 	// resolve it (MA2.5, desks design F1 and F2). A role that only borrows
-	// its parent's policy (the research child) is not one.
+	// its parent's policy (a research child) is not one.
 	Profile bool
 	// Prompt reports that the desk has a stored role prompt (promptstore).
 	Prompt bool
@@ -263,6 +269,7 @@ var verbDispatch = map[string]dispatch{
 	"ProductAPI":       {"product_api", false},
 	"Stories":          {"stories", false},
 	"Research":         {"research", false},
+	"SearchTexture":    {"texture_search", false},
 	"System1":          {"system1", false},
 	"RelateStories":    {"relate_stories", false},
 	"Relate":           {"relate", false},
@@ -333,10 +340,15 @@ var system = []Desk{
 		Name: Research, Kind: KindSystem, Carrier: CarrierDeskWorker,
 		Instance: InstanceSubject,
 		// Research observes the world read-only but has full message
-		// authority: read-only world access is not read-only messaging.
+		// authority: read-only world access is not read-only messaging. Its
+		// grants are the union its two child roles narrow (plan 8.6):
+		// world.read for research_web, texture.search for research_texture.
+		// The desk's own run holds no texture.search lease, so its own
+		// SearchTexture is refused by the custodian; only the Texture child
+		// is issued one.
 		Grants: []Grant{G("act.cast"), G("act.ask"), G("act.reply"), G("act.cancel"),
 			G("act.escalate"), G("act.precommit"), G("act.report"), G("act.report_packet"), G("act.resolve"), G("act.disagree"),
-			G("world.read"), G("captures.read"), G("source.poll"), G("evidence.write"), G("evidence.read"), G("run.memory"),
+			G("world.read"), G("texture.search"), G("captures.read"), G("source.poll"), G("evidence.write"), G("evidence.read"), G("run.memory"),
 			G("research.spawn"), G("system1.call"), G("story.relate"), G("capsule.read")},
 		Sandbox:    Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:      TaintUntrustedInput,
@@ -381,15 +393,29 @@ var system = []Desk{
 		Profile: true,
 	},
 	{
-		Name: ResearchChild, Kind: KindRole, Carrier: CarrierDeskWorker,
-		// A child research activation reads the world and returns its
-		// findings to the parent cell as a value. It cannot message,
-		// report or write.
+		Name: ResearchWeb, Kind: KindRole, Carrier: CarrierDeskWorker,
+		// The research desk's web child (plan 8.6) reads the world and
+		// returns its findings to the parent as a Report. It holds no lease,
+		// so no owner-private Texture text reaches it, and it cannot message,
+		// write or fan out.
 		Grants:    []Grant{G("world.read"), G("captures.read"), G("evidence.read")},
 		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:     TaintUntrustedInput,
 		Memory:    Memory{WorkerMaxBytes: 384 * mib},
-		ModelRole: ResearchChild, Restart: RestartContract,
+		ModelRole: ResearchWeb, Restart: RestartContract,
+	},
+	{
+		Name: ResearchTexture, Kind: KindRole, Carrier: CarrierDeskWorker,
+		// The research desk's Texture child (plan 8.6) searches the owner's
+		// Texture corpus through the custodian's guarded search, under the
+		// texture.search lease the Texture custodian issues it for the call.
+		// It holds no world.read: it has no outbound channel, and returns its
+		// findings to the parent as a Report labelled owner_private:texture.
+		Grants:    []Grant{G("texture.search")},
+		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61003},
+		Taint:     TaintUntrustedInput,
+		Memory:    Memory{WorkerMaxBytes: 384 * mib},
+		ModelRole: ResearchTexture, Restart: RestartContract,
 	},
 	{
 		Name: Conductor, Kind: KindSystem, Carrier: CarrierNone,
@@ -681,7 +707,8 @@ var reservedAppSlugs = map[string]bool{
 	"epub": true, "mail": true,
 	"management": true, "management-task": true, "management_task": true, "owner": true, "pdf": true,
 	"podcast": true, "prompt": true, "pulse": true, "research": true,
-	"research-child": true, "research_child": true, "settings": true, "shell": true, "slides": true,
+	"research-child": true, "research_child": true, "research-web": true, "research_web": true,
+	"research-texture": true, "research_texture": true, "settings": true, "shell": true, "slides": true,
 	"system": true, "texture": true, "video": true,
 	// "app" is the namespace prefix itself (MA3.6 N6).
 	"app": true,

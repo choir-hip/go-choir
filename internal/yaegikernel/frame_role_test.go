@@ -24,11 +24,12 @@ var pinnedFrameActions = map[string][]BrokerAction{
 	"texture":    {ActionReadCapture},
 	"research": {ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence,
 		ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
-		ActionPollSource, ActionReadCapture, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI},
-	SessionRoleResearchChild: {ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
+		ActionPollSource, ActionReadCapture, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionTextureSearch},
+	SessionRoleResearchWeb: {ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
 		ActionReadEvidence, ActionListEvidence},
-	SessionRoleManagementTask: {ActionReadCapture, ActionStories},
-	"engineering":             {},
+	SessionRoleResearchTexture: {ActionTextureSearch},
+	SessionRoleManagementTask:  {ActionReadCapture, ActionStories},
+	"engineering":              {},
 }
 
 var allBrokerActions = []BrokerAction{
@@ -36,6 +37,7 @@ var allBrokerActions = []BrokerAction{
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
 	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList,
+	ActionTextureSearch,
 }
 
 const testSlotToken = "slot-token-0123456789abcdef0123456789abcdef"
@@ -202,17 +204,45 @@ func TestForgedFrameClaimsAnotherDesk(t *testing.T) {
 	}
 }
 
-// A research child is served research_child's narrower table even though its
+// A research child is served its own role's narrower table even though its
 // parent is research. Failure mode 6.
-func TestFrameRoleResearchChildIsNarrower(t *testing.T) {
-	h := newFrameHarness(t, SessionRoleResearchChild)
-	for _, action := range []BrokerAction{ActionSaveEvidence, ActionPollSource, ActionSourceAPI, ActionSystem1, ActionRelateStories, ActionRelate, ActionResearch, ActionGetRunMemoryEntry} {
-		if resp := h.send(StreamBrokerEgress, h.request(action, nil)); resp.Success {
-			t.Fatalf("research child was served %s", action)
+//
+// MA4.6 (plan 8.6): the two child roles split the research desk's grants. The
+// web child tries the Texture child's texture_search and the Texture child
+// tries every world.read action and the rest of research's table; each is
+// refused at the frame check, named, and reported, and no handler runs.
+func TestFrameRoleResearchChildrenAreNarrowerAndDisjoint(t *testing.T) {
+	refused := map[string][]BrokerAction{
+		SessionRoleResearchWeb: {ActionTextureSearch, ActionSaveEvidence, ActionPollSource, ActionSourceAPI, ActionSystem1,
+			ActionRelateStories, ActionRelate, ActionResearch, ActionGetRunMemoryEntry},
+		SessionRoleResearchTexture: {ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionReadCapture, ActionPollSource,
+			ActionSourceAPI, ActionReadEvidence, ActionListEvidence, ActionSaveEvidence, ActionResearch, ActionSystem1,
+			ActionRelateStories, ActionRelate, ActionGetRunMemoryEntry, ActionProductAPI},
+	}
+	for role, actions := range refused {
+		h := newFrameHarness(t, role)
+		for _, action := range actions {
+			resp := h.send(StreamBrokerEgress, h.request(action, nil))
+			if resp.Success {
+				t.Fatalf("%s was served %s", role, action)
+			}
+			if !strings.Contains(resp.Error, "refused") || !strings.Contains(resp.Error, role) || !strings.Contains(resp.Error, string(action)) {
+				t.Fatalf("%s/%s: the refusal must name the desk and the action, got %q", role, action, resp.Error)
+			}
+		}
+		if h.egress.Load() != 0 {
+			t.Fatalf("handler ran for a %s action outside its table", role)
+		}
+		if h.refusalCount() != len(actions) {
+			t.Fatalf("%s: %d refusals reported, want %d", role, h.refusalCount(), len(actions))
 		}
 	}
-	if h.egress.Load() != 0 {
-		t.Fatalf("handler ran for a research child's widened action")
+	// Each is served its own grant.
+	for role, action := range map[string]BrokerAction{SessionRoleResearchWeb: ActionSearchWireCorpus, SessionRoleResearchTexture: ActionTextureSearch} {
+		h := newFrameHarness(t, role)
+		if resp := h.send(StreamBrokerEgress, h.request(action, nil)); !resp.Success {
+			t.Fatalf("%s refused its own %s: %q", role, action, resp.Error)
+		}
 	}
 }
 

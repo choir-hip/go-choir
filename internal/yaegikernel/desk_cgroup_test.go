@@ -43,7 +43,7 @@ func readCgroupFile(t *testing.T, dir, name string) string {
 
 func TestWorkerCgroupIsTheDesksManifestBudget(t *testing.T) {
 	fakeCgroupFS(t)
-	for _, role := range []string{"management", "texture", "research", SessionRoleManagementTask, SessionRoleResearchChild} {
+	for _, role := range []string{"management", "texture", "research", SessionRoleManagementTask, SessionRoleResearchWeb} {
 		role := role
 		t.Run(role, func(t *testing.T) {
 			root := t.TempDir()

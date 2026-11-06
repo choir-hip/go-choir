@@ -384,27 +384,35 @@ func TestTheCapsuleStoreCopyIsALease(t *testing.T) {
 	}
 }
 
-// MA3.7c: texture.search is a first-party grant lease. Only the research desk
-// run it was issued for holds it; it opens no kind to the reader gate and ends
-// with the run.
+// MA3.7c, MA4.6: texture.search is a first-party grant lease. Only the
+// research desk's Texture child it was issued to holds it, in the run it was
+// issued for; the research desk itself and its web child are refused it; it
+// opens no kind to the reader gate and ends with the run.
 func TestTextureSearchGrantIsHeldByTheIssuedRunOnly(t *testing.T) {
 	f := newFixture(t)
-	rec, err := f.svc.IssueTextureSearch(context.Background(), ownerID, computer, "run-g", "research:doc")
+	for _, agent := range []string{"research:doc", deskmanifest.ResearchWeb + ":k1", "management:o"} {
+		if _, err := f.svc.IssueTextureSearch(context.Background(), ownerID, computer, "run-g", agent); !errors.Is(err, lease.ErrRefused) {
+			t.Errorf("texture.search was issued to %s: %v", agent, err)
+		}
+	}
+	rec, err := f.svc.IssueTextureSearch(context.Background(), ownerID, computer, "run-g", deskmanifest.ResearchTexture+":k1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Holder != deskmanifest.Research || len(rec.Scope.Grants) != 1 || len(rec.Custodians) != 1 || rec.Custodians[0] != "desk:texture" {
+	if rec.Holder != deskmanifest.ResearchTexture || len(rec.Scope.Grants) != 1 || len(rec.Custodians) != 1 || rec.Custodians[0] != "desk:texture" {
 		t.Fatalf("unexpected grant lease: %+v", rec)
 	}
-	research := objectgraph.WriterResearch
+	research := lease.WriterResearchTexture
 	if _, ok := f.svc.AdmitsGrant(research, "run-g", lease.GrantTextureSearch); !ok {
 		t.Error("the issued run does not hold the grant")
 	}
 	if _, ok := f.svc.AdmitsGrant(research, "run-other", lease.GrantTextureSearch); ok {
 		t.Error("another run of the desk holds the grant")
 	}
-	if _, ok := f.svc.AdmitsGrant(objectgraph.WriterManagement, "run-g", lease.GrantTextureSearch); ok {
-		t.Error("another desk holds the grant")
+	for _, w := range []objectgraph.Writer{objectgraph.WriterManagement, objectgraph.WriterResearch, "desk:" + deskmanifest.ResearchWeb} {
+		if _, ok := f.svc.AdmitsGrant(w, "run-g", lease.GrantTextureSearch); ok {
+			t.Errorf("%s holds the grant", w)
+		}
 	}
 	if f.svc.AdmitsKind(research, "run-g", "choir.texture_document") {
 		t.Error("a grant lease opened a kind to the reader gate")
@@ -503,10 +511,10 @@ func TestTextureBriefGrantIsMintedByTheCustodianOnly(t *testing.T) {
 		t.Error("B7: the grant opened texture.search")
 	}
 	// The texture.search grant admits no message.
-	if _, err := f.svc.IssueTextureSearch(ctx, ownerID, computer, "run-s", "research:2"); err != nil {
+	if _, err := f.svc.IssueTextureSearch(ctx, ownerID, computer, "run-s", deskmanifest.ResearchTexture+":2"); err != nil {
 		t.Fatal(err)
 	}
-	if f.svc.AdmitsMessageLabel(research, "run-s", doc) {
+	if f.svc.AdmitsMessageLabel(research, "run-s", doc) || f.svc.AdmitsMessageLabel(lease.WriterResearchTexture, "run-s", doc) {
 		t.Error("texture.search admitted a message")
 	}
 	// Expiry.

@@ -35,7 +35,7 @@ func TestRelateIsExportedToTheResearchDeskOnly(t *testing.T) {
 		{"management", "", false},
 		{"engineering", "implementation", false},
 		{"texture", "", false},
-		{SessionRoleResearchChild, "", false},
+		{SessionRoleResearchWeb, "", false},
 		{SessionRoleManagementTask, "", false},
 		{"", "", false},
 	}
@@ -59,7 +59,7 @@ func relateEntityOK() RelateEntity {
 func TestRelateHandleAuthorizesOnlyTheResearchDesk(t *testing.T) { // E1
 	story := pubID(t, "a")
 	ent := map[string]any{"name": "Aleksandar Vucic", "type": "person", "role": "central", "judgment_ref": "system1:e1", "question_id": "q1"}
-	for _, role := range []string{"management", "engineering", "texture", SessionRoleResearchChild, SessionRoleManagementTask} {
+	for _, role := range []string{"management", "engineering", "texture", SessionRoleResearchWeb, SessionRoleManagementTask} {
 		scope, broker := system1Scope(t, role, "")
 		broker.SetEgress(func(context.Context, BrokerAction, json.RawMessage) (json.RawMessage, error) {
 			t.Errorf("role %s reached the host egress", role)

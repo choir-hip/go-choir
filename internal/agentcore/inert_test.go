@@ -358,7 +358,7 @@ func TestInertSamplingCoversSubCallAndRecordsRouteCasts(t *testing.T) {
 	}
 	lineage := researchLineage{ownerID: f.owner}
 	spec := yaegikernel.ResearchChild{Objective: "Find the filing date", PSuccess: fp(0.6), Weight: fp(0.5), Questions: []types.TypedQuestion{subCallYesNo(0.6)}}
-	if _, err := f.rt.openChildCast(context.Background(), f.parent, lineage, spec, fan, "k0"); err != nil {
+	if _, err := f.rt.openChildCast(context.Background(), f.parent, lineage, spec, yaegikernel.SessionRoleResearchWeb, fan, "k0"); err != nil {
 		t.Fatal(err)
 	}
 	f.rt.waitSubCallJudge()

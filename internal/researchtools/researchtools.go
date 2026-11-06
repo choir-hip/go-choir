@@ -3,7 +3,6 @@ package researchtools
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,13 +32,16 @@ type Dependencies struct {
 }
 
 // newSearchWireCorpusTool is choir.SearchWireCorpus: a keyword search of
-// this computer's own corpus, its stories (Texture documents, in results, only under a texture.search lease)
-// and its captures (the shared store's web_capture objects this computer
-// wrote, with Jev's labels as topic and outlet hints, in captures).
-// Research calls it before the web, so what the paper already holds is
-// cited, not fetched again. It is scoped by the run's owner and computer; a
-// call with no run context names the owner, and the environment's owner is
-// the last fallback. Each list is bounded (corpusMaxLimit).
+// this computer's own world corpus: its captures (the shared store's
+// web_capture objects this computer wrote, with Jev's labels as topic and
+// outlet hints), the world events it resolved and published Autopaper pieces.
+// Research calls it before the web, so what the paper already holds is cited,
+// not fetched again. It never searches the owner's stories: that is the
+// Texture custodian's guarded search (newSearchTextureTool), served only to the
+// research desk's Texture child (plan MA4.6, section 8.6). It is scoped by the
+// run's owner and computer; a call with no run context names the owner, and
+// the environment's owner is the last fallback. Each list is bounded
+// (corpusMaxLimit).
 func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		Query   string `json:"query"`
@@ -47,7 +49,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		OwnerID string `json:"owner_id,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet or keywords: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids), its stories (results: doc_id, title, snippet, label; returned only when this run holds a texture.search lease, otherwise results is empty with a results_note) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet or keywords: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
@@ -68,48 +70,14 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			limit := corpusLimit(in.Limit)
 			exec := toolregistry.ExecutionContextFrom(ctx)
 			ownerID := firstNonEmptyString(exec.OwnerID, in.OwnerID, universalWirePlatformOwnerID())
-			// X1 (MA3.7c): the Texture part is the custodian's guarded search
-			// under a texture.search lease held by this run. Without the
-			// lease the Texture part is omitted and the world parts stay.
-			// The research desk's run holds the lease until MA4.6 moves it
-			// to the research_texture child (plan 8.6).
-			storiesStart := time.Now()
-			hits, searchErr := deps.Store.TextureSearchUnderLease(ctx, ownerID, query, limit)
-			storiesElapsed := time.Since(storiesStart)
-			textureNote := ""
-			switch {
-			case errors.Is(searchErr, store.ErrTextureSearchNoLease):
-				textureNote = "Texture stories not searched: this run holds no texture.search lease"
-			case errors.Is(searchErr, store.ErrTextureSearchRate):
-				textureNote = "Texture stories not searched: " + searchErr.Error()
-			case searchErr != nil:
-				return "", fmt.Errorf("search wire corpus: %w", searchErr)
-			}
-			type searchResult struct {
-				DocID     string `json:"doc_id"`
-				Title     string `json:"title"`
-				UpdatedAt string `json:"updated_at"`
-				Snippet   string `json:"snippet,omitempty"`
-				Label     string `json:"label"`
-			}
-			out := make([]searchResult, 0, len(hits))
-			for _, r := range hits {
-				out = append(out, searchResult{
-					DocID:     r.Ref,
-					Title:     r.Title,
-					UpdatedAt: r.UpdatedAt.Format(time.RFC3339),
-					Snippet:   r.Snippet,
-					Label:     r.Label,
-				})
-			}
-			// A capture-store outage keeps the stories and says so; it never
+			// A capture-store outage keeps the rest and says so; it never
 			// reads as "no captures".
 			capturesStart := time.Now()
 			captures, note, err := searchCaptures(ctx, deps, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
 			if err != nil {
 				captures, note = nil, "captures not searched: "+err.Error()
 			}
-			logCorpusSearch(query, exec.ComputerID, storiesElapsed, len(out), time.Since(capturesStart), captures, note)
+			logCorpusSearch(query, exec.ComputerID, time.Since(capturesStart), captures, note)
 			if captures == nil {
 				captures = []CorpusCapture{}
 			}
@@ -124,7 +92,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
 			published, publishedNote := searchPublished(ctx, deps, query, limit)
-			body := map[string]any{"events": events, "event_count": len(events), "results": out, "count": len(out), "query": query, "captures": captures, "capture_count": len(captures),
+			body := map[string]any{"events": events, "event_count": len(events), "query": query, "captures": captures, "capture_count": len(captures),
 				"published": published, "published_count": len(published)}
 			if publishedNote != "" {
 				body["published_note"] = publishedNote
@@ -134,9 +102,6 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			}
 			if eventsNote != "" {
 				body["events_note"] = eventsNote
-			}
-			if textureNote != "" {
-				body["results_note"] = textureNote
 			}
 			return toolregistry.ResultJSON(body)
 		}}
@@ -166,7 +131,7 @@ func universalWirePlatformOwnerID() string {
 // docs/archive/reports/object-graph-retrieval-research-2026-10-14.md): the query,
 // both halves' latency and counts, and the capture ids returned, so the
 // retrieval eval set can be grown from real searches and their hits.
-func logCorpusSearch(query, computerID string, storiesElapsed time.Duration, stories int, capturesElapsed time.Duration, captures []CorpusCapture, note string) {
+func logCorpusSearch(query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string) {
 	ids := make([]string, 0, len(captures))
 	for i, c := range captures {
 		if i == 10 {
@@ -177,6 +142,6 @@ func logCorpusSearch(query, computerID string, storiesElapsed time.Duration, sto
 	if len(query) > 200 {
 		query = query[:200]
 	}
-	log.Printf("corpus search computer=%s stories_ms=%d stories=%d captures_ms=%d captures=%d note=%q query=%q capture_ids=%s",
-		computerID, storiesElapsed.Milliseconds(), stories, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","))
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d note=%q query=%q capture_ids=%s",
+		computerID, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","))
 }

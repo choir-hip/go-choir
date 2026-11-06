@@ -186,8 +186,10 @@ func TestProfileReadDoesNotClone(t *testing.T) {
 	if p, r := Profile(Texture); !p || r {
 		t.Fatalf("texture profile/role = %v %v", p, r)
 	}
-	if p, _ := Profile(ResearchChild); p {
-		t.Fatal("research_child is a profile")
+	for _, role := range []string{ResearchWeb, ResearchTexture, "research_child"} {
+		if p, _ := Profile(role); p {
+			t.Fatalf("%s is a profile", role)
+		}
 	}
 	if p, _ := Profile("nobody"); p {
 		t.Fatal("unknown is a profile")

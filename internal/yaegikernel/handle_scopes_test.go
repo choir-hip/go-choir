@@ -29,14 +29,15 @@ func newTestBroker(t *testing.T) (*Broker, *HandleIssuer) {
 // Written independently of internal/deskmanifest: this table is the authority
 // the batch must not widen, and it is the narrowing it applies.
 var pinnedHandleScopes = map[string][]BrokerAction{
-	"management":              {ActionReadFile, ActionListDir, ActionProductAPI, ActionReadCapture, ActionStories},
-	"texture":                 {ActionReadFile, ActionListDir, ActionReadCapture},
-	"research":                append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions["research"]...),
-	SessionRoleResearchChild:  append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions[SessionRoleResearchChild]...),
-	SessionRoleManagementTask: {ActionReadFile, ActionListDir, ActionReadCapture, ActionStories},
-	"engineering":             {ActionExec, ActionReadFile, ActionWriteFile, ActionListDir},
-	"":                        {ActionReadFile, ActionListDir},
-	"not-a-desk":              {ActionReadFile, ActionListDir},
+	"management":               {ActionReadFile, ActionListDir, ActionProductAPI, ActionReadCapture, ActionStories},
+	"texture":                  {ActionReadFile, ActionListDir, ActionReadCapture},
+	"research":                 append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions["research"]...),
+	SessionRoleResearchWeb:     append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions[SessionRoleResearchWeb]...),
+	SessionRoleResearchTexture: append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions[SessionRoleResearchTexture]...),
+	SessionRoleManagementTask:  {ActionReadFile, ActionListDir, ActionReadCapture, ActionStories},
+	"engineering":              {ActionExec, ActionReadFile, ActionWriteFile, ActionListDir},
+	"":                         {ActionReadFile, ActionListDir},
+	"not-a-desk":               {ActionReadFile, ActionListDir},
 }
 
 func actionNames(in []BrokerAction) []string {
@@ -82,6 +83,7 @@ var verbDispatch = map[string]BrokerAction{
 	"ProductAPI": ActionProductAPI, "Stories": ActionStories, "Research": ActionResearch, "System1": ActionSystem1,
 	"RelateStories": ActionRelateStories,
 	"Relate":        ActionRelate,
+	"SearchTexture": ActionTextureSearch,
 }
 
 // The table forgot nothing a desk's verbs dispatch (failure mode F8: a real

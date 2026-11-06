@@ -29,6 +29,10 @@ const (
 	ActionSourceAPI        BrokerAction = "source_api"
 	ActionReadCapture      BrokerAction = "read_capture"
 	ActionSearchWireCorpus BrokerAction = "search_wire_corpus"
+	// ActionTextureSearch is the Texture custodian's guarded corpus search,
+	// served only under a texture.search lease: the research desk's Texture
+	// child's choir.SearchTexture (plan MA4.6, section 8.6).
+	ActionTextureSearch BrokerAction = "texture_search"
 	// ActionResearch runs child research activations on the host and
 	// returns their findings to the calling cell (RLM actor recursion).
 	ActionResearch          BrokerAction = "research"
@@ -146,7 +150,11 @@ type ResearchPayload struct {
 // ResearchChild is one child research activation's spec.
 type ResearchChild struct {
 	Objective string `json:"objective"`
-	Model     string `json:"model,omitempty"`
+	// Role is the child's role (plan MA4.6, section 8.6): ResearchChildWeb
+	// (the default when empty) or ResearchChildTexture. Any other value is
+	// refused, never run as a web child.
+	Role  string `json:"role,omitempty"`
+	Model string `json:"model,omitempty"`
 	// Questions are the parent's precommitment about this child's result
 	// (MA1.5): typed questions with the parent's own probabilities.
 	// PSuccess and Weight are the parent's stated chance the child achieves
@@ -157,9 +165,18 @@ type ResearchChild struct {
 	Weight    *float64              `json:"weight,omitempty"`
 }
 
+// The roles a ResearchChild names.
+const (
+	ResearchChildWeb     = "web"
+	ResearchChildTexture = "texture"
+)
+
 // ResearchChildResult is what one child returns to the calling cell.
 type ResearchChildResult struct {
-	Objective  string `json:"objective"`
+	Objective string `json:"objective"`
+	// Role is the session role the child ran as (research_web or
+	// research_texture).
+	Role       string `json:"role,omitempty"`
 	Model      string `json:"model"`
 	Findings   string `json:"findings,omitempty"`
 	Error      string `json:"error,omitempty"`
@@ -303,6 +320,13 @@ type SearchWireCorpusPayload struct {
 	Limit int    `json:"limit,omitempty"`
 }
 
+// TextureSearchPayload defines ActionTextureSearch: the query and how many
+// hits (the custodian clamps it).
+type TextureSearchPayload struct {
+	Query string `json:"query"`
+	Limit int    `json:"limit,omitempty"`
+}
+
 // Evidence + run-memory cell verbs. These resolve through rt-bound tools on
 // the host (agentcore), not the researchtools deps table — the action name
 // equals the tool name there too.
@@ -343,7 +367,7 @@ func (r *BrokerRequest) Validate() error {
 	}
 	switch r.Action {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
-		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
+		ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
 		return nil

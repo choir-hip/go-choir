@@ -124,6 +124,10 @@ var catalogue = map[string]grantSpec{
 	"research.spawn": {Verbs: []string{"Research"}, Privileged: true},
 	"system1.call":   {Verbs: []string{"System1"}, Privileged: true},
 	"story.relate":   {Verbs: []string{"RelateStories", "Relate", "StoryAnalysis"}, Privileged: true},
+	// The Texture custodian's guarded corpus search (plan 8.6): the verb is
+	// served only under a texture.search lease the custodian issues to the
+	// research desk's Texture child (internal/lease, store.TextureSearchUnderLease).
+	"texture.search": {Verbs: []string{"SearchTexture"}, Privileged: true},
 	"capsule.read":   {CapsuleVerbs: []string{"read_file", "list_dir", "stat", "go_eval"}, Privileged: true},
 
 	// Engineering's capsule-bound mutation.

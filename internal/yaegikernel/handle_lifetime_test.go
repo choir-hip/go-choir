@@ -34,7 +34,7 @@ func TestDeskHandleOutlivesItsFirstIssue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := NewChoirScope(broker, issuer, "computer-ttl", "activation-ttl", 1, SessionRoleResearchChild, "")
+	scope, err := NewChoirScope(broker, issuer, "computer-ttl", "activation-ttl", 1, SessionRoleResearchWeb, "")
 	if err != nil {
 		t.Fatal(err)
 	}

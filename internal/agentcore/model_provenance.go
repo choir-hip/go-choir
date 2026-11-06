@@ -29,7 +29,8 @@ const modelProvenanceMaxRuns = 400
 // trajectories (Texture, the research desk, engineering casts) and the run
 // that requested an engineering run of the lineage (the management turn
 // that cast it). Research children are not runs: their lines are written
-// on their parent run under the research_child role. Every read is indexed
+// on their parent run under the child's role (research_web, research_texture;
+// research_child before MA4.6). Every read is indexed
 // (channel_id, trajectory_id, run_id, a point lookup), so the cost is
 // bounded by the lineage, never by the store. The caller declares the
 // reader (the owner route does).

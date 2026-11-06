@@ -124,7 +124,7 @@ func TestDocumentModelProvenanceShowsSwitchesChildrenEngineeringAndDelegate(t *t
 			{FromProvider: "chatgpt", FromModel: "gpt-6-luna", ToProvider: "openrouter", ToModel: "iceman", Reason: "provider_quota"},
 		}})
 	// A research child's line, written on its parent run (B2).
-	appendServed(t, s, research, types.ModelServedRecord{Role: researchChildRole, SelectedProvider: "openrouter", SelectedModel: "flint",
+	appendServed(t, s, research, types.ModelServedRecord{Role: yaegikernel.SessionRoleResearchWeb, SelectedProvider: "openrouter", SelectedModel: "flint",
 		Models: []types.ModelServedUsage{{Provider: "openrouter", Model: "flint", Calls: 5}}})
 	appendServed(t, s, engRun, types.ModelServedRecord{SelectedProvider: "chatgpt", SelectedModel: "gpt-6",
 		Models: []types.ModelServedUsage{{Provider: "chatgpt", Model: "gpt-6", Calls: 7}}})
@@ -144,8 +144,8 @@ func TestDocumentModelProvenanceShowsSwitchesChildrenEngineeringAndDelegate(t *t
 		t.Fatalf("texture = %+v", provenanceRole(got, "texture"))
 	}
 	researchModels := provenanceRole(got, "research")
-	if m, ok := provenanceModel(provenanceRole(got, researchChildRole), "flint"); !ok || m.Calls != 5 {
-		t.Fatalf("research children = %+v", provenanceRole(got, researchChildRole))
+	if m, ok := provenanceModel(provenanceRole(got, yaegikernel.SessionRoleResearchWeb), "flint"); !ok || m.Calls != 5 {
+		t.Fatalf("research children = %+v", provenanceRole(got, yaegikernel.SessionRoleResearchWeb))
 	}
 	for model, calls := range map[string]int{"deepseek-v4.1-flash": 2, "gpt-6-luna": 3, "iceman": 1} {
 		if m, ok := provenanceModel(researchModels, model); !ok || m.Calls != calls {
@@ -212,14 +212,14 @@ func TestDocumentModelProvenanceReachesResearchChildren(t *testing.T) {
 	if _, ok := provenanceModel(provenanceRole(got, "research"), "deepseek-v4.1-flash"); !ok {
 		t.Fatalf("parent model missing")
 	}
-	children := provenanceRole(got, researchChildRole)
+	children := provenanceRole(got, yaegikernel.SessionRoleResearchWeb)
 	if m, ok := provenanceModel(children, "flint"); !ok || m.Calls != 1 {
 		t.Fatalf("first child's model missing: %+v", children)
 	}
 	if len(children) != 2 {
 		t.Fatalf("children = %+v, want flint and the chain model the second child switched to", children)
 	}
-	if len(got.Switches) != 1 || got.Switches[0].Role != researchChildRole || got.Switches[0].FromProvider != "synthetic" ||
+	if len(got.Switches) != 1 || got.Switches[0].Role != yaegikernel.SessionRoleResearchWeb || got.Switches[0].FromProvider != "synthetic" ||
 		!strings.HasPrefix(got.Switches[0].Reason, "provider_quota") {
 		t.Fatalf("switches = %+v, want the second child's quota switch", got.Switches)
 	}

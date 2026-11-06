@@ -469,7 +469,7 @@ func TestSystem1HostRefusesAMalformedPayload(t *testing.T) {
 // sent.
 func TestSystem1HostRefusesEveryDeskButResearch(t *testing.T) {
 	f := newSystem1Fixture(t)
-	for _, role := range []string{agentprofile.Management, agentprofile.Engineering, agentprofile.Texture, yaegikernel.SessionRoleResearchChild, yaegikernel.SessionRoleManagementTask, ""} {
+	for _, role := range []string{agentprofile.Management, agentprofile.Engineering, agentprofile.Texture, yaegikernel.SessionRoleResearchWeb, yaegikernel.SessionRoleResearchTexture, yaegikernel.SessionRoleManagementTask, ""} {
 		if _, err := f.call(t, role, "run-role", question("q1")); err == nil || !strings.Contains(err.Error(), "research desk") {
 			t.Errorf("role %q: err = %v, want a refusal naming the research desk", role, err)
 		}

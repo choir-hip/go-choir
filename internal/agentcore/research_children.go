@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -25,13 +26,44 @@ import (
 // this protects guest memory; it never refuses a child, it queues it.
 const researchChildConcurrency = 4
 
-// researchChildRole is the role a research child runs as: the callee of the
-// Cast each child call is (subcall_record.go).
-const researchChildRole = yaegikernel.SessionRoleResearchChild
+// The research desk's fan-out (plan MA4.6, section 8.6). A choir.Research
+// child runs as one of two roles, each a narrowing of the research desk's
+// grants (deskmanifest): research_web holds world.read and no lease, so no
+// owner-private Texture text reaches the child that reads the web;
+// research_texture holds only SearchTexture, under the texture.search lease
+// the Texture custodian issues it for its call, and has no outbound channel.
+// The parent writes every objective from its own context before any child
+// runs, and receives only the children's Reports.
+
+// The two child roles, in the kernel's spelling.
+const (
+	researchWebRole     = yaegikernel.SessionRoleResearchWeb
+	researchTextureRole = yaegikernel.SessionRoleResearchTexture
+)
+
+// researchTextureLabels are the labels a Texture child's findings carry: the
+// Texture custodian's search snippets (store.TextureSearchUnderLease).
+var researchTextureLabels = types.NewLabelSet(store.TextureSearchLabel())
+
+// researchChildRoleOf is the session role a child spec names: the callee of
+// the Cast each child call is (subcall_record.go). An unknown role is refused,
+// never run as a web child.
+func researchChildRoleOf(spec yaegikernel.ResearchChild) (string, error) {
+	switch strings.TrimSpace(spec.Role) {
+	case "", yaegikernel.ResearchChildWeb:
+		return researchWebRole, nil
+	case yaegikernel.ResearchChildTexture:
+		return researchTextureRole, nil
+	}
+	return "", fmt.Errorf("choir.Research: child role %q is not %q or %q", spec.Role, yaegikernel.ResearchChildWeb, yaegikernel.ResearchChildTexture)
+}
 
 // researchChildPreamble is prepended to the research desk prompt for a child
 // activation. It states the child's job, not a procedure.
-const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. Do this objective's work yourself with the read-only world verbs. You cannot fan out further, report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
+var researchChildPreamble = map[string]string{
+	researchWebRole:     `You are a web child of a parent research desk, working on one objective. Do this objective's work yourself with the read-only world verbs. You cannot search the owner's own stories, fan out further, report, message or write: whatever you end your turn with is returned to the parent as your Report. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`,
+	researchTextureRole: `You are the Texture child of a parent research desk, working on one objective. Your only verb beyond reading your own session is choir.SearchTexture(query, limit), the Texture custodian's guarded search of the owner's own stories: ranked refs with short snippets, never a whole document. You cannot reach the web, fan out further, report, message or write: whatever you end your turn with is returned to the parent as your Report, labelled as the owner's private text. Search with several wordings, then end with your findings: each claim with the story ref it comes from, and what the owner's stories do not cover. The world verbs and the research procedure in the prompt below are not yours; ignore them.`,
+}
 
 // researchChildCallInterval spaces research-child model calls across the
 // whole computer: 40 a minute, under the gateway's default per-computer
@@ -226,9 +258,14 @@ type researchFanOut struct {
 // time ran out while it queued): it is still a Cast with a Report, so no
 // sub-call goes unrecorded.
 func (rt *Runtime) runResearchChildRefused(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, fan researchFanOut, cause string) yaegikernel.ResearchChildResult {
-	result := yaegikernel.ResearchChildResult{Objective: spec.Objective, Model: spec.Model, Error: cause}
+	role, roleErr := researchChildRoleOf(spec)
+	result := yaegikernel.ResearchChildResult{Objective: spec.Objective, Role: role, Model: spec.Model, Error: cause}
+	if roleErr != nil {
+		result.Error += "; " + roleErr.Error()
+		return result
+	}
 	childKey := uuid.NewString()
-	cast, err := rt.openChildCast(ctx, parent, lineage, spec, fan, childKey)
+	cast, err := rt.openChildCast(ctx, parent, lineage, spec, role, fan, childKey)
 	if err != nil {
 		result.Error += "; " + err.Error()
 		return result
@@ -239,20 +276,24 @@ func (rt *Runtime) runResearchChildRefused(ctx context.Context, parent toolregis
 // runResearchChild runs one child as a Cast: the parent's precommitment is
 // recorded before the child starts, the child's findings are recorded as its
 // Report, and the findings are handed to the parent cell only once that
-// Report is durable.
+// Report is durable. A spec naming no known role is refused before any Cast.
 func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, fan researchFanOut) yaegikernel.ResearchChildResult {
-	childKey := uuid.NewString()
-	cast, err := rt.openChildCast(ctx, parent, lineage, spec, fan, childKey)
+	role, err := researchChildRoleOf(spec)
 	if err != nil {
 		return yaegikernel.ResearchChildResult{Objective: spec.Objective, Model: spec.Model, Error: err.Error()}
 	}
-	result := rt.runResearchChildWork(ctx, parent, lineage, spec, childKey)
+	childKey := uuid.NewString()
+	cast, err := rt.openChildCast(ctx, parent, lineage, spec, role, fan, childKey)
+	if err != nil {
+		return yaegikernel.ResearchChildResult{Objective: spec.Objective, Role: role, Model: spec.Model, Error: err.Error()}
+	}
+	result := rt.runResearchChildWork(ctx, parent, lineage, spec, role, childKey)
 	return rt.closeChildCast(ctx, cast, result, childKey)
 }
 
-func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, childKey string) yaegikernel.ResearchChildResult {
+func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild, role, childKey string) yaegikernel.ResearchChildResult {
 	start := time.Now()
-	result := yaegikernel.ResearchChildResult{Objective: spec.Objective}
+	result := yaegikernel.ResearchChildResult{Objective: spec.Objective, Role: role}
 	selection, fallbacks, err := rt.researchChildSelection(ctx, lineage, spec.Model, childKey)
 	if err != nil {
 		result.Model = spec.Model
@@ -265,23 +306,34 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	childExec.ChannelID = ""
 	childExec.ToolCallID = ""
 	childExec.Profile = agentprofile.Research
-	childExec.Role = researchChildRole
+	childExec.Role = role
 	share := researchChildDeadline(ctx)
 	ctx, cancel := context.WithDeadline(ctx, share)
 	defer cancel()
 	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection, fallbacks: fallbacks})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
-	// MA3.3: the child reads as the desk it runs as, not as its parent.
+	// MA3.3: the child reads as the desk it runs as, not as its parent; the
+	// web child holds no lease, and the Texture child holds only its own.
 	childCtx = researchChildReadContext(childCtx, childExec.Profile)
+	if role == researchTextureRole {
+		leased, end, err := rt.researchTextureChildContext(childCtx, parent, lineage, childKey)
+		if err != nil {
+			result.Model = selection.Model
+			result.Error = err.Error()
+			return result
+		}
+		defer end()
+		childCtx = leased
+	}
 
-	workers := newResearchChildDeskWorkers(childKey)
+	workers := newResearchChildDeskWorkers(role, childKey)
 	defer workers.release(deskWorkerActivationID(childExec))
-	registry, err := toolregistry.NewToolRegistryWithTools(newDeskGoEvalTool(rt, workers, researchChildRole))
+	registry, err := toolregistry.NewToolRegistryWithTools(newDeskGoEvalTool(rt, workers, role))
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
-	systemPrompt, err := rt.researchChildSystemPrompt(lineage.ownerID)
+	systemPrompt, err := rt.researchChildSystemPrompt(lineage.ownerID, role)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -291,9 +343,9 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 		"content": []any{map[string]string{"type": "text", "text": spec.Objective}},
 	})
 	// A child is not a run: its one durable line is the models it served,
-	// written on the parent run under the research_child role so the
+	// written on the parent run under the child's role so the
 	// parent's document reads them (review r1, B2).
-	childEmit := rt.researchChildServedEmitter(ctx, parent)
+	childEmit := rt.researchChildServedEmitter(ctx, parent, role)
 	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.subRLMCallSpacer()}
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{runContextMessage(time.Now(), researchChildTime(share)), userMsg}, systemPrompt,
@@ -303,9 +355,9 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 		// OpenCode refuses a call without a conversation id; each child is
 		// its own provider conversation.
 		toolregistry.WithToolLoopConversationID("research-child:"+childKey),
-		// Siblings share one system prompt and tools, so they share one
-		// cache thread under their parent desk.
-		toolregistry.WithToolLoopPromptCache(researchChildCacheScope(parent)),
+		// Siblings of one role share one system prompt and tools, so they
+		// share one cache thread under their parent desk.
+		toolregistry.WithToolLoopPromptCache(researchChildCacheScope(parent, role)),
 		// A child gets the same quota machinery as a run: the computer's
 		// shared ledger, its continuation chain, and a visible incident
 		// keyed by the child (never the parent's run).
@@ -318,14 +370,14 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 		result.Error = loopErr.Error()
 	}
 	result.DurationMs = time.Since(start).Milliseconds()
-	log.Printf("research child: root=%s model=%s duration_ms=%d input_tokens=%d output_tokens=%d findings_chars=%d error=%q",
-		childExec.RunID, selection.Model, result.DurationMs, usage.InputTokens, usage.OutputTokens, len(result.Findings), result.Error)
+	log.Printf("research child: root=%s role=%s model=%s duration_ms=%d input_tokens=%d output_tokens=%d findings_chars=%d error=%q",
+		childExec.RunID, role, selection.Model, result.DurationMs, usage.InputTokens, usage.OutputTokens, len(result.Findings), result.Error)
 	return result
 }
 
 // researchChildServedEmitter forwards a child's model.served line to its
-// parent run, role research_child; every other child event is dropped.
-func (rt *Runtime) researchChildServedEmitter(ctx context.Context, parent toolregistry.ExecutionContext) func(types.EventKind, string, json.RawMessage) {
+// parent run, under the child's role; every other child event is dropped.
+func (rt *Runtime) researchChildServedEmitter(ctx context.Context, parent toolregistry.ExecutionContext, role string) func(types.EventKind, string, json.RawMessage) {
 	return func(kind types.EventKind, _ string, payload json.RawMessage) {
 		if kind != types.EventModelServed {
 			return
@@ -334,7 +386,7 @@ func (rt *Runtime) researchChildServedEmitter(ctx context.Context, parent toolre
 		if json.Unmarshal(payload, &rec) != nil {
 			return
 		}
-		rec.Role = researchChildRole
+		rec.Role = role
 		raw, err := json.Marshal(rec)
 		if err != nil {
 			return
@@ -364,25 +416,29 @@ func researchChildTime(deadline time.Time) string {
 	return fmt.Sprintf("You have about %s for this objective; findings you have not returned by then are lost.", time.Until(deadline).Round(time.Second))
 }
 
-// researchChildSystemPrompt is every child's stable system prompt: the
-// child preamble and the research desk's prompt, byte-identical across
-// children, parents and time.
-func (rt *Runtime) researchChildSystemPrompt(ownerID string) (string, error) {
+// researchChildSystemPrompt is every child's stable system prompt: its role's
+// preamble and the research desk's prompt, byte-identical across children of
+// one role, parents and time.
+func (rt *Runtime) researchChildSystemPrompt(ownerID, role string) (string, error) {
+	preamble, ok := researchChildPreamble[role]
+	if !ok {
+		return "", fmt.Errorf("choir.Research: no child role %q", role)
+	}
 	rolePrompt, err := rt.systemPromptForRun(&types.RunRecord{OwnerID: ownerID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research})
 	if err != nil {
 		return "", err
 	}
-	return researchChildPreamble + "\n\n" + rolePrompt, nil
+	return preamble + "\n\n" + rolePrompt, nil
 }
 
-// researchChildCacheScope is the cache thread research children share: the
-// parent desk's agent on its computer.
-func researchChildCacheScope(parent toolregistry.ExecutionContext) (label, scope string) {
+// researchChildCacheScope is the cache thread research children of one role
+// share: the parent desk's agent on its computer.
+func researchChildCacheScope(parent toolregistry.ExecutionContext, role string) (label, scope string) {
 	agentID := strings.TrimSpace(parent.AgentID)
 	if agentID == "" {
 		return "", ""
 	}
-	return "research_child", strings.TrimSpace(parent.OwnerID) + "\x00" + strings.TrimSpace(parent.ComputerID) + "\x00" + agentID + "\x00child"
+	return role, strings.TrimSpace(parent.OwnerID) + "\x00" + strings.TrimSpace(parent.ComputerID) + "\x00" + agentID + "\x00" + role
 }
 
 // researchChildSelection resolves a child's model: the caller's own when
@@ -434,8 +490,69 @@ func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchL
 
 // researchChildReadContext is the reading identity of a research child: the
 // desk it runs as, and no lease. The child shares its parent's run id and so
-// would read the parent's leases, among them texture.search; a web-capable
-// child must not hold owner-private Texture text (MA3.7c).
+// would read the parent's leases; a web-capable child must not hold
+// owner-private Texture text (MA3.7c, MA4.6).
 func researchChildReadContext(ctx context.Context, profile string) context.Context {
 	return objectgraph.WithoutLeases(withDeskReader(ctx, profile))
+}
+
+// researchTextureChildContext is the Texture child's reading identity: the
+// research_texture role as reader, holding the texture.search lease the
+// Texture custodian issues it for this one child call (bound to the parent's
+// run, which the child works for). The lease is the child's alone: the
+// research desk reads as itself and the web child as research with no lease,
+// so neither is admitted by it. end revokes it when the child ends; the
+// parent run's end, or a restart, ends it too.
+func (rt *Runtime) researchTextureChildContext(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, childKey string) (context.Context, func(), error) {
+	if rt.leases == nil {
+		return nil, nil, fmt.Errorf("choir.Research: a Texture child needs the lease service, and this computer has none")
+	}
+	runID := strings.TrimSpace(parent.RunID)
+	owner := firstNonEmpty(parent.OwnerID, lineage.ownerID)
+	granted, err := rt.leases.IssueTextureSearch(ctx, owner, strings.TrimSpace(parent.ComputerID), runID, researchTextureRole+":"+childKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("choir.Research: the Texture custodian did not issue texture.search: %w", err)
+	}
+	end := func() {
+		if err := rt.leases.End(context.WithoutCancel(ctx), granted.LeaseID, "research Texture child ended"); err != nil {
+			log.Printf("choir.Research: end the texture.search lease %s: %v", granted.LeaseID, err)
+		}
+	}
+	leased := objectgraph.WithLeases(withDeskReader(ctx, researchTextureRole), rt.leaseAuthority(), runID)
+	return leased, end, nil
+}
+
+// textureSearchEgress serves choir.SearchTexture: the Texture custodian's
+// guarded search (store.TextureSearchUnderLease), ranked refs with bounded
+// snippets labelled owner_private:texture and never a body. It is served only
+// under a texture.search lease the calling context holds, which only the
+// research desk's Texture child is issued (researchTextureChildContext); any
+// other caller is refused by the custodian.
+func (rt *Runtime) textureSearchEgress(ctx context.Context, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
+	if rt.store == nil {
+		return nil, fmt.Errorf("texture_search: no store on this computer")
+	}
+	var req yaegikernel.TextureSearchPayload
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("texture_search: decode: %w", err)
+	}
+	query := strings.TrimSpace(req.Query)
+	if query == "" {
+		return nil, fmt.Errorf("texture_search: query is required")
+	}
+	owner := strings.TrimSpace(exec.OwnerID)
+	if owner == "" && exec.RunRecord != nil {
+		owner = strings.TrimSpace(exec.RunRecord.OwnerID)
+	}
+	if owner == "" {
+		return nil, fmt.Errorf("texture_search: the call carries no owner")
+	}
+	hits, err := rt.store.TextureSearchUnderLease(ctx, owner, query, req.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("texture_search: %w", err)
+	}
+	if hits == nil {
+		hits = []store.TextureSearchHit{}
+	}
+	return json.Marshal(map[string]any{"results": hits, "count": len(hits), "query": query})
 }

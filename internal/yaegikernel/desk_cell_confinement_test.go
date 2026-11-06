@@ -22,7 +22,7 @@ func TestDeskCellIdentityIsOnePerDesk(t *testing.T) {
 	}
 	// A task shares management's identity and a research child research's;
 	// the three desks are distinct from one another.
-	if uid("management") != uid(SessionRoleManagementTask) || uid("research") != uid(SessionRoleResearchChild) {
+	if uid("management") != uid(SessionRoleManagementTask) || uid("research") != uid(SessionRoleResearchWeb) || uid("research") != uid(SessionRoleResearchTexture) {
 		t.Error("a role must run as its desk's identity")
 	}
 	if uid("management") == uid("texture") || uid("texture") == uid("research") || uid("management") == uid("research") {

@@ -17,11 +17,14 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// MA3.7c (X1): the Texture part of research's corpus search is the Texture
-// custodian's guarded search under a texture.search lease the research run
-// holds. Without the lease the Texture part is omitted and nothing is counted;
-// with it the cell gets ranked refs and bounded, labelled snippets and no body.
-func TestCorpusSearchTextureHalfNeedsTheLease(t *testing.T) {
+// MA3.7c (X1), moved by MA4.6 (plan 8.6): the owner's stories are searched
+// only through the Texture custodian's guarded search, choir.SearchTexture,
+// under a texture.search lease the research desk's Texture child is issued.
+// Failure modes pinned: the world corpus search (SearchWireCorpus) still
+// answers the owner's stories; the research desk's own run is served
+// SearchTexture; the Texture child's search returns a body, an unlabelled hit
+// or an unrecorded query; the lease outlives the child.
+func TestTextureSearchIsTheTextureChildsUnderItsLease(t *testing.T) {
 	f := newDelegationFixture(t, "owner-ma37c-search")
 	ctx := context.Background()
 	rt, s := f.rt, f.s
@@ -37,22 +40,17 @@ func TestCorpusSearchTextureHalfNeedsTheLease(t *testing.T) {
 	}
 
 	research := "research:" + doc
-	newRun := func(id string) (types.RunRecord, toolregistry.ExecutionContext) {
-		rec := types.RunRecord{RunID: id, AgentID: research, OwnerID: owner, ComputerID: f.computer,
-			ChannelID: doc, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: types.RunRunning}
-		if err := s.CreateRun(ctx, rec); err != nil {
-			t.Fatal(err)
-		}
-		return rec, toolregistry.ExecutionContext{RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: f.computer,
-			Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rec}
+	rec := types.RunRecord{RunID: "run-ma46-search", AgentID: research, OwnerID: owner, ComputerID: f.computer,
+		ChannelID: doc, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: types.RunRunning}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatal(err)
 	}
-	search := func(exec toolregistry.ExecutionContext, query string) map[string]any {
+	exec := toolregistry.ExecutionContext{RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: f.computer,
+		Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rec}
+	cell := func(cellCtx context.Context, role, src string) string {
 		t.Helper()
-		tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
-		payload, _ := json.Marshal(map[string]any{"source": `r, err := choir.SearchWireCorpus("` + query + `", 25)
-fmt.Println(r, err)`, "timeout_ms": 15000})
-		cellCtx := withDeskReader(withDeskWriter(ctx, exec.Profile), exec.Profile)
-		cellCtx = objectgraph.WithLeases(cellCtx, rt.leaseAuthority(), exec.RunID)
+		tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), role)
+		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
 		out, err := tool.Func(toolregistry.WithExecutionContext(cellCtx, exec), payload)
 		if err != nil {
 			t.Fatalf("cell: %v\n%s", err, out)
@@ -60,20 +58,24 @@ fmt.Println(r, err)`, "timeout_ms": 15000})
 		if strings.Contains(out, "SECRET-TAIL-MARKER") {
 			t.Fatalf("a document body reached the cell: %s", out)
 		}
-		var cell struct {
+		var c struct {
 			Stdout string `json:"stdout"`
 		}
-		if err := json.Unmarshal([]byte(out), &cell); err != nil {
+		if err := json.Unmarshal([]byte(out), &c); err != nil {
 			t.Fatalf("decode cell output %q: %v", out, err)
 		}
-		i := strings.Index(cell.Stdout, "{\"capture_count\"")
-		j := strings.LastIndex(cell.Stdout, "}")
+		return c.Stdout
+	}
+	object := func(stdout, prefix string) map[string]any {
+		t.Helper()
+		i := strings.Index(stdout, prefix)
+		j := strings.LastIndex(stdout, "}")
 		if i < 0 || j < i {
-			t.Fatalf("no result object in cell output: %s", out)
+			t.Fatalf("no result object in cell output: %s", stdout)
 		}
 		var got map[string]any
-		if err := json.Unmarshal([]byte(cell.Stdout[i:j+1]), &got); err != nil {
-			t.Fatalf("decode %q: %v", out, err)
+		if err := json.Unmarshal([]byte(stdout[i:j+1]), &got); err != nil {
+			t.Fatalf("decode %q: %v", stdout, err)
 		}
 		return got
 	}
@@ -87,8 +89,8 @@ fmt.Println(r, err)`, "timeout_ms": 15000})
 		}
 		return out
 	}
-	texturEvents := func(runID string) int {
-		evs, err := s.ListEvents(ctx, runID, 100)
+	textureEvents := func() int {
+		evs, err := s.ListEvents(ctx, rec.RunID, 100)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,38 +102,45 @@ fmt.Println(r, err)`, "timeout_ms": 15000})
 		}
 		return n
 	}
+	parentCtx := objectgraph.WithLeases(withDeskReader(ctx, agentprofile.Research), rt.leaseAuthority(), rec.RunID)
 
-	// Without a lease: no Texture results, nothing counted.
-	_, noLease := newRun("run-ma37c-nolease")
+	// The research desk's own run: its world corpus search carries no
+	// stories, and its SearchTexture is refused by the custodian (no lease).
 	objectgraph.ResetReaderGateCounts()
-	got := search(noLease, "traffic schedule")
-	if c, _ := got["count"].(float64); c != 0 {
-		t.Errorf("a run without the lease got Texture results: %v", got["results"])
+	got := object(cell(parentCtx, agentprofile.Research, `r, err := choir.SearchWireCorpus("traffic schedule", 25)
+fmt.Println(r, err)`), "{\"capture_count\"")
+	for _, key := range []string{"results", "results_note", "count"} {
+		if _, has := got[key]; has {
+			t.Errorf("the world corpus search answered the owner's stories (%s): %v", key, got)
+		}
 	}
-	if note, _ := got["results_note"].(string); !strings.Contains(note, "texture.search") {
-		t.Errorf("the omitted Texture part is not explained: %v", got)
+	out := cell(parentCtx, agentprofile.Research, `r, err := choir.SearchTexture("traffic schedule", 5)
+fmt.Println(string(r), err)`)
+	if !strings.Contains(out, "texture.search needs a lease") || strings.Contains(out, doc) {
+		t.Errorf("the research desk's own run searched Texture: %s", out)
 	}
 	if c := crossings(); len(c) != 0 {
-		t.Errorf("a search without the lease counted: %v", c)
+		t.Errorf("a refused search counted: %v", c)
 	}
-	if n := texturEvents("run-ma37c-nolease"); n != 0 {
+	if n := textureEvents(); n != 0 {
 		t.Errorf("a refused search was recorded as a query: %d", n)
 	}
 
-	// With the lease: refs and bounded labelled snippets, nothing counted.
-	rec, withLease := newRun("run-ma37c-lease")
-	granted, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rec.RunID, rec.AgentID)
+	// The Texture child, under the lease the custodian issues it: refs and
+	// bounded labelled snippets, one recorded query, nothing counted.
+	childCtx, end, err := rt.researchTextureChildContext(researchChildReadContext(ctx, agentprofile.Research), exec, researchLineage{ownerID: owner}, "k1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	objectgraph.ResetReaderGateCounts()
-	got = search(withLease, "traffic schedule")
+	got = object(cell(childCtx, yaegikernel.SessionRoleResearchTexture, `r, err := choir.SearchTexture("traffic schedule", 25)
+fmt.Println(string(r), err)`), "{\"count\"")
 	results, _ := got["results"].([]any)
 	if len(results) != 1 {
 		t.Fatalf("expected the Harbor story under the lease: %v", got)
 	}
 	hit := results[0].(map[string]any)
-	if hit["doc_id"] != doc || hit["label"] != "owner_private:texture" {
+	if hit["ref"] != doc || hit["label"] != "owner_private:texture" {
 		t.Errorf("hit is not a labelled ref: %v", hit)
 	}
 	snippet, _ := hit["snippet"].(string)
@@ -144,19 +153,26 @@ fmt.Println(r, err)`, "timeout_ms": 15000})
 	if c := crossings(); len(c) != 0 {
 		t.Errorf("a search under the lease counted: %v", c)
 	}
-	if n := texturEvents(rec.RunID); n != 1 {
+	if n := textureEvents(); n != 1 {
 		t.Errorf("the query was not recorded once as an event: %d", n)
 	}
 	live := rt.leases.Live(owner)
-	if len(live) != 1 || live[0].LeaseID != granted.LeaseID || live[0].Uses == 0 {
-		t.Errorf("the lease use was not counted: %+v", live)
+	if len(live) != 1 || live[0].Holder != yaegikernel.SessionRoleResearchTexture || live[0].Uses == 0 {
+		t.Errorf("the lease is not the Texture child's, or its use was not counted: %+v", live)
+	}
+	if !rt.runLabelSet(rec.RunID).Has("owner_private:texture") {
+		t.Errorf("the search did not label the run it works for: %v", rt.runLabelSet(rec.RunID))
 	}
 
-	// The lease ends with its run: a later search by the same run omits Texture.
-	rt.endRunLeases(ctx, rec.RunID, "run ended")
-	got = search(withLease, "traffic schedule")
-	if c, _ := got["count"].(float64); c != 0 {
-		t.Errorf("an ended lease still served Texture: %v", got["results"])
+	// The lease ends with the child: a later search is refused.
+	end()
+	if live := rt.leases.Live(owner); len(live) != 0 {
+		t.Errorf("the Texture child's lease outlived it: %+v", live)
+	}
+	out = cell(childCtx, yaegikernel.SessionRoleResearchTexture, `r, err := choir.SearchTexture("traffic schedule", 5)
+fmt.Println(string(r), err)`)
+	if !strings.Contains(out, "texture.search needs a lease") {
+		t.Errorf("an ended lease still served Texture: %s", out)
 	}
 }
 
@@ -173,10 +189,10 @@ func seedStoryForSearch(t *testing.T, s *store.Store, owner, doc, title, body st
 	}
 }
 
-// Devin r1 on MA3.7c: a research child shares its parent's run id, so it must
-// not read the parent's texture.search lease. The child's context holds no
-// lease; the same search on the parent's context is served.
-func TestResearchChildDoesNotHoldTheParentsTextureSearchLease(t *testing.T) {
+// Devin r1 on MA3.7c, MA4.6: a research child shares its parent's run id, so
+// the web child must not read the Texture child's texture.search lease, nor the
+// parent its own; only the Texture child's context is served.
+func TestOnlyTheTextureChildHoldsTheTextureSearchLease(t *testing.T) {
 	f := newDelegationFixture(t, "owner-ma37c-child")
 	ctx := context.Background()
 	rt, s := f.rt, f.s
@@ -187,30 +203,54 @@ func TestResearchChildDoesNotHoldTheParentsTextureSearchLease(t *testing.T) {
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rec.RunID, rec.AgentID); err != nil {
+	parent := withDeskReader(objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID), agentprofile.Research)
+	exec := toolregistry.ExecutionContext{RunID: rec.RunID, OwnerID: owner, ComputerID: f.computer, AgentID: rec.AgentID}
+	textureChild, end, err := rt.researchTextureChildContext(researchChildReadContext(parent, agentprofile.Research), exec, researchLineage{ownerID: owner}, "k1")
+	if err != nil {
 		t.Fatal(err)
 	}
-	parent := withDeskReader(objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID), agentprofile.Research)
-	if hits, err := s.TextureSearchUnderLease(parent, owner, "lanterns", 5); err != nil || len(hits) != 1 {
-		t.Fatalf("the parent's search: %v %v", hits, err)
+	defer end()
+	if hits, err := s.TextureSearchUnderLease(textureChild, owner, "lanterns", 5); err != nil || len(hits) != 1 {
+		t.Fatalf("the Texture child's search: %v %v", hits, err)
 	}
-	child := researchChildReadContext(parent, agentprofile.Research)
-	if hits, err := s.TextureSearchUnderLease(child, owner, "lanterns", 5); !errors.Is(err, store.ErrTextureSearchNoLease) || len(hits) != 0 {
-		t.Fatalf("a research child searched Texture on its parent's lease: %v %v", hits, err)
+	if hits, err := s.TextureSearchUnderLease(parent, owner, "lanterns", 5); !errors.Is(err, store.ErrTextureSearchNoLease) || len(hits) != 0 {
+		t.Fatalf("the research parent searched Texture on its child's lease: %v %v", hits, err)
+	}
+	web := researchChildReadContext(parent, agentprofile.Research)
+	if hits, err := s.TextureSearchUnderLease(web, owner, "lanterns", 5); !errors.Is(err, store.ErrTextureSearchNoLease) || len(hits) != 0 {
+		t.Fatalf("a web child searched Texture on its sibling's lease: %v %v", hits, err)
+	}
+	webLeased := objectgraph.WithLeases(withDeskReader(ctx, yaegikernel.SessionRoleResearchWeb), rt.leaseAuthority(), rec.RunID)
+	if hits, err := s.TextureSearchUnderLease(webLeased, owner, "lanterns", 5); !errors.Is(err, store.ErrTextureSearchNoLease) || len(hits) != 0 {
+		t.Fatalf("a reader declared as the web child searched Texture: %v %v", hits, err)
 	}
 }
 
-// A SearchWireCorpus result that carries labelled Texture hits folds the
-// label into the run's labels; a result with none carries the world label only.
-func TestCorpusSearchHitsTaintTheRun(t *testing.T) {
-	with := json.RawMessage(`{"results":[{"doc_id":"d","label":"owner_private:texture"}]}`)
-	got, ok := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, with)
-	if !ok || !got.Has("owner_private:texture") || !got.Has(types.LabelWorldUntrusted) {
-		t.Errorf("labelled hits did not taint the run: %v", got)
+// A SearchTexture result labels the run with each hit's owner-private label
+// and the custodian's own; a Research result labels it by each child's role:
+// the Texture child's Report is owner-private, the web child's the world's.
+func TestTextureChildReadsTaintTheRun(t *testing.T) {
+	got, ok := egressReadLabels(yaegikernel.ActionTextureSearch, nil, json.RawMessage(`{"results":[{"ref":"d","label":"owner_private:texture"}]}`))
+	if !ok || !got.Has("owner_private:texture") || got.Has(types.LabelWorldUntrusted) {
+		t.Errorf("a Texture search did not taint the run as owner-private Texture text only: %v", got)
 	}
-	got, _ = egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, json.RawMessage(`{"results":[]}`))
-	if got.Has("owner_private:texture") {
-		t.Errorf("an empty result tainted the run: %v", got)
+	got, _ = egressReadLabels(yaegikernel.ActionTextureSearch, nil, json.RawMessage(`{"results":[]}`))
+	if !got.Has("owner_private:texture") {
+		t.Errorf("an empty Texture search lost the custodian's label: %v", got)
+	}
+	got, _ = egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, json.RawMessage(`{"captures":[]}`))
+	if got.Has("owner_private:texture") || !got.Has(types.LabelWorldUntrusted) {
+		t.Errorf("a world corpus search is not the world's: %v", got)
+	}
+	web, _ := json.Marshal([]yaegikernel.ResearchChildResult{{Role: yaegikernel.SessionRoleResearchWeb}})
+	got, _ = egressReadLabels(yaegikernel.ActionResearch, nil, web)
+	if got.Has("owner_private:texture") || !got.Has(types.LabelWorldUntrusted) {
+		t.Errorf("a web child's result is not the world's: %v", got)
+	}
+	both, _ := json.Marshal([]yaegikernel.ResearchChildResult{{Role: yaegikernel.SessionRoleResearchWeb}, {Role: yaegikernel.SessionRoleResearchTexture}})
+	got, _ = egressReadLabels(yaegikernel.ActionResearch, nil, both)
+	if !got.Has("owner_private:texture") || !got.Has(types.LabelWorldUntrusted) {
+		t.Errorf("a Texture child's result did not label the parent: %v", got)
 	}
 }
 
@@ -230,11 +270,12 @@ func TestTextureSearchClampsHitsAndBoundsQueriesPerLease(t *testing.T) {
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatal(err)
 	}
-	granted, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rec.RunID, rec.AgentID)
+	child := yaegikernel.SessionRoleResearchTexture + ":k-bounds"
+	granted, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rec.RunID, child)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rctx := withDeskReader(objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID), agentprofile.Research)
+	rctx := withDeskReader(objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID), yaegikernel.SessionRoleResearchTexture)
 	hits, err := s.TextureSearchUnderLease(rctx, owner, "beacon", 11)
 	if err != nil || len(hits) != store.TextureSearchMaxResults {
 		t.Fatalf("11 requested: got %d hits, %v (want %d)", len(hits), err, store.TextureSearchMaxResults)
@@ -252,7 +293,7 @@ func TestTextureSearchClampsHitsAndBoundsQueriesPerLease(t *testing.T) {
 	if granted.LeaseID == "" {
 		t.Fatal("no lease id")
 	}
-	again, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rec.RunID, rec.AgentID)
+	again, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rec.RunID, child)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,8 +304,9 @@ func TestTextureSearchClampsHitsAndBoundsQueriesPerLease(t *testing.T) {
 
 // leasedResearchCtx is a research run's context for a corpus search test that
 // is about something else than the lease: the run reads as the research desk
-// and holds the texture.search grant (a stub authority; the lease service is
-// tested in internal/lease and above).
+// with a stub authority that admits any grant, which the world corpus search
+// never asks for (MA4.6); the lease service is tested in internal/lease and
+// above.
 func leasedResearchCtx(ctx context.Context) context.Context {
 	return objectgraph.WithLeases(objectgraph.WithReader(ctx, objectgraph.WriterResearch), grantEverything{}, "research-run")
 }

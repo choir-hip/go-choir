@@ -2078,6 +2078,10 @@ func boundSnippet(s string, max int) string {
 
 // textureSearchLabel is the owner-private label of every snippet, kinded by the
 // Texture custodian's own name.
+// TextureSearchLabel is the label of every hit the custodian's guarded search
+// returns: the owner's private Texture text.
+func TextureSearchLabel() string { return textureSearchLabel() }
+
 func textureSearchLabel() string {
 	return types.OwnerPrivateLabel(strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"))
 }

@@ -33,10 +33,11 @@ func TestGrantUnionReproducesTodaysAuthority(t *testing.T) {
 		"management": {verbs: []string{"Ask", "Calibration", "CancelAct", "CancelAssignment", "CancelTask", "Cast", "Decline", "Delegate", "Disagreement", "Escalate", "Feed", "Precommit", "ProductAPI", "ReadCapture", "Reply", "Report", "ReportPacket", "Resolve", "Restate", "Stories", "Verify"},
 			modules: []string{"updates.read"}, cell: 300 * time.Second},
 		"management_task": {verbs: []string{"Cast", "Decline", "Done", "Feed", "ReadCapture", "Stories"}, cell: 300 * time.Second},
-		"research": {verbs: []string{"Ask", "CancelAct", "Cast", "Disagreement", "Escalate", "ListEvidence", "PollSource", "Precommit", "Read", "ReadCapture", "ReadEvidence", "Relate", "RelateStories", "Reply", "Report", "ReportPacket", "Research", "Resolve", "RunMemoryEntry", "SaveEvidence", "SearchStart", "SearchWait", "SearchWireCorpus", "Searches", "SourceAPI", "StoryAnalysis", "System1"},
+		"research": {verbs: []string{"Ask", "CancelAct", "Cast", "Disagreement", "Escalate", "ListEvidence", "PollSource", "Precommit", "Read", "ReadCapture", "ReadEvidence", "Relate", "RelateStories", "Reply", "Report", "ReportPacket", "Research", "Resolve", "RunMemoryEntry", "SaveEvidence", "SearchStart", "SearchTexture", "SearchWait", "SearchWireCorpus", "Searches", "SourceAPI", "StoryAnalysis", "System1"},
 			capsule: []string{"go_eval", "list_dir", "read_file", "stat"}},
-		"research_child": {verbs: []string{"ListEvidence", "Read", "ReadCapture", "ReadEvidence", "SearchStart", "SearchWait", "SearchWireCorpus", "Searches"}},
-		"texture":        {verbs: []string{"Ask", "Cast", "Done", "ReadCapture", "ReadDoc", "Reject", "Wait", "Write"}, modules: []string{"updates.read"}},
+		"research_web":     {verbs: []string{"ListEvidence", "Read", "ReadCapture", "ReadEvidence", "SearchStart", "SearchWait", "SearchWireCorpus", "Searches"}},
+		"research_texture": {verbs: []string{"SearchTexture"}},
+		"texture":          {verbs: []string{"Ask", "Cast", "Done", "ReadCapture", "ReadDoc", "Reject", "Wait", "Write"}, modules: []string{"updates.read"}},
 	}
 	for name, w := range pinned {
 		d, ok := Lookup(name)
@@ -120,8 +121,17 @@ func TestEveryGrantedVerbIsInOneGrantAndPrivilegeIsMarked(t *testing.T) {
 	}
 }
 
+// MA4.6: research's world tools (world.read) and the Texture child's search
+// (texture.search) are first-party only; a third-party desk asking any of their
+// verbs is refused.
 func TestAppDeskRefusesPrivilegedGrantVerbs(t *testing.T) {
-	for _, v := range []string{"CancelAssignment", "Feed", "Decline", "Stories", "ProductAPI", "Delegate", "WriteFile", "Read"} {
+	for _, g := range []string{"world.read", "texture.search"} {
+		if !GrantPrivileged(g) {
+			t.Errorf("%s is not first-party only", g)
+		}
+	}
+	for _, v := range []string{"CancelAssignment", "Feed", "Decline", "Stories", "ProductAPI", "Delegate", "WriteFile", "Read",
+		"SearchStart", "Searches", "SearchWait", "SearchWireCorpus", "SearchTexture"} {
 		_, err := NewAppDesk(AppDeskSpec{Name: "app:grantprobe", Verbs: []string{v}, Taint: TaintUntrustedInput, UID: 62000, WorkerMaxBytes: mib})
 		if err == nil {
 			t.Errorf("app desk with %s must be refused", v)

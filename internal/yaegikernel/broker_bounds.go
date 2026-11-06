@@ -46,6 +46,7 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 	ActionRead:              {"url": strMax(8192)},
 	ActionSearchStart:       {"query": strMax(8192)},
 	ActionSearchWireCorpus:  {"query": strMax(8192), "limit": numRange(0, 1000)},
+	ActionTextureSearch:     {"query": strMax(8192), "limit": numRange(0, 1000)},
 	ActionReadCapture:       {"capture_id": strMax(256), "from_block": numRange(0, 1_000_000), "max_chars": numRange(0, 1_000_000)},
 	ActionPollSource:        {"source_id": strMax(256), "max_items": numRange(0, 1000)},
 	ActionSourceAPI:         {"provider": strMax(128), "endpoint": strMax(256)},

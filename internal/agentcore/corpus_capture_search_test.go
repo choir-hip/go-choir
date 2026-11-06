@@ -197,10 +197,11 @@ func TestSearchWireCorpusFindsTheComputersCaptures(t *testing.T) {
 	harbor, ceasefire, bandar := corpus.captures[0], corpus.captures[1], corpus.captures[2]
 
 	// Title words: the capture whose title matches ranks above the one only
-	// Jev's topic hint ties to the query; the story is still found.
+	// Jev's topic hint ties to the query. The owner's story is not a world
+	// corpus hit: it is the research Texture child's SearchTexture (MA4.6).
 	out := searchCorpusAsCell(t, deps, owner, computer, `{"query":"harbor reopens"}`)
-	if len(out.Results) != 1 || out.Results[0].DocID != story {
-		t.Fatalf("stories = %+v; want the owner's story %s", out.Results, story)
+	if len(out.Results) != 0 {
+		t.Fatalf("stories = %+v; the world corpus search answered the owner's story %s", out.Results, story)
 	}
 	if got := hitIDs(out.Captures); len(got) != 2 || got[0] != harbor.id || got[1] != bandar.id {
 		t.Fatalf("captures = %+v; want the title match %s, then the topic-labelled %s, and no other owner's or computer's capture", out.Captures, harbor.id, bandar.id)
@@ -281,14 +282,10 @@ func TestCorpusCaptureHandleIsCitableByTexture(t *testing.T) {
 	}
 }
 
-func TestSearchWireCorpusKeepsStoriesWhenCapturesFail(t *testing.T) {
+func TestSearchWireCorpusSaysWhenCapturesFail(t *testing.T) {
 	s, corpus, deps, owner, computer := corpusFixture(t)
-	story := openTestStory(t, s, owner, computer, "Harbor reopens after the storm")
 	corpus.failList = true
 	out := searchCorpusAsCell(t, deps, owner, computer, `{"query":"harbor"}`)
-	if len(out.Results) != 1 || out.Results[0].DocID != story {
-		t.Fatalf("stories = %+v; a capture outage must not lose them", out.Results)
-	}
 	if len(out.Captures) != 0 || !strings.Contains(out.CapturesNote, "500") {
 		t.Fatalf("captures = %+v, note %q; want none and a note naming the outage", out.Captures, out.CapturesNote)
 	}

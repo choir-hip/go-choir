@@ -206,7 +206,7 @@ func TestADerivedSummaryCarriesTheUnionOfItsInputsLabels(t *testing.T) {
 	want := types.NewLabelSet(types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("texture"), types.LabelWorldUntrusted, types.LabelPlatform)
 
 	cast, err := buildSubCallCast(subCallCastParams{
-		RecordID: "subcall-sum-cast", FanOutID: "fan-sum", ChildKey: "k", ChildRole: researchChildRole, ChildInbox: researchChildRole + ":k",
+		RecordID: "subcall-sum-cast", FanOutID: "fan-sum", ChildKey: "k", ChildRole: yaegikernel.SessionRoleResearchWeb, ChildInbox: yaegikernel.SessionRoleResearchWeb + ":k",
 		Objective: "summarise", ParentAgent: "research:doc-sum", ParentRunID: "run-parent", ComputerID: computer, Now: time.Now(),
 	})
 	if err != nil {

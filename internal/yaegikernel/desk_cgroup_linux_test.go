@@ -39,7 +39,7 @@ func deskCgroupTestRoot(t *testing.T) string {
 func TestDeskCgroupKillsRunawayWorker(t *testing.T) {
 	root := deskCgroupTestRoot(t)
 
-	victimEnv := newConfinedTestEnv(t, "research_child", CellConfinementAuto)
+	victimEnv := newConfinedTestEnv(t, "research_web", CellConfinementAuto)
 	victimEnv.cfg.CgroupRoot = root
 	bystanderEnv := newConfinedTestEnv(t, "research", CellConfinementAuto)
 	bystanderEnv.cfg.CgroupRoot = root
@@ -62,7 +62,7 @@ func TestDeskCgroupKillsRunawayWorker(t *testing.T) {
 		t.Fatalf("worker %d is not in a w-* child of the desks cgroup: %s", victim.PID(), raw)
 	}
 	if got := readCgroupFile(t, victim.budget.path, "memory.max"); got != fmt.Sprint(384<<20) {
-		t.Fatalf("research_child memory.max = %s, want its manifest 384 MiB", got)
+		t.Fatalf("research_web memory.max = %s, want its manifest 384 MiB", got)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -92,7 +92,7 @@ for {
 	if err != nil || !strings.Contains(res.Stdout, "42") {
 		t.Fatalf("the bystander worker was affected: %v %+v", err, res)
 	}
-	nextEnv := newConfinedTestEnv(t, "research_child", CellConfinementAuto)
+	nextEnv := newConfinedTestEnv(t, "research_web", CellConfinementAuto)
 	nextEnv.cfg.CgroupRoot = root
 	next, err := SpawnDeskSessionWorker(nextEnv.cfg)
 	if err != nil {

@@ -116,11 +116,16 @@ type verbRefusal struct {
 // never from model input. Any other role string means full engineering scope.
 const SessionRoleResearch = "research"
 
-// SessionRoleResearchChild is a child research activation run for a
-// research cell's choir.Research: read-only world verbs and further
-// choir.Research, no messaging or reporting. Its result returns to the
-// parent cell as a value.
-const SessionRoleResearchChild = "research_child"
+// SessionRoleResearchWeb and SessionRoleResearchTexture are the two child
+// roles of a research cell's choir.Research (plan MA4.6, section 8.6). The
+// web child has the read-only world verbs and no lease; the Texture child
+// has only choir.SearchTexture, under the texture.search lease the Texture
+// custodian issues it. Neither can fan out further, message or write; each
+// child's findings return to the parent as its Report.
+const (
+	SessionRoleResearchWeb     = "research_web"
+	SessionRoleResearchTexture = "research_texture"
+)
 
 // SessionRoleManagementTask is a management task (management delegation
 // S2a, design round 2 R2-1/R2-2): a bounded sub-RLM of the management desk
@@ -142,7 +147,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
 	desk := normalizeDeskRole(role)
-	readOnly := role == SessionRoleResearch || role == SessionRoleResearchChild
+	readOnly := role == SessionRoleResearch || role == SessionRoleResearchWeb || role == SessionRoleResearchTexture
 	if desk == "" || desk == SessionRoleManagementTask {
 		// An unknown role fails closed (R2-2): observation only. A task
 		// stages acts the host reduces and touches no filesystem.
@@ -409,6 +414,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"SourceAPI":        func() reflect.Value { return reflect.ValueOf(s.SourceAPI) },
 		"ReadCapture":      func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
 		"SearchWireCorpus": func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
+		"SearchTexture":    func() reflect.Value { return reflect.ValueOf(s.SearchTexture) },
 		"System1":          func() reflect.Value { return reflect.ValueOf(s.System1) },
 		"RelateStories":    func() reflect.Value { return reflect.ValueOf(s.RelateStories) },
 		"Relate":           func() reflect.Value { return reflect.ValueOf(s.Relate) },
@@ -586,12 +592,12 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 				specs = append(specs, ResearchChild{Objective: o})
 			}
 		} else if err := json.Unmarshal([]byte(raw), &specs); err != nil {
-			return nil, fmt.Errorf("choir: Research takes an objective, a list of objectives, or a list of {objective, model} maps: %w", err)
+			return nil, fmt.Errorf("choir: Research takes an objective, a list of objectives, or a list of {objective, role, model} maps: %w", err)
 		}
 	case strings.HasPrefix(raw, "{"):
 		var one ResearchChild
 		if err := json.Unmarshal([]byte(raw), &one); err != nil {
-			return nil, fmt.Errorf("choir: Research takes an objective, a list of objectives, or a list of {objective, model} maps: %w", err)
+			return nil, fmt.Errorf("choir: Research takes an objective, a list of objectives, or a list of {objective, role, model} maps: %w", err)
 		}
 		specs = append(specs, one)
 	default:
@@ -601,6 +607,7 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 	for _, spec := range specs {
 		spec.Objective = strings.TrimSpace(spec.Objective)
 		spec.Model = strings.TrimSpace(spec.Model)
+		spec.Role = strings.TrimSpace(spec.Role)
 		if spec.Objective != "" {
 			kept = append(kept, spec)
 		}
@@ -609,6 +616,11 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 		return nil, fmt.Errorf("choir: Research needs at least one objective")
 	}
 	for i, spec := range kept {
+		switch spec.Role {
+		case "", ResearchChildWeb, ResearchChildTexture:
+		default:
+			return nil, fmt.Errorf("choir: Research child %d: role %q is not %q or %q", i+1, spec.Role, ResearchChildWeb, ResearchChildTexture)
+		}
 		if err := types.ValidateTypedQuestions(spec.Questions); err != nil {
 			return nil, fmt.Errorf("choir: Research child %d: questions: %w", i+1, err)
 		}
@@ -772,6 +784,16 @@ var frameHandleRE = regexp.MustCompile(`^r[0-9]+\.c[0-9]+$`)
 func (s *ChoirScope) SearchWireCorpus(query string, limit int) (JSON, error) {
 	var out JSON
 	err := s.call(ActionSearchWireCorpus, SearchWireCorpusPayload{Query: query, Limit: limit}, &out)
+	return out, err
+}
+
+// SearchTexture is the Texture custodian's guarded search of the owner's
+// stories: ranked refs with bounded snippets labelled owner_private:texture,
+// never a document body. Only the research desk's Texture child is served it,
+// under the texture.search lease issued for its call.
+func (s *ChoirScope) SearchTexture(query string, limit int) (JSON, error) {
+	var out JSON
+	err := s.call(ActionTextureSearch, TextureSearchPayload{Query: query, Limit: limit}, &out)
 	return out, err
 }
 

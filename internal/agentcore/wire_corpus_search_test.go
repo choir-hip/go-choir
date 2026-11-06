@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/researchtools"
+	"github.com/yusefmosiah/go-choir/internal/lease"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
@@ -28,22 +29,25 @@ func TestSearchWireCorpusFindsTheOwnersStories(t *testing.T) {
 	owner, computer := "owner-corpus", rt.cfg.ComputerID
 	harbor := openTestStory(t, s, owner, computer, "Harbor reopens after the storm")
 	openTestStory(t, s, "owner-other", computer, "Harbor strike enters second week")
-	deps := researchtools.Dependencies{Store: s}
-	ectx := toolregistry.WithExecutionContext(leasedResearchCtx(ctx), toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research})
-	raw, err := deps.HostEgress(ectx, "search_wire_corpus", json.RawMessage(`{"query":"harbor","owner_id":"`+owner+`"}`))
+	// MA4.6: the owner's stories are the Texture custodian's guarded search,
+	// served to the research Texture child under its lease (a stub authority
+	// here; the lease is tested in corpus_search_lease_ma37c_test.go).
+	tctx := objectgraph.WithLeases(objectgraph.WithReader(ctx, lease.WriterResearchTexture), grantEverything{}, "research-run")
+	ectx := toolregistry.WithExecutionContext(tctx, toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research})
+	raw, err := rt.textureSearchEgress(ectx, toolregistry.ExecutionContextFrom(ectx), json.RawMessage(`{"query":"harbor"}`))
 	if err != nil {
-		t.Fatalf("search_wire_corpus: %v", err)
+		t.Fatalf("texture_search: %v", err)
 	}
 	var out struct {
 		Results []struct {
-			DocID string `json:"doc_id"`
+			Ref   string `json:"ref"`
 			Title string `json:"title"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Results) != 1 || out.Results[0].DocID != harbor {
+	if len(out.Results) != 1 || out.Results[0].Ref != harbor {
 		t.Fatalf("search results = %s; want the owner's story %s alone", raw, harbor)
 	}
 	if strings.Contains(string(raw), "strike") {

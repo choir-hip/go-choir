@@ -30,7 +30,7 @@ import (
 //   - deskEgress (the durable record is the source of truth; the cache is
 //     a view of it, flushed at each reducer commit): every host-mediated choir.* call of a desk cell that
 //     returns outside content (Read, PollSource, SourceAPI, SearchStart,
-//     SearchWireCorpus, Research, ReadCapture, ReadEvidence, ListEvidence,
+//     SearchWireCorpus, SearchTexture, Research, ReadCapture, ReadEvidence, ListEvidence,
 //     ProductAPI, Stories);
 //   - the records a cell was shown through choir.Records(), by the labels
 //     their provenance carries (cellRecords.labelsThrough);
@@ -176,25 +176,43 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 		// The floor every capture read carries, plus what the capture record
 		// itself is labelled (MA3.3): the host reads it from the record.
 		return captureReadLabels.Union(captureRecordLabels(result)), true
-	case yaegikernel.ActionSearchWireCorpus:
-		// Stories come only under a texture.search lease, each hit labelled
-		// by the custodian; the run carries every label a hit carries
-		// (MA3.7c) so the disclosure gate sees owner-private Texture text.
+	case yaegikernel.ActionTextureSearch:
+		// The Texture custodian's guarded search (MA4.6): the floor is its
+		// own label, plus every owner-private label a hit carries, so the
+		// disclosure gate sees owner-private Texture text.
 		var body struct {
 			Results []struct {
 				Label string `json:"label"`
 			} `json:"results"`
 		}
 		_ = json.Unmarshal(result, &body)
-		labels := worldReadLabels
+		labels := researchTextureLabels
 		for _, r := range body.Results {
 			if strings.HasPrefix(r.Label, types.LabelOwnerPrivatePrefix) {
 				labels = labels.Union(types.NewLabelSet(r.Label))
 			}
 		}
 		return labels, true
+	case yaegikernel.ActionResearch:
+		// Each child's Report carries its role's labels: a web child's the
+		// world's, a Texture child's the owner's private Texture text
+		// (MA4.6). A result the host cannot read is the world's.
+		var results []yaegikernel.ResearchChildResult
+		_ = json.Unmarshal(result, &results)
+		labels := types.LabelSet(nil)
+		for _, r := range results {
+			if r.Role == researchTextureRole {
+				labels = labels.Union(researchTextureLabels)
+			} else {
+				labels = labels.Union(worldReadLabels)
+			}
+		}
+		if len(labels) == 0 {
+			labels = worldReadLabels
+		}
+		return labels, true
 	case yaegikernel.ActionRead, yaegikernel.ActionPollSource, yaegikernel.ActionSourceAPI,
-		yaegikernel.ActionSearchStart, yaegikernel.ActionResearch:
+		yaegikernel.ActionSearchStart, yaegikernel.ActionSearchWireCorpus:
 		return worldReadLabels, true
 	case yaegikernel.ActionReadEvidence:
 		// An evidence object carries the labels its writer's run held.

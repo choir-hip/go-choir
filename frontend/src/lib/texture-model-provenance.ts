@@ -44,12 +44,15 @@ export type ProvenanceRow = {
 };
 
 // Desk order of the roles; an unknown role sorts after these, by name.
-const ROLE_ORDER = ['conductor', 'texture', 'research', 'research_child', 'management', 'management_task', 'engineering', 'verifier', 'system1'];
+const ROLE_ORDER = ['conductor', 'texture', 'research', 'research_web', 'research_texture', 'research_child', 'management', 'management_task', 'engineering', 'verifier', 'system1'];
 
 const ROLE_LABELS: Record<string, string> = {
   conductor: 'Conductor',
   texture: 'Texture',
   research: 'Research',
+  research_web: 'Research web children',
+  research_texture: 'Research Texture children',
+  // Records written before MA4.6 split the child role.
   research_child: 'Research children',
   management: 'Management',
   management_task: 'Management tasks',

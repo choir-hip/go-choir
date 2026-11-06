@@ -32,7 +32,7 @@ func TestSystem1IsExportedToTheResearchDeskOnly(t *testing.T) {
 		{"engineering", "implementation", false},
 		{"engineering", "verifier", false},
 		{"texture", "", false},
-		{SessionRoleResearchChild, "", false},
+		{SessionRoleResearchWeb, "", false},
 		{SessionRoleManagementTask, "", false},
 		{"", "", false},
 		{"unknown-desk", "", false},
@@ -57,7 +57,7 @@ func TestSystem1IsExportedToTheResearchDeskOnly(t *testing.T) {
 
 func TestSystem1HandleAuthorizesOnlyTheResearchDesk(t *testing.T) {
 	good := []System1Question{{ID: "q1", Text: "Same incident?", Choices: []string{"yes", "no"}}}
-	for _, role := range []string{"management", "engineering", "texture", SessionRoleResearchChild, SessionRoleManagementTask} {
+	for _, role := range []string{"management", "engineering", "texture", SessionRoleResearchWeb, SessionRoleManagementTask} {
 		scope, broker := system1Scope(t, role, "")
 		broker.SetEgress(func(context.Context, BrokerAction, json.RawMessage) (json.RawMessage, error) {
 			t.Errorf("role %s reached the host egress", role)

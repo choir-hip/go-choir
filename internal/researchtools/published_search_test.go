@@ -75,10 +75,16 @@ func TestSearchWireCorpusIncludesPublished(t *testing.T) {
 	if note, _ := body["published_note"].(string); !strings.Contains(note, "capped") {
 		t.Fatalf("a capped search must say so: note %q", note)
 	}
-	// The other halves are still there.
-	for _, key := range []string{"results", "captures", "events"} {
+	// The other halves are still there; the owner's stories are not part of
+	// the world corpus search (MA4.6: they are the Texture child's SearchTexture).
+	for _, key := range []string{"captures", "events"} {
 		if _, ok := body[key]; !ok {
 			t.Fatalf("the corpus answer lost %q: %v", key, body)
+		}
+	}
+	for _, key := range []string{"results", "results_note"} {
+		if _, ok := body[key]; ok {
+			t.Fatalf("the world corpus search answered the owner's stories (%q): %v", key, body)
 		}
 	}
 }
@@ -95,7 +101,7 @@ func TestSearchWireCorpusPublishedFailureIsNotEmpty(t *testing.T) {
 	if note, _ := body["published_note"].(string); !strings.Contains(note, "published pieces not searched") {
 		t.Fatalf("a failing published search must say it did not search: note %q", note)
 	}
-	if _, ok := body["results"]; !ok {
-		t.Fatalf("a failing published search hid the guest's own stories: %v", body)
+	if _, ok := body["captures"]; !ok {
+		t.Fatalf("a failing published search hid the guest's own captures: %v", body)
 	}
 }

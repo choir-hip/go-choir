@@ -118,7 +118,7 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleWriteFile(ctx, req, receiptID, start)
 	case ActionListDir:
 		return b.handleListDir(ctx, req, receiptID, start)
-	case ActionSearchStart, ActionRead, ActionSearchWireCorpus,
+	case ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
 		return b.handleEgress(ctx, req, receiptID, start)

@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"strconv"
 	"strings"
 	"testing"
@@ -162,12 +163,12 @@ func TestDeskPromptPrefixIsByteStableAcrossRunsAndTime(t *testing.T) {
 // is in its run-context turn.
 func TestResearchChildSystemPromptIsStableAndBudgetIsAContextTurn(t *testing.T) {
 	rt, _ := testRuntime(t)
-	a, err := rt.researchChildSystemPrompt("owner-1")
+	a, err := rt.researchChildSystemPrompt("owner-1", yaegikernel.SessionRoleResearchWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(1100 * time.Millisecond)
-	b, err := rt.researchChildSystemPrompt("owner-1")
+	b, err := rt.researchChildSystemPrompt("owner-1", yaegikernel.SessionRoleResearchWeb)
 	if err != nil {
 		t.Fatal(err)
 	}

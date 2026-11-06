@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -145,7 +146,7 @@ func TestResearchChildCellsNameTheirOwnSession(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	for _, child := range []string{"child-a", "child-b"} {
-		workers := newResearchChildDeskWorkers(child)
+		workers := newResearchChildDeskWorkers(yaegikernel.SessionRoleResearchWeb, child)
 		t.Cleanup(workers.closeAll)
 		tool := newDeskGoEvalTool(rt, workers, agentprofile.Research)
 		ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)

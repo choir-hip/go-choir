@@ -255,7 +255,7 @@ func TestSubCallEveryChildIsACastWithTypedQuestionsAndAReport(t *testing.T) {
 		if cast.Provenance.Desk != "research:doc-sub" || cast.Provenance.RunID != "run-sub-1" || cast.Provenance.Origin != types.OriginDeskRun {
 			t.Fatalf("child %d: provenance %+v", i, cast.Provenance)
 		}
-		if cast.SubCall.Role != researchChildRole {
+		if cast.SubCall.Role != yaegikernel.SessionRoleResearchWeb {
 			t.Fatalf("child %d: role %q", i, cast.SubCall.Role)
 		}
 		if len(report.EvidenceRefs) != 1 || report.EvidenceRefs[0] != "https://example.test/a" {
@@ -574,14 +574,14 @@ func TestSubCallSameFamilyJudgeIsNotIndependent(t *testing.T) {
 func (f *subCallFixture) writeCall(t *testing.T, fan string, withReport bool) types.CommitmentRecord {
 	t.Helper()
 	cast, err := buildSubCallCast(subCallCastParams{RecordID: types.SubCallCastRecordID(fan, 0), FanOutID: fan, ChildKey: "k-" + fan,
-		ChildRole: researchChildRole, ChildInbox: researchChildRole + ":k", Objective: "gamma " + fan, ParentAgent: "research:doc-sub", ParentRunID: "run-sub-1",
+		ChildRole: yaegikernel.SessionRoleResearchWeb, ChildInbox: yaegikernel.SessionRoleResearchWeb + ":k", Objective: "gamma " + fan, ParentAgent: "research:doc-sub", ParentRunID: "run-sub-1",
 		ParentModel: "parent-model", ComputerID: f.computer, PSuccess: fp(0.7), Weight: fp(0.5), Now: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	recs := []types.CommitmentRecord{cast}
 	if withReport {
-		recs = append(recs, buildSubCallReport(subCallReportParams{Cast: cast, Child: researchChildRole + ":k", Model: "child-model", Text: "findings", Now: time.Now()}))
+		recs = append(recs, buildSubCallReport(subCallReportParams{Cast: cast, Child: yaegikernel.SessionRoleResearchWeb + ":k", Model: "child-model", Text: "findings", Now: time.Now()}))
 	}
 	for _, rec := range recs {
 		if err := f.rt.appendSubCallRecord(context.Background(), f.owner, f.computer, rec); err != nil {
@@ -906,12 +906,12 @@ choir.Delegate("intake", "", ids, "per_record", map[string]any{"p_success": 0.8,
 func TestSubCallEmptyObjectiveIsNeverSentToTheJudge(t *testing.T) {
 	f := newSubCallFixture(t, map[string]string{"gamma": "findings"})
 	cast, err := buildSubCallCast(subCallCastParams{RecordID: types.SubCallCastRecordID("fan-blank", 0), FanOutID: "fan-blank", ChildKey: "k",
-		ChildRole: researchChildRole, ChildInbox: researchChildRole + ":k", Objective: "  ", ParentAgent: "research:doc-sub", ParentRunID: "run-sub-1",
+		ChildRole: yaegikernel.SessionRoleResearchWeb, ChildInbox: yaegikernel.SessionRoleResearchWeb + ":k", Objective: "  ", ParentAgent: "research:doc-sub", ParentRunID: "run-sub-1",
 		ParentModel: "parent-model", ComputerID: f.computer, Now: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	report := buildSubCallReport(subCallReportParams{Cast: cast, Child: researchChildRole + ":k", Model: "child-model", Text: "findings", Now: time.Now()})
+	report := buildSubCallReport(subCallReportParams{Cast: cast, Child: yaegikernel.SessionRoleResearchWeb + ":k", Model: "child-model", Text: "findings", Now: time.Now()})
 	for _, rec := range []types.CommitmentRecord{cast, report} {
 		if err := f.rt.appendSubCallRecord(context.Background(), f.owner, f.computer, rec); err != nil {
 			t.Fatal(err)
@@ -935,9 +935,9 @@ func TestSubCallEmptyObjectiveIsNeverSentToTheJudge(t *testing.T) {
 func TestSubCallErroredChildIsNoObservationNotAContradiction(t *testing.T) {
 	f := newSubCallFixture(t, nil)
 	cast, _ := buildSubCallCast(subCallCastParams{RecordID: types.SubCallCastRecordID("fan-err", 0), FanOutID: "fan-err", ChildKey: "k",
-		ChildRole: researchChildRole, ChildInbox: researchChildRole + ":k", Objective: "gamma err", ParentAgent: "research:doc-sub", ParentRunID: "run-sub-1",
+		ChildRole: yaegikernel.SessionRoleResearchWeb, ChildInbox: yaegikernel.SessionRoleResearchWeb + ":k", Objective: "gamma err", ParentAgent: "research:doc-sub", ParentRunID: "run-sub-1",
 		ComputerID: f.computer, PSuccess: fp(0.7), Weight: fp(0.5), Now: time.Now()})
-	report := buildSubCallReport(subCallReportParams{Cast: cast, Child: researchChildRole + ":k", Error: "context deadline exceeded", Now: time.Now()})
+	report := buildSubCallReport(subCallReportParams{Cast: cast, Child: yaegikernel.SessionRoleResearchWeb + ":k", Error: "context deadline exceeded", Now: time.Now()})
 	for _, rec := range []types.CommitmentRecord{cast, report} {
 		if err := f.rt.appendSubCallRecord(context.Background(), f.owner, f.computer, rec); err != nil {
 			t.Fatal(err)

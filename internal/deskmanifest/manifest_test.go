@@ -70,14 +70,15 @@ func TestOnlyEngineeringHoldsExecAndWriteFile(t *testing.T) {
 // pinnedFrame is each desk's frame table, written out. It equals the table in
 // yaegikernel's frame_role_test.go, which is pinned against the module sets.
 var pinnedFrame = map[string][]string{
-	Management:     {"product_api", "read_capture", "stories"},
-	Texture:        {"read_capture"},
-	Research:       {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "relate", "source_api"},
-	ResearchChild:  {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},
-	ManagementTask: {"read_capture", "stories"},
-	Engineering:    {},
-	Conductor:      {},
-	Email:          {},
+	Management:      {"product_api", "read_capture", "stories"},
+	Texture:         {"read_capture"},
+	Research:        {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "relate", "source_api", "texture_search"},
+	ResearchWeb:     {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},
+	ResearchTexture: {"texture_search"},
+	ManagementTask:  {"read_capture", "stories"},
+	Engineering:     {},
+	Conductor:       {},
+	Email:           {},
 }
 
 func TestFrameActionsArePinned(t *testing.T) {
@@ -99,7 +100,7 @@ func TestInstancesAndCapsuleVerbsKeepTheirOldAuthority(t *testing.T) {
 	instances := map[string]Instance{
 		Management: InstanceOwner, Texture: InstanceSubject, Research: InstanceSubject,
 		Engineering: InstanceAssignment, Conductor: InstanceNone, Email: InstanceNone,
-		ManagementTask: InstanceNone, ResearchChild: InstanceNone,
+		ManagementTask: InstanceNone, ResearchWeb: InstanceNone, ResearchTexture: InstanceNone,
 	}
 	for name, want := range instances {
 		d, ok := Lookup(name)
@@ -156,7 +157,7 @@ func TestCellUIDsAreDistinctPerWorkerClass(t *testing.T) {
 		sort.Strings(names)
 		joined := strings.Join(names, ",")
 		switch joined {
-		case Management + "," + ManagementTask, ManagementTask + "," + Management, ResearchChild + "," + Research, Research + "," + ResearchChild, Texture:
+		case Management + "," + ManagementTask, Research + "," + ResearchTexture + "," + ResearchWeb, Texture:
 		default:
 			t.Errorf("uid %d is shared by %s", uid, joined)
 		}
@@ -175,7 +176,7 @@ func TestCellUIDsAreDistinctPerWorkerClass(t *testing.T) {
 
 func TestTaintClasses(t *testing.T) {
 	want := map[string]Taint{
-		Research: TaintUntrustedInput, ResearchChild: TaintUntrustedInput, Email: TaintUntrustedInput,
+		Research: TaintUntrustedInput, ResearchWeb: TaintUntrustedInput, ResearchTexture: TaintUntrustedInput, Email: TaintUntrustedInput,
 		Management: TaintPrivileged, Texture: TaintPrivileged, Engineering: TaintPrivileged,
 		ManagementTask: TaintPrivileged, Conductor: TaintPrivileged,
 	}

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -19,8 +20,15 @@ import (
 
 // GrantTextureSearch is the Texture custodian's guarded corpus search: ranked
 // refs plus bounded snippets labelled owner_private:texture, never a document
-// body (store.TextureSearchUnderLease).
+// body (store.TextureSearchUnderLease). Its one holder is the research desk's
+// Texture child (plan MA4.6, section 8.6): the research desk's own run and its
+// web child hold none, so no owner-private Texture text reaches a desk that
+// reads the web.
 const GrantTextureSearch = "texture.search"
+
+// WriterResearchTexture is the research desk's Texture child: the holder of
+// texture.search.
+var WriterResearchTexture = objectgraph.Writer("desk:" + deskmanifest.ResearchTexture)
 
 // GrantTextureBrief is the Texture custodian's disclosure grant to research
 // for one trajectory run: the brief a Texture run Casts (or Asks) research
@@ -42,9 +50,9 @@ type grantRow struct {
 }
 
 var grantTable = map[string]grantRow{
-	// Until MA4.6 the research desk's own run holds texture.search; MA4.6
-	// moves it to the research_texture child and removes research from this row.
-	GrantTextureSearch: {custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{objectgraph.WriterResearch}},
+	// The research_texture child holds texture.search (MA4.6); the research
+	// desk's own run does not.
+	GrantTextureSearch: {custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{WriterResearchTexture}},
 	// The labels of the data Texture is the custodian of: a document the
 	// Texture frame showed (owner_private:document) and the custodian's own
 	// search snippets (owner_private:texture, store.textureSearchLabel).
@@ -89,15 +97,18 @@ func GrantHeldBy(grant string, w objectgraph.Writer) bool {
 	return false
 }
 
-// IssueTextureSearch issues the texture.search lease of a research run. The
-// Texture custodian's service issues it (the platform's own request, origin
-// system, stated as a precommitment like any lease); it is held by the research
-// desk for the run and ends with it.
+// IssueTextureSearch issues the texture.search lease of one research Texture
+// child (MA4.6). The Texture custodian's service issues it (the platform's own
+// request, origin system, stated as a precommitment like any lease). runID is
+// the research run the child works for (the child has no run record of its
+// own); agentID is the child's (research_texture:<key>), whose desk the grant
+// table must name as a holder. The caller ends it when the child ends (End);
+// the run's end ends it too.
 func (s *Service) IssueTextureSearch(ctx context.Context, ownerID, computerID, runID, agentID string) (Record, error) {
 	if strings.TrimSpace(runID) == "" {
 		return Record{}, fmt.Errorf("lease: texture.search needs the run it is for")
 	}
-	// The holder is the run's own desk (agent ids are <desk>:<id>), checked
+	// The holder is the child's desk (agent ids are <desk>:<id>), checked
 	// against the grant table when the lease is decided.
 	desk, _, ok := strings.Cut(agentID, ":")
 	if !ok || desk == "" {
@@ -108,7 +119,7 @@ func (s *Service) IssueTextureSearch(ctx context.Context, ownerID, computerID, r
 		OwnerID: ownerID, ComputerID: computerID, Desk: desk, RunID: runID, AgentID: agentID,
 		Origin:  types.OriginSystem,
 		Scope:   Scope{Grants: []string{GrantTextureSearch}},
-		Purpose: "research's corpus search over Texture: ranked refs and bounded snippets, never a document body",
+		Purpose: "the research Texture child's corpus search over Texture: ranked refs and bounded snippets, never a document body",
 		Fields:  &types.RequestFields{PSuccess: &p, Weight: &w, ImpactClass: types.ImpactI1, Settlement: types.SettlementRecipient},
 		grant:   true,
 	})

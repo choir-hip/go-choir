@@ -166,9 +166,9 @@ type deskSessionWorkers struct {
 
 // newResearchChildDeskWorkers returns the pool one choir.Research child runs
 // in, labelled with the child's key for the trace.
-func newResearchChildDeskWorkers(childKey string) *deskSessionWorkers {
+func newResearchChildDeskWorkers(role, childKey string) *deskSessionWorkers {
 	w := newDeskSessionWorkers()
-	w.label = "research_child:" + childKey + "/"
+	w.label = role + ":" + childKey + "/"
 	return w
 }
 
@@ -1344,6 +1344,9 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	}
 	if action == yaegikernel.ActionResearch {
 		return rt.runResearchChildren(egrCtx, cellExec, payload)
+	}
+	if action == yaegikernel.ActionTextureSearch {
+		return rt.textureSearchEgress(egrCtx, cellExec, payload)
 	}
 	if fn, ok := rt.egressEvidenceTool()[string(action)]; ok {
 		out, err := fn(egrCtx, payload)

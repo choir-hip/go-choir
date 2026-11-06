@@ -3958,15 +3958,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// may read; they end with the run.
 	ctx = objectgraph.WithLeases(ctx, rt.leaseAuthority(), rec.RunID)
 	defer rt.endRunLeases(ctx, rec.RunID, lease.ReasonRunEnded)
-	// MA3.7c (X1): the research desk's run holds the Texture custodian's
-	// texture.search lease for its corpus search, issued here from the run
-	// record and ended with the run. MA4.6 moves it to the research_texture
-	// child; until then a run without it searches the world parts only.
-	if rt.leases != nil && runHoldsTextureSearch(rec) && !isManagementTaskRun(rec) {
-		if _, err := rt.leases.IssueTextureSearch(ctx, rec.OwnerID, rec.ComputerID, rec.RunID, rec.AgentID); err != nil {
-			log.Printf("runtime: texture.search lease for run %s: %v", rec.RunID, err)
-		}
-	}
+	// MA4.6: no desk's own run holds texture.search; the research desk's
+	// Texture child is issued it per call (research_children.go).
 	// MA3.6: each model call of the run is logged with the run's labels.
 	// The accumulator is the live view; a resumed run's is empty until it
 	// reads, so the record is the source then.

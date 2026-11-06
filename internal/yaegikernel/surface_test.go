@@ -313,7 +313,7 @@ func TestSearchSurfaceIsAsyncOnResearchOnly(t *testing.T) {
 			t.Errorf("%s still exports choir.WebSearch", desk)
 		}
 		_, has := exports["SearchStart"]
-		if want := desk == "research" || desk == SessionRoleResearchChild; has != want {
+		if want := desk == "research" || desk == SessionRoleResearchWeb; has != want {
 			t.Errorf("%s exports SearchStart = %v, want %v", desk, has, want)
 		}
 	}

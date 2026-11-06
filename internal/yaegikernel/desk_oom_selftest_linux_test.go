@@ -28,13 +28,13 @@ func TestReadDaemonIdentityIsThisProcess(t *testing.T) {
 // sibling answers, this process survives, and nothing is left behind.
 func TestDeskOOMSelfTestKillsTheWorkerAtItsBudget(t *testing.T) {
 	root := deskCgroupTestRoot(t)
-	env := newConfinedTestEnv(t, "research_child", CellConfinementAuto)
+	env := newConfinedTestEnv(t, "research_web", CellConfinementAuto)
 	env.cfg.CgroupRoot = root
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	// research_child (384 MiB) keeps the test light; the deployed leg uses
+	// research_web (384 MiB) keeps the test light; the deployed leg uses
 	// research (768 MiB).
-	rec := DeskOOMSelfTest(ctx, DeskOOMSelfTestConfig{Base: env.cfg, Role: "research_child"})
+	rec := DeskOOMSelfTest(ctx, DeskOOMSelfTestConfig{Base: env.cfg, Role: "research_web"})
 	// The test spawns in auto mode (a container has no Landlock); the judge
 	// requires the guest's required mode, so that is the one failure allowed.
 	if len(rec.Failures) != 1 || !strings.Contains(rec.Failures[0], "mode") {

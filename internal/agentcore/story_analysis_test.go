@@ -285,7 +285,7 @@ func TestStoryAnalysisIsAbsentOffUnboundOrForAnotherDesk(t *testing.T) { // G9
 	if a := f.analyse(t, agentprofile.Research, "run-unbound", f.owner); a != nil {
 		t.Fatalf("unbound desk: analysis = %+v, want none", a)
 	}
-	for _, role := range []string{agentprofile.Texture, agentprofile.Management, yaegikernel.SessionRoleResearchChild, ""} {
+	for _, role := range []string{agentprofile.Texture, agentprofile.Management, yaegikernel.SessionRoleResearchWeb, yaegikernel.SessionRoleResearchTexture, ""} {
 		if a := f.analyse(t, role, "run-desk-"+role, "doc-story"); a != nil {
 			t.Fatalf("desk %q: analysis = %+v, want none", role, a)
 		}

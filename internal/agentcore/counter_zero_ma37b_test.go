@@ -34,7 +34,8 @@ import (
 //   - Nothing else is excused. A key landing here is a crossing the enforce
 //     flip would block. MA3.7c closed the corpus search: world events and
 //     capture labels are admitted to research (E4, reader table), and the
-//     Texture part reads under a texture.search lease the research run holds.
+//     owner's stories are not part of it: they are the research Texture
+//     child's SearchTexture under its own texture.search lease (MA4.6).
 //   - The one residual a representative day may show is content_item (a
 //     desk-authored content ref Texture resolves, counted as Texture's read; a
 //     content lease replaces it). It does not occur in this day.
@@ -151,11 +152,6 @@ choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","
 	rexec := toolregistry.ExecutionContext{RunID: rrec.RunID, AgentID: rrec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: f.computer,
 		Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rrec}
 	rtool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
-	// The research run holds the texture.search lease (as executeWithToolLoop
-	// issues it), so its corpus search reads Texture as the custodian.
-	if _, err := rt.leases.IssueTextureSearch(ctx, owner, f.computer, rrec.RunID, rrec.AgentID); err != nil {
-		t.Fatal(err)
-	}
 	out = runCell(rtool, rexec, `rs := choir.Records()
 fmt.Println(len(rs))
 r, err := choir.SearchWireCorpus("harbor", 5)
