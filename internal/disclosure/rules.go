@@ -169,6 +169,34 @@ type Facts struct {
 	// AdmittedFor reports whether the destination is admitted for a label.
 	// nil admits nothing.
 	AdmittedFor func(label string) bool
+	// OwnerDesks is set by the host when a desk message runs between the
+	// owner's built-in Texture and research desks (either direction). It feeds
+	// OwnerFlow only; a package desk or any other pair never sets it.
+	OwnerDesks bool
+}
+
+// OwnerFlow is the owner-internal flow rule (owner ruling, 2026-11-06: "On
+// private captures, don't worry about that. It's expected that private
+// captures will be used by texture, no approval required or even no need to
+// notify users. Just keep the provenance."). A desk message between the
+// owner's own built-in Texture and research desks, in either direction, that
+// carries owner_private:capture or owner_private:evidence (evidence is the
+// research custodian's record derived from captures and other reads) is
+// allowed without an ask. Only the verdict changes: the labels stay on the
+// message, the record and the run exactly as before. It covers the desk
+// message sink alone; publication, mail, library release and any desk outside
+// the pair still follow the table.
+func OwnerFlow(label string, sink Sink, ownerDesks bool) bool {
+	if !ownerDesks {
+		return false
+	}
+	if sink != SinkDeskMessage {
+		return false
+	}
+	if label != types.OwnerPrivateLabel("capture") && label != types.OwnerPrivateLabel("evidence") {
+		return false
+	}
+	return true
 }
 
 // Hit is the table's decision for one label.
@@ -239,6 +267,10 @@ func Decide(labels types.LabelSet, sink Sink, facts Facts) Verdict {
 		d := cell.Unadmitted
 		if admitted {
 			d = cell.Admitted
+		}
+		// The owner flow lifts an Ask only: a Deny is the owner's own rule.
+		if d == Ask && OwnerFlow(l, sink, facts.OwnerDesks) {
+			d = Allow
 		}
 		v.Hits = append(v.Hits, Hit{Label: l, Class: class, Admitted: admitted, Decision: d})
 		if d.severity() > v.Decision.severity() {

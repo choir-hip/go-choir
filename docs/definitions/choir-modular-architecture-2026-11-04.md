@@ -318,7 +318,7 @@ now:
     next_observation: MA6.6's measured frame-call bound and its tier 2 review
   blocker_or_risk: >-
     Not blocking, owner decisions: the disclosure enforce flip
-    (owner_private:capture research to texture policy); the H3 pasted-URL
+    (settled 2026-11-06: owner captures flow between Texture and research without an ask, provenance kept; see the ledger); the H3 pasted-URL
     chip default; F1's staging proof needs CHOIR_PLATFORM_OPERATORS on Node
     B. Waits: MA4.10 needs a week of staging runs; MA6.7 needs Phase 8. Open
     defects not patched (old system): the Texture first draft after create

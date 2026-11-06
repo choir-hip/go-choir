@@ -249,12 +249,31 @@ func messageTargetDesk(call disclosureCall) string {
 	return canonicalDeskName(head)
 }
 
+// ownerDeskPair reports whether a desk message runs between the custodian of
+// the owner's documents (Texture) and the custodian of agent evidence
+// (research), in either direction (owner ruling 2026-11-06,
+// disclosure.OwnerFlow). The registry names both, so no desk name is keyed
+// here, and a package desk never holds either custody.
+func ownerDeskPair(from, to string) bool {
+	docs, okD := objectgraph.CustodianOf("choir.texture_document")
+	evid, okE := objectgraph.CustodianOf("choir.agent_evidence")
+	f, okF := objectgraph.DeskWriter(from)
+	t, okT := objectgraph.DeskWriter(to)
+	if !okD || !okE || !okF || !okT || docs == evid {
+		return false
+	}
+	return (f == docs && t == evid) || (f == evid && t == docs)
+}
+
 // disclosureFacts computes the admission facts of a sink attempt.
 func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
 	switch call.sink {
 	case disclosure.SinkDeskMessage:
 		owner, runID := strings.TrimSpace(call.exec.OwnerID), strings.TrimSpace(call.exec.RunID)
-		return disclosure.Facts{AdmittedFor: func(label string) bool { return rt.messageAdmitted(owner, runID, call.target, label) }}
+		return disclosure.Facts{
+			AdmittedFor: func(label string) bool { return rt.messageAdmitted(owner, runID, call.target, label) },
+			OwnerDesks:  ownerDeskPair(canonicalDeskName(strings.TrimSpace(call.deskRole)), messageTargetDesk(call)),
+		}
 	case disclosure.SinkMailSend:
 		// Only the mail custodian replying in the owner's own thread is
 		// admitted; any other mail leaves the owner's mailbox on an ask.

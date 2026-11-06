@@ -216,3 +216,36 @@ func TestSitesAreBounded(t *testing.T) {
 		t.Fatalf("len=%d overflow=%d", len(got), got[sitesOverflowKey])
 	}
 }
+
+// Owner ruling 2026-11-06: captures (and the evidence derived from them) move
+// between the owner's Texture and research desks without an ask; nothing else
+// about the table changes.
+func TestOwnerFlowAllowsCapturesBetweenTextureAndResearchOnly(t *testing.T) {
+	capture, evidence := types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("evidence")
+	both := types.NewLabelSet(capture, evidence, types.LabelWorldUntrusted)
+	v := Decide(both, SinkDeskMessage, Facts{OwnerDesks: true})
+	if v.Decision != Allow || v.Binding() != "-" || len(v.Hits) != 3 {
+		t.Errorf("verdict %+v, want allow with every label recorded", v)
+	}
+	for _, c := range []struct {
+		name       string
+		labels     types.LabelSet
+		sink       Sink
+		ownerDesks bool
+	}{
+		{"another desk pair", both, SinkDeskMessage, false},
+		{"other label", types.NewLabelSet(types.OwnerPrivateLabel("mail")), SinkDeskMessage, true},
+		{"mixed with a mail label", types.NewLabelSet(capture, types.OwnerPrivateLabel("mail")), SinkDeskMessage, true},
+		{"publication", both, SinkPublication, true},
+		{"mail send", both, SinkMailSend, true},
+		{"library release", both, SinkLibraryRelease, true},
+	} {
+		if v := Decide(c.labels, c.sink, Facts{OwnerDesks: c.ownerDesks}); v.Decision != Ask {
+			t.Errorf("%s = %s, want ask", c.name, v.Decision)
+		}
+	}
+	// Egress was already allowed and stays so.
+	if v := Decide(both, SinkEgress, Facts{}); v.Decision != Allow {
+		t.Errorf("egress = %s", v.Decision)
+	}
+}

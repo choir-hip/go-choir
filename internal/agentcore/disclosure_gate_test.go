@@ -592,9 +592,9 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 		t.Fatalf("T2: another run's message under run A's lease = %v", err)
 	}
 	// A label outside Texture's custody still asks, lease or not.
-	texC := f.run(t, "run-tex-c", agentprofile.Texture, "draft", doc, types.OwnerPrivateLabel("capture"))
+	texC := f.run(t, "run-tex-c", agentprofile.Texture, "draft", doc, types.OwnerPrivateLabel("mail"))
 	if err := reduction(texC).gateMessageDisclosure(ctx, cast("c2", agentprofile.Research)); !asks(err) {
-		t.Fatalf("T2: a capture label rode the brief = %v", err)
+		t.Fatalf("T2: a mail label rode the brief = %v", err)
 	}
 
 	// T3: management's message to research and Texture's to management mint
@@ -678,5 +678,57 @@ func TestTheGateTalliesTheSiteOfAnObservedAsk(t *testing.T) {
 	}
 	if disclosure.Counts()["desk_message|owner_private|ask|observed"] != 1 {
 		t.Fatalf("counts = %v", disclosure.Counts())
+	}
+}
+
+// Owner ruling 2026-11-06: an owner's capture used by Texture needs no ask and
+// no notice; the provenance stays. The shapes d@e showed (research to texture
+// report, texture to research cast, carrying owner_private:capture and
+// owner_private:evidence) are allowed, in enforce mode too, with the labels
+// still on the run; the same labels to any other desk or to a publication,
+// mail or library sink behave as before.
+func TestOwnerCapturesFlowBetweenTextureAndResearchWithoutAnAsk(t *testing.T) {
+	f := newDisclosureFixture(t, "ownerflow", 62840)
+	f.escalating()
+	capture, evidence := types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("evidence")
+	res := f.run(t, "run-of-res", agentprofile.Research, "x", capture, evidence)
+	tex := f.run(t, "run-of-tex", agentprofile.Texture, "x", capture, evidence)
+	for _, enforce := range []bool{false, true} {
+		if enforce {
+			defer disclosure.SetMode(disclosure.ModeEnforce)()
+		}
+		if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Texture+":doc-1", "report"); err != nil {
+			t.Fatalf("enforce=%v research->texture = %v", enforce, err)
+		}
+		if err := f.gate(tex, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "cast"); err != nil {
+			t.Fatalf("enforce=%v texture->research = %v", enforce, err)
+		}
+	}
+	if sites := disclosure.Sites(); len(sites) != 0 {
+		t.Fatalf("an owner flow was tallied as an ask: %v", sites)
+	}
+	if f.judge.callCount() != 0 || len(f.events(t)) != 0 {
+		t.Fatalf("an owner flow spent System 1 (%d) or wrote an owner tap (%d)", f.judge.callCount(), len(f.events(t)))
+	}
+	// Provenance is unchanged: the runs still carry both labels.
+	for _, id := range []string{"run-of-res", "run-of-tex"} {
+		got, err := f.rt.store.RunLabels(context.Background(), f.owner, f.computer, id)
+		if err != nil || strings.Join(got, ",") != strings.Join(types.NewLabelSet(capture, evidence), ",") {
+			t.Fatalf("run %s labels = %v %v", id, got, err)
+		}
+	}
+	// Anywhere else it still asks: another desk, publication, library release.
+	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Management, "report"); err == nil {
+		t.Error("a capture to management did not ask")
+	}
+	for _, sink := range []disclosure.Sink{disclosure.SinkPublication, disclosure.SinkLibraryRelease} {
+		if err := f.gate(tex, agentprofile.Texture, sink, "elsewhere", "send"); err == nil {
+			t.Errorf("a capture at %s did not ask", sink)
+		}
+	}
+	// The pair is by desk, not by label alone: another label still asks.
+	doc := f.run(t, "run-of-doc", agentprofile.Research, "x", types.OwnerPrivateLabel("mail"))
+	if err := f.gate(doc, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Texture+":doc-1", "report"); err == nil {
+		t.Error("a mail label to texture did not ask")
 	}
 }
