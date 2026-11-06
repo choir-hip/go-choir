@@ -3,7 +3,6 @@
 package capsule
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -2215,20 +2214,14 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 				}
 			}
 		} else {
-			scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
-			scanner.Buffer(make([]byte, 64<<10), 1<<20)
-			for scanner.Scan() {
-				// Refusal-grade scan: DetectPrivateSecrets is redaction-grade and
-				// over-matches machine-generated text (vendored pdf.js enums,
-				// minified member accesses) just as it did compiled binaries.
-				if findings := computerevent.DetectRefusalSecrets(scanner.Bytes()); len(findings) != 0 {
-					_ = input.Close()
-					return nil, fmt.Errorf("capsule release refuses secret content in %q", change.Path)
-				}
-			}
-			if scanErr := scanner.Err(); scanErr != nil {
+			found, scanErr := textHasRefusalSecret(&contextReader{ctx: ctx, reader: input})
+			if scanErr != nil {
 				_ = input.Close()
 				return nil, fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, scanErr)
+			}
+			if found {
+				_ = input.Close()
+				return nil, fmt.Errorf("capsule release refuses secret content in %q", change.Path)
 			}
 		}
 		if _, err := input.Seek(0, io.SeekStart); err != nil {
