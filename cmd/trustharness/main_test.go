@@ -129,3 +129,11 @@ func mustRead(t *testing.T, p string) []byte {
 	}
 	return b
 }
+
+// Review r1 (MA7.9): a computer id shorter than eight characters names its
+// output directory instead of panicking.
+func TestShortIDOfAShortComputerID(t *testing.T) {
+	if shortID("computer-x") != "x" || shortID("computer-59c902c5d4") != "59c902c5" {
+		t.Fatalf("shortID: %q %q", shortID("computer-x"), shortID("computer-59c902c5d4"))
+	}
+}

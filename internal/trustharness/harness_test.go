@@ -205,3 +205,16 @@ func TestReproducesBytesFromStoredInputs(t *testing.T) {
 		}
 	}
 }
+
+// Review r1 (MA7.9): past the deadline with units served but none scored,
+// the harness reports unresolved instead of panicking in compare.
+func TestPastDeadlineWithNoUnitsIsUnresolved(t *testing.T) {
+	in := Inputs{Schema: InputsSchema, ComputerID: "computer-x", FetchedAt: time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC),
+		Served: map[string]bool{"prereg_units": true}, PreregUnits: units(0, 1, true), GateReplay: &trust.GateReport{}}
+	r := Compute(in)
+	for _, id := range []string{"P1", "P2"} {
+		if tr := testByID(r, id); tr.Status != "unresolved" {
+			t.Fatalf("%s past the deadline with no units: %+v", id, tr)
+		}
+	}
+}

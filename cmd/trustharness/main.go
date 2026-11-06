@@ -86,7 +86,7 @@ func run(args []string, stdout io.Writer) error {
 	}
 	dir := *out
 	if dir == "" {
-		dir = filepath.Join(defaultEvidenceRoot, in.FetchedAt.Format("2006-01-02")+"-"+strings.TrimPrefix(in.ComputerID, "computer-")[:8])
+		dir = filepath.Join(defaultEvidenceRoot, in.FetchedAt.Format("2006-01-02")+"-"+shortID(in.ComputerID))
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -282,4 +282,14 @@ func fetch(c client) (trustharness.Inputs, error) {
 		in.ActGateCounts = obs.ActGate.Counts
 	}
 	return in, nil
+}
+
+// shortID is the first eight characters of a computer id without its prefix,
+// or all of it when it is shorter.
+func shortID(id string) string {
+	id = strings.TrimPrefix(id, "computer-")
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }

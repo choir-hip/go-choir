@@ -53,6 +53,9 @@ func aucOf(xs []scored) (float64, bool) {
 // degenerate says the scores are constant over the units (AUC 0.5 by
 // construction; pre-registration P1).
 func degenerate(xs []scored) bool {
+	if len(xs) < 2 {
+		return true
+	}
 	for _, x := range xs[1:] {
 		if x.risk != xs[0].risk {
 			return false

@@ -263,6 +263,7 @@ func ledgerScores(l LedgerInput) LedgerScores {
 	bins := []*bin{{lo: 0, hi: 0.5}, {lo: 0.5, hi: 0.7}, {lo: 0.7, hi: 0.9}, {lo: 0.9, hi: 1.0001}}
 	var brier, logs, sharp float64
 	var isc, lr, alr, width float64
+	nScaled := 0
 	for _, r := range l.Records {
 		s.ByResolution[r.Resolution]++
 		switch r.Resolution {
@@ -314,6 +315,7 @@ func ledgerScores(l LedgerInput) LedgerScores {
 			if e != 0 {
 				isc += score / math.Abs(e)
 				width += (hi - lo) / math.Abs(e)
+				nScaled++
 			}
 			if e > 0 && x > 0 {
 				v := math.Log(x / e)
@@ -343,6 +345,9 @@ func ledgerScores(l LedgerInput) LedgerScores {
 	}
 	if n := float64(s.Interval.N); n > 0 {
 		s.Interval.Coverage = r6(float64(s.Interval.Covered) / n)
+	}
+	// The scaled means are over the records with a nonzero estimate only.
+	if n := float64(nScaled); n > 0 {
 		s.Interval.MeanScaledIntervalScore = r6(isc / n)
 		s.Interval.MeanRelativeWidth = r6(width / n)
 	}
@@ -406,8 +411,12 @@ type candidate struct {
 func compare(units []trust.PreregUnit, pred func(trust.PreregUnit) float64, bases []candidate) (map[string]float64, []BaselineResult, string) {
 	m := map[string]float64{}
 	ps := scoreUnits(units, pred)
-	a, _ := aucOf(ps)
-	m["auc"] = r6(a)
+	// An AUC with no positives or no negatives is undefined, so it is left
+	// out rather than stored as 0.5 and judged.
+	a, aOK := aucOf(ps)
+	if aOK {
+		m["auc"] = r6(a)
+	}
 	var out []BaselineResult
 	best, bestName := -1.0, ""
 	var bestScores []scored
@@ -426,7 +435,9 @@ func compare(units []trust.PreregUnit, pred func(trust.PreregUnit) float64, base
 	}
 	if bestScores != nil {
 		m["best_baseline_auc"] = r6(best)
-		m["auc_difference"] = r6(a - best)
+		if aOK {
+			m["auc_difference"] = r6(a - best)
+		}
 		if lo, hi, ok := bootstrapDiff(ps, bestScores); ok {
 			m["auc_difference_lo95"], m["auc_difference_hi95"] = r6(lo), r6(hi)
 		}
@@ -569,11 +580,13 @@ func tests(in Inputs, taps GateTaps) []TestResult {
 				}
 			}
 			p2.N["breaker_units"] = breakerUnits
-			auc := m["auc"]
+			auc, hasAUC := m["auc"]
 			lo, hasLo := m["auc_difference_lo95"]
 			switch {
 			case below:
 				p2.Status, p2.Reason = "unresolved", fmt.Sprintf("the deadline passed below the minimum n (%d of 30 events)", pos)
+			case !hasAUC:
+				p2.Status, p2.Reason = "unresolved", "the AUC is undefined: the units have no failures or no non-failures"
 			case auc < 0.55 || auc < srAUC:
 				p2.Status, p2.Reason = "refuted", "AUC below 0.55 or below the success-rate baseline"
 			case hasLo && lo > 0 && usable:
