@@ -103,16 +103,17 @@ const leaseTrustEvery = 30 * time.Second
 const leaseTrustTimeout = 10 * time.Second
 
 // feedLeaseTrust derives the trust view (as GET /api/trust does) and pushes
-// its rows to the lease policy (MA7.4), at most once per leaseTrustEvery per
-// owner: the
-// policy reads the rows for a lease's duration, and a row whose breaker is set
-// revokes the holder's leases in its class. It then renews or ends the leases
-// past their expiry. The derivation runs here, on the request path and outside
-// any store read, because the reader gate asks the lease service from inside
-// store reads and the service never reads the store. It reads under its own
+// its rows to the lease policy (MA7.4) and the act gate (MA7.8), at most once
+// per leaseTrustEvery per owner: the policy reads the rows for a lease's
+// duration, a row whose breaker is set revokes the holder's leases in its
+// class, and the gate reads them for whether a material act is autonomous.
+// It then renews or ends the leases past their expiry. The derivation runs
+// here, on the lease request and act paths and outside any store read,
+// because the reader gate asks the lease service from inside store reads and
+// neither the service nor the gate reads the store. It reads under its own
 // context, without the requesting desk's reader.
 func (rt *Runtime) feedLeaseTrust(ownerID, computerID string) {
-	if rt == nil || rt.leases == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" {
+	if rt == nil || (rt.leases == nil && rt.actGate == nil) || rt.store == nil || strings.TrimSpace(ownerID) == "" {
 		return
 	}
 	rt.leaseTrustMu.Lock()
@@ -135,6 +136,12 @@ func (rt *Runtime) feedLeaseTrust(ownerID, computerID string) {
 		rt.leaseTrustFed = map[string]time.Time{}
 	}
 	rt.leaseTrustFed[ownerID] = time.Now()
+	if rt.actGate != nil {
+		rt.actGate.Observe(ownerID, view.Rows)
+	}
+	if rt.leases == nil {
+		return
+	}
 	if n := rt.leases.ObserveTrust(ctx, ownerID, view.Rows); n > 0 {
 		log.Printf("runtime: lease policy: the breaker revoked %d lease(s) on a fidelity event", n)
 	}

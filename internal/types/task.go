@@ -255,6 +255,14 @@ const (
 	// said deny). The owner's tap is a fact on the tape.
 	EventDisclosure EventKind = "disclosure.decision"
 
+	// EventTrustBreaker records one trip of the trust circuit breaker (MA7.8)
+	// on the trust-breaker:<computer> channel: the desk, the action class
+	// ("*" for every class), the cause and the time. A trip drops the class to
+	// gated and ends the desk's leases in it at once; the trust view reads
+	// the record back as fidelity evidence (E3), so the drop survives a
+	// restart and autonomy returns only through new positive evidence.
+	EventTrustBreaker EventKind = "trust.breaker"
+
 	// EventStoryRelation records a research cell's choir.RelateStories act on
 	// the tape, on the same system1:<computer> channel: a "recorded" event
 	// per judged pair with the relation, the probability read from the

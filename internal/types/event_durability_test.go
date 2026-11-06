@@ -136,8 +136,10 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	// provenance, a few lines per run, read for as long as the document lives.
 	// And setting.updated (acknowledged, 2026-11-05, S6): a package setting
 	// changed, so the owner's other windows follow it; like theme.updated.
-	if n := len(eventDurability); n != 50 {
-		t.Fatalf("eventDurability has %d entries, want 50 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision, texture.search.queried, model.served and setting.updated)", n)
+	// And trust.breaker (acknowledged, 2026-11-05, MA7.8): a breaker trip is
+	// the authority a class stays gated on across a restart.
+	if n := len(eventDurability); n != 51 {
+		t.Fatalf("eventDurability has %d entries, want 51 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision, texture.search.queried, model.served, setting.updated and trust.breaker)", n)
 	}
 }
 

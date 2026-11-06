@@ -393,6 +393,31 @@ who reads it. In order:
 Never: exceed the ceiling; override a platform yank or forced update; resume
 work after a crash; touch first-party-only refusals.
 
+**As built (MA7.8, 2026-11-05; `internal/actgate`, `internal/agentcore/act_gate.go`).**
+The act gate sits on the act path: `commitActIntent` asks it for every staged
+semantic act, after the addressee and disclosure checks and before anything is
+written. The act's class is the record's (`trust.ActionOf`). A material act
+(I2 and up) of a desk that is not first-party derives a fresh view (at most
+every 30 s, the feed the lease policy reads) and is autonomous only when the
+desk's lower bound in that exact class clears tau over a record in the class,
+with no open breaker on any row of its grant; I4 is never autonomous for such
+a desk. A gated act goes to the owner tap on the disclosure tape (sink
+`act_gate`, answered at `/api/disclosures/{id}/approve` or `/deny`), with a
+notice to management's inbox; the act is refused now, and an approval lets the
+same act pass once. The owner's answers are E6 evidence. A first-party desk's
+material acts are counted (`act_gate` on `/api/runtime/observability`) and
+pass: the pre-registered P2 test decides whether the posterior governs them.
+The breaker trips on a forged frame (every class of the desk) and reads every
+breaker row of a fresh view; a trip ends the desk's leases in the class through
+`RevokeOnFidelity`, is a `trust.breaker` fact on the tape that the view reads
+back as E3, and notifies management, so the drop survives a restart and lifts
+only on new positive evidence. `GET /api/trust?replay=1` adds the gate rule's
+replay (`gate_replay`: material acts, gated acts, taps per day) beside the AUC.
+Not built: a gated act as a PSA request to management for admission (the
+owner tap is the only gate); E3 from declared capabilities (the reducer stamps
+none, so the forged frame is the only real-path fidelity event); E4 refusals
+and E7 platform events in the view's inputs.
+
 ## 6. Gaming, and the guards
 
 The PSA guards (PSA 5.4) apply. The security setting adds:

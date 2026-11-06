@@ -150,6 +150,10 @@ func recordDesk(rec types.CommitmentRecord) string {
 	return DeskOf(rec.Provenance.AgentID)
 }
 
+// ActionOf is the action class the view files a record's evidence under, and
+// the class the act gate (internal/actgate) decides an act in.
+func ActionOf(rec types.CommitmentRecord) ActionClass { return actionOf(rec) }
+
 // actionOf is the record's action class: ClassOf, with a precommit's own
 // stated class counted as frozen.
 func actionOf(rec types.CommitmentRecord) ActionClass {

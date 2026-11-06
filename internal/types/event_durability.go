@@ -75,6 +75,11 @@ var eventDurability = map[EventKind]EventDurability{
 	// stand after the owner approved.
 	EventDisclosure: DurabilityAcknowledged,
 
+	// Acknowledged: a breaker trip is the authority a class stays gated on
+	// across a restart; a lost record would hand autonomy back without
+	// evidence.
+	EventTrustBreaker: DurabilityAcknowledged,
+
 	// Acknowledged: a judged pair relation is the authority for a public
 	// graph edge; a lost record would leave an edge with no record behind it.
 	EventStoryRelation: DurabilityAcknowledged,

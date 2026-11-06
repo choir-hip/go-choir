@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/lease"
@@ -120,6 +121,9 @@ type disclosurePayload struct {
 	RecordID       string             `json:"record_id,omitempty"`
 	Reason         string             `json:"reason,omitempty"`
 	Actor          string             `json:"actor,omitempty"`
+	// Gate is the act gate's verdict when the fact is a gated act (sink
+	// act_gate, act_gate.go, MA7.8) rather than a disclosure.
+	Gate *actgate.Verdict `json:"gate,omitempty"`
 }
 
 // packageDesk reports whether the desk is an installed package desk, the

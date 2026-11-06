@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -83,6 +84,10 @@ type Runtime struct {
 	// MA7.4); leaseTrustFed is when it last pushed a view, per owner.
 	leaseTrustMu  sync.Mutex
 	leaseTrustFed map[string]time.Time
+	// actGate is the act gate and circuit breaker (act_gate.go, MA7.8): it
+	// reads the same trust feed, and its trips end leases through the lease
+	// policy's hook.
+	actGate *actgate.Gate
 	// engineerClockFired holds the assignments whose budget line has been
 	// shown (assignment id:attempt:revision -> struct{}); engineer_clock.go.
 	engineerClockFired sync.Map
@@ -626,6 +631,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	}
 	if s != nil {
 		rt.leases = lease.New(s.Leases())
+		rt.actGate = actgate.New(rt.leases)
 		// Every terminal run write ends the run's leases, whichever path made it.
 		s.SetRunTerminalObserver(func(runID string) { rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded) })
 		// A closed round with a scorable desk-to-desk Cast is judged

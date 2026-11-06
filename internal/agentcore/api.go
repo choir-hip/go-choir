@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
@@ -942,6 +943,11 @@ type guestObservabilityResponse struct {
 	// (MA3.6): a built-in desk's ask or deny shows as outcome observed, a
 	// package desk's as enforced.
 	DisclosureGate *writerGateObservability `json:"disclosure_gate,omitempty"`
+	// ActGate is the act gate's decisions since boot (MA7.8), keyed
+	// "decision|impact|enforcement" (enforced for a package desk, observed
+	// for a first-party desk, approved for an owner-approved retry), and the
+	// breaker's trips, keyed "trip|cause".
+	ActGate *writerGateObservability `json:"act_gate,omitempty"`
 }
 
 type writerGateObservability struct {
@@ -1021,6 +1027,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		DisclosureGate: &writerGateObservability{
 			Mode: disclosure.CurrentMode().String(), Counts: disclosure.Counts(), Sites: disclosure.Sites(),
 		},
+		ActGate: &writerGateObservability{Mode: "enforce package desks, observe first-party", Counts: actgate.Counts()},
 	}
 	if r.URL.Query().Get("goroutines") == "1" {
 		resp.Goroutines = goroutineDump()

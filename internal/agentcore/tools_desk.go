@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
@@ -1371,6 +1372,13 @@ func (rt *Runtime) recordDeskRefusal(ctx context.Context, fallback toolregistry.
 		level = "forged"
 	}
 	log.Printf("desk frame %s: desk %q action %s (worker pid %d, run %s): %s", level, r.Role, r.Action, r.WorkerPID, exec.RunID, r.Reason)
+	if r.Forged {
+		// A forged frame is a fidelity event: the worker used authority the
+		// host did not give it. The breaker drops every class of the desk at
+		// once and ends its leases (act_gate.go, MA7.8).
+		rt.tripBreaker(ctx, exec.OwnerID, exec.ComputerID, r.Role, actgate.Wild, breakerCauseForgedFrame, exec.RunID,
+			fmt.Sprintf("Its worker (pid %d) sent a %s frame the host could not verify: %s.", r.WorkerPID, r.Action, r.Reason))
+	}
 	rt.recordDeskEvent(context.WithoutCancel(ctx), exec, types.EventDeskEgress, map[string]any{
 		"request_id": r.RequestID, "response_request_id": r.RequestID,
 		"verb": string(r.Action), "desk_session": session, "worker_pid": r.WorkerPID,

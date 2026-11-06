@@ -1243,6 +1243,12 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
+	// A material act outside its desk's autonomy goes to the act gate
+	// instead of executing (MA7.8, act_gate.go). Nothing is written before
+	// this point.
+	if err := r.gateAct(ctx, in, rec); err != nil {
+		return 0, err
+	}
 	r.noteInertCandidate(rec)
 	// SMG: cancel_assignment is the verb carrier for the deleted
 	// cancel_co_super_assignment tool — the commitment record mints, then the

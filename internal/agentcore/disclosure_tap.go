@@ -92,6 +92,10 @@ type pendingDisclosure struct {
 }
 
 func (p disclosurePayload) sentence() string {
+	if p.Gate != nil {
+		return fmt.Sprintf("Desk %s wants to make a %s act (%s) to %s: %s. The act gate holds it: %s. Approve it and the same act passes once.",
+			p.Desk, p.Gate.Class.Impact, p.Gate.Class, firstNonEmpty(p.Target, "no addressee"), p.Summary, p.Gate.Reason)
+	}
 	yes, no, unsure := p.Distribution["yes"], p.Distribution["no"], p.Distribution["unsure"]
 	return fmt.Sprintf("Desk %s wants to send data labelled %s to %s (%s): %s System 1 gave yes %.2f, no %.2f, unsure %.2f.",
 		p.Desk, strings.Join(p.Labels, ", "), p.Target, p.Sink, p.Summary, yes, no, unsure)

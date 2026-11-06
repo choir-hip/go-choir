@@ -17,9 +17,11 @@ import (
 // the circuit-breaker flag, derived from the settled sub-call ledger on every
 // request and stored nowhere. With replay=1 it adds the replay of settled
 // records: both weight candidates' calibration and AUC on the next failure,
-// and the one the replay picks. It is read-only; nothing here grants or
-// revokes (the lease policy reads its own derivation, leases.go; the act gate
-// is a later slice).
+// the one the replay picks, and the act gate's rule replayed (gated acts and
+// owner taps per day). It is read-only; nothing here grants or revokes (the
+// lease policy and the act gate read their own derivation, leases.go and
+// act_gate.go). The inputs include the breaker's trips (E3) and the owner's
+// answers to gated acts (E6).
 
 // trustLedgerWindow bounds the newest ledger records the view reads.
 const trustLedgerWindow = 20000
@@ -32,6 +34,9 @@ type trustResponse struct {
 	Window     string              `json:"window"`
 	View       trust.View          `json:"view"`
 	Replay     *trust.ReplayReport `json:"replay,omitempty"`
+	// GateReplay is the act gate's rule replayed over the same records: the
+	// material acts it would have gated and the owner taps per day (MA7.8).
+	GateReplay *trust.GateReport `json:"gate_replay,omitempty"`
 	// ReplayNote says when the replay read fewer records than the view.
 	ReplayNote string `json:"replay_note,omitempty"`
 }
@@ -47,7 +52,11 @@ func (rt *Runtime) trustInputs(ctx context.Context, ownerID, computerID string) 
 	if err != nil {
 		return trust.Inputs{}, fmt.Errorf("settlements: %w", err)
 	}
-	return trust.Inputs{Records: append(casts, settlements...)}, nil
+	in := trust.Inputs{Records: append(casts, settlements...)}
+	if err := rt.trustGateInputs(ctx, ownerID, computerID, &in); err != nil {
+		return trust.Inputs{}, err
+	}
+	return in, nil
 }
 
 // HandleTrust serves GET /api/trust.
@@ -87,6 +96,8 @@ func (h *APIHandler) HandleTrust(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("replay") == "1" {
 		rep := trust.Replay(replayIn, trust.DefaultParams())
 		resp.Replay = &rep
+		gate := trust.GateReplay(replayIn, trust.DefaultParams())
+		resp.GateReplay = &gate
 		resp.ReplayNote = replayNote
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
