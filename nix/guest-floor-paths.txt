@@ -22,6 +22,7 @@ go.sum
 nix/autoputer-vm.nix
 nix/guest-tools.nix
 nix/guest-tool-exec-wrapper.sh
+nix/gvisor.nix
 scripts/guest-signer-state-migrate
 scripts/guest-signer-state-project
 

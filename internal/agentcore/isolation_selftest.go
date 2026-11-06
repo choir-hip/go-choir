@@ -33,6 +33,11 @@ import (
 //     desk_go_eval config, CHOIR_DESK_CELL_CONFINEMENT from the guest image),
 //     each acting as an escaped cell before its first cell
 //     (yaegikernel.DeskCellSelfTest);
+//   - gvisor (MA6.4): whether desk workers run under gVisor, the runsc the
+//     spawner uses, and every live sandbox read back while the desk_cells
+//     workers ran (one per trust class, its workers, host processes and
+//     resident memory). Required mode is gVisor-confined: a desk_cells worker
+//     under process confinement, or a computer without gVisor, fails it;
 //   - document_tool: the daemon's own binary run as a document tool through
 //     the document-tool sandbox (SEC-15, internal/doctool) in required mode,
 //     acting as a hostile tool would;
@@ -101,6 +106,9 @@ type isolationSelfTestResponse struct {
 	// daemon's frame admission per desk, judged by the staging script against
 	// a table it holds itself.
 	FrameBoundary yaegikernel.FrameBoundaryReceipt `json:"frame_boundary"`
+	// Gvisor is the gVisor check (MA6.4): the spawner's gVisor state and the
+	// sandboxes read back while the desk_cells workers were live.
+	Gvisor *yaegikernel.GvisorStatus `json:"gvisor,omitempty"`
 	// DocumentTool is the document-tool sandbox's probe (SEC-15).
 	DocumentTool doctool.SelfTestReceipt `json:"document_tool"`
 	// RuntimeCapabilities is the daemon's own capability state (SEC-15's
@@ -139,6 +147,7 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	for _, f := range resp.DeskCells.Failures {
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
 	}
+	resp.Gvisor = resp.DeskCells.Gvisor
 	resp.FrameBoundary = yaegikernel.FrameBoundarySelfTest()
 	for _, r := range resp.FrameBoundary.Roles {
 		if r.Error != "" {

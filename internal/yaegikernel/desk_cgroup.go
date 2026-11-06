@@ -38,6 +38,8 @@ const DeskCgroupRootEnv = "CHOIR_DESK_CGROUP_ROOT"
 
 const (
 	workerCgroupPrefix = "w-"
+	// sandboxCgroupPrefix names a gVisor sandbox's desks-cgroup child.
+	sandboxCgroupPrefix = "s-"
 	// workerPidsMax caps threads and processes in one worker's cgroup: the
 	// seccomp filter admits clone with CLONE_THREAD only, so this bounds a
 	// thread bomb the memory limit would meet late.
@@ -58,8 +60,9 @@ var writeCgroupFile = func(dir, name, value string) error {
 
 // EnsureDeskCgroupRoot creates the desks cgroup, enables the memory and pids
 // controllers for its children, sets its aggregate limits, and removes the
-// cgroups of workers a crashed daemon left behind (an empty directory per
-// dead worker: workers die with the daemon, nothing resumes). It lists one
+// cgroups of workers and gVisor sandboxes a crashed daemon left behind (an
+// empty directory per dead worker or sandbox: they die with the daemon,
+// nothing resumes). It lists one
 // directory; it touches nothing else.
 func EnsureDeskCgroupRoot(root string, maxBytes, highBytes uint64) error {
 	if root == "" {
@@ -85,7 +88,8 @@ func EnsureDeskCgroupRoot(root string, maxBytes, highBytes uint64) error {
 		return fmt.Errorf("desks cgroup: list %s: %w", root, err)
 	}
 	for _, e := range entries {
-		if e.IsDir() && strings.HasPrefix(e.Name(), workerCgroupPrefix) {
+		// w-: a process-confined worker's; s-: a gVisor sandbox's (MA6.4).
+		if e.IsDir() && (strings.HasPrefix(e.Name(), workerCgroupPrefix) || strings.HasPrefix(e.Name(), sandboxCgroupPrefix)) {
 			removeCgroupDir(filepath.Join(root, e.Name()))
 		}
 	}
@@ -96,10 +100,14 @@ func EnsureDeskCgroupRoot(root string, maxBytes, highBytes uint64) error {
 		if err := writeCgroupFile(root, "memory.max", strconv.FormatUint(maxBytes, 10)); err != nil {
 			return fmt.Errorf("desks cgroup: memory.max: %w", err)
 		}
+		// No memory.high clears one an earlier daemon set: the cgroup
+		// outlives a daemon restart.
+		high := "max"
 		if highBytes > 0 {
-			if err := writeCgroupFile(root, "memory.high", strconv.FormatUint(highBytes, 10)); err != nil {
-				return fmt.Errorf("desks cgroup: memory.high: %w", err)
-			}
+			high = strconv.FormatUint(highBytes, 10)
+		}
+		if err := writeCgroupFile(root, "memory.high", high); err != nil {
+			return fmt.Errorf("desks cgroup: memory.high: %w", err)
 		}
 	}
 	return nil
@@ -109,7 +117,11 @@ func EnsureDeskCgroupRoot(root string, maxBytes, highBytes uint64) error {
 // or returns nil when no budget is configured and the mode allows that. It
 // refuses rather than weakens: in required mode a missing root, a role with no
 // budget, or a cgroup that cannot be made is an error and no worker starts.
-func planWorkerCgroup(cfg DeskSessionWorkerConfig) (*workerCgroup, error) {
+//
+// capBytes, when non-zero and below the manifest budget, is the worker's
+// claim in the desks memory ledger (a process-confined fallback, MA6.4 r4):
+// its memory.max is capped there so the claim bounds what it can hold.
+func planWorkerCgroup(cfg DeskSessionWorkerConfig, capBytes uint64) (*workerCgroup, error) {
 	root := cfg.CgroupRoot
 	if root == "" {
 		root = os.Getenv(DeskCgroupRootEnv)
@@ -129,7 +141,14 @@ func planWorkerCgroup(cfg DeskSessionWorkerConfig) (*workerCgroup, error) {
 	if _, err := rand.Read(id); err != nil {
 		return nil, fmt.Errorf("desk worker cgroup name: %w", err)
 	}
-	return createWorkerCgroup(root, workerCgroupPrefix+hex.EncodeToString(id), d.Memory.WorkerMaxBytes, d.Memory.WorkerHighBytes)
+	maxBytes, highBytes := d.Memory.WorkerMaxBytes, d.Memory.WorkerHighBytes
+	if capBytes > 0 && capBytes < maxBytes {
+		maxBytes = capBytes
+		if highBytes >= maxBytes {
+			highBytes = 0
+		}
+	}
+	return createWorkerCgroup(root, workerCgroupPrefix+hex.EncodeToString(id), maxBytes, highBytes)
 }
 
 func createWorkerCgroup(root, name string, maxBytes, highBytes uint64) (*workerCgroup, error) {

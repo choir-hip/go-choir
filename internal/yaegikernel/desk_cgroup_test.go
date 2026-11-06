@@ -47,7 +47,7 @@ func TestWorkerCgroupIsTheDesksManifestBudget(t *testing.T) {
 		role := role
 		t.Run(role, func(t *testing.T) {
 			root := t.TempDir()
-			cg, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: root, Session: SessionWorkerConfig{Role: role}})
+			cg, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: root, Session: SessionWorkerConfig{Role: role}}, 0)
 			if err != nil || cg == nil {
 				t.Fatalf("plan: %v (cg %v)", err, cg)
 			}
@@ -79,7 +79,7 @@ func TestWorkerCgroupsAreDistinctPerSpawn(t *testing.T) {
 	root := t.TempDir()
 	seen := map[string]bool{}
 	for i := 0; i < 20; i++ {
-		cg, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: root, Session: SessionWorkerConfig{Role: "research"}})
+		cg, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: root, Session: SessionWorkerConfig{Role: "research"}}, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,26 +95,26 @@ func TestWorkerCgroupsAreDistinctPerSpawn(t *testing.T) {
 func TestWorkerBudgetFailsClosed(t *testing.T) {
 	fakeCgroupFS(t)
 	t.Setenv(DeskCgroupRootEnv, "")
-	if _, err := planWorkerCgroup(DeskSessionWorkerConfig{Confinement: CellConfinement{Mode: CellConfinementRequired}, Session: SessionWorkerConfig{Role: "research"}}); err == nil {
+	if _, err := planWorkerCgroup(DeskSessionWorkerConfig{Confinement: CellConfinement{Mode: CellConfinementRequired}, Session: SessionWorkerConfig{Role: "research"}}, 0); err == nil {
 		t.Fatal("required mode planned a worker with no cgroup root")
 	}
-	if cg, err := planWorkerCgroup(DeskSessionWorkerConfig{Session: SessionWorkerConfig{Role: "research"}}); err != nil || cg != nil {
+	if cg, err := planWorkerCgroup(DeskSessionWorkerConfig{Session: SessionWorkerConfig{Role: "research"}}, 0); err != nil || cg != nil {
 		t.Fatalf("auto mode with no cgroup root should run on rlimits alone: %v %v", cg, err)
 	}
 	root := t.TempDir()
 	for _, role := range []string{"", "engineering", "conductor", "root", "app:never-registered"} {
-		if cg, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: root, Session: SessionWorkerConfig{Role: role}}); err == nil {
+		if cg, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: root, Session: SessionWorkerConfig{Role: role}}, 0); err == nil {
 			cg.release()
 			t.Errorf("role %q was given a budget it has no manifest row for", role)
 		}
 	}
 	// A root that is not there is a refusal, not a skip.
-	if _, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: filepath.Join(root, "missing", "desks"), Session: SessionWorkerConfig{Role: "research"}}); err == nil {
+	if _, err := planWorkerCgroup(DeskSessionWorkerConfig{CgroupRoot: filepath.Join(root, "missing", "desks"), Session: SessionWorkerConfig{Role: "research"}}, 0); err == nil {
 		t.Error("a missing desks cgroup was skipped")
 	}
 	// The env selects the root when the config does not.
 	t.Setenv(DeskCgroupRootEnv, root)
-	cg, err := planWorkerCgroup(DeskSessionWorkerConfig{Confinement: CellConfinement{Mode: CellConfinementRequired}, Session: SessionWorkerConfig{Role: "texture"}})
+	cg, err := planWorkerCgroup(DeskSessionWorkerConfig{Confinement: CellConfinement{Mode: CellConfinementRequired}, Session: SessionWorkerConfig{Role: "texture"}}, 0)
 	if err != nil || cg == nil {
 		t.Fatalf("env root not used: %v", err)
 	}

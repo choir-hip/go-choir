@@ -3,17 +3,23 @@
 package yaegikernel
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	seccomp "github.com/elastic/go-seccomp-bpf"
 	"github.com/elastic/go-seccomp-bpf/arch"
 	"github.com/landlock-lsm/go-landlock/landlock"
 	ll "github.com/landlock-lsm/go-landlock/landlock/syscall"
 	"golang.org/x/sys/unix"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // cellSpawnPlan is what SpawnDeskSessionWorker applies to the worker's
@@ -27,6 +33,17 @@ type cellSpawnPlan struct {
 	// release frees it for reuse at reap.
 	uid     uint32
 	release func()
+	// gvisor is the worker's cell in its trust class's sandbox (MA6.4), nil
+	// under process confinement; wrap turns the worker's command into the
+	// runsc exec that starts it there.
+	gvisor *gvisorCell
+	wrap   func(*exec.Cmd) error
+	// budgetCap caps a process-confined desk worker's cgroup memory.max at
+	// its claim in the desks memory ledger (0: the manifest budget); queued
+	// is how long its spawn waited for that claim (or the sandboxed
+	// worker's, for its cell).
+	budgetCap uint64
+	queued    time.Duration
 }
 
 // planCellConfinement resolves the spawner half (see desk_cell_confinement.go).
@@ -37,6 +54,70 @@ func planCellConfinement(cfg DeskSessionWorkerConfig) (out cellSpawnPlan, err er
 	attr := workerSysProcAttr(cfg.ProcessGroup)
 	if attr == nil {
 		attr = &syscall.SysProcAttr{}
+	}
+	// MA6.4: every desk worker runs under gVisor in its trust class's
+	// sandbox. Where gVisor is unavailable, a first-party desk runs under the
+	// process confinement below and any other desk is refused.
+	if cls, isDesk := classifyDesk(cfg.Session.Role); isDesk {
+		ok, reason := gvisorAvailable()
+		if ok {
+			if cfg.Confinement.UID == 0 {
+				if _, known := DeskCellIdentity(cfg.Session.Role); !known {
+					return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: the manifest gives desk role %q no cell identity", cfg.Session.Role)
+				}
+			}
+			bin := cfg.Bin
+			if bin == "" {
+				if bin, err = os.Executable(); err != nil {
+					return cellSpawnPlan{}, fmt.Errorf("desk worker binary: %w", err)
+				}
+			}
+			gplan, gerr := planGvisorCell(cfg, cls, bin, attr)
+			if gerr == nil {
+				return gplan, nil
+			}
+			if errors.Is(gerr, errDesksMemoryCommitted) || errors.Is(gerr, errDesksMemoryNeverFits) {
+				// A capacity refusal, not an unavailable gVisor: no desk
+				// runs outside its sandbox for want of memory.
+				return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: desk %q: %w", cfg.Session.Role, gerr)
+			}
+			reason = gerr.Error()
+		}
+		if !cls.FirstParty {
+			return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: desk %q is not first-party and runs only under gVisor, which is unavailable: %s", cfg.Session.Role, reason)
+		}
+		log.Printf("yaegikernel: desk %q (class %s) runs under process confinement, not gVisor: %s", cfg.Session.Role, cls.Key, reason)
+		// The fallback worker is in the same desks memory ledger as the
+		// sandboxes (it waits like them), and its cgroup is capped at its
+		// claim.
+		root := cfg.CgroupRoot
+		if root == "" {
+			root = os.Getenv(DeskCgroupRootEnv)
+		}
+		var budget uint64
+		if d, ok := deskmanifest.Lookup(cfg.Session.Role); ok {
+			budget = d.Memory.WorkerMaxBytes
+		}
+		mem, merr := deskGvisor.admitProcess(cfg.Context, cls, cfg.Session.Role, budget, root)
+		if merr != nil {
+			return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: desk %q: %w", cfg.Session.Role, merr)
+		}
+		if mem != nil {
+			defer func() {
+				if err != nil {
+					mem.release()
+					return
+				}
+				out.budgetCap, out.queued = mem.bytes, mem.queued
+				uidRelease := out.release
+				out.release = func() {
+					if uidRelease != nil {
+						uidRelease()
+					}
+					mem.release()
+				}
+			}()
+		}
 	}
 	plan := cellSpawnPlan{attr: attr, dir: cfg.Session.AllowedRoot}
 	defer func() {
@@ -142,6 +223,9 @@ func ConfineDeskSessionWorker(getenv func(string) string, prefix string) error {
 	if level == "" {
 		return nil
 	}
+	if level == cellSandboxGvisor {
+		return confineGvisorWorker(getenv, prefix)
+	}
 	if level != cellSandboxRequired && level != cellSandboxBestEffort {
 		level = cellSandboxRequired
 	}
@@ -172,6 +256,44 @@ func ConfineDeskSessionWorker(getenv func(string) string, prefix string) error {
 	}
 	if err := restrictCellFilesystem(level, getenv(prefix+"ALLOWED_ROOT"), tmp); err != nil {
 		return err
+	}
+	if err := seccomp.LoadFilter(DeskCellSeccompFilter(os.Getpid())); err != nil {
+		return fmt.Errorf("desk cell worker: seccomp: %w", err)
+	}
+	return nil
+}
+
+// confineGvisorWorker is the worker half inside a gVisor sandbox: it must be
+// in one (the marker only gVisor's procfs holds), never as root and as the
+// uid its spawner planned, with no capability; then the rlimits and the cell
+// seccomp filter, exactly as outside. gVisor's filesystem view replaces
+// Landlock and the MA6.2 mount namespace (Landlock is ENOSYS inside gVisor).
+func confineGvisorWorker(getenv func(string) string, prefix string) error {
+	if _, err := os.Stat(gvisorMarkerFile); err != nil {
+		return fmt.Errorf("desk cell worker: gvisor level outside a gVisor sandbox (%v)", err)
+	}
+	want := getenv(prefix + cellUIDEnv)
+	if want == "" || strconv.Itoa(os.Getuid()) != want || strconv.Itoa(os.Geteuid()) != want || os.Geteuid() == 0 {
+		return fmt.Errorf("desk cell worker: running as uid %d (euid %d), want the cell user's uid %q", os.Getuid(), os.Geteuid(), want)
+	}
+	tmp := getenv(prefix + cellTmpDirEnv)
+	if tmp == "" {
+		return fmt.Errorf("desk cell worker: no tmp dir")
+	}
+	// The worker makes its own tmp dir in the sandbox's memory /tmp; a dir
+	// that already exists was made by someone else and is refused.
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		return fmt.Errorf("desk cell worker: tmp dir: %w", err)
+	}
+	if st, err := os.Lstat(tmp); err != nil || !st.IsDir() || st.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+		return fmt.Errorf("desk cell worker: tmp dir %s is not the worker's own", tmp)
+	}
+	if err := applyCellRlimits(); err != nil {
+		return fmt.Errorf("desk cell worker: %w", err)
+	}
+	// Landlock's no_new_privs; the filter's own NoNewPrivs sets it too.
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return fmt.Errorf("desk cell worker: no_new_privs: %w", err)
 	}
 	if err := seccomp.LoadFilter(DeskCellSeccompFilter(os.Getpid())); err != nil {
 		return fmt.Errorf("desk cell worker: seccomp: %w", err)

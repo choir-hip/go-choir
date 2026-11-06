@@ -43,8 +43,16 @@ func TestDeskOOMSelfTestKillsTheWorkerAtItsBudget(t *testing.T) {
 	if !rec.Worker.CellStarted {
 		t.Fatal("the start marker did not reach the host")
 	}
-	if rec.Worker.OOMKill < 1 || rec.Worker.Cgroup.MemoryMax != fmt.Sprint(384<<20) {
-		t.Fatalf("worker = %+v", rec.Worker)
+	// The process-confined worker's memory.max is its desks-memory claim
+	// where that is below the manifest's 384 MiB (MA6.4 r4).
+	want := uint64(384 << 20)
+	if desks := desksMemoryMax(root); desks > 0 {
+		if c := gvisorWorkerClaim(workerShare(want, desks)); c < want {
+			want = c
+		}
+	}
+	if rec.Worker.OOMKill < 1 || rec.Worker.Cgroup.MemoryMax != fmt.Sprint(want) {
+		t.Fatalf("worker (want memory.max %d) = %+v", want, rec.Worker)
 	}
 	if !rec.Sibling.AfterAnswered || rec.DaemonAfter.PID != os.Getpid() {
 		t.Fatalf("sibling or daemon affected: %+v %+v", rec.Sibling, rec.DaemonAfter)

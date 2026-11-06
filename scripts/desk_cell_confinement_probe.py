@@ -106,6 +106,8 @@ OOM_BUDGET_BYTES = 768 << 20
 # (internal/yaegikernel deskOOMHeadroomBytes: the daemon's MemoryMin plus
 # room for the other desks and the page cache).
 OOM_HEADROOM_BYTES = 1 << 30
+# MA6.4: a sandboxed worker's address-space limit is its budget plus this.
+GVISOR_ADDRESS_OVERHEAD_BYTES = 1440 << 20  # the largest, amd64 (gvisorAddressOverheadMaxBytes)
 # The seccomp leg: every capsule filter (internal/capsule/seccomp.go) and what
 # each probe must answer under it, written out here.
 SECCOMP_FILTERS = ["workload", "workload-inet", "broker", "broker-inet", "delegate", "broker-delegate"]
@@ -155,15 +157,53 @@ class Computer:
         return last, {}
 
 
+# MA6.4 (R39, R40): every desk worker runs under gVisor, in one sandbox per
+# trust class. Written out here: management and texture are first-party
+# custodians (class a), research reads untrusted content (class b).
+GVISOR_CLASS = {"management": "a", "texture": "a", "research": "b"}
+# Inside gVisor, /proc/meminfo and /dev are the sandbox kernel's own; the rest
+# of MOUNT_HIDDEN must still fail.
+GVISOR_HIDDEN = ["proc_pid1_environ", "proc_parent_status", "sys_kernel", "dev_mem"]
+
+
+def judge_gvisor_sharing(dc, workers):
+    fails = []
+    gv = dc.get("gvisor") or {}
+    if not gv.get("available"):
+        fails.append("gvisor: unavailable (%r)" % gv.get("reason"))
+        return fails
+    ids = {}
+    for role, cls in GVISOR_CLASS.items():
+        w = workers.get(role) or {}
+        if w.get("sandbox_key") != cls:
+            fails.append("gvisor: %s runs in class %r, want %r" % (role, w.get("sandbox_key"), cls))
+        ids.setdefault(cls, set()).add(w.get("sandbox_id"))
+    for cls, s in ids.items():
+        if len(s) != 1:
+            fails.append("gvisor: class %s runs in sandboxes %r, want one" % (cls, sorted(map(str, s))))
+    if len(ids) == 2 and ids.get("a") == ids.get("b"):
+        fails.append("gvisor: classes a and b share a sandbox")
+    live = {}
+    for sb in gv.get("sandboxes") or []:
+        live.setdefault(sb.get("key"), []).append(sb)
+    for cls in ids:
+        got = live.get(cls) or []
+        if len(got) != 1:
+            fails.append("gvisor: %d live sandboxes of class %s read back, want 1" % (len(got), cls))
+        for sb in got:
+            if not sb.get("rss_bytes"):
+                fails.append("gvisor: sandbox %s has no resident memory read back" % sb.get("id"))
+    return fails
+
+
 def judge_desk_cells(dc):
     fails = []
     if dc.get("mode") != "required":
         fails.append("mode=%r, want required (the guest image sets CHOIR_DESK_CELL_CONFINEMENT)" % dc.get("mode"))
-    if (dc.get("landlock_abi") or 0) < 5:
-        fails.append("landlock_abi=%r, want >= 5" % dc.get("landlock_abi"))
+    workers = {w.get("role"): w for w in dc.get("workers") or []}
+    fails += judge_gvisor_sharing(dc, workers)
     if dc.get("spawner_uid") != 0:
         fails.append("spawner_uid=%r, want 0 (the guest runtime is root)" % dc.get("spawner_uid"))
-    workers = {w.get("role"): w for w in dc.get("workers") or []}
     uids = set()
     for role in ROLES:
         w = workers.get(role)
@@ -174,6 +214,11 @@ def judge_desk_cells(dc):
         if w.get("error"):
             fails.append(p + w["error"])
             continue
+        gvisor = w.get("profile") == "gvisor"
+        if not gvisor:
+            fails.append(p + "profile=%r, want gvisor (required mode is gVisor-confined)" % w.get("profile"))
+        elif not w.get("gvisor_marker"):
+            fails.append(p + "its sandbox shows no gVisor marker")
         st = w.get("status") or {}
         uid = str(w.get("user_uid") or "")
         fields = (st.get("Uid") or "").split()
@@ -182,6 +227,8 @@ def judge_desk_cells(dc):
             fails.append(p + "Uid=%r planned=%r, want one activation uid in [%d, %d) on all four" % (st.get("Uid"), uid, lo, hi))
         uids.add(uid)
         for k in ("CapInh", "CapPrm", "CapEff", "CapAmb"):
+            if gvisor and k == "CapAmb" and k not in st:
+                continue
             if (st.get(k) or "x").strip("0") != "":
                 fails.append(p + "%s=%r, want 0" % (k, st.get(k)))
         if (st.get("Groups") or "").strip():
@@ -190,14 +237,17 @@ def judge_desk_cells(dc):
             fails.append(p + "NoNewPrivs=%r" % st.get("NoNewPrivs"))
         if st.get("Seccomp") != "2":
             fails.append(p + "Seccomp=%r" % st.get("Seccomp"))
-        if not w.get("net_ns_isolated"):
+        # A gVisor worker's namespaces are the sandbox kernel's own and its
+        # network is none; the host namespace links do not apply.
+        if not gvisor and not w.get("net_ns_isolated"):
             fails.append(p + "shares the runtime's network namespace")
-        if not w.get("ipc_ns_isolated"):
+        if not gvisor and not w.get("ipc_ns_isolated"):
             fails.append(p + "shares the runtime's IPC namespace")
-        if not w.get("mount_ns_isolated"):
+        if not gvisor and not w.get("mount_ns_isolated"):
             fails.append(p + "shares the runtime's mount namespace")
+        isolated_view = gvisor or w.get("mount_ns_isolated")
         probes = w.get("probes") or {}
-        for name in MOUNT_HIDDEN:
+        for name in (GVISOR_HIDDEN if gvisor else MOUNT_HIDDEN):
             if probes.get(name, "") in ("", None):
                 fails.append(p + "%s succeeded (or did not run): the worker sees the host's /proc, /sys or /dev" % name)
         for name in ALLOWED:
@@ -219,12 +269,12 @@ def judge_desk_cells(dc):
             got = probes.get("read:" + t)
             if got in ("", None):
                 fails.append(p + "read %s succeeded (or did not run)" % t)
-            elif str(got).startswith("ENOENT") and not w.get("mount_ns_isolated"):
+            elif str(got).startswith("ENOENT") and not isolated_view:
                 fails.append(p + "read %s: %s (a missing path proves nothing)" % (t, got))
         # Another desk's tmp dir is not in this worker's mount namespace at
         # all (ENOENT); without one it is another uid's 0700 dir (EACCES).
         for t in canaries:
-            want = ("ENOENT", "EACCES") if w.get("mount_ns_isolated") else ("EACCES",)
+            want = ("ENOENT", "EACCES") if isolated_view else ("EACCES",)
             if not str(probes.get("read:" + t, "")).startswith(want):
                 fails.append(p + "read of another desk's canary = %r, want one of %s" % (probes.get("read:" + t), "/".join(want)))
         if not w.get("cell_serves"):
@@ -307,7 +357,21 @@ def judge_oom(oom):
         fails.append("oom: role=%r, want %s" % (oom.get("role"), OOM_ROLE))
     if w.get("error"):
         fails.append("oom: worker: %s" % w["error"])
-    if cg.get("memory_max") != str(OOM_BUDGET_BYTES):
+    # MA6.4: a worker in a shared gVisor sandbox has no cgroup of its own; its
+    # hard bound is its address-space limit (its heap share, at most the
+    # budget and less on a small guest, plus the Go runtime's mappings,
+    # internal/yaegikernel gvisorAddressOverheadBytes), and the
+    # runaway must end itself there without the sandbox's cgroup killing the
+    # class.
+    gvisor = w.get("profile") == "gvisor"
+    if gvisor:
+        lim = w.get("address_limit_bytes") or 0
+        share = w.get("heap_share_bytes") or 0
+        if not share or share > OOM_BUDGET_BYTES:
+            fails.append("oom: sandboxed worker heap share %r, want at most the budget %d" % (share, OOM_BUDGET_BYTES))
+        if not lim or lim > share + GVISOR_ADDRESS_OVERHEAD_BYTES:
+            fails.append("oom: sandboxed worker address limit %r, want at most its heap share plus %d" % (lim, GVISOR_ADDRESS_OVERHEAD_BYTES))
+    elif cg.get("memory_max") != str(OOM_BUDGET_BYTES):
         fails.append("oom: worker memory.max=%r, want %d (768 MiB)" % (cg.get("memory_max"), OOM_BUDGET_BYTES))
     slice_max = str((oom.get("slice") or {}).get("memory_max") or "")
     if not slice_max.isdigit() or int(slice_max) == 0:
@@ -320,9 +384,14 @@ def judge_oom(oom):
         if w.get("result") == "returned" or not w.get("dead"):
             fails.append("oom: the runaway worker survived (result %r)" % w.get("result"))
         oom_kill = w.get("oom_kill") or 0
-        if oom_kill < 1 or ((cg.get("memory_events") or {}).get("oom_kill") or 0) < 1:
+        if gvisor:
+            if not w.get("runtime_out_of_memory") or "exited on its own" not in str(w.get("exit_cause") or ""):
+                fails.append("oom: the sandboxed runaway did not end at its address limit (exit %r)" % w.get("exit_cause"))
+            if oom_kill:
+                fails.append("oom: the sandbox cgroup killed (oom_kill %r): the class died with the runaway" % oom_kill)
+        elif oom_kill < 1 or ((cg.get("memory_events") or {}).get("oom_kill") or 0) < 1:
             fails.append("oom: memory.events oom_kill=%r: the cgroup did not kill it (exit %r)" % (oom_kill, w.get("exit_cause")))
-        if "killed by its memory budget" not in str(w.get("exit_cause") or ""):
+        if not gvisor and "killed by its memory budget" not in str(w.get("exit_cause") or ""):
             fails.append("oom: exit cause does not name the budget: %r" % w.get("exit_cause"))
     if not sib.get("before_answered") or not sib.get("after_answered"):
         fails.append("oom: sibling before=%r after=%r (%r)" % (sib.get("before_answered"), sib.get("after_answered"),

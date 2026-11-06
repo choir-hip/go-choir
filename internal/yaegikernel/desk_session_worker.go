@@ -67,6 +67,11 @@ type DeskSessionWorkerConfig struct {
 	// (desk_cell_confinement.go). The zero value confines as far as the
 	// spawner can; it is never weaker than that.
 	Confinement CellConfinement
+	// Context bounds the spawn's wait for desks memory (a gVisor worker
+	// whose claim does not fit yet waits for a reap, MA6.4 r3): the cell's
+	// or the research child's own deadline. Nil, or one with no deadline,
+	// waits at most two minutes.
+	Context context.Context
 }
 
 // FrameRefusal is one refused worker frame.
@@ -120,6 +125,11 @@ type DeskSessionWorker struct {
 	// budget is the worker's memory cgroup (nil without one), released at
 	// reap.
 	budget *workerCgroup
+	// gvisor is the worker's cell in its class's gVisor sandbox (nil under
+	// process confinement); releaseUID releases it.
+	gvisor *gvisorCell
+	// queued is how long the spawn waited for desks memory.
+	queued time.Duration
 }
 
 // envHasKey reports whether env sets key.
@@ -179,7 +189,11 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	}
 	// The memory budget: a cgroup of the worker's own, from its desk's
 	// manifest row (RES-02). Refused, not skipped, in required mode.
-	budget, err := planWorkerCgroup(cfg)
+	// A gVisor sandbox's budget is its class cgroup (desk_gvisor_linux.go).
+	var budget *workerCgroup
+	if plan.gvisor == nil {
+		budget, err = planWorkerCgroup(cfg, plan.budgetCap)
+	}
 	if err != nil {
 		plan.discard()
 		return nil, err
@@ -234,6 +248,16 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	cmd.Stdin = nil
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
+	if plan.wrap != nil {
+		// MA6.4: the worker starts inside its trust class's gVisor sandbox.
+		if err := plan.wrap(cmd); err != nil {
+			_ = childFile.Close()
+			_ = parentConn.Close()
+			budget.release()
+			plan.discard()
+			return nil, fmt.Errorf("desk session worker sandbox: %w", err)
+		}
+	}
 	if err := childthread.Start(cmd); err != nil {
 		_ = childFile.Close()
 		_ = parentConn.Close()
@@ -252,6 +276,8 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		cellUID:    plan.uid,
 		releaseUID: plan.release,
 		budget:     budget,
+		gvisor:     plan.gvisor,
+		queued:     plan.queued,
 		// The worker returns the hex form; the host compares that.
 		slotToken: []byte(hex.EncodeToString(token)),
 	}
@@ -706,6 +732,9 @@ func (w *DeskSessionWorker) reapLocked(hostReason string, grace time.Duration) {
 			hostReason = "lost its session socket and was killed by the host after " + grace.String()
 		}
 	}
+	// A gVisor worker is ended inside its sandbox first: its runsc exec
+	// client holds no process of its own to kill (MA6.4).
+	w.gvisor.killWorker()
 	killProcessGroup(w.cmd.Process.Pid)
 	_ = w.cmd.Process.Kill()
 	w.exitCause = w.describeExit(hostReason, <-done)

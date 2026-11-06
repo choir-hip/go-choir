@@ -38,9 +38,38 @@ GOOD_OOM = {
 }
 
 
+# MA6.4: the gVisor shape. The worker's address limit ends it; the sandbox
+# cgroup records no kill. On a 2 GiB guest its heap share is below the budget.
+GOOD_OOM_GVISOR = copy.deepcopy(GOOD_OOM)
+GOOD_OOM_GVISOR["slice"].update(memory_max=str(1 << 30), memory_high=str(768 << 20))
+GOOD_OOM_GVISOR["worker"].update(
+    profile="gvisor", heap_share_bytes=124 << 20, address_limit_bytes=(124 << 20) + (1440 << 20),
+    runtime_out_of_memory=True, oom_kill=0, result="transport: frame: read header: EOF",
+    exit_cause="exited on its own (exit status 2); stderr: fatal error: out of memory",
+    cgroup={"path": "/sys/fs/cgroup/choir-desks/s-b-1", "memory_max": str(560 << 20), "memory_high": "max",
+            "memory_events": {"oom": 0, "oom_kill": 0}})
+
+
 class JudgeOOM(unittest.TestCase):
     def test_good(self):
         self.assertEqual(probe.judge_oom(copy.deepcopy(GOOD_OOM)), [])
+
+    def test_good_gvisor(self):
+        self.assertEqual(probe.judge_oom(copy.deepcopy(GOOD_OOM_GVISOR)), [])
+
+    def test_gvisor_shortfalls(self):
+        cases = {
+            "share above budget": lambda r: r["worker"].update(heap_share_bytes=1 << 30),
+            "no share": lambda r: r["worker"].pop("heap_share_bytes"),
+            "limit beyond share": lambda r: r["worker"].update(address_limit_bytes=(124 << 20) + (2 << 30)),
+            "class killed": lambda r: r["worker"].update(oom_kill=1),
+            "not a runtime oom": lambda r: r["worker"].update(runtime_out_of_memory=False),
+            "host killed it": lambda r: r["worker"].update(exit_cause="killed by the host"),
+        }
+        for name, mutate in cases.items():
+            r = copy.deepcopy(GOOD_OOM_GVISOR)
+            mutate(r)
+            self.assertTrue(probe.judge_oom(r), name)
 
     def test_each_shortfall(self):
         cases = {
@@ -86,14 +115,19 @@ def _desk_worker(role, uid, canary):
     targets = ["/etc/passwd"] + ([canary] if canary else [])
     for t in targets:
         probes["read:" + t] = "ENOENT: no such file or directory"
-    return {"role": role, "user_uid": str(uid), "net_ns_isolated": True, "ipc_ns_isolated": True,
+    cls = probe.GVISOR_CLASS[role]
+    return {"role": role, "profile": "gvisor", "gvisor_marker": True, "sandbox_key": cls,
+            "sandbox_id": "choir-desk-%s-0000" % cls,
+            "user_uid": str(uid), "net_ns_isolated": True, "ipc_ns_isolated": True,
             "mount_ns_isolated": True, "probes": probes, "read_targets": targets, "cell_serves": True,
             "status": {"Uid": " ".join([str(uid)] * 4), "CapInh": "0", "CapPrm": "0", "CapEff": "0",
                        "CapAmb": "0", "Groups": "", "NoNewPrivs": "1", "Seccomp": "2"}}
 
 
 def _good_desk_cells():
-    return {"mode": "required", "landlock_abi": 7, "spawner_uid": 0, "workers": [
+    sandboxes = [{"key": k, "class": k, "id": "choir-desk-%s-0000" % k, "rss_bytes": 150 << 20} for k in ("a", "b")]
+    return {"mode": "required", "landlock_abi": 7, "spawner_uid": 0,
+            "gvisor": {"available": True, "sandboxes": sandboxes}, "workers": [
         _desk_worker("management", 200001, None),
         _desk_worker("texture", 200002, "/tmp/a/selftest-canary"),
         _desk_worker("research", 200003, "/tmp/b/selftest-canary")]}
@@ -107,11 +141,16 @@ class JudgeDeskCells(unittest.TestCase):
         cases = {
             "manifest uid": lambda r: r["workers"][0].update(user_uid="61001"),
             "shared uid": lambda r: r["workers"][1].update(user_uid="200001"),
-            "no mount ns": lambda r: r["workers"][0].update(mount_ns_isolated=False),
+            "process profile": lambda r: r["workers"][0].update(profile="process"),
+            "no gvisor marker": lambda r: r["workers"][1].update(gvisor_marker=False),
+            "gvisor unavailable": lambda r: r["gvisor"].update(available=False),
+            "classes share": lambda r: r["workers"][2].update(sandbox_key="a", sandbox_id="choir-desk-a-0000"),
+            "two class-a sandboxes": lambda r: r["workers"][1].update(sandbox_id="choir-desk-a-1111"),
+            "pid1 environ visible": lambda r: r["workers"][1]["probes"].update(proc_pid1_environ=""),
             "io_uring allowed": lambda r: r["workers"][0]["probes"].update(io_uring_setup=""),
             "ptrace allowed": lambda r: r["workers"][2]["probes"].update(ptrace=""),
-            "proc visible": lambda r: r["workers"][1]["probes"].update(proc_meminfo=""),
-            "dev visible": lambda r: r["workers"][1]["probes"].update(dev_extra_entries=""),
+            "sys visible": lambda r: r["workers"][1]["probes"].update(sys_kernel=""),
+            "dev mem visible": lambda r: r["workers"][1]["probes"].update(dev_mem=""),
         }
         for name, mutate in cases.items():
             r = _good_desk_cells()

@@ -5,7 +5,9 @@ package yaegikernel
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"syscall"
+	"time"
 )
 
 type cellSpawnPlan struct {
@@ -15,10 +17,17 @@ type cellSpawnPlan struct {
 	tmpDir  string
 	uid     uint32
 	release func()
+	gvisor  *gvisorCell
+	wrap    func(*exec.Cmd) error
+	// budgetCap and queued: see the Linux plan.
+	budgetCap uint64
+	queued    time.Duration
 }
 
 // planCellConfinement: confinement is a Linux mechanism (the guest is
-// Linux). A dev host runs workers as before; required mode refuses.
+// Linux). A dev host runs workers as before; required mode refuses. gVisor
+// is Linux-only too: only local unit tests run a desk worker natively on a
+// non-Linux host (R40), so no desk is refused here for lacking it.
 func planCellConfinement(cfg DeskSessionWorkerConfig) (cellSpawnPlan, error) {
 	if cfg.Confinement.Mode == CellConfinementRequired {
 		return cellSpawnPlan{}, fmt.Errorf("desk cell confinement: required mode needs Linux")

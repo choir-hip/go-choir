@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -118,7 +119,23 @@ type DeskCellSelfTestWorker struct {
 	CellOutput string `json:"cell_output,omitempty"`
 	CellServes bool   `json:"cell_serves"`
 	Error      string `json:"error,omitempty"`
+	// Profile is "gvisor" for a worker in its trust class's sandbox (MA6.4)
+	// and "process" for one under process confinement. For a gVisor worker
+	// Status was read inside the sandbox by the spawner's inspect role, and
+	// GvisorMarker is whether that sandbox holds gVisor's marker file.
+	Profile      string `json:"profile"`
+	SandboxKey   string `json:"sandbox_key,omitempty"`
+	SandboxID    string `json:"sandbox_id,omitempty"`
+	GvisorMarker bool   `json:"gvisor_marker,omitempty"`
+	// CellP50Micros is the median wall time of deskCellTimingCells trivial
+	// cells after the check cell, as the spawner sees it.
+	CellP50Micros int64 `json:"cell_p50_us,omitempty"`
+	// QueuedMS is how long the worker's spawn waited for desks memory.
+	QueuedMS int64 `json:"queued_ms"`
 }
+
+// deskCellTimingCells is how many trivial cells the self-test times per worker.
+const deskCellTimingCells = 20
 
 // DeskCellSelfTestReceipt is the whole self-test.
 type DeskCellSelfTestReceipt struct {
@@ -129,8 +146,12 @@ type DeskCellSelfTestReceipt struct {
 	LandlockABI int                      `json:"landlock_abi"`
 	AllowedRoot string                   `json:"allowed_root"`
 	Workers     []DeskCellSelfTestWorker `json:"workers"`
-	OK          bool                     `json:"ok"`
-	Failures    []string                 `json:"failures,omitempty"`
+	// Gvisor is the spawner's gVisor state read while the workers were
+	// live: one sandbox per trust class, with its host processes and their
+	// resident memory (MA6.4).
+	Gvisor   *GvisorStatus `json:"gvisor,omitempty"`
+	OK       bool          `json:"ok"`
+	Failures []string      `json:"failures,omitempty"`
 }
 
 // RunDeskCellSelfTestIfRequested is the worker half. The worker entrypoint
@@ -263,14 +284,19 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 	}()
 	prevCanary := ""
 	for _, role := range roles {
-		out := DeskCellSelfTestWorker{Role: role}
+		out := DeskCellSelfTestWorker{Role: role, Profile: "process"}
 		reads := existingPaths(append([]string{"/etc/passwd"}, cfg.ExtraReads...))
 		if prevCanary != "" {
+			// The previous desk's canary path: a class-mate of it sees the
+			// sandbox's /tmp but not the 0700 dir; any other desk does not
+			// see the path at all.
 			reads = append(reads, prevCanary)
 		}
 		out.ReadTargets = reads
 		wcfg := cfg.Base
 		wcfg.Session.Role = role
+		// The handler's deadline bounds the desks-memory wait too.
+		wcfg.Context = ctx
 		wcfg.ExtraEnv = append(append([]string(nil), cfg.Base.ExtraEnv...),
 			prefix+cellSelfTestEnv+"=1",
 			prefix+cellSelfTestReadEnv+"="+strings.Join(reads, string(os.PathListSeparator)),
@@ -284,15 +310,32 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 		}
 		live = append(live, w)
 		out.PID = w.PID()
+		out.QueuedMS = w.AdmissionQueued().Milliseconds()
+		if w.gvisor != nil {
+			// Inside a sandbox the host's /proc shows only runsc's exec
+			// client: the spawner reads the worker from inside.
+			out.Profile = "gvisor"
+			out.SandboxKey, out.SandboxID = w.gvisor.sandboxKeyID()
+			if rep, err := w.gvisor.inspect(); err != nil {
+				out.Error = "inspect in sandbox: " + err.Error()
+			} else if rep.Error != "" {
+				out.Error = "inspect in sandbox: " + rep.Error
+			} else {
+				out.Status = rep.Status
+				out.GvisorMarker = rep.GvisorMarker
+			}
+		}
 		if w.cellUID != 0 {
 			out.User = fmt.Sprintf("activation uid %d (desk %s)", w.cellUID, role)
 			out.UserUID = strconv.FormatUint(uint64(w.cellUID), 10)
 		}
-		out.MountNSIsolated = nsDiffers(w.PID(), "mnt")
-		out.Status = procStatusFields(w.PID())
-		out.NetNSIsolated = nsDiffers(w.PID(), "net")
-		out.IPCNSIsolated = nsDiffers(w.PID(), "ipc")
-		if raw, err := os.ReadFile(filepath.Join(w.cellTmpDir, cellSelfTestFile)); err != nil {
+		if w.gvisor == nil {
+			out.MountNSIsolated = nsDiffers(w.PID(), "mnt")
+			out.Status = procStatusFields(w.PID())
+			out.NetNSIsolated = nsDiffers(w.PID(), "net")
+			out.IPCNSIsolated = nsDiffers(w.PID(), "ipc")
+		}
+		if raw, err := readCellSelfTestReport(w); err != nil {
 			out.Error = "read worker report: " + err.Error()
 		} else if err := json.Unmarshal(raw, &out.Probes); err != nil {
 			out.Error = "decode worker report: " + err.Error()
@@ -309,9 +352,16 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 			out.CellOutput = strings.TrimSpace(res.Stdout)
 			out.CellServes = strings.Contains(res.Stdout, cfg.CheckWant)
 		}
+		if out.CellServes {
+			out.CellP50Micros = timeTrivialCells(ctx, w, deskCellTimingCells)
+		}
 		// The next desk tries to read this desk's live tmp dir.
 		prevCanary = ""
-		if w.cellTmpDir != "" {
+		if w.gvisor != nil {
+			if path, err := w.gvisor.writeCellCanary(deskCellSelfTestCanary); err == nil {
+				prevCanary = path
+			}
+		} else if w.cellTmpDir != "" {
 			canary := filepath.Join(w.cellTmpDir, deskCellSelfTestCanary)
 			if err := os.WriteFile(canary, []byte("another desk's file\n"), 0o644); err == nil {
 				_ = os.Chmod(canary, 0o644)
@@ -320,9 +370,41 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 		}
 		rec.Workers = append(rec.Workers, out)
 	}
+	// Read back the sandboxes while every worker is live: one per class.
+	gst := GvisorStatusNow()
+	rec.Gvisor = &gst
 	rec.Failures = JudgeDeskCellSelfTest(rec)
 	rec.OK = len(rec.Failures) == 0
 	return rec
+}
+
+// readCellSelfTestReport reads the worker's self-test report: from its host
+// tmp dir, or for a gVisor worker from inside its sandbox.
+func readCellSelfTestReport(w *DeskSessionWorker) ([]byte, error) {
+	if w.gvisor != nil {
+		return w.gvisor.readCellFile(cellSelfTestFile)
+	}
+	return os.ReadFile(filepath.Join(w.cellTmpDir, cellSelfTestFile))
+}
+
+// timeTrivialCells runs n trivial cells and returns their median wall time.
+func timeTrivialCells(ctx context.Context, w *DeskSessionWorker, n int) int64 {
+	var ds []time.Duration
+	for i := 0; i < n; i++ {
+		cellCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		start := time.Now()
+		_, err := w.Eval(cellCtx, "x := 1 + 1\n_ = x")
+		cancel()
+		if err != nil {
+			break
+		}
+		ds = append(ds, time.Since(start))
+	}
+	if len(ds) == 0 {
+		return 0
+	}
+	sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
+	return ds[len(ds)/2].Microseconds()
 }
 
 // JudgeDeskCellSelfTest returns every way the receipt falls short of the
@@ -334,17 +416,44 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 	var fails []string
 	fail := func(format string, args ...any) { fails = append(fails, fmt.Sprintf(format, args...)) }
 	identity := rec.SpawnerUID == 0 || rec.Mode == string(CellConfinementRequired)
-	if rec.Mode == string(CellConfinementRequired) && rec.LandlockABI < 5 {
+	required := rec.Mode == string(CellConfinementRequired)
+	processWorkers := 0
+	for _, w := range rec.Workers {
+		if w.Profile != "gvisor" {
+			processWorkers++
+		}
+	}
+	// MA6.4: required means gVisor-confined. A computer without gVisor
+	// still runs its first-party desks under process confinement, but its
+	// self-test says so.
+	if required && (rec.Gvisor == nil || !rec.Gvisor.Available) {
+		reason := "no gVisor state in the receipt"
+		if rec.Gvisor != nil {
+			reason = rec.Gvisor.Reason
+		}
+		fail("required mode without gVisor (%s): first-party desks run under process confinement and other desks are refused", reason)
+	}
+	// The fallback (process confinement) still needs Landlock V5; a receipt
+	// with no gVisor worker is judged as the fallback.
+	if required && (processWorkers > 0 || processWorkers == len(rec.Workers)) && rec.LandlockABI < 5 {
 		fail("required mode on a kernel with Landlock ABI %d (want >= 5)", rec.LandlockABI)
 	}
 	if len(rec.Workers) == 0 {
 		fail("no workers")
 	}
+	fails = append(fails, judgeSandboxSharing(rec)...)
 	seenUID := map[string]bool{}
 	for _, w := range rec.Workers {
 		p := w.Role + ": "
 		if w.Error != "" {
 			fail(p+"%s", w.Error)
+			continue
+		}
+		if required && w.Profile != "gvisor" {
+			fail("%s", p+"runs under process confinement in required mode (want gVisor)")
+		}
+		if w.Profile == "gvisor" {
+			fails = append(fails, judgeGvisorWorker(w, identity, seenUID)...)
 			continue
 		}
 		st := w.Status
@@ -448,6 +557,123 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 		if !w.CellServes {
 			fail(p+"check cell did not run after confinement: %s", w.CellOutput)
 		}
+	}
+	return fails
+}
+
+// judgeSandboxSharing checks R40 on the receipt: workers of one trust class
+// share one sandbox, workers of different classes never do, and the spawner
+// read back exactly one live sandbox per class.
+func judgeSandboxSharing(rec DeskCellSelfTestReceipt) []string {
+	var fails []string
+	byKey := map[string]string{}
+	byID := map[string]string{}
+	for _, w := range rec.Workers {
+		if w.Profile != "gvisor" || w.Error != "" {
+			continue
+		}
+		if id, ok := byKey[w.SandboxKey]; ok && id != w.SandboxID {
+			fails = append(fails, fmt.Sprintf("%s: class %s runs in sandbox %s and %s (want one per class)", w.Role, w.SandboxKey, id, w.SandboxID))
+		}
+		if key, ok := byID[w.SandboxID]; ok && key != w.SandboxKey {
+			fails = append(fails, fmt.Sprintf("%s: sandbox %s serves classes %s and %s", w.Role, w.SandboxID, key, w.SandboxKey))
+		}
+		byKey[w.SandboxKey], byID[w.SandboxID] = w.SandboxID, w.SandboxKey
+	}
+	if rec.Gvisor == nil || len(byKey) == 0 {
+		return fails
+	}
+	live := map[string]int{}
+	for _, sb := range rec.Gvisor.Sandboxes {
+		live[sb.Key]++
+		if sb.RSSBytes == 0 {
+			fails = append(fails, fmt.Sprintf("sandbox %s: no resident memory read back", sb.ID))
+		}
+	}
+	for key, id := range byKey {
+		if live[key] != 1 {
+			fails = append(fails, fmt.Sprintf("class %s: %d live sandboxes read back, want 1 (%s)", key, live[key], id))
+		}
+	}
+	return fails
+}
+
+// judgeGvisorWorker judges one worker in a gVisor sandbox. Its status was
+// read inside the sandbox; the namespaces are the sandbox's own (gVisor's
+// kernel, --network=none), so the host namespace checks do not apply, and a
+// host path being absent from its view is a stronger denial than Landlock's.
+func judgeGvisorWorker(w DeskCellSelfTestWorker, identity bool, seenUID map[string]bool) []string {
+	var fails []string
+	p := w.Role + ": "
+	fail := func(format string, args ...any) { fails = append(fails, p+fmt.Sprintf(format, args...)) }
+	if !w.GvisorMarker {
+		fail("the sandbox shows no gVisor marker")
+	}
+	st := w.Status
+	if st["NoNewPrivs"] != "1" {
+		fail("NoNewPrivs=%q, want 1", st["NoNewPrivs"])
+	}
+	if st["Seccomp"] != "2" {
+		fail("Seccomp=%q, want 2", st["Seccomp"])
+	}
+	uids := strings.Fields(st["Uid"])
+	if w.UserUID == "" || len(uids) != 4 || uids[0] != w.UserUID || uids[1] != w.UserUID || uids[2] != w.UserUID || uids[3] != w.UserUID {
+		fail("Uid=%q, want %s on all four", st["Uid"], w.UserUID)
+	}
+	if len(uids) > 0 && uids[0] == "0" {
+		fail("runs as root")
+	}
+	for _, k := range []string{"CapEff", "CapPrm", "CapInh"} {
+		if strings.Trim(st[k], "0") != "" {
+			fail("%s=%s, want 0", k, st[k])
+		}
+	}
+	if seenUID[w.UserUID] {
+		fail("uid %s is shared with another worker (want one uid per activation)", w.UserUID)
+	}
+	seenUID[w.UserUID] = true
+	if w.Probes == nil {
+		fail("no probe report")
+	} else {
+		for _, name := range deskCellAllowedProbes {
+			if got, ok := w.Probes[name]; !ok || got != "" {
+				fail("%s should succeed: %q", name, got)
+			}
+		}
+		for _, name := range deskCellDeniedProbes {
+			got, ok := w.Probes[name]
+			switch {
+			case !ok:
+				fail("%s did not run", name)
+			case got == "":
+				fail("%s succeeded inside a confined worker", name)
+			case name != "write_etc" && !strings.HasPrefix(got, "EPERM"):
+				fail("%s = %q, want EPERM from the cell seccomp filter", name, got)
+			}
+		}
+		// gVisor's /proc/meminfo and /dev are the sandbox kernel's own, not
+		// the host's; the rest must be refused or absent.
+		for _, name := range []string{"proc_pid1_environ", "proc_parent_status", "sys_kernel", "dev_mem", "write_allowed_root"} {
+			got, ok := w.Probes[name]
+			switch {
+			case !ok:
+				fail("%s did not run", name)
+			case got == "":
+				fail("%s succeeded inside the sandbox", name)
+			}
+		}
+		for _, target := range w.ReadTargets {
+			got, ok := w.Probes["read:"+target]
+			switch {
+			case !ok:
+				fail("read of %s did not run", target)
+			case got == "" && (!strings.Contains(target, deskCellSelfTestCanary) || identity):
+				fail("read %s succeeded", target)
+			}
+		}
+	}
+	if !w.CellServes {
+		fail("check cell did not run after confinement: %s", w.CellOutput)
 	}
 	return fails
 }

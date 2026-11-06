@@ -29,6 +29,8 @@ let
   # for the layered base's core probe (flake.nix), which replaces every tool
   # with an empty package to learn what the core needs without them.
   guestTools = (import ./guest-tools.nix).forPkgs { inherit pkgs choirGo; stub = guestToolStubs; };
+  # gVisor's runsc for desk workers (MA6.4; nix/gvisor.nix, pinned).
+  gvisorRunsc = pkgs.callPackage ./gvisor.nix { };
   toolPkgs = guestTools.packages;
   # The tool exec log (design 6): wrappers ahead of the real binaries on PATH
   # that journal the tool name (never its arguments) and name the missing
@@ -1010,9 +1012,15 @@ EOF
       CHOIR_DEPLOY_RECEIPT_PATH = "/run/go-choir-guest-deploy-receipt.json";
       CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
       CHOIR_GUEST_SIGNER_SOCKET = "/run/choir-signers/guest-core/signer.sock";
-      # Desk cell workers run confined or not at all: their desk's user,
-      # mandatory Landlock V5, seccomp, private network namespace.
+      # Desk cell workers run confined or not at all. Required means
+      # gVisor-confined (MA6.4, R39): each worker runs in its trust class's
+      # gVisor sandbox as its activation's own uid under seccomp. Where gVisor
+      # cannot start, first-party desks fall back to the process confinement
+      # (uid, Landlock V5, seccomp, private namespaces) and other desks are
+      # refused; the isolation self-test fails until gVisor runs.
       CHOIR_DESK_CELL_CONFINEMENT = "required";
+      # The pinned runsc (nix/gvisor.nix) the desk spawner runs.
+      CHOIR_RUNSC = "${gvisorRunsc}/bin/runsc";
       # The desks cgroup (SDC RES-01, RES-02): each desk worker runs in its own
       # child with a hard memory.max from its desk's manifest row, under an
       # aggregate the daemon sets at start (internal/autoputer/desk_cgroup.go).

@@ -197,6 +197,21 @@ func readDeskOOMCgroup(path string) DeskOOMCgroup {
 type DeskOOMWorker struct {
 	PID    int           `json:"pid,omitempty"`
 	Cgroup DeskOOMCgroup `json:"cgroup"`
+	// Profile is "gvisor" for a worker in its class's shared sandbox
+	// (MA6.4): its hard bound is its address-space limit (AddressLimitBytes,
+	// the desk's budget plus the Go runtime's mappings), which ends the
+	// worker alone, not a cgroup of its own; Cgroup is then the sandbox's.
+	Profile           string `json:"profile,omitempty"`
+	AddressLimitBytes uint64 `json:"address_limit_bytes,omitempty"`
+	// QueuedMS is how long the worker's spawn waited for desks memory.
+	QueuedMS int64 `json:"queued_ms"`
+	// HeapShareBytes is a sandboxed worker's admitted heap: its budget, or
+	// less where the desks cgroup is small (the address limit is this plus
+	// the runtime's mappings).
+	HeapShareBytes uint64 `json:"heap_share_bytes,omitempty"`
+	// RuntimeOutOfMemory: the worker's stderr carries the Go runtime's own
+	// out-of-memory end (read in full, not the exit cause's tail).
+	RuntimeOutOfMemory bool `json:"runtime_out_of_memory,omitempty"`
 	// CellSent: the cell frame was written to the worker (only after the
 	// budget, memory and sibling checks).
 	CellSent bool `json:"cell_sent"`
@@ -321,6 +336,8 @@ func DeskOOMSelfTest(ctx context.Context, cfg DeskOOMSelfTestConfig) DeskOOMSelf
 	wcfg.Session.Role = role
 	wcfg.CgroupRoot = root
 	wcfg.Egress = deskOOMStartMarkerEgress(&started)
+	// The handler's deadline bounds the desks-memory wait too.
+	wcfg.Context = ctx
 
 	// The sibling first, so it lives through the kill; no live sibling, no
 	// runaway.
@@ -343,6 +360,19 @@ func DeskOOMSelfTest(ctx context.Context, cfg DeskOOMSelfTestConfig) DeskOOMSelf
 	}
 	defer w.Close()
 	rec.Worker.PID = w.PID()
+	rec.Worker.QueuedMS = w.AdmissionQueued().Milliseconds()
+	if w.gvisor != nil {
+		rec.Worker.Profile = "gvisor"
+		rec.Worker.HeapShareBytes = w.gvisor.heapShare()
+		rec.Worker.AddressLimitBytes = gvisorAddressLimit(wcfg.Session.MemoryLimitBytes, rec.Worker.HeapShareBytes)
+		rec.Worker.Cgroup = readDeskOOMCgroup(w.gvisor.cgroupPath())
+		if memoryShort() {
+			return finish()
+		}
+		runDeskOOMRunaway(ctx, w, deskOOMSelfTestCell, timeout, started.Load, &rec.Worker)
+		rec.Sibling.AfterAnswered, rec.Sibling.OutputAfter = deskOOMPing(ctx, sib)
+		return finish()
+	}
 	if w.budget == nil {
 		rec.Worker.Error = "refused: the worker has no budget cgroup"
 		return finish()
@@ -368,11 +398,16 @@ func DeskOOMSelfTest(ctx context.Context, cfg DeskOOMSelfTestConfig) DeskOOMSelf
 // releases its cgroup (w.budget = nil), and a released cgroup reads as no
 // kill, which the judge refuses.
 func runDeskOOMRunaway(ctx context.Context, w *DeskSessionWorker, cell string, timeout time.Duration, started func() bool, out *DeskOOMWorker) {
-	if w.budget == nil {
+	var path string
+	switch {
+	case w.gvisor != nil:
+		path = w.gvisor.cgroupPath()
+	case w.budget == nil:
 		out.Error = "refused: the worker has no budget cgroup"
 		return
+	default:
+		path = w.budget.path
 	}
-	path := w.budget.path
 	cellCtx, cancel := context.WithTimeout(ctx, timeout)
 	res, evalErr := w.Eval(cellCtx, cell)
 	cancel()
@@ -389,10 +424,15 @@ func runDeskOOMRunaway(ctx context.Context, w *DeskSessionWorker, cell string, t
 	out.CellStarted = started()
 	out.Dead = w.Dead()
 	// O9: the events before Close removes the cgroup.
-	out.Cgroup = readDeskOOMCgroup(path)
-	out.OOMKill = out.Cgroup.Events["oom_kill"]
+	if path != "" {
+		out.Cgroup = readDeskOOMCgroup(path)
+		out.OOMKill = out.Cgroup.Events["oom_kill"]
+	}
 	w.Close()
 	out.ExitCause = w.ExitCause()
+	if w.stderr != nil {
+		out.RuntimeOutOfMemory = deskOOMRuntimeOOM(w.stderr.String())
+	}
 }
 
 // deskEvalNotSent reports whether err is one of Eval's refusals before the
@@ -447,8 +487,18 @@ func JudgeDeskOOMSelfTest(rec DeskOOMSelfTestReceipt) []string {
 	if n, err := strconv.ParseUint(rec.Slice.MemoryMax, 10, 64); err != nil || n == 0 {
 		fail("desks slice memory.max = %q, want a hard limit", rec.Slice.MemoryMax)
 	}
-	if got := rec.Worker.Cgroup.MemoryMax; rec.BudgetBytes != 0 && got != strconv.FormatUint(rec.BudgetBytes, 10) {
-		fail("worker memory.max = %q, want the manifest's %d", got, rec.BudgetBytes)
+	gvisor := rec.Worker.Profile == "gvisor"
+	if gvisor {
+		if rec.Worker.HeapShareBytes == 0 || rec.Worker.HeapShareBytes > rec.BudgetBytes {
+			fail("sandboxed worker heap share %d, want at most the budget %d", rec.Worker.HeapShareBytes, rec.BudgetBytes)
+		}
+		if want := rec.Worker.HeapShareBytes + gvisorAddressOverheadMaxBytes; rec.Worker.AddressLimitBytes == 0 || rec.Worker.AddressLimitBytes > want {
+			fail("sandboxed worker address limit %d, want at most its heap share plus %d (%d)", rec.Worker.AddressLimitBytes, uint64(gvisorAddressOverheadMaxBytes), want)
+		}
+	} else if got, perr := strconv.ParseUint(rec.Worker.Cgroup.MemoryMax, 10, 64); rec.BudgetBytes != 0 && (perr != nil || got == 0 || got > rec.BudgetBytes) {
+		// A process-confined desk worker's memory.max is the manifest's
+		// budget, or its desks-memory claim where that is smaller (MA6.4 r4).
+		fail("worker memory.max = %q, want a hard limit of at most the manifest's %d", rec.Worker.Cgroup.MemoryMax, rec.BudgetBytes)
 	}
 	if !rec.Worker.CellSent {
 		fail("the runaway cell was not sent")
@@ -462,11 +512,23 @@ func JudgeDeskOOMSelfTest(rec DeskOOMSelfTestReceipt) []string {
 		if !rec.Worker.Dead {
 			fail("the runaway worker is alive")
 		}
-		if rec.Worker.OOMKill < 1 {
-			fail("worker memory.events oom_kill = %d: the cgroup did not kill it (result %q, exit %q)", rec.Worker.OOMKill, rec.Worker.Result, rec.Worker.ExitCause)
-		}
-		if !strings.Contains(rec.Worker.ExitCause, "killed by its memory budget") {
-			fail("exit cause does not name the memory budget: %q", rec.Worker.ExitCause)
+		switch {
+		case gvisor:
+			// In a shared sandbox the worker ends itself at its address
+			// limit; a cgroup kill would have ended its class-mates too.
+			if !rec.Worker.RuntimeOutOfMemory || !strings.Contains(rec.Worker.ExitCause, "exited on its own") {
+				fail("the sandboxed runaway did not end at its address limit: exit %q", rec.Worker.ExitCause)
+			}
+			if rec.Worker.OOMKill > 0 {
+				fail("the sandbox's cgroup killed (oom_kill %d): the whole class died with the runaway", rec.Worker.OOMKill)
+			}
+		default:
+			if rec.Worker.OOMKill < 1 {
+				fail("worker memory.events oom_kill = %d: the cgroup did not kill it (result %q, exit %q)", rec.Worker.OOMKill, rec.Worker.Result, rec.Worker.ExitCause)
+			}
+			if !strings.Contains(rec.Worker.ExitCause, "killed by its memory budget") {
+				fail("exit cause does not name the memory budget: %q", rec.Worker.ExitCause)
+			}
 		}
 	}
 	if rec.Sibling.Error != "" {
@@ -488,4 +550,10 @@ func JudgeDeskOOMSelfTest(rec DeskOOMSelfTestReceipt) []string {
 		fail("daemon identity changed: before %+v after %+v", b, a)
 	}
 	return fails
+}
+
+// deskOOMRuntimeOOM reports whether a worker's stderr is the Go runtime's
+// own out-of-memory end at its address-space limit.
+func deskOOMRuntimeOOM(stderr string) bool {
+	return strings.Contains(stderr, "fatal error: out of memory") || strings.Contains(stderr, "fatal error: runtime: cannot allocate memory")
 }

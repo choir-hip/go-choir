@@ -48,7 +48,14 @@ func realSteps() steps {
 //
 // Startup order: RegisterCarriedAppDesk (exit 2 on error), gomemlimit.ApplyDeskWorker, ConfineDeskSessionWorker (exit 3
 // on error), RunDeskCellSelfTestIfRequested, then serving.
-func Run() int { return run(realSteps()) }
+func Run() int {
+	// A gVisor sandbox's init and the spawner's inspect role (MA6.4) run the
+	// same binary; they serve no cells.
+	if code, ran := yaegikernel.RunDeskSandboxRoleIfRequested(); ran {
+		return code
+	}
+	return run(realSteps())
+}
 
 func run(s steps) int {
 	// Descriptors that survived execve from the spawner's side are not ours.
