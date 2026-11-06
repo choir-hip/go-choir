@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/pmezard/go-difflib/difflib"
+
+	"github.com/yusefmosiah/go-choir/internal/packagepath"
 )
 
 // errSourcePatchSymlink names why a source change is refused when its
@@ -107,6 +109,35 @@ func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePa
 		files = append(files, file)
 	}
 	return files, nil
+}
+
+// ErrMixedLayers refuses a frozen change set that changes a package and the
+// platform, or more than one package (forced modularity M2,
+// docs/design/forced-modularity-build-2026-11-04.md section 2, door 1). The
+// source stack carries platform operations only, and a package operation
+// changes one package root.
+var ErrMixedLayers = errors.New("capsule freeze: " + packagepath.ReasonPackagePath)
+
+// ClassifySourcePatchFiles classifies the whole change set before anything
+// is rendered: the package name for a package-only change ("" for a
+// platform-only one), or ErrMixedLayers naming both lists. Unchanged files
+// are left out, as renderSourcePatch leaves them out.
+func ClassifySourcePatchFiles(files []sourcePatchFile) (string, error) {
+	var paths []string
+	for _, f := range files {
+		if f.OldExists && f.NewExists && bytes.Equal(f.Old, f.New) {
+			continue
+		}
+		if !f.OldExists && !f.NewExists {
+			continue
+		}
+		paths = append(paths, f.Rel)
+	}
+	split := packagepath.Classify(paths)
+	if split.Mixed() {
+		return "", fmt.Errorf("%w: %s", ErrMixedLayers, split.MixedDetail())
+	}
+	return split.Name(), nil
 }
 
 // noNewlineMarker is git's marker for a last line without a final newline.

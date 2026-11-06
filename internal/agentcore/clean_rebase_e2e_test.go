@@ -504,31 +504,6 @@ func TestCleanRebaseEndToEndRematerializedCleanAppliesWithoutAnOwnerAct(t *testi
 	}
 }
 
-func TestCleanRebaseEndToEndRematerializedPackageConflictMintsTheNotice(t *testing.T) {
-	const pkg = "frontend/src/packages/lib-next/app.txt"
-	f := newCleanRebaseE2EWith(t, pkg)
-	// The deploy edits the same package file the stack edited: the projection
-	// keeps the stack's package whole (package_behind_base, conflict).
-	b2 := f.commitPlatform(t, map[string]string{pkg: cleanLong(map[int]string{35: "platform package line 35"})})
-	f.boot(t, b2)
-	result := f.requireRematerialized(t, b2)
-	if !rebasePackageConflict(result) {
-		t.Fatalf("expected a package conflict: %+v", result.Packages)
-	}
-	out := f.fire(t)
-	if _, found := f.cleanOp(t, b2); found {
-		t.Fatal("a package conflict opened a clean rebase operation")
-	}
-	if out.Minted == "" || !f.noticeMinted(t, b2) {
-		t.Fatalf("a package conflict did not mint the notice: %+v", out)
-	}
-	// The notice can be answered: the rebase Cast gate accepts the stack.
-	spec := rebaseSpec{Notice: types.StackRebaseNoticeID(f.prior, b2, 1), RebaseOf: f.prior, Base: b2}
-	if base, _, err := f.rt.sourceProjectionCastGateFor(context.Background(), spec, castLedgerRef{}); err != nil || base != b2 {
-		t.Fatalf("the rebase Cast gate on a rematerialized stack: %q %v", base, err)
-	}
-}
-
 // Devin F2 (remat-serve review): a rematerialized stack admits ordinary Casts,
 // so an operation is routinely open at fire time. The pair must hold (no
 // notice, no attempt) and proceed at the next fire once the operation closes.

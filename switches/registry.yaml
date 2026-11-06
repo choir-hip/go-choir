@@ -1668,36 +1668,6 @@
    "note": "LEAVE OFF on the paper (hundreds of story documents would churn the master). Default off, held 2026-11-03 (docs/problems/default-off-switches-audit-2026-11-03.md): owner turns it on once F4/F5 are re-proved on d@e and the paper's story documents feed the master as one batched entry an hour."
   },
   {
-   "id": "packages_publish",
-   "kind": "setting",
-   "life": "release",
-   "owner": "library",
-   "class": "orange",
-   "surface": "library",
-   "introduced": "2026-10-28",
-   "settings": [
-    "packages.publish"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "all",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback. The b@c first-publish gate is superseded by the owner rulings of 2026-11-03 (nothing is off by default; a published release is public, 8e2814b6f); publishing stays an owner act with its --confirm-paths preview and needs an applied operation."
-  },
-  {
    "id": "intake_events",
    "kind": "setting",
    "life": "release",

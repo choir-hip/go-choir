@@ -133,11 +133,19 @@ func (w *pkgWorld) fixtureReleaseMedia(fr fixtureRelease, seq int, out map[strin
 	// The store lists no release without a screenshot: one that names none
 	// gets a single desktop shot.
 	desktop := fr.desktop
-	if desktop == 0 && fr.phone == 0 {
+	if desktop == 0 {
 		desktop = 1
 	}
+	// Every fixture release updates a package (its parent is the base's or
+	// the previous release), so it shows one view before and after
+	// (forced modularity 1a): the first desktop shot is the after.
+	shot("01-before-"+fr.pkg+"-desktop.png", 20, 1280, 800)
 	for i := 0; i < desktop; i++ {
-		shot(fr.pkg+"-desktop-"+string(rune('1'+i))+".png", i, 1280, 800)
+		name := fr.pkg + "-desktop-" + string(rune('1'+i)) + ".png"
+		if i == 0 {
+			name = "01-after-" + fr.pkg + "-desktop.png"
+		}
+		shot(name, i, 1280, 800)
 	}
 	for i := 0; i < fr.phone; i++ {
 		shot(fr.pkg+"-phone-"+string(rune('1'+i))+"-mobile.png", 10+i, 390, 844)

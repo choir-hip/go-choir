@@ -14,6 +14,8 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostbuild"
+	"github.com/yusefmosiah/go-choir/internal/packagepath"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -211,7 +213,6 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 		return result, err
 	}
 	result.Reason = rt.withBaseFetchReason(result)
-	rt.annotatePackageReleases(ctx, &result)
 	rt.sourceProjectionMu.Lock()
 	previous := rt.sourceProjectionLast
 	copied := result
@@ -401,7 +402,7 @@ func rematerializedCastWarning(cast castLedgerRef, result sourceproj.Result, now
 		Discrepancy: types.DiscrepancyUnresolved,
 		Prediction: types.CommitmentPrediction{
 			Hypothesis: fmt.Sprintf("warning: Cast %s builds on the applied change %s grafted onto the booted base %s (stack_rematerialized, commit %s). The served build is still that change on %s. %s; approving this Cast's candidate also approves the change on %s.",
-				cast.CastRecordID, result.OperationID, result.BootedBase, result.Head, result.ServedBase, rematerializedGraftDetail(result), result.BootedBase),
+				cast.CastRecordID, result.OperationID, result.BootedBase, result.Head, result.ServedBase, "The booted base changed no path the change touches, so the graft is byte-identical at those paths", result.BootedBase),
 			CommittedAt: stamp,
 		},
 		Observation: types.CommitmentObservation{
@@ -535,6 +536,12 @@ func composeFreezePatch(ctx context.Context, repo string, staged *capsule.Staged
 	if sourceproj.SHA256(patch) != staged.SourcePatchSHA {
 		return fmt.Errorf("compose the cumulative source patch: the staged patch does not match its digest")
 	}
+	// Forced modularity: a package operation is not a stack operation. Its
+	// patch stays the package's own change on the commit the capsule was cast
+	// from; composing it with the platform stack would make it mixed.
+	if paths, err := hostbuild.PatchPaths(patch); err == nil && packagepath.Classify(paths).PackageOnly() {
+		return nil
+	}
 	cumulative, base, err := sourceproj.Cumulative(ctx, repo, staged.SourceBaseCommit, patch)
 	if err != nil {
 		return fmt.Errorf("Freeze refused: %w", err)
@@ -552,64 +559,4 @@ func composeFreezePatch(ctx context.Context, repo string, staged *capsule.Staged
 	}
 	staged.SourcePatchSHA, staged.SourceBaseCommit = sourceproj.SHA256(cumulative), base
 	return nil
-}
-
-// rematerializedGraftDetail says what the graft holds, for the Cast warning
-// (S6): byte-identical at every path when no package entry is live; else one
-// sentence per kind of package entry, naming every package_behind_base root.
-func rematerializedGraftDetail(result sourceproj.Result) string {
-	var conflicts, merged, placed []string
-	for _, e := range result.Packages {
-		switch {
-		case e.State == sourceproj.PackageBehindBase && e.Conflict:
-			conflicts = append(conflicts, e.Root)
-		case e.State == sourceproj.PackageBehindBase:
-			merged = append(merged, e.Root)
-		case e.State == sourceproj.PackageBaseMoved:
-			placed = append(placed, e.Root)
-		}
-	}
-	if len(conflicts)+len(merged)+len(placed) == 0 {
-		return "The booted base changed no path the change touches, so the graft is byte-identical at those paths"
-	}
-	parts := []string{"Outside the package roots, the booted base changed no path the change touches, and those paths are grafted byte-identically"}
-	if len(placed) > 0 {
-		parts = append(parts, "The package roots "+strings.Join(placed, ", ")+" are unchanged on the booted base, so this computer's version of each is placed byte-identically (package_base_moved)")
-	}
-	if len(merged) > 0 {
-		parts = append(parts, "The booted base changed other files of the package roots "+strings.Join(merged, ", ")+" than this change did (package_behind_base, merged): each holds the base's version with this change's files grafted onto it, a combination no build has checked yet")
-	}
-	if len(conflicts) > 0 {
-		parts = append(parts, "The booted base also changed files this change touches in the package roots "+strings.Join(conflicts, ", ")+" (package_behind_base, conflict): the capsule source keeps this computer's version of each whole, over the base's version, so approving this Cast's candidate keeps it (to take the base's, restore the root to the base in the candidate)")
-	}
-	return strings.Join(parts, ". ")
-}
-
-// annotatePackageReleases names the package install (store.PackageInstall,
-// kind package, action install) whose release tree is each entry's R, the
-// stack's subtree (a merged entry's projection differs from R). It is
-// provenance for /health only; a read failure leaves the entries unnamed.
-func (rt *Runtime) annotatePackageReleases(ctx context.Context, result *sourceproj.Result) {
-	if rt == nil || rt.store == nil || result == nil || len(result.Packages) == 0 {
-		return
-	}
-	ownerID, computerID := rt.rebaseScope()
-	if ownerID == "" || computerID == "" {
-		return
-	}
-	installs, err := rt.store.ListPackageInstalls(ctx, ownerID, computerID)
-	if err != nil {
-		return
-	}
-	for i := range result.Packages {
-		e := &result.Packages[i]
-		// A runtime install (S12) is not in the source stack, so it never
-		// names a stack entry.
-		for _, install := range installs { // newest first
-			if install.Kind == "package" && install.Action == "install" && install.Mode != store.PackageInstallModeRuntime && install.Package == e.Name && e.Tree != "" && install.ReleaseTreeHash == e.Tree {
-				e.ReleaseID = install.ReleaseID
-				break
-			}
-		}
-	}
 }

@@ -144,15 +144,6 @@ const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 // rollback: the master stays an ordinary document.
 const SettingTextureRootDesk = "texture.root_desk"
 
-// SettingPackagesPublish lets the owner publish this computer's applied
-// package changes to the Choir Library, where a published release is public
-// to every signed-in owner (owner, 2026-11-03; Library S2,
-// docs/design/library-package-propagation-2026-10-26.md 3.2): the guest
-// drafts a package release only when it is on. On by default (owner,
-// 2026-11-03); a stored off is the
-// rollback, and releases already listed stay readable and inert.
-const SettingPackagesPublish = "packages.publish"
-
 // SettingDispatchWideSlots raises the dispatcher's shared slots from 8 to
 // 12 at once, without a restart (the owner for the paper, 2026-10-27: "I
 // have the tokens for it"; docs/problems/related-stories-not-showing-on-the-paper-2026-10-27.md
@@ -237,7 +228,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureEvidenceEmbeds:        true,
 	SettingTextureHoldTrajectory:        true,
 	SettingTextureRootDesk:              false,
-	SettingPackagesPublish:              true,
 	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,

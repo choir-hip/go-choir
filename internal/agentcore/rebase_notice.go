@@ -130,18 +130,6 @@ func rebaseStackBase(result sourceproj.Result) (string, bool) {
 	return "", false
 }
 
-// rebasePackageConflict reports a package entry the projection kept whole over
-// a change in the booted base. The clean rebase never decides that for the
-// owner: such a stack goes to the notice.
-func rebasePackageConflict(result sourceproj.Result) bool {
-	for _, entry := range result.Packages {
-		if entry.Conflict {
-			return true
-		}
-	}
-	return false
-}
-
 // armRebaseNotice is called after a reconcile. It arms the one timer when the
 // stack is behind the booted base (stack_base_moved, or stack_rematerialized
 // served on an older base; rebaseStackBase); it never mints, so it is safe at boot. A timer
@@ -270,11 +258,7 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	// Owner ruling 2026-11-04: a change that re-applies cleanly and builds
 	// applies without an owner act (clean_rebase.go). Only when it does not,
 	// or the attempt fails, does the notice go to Texture.
-	// A rematerialized stack that keeps a package whole over the base's change
-	// is the owner's to decide: the notice, never the clean rebase.
-	if result.State == sourceproj.StateRematerialized && rebasePackageConflict(result) {
-		log.Printf("rebase notice: no clean rebase of %s onto %s: the projection keeps a package whole over the base's change (package_behind_base)", operationID, booted)
-	} else if hold, why := rt.cleanRebaseBeforeNotice(ctx, ownerID, computerID, operationID, stackBase, booted); hold {
+	if hold, why := rt.cleanRebaseBeforeNotice(ctx, ownerID, computerID, operationID, stackBase, booted); hold {
 		return rebaseNoticeOutcome{Reason: why, Rearm: rt.rebaseRecheckInterval()}
 	} else if why != "" {
 		log.Printf("rebase notice: no clean rebase of %s onto %s: %s", operationID, booted, why)

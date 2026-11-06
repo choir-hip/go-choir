@@ -35,6 +35,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 var (
@@ -493,6 +494,11 @@ func (a *ConsensusActuator) castHostBuildBallot(computerID string, request Conse
 	}
 	if !computerevent.IsSHA256(build.SourcePatchSHA256) || build.BaseCommit == "" {
 		return hostBuildVote{}, fmt.Errorf("%w: the bundle names no source patch and base commit; the host cannot build it", ErrConsensusRefused)
+	}
+	// Forced modularity M2, door 3: a platform bundle never carries app
+	// source, whatever the computer signed.
+	if refusal := selfdevprotocol.RefuseBundlePackagePaths(request.Bundle); refusal != "" {
+		return hostBuildVote{}, fmt.Errorf("%w: %s", ErrConsensusRefused, refusal)
 	}
 	if err := build.Validate(); err != nil {
 		return hostBuildVote{}, fmt.Errorf("%w: %v", ErrConsensusRefused, err)

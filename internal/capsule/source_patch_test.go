@@ -2,6 +2,7 @@ package capsule
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -155,5 +156,31 @@ func TestVerifySourcePatchRefusesUnfaithfulPatch(t *testing.T) {
 	}
 	if err := verifySourcePatch(context.Background(), wrong, files); err == nil || !strings.Contains(err.Error(), "docs/evidence/m11.json") {
 		t.Fatalf("verifySourcePatch should name the mismatched file, got %v", err)
+	}
+}
+
+// Forced modularity M2, door 1. Failure modes: a mixed set freezes (the
+// platform hunk would carry app source into the stack); the refusal names
+// only one list, so the engineer cannot split it; two packages freeze as
+// one operation; an unchanged package file (same bytes) makes a platform
+// change look mixed.
+func TestClassifySourcePatchFilesRefusesMixedLayers(t *testing.T) {
+	shell := sourcePatchFile{Rel: "frontend/src/lib/Desktop.svelte", Old: []byte("a"), OldExists: true, New: []byte("b"), NewExists: true}
+	image := sourcePatchFile{Rel: "frontend/src/packages/image/App.svelte", New: []byte("x"), NewExists: true}
+	reader := sourcePatchFile{Rel: "frontend/src/packages/reader/App.svelte", Old: []byte("a"), OldExists: true}
+	same := sourcePatchFile{Rel: "frontend/src/packages/reader/same.js", Old: []byte("a"), OldExists: true, New: []byte("a"), NewExists: true}
+
+	_, err := ClassifySourcePatchFiles([]sourcePatchFile{shell, image})
+	if !errors.Is(err, ErrMixedLayers) || !strings.Contains(err.Error(), shell.Rel) || !strings.Contains(err.Error(), image.Rel) {
+		t.Fatalf("mixed: %v", err)
+	}
+	if _, err := ClassifySourcePatchFiles([]sourcePatchFile{image, reader}); !errors.Is(err, ErrMixedLayers) {
+		t.Fatalf("two packages: %v", err)
+	}
+	if name, err := ClassifySourcePatchFiles([]sourcePatchFile{image}); err != nil || name != "image" {
+		t.Fatalf("package-only: %q %v", name, err)
+	}
+	if name, err := ClassifySourcePatchFiles([]sourcePatchFile{shell, same}); err != nil || name != "" {
+		t.Fatalf("platform with an unchanged package file: %q %v", name, err)
 	}
 }

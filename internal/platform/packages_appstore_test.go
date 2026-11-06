@@ -84,7 +84,7 @@ func TestCatalogListsOnlyReleasesWithScreenshotsAndKeepsTheOthersStored(t *testi
 	next := w.build("<p>new</p>\n", "owner-a", &legacy)
 	w.published(next)
 	got := w.catalogOf("owner-b")
-	if len(got) != 1 || got[0].HeadReleaseID != next.id || got[0].Releases != 1 || len(got[0].HeadMedia) != 1 {
+	if len(got) != 1 || got[0].HeadReleaseID != next.id || got[0].Releases != 1 || len(got[0].HeadMedia) != 2 {
 		t.Fatalf("A3 catalog = %+v", got)
 	}
 	if got[0].HeadPublishedAt == "" {

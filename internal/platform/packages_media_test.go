@@ -50,6 +50,9 @@ func hostPNG(t *testing.T, w, h int, seed uint8) []byte {
 // defaultShot is the screenshot every test release carries.
 func defaultShot(t *testing.T) []byte { return hostPNG(t, 16, 16, 7) }
 
+// defaultBeforeShot is the "before" screen of the same view.
+func defaultBeforeShot(t *testing.T) []byte { return hostPNG(t, 16, 16, 9) }
+
 func hostWebM() []byte {
 	head := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm', 0x42, 0x87, 0x81, 0x04, 0x42, 0x85, 0x81, 0x02}
 	return append(head, bytes.Repeat([]byte{5}, 256)...)
@@ -72,7 +75,7 @@ func mediaVideo(raw []byte) pkgrelease.Media {
 func TestPackageMediaPublishesAndServesPublicly(t *testing.T) {
 	w := newPkgWorld(t)
 	home, phone, video := hostPNG(t, 128, 80, 1), hostPNG(t, 39, 84, 2), hostWebM()
-	b := w.withMedia(w.build("<p>v2</p>\n", "owner-a", nil), mediaShot("home.png", home, 128, 80), mediaShot("phone.png", phone, 39, 84), mediaVideo(video))
+	b := w.withMedia(w.build("<p>v2</p>\n", "owner-a", nil), mediaShot("01-before-home.png", home, 128, 80), mediaShot("01-after-home.png", phone, 39, 84), mediaVideo(video))
 
 	// H1: nothing uploaded, the release is not listed.
 	wantPkgRefusal(t, w.publish(b), http.StatusConflict, pkgrelease.ReasonBlobMismatch)
@@ -81,6 +84,10 @@ func TestPackageMediaPublishesAndServesPublicly(t *testing.T) {
 			t.Fatalf("media upload = %d %s", rec.Code, rec.Body.String())
 		}
 	}
+	// Forced modularity 1a: an update (the base's package is its parent)
+	// with no before and after of one view is not listed.
+	unpaired := w.withMedia(w.build("<p>v2</p>\n", "owner-a", nil), mediaShot("home.png", home, 128, 80), mediaShot("phone.png", phone, 39, 84))
+	wantPkgRefusal(t, w.publish(unpaired), http.StatusUnprocessableEntity, pkgrelease.ReasonBeforeAfterRequired)
 	view := w.published(b)
 	if len(view.Media) != 3 {
 		t.Fatalf("view media = %+v", view.Media)

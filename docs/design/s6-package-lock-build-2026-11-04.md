@@ -1,6 +1,11 @@
 # S6 build: the package lock and package-aware containment (2026-11-04)
 
-Status: build plan, red (the Cast gate's source and the projection).
+Status: superseded and deleted by forced modularity M2+M3
+([forced-modularity-build](forced-modularity-build-2026-11-04.md)): the
+source stack refuses package paths (`stack_package_path`), so no package
+root needs an entry; `internal/sourceproj/packages.go` is gone and the
+classifier lives in `internal/packagepath`. Kept as the record of what S6 was.
+Original status: build plan, red (the Cast gate's source and the projection).
 Builds "### S6" and failure L17 of
 [the Library design](library-package-propagation-2026-10-26.md) (10.3, 15.3),
 reconciled with what landed since. Evidence that motivates it:

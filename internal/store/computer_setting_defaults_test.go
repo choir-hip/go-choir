@@ -23,7 +23,6 @@ var defaultOnFeatures = []string{
 	SettingEngineeringCarryUnfinished,
 	SettingEngineeringSlotsGraph,
 	SettingFilesObject,
-	SettingPackagesPublish,
 	SettingIntakeEvents,
 	SettingIntakeLabels,
 	SettingTelemetryBatch,

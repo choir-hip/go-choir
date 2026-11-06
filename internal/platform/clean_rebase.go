@@ -268,6 +268,10 @@ func (a *OwnerActAuthority) cleanRebaseLink(ctx context.Context, tx *sql.Tx, eve
 	if err != nil {
 		return none, err.Error(), nil
 	}
+	// Forced modularity M2, door 3: a clean rebase never carries app source.
+	if refusal := selfdevprotocol.RefuseBundlePackagePaths(nextBundle); refusal != "" {
+		return none, refusal, nil
+	}
 	switch {
 	case facts.SourcePatchSHA256 != receipt.SourcePatchSHA256:
 		return none, "the bundles carry another patch than the receipt names", nil

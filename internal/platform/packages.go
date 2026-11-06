@@ -625,6 +625,10 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		// No screenshot, no listing (owner, 2026-11-04).
 		err = pkgrelease.RequireScreenshot(record)
 	}
+	if err == nil {
+		// An update shows before and after (forced modularity 1a).
+		err = pkgrelease.RequireBeforeAfter(record)
+	}
 	if err != nil {
 		writePackageRefusal(w, err)
 		return

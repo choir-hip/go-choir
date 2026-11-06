@@ -2361,6 +2361,12 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 	if len(files) == 0 {
 		return "", "", "", nil
 	}
+	// Forced modularity M2: one operation, one layer. A change set that
+	// touches a package and the platform (or two packages) is refused here,
+	// with both lists named, so the engineer casts one operation per layer.
+	if _, err := ClassifySourcePatchFiles(files); err != nil {
+		return "", "", "", err
+	}
 	// Recover the pinned base commit from the source artifact ref.
 	if ref := caps.Spec.SourceArtifactRef; strings.HasPrefix(ref, "capsule-source-git:") {
 		raw := strings.TrimPrefix(ref, "capsule-source-git:")

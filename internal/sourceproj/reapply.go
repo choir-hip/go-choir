@@ -60,5 +60,11 @@ func Reapply(ctx context.Context, repo, stackBase, booted string, patch []byte) 
 	if tree == bootedTree {
 		return ReapplyVerdict{Reason: "the applied change makes no difference on the booted base"}, nil
 	}
+	// Forced modularity M2: a clean rebase never carries a package path.
+	if pkgPaths, err := PackagePaths(ctx, repo, bootedCommit, tree); err != nil {
+		return ReapplyVerdict{}, err
+	} else if len(pkgPaths) > 0 {
+		return ReapplyVerdict{Reason: ErrPackagePath.Error() + ": the applied change changes the package paths " + shownPaths(pkgPaths) + "; the stack carries platform operations only"}, nil
+	}
 	return ReapplyVerdict{Clean: true, Tree: tree}, nil
 }

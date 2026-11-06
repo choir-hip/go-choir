@@ -252,6 +252,10 @@ func TestRecipeAndEpochPatchesAreRefused(t *testing.T) { // H2, H3
 		// H16: git metadata that changes what the tree means.
 		"gitattributes": {"diff --git a/sub/.gitattributes b/sub/.gitattributes\nnew file mode 100644\n--- /dev/null\n+++ b/sub/.gitattributes\n@@ -0,0 +1 @@\n+* filter=x\n", ReasonPatchTreeRefused},
 		"gitmodules":    {"diff --git a/.gitmodules b/.gitmodules\nnew file mode 100644\n--- /dev/null\n+++ b/.gitmodules\n@@ -0,0 +1 @@\n+[submodule]\n", ReasonPatchTreeRefused},
+		// M2: the stack carries no package path, whatever the spelling.
+		"package":        {"--- a/frontend/src/packages/image/App.svelte\n+++ b/frontend/src/packages/image/App.svelte\n@@ -1 +1 @@\n-a\n+b\n", ReasonPackagePathRefused},
+		"package rename": {"diff --git a/frontend/src/lib/x.js b/frontend/src/packages/image/x.js\nsimilarity index 100%\nrename from frontend/src/lib/x.js\nrename to frontend/src/packages/image/x.js\n", ReasonPackagePathRefused},
+		"package quoted": {"diff --git \"a/frontend/src/packages/im\\141ge/a.js\" \"b/frontend/src/packages/im\\141ge/a.js\"\n--- \"a/frontend/src/packages/im\\141ge/a.js\"\n+++ \"b/frontend/src/packages/im\\141ge/a.js\"\n@@ -1 +1 @@\n-a\n+b\n", ReasonPackagePathRefused},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
@@ -511,6 +515,12 @@ func TestAdmitPatchedTree(t *testing.T) {
 		"store schema":   {builder.PatchedChange{Path: "internal/storeschema/v.go", OldMode: "100644", NewMode: "100644"}, ReasonStoreEpochRefused},
 		"gitattributes":  {builder.PatchedChange{Path: "a/.gitattributes", OldMode: "000000", NewMode: "100644"}, ReasonPatchTreeRefused},
 		"executable bit": {builder.PatchedChange{Path: "scripts/x.sh", OldMode: "100644", NewMode: "100755"}, ""},
+		// M2: git's committed record names the package path, so no patch
+		// spelling hides it.
+		"package file":      {builder.PatchedChange{Path: "frontend/src/packages/reader/App.svelte", OldMode: "100644", NewMode: "100644"}, ReasonPackagePathRefused},
+		"package new":       {builder.PatchedChange{Path: "frontend/src/packages/new-app/choir-package.json", OldMode: "000000", NewMode: "100644"}, ReasonPackagePathRefused},
+		"package mode":      {builder.PatchedChange{Path: "frontend/src/packages/reader/x.sh", OldMode: "100644", NewMode: "100755"}, ReasonPackagePathRefused},
+		"packages dir file": {builder.PatchedChange{Path: "frontend/src/packages/README.md", OldMode: "100644", NewMode: "100644"}, ""},
 	} {
 		err := AdmitPatchedTree([]builder.PatchedChange{tc.change})
 		var refusal *RefusalError

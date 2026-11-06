@@ -739,3 +739,61 @@ updates `objectgraph/registry.go`.
   and add a new mode for package operations; rejected as a second mode for
   the same decision. The only owner act left in this design is the platform
   break-glass yank or force.
+
+## Build notes: M2+M3 (2026-11-05)
+
+Landed in one commit (MA5.M2+M3):
+
+- **The wall, all doors (M2).** `internal/packagepath` is the one classifier
+  (`RootOf`, `Classify`, reason `package_path_refused`). Door 1: Freeze
+  refuses a mixed change set (platform and a package, or two packages) with
+  both lists named (`capsule.ClassifySourcePatchFiles`, `ErrMixedLayers`).
+  Door 2: `hostbuild.refusePath` refuses any package path, so both
+  `RefusePatchPaths` (early) and `AdmitPatchedTree` (authority, git's
+  committed record) refuse it. Door 3: `sourceproj` reconcile refuses a live
+  stack whose patch changes a package path (`stack_package_path`, nothing is
+  moved, `package_paths` in `/health`), and `Reapply` never carries one;
+  corpusd refuses a bundle whose ordered file effects name a package path, in
+  the consensus poster's host-build seat and in the clean rebase gate
+  (`selfdevprotocol.RefuseBundlePackagePaths`). A stack the booted base
+  already carries is retired as before.
+- **S6 deleted.** `internal/sourceproj/packages.go` (entries, states, the
+  package graft) is gone; the S4 path graft stays (`pathGraft`).
+  `Result.Packages`, `/health effective_release.packages`, the Cast warning's
+  package sentences, the rebase notice's package-conflict branch and the
+  source-mode provenance annotation are deleted.
+- **The draft reads the package operation's frozen bundle.** The stack
+  machinery (`packageSourceBefore`, `AppliedRefs`, `Stack`, `BeforeBase`,
+  `graftBefore`, the sibling exemption) is deleted: the package before the
+  operation is the base's, the patch must lie under one package root, and a
+  capsule cast from a projection commit names the stack base as `built_on`
+  and as a base parent. The draft and media routes admit a decided operation
+  (accepted, materializing, applied). Freeze no longer composes a
+  package-only patch into the cumulative stack patch.
+- **`packages.publish` deleted** (setting, readers, registry entry).
+- **Before and after at the host.** corpusd refuses to list an update
+  (parent not the empty tree) without a before and after screen of one view
+  (`pkgrelease.RequireBeforeAfter`, `before_after_required`).
+- D6 needed nothing: `origin: published` already landed with P0.
+
+Deferred, named (each is M3 scope that did not land here):
+
+1. **The package operation's decision and effect.** A package-only frozen
+   operation still walks the platform pipeline and is refused at the host
+   build (`package_path_refused`). Still to build: decide it by the
+   `standing_consensus` policy with no arm, expiry or tier on every computer
+   not `off` or `audit_only` (D7), and make its effect publish then install
+   locally with the decision as the publish authority instead of the
+   per-release owner act; the operation reaches `applied` with the install
+   record.
+2. **The candidate overlay** (section 1a): the candidate install record, its
+   `<name> (candidate)` launcher name, the supplant on acceptance and the
+   boot close as "interrupted by a restart". Also: a capsule's workspace
+   holds the base's copy of a package, not the installed track head, so an
+   update of an installed head refuses `package_parent_unpublished` at draft
+   until the capsule is seeded from the installed version.
+3. **The boot migration** (section 4). Until it lands, a computer whose
+   applied stack holds package source reports `stack_package_path` (with the
+   paths) and refuses casts; its served build is unchanged. Self-development
+   is paused until gate G anyway. The legacy source-mode install records
+   (`installStateSource`, "Earlier source install") go with the migration.

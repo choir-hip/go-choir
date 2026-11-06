@@ -36,6 +36,10 @@ const (
 	// ReasonScreenshotRequired: a release is listed only with at least one
 	// screenshot of the app it ships (owner, 2026-11-04: an app store).
 	ReasonScreenshotRequired = "screenshot_required"
+	// ReasonBeforeAfterRequired: an update (a release whose parent is not
+	// the empty tree) is listed only with before and after screens of one
+	// view (forced modularity, section 1a).
+	ReasonBeforeAfterRequired = "before_after_required"
 	// ReasonRecordUnlisted: the record was stored and its listing was not
 	// (a crash between the two writes), and the track has since moved, so
 	// it can no longer be listed where it would have been.

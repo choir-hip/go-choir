@@ -184,3 +184,40 @@ func RequireScreenshot(r Record) error {
 	}
 	return refuse(ReasonScreenshotRequired, "a release needs at least one screenshot to be listed in the Library; the round that made it accepted none, so run the app and have the round capture its screens before publishing")
 }
+
+// screenRole matches the capsule's pairing convention for screens
+// (capsule.ScreenRole): NN-before-<view>.png and NN-after-<view>.png.
+var screenRole = regexp.MustCompile(`(?i)^(?:\d+[-_])?(before|after)[-_](.+?)\.png$`)
+
+// RequireBeforeAfter refuses an update with no before and after screens of
+// one view (owner, 2026-11-04; forced modularity section 1a): a release whose
+// parent is not the empty tree updates an existing package, so it must show
+// the installed version (before) and the candidate (after). The host checks
+// it on the record's media; the guest's draft and Freeze check it earlier.
+func RequireBeforeAfter(r Record) error {
+	if r.Parent.Tree == EmptyTree {
+		return nil
+	}
+	before, after := map[string]bool{}, map[string]bool{}
+	for _, m := range r.Media {
+		if m.Kind != MediaKindScreenshot {
+			continue
+		}
+		match := screenRole.FindStringSubmatch(m.Name)
+		if match == nil {
+			continue
+		}
+		view := strings.ToLower(match[2])
+		if strings.EqualFold(match[1], "before") {
+			before[view] = true
+		} else {
+			after[view] = true
+		}
+	}
+	for view := range before {
+		if after[view] {
+			return nil
+		}
+	}
+	return refuse(ReasonBeforeAfterRequired, "this release updates an existing package (its parent is not the empty tree); its screenshots must hold the same view before (the installed version) and after (the candidate), named NN-before-<view>.png and NN-after-<view>.png")
+}

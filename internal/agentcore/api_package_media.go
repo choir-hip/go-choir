@@ -12,7 +12,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // Release media at the publisher
@@ -100,17 +99,15 @@ func (h *APIHandler) packageReleaseMedia(w http.ResponseWriter, r *http.Request,
 		writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "media not found"})
 		return
 	}
-	if !h.rt.computerSettingOn(ctx, ownerID, computerID, store.SettingPackagesPublish) {
-		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "package publishing is off on this computer; the owner turns on the setting " + store.SettingPackagesPublish, Reason: "packages_publish_off"})
-		return
-	}
 	operation, err := h.rt.selfdevOperations.Get(ctx, computerID, operationID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, releaseAPIError{Error: "self-development operation not found"})
 		return
 	}
-	if operation.State != selfdev.StateApplied {
-		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "operation is " + operation.State + "; only an applied operation is published", Reason: "operation_not_applied"})
+	switch operation.State {
+	case selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateApplied:
+	default:
+		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "operation is " + operation.State + "; only a decided package operation is published", Reason: "operation_not_decided"})
 		return
 	}
 	items, data, err := h.rt.operationMedia(operation)

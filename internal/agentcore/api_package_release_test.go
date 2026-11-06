@@ -15,31 +15,25 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // Library S2 guest draft (docs/design/library-package-propagation-2026-10-26.md
-// 3.2, publisher-side checks), written before the code. Failure modes pinned:
+// 3.2), as forced modularity leaves it
+// (docs/design/forced-modularity-build-2026-11-04.md sections 1 and 2): the
+// draft reads one package operation's frozen bundle. Failure modes pinned:
 //
-//	L1   an operation whose parent subtree is the publisher's earlier,
-//	     unpublished change carries a path outside the root; or (fix 11,
-//	     docs/problems/selfdev-round-blockers-cluster-2026-11-03.md) its
-//	     release is put on a track head that is not the package at any
-//	     point of this stack, or on the base while the track has a head;
-//	L15  a mixed operation (the package and app.css) is drafted as a
-//	     package; the refusal names the outside paths and points to the
-//	     platform proposal;
+//	L15  a mixed operation (the package and app.css), or one that also
+//	     changes a sibling package, is drafted as a package; the refusal
+//	     names the outside paths and points to the platform proposal;
 //	L25  a manifest that declares kinds is drafted before S12;
-//	G1   the setting packages.publish off still drafts;
-//	G2   an unapplied operation is drafted;
+//	G1   a packages.publish setting can still refuse a draft (the switch is
+//	     deleted: publishing is the only way an app exists on its builder);
+//	G2   an undecided operation is drafted (a release names its decision);
 //	G3   the draft's tree_patch carries a path outside the root, or the
 //	     draft does not pass the host's own checks on the guest's base;
 //	G4   the draft writes (it is GET only);
-//	G5   an added secret is drafted;
-//	L1b  the operation just before this one left no projection ref, and an
-//	     older ref stands in for the source before (review 274 F2): the
-//	     diff would carry the skipped operation's change inside the root.
+//	G5   an added secret is drafted.
 
 const draftRoot = "frontend/src/packages/reader"
 
@@ -81,23 +75,6 @@ func packageSourceRepo(t *testing.T) (repo, base string) {
 	return repo, releaseGit(t, repo, "rev-parse", "HEAD")
 }
 
-// projectApplied leaves the projection's ref for an applied operation: a
-// commit of base plus patch whose trailers name the stack base and the
-// operation, at refs/choir/applied/<digest>, as sourceproj writes it.
-func projectApplied(t *testing.T, repo, base, operationID string, patch []byte) {
-	t.Helper()
-	scratch := t.TempDir()
-	releaseGit(t, scratch, "clone", "-q", repo, ".")
-	releaseGit(t, scratch, "checkout", "-q", base)
-	if err := os.WriteFile(filepath.Join(scratch, "op.patch"), patch, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	releaseGit(t, scratch, "apply", "--index", "op.patch")
-	releaseGit(t, scratch, "commit", "-q", "-m", "choir: apply "+operationID+"\n\n"+sourceproj.TrailerStackBase+": "+base+"\nChoir-Operation: "+operationID)
-	commit := releaseGit(t, scratch, "rev-parse", "HEAD")
-	releaseGit(t, scratch, "push", "-q", repo, commit+":"+sourceproj.RefAppliedPrefix+strings.Repeat("a", 60)+operationID[len(operationID)-4:])
-}
-
 type draftWorld struct {
 	t           *testing.T
 	h           *APIHandler
@@ -115,16 +92,7 @@ func newDraftWorld(t *testing.T) *draftWorld {
 	rt, products, updaterRoot := releaseTestRuntime(t, draftComputer)
 	repo, base := packageSourceRepo(t)
 	rt.releaseSourceDir = repo
-	w := &draftWorld{t: t, h: NewAPIHandler(rt), rt: rt, repo: repo, base: base, updaterRoot: updaterRoot, products: products, at: time.Now().UTC().Add(-time.Hour)}
-	w.setting(true)
-	return w
-}
-
-func (w *draftWorld) setting(on bool) {
-	w.t.Helper()
-	if err := w.rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-a", ComputerID: draftComputer, Key: store.SettingPackagesPublish, Value: on}); err != nil {
-		w.t.Fatal(err)
-	}
+	return &draftWorld{t: t, h: NewAPIHandler(rt), rt: rt, repo: repo, base: base, updaterRoot: updaterRoot, products: products, at: time.Now().UTC().Add(-time.Hour)}
 }
 
 // operation records an operation in state whose frozen bundle carries the
@@ -213,14 +181,21 @@ func decodeDraft(t *testing.T, rec *httptest.ResponseRecorder) (pkgrelease.Recor
 	return record, body.ReleaseID, blobs
 }
 
-func TestPackageDraftNeedsTheSettingAndAnAppliedOperation(t *testing.T) {
+func TestPackageDraftNeedsADecidedOperationAndNoSetting(t *testing.T) {
 	w := newDraftWorld(t)
 	w.operation("op-awaiting", selfdev.StateAwaitingApproval, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
-	w.operation("op-applied", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
-	wantDraftReason(t, w.draft("op-awaiting", nil), http.StatusConflict, "operation_not_applied")
-	w.setting(false)
-	wantDraftReason(t, w.draft("op-applied", nil), http.StatusConflict, "packages_publish_off")
-	w.setting(true)
+	w.paired("op-applied", map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
+	wantDraftReason(t, w.draft("op-awaiting", nil), http.StatusConflict, "operation_not_decided")
+	// G1: the setting is gone; a computer cannot store it.
+	if _, known := store.KnownComputerSettings["packages.publish"]; known {
+		t.Fatal("G1 packages.publish is still a computer setting")
+	}
+	if err := w.rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-a", ComputerID: draftComputer, Key: "packages.publish", Value: false}); err == nil {
+		t.Fatal("G1 a computer stored the deleted packages.publish")
+	}
+	if rec := w.draft("op-applied", nil); rec.Code != http.StatusOK {
+		t.Fatalf("an applied package operation drafts: %d %s", rec.Code, rec.Body.String())
+	}
 	if rec := releaseRouterCall(t, w.h, http.MethodPost, "/api/computers/"+draftComputer+"/packages/operations/op-applied/release-draft?package=reader", "owner-a", draftComputer, []byte("{}")); rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("G4 draft write = %d, want 405", rec.Code)
 	}
@@ -231,22 +206,18 @@ func TestPackageDraftNeedsTheSettingAndAnAppliedOperation(t *testing.T) {
 
 func TestPackageDraftRefusesAMixedOperationNamingItsPaths(t *testing.T) {
 	w := newDraftWorld(t)
-	mixed := w.operation("op-mixed", selfdev.StateApplied, map[string]string{
+	w.operation("op-mixed", selfdev.StateApplied, map[string]string{
 		draftRoot + "/App.svelte": "<p>v2</p>\n",
 		"frontend/src/app.css":    "body { color: red }\n",
 	})
-	// The projection left op-mixed's ref, so the operation after it is
-	// measured from it (without one it would refuse first, see L1b).
-	projectApplied(t, w.repo, w.base, "op-mixed", mixed)
 	got := wantDraftReason(t, w.draft("op-mixed", nil), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
 	if !strings.Contains(got.Error, "frontend/src/app.css") || strings.Contains(got.Error, draftRoot+"/App.svelte") || !strings.Contains(got.Error, "choir platform publish") {
 		t.Fatalf("L15 refusal = %q, want the outside path named and the platform proposal pointed to", got.Error)
 	}
-	// A change to the reader drafted under another package's name is the
-	// sibling's subtree, not outside (problem 29); the other package has no
-	// tree here, so the draft is refused as invalid, not as unconfined.
+	// One operation, one package: a change to the reader drafted under
+	// another package's name is outside that package.
 	w.operation("op-reader", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n"})
-	wantDraftReason(t, w.draft("op-reader", url.Values{"package": {"image"}}), http.StatusUnprocessableEntity, pkgrelease.ReasonInvalid)
+	wantDraftReason(t, w.draft("op-reader", url.Values{"package": {"image"}}), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
 }
 
 func TestPackageDraftIsTheConfinedSubtreeOnTheBase(t *testing.T) {
@@ -271,106 +242,14 @@ func TestPackageDraftIsTheConfinedSubtreeOnTheBase(t *testing.T) {
 	}
 }
 
-func TestPackageDraftCarriesAnEarlierUnpublishedRoundOfTheStack(t *testing.T) {
-	w := newDraftWorld(t)
-	// op-1 changed the reader and the shell; it applied, and the projection
-	// left its ref. It can never be published (it is mixed).
-	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0001", w.paired("op-0001", first))
-	wantDraftReason(t, w.draft("op-0001", nil), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
-	// op-2 changes only the reader. Its bundle patch is cumulative from the
-	// stack base (U1), so it carries op-1's change too.
-	cumulative := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", draftRoot + "/Extra.svelte": "<p>x</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	w.paired("op-0002", cumulative)
-
-	// Fix 11: with no track head, op-2's release is the stack's package
-	// change from the base. Only the root travels (L1).
-	record, _, blobs := decodeDraft(t, w.draft("op-0002", nil))
-	baseTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", w.base+":"+draftRoot))
-	if record.Parent != (pkgrelease.Parent{Kind: pkgrelease.ParentBase, Commit: w.base, Tree: baseTree}) || record.Operation.OperationID != "op-0002" {
-		t.Fatalf("a stacked round with no head must publish on the base: %+v", record.Parent)
-	}
-	if strings.Contains(string(blobs.ReviewPatch), "app.css") || strings.Contains(string(blobs.TreePatch), "app.css") {
-		t.Fatal("L1 the release carries the shell change")
-	}
-	if !strings.Contains(string(blobs.ReviewPatch), "v3") || strings.Join(record.Source.ChangedPaths, ",") != draftRoot+"/App.svelte,"+draftRoot+"/Extra.svelte" {
-		t.Fatalf("the cumulative release's paths = %v", record.Source.ChangedPaths)
-	}
-	if err := pkgrelease.VerifyHost(context.Background(), pkgrelease.HostInput{Record: record, TreePatch: blobs.TreePatch, ReviewPatch: blobs.ReviewPatch, ParentPatch: blobs.ParentPatch, Base: pkgrelease.GitStore{Dir: w.repo}}); err != nil {
-		t.Fatalf("the cumulative release fails the host checks: %v", err)
-	}
-
-	// Once the reader at op-1 is the track head, op-2 drafts on it and
-	// carries only its own delta.
-	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
-	headID := strings.Repeat("f", 64)
-	record, _, blobs = decodeDraft(t, w.draft("op-0002", url.Values{"head_release_id": {headID}, "head_tree": {headTree}}))
-	if record.Parent != (pkgrelease.Parent{Kind: pkgrelease.ParentRelease, ReleaseID: headID, Tree: headTree}) || record.ParentPatch != nil || blobs.ParentPatch != nil {
-		t.Fatalf("draft on the head = %+v", record.Parent)
-	}
-	if strings.Contains(string(blobs.ReviewPatch), "app.css") || strings.Contains(string(blobs.TreePatch), "app.css") {
-		t.Fatal("L1 the release carries the shell change")
-	}
-
-	// A head that is the package at no point of this stack came from
-	// elsewhere: the stack's change is not put on it.
-	foreign := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", w.base+":frontend/src"))
-	got := wantDraftReason(t, w.draft("op-0002", url.Values{"head_release_id": {headID}, "head_tree": {foreign}}), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
-	if !strings.Contains(got.Error, "came from elsewhere") {
-		t.Fatalf("foreign head refusal = %q", got.Error)
-	}
-}
-
-func TestPackageDraftCarriesTheStackFromAHeadInItsLineage(t *testing.T) {
-	w := newDraftWorld(t)
-	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0001", w.paired("op-0001", first))
-	second := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0002", w.paired("op-0002", second))
-	w.paired("op-0003", map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
-	// The track head is the reader at op-1 (op-2 was never published).
-	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
-	headID := strings.Repeat("f", 64)
-	record, _, blobs := decodeDraft(t, w.draft("op-0003", url.Values{"head_release_id": {headID}, "head_tree": {headTree}}))
-	if record.Parent != (pkgrelease.Parent{Kind: pkgrelease.ParentRelease, ReleaseID: headID, Tree: headTree}) {
-		t.Fatalf("op-3 must publish on the head in its lineage: %+v", record.Parent)
-	}
-	if !strings.Contains(string(blobs.ReviewPatch), "-<p>v2</p>") || !strings.Contains(string(blobs.ReviewPatch), "+<p>v4</p>") {
-		t.Fatalf("the review patch must go from the head (v2) to op-3 (v4):\n%s", blobs.ReviewPatch)
-	}
-}
-
 func TestPackageDraftRefusesKindsAndSecrets(t *testing.T) {
 	w := newDraftWorld(t)
 	withKinds := strings.Replace(draftManifest, `"kinds": []`, `"kinds": [{"kind": "choir.app.reader.note"}]`, 1)
 	w.operation("op-kinds", selfdev.StateApplied, map[string]string{draftRoot + "/choir-package.json": withKinds})
 	wantDraftReason(t, w.draft("op-kinds", nil), http.StatusUnprocessableEntity, pkgrelease.ReasonKindsNeedPlatform)
-	// The secret on its own computer: after op-kinds without a ref, the
-	// draft would refuse first (L1b).
 	w = newDraftWorld(t)
 	w.operation("op-secret", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "GITHUB_TOKEN=ghp_" + strings.Repeat("A", 36) + "\n"})
 	wantDraftReason(t, w.draft("op-secret", nil), http.StatusUnprocessableEntity, pkgrelease.ReasonSecretFound)
-}
-
-func TestPackageDraftRefusesWhenThePrecedingOperationLeftNoRef(t *testing.T) {
-	w := newDraftWorld(t)
-	// op-1 changed the reader and the shell and left its projection ref.
-	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
-	projectApplied(t, w.repo, w.base, "op-0001", w.paired("op-0001", first))
-	// op-2 changed the reader again; the projection never left its ref.
-	w.operation("op-0002", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"})
-	// op-3 changes the reader once more (cumulative from the stack base).
-	w.paired("op-0003", map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
-
-	// The reader at op-1 is the track head. Measured from op-1's ref, op-3
-	// would carry op-2's unpublished change to the reader as its own.
-	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
-	got := wantDraftReason(t, w.draft("op-0003", url.Values{"head_release_id": {strings.Repeat("f", 64)}, "head_tree": {headTree}}), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
-	if !strings.Contains(got.Error, "op-0002") {
-		t.Fatalf("L1b refusal does not name the operation without a ref: %q", got.Error)
-	}
-	// And with no head: the base cannot stand in either.
-	wantDraftReason(t, w.draft("op-0003", nil), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
 }
 
 // The owner's ruling of 2026-11-03: a published release is public, so
@@ -396,9 +275,8 @@ func TestPackageShareGateAndSettingAreRetired(t *testing.T) {
 
 func TestPackageDraftReadFailureIsUnavailable(t *testing.T) {
 	w := newDraftWorld(t)
-	w.operation("op-0001", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
 	w.operation("op-0002", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n"})
-	// The source repository is gone: the applied refs cannot be read.
+	// The source repository is gone: the operation's base cannot be read.
 	w.rt.releaseSourceDir = t.TempDir()
 	wantDraftReason(t, w.draft("op-0002", nil), http.StatusServiceUnavailable, "tree_unavailable")
 }

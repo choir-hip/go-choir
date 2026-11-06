@@ -430,6 +430,21 @@ func TestConsensusPosterMintsADecisionFromTwoSignedBallots(t *testing.T) {
 	if _, err := f.decide(t, patchless); !errors.Is(err, ErrConsensusRefused) || !strings.Contains(err.Error(), "source patch") {
 		t.Fatalf("patchless bundle: %v", err)
 	}
+	// Forced modularity M2, door 3: a hand-built bundle whose platform
+	// change carries a package path is refused at corpusd, before any build
+	// is consulted.
+	var bundleFields map[string]any
+	if err := json.Unmarshal(f.bundle, &bundleFields); err != nil {
+		t.Fatal(err)
+	}
+	bundleFields["ordered_file_effects"] = []any{map[string]any{"path": "/workspace/platform/frontend/src/packages/image/App.svelte", "kind": "modified", "mode": 420}}
+	carried := f.request(t, "op-2")
+	carried.Bundle, _ = computerevent.CanonicalJSON(bundleFields)
+	carried.Subject.BundleDigest = computerevent.DigestBytes(carried.Bundle)
+	carried.ReviewerBallot = f.reviewer(t, f.guestKey, decisionpolicy.SeatIndependentReviewer, decisionpolicy.IssuerGuestManagement, carried.Subject)
+	if _, err := f.decide(t, carried); !errors.Is(err, ErrConsensusRefused) || !strings.Contains(err.Error(), "package_path_refused") {
+		t.Fatalf("bundle with a package path: %v", err)
+	}
 	// 29: a done job whose result is not platform-control signed.
 	_, rogueKey, _ := ed25519.GenerateKey(rand.Reader)
 	f.recordBuild(t, f.hostRequest("op-8"), hostbuild.StateDone, computerevent.SigningKey{SignerRef: f.modeKey.SignerRef, PrivateKey: rogueKey})

@@ -26,6 +26,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/builder"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/packagepath"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
@@ -56,6 +57,10 @@ const (
 	ReasonBuildTimeout            = "build_timeout"
 	ReasonInterruptedByRestart    = "interrupted_by_host_restart"
 	ReasonHostBuilderUnconfigured = "host_builder_unconfigured"
+	// ReasonPackagePathRefused: the patch changes a package path. The stack
+	// carries platform operations only; a package change is a package
+	// operation that publishes and installs (forced modularity M2).
+	ReasonPackagePathRefused = packagepath.ReasonPackagePath
 )
 
 // MaxPatchBytes is the largest patch the host builds (the patch export cap).
@@ -208,6 +213,8 @@ func refusePath(p string) (string, string) {
 		return ReasonPatchTreeRefused, "the patch changes git metadata (" + p + ")"
 	case strings.HasPrefix(clean, "internal/storeschema/"):
 		return ReasonStoreEpochRefused, "the patch changes the store schema (" + p + "); an epoch-bumping release is refused until LU2"
+	case packagepath.RootOf(clean) != "":
+		return ReasonPackagePathRefused, "the patch changes the package path " + p + "; the base carries no app source: a package change is a package operation, published and installed (forced modularity)"
 	}
 	recipe := recipeFiles[clean] || strings.HasSuffix(clean, ".nix") ||
 		path.Base(clean) == "flake.lock" || path.Base(clean) == "flake.nix"

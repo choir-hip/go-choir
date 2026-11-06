@@ -66,13 +66,16 @@ const (
 	// be placed. The projection is kept; casting refuses until a rebase.
 	StateBaseMoved State = "stack_base_moved"
 	// StateRematerialized: a live stack on a base that is not the booted one,
-	// where the booted base left every shell path the patch touches
-	// unchanged. HEAD is the booted base with the patch's after-image at those
-	// paths, byte for byte, and each package root per its entry
-	// (Result.Packages, S6): retired, grafted path by path, or holding this
-	// computer's version whole. Casting is admitted (the served build is still
-	// the stack on its own base, which the Cast's ledger warning says).
+	// where the booted base left every path the patch touches unchanged. HEAD
+	// is the booted base with the patch's after-image at those paths, byte for
+	// byte. Casting is admitted (the served build is still the stack on its
+	// own base, which the Cast's ledger warning says).
 	StateRematerialized State = "stack_rematerialized"
+	// StatePackagePath: the stack's patch changes a package path
+	// (ErrPackagePath, forced modularity M2). The stack carries platform
+	// operations only; nothing is touched and casting refuses until the
+	// stack holds no package path.
+	StatePackagePath State = "stack_package_path"
 	// StateBaseObjectsMissing: the booted base's objects are not in the
 	// guest repository (residual R3), so it can neither be moved to nor shown
 	// to contain the stack. The cast refuses (U1b); U1b's fetch supplies them.
@@ -198,10 +201,10 @@ type Result struct {
 	From string `json:"from,omitempty"`
 	// Saved lists what was kept at refs/choir/saved/ before the reset.
 	Saved []Saved `json:"saved,omitempty"`
-	// Packages are the package roots the stack touches, each with its answer
-	// (S6, docs/design/s6-package-lock-build-2026-11-04.md).
-	Packages []PackageEntry `json:"packages,omitempty"`
-	At       time.Time      `json:"at"`
+	// PackagePaths lists the package paths a refused stack's patch changes
+	// (StatePackagePath).
+	PackagePaths []string  `json:"package_paths,omitempty"`
+	At           time.Time `json:"at"`
 }
 
 // Refusal names why a cast must be refused, or "" when it may go ahead.
@@ -225,6 +228,8 @@ func (r Result) Refusal() string {
 		return "source_projection_unrebuildable: " + r.Reason
 	case StateRepoUnavailable:
 		return "source_projection_repo_unavailable: " + r.Reason
+	case StatePackagePath:
+		return "stack_package_path: " + r.Reason
 	}
 	return ""
 }
@@ -368,6 +373,18 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, cur c
 			return upstreamed("the operation's patch is already in the booted base " + booted)
 		}
 	}
+	// Forced modularity M2: a live stack that changes a package path is
+	// refused, never projected. (A patch the booted base already holds is
+	// retired above: main carries it now.)
+	pkgPaths, err := PackagePaths(ctx, repo, base, tree)
+	if err != nil {
+		return res, err
+	}
+	if len(pkgPaths) > 0 {
+		res.State, res.Head, res.Diverged, res.PackagePaths = StatePackagePath, cur.head, true, pkgPaths
+		res.Reason = fmt.Sprintf("%v: the applied stack's patch changes the package paths %s; the stack carries platform operations only, and an app exists on a computer as an installed package. Nothing was moved; casting refuses until the stack holds no package path (the forced-modularity migration publishes and installs the package and rebuilds a platform-only stack)", ErrPackagePath, shownPaths(pkgPaths))
+		return res, nil
+	}
 	commit, err := projectionCommit(ctx, repo, top, base, tree)
 	if err != nil {
 		return res, err
@@ -375,9 +392,7 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, cur c
 	if haveBooted && base != booted {
 		// S4: a moved base the patch's paths did not see is grafted, byte for
 		// byte (library design 10.3, applied to the whole stack).
-		// S6: package roots are units; shell paths keep S4's path graft.
-		graft, packages, ok, why, gerr := packageGraft(ctx, repo, base, booted, tree)
-		res.Packages = packages
+		graft, ok, why, gerr := pathGraft(ctx, repo, base, booted, tree)
 		if gerr != nil {
 			return res, gerr
 		}
@@ -395,10 +410,6 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, cur c
 			}
 			res.State, res.Base, res.ServedBase, res.Diverged = StateRematerialized, booted, base, true
 			res.Reason = "the stack's patch on " + base + " is grafted byte-identically onto the booted base " + booted + ": the booted base changed no path the patch touches; the served build is still the stack on " + base
-			if conflicts := packageConflicts(res.Packages); len(conflicts) > 0 {
-				res.Reason = "the stack's patch on " + base + " is re-materialized onto the booted base " + booted + ": the booted base changed no shell path the patch touches; it also changed the package roots " + strings.Join(conflicts, ", ") +
-					" (package_behind_base), where this computer's version is kept whole; the served build is still the stack on " + base
-			}
 			err := res.settle(ctx, repo, cur, target{expected: grafted, base: booted, appliedDigest: top.AppliedEventDigest, appliedCommit: commit})
 			return res, err
 		}
@@ -408,13 +419,6 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, cur c
 		return res, err
 	}
 	res.Base, res.Diverged = base, true
-	if haveBooted {
-		entries, perr := packageEntries(ctx, repo, base, tree)
-		if perr != nil {
-			return res, perr
-		}
-		res.Packages = entries
-	}
 	switch {
 	case haveBooted:
 		res.State = StateProjected
