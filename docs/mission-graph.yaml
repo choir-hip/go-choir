@@ -648,7 +648,7 @@ nodes:
       rejected, falsified record visible in the live Texture doc,
       pinned-head restore via tape_reconstruct). Evidence:
       docs/archive/evidence/m11-probe-run9-satisfied-2026-09-29.json.
-      Probe: scripts/m11_selfdev_episode_probe.mjs.
+      Probe: scripts/m11_selfdev_episode_probe.mjs (deleted 2026-11-06 with owner approval; see git history).
     sources:
       - docs/archive/definitions/choir-selfdev-gate-2026-09-27.md
       - docs/archive/evidence/m11-episode-call-map-2026-09-27.md

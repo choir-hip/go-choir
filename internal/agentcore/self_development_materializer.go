@@ -190,7 +190,7 @@ func (rt *Runtime) closeUndecidedSelfDevelopmentOperationsAtBoot(ctx context.Con
 		log.Printf("selfdev: boot: %s closed from awaiting_approval: %s", operation.OperationID, selfdevUndecidedInterruptedByRestart)
 		// The owner reading the candidate's document learns it closed, as the
 		// attempt close tells it (the record is the wake; no turn is forced).
-		rt.notifyTextureOfOwnerAct(ctx, rt.selfdevRouteOwnerID, closed, types.OwnerActFail, "")
+		rt.notifyTextureOfOwnerAct(context.WithoutCancel(ctx), rt.selfdevRouteOwnerID, closed, types.OwnerActFail, "")
 	}
 }
 
