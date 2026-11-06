@@ -976,3 +976,56 @@ func TestGvisorAddressCalibration(t *testing.T) {
 		}
 	}
 }
+
+// TestGvisorCodeModeHostCallsAndImportSet (MA6.6) runs code mode inside the
+// sandbox: a hundred host calls in one cell, the per-cell bound past 1,024,
+// parallel calls served in parallel, and an import outside the desk's set
+// refused at the static check.
+func TestGvisorCodeModeHostCallsAndImportSet(t *testing.T) {
+	requireGvisor(t)
+	cfg := gvisorTestConfig(t, "research")
+	var calls atomic.Int64
+	cfg.Egress = func(context.Context, BrokerAction, json.RawMessage) (json.RawMessage, error) {
+		calls.Add(1)
+		time.Sleep(time.Millisecond)
+		return json.RawMessage(`{"items":[]}`), nil
+	}
+	w, err := SpawnDeskSessionWorker(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if w.gvisor == nil {
+		t.Fatal("the worker is not in a gVisor sandbox")
+	}
+	for _, n := range []int{100, MaxFrameCallsPerCell + 10} {
+		calls.Store(0)
+		start := time.Now()
+		ok := min(n, MaxFrameCallsPerCell)
+		gvEvalCell(t, w, fmt.Sprintf(`ok := 0
+for i := 0; i < %d; i++ {
+	if _, err := choir.ListEvidence("", 5); err == nil { ok++ }
+}
+fmt.Print("ok ", ok, "\n")`, n), fmt.Sprintf("ok %d", ok))
+		if calls.Load() != int64(ok) {
+			t.Fatalf("n=%d: host served %d", n, calls.Load())
+		}
+		t.Logf("gVisor: %d host calls in one cell in %v (%d served)", n, time.Since(start), ok)
+	}
+	start := time.Now()
+	gvEvalCell(t, w, `import "sync"
+var wg sync.WaitGroup
+for i := 0; i < 16; i++ {
+	wg.Add(1)
+	go func() { defer wg.Done(); choir.ListEvidence("", 1) }()
+}
+wg.Wait()
+fmt.Print("joined\n")`, "joined")
+	t.Logf("gVisor: 16 parallel host calls in %v", time.Since(start))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := w.Eval(ctx, "import \"encoding/gob\"\nprintln(\"ran\")")
+	if err != nil || !strings.Contains(res.Error, "refused") {
+		t.Fatalf("an import outside the set in the sandbox: %+v %v", res, err)
+	}
+}

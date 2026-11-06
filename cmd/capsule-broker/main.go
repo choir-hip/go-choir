@@ -157,7 +157,7 @@ func main() {
 			log.Fatalf("session worker memory bound: %v", err)
 		}
 		cfg := yaegikernel.SessionWorkerConfig{
-			AllowedPackages: yaegikernel.DefaultSafeStdlibPackagesList(),
+			AllowedPackages: yaegikernel.DeskAllowedPackages(sessionRole),
 			ComputerID:      sessionComputerID,
 			ActivationID:    sessionActivation,
 			Epoch:           sessionEpoch,

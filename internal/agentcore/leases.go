@@ -172,9 +172,19 @@ func (rt *Runtime) requestLeaseEgress(ctx context.Context, deskRole string, exec
 	if held.RunID == "" {
 		held.RunID = exec.RunID
 	}
+	// A cell that was aborted (a forged frame, the host's kill) asks for
+	// nothing: its context is cancelled before the breaker trips, and a grant
+	// that raced the abort is revoked at once (MA6.6 review r1, S2).
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("choir.RequestLease: the cell was aborted: %w", err)
+	}
 	granted, err := rt.RequestLease(ctx, &held,
 		lease.Scope{Kinds: req.Kinds, CaptureIDs: req.CaptureIDs, CaptureLabels: req.CaptureLabels},
 		req.Purpose, time.Duration(req.DurationSeconds)*time.Second, req.Req)
+	if err == nil && ctx.Err() != nil {
+		_ = rt.leases.Revoke(context.WithoutCancel(ctx), granted.LeaseID, "the cell that asked was aborted")
+		return nil, fmt.Errorf("choir.RequestLease: the cell was aborted: %w", ctx.Err())
+	}
 	if err != nil {
 		if errors.Is(err, lease.ErrRefused) {
 			return nil, fmt.Errorf("choir.RequestLease: %w", err)

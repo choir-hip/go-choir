@@ -99,12 +99,15 @@ const sessionReadyTimeout = 10 * time.Second
 // host keeps one end, the worker inherits the other as fd 3 — worker traffic
 // never touches process stdio; stdout/stderr carry only crash diagnostics.
 type DeskSessionWorker struct {
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	framed *FramedConn
-	pid    int
-	dead   bool
-	cfg    DeskSessionWorkerConfig
+	mu sync.Mutex
+	// cellCancel ends the running cell's handler context; set and read under
+	// mu (EvalFrame holds it for the cell).
+	cellCancel context.CancelFunc
+	cmd        *exec.Cmd
+	framed     *FramedConn
+	pid        int
+	dead       bool
+	cfg        DeskSessionWorkerConfig
 	// stderr carries only crash diagnostics; it is read once the process
 	// is reaped, when the copy into it has finished.
 	stderr *lockedBuffer
@@ -479,23 +482,49 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 		err error
 	}
 	ch := make(chan result, 1)
+	// The cell's handlers run under cellCtx: it ends when the cell ends, and
+	// at once when the cell is aborted (a read error, a forged frame, the
+	// host's kill), so no handler acts for an aborted cell (review r1, S2).
+	cellCtx, cancelCell := context.WithCancel(ctx)
+	defer cancelCell()
+	w.cellCancel = cancelCell
+	defer func() { w.cellCancel = nil }()
 	go func() {
+		// The cell's host calls (MA6.6): counted against MaxFrameCallsPerCell
+		// and served up to MaxConcurrentFrameCalls at a time, so a cell's
+		// fan-out runs in parallel on the host. Every call the cell made is
+		// answered before its result is delivered, as when they were served
+		// one by one.
+		calls := &cellFrameCalls{ctx: cellCtx, sem: make(chan struct{}, MaxConcurrentFrameCalls)}
+		// abort ends the cell's handlers before the reader reports: cancel,
+		// then wait (bounded) for those in flight. A forged frame is traced
+		// (and trips the breaker) only after that, so a lease admitted before
+		// it cannot be granted after the trip.
+		abort := func(err error, forged *FrameRefusal) {
+			cancelCell()
+			calls.waitBounded(cellAbortWait)
+			if forged != nil && w.cfg.Refused != nil {
+				w.cfg.Refused(ctx, *forged)
+			}
+			ch <- result{err: err}
+		}
 		for {
 			stream, payload, err := w.framed.ReadFrame()
 			if err != nil {
-				ch <- result{err: err}
+				abort(err, nil)
 				return
 			}
 			// Mid-cell host-mediated network verbs (search_start / read /
 			// read_capture) ride the shared egress stream; the host resolves
 			// them and answers, then keeps waiting for the StreamCell result.
 			if stream == StreamBrokerEgress {
-				if forged := w.serviceEgress(ctx, payload); forged {
-					ch <- result{err: errForgedFrame}
+				if forged := w.serviceEgress(ctx, payload, calls); forged != nil {
+					abort(errForgedFrame, forged)
 					return
 				}
 				continue
 			}
+			calls.wg.Wait()
 			if stream != StreamCell {
 				ch <- result{err: fmt.Errorf("desk eval: unexpected stream %d", stream)}
 				return
@@ -549,24 +578,142 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 // BrokerRequest whose action names a host-mediated network verb; the host
 // resolves it via cfg.Egress (the deps-bound handler in agentcore) and
 // replies on StreamBrokerEgressResult so the blocked cell resumes.
-func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) (forged bool) {
+func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte, calls *cellFrameCalls) (forged *FrameRefusal) {
 	var req BrokerRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("egress decode request: %w", err))
-		return false
+		return nil
 	}
-	if reason, forged := w.admitFrame(ctx, StreamBrokerEgress, req); reason != "" {
+	// Every frame counts toward the bound, served or refused (review r1, S3).
+	calls.n++
+	// The frame is admitted here, in frame order, before any handler runs:
+	// a forged frame ends the worker before a later frame is served.
+	reason, isForged := w.checkFrame(req)
+	if isForged {
 		w.writeEgressResult(req.RequestID, nil, errors.New(reason))
-		return forged
+		r := w.frameRefusal(StreamBrokerEgress, req, reason)
+		r.Forged = true
+		return &r
+	}
+	if reason == "" && calls.n > MaxFrameCallsPerCell {
+		reason = fmt.Sprintf("refused: this cell made %d host calls; at most %d per cell (continue in the next cell)", calls.n, MaxFrameCallsPerCell)
+	}
+	if reason != "" {
+		calls.traceRefusal(ctx, w, w.frameRefusal(StreamBrokerEgress, req, reason))
+		w.writeEgressResult(req.RequestID, nil, errors.New(reason))
+		return nil
 	}
 	handler := w.cfg.Egress
 	if handler == nil {
 		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("%s host unavailable", req.Action))
-		return false
+		return nil
 	}
-	res, err := handler(withEgressFrame(ctx, req.RequestID, w), req.Action, req.Payload)
-	w.writeEgressResult(req.RequestID, res, err)
-	return false
+	sink := DisclosureSinkActions[req.Action]
+	if sink {
+		// A disclosure-gated sink is gated on the run's labels, so every read
+		// admitted before it has tainted the run first (review r1, D1).
+		calls.reads.Wait()
+	}
+	// A full set of in-flight calls holds the reader here: no further frame
+	// is read until one finishes, so the worker's next call waits.
+	calls.sem <- struct{}{}
+	calls.wg.Add(1)
+	if !sink {
+		calls.reads.Add(1)
+	}
+	go func() {
+		defer calls.wg.Done()
+		defer func() { <-calls.sem }()
+		if !sink {
+			defer calls.reads.Done()
+		}
+		if serialFrameActions[req.Action] {
+			calls.serial.Lock()
+			defer calls.serial.Unlock()
+		}
+		if err := calls.ctx.Err(); err != nil {
+			w.writeEgressResult(req.RequestID, nil, fmt.Errorf("%s: the cell ended before the call ran", req.Action))
+			return
+		}
+		res, err := handler(withEgressFrame(calls.ctx, req.RequestID, w), req.Action, req.Payload)
+		w.writeEgressResult(req.RequestID, res, err)
+	}()
+	return nil
+}
+
+// MaxFrameCallsPerCell bounds the host calls (choir verbs the daemon serves)
+// one cell may make (MA6.6). Code mode makes many calls in one cell, so the
+// bound sits far above the hundred a cell is meant to make, and well below
+// what a cell deadline would allow: measured at about 0.2 ms a call
+// host-side, a five-minute cell could otherwise make over a million, each
+// with a row in the cell's trace event and about 29 KiB of host allocation
+// (docs/design/ma66-code-mode-import-sets-2026-11-06.md section 4). Calls the
+// worker serves itself (ReadFile, ListDir, Records) are not host calls.
+const MaxFrameCallsPerCell = 1024
+
+// MaxConcurrentFrameCalls bounds the host calls of one cell served at once.
+// Before MA6.6 they were served one at a time, so a cell's parallel fan-out
+// ran serially on the host (8 goroutines of a 100 ms verb took 810 ms).
+const MaxConcurrentFrameCalls = 8
+
+// serialFrameActions are served one at a time within a cell, as before
+// MA6.6: a choir.Research call starts up to MaxResearchChildren child runs,
+// each with its own desk worker, so eight at once could start 128 workers.
+// Their parallelism is the call's own children.
+var serialFrameActions = map[BrokerAction]bool{ActionResearch: true}
+
+// DisclosureSinkActions are the host calls the disclosure gate judges as
+// egress sinks (agentcore egressDisclosure; a test there pins the two lists
+// equal). Each waits until every non-sink call admitted before it has
+// finished, so the run's labels it is gated on include their taint (review
+// r1, D1). Sinks do not wait for each other: a sink's payload cannot carry a
+// result still in flight.
+var DisclosureSinkActions = map[BrokerAction]bool{ActionRead: true, ActionSourceAPI: true, ActionSearchStart: true}
+
+// maxTracedRefusalsPerCell bounds the refusal events one cell leaves: the
+// first ones are traced, then one more saying the rest are not (review r1, S3).
+const maxTracedRefusalsPerCell = 16
+
+// cellAbortWait bounds how long an aborted cell waits for its in-flight
+// handlers, which see a cancelled context, before the reader reports.
+const cellAbortWait = 5 * time.Second
+
+// cellFrameCalls is one cell's host-call accounting on the reader goroutine.
+type cellFrameCalls struct {
+	ctx     context.Context
+	n       int
+	refused int
+	sem     chan struct{}
+	wg      sync.WaitGroup
+	// reads counts the in-flight calls that are not disclosure sinks.
+	reads  sync.WaitGroup
+	serial sync.Mutex
+}
+
+// traceRefusal reports a refused frame through the worker's Refused hook,
+// at most maxTracedRefusalsPerCell times a cell, then once more to say the
+// rest are not traced.
+func (c *cellFrameCalls) traceRefusal(ctx context.Context, w *DeskSessionWorker, r FrameRefusal) {
+	c.refused++
+	if w.cfg.Refused == nil || c.refused > maxTracedRefusalsPerCell+1 {
+		return
+	}
+	if c.refused == maxTracedRefusalsPerCell+1 {
+		r.Reason = fmt.Sprintf("%s (refusals after the first %d in this cell are not traced)", r.Reason, maxTracedRefusalsPerCell)
+	}
+	w.cfg.Refused(ctx, r)
+}
+
+// waitBounded waits for the in-flight handlers, at most d.
+func (c *cellFrameCalls) waitBounded(d time.Duration) {
+	done := make(chan struct{})
+	go func() { c.wg.Wait(); close(done) }()
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+	}
 }
 
 // ActionTransport names a refusal that happened below the broker protocol: a
@@ -588,33 +735,45 @@ var errForgedFrame = errors.New("desk worker sent a forged frame")
 // It returns a non-empty reason to refuse. forged is true when the frame
 // proves tampering (a wrong or missing slot token): the worker is ended.
 func (w *DeskSessionWorker) admitFrame(ctx context.Context, stream byte, req BrokerRequest) (reason string, forged bool) {
-	refuse := func(reason string, forged bool) (string, bool) {
-		if w.cfg.Refused != nil {
-			w.cfg.Refused(ctx, FrameRefusal{Role: w.cfg.Session.Role, Action: req.Action, Stream: stream,
-				Reason: reason, RequestID: req.RequestID, WorkerPID: w.pid, Forged: forged})
-		}
-		return reason, forged
+	reason, forged = w.checkFrame(req)
+	if reason != "" && w.cfg.Refused != nil {
+		r := w.frameRefusal(stream, req, reason)
+		r.Forged = forged
+		w.cfg.Refused(ctx, r)
 	}
+	return reason, forged
+}
+
+// frameRefusal is the refusal record of a frame.
+func (w *DeskSessionWorker) frameRefusal(stream byte, req BrokerRequest, reason string) FrameRefusal {
+	return FrameRefusal{Role: w.cfg.Session.Role, Action: req.Action, Stream: stream,
+		Reason: reason, RequestID: req.RequestID, WorkerPID: w.pid}
+}
+
+// checkFrame is admitFrame's check without the trace: the cell's frame loop
+// traces refusals itself, bounded per cell, and a forged frame only after the
+// cell's handlers have stopped.
+func (w *DeskSessionWorker) checkFrame(req BrokerRequest) (reason string, forged bool) {
 	if len(w.slotToken) == 0 {
-		return refuse("refused: the host holds no slot token for this worker", false)
+		return "refused: the host holds no slot token for this worker", false
 	}
 	if subtle.ConstantTimeCompare([]byte(req.SlotToken), w.slotToken) != 1 {
-		return refuse("refused: slot token does not match the worker the host started", true)
+		return "refused: slot token does not match the worker the host started", true
 	}
 	if req.ProtocolVersion != ProtocolVersion {
-		return refuse(fmt.Sprintf("refused: protocol version %d, the host speaks %d", req.ProtocolVersion, ProtocolVersion), false)
+		return fmt.Sprintf("refused: protocol version %d, the host speaks %d", req.ProtocolVersion, ProtocolVersion), false
 	}
 	if req.Epoch != w.cfg.Session.Epoch {
-		return refuse(fmt.Sprintf("refused: epoch %d is not this worker's epoch %d", req.Epoch, w.cfg.Session.Epoch), false)
+		return fmt.Sprintf("refused: epoch %d is not this worker's epoch %d", req.Epoch, w.cfg.Session.Epoch), false
 	}
 	role := w.cfg.Session.Role
 	if !deskmanifest.FrameAllowedAt(role, w.cfg.Session.DeskEpoch, string(req.Action)) {
-		return refuse(fmt.Sprintf("refused: desk %q may not call %s", role, req.Action), false)
+		return fmt.Sprintf("refused: desk %q may not call %s", role, req.Action), false
 	}
 	// The shape of what the cell wrote: lengths, ranges, depth. Checked here
 	// so no handler decodes an unbounded field (MA6.3, broker_bounds.go).
 	if err := req.ValidateBounds(); err != nil {
-		return refuse("refused: "+err.Error(), false)
+		return "refused: " + err.Error(), false
 	}
 	return "", false
 }
@@ -689,6 +848,10 @@ func (w *DeskSessionWorker) Kill() {
 
 func (w *DeskSessionWorker) killLocked() {
 	w.dead = true
+	// The running cell's handlers stop acting for it (review r1, S2).
+	if w.cellCancel != nil {
+		w.cellCancel()
+	}
 	w.reapLocked("killed by the host", 0)
 	if w.framed != nil {
 		_ = w.framed.Close()

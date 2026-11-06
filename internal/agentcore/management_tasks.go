@@ -514,7 +514,21 @@ func (rt *Runtime) noteStoryLibraryShown(ctx context.Context, runID, ownerID, co
 	if err != nil {
 		return
 	}
-	rt.storyLibraryShown.Store(strings.TrimSpace(runID), head)
+	// Concurrent calls in one cell keep the highest head read, never a lower
+	// one stored last (MA6.6 review r1, S4).
+	key := strings.TrimSpace(runID)
+	for {
+		v, loaded := rt.storyLibraryShown.LoadOrStore(key, head)
+		if !loaded {
+			return
+		}
+		if old, ok := v.(int64); ok && old >= head {
+			return
+		}
+		if rt.storyLibraryShown.CompareAndSwap(key, v, head) {
+			return
+		}
+	}
 }
 
 // storyLibraryShownMark is the head a run last read, or 0.

@@ -50,7 +50,9 @@ type ChoirScope struct {
 	// blocking; Inbox() reads the bound snapshot. Unbound scopes keep the
 	// legacy synchronous broker behavior (one-shot path). The session loop
 	// owns binding lifetime: exactly one cell binds at a time.
-	tray  *Tray
+	// tray is the bound cell's tray; a cell's goroutines read it while
+	// BindCell swaps it (MA6.6 review r1).
+	tray  atomic.Pointer[Tray]
 	inbox []IncomingMessage
 	// jobs is the cell-start snapshot of this run's capsule jobs, read by
 	// Poll (jobs.go).
@@ -147,12 +149,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
 	desk := normalizeDeskRole(role)
-	readOnly := role == SessionRoleResearch || role == SessionRoleResearchWeb || role == SessionRoleResearchTexture
-	if desk == "" || desk == SessionRoleManagementTask {
-		// An unknown role fails closed (R2-2): observation only. A task
-		// stages acts the host reduces and touches no filesystem.
-		readOnly = true
-	}
+	readOnly := scopeReadOnly(role, desk)
 	// The handle's scopes are the desk's manifest row (internal/deskmanifest):
 	// the observation actions its worker serves itself, plus the host-served
 	// actions its verbs dispatch. exec and write_file are engineering's only,
@@ -199,6 +196,18 @@ func (s *ChoirScope) HandleRef() string { return *s.handleRef.Load() }
 // included, is no desk and gets no module verbs (management delegation
 // R2-2): it used to resolve to engineering, so a role the kernel did not
 // know silently received WriteFile, Exec, Complete and Freeze.
+// scopeReadOnly reports whether a role's choir scope omits filesystem and
+// capsule mutation: the research roles, a management task, and an unknown
+// role, which fails closed to observation only (R2-2). desk is
+// normalizeDeskRole(role).
+func scopeReadOnly(role, desk string) bool {
+	if desk == "" || desk == SessionRoleManagementTask {
+		// A task stages acts the host reduces and touches no filesystem.
+		return true
+	}
+	return role == SessionRoleResearch || role == SessionRoleResearchWeb || role == SessionRoleResearchTexture
+}
+
 func normalizeDeskRole(role string) string {
 	if d, ok := deskmanifest.Lookup(role); ok && d.Carrier != deskmanifest.CarrierNone {
 		return role
@@ -212,7 +221,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 	return CellHooks{
 		Begin: func(frame SessionFrame) {
 			s.reissueHandle()
-			s.tray = &Tray{}
+			s.tray.Store(&Tray{})
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
 			s.pack = frame.Pack
@@ -229,9 +238,8 @@ func (s *ChoirScope) BindCell() CellHooks {
 		},
 		End: func() []StagedIntent {
 			var out []StagedIntent
-			if s.tray != nil {
-				out = s.tray.Drain()
-				s.tray = nil
+			if t := s.tray.Swap(nil); t != nil {
+				out = t.Close()
 			}
 			s.inbox = nil
 			s.doc = nil
@@ -1109,10 +1117,11 @@ func (s *ChoirScope) Complete(result, verdict, summary string, evidenceRefs, exe
 	if err := s.mutateDenied("Complete"); err != nil {
 		return err
 	}
-	if s.tray == nil {
+	t := s.tray.Load()
+	if t == nil {
 		return fmt.Errorf("choir: complete requires a bound cell")
 	}
-	return s.tray.Complete(result, verdict, summary, evidenceRefs, executionRefs)
+	return t.Complete(result, verdict, summary, evidenceRefs, executionRefs)
 }
 
 // Freeze stages the self-development freeze: the reducer freezes the cell's
@@ -1123,10 +1132,11 @@ func (s *ChoirScope) Freeze(buildRecipeRef string, testReceipts, dependencyToolc
 	if err := s.mutateDenied("Freeze"); err != nil {
 		return err
 	}
-	if s.tray == nil {
+	t := s.tray.Load()
+	if t == nil {
 		return fmt.Errorf("choir: freeze requires a bound cell")
 	}
-	return s.tray.Freeze(buildRecipeRef, testReceipts, dependencyToolchainRefs)
+	return t.Freeze(buildRecipeRef, testReceipts, dependencyToolchainRefs)
 }
 
 // Verify stages management's verdict on the candidate an engineering
@@ -1144,10 +1154,11 @@ func (s *ChoirScope) Verify(assignmentID, decision string, verifierRefs []string
 	if !s.deskModule("Verify") {
 		return fmt.Errorf("choir: verify is management's")
 	}
-	if s.tray == nil {
+	t := s.tray.Load()
+	if t == nil {
 		return fmt.Errorf("choir: verify requires a bound cell")
 	}
-	return s.tray.Verify(assignmentID, decision, verifierRefs, bundleDigest, reason...)
+	return t.Verify(assignmentID, decision, verifierRefs, bundleDigest, reason...)
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development
@@ -1306,7 +1317,7 @@ func (s *ChoirScope) Write(edits, why string, pSupported ...float64) (string, er
 	}
 	id, err := s.stageWrite(t, edits, why, pSupported)
 	if err != nil {
-		t.writeRefused = err.Error()
+		t.noteWriteRefused(err.Error())
 	}
 	return id, err
 }
@@ -1364,8 +1375,10 @@ func (s *ChoirScope) Done(why string) (string, error) {
 	}
 	return s.closeTurn("done", why, func(turn *TextureTurn, why string) error {
 		switch {
-		case turn.Write == nil && s.tray.writeRefused != "":
-			return fmt.Errorf("choir: Done refused, nothing staged: this cell's Write was refused (%s); fix the script and call Write again, then Done", s.tray.writeRefused)
+		// The turn's update runs under the tray's lock, so the field is read
+		// directly.
+		case turn.Write == nil && s.tray.Load().writeRefused != "":
+			return fmt.Errorf("choir: Done refused, nothing staged: this cell's Write was refused (%s); fix the script and call Write again, then Done", s.tray.Load().writeRefused)
 		case turn.Done != "":
 			return fmt.Errorf("choir: Done once per cell")
 		case turn.Wait != "" && turn.Write == nil:
@@ -1508,10 +1521,11 @@ func (s *ChoirScope) boundTray(op string) (*Tray, error) {
 	if err := s.mutateDenied(op); err != nil {
 		return nil, err
 	}
-	if s.tray == nil {
+	t := s.tray.Load()
+	if t == nil {
 		return nil, fmt.Errorf("choir: %s requires a bound cell", op)
 	}
-	return s.tray, nil
+	return t, nil
 }
 
 // Cast stages delegated admission of a downstream assignment. spec is an

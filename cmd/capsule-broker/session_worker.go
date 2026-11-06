@@ -334,7 +334,8 @@ func (w *sessionWorker) killLocked() {
 // server-owned stdlib surface plus the prebound choir package: never
 // model-controlled.
 func (b *Broker) sessionConfigFor(activationID, role, slot string) workerSessionConfig {
-	allowed := yaegikernel.DefaultSafeStdlibPackagesList()
+	// The desk's derived import set (MA6.6): the same for every role today.
+	allowed := yaegikernel.DeskAllowedPackages(role)
 	computerID := b.capsuleID
 	if computerID == "" {
 		computerID = "worker-local"

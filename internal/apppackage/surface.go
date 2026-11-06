@@ -124,12 +124,44 @@ func (d dirSource) Read(p string) ([]byte, error) {
 // Nothing with effects is here (R26).
 var baseImportSet = append([]string{"choir"}, gomodule.Stdlib()...)
 
-// ImportSet is the desk's yaegi import set, derived from its package's grants
-// by the host and never authored. No grant implies a package yet, so the set is
-// the base set; MA6.6 widens it by grant. It is not part of the
-// behaviour-surface hash (a platform fact, see BehaviourSurface).
+// ImportSet is the package desks' base yaegi import set, derived by the host
+// and never authored. MA6.6 (docs/design/ma66-code-mode-import-sets-2026-11-06.md)
+// settled the derivation: no grant implies a package, because every effect a
+// grant carries reaches a cell as a choir verb, so the package part of every
+// desk's set is this base; a desk adds only its verified go_imports
+// (DeskImportSets). It is not part of the behaviour-surface hash (a platform
+// fact, see BehaviourSurface).
 func (m Manifest) ImportSet() []string {
 	return append([]string{}, baseImportSet...)
+}
+
+// DeskImportSets is each desk's package import set (MA6.6), by desk name: the
+// base set plus the desk's verified go_imports, sorted. It is computed from
+// the same document the behaviour surface hashes, so two releases with one
+// hash have the same sets on one platform version; it runs the same source
+// gate and refuses what BehaviourSurface refuses.
+func (m Manifest) DeskImportSets(src Source) (map[string][]string, error) {
+	doc, err := m.surfaceDocument(src)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(doc.Desks))
+	for _, d := range doc.Desks {
+		set := map[string]bool{}
+		for _, p := range baseImportSet {
+			set[p] = true
+		}
+		for _, p := range d.GoImports {
+			set[p] = true
+		}
+		list := make([]string, 0, len(set))
+		for p := range set {
+			list = append(list, p)
+		}
+		sort.Strings(list)
+		out[d.Name] = list
+	}
+	return out, nil
 }
 
 // CheckGoSource refuses a desk source file whose imports leave the desk's

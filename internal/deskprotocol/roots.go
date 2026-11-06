@@ -73,6 +73,9 @@ var Roots = []Root{
 	{Name: "yaegikernel.MaxIntentsPerCell", Direction: Emitted, Quota: true},
 	{Name: "yaegikernel.MaxIntentBody", Direction: Emitted, Quota: true},
 	{Name: "yaegikernel.MaxTrayBytes", Direction: Emitted, Quota: true},
+	// Code mode (MA6.6): the host calls one cell may make, and how many at once.
+	{Name: "yaegikernel.MaxFrameCallsPerCell", Direction: Emitted, Quota: true},
+	{Name: "yaegikernel.MaxConcurrentFrameCalls", Direction: Emitted, Quota: true},
 	{Name: "yaegikernel.TextureTurn", Direction: Emitted},
 	{Name: "yaegikernel.TextureWrite", Direction: Emitted},
 	{Name: "yaegikernel.TextureReject", Direction: Emitted},

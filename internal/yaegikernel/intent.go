@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -171,11 +172,20 @@ const (
 	CompletePartial   = "partial"
 )
 
-// Tray quotas bound every cell: at most 16 staged intents, 16 KiB per message
+// Tray quotas bound every cell: at most 64 staged intents, 16 KiB per message
 // body, 256 KiB aggregate tray payload. The broker rejects cells that exceed
 // them before they reach durable state.
+//
+// The intent count was 16, set when the tray held only messages (16 bodies of
+// 16 KiB fill the 256 KiB tray). Code mode (MA6.6) stages small acts in loops
+// (a package desk's Put per object, a Decline per capture), so the count is
+// set where the byte quota binds at a 4 KiB average act: 64 x 4 KiB = 256 KiB.
+// The per-kind rules stay (one Complete, Freeze, Verify, Write, Done, job
+// start and engineering Cast per cell), and the reducer commits a cell's
+// intents in one records transaction. Reads are host calls, not intents
+// (MaxFrameCallsPerCell).
 const (
-	MaxIntentsPerCell = 16
+	MaxIntentsPerCell = 64
 	MaxIntentBody     = 16 << 10
 	MaxTrayBytes      = 256 << 10
 	// MaxObjectBody bounds one object a package desk puts (MA3.8). It is
@@ -393,7 +403,13 @@ type StagedIntent struct {
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
 // cells execute serially on one interpreter. Methods return immediately and
 // never touch the network.
+//
+// A cell's goroutines may stage concurrently (code mode, MA6.6 review r1), so
+// every method holds mu: a per-kind check (one Complete, Freeze, Verify, Done,
+// job start) and its stage are one step. A closed tray stages nothing.
 type Tray struct {
+	mu      sync.Mutex
+	drained bool
 	intents []StagedIntent
 	bytes   int
 	next    int
@@ -408,6 +424,8 @@ type Tray struct {
 // assignment's evidence binds to; a terminal completed pass requires at
 // least one. result may be completed, failed, blocked, or partial.
 func (t *Tray) Complete(result, verdict, summary string, evidenceRefs, executionRefs []string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	switch result {
 	case CompleteCompleted, CompleteFailed, CompleteBlocked, CompletePartial:
 	default:
@@ -440,6 +458,8 @@ func (t *Tray) Complete(result, verdict, summary string, evidenceRefs, execution
 // cell; the reducer runs the freeze on cell return using the cell's bound
 // capsule handle (never model input).
 func (t *Tray) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRefs []string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, in := range t.intents {
 		if in.Kind == IntentFreeze {
 			return fmt.Errorf("tray: at most one freeze per cell")
@@ -461,6 +481,8 @@ func (t *Tray) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRe
 // An optional trailing reason says why, as plain text; it is bounded and
 // stripped of control characters (NormalizeVerifyReason).
 func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string, reason ...string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	assignmentID = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(assignmentID), "assignment:"))
 	if assignmentID == "" {
 		return fmt.Errorf("tray: verify names the assignment whose candidate it judges")
@@ -493,6 +515,8 @@ func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bund
 // (desk, objective) under the delegated-cast admission authority. Spec is an
 // optional structured payload (JSON) the assignment binds.
 func (t *Tray) Cast(desk, objective, spec string, req *types.RequestFields) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if desk == "" || objective == "" {
 		return "", fmt.Errorf("tray: cast requires a desk and objective")
 	}
@@ -504,6 +528,8 @@ func (t *Tray) Cast(desk, objective, spec string, req *types.RequestFields) (str
 
 // Ask stages a directed query to a desk; it resolves on the target's Reply.
 func (t *Tray) Ask(toDesk, question string, req *types.RequestFields) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if toDesk == "" || question == "" {
 		return "", fmt.Errorf("tray: ask requires a desk and a question")
 	}
@@ -523,6 +549,8 @@ const (
 // (texture:<doc>) or declined to their source (source:<id>). Its body names
 // the reason and the captures.
 func (t *Tray) Dispose(toDesk, disposition string, captureIDs []string, reason string, req *types.RequestFields) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	reason = strings.TrimSpace(reason)
 	if toDesk == "" || len(captureIDs) == 0 || reason == "" {
 		return "", fmt.Errorf("tray: %s requires a destination, capture ids and a reason", disposition)
@@ -549,6 +577,8 @@ func (t *Tray) Delegate(spec DelegateSpec) (string, error) {
 // and typed questions. A nil req stages the delegation unscored: each task's
 // Cast is marked weight zero, and nothing is invented for the delegator.
 func (t *Tray) DelegateWithRequest(spec DelegateSpec, req *types.RequestFields) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if len(spec.Groups) == 0 {
 		return "", fmt.Errorf("tray: delegate requires at least one group of records")
 	}
@@ -566,6 +596,8 @@ func (t *Tray) DelegateWithRequest(spec DelegateSpec, req *types.RequestFields) 
 
 // CancelTask stages the cancellation of one management task.
 func (t *Tray) CancelTask(taskID, reason string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(taskID) == "" {
 		return "", fmt.Errorf("tray: cancel_task requires the task id")
 	}
@@ -574,6 +606,8 @@ func (t *Tray) CancelTask(taskID, reason string) (string, error) {
 
 // TaskDone stages the end of a management task, once per cell.
 func (t *Tray) TaskDone(note string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, in := range t.intents {
 		if in.Kind == IntentTaskDone {
 			return "", fmt.Errorf("tray: Done once per cell")
@@ -587,6 +621,8 @@ func (t *Tray) TaskDone(note string) (string, error) {
 // desk's quota, and writes it as the run's desk; a refusal reaches the cell as
 // the cell's error. The object is readable with Get from the next cell.
 func (t *Tray) ObjectPut(kind, id, bodyJSON string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(kind) == "" || strings.TrimSpace(id) == "" {
 		return "", fmt.Errorf("tray: put requires a kind and an id")
 	}
@@ -599,6 +635,8 @@ func (t *Tray) ObjectPut(kind, id, bodyJSON string) (string, error) {
 // ObjectRetract stages the withdrawal of one object of the desk's own package
 // kinds.
 func (t *Tray) ObjectRetract(kind, id string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(kind) == "" || strings.TrimSpace(id) == "" {
 		return "", fmt.Errorf("tray: retract requires a kind and an id")
 	}
@@ -607,6 +645,8 @@ func (t *Tray) ObjectRetract(kind, id string) (string, error) {
 
 // Reply answers a staged Ask; targetRef is the Ask's correlation id.
 func (t *Tray) Reply(toDesk, targetRef, answer string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if toDesk == "" || targetRef == "" {
 		return "", fmt.Errorf("tray: reply requires a desk and the ask's target ref")
 	}
@@ -615,6 +655,8 @@ func (t *Tray) Reply(toDesk, targetRef, answer string) (string, error) {
 
 // Cancel retracts a commitment by its correlation/record ref.
 func (t *Tray) Cancel(targetRef string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if targetRef == "" {
 		return "", fmt.Errorf("tray: cancel requires the commitment ref")
 	}
@@ -625,6 +667,8 @@ func (t *Tray) Cancel(targetRef string) (string, error) {
 // acknowledgement (SMG — the verb carrier for the deleted
 // cancel_co_super_assignment tool). Management desk only.
 func (t *Tray) CancelAssignment(assignmentID, reason string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(assignmentID) == "" {
 		return "", fmt.Errorf("tray: cancel_assignment requires the assignment id")
 	}
@@ -633,6 +677,8 @@ func (t *Tray) CancelAssignment(assignmentID, reason string) (string, error) {
 
 // Escalate surfaces an issue to management or the owner.
 func (t *Tray) Escalate(toDesk, issue string, req *types.RequestFields) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if toDesk == "" || issue == "" {
 		return "", fmt.Errorf("tray: escalate requires a target and an issue")
 	}
@@ -646,6 +692,8 @@ func (t *Tray) Escalate(toDesk, issue string, req *types.RequestFields) (string,
 // encodes types.CommitmentPrecommit; validation occurs before reduction so an
 // invalid body never reaches durable state.
 func (t *Tray) Precommit(precommitJSON string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(precommitJSON) == "" {
 		return "", fmt.Errorf("tray: precommit requires a typed precommit body")
 	}
@@ -655,6 +703,8 @@ func (t *Tray) Precommit(precommitJSON string) (string, error) {
 // Restate stages one restatement (E1). target and bodyJSON are checked by
 // the reducer, which alone knows the statement restated.
 func (t *Tray) Restate(target, bodyJSON string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(target) == "" || strings.TrimSpace(bodyJSON) == "" {
 		return "", fmt.Errorf("tray: restate requires what it restates and the new statement")
 	}
@@ -663,6 +713,8 @@ func (t *Tray) Restate(target, bodyJSON string) (string, error) {
 
 // Report asserts a typed claim with evidence refs and names its resolver.
 func (t *Tray) Report(toDesk, claim string, evidenceRefs []string, resolverID string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if toDesk == "" || claim == "" {
 		return "", fmt.Errorf("tray: report requires a desk and a claim")
 	}
@@ -675,6 +727,8 @@ func (t *Tray) Report(toDesk, claim string, evidenceRefs []string, resolverID st
 // the reducer validates it (schema_version, kind, claims/sources/actions/
 // questions) before the act commits, preserving the packet's safety contract.
 func (t *Tray) ReportPacket(toDesk, packetJSON, resolverID string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if toDesk == "" || strings.TrimSpace(packetJSON) == "" {
 		return "", fmt.Errorf("tray: report_packet requires a desk and a packet body")
 	}
@@ -683,6 +737,8 @@ func (t *Tray) ReportPacket(toDesk, packetJSON, resolverID string) (string, erro
 
 // Resolve closes a commitment with a typed evidence-bearing resolver verdict.
 func (t *Tray) Resolve(targetRef, resolveJSON string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if targetRef == "" || strings.TrimSpace(resolveJSON) == "" {
 		return "", fmt.Errorf("tray: resolve requires the act ref and typed resolve body")
 	}
@@ -691,6 +747,8 @@ func (t *Tray) Resolve(targetRef, resolveJSON string) (string, error) {
 
 // Disagreement records scorer and resolver verdicts separately from Resolve.
 func (t *Tray) Disagreement(disagreementJSON string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if strings.TrimSpace(disagreementJSON) == "" {
 		return "", fmt.Errorf("tray: disagreement requires a typed disagreement body")
 	}
@@ -702,6 +760,8 @@ func (t *Tray) Disagreement(disagreementJSON string) (string, error) {
 // cannot hold, leaving the turn as it was. Doc bodies may exceed the message
 // cap, so this kind is bound by the aggregate tray quota, not MaxIntentBody.
 func (t *Tray) TextureTurn(baseRevisionID string, update func(*TextureTurn) error) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	at := -1
 	for i, in := range t.intents {
 		if in.Kind == IntentTextureTurn {
@@ -735,6 +795,9 @@ func (t *Tray) TextureTurn(baseRevisionID string, update func(*TextureTurn) erro
 }
 
 func (t *Tray) stage(in StagedIntent) (string, error) {
+	if t.drained {
+		return "", fmt.Errorf("tray: this cell has returned; nothing more is staged")
+	}
 	if len(t.intents) >= MaxIntentsPerCell {
 		return "", fmt.Errorf("tray: cell intent quota exceeded (%d)", MaxIntentsPerCell)
 	}
@@ -770,16 +833,38 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 	return in.LocalID, nil
 }
 
+// noteWriteRefused remembers the refusal of this cell's Write (choir.Write).
+func (t *Tray) noteWriteRefused(reason string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.writeRefused = reason
+}
+
 // Drain returns the staged intents exactly once. Reduction ships the drained
 // batch; undrained trays die with their cell and are never retried.
 func (t *Tray) Drain() []StagedIntent {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	out := t.intents
 	t.intents = nil
 	return out
 }
 
+// Close drains the tray for the last time: the cell has returned, and a
+// goroutine of it still holding the tray stages nothing more.
+func (t *Tray) Close() []StagedIntent {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := t.intents
+	t.intents = nil
+	t.drained = true
+	return out
+}
+
 // Len reports staged intent count without draining.
 func (t *Tray) Len() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return len(t.intents)
 }
 

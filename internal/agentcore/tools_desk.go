@@ -613,7 +613,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				Bin:       deskWorkerBinary(),
 				WorkerArg: deskWorkerArg,
 				Session: yaegikernel.SessionWorkerConfig{
-					AllowedPackages:  yaegikernel.DefaultSafeStdlibPackagesList(),
+					AllowedPackages:  yaegikernel.DeskAllowedPackages(deskRole),
 					ComputerID:       execCtx.ComputerID,
 					ActivationID:     activationID,
 					Epoch:            deskWorkerEpoch(execCtx),
@@ -674,6 +674,12 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						if gateErr := rt.gateEgressCall(egrCtx, deskRole, cellExec, action, payload); gateErr != nil {
 							return nil, gateErr
 						}
+						// The search's results reach the cell from the moment it
+						// starts (forwardSearch), so the run is tainted before,
+						// not after: a sibling call (SaveEvidence) must not
+						// stamp what it writes without world_untrusted (review
+						// r1, S1).
+						rt.taintRun(cellExec.RunID, worldReadLabels)
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(egrCtx, sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
@@ -799,6 +805,14 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			}
 			if rows := egressLog.seal(); len(rows) > 0 {
 				cellEvent["egress"] = rows
+			}
+			// MA6.6: the cell's host-call count, and the rows past the
+			// event's bound by verb.
+			if calls, omitted := egressLog.counts(); calls > 0 {
+				cellEvent["egress_calls"] = calls
+				if len(omitted) > 0 {
+					cellEvent["egress_omitted"] = omitted
+				}
 			}
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
@@ -1430,6 +1444,12 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	}
 	if rt.researchDeps == nil {
 		return nil, fmt.Errorf("%s host unavailable", action)
+	}
+	if action == yaegikernel.ActionPollSource {
+		// One poll of a source at a time within a run: a cell's parallel
+		// calls would otherwise race on the source's cursor (MA6.6 review
+		// r1, D3).
+		defer rt.lockPollSource(cellExec.RunID, payload)()
 	}
 	return rt.researchDeps.HostEgress(egrCtx, string(action), payload)
 }

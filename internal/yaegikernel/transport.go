@@ -55,7 +55,7 @@ const (
 )
 
 // MaxFramePayload bounds one frame. Cells exceeding it are rejected before
-// send; the tray quotas (16 intents, 256 KiB aggregate) sit far below it.
+// send; the tray quotas (64 intents, 256 KiB aggregate) sit far below it.
 const MaxFramePayload = 4 << 20
 
 const frameHeaderLen = 8

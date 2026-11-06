@@ -167,6 +167,8 @@ func jobNumber(name string, v any) (float64, error) {
 // JobStart stages a job start. At most one per cell, and not in a cell
 // that stages Freeze or Complete (the job would start after them).
 func (t *Tray) JobStart(spec capsulejob.Spec) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, in := range t.intents {
 		switch {
 		case in.Kind == IntentJob && in.JobOp == JobOpStart:
@@ -180,12 +182,26 @@ func (t *Tray) JobStart(spec capsulejob.Spec) (string, error) {
 
 // JobStop stages a job stop.
 func (t *Tray) JobStop(id string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, in := range t.intents {
 		if in.Kind == IntentFreeze || in.Kind == IntentComplete {
 			return "", fmt.Errorf("tray: a job stop cannot share a cell with %s", in.Kind)
 		}
 	}
 	return t.stage(StagedIntent{Kind: IntentJob, JobOp: JobOpStop, JobID: id})
+}
+
+// stagedJobStart is the job start this tray stages for id, if any.
+func (t *Tray) stagedJobStart(id string) (StagedIntent, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, in := range t.intents {
+		if in.Kind == IntentJob && in.JobOp == JobOpStart && in.JobID == id {
+			return in, true
+		}
+	}
+	return StagedIntent{}, false
 }
 
 // hasJobIntent reports whether the tray stages a job start or stop.
@@ -212,7 +228,8 @@ func (s *ChoirScope) Start(argv []string, opts map[string]any) (string, error) {
 	if !s.deskModule("Start") {
 		return "", fmt.Errorf("choir: jobs are engineering's")
 	}
-	if s.tray == nil {
+	t := s.tray.Load()
+	if t == nil {
 		return "", fmt.Errorf("choir: Start requires a bound cell")
 	}
 	cwd, wallMS, memoryMiB, err := jobOptions(opts)
@@ -223,7 +240,7 @@ func (s *ChoirScope) Start(argv []string, opts map[string]any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("choir.Start: %w", err)
 	}
-	if _, err := s.tray.JobStart(spec); err != nil {
+	if _, err := t.JobStart(spec); err != nil {
 		return "", err
 	}
 	return spec.ID, nil
@@ -234,14 +251,15 @@ func (s *ChoirScope) Stop(id string) error {
 	if !s.deskModule("Stop") {
 		return fmt.Errorf("choir: jobs are engineering's")
 	}
-	if s.tray == nil {
+	t := s.tray.Load()
+	if t == nil {
 		return fmt.Errorf("choir: Stop requires a bound cell")
 	}
 	id = strings.TrimSpace(id)
 	if !capsulejob.ValidID(id) {
 		return fmt.Errorf("choir.Stop: %q is not a job id", id)
 	}
-	_, err := s.tray.JobStop(id)
+	_, err := t.JobStop(id)
 	return err
 }
 
@@ -261,9 +279,9 @@ func (s *ChoirScope) Poll(id string) (JobView, error) {
 			return j, nil
 		}
 	}
-	if s.tray != nil {
-		for _, in := range s.tray.intents {
-			if in.Kind == IntentJob && in.JobOp == JobOpStart && in.JobID == id {
+	if t := s.tray.Load(); t != nil {
+		if in, ok := t.stagedJobStart(id); ok {
+			{
 				s.noteAwaited(id)
 				return JobView{ID: id, State: JobStateStarting, Argv: append([]string(nil), in.Argv...), Cwd: in.Cwd,
 					WallClockSec: in.WallClockMS / 1000, Reason: "staged in this cell; it starts after the cell returns"}, nil

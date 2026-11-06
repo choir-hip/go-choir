@@ -43,7 +43,7 @@ func TestTrayQuotas(t *testing.T) {
 		}
 	}
 	if _, err := tray.Escalate("peer", "one too many", testRequest()); err == nil {
-		t.Fatal("17th intent must exceed quota")
+		t.Fatal("an intent past MaxIntentsPerCell must exceed quota")
 	}
 	var big Tray
 	if _, err := big.Escalate("peer", strings.Repeat("b", MaxIntentBody+1), testRequest()); err == nil {

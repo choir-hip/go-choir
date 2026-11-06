@@ -75,7 +75,7 @@ func run(s steps) int {
 		return 2
 	}
 	if len(cfg.AllowedPackages) == 0 {
-		cfg.AllowedPackages = yaegikernel.DefaultSafeStdlibPackagesList()
+		cfg.AllowedPackages = yaegikernel.DeskAllowedPackages(cfg.Role)
 	}
 	// Best effort: a worker that cannot volunteer still serves cells.
 	if err := s.volunteer(); err != nil {

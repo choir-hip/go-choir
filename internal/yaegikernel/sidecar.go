@@ -95,7 +95,11 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 		os.Exit(2)
 		return nil, nil, nil
 	}
-	allowlist := NewAllowlist(cfg.AllowedPackages...)
+	// The desk's derived import set (MA6.6): a carried list may only narrow it.
+	allowlist, err := DeskAllowlist(cfg.Role, cfg.AllowedPackages)
+	if err != nil {
+		return fail("import set", err)
+	}
 	bundle, err := cfg.goModuleBundle()
 	if err != nil {
 		return fail("go modules", err)

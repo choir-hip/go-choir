@@ -144,6 +144,8 @@ type Runtime struct {
 	// last read with choir.Stories() (run id -> int64), stamped on its
 	// texture:new commits (management delegation R2-5).
 	storyLibraryShown sync.Map
+	// pollSources serializes choir.PollSource per source within a run.
+	pollSources pollSourceLocks
 	// calibration caches each computer's calibration snapshot for the
 	// ICRL digest (calibration_feedback.go); in memory, rebuilt on demand.
 	calibration calibrationCache

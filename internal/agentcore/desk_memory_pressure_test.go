@@ -21,6 +21,10 @@ import (
 func TestDeskMemoryPressureEndsLeastRecentlyUsedIdleSession(t *testing.T) {
 	deskTestWorkerBin(t)
 	cfg := deskPoolCfg(t)
+	// Pools are process-wide: end the idle sessions earlier tests left, so the
+	// assertions below see only this test's sessions.
+	for i := 0; i < 1000 && endIdleDeskSession(); i++ {
+	}
 	clock := time.Now()
 	desks := newDeskSessionWorkers()
 	desks.now = func() time.Time { return clock }
