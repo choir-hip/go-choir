@@ -183,12 +183,12 @@ export function readSdkVersion(frontendRoot = DEFAULT_ROOT) {
   return m[1];
 }
 
-/** The lock sections beyond names (src/lib/sdk-surface/sections.json): pipelines, services, contributes, ctx, grants; null before 1.2.0. */
+/** The lock sections beyond names (src/lib/sdk-surface/sections.json): pipelines, services, contributes, ctx, props (1.6.0), grants; null before 1.2.0. */
 export function readSections(frontendRoot = DEFAULT_ROOT) {
   const file = path.join(frontendRoot, LOCK_REL, 'sections.json');
   if (!existsSync(file)) return null;
   const { schema: _schema, note: _note, ...sections } = JSON.parse(readFileSync(file, 'utf8'));
-  for (const key of ['pipelines', 'services', 'contributes', 'ctx', 'grants']) {
+  for (const key of ['pipelines', 'services', 'contributes', 'ctx', 'props', 'grants']) {
     if (!(key in sections)) throw new Error(`${path.relative(frontendRoot, file)}: section "${key}" is missing`);
   }
   if (!Array.isArray(sections.ctx) || !Array.isArray(sections.contributes.when_keys)) throw new Error(`${path.relative(frontendRoot, file)}: ctx and contributes.when_keys must be lists`);
@@ -206,6 +206,7 @@ function flattenSections(sections) {
     else put(`contributes.${name}.entry`, v.entry);
   }
   for (const k of sections?.ctx || []) put(`ctx.${k}`, 'true');
+  for (const [k, type] of Object.entries(sections?.props || {})) put(`props.${k}`, type);
   for (const [name, grant] of Object.entries(sections?.grants || {})) put(`grants.${name}`, grant);
   return out;
 }

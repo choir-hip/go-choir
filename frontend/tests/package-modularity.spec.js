@@ -309,6 +309,8 @@ test.describe('modularity: the SDK lock and every package contract', () => {
     fixture('fx-stubbed', FETCHES, { more: { api: [{ method: 'GET', path: '/api/fixture/data', status: 200, json: { ok: true } }] } });
     fixture('fx-sdk-global', `<script>const t = globalThis.__choirAppSdk.appTitle('fixture');</script>\n<section data-fixture-app><p data-fixture-title>Fixture {t}</p></section>\n`);
     fixture('fx-sdk-template', '<script>const t = globalThis[`__choirAppSdk`].appTitle(\'fixture\');</script>\n<section data-fixture-app><p data-fixture-title>Fixture {t}</p></section>\n');
+    // M5: a computed name: the boundary refuses computed global access, and there is no global to read anyway.
+    fixture('fx-sdk-computed', `<script>const g = '__choir' + 'AppSdk'; const t = globalThis[g].appTitle('fixture');</script>\n<section data-fixture-app><p data-fixture-title>Fixture {t}</p></section>\n`);
     try {
       // The probation path: trees from elsewhere, installed mode only.
       const rows = await checkPackages({ browser, base: server.base, packages: loadPackages(dir), modes: ['installed'] });
@@ -319,6 +321,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       expect(problems('fx-unanswered')).toMatch(/unanswered: GET \/api\/fixture\/data \(stub it/);
       // The SDK global would let a package use names its sdk_imports never lists: the build refuses it.
       for (const n of ['fx-sdk-global', 'fx-sdk-template']) expect(by[n].problems.join(' / '), n).toMatch(/module\/v1 build failed.*__choirAppSdk is the shell's, not a package's/);
+      expect(by['fx-sdk-computed'].problems.join(' / ')).toMatch(/module\/v1 build failed.*computed access to the global object is not allowed/);
       expect(problems('fx-vacuous')).toMatch(/ready selector "\[data-desk-menu-button\]" did not show inside the fx-vacuous window/);
       expect(problems('fx-missing')).toMatch(/ready selector "\[data-never-there\]" did not show/);
       expect(problems('fx-throws')).toMatch(/did not mount the installed module \(state failed\).*fixture throws on mount/);

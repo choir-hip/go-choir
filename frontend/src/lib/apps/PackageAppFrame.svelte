@@ -26,8 +26,8 @@
   // AppHost provides the window's launch context; the module's own Svelte
   // reads it through ctx.launchContext.
   const launchContext = getContext(Symbol.for('choir.launch-context'));
+  // The SDK reaches a module only as ctx.sdk: there is no global to read (M5).
   const sdk = Object.freeze({ ...appSdk });
-  (globalThis as any).__choirAppSdk = sdk;
 
   let target: HTMLElement;
   let state: FrameState = 'loading';

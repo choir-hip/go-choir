@@ -424,6 +424,9 @@ test.describe('image viewer package in the shell', () => {
     const win = page.locator('[data-window][data-window-app-id="image"]');
     await expect(win).toBeVisible();
     await expect(win.locator('[data-image-window], .image-content').first()).toBeVisible();
+    // M5: the base module mounted through ctx.sdk; the shell sets no SDK global for a package to read.
+    await expect(win.locator('[data-package-frame][data-package-state="mounted"][data-package-install="base:image"]')).toBeVisible();
+    expect(await page.evaluate(() => '__choirAppSdk' in globalThis)).toBe(false);
     expect(errors.filter((e) => /\[packages\]/.test(e))).toEqual([]);
   });
 

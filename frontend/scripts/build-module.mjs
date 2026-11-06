@@ -44,7 +44,8 @@ import { derived, get } from 'svelte/store';
 const KEY = Symbol.for('choir.launch-context');
 let bound = null;
 export function bindSdk(sdk) { if (sdk) bound = sdk; }
-const base = () => bound || globalThis.__choirAppSdk || {};
+// ctx.sdk is the only way in: the shell sets no SDK global (forced modularity M5).
+const base = () => bound || {};
 const launchStore = () => { try { return getContext(KEY) || null; } catch { return null; } };
 // A module's settings are its own: the loader binds the package name, so no
 // argument a module passes can name another package's setting.
