@@ -114,15 +114,25 @@ const STATIC_IDS = new Set(STATIC_APPS.map((app) => app.id));
 // install unchanged keeps its definition object, so AppHost (which reloads on
 // a new definition) never remounts an open window for it.
 let runtimeDefinitions = new Map<string, ChoirAppDefinition>();
+// The module record each package window mounts: the base copy (shipped beside
+// the shell) unless an installed release replaces it (M4: one load path).
+const BASE_RECORDS = PACKAGES.records;
+let mountedRecords = new Map<string, InstalledPackageRecord>(BASE_RECORDS);
+
+/** The module record a package's window mounts now (base or installed); null for a static app. */
+export function packageRecordFor(appId: string): InstalledPackageRecord | null {
+  return mountedRecords.get(normalizeAppId(appId)) ?? null;
+}
 
 export function applyInstalledPackages(records: InstalledPackageRecord[]): void {
   const runtime = new Map<string, ChoirAppDefinition>();
   const kept = new Map<string, ChoirAppDefinition>();
+  const mounted = new Map<string, InstalledPackageRecord>(BASE_RECORDS);
   for (const record of records) {
-    // A static app is never replaced; an in-tree package is, unless the
+    // A static app is never replaced; a base package is, unless the
     // shell's SDK is out of the installed package's range (the base wins).
     if (STATIC_IDS.has(record.name) || runtime.has(record.name)) continue;
-    // The in-tree twin wins when the installed module cannot run here: the
+    // The base copy wins when the installed module cannot run here: the
     // SDK is out of its range, or its module is not in the store.
     const base = BUILT_IN.some((app) => app.id === record.name);
     if (base && (!sdkSatisfies(record.requires_sdk) || !record.available)) continue;
@@ -130,10 +140,12 @@ export function applyInstalledPackages(records: InstalledPackageRecord[]): void 
     const app = runtimeDefinitions.get(key) || runtimeAppDefinition(record);
     if (app) {
       runtime.set(record.name, app);
+      mounted.set(record.name, record);
       kept.set(key, app);
     }
   }
   runtimeDefinitions = kept;
+  mountedRecords = mounted;
   const nowInstalled = new Set<string>();
   // Apps and packs both contribute (a pack has no window): the files are
   // fetched and digest-checked first so a theme resolves when it registers.

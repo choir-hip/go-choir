@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Hosts one installed package's module (runtime install, S12;
-  // docs/design/s12-runtime-install-build-2026-11-04.md). The module is
+  // Hosts one package's module: a base package shipped beside the shell
+  // (forced modularity M4) or an installed release (runtime install, S12;
+  // docs/design/s12-runtime-install-build-2026-11-04.md), by one path. The module is
   // fetched by digest and verified (packages.ts), checked against the shell
   // SDK (requires_sdk, and every SDK name it imports), and mounted into a
   // plain element with ctx: { sdk, package, release, windowId, props,
@@ -10,7 +11,8 @@
   import * as appSdk from '../app-sdk';
   import { SDK_VERSION, sdkSatisfies } from '../sdk-version';
   import { bindRegisterCommand } from '../services/commands';
-  import { installedPackages, loadPackageModule, PackageLoadError, type InstalledPackageRecord } from './packages';
+  import { loadPackageModule, PackageLoadError, type InstalledPackageRecord } from './packages';
+  import { packageRecordFor, registryRevision } from './registry';
 
   export let windowId = '';
   export let appContext: any = {};
@@ -35,7 +37,11 @@
   let token = 0;
 
   $: name = String(appContext?.appId || '');
-  $: record = $installedPackages.find((p) => p.name === name) || null;
+  // The base copy, or the installed release that replaces it (the registry decides).
+  $: record = recordFor($registryRevision, name);
+  function recordFor(_revision: number, appId: string): InstalledPackageRecord | null {
+    return packageRecordFor(appId);
+  }
   $: props = { windowId, appContext, currentUser, authenticated, currentTheme };
   $: void sync(record, target);
   $: if (handle?.update && state === 'mounted') {
@@ -114,7 +120,7 @@
   onDestroy(teardown);
 </script>
 
-<div class="package-frame" data-package-frame data-package-name={name} data-package-state={state}>
+<div class="package-frame" data-package-frame data-package-name={name} data-package-install={record?.install_id || ''} data-package-state={state}>
   <div class="package-mount" bind:this={target} hidden={state !== 'mounted'}></div>
   {#if state === 'loading'}
     <div class="package-state" role="status" aria-live="polite">Opening {record?.manifest?.display?.title || name}…</div>

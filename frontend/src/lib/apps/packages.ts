@@ -2,12 +2,16 @@
 // (docs/design/app-packages-replan-2026-10-24.md §3.1).
 //
 // A package is a directory src/packages/<name>/ holding choir-package.json and
-// App.svelte. Vite resolves both globs at build time, so adding a package
-// needs no registry edit. scripts/check-packages.mjs (run by `npm run build`)
-// is the gate that refuses a bad package; the defensive skips below only keep
-// the shell alive if that gate was bypassed.
-import type { ComponentType } from 'svelte';
+// App.svelte. The base packages are base-shipped modules (forced modularity
+// M4, docs/design/forced-modularity-build-2026-11-04.md section 3): the build
+// (scripts/base-modules.mjs) builds each into one module/v1 module beside the
+// shell, and the shell mounts it through the same loader as an installed
+// package (PackageAppFrame). The shell never bundles a package's Svelte.
+// scripts/check-packages.mjs (run by `npm run build`) is the gate that refuses
+// a bad package; the defensive skips below only keep the shell alive if that
+// gate was bypassed.
 import { writable } from 'svelte/store';
+import baseModules from 'virtual:choir-base-packages';
 import { AuthRequiredError, fetchWithRenewal } from '../auth.js';
 import type { ChoirAppDefinition } from './registry';
 
@@ -36,6 +40,8 @@ export type PackageMediaRoute = { appId: string; mediaType: string; extensions: 
 
 export type LoadedPackages = {
   apps: ChoirAppDefinition[];
+  /** The module record each base app mounts (the base copy; an installed release replaces it while installed). */
+  records: Map<string, InstalledPackageRecord>;
   aliases: Record<string, string>;
   mediaRoutes: PackageMediaRoute[];
   /** What each package's manifest contributes (commands, keybindings, ...), applied by contributions.ts. */
@@ -47,15 +53,31 @@ const manifestModules = import.meta.glob('../../packages/*/choir-package.json', 
   import: 'default',
 }) as Record<string, PackageManifest>;
 
-const componentModules = import.meta.glob('../../packages/*/App.svelte') as Record<
-  string,
-  () => Promise<{ default: ComponentType }>
->;
+type BaseModule = { name: string; requires_sdk: string; sha256: string; url: string };
+const BASE_MODULES = new Map((baseModules as BaseModule[]).map((m) => [m.name, m]));
+
+/** The install record of a base-shipped module: same shape as an installed one, so one loader mounts both. */
+function baseRecord(name: string, manifest: PackageManifest, mod: BaseModule): InstalledPackageRecord {
+  return {
+    name,
+    release_id: `base:${name}`,
+    install_id: `base:${name}`,
+    installed_at: '',
+    requires_sdk: mod.requires_sdk,
+    manifest,
+    module: { abi: MODULE_ABI, sha256: mod.sha256, url: mod.url },
+    available: true,
+  };
+}
+
+/** A base record names its module by digest beside the shell. */
+export const isBaseRecord = (record: Pick<InstalledPackageRecord, 'install_id'>): boolean => record.install_id.startsWith('base:');
 
 const isObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackages {
   const apps: ChoirAppDefinition[] = [];
+  const records = new Map<string, InstalledPackageRecord>();
   const aliases: Record<string, string> = {};
   const mediaRoutes: PackageMediaRoute[] = [];
   const contributions: LoadedPackages['contributions'] = [];
@@ -63,8 +85,6 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
 
   for (const [manifestPath, manifest] of Object.entries(manifestModules).sort(([a], [b]) => a.localeCompare(b))) {
     try {
-      const entryPath = manifestPath.replace(/choir-package\.json$/, 'App.svelte');
-      const component = componentModules[entryPath];
       const name = manifest?.name;
       // A shell-surface package draws no window (shell-slots.ts registers its
       // surfaces); what it contributes still applies.
@@ -79,8 +99,9 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
         console.warn(`[packages] skipped ${manifestPath}: malformed manifest`);
         continue;
       }
-      if (!component) {
-        console.warn(`[packages] skipped ${name}: no App.svelte`);
+      const mod = BASE_MODULES.get(name);
+      if (!mod) {
+        console.warn(`[packages] skipped ${name}: the build shipped no module for it`);
         continue;
       }
       const { launcher, window: windowPref, auth, theme } = manifest.app;
@@ -106,7 +127,7 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
         name: manifest.display.title,
         icon: manifest.display.icon,
         description: manifest.display.description,
-        component,
+        component: () => import('./PackageAppFrame.svelte'),
         launcher,
         window: windowPref,
         auth,
@@ -118,13 +139,14 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
         aliases[alias] = name;
       });
       apps.push(app);
+      records.set(name, baseRecord(name, manifest, mod));
       mediaRoutes.push(...routes);
       if (isObject(manifest.contributes)) contributions.push({ name, contributes: manifest.contributes });
     } catch (error) {
       console.warn(`[packages] skipped ${manifestPath}:`, error);
     }
   }
-  return { apps, aliases, mediaRoutes, contributions };
+  return { apps, records, aliases, mediaRoutes, contributions };
 }
 
 // ---- Runtime install (S12; docs/design/s12-runtime-install-build-2026-11-04.md) ----

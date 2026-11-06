@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
 import packageBoundary from './scripts/package-boundary-plugin.mjs';
+import baseModules from './scripts/base-modules.mjs';
 
 const buildInfo = {
   version: process.env.VITE_CHOIR_BUILD_VERSION || process.env.CHOIR_BUILD_VERSION || 'dev',
@@ -15,7 +16,9 @@ export default defineConfig({
   // every other entry. Concatenating minified chunks into one module scope is
   // not sound — sibling chunks reuse top-level identifiers and the browser
   // rejects the re-declaration.
-  plugins: [packageBoundary({ root: fileURLToPath(new URL('.', import.meta.url)) }), svelte()],
+  // The base packages are built as module/v1 modules and shipped beside the
+  // shell (forced modularity M4); the shell never bundles a package's Svelte.
+  plugins: [packageBoundary({ root: fileURLToPath(new URL('.', import.meta.url)) }), baseModules({ root: fileURLToPath(new URL('.', import.meta.url)) }), svelte()],
   define: {
     __CHOIR_BUILD_VERSION__: JSON.stringify(buildInfo.version),
     __CHOIR_BUILD_COMMIT__: JSON.stringify(buildInfo.commit),

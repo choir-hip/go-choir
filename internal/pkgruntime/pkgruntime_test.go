@@ -37,6 +37,18 @@ func TestEmbeddedBoundaryPluginIsTheFrontends(t *testing.T) {
 	}
 }
 
+// M4: the frontend build builds the base packages with the same script, from
+// its own copy (the Nix frontend source holds only frontend/).
+func TestEmbeddedBuildScriptIsTheFrontends(t *testing.T) {
+	front, err := os.ReadFile(filepath.Join("..", "..", "frontend", "scripts", "build-module.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(front, buildScript) {
+		t.Fatal("internal/pkgruntime/build-module.mjs differs from frontend/scripts/build-module.mjs; copy it")
+	}
+}
+
 func TestEmbeddedCSSFetchFunctionsAreTheFrontends(t *testing.T) {
 	front, err := os.ReadFile(filepath.Join("..", "..", "frontend", "scripts", "css-fetch-functions.json"))
 	if err != nil {

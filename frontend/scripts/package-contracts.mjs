@@ -37,7 +37,9 @@
 // contract lists it in allow_unanswered with a reason.
 //
 // Two modes:
-//   in-tree    the package as the shell build bundles it (svelte-inline/v1);
+//   in-tree    the package as the base ships it: the shell build builds it into
+//              a module/v1 module beside the shell and mounts it through the
+//              loader (forced modularity M4; scripts/base-modules.mjs);
 //   installed  the package built to one module/v1 module by the computer's own
 //              build (internal/pkgruntime/build-module.mjs) and listed as an
 //              installed package, so the shell's real loader checks its
@@ -419,18 +421,23 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
     }
     await step(() => page.locator(windowSel(name)).first().waitFor({ timeout: STEP_MS }), `no ${name} window opened`);
     const content = page.locator(contentSel(name)).first();
-    if (mode === 'installed') {
+    // Both modes mount a module through the shell's loader (M4): the base copy
+    // in-tree, the installed release in installed mode, never the other one.
+    {
       const frame = content.locator('[data-package-frame]').first();
-      await step(() => frame.waitFor({ timeout: STEP_MS }), 'the window does not host the installed module (no PackageAppFrame): the in-tree package was not replaced');
+      await step(() => frame.waitFor({ timeout: STEP_MS }), 'the window does not host a package module (no PackageAppFrame)');
       const settled = await step(() => page.waitForFunction((sel) => {
         const el = document.querySelector(sel);
         const s = el && el.getAttribute('data-package-state');
         return s && s !== 'loading' ? s : false;
-      }, `${contentSel(name)} [data-package-frame]`, { timeout: STEP_MS }), 'the installed module never left loading');
+      }, `${contentSel(name)} [data-package-frame]`, { timeout: STEP_MS }), 'the module never left loading');
       const state = await settled.jsonValue();
+      const install = (await frame.getAttribute('data-package-install')) || '';
+      if (mode === 'installed' && install.startsWith('base:')) throw new Error('the window mounts the base copy: the installed release did not replace it');
+      if (mode === 'in-tree' && !install.startsWith('base:')) throw new Error(`the window mounts ${install || 'no record'}, not the base copy`);
       if (state !== 'mounted') {
         const why = await frame.innerText().catch(() => '');
-        throw new Error(`the shell did not mount the installed module (state ${state}): ${why.replace(/\s+/g, ' ').trim()}`);
+        throw new Error(`the shell did not mount the ${mode === 'installed' ? 'installed' : 'base'} module (state ${state}): ${why.replace(/\s+/g, ' ').trim()}`);
       }
     }
     try {
