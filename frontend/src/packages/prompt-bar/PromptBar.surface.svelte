@@ -16,8 +16,8 @@
   One chip names what the text goes to: the focused app agent and its object
   ("Texture · Tide notes"), the focused app as a hint when it has no desk to
   take it (the conductor routes), or the conductor. One tap clears a focus to
-  the conductor and a second restores it. A single URL defaults to the
-  conductor, which opens it in its display app (review 284 item 1).
+  the conductor and a second restores it. A pasted link is text like
+  any other: it goes to the focused object (owner, 2026-11-06).
 -->
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
@@ -35,7 +35,6 @@
     type ContextMenuEntry,
     type PromptFocus,
   } from '../../lib/app-sdk';
-  import { isSingleHttpUrl } from './url';
 
   type PromptTarget = { windowId: string; appId: string; appName: string; label: string; focus: PromptFocus | null };
   type PromptRoute = { state: 'routing' | 'routed'; label: string };
@@ -101,7 +100,7 @@
     : choice === 'conductor'
       ? 'conductor'
       : target.focus
-        ? (choice === 'focus' || !isSingleHttpUrl(promptValue) ? 'focus' : 'conductor')
+        ? 'focus'
         : 'hint';
   $: chipName = mode === 'conductor' ? 'Conductor' : target?.appName || '';
   $: chipLabel = mode === 'conductor' ? '' : target?.label || '';

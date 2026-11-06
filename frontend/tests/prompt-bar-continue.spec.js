@@ -25,9 +25,9 @@
  *      desktop and phone width; or its tap target is under 40px tall
  *      (review 284 item 2).
  * Review 284 (written before the fixes):
- *   C7 A single URL with a document in view continues the document instead
- *      of reaching the display app the conductor classifies: the chip must
- *      default to "New document" for it, and a tap still continues.
+ *   C7 A single URL with a document in view (superseded by the owner,
+ *      2026-11-06): the pasted link goes to the focused document like any
+ *      text, and a tap sends it to the conductor.
  *   C8 A quick second send while the first is routing goes out (and can
  *      continue the old document after a "New document" send).
  *   C9 A continue whose window was closed before the receipt came back
@@ -318,15 +318,13 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
   });
 }
 
-test('C7: a single URL defaults to the conductor, and a tap still keeps the focus', async ({ page }) => {
+test('C7: a single URL goes to the focused document, and a tap sends it to the conductor', async ({ page }) => {
   const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides' });
   const input = await openDesktop(page);
   const chip = page.locator('[data-command-field] [data-prompt-target]');
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
 
   await input.fill('  https://example.com/tides/article  ');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
-  await chip.click();
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
   await input.press('Enter');
   await expect.poll(() => submits.length).toBe(1);
@@ -334,13 +332,12 @@ test('C7: a single URL defaults to the conductor, and a tap still keeps the focu
 
   // One send at a time with a target in view: wait for the first to route.
   await expect(page.locator('[data-prompt-surface]')).toHaveAttribute('data-routing', 'false');
-  await send(page, 'https://example.com/tides/article');
+  await input.fill('https://example.com/tides/article');
+  await chip.click();
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
+  await input.press('Enter');
   await expect.poll(() => submits.length).toBe(2);
   expect(submits[1].focus?.object_ref).toBeUndefined();
-
-  // Text that is not one URL keeps the focus default.
-  await input.fill('summarize https://example.com/tides/article');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
 });
 
 test('C8: no second send while the first is routing', async ({ page }) => {
