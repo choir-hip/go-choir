@@ -133,6 +133,12 @@ func packageDesk(deskRole string) bool {
 // lease lookups. A label's kind is the product's word (document, story,
 // capture); the registry's is the object kind.
 func labelObjectKinds(kind string) []objectgraph.ObjectKind {
+	// owner_private:texture labels the Texture custodian's own search
+	// snippets (store.textureSearchLabel): its kind is the custodian's name,
+	// so it names the documents Texture keeps.
+	if kind == strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:") {
+		kind = "document"
+	}
 	switch kind {
 	case "document":
 		return []objectgraph.ObjectKind{"choir.texture_document", "choir.texture_revision"}

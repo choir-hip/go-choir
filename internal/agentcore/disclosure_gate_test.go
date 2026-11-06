@@ -628,3 +628,25 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 		t.Fatalf("T4: the lease outlived its expiry = %v", err)
 	}
 }
+
+// A research run that read Texture's snippets carries owner_private:texture;
+// its message back to Texture goes to that label's custodian and is admitted.
+// The label's kind is the custodian's name, not an object kind, so it must
+// name Texture's kinds (d@e 2026-11-06, trajectory 3ee6da5c: six
+// desk_message|owner_private asks with a texture.brief lease live).
+func TestAResearchAnswerCarryingTextureLabelsIsAdmittedByTheCustodian(t *testing.T) {
+	f := newDisclosureFixture(t, "answers", 62852)
+	f.escalating()
+	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	res := f.run(t, "run-res-a", agentprofile.Research, "research", types.OwnerPrivateLabel("texture"), types.OwnerPrivateLabel("document"))
+	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Texture, "Report findings"); err != nil {
+		t.Fatalf("research's answer to the custodian = %v", err)
+	}
+	if f.judge.callCount() != 0 {
+		t.Fatalf("the admitted answer spent System 1 (%d calls)", f.judge.callCount())
+	}
+	// The same labels to a desk that is not the custodian still ask.
+	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Management, "Report findings"); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
+		t.Fatalf("texture labels to management = %v", err)
+	}
+}
