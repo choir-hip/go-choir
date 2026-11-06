@@ -262,7 +262,7 @@ func TestDecideRequiresTheExactOwnerAct(t *testing.T) {
 		"no verifier":       {mint(t, s, g.ComputerID, ActDecide, good, t0), nil, VerdictGrant, t0},
 		"empty receipt":     {computerevent.Receipt{}, v, VerdictGrant, t0},
 		"other key":         {mint(t, other, g.ComputerID, ActDecide, good, t0), v, VerdictGrant, t0},
-		"other act kind":    {mint(t, s, g.ComputerID, owneract.ActSelfDevApprove, good, t0), v, VerdictGrant, t0},
+		"other act kind":    {mint(t, s, g.ComputerID, owneract.ActSelfDevModeSet, good, t0), v, VerdictGrant, t0},
 		"other computer":    {mint(t, s, "computer-b", ActDecide, good, t0), v, VerdictGrant, t0},
 		"expired receipt":   {mint(t, s, g.ComputerID, ActDecide, good, t0), v, VerdictGrant, t0.Add(owneract.TTL + time.Second)},
 		"other grant":       {mint(t, s, g.ComputerID, ActDecide, map[string]any{"grant_id": "egress-grant:sha256:00", "decision": VerdictGrant}, t0), v, VerdictGrant, t0},

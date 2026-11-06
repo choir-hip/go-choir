@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,13 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/platform"
-	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
-
-// errStandingAutonomyTier refuses a standing_consensus arm on a computer
-// that is not test-tier (P4; owner ruling: autonomy only on test computers
-// until desk-cell confinement lands).
-var errStandingAutonomyTier = errors.New("standing autonomy is allowed only on test-tier computers")
 
 func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool) {
 	const prefix = "/api/computers/"
@@ -128,8 +121,7 @@ func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 }
 
 // selfDevelopmentCorpusdRoute names the corpusd-held self-development
-// resources: the signed mode, and the event head an owner's accept_once
-// approval binds.
+// resources: the signed mode, and the event head.
 func selfDevelopmentCorpusdRoute(path string) (computerID, resource string, ok bool) {
 	for _, resource := range []string{"mode", "head"} {
 		if computerID, ok := selfDevelopmentCorpusdComputerID(path, "/self-development/"+resource); ok {
@@ -259,11 +251,7 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		// statement over this exact write, for corpusd to verify.
 		ownerActHeader, err = h.mintModeOwnerAct(r.Context(), authResult, computerID, body)
 		if err != nil {
-			status := http.StatusBadRequest
-			if errors.Is(err, errStandingAutonomyTier) {
-				status = http.StatusForbidden
-			}
-			writeJSON(w, status, errorResponse{Error: err.Error()})
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 			return
 		}
 		upstreamBody = bytes.NewReader(body)
@@ -300,40 +288,20 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 }
 
 // mintModeOwnerAct signs the owner-act receipt for a mode write the proxy
-// has just authorized: act selfdev.approve for an accept_once arm (the
-// owner's approval of one operation and bundle), selfdev.mode.set
-// otherwise, over the write's request commitment. With no key loaded it
-// returns "" and the write goes without a receipt, as before S1.
-//
-// P4: arming standing_consensus (act selfdev.autonomy.arm) is allowed only
-// on a test-tier computer. The proxy reads the tier from vmctl, the same
-// authority that proves ownership, refuses any other tier, and signs
-// computer_tier into the act so corpusd can require it.
-func (h *Handler) mintModeOwnerAct(ctx context.Context, authResult *AuthResult, computerID string, body []byte) (string, error) {
+// has just authorized: act selfdev.mode.set (off or apply) over the write's
+// request commitment. With no key loaded it returns "" and the write goes
+// without a receipt, as before S1.
+func (h *Handler) mintModeOwnerAct(_ context.Context, authResult *AuthResult, computerID string, body []byte) (string, error) {
 	var request platform.SetSelfDevelopmentModeRequest
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		return "", fmt.Errorf("invalid mode request")
 	}
-	tier := ""
-	if strings.TrimSpace(request.Mode) == platform.SelfDevelopmentModeStandingConsensus {
-		if h.vmctlClient == nil {
-			return "", fmt.Errorf("%w: computer tier authority unavailable", errStandingAutonomyTier)
-		}
-		ownership, err := h.vmctlClient.LookupComputerContext(ctx, authResult.UserID, computerID)
-		if err != nil || ownership == nil || ownership.ComputerID != computerID {
-			return "", fmt.Errorf("%w: computer tier unavailable", errStandingAutonomyTier)
-		}
-		if ownership.WarmnessClass != string(vmctl.WarmnessClassTest) {
-			return "", fmt.Errorf("%w: computer %s is %q", errStandingAutonomyTier, computerID, ownership.WarmnessClass)
-		}
-		tier = platform.ComputerTierTest
-	}
 	if h.ownerActSigner == nil {
 		return "", nil
 	}
-	subject, err := platform.OwnerActModeSubjectWithTier(computerID, request, tier)
+	subject, err := platform.OwnerActModeSubject(computerID, request)
 	if err != nil {
 		return "", fmt.Errorf("invalid mode request")
 	}
@@ -516,13 +484,16 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	switch action {
 	case "approve":
 		// A rejection withdraws a candidate and is fail-safe, so an agent
-		// key may send it; every other decision is the owner's act.
+		// key may send it. Owner approval is retired (docs/design/
+		// selfdev-apply-and-revert-2026-11-06.md 3.1): consensus decides a
+		// candidate and the owner reverts.
 		reject, err := selfDevelopmentDecisionIsReject(r)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development decision"})
 			return
 		}
-		if !reject && !authorizeOwnerAct(w, authResult, "self-development approval") {
+		if !reject {
+			writeJSON(w, http.StatusGone, errorResponse{Error: "owner approval is retired: a candidate is decided by consensus, and the owner reverts an applied change"})
 			return
 		}
 	case "rollback":

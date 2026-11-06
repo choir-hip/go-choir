@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
-	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
-// The post-commit observer can finalize an owner's decision between the
+// The post-commit observer can finalize an owner's reject between the
 // handler's decision append and its own operation Transition. The decision
 // landed, so the handler must answer 200 with the decided operation, and a
 // replay of the same key must answer 200 too. Staging answered 409 for a
@@ -28,7 +26,7 @@ import (
 //   - the fix loosens the replay: a different key and a changed reason on
 //     the same key must still be refused.
 func TestSelfDevDecisionObserverWinsRaceAnswersDecidedOperation(t *testing.T) {
-	for _, decision := range []string{"reject", "approve"} {
+	for _, decision := range []string{"reject"} {
 		t.Run(decision, func(t *testing.T) {
 			f := newP4Fixture(t)
 			ctx := context.Background()
@@ -42,31 +40,10 @@ func TestSelfDevDecisionObserverWinsRaceAnswersDecidedOperation(t *testing.T) {
 				ExpectedPendingTransitionRef:   &pending,
 				ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 			}
+			// The computer has no mode row: canonical apply, generation 0. The
+			// owner's reject needs no write.
 			wantState := selfdev.StateRejected
-			if decision == "reject" {
-				request.Reason = "observer race drill"
-				arm := platform.SetSelfDevelopmentModeRequest{
-					Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: f.currentMode(t).Generation,
-					IdempotencyKey: "race-propose-only",
-				}
-				if code, _, body := f.ownerWrite(t, arm, platform.ComputerTierTest); code != http.StatusOK {
-					t.Fatalf("owner propose_only: %d %s", code, body)
-				}
-			} else {
-				wantState = selfdev.StateApplied
-				arm := platform.SetSelfDevelopmentModeRequest{
-					Mode: platform.SelfDevelopmentModeAcceptOnce, ExpectedGeneration: f.currentMode(t).Generation,
-					OperationID: operation.OperationID, BundleDigest: operation.BundleDigest,
-					ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
-					ExpectedPendingTransitionRef:   &pending,
-					ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
-					ExpiresAt:      time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond).Format(time.RFC3339Nano),
-					IdempotencyKey: "race-accept-once",
-				}
-				if code, _, body := f.ownerWrite(t, arm, platform.ComputerTierTest); code != http.StatusOK {
-					t.Fatalf("owner accept_once: %d %s", code, body)
-				}
-			}
+			request.Reason = "observer race drill"
 
 			// The observer wins: it finalizes (and, for an approve, applies)
 			// before the handler moves the operation.
@@ -136,11 +113,7 @@ func TestSelfDevDecisionObserverWinsRaceAnswersDecidedOperation(t *testing.T) {
 				t.Fatalf("a different key after the decision answered %d %v", status, err)
 			}
 			changed := request
-			if decision == "reject" {
-				changed.Reason = "a different reason"
-			} else {
-				changed.Decision, changed.Reason = "reject", "flip to reject"
-			}
+			changed.Reason = "a different reason"
 			if _, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, changed); status != http.StatusConflict || err == nil {
 				t.Fatalf("the same key with a changed binding answered %d %v", status, err)
 			}

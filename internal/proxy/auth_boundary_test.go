@@ -201,9 +201,7 @@ func TestOwnerActsRefuseAgentAndAdminKeys(t *testing.T) {
 		name, method, path, body, scope string
 		upstream                        string // "guest" or "corpusd"
 	}{
-		{"mode set", http.MethodPut, base + "/self-development/mode", `{"mode":"accept_once"}`, "computer:self_development:mode", "corpusd"},
-		{"approve", http.MethodPost, base + "/self-development/operations/op-1/decision", `{"decision":"approve"}`, "computer:self_development:approve", "guest"},
-		{"unparseable decision", http.MethodPost, base + "/self-development/operations/op-1/decision", `not json`, "computer:self_development:approve", "guest"},
+		{"mode set", http.MethodPut, base + "/self-development/mode", `{"mode":"apply"}`, "computer:self_development:mode", "corpusd"},
 		{"rollback", http.MethodPost, base + "/self-development/rollbacks", `{}`, "computer:self_development:rollback", "guest"},
 		// Forced modularity M3: the migration rollback is a rollback-class act.
 		{"package migration rollback", http.MethodPost, base + "/self-development/package-migration-rollback", `{}`, "computer:self_development:rollback", "guest"},
@@ -233,9 +231,6 @@ func TestOwnerActsRefuseAgentAndAdminKeys(t *testing.T) {
 			if hits.Load() != 0 {
 				t.Fatalf("F4: %s reached %s %d times without the owner", act.name, act.upstream, hits.Load())
 			}
-			if act.name == "unparseable decision" {
-				return
-			}
 			// An owner-minted owner:acts key, with the route's scope, passes.
 			if rec := env.send(t, act.method, act.path, act.body, env.key(t, act.scope, OwnerActsScope)); rec.Code == http.StatusForbidden {
 				t.Fatalf("F4': owner:acts key refused for %s: %d %s", act.name, rec.Code, rec.Body.String())
@@ -248,6 +243,25 @@ func TestOwnerActsRefuseAgentAndAdminKeys(t *testing.T) {
 				t.Fatalf("F4': %s reached %s %d times, want 2 (owner:acts key, session)", act.name, act.upstream, hits.Load())
 			}
 		})
+	}
+}
+
+// Owner approval is retired: an approve (or anything the proxy cannot read as
+// a rejection) is refused for every caller, owner session included, and never
+// reaches the computer.
+func TestOwnerApprovalIsRetired(t *testing.T) {
+	const path = "/api/computers/computer-a/self-development/operations/op-1/decision"
+	for name, body := range map[string]string{"approve": `{"decision":"approve"}`, "unparseable": `not json`} {
+		env := newOwnerActEnv(t)
+		for label, key := range map[string]string{"session": "", "owner key": env.key(t, "computer:self_development:approve", OwnerActsScope), "agent key": env.key(t, "computer:self_development:approve")} {
+			rec := env.send(t, http.MethodPost, path, body, key)
+			if rec.Code != http.StatusGone || !strings.Contains(rec.Body.String(), "retired") {
+				t.Fatalf("%s as %s = %d %s, want 410 retired", name, label, rec.Code, rec.Body.String())
+			}
+		}
+		if env.guestHits.Load() != 0 {
+			t.Fatalf("%s reached the computer %d times", name, env.guestHits.Load())
+		}
 	}
 }
 

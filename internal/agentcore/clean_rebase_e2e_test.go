@@ -161,8 +161,7 @@ func newCleanRebaseE2EWith(t *testing.T, pkg string) *cleanRebaseE2E {
 	})
 	t.Cleanup(f.rt.stopRebaseNotice)
 
-	// The prior change, approved without a per-candidate owner act.
-	f.armStanding(t, time.Now().Add(2*time.Hour))
+	// The prior change, decided by consensus on a computer with no mode row.
 	prior := f.verify(t, f.freezeWithPatch(t, "clean-prior", "the approved change", f.longPatch(t, map[int]string{5: "stack line 05"})))
 	if _, err := f.rt.runStandingConsensus(context.Background(), prior.OperationID, "run:management-p4"); err != nil {
 		t.Fatalf("prior approval: %v", err)

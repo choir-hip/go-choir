@@ -78,57 +78,16 @@ func newSelfDevStub(t *testing.T, state string) (*selfDevStub, *httptest.Server)
 	return stub, server
 }
 
-// Failure modes pinned for approve: arming accept_once for a different
-// operation, bundle, head or commitment than the frozen candidate; arming
-// against a stale mode generation; deciding before arming; and arming or
-// deciding at all when the operation is not awaiting approval.
-func TestSelfDevApproveArmsAcceptOnceForExactlyThisCandidate(t *testing.T) {
+// Owner approval is retired (docs/design/selfdev-apply-and-revert-2026-11-06.md
+// 3.1): the CLI has no approve verb and arms nothing.
+func TestSelfDevApproveIsGone(t *testing.T) {
 	stub, server := newSelfDevStub(t, "awaiting_approval")
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"self-dev", "approve", "--computer=computer-x", "--operation=op-1", "--host=" + server.URL}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("code=%d stderr=%s", code, stderr.String())
-	}
-	want := []string{"GET /operations/op-1", "GET /head", "GET /mode", "PUT /mode", "POST /operations/op-1/decision"}
-	if strings.Join(stub.requests, ",") != strings.Join(want, ",") {
-		t.Fatalf("requests = %v, want %v", stub.requests, want)
-	}
-	hex := func(c string) string { return strings.Repeat(c, 64) }
-	arm := stub.bodies["PUT /mode"]
-	for field, value := range map[string]any{"mode": "accept_once", "expected_generation": float64(3), "operation_id": "op-1", "bundle_digest": hex("b"),
-		"expected_desired_event_head": hex("d"), "expected_effective_event_head": hex("e"), "expected_pending_transition_ref": "",
-		"expected_desired_state_commitment": hex("1"), "expected_effective_state_commitment": hex("2")} {
-		if arm[field] != value {
-			t.Fatalf("arm %s = %#v, want %#v (body %#v)", field, arm[field], value, arm)
-		}
-	}
-	expires, err := time.Parse(time.RFC3339Nano, arm["expires_at"].(string))
-	if err != nil || expires.Location() != time.UTC || !expires.After(time.Now()) || expires.Format(time.RFC3339Nano) != arm["expires_at"] {
-		t.Fatalf("expires_at %v is not a future canonical UTC time", arm["expires_at"])
-	}
-	decision := stub.bodies["POST /operations/op-1/decision"]
-	for field, value := range map[string]any{"decision": "approve", "bundle_digest": hex("b"), "verifier_ref": "verifier:jev",
-		"expected_desired_event_head": hex("d"), "expected_effective_event_head": hex("e"), "expected_pending_transition_ref": "",
-		"expected_desired_state_commitment": hex("1"), "expected_effective_state_commitment": hex("2")} {
-		if decision[field] != value {
-			t.Fatalf("decision %s = %#v, want %#v", field, decision[field], value)
-		}
-	}
-	if key, _ := decision["idempotency_key"].(string); key == "" {
-		t.Fatal("decision has no idempotency key")
-	}
-}
-
-func TestSelfDevApproveRefusesBeforeAnyWriteUnlessAwaitingApproval(t *testing.T) {
-	stub, server := newSelfDevStub(t, "executing")
-	var stdout, stderr bytes.Buffer
 	if code := run([]string{"self-dev", "approve", "--computer=computer-x", "--operation=op-1", "--host=" + server.URL}, &stdout, &stderr); code == 0 {
-		t.Fatalf("approve of an executing operation succeeded: %s", stdout.String())
+		t.Fatalf("self-dev approve succeeded: %s", stdout.String())
 	}
-	for _, request := range stub.requests {
-		if !strings.HasPrefix(request, "GET ") {
-			t.Fatalf("approve wrote %s for an operation not awaiting approval", request)
-		}
+	if len(stub.requests) != 0 {
+		t.Fatalf("self-dev approve sent %v", stub.requests)
 	}
 }
 
@@ -193,8 +152,6 @@ func TestSelfDevDecisionReplaysALandedDecisionWithItsOriginalBinding(t *testing.
 	hex := func(c string) string { return strings.Repeat(c, 64) }
 	for _, tc := range []struct{ decision, state, kind string }{
 		{"reject", "rejected", "effect_rejected"},
-		{"approve", "applied", "effect_accepted"},
-		{"approve", "accepted", "effect_accepted"},
 	} {
 		t.Run(tc.decision+"-"+tc.state, func(t *testing.T) {
 			stub, server := newSelfDevStub(t, tc.state)
@@ -222,9 +179,7 @@ func TestSelfDevDecisionReplaysALandedDecisionWithItsOriginalBinding(t *testing.
 	}
 	for _, tc := range []struct{ decision, state, kind string }{
 		{"reject", "applied", "effect_accepted"},
-		{"approve", "rejected", "effect_rejected"},
 		{"reject", "rejected", ""},
-		{"approve", "failed", ""},
 		{"reject", "executing", ""},
 	} {
 		t.Run("refuses-"+tc.decision+"-"+tc.state, func(t *testing.T) {

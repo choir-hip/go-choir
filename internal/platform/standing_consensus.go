@@ -1,12 +1,14 @@
 package platform
 
-// P4: standing autonomous acceptance on test computers
+// P4: autonomous acceptance, now on the mode row
+// (docs/design/selfdev-apply-and-revert-2026-11-06.md 3.2 and 3.3; formerly a
+// standing arm on test computers)
 // (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md;
 // docs/archive/reports/selfdev-update-architecture-2026-10-15.md §1.3, P4;
 // docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md §6 S2).
 //
-// corpusd is the decision poster. Under an owner's standing_consensus arm it
-// collects the two verification ballots reversible-selfdev-v1 needs, each
+// corpusd is the decision poster. For a computer whose canonical mode is apply
+// (the owner wrote apply, or wrote nothing) it collects the two verification ballots reversible-selfdev-v1 needs, each
 // signed by the one domain its seat admits (the capsule-verifier seat cast
 // here, platform-control signed, on this operation's P5 host build, so the
 // vote binds the bytes the computer applies; the independent-reviewer seat
@@ -34,14 +36,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
-	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 var (
 	// ErrConsensusRefused is a decision request the poster will not act on:
-	// no standing arm, an expired window, a non-test computer, a ballot that
-	// does not verify, or a subject that does not bind.
+	// mode off, a platform computer, a ballot that does not verify, or a
+	// subject that does not bind.
 	ErrConsensusRefused = errors.New("consensus decision refused")
 	// ErrConsensusStale is a subject whose heads are no longer corpusd's.
 	ErrConsensusStale = errors.New("consensus decision subject is stale")
@@ -125,27 +126,13 @@ func platformComputer(computerID string) (bool, error) {
 	return platformTiers.PlatformComputer(computerID), nil
 }
 
-// standingArmRefusal is the authority a standing_consensus arm needs: the
-// owner (host-internal), a verified owner act of kind selfdev.autonomy.arm
-// whose subject the proxy signed with computer_tier "test", and a computer
-// that is not a platform computer. It applies in observe as in enforce.
-func standingArmRefusal(writer, computerID string, ownerAct *owneract.Verified) error {
-	if writer != ModeWriterHostInternal {
-		return ErrSelfDevelopmentModeOwnerRequired
-	}
-	if ownerAct == nil {
-		return fmt.Errorf("%w: standing_consensus requires a verified owner act (in observe too)", ErrOwnerActRefused)
-	}
-	if ownerAct.ActKind != owneract.ActSelfDevAutonomyArm {
-		return fmt.Errorf("%w: standing_consensus requires act %s", ErrOwnerActRefused, owneract.ActSelfDevAutonomyArm)
-	}
-	if tier := ownerAct.SubjectString("computer_tier"); tier != ComputerTierTest {
-		return fmt.Errorf("%w: standing autonomy is allowed only on test-tier computers (owner act names tier %q)", ErrOwnerActRefused, tier)
-	}
-	if platform, err := platformComputer(computerID); platform || err != nil {
-		return fmt.Errorf("%w: standing autonomy is refused on a platform computer", ErrOwnerActRefused)
-	}
-	return nil
+// IsPlatformComputer reports a computer on the platform tier, from the tier
+// file this binary embeds. corpusd uses it to refuse a decision for a
+// platform computer; the guest uses it for an early, readable freeze refusal.
+// An unreadable tier file reports true (fail closed).
+func IsPlatformComputer(computerID string) bool {
+	platform, err := platformComputer(computerID)
+	return platform || err != nil
 }
 
 // ConsensusRequest is the guest's request for a decision on one operation.
@@ -205,42 +192,62 @@ func NewConsensusActuator(store *Store, modes *SelfDevelopmentModeCAS, signingKe
 // SetClock overrides the poster's clock (tests).
 func (a *ConsensusActuator) SetClock(now func() time.Time) { a.now = now }
 
-// StandingArm is the current standing mode, verified for autonomy.
-type standingArm struct {
-	mode          SelfDevelopmentMode
+// applyAuthority is the mode row as the poster's authority: the canonical
+// mode is apply, the computer is not a platform computer, and a row's receipt
+// verifies. receiptDigest is the mode receipt's digest, or the default-apply
+// digest for a computer with no row; generation is 0 for no row.
+type applyAuthority struct {
+	generation    uint64
 	receiptDigest string
-	expiresAt     time.Time
 }
 
-// currentStandingArm reads the mode (lazy expiry applies) and requires an
-// unexpired, test-tier standing arm under an allowed policy.
-func (a *ConsensusActuator) currentStandingArm(ctx context.Context, computerID string) (standingArm, error) {
+// modeReceiptKey resolves corpusd's own platform-control key, the only key a
+// ModeReceipt is signed by.
+type modeReceiptKey struct {
+	keyID  string
+	public ed25519.PublicKey
+}
+
+func (k modeReceiptKey) ResolveReceiptKey(domain, _ string, keyID string, _ uint64, _ time.Time) (ed25519.PublicKey, error) {
+	if domain != "platform-control" || keyID != k.keyID {
+		return nil, fmt.Errorf("%s/%s is not corpusd's platform-control key", domain, keyID)
+	}
+	return k.public, nil
+}
+
+// currentApplyAuthority reads the mode (canonical, no row is apply) and
+// requires apply on a computer that is not a platform computer.
+func (a *ConsensusActuator) currentApplyAuthority(ctx context.Context, computerID string) (applyAuthority, error) {
 	mode, err := a.modes.Get(ctx, computerID)
 	if err != nil {
-		return standingArm{}, err
+		return applyAuthority{}, err
 	}
-	return standingArmFromMode(mode, a.now())
+	return applyAuthorityFromMode(mode, computerID, modeReceiptKey{keyID: a.signingKey.KeyID, public: a.signingKey.PrivateKey.Public().(ed25519.PublicKey)})
 }
 
-func standingArmFromMode(mode SelfDevelopmentMode, now time.Time) (standingArm, error) {
-	if mode.Mode != SelfDevelopmentModeStandingConsensus || mode.Receipt == nil {
-		return standingArm{}, fmt.Errorf("%w: no standing_consensus arm (mode %s)", ErrConsensusRefused, mode.Mode)
+// keys nil skips the signature check: the admission gate reads corpusd's own
+// database row, which corpusd signed.
+func applyAuthorityFromMode(mode SelfDevelopmentMode, computerID string, keys computerevent.KeyResolver) (applyAuthority, error) {
+	if platform, err := platformComputer(computerID); platform || err != nil {
+		return applyAuthority{}, fmt.Errorf("%w: a platform computer does not self-develop (owner ruling 2026-11-06)", ErrConsensusRefused)
 	}
-	expiresAt, err := time.Parse(time.RFC3339Nano, mode.ExpiresAt)
-	if err != nil || !now.Before(expiresAt) {
-		return standingArm{}, fmt.Errorf("%w: the standing window has expired", ErrConsensusRefused)
+	if CanonicalSelfDevelopmentMode(mode.Mode) != SelfDevelopmentModeApply {
+		return applyAuthority{}, fmt.Errorf("%w: the computer's self-development mode is %s", ErrConsensusRefused, CanonicalSelfDevelopmentMode(mode.Mode))
 	}
-	if tier, _ := mode.Receipt.KindFields["computer_tier"].(string); tier != ComputerTierTest {
-		return standingArm{}, fmt.Errorf("%w: the standing arm is not test-tier", ErrConsensusRefused)
+	if mode.Receipt == nil {
+		if mode.Generation != 0 {
+			return applyAuthority{}, fmt.Errorf("%w: mode row %d carries no receipt", ErrConsensusRefused, mode.Generation)
+		}
+		return applyAuthority{generation: 0, receiptDigest: DefaultApplyModeDigest()}, nil
 	}
-	if !decisionpolicy.StandingPolicyAllowed(mode.PolicyDigest) {
-		return standingArm{}, fmt.Errorf("%w: the standing arm's policy may not be autonomous", ErrConsensusRefused)
+	if mode.Receipt.ReceiptKind != "ModeReceipt" || (keys != nil && mode.Receipt.Verify(keys) != nil) {
+		return applyAuthority{}, fmt.Errorf("%w: the mode receipt does not verify", ErrConsensusRefused)
 	}
 	raw, err := mode.Receipt.CanonicalBytes()
 	if err != nil {
-		return standingArm{}, err
+		return applyAuthority{}, err
 	}
-	return standingArm{mode: mode, receiptDigest: computerevent.DigestBytes(raw), expiresAt: expiresAt.UTC()}, nil
+	return applyAuthority{generation: mode.Generation, receiptDigest: computerevent.DigestBytes(raw)}, nil
 }
 
 // guestCoreKeyPin resolves the one guest-core key pinned for a computer.
@@ -291,7 +298,7 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	lock.Lock()
 	defer lock.Unlock()
 
-	arm, err := a.currentStandingArm(ctx, computerID)
+	arm, err := a.currentApplyAuthority(ctx, computerID)
 	if err != nil {
 		return ConsensusResponse{}, err
 	}
@@ -319,11 +326,11 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	if err != nil {
 		return ConsensusResponse{}, err
 	}
-	if existing, found, err := a.existingDecision(ctx, computerID, subjectDigest, arm.mode.Generation); err != nil || found {
+	if existing, found, err := a.existingDecision(ctx, computerID, subjectDigest, arm.generation); err != nil || found {
 		return existing, err
 	}
 	now := a.now().UTC().Truncate(time.Microsecond)
-	policyDigest := arm.mode.PolicyDigest
+	policyDigest := decisionpolicy.PolicyDigestReversibleSelfDevV1
 	want := func(seat string) decisionpolicy.BallotExpectation {
 		return decisionpolicy.BallotExpectation{Seat: seat, PolicyDigest: policyDigest, SubjectDigest: subjectDigest, ComputerID: computerID, OperationID: request.OperationID, Now: now}
 	}
@@ -358,7 +365,7 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	ballotDigests := []string{host.Digest, reviewer.Digest}
 
 	// The bundle: seat manifest from the policy, the selection bound to the
-	// owner's standing arm (the policy was selected before any output),
+	// computer's mode row (the policy was selected before any output),
 	// and the reducer's join records for the two verified ballots.
 	policy, _, err := a.policies.Get(policyDigest)
 	if err != nil {
@@ -376,7 +383,7 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	selection := decisionpolicy.PolicySelectionReceipt{
 		ReceiptKind: decisionpolicy.ReceiptKindPolicySelection, PolicyDigest: policyDigest,
 		SeatManifestDigest: manifestDigest, SubjectDigest: subjectDigest,
-		SelectedAtHead: arm.receiptDigest, SelectedSequence: arm.mode.Generation,
+		SelectedAtHead: arm.receiptDigest, SelectedSequence: arm.generation + 1, // the reducer requires a nonzero sequence; a no-row computer is generation 0
 	}
 	if selection.SelectionDigest, err = selection.Digest(); err != nil {
 		return ConsensusResponse{}, err
@@ -401,9 +408,6 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	}
 
 	notAfter := now.Add(decisionpolicy.MaxBallotTTL)
-	if arm.expiresAt.Before(notAfter) {
-		notAfter = arm.expiresAt
-	}
 	fields := map[string]any{
 		"computer_id": computerID, "operation_id": request.OperationID,
 		"subject": subject, "subject_digest": subjectDigest,
@@ -411,8 +415,8 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 		"qualified_consensus_receipt": qualified, "qualified_consensus_receipt_digest": qualified.ReceiptDigest,
 		"ballots":                      []computerevent.Receipt{host.Receipt, reviewer.Receipt},
 		"ballot_receipt_digests":       ballotDigests,
-		"standing_mode_receipt_digest": arm.receiptDigest, "standing_generation": arm.mode.Generation,
-		"computer_tier": ComputerTierTest, "not_after": notAfter.Format(time.RFC3339Nano),
+		"standing_mode_receipt_digest": arm.receiptDigest, "standing_generation": arm.generation,
+		"not_after": notAfter.Format(time.RFC3339Nano),
 		"host_build": map[string]any{
 			"job_id": hostVote.job.JobID, "result_digest": hostVote.resultDigest,
 			"closure_digest": hostVote.job.Result.ClosureDigest, "builder_receipt_digest": hostVote.job.Result.BuilderReceiptDigest,
@@ -435,7 +439,7 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	_, err = a.store.db.ExecContext(ctx, `INSERT INTO consensus_decisions (decision_digest, computer_id, operation_id, subject_digest, bundle_digest, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment, policy_digest, standing_mode_receipt_digest, standing_generation, host_build_job_id, host_build_result_digest, not_after, decision_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		digest, computerID, request.OperationID, subjectDigest, subject.BundleDigest, subject.DesiredEventHead, subject.EffectiveEventHead,
 		subject.PendingTransitionRef, subject.DesiredStateCommitment, subject.EffectiveStateCommitment, policyDigest,
-		arm.receiptDigest, arm.mode.Generation, hostVote.job.JobID, hostVote.resultDigest, notAfter, string(raw), now)
+		arm.receiptDigest, arm.generation, hostVote.job.JobID, hostVote.resultDigest, notAfter, string(raw), now)
 	if err != nil {
 		return ConsensusResponse{}, fmt.Errorf("consensus actuator: record decision: %w", err)
 	}
@@ -585,8 +589,9 @@ func normalizeFields(fields map[string]any) (map[string]any, error) {
 // consensusDecisionRefusal is the admission gate's consensus branch: an
 // effect_accepted citing qualified-consensus:<d> is admitted only when d is
 // a decision this poster minted for exactly this event, still inside its
-// window, under a standing arm that is still the computer's current mode.
-func consensusDecisionRefusal(ctx context.Context, tx *sql.Tx, event computerevent.Event, eventDigest string, now time.Time) (string, func() error, error) {
+// window, under the mode row (or its absence) that is still the computer's
+// current mode and still authorizes apply on a computer that may self-develop.
+func consensusDecisionRefusal(ctx context.Context, tx *sql.Tx, keys computerevent.KeyResolver, event computerevent.Event, eventDigest string, now time.Time) (string, func() error, error) {
 	digest, ok := decisionpolicy.ReceiptDigestFromAuthority(event.AuthorityRef)
 	if !ok {
 		return "qualified-consensus authority names no decision digest", nil, nil
@@ -625,7 +630,7 @@ func consensusDecisionRefusal(ctx context.Context, tx *sql.Tx, event computereve
 			return "an input artifact is not an artifact reference", nil, nil
 		}
 		if i == 0 && parsed.Digest().String() != row.standingDigest {
-			return "input artifact 0 is not the standing arm the decision was made under", nil, nil
+			return "input artifact 0 is not the mode receipt the decision was made under", nil, nil
 		}
 		if parsed.Digest().String() == digest {
 			cited = true
@@ -638,11 +643,19 @@ func consensusDecisionRefusal(ctx context.Context, tx *sql.Tx, event computereve
 	if err != nil {
 		return "", nil, err
 	}
-	if !found || mode.Generation != row.generation {
-		return "the standing arm the decision was made under is no longer the computer's mode", nil, nil
+	if !found {
+		// No row is canonical apply at generation 0, with no receipt.
+		mode = SelfDevelopmentMode{ComputerID: event.ComputerID, Mode: SelfDevelopmentModeApply}
 	}
-	if _, err := standingArmFromMode(mode, now); err != nil {
-		return "the standing arm no longer authorizes autonomy: " + err.Error(), nil, nil
+	if mode.Generation != row.generation {
+		return "the mode the decision was made under is no longer the computer's mode", nil, nil
+	}
+	authority, err := applyAuthorityFromMode(mode, event.ComputerID, keys)
+	if err != nil {
+		return "the computer's mode no longer authorizes apply: " + err.Error(), nil, nil
+	}
+	if authority.receiptDigest != row.standingDigest {
+		return "the mode receipt the decision was made under is no longer the computer's", nil, nil
 	}
 	return "", func() error {
 		_, err := tx.ExecContext(ctx, `UPDATE consensus_decisions SET admitted_event_digest=? WHERE decision_digest=? AND (admitted_event_digest IS NULL OR admitted_event_digest=?)`, eventDigest, digest, eventDigest)

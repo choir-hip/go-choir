@@ -488,10 +488,14 @@ func (rt *Runtime) acceptCleanRebase(ctx context.Context, op selfdev.Operation, 
 	if err != nil {
 		return op, fmt.Errorf("read the mode: %w", err)
 	}
-	if mode.Receipt == nil || mode.Receipt.Verify(rt.selfdevControl.KeyResolver()) != nil {
+	// No mode row is canonical apply at generation 0 with no receipt.
+	if mode.Receipt == nil && mode.Generation != 0 {
+		return op, errors.New("the current mode receipt is missing")
+	}
+	if mode.Receipt != nil && mode.Receipt.Verify(rt.selfdevControl.KeyResolver()) != nil {
 		return op, errors.New("the current mode receipt does not verify")
 	}
-	modeBytes, err := mode.Receipt.CanonicalBytes()
+	modeBytes, err := selfDevelopmentModeAuthorityBytes(mode)
 	if err != nil {
 		return op, err
 	}

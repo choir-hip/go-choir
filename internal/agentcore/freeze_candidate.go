@@ -121,22 +121,22 @@ func advanceFreezeCandidate(ctx context.Context, operations *selfdev.Store, oper
 }
 
 // selfDevelopmentProposalAuthorized reports whether the computer's current
-// signed mode authorizes opening a proposal. Off and audit-only do not.
+// mode authorizes opening a proposal. Off does not; a platform computer does
+// not self-develop whatever its mode (owner ruling 2026-11-06); a computer
+// with no mode row is apply.
 func (rt *Runtime) selfDevelopmentProposalAuthorized(ctx context.Context) error {
 	if rt == nil || rt.selfdevControl == nil {
 		return fmt.Errorf("self-development mode authority unavailable")
+	}
+	if platform.IsPlatformComputer(rt.standingComputerID()) {
+		return fmt.Errorf("a platform computer does not self-develop (owner ruling 2026-11-06)")
 	}
 	mode, err := rt.selfdevControl.SelfDevelopmentMode(ctx)
 	if err != nil {
 		return err
 	}
-	switch strings.TrimSpace(mode.Mode) {
-	case platform.SelfDevelopmentModeProposeOnly, platform.SelfDevelopmentModeAcceptOnce, platform.SelfDevelopmentModeQualifiedConsensus,
-		// P4: a standing arm proposes too; its candidates are decided by
-		// corpusd's poster instead of an owner act.
-		platform.SelfDevelopmentModeStandingConsensus:
-		return nil
-	default:
-		return fmt.Errorf("mode is %q", mode.Mode)
+	if canonical := platform.CanonicalSelfDevelopmentMode(mode.Mode); canonical != platform.SelfDevelopmentModeApply {
+		return fmt.Errorf("mode is %q", canonical)
 	}
+	return nil
 }

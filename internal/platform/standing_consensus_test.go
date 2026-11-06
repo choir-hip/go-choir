@@ -20,124 +20,15 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
-	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
-// P4: the standing arm, the decision poster and the gate's consensus branch
-// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md). The numbers
-// in comments are that record's failure modes.
+// P4: the decision poster and the gate's consensus branch, authorized by the
+// mode row (docs/design/selfdev-apply-and-revert-2026-11-06.md 3.2, 3.3). The
+// numbers in comments are the P4 record's failure modes
+// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
 
-func mintStandingAct(t *testing.T, signer *owneract.Signer, computerID string, request SetSelfDevelopmentModeRequest, tier string, now time.Time) string {
-	t.Helper()
-	subject, err := OwnerActModeSubjectWithTier(computerID, request, tier)
-	if err != nil {
-		t.Fatal(err)
-	}
-	receipt, err := signer.Mint(owneract.Act{
-		Kind: OwnerActKindForMode(request.Mode), OwnerUserID: "owner-1", AuthMethod: owneract.AuthMethodAPIKey,
-		CredentialRef: "api-key:test", ComputerID: computerID, Subject: subject,
-	}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return encodeAct(t, receipt)
-}
-
-func standingRequest(generation uint64, key string, expires time.Time) SetSelfDevelopmentModeRequest {
-	return SetSelfDevelopmentModeRequest{
-		Mode: SelfDevelopmentModeStandingConsensus, ExpectedGeneration: generation, IdempotencyKey: key,
-		PolicyDigest: decisionpolicy.PolicyDigestReversibleSelfDevV1,
-		ExpiresAt:    expires.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
-	}
-}
-
-func TestStandingArmIsOwnerOnlyTestTierBoundedAndNeverConsumed(t *testing.T) {
-	f := newModeAuthorityFixture(t)
-	signer := newTestOwnerActSigner(t)
-	// Observe: S1 would let a receipt-less owner write through; the
-	// standing arm still needs a verified owner act.
-	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActObserve, signer))
-	now := time.Now().UTC()
-	arm := standingRequest(0, "standing-1", now.Add(2*time.Hour))
-	unchanged := func(label string) {
-		t.Helper()
-		if mode := f.current(t); mode.Mode != SelfDevelopmentModeOff || mode.Generation != 0 {
-			t.Fatalf("%s changed the mode: %+v", label, mode)
-		}
-	}
-
-	// 16: no owner act, an owner act that names no tier, a primary-tier
-	// computer, and an act of the wrong kind.
-	if code, _, body := f.ownerWith(t, arm, ""); code != http.StatusForbidden {
-		t.Fatalf("no owner act (observe): %d %s", code, body)
-	}
-	if code, _, body := f.ownerWith(t, arm, mintStandingAct(t, signer, f.computerID, arm, "", now)); code != http.StatusForbidden || !strings.Contains(body, "test-tier") {
-		t.Fatalf("no tier: %d %s", code, body)
-	}
-	if code, _, body := f.ownerWith(t, arm, mintStandingAct(t, signer, f.computerID, arm, "primary", now)); code != http.StatusForbidden {
-		t.Fatalf("primary tier: %d %s", code, body)
-	}
-	unchanged("refused arms")
-	// 18: the guest cannot arm it.
-	if code, _ := f.guest(t, arm); code != http.StatusForbidden {
-		t.Fatalf("guest standing arm: %d", code)
-	}
-	// 19 and 14: other policies, operation bindings, a consensus receipt, a
-	// window over 24 hours, a past or non-canonical expiry.
-	bad := map[string]SetSelfDevelopmentModeRequest{}
-	other := arm
-	other.PolicyDigest = decisionpolicy.PolicyDigestHumanRequiredV1
-	bad["human-required policy"] = other
-	bound := arm
-	bound.OperationID = "op-1"
-	bad["operation binding"] = bound
-	receipt := arm
-	receipt.ConsensusReceiptDigest = strings.Repeat("c", 64)
-	bad["consensus receipt"] = receipt
-	bad["25 hours"] = standingRequest(0, "standing-1", now.Add(25*time.Hour))
-	bad["past"] = standingRequest(0, "standing-1", now.Add(-time.Minute))
-	nonCanonical := arm
-	nonCanonical.ExpiresAt = now.Add(time.Hour).Format(time.RFC1123)
-	bad["non-canonical"] = nonCanonical
-	for name, request := range bad {
-		if code, _, body := f.ownerWith(t, request, mintStandingAct(t, signer, f.computerID, request, ComputerTierTest, now)); code != http.StatusBadRequest {
-			t.Fatalf("%s: %d %s", name, code, body)
-		}
-	}
-	unchanged("invalid arms")
-
-	// The owner's test-tier arm.
-	code, armed, body := f.ownerWith(t, arm, mintStandingAct(t, signer, f.computerID, arm, ComputerTierTest, now))
-	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeStandingConsensus || armed.PolicyDigest != decisionpolicy.PolicyDigestReversibleSelfDevV1 {
-		t.Fatalf("test-tier arm: %d %s", code, body)
-	}
-	if armed.Receipt.KindFields["computer_tier"] != ComputerTierTest || armed.Receipt.KindFields["owner_act_receipt_digest"] == nil || modeWriter(armed) != ModeWriterHostInternal {
-		t.Fatalf("standing ModeReceipt fields: %#v", armed.Receipt.KindFields)
-	}
-	// Never consumed: a guest consumption of the standing arm is refused.
-	for _, prefix := range []string{AcceptOnceConsumptionKeyPrefix, QualifiedConsensusConsumptionKeyPrefix} {
-		if code, _ := f.guest(t, consume(prefix, "op-1", 1)); code != http.StatusForbidden {
-			t.Fatalf("guest consumed the standing arm with %s: %d", prefix, code)
-		}
-	}
-	// 11: after the window, the first read writes off.
-	f.modes.now = func() time.Time { return now.Add(3 * time.Hour) }
-	if mode := f.current(t); mode.Mode != SelfDevelopmentModeOff || modeWriter(mode) != ModeWriterCorpusdExpiry {
-		t.Fatalf("expired standing arm: %+v", mode)
-	}
-}
-
-func TestStandingArmRefusesAPlatformComputer(t *testing.T) {
-	f := newModeAuthorityFixture(t)
-	signer := newTestOwnerActSigner(t)
-	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActEnforce, signer))
-	f.computerID = "computer-1355b83bced1613eb048ee28d66688a8" // the Autopaper paper computer
-	arm := standingRequest(0, "standing-paper", time.Now().Add(time.Hour))
-	if code, _, body := f.ownerWith(t, arm, mintStandingAct(t, signer, f.computerID, arm, ComputerTierTest, time.Now())); code != http.StatusForbidden || !strings.Contains(body, "platform computer") {
-		t.Fatalf("platform computer arm: %d %s", code, body)
-	}
-}
+const paperComputerID = "computer-1355b83bced1613eb048ee28d66688a8" // the Autopaper paper computer
 
 // --- the decision poster ---
 
@@ -239,14 +130,30 @@ func (f *consensusFixture) recordBuild(t *testing.T, request hostbuild.Request, 
 	return job
 }
 
-// armStanding arms the standing mode as the owner, through the proxy's act.
-func (f *consensusFixture) armStanding(t *testing.T, expires time.Time) SelfDevelopmentMode {
+// writeMode is the owner's mode write through the proxy's act.
+func (f *consensusFixture) writeMode(t *testing.T, mode string) SelfDevelopmentMode {
 	t.Helper()
 	current := f.current(t)
-	arm := standingRequest(current.Generation, "standing-"+expires.Format("150405.000000"), expires)
-	code, mode, body := f.ownerWith(t, arm, mintStandingAct(t, f.signer, f.computerID, arm, ComputerTierTest, time.Now()))
+	request := SetSelfDevelopmentModeRequest{Mode: mode, ExpectedGeneration: current.Generation, IdempotencyKey: "mode-" + mode + "-" + fmt.Sprint(current.Generation)}
+	code, written, body := f.ownerWith(t, request, encodeAct(t, mintModeAct(t, f.signer, f.computerID, "owner-1", request, time.Now())))
 	if code != http.StatusOK {
-		t.Fatalf("arm standing: %d %s", code, body)
+		t.Fatalf("write %s: %d %s", mode, code, body)
+	}
+	f.armedMode = written
+	return written
+}
+
+// legacyRow gives the computer a row an old build wrote: a real receipt
+// corpusd signed, under the raw legacy mode in the stored column.
+func (f *consensusFixture) legacyRow(t *testing.T, raw string) SelfDevelopmentMode {
+	t.Helper()
+	written := f.writeMode(t, SelfDevelopmentModeApply)
+	if _, err := f.store.db.ExecContext(context.Background(), `UPDATE computer_self_development_modes SET mode=? WHERE computer_id=?`, raw, f.computerID); err != nil {
+		t.Fatal(err)
+	}
+	mode := f.current(t)
+	if mode.Mode != SelfDevelopmentModeApply || mode.Generation != written.Generation {
+		t.Fatalf("legacy %s row reads %+v", raw, mode)
 	}
 	f.armedMode = mode
 	return mode
@@ -302,11 +209,7 @@ func TestConsensusPosterMintsADecisionFromTwoSignedBallots(t *testing.T) {
 	for _, op := range []string{"op-1", "op-4"} {
 		f.recordBuild(t, f.hostRequest(op), hostbuild.StateDone, f.modeKey)
 	}
-	// 11: no standing arm.
-	if _, err := f.decide(t, f.request(t, "op-1")); !errors.Is(err, ErrConsensusRefused) {
-		t.Fatalf("no arm: %v", err)
-	}
-	f.armStanding(t, time.Now().Add(2*time.Hour))
+	// No mode row is canonical apply, generation 0: the poster decides.
 	response, err := f.decide(t, f.request(t, "op-1"))
 	if err != nil {
 		t.Fatalf("decision: %v", err)
@@ -325,10 +228,17 @@ func TestConsensusPosterMintsADecisionFromTwoSignedBallots(t *testing.T) {
 		t.Fatal("decision digest is not the receipt's canonical digest")
 	}
 	fields := response.Decision.KindFields
-	armRaw, _ := f.armedMode.Receipt.CanonicalBytes()
-	if fields["standing_mode_receipt_digest"] != computerevent.DigestBytes(armRaw) || fields["policy_digest"] != decisionpolicy.PolicyDigestReversibleSelfDevV1 ||
-		fields["computer_tier"] != ComputerTierTest || fields["operation_id"] != "op-1" {
+	if fields["standing_mode_receipt_digest"] != DefaultApplyModeDigest() || fields["policy_digest"] != decisionpolicy.PolicyDigestReversibleSelfDevV1 ||
+		fields["standing_generation"] != json.Number("0") || fields["operation_id"] != "op-1" {
 		t.Fatalf("decision fields: %#v", fields)
+	}
+	if _, stamped := fields["computer_tier"]; stamped {
+		t.Fatalf("the decision still carries the stale computer_tier stamp: %#v", fields)
+	}
+	if notAfter, _ := fields["not_after"].(string); notAfter == "" {
+		t.Fatalf("decision has no not_after: %#v", fields)
+	} else if parsed, err := time.Parse(time.RFC3339Nano, notAfter); err != nil || parsed.Sub(time.Now()) > decisionpolicy.MaxBallotTTL+time.Minute {
+		t.Fatalf("not_after %q is not capped at MaxBallotTTL: %v", notAfter, err)
 	}
 	jobID, _ := f.hostRequest("op-1").JobID()
 	done := f.builds.jobs[jobID]
@@ -474,11 +384,67 @@ func TestConsensusPosterMintsADecisionFromTwoSignedBallots(t *testing.T) {
 	}
 	f.actuator.hostBuilds = f.builds
 
-	// 11: the window closes; the poster refuses.
-	f.actuator.SetClock(func() time.Time { return time.Now().Add(3 * time.Hour) })
-	f.modes.now = func() time.Time { return time.Now().Add(3 * time.Hour) }
-	if _, err := f.decide(t, f.request(t, "op-4")); !errors.Is(err, ErrConsensusRefused) {
-		t.Fatalf("expired window: %v", err)
+	// The owner writes off: the poster refuses, and a mode that is not apply
+	// is the whole reason.
+	f.writeMode(t, SelfDevelopmentModeOff)
+	if _, err := f.decide(t, f.request(t, "op-4")); !errors.Is(err, ErrConsensusRefused) || !strings.Contains(err.Error(), "mode is off") {
+		t.Fatalf("mode off: %v", err)
+	}
+	// Back to apply (generation 2): the poster decides again, under the new row.
+	f.writeMode(t, SelfDevelopmentModeApply)
+	if again, err := f.decide(t, f.request(t, "op-4")); err != nil || again.Decision == nil {
+		t.Fatalf("apply again: %v %+v", err, again)
+	}
+}
+
+func TestConsensusPosterRefusesAPlatformComputer(t *testing.T) {
+	f := newConsensusFixture(t, OwnerActEnforce)
+	request := f.request(t, "op-1")
+	request.Subject.ComputerID = paperComputerID
+	if _, err := f.actuator.Decide(context.Background(), paperComputerID, request); !errors.Is(err, ErrConsensusRefused) || !strings.Contains(err.Error(), "platform computer") {
+		t.Fatalf("platform computer Decide: %v", err)
+	}
+	if _, err := applyAuthorityFromMode(SelfDevelopmentMode{ComputerID: paperComputerID, Mode: SelfDevelopmentModeApply}, paperComputerID, nil); err == nil {
+		t.Fatal("applyAuthorityFromMode admitted a platform computer")
+	}
+	// The gate refuses one too: a decision row for the paper computer that
+	// otherwise matches the event is not admitted.
+	head := f.seedHead(t, paperComputerID)
+	d := digestOf('4')
+	if _, err := f.store.db.Exec(`INSERT INTO consensus_decisions (decision_digest, computer_id, operation_id, subject_digest, bundle_digest, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment, policy_digest, standing_mode_receipt_digest, standing_generation, host_build_job_id, host_build_result_digest, not_after, decision_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d, paperComputerID, "op-1", digestOf('5'), digestOf('b'), head.DesiredEventHead, head.EffectiveEventHead, "", head.DesiredStateCommitment, head.EffectiveStateCommitment,
+		decisionpolicy.PolicyDigestReversibleSelfDevV1, DefaultApplyModeDigest(), 0, digestOf('6'), digestOf('7'), time.Now().Add(10*time.Minute), "{}", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	event := accepted(t, head, decisionpolicy.DecisionAuthorityRef(d), "op-1", digestOf('b'), []string{"artifact:sha256:" + DefaultApplyModeDigest(), "artifact:sha256:" + d}, digestOf('d'))
+	tx, err := f.store.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	reason, _, err := consensusDecisionRefusal(context.Background(), tx, nil, event.Event, event.EventDigest, time.Now())
+	if err != nil || !strings.Contains(reason, "platform computer") {
+		t.Fatalf("gate on a platform computer: %q %v", reason, err)
+	}
+}
+
+func TestConsensusPosterDecidesUnderALegacyRowsReceipt(t *testing.T) {
+	f := newConsensusFixture(t, OwnerActEnforce)
+	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
+	// d@e's row says propose_only: the receipt's new_mode is apply under the
+	// normaliser, and the decision binds that receipt's digest and generation.
+	legacy := f.legacyRow(t, testLegacyProposeOnly)
+	response, err := f.decide(t, f.request(t, "op-1"))
+	if err != nil {
+		t.Fatalf("decision under a legacy propose_only row: %v", err)
+	}
+	raw, _ := legacy.Receipt.CanonicalBytes()
+	if response.Decision.KindFields["standing_mode_receipt_digest"] != computerevent.DigestBytes(raw) {
+		t.Fatalf("decision names %v, want the legacy receipt %s", response.Decision.KindFields["standing_mode_receipt_digest"], computerevent.DigestBytes(raw))
+	}
+	event := f.acceptedFor(t, "op-1", response.DecisionDigest, []string{f.modeRef(t), "artifact:sha256:" + response.DecisionDigest})
+	if err := f.append(t, event); err != nil {
+		t.Fatalf("gate refused a decision under a legacy row: %v", err)
 	}
 }
 
@@ -488,9 +454,15 @@ func (f *consensusFixture) acceptedFor(t *testing.T, operationID, decisionDigest
 	return accepted(t, f.head, decisionpolicy.DecisionAuthorityRef(decisionDigest), operationID, computerevent.DigestBytes(f.bundle), inputs, digestOf('d'))
 }
 
-func (f *consensusFixture) armRef(t *testing.T) string {
+// modeRef is the decision's input artifact 0: the mode receipt's digest, or
+// the default-apply digest for a computer with no row.
+func (f *consensusFixture) modeRef(t *testing.T) string {
 	t.Helper()
-	raw, err := f.armedMode.Receipt.CanonicalBytes()
+	mode := f.current(t)
+	if mode.Receipt == nil {
+		return "artifact:sha256:" + DefaultApplyModeDigest()
+	}
+	raw, err := mode.Receipt.CanonicalBytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,25 +473,24 @@ func TestConsensusGateAdmitsOnlyADecisionThePosterMinted(t *testing.T) {
 	// Observe: the S1 branches only log; the consensus branch enforces.
 	f := newConsensusFixture(t, OwnerActObserve)
 	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
-	f.armStanding(t, time.Now().Add(2*time.Hour))
 	response, err := f.decide(t, f.request(t, "op-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	d := response.DecisionDigest
-	good := []string{f.armRef(t), "artifact:sha256:" + d}
+	good := []string{f.modeRef(t), "artifact:sha256:" + d}
 
 	// 8: a digest the poster never minted; a guest-reduced receipt digest;
 	// the decision cited for another operation or bundle; the decision not
-	// carried as an input; input 0 not the standing arm.
-	refused(t, "random digest", f.append(t, f.acceptedFor(t, "op-1", digestOf('e'), []string{f.armRef(t), "artifact:sha256:" + digestOf('e')})))
+	// carried as an input; input 0 not the mode receipt.
+	refused(t, "random digest", f.append(t, f.acceptedFor(t, "op-1", digestOf('e'), []string{f.modeRef(t), "artifact:sha256:" + digestOf('e')})))
 	qualified, _ := response.Decision.KindFields["qualified_consensus_receipt_digest"].(string)
-	refused(t, "guest-reduced receipt digest", f.append(t, f.acceptedFor(t, "op-1", qualified, []string{f.armRef(t), "artifact:sha256:" + qualified})))
+	refused(t, "guest-reduced receipt digest", f.append(t, f.acceptedFor(t, "op-1", qualified, []string{f.modeRef(t), "artifact:sha256:" + qualified})))
 	refused(t, "other operation", f.append(t, f.acceptedFor(t, "op-2", d, good)))
 	otherBundle := accepted(t, f.head, decisionpolicy.DecisionAuthorityRef(d), "op-1", digestOf('b'), good, digestOf('d'))
 	refused(t, "other bundle", f.append(t, otherBundle))
-	refused(t, "decision not carried", f.append(t, f.acceptedFor(t, "op-1", d, []string{f.armRef(t)})))
-	refused(t, "input 0 not the arm", f.append(t, f.acceptedFor(t, "op-1", d, []string{"artifact:sha256:" + digestOf('f'), "artifact:sha256:" + d})))
+	refused(t, "decision not carried", f.append(t, f.acceptedFor(t, "op-1", d, []string{f.modeRef(t)})))
+	refused(t, "input 0 not the mode receipt", f.append(t, f.acceptedFor(t, "op-1", d, []string{"artifact:sha256:" + digestOf('f'), "artifact:sha256:" + d})))
 	// Other computer: the same decision on computer B.
 	otherHead := f.seedHead(t, "computer-b")
 	onB := accepted(t, otherHead, decisionpolicy.DecisionAuthorityRef(d), "op-1", computerevent.DigestBytes(f.bundle), good, digestOf('d'))
@@ -545,49 +516,37 @@ func TestConsensusGateAdmitsOnlyADecisionThePosterMinted(t *testing.T) {
 	}
 	defer tx.Rollback()
 	second := f.acceptedFor(t, "op-1", d, good)
-	if reason, _, err := consensusDecisionRefusal(context.Background(), tx, second.Event, second.EventDigest, time.Now()); err != nil || !strings.Contains(reason, "already admitted") {
+	if reason, _, err := consensusDecisionRefusal(context.Background(), tx, nil, second.Event, second.EventDigest, time.Now()); err != nil || !strings.Contains(reason, "already admitted") {
 		t.Fatalf("second admission: %q %v", reason, err)
 	}
 }
 
-func TestConsensusGateStopsWhenTheWindowClosesOrTheOwnerDisarms(t *testing.T) {
+func TestConsensusGateStopsWhenTheOwnerWritesOffOrTheModeMoves(t *testing.T) {
 	f := newConsensusFixture(t, OwnerActEnforce)
 	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
-	f.armStanding(t, time.Now().Add(2*time.Hour))
 	response, err := f.decide(t, f.request(t, "op-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	event := f.acceptedFor(t, "op-1", response.DecisionDigest, []string{f.armRef(t), "artifact:sha256:" + response.DecisionDigest})
+	event := f.acceptedFor(t, "op-1", response.DecisionDigest, []string{f.modeRef(t), "artifact:sha256:" + response.DecisionDigest})
 	tx, err := f.store.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 13: past the decision's own not_after (30 minutes) plus grace.
-	if reason, _, _ := consensusDecisionRefusal(context.Background(), tx, event.Event, event.EventDigest, time.Now().Add(40*time.Minute)); !strings.Contains(reason, "expired") {
+	if reason, _, _ := consensusDecisionRefusal(context.Background(), tx, nil, event.Event, event.EventDigest, time.Now().Add(40*time.Minute)); !strings.Contains(reason, "expired") {
 		t.Fatalf("expired decision: %q", reason)
 	}
 	_ = tx.Rollback()
 
-	// 12: the owner disarms between the decision and the append.
-	off := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeProposeOnly, ExpectedGeneration: f.armedMode.Generation, IdempotencyKey: "disarm"}
-	if code, _, body := f.ownerWith(t, off, encodeAct(t, mintModeAct(t, f.signer, f.computerID, "owner-1", off, time.Now()))); code != http.StatusOK {
-		t.Fatalf("disarm: %d %s", code, body)
-	}
-	refused(t, "after the owner disarmed", f.append(t, event))
-
-	// 12: re-armed with a short window; a decision inside it; the window
-	// closes before the append.
-	g := newConsensusFixture(t, OwnerActEnforce)
-	g.recordBuild(t, g.hostRequest("op-1"), hostbuild.StateDone, g.modeKey)
-	g.armStanding(t, time.Now().Add(10*time.Minute))
-	decided, err := g.decide(t, g.request(t, "op-1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	late := g.acceptedFor(t, "op-1", decided.DecisionDigest, []string{g.armRef(t), "artifact:sha256:" + decided.DecisionDigest})
-	g.cas.ownerActs.now = func() time.Time { return time.Now().Add(11 * time.Minute) }
-	refused(t, "after the window closed", g.append(t, late))
+	// 12: the owner writes off between the decision and the append: the
+	// generation changed, so every decision in flight is revoked.
+	f.writeMode(t, SelfDevelopmentModeOff)
+	refused(t, "after the owner wrote off", f.append(t, event))
+	// Writing apply again is generation 2, not the generation 0 the decision
+	// was made under: the decision stays revoked.
+	f.writeMode(t, SelfDevelopmentModeApply)
+	refused(t, "after off and apply again", f.append(t, event))
 }
 
 func TestConsensusRouteIsTheGuestsAndAnswersTyped(t *testing.T) {
@@ -615,10 +574,11 @@ func TestConsensusRouteIsTheGuestsAndAnswersTyped(t *testing.T) {
 	if w := post(f.request(t, "op-1"), "computer-other", f.guestToken); w.Code != http.StatusForbidden {
 		t.Fatalf("another computer's route: %d", w.Code)
 	}
+	f.writeMode(t, SelfDevelopmentModeOff)
 	if w := post(f.request(t, "op-1"), f.computerID, f.guestToken); w.Code != http.StatusForbidden {
-		t.Fatalf("no standing arm: %d %s", w.Code, w.Body.String())
+		t.Fatalf("mode off: %d %s", w.Code, w.Body.String())
 	}
-	f.armStanding(t, time.Now().Add(time.Hour))
+	f.writeMode(t, SelfDevelopmentModeApply)
 	w := post(f.request(t, "op-1"), f.computerID, f.guestToken)
 	var response ConsensusResponse
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Decision == nil {

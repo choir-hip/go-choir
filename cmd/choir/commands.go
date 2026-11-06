@@ -631,20 +631,6 @@ func buildRegistry() []*command {
 			legacy:  runSelfDevWait,
 		},
 		{
-			path: []string{"self-dev", "approve"}, summary: "Owner's single approval: arm accept_once for exactly the frozen candidate, then decide; the same key replays a landed approval",
-			params: []param{
-				computerParam().orSay(selfDevUsage),
-				pStr("operation", "Operation ID awaiting approval").req(),
-				idempotencyParam("Decision idempotency key (default derives from the operation)"),
-				pDuration("window", "How long the owner's single approval stays armed").dflt(15 * time.Minute),
-			},
-			usage:       "--operation is required",
-			scopes:      []string{"computer:self_development:read", "computer:self_development:mode", "computer:self_development:approve", ownerActsScope},
-			destructive: true, idempotent: true,
-			handler: func(x *call) (any, error) { return selfDevDecide(x, "approve") },
-			cliOnly: ownerActReason,
-		},
-		{
 			path: []string{"self-dev", "reject"}, summary: "Reject a candidate awaiting approval (--reason); the same key and reason replay a landed reject",
 			params: []param{
 				computerParam().orSay(selfDevUsage),
@@ -701,19 +687,9 @@ func buildRegistry() []*command {
 			path: []string{"self-dev", "mode", "set"}, summary: "Generation-CAS the explicit computer mode",
 			params: []param{
 				computerParam(),
-				pStr("mode", "Computer mode").req().oneOf("off", "audit_only", "propose_only", "accept_once", "qualified_consensus", "standing_consensus"),
+				pStr("mode", "Computer mode: off (no self-development) or apply (propose, verify, host build, decide by consensus, apply)").req().oneOf("off", "apply"),
 				pInt("expected_generation", "Expected mode generation").dflt(0).atLeast(0),
 				idempotencyParam("Unique idempotency key").req(),
-				pStr("expires_at", "Canonical UTC expiry for accept_once, qualified_consensus or standing_consensus (at most 24 h ahead)"),
-				pStr("operation", "Exact operation ID for accept_once or qualified_consensus"),
-				pStr("expected_desired_head", "Expected desired event head for accept_once or qualified_consensus"),
-				pStr("expected_effective_head", "Expected effective event head for accept_once or qualified_consensus"),
-				pStr("expected_pending_ref", "Expected pending transition reference (empty when absent)"),
-				pStr("expected_desired_commitment", "Expected desired state commitment for accept_once or qualified_consensus"),
-				pStr("expected_effective_commitment", "Expected effective state commitment for accept_once or qualified_consensus"),
-				pStr("bundle", "Exact bundle digest for accept_once or qualified_consensus"),
-				pStr("policy_digest", "Frozen policy digest for qualified_consensus or standing_consensus"),
-				pStr("consensus_receipt_digest", "QualifiedConsensusReceipt digest for qualified_consensus"),
 			},
 			usage:  "--computer, --mode, and --idempotency-key are required; positional arguments are forbidden",
 			scopes: []string{"computer:self_development:mode", ownerActsScope}, destructive: true, idempotent: true,
@@ -972,7 +948,7 @@ func computerPost(verb, summary, route string, body any, destructive bool) *comm
 // the ruling). Approving a frozen candidate, setting the computer mode and
 // rewriting a computer's state are the owner's supervision; an agent that
 // reaches them through a tool can approve its own work.
-const ownerActReason = "an owner act (approve, mode, restore, chain bootstrap, rematerialize): agents propose and read through MCP; the owner decides from their own terminal, with a key minted from their signed-in session that carries owner:acts (admin does not)"
+const ownerActReason = "an owner act (mode, rollback, restore, chain bootstrap, rematerialize): agents propose and read through MCP; the owner decides from their own terminal, with a key minted from their signed-in session that carries owner:acts (admin does not)"
 
 // ownerAct marks a command as an owner act, CLI only.
 // ownerAct marks a command as the owner's: CLI-only, and its key needs
@@ -1145,30 +1121,9 @@ func textureEmbedRows(revisionID string, body json.RawMessage) []textureEmbedRow
 
 func selfDevDecide(x *call, decision string) (any, error) {
 	computerID, id := x.trim("computer"), x.trim("operation")
-	operation, binding, replay, err := selfDevDecisionBinding(x.c, computerID, id, decision)
+	operation, binding, _, err := selfDevDecisionBinding(x.c, computerID, id, decision)
 	if err != nil {
 		return nil, err
-	}
-	if decision == "approve" && !replay {
-		// The owner's single approval: arm accept_once bound to exactly this
-		// candidate and head; the decision consumes it. A replay of a landed
-		// approval arms nothing: its grant was consumed.
-		var mode struct {
-			Generation uint64 `json:"generation"`
-		}
-		if err := x.c.do(http.MethodGet, selfDevPath(computerID, "mode"), nil, &mode); err != nil {
-			return nil, fmt.Errorf("read mode: %w", err)
-		}
-		arm := map[string]any{
-			"mode": "accept_once", "expected_generation": mode.Generation, "idempotency_key": "cli-accept-once:" + id,
-			"operation_id": id, "expires_at": time.Now().UTC().Add(x.dur("window")).Truncate(time.Second).Format(time.RFC3339Nano),
-		}
-		for field, value := range binding {
-			arm[field] = value
-		}
-		if err := x.c.do(http.MethodPut, selfDevPath(computerID, "mode"), arm, nil); err != nil {
-			return nil, fmt.Errorf("arm accept_once: %w", err)
-		}
 	}
 	body := map[string]any{"decision": decision, "verifier_ref": operation.VerifierRefs[0]}
 	for field, value := range binding {
@@ -1202,29 +1157,8 @@ func selfDevAbandon(x *call) (any, error) {
 }
 
 func selfDevModeSet(x *call) (any, error) {
-	mode := x.str("mode")
 	body := map[string]any{
-		"mode": mode, "expected_generation": uint64(x.num("expected_generation")), "idempotency_key": x.str("idempotency_key"),
-	}
-	if mode == "accept_once" || mode == "qualified_consensus" {
-		body["expires_at"] = x.str("expires_at")
-		body["operation_id"] = x.str("operation")
-		body["expected_desired_event_head"] = x.str("expected_desired_head")
-		body["expected_effective_event_head"] = x.str("expected_effective_head")
-		body["expected_pending_transition_ref"] = x.trim("expected_pending_ref")
-		body["expected_desired_state_commitment"] = x.str("expected_desired_commitment")
-		body["expected_effective_state_commitment"] = x.str("expected_effective_commitment")
-		body["bundle_digest"] = x.str("bundle")
-	}
-	if mode == "qualified_consensus" {
-		body["policy_digest"] = x.trim("policy_digest")
-		body["consensus_receipt_digest"] = x.trim("consensus_receipt_digest")
-	}
-	if mode == "standing_consensus" {
-		// P4: the owner's standing autonomous arm, test-tier computers only:
-		// a policy (reversible-selfdev-v1) and an expiry at most 24 h ahead.
-		body["policy_digest"] = x.trim("policy_digest")
-		body["expires_at"] = x.str("expires_at")
+		"mode": x.str("mode"), "expected_generation": uint64(x.num("expected_generation")), "idempotency_key": x.str("idempotency_key"),
 	}
 	return sendRaw(x, http.MethodPut, selfDevPath(x.str("computer"), "mode"), body)
 }

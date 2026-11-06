@@ -92,23 +92,17 @@ func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, 
 	if a.cleanRebaseJobs == nil {
 		return "no host build service", nil, nil
 	}
-	var mode string
-	err := tx.QueryRowContext(ctx, `SELECT mode FROM computer_self_development_modes WHERE computer_id=?`, event.ComputerID).Scan(&mode)
+	// The owner's ruling is unconditional ("clean rebases without approval",
+	// 2026-11-04): every computer that develops admits a clean rebase. The raw
+	// column is read and normalised in Go; no row is the default, apply.
+	var stored string
+	err := tx.QueryRowContext(ctx, `SELECT mode FROM computer_self_development_modes WHERE computer_id=?`, event.ComputerID).Scan(&stored)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "the computer has no self-development mode", nil, nil
-	}
-	if err != nil {
+		stored = ""
+	} else if err != nil {
 		return "", nil, err
 	}
-	// The owner's ruling is unconditional ("clean rebases without approval",
-	// 2026-11-04), so every mode in which the computer develops admits a
-	// clean rebase, propose_only included: it is the mode a test computer
-	// rests in after any consumed grant, and refusing it would turn the
-	// feature off on the computers it is for. off and audit_only stay the
-	// hard stops. An allowlist, so a new mode is refused until it is named.
-	switch mode {
-	case SelfDevelopmentModeAcceptOnce, SelfDevelopmentModeQualifiedConsensus, SelfDevelopmentModeStandingConsensus, SelfDevelopmentModeProposeOnly:
-	default:
+	if mode := CanonicalSelfDevelopmentMode(stored); mode != SelfDevelopmentModeApply {
 		return "the computer's self-development mode is " + mode + "; no clean rebase applies under it", nil, nil
 	}
 	receipt, reason, err := a.cleanRebaseLink(ctx, tx, event, receiptDigest, 0)

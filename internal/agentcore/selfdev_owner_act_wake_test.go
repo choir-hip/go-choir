@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -120,7 +119,8 @@ func checkOwnerActRecord(t *testing.T, rec types.CommitmentRecord, inbox, operat
 	}
 }
 
-// ownerActDecisionRequest is the owner's decision binding at the current head.
+// ownerActDecisionRequest is the owner's reject binding at the current head.
+// The computer has no mode row (canonical apply), so it needs no mode write.
 func ownerActDecisionRequest(t *testing.T, f *p4Fixture, operation selfdev.Operation, decision, key string) selfDevelopmentDecisionRequest {
 	t.Helper()
 	head := f.waitForStableHead(t)
@@ -132,29 +132,7 @@ func ownerActDecisionRequest(t *testing.T, f *p4Fixture, operation selfdev.Opera
 		ExpectedPendingTransitionRef:   &pending,
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 	}
-	if decision == "reject" {
-		request.Reason = "the page split is still wrong: page 1 shows page 2's text"
-		arm := platform.SetSelfDevelopmentModeRequest{
-			Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: f.currentMode(t).Generation,
-			IdempotencyKey: key + "-propose-only",
-		}
-		if code, _, body := f.ownerWrite(t, arm, platform.ComputerTierTest); code != http.StatusOK {
-			t.Fatalf("owner propose_only: %d %s", code, body)
-		}
-		return request
-	}
-	arm := platform.SetSelfDevelopmentModeRequest{
-		Mode: platform.SelfDevelopmentModeAcceptOnce, ExpectedGeneration: f.currentMode(t).Generation,
-		OperationID: operation.OperationID, BundleDigest: operation.BundleDigest,
-		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
-		ExpectedPendingTransitionRef:   &pending,
-		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
-		ExpiresAt:      time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond).Format(time.RFC3339Nano),
-		IdempotencyKey: key + "-accept-once",
-	}
-	if code, _, body := f.ownerWrite(t, arm, platform.ComputerTierTest); code != http.StatusOK {
-		t.Fatalf("owner accept_once: %d %s", code, body)
-	}
+	request.Reason = "the page split is still wrong: page 1 shows page 2's text"
 	return request
 }
 
@@ -182,7 +160,7 @@ func ownerActReplay(t *testing.T, f *p4Fixture, request selfDevelopmentDecisionR
 	return replay
 }
 
-func TestOwnerActWakeApproveAndApplyEachWakeOnce(t *testing.T) {
+func TestOwnerActWakeConsensusApproveAndApplyEachWakeOnce(t *testing.T) {
 	f := newP4Fixture(t)
 	ctx := context.Background()
 	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-approve")
@@ -193,20 +171,19 @@ func TestOwnerActWakeApproveAndApplyEachWakeOnce(t *testing.T) {
 	}
 	headBefore := ownerActHead(t, f.store, "owner", f.computerID, "doc-approve")
 	if got := ownerActRecords(t, f.store, "owner", f.computerID, inbox); len(got) != 0 {
-		t.Fatalf("records before the owner act: %+v", got)
+		t.Fatalf("records before the decision: %+v", got)
 	}
 
-	request := ownerActDecisionRequest(t, f, operation, "approve", "owner-act-approve-key")
-	// The post-commit observer wins the race: it finalizes and applies
-	// before the handler moves the operation, as on staging.
+	// Consensus decides (there is no owner approval); the post-commit
+	// observer may win the race and apply before the handler moves the
+	// operation, as on staging.
 	f.rt.selfdevDecisionBeforeTransition = func(ctx context.Context, _ string) {
 		f.rt.reconcileSelfDevelopmentMaterialization(ctx)
 	}
-	handler := &APIHandler{rt: f.rt}
-	decided, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, request)
+	_, err := f.rt.runStandingConsensus(ctx, operation.OperationID, "run:management-p4")
 	f.rt.selfdevDecisionBeforeTransition = nil
-	if status != http.StatusOK || err != nil {
-		t.Fatalf("approve answered %d: %v", status, err)
+	if err != nil {
+		t.Fatalf("consensus: %v", err)
 	}
 	f.waitForState(t, operation.OperationID, selfdev.StateApplied)
 
@@ -229,11 +206,7 @@ func TestOwnerActWakeApproveAndApplyEachWakeOnce(t *testing.T) {
 		t.Fatal("approve and apply carry the same text; Texture cannot tell accepted from applied")
 	}
 
-	// A same-key replay and another reconcile pass mint nothing more.
-	replayed, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, ownerActReplay(t, f, request, decided))
-	if status != http.StatusOK || err != nil || replayed.State != selfdev.StateApplied {
-		t.Fatalf("same-key replay answered %d %v: %+v", status, err, replayed)
-	}
+	// Another reconcile pass mints nothing more.
 	f.rt.reconcileSelfDevelopmentMaterialization(ctx)
 	if again := ownerActRecords(t, f.store, "owner", f.computerID, inbox); len(again) != 2 {
 		t.Fatalf("replay left %d owner-act records, want 2", len(again))
@@ -345,10 +318,8 @@ func TestOwnerActWakeHasNoSwitch(t *testing.T) {
 	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-default")
 	f.trajectoryID = trajectoryID
 	operation := f.verify(t, f.freeze(t, "owner-act-default", "owner act default"))
-	request := ownerActDecisionRequest(t, f, operation, "approve", "owner-act-default-key")
-	handler := &APIHandler{rt: f.rt}
-	if _, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, request); status != http.StatusOK || err != nil {
-		t.Fatalf("approve answered %d: %v", status, err)
+	if _, err := f.rt.runStandingConsensus(ctx, operation.OperationID, "run:management-p4"); err != nil {
+		t.Fatalf("consensus approve: %v", err)
 	}
 	f.waitForState(t, operation.OperationID, selfdev.StateApplied)
 	if got := ownerActRecords(t, f.store, "owner", f.computerID, inbox); len(got) != 2 {

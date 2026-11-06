@@ -66,7 +66,7 @@ var wantCLIOnly = []string{
 	"platform yank",
 	"precommit import-ledger",
 	// Owner act: abandoning an open operation.
-	"self-dev abandon", "self-dev approve",
+	"self-dev abandon",
 	// Owner act: rolling an applied operation back.
 	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace tail", "version",
 }

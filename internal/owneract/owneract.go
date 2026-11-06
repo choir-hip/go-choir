@@ -64,17 +64,10 @@ const (
 
 // Act kinds.
 const (
-	// ActSelfDevApprove is arming accept_once: the owner's approval of
-	// exactly one operation and bundle at exact heads.
-	ActSelfDevApprove = "selfdev.approve"
-	// ActSelfDevModeSet is every other self-development mode write.
+	// ActSelfDevModeSet is a self-development mode write (off or apply). The
+	// retired kinds selfdev.approve and selfdev.autonomy.arm survive only as
+	// historic owner_act_receipts rows.
 	ActSelfDevModeSet = "selfdev.mode.set"
-	// ActSelfDevAutonomyArm is arming standing_consensus: the owner's
-	// standing grant of autonomous acceptance under one policy, on one
-	// test-tier computer, until an expiry (P4,
-	// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md). Its
-	// subject carries computer_tier, which the proxy reads from vmctl.
-	ActSelfDevAutonomyArm = "selfdev.autonomy.arm"
 	// ActPackagePublish is publishing one package release at scope owner
 	// (Library S2, docs/design/library-package-propagation-2026-10-26.md
 	// 4.1). Its subject binds the release id and the scopes.

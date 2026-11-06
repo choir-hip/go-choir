@@ -1,19 +1,21 @@
 package agentcore
 
-// P4: the guest side of standing autonomous acceptance
-// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md §5).
+// P4: the guest side of autonomous acceptance, now authorized by the mode row
+// (docs/design/selfdev-apply-and-revert-2026-11-06.md 3.2 and 3.4;
+// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md §5).
 //
-// After management's Verify moves an operation to awaiting_approval, and
-// only while the owner's standing_consensus arm is the computer's mode, the
-// runtime makes one bounded attempt: it submits the candidate's P5 host
-// build and waits for it (under a standing arm the host's vote is on that
-// build, so the build comes before the decision), signs management's verdict
-// as the independent-reviewer ballot (guest-core), asks corpusd's decision
-// poster for a decision (corpusd casts the capsule-verifier ballot itself,
-// on the build), and records the poster's answer through the ordinary
-// decision path. The guest never reduces a bundle and never signs the
-// host's seat. There is no resumer: a crash mid-attempt leaves the
-// operation at awaiting_approval for the owner.
+// After management's Verify moves an operation to awaiting_approval, the
+// runtime makes one bounded attempt on a computer whose canonical mode is
+// apply (the owner wrote apply, or wrote nothing): it submits the candidate's
+// P5 host build and waits for it (the host's vote is on that build, so the
+// build comes before the decision), signs management's verdict as the
+// independent-reviewer ballot (guest-core), asks corpusd's decision poster for
+// a decision (corpusd casts the capsule-verifier ballot itself, on the build),
+// and records the poster's answer through the ordinary decision path. The
+// guest never reduces a bundle and never signs the host's seat. Nothing
+// parks: every exit of the attempt that does not decide closes the operation
+// failed with the reason (closeUndecidedSelfDevelopmentOperation), and every
+// boot closes an undecided awaiting_approval operation. There is no resumer.
 
 import (
 	"bytes"
@@ -27,6 +29,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +39,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -57,7 +61,8 @@ const (
 )
 
 // triggerStandingConsensus starts one bounded attempt in the background, so
-// management's Verify returns while the host builds.
+// management's Verify returns while the host builds. An attempt that ends
+// without a decision closes the operation failed with its reason.
 func (rt *Runtime) triggerStandingConsensus(operationID, verifierRunID string) {
 	if rt == nil || rt.selfdevControl == nil || rt.selfdevBallotSigner == nil || rt.selfdevOperations == nil || rt.store == nil {
 		return
@@ -67,10 +72,11 @@ func (rt *Runtime) triggerStandingConsensus(operationID, verifierRunID string) {
 		defer cancel()
 		if _, err := rt.runStandingConsensus(ctx, operationID, verifierRunID); err != nil {
 			log.Printf("agentcore: standing consensus for %s: %v", operationID, err)
-			computerID := rt.standingComputerID()
-			if recordErr := rt.selfdevOperations.RecordIntentError(ctx, computerID, operationID, "standing consensus: "+err.Error()); recordErr != nil {
-				log.Printf("agentcore: record standing consensus error on %s: %v", operationID, recordErr)
-			}
+			// The attempt's own context may be the thing that ended; the
+			// close is a fresh bounded write.
+			closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Minute)
+			defer closeCancel()
+			rt.closeUndecidedSelfDevelopmentOperation(closeCtx, rt.standingComputerID(), operationID, "standing consensus: "+err.Error())
 		}
 	}()
 }
@@ -102,6 +108,52 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+// closeUndecidedSelfDevelopmentOperation closes an operation still awaiting
+// approval failed, with reason on the operation (RecordIntentError and
+// TerminalError) and in its document's Texture. Nothing parks
+// (docs/design/selfdev-apply-and-revert-2026-11-06.md 3.4). An operation that
+// already left awaiting_approval is left alone; one whose decision is on the
+// tape but not projected goes through the existing recovery, never this close.
+func (rt *Runtime) closeUndecidedSelfDevelopmentOperation(ctx context.Context, computerID, operationID, reason string) {
+	if rt == nil || rt.selfdevOperations == nil {
+		return
+	}
+	operation, err := rt.selfdevOperations.Get(ctx, computerID, operationID)
+	if err != nil {
+		log.Printf("agentcore: close undecided %s: read: %v", operationID, err)
+		return
+	}
+	if operation.State != selfdev.StateAwaitingApproval {
+		return
+	}
+	if rt.store != nil {
+		_, decided, lookupErr := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID)
+		if lookupErr != nil {
+			log.Printf("agentcore: close undecided %s: decision lookup: %v", operationID, lookupErr)
+			return
+		}
+		if decided {
+			if _, _, recoverErr := rt.recoverSelfDevelopmentDecision(ctx, operation); recoverErr != nil {
+				log.Printf("agentcore: close undecided %s: its decision is on the tape; recovery: %v", operationID, recoverErr)
+			}
+			return
+		}
+	}
+	if recordErr := rt.selfdevOperations.RecordIntentError(ctx, computerID, operationID, reason); recordErr != nil {
+		log.Printf("agentcore: close undecided %s: record the reason: %v", operationID, recordErr)
+	}
+	closed, err := rt.selfdevOperations.Transition(ctx, computerID, operationID, selfdev.StateAwaitingApproval, selfdev.StateFailed, func(next *selfdev.Operation) error {
+		next.TerminalError = reason
+		return nil
+	})
+	if err != nil {
+		log.Printf("agentcore: close undecided %s: %v", operationID, err)
+		return
+	}
+	log.Printf("agentcore: %s closed failed before a decision: %s", operationID, reason)
+	rt.notifyTextureOfOwnerAct(ctx, rt.selfdevRouteOwnerID, closed, types.OwnerActFail, "")
 }
 
 // standingHostBuild submits the operation's host build and waits until it is
@@ -136,18 +188,27 @@ func (rt *Runtime) standingHostBuild(ctx context.Context, operation selfdev.Oper
 
 // runStandingConsensus builds, asks the poster and records its answer. It
 // returns the operation after the decision, or the operation unchanged (and
-// nil) when the computer is not under a standing arm.
+// nil) when it is no longer awaiting approval. Every other exit is an error,
+// and the caller closes the operation failed with it.
 func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifierRunID string) (selfdev.Operation, error) {
 	computerID := rt.standingComputerID()
+	if platform.IsPlatformComputer(computerID) {
+		return selfdev.Operation{}, fmt.Errorf("a platform computer does not self-develop (owner ruling 2026-11-06)")
+	}
 	mode, err := rt.selfdevControl.SelfDevelopmentMode(ctx)
 	if err != nil {
 		return selfdev.Operation{}, err
 	}
-	if mode.Mode != platform.SelfDevelopmentModeStandingConsensus {
-		return selfdev.Operation{}, nil
+	// No row is canonical apply at generation 0 with no receipt.
+	if canonical := platform.CanonicalSelfDevelopmentMode(mode.Mode); canonical != platform.SelfDevelopmentModeApply {
+		return selfdev.Operation{}, fmt.Errorf("the computer's self-development mode is %s", canonical)
 	}
-	if mode.Receipt == nil || mode.Receipt.Verify(rt.selfdevControl.KeyResolver()) != nil {
-		return selfdev.Operation{}, fmt.Errorf("standing mode receipt does not verify")
+	if mode.Receipt == nil {
+		if mode.Generation != 0 {
+			return selfdev.Operation{}, fmt.Errorf("mode row %d carries no receipt", mode.Generation)
+		}
+	} else if mode.Receipt.Verify(rt.selfdevControl.KeyResolver()) != nil {
+		return selfdev.Operation{}, fmt.Errorf("mode receipt does not verify")
 	}
 	operation, err := rt.selfdevOperations.Get(ctx, computerID, operationID)
 	if err != nil {
@@ -270,7 +331,7 @@ func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifi
 		}
 		return operation, decideErr
 	}
-	return selfdev.Operation{}, fmt.Errorf("event head kept moving; %d attempts", standingConsensusAttempts)
+	return selfdev.Operation{}, fmt.Errorf("decision attempt exhausted: the event head kept moving; %d attempts", standingConsensusAttempts)
 }
 
 // standingFrozenBundle reads the operation's frozen bundle bytes and decodes
@@ -335,7 +396,7 @@ func (rt *Runtime) standingConsensusRequest(ctx context.Context, mode platform.S
 		evidence = append(evidence, "run:"+strings.TrimPrefix(verifierRunID, "run:"))
 	}
 	now := time.Now().UTC()
-	ballot, err := decisionpolicy.NewBallot(decisionpolicy.SeatIndependentReviewer, decisionpolicy.VoteAccept, mode.PolicyDigest, subjectDigest,
+	ballot, err := decisionpolicy.NewBallot(decisionpolicy.SeatIndependentReviewer, decisionpolicy.VoteAccept, decisionpolicy.PolicyDigestReversibleSelfDevV1, subjectDigest,
 		subject.ComputerID, operation.OperationID, decisionpolicy.DeskManagement, "", evidence, now, 0)
 	if err != nil {
 		return platform.ConsensusRequest{}, err
@@ -360,18 +421,17 @@ func (rt *Runtime) standingConsensusRequest(ctx context.Context, mode platform.S
 
 // verifyStandingConsensusDecision checks, before the guest records it, that
 // a decision is the poster's (platform-control signed), for this computer,
-// operation, bundle and heads, under the current standing arm, inside its
-// window. corpusd's gate repeats the binding where it counts; this is the
-// guest's legible refusal and defense in depth.
+// operation, bundle and heads, under the current mode, inside its window.
+// corpusd's gate repeats the binding where it counts; this is the guest's
+// legible refusal and defense in depth.
 func verifyStandingConsensusDecision(resolver computerevent.KeyResolver, currentMode platform.SelfDevelopmentMode, computerID, operationID string, request selfDevelopmentDecisionRequest) ([]byte, string, error) {
 	decision := request.ConsensusDecision
 	if decision == nil {
 		return nil, "", fmt.Errorf("standing consensus approval requires the poster's decision")
 	}
 	now := time.Now().UTC()
-	expiresAt, err := time.Parse(time.RFC3339Nano, currentMode.ExpiresAt)
-	if err != nil || !now.Before(expiresAt) {
-		return nil, "", fmt.Errorf("the standing window has expired")
+	if platform.CanonicalSelfDevelopmentMode(currentMode.Mode) != platform.SelfDevelopmentModeApply {
+		return nil, "", fmt.Errorf("the computer's self-development mode is not apply")
 	}
 	if decision.ReceiptKind != decisionpolicy.DecisionReceiptKind || decision.Issuer != "corpusd" ||
 		len(decision.RequiredSigners) != 1 || decision.RequiredSigners[0].SignerDomain != "platform-control" || decision.Verify(resolver) != nil {
@@ -381,13 +441,22 @@ func verifyStandingConsensusDecision(resolver computerevent.KeyResolver, current
 		value, _ := decision.KindFields[name].(string)
 		return value
 	}
-	armBytes, err := currentMode.Receipt.CanonicalBytes()
+	// The mode receipt's digest, or for a computer with no row the default
+	// apply digest (generation 0).
+	modeBytes, err := selfDevelopmentModeAuthorityBytes(currentMode)
 	if err != nil {
 		return nil, "", err
 	}
+	generation, _ := decision.KindFields["standing_generation"].(json.Number)
+	if generation == "" {
+		if number, isFloat := decision.KindFields["standing_generation"].(float64); isFloat {
+			generation = json.Number(strconv.FormatUint(uint64(number), 10))
+		}
+	}
 	if field("computer_id") != computerID || field("operation_id") != operationID ||
-		field("standing_mode_receipt_digest") != computerevent.DigestBytes(armBytes) {
-		return nil, "", fmt.Errorf("consensus decision does not bind this computer, operation and standing arm")
+		field("standing_mode_receipt_digest") != computerevent.DigestBytes(modeBytes) ||
+		generation.String() != strconv.FormatUint(currentMode.Generation, 10) {
+		return nil, "", fmt.Errorf("consensus decision does not bind this computer, operation and mode")
 	}
 	notAfter, err := time.Parse(time.RFC3339Nano, field("not_after"))
 	if err != nil || !now.Before(notAfter) {

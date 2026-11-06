@@ -301,9 +301,9 @@ func newP4Fixture(t *testing.T) *p4Fixture {
 
 // ownerWrite is the owner's mode write as the proxy forwards it: a
 // host-internal call carrying the proxy's owner-act receipt.
-func (f *p4Fixture) ownerWrite(t *testing.T, request platform.SetSelfDevelopmentModeRequest, tier string) (int, platform.SelfDevelopmentMode, string) {
+func (f *p4Fixture) ownerWrite(t *testing.T, request platform.SetSelfDevelopmentModeRequest) (int, platform.SelfDevelopmentMode, string) {
 	t.Helper()
-	subject, err := platform.OwnerActModeSubjectWithTier(f.computerID, request, tier)
+	subject, err := platform.OwnerActModeSubject(f.computerID, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,18 +343,34 @@ func (f *p4Fixture) currentMode(t *testing.T) platform.SelfDevelopmentMode {
 	return mode
 }
 
-func (f *p4Fixture) armStanding(t *testing.T, expires time.Time) platform.SelfDevelopmentMode {
+// writeMode is the owner's mode write (off or apply). A computer needs no
+// write to self-develop: with no row it is apply at generation 0.
+func (f *p4Fixture) writeMode(t *testing.T, mode string) platform.SelfDevelopmentMode {
 	t.Helper()
+	current := f.currentMode(t)
 	request := platform.SetSelfDevelopmentModeRequest{
-		Mode: platform.SelfDevelopmentModeStandingConsensus, ExpectedGeneration: f.currentMode(t).Generation,
-		IdempotencyKey: "p4-standing-" + expires.Format("150405.000000"), PolicyDigest: decisionpolicy.PolicyDigestReversibleSelfDevV1,
-		ExpiresAt: expires.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
+		Mode: mode, ExpectedGeneration: current.Generation, IdempotencyKey: fmt.Sprintf("p4-%s-%d", mode, current.Generation),
 	}
-	code, mode, body := f.ownerWrite(t, request, platform.ComputerTierTest)
+	code, written, body := f.ownerWrite(t, request)
 	if code != http.StatusOK {
-		t.Fatalf("owner standing arm: %d %s", code, body)
+		t.Fatalf("owner %s: %d %s", mode, code, body)
 	}
-	return mode
+	return written
+}
+
+// modeArtifactDigest is input artifact 0 of a decision under the current
+// mode: the mode receipt's digest, or the default-apply digest for no row.
+func (f *p4Fixture) modeArtifactDigest(t *testing.T) string {
+	t.Helper()
+	mode := f.currentMode(t)
+	if mode.Receipt == nil {
+		return platform.DefaultApplyModeDigest()
+	}
+	raw, err := mode.Receipt.CanonicalBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return computerevent.DigestBytes(raw)
 }
 
 // freeze writes a candidate the way Freeze does (a draft bundle naming its
@@ -481,26 +497,22 @@ func TestStandingConsensusEndToEndFreezeVerifyAcceptApplyWithoutPerCandidateOwne
 	f := newP4Fixture(t)
 	ctx := context.Background()
 
-	// Not autonomous before the owner arms: the driver does nothing.
+	// No mode row: canonical apply, generation 0, no receipt. The owner
+	// does nothing, and the driver decides the candidate end to end: the
+	// guest's no-row guards, input artifact 0 as the default-apply digest and
+	// the gate's generation 0 all hold.
+	if mode := f.currentMode(t); mode.Mode != platform.SelfDevelopmentModeApply || mode.Generation != 0 || mode.Receipt != nil {
+		t.Fatalf("a fresh computer reads %+v, want apply generation 0 with no receipt", mode)
+	}
 	first := f.verify(t, f.freeze(t, "p4-first", "first autonomous change"))
-	if op, err := f.rt.runStandingConsensus(ctx, first.OperationID, "run:management-p4"); err != nil || op.OperationID != "" {
-		t.Fatalf("driver acted without a standing arm: %+v %v", op, err)
-	}
-	// A non-test computer cannot be armed (the tier the proxy signs).
-	refusedArm := platform.SetSelfDevelopmentModeRequest{Mode: platform.SelfDevelopmentModeStandingConsensus, ExpectedGeneration: 0,
-		IdempotencyKey: "p4-primary", PolicyDigest: decisionpolicy.PolicyDigestReversibleSelfDevV1,
-		ExpiresAt: time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond).Format(time.RFC3339Nano)}
-	if code, _, body := f.ownerWrite(t, refusedArm, "primary"); code != http.StatusForbidden {
-		t.Fatalf("primary-tier arm: %d %s", code, body)
-	}
-
-	// The one owner act.
-	f.armStanding(t, time.Now().Add(2*time.Hour))
 	if _, err := f.rt.runStandingConsensus(ctx, first.OperationID, "run:management-p4"); err != nil {
 		t.Fatalf("standing consensus: %v", err)
 	}
 	applied := f.waitForState(t, first.OperationID, selfdev.StateApplied)
 	decision := f.decisionEvent(t, first.OperationID)
+	if len(decision.InputArtifactRefs) == 0 || decision.InputArtifactRefs[0] != "artifact:sha256:"+platform.DefaultApplyModeDigest() {
+		t.Fatalf("the no-row decision's input artifact 0 = %v, want the default-apply digest", decision.InputArtifactRefs)
+	}
 	digest, ok := decisionpolicy.ReceiptDigestFromAuthority(decision.AuthorityRef)
 	if decision.EventKind != computerevent.EventEffectAccepted || !ok || applied.DecisionActor != digest {
 		t.Fatalf("decision authority %q actor %q", decision.AuthorityRef, applied.DecisionActor)
@@ -542,7 +554,6 @@ func TestStandingConsensusEndToEndFreezeVerifyAcceptApplyWithoutPerCandidateOwne
 	// poster never minted is refused by corpusd before it is on the chain.
 	third := f.verify(t, f.freeze(t, "p4-forged", "forged acceptance"))
 	head := f.waitForStableHead(t)
-	modeRaw, _ := f.currentMode(t).Receipt.CanonicalBytes()
 	forgedDigest := strings.Repeat("e", 64)
 	eventID, _ := computerevent.NewEventID()
 	forged := computerevent.Event{
@@ -555,7 +566,7 @@ func TestStandingConsensusEndToEndFreezeVerifyAcceptApplyWithoutPerCandidateOwne
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: third.BundleDigest,
 		DecisionRef: strings.Repeat("d", 64), VerifierRefs: append([]string(nil), third.VerifierRefs...), ReducerVersion: computerevent.ReducerVersionV1,
-		InputArtifactRefs: []string{"artifact:sha256:" + computerevent.DigestBytes(modeRaw), "artifact:sha256:" + forgedDigest},
+		InputArtifactRefs: []string{"artifact:sha256:" + f.modeArtifactDigest(t), "artifact:sha256:" + forgedDigest},
 	}
 	target, _ := computerevent.CanonicalJSON(map[string]string{"base_head": third.BaseHead, "bundle_digest": third.BundleDigest})
 	if _, err := f.appender.AppendNew(ctx, forged, computerevent.TransitionInput{TargetStateCommitment: computerevent.DigestBytes(target)}, nil); err == nil || !strings.Contains(err.Error(), "admission refused") {
@@ -565,17 +576,19 @@ func TestStandingConsensusEndToEndFreezeVerifyAcceptApplyWithoutPerCandidateOwne
 		t.Fatalf("forged acceptance moved the operation to %s", op.State)
 	}
 
-	// An expired window stops autonomy: re-arm for two seconds, let it lapse.
-	f.armStanding(t, time.Now().Add(2*time.Second))
-	time.Sleep(2500 * time.Millisecond)
-	if op, err := f.rt.runStandingConsensus(ctx, third.OperationID, "run:management-p4"); err != nil || op.OperationID != "" {
-		t.Fatalf("driver acted after the window closed: %+v %v", op, err)
-	}
-	if mode := f.currentMode(t); mode.Mode != platform.SelfDevelopmentModeOff {
-		t.Fatalf("expired standing arm reads %s", mode.Mode)
+	// The owner writes off: the attempt closes the candidate failed, with the
+	// reason on the operation (nothing parks).
+	f.writeMode(t, platform.SelfDevelopmentModeOff)
+	if op, err := f.rt.runStandingConsensus(ctx, third.OperationID, "run:management-p4"); err == nil || op.OperationID != "" || !strings.Contains(err.Error(), "mode is off") {
+		t.Fatalf("driver under mode off: %+v %v", op, err)
 	}
 	if op, _ := f.operations.Get(ctx, f.computerID, third.OperationID); op.State != selfdev.StateAwaitingApproval {
-		t.Fatalf("operation moved after the window closed: %s", op.State)
+		t.Fatalf("operation moved by a refused attempt: %s", op.State)
+	}
+	f.rt.triggerStandingConsensus(third.OperationID, "run:management-p4")
+	closed := f.waitForState(t, third.OperationID, selfdev.StateFailed)
+	if !strings.Contains(closed.TerminalError, "mode is off") || !strings.Contains(closed.LastIntentError, "mode is off") {
+		t.Fatalf("closed operation carries no reason: terminal=%q intent=%q", closed.TerminalError, closed.LastIntentError)
 	}
 }
 
@@ -585,7 +598,6 @@ func TestStandingConsensusEndToEndFreezeVerifyAcceptApplyWithoutPerCandidateOwne
 func TestStandingConsensusEndToEndHostDissentRejects(t *testing.T) {
 	f := newP4Fixture(t)
 	ctx := context.Background()
-	f.armStanding(t, time.Now().Add(time.Hour))
 	// A patch git reads, against a file whose base content it does not match.
 	broken := []byte("diff --git a/frontend/index.html b/frontend/index.html\n--- a/frontend/index.html\n+++ b/frontend/index.html\n@@ -1 +1 @@\n-<html>not the base</html>\n+<html>dissent</html>\n")
 	verified := f.verify(t, f.freezeWithPatch(t, "p4-dissent", "a patch the host cannot build", broken))

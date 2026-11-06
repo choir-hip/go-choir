@@ -27,14 +27,13 @@ which `admin` does not imply; reject stays an agent act.
 
 | Step | CLI surface | Durable evidence |
 | --- | --- | --- |
-| Arm proposals | `choir self-dev mode set --mode=propose_only --expected-generation=N --idempotency-key=K` | generation-CAS `ModeReceipt` |
-| Start a change | `choir run start --idempotency-key=K "<the change, with its deterministic check>"` (on a computer the owner armed with `self-dev mode set --mode propose_only`; engineering's Freeze opens the operation) | trajectory id, doc id |
+| Turn self-development off or on | `choir self-dev mode set --mode=off\|apply --expected-generation=N --idempotency-key=K` (a computer with no row is `apply`) | generation-CAS `ModeReceipt` |
+| Start a change | `choir run start --idempotency-key=K "<the change, with its deterministic check>"` (on any computer whose mode is not `off`; engineering's Freeze opens the operation) | trajectory id, doc id |
 | Find candidates | `choir self-dev list [--state=awaiting_approval]` | operations, newest first |
 | Observe | `choir self-dev wait --operation=ID --state=awaiting_approval` | operation once it reaches the state; exits 1 if it settles elsewhere |
 | Export the source patch | `choir self-dev patch --operation=ID --out=FILE` (frozen or later; MCP `self_dev_patch` inlines it up to 256 KiB) | sha256-verified `source.patch`, its base commit and bundle digest |
 | See the screenshots | the engineer's own screens are files in the computer's tree, `Self-development/<operation>/screens/<name>.png` (frozen or later); `choir texture read DOC` lists the Texture embeds with each `file` and `digest` | sha256-bound PNGs |
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
-| Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
 | Roll back (owner) | `choir self-dev rollback --to-operation=ID [--wait]` | `rollback_requested` event, rollback operation to `rolled_back` |
 | Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |
 | Publish a package (owner) | `choir package publish --computer=A --operation=ID --package=NAME` (applied operation; one package directory; public) | package release id in the Library |
@@ -44,11 +43,8 @@ which `admin` does not imply; reject stays an agent act.
 
 Self-development a Texture request opens (Texture -> management -> engineering
 freeze) creates its own operation; `list` is how to find it — do not derive the
-id by hand. `approve` is the owner's single approval: it reads the frozen
-candidate and the computer's event head, arms `accept_once` bound to exactly
-that operation, bundle, heads and commitments (15-minute window, `--window`),
-and posts the approve decision, which consumes it. It refuses before any write
-unless the operation is `awaiting_approval`. Rollback of an applied operation
+id by hand. There is no owner approval: a candidate that passes Verify is built by the host
+and decided by consensus, and the owner reverts an applied change. Rollback of an applied operation
 is `choir self-dev rollback --computer=ID --to-operation=APPLIED_OP [--idempotency-key=K] [--wait]`
 (an owner act: the key needs `owner:acts`, plus `computer:self_development:rollback`,
 and `computer:self_development:read`). It resolves the guest's seven
@@ -57,9 +53,8 @@ route generation, refuses a target that is not applied, is the current state or 
 genesis baseline before posting, and prints the guest's answer unchanged (a 409
 included); `--wait` polls the rollback operation to `rolled_back`.
 
-Effects default to `off`. `accept_once` authorizes only its exact canonical
-approval request and returns to `propose_only` before that approval reaches the
-guest. A package, adoption, mutable branch, VM, local test, verifier statement,
+A computer's mode is `off` (no self-development) or `apply` (the default).
+A package, adoption, mutable branch, VM, local test, verifier statement,
 checkpoint, or route transition alone is not accepted self-development.
 
 Shared GitHub source still lands through commit, push, CI, deploy identity, and

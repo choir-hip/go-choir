@@ -104,10 +104,10 @@ func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testi
 	f := newModeAuthorityFixture(t)
 	signer := newTestOwnerActSigner(t)
 	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActEnforce, signer))
-	arm := f.arm(SelfDevelopmentModeAcceptOnce, "op-1", 0, "arm-1")
+	arm := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
 	unchanged := func(label string) {
 		t.Helper()
-		if mode := f.current(t); mode.Mode != SelfDevelopmentModeOff || mode.Generation != 0 {
+		if mode := f.current(t); mode.Mode != SelfDevelopmentModeApply || mode.Generation != 0 || mode.Receipt != nil {
 			t.Fatalf("%s changed the mode: %+v", label, mode)
 		}
 	}
@@ -128,7 +128,7 @@ func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testi
 	_, otherKey, _ := ed25519.GenerateKey(rand.Reader)
 	subject, _ := OwnerActModeSubject(f.computerID, arm)
 	forged, err := computerevent.NewSignedReceipt(owneract.ReceiptKind, owneract.Issuer, map[string]any{
-		"act_kind": owneract.ActSelfDevApprove, "owner_user_id": "owner-1", "auth_method": "session",
+		"act_kind": owneract.ActSelfDevModeSet, "owner_user_id": "owner-1", "auth_method": "session",
 		"credential_ref": "session-jwt-sha256:x", "audience": owneract.Audience, "computer_id": f.computerID,
 		"nonce": strings.Repeat("ab", 16), "not_after": time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond).Format(time.RFC3339Nano),
 		"subject": subject,
@@ -147,7 +147,7 @@ func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testi
 	if code, _, body := f.ownerWith(t, arm, encodeAct(t, mintModeAct(t, signer, "computer-other", "owner-1", arm, time.Now()))); code != http.StatusForbidden {
 		t.Fatalf("other computer: %d %s", code, body)
 	}
-	other := f.arm(SelfDevelopmentModeAcceptOnce, "op-other", 0, "arm-1")
+	other := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeOff, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
 	if code, _, body := f.ownerWith(t, arm, encodeAct(t, mintModeAct(t, signer, f.computerID, "owner-1", other, time.Now()))); code != http.StatusForbidden {
 		t.Fatalf("other subject: %d %s", code, body)
 	}
@@ -161,7 +161,7 @@ func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testi
 	// ModeReceipt names it.
 	valid := mintModeAct(t, signer, f.computerID, "owner-1", arm, time.Now())
 	code, armed, body := f.ownerWith(t, arm, encodeAct(t, valid))
-	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeAcceptOnce {
+	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeApply {
 		t.Fatalf("valid receipt: %d %s", code, body)
 	}
 	validBytes, _ := valid.CanonicalBytes()
@@ -185,20 +185,16 @@ func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testi
 		t.Fatalf("replay changed the mode: %+v", mode)
 	}
 
-	// 17: the guest's consumption needs no receipt; 10: expiry neither.
-	arm3 := f.arm(SelfDevelopmentModeAcceptOnce, "op-3", 2, "arm-3")
-	if code, _, body := f.ownerWith(t, arm3, encodeAct(t, mintModeAct(t, signer, f.computerID, "owner-1", arm3, time.Now()))); code != http.StatusOK {
-		t.Fatalf("arm 3: %d %s", code, body)
-	}
-	if code, consumed := f.guest(t, consume(AcceptOnceConsumptionKeyPrefix, "op-3", 3)); code != http.StatusOK || modeWriter(consumed) != ModeWriterGuestConsumption {
-		t.Fatalf("guest consumption: %d %+v", code, consumed)
+	// The guest writes no mode, with or without a receipt.
+	if code, _ := f.guest(t, SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 2, IdempotencyKey: "guest-apply"}); code != http.StatusForbidden {
+		t.Fatalf("guest mode write: %d", code)
 	}
 }
 
 func TestOwnerActModeWriteEnforceWithoutKeyRefusesEveryOwnerWrite(t *testing.T) {
 	f := newModeAuthorityFixture(t)
 	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActEnforce, nil))
-	arm := f.arm(SelfDevelopmentModeAcceptOnce, "op-1", 0, "arm-1")
+	arm := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
 	// 6: enforce with no public key configured.
 	if code, _, body := f.ownerWith(t, arm, encodeAct(t, mintModeAct(t, newTestOwnerActSigner(t), f.computerID, "owner-1", arm, time.Now()))); code != http.StatusForbidden {
 		t.Fatalf("no key configured: %d %s", code, body)
@@ -209,9 +205,9 @@ func TestOwnerActModeWriteObserveLogsAndAllows(t *testing.T) {
 	f := newModeAuthorityFixture(t)
 	signer := newTestOwnerActSigner(t)
 	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActObserve, signer))
-	arm := f.arm(SelfDevelopmentModeAcceptOnce, "op-1", 0, "arm-1")
+	arm := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
 	code, armed, body := f.ownerWith(t, arm, "")
-	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeAcceptOnce {
+	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeApply {
 		t.Fatalf("observe without receipt: %d %s", code, body)
 	}
 	if _, named := armed.Receipt.KindFields["owner_act_receipt_digest"]; named {
@@ -322,39 +318,6 @@ func accepted(t *testing.T, head computerevent.Head, authority, operationID, bun
 	}
 }
 
-// armAndConsume runs the owner's approval as the tracer does: the proxy's
-// receipt arms accept_once at the head, then the guest consumes it. It
-// returns the consumed ModeReceipt's artifact reference.
-func (f *admissionFixture) armAndConsume(t *testing.T, head computerevent.Head, operationID, bundle string, withReceipt bool) string {
-	t.Helper()
-	pending := head.PendingTransitionRef
-	current := f.current(t)
-	arm := SetSelfDevelopmentModeRequest{
-		Mode: SelfDevelopmentModeAcceptOnce, ExpectedGeneration: current.Generation, IdempotencyKey: "arm-" + operationID,
-		OperationID: operationID, BundleDigest: bundle,
-		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
-		ExpectedPendingTransitionRef:   &pending,
-		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
-		ExpiresAt: time.Now().UTC().Add(5 * time.Minute).Truncate(time.Microsecond).Format(time.RFC3339Nano),
-	}
-	header := ""
-	if withReceipt {
-		header = encodeAct(t, mintModeAct(t, f.signer, f.computerID, "owner-1", arm, time.Now()))
-	}
-	if code, _, body := f.ownerWith(t, arm, header); code != http.StatusOK {
-		t.Fatalf("arm %s: %d %s", operationID, code, body)
-	}
-	code, consumed := f.guest(t, consume(AcceptOnceConsumptionKeyPrefix, operationID, current.Generation+1))
-	if code != http.StatusOK {
-		t.Fatalf("consume %s: %d", operationID, code)
-	}
-	raw, err := consumed.Receipt.CanonicalBytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return "artifact:sha256:" + computerevent.DigestBytes(raw)
-}
-
 func (f *admissionFixture) append(t *testing.T, request computerevent.CASRequest) error {
 	t.Helper()
 	_, err := f.cas.CompareAndSwap(context.Background(), request)
@@ -368,65 +331,17 @@ func refused(t *testing.T, label string, err error) {
 	}
 }
 
-func TestEffectAdmissionEnforceTracesOwnerApprovalToTheProxyReceipt(t *testing.T) {
+func TestEffectAdmissionRefusesOwnerApprovalAndUnknownAuthority(t *testing.T) {
 	f := newAdmissionFixture(t, OwnerActEnforce)
 	head := f.seedHead(t, f.computerID)
 	bundle := digestOf('b')
-	consumedRef := f.armAndConsume(t, head, "op-1", bundle, true)
-
-	// 7: a ModeReceipt corpusd never issued.
-	refused(t, "fabricated ModeReceipt", f.append(t, accepted(t, head, "external-owner:owner-1", "op-1", bundle, []string{"artifact:sha256:" + digestOf('f')}, digestOf('d'))))
-	// 15: no ModeReceipt at all, and an unknown authority.
+	// Owner approval is retired: an external-owner effect_accepted is refused
+	// whatever it cites, in enforce.
+	refused(t, "external owner", f.append(t, accepted(t, head, "external-owner:owner-1", "op-1", bundle, []string{"artifact:sha256:" + digestOf('f')}, digestOf('d'))))
 	refused(t, "no input", f.append(t, accepted(t, head, "external-owner:owner-1", "op-1", bundle, nil, digestOf('d'))))
-	refused(t, "unknown authority", f.append(t, accepted(t, head, "guest:self", "op-1", bundle, []string{consumedRef}, digestOf('d'))))
-	// 9: the consumption is for op-1; the event claims op-2, or another bundle.
-	refused(t, "other operation", f.append(t, accepted(t, head, "external-owner:owner-1", "op-2", bundle, []string{consumedRef}, digestOf('d'))))
-	refused(t, "other bundle", f.append(t, accepted(t, head, "external-owner:owner-1", "op-1", digestOf('c'), []string{consumedRef}, digestOf('d'))))
-	// 11: the arm's owner act was owner-1's.
-	refused(t, "other owner", f.append(t, accepted(t, head, "external-owner:owner-2", "op-1", bundle, []string{consumedRef}, digestOf('d'))))
-	// 13: consensus authority until S2.
-	refused(t, "qualified consensus", f.append(t, accepted(t, head, "qualified-consensus:"+digestOf('e'), "op-1", bundle, []string{consumedRef}, digestOf('d'))))
-	// 8: citing the arm itself rather than its consumption.
-	var armDigest string
-	if err := f.store.db.QueryRow(`SELECT receipt_digest FROM self_development_mode_receipts WHERE computer_id=? AND new_mode=?`, f.computerID, SelfDevelopmentModeAcceptOnce).Scan(&armDigest); err != nil {
-		t.Fatal(err)
-	}
-	refused(t, "arm as input", f.append(t, accepted(t, head, "external-owner:owner-1", "op-1", bundle, []string{"artifact:sha256:" + armDigest}, digestOf('d'))))
-
-	// 19: the owner's own approval is admitted and marks the consumption.
-	good := accepted(t, head, "external-owner:owner-1", "op-1", bundle, []string{consumedRef}, digestOf('d'))
-	if err := f.append(t, good); err != nil {
-		t.Fatalf("owner approval refused: %v", err)
-	}
-	var admitted string
-	if err := f.store.db.QueryRow(`SELECT COALESCE(admitted_event_digest, '') FROM self_development_mode_receipts WHERE receipt_digest=?`, strings.TrimPrefix(consumedRef, "artifact:sha256:")).Scan(&admitted); err != nil || admitted != good.EventDigest {
-		t.Fatalf("consumption not marked: %q %v", admitted, err)
-	}
-	// 22: an idempotent retry of the admitted append returns its receipt.
-	if err := f.append(t, good); err != nil {
-		t.Fatalf("idempotent retry refused: %v", err)
-	}
-	// 12: a second event citing the same consumption.
-	tx, err := f.store.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback()
-	second := accepted(t, head, "external-owner:owner-1", "op-1", bundle, []string{consumedRef}, digestOf('d'))
-	reason, _, err := f.cas.ownerActs.effectAcceptedRefusal(context.Background(), tx, second.Event, second.EventDigest)
-	if err != nil || !strings.Contains(reason, "already admitted") {
-		t.Fatalf("second admission of one consumption: %q %v", reason, err)
-	}
-}
-
-func TestEffectAdmissionEnforceRefusesAnArmWithoutAnOwnerAct(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActEnforce)
-	head := f.seedHead(t, f.computerID)
-	bundle := digestOf('b')
-	// 10: an arm made while observe let a receipt-less write through.
-	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActObserve, f.signer))
-	consumedRef := f.armAndConsume(t, head, "op-1", bundle, false)
-	refused(t, "arm without owner act", f.append(t, accepted(t, head, "external-owner:owner-1", "op-1", bundle, []string{consumedRef}, digestOf('d'))))
+	refused(t, "unknown authority", f.append(t, accepted(t, head, "guest:self", "op-1", bundle, []string{"artifact:sha256:" + digestOf('f')}, digestOf('d'))))
+	// A consensus authority naming a decision corpusd never minted.
+	refused(t, "qualified consensus", f.append(t, accepted(t, head, "qualified-consensus:"+digestOf('e'), "op-1", bundle, []string{"artifact:sha256:" + digestOf('e')}, digestOf('d'))))
 }
 
 func TestEffectAdmissionPlatformUpdateNeedsAnOfferCorpusdMinted(t *testing.T) {

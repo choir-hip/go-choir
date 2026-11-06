@@ -12,34 +12,51 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 )
 
+// The two writable self-development modes (docs/design/selfdev-apply-and-revert-2026-11-06.md
+// 3.1). off: this computer does no self-development. apply: propose, verify,
+// host build, decide by consensus, apply. A computer with no row is apply.
 const (
-	SelfDevelopmentModeOff                = "off"
-	SelfDevelopmentModeAuditOnly          = "audit_only"
-	SelfDevelopmentModeProposeOnly        = "propose_only"
-	SelfDevelopmentModeAcceptOnce         = "accept_once"
-	SelfDevelopmentModeQualifiedConsensus = "qualified_consensus"
-	// SelfDevelopmentModeStandingConsensus is the P4 standing autonomous
-	// mode: bound to a computer, one policy and an expiry, never to an
-	// operation, and never consumed by the guest. Only an owner act arms
-	// it, only on a test-tier computer, for at most
-	// StandingConsensusMaxWindow (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
-	SelfDevelopmentModeStandingConsensus = "standing_consensus"
+	SelfDevelopmentModeOff   = "off"
+	SelfDevelopmentModeApply = "apply"
 )
 
-// StandingConsensusMaxWindow bounds a standing arm's expiry.
-const StandingConsensusMaxWindow = 24 * time.Hour
+// Legacy stored mode values. They are never written again; rows that carry
+// them stay as they are and read through CanonicalSelfDevelopmentMode.
+const (
+	legacyModeAuditOnly          = "audit_only"
+	legacyModeProposeOnly        = "propose_only"
+	legacyModeAcceptOnce         = "accept_once"
+	legacyModeQualifiedConsensus = "qualified_consensus"
+	legacyModeStandingConsensus  = "standing_consensus"
+)
 
-// ComputerTierTest is the one tier a standing arm may name: vmctl's
-// warmness class for a computer of a test account.
-const ComputerTierTest = "test"
+// CanonicalSelfDevelopmentMode is the one normaliser every reader of a mode
+// goes through: off and audit_only read off; propose_only, accept_once,
+// qualified_consensus, standing_consensus and no row (the empty string) read
+// apply. An unknown stored value fails closed to off.
+func CanonicalSelfDevelopmentMode(stored string) string {
+	switch strings.TrimSpace(stored) {
+	case SelfDevelopmentModeApply, legacyModeProposeOnly, legacyModeAcceptOnce, legacyModeQualifiedConsensus, legacyModeStandingConsensus, "":
+		return SelfDevelopmentModeApply
+	case SelfDevelopmentModeOff, legacyModeAuditOnly:
+		return SelfDevelopmentModeOff
+	default:
+		return SelfDevelopmentModeOff
+	}
+}
 
-// lazyExpiringMode reports a mode corpusd turns off once its expiry passes.
-func lazyExpiringMode(mode string) bool {
-	return mode == SelfDevelopmentModeAcceptOnce || mode == SelfDevelopmentModeQualifiedConsensus || mode == SelfDevelopmentModeStandingConsensus
+// DefaultApplyModeMarker is the content whose digest stands in as the mode
+// receipt for a computer with no mode row: the default is apply, generation 0.
+const DefaultApplyModeMarker = "selfdev-mode:default-apply:0"
+
+// DefaultApplyModeDigest is sha256(DefaultApplyModeMarker), 64 hex: the
+// digest of input artifact 0 and the decisions table's standing_digest for a
+// computer with no mode row.
+func DefaultApplyModeDigest() string {
+	return computerevent.DigestBytes([]byte(DefaultApplyModeMarker))
 }
 
 var ErrSelfDevelopmentModeConflict = errors.New("self-development mode CAS conflict")
@@ -47,26 +64,16 @@ var ErrSelfDevelopmentModeConflict = errors.New("self-development mode CAS confl
 // ErrSelfDevelopmentModeOwnerRequired refuses a mode write that is not an
 // owner act. Only the owner sets the mode: the proxy reaches corpusd as a
 // host-internal caller after it has authenticated the owner's session or an
-// owner API key scoped computer:self_development:mode. The guest's
-// event:append capability may only consume the grant the owner armed
-// (docs/archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md).
+// owner API key scoped computer:self_development:mode. The guest can write no
+// mode at all (docs/archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md).
 var ErrSelfDevelopmentModeOwnerRequired = errors.New("self-development mode: owner authority required")
 
 // Mode writers, recorded as mode_writer in every new ModeReceipt. Receipts
 // signed before this field existed carry none; they were all written before
-// the owner-only rule and are not re-judged.
+// the owner-only rule and are not re-judged. The retired writers
+// "guest-consumption" and "corpusd-expiry" still name historic log rows.
 const (
-	ModeWriterHostInternal     = "host-internal"
-	ModeWriterGuestConsumption = "guest-consumption"
-	ModeWriterCorpusdExpiry    = "corpusd-expiry"
-)
-
-// Consumption idempotency keys: agentcore's decision handler writes
-// <prefix><operation_id>:<decision binding digest> when it consumes an armed
-// grant, and its consumed-receipt verifier expects the same spelling.
-const (
-	AcceptOnceConsumptionKeyPrefix         = "accept-once-consumed:"
-	QualifiedConsensusConsumptionKeyPrefix = "qualified-consensus-consumed:"
+	ModeWriterHostInternal = "host-internal"
 )
 
 type SelfDevelopmentMode struct {
@@ -124,6 +131,9 @@ func NewSelfDevelopmentModeCAS(store *Store, signingKey computerevent.SigningKey
 	return &SelfDevelopmentModeCAS{store: store, signingKey: signingKey, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
+// Get reads the computer's mode through the canonical normaliser: a computer
+// with no row is apply at generation 0 with no receipt; a legacy row reads its
+// canonical mode (the row is never rewritten).
 func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (SelfDevelopmentMode, error) {
 	computerID = strings.TrimSpace(computerID)
 	if computerID == "" {
@@ -134,43 +144,9 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 		return SelfDevelopmentMode{}, err
 	}
 	if !found {
-		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}, nil
+		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeApply}, nil
 	}
-	hydrateSelfDevelopmentModeBindings(&mode)
-	if !lazyExpiringMode(mode.Mode) {
-		return mode, nil
-	}
-	expiresAt, err := time.Parse(time.RFC3339Nano, mode.ExpiresAt)
-	if err != nil {
-		return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: invalid durable expiry: %w", err)
-	}
-	if c.now().Before(expiresAt) {
-		return mode, nil
-	}
-	expired, err := c.set(ctx, computerID, SetSelfDevelopmentModeRequest{
-		Mode: SelfDevelopmentModeOff, ExpectedGeneration: mode.Generation,
-		IdempotencyKey: fmt.Sprintf("selfdev-mode-expiry-v1:%s:%d", computerID, mode.Generation),
-	}, ModeWriterCorpusdExpiry, nil)
-	if err == nil {
-		return expired, nil
-	}
-	if !errors.Is(err, ErrSelfDevelopmentModeConflict) {
-		return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: persist expiry: %w", err)
-	}
-	current, found, readErr := readSelfDevelopmentMode(ctx, c.store.db, computerID, false)
-	if readErr != nil {
-		return SelfDevelopmentMode{}, readErr
-	}
-	if !found {
-		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}, nil
-	}
-	if lazyExpiringMode(current.Mode) {
-		currentExpiry, parseErr := time.Parse(time.RFC3339Nano, current.ExpiresAt)
-		if parseErr != nil || !c.now().Before(currentExpiry) {
-			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: expired one-shot mode reconciliation conflicted")
-		}
-	}
-	return current, nil
+	return mode, nil
 }
 
 // Set is the owner's mode write. Its only callers are host-internal: the
@@ -183,36 +159,6 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 // handler verified (nil when it carried none and the policy observes).
 func (c *SelfDevelopmentModeCAS) SetAsOwner(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, ownerAct *owneract.Verified) (SelfDevelopmentMode, error) {
 	return c.set(ctx, computerID, request, ModeWriterHostInternal, ownerAct)
-}
-
-// ConsumeAsGuest is the only mode write a guest capability may make: the
-// decision handler's consumption of the grant the owner armed, accept_once
-// or qualified_consensus to propose_only, under the consumption key that
-// names the armed operation. Everything else is ErrSelfDevelopmentModeOwnerRequired.
-func (c *SelfDevelopmentModeCAS) ConsumeAsGuest(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
-	return c.set(ctx, computerID, request, ModeWriterGuestConsumption, nil)
-}
-
-// guestConsumptionAllowed admits exactly the two consumption writes in
-// agentcore's decision handler (api_self_development.go): the current mode
-// is an armed grant, the next mode is propose_only, and the idempotency key
-// is that grant's consumption key for the armed operation.
-func guestConsumptionAllowed(current SelfDevelopmentMode, request SetSelfDevelopmentModeRequest) bool {
-	prefix := ""
-	switch current.Mode {
-	case SelfDevelopmentModeAcceptOnce:
-		prefix = AcceptOnceConsumptionKeyPrefix
-	case SelfDevelopmentModeQualifiedConsensus:
-		prefix = QualifiedConsensusConsumptionKeyPrefix
-	default:
-		return false
-	}
-	operationID := strings.TrimSpace(current.OperationID)
-	if request.Mode != SelfDevelopmentModeProposeOnly || operationID == "" {
-		return false
-	}
-	digest, ok := strings.CutPrefix(request.IdempotencyKey, prefix+operationID+":")
-	return ok && computerevent.IsSHA256(digest)
 }
 
 func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, writer string, ownerAct *owneract.Verified) (SelfDevelopmentMode, error) {
@@ -246,7 +192,7 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		return current, nil
 	}
 	if !found {
-		current = SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}
+		current = SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeApply}
 	}
 	switch writer {
 	case ModeWriterHostInternal:
@@ -268,23 +214,8 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		} else {
 			ownerAct = nil
 		}
-	case ModeWriterCorpusdExpiry:
-		ownerAct = nil
-	case ModeWriterGuestConsumption:
-		ownerAct = nil
-		if !guestConsumptionAllowed(current, request) {
-			return SelfDevelopmentMode{}, ErrSelfDevelopmentModeOwnerRequired
-		}
 	default:
 		return SelfDevelopmentMode{}, ErrSelfDevelopmentModeOwnerRequired
-	}
-	if request.Mode == SelfDevelopmentModeStandingConsensus {
-		// P4: a new authority starts fail-closed. Only the owner arms it,
-		// with a verified owner act whatever CHOIR_OWNER_ACT_MODE says,
-		// and only on a computer the proxy attested is test-tier.
-		if err := standingArmRefusal(writer, computerID, ownerAct); err != nil {
-			return SelfDevelopmentMode{}, err
-		}
 	}
 	if current.Generation != request.ExpectedGeneration {
 		return SelfDevelopmentMode{}, fmt.Errorf("%w: generation changed", ErrSelfDevelopmentModeConflict)
@@ -324,9 +255,6 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		fields["owner_act_receipt_digest"] = ownerAct.Digest
 		fields["owner_user_id"] = ownerAct.OwnerUserID
 		fields["owner_auth_method"] = ownerAct.AuthMethod
-	}
-	if next.Mode == SelfDevelopmentModeStandingConsensus {
-		fields["computer_tier"] = ComputerTierTest
 	}
 	receipt, err := computerevent.NewSignedReceipt("ModeReceipt", "corpusd", fields, []computerevent.SigningKey{c.signingKey}, now)
 	if err != nil {
@@ -368,91 +296,23 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 	return next, nil
 }
 
-func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request SetSelfDevelopmentModeRequest, now time.Time) (SelfDevelopmentMode, any, error) {
+// validateSelfDevelopmentModeTransition admits the two writable modes, off
+// and apply, with no bindings. Every retired value is refused.
+func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request SetSelfDevelopmentModeRequest, _ time.Time) (SelfDevelopmentMode, any, error) {
 	next := SelfDevelopmentMode{ComputerID: current.ComputerID, Mode: request.Mode}
-	ordinaryBindings := []string{request.OperationID, request.BundleDigest, request.ExpectedDesiredEventHead, request.ExpectedEffectiveEventHead, request.ExpectedDesiredStateCommitment, request.ExpectedEffectiveStateCommitment, request.ExpiresAt}
 	switch request.Mode {
-	case SelfDevelopmentModeOff, SelfDevelopmentModeAuditOnly, SelfDevelopmentModeProposeOnly:
+	case SelfDevelopmentModeOff, SelfDevelopmentModeApply:
 		if request.ExpectedPendingTransitionRef != nil {
 			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
 		}
-		for _, value := range ordinaryBindings {
+		for _, value := range []string{request.OperationID, request.BundleDigest, request.ExpectedDesiredEventHead, request.ExpectedEffectiveEventHead, request.ExpectedDesiredStateCommitment, request.ExpectedEffectiveStateCommitment, request.ExpiresAt, request.PolicyDigest, request.ConsensusReceiptDigest} {
 			if strings.TrimSpace(value) != "" {
 				return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
 			}
 		}
-		if strings.TrimSpace(request.PolicyDigest) != "" || strings.TrimSpace(request.ConsensusReceiptDigest) != "" {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
-		}
 		return next, nil, nil
-	// accept_once is the legacy fail-closed owner-gated mode. The active effects
-	// Definition replaces it atomically with policy-bound consensus modes; these
-	// exact bindings remain required until that replacement is complete.
-	case SelfDevelopmentModeAcceptOnce:
-		if strings.TrimSpace(request.PolicyDigest) != "" || strings.TrimSpace(request.ConsensusReceiptDigest) != "" {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once does not bind consensus receipts")
-		}
-		if request.ExpectedPendingTransitionRef == nil || strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once requires exact operation, bundle, heads, pending transition, and commitments")
-		}
-		expiresAt, err := time.Parse(time.RFC3339Nano, request.ExpiresAt)
-		if err != nil || expiresAt.Location() != time.UTC || expiresAt.Format(time.RFC3339Nano) != request.ExpiresAt || !expiresAt.After(now.UTC()) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once requires a future canonical UTC expiry")
-		}
-		next.OperationID = request.OperationID
-		next.BundleDigest = request.BundleDigest
-		next.ExpectedDesiredEventHead = request.ExpectedDesiredEventHead
-		next.ExpectedEffectiveEventHead = request.ExpectedEffectiveEventHead
-		next.ExpectedPendingTransitionRef = strings.TrimSpace(*request.ExpectedPendingTransitionRef)
-		next.ExpectedDesiredStateCommitment = request.ExpectedDesiredStateCommitment
-		next.ExpectedEffectiveStateCommitment = request.ExpectedEffectiveStateCommitment
-		next.ExpiresAt = request.ExpiresAt
-		return next, expiresAt.UTC(), nil
-	case SelfDevelopmentModeQualifiedConsensus:
-		if request.ExpectedPendingTransitionRef == nil || strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) || !computerevent.IsSHA256(request.PolicyDigest) || !computerevent.IsSHA256(request.ConsensusReceiptDigest) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: qualified_consensus requires exact operation, bundle, heads, pending transition, commitments, policy_digest, and consensus_receipt_digest")
-		}
-		expiresAt, err := time.Parse(time.RFC3339Nano, request.ExpiresAt)
-		if err != nil || expiresAt.Location() != time.UTC || expiresAt.Format(time.RFC3339Nano) != request.ExpiresAt || !expiresAt.After(now.UTC()) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: qualified_consensus requires a future canonical UTC expiry")
-		}
-		next.OperationID = request.OperationID
-		next.BundleDigest = request.BundleDigest
-		next.ExpectedDesiredEventHead = request.ExpectedDesiredEventHead
-		next.ExpectedEffectiveEventHead = request.ExpectedEffectiveEventHead
-		next.ExpectedPendingTransitionRef = strings.TrimSpace(*request.ExpectedPendingTransitionRef)
-		next.ExpectedDesiredStateCommitment = request.ExpectedDesiredStateCommitment
-		next.ExpectedEffectiveStateCommitment = request.ExpectedEffectiveStateCommitment
-		next.ExpiresAt = request.ExpiresAt
-		next.PolicyDigest = request.PolicyDigest
-		next.ConsensusReceiptDigest = request.ConsensusReceiptDigest
-		return next, expiresAt.UTC(), nil
-	case SelfDevelopmentModeStandingConsensus:
-		// Bound to a policy and an expiry; the one-operation subject
-		// binding lives in each ballot and decision, never in the mode.
-		if request.ExpectedPendingTransitionRef != nil || strings.TrimSpace(request.ConsensusReceiptDigest) != "" {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus binds no operation or consensus receipt")
-		}
-		for _, value := range ordinaryBindings[:6] {
-			if strings.TrimSpace(value) != "" {
-				return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus binds no operation or consensus receipt")
-			}
-		}
-		if !decisionpolicy.StandingPolicyAllowed(request.PolicyDigest) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus arms only %s", decisionpolicy.PolicyIDReversibleSelfDevV1)
-		}
-		expiresAt, err := time.Parse(time.RFC3339Nano, request.ExpiresAt)
-		if err != nil || expiresAt.Location() != time.UTC || expiresAt.Format(time.RFC3339Nano) != request.ExpiresAt || !expiresAt.After(now.UTC()) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus requires a future canonical UTC expiry")
-		}
-		if expiresAt.Sub(now.UTC()) > StandingConsensusMaxWindow {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus expiry is more than %s ahead", StandingConsensusMaxWindow)
-		}
-		next.PolicyDigest = request.PolicyDigest
-		next.ExpiresAt = request.ExpiresAt
-		return next, expiresAt.UTC(), nil
 	default:
-		return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: unknown mode %q", request.Mode)
+		return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: %q is not a writable mode (off or apply)", request.Mode)
 	}
 }
 
@@ -493,6 +353,8 @@ func readSelfDevelopmentMode(ctx context.Context, db queryRower, computerID stri
 		return SelfDevelopmentMode{}, false, fmt.Errorf("self-development mode: read: %w", err)
 	}
 	mode.ComputerID = computerID
+	// Every reader sees the canonical mode; the stored column is never rewritten.
+	mode.Mode = CanonicalSelfDevelopmentMode(mode.Mode)
 	if expiresAt.Valid {
 		mode.ExpiresAt = expiresAt.Time.UTC().Format(time.RFC3339Nano)
 	}
@@ -546,14 +408,10 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusOK, mode)
 	case http.MethodPost:
 		// A host-internal caller is the proxy carrying an authenticated
-		// owner act. A guest capability may only consume the armed grant.
-		var write func(context.Context, string, SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error)
+		// owner act. A guest capability writes no mode.
 		if !internalCaller {
-			if h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:append") != nil {
-				writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode mutation capability refused"})
-				return
-			}
-			write = h.selfDevelopmentModes.ConsumeAsGuest
+			writeJSON(w, http.StatusForbidden, apiError{Error: ErrSelfDevelopmentModeOwnerRequired.Error()})
+			return
 		}
 		var request SetSelfDevelopmentModeRequest
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
@@ -562,26 +420,21 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid mode request"})
 			return
 		}
-		if write == nil {
-			// S1: the owner's write must carry the proxy's owner-act
-			// receipt. In observe a missing or invalid one is logged.
-			var ownerAct *owneract.Verified
-			if authority := h.selfDevelopmentModes.ownerActs; authority != nil {
-				verified, verifyErr := authority.verifyModeWrite(r, computerID, request)
-				if verifyErr != nil {
-					if refuseErr := authority.refuse(ErrOwnerActRefused, "mode write", computerID, verifyErr.Error()); refuseErr != nil {
-						writeJSON(w, http.StatusForbidden, apiError{Error: refuseErr.Error()})
-						return
-					}
-				} else {
-					ownerAct = verified
+		// S1: the owner's write must carry the proxy's owner-act
+		// receipt. In observe a missing or invalid one is logged.
+		var ownerAct *owneract.Verified
+		if authority := h.selfDevelopmentModes.ownerActs; authority != nil {
+			verified, verifyErr := authority.verifyModeWrite(r, computerID, request)
+			if verifyErr != nil {
+				if refuseErr := authority.refuse(ErrOwnerActRefused, "mode write", computerID, verifyErr.Error()); refuseErr != nil {
+					writeJSON(w, http.StatusForbidden, apiError{Error: refuseErr.Error()})
+					return
 				}
-			}
-			write = func(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
-				return h.selfDevelopmentModes.SetAsOwner(ctx, computerID, request, ownerAct)
+			} else {
+				ownerAct = verified
 			}
 		}
-		mode, err := write(r.Context(), computerID, request)
+		mode, err := h.selfDevelopmentModes.SetAsOwner(r.Context(), computerID, request, ownerAct)
 		if err != nil {
 			if errors.Is(err, ErrSelfDevelopmentModeOwnerRequired) || errors.Is(err, ErrOwnerActRefused) {
 				writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})

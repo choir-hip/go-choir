@@ -17,8 +17,8 @@ import (
 )
 
 // P3: only an owner act may set the self-development mode
-// (docs/archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md). The guest's
-// event:append capability may only consume the grant the owner armed.
+// (docs/archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md). The
+// guest's event:append capability writes no mode at all.
 
 type modeAuthorityFixture struct {
 	handler    *Handler
@@ -110,30 +110,6 @@ func (f *modeAuthorityFixture) current(t *testing.T) SelfDevelopmentMode {
 	return mode
 }
 
-func (f *modeAuthorityFixture) arm(mode, operationID string, generation uint64, key string) SetSelfDevelopmentModeRequest {
-	digest := strings.Repeat("a", 64)
-	pending := ""
-	request := SetSelfDevelopmentModeRequest{
-		Mode: mode, ExpectedGeneration: generation, IdempotencyKey: key,
-		OperationID: operationID, BundleDigest: digest,
-		ExpectedDesiredEventHead: digest, ExpectedEffectiveEventHead: digest, ExpectedPendingTransitionRef: &pending,
-		ExpectedDesiredStateCommitment: digest, ExpectedEffectiveStateCommitment: digest,
-		ExpiresAt: f.now.Add(5 * time.Minute).Truncate(time.Microsecond).Format(time.RFC3339Nano),
-	}
-	if mode == SelfDevelopmentModeQualifiedConsensus {
-		request.PolicyDigest = strings.Repeat("b", 64)
-		request.ConsensusReceiptDigest = strings.Repeat("c", 64)
-	}
-	return request
-}
-
-func consume(prefix, operationID string, generation uint64) SetSelfDevelopmentModeRequest {
-	return SetSelfDevelopmentModeRequest{
-		Mode: SelfDevelopmentModeProposeOnly, ExpectedGeneration: generation,
-		IdempotencyKey: prefix + operationID + ":" + strings.Repeat("d", 64),
-	}
-}
-
 func modeWriter(mode SelfDevelopmentMode) string {
 	if mode.Receipt == nil {
 		return ""
@@ -144,112 +120,52 @@ func modeWriter(mode SelfDevelopmentMode) string {
 
 func TestGuestCapabilityCannotSetSelfDevelopmentMode(t *testing.T) {
 	f := newModeAuthorityFixture(t)
-	// Failure modes 1-3 and 4 from mode off.
+	// From no row (canonical apply, generation 0): the guest writes nothing.
 	for name, request := range map[string]SetSelfDevelopmentModeRequest{
-		"arm accept_once":         f.arm(SelfDevelopmentModeAcceptOnce, "op-guest", 0, "guest-arm-once"),
-		"arm qualified_consensus": f.arm(SelfDevelopmentModeQualifiedConsensus, "op-guest", 0, "guest-arm-qc"),
-		"raise to propose_only":   {Mode: SelfDevelopmentModeProposeOnly, IdempotencyKey: "guest-propose"},
-		"raise to audit_only":     {Mode: SelfDevelopmentModeAuditOnly, IdempotencyKey: "guest-audit"},
-		"re-set off":              {Mode: SelfDevelopmentModeOff, IdempotencyKey: "guest-off"},
-		"consume nothing":         consume("accept-once-consumed:", "op-guest", 0),
+		"set apply":        {Mode: SelfDevelopmentModeApply, IdempotencyKey: "guest-apply"},
+		"set off":          {Mode: SelfDevelopmentModeOff, IdempotencyKey: "guest-off"},
+		"legacy arm":       {Mode: "accept_once", IdempotencyKey: "guest-arm-once"},
+		"legacy consume":   {Mode: "propose_only", IdempotencyKey: "accept-once-consumed:op-guest:" + strings.Repeat("d", 64)},
+		"legacy audit":     {Mode: "audit_only", IdempotencyKey: "guest-audit"},
+		"legacy standing":  {Mode: "standing_consensus", IdempotencyKey: "guest-standing"},
+		"legacy qualified": {Mode: "qualified_consensus", IdempotencyKey: "guest-qc"},
+	} {
+		t.Run("no row/"+name, func(t *testing.T) {
+			if code, _ := f.guest(t, request); code != http.StatusForbidden {
+				t.Fatalf("guest %s status=%d, want 403", name, code)
+			}
+			if got := f.current(t); got.Mode != SelfDevelopmentModeApply || got.Generation != 0 {
+				t.Fatalf("guest %s changed the mode: %+v", name, got)
+			}
+		})
+	}
+	// From an owner-set off: the guest cannot raise it, and cannot consume.
+	code, off := f.owner(t, SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeOff, IdempotencyKey: "owner-off"})
+	if code != http.StatusOK || off.Mode != SelfDevelopmentModeOff {
+		t.Fatalf("owner off status=%d mode=%+v", code, off)
+	}
+	for name, request := range map[string]SetSelfDevelopmentModeRequest{
+		"raise to apply": {Mode: SelfDevelopmentModeApply, ExpectedGeneration: off.Generation, IdempotencyKey: "guest-apply-2"},
+		"re-set off":     {Mode: SelfDevelopmentModeOff, ExpectedGeneration: off.Generation, IdempotencyKey: "guest-off-2"},
 	} {
 		t.Run("from off/"+name, func(t *testing.T) {
 			if code, _ := f.guest(t, request); code != http.StatusForbidden {
 				t.Fatalf("guest %s status=%d, want 403", name, code)
 			}
-			if got := f.current(t); got.Mode != SelfDevelopmentModeOff || got.Generation != 0 {
-				t.Fatalf("guest %s changed the mode: %+v", name, got)
-			}
-		})
-	}
-
-	// From an owner-set propose_only: failure modes 1, 2, 4 and 5.
-	code, proposed := f.owner(t, SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeProposeOnly, IdempotencyKey: "owner-propose"})
-	if code != http.StatusOK || proposed.Mode != SelfDevelopmentModeProposeOnly {
-		t.Fatalf("owner propose_only status=%d mode=%+v", code, proposed)
-	}
-	g := proposed.Generation
-	for name, request := range map[string]SetSelfDevelopmentModeRequest{
-		"arm accept_once":         f.arm(SelfDevelopmentModeAcceptOnce, "op-guest", g, "guest-arm-once-2"),
-		"arm qualified_consensus": f.arm(SelfDevelopmentModeQualifiedConsensus, "op-guest", g, "guest-arm-qc-2"),
-		"lower to off":            {Mode: SelfDevelopmentModeOff, ExpectedGeneration: g, IdempotencyKey: "guest-off-2"},
-		"lower to audit_only":     {Mode: SelfDevelopmentModeAuditOnly, ExpectedGeneration: g, IdempotencyKey: "guest-audit-2"},
-		"consume nothing":         consume("accept-once-consumed:", "op-guest", g),
-	} {
-		t.Run("from propose_only/"+name, func(t *testing.T) {
-			if code, _ := f.guest(t, request); code != http.StatusForbidden {
-				t.Fatalf("guest %s status=%d, want 403", name, code)
-			}
-			if got := f.current(t); got.Mode != SelfDevelopmentModeProposeOnly || got.Generation != g {
+			if got := f.current(t); got.Mode != SelfDevelopmentModeOff || got.Generation != off.Generation {
 				t.Fatalf("guest %s changed the mode: %+v", name, got)
 			}
 		})
 	}
 }
 
-func TestGuestCapabilityConsumesOnlyTheArmedGrant(t *testing.T) {
-	f := newModeAuthorityFixture(t)
-	code, armed := f.owner(t, f.arm(SelfDevelopmentModeAcceptOnce, "op-1", 0, "owner-arm-once"))
-	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeAcceptOnce || modeWriter(armed) != ModeWriterHostInternal {
-		t.Fatalf("owner arm accept_once status=%d mode=%+v writer=%q", code, armed, modeWriter(armed))
-	}
-	// Failure modes 5 and 6: the wrong operation, the wrong kind of key, and
-	// an arming request dressed as a consumption are refused.
-	for name, request := range map[string]SetSelfDevelopmentModeRequest{
-		"other operation":   consume("accept-once-consumed:", "op-2", armed.Generation),
-		"operation prefix":  consume("accept-once-consumed:", "op-", armed.Generation),
-		"wrong key kind":    consume("qualified-consensus-consumed:", "op-1", armed.Generation),
-		"digest missing":    {Mode: SelfDevelopmentModeProposeOnly, ExpectedGeneration: armed.Generation, IdempotencyKey: "accept-once-consumed:op-1:"},
-		"to off":            {Mode: SelfDevelopmentModeOff, ExpectedGeneration: armed.Generation, IdempotencyKey: "accept-once-consumed:op-1:" + strings.Repeat("d", 64)},
-		"re-arm same grant": f.arm(SelfDevelopmentModeAcceptOnce, "op-1", armed.Generation, "accept-once-consumed:op-1:"+strings.Repeat("d", 64)),
-	} {
-		t.Run(name, func(t *testing.T) {
-			if code, _ := f.guest(t, request); code != http.StatusForbidden {
-				t.Fatalf("guest %s status=%d, want 403", name, code)
-			}
-			if got := f.current(t); got.Mode != SelfDevelopmentModeAcceptOnce || got.Generation != armed.Generation {
-				t.Fatalf("guest %s changed the armed grant: %+v", name, got)
-			}
-		})
-	}
-
-	// Allowed 7 and 8: the decision handler's consumption, and its retry.
-	consumption := consume("accept-once-consumed:", "op-1", armed.Generation)
-	code, consumed := f.guest(t, consumption)
-	if code != http.StatusOK || consumed.Mode != SelfDevelopmentModeProposeOnly || consumed.Generation != armed.Generation+1 {
-		t.Fatalf("guest consumption status=%d mode=%+v", code, consumed)
-	}
-	if modeWriter(consumed) != ModeWriterGuestConsumption || consumed.Receipt.KindFields["consumed_operation_id"] != "op-1" {
-		t.Fatalf("consumption receipt = %+v", consumed.Receipt.KindFields)
-	}
-	code, retried := f.guest(t, consumption)
-	if code != http.StatusOK || retried.Receipt == nil || retried.Receipt.ReceiptID != consumed.Receipt.ReceiptID {
-		t.Fatalf("idempotent consumption retry status=%d mode=%+v", code, retried)
-	}
-
-	// qualified_consensus consumption.
-	code, armedQC := f.owner(t, f.arm(SelfDevelopmentModeQualifiedConsensus, "op-3", consumed.Generation, "owner-arm-qc"))
-	if code != http.StatusOK || armedQC.Mode != SelfDevelopmentModeQualifiedConsensus {
-		t.Fatalf("owner arm qualified_consensus status=%d mode=%+v", code, armedQC)
-	}
-	if code, _ := f.guest(t, consume("accept-once-consumed:", "op-3", armedQC.Generation)); code != http.StatusForbidden {
-		t.Fatalf("accept_once key consumed a qualified_consensus grant: status=%d", code)
-	}
-	code, consumedQC := f.guest(t, consume("qualified-consensus-consumed:", "op-3", armedQC.Generation))
-	if code != http.StatusOK || consumedQC.Mode != SelfDevelopmentModeProposeOnly || modeWriter(consumedQC) != ModeWriterGuestConsumption {
-		t.Fatalf("guest qualified_consensus consumption status=%d mode=%+v", code, consumedQC)
-	}
-}
-
-func TestOwnerStillSetsEveryMode(t *testing.T) {
+func TestOwnerSetsOffAndApplyOnly(t *testing.T) {
 	f := newModeAuthorityFixture(t)
 	generation := uint64(0)
 	for i, request := range []SetSelfDevelopmentModeRequest{
-		{Mode: SelfDevelopmentModeAuditOnly, IdempotencyKey: "owner-1"},
-		{Mode: SelfDevelopmentModeProposeOnly, IdempotencyKey: "owner-2"},
-		f.arm(SelfDevelopmentModeAcceptOnce, "op-1", 0, "owner-3"),
-		f.arm(SelfDevelopmentModeQualifiedConsensus, "op-1", 0, "owner-4"),
-		{Mode: SelfDevelopmentModeOff, IdempotencyKey: "owner-5"},
+		{Mode: SelfDevelopmentModeOff, IdempotencyKey: "owner-1"},
+		{Mode: SelfDevelopmentModeApply, IdempotencyKey: "owner-2"},
+		{Mode: SelfDevelopmentModeOff, IdempotencyKey: "owner-3"},
 	} {
 		request.ExpectedGeneration = generation
 		code, mode := f.owner(t, request)
@@ -258,7 +174,13 @@ func TestOwnerStillSetsEveryMode(t *testing.T) {
 		}
 		generation = mode.Generation
 	}
-	// Allowed 11: the guest still reads the mode.
+	for _, retired := range []string{"audit_only", "propose_only", "accept_once", "qualified_consensus", "standing_consensus"} {
+		code, _ := f.owner(t, SetSelfDevelopmentModeRequest{Mode: retired, ExpectedGeneration: generation, IdempotencyKey: "owner-retired-" + retired})
+		if code != http.StatusBadRequest {
+			t.Fatalf("owner wrote retired mode %s: status=%d, want 400", retired, code)
+		}
+	}
+	// The guest still reads the mode.
 	r := httptest.NewRequest(http.MethodGet, "/internal/computers/self-development/mode?computer_id="+f.computerID, nil)
 	r.RemoteAddr = "172.16.0.2:40000"
 	r.Header.Set("Authorization", "Bearer "+f.guestToken)
@@ -266,20 +188,5 @@ func TestOwnerStillSetsEveryMode(t *testing.T) {
 	f.handler.HandleSelfDevelopmentMode(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("guest mode read status=%d", w.Code)
-	}
-}
-
-func TestSelfDevelopmentModeExpiryIsRecordedAsCorpusdWrite(t *testing.T) {
-	f := newModeAuthorityFixture(t)
-	start := time.Date(2026, 7, 19, 1, 0, 0, 0, time.UTC)
-	f.now = start
-	f.modes.now = func() time.Time { return start }
-	if code, _ := f.owner(t, f.arm(SelfDevelopmentModeAcceptOnce, "op-1", 0, "owner-arm")); code != http.StatusOK {
-		t.Fatalf("owner arm status=%d", code)
-	}
-	f.modes.now = func() time.Time { return start.Add(10 * time.Minute) }
-	expired := f.current(t)
-	if expired.Mode != SelfDevelopmentModeOff || modeWriter(expired) != ModeWriterCorpusdExpiry {
-		t.Fatalf("expired mode = %+v writer=%q", expired, modeWriter(expired))
 	}
 }

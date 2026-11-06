@@ -131,7 +131,7 @@ func newCleanRebaseFixture(t *testing.T) *cleanRebaseFixture {
 	t.Helper()
 	store, _ := openTestPlatformStore(t)
 	f := &cleanRebaseFixture{store: store, tape: fakeTape{}}
-	f.setMode(t, SelfDevelopmentModeStandingConsensus)
+	f.setMode(t, testLegacyStandingConsensus)
 	return f
 }
 
@@ -176,7 +176,7 @@ func (f *cleanRebaseFixture) markOwner(t *testing.T, eventDigest string) {
 	t.Helper()
 	f.seq++
 	_, err := f.store.db.Exec(`INSERT INTO self_development_mode_receipts (receipt_digest, computer_id, generation, old_generation, old_mode, new_mode, mode_writer, receipt_json, admitted_event_digest, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		computerevent.DigestBytes([]byte(fmt.Sprintf("mode-%d", f.seq))), crComputer, f.seq, f.seq-1, SelfDevelopmentModeAcceptOnce, SelfDevelopmentModeProposeOnly, ModeWriterGuestConsumption, "{}", eventDigest, time.Now().UTC())
+		computerevent.DigestBytes([]byte(fmt.Sprintf("mode-%d", f.seq))), crComputer, f.seq, f.seq-1, testLegacyAcceptOnce, testLegacyProposeOnly, "guest-consumption", "{}", eventDigest, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,9 +428,9 @@ func TestCleanRebaseGateNeverAppliedOnAFreshComputer(t *testing.T) {
 }
 
 func TestCleanRebaseGateAdmitsEveryDevelopingMode(t *testing.T) {
-	// propose_only is the resting mode after a consumed grant; the owner's
-	// ruling admits clean rebases under it.
-	for _, mode := range []string{SelfDevelopmentModeProposeOnly, SelfDevelopmentModeAcceptOnce, SelfDevelopmentModeQualifiedConsensus, SelfDevelopmentModeStandingConsensus} {
+	// Every row that reads canonical apply admits a clean rebase, and so does
+	// no row at all (the default).
+	for _, mode := range []string{"", SelfDevelopmentModeApply, testLegacyProposeOnly, testLegacyAcceptOnce, testLegacyQualifiedConsensus, testLegacyStandingConsensus} {
 		f := newCleanRebaseFixture(t)
 		f.setMode(t, mode)
 		c := newCleanRebaseCase()
@@ -443,7 +443,7 @@ func TestCleanRebaseGateAdmitsEveryDevelopingMode(t *testing.T) {
 }
 
 func TestCleanRebaseGateModeCheck(t *testing.T) {
-	for _, mode := range []string{"", SelfDevelopmentModeOff, SelfDevelopmentModeAuditOnly, "a-future-mode"} {
+	for _, mode := range []string{SelfDevelopmentModeOff, testLegacyAuditOnly, "a-future-mode"} {
 		f := newCleanRebaseFixture(t)
 		f.setMode(t, mode)
 		c := newCleanRebaseCase()

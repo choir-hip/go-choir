@@ -185,32 +185,21 @@ func (a *OwnerActAuthority) refuse(sentinel error, what, computerID, reason stri
 	return nil
 }
 
-// OwnerActKindForMode names the owner act a mode write is: arming
-// accept_once is the owner's approval of exactly one operation and bundle.
-func OwnerActKindForMode(mode string) string {
-	switch strings.TrimSpace(mode) {
-	case SelfDevelopmentModeAcceptOnce:
-		return owneract.ActSelfDevApprove
-	case SelfDevelopmentModeStandingConsensus:
-		return owneract.ActSelfDevAutonomyArm
-	}
+// OwnerActKindForMode names the owner act a mode write is: off and apply
+// are both selfdev.mode.set. The retired arm kinds (selfdev.approve,
+// selfdev.autonomy.arm) survive only as historic owner_act_receipts rows.
+func OwnerActKindForMode(string) string {
 	return owneract.ActSelfDevModeSet
 }
 
 // OwnerActModeSubject is the subject the proxy signs for a mode write and
 // corpusd checks: the request commitment binds every field of the write.
 func OwnerActModeSubject(computerID string, request SetSelfDevelopmentModeRequest) (map[string]any, error) {
-	return OwnerActModeSubjectWithTier(computerID, request, "")
-}
-
-// OwnerActModeSubjectWithTier adds the computer tier the proxy read from
-// vmctl, which a standing_consensus arm must carry (P4).
-func OwnerActModeSubjectWithTier(computerID string, request SetSelfDevelopmentModeRequest, tier string) (map[string]any, error) {
 	commitment, err := SelfDevelopmentModeRequestCommitment(computerID, request)
 	if err != nil {
 		return nil, err
 	}
-	subject := map[string]any{
+	return map[string]any{
 		"mode":                     strings.TrimSpace(request.Mode),
 		"expected_generation":      request.ExpectedGeneration,
 		"operation_id":             request.OperationID,
@@ -218,11 +207,7 @@ func OwnerActModeSubjectWithTier(computerID string, request SetSelfDevelopmentMo
 		"policy_digest":            request.PolicyDigest,
 		"consensus_receipt_digest": request.ConsensusReceiptDigest,
 		"request_commitment":       commitment,
-	}
-	if tier = strings.TrimSpace(tier); tier != "" {
-		subject["computer_tier"] = tier
-	}
-	return subject, nil
+	}, nil
 }
 
 // verifyModeWrite checks the owner-act receipt on a host-internal mode
@@ -369,11 +354,13 @@ func (a *OwnerActAuthority) effectAcceptedRefusal(ctx context.Context, tx *sql.T
 	case authority == AuthorityPlatformUpdate:
 		return a.platformUpdateRefusal(ctx, tx, event, eventDigest)
 	case strings.HasPrefix(authority, AuthorityExternalOwner):
-		return a.externalOwnerRefusal(ctx, tx, event, eventDigest, strings.TrimPrefix(authority, AuthorityExternalOwner))
+		// Owner approval is retired (docs/design/selfdev-apply-and-revert-2026-11-06.md
+		// 3.1): a candidate is decided by consensus, and the owner reverts.
+		return "owner approval is retired; an effect is accepted by consensus or a clean rebase", nil, nil
 	case strings.HasPrefix(authority, AuthorityQualifiedConsensus):
 		// P4: admitted only for a ConsensusDecisionReceipt corpusd's
 		// decision poster minted from signed ballots.
-		return consensusDecisionRefusal(ctx, tx, event, eventDigest, a.now())
+		return consensusDecisionRefusal(ctx, tx, nil, event, eventDigest, a.now())
 	case IsCleanRebaseAuthority(authority):
 		// Owner 2026-11-04: a clean re-application of an approved change
 		// onto the booted base, host built, applies without an owner act.
@@ -410,82 +397,6 @@ func (a *OwnerActAuthority) platformUpdateRefusal(ctx context.Context, tx *sql.T
 	}
 	return "", func() error {
 		_, err := tx.ExecContext(ctx, `UPDATE platform_update_offers SET admitted_event_digest=? WHERE offer_digest=? AND (admitted_event_digest IS NULL OR admitted_event_digest=?)`, eventDigest, event.DecisionRef, eventDigest)
-		return err
-	}, nil
-}
-
-func (a *OwnerActAuthority) externalOwnerRefusal(ctx context.Context, tx *sql.Tx, event computerevent.Event, eventDigest, ownerID string) (string, func() error, error) {
-	if strings.TrimSpace(ownerID) == "" {
-		return "external-owner authority names no owner", nil, nil
-	}
-	if len(event.InputArtifactRefs) == 0 {
-		return "no ModeReceipt input artifact", nil, nil
-	}
-	ref, err := computerevent.ParseArtifactRef(event.InputArtifactRefs[0])
-	if err != nil {
-		return "input artifact 0 is not an artifact reference", nil, nil
-	}
-	modeDigest := ref.Digest().String()
-	consumed, found, err := readModeReceiptLogRow(ctx, tx, `computer_id=? AND receipt_digest=?`, event.ComputerID, modeDigest)
-	if err != nil {
-		return "", nil, err
-	}
-	if !found {
-		return "input ModeReceipt " + modeDigest + " was never issued by corpusd for this computer", nil, nil
-	}
-	if consumed.writer != ModeWriterGuestConsumption || consumed.oldMode != SelfDevelopmentModeAcceptOnce || consumed.newMode != SelfDevelopmentModeProposeOnly {
-		return fmt.Sprintf("input ModeReceipt is not a guest consumption of accept_once (writer=%s %s->%s)", consumed.writer, consumed.oldMode, consumed.newMode), nil, nil
-	}
-	if !strings.HasPrefix(consumed.field("idempotency_key"), AcceptOnceConsumptionKeyPrefix+event.ParentEventID+":") {
-		return "consumption key does not name this operation", nil, nil
-	}
-	pairs := [][2]string{
-		{consumed.field("consumed_operation_id"), event.ParentEventID},
-		{consumed.field("consumed_bundle_digest"), event.ProposedEffectRef},
-		{consumed.field("consumed_desired_event_head"), event.ExpectedDesiredEventHead},
-		{consumed.field("consumed_effective_event_head"), event.ExpectedEffectiveEventHead},
-		{consumed.field("consumed_pending_transition_ref"), event.ExpectedPendingTransitionRef},
-		{consumed.field("consumed_desired_state_commitment"), event.ExpectedDesiredStateCommitment},
-		{consumed.field("consumed_effective_state_commitment"), event.ExpectedEffectiveStateCommitment},
-	}
-	for _, pair := range pairs {
-		if pair[0] != pair[1] {
-			return "consumed ModeReceipt does not bind this operation, bundle and heads", nil, nil
-		}
-	}
-	if consumed.admitted != "" && consumed.admitted != eventDigest {
-		return "consumed ModeReceipt already admitted another event", nil, nil
-	}
-	arm, found, err := readModeReceiptLogRow(ctx, tx, `computer_id=? AND generation=?`, event.ComputerID, consumed.oldGeneration)
-	if err != nil {
-		return "", nil, err
-	}
-	if !found {
-		return "the accept_once arm the consumption names was never issued by corpusd", nil, nil
-	}
-	if arm.writer != ModeWriterHostInternal || arm.newMode != SelfDevelopmentModeAcceptOnce ||
-		arm.field("operation_id") != event.ParentEventID || arm.field("bundle_digest") != event.ProposedEffectRef {
-		return "the consumed grant was not an owner arm of accept_once for this operation", nil, nil
-	}
-	if arm.ownerActDigest == "" {
-		return "the accept_once arm carries no owner-act receipt", nil, nil
-	}
-	var actComputer, actOwner, actKind string
-	err = tx.QueryRowContext(ctx, `SELECT computer_id, owner_user_id, act_kind FROM owner_act_receipts WHERE receipt_digest=?`, arm.ownerActDigest).Scan(&actComputer, &actOwner, &actKind)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "the arm's owner-act receipt is not in corpusd's log", nil, nil
-	}
-	if err != nil {
-		return "", nil, err
-	}
-	if actComputer != event.ComputerID || actKind != owneract.ActSelfDevApprove {
-		return "the arm's owner-act receipt is for another computer or act", nil, nil
-	}
-	if actOwner != ownerID {
-		return fmt.Sprintf("authority names owner %q but the owner act was %q's", ownerID, actOwner), nil, nil
-	}
-	return "", func() error {
-		_, err := tx.ExecContext(ctx, `UPDATE self_development_mode_receipts SET admitted_event_digest=? WHERE receipt_digest=? AND (admitted_event_digest IS NULL OR admitted_event_digest=?)`, eventDigest, consumed.digest, eventDigest)
 		return err
 	}, nil
 }

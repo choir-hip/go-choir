@@ -1868,8 +1868,8 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 				return types.SettleRuleOnVerify(rule, verdict)
 			})
 	}
-	// P4: under the owner's standing_consensus arm, a passed Verify asks
-	// corpusd's decision poster once (no-op under any other mode).
+	// A passed Verify asks corpusd's decision poster once; an attempt that
+	// does not decide closes the operation failed with its reason.
 	if state, _ := out["state"].(string); state == selfdev.StateAwaitingApproval {
 		rt.triggerStandingConsensus(operation.OperationID, r.scope.RunID)
 	}

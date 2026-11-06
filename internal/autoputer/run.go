@@ -545,7 +545,7 @@ func Run() {
 		if credentials != nil {
 			credentials.StartBackgroundRenewal(context.Background())
 			coreOpts = append(coreOpts, guestControlOptions(credentials)...)
-			log.Printf("autoputer: owner-recovery and self-development mode credentials wired; proposal still requires signed propose_only")
+			log.Printf("autoputer: owner-recovery and self-development mode credentials wired; proposal needs a mode that is not off (no row is apply)")
 		}
 		log.Printf("autoputer: computer event authority reconstructed")
 		bootMark("credential_exchange_done")
@@ -583,8 +583,8 @@ func Run() {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development verifier authority wired; mode remains off")
 		// P4: the guest-core signer signs management's reviewer ballot for
-		// corpusd's decision poster; it acts only under an owner's
-		// standing_consensus arm (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
+		// corpusd's decision poster; it acts only while the mode is apply
+		// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
 		socket := strings.TrimSpace(os.Getenv("CHOIR_GUEST_SIGNER_SOCKET"))
 		if socket == "" {
 			socket = "/run/choir-signers/guest-core/signer.sock"
