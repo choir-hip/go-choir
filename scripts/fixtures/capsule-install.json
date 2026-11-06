@@ -7,8 +7,9 @@
     "body": {
       "action": "install",
       "attempt": 1,
+      "behaviour_surface": "274ae67ee6ccd40081a57b6128362be5a4d2c069d66a470e725ec0df06319c8c",
       "computer_id": "computer-b",
-      "install_id": "install-0900602c65723cba5bf9571c",
+      "install_id": "install-f129a7a590add2337c99ee25",
       "kind": "package",
       "manifest": {
         "name": "demo-next"
@@ -16,21 +17,22 @@
       "mode": "runtime",
       "module_abi": "choir.app-frontend/module/v1",
       "module_available": true,
-      "module_sha256": "ecc1846d73efa53ee45962ca6206782058d8919ab9a54eeb317de3b3cd5e3f67",
+      "module_sha256": "b38d1d6bd0e7308153b10cb29da8d1212a10339d1cb8214bfcb6b81d6918305a",
       "owner_id": "owner-b",
       "package": "demo-next",
       "patch_matches_release": true,
-      "patch_sha256": "58530238294c8c4dc65ceca3a801aecd0455613c5eaa012c251aa875c0cbea7d",
+      "patch_sha256": "1955110ed6cab8348eebc43ab03354b03e31ba8b5d138fe31dd0d11f1ffba432",
       "publisher_computer_id": "computer-owner-b",
       "publisher_operation_id": "op-owner-b",
       "publisher_track": "owner-b",
-      "release_base_commit": "4fba8862c6b58ef3a6abc22af2dfe2c39f138111",
-      "release_id": "86cecf5c51441f4cfd5b61bfdb8777f79d4ff56cbce151ede927d9d93bf475fa",
-      "release_tree_hash": "f4501d6cfa5a6b3740dd7463daf4261a8157c0a8",
+      "release_base_commit": "2604e4071ef1473d5322b86d1a6ddf7080fe3266",
+      "release_id": "de5f475f63864fa0db43e5f232b0f70d10ac1c2bf2eb021c0b54113b29fae701",
+      "release_tree_hash": "7cbde66aafa794d44d65556587cb9482d218acdd",
       "requested_at": "2026-11-03T03:00:00Z",
       "requires_sdk": "^1.0",
       "state": "installed",
-      "trajectory_id": ""
+      "trajectory_id": "",
+      "uses_recorded": true
     }
   },
   "repeat": {
@@ -38,8 +40,9 @@
     "body": {
       "action": "install",
       "attempt": 1,
+      "behaviour_surface": "274ae67ee6ccd40081a57b6128362be5a4d2c069d66a470e725ec0df06319c8c",
       "computer_id": "computer-b",
-      "install_id": "install-0900602c65723cba5bf9571c",
+      "install_id": "install-f129a7a590add2337c99ee25",
       "kind": "package",
       "manifest": {
         "name": "demo-next"
@@ -47,21 +50,22 @@
       "mode": "runtime",
       "module_abi": "choir.app-frontend/module/v1",
       "module_available": true,
-      "module_sha256": "ecc1846d73efa53ee45962ca6206782058d8919ab9a54eeb317de3b3cd5e3f67",
+      "module_sha256": "b38d1d6bd0e7308153b10cb29da8d1212a10339d1cb8214bfcb6b81d6918305a",
       "owner_id": "owner-b",
       "package": "demo-next",
       "patch_matches_release": true,
-      "patch_sha256": "58530238294c8c4dc65ceca3a801aecd0455613c5eaa012c251aa875c0cbea7d",
+      "patch_sha256": "1955110ed6cab8348eebc43ab03354b03e31ba8b5d138fe31dd0d11f1ffba432",
       "publisher_computer_id": "computer-owner-b",
       "publisher_operation_id": "op-owner-b",
       "publisher_track": "owner-b",
-      "release_base_commit": "4fba8862c6b58ef3a6abc22af2dfe2c39f138111",
-      "release_id": "86cecf5c51441f4cfd5b61bfdb8777f79d4ff56cbce151ede927d9d93bf475fa",
-      "release_tree_hash": "f4501d6cfa5a6b3740dd7463daf4261a8157c0a8",
+      "release_base_commit": "2604e4071ef1473d5322b86d1a6ddf7080fe3266",
+      "release_id": "de5f475f63864fa0db43e5f232b0f70d10ac1c2bf2eb021c0b54113b29fae701",
+      "release_tree_hash": "7cbde66aafa794d44d65556587cb9482d218acdd",
       "requested_at": "2026-11-03T03:00:00Z",
       "requires_sdk": "^1.0",
       "state": "installed",
-      "trajectory_id": ""
+      "trajectory_id": "",
+      "uses_recorded": true
     }
   },
   "list": {
@@ -71,8 +75,9 @@
         {
           "action": "install",
           "attempt": 1,
+          "behaviour_surface": "274ae67ee6ccd40081a57b6128362be5a4d2c069d66a470e725ec0df06319c8c",
           "computer_id": "computer-b",
-          "install_id": "install-0900602c65723cba5bf9571c",
+          "install_id": "install-f129a7a590add2337c99ee25",
           "kind": "package",
           "manifest": {
             "name": "demo-next"
@@ -80,21 +85,22 @@
           "mode": "runtime",
           "module_abi": "choir.app-frontend/module/v1",
           "module_available": true,
-          "module_sha256": "ecc1846d73efa53ee45962ca6206782058d8919ab9a54eeb317de3b3cd5e3f67",
+          "module_sha256": "b38d1d6bd0e7308153b10cb29da8d1212a10339d1cb8214bfcb6b81d6918305a",
           "owner_id": "owner-b",
           "package": "demo-next",
           "patch_matches_release": true,
-          "patch_sha256": "58530238294c8c4dc65ceca3a801aecd0455613c5eaa012c251aa875c0cbea7d",
+          "patch_sha256": "1955110ed6cab8348eebc43ab03354b03e31ba8b5d138fe31dd0d11f1ffba432",
           "publisher_computer_id": "computer-owner-b",
           "publisher_operation_id": "op-owner-b",
           "publisher_track": "owner-b",
-          "release_base_commit": "4fba8862c6b58ef3a6abc22af2dfe2c39f138111",
-          "release_id": "86cecf5c51441f4cfd5b61bfdb8777f79d4ff56cbce151ede927d9d93bf475fa",
-          "release_tree_hash": "f4501d6cfa5a6b3740dd7463daf4261a8157c0a8",
+          "release_base_commit": "2604e4071ef1473d5322b86d1a6ddf7080fe3266",
+          "release_id": "de5f475f63864fa0db43e5f232b0f70d10ac1c2bf2eb021c0b54113b29fae701",
+          "release_tree_hash": "7cbde66aafa794d44d65556587cb9482d218acdd",
           "requested_at": "2026-11-03T03:00:00Z",
           "requires_sdk": "^1.0",
           "state": "installed",
-          "trajectory_id": ""
+          "trajectory_id": "",
+          "uses_recorded": true
         }
       ]
     }

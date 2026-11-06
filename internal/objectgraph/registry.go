@@ -234,6 +234,9 @@ func DefaultRegistry() *Registry {
 		// predecessor. corpusd writes both, on the owner's act.
 		{Kind: "choir.package_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "pkgrelease.Record"},
 		{Kind: "choir.release_listing", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "pkgrelease.Listing"},
+		// A publisher's request that the platform force an update of its
+		// release (F1): a note for the platform operator; it changes nothing.
+		{Kind: "choir.package_force_request", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
 	}
 	// The custodian of each kind is not written here: it is derived from the
 	// desk and kernel-service manifests, and the load fails when a kind has

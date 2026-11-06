@@ -177,6 +177,10 @@ func TestBuildMakesAModuleV1(t *testing.T) {
 	if mod.RequiresSDK != "^1.0" || mod.ABI != ModuleABI || mod.SHA256 != digest(mod.Bytes) || len(mod.Manifest) == 0 {
 		t.Fatalf("module = %+v", Module{SHA256: mod.SHA256, ABI: mod.ABI, RequiresSDK: mod.RequiresSDK})
 	}
+	// F1: the extracted uses are the module's own sdk_imports.
+	if len(mod.Uses) != 1 || mod.Uses[0] != "appTitle" {
+		t.Fatalf("F1: uses = %v, want [appTitle]", mod.Uses)
+	}
 }
 
 func TestBuildRefusesAnImportOutsideThePackage(t *testing.T) {

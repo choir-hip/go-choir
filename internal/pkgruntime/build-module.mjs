@@ -206,4 +206,7 @@ code = code
   .replace('"__CHOIR_SDK_IMPORTS__"', () => JSON.stringify([...sdkImports].sort()))
   .replace('"__CHOIR_CSS__"', () => JSON.stringify(css));
 writeFileSync(path.resolve(outFile), code);
+// The extracted uses beside the module: the same names as sdk_imports, read
+// by the Go side so an update can compare them (F1).
+writeFileSync(path.resolve(outFile) + '.uses.json', JSON.stringify([...sdkImports].sort()));
 rmSync(outDir, { recursive: true, force: true });

@@ -58,7 +58,12 @@ var wantCLIOnly = []string{
 	"package export",
 	// Owner acts (docs/design/package-install-2026-11-04.md): installing and
 	// uninstalling a package release on a computer.
-	"package install", "package publish", "package reinstate", "package share", "package uninstall", "package withdraw",
+	"package install", "package publish", "package reinstate",
+	// Owner act (F1): a publisher's force request, a note to the platform.
+	"package request-force",
+	"package share", "package uninstall", "package withdraw",
+	// The platform operator's break-glass yank (F1): host only.
+	"platform yank",
 	"precommit import-ledger",
 	// Owner act: abandoning an open operation.
 	"self-dev abandon", "self-dev approve",

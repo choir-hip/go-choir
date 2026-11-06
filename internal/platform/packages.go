@@ -149,6 +149,10 @@ func (h *Handler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 		h.readPackageReleaseBlob(w, r, strings.ToLower(parts[1]), strings.ToLower(parts[3]))
 	case rest == "releases" && r.Method == http.MethodPost:
 		h.publishPackage(w, r)
+	case rest == "updates" && r.Method == http.MethodPost:
+		h.packageUpdates(w, r)
+	case len(parts) == 3 && parts[0] == "releases" && parts[2] == "force-requests" && r.Method == http.MethodPost && computerevent.IsSHA256(strings.ToLower(parts[1])):
+		h.packageForceRequest(w, r, strings.ToLower(parts[1]))
 	case len(parts) == 2 && parts[0] == "releases" && r.Method == http.MethodGet:
 		h.readPackageRelease(w, r, strings.ToLower(parts[1]))
 	case rest == "catalog" && r.Method == http.MethodGet:
@@ -363,11 +367,25 @@ func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[s
 // version 1 first, up to the newest one whose predecessor digests are
 // intact.
 func (h *Handler) trackChains(ctx context.Context, ownerID, pkg string) (map[string][]pkgrelease.Listing, int, error) {
+	chains, _, count, err := h.trackChainsTimed(ctx, ownerID, pkg)
+	return chains, count, err
+}
+
+// listedAtKey names one listing version's write time in trackChainsTimed.
+type listedAtKey struct {
+	record  string
+	version int
+}
+
+// trackChainsTimed is trackChains with each listing version's write time
+// (the listing object's listed_at), which the update soak reads (F1).
+func (h *Handler) trackChainsTimed(ctx context.Context, ownerID, pkg string) (map[string][]pkgrelease.Listing, map[listedAtKey]time.Time, int, error) {
 	objects, err := h.pagedListings(ctx, "$.package", pkg, ownerID)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 	versions := map[string]map[int]pkgrelease.Listing{}
+	times := map[listedAtKey]time.Time{}
 	for _, obj := range objects {
 		listing, err := verifiedListing(obj, ownerID)
 		if err != nil || listing.Package != pkg {
@@ -377,6 +395,14 @@ func (h *Handler) trackChains(ctx context.Context, ownerID, pkg string) (map[str
 			versions[listing.RecordID] = map[int]pkgrelease.Listing{}
 		}
 		versions[listing.RecordID][listing.Version] = listing
+		var meta struct {
+			ListedAt string `json:"listed_at"`
+		}
+		if json.Unmarshal(obj.Metadata, &meta) == nil {
+			if at, err := time.Parse(time.RFC3339Nano, meta.ListedAt); err == nil {
+				times[listedAtKey{listing.RecordID, listing.Version}] = at
+			}
+		}
 	}
 	chains := map[string][]pkgrelease.Listing{}
 	for recordID, byVersion := range versions {
@@ -399,7 +425,7 @@ func (h *Handler) trackChains(ctx context.Context, ownerID, pkg string) (map[str
 		}
 		chains[recordID] = chain
 	}
-	return chains, len(objects), nil
+	return chains, times, len(objects), nil
 }
 
 // pagedListings reads every listing object of ownerID matching

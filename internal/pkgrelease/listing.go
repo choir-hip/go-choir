@@ -53,7 +53,17 @@ type Listing struct {
 	StateActor        string     `json:"state_actor"`
 	Version           int        `json:"version"`
 	PrevVersionDigest string     `json:"prev_version_digest,omitempty"`
+	// ForcedRelease is the platform's forced update (F1): on a yanked
+	// listing written by the platform operator, the release of the same
+	// track every installer of this one moves to at its next load, over the
+	// soak and over a manual choice. omitempty: a listing without it hashes
+	// as before.
+	ForcedRelease string `json:"forced_release,omitempty"`
 }
+
+// PlatformActorPrefix starts the state_actor of a listing version the
+// platform operator wrote (a yank or a forced update).
+const PlatformActorPrefix = "platform:"
 
 // SharedWith names the owners and computers a shared listing admitted
 // before 2026-11-03 (S3). It is kept so those listings still verify; only
@@ -125,6 +135,14 @@ func (l Listing) Validate() error {
 	}
 	if strings.TrimSpace(l.StateActor) == "" {
 		return fail("state_actor is required")
+	}
+	if l.ForcedRelease != "" {
+		if l.State != StateYanked || !strings.HasPrefix(l.StateActor, PlatformActorPrefix) {
+			return fail("forced_release is the platform's act on a yanked listing")
+		}
+		if !computerevent.IsSHA256(l.ForcedRelease) || l.ForcedRelease == l.RecordID {
+			return fail("forced_release names another release by its sha256")
+		}
 	}
 	if (l.Version == 1) != (l.PrevVersionDigest == "") || (l.PrevVersionDigest != "" && !computerevent.IsSHA256(l.PrevVersionDigest)) {
 		return fail("version 1 names no predecessor; every later version names its predecessor's digest")

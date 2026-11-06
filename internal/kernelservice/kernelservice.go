@@ -98,6 +98,7 @@ var builtin = []Manifest{
 		"choir.publication_policy", "choir.verifier_attestation", "choir.publication_resolved_blocks",
 		"choir.publication_check", "choir.support_judgement", "choir.entity", "choir.entity_review",
 		"choir.entity_stopword", "choir.software_release", "choir.package_release", "choir.release_listing",
+		"choir.package_force_request",
 	}},
 	{Name: Store, OwnedKinds: []string{"choir.stream_seq_lease"}},
 	{Name: OwnerFiles, OwnedKinds: []string{"choir.file", "choir.file_path"}},

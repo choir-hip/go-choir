@@ -200,6 +200,25 @@
   font-size: 0.8rem;
 }
 
+/* Updates (F1): the owner's update setting, per app and for every app. */
+.lib-update-policy,
+.lib-update-default select {
+  min-height: 2.25rem;
+  border: 1px solid var(--choir-border-strong);
+  border-radius: var(--choir-radius-control-sm);
+  background: var(--choir-surface, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.lib-update-default {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 0.5rem;
+}
+
 .lib-tag {
   display: inline-flex;
   align-items: center;

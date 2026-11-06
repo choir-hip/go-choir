@@ -46,6 +46,10 @@ type InstalledPackage struct {
 	// at URL; the shell resolves contributes.themes[].file through them.
 	Files     []InstalledFile `json:"files,omitempty"`
 	Available bool            `json:"available"`
+	// Update is the last update sync's view of the package (F1): an update
+	// available, one that needs the owner's approval, or what the platform
+	// did. Absent until a sync has run.
+	Update *PackageUpdateView `json:"update,omitempty"`
 }
 
 // InstalledFile is one data file of an installed package.
@@ -107,6 +111,7 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 				Publisher:   item.PublisherComputerID, Track: item.PublisherTrack, RequiresSDK: item.RequiresSDK, Manifest: item.Manifest,
 				Module: module, Files: files,
 				Available: rt.installBytesPresent(*item),
+				Update:    rt.packageUpdateView(name),
 			})
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

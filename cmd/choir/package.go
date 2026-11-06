@@ -1,14 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
@@ -160,7 +166,74 @@ func packageCommands() []*command {
 		packageInstallAct("uninstall", "Uninstall a package release the Library installed on your computer, removing its module from the launcher (owner act)"),
 		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: nobody else sees it any more; it stays in your own history (owner act)"),
 		packageStateAct("reinstate", pkgrelease.StateListed, "Reinstate a withdrawn or suspended package release while it can still head its track (owner act)"),
+		ownerAct(&command{
+			path: []string{"package", "request-force"}, summary: "Ask the platform to force an update of your release on its installers: a note to the platform operator; it changes nothing by itself (owner act)",
+			params: []param{
+				computerParam().orSay("--computer names your computer the request is made from"),
+				pStr("release", "Your package release id").req(),
+				pStr("note", "Why the platform should force the update").req(),
+			},
+			usage:  "--computer, --release and --note are required",
+			scopes: []string{releaseApprove},
+			handler: func(x *call) (any, error) {
+				return sendRaw(x, http.MethodPost, "/api/catalog/records/"+url.PathEscape(strings.ToLower(x.trim("release")))+"/force-request", map[string]any{
+					"computer_id": x.trim("computer"), "note": x.trim("note"),
+				})
+			},
+		}),
+		{
+			path: []string{"platform", "yank"}, summary: "Platform operator only: yank a package release, or force its installers onto another release of its track (break glass, manual)",
+			scopes:  []string{"public"},
+			cliOnly: "the platform's break-glass act runs on the host against corpusd with the host credential and an operator token; no agent and no hosted server may reach it",
+			legacy:  runPlatformYank,
+		},
 	}
+}
+
+// runPlatformYank is the platform operator's yank or forced update (F1,
+// docs/design/forced-modularity-build-2026-11-04.md section 5). It runs on
+// the host (ssh), calls corpusd's operator route directly over loopback with
+// the host credential (hostauth), and names the operator; the token is read
+// from CHOIR_PLATFORM_OPERATOR_TOKEN so it never appears in argv.
+func runPlatformYank(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir platform yank", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	corpusd := fs.String("corpusd", "http://127.0.0.1:8086", "corpusd base URL on this host")
+	operator := fs.String("operator", "", "Your platform operator name (CHOIR_PLATFORM_OPERATORS)")
+	release := fs.String("release", "", "The release to yank (sha256)")
+	reason := fs.String("reason", "", "Why; shown to every installer")
+	forceTo := fs.String("force-to", "", "A listed release of the same track every installer moves to (a forced update)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	token := os.Getenv("CHOIR_PLATFORM_OPERATOR_TOKEN")
+	if strings.TrimSpace(*operator) == "" || strings.TrimSpace(*release) == "" || strings.TrimSpace(*reason) == "" || token == "" {
+		fmt.Fprintln(stderr, "choir platform yank: --operator, --release, --reason and CHOIR_PLATFORM_OPERATOR_TOKEN are required")
+		return 2
+	}
+	body, _ := json.Marshal(map[string]string{"release_id": strings.ToLower(strings.TrimSpace(*release)), "reason": strings.TrimSpace(*reason), "forced_release": strings.ToLower(strings.TrimSpace(*forceTo))})
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(*corpusd, "/")+"/internal/platform/operator/packages/yank", bytes.NewReader(body))
+	if err != nil {
+		fmt.Fprintf(stderr, "choir platform yank: %v\n", err)
+		return 2
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Choir-Operator", strings.TrimSpace(*operator))
+	req.Header.Set("X-Choir-Operator-Token", token)
+	hostauth.MarkInternal(req)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir platform yank: %v\n", err)
+		return 1
+	}
+	defer func() { _ = resp.Body.Close() }()
+	out, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	fmt.Fprintln(stdout, strings.TrimSpace(string(out)))
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(stderr, "choir platform yank: corpusd answered %d\n", resp.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 // packageInstallAct installs or uninstalls one package release on a

@@ -31,12 +31,15 @@ type Config struct {
 	SigningKeyPath        string
 	KeyEscrowKeyPath      string
 	KeyEscrowOperatorsRaw string
-	VmctlURL              string
-	ArtifactGCMode        string
-	ArtifactGCGrace       string
-	ArtifactGCInterval    string
-	ArtifactGCMaxDeletes  string
-	ArtifactGCMaxBytes    string
+	// PlatformOperatorsRaw names the platform operators of the break-glass
+	// package yank and forced update (F1): name:token,...
+	PlatformOperatorsRaw string
+	VmctlURL             string
+	ArtifactGCMode       string
+	ArtifactGCGrace      string
+	ArtifactGCInterval   string
+	ArtifactGCMaxDeletes string
+	ArtifactGCMaxBytes   string
 	// ArtifactGCNamespaces is PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES: the
 	// comma list an active run may delete from (ParseArtifactGCNamespaces).
 	ArtifactGCNamespaces string
@@ -78,6 +81,7 @@ func LoadConfig() (*Config, error) {
 		SigningKeyPath:        envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
 		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
 		KeyEscrowOperatorsRaw: os.Getenv("CHOIR_KEY_ESCROW_OPERATORS"),
+		PlatformOperatorsRaw:  os.Getenv("CHOIR_PLATFORM_OPERATORS"),
 		VmctlURL:              os.Getenv("CORPUSD_VMCTL_URL"),
 		ArtifactGCMode:        os.Getenv("PLATFORM_ARTIFACT_GC_MODE"),
 		ArtifactGCGrace:       os.Getenv("PLATFORM_ARTIFACT_GC_GRACE"),

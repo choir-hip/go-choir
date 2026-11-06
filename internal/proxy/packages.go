@@ -323,6 +323,10 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		h.handlePackageListingAct(w, r, strings.ToLower(parts[1]))
 		return
 	}
+	if len(parts) == 3 && parts[0] == "records" && parts[2] == "force-request" && r.Method == http.MethodPost {
+		h.handlePackageForceRequest(w, r, strings.ToLower(parts[1]))
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -456,6 +460,48 @@ func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request
 	}
 	act, _ := json.Marshal(platform.PackageListingRequest{OwnerID: authResult.UserID, ComputerID: computerID, ListingChange: change})
 	status, raw, err := h.corpusdCallHeaders(r.Context(), http.MethodPut, "/internal/platform/listings/"+releaseID, "application/json", headers, act)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
+		return
+	}
+	relayJSON(w, status, raw)
+}
+
+// handlePackageForceRequest is a publisher's request that the platform force
+// an update of its release (F1): a note to the platform operator. It executes
+// nothing; only the operator's yank route forces or yanks.
+func (h *Handler) handlePackageForceRequest(w http.ResponseWriter, r *http.Request, releaseID string) {
+	if !computerevent.IsSHA256(releaseID) {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	}
+	authResult, err := h.authenticate(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if authResult.AuthMethod == "api_key" && !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, releasePublishScope) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + releasePublishScope})
+		return
+	}
+	if !authorizeOwnerAct(w, authResult, "package force request") {
+		return
+	}
+	var body struct {
+		ComputerID string `json:"computer_id"`
+		Note       string `json:"note"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || strings.TrimSpace(body.ComputerID) == "" || strings.TrimSpace(body.Note) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id and note are required"})
+		return
+	}
+	if _, ok := h.ownedComputerURL(w, r, authResult, strings.TrimSpace(body.ComputerID)); !ok {
+		return
+	}
+	act, _ := json.Marshal(platform.PackageForceRequest{OwnerID: authResult.UserID, ComputerID: strings.TrimSpace(body.ComputerID), Note: body.Note})
+	status, raw, err := h.corpusdCall(r.Context(), http.MethodPost, "/internal/platform/packages/releases/"+releaseID+"/force-requests", "application/json", act)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
 		return

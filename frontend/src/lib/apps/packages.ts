@@ -239,7 +239,31 @@ export async function fetchInstalledFiles(record: InstalledPackageRecord): Promi
  */
 let refreshSeq = 0;
 
+// The update sync (F1): once per sign-in, at load, the computer compares its
+// installs with their tracks; an app on automatic updates installs, and the
+// platform's yank or forced update lands. The installed set is read after it.
+let updatesSynced = false;
+
+async function syncPackageUpdatesOnce(): Promise<void> {
+  if (updatesSynced) return;
+  try {
+    const boot = await fetchWithRenewal('/api/shell/bootstrap', { headers: { accept: 'application/json' } });
+    if (!boot.ok) return;
+    const computerId = String((await boot.json())?.computer_id || '');
+    if (!computerId) return;
+    updatesSynced = true;
+    await fetchWithRenewal(`/api/computers/${encodeURIComponent(computerId)}/packages/updates`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: '{}',
+    });
+  } catch {
+    // The installed set stands; the next sign-in or the Library syncs again.
+  }
+}
+
 export async function refreshInstalledPackages(): Promise<void> {
+  await syncPackageUpdatesOnce();
   // Only the newest read lands: an older answer never overwrites a newer set.
   const mine = ++refreshSeq;
   const land = (records: InstalledPackageRecord[]) => {
@@ -264,6 +288,7 @@ export async function refreshInstalledPackages(): Promise<void> {
 /** Sign-out: the previous owner's installed apps leave the launcher at once. */
 export function clearInstalledPackages(): void {
   refreshSeq += 1;
+  updatesSynced = false;
   installedPackages.set([]);
 }
 

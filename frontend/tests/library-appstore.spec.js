@@ -101,7 +101,7 @@ function world() {
       publisher_address: app.email, own: false,
     });
   });
-  return { releases, byTrack, entries, installs: [], posts: [], reputationAsks: [] };
+  return { releases, byTrack, entries, installs: [], posts: [], reputationAsks: [], updates: [], syncs: 0, policy: { default: 'manual', apps: {} }, policyPuts: [] };
 }
 
 // answer routes the catalog and the install list for one page, statefully.
@@ -139,6 +139,16 @@ async function answerCatalog(page, w) {
         ] });
       }
       return json({ publisher: who, n: 0, sentences: [{ text: 'No settled outcomes for this maker yet.', n: 0 }] });
+    }
+    if (p === `/api/computers/${COMPUTER}/packages/updates` && req.method() === 'POST') {
+      w.syncs += 1;
+      return json({ updates: w.updates, policy: w.policy });
+    }
+    if (p === '/api/preferences/packages.update_policy' && req.method() === 'PUT') {
+      const body = JSON.parse(req.postData() || '{}');
+      w.policyPuts.push(body.value);
+      w.policy = body.value;
+      return json({ key: 'packages.update_policy', value: w.policy });
     }
     if (p === `/api/computers/${COMPUTER}/packages/installs`) {
       if (req.method() === 'GET') return json({ installs: w.installs });
@@ -435,6 +445,48 @@ test.describe('the Library is an app store', () => {
     await expect.poll(() => w.posts.length).toBe(1);
     expect(w.posts[0]).toMatchObject({ release_id: hex(777), action: 'uninstall' });
     await expect(content.locator('[data-installed-row]', { hasText: 'old-app' })).toHaveCount(0);
+    await context.close();
+  });
+
+  // F1: the Library syncs updates on open; a widening update reads "needs
+  // approval" and installs only on the owner's press; the update setting is
+  // per app and for every app; the platform's yank is told with its reason.
+  test('updates: needs approval, the press, the per-app setting and the platform line', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    const w = world();
+    const ids = w.byTrack.get(`converter-next\n${hex(1)}`);
+    const [headId, oldId] = ids;
+    w.installs.push(
+      { install_id: 'ad-c', release_id: oldId, package: 'converter-next', action: 'install', mode: 'runtime', patch_matches_release: true },
+      { install_id: 'ad-y', release_id: hex(555), package: 'yanked-app', action: 'uninstall', mode: 'runtime', patch_matches_release: true, trigger: 'platform', platform_reason: 'it sent your files away' },
+    );
+    w.updates = [{
+      package: 'converter-next', state: 'needs_approval', policy: 'manual', release_id: headId, seq: 2,
+      change: { added_uses: [], added_grants: ['net.fetch'], surface_changed: true }, view: w.releases.get(headId),
+    }];
+    await stubBackend(page, { api: [] });
+    await answerCatalog(page, w);
+    const { content } = await openLibrary(page, server.base);
+    await expect.poll(() => w.syncs).toBeGreaterThan(0);
+
+    const row = content.locator('[data-installed-row][data-package="converter-next"]');
+    await expect(row.locator('[data-update-line]')).toContainText('Update available, needs approval');
+    await expect(row.locator('[data-update-line]')).toContainText('net.fetch');
+    expect(w.posts).toHaveLength(0);
+    await expect(content.locator('[data-platform-removed-row][data-package="yanked-app"] [data-platform-line]')).toHaveText('Removed by the platform: it sent your files away');
+
+    // The per-app setting is the owner's preference.
+    await row.locator('[data-update-policy]').selectOption('automatic');
+    await expect.poll(() => w.policyPuts.length).toBe(1);
+    expect(w.policyPuts[0]).toEqual({ default: 'manual', apps: { 'converter-next': 'automatic' } });
+
+    // The press is the approval: the ordinary install of the newer release.
+    await row.locator('[data-update-button]').click();
+    await content.locator('[data-confirm-install]').click();
+    await expect.poll(() => w.posts.length).toBe(1);
+    expect(w.posts[0]).toMatchObject({ release_id: headId });
     await context.close();
   });
 });

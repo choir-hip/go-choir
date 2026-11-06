@@ -66,7 +66,31 @@ type PackageInstall struct {
 	// each in the computer's module store by digest. A package with no app (a
 	// pack) has files or nothing and no ModuleSHA256.
 	Files []PackageInstallFile `json:"files,omitempty"`
+	// Updates (F1, docs/design/forced-modularity-build-2026-11-04.md
+	// section 5). Uses are the SDK names the installed module imports
+	// (extracted by the build) and UsesRecorded says they were kept (an
+	// install before F1 has none to compare); BehaviourSurface is the
+	// release's behaviour-surface hash. Trigger says what made the change:
+	// "" (the owner's press), "automatic" (the owner's automatic update
+	// policy), or "platform" (the platform's break-glass yank or forced
+	// update, Forced). A platform change names the yanked release's listing
+	// version it acted on and the operator's reason.
+	Uses             []string `json:"uses,omitempty"`
+	UsesRecorded     bool     `json:"uses_recorded,omitempty"`
+	BehaviourSurface string   `json:"behaviour_surface,omitempty"`
+	Trigger          string   `json:"trigger,omitempty"`
+	Forced           bool     `json:"forced,omitempty"`
+	PlatformReason   string   `json:"platform_reason,omitempty"`
+	ListingRelease   string   `json:"listing_release,omitempty"`
+	ListingVersion   int      `json:"listing_version,omitempty"`
+	ListingDigest    string   `json:"listing_digest,omitempty"`
 }
+
+// Install triggers (PackageInstall.Trigger).
+const (
+	PackageInstallTriggerAutomatic = "automatic"
+	PackageInstallTriggerPlatform  = "platform"
+)
 
 // PackageInstallFile is one data file of an install: its path in the package
 // and its sha256.

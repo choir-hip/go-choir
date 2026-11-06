@@ -264,6 +264,9 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 	case len(parts) == 3 && parts[1] == "packages" && parts[2] == "installs":
 		// The Library: install or uninstall a package release; list installs.
 		h.handlePackageInstalls(w, r, ownerID, computerID, "")
+	case len(parts) == 3 && parts[1] == "packages" && parts[2] == "updates":
+		// F1: the update sync; the proxy supplies the catalog's facts.
+		h.handlePackageUpdates(w, r, ownerID, computerID)
 	case len(parts) == 4 && parts[1] == "packages" && parts[2] == "installs":
 		h.handlePackageInstalls(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "operations":

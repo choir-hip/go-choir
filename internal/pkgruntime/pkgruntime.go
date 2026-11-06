@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -85,6 +86,9 @@ type Module struct {
 	// read from the verified tree. A pack, a package with no app, has Files
 	// and no Bytes: there is no code to build.
 	Files []File `json:"files,omitempty"`
+	// Uses are the SDK names the module imports, extracted by the build
+	// (sorted; empty for a pack). An update compares them (F1).
+	Uses []string `json:"uses,omitempty"`
 }
 
 // File is one data file of a package, by path in the package and digest.
@@ -209,7 +213,30 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if len(raw) == 0 || len(raw) > MaxModuleBytes {
 		return Module{}, fmt.Errorf("%w: the module is %d bytes (at most %d)", ErrBuild, len(raw), MaxModuleBytes)
 	}
-	return Module{SHA256: digest(raw), Size: len(raw), ABI: ModuleABI, RequiresSDK: requires, Manifest: json.RawMessage(manifestRaw), Bytes: raw, Files: files}, nil
+	uses, err := readUses(out + ".uses.json")
+	if err != nil {
+		return Module{}, err
+	}
+	return Module{SHA256: digest(raw), Size: len(raw), ABI: ModuleABI, RequiresSDK: requires, Manifest: json.RawMessage(manifestRaw), Bytes: raw, Files: files, Uses: uses}, nil
+}
+
+// readUses reads the SDK names the build extracted (the module's own
+// sdk_imports, written beside it): the extracted uses an update compares
+// (F1).
+func readUses(path string) ([]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: the build wrote no uses: %v", ErrBuild, err)
+	}
+	var uses []string
+	if err := json.Unmarshal(raw, &uses); err != nil {
+		return nil, fmt.Errorf("%w: the build's uses: %v", ErrBuild, err)
+	}
+	if uses == nil {
+		uses = []string{}
+	}
+	sort.Strings(uses)
+	return uses, nil
 }
 
 // readThemeFiles reads the theme files the manifest names from the verified

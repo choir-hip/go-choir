@@ -160,6 +160,120 @@ export async function installRelease(computerId, releaseId, record, action = 'in
   return { status: res.status, body: body && typeof body === 'object' ? body : {} };
 }
 
+// ---- updates (F1) ----
+
+// UPDATE_POLICY_KEY is the owner's update setting: a user preference.
+export const UPDATE_POLICY_KEY = 'packages.update_policy';
+
+// syncUpdates asks this computer to compare its installs with their tracks:
+// it answers each installed app's update (available, needs approval, updated
+// automatically, or what the platform did) and the owner's policy. An app on
+// automatic updates here once its newest release has been listed a day.
+export async function syncUpdates(computerId) {
+  const path = '/api/computers/' + encodeURIComponent(computerId) + '/packages/updates';
+  let res;
+  try {
+    res = await fetchWithRenewal(path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: '{}',
+    });
+  } catch (err) {
+    if (err && err.name === 'AuthRequiredError') throw err;
+    throw new CatalogError(UNREACHABLE, 0, 'unreachable');
+  }
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (_err) {
+    body = null;
+  }
+  if (!res.ok) {
+    const reason = body && typeof body.reason === 'string' ? body.reason : '';
+    throw new CatalogError(plainReason(reason, res.status), res.status, reason);
+  }
+  const updates = Array.isArray(body && body.updates) ? body.updates.filter((u) => u && typeof u.package === 'string') : [];
+  if (updates.some((u) => u.state === 'updated' || u.state === 'updated_by_platform' || u.state === 'removed_by_platform')) notifyPackagesChanged();
+  return { updates, policy: normalizePolicy(body && body.policy) };
+}
+
+// normalizePolicy reads a policy; anything unreadable is manual.
+export function normalizePolicy(raw) {
+  const mode = (v) => (v === 'automatic' ? 'automatic' : 'manual');
+  const apps = {};
+  if (raw && raw.apps && typeof raw.apps === 'object') {
+    for (const [name, value] of Object.entries(raw.apps)) apps[name] = mode(value);
+  }
+  return { default: mode(raw && raw.default), apps };
+}
+
+// policyFor is one app's update mode.
+export function policyFor(policy, name) {
+  const p = normalizePolicy(policy);
+  return Object.prototype.hasOwnProperty.call(p.apps, name) ? p.apps[name] : p.default;
+}
+
+// savePolicy writes the owner's update setting.
+export async function savePolicy(policy) {
+  const value = normalizePolicy(policy);
+  const body = await requestJSON('/api/preferences/' + UPDATE_POLICY_KEY, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ value }),
+  });
+  return normalizePolicy(body && body.value);
+}
+
+// updateLine says an installed app's update in plain words, or ''.
+export function updateLine(update) {
+  if (!update) return '';
+  const change = update.change || {};
+  const widening = [];
+  if (Array.isArray(change.added_grants) && change.added_grants.length) widening.push('asks for new permissions: ' + change.added_grants.join(', '));
+  if (Array.isArray(change.added_uses) && change.added_uses.length) widening.push('uses new parts of Choir: ' + change.added_uses.join(', '));
+  if (change.uses_unknown) widening.push('what the installed version uses was not recorded');
+  switch (update.state) {
+    case 'available':
+      return 'Update available' + (update.seq ? ' (version ' + update.seq + ')' : '') + '.';
+    case 'needs_approval':
+      return 'Update available, needs approval' + (widening.length ? ': it ' + widening.join('; ') : '') + '.';
+    case 'updated':
+      return 'Updated automatically' + (update.seq ? ' to version ' + update.seq : '') + '.';
+    case 'removed_by_platform':
+      return 'Removed by the platform: ' + String(update.detail || 'no reason given');
+    case 'updated_by_platform':
+      return 'Updated by the platform: ' + String(update.detail || 'no reason given');
+    default:
+      return '';
+  }
+}
+
+// platformLine is the platform's last act on a package, from the install
+// records (newest first): "Removed by the platform: <reason>" or "Updated by
+// the platform: <reason>", or ''.
+export function platformLine(installs, name) {
+  const list = Array.isArray(installs) ? installs : [];
+  const latest = list.find((item) => item && item.package === name);
+  if (!latest || latest.trigger !== 'platform') return '';
+  const reason = String(latest.platform_reason || 'no reason given');
+  return latest.action === 'uninstall' ? 'Removed by the platform: ' + reason : 'Updated by the platform: ' + reason;
+}
+
+// platformRemoved is every package whose latest record is the platform's
+// uninstall: it is no longer installed, and the owner is told why.
+export function platformRemoved(installs) {
+  const list = Array.isArray(installs) ? installs : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (!item || seen.has(item.package)) continue;
+    seen.add(item.package);
+    if (item.trigger === 'platform' && item.action === 'uninstall') out.push(item);
+  }
+  return out;
+}
+
 // ---- reading a release ----
 
 export function packageOf(release) {

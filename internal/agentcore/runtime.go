@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/installreview"
+	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"log"
 	"net/http"
@@ -556,6 +557,11 @@ type Runtime struct {
 	packageBuilder   PackageModuleBuilder
 	packageModules   pkgruntime.Store
 	packageInstallMu sync.Mutex
+	// Updates (F1, package_update.go): the last update sync's view per
+	// package, and the candidates' extracted surfaces by release id.
+	packageUpdateMu     sync.Mutex
+	packageUpdateViews  map[string]PackageUpdateView
+	packageUpdateProbes map[string]pkgrelease.UpdateSurface
 	// The install review gate (MA7.5, install_review.go): the guest-core
 	// signer that seals verdicts, and the seats (nil: the Devin and DeepSeek
 	// roster on the gateway provider).

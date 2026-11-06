@@ -197,6 +197,7 @@ func main() {
 	if err := handler.ConfigureKeyEscrow(escrowPrivateKey, cfg.KeyEscrowOperatorsRaw); err != nil {
 		log.Fatalf("corpusd key escrow routes: %v", err)
 	}
+	handler.ConfigurePlatformOperators(cfg.PlatformOperatorsRaw)
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
 

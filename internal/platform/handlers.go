@@ -48,6 +48,11 @@ type Handler struct {
 	// (owner, package, seq) or a store-level compare-and-set first (review
 	// 274 F5).
 	packageMu sync.Mutex
+	// platformOperators are the named operators of the break-glass yank and
+	// forced update (F1, CHOIR_PLATFORM_OPERATORS); the route is closed
+	// when none are configured.
+	platformOperators     map[string][32]byte
+	platformOperatorsOpen bool
 }
 type healthResponse struct {
 	Status  string         `json:"status"`
@@ -617,6 +622,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(hostbuild.Route+"/", h.HandleHostBuilds)
 	s.HandleFunc(packagesRoute+"/", h.HandlePackages)
 	s.HandleFunc(listingsRoute+"/", h.HandleListings)
+	s.HandleFunc(platformOperatorYankRoute, h.HandlePlatformYank)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)

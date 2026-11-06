@@ -29,6 +29,14 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		return "", "", false
 	}
 	rest := strings.TrimPrefix(path, prefix)
+	if rawID, tail, ok := strings.Cut(rest, "/packages/updates"); ok && tail == "" {
+		// F1: the update sync, at load and when the Library opens.
+		decoded, err := url.PathUnescape(rawID)
+		if err != nil || strings.TrimSpace(decoded) == "" || strings.Contains(rawID, "/") {
+			return "", "", false
+		}
+		return strings.TrimSpace(decoded), "updates", true
+	}
 	if rawID, tail, ok := strings.Cut(rest, "/packages/installs"); ok {
 		// The Library's installs: GET lists or reads one (read); POST installs
 		// or uninstalls a package release (the owner's act). Installs are not
@@ -102,6 +110,8 @@ func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 		return method == http.MethodGet
 	case "installs":
 		return method == http.MethodGet || method == http.MethodPost
+	case "updates":
+		return method == http.MethodPost
 	default:
 		return false
 	}
@@ -471,6 +481,12 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 			action = "install"
 		}
 	}
+	// The update sync (F1) may install or uninstall by the owner's policy or
+	// the platform's act: it is an install-class owner act.
+	updates := action == "updates"
+	if updates {
+		action = "install"
+	}
 	requiredScope := "computer:self_development:" + action
 	if action == "rebase-retry" || action == "abandon" {
 		// An approval-class act: the approve scope plus the owner-act gate below.
@@ -567,7 +583,15 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		maxBody = 1 << 20
 	}
 	var upstreamBody io.Reader = http.MaxBytesReader(w, r.Body, maxBody)
-	if action == "install" {
+	if updates {
+		_, _ = io.Copy(io.Discard, http.MaxBytesReader(w, r.Body, 4<<10))
+		body, refusal := h.packageUpdatesBody(r.Context(), authResult.UserID, h.guestInstalledReader(autoputerURL, authResult.UserID, computerID))
+		if refusal != nil {
+			writeJSON(w, refusal.status, errorResponse{Error: refusal.detail, Reason: refusal.reason})
+			return
+		}
+		upstreamBody = bytes.NewReader(body)
+	} else if action == "install" {
 		// The owner's package install: the proxy reads and verifies the
 		// release and its tree, and the computer gets them from here only
 		// (package_install.go).

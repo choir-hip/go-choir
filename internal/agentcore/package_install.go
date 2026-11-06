@@ -62,6 +62,29 @@ type packageInstallRequest struct {
 	// catalog; Action is install (the default) or uninstall.
 	TreePatch []byte `json:"tree_patch,omitempty"`
 	Action    string `json:"action,omitempty"`
+	// change is what made an update sync's install or uninstall (F1). It is
+	// never read from a request body: the owner's own press has none.
+	change installChange
+}
+
+// installChange records why an update sync changed an install: the owner's
+// automatic policy, or the platform's yank or forced update and the listing
+// version it acted on.
+type installChange struct {
+	trigger        string
+	forced         bool
+	platformReason string
+	listing        pkgrelease.TrackRelease
+}
+
+func (c installChange) apply(record *store.PackageInstall) {
+	if c.trigger == "" {
+		return
+	}
+	record.Trigger, record.Forced, record.PlatformReason = c.trigger, c.forced, c.platformReason
+	if c.listing.ReleaseID != "" {
+		record.ListingRelease, record.ListingVersion, record.ListingDigest = c.listing.ReleaseID, c.listing.Version, c.listing.VersionDigest
+	}
 }
 
 // PackageInstallView is an install record and where it stands now.
@@ -125,7 +148,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 		return PackageInstallView{}, false, refuseInstall(http.StatusBadRequest, "request_invalid", "action must be install or uninstall")
 	}
 	if action == packageActionUninstall {
-		return rt.uninstallPackage(ctx, ownerID, computerID, releaseID)
+		return rt.uninstallPackageWith(ctx, ownerID, computerID, releaseID, request.change)
 	}
 	if rt.packageBuilder == nil || strings.TrimSpace(rt.packageModules.Dir) == "" {
 		return PackageInstallView{}, false, refuseInstall(http.StatusServiceUnavailable, "install_unavailable", "this computer has no package builder or module store")
@@ -217,6 +240,10 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	// module, never an install whose module is missing.
 	record.PatchSHA256 = computerevent.DigestBytes(request.TreePatch)
 	record.ModuleSHA256, record.ModuleABI, record.RequiresSDK, record.Manifest = sha, module.ABI, module.RequiresSDK, module.Manifest
+	// The surface an update compares against (F1): a pack has no code, so
+	// its uses are known and empty.
+	record.Uses, record.UsesRecorded, record.BehaviourSurface = append([]string{}, module.Uses...), true, rec.Manifest.BehaviourSurface
+	request.change.apply(&record)
 	if err := rt.store.PutPackageInstall(ctx, record); err != nil {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
@@ -268,6 +295,12 @@ func (rt *Runtime) installBytesPresent(item store.PackageInstall) bool {
 // package, so a withdrawn, suspended, yanked or deleted release, or a
 // computer with no builder, can always be uninstalled.
 func (rt *Runtime) uninstallPackage(ctx context.Context, ownerID, computerID, releaseID string) (PackageInstallView, bool, *installRefusal) {
+	return rt.uninstallPackageWith(ctx, ownerID, computerID, releaseID, installChange{})
+}
+
+// uninstallPackageWith is uninstallPackage recording what made the change
+// (a platform yank, F1).
+func (rt *Runtime) uninstallPackageWith(ctx context.Context, ownerID, computerID, releaseID string, change installChange) (PackageInstallView, bool, *installRefusal) {
 	rt.packageInstallMu.Lock()
 	defer rt.packageInstallMu.Unlock()
 	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
@@ -291,6 +324,8 @@ func (rt *Runtime) uninstallPackage(ctx context.Context, ownerID, computerID, re
 	record.Package = current.Package
 	record.PublisherComputerID, record.PublisherOperationID = current.PublisherComputerID, current.PublisherOperationID
 	record.ReleaseBaseCommit, record.ReleaseTreeHash = current.ReleaseBaseCommit, current.ReleaseTreeHash
+	record.PublisherTrack = current.PublisherTrack
+	change.apply(&record)
 	if err := rt.store.PutPackageInstall(ctx, record); err != nil {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}

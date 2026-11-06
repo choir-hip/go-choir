@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
+	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -55,6 +56,10 @@ func (h *Handler) HandlePreference(w http.ResponseWriter, r *http.Request) {
 		h.HandleThemePreference(w, r)
 		return
 	}
+	if key == pkgrelease.UpdatePolicyKey {
+		h.handleUpdatePolicy(w, r)
+		return
+	}
 	pkg, field, ok := apppackage.SplitSettingKey(key)
 	if !ok {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "unknown preference"})
@@ -84,6 +89,83 @@ func (h *Handler) HandlePreference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.putSetting(w, r, ownerID, key, decl)
+}
+
+// ReadUpdatePolicy is the owner's package update policy (F1): manual for
+// every app unless the owner chose otherwise. An absent or unreadable
+// preference is manual.
+func ReadUpdatePolicy(ctx context.Context, st *store.Store, ownerID string) pkgrelease.UpdatePolicy {
+	manual := pkgrelease.UpdatePolicy{Default: pkgrelease.UpdateManual}
+	if st == nil {
+		return manual
+	}
+	rec, err := st.GetUserPreference(ctx, ownerID, pkgrelease.UpdatePolicyKey)
+	if err != nil {
+		return manual
+	}
+	raw, err := json.Marshal(rec.Value["value"])
+	if err != nil {
+		return manual
+	}
+	policy, err := pkgrelease.ParseUpdatePolicy(raw)
+	if err != nil {
+		return manual
+	}
+	return policy
+}
+
+// handleUpdatePolicy serves /api/preferences/packages.update_policy: the
+// owner's update setting, {"default": "manual"|"automatic", "apps": {...}}.
+// It is a user preference on the owner's tape, not a platform switch.
+func (h *Handler) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	key := pkgrelease.UpdatePolicyKey
+	switch r.Method {
+	case http.MethodGet:
+		_, getErr := h.store.GetUserPreference(r.Context(), ownerID, key)
+		writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: ReadUpdatePolicy(r.Context(), h.store, ownerID), Default: getErr != nil})
+	case http.MethodPut:
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<10))
+		if err != nil {
+			writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "update policy too large"})
+			return
+		}
+		var req settingRequest
+		dec := json.NewDecoder(strings.NewReader(string(body)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil || dec.More() || len(req.Value) == 0 {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "an update policy write is {\"value\": {\"default\": ..., \"apps\": {...}}}"})
+			return
+		}
+		policy, err := pkgrelease.ParseUpdatePolicy(req.Value)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		var value map[string]any
+		normalized, _ := json.Marshal(policy)
+		_ = json.Unmarshal(normalized, &value)
+		rec, err := h.store.SaveUserPreference(r.Context(), types.UserPreference{
+			OwnerID: ownerID, PreferenceKey: key, Value: map[string]any{"value": value}, UpdatedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save the update policy"})
+			return
+		}
+		updated := rec.UpdatedAt.UTC().Format(time.RFC3339Nano)
+		_, _ = h.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventSettingUpdated, map[string]any{
+			"key": key, "value": value, "updated_at": updated,
+			"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
+		})
+		writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: policy, UpdatedAt: updated})
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
 }
 
 func (h *Handler) getSetting(w http.ResponseWriter, r *http.Request, ownerID, key string, decl apppackage.SettingField) {

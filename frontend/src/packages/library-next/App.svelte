@@ -27,6 +27,12 @@
     mediaOf,
     outcomeLabel,
     plainReason,
+    platformLine,
+    platformRemoved,
+    policyFor,
+    savePolicy,
+    syncUpdates,
+    updateLine,
     precommitmentsOf,
     predictionLabel,
     releaseIdOf,
@@ -82,6 +88,12 @@
   // Update is offered only to a newer version of the same maker's app.
   $: canUpdate = Boolean(installed && !upToDate && page.head && seqOf(page.head) > installedSeq);
   $: shelfInstalls = installsOf(installs);
+  $: removedByPlatform = platformRemoved(installs);
+  // Updates (F1): each installed app's update from the last sync, and the
+  // owner's update setting (manual unless chosen otherwise).
+  let updates = {};
+  let policy = { default: 'manual', apps: {} };
+  $: pageUpdate = installed ? updates[String(installed.package)] || null : null;
 
   onMount(() => {
     void boot();
@@ -94,7 +106,43 @@
 
   async function boot() {
     await readIdentity();
+    await refreshUpdates();
     await Promise.all([refreshList(), refreshInstalls()]);
+  }
+
+  // refreshUpdates compares this computer's installs with their tracks. An
+  // app on automatic updates installs here; the platform's act lands here.
+  async function refreshUpdates() {
+    if (!computerId) return;
+    try {
+      const result = await syncUpdates(computerId);
+      updates = Object.fromEntries(result.updates.map((u) => [u.package, u]));
+      policy = result.policy;
+    } catch (err) {
+      if (err && err.name === 'AuthRequiredError') reportAuth('install_read');
+    }
+  }
+
+  // askUpdate offers the update's release through the ordinary install
+  // confirmation; the press is the owner's approval.
+  function askUpdate(update) {
+    const rel = update && update.view;
+    if (!rel || !rel.record) return;
+    askInstall(rel);
+  }
+
+  async function setPolicy(name, mode) {
+    const next = { default: policy.default, apps: { ...policy.apps } };
+    if (name) next.apps[name] = mode;
+    else next.default = mode;
+    try {
+      policy = await savePolicy(next);
+      await refreshUpdates();
+      await refreshInstalls();
+    } catch (err) {
+      if (err && err.name === 'AuthRequiredError') reportAuth('install');
+      message = { tone: 'bad', text: messageOf(err) + ' The update setting did not change.' };
+    }
   }
 
   async function readIdentity() {
@@ -284,6 +332,7 @@
       const result = await installRelease(computerId, releaseIdOf(rel), rel.record);
       confirm = null;
       await refreshInstalls();
+      await refreshUpdates();
       const done = installedFor(installs, view.kind === 'app' ? view.name : '');
       message = done
         ? { tone: 'ok', text: 'Installed. Open it from the launcher.' }
@@ -481,16 +530,45 @@
           </ul>
         {/if}
       </section>
-      {#if shelfInstalls.length}
+      {#if shelfInstalls.length || removedByPlatform.length}
         <section class="lib-section" data-installed-section>
           <h3 class="lib-h3">Installed on this computer</h3>
+          <label class="lib-note lib-update-default" data-update-default>
+            Updates for every app:
+            <select value={policy.default} disabled={busy} on:change={(e) => setPolicy('', e.currentTarget.value)}>
+              <option value="manual">Ask me</option>
+              <option value="automatic">Automatic, a day after release</option>
+            </select>
+          </label>
           <ul class="lib-version-list lib-installed-list">
             {#each shelfInstalls as item (item.install_id || item.release_id)}
-              <li class="lib-version" data-installed-row>
+              {@const update = updates[item.package]}
+              <li class="lib-version" data-installed-row data-package={item.package}>
                 <span>{item.package}</span>
+                {#if platformLine(installs, item.package)}
+                  <span class="lib-note" data-platform-line>{platformLine(installs, item.package)}</span>
+                {/if}
+                {#if updateLine(update)}
+                  <span class="lib-note" data-update-line data-update-state={update.state}>{updateLine(update)}</span>
+                {/if}
+                {#if update && (update.state === 'available' || update.state === 'needs_approval') && update.view}
+                  <button class="lib-btn lib-btn-primary lib-btn-small" data-update-button disabled={busy || !computerId} on:click={() => askUpdate(update)}>
+                    {update.state === 'needs_approval' ? 'Review and update' : 'Update'}
+                  </button>
+                {/if}
+                <select class="lib-update-policy" data-update-policy aria-label={'Updates for ' + item.package} value={policyFor(policy, item.package)} disabled={busy} on:change={(e) => setPolicy(item.package, e.currentTarget.value)}>
+                  <option value="manual">Ask me</option>
+                  <option value="automatic">Automatic</option>
+                </select>
                 <button class="lib-btn lib-btn-quiet lib-btn-small" data-uninstall-button disabled={busy || !computerId} on:click={() => doUninstall(item)}>
                   Uninstall
                 </button>
+              </li>
+            {/each}
+            {#each removedByPlatform as item (item.install_id)}
+              <li class="lib-version" data-platform-removed-row data-package={item.package}>
+                <span>{item.package}</span>
+                <span class="lib-note" data-platform-line>{platformLine(installs, item.package)}</span>
               </li>
             {/each}
           </ul>
@@ -536,6 +614,10 @@
               {/if}
             </div>
           </header>
+
+          {#if pageUpdate && updateLine(pageUpdate)}
+            <p class="lib-note" data-app-update-line data-update-state={pageUpdate.state}>{updateLine(pageUpdate)}</p>
+          {/if}
 
           {#if elsewhere && !working}
             <p class="lib-note" data-elsewhere>
