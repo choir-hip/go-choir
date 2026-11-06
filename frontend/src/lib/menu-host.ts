@@ -14,7 +14,8 @@ import type { ComponentType } from 'svelte';
 import LastResortMenu from './LastResortMenu.svelte';
 import { contextMenuState } from './context-menu-state';
 import { packageIdentityContext } from './package-identity';
-import { inTreeSurfaces, surfaceScope } from './shell-slots';
+import type { Scope } from './kernel';
+import { addSurfaceRegistrar, inTreeSurfaces, surfaceScope, type InTreeSurface } from './shell-slots';
 import { sdkSatisfies } from './sdk-version';
 import { BASE_RENDERER_ID, RENDERER_SLOT, installBaseRenderer, registerContextMenuRenderer, type RenderRequest } from './services/context-menu';
 
@@ -56,14 +57,13 @@ installBaseRenderer((request) => {
 });
 
 // The in-tree renderer packages (menu-default): ordinary providers of the slot.
-for (const s of inTreeSurfaces()) {
-  if (s.slot !== RENDERER_SLOT || !s.component) continue;
+function registerRendererSurface(s: InTreeSurface, scope: Scope): void {
+  if (s.slot !== RENDERER_SLOT || !s.component) return;
   if (!sdkSatisfies(s.requires)) {
     console.warn(`[context-menu] ${s.name}: needs SDK ${s.requires}; its renderer is skipped`);
-    continue;
+    return;
   }
   const { name, component } = s;
-  const scope = surfaceScope(name);
   registerContextMenuRenderer(scope, {
     id: name,
     tier: 'core',
@@ -82,3 +82,7 @@ for (const s of inTreeSurfaces()) {
     unmountRenderer(name);
   });
 }
+
+for (const s of inTreeSurfaces()) registerRendererSurface(s, surfaceScope(s.name));
+// The recovery surface's "use default" registers it again (shell-slots restoreSurfacePackage).
+addSurfaceRegistrar(registerRendererSurface);

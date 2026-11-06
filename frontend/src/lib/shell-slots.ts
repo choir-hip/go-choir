@@ -142,17 +142,63 @@ export async function removeSurfacePackage(name: string): Promise<void> {
   if (scope) await scope.dispose();
 }
 
-for (const s of inTreeSurfaces()) {
-  if (!isSlot(s.slot)) continue; // contextMenu.renderer registers through its own service
+export type InTreeSurface = ReturnType<typeof inTreeSurfaces>[number];
+type Registrar = (surface: InTreeSurface, scope: Scope) => void;
+
+// A slot surface of the in-tree set, registered as the slot's base-image default.
+function registerSlotSurface(s: InTreeSurface, scope: Scope): void {
+  if (!isSlot(s.slot)) return; // contextMenu.renderer registers through its own service (menu-host.ts)
   if (!sdkSatisfies(s.requires)) {
     console.warn(`[shell] ${s.name}: needs SDK ${s.requires}; its ${s.slot} surface is skipped`);
-    continue;
+    return;
   }
   try {
-    registerSurface(surfaceScope(s.name), s.slot, { id: s.name, component: s.component as ComponentType, priority: s.priority, base: true });
+    registerSurface(scope, s.slot, { id: s.name, component: s.component as ComponentType, priority: s.priority, base: true });
   } catch (err) {
     console.warn(`[shell] ${s.name}: ${(err as Error).message}`);
   }
+}
+
+const registrars: Registrar[] = [registerSlotSurface];
+/** Another slot's registration of the in-tree surfaces (menu-host.ts, for the renderer), run again on a restore. */
+export function addSurfaceRegistrar(fn: Registrar): void {
+  registrars.push(fn);
+}
+
+for (const s of inTreeSurfaces()) registerSlotSurface(s, surfaceScope(s.name));
+
+/**
+ * The recovery surface's "use default": the in-tree package's surfaces are
+ * registered again, healthy, in a fresh scope (a failed provider stays tripped
+ * until its registration is disposed and provided again; kernel V3).
+ */
+export async function restoreSurfacePackage(name: string): Promise<void> {
+  const surfaces = inTreeSurfaces().filter((s) => s.name === name);
+  if (surfaces.length === 0) throw new Error(`${name} is not a surface package of this shell`);
+  await removeSurfacePackage(name);
+  const scope = surfaceScope(name);
+  for (const s of surfaces) for (const register of registrars) register(s, scope);
+  await shellKernel.services.settled();
+}
+
+/** The slots the recovery surface lists: the surface slots and the context-menu renderer. */
+export const RECOVERY_SLOTS = [...SURFACE_SLOTS, 'contextMenu.renderer'] as const;
+export type RecoveryRow = { slot: string; active: string | null; lastResort: boolean; defaultPackage: string; failed: string[] };
+
+/** For each slot: who draws it, whether the host's last resort does, its default package and the providers set aside. */
+export function describeRecovery(): RecoveryRow[] {
+  const services = (shellKernel.services.describe().services || {}) as Record<string, { active: string | null; providers: { id: string; healthy: boolean }[] }>;
+  const tree = inTreeSurfaces();
+  return RECOVERY_SLOTS.map((slot) => {
+    const active = services[slot]?.active ?? null;
+    return {
+      slot,
+      active,
+      lastResort: active === null || active === 'last-resort',
+      defaultPackage: tree.find((s) => s.slot === slot)?.name || '',
+      failed: (services[slot]?.providers ?? []).filter((p) => !p.healthy).map((p) => p.id),
+    };
+  });
 }
 
 // ---- the launcher's open state (the host's: the prompt bar opens it, Cmd+K toggles it) ----

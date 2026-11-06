@@ -22,6 +22,7 @@ var builtinPackageNames = []string{
 	"library-next",
 	"mail",
 	"menu-default",
+	"notifications",
 	"overview",
 	"podcast",
 	"prompt-bar",

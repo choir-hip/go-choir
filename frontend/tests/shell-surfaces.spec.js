@@ -20,6 +20,13 @@
 //  P1 with the prompt-bar package gone the owner has no door: the host's
 //     last-resort field must take text (to the conductor) and open the apps;
 //  P2 Cmd+K, the host's command, stops opening the desk with the package gone.
+// H4, notifications and recovery (lib/services/notifications.ts N1 to N4):
+//  N1 a notification.post handler that throws is skipped and the notification shows;
+//  N2 a handler can rewrite or drop a notification;
+//  R1 with the notifications package gone a notification is lost: the host's
+//     last-resort list must show it;
+//  R2 the recovery entry does not list every slot and who draws it, or "Use
+//     default" does not bring a removed or failed package back.
 //
 //   cd frontend && npx vite --port 5173 &
 //   npx playwright test tests/shell-surfaces.spec.js
@@ -46,8 +53,24 @@ test.describe('the slots on the kernel', () => {
   });
   test.afterAll(async () => { await vite?.close(); });
 
+  test('N1 N2: notification.post runs its handlers; a throwing one is skipped, a rewrite or a drop is kept', async () => {
+    const N = await vite.ssrLoadModule('/src/lib/services/notifications.ts');
+    const scope = K.shellKernel.scope('test:notifications');
+    const seen = () => { let v; N.notifications.subscribe((x) => { v = x; })(); return v.map((n) => `${n.kind}:${n.body}`); };
+    K.shellKernel.pipelines.use(scope, N.NOTIFICATION_PIPELINE, { id: 'thrower', tier: 'user' }, () => { throw new Error('boom'); });
+    K.shellKernel.pipelines.use(scope, N.NOTIFICATION_PIPELINE, { id: 'rewriter', tier: 'app' }, (items) =>
+      items.filter((i) => i.notification.body !== 'drop me').map((i) => ({ notification: { ...i.notification, body: i.notification.body.toUpperCase() } })));
+    await N.postNotification('hello');
+    await N.postNotification('drop me');
+    await N.postNotification('bad', { kind: 'error' });
+    expect(seen()).toEqual(['info:HELLO', 'error:BAD']);
+    await scope.dispose();
+    await N.postNotification('plain');
+    expect(seen()).toContain('info:plain');
+  });
+
   test('every shell slot is drawn by its in-tree package, an ordinary provider in the snapshot', () => {
-    const want = { launcher: 'launcher', 'desktop.icons': 'desktop-icons', overview: 'overview', prompt: 'prompt-bar' };
+    const want = { launcher: 'launcher', 'desktop.icons': 'desktop-icons', overview: 'overview', prompt: 'prompt-bar', 'notifications.host': 'notifications' };
     const slots = Object.fromEntries(M.describeSlots().map((s) => [s.slot, s]));
     for (const [slot, pkg] of Object.entries(want)) {
       expect(slots[slot].active, slot).toBe(pkg);
@@ -178,5 +201,47 @@ test.describe('the drills in the shell', () => {
     await field.locator('[data-last-resort-prompt-input]').fill('Write about currents');
     await field.locator('[data-last-resort-prompt-input]').press('Enter');
     await expect(page.locator('[data-auth-overlay]')).toBeVisible();
+  });
+
+  test('H4: notifications render from their package; without it the last-resort list shows them; recovery restores the default', async ({ page }) => {
+    await openShell(page);
+    // The shell's own instance of the SDK (a dev server may add ?t=).
+    const toast = (text) => page.evaluate(async (t) => {
+      const entry = performance.getEntriesByType('resource').map((e) => e.name).find((n) => new URL(n).pathname === '/src/lib/app-sdk.ts');
+      (await import(/* @vite-ignore */ entry || '/src/lib/app-sdk.ts')).toast(t);
+    }, text);
+
+    await expect(page.locator('[data-shell-slot="notifications.host"]')).toHaveAttribute('data-shell-slot-provider', 'notifications');
+    await toast('from the package');
+    await expect(page.locator('[data-notifications] [role="status"]').filter({ hasText: 'from the package' })).toBeVisible();
+
+    await removeSurfacePackages(page, ['notifications', 'menu-default']);
+    await toast('from the last resort');
+    const fallback = page.locator('[data-last-resort="notifications"]');
+    await expect(fallback.getByRole('status').filter({ hasText: 'from the last resort' })).toBeVisible();
+    await fallback.getByRole('status').filter({ hasText: 'from the last resort' }).getByRole('button', { name: 'Dismiss notification' }).click();
+    await expect(fallback.getByRole('status').filter({ hasText: 'from the last resort' })).toHaveCount(0);
+
+    // The recovery entry (the host's command) lists every slot and who draws it.
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Alt+R' : 'Control+Alt+R');
+    const recovery = page.locator('[data-last-resort="recovery"]');
+    await expect(recovery).toBeVisible();
+    for (const slot of ['launcher', 'desktop.icons', 'overview', 'prompt', 'notifications.host', 'contextMenu.renderer']) {
+      await expect(recovery.locator(`[data-recovery-slot="${slot}"]`)).toHaveCount(1);
+    }
+    await expect(recovery.locator('[data-recovery-slot="notifications.host"]')).toHaveAttribute('data-recovery-last-resort', 'true');
+    await expect(recovery.locator('[data-recovery-slot="contextMenu.renderer"]')).toHaveAttribute('data-recovery-last-resort', 'true');
+    await expect(recovery.locator('[data-recovery-slot="prompt"]')).toHaveAttribute('data-recovery-last-resort', 'false');
+    await recovery.locator('[data-recovery-restore="notifications"]').click();
+    await expect(recovery.locator('[data-recovery-slot="notifications.host"]')).toHaveAttribute('data-recovery-last-resort', 'false');
+    await recovery.locator('[data-recovery-restore="menu-default"]').click();
+    await expect(recovery.locator('[data-recovery-slot="contextMenu.renderer"]')).toHaveAttribute('data-recovery-last-resort', 'false');
+    await expect(page.locator('[data-notifications] [role="status"]').filter({ hasText: 'Restored menu-default' })).toBeVisible();
+    await recovery.locator('[data-last-resort-close]').click();
+    await expect(recovery).toHaveCount(0);
+    // The restored renderer draws the menu again.
+    await page.locator('[data-desktop-icon][data-desktop-icon-id="files"]').click({ button: 'right' });
+    await expect(page.locator('[data-context-menu]').first()).toBeVisible();
+    await expect(page.locator('[data-last-resort="menu"]')).toHaveCount(0);
   });
 });

@@ -1,0 +1,25 @@
+{
+  "schema": "choir.package/v2",
+  "name": "notifications",
+  "version": "1.0.0",
+  "display": {
+    "title": "Notifications",
+    "icon": "🔔",
+    "description": "The notification stack"
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": [{ "grant": "ui.shell" }],
+  "provides": [
+    {
+      "service": "notifications.host",
+      "abi": "choir.service/notifications.host/v1",
+      "entry": "Notifications.surface.svelte",
+      "requires_sdk": "^1.4"
+    }
+  ]
+}

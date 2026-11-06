@@ -97,7 +97,11 @@ test('every in-tree package has its uses extracted, and none exceeds its grants'
   for (const name of fs.readdirSync(path.join(root, 'src/packages'))) {
     const dir = path.join(root, 'src/packages', name);
     const uses = await extractUses(dir, sections);
-    expect(uses.sdk.length, name).toBeGreaterThan(0);
+    // A package that imports the SDK has its uses extracted; one that needs
+    // nothing of it (the notification stack: props in, an event out) has none.
+    const importsSdk = fs.readdirSync(dir).some((f) => /\.(svelte|[cm]?[jt]s)$/.test(f) && fs.readFileSync(path.join(dir, f), 'utf8').includes('lib/app-sdk'));
+    if (importsSdk) expect(uses.sdk.length, name).toBeGreaterThan(0);
+    else expect(uses.sdk, name).toEqual([]);
     expect(usesProblems(uses, JSON.parse(fs.readFileSync(path.join(dir, 'choir-package.json'), 'utf8'))), name).toEqual([]);
   }
 });

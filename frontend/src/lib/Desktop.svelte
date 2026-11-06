@@ -1,10 +1,16 @@
 <!--
-  Desktop — Choir desktop shell with floating desktop icons, floating windows, and PromptSurface.
+  Desktop — the window host (slices H1 to H4): floating windows, their
+  z-order, restore and persistence, and the slots the shell surfaces draw in.
+  The launcher, desktop icons, overview, prompt bar, notifications and the
+  context-menu renderer are packages (lib/shell-slots.ts, lib/menu-host.ts);
+  for a slot with no healthy package the host shows its last-resort surface
+  (LastResort.svelte), and Mod+Alt+R opens the recovery surface. The prompt
+  bar's door is lib/prompt-submit.ts.
 
   Layout:
-    - Floating desktop icons freely draggable on the desktop surface
+    - The desktop-icons surface on the desktop surface
     - Floating windows draggable/resizable on top of icons
-    - PromptSurface fixed at viewport bottom
+    - The prompt surface fixed at the viewport bottom (or top)
 
   Responsive layout across three breakpoints:
     - Desktop (>1024px): full floating icons with labels, floating draggable windows
@@ -25,7 +31,7 @@
   import { tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError, renewSession } from './auth.js';
   import { handoffToComputerSurfaceIfStale } from './computer-surface-handoff.js';
-  import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
+  import { createPromptSubmitter } from './prompt-submit';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
   import { withDesktopSelector } from './desktop-selector.js';
   import {
@@ -43,8 +49,9 @@
   import AppHost from './AppHost.svelte';
   import ShellSlot from './ShellSlot.svelte';
   import LastResort from './LastResort.svelte';
-  import { launcherState, setLauncherOpen, toggleLauncher } from './shell-slots';
-  import { promptTargetFor, TEXTURE_AGENT } from './prompt-focus';
+  import { activeSurfaces, describeRecovery, launcherState, restoreSurfacePackage, setLauncherOpen, toggleLauncher } from './shell-slots';
+  import { promptTargetFor } from './prompt-focus';
+  import { dismissNotification, notifications, postNotification } from './services/notifications';
   import './menu-host';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
   import { setTheme as setShellTheme } from './services/theme';
@@ -111,9 +118,11 @@
   // True from prompt submit until the conductor's decision arrives; the
   // prompt surface sweeps an accent across that gap (about 0.6 s).
   let promptRouting = false;
+  // The recovery surface (H4): every shell slot, who draws it, and "use default".
+  let recoveryOpen = false;
+  let recoveryRows = [];
   // Where the last text went (slice H3): { state: 'routing' | 'routed', label }.
   let promptRoute = null;
-  let promptRouteTimer = null;
   let mounted = false;
   let authenticatedStartupRunning = false;
   let lastAuthenticated = null;
@@ -129,8 +138,6 @@
   let lastLiveStreamSeq = 0;
   const MAX_WS_RECONNECT_ATTEMPTS = 5;
   const WS_RECONNECT_BASE_DELAY = 1000;
-  let toasts = [];
-  let toastCounter = 0;
 
   // ---- Desktop state persistence ----
   let stateLoaded = false;
@@ -193,7 +200,7 @@
     promptReplay.id !== lastPromptReplayId
   ) {
     lastPromptReplayId = promptReplay.id;
-    submitPromptText(promptReplay.text, {
+    promptSubmitter.send(promptReplay.text, {
       focus: promptReplay.focus || null,
       windowId: promptReplay.windowId || '',
     });
@@ -1265,136 +1272,20 @@
     dispatch('logout');
   }
 
-  // promptFocusOf reads a submit's focus: the 1.5.0 focus (null sends the
-  // text to the conductor), or the 1.1.0 continueDocId, a Texture focus.
-  function promptFocusOf(detail = {}) {
-    if (detail.focus !== undefined) return detail.focus || null;
-    const docId = String(detail.continueDocId || '').trim();
-    return docId ? { app_agent_id: TEXTURE_AGENT, object_ref: docId } : null;
-  }
-
-  async function handlePromptSubmit(event) {
-    const text = (event.detail?.text || '').trim();
-    if (!text) return;
-    const focus = promptFocusOf(event.detail || {});
-    const windowId = event.detail?.windowId || event.detail?.continueWindowId || '';
-    if (!authenticated) {
-      requestAuth({ kind: 'prompt', text, focus, windowId });
-      return;
-    }
-    submitPromptText(text, { focus, windowId });
-  }
-
-  // showPromptRoute shows where the text went (the chip's destination line);
-  // a routed line clears itself.
-  function showPromptRoute(state, label) {
-    clearTimeout(promptRouteTimer);
-    promptRoute = label ? { state, label } : null;
-    if (state === 'routed') promptRouteTimer = setTimeout(() => { promptRoute = null; }, 2400);
-  }
-
-  function appLabel(appId, title = '') {
-    const name = getAppDefinition(appId)?.name || appId || 'App';
-    return title && title !== name ? `${name} · ${title}` : name;
-  }
-
-  // showContinuedDocument keeps a prompt-bar continue in the document's own
-  // window: it focuses that window (or opens one on the document if it was
-  // closed) and hands it the receipt, so it follows the trajectory the
-  // revision committed on (FE-02 step 1). live marks a receipt the window has
-  // not followed yet, so a window that mounts with it (the reopen) follows
-  // it too; the window clears it once followed.
-  function showContinuedDocument(receipt, preferredWindowId = '') {
-    const docId = receipt.doc_id || '';
-    const promptBarContinue = {
-      live: true,
-      docId,
-      trajectoryId: receipt.trajectory_id || '',
-      revisionId: receipt.revision_id || '',
-      requestId: receipt.request_id || '',
-    };
-    const isDocWindow = (win) => normalizeAppId(win.appId) === 'texture' && win.mode !== 'closed' && win.appContext?.docId === docId;
-    const target = $windows.find((win) => win.windowId === preferredWindowId && isDocWindow(win)) || $windows.find(isDocWindow);
-    if (target) {
-      // restoreWindow brings back a minimized or hidden window; focusWindow
-      // alone does not unhide one.
-      if (target.mode === 'normal' || target.mode === 'maximized') focusWindow(target.windowId);
-      else restoreWindow(target.windowId);
-      updateWindowAppContext(target.windowId, { promptBarContinue });
-    } else {
-      openApp('texture', 'Texture', getAppIcon('texture'), { docId, allowMultiple: true, promptBarContinue });
-    }
-    scheduleSave();
-    showPromptRoute('routed', appLabel('texture', target?.title || ''));
-  }
-
-  async function submitPromptText(text, { focus = null, windowId = '' } = {}) {
-    if (!desktopReady) {
-      showToast('Desktop is still connecting');
-      return;
-    }
-
-    const fallbackWindowTitle = text.length > 28 ? `${text.slice(0, 28)}…` : text;
-
-    try {
-      promptRouting = true;
-      showPromptRoute('routing', focus ? appLabel(focus.app_agent_id === TEXTURE_AGENT ? 'texture' : focus.app_agent_id.replace(/^app:/, '')) : 'Conductor');
-      const submission = await submitConductorPrompt(text, { focus });
-      if (submission.continued === true) {
-        promptRouting = false;
-        showContinuedDocument(submission, windowId);
-        return;
-      }
-      const conductorSubmissionId = submission.submission_id || '';
-      const decision = await waitForConductorDecision(conductorSubmissionId).finally(() => {
-        promptRouting = false;
-      });
-
-      if (decision.action === 'toast') {
-        showPromptRoute('', '');
-        showToast(decision.message || 'Conductor acknowledged the request');
-        return;
-      }
-
-      if (decision.action !== 'open_app') {
-        showPromptRoute('', '');
-        showToast('Conductor returned an unsupported route');
-        return;
-      }
-
-      if (normalizeAppId(decision.app || '') === 'texture') {
-        showPromptRoute('routed', appLabel('texture', decision.title || ''));
-        openApp('texture', 'Texture', '📝', {
-          windowTitle: decision.title || fallbackWindowTitle,
-          docId: decision.doc_id || '',
-          seedPrompt: decision.seed_prompt || text,
-          initialContent: decision.initial_content || decision.seed_prompt || text,
-          createInitialVersion: decision.create_initial_version !== false,
-          conductorLoopId: conductorSubmissionId,
-          initialLoopId: decision.initial_loop_id || '',
-        });
-        return;
-      }
-
-      showPromptRoute('routed', appLabel(normalizeAppId(decision.app || 'browser'), decision.title || ''));
-      openApp(decision.app || 'browser', decision.title || decision.app || fallbackWindowTitle, '', {
-        windowTitle: decision.title || fallbackWindowTitle,
-        sourceUrl: decision.source_url || text,
-        mediaType: decision.media_type || '',
-        appHint: decision.app_hint || decision.app || '',
-        contentId: decision.content_id || '',
-        conductorLoopId: conductorSubmissionId,
-      });
-    } catch (err) {
-      promptRouting = false;
-      showPromptRoute('', '');
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      showToast(err.message || 'Conductor submission failed', { kind: 'error' });
-    }
-  }
+  // The prompt bar's door (lib/prompt-submit.ts): the focus goes to its app
+  // agent, the rest to the conductor; the opened window is the host's.
+  const promptSubmitter = createPromptSubmitter({
+    ready: () => desktopReady,
+    authenticated: () => authenticated,
+    requestAuth: (detail) => requestAuth(detail),
+    toast: (message, options) => showToast(message, options),
+    authExpired: () => dispatch('authexpired'),
+    scheduleSave: () => scheduleSave(),
+  });
+  const { routing: promptRoutingStore, route: promptRouteStore } = promptSubmitter;
+  $: promptRouting = $promptRoutingStore;
+  $: promptRoute = $promptRouteStore;
+  const handlePromptSubmit = (event) => promptSubmitter.submit(event.detail || {});
 
   async function handleOpenTextFile(event) {
     if (!authenticated) {
@@ -1652,18 +1543,10 @@
     }
   }
 
+  // Notifications go through the notification.post pipeline; the
+  // notifications.host surface (or the last resort) shows them (H4).
   function showToast(message, options = {}) {
-    const id = ++toastCounter;
-    const kind = options.kind || 'info';
-    const durationMs = options.durationMs ?? (kind === 'error' ? 9000 : 2400);
-    toasts = [...toasts, { id, message, kind }];
-    setTimeout(() => {
-      toasts = toasts.filter((toast) => toast.id !== id);
-    }, durationMs);
-  }
-
-  function dismissToast(id) {
-    toasts = toasts.filter((toast) => toast.id !== id);
+    void postNotification(String(message ?? ''), { kind: options.kind, durationMs: options.durationMs });
   }
 
   // ---- Lifecycle ----
@@ -1718,7 +1601,29 @@
       () => toggleLauncher(),
     ),
     commands.registerKeybinding({ key: 'Mod+K', command: 'core.toggleDesk', allowInInput: true }, 'core'),
+    // The recovery entry: the host's own, so a broken surface package cannot hide it.
+    commands.registerCommand(
+      { id: 'core.openRecovery', title: 'Open shell recovery', scope: 'global', run: { handler: true } },
+      'core',
+      () => openRecovery(),
+    ),
+    commands.registerKeybinding({ key: 'Mod+Alt+R', command: 'core.openRecovery', allowInInput: true }, 'core'),
   ];
+  function openRecovery() {
+    setLauncherOpen(false);
+    recoveryRows = describeRecovery();
+    recoveryOpen = true;
+  }
+  $: if (recoveryOpen && $activeSurfaces) recoveryRows = describeRecovery();
+  async function restoreDefaultSurface(name) {
+    try {
+      await restoreSurfacePackage(name);
+      showToast(`Restored ${name}`);
+    } catch (err) {
+      showToast(`Could not restore ${name}: ${err?.message || err}`, { kind: 'error' });
+    }
+    recoveryRows = describeRecovery();
+  }
   // The prompt bar's target: the focused window's app agent and object (H3).
   $: promptTarget = promptTargetFor($windows, $activeWindowId, { authenticated });
   // registryRevision: installed packages join the launcher at run time.
@@ -1737,7 +1642,7 @@
   });
   onDestroy(() => {
     unbindShellHost();
-    clearTimeout(promptRouteTimer);
+    promptSubmitter.dispose();
     removeOverviewCommand.forEach((remove) => remove());
     commands.setContext('overview.open', false);
     removeKeyCapture();
@@ -1970,16 +1875,13 @@
     </div>
   {/if}
 
-  {#if toasts.length > 0}
-    <div class="toast-stack">
-      {#each toasts as toast (toast.id)}
-        <div class="toast" class:error={toast.kind === 'error'} role={toast.kind === 'error' ? 'alert' : 'status'} aria-atomic="true">
-          <span>{toast.message}</span>
-          <button class="toast-close" type="button" aria-label="Dismiss notification" on:click={() => dismissToast(toast.id)}>×</button>
-        </div>
-      {/each}
-    </div>
+  {#if recoveryOpen}
+    <LastResort kind="recovery" rows={recoveryRows} on:close={() => (recoveryOpen = false)} on:restore={(event) => restoreDefaultSurface(event.detail.name)} />
   {/if}
+
+  <ShellSlot name="notifications.host" props={{ notifications: $notifications }} on={{ dismiss: (event) => dismissNotification(event.detail?.id) }}>
+    <LastResort kind="notifications" notifications={$notifications} on:dismiss={(event) => dismissNotification(event.detail.id)} />
+  </ShellSlot>
 
   <ShellSlot
     name="launcher"
@@ -1991,6 +1893,7 @@
       kind="launcher"
       apps={launcherApps}
       on:close={() => setLauncherOpen(false, { restoreFocus: true })}
+      on:recovery={() => openRecovery()}
       on:launch={(event) => { setLauncherOpen(false); handleLaunchApp({ detail: { appId: event.detail.app.id, appName: event.detail.app.name, icon: event.detail.app.icon } }); }}
     />
   </ShellSlot>
@@ -2275,76 +2178,6 @@
     font-size: 0.82rem;
     font-weight: 800;
     padding: 0.5rem 0.72rem;
-  }
-
-  .toast-stack {
-    position: fixed;
-    left: 50%;
-    bottom: 72px;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    z-index: 1200;
-    pointer-events: none;
-  }
-
-  .toast {
-    pointer-events: auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.65rem;
-    width: max-content;
-    max-width: min(32rem, calc(100vw - 2rem));
-    background: var(--choir-state-selected);
-    color: var(--choir-text-accent);
-    border: 0;
-    border-radius: var(--choir-radius-pill, 30px);
-    padding: 0.6rem 0.95rem;
-    font-size: 0.82rem;
-    box-shadow: 0 12px 32px color-mix(in srgb, var(--choir-shadow-color) 25%, transparent);
-    animation: toast-enter var(--choir-motion-fast);
-  }
-
-  .toast.error {
-    background: var(--choir-status-danger);
-    box-shadow: 0 12px 32px color-mix(in srgb, var(--choir-status-danger) 18%, transparent);
-    color: var(--choir-text-on-danger);
-  }
-
-  .toast-close {
-    display: inline-grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    margin: -0.35rem -0.65rem -0.35rem 0;
-    border: 0;
-    border-radius: 50%;
-    background: color-mix(in srgb, currentColor 14%, transparent);
-    color: inherit;
-    font: inherit;
-    font-size: 1rem;
-    cursor: pointer;
-  }
-
-  .toast-close:hover {
-    background: color-mix(in srgb, currentColor 24%, transparent);
-  }
-
-  .toast-close:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
-  }
-
-  @keyframes toast-enter {
-    from { opacity: 0; transform: translateY(0.4rem) scale(0.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .toast { animation: none; }
   }
 
   @media (max-width: 768px) {
