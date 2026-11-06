@@ -359,11 +359,22 @@ func deskAnswerText(rec types.CommitmentRecord) string {
 	return strings.Join(strings.Fields(strings.Join(parts, "\n")), " ")
 }
 
-// deskScoredItem shapes a desk Cast as the judge machinery reads a sub-call:
-// the objective, the sender's typed questions and the p_success question
-// (yes/no at the sender's own p_success), and the recipient's model for the
-// same-family check. Nothing here is written to the tape.
+// deskScoredItem shapes a desk Cast as the judge machinery reads a sub-call
+// (deskScoredCast), with the recipient's last answer as the report, whose
+// model is the same-family check. Nothing here is written to the tape.
 func deskScoredItem(c types.CommitmentRecord, key string, answers []types.CommitmentRecord) subCallItem {
+	report := types.CommitmentRecord{RecordID: answers[len(answers)-1].RecordID,
+		Provenance: types.CommitmentProvenance{ModelID: answers[len(answers)-1].Provenance.ModelID}}
+	return subCallItem{cast: deskScoredCast(c, key), report: report}
+}
+
+// deskScoredCast is a desk Cast as a sub-call Cast: the objective, the
+// sender's typed questions and the p_success question (yes/no at the
+// sender's own p_success), in the order the judge's verdicts index. The
+// judge settles this shape and the trust view reads the same shape
+// (trustInputs), so a settlement's verdicts land on the questions they
+// answered. key is the round key. c must be scorable (IsDeskCastScorable).
+func deskScoredCast(c types.CommitmentRecord, key string) types.CommitmentRecord {
 	objective := ""
 	if c.Directive != nil {
 		objective = firstNonEmpty(strings.TrimSpace(c.Directive.Objective), strings.TrimSpace(c.Directive.Body))
@@ -384,9 +395,7 @@ func deskScoredItem(c types.CommitmentRecord, key string, answers []types.Commit
 	cast.Prediction.Questions = questions
 	cast.SubCall = &types.CommitmentSubCall{Kind: types.SubCallCast, Plane: types.SubCallPlaneDeskCast, FanOutID: key,
 		Role: deskOfInbox(c.Inbox), ParentRunID: c.Provenance.RunID, ParentAgent: firstNonEmpty(c.Provenance.Desk, c.SenderInbox)}
-	report := types.CommitmentRecord{RecordID: answers[len(answers)-1].RecordID,
-		Provenance: types.CommitmentProvenance{ModelID: answers[len(answers)-1].Provenance.ModelID}}
-	return subCallItem{cast: cast, report: report}
+	return cast
 }
 
 // deskCastJudgeRequest builds one blind request for a chunk: each round's

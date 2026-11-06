@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/trust"
@@ -100,8 +101,13 @@ func (rt *Runtime) gatedActs(ctx context.Context, owner, computer string) ([]gat
 	return out, nil
 }
 
+// trustDeskCastWindow bounds the desk Casts the view reads back by id: the
+// Casts of the newest desk_cast-plane settlements, one keyed read each.
+const trustDeskCastWindow = 5000
+
 // trustInputs reads the ledger window a trust view is derived from: the
-// newest casts and settlements of the owner on the computer.
+// newest casts and settlements of the owner on the computer, and the desk
+// Casts the desk-cast judge's settlements settle.
 func (rt *Runtime) trustInputs(ctx context.Context, ownerID, computerID string) (trust.Inputs, error) {
 	casts, err := rt.store.ListSubCallRecords(ctx, ownerID, computerID, types.SubCallCast, 5000)
 	if err != nil {
@@ -111,11 +117,53 @@ func (rt *Runtime) trustInputs(ctx context.Context, ownerID, computerID string) 
 	if err != nil {
 		return trust.Inputs{}, fmt.Errorf("settlements: %w", err)
 	}
-	in := trust.Inputs{Records: append(casts, settlements...)}
+	deskCasts, err := rt.trustDeskCasts(ctx, ownerID, computerID, settlements)
+	if err != nil {
+		return trust.Inputs{}, fmt.Errorf("desk casts: %w", err)
+	}
+	records := append(casts, settlements...)
+	in := trust.Inputs{Records: append(records, deskCasts...)}
 	if err := rt.trustGateInputs(ctx, ownerID, computerID, &in); err != nil {
 		return trust.Inputs{}, err
 	}
 	return in, nil
+}
+
+// trustDeskCasts reads the desk-to-desk Casts the desk-cast judge settled
+// (plane desk_cast), shaped as the judge read them (deskScoredCast): a desk
+// Cast is an ordinary Cast directive with no sub-call body, so the sub-call
+// list never returns it, and without it its settlement is evidence about no
+// one. It reads the Casts of the newest trustDeskCastWindow settlements by
+// record id. A Cast that does not read back, or is not a scorable desk Cast,
+// is left out; the view then excludes its settlement as cast_missing.
+func (rt *Runtime) trustDeskCasts(ctx context.Context, ownerID, computerID string, settlements []types.CommitmentRecord) ([]types.CommitmentRecord, error) {
+	type want struct{ castID, key, at string }
+	var wants []want
+	seen := map[string]bool{}
+	for _, s := range settlements {
+		b, ok := s.SubCallBody(types.SubCallSettlement)
+		if !ok || b.Plane != types.SubCallPlaneDeskCast || strings.TrimSpace(b.CastID) == "" || seen[b.CastID] {
+			continue
+		}
+		seen[b.CastID] = true
+		wants = append(wants, want{castID: b.CastID, key: b.FanOutID, at: s.Provenance.CommittedAt})
+	}
+	sort.SliceStable(wants, func(i, j int) bool { return wants[i].at > wants[j].at })
+	if len(wants) > trustDeskCastWindow {
+		wants = wants[:trustDeskCastWindow]
+	}
+	out := make([]types.CommitmentRecord, 0, len(wants))
+	for _, w := range wants {
+		rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, w.castID)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", w.castID, err)
+		}
+		if rec == nil || !types.IsDeskCastScorable(*rec) {
+			continue
+		}
+		out = append(out, deskScoredCast(*rec, w.key))
+	}
+	return out, nil
 }
 
 // HandleTrust serves GET /api/trust.
@@ -150,7 +198,7 @@ func (h *APIHandler) HandleTrust(w http.ResponseWriter, r *http.Request) {
 		replayIn.Records = recs[:trustReplayMaxRecords]
 		replayNote = fmt.Sprintf("replay read the newest %d of %d records", trustReplayMaxRecords, len(in.Records))
 	}
-	resp := trustResponse{ComputerID: computerID, Window: "newest 5000 casts and 20000 settlements",
+	resp := trustResponse{ComputerID: computerID, Window: "newest 5000 casts and 20000 settlements, and the desk Casts of the newest 5000 desk Cast settlements",
 		View: trust.Derive(in, trust.DefaultParams())}
 	if r.URL.Query().Get("replay") == "1" {
 		rep := trust.Replay(replayIn, trust.DefaultParams())

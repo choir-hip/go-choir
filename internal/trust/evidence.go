@@ -67,6 +67,7 @@ const (
 	ExcludedFreezeHash     = "freeze_hash_mismatch"    // the record's frozen procedure fails its hash
 	ExcludedReferenceHash  = "reference_hash_mismatch" // the frozen reference fails its hash or names another procedure
 	ExcludedZeroWeight     = "zero_weight"             // frozen weight is zero (inert, or irrelevant)
+	ExcludedCastMissing    = "cast_missing"            // a settlement whose Cast is not in the records read
 )
 
 // Naming origins for a foreseeable consequence (plan 10.1).

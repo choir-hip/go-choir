@@ -53,6 +53,19 @@ func Extract(in Inputs, p Params) Extracted {
 	}
 
 	x := &extractor{in: in, p: p, out: Extracted{Judgment: map[Subject]JudgmentStat{}}, base: baseRates(in)}
+	// A settlement whose Cast is not among the records is evidence about no
+	// one; it is excluded by name (on the Cast's id, filed under the callee),
+	// never dropped in silence.
+	casts := map[string]bool{}
+	for _, r := range recs {
+		casts[r.RecordID] = true
+	}
+	for _, id := range sortedKeys(settlements) {
+		if id == "" || casts[id] {
+			continue
+		}
+		x.out.Excluded = append(x.out.Excluded, Excluded{RecordID: id, Desk: settlements[id][0].SubCall.Role, Reason: ExcludedCastMissing})
+	}
 	judg := map[Subject][]float64{}
 	for _, r := range recs {
 		switch {
