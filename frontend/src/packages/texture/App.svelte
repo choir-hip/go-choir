@@ -492,10 +492,18 @@
   }
 
   function requestPublishedEditAuth() {
+    // After sign-in the shell replays an app_launch: Texture reopens the derivative.
+    const title = titleForPublishedBundle() || 'Published Texture';
     requireAuth({
-      kind: 'published_texture_edit',
-      routePath: publishedRoutePath || appContext.publishedRoutePath || '',
-      title: titleForPublishedBundle(),
+      kind: 'app_launch',
+      appId: 'texture',
+      appName: 'Texture',
+      appContext: {
+        publishedRoutePath: publishedRoutePath || appContext.publishedRoutePath || '',
+        windowTitle: title,
+        startPublishedDerivative: true,
+        allowMultiple: true,
+      },
     });
   }
 

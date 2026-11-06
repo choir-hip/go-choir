@@ -180,7 +180,7 @@ export function createLinks(describeApp: (appId: string) => { name: string; icon
     if (launch.requireAny?.length && !launch.requireAny.some((n) => values[n])) return null;
     const appContext: Record<string, unknown> = {};
     // Two params may fill one key (an older spelling): the first present wins.
-    for (const p of rule.params) if (p.context && (values[p.name] || !(p.context in appContext))) appContext[p.context] = values[p.name] ?? '';
+    for (const p of rule.params) if (p.context && (!(p.context in appContext) || (!appContext[p.context] && values[p.name]))) appContext[p.context] = values[p.name] ?? '';
     for (const [key, value] of Object.entries(launch.context ?? {})) {
       if (typeof value === 'string' && value.startsWith('param:')) appContext[key] = values[value.slice(6)] ?? '';
       else appContext[key] = value;
