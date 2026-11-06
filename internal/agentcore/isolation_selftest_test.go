@@ -1,13 +1,45 @@
 package agentcore
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
+
+// The fan-out probe's entry rides each desk worker in the response's
+// desk_cells, with the fields the staging evidence reads.
+func TestIsolationSelfTestResponseCarriesTheFanOutProbe(t *testing.T) {
+	resp := isolationSelfTestResponse{}
+	resp.DeskCells.Workers = []yaegikernel.DeskCellSelfTestWorker{{Role: "research", FanOut: &yaegikernel.DeskCellFanOut{Rounds: 50, Goroutines: 64, Error: "panic: call of nil function"}}}
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back struct {
+		DeskCells struct {
+			Workers []struct {
+				FanOut map[string]any `json:"fanout"`
+			} `json:"workers"`
+		} `json:"desk_cells"`
+	}
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+	fo := back.DeskCells.Workers[0].FanOut
+	for _, k := range []string{"ok", "rounds", "goroutines", "duration_ms", "error"} {
+		if _, ok := fo[k]; !ok {
+			t.Errorf("fanout lacks %q: %s", k, raw)
+		}
+	}
+	if fo["ok"] != false || fo["error"] != "panic: call of nil function" {
+		t.Errorf("a cell panic must read ok=false with its message: %v", fo)
+	}
+}
 
 // The legs are selected only by an enum on the internal route; anything
 // else is refused before any worker starts (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md, O6, O7).

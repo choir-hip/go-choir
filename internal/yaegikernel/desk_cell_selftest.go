@@ -118,7 +118,9 @@ type DeskCellSelfTestWorker struct {
 	// CellOutput is the check cell's stdout after the probes.
 	CellOutput string `json:"cell_output,omitempty"`
 	CellServes bool   `json:"cell_serves"`
-	Error      string `json:"error,omitempty"`
+	// FanOut is the interpreted goroutine fan-out probe (desk_cell_fanout.go).
+	FanOut *DeskCellFanOut `json:"fanout,omitempty"`
+	Error  string          `json:"error,omitempty"`
 	// Profile is "gvisor" for a worker in its trust class's sandbox (MA6.4)
 	// and "process" for one under process confinement. For a gVisor worker
 	// Status was read inside the sandbox by the spawner's inspect role, and
@@ -354,6 +356,7 @@ func DeskCellSelfTest(ctx context.Context, cfg DeskCellSelfTestConfig) DeskCellS
 		}
 		if out.CellServes {
 			out.CellP50Micros = timeTrivialCells(ctx, w, deskCellTimingCells)
+			out.FanOut = runDeskCellFanOut(ctx, w.Eval)
 		}
 		// The next desk tries to read this desk's live tmp dir.
 		prevCanary = ""
@@ -451,6 +454,13 @@ func JudgeDeskCellSelfTest(rec DeskCellSelfTestReceipt) []string {
 		}
 		if required && w.Profile != "gvisor" {
 			fail("%s", p+"runs under process confinement in required mode (want gVisor)")
+		}
+		if w.CellServes {
+			if w.FanOut == nil {
+				fail("%s", p+"fanout: the probe did not run")
+			} else if !w.FanOut.OK {
+				fail(p+"fanout: %s", w.FanOut.Error)
+			}
 		}
 		if w.Profile == "gvisor" {
 			fails = append(fails, judgeGvisorWorker(w, identity, seenUID)...)
