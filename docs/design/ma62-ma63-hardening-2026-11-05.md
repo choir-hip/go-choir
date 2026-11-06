@@ -51,3 +51,51 @@ Audit of `FrameAllowed` and the verb handlers for confused-deputy use (a verb th
 - Fixed: `research` had no cap on children (a cell could request an unbounded fan-out): 16. `list_evidence` took the cell's `limit` unclamped: now at most 200, also in the handler.
 - Not changed, named: `read_evidence` reads any evidence record of the owner by id, and `list_evidence` lists the records of any agent id the cell names, within the owner. Neither crosses an owner, and a read taints the run with the record's labels, but evidence has no custodian desk, so a research cell can read what another desk saved. The fix is the evidence kind's custodian lease (MA3), not a bound here.
 - Not changed, named: `exec`, `read_file`, `write_file`, `list_dir` are in the protocol's action list but no desk manifest row serves them on the host (they belong to the capsule broker); `FrameAllowed` refuses them for every desk, and the bounds table covers them for the day a row names one.
+
+## MA6.3 second pass (2026-11-06): every field, every handler, every verb audited
+
+Class orange (rollback: revert). What the first pass left: three wire actions (`texture_search`, `object_get`, `object_list`) were not in the fuzz list, and the "every action" test was a hand-written list that had drifted with them; the bounds tables did not cover every payload field, and nothing checked that a bounded field name is one the handler decodes; the fuzz targets reached the validators but not the host handlers themselves (failure mode 2 above); the audit was prose without line references.
+
+Built:
+
+- `TestEveryWireActionIsFuzzedAndValidated` reads every `BrokerAction` constant from `broker_protocol.go` with go/parser, so a new action fails until it is in the fuzz list and has a payload struct.
+- `TestEveryPayloadFieldIsBounded`: every json field of every action's payload struct is in `payloadBounds`, `payloadListBounds`, or `boundElsewhere` (which names the handler validator that bounds it and why); a bound naming a field the struct lacks fails.
+- Research children are bounded per child at admission (objective 32 KiB, model 256 bytes, role 32 bytes) and the handler runs `ResearchChildrenBounds` before any child starts; the cell SDK's whole-call check is the same function plus role, questions, p_success and weight (`ValidateResearchChildren`), so the two cannot drift.
+- `FuzzHandlerPayloads` (yaegikernel): each handler's strict decode and validator (System1, Relate, RelateStories, Research), asserting what is accepted is inside the verb's bounds.
+- `FuzzDeskEgressHandlers` (agentcore): eighteen verbs through the real host handler `rt.deskEgress`, on a real store seeded with another owner's evidence and another run's memory entry, from seven desks, with the run's role always management. On every input: research-only verbs serve only research; Stories and ProductAPI serve only a desk that holds the grant; Get and List read only a kind the session's desk writes; read_evidence never returns another owner's record; get_run_memory_entry never another run's entry; list_evidence never more than 200; and every path the product API handler is served is canonical, carries no escaped slash, and is not a blocked route. `choir.Research` is not driven (a valid call runs child model loops); its payload goes through `FuzzHandlerPayloads`.
+- `scripts/fuzz-broker-protocol.sh` runs nine targets (eight yaegikernel, one agentcore) at the fixed time CI passes (15 s each).
+
+Fixed (each a ledger line):
+
+1. `choir.Stories` checked the `intake.read` grant against the run's role (`exec.Role`), not the session's desk: a desk whose cell ran in a context carrying a holder's role was served under the holder's grant. The check now takes the desk role the frame came from, as ProductAPI does.
+2. ProductAPI checked the decoded, uncleaned path against its route lists and served it as given. `/api/autopaper/../leases` passed the allowlist (`/api/autopaper/` prefix) and reached the handler unchanged. The production router is the stdlib ServeMux, which answers an unclean path with a 307 that the in-process recorder does not follow, so no blocked route was served; but the check and the router read different paths. `normalizeProductAPIPath` now refuses a path that is not its own clean form, or that carries an escaped slash or a backslash.
+3. `choir.System1` makes the judge read every capture a question names, with the owner's authority, and returned answers drawn from it without tainting the run. A capture ref now taints the run with the capture read floor (`owner_private:capture`, `world_untrusted`), as `read_capture` does; the cell's own passages add nothing.
+
+### Confused-deputy audit, verb by verb (2026-11-06, at d930f16a8 plus this change)
+
+Authority sources: the session's desk role (`deskRole`, from the worker's spawn config) and the run's execution context (`exec`, owner, computer, run, agent) are host values. Every frame passes `admitFrame` (token, epoch, `FrameAllowed(cfg.Session.Role, action)`, bounds; `yaegikernel/desk_session_worker.go`), and the session's Egress repeats `FrameAllowedAt(deskRole, deskEpoch, action)` and `ValidatePayload` (`agentcore/tools_desk.go:590-594`). The table is about what each handler does with the cell-supplied fields after that.
+
+| Verb | Cell-supplied reference | Authority used | Verdict |
+| --- | --- | --- | --- |
+| system1 | question context_refs (capture ids), passages | owner from exec; research only (`system1_verb.go:112`); host: refs resolve against an empty map (`system1_verb.go:464`) | fixed: capture refs now taint the run (`run_labels.go:214`). Residual: the capture record's own labels are not read (floor only), see below |
+| relate_stories | story ids, judgment_ref | research only (`story_relation_verb.go:72`); receipts must be this run's answered System1 events (`ev.RunID == runID`) | safe |
+| relate | story, entities | research only (`story_entities_verb.go:119`); own story bound from exec.AgentID | safe |
+| request_lease | kinds, capture ids, labels, purpose | holder is `deskRole`, run from exec (`leases.go:171`); the lease service decides | safe |
+| object_get / object_list | kind, id | `resolveDeskObject(deskRole, kind)`; owner from exec (`desk_objects.go:265`, `:294`) | safe |
+| product_api | method, path, body | `Holds(deskRole, "product.api")`; owner from exec (`tools_product_api.go:135`); route lists | fixed: non-canonical paths refused (`tools_product_api.go:190`, `canonicalProductAPIPath`) |
+| stories | limit, before | grant check | fixed: grant read from deskRole, not exec.Role (`intake_view.go:74`) |
+| texture_search | query, limit | owner from exec; served only under a texture.search lease in ctx (`research_children.go:552`, `store.TextureSearchUnderLease`) | safe |
+| research | children (objective, role, model, questions) | parent run from exec; role per child (`research_children.go:51`); model from the catalog (`researchChildSelection`) | safe; bounds added (`research_children.go:187`, `ResearchChildrenBounds`) |
+| save_evidence | kind, title, content, metadata | owner and agent from exec; labels in metadata discarded and restamped from the run (`tools_evidence.go:133`) | safe |
+| read_evidence | evidence_id | owner from exec (`tools_evidence.go:169`) | residual (named in the first pass): any evidence of the owner, not only the desk's own; evidence's custodian lease is MA3's |
+| list_evidence | agent_id, limit | owner from exec; limit clamped 200 (`tools_evidence.go:219`, `:222`) | residual (named in the first pass): any agent id within the owner |
+| get_run_memory_entry | entry_id | owner and run from exec; another run's entry reads as absent (`tools_evidence.go:63`, X18) | safe |
+| read | url | owner from exec; the address-guarded client (`agentcore/tool_profiles.go` binds `sourcefetch.Client` as deps.HTTP; `researchtools/read.go:97`: no loopback, private, link-local or metadata address, dials the checked address) | safe |
+| poll_source | source_id, max_items | registry lookup; unknown ids refused | safe |
+| source_api | provider, endpoint, params | the gateway holds the keys and its endpoint table (`researchtools/source_api.go:43`) | safe at this layer; params are structural only, the gateway's check is the bound |
+| read_capture | capture_id, from_block, max_chars | the shared capture store, no owner (`researchtools/poll_source.go:309`); app desks gated by `gateCaptureRead` (`capture_read_gate.go:88`) | safe for app desks; system desks read any shared capture by design (captures are shared content, W1b2) |
+| search_wire_corpus | query, limit | shared corpus | safe |
+| search_start | query | disclosure gate (`tools_desk.go:603`); session-owned stream | safe |
+| exec, read_file, write_file, list_dir | path, command | no desk row names them; `FrameAllowed` refuses every desk | safe (unreachable on the host) |
+
+Residuals named, not fixed here: (a) System1's capture taint is the read floor; the record's own owner-private labels are not read, because the judge's capture read goes through `TextureCaptures.CaptureBlocks`, which does not return labels. A research desk that names an owner-private capture through System1 is tainted owner-private (`owner_private:capture`), so the disclosure gate still sees it, but not with the capture's specific label. (b) The read_evidence and list_evidence scope (first pass). (c) The production product API router redirects rather than serves unclean paths, so fix 2 is a second wall, not a live hole.

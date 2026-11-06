@@ -66,12 +66,11 @@ func captureLabelView(l store.CaptureLabel) yaegikernel.CaptureLabelView {
 
 // storiesEgress serves ActionStories for a cell whose desk holds the
 // intake.read grant (management and its task today; MA4.9: the grant, not the
-// desk's name, admits it).
-func (rt *Runtime) storiesEgress(ctx context.Context, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
-	role := strings.TrimSpace(exec.Role)
-	if role == "" && exec.RunRecord != nil {
-		role = agentProfileForRun(exec.RunRecord)
-	}
+// desk's name, admits it). The grant is the session's desk's, the worker the
+// frame came from, never the role of the run whose context the cell carries
+// (MA6.3: the run's role is not the frame's authority).
+func (rt *Runtime) storiesEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
+	role := strings.TrimSpace(deskRole)
 	if !deskmanifest.Holds(role, "intake.read") {
 		return nil, fmt.Errorf("the story library is read under the intake.read grant, which %q does not hold", role)
 	}

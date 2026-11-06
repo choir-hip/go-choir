@@ -211,6 +211,22 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 			labels = worldReadLabels
 		}
 		return labels, true
+	case yaegikernel.ActionSystem1:
+		// The judge reads each capture a question names with the owner's
+		// authority; its answers are drawn from that text, so the run is
+		// tainted as a capture read is (MA6.3). Passages are the cell's own
+		// text and add nothing.
+		var req yaegikernel.System1Payload
+		_ = json.Unmarshal(payload, &req)
+		for _, q := range req.Questions {
+			for _, ref := range q.ContextRefs {
+				ref = strings.TrimSpace(ref)
+				if ref != "" && !strings.HasPrefix(ref, yaegikernel.System1TextRefPrefix) && !strings.HasPrefix(ref, system1HostRefPrefix) {
+					return captureReadLabels, true
+				}
+			}
+		}
+		return nil, false
 	case yaegikernel.ActionRead, yaegikernel.ActionPollSource, yaegikernel.ActionSourceAPI,
 		yaegikernel.ActionSearchStart, yaegikernel.ActionSearchWireCorpus:
 		return worldReadLabels, true

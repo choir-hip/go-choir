@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Bounds on a broker request (MA6.3). The frame limit (MaxFramePayload,
@@ -25,6 +28,12 @@ const (
 	MaxResearchChildren = 16
 	maxLeaseListItems   = 256
 	maxLeaseDuration    = 31 * 24 * 60 * 60 // seconds
+
+	// One research child's fields (MA6.3): the objective becomes a child's
+	// prompt, the model a catalog name, the role one of two words.
+	MaxResearchObjectiveBytes = 32 << 10
+	maxResearchModelLen       = 256
+	maxResearchRoleLen        = 32
 )
 
 // payloadFieldBound limits one top-level field of an action's payload: a
@@ -97,6 +106,64 @@ func (r *BrokerRequest) ValidateBounds() error {
 	return ValidatePayload(r.Action, r.Payload)
 }
 
+// ResearchChildrenBounds is the host's length check on a research call
+// (MA6.3): the count and each child's objective, role and model lengths. The
+// handler runs it before any child starts; each child's role, questions,
+// p_success and weight are still judged per child (an unknown role refuses
+// that child, never its siblings).
+func ResearchChildrenBounds(children []ResearchChild) error {
+	if len(children) > MaxResearchChildren {
+		return fmt.Errorf("choir.Research: %d children, at most %d per call", len(children), MaxResearchChildren)
+	}
+	for i, spec := range children {
+		if err := researchChildBounds(spec); err != nil {
+			return fmt.Errorf("choir.Research child %d: %w", i+1, err)
+		}
+	}
+	return nil
+}
+
+// ValidateResearchChildren is the cell SDK's whole-call check: the bounds,
+// then each child's role, typed questions, p_success and weight.
+func ValidateResearchChildren(children []ResearchChild) error {
+	if err := ResearchChildrenBounds(children); err != nil {
+		return err
+	}
+	for i, spec := range children {
+		switch strings.TrimSpace(spec.Role) {
+		case "", ResearchChildWeb, ResearchChildTexture:
+		default:
+			return fmt.Errorf("choir: Research child %d: role %q is not %q or %q", i+1, spec.Role, ResearchChildWeb, ResearchChildTexture)
+		}
+		if err := types.ValidateTypedQuestions(spec.Questions); err != nil {
+			return fmt.Errorf("choir: Research child %d: questions: %w", i+1, err)
+		}
+		for _, f := range []struct {
+			name string
+			v    *float64
+		}{{"p_success", spec.PSuccess}, {"weight", spec.Weight}} {
+			if f.v != nil && !(*f.v >= 0 && *f.v <= 1) {
+				return fmt.Errorf("choir: Research child %d: %s %v is outside [0,1]", i+1, f.name, *f.v)
+			}
+		}
+	}
+	return nil
+}
+
+// researchChildBounds is the length half of ValidateResearchChildren, which
+// admission runs on every research frame before any handler decodes it.
+func researchChildBounds(spec ResearchChild) error {
+	switch {
+	case len(spec.Objective) > MaxResearchObjectiveBytes:
+		return fmt.Errorf("objective is %d bytes, over %d", len(spec.Objective), MaxResearchObjectiveBytes)
+	case len(spec.Model) > maxResearchModelLen:
+		return fmt.Errorf("model is %d bytes, over %d", len(spec.Model), maxResearchModelLen)
+	case len(spec.Role) > maxResearchRoleLen:
+		return fmt.Errorf("role is %d bytes, over %d", len(spec.Role), maxResearchRoleLen)
+	}
+	return nil
+}
+
 // ValidatePayload checks one action's payload before any handler decodes it:
 // valid JSON of bounded depth, size and token count, no string over
 // maxPayloadString, and the action's field limits. An empty payload is valid
@@ -110,6 +177,21 @@ func ValidatePayload(action BrokerAction, raw json.RawMessage) error {
 	}
 	if err := boundJSON(raw); err != nil {
 		return fmt.Errorf("broker protocol: %s payload: %w", action, err)
+	}
+	if action == ActionResearch {
+		// The children are objects: their fields are bounded here, the
+		// semantics (role, questions) by the handler (ValidateResearchChildren).
+		var req ResearchPayload
+		if json.Unmarshal(raw, &req) == nil {
+			for i, spec := range req.Children {
+				if i >= MaxResearchChildren {
+					break // the list bound below names the count
+				}
+				if err := researchChildBounds(spec); err != nil {
+					return fmt.Errorf("broker protocol: research child %d: %w", i+1, err)
+				}
+			}
+		}
 	}
 	bounds, lists := payloadBounds[action], payloadListBounds[action]
 	if len(bounds) == 0 && len(lists) == 0 {

@@ -116,7 +116,7 @@ func TestStoriesPagesPastFiftyNewestFirst(t *testing.T) {
 	exec := toolregistry.ExecutionContext{OwnerID: owner, ComputerID: computer, Role: agentprofile.Management, Profile: agentprofile.Management}
 	page := func(limit int, before string) (yaegikernel.StoriesPage, error) {
 		payload, _ := json.Marshal(yaegikernel.StoriesPayload{Limit: limit, Before: before})
-		raw, err := rt.storiesEgress(ctx, exec, payload)
+		raw, err := rt.storiesEgress(ctx, exec.Role, exec, payload)
 		if err != nil {
 			return yaegikernel.StoriesPage{}, err
 		}

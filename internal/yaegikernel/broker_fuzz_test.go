@@ -55,7 +55,7 @@ var allActions = []BrokerAction{
 	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionSearchStart, ActionRead, ActionPollSource,
 	ActionSourceAPI, ActionReadCapture, ActionSearchWireCorpus, ActionResearch, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionStories, ActionSystem1, ActionRelateStories,
-	ActionRelate, ActionRequestLease,
+	ActionRelate, ActionRequestLease, ActionTextureSearch, ActionObjectGet, ActionObjectList,
 }
 
 func seedRequests(f *testing.F) {
@@ -107,7 +107,8 @@ func decodePayloads(raw json.RawMessage) {
 	for _, dst := range []any{&ExecPayload{}, &ReadFilePayload{}, &WriteFilePayload{}, &ListDirPayload{}, &ResearchPayload{},
 		&ProductAPIPayload{}, &StoriesPayload{}, &ReadPayload{}, &PollSourcePayload{}, &SourceAPIPayload{}, &RequestLeasePayload{},
 		&ReadCapturePayload{}, &SearchWireCorpusPayload{}, &SaveEvidencePayload{}, &ReadEvidencePayload{}, &ListEvidencePayload{},
-		&GetRunMemoryEntryPayload{}} {
+		&GetRunMemoryEntryPayload{}, &SearchStartPayload{}, &System1Payload{}, &RelatePayload{}, &RelateStoriesPayload{},
+		&ObjectGetPayload{}, &ObjectListPayload{}, &TextureSearchPayload{}} {
 		_ = json.Unmarshal(raw, dst)
 	}
 }
@@ -299,6 +300,105 @@ func FuzzAdmitFrame(f *testing.F) {
 			}
 			if err := req.ValidateBounds(); err != nil {
 				t.Fatalf("served a frame outside the bounds: %v", err)
+			}
+		}
+	})
+}
+
+// FuzzHandlerPayloads: each verb's own host-side check (the handler's strict
+// decode and its validator) never panics, and what it accepts is inside the
+// verb's bounds. These are the checks the agentcore handlers run after
+// admission (system1_verb.go, story_entities_verb.go, story_relation_verb.go,
+// research_children.go).
+func FuzzHandlerPayloads(f *testing.F) {
+	f.Add(uint8(0), []byte(`{"questions":[{"id":"q1","text":"Is it?","choices":["yes","no"],"context_refs":["choir.web_capture:abc"]}]}`))
+	f.Add(uint8(0), []byte(`{"questions":[{"id":"q1","text":"t","choices":["a","b"],"passages":["`+strings.Repeat("p", 100)+`"]}]}`))
+	f.Add(uint8(1), []byte(`{"story":"story:head","entities":[{"name":"Ada","role":"subject","type":"person"}]}`))
+	f.Add(uint8(2), []byte(`{"pairs":[{"story_a":"a","story_b":"b","relation":"same_event","judgment_ref":"system1:x","question_id":"q1"}]}`))
+	f.Add(uint8(3), []byte(`{"children":[{"objective":"o","role":"texture","p_success":0.5,"weight":2}]}`))
+	f.Add(uint8(3), []byte(`{"children":[{"objective":"o","questions":[{"question":"q","answers":["a","b"],"probabilities":{"a":0.5,"b":0.5}}]}]}`))
+	f.Fuzz(func(t *testing.T, which uint8, data []byte) {
+		strict := func(dst any) bool {
+			dec := json.NewDecoder(bytes.NewReader(data))
+			dec.DisallowUnknownFields()
+			return dec.Decode(dst) == nil
+		}
+		switch which % 4 {
+		case 0:
+			var req System1Payload
+			if !strict(&req) {
+				return
+			}
+			qs, err := ValidateSystem1Questions(req.Questions)
+			if err != nil {
+				return
+			}
+			if len(qs) > System1MaxQuestions {
+				t.Fatalf("accepted %d questions", len(qs))
+			}
+			for _, q := range qs {
+				if len(q.Choices) > System1MaxChoices || len(q.ContextRefs) > System1MaxRefsPerQuestion ||
+					len(q.Passages) > System1MaxPassagesPerQuestion {
+					t.Fatalf("accepted a question past its bounds: %+v", q)
+				}
+				for _, ref := range q.ContextRefs {
+					if len(ref) > system1MaxRefLen {
+						t.Fatalf("accepted a ref of %d bytes", len(ref))
+					}
+				}
+			}
+		case 1:
+			var req RelatePayload
+			if !strict(&req) {
+				return
+			}
+			got, err := ValidateRelate(req)
+			if err != nil {
+				return
+			}
+			if len(got.Entities) > RelateMaxEntities {
+				t.Fatalf("accepted %d entities", len(got.Entities))
+			}
+		case 2:
+			var req RelateStoriesPayload
+			if !strict(&req) {
+				return
+			}
+			pairs, err := ValidateRelateStoriesPairs(req.Pairs)
+			if err != nil {
+				return
+			}
+			if len(pairs) > RelateStoriesMaxPairs {
+				t.Fatalf("accepted %d pairs", len(pairs))
+			}
+			for _, p := range pairs {
+				if len(p.StoryA) > relateStoriesMaxRefLen || len(p.StoryB) > relateStoriesMaxRefLen {
+					t.Fatalf("accepted a story ref past its bound: %+v", p)
+				}
+			}
+		case 3:
+			var req ResearchPayload
+			if json.Unmarshal(data, &req) != nil {
+				return
+			}
+			if err := ResearchChildrenBounds(req.Children); err != nil {
+				return
+			}
+			if ValidateResearchChildren(req.Children) != nil {
+				return
+			}
+			if len(req.Children) > MaxResearchChildren {
+				t.Fatalf("accepted %d children", len(req.Children))
+			}
+			for _, c := range req.Children {
+				if len(c.Objective) > MaxResearchObjectiveBytes || len(c.Model) > maxResearchModelLen {
+					t.Fatalf("accepted a child past its bounds")
+				}
+				for _, v := range []*float64{c.PSuccess, c.Weight} {
+					if v != nil && (*v < 0 || *v > 1) {
+						t.Fatalf("accepted p_success or weight %v", *v)
+					}
+				}
 			}
 		}
 	})

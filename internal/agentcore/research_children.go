@@ -182,8 +182,10 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 	if len(req.Children) == 0 {
 		return nil, fmt.Errorf("research: no children")
 	}
-	if len(req.Children) > yaegikernel.MaxResearchChildren {
-		return nil, fmt.Errorf("choir.Research: %d children, at most %d per call", len(req.Children), yaegikernel.MaxResearchChildren)
+	// The cell's SDK checks the children too, but a cell can write a frame
+	// without it: the host bounds every child before any runs (MA6.3).
+	if err := yaegikernel.ResearchChildrenBounds(req.Children); err != nil {
+		return nil, err
 	}
 	if rt == nil || rt.provider == nil {
 		return nil, fmt.Errorf("research: no model provider on this computer")

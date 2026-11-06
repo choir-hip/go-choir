@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	pathpkg "path"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -174,7 +175,31 @@ func normalizeProductAPIPath(raw string) (string, error) {
 	if u.Path == "" {
 		return "", fmt.Errorf("path must include an API route")
 	}
+	// The route checks below read the decoded path; the router serves the
+	// escaped one. A path the two could read differently (a dot segment, an
+	// empty segment, an escaped slash) is refused, so the route a desk is
+	// checked against is the route it is served (MA6.3: a cell-supplied
+	// reference never reaches past the allowlist through the daemon).
+	if err := canonicalProductAPIPath(u); err != nil {
+		return "", err
+	}
 	return u.RequestURI(), nil
+}
+
+// canonicalProductAPIPath refuses a path that is not its own clean form.
+func canonicalProductAPIPath(u *url.URL) error {
+	p := u.Path
+	clean := pathpkg.Clean(p)
+	if strings.HasSuffix(p, "/") && clean != "/" {
+		clean += "/"
+	}
+	if clean != p {
+		return fmt.Errorf("path %q is not canonical (it reads as %q); send the route itself", p, clean)
+	}
+	if strings.Contains(strings.ToLower(u.EscapedPath()), "%2f") || strings.Contains(p, "\\") {
+		return fmt.Errorf("path %q carries an escaped slash or a backslash; send the route itself", p)
+	}
+	return nil
 }
 
 func validateProductAPIRoute(method, requestURI string) error {

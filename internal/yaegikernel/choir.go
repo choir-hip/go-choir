@@ -615,20 +615,10 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 	if len(kept) == 0 {
 		return nil, fmt.Errorf("choir: Research needs at least one objective")
 	}
-	for i, spec := range kept {
-		switch spec.Role {
-		case "", ResearchChildWeb, ResearchChildTexture:
-		default:
-			return nil, fmt.Errorf("choir: Research child %d: role %q is not %q or %q", i+1, spec.Role, ResearchChildWeb, ResearchChildTexture)
-		}
-		if err := types.ValidateTypedQuestions(spec.Questions); err != nil {
-			return nil, fmt.Errorf("choir: Research child %d: questions: %w", i+1, err)
-		}
-		for name, v := range map[string]*float64{"p_success": spec.PSuccess, "weight": spec.Weight} {
-			if v != nil && (*v < 0 || *v > 1 || *v != *v) {
-				return nil, fmt.Errorf("choir: Research child %d: %s %v is outside [0,1]", i+1, name, *v)
-			}
-		}
+	// The host runs the same check on the frame (MA6.3); here it answers
+	// the cell before the call crosses the socket.
+	if err := ValidateResearchChildren(kept); err != nil {
+		return nil, err
 	}
 	return kept, nil
 }

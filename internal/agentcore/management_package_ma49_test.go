@@ -49,13 +49,15 @@ func TestProductAPIAndStoriesAreServedOnlyUnderTheirGrants(t *testing.T) {
 		t.Errorf("ProductAPI from management: %v, want past the grant check", err)
 	}
 	for _, desk := range []string{agentprofile.Research, agentprofile.Texture, "app:mail"} {
-		_, err := rt.storiesEgress(ctx, toolregistry.ExecutionContext{Role: desk}, nil)
+		// The run's role is the holder's: the frame's authority is the
+		// session's desk, so a non-holder desk is refused anyway (MA6.3).
+		_, err := rt.storiesEgress(ctx, desk, toolregistry.ExecutionContext{Role: agentprofile.Management}, nil)
 		if err == nil || !strings.Contains(err.Error(), "intake.read") {
 			t.Errorf("Stories from %q: %v, want the grant refusal", desk, err)
 		}
 	}
 	for _, desk := range []string{agentprofile.Management, agentprofile.ManagementTask} {
-		if _, err := rt.storiesEgress(ctx, toolregistry.ExecutionContext{Role: desk}, nil); err == nil || strings.Contains(err.Error(), "intake.read") {
+		if _, err := rt.storiesEgress(ctx, desk, toolregistry.ExecutionContext{Role: agentprofile.Research}, nil); err == nil || strings.Contains(err.Error(), "intake.read") {
 			t.Errorf("Stories from %q: %v, want past the grant check", desk, err)
 		}
 	}

@@ -77,7 +77,7 @@ func TestStoriesByManagementReadsTheIndexNotTextureKinds(t *testing.T) {
 	openTestStory(t, st, owner, computer, "Harbor reopens after the storm")
 	objectgraph.ResetReaderGateCounts()
 	exec := toolregistry.ExecutionContext{OwnerID: owner, ComputerID: computer, RunID: "run-x8", Role: agentprofile.Management, Profile: agentprofile.Management}
-	raw, err := rt.storiesEgress(ctx, exec, nil)
+	raw, err := rt.storiesEgress(ctx, exec.Role, exec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

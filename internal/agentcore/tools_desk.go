@@ -1341,7 +1341,7 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 		return rt.productAPIEgress(egrCtx, deskRole, cellExec.OwnerID, cellExec.OwnerEmail, payload)
 	}
 	if action == yaegikernel.ActionStories {
-		return rt.storiesEgress(egrCtx, cellExec, payload)
+		return rt.storiesEgress(egrCtx, deskRole, cellExec, payload)
 	}
 	if action == yaegikernel.ActionResearch {
 		return rt.runResearchChildren(egrCtx, cellExec, payload)
