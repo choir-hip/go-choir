@@ -17,7 +17,7 @@
  *   npx playwright test tests/oped-opinion-label.spec.js
  */
 import { expect, test } from '@playwright/test';
-import { aiDisclosureHTML, AI_DISCLOSURE_TEXT, opinionLabelHTML, pieceDisclosureHTML } from '../src/lib/texture-ai-disclosure.ts';
+import { aiDisclosureHTML, AI_DISCLOSURE_TEXT, opinionLabelHTML, pieceDisclosureHTML } from '../src/packages/texture/texture-ai-disclosure.ts';
 
 const BASE_URL = (process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173').replace(/\/+$/, '');
 

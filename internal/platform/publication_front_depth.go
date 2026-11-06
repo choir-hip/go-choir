@@ -20,7 +20,7 @@ import (
 //
 // Sources are counted the way the reader's "Sources N" counts them
 // (buildPublishedCitationContext in
-// frontend/src/lib/texture-published-citations.ts): one per distinct source
+// frontend/src/packages/texture/texture-published-citations.ts): one per distinct source
 // entity over the body's citations and embeds, keyed by the anchor's source
 // entity id, else by the capture it cites. A capture cited many times is one
 // source.

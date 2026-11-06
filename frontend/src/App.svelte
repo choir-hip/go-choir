@@ -33,6 +33,7 @@
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { links } from './lib/services/links';
+  import { contributionsSettled } from './lib/contributions';
   import { bindThemeHost, publishTheme, rememberWantedTheme } from './lib/services/theme';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
@@ -70,14 +71,6 @@
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
-
-  function normalizeTextureAuthIntentKind(kind) {
-    return String(kind || '');
-  }
-
-  function isTextureAuthIntent(intent, ...kinds) {
-    return kinds.includes(normalizeTextureAuthIntentKind(intent?.kind));
-  }
 
   function summarizeIntentText(value, maxLength = 120) {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -147,18 +140,12 @@
     if (intent.kind === 'app_launch') {
       return `Open ${intent.appName || 'this app'} with your saved work.`;
     }
-    if (isTextureAuthIntent(intent, 'save_texture')) return 'Save this Texture as a new revision.';
-    if (isTextureAuthIntent(intent, 'publish_texture')) return 'Publish this Texture from your account.';
+    if (intent.kind === 'save_texture') return 'Save this Texture as a new revision.';
+    if (intent.kind === 'publish_texture') return 'Publish this Texture from your account.';
     if (intent.kind === 'file_upload') return 'Upload these files to your private computer.';
     if (intent.kind === 'file_mutation') return 'Make this change to your saved files.';
     if (String(intent.kind || '').startsWith('email')) return 'Open your mailbox and continue this email action.';
     if (String(intent.kind || '').startsWith('podcast')) return 'Continue this podcast action with your saved subscriptions.';
-    if (isTextureAuthIntent(intent, 'published_texture_edit')) {
-      return `Edit your saved copy of ${summarizeIntentText(intent.title || 'this published Texture', 80)}.`;
-    }
-    if (isTextureAuthIntent(intent, 'private_texture_document')) {
-      return `Open ${summarizeIntentText(intent.title || 'this Texture document', 80)} from your saved work.`;
-    }
     return 'Open your private computer and continue this action.';
   }
 
@@ -194,36 +181,6 @@
       };
       return;
     }
-    if (isTextureAuthIntent(intent, 'published_texture_edit')) {
-      appReplay = {
-        id: `app-replay-${++appReplayCounter}`,
-        appId: 'texture',
-        appName: 'Texture',
-        icon: '📝',
-        appContext: {
-          publishedRoutePath: intent.routePath || publicRoutePath || window.location.pathname,
-          windowTitle: intent.title || 'Published Texture',
-          startPublishedDerivative: true,
-          allowMultiple: true,
-        },
-      };
-      return;
-    }
-    if (isTextureAuthIntent(intent, 'private_texture_document') && intent.docId) {
-      appReplay = {
-        id: `app-replay-${++appReplayCounter}`,
-        appId: 'texture',
-        appName: 'Texture',
-        icon: '📝',
-        appContext: {
-          docId: intent.docId,
-          windowTitle: intent.title || 'Texture',
-          createInitialVersion: false,
-          allowMultiple: true,
-        },
-      };
-      return;
-    }
     if (intent?.kind === 'app_launch' && intent.appId) {
       appReplay = {
         id: `app-replay-${++appReplayCounter}`,
@@ -239,19 +196,6 @@
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search || '');
     const appId = (params.get('app') || '').trim().toLowerCase();
-    if (appId === 'texture' || appId === 'texture') {
-      const docId = (params.get('doc') || params.get('doc_id') || '').trim();
-      if (!docId) {
-        clearConsumedAppIntentFromURL();
-        return null;
-      }
-      return {
-        kind: 'private_texture_document',
-        source: 'url',
-        docId,
-        title: (params.get('title') || '').trim() || 'Texture',
-      };
-    }
     if (appId === 'email') {
       const draftId = (params.get('draft') || '').trim();
       const approvalToken = (params.get('approval') || '').trim();
@@ -289,9 +233,6 @@
     url.searchParams.delete('app');
     url.searchParams.delete('draft');
     url.searchParams.delete('approval');
-    url.searchParams.delete('doc');
-    url.searchParams.delete('doc_id');
-    url.searchParams.delete('title');
     url.searchParams.delete('intake');
     url.searchParams.delete('intake_id');
     for (const name of links.consumedParams()) url.searchParams.delete(name);
@@ -440,10 +381,6 @@
   }
 
   import { onMount, tick } from 'svelte';
-  function isPublicTextureRoutePath(pathname) {
-    return pathname.startsWith('/pub/texture/');
-  }
-
   function isRecoverPath(pathname) {
     return pathname === '/recover' || pathname === '/recover/';
   }
@@ -476,13 +413,16 @@
     if (legacy !== null) {
       window.history.replaceState(window.history.state, '', `${legacy}${window.location.search}${window.location.hash}`);
     }
-    publicRoutePath = isPublicTextureRoutePath(window.location.pathname) ? window.location.pathname : '';
     applyTheme(loadThemeBootCache(), false);
-    const initialIntent = initialAppIntentFromURL();
     // The recovery page stands alone: no session check, prewarm or
     // computer-surface handoff (a handoff reload would drop the in-memory
-    // recovery token).
-    if (!isRecoverRoute && !isEmailSignInRoute && !isDeviceApproveRoute) checkSession().then(async (session) => {
+    // recovery token). Deep links and public routes are the packages'
+    // contributes.links, read once the in-tree contributions have applied.
+    if (!isRecoverRoute && !isEmailSignInRoute && !isDeviceApproveRoute) contributionsSettled().then(() => {
+      // A package's public route (/pub/<package>/...) opens its app on the desktop.
+      publicRoutePath = links.resolveRoute(window.location.pathname) ? window.location.pathname : '';
+      return initialAppIntentFromURL();
+    }).then((initialIntent) => checkSession().then(async (session) => {
       if (session?.authenticated) {
         await prewarmAuthenticatedComputer().catch(() => {});
         if (await handoffToComputerSurfaceIfStale()) return;
@@ -495,7 +435,7 @@
         pendingAuthIntent = initialIntent;
         authOverlayOpen = true;
       }
-    });
+    }));
 
     // setTheme in the SDK (services/theme.ts) applies and persists through this host.
     const unbindThemeHost = bindThemeHost({ apply: (theme, persist) => applyTheme(theme || DEFAULT_THEME, persist) });

@@ -187,7 +187,7 @@ type stubCellAuthorizer struct {
 	seen []string
 }
 
-func (a *stubCellAuthorizer) CommitCellTextureAuthor(_ context.Context, _ *types.RunRecord, bodyJSON, _ string) (string, error) {
+func (a *stubCellAuthorizer) Commit(_ context.Context, _ *types.RunRecord, bodyJSON, _ string) (string, error) {
 	a.seen = append(a.seen, bodyJSON)
 	return `{"op":"apply","doc_id":"doc-1","revision_id":"rev-2"}`, nil
 }

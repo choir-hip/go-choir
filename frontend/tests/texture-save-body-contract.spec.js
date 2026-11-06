@@ -14,7 +14,15 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createRevision } from '../src/lib/texture.js';
+
+import { closeSources, loadSource } from './helpers/source-modules.js';
+
+let createRevision;
+test.beforeAll(async () => {
+  ({ createRevision } = await loadSource('/src/packages/texture/texture.js'));
+});
+test.afterAll(closeSources);
+
 
 function serverRevisionFields() {
   const source = readFileSync(fileURLToPath(

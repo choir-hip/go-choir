@@ -2,7 +2,7 @@ import {
   escapeHTML,
   renderInlineSourceRef,
   sourceEntityID,
-} from './texture-source-renderer';
+} from '../../lib/app-sdk';
 import {
   renderPublishedCitationRef,
   type PublishedCitationContext,

@@ -46,7 +46,7 @@ func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
 	ctx := context.Background()
 	rt, s := f.rt, f.s
 	auth := &stubCellAuthorizer{}
-	rt.SetTextureCellAuthorizer(auth)
+	bindTextureCommitter(t, rt, auth)
 
 	seedArrival(t, s, f.owner, f.computer, "rss:cz", []types.CaptureArrival{
 		{CaptureID: "cap-cz1", Title: "Harbor reopens", URL: "https://cz.example/1"},

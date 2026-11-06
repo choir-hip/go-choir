@@ -255,8 +255,8 @@ func TestTextureLifecycleProjectionRoutes(t *testing.T) {
 // The Texture UI reads lifecycle and engineering evidence only through the
 // Texture projection endpoints, and names itself on those calls.
 func TestTextureUIUsesProjectionEndpoints(t *testing.T) {
-	for _, f := range []string{"texture.js", "lifecycle.js", "TextureEditor.svelte", "texture-embeds.ts"} {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "lib", f))
+	for _, f := range []string{"texture.js", "lifecycle.js", "App.svelte", "texture-embeds.ts"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "packages", "texture", f))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -265,7 +265,7 @@ func TestTextureUIUsesProjectionEndpoints(t *testing.T) {
 		}
 	}
 	for _, f := range []string{"texture.js", "lifecycle.js"} {
-		raw, _ := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "lib", f))
+		raw, _ := os.ReadFile(filepath.Join("..", "..", "frontend", "src", "packages", "texture", f))
 		if !strings.Contains(string(raw), "app-identity") {
 			t.Errorf("%s does not name its app on its calls", f)
 		}

@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
+	"github.com/yusefmosiah/go-choir/internal/committer"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
@@ -306,12 +307,11 @@ type Runtime struct {
 	// /api/runtime/observability (step_trace.go); stepsOnce creates it.
 	steps     *steptrace.Tracker
 	stepsOnce sync.Once
-	// textureCellAuthorizer commits a Texture cell's turn (choir.Write,
-	// Done, Wait, Reject) through the canonical ApplyTextureTurn
-	// transaction. Bound by autoputer to the texture lifecycle owner —
-	// the desk-cell carrier cannot import the owner, so this is an
-	// interface seam (same shape as the actor-dispatch hooks).
-	textureCellAuthorizer TextureCellAuthorizer
+	// committers apply a desk's turn by kind (committers.go): autoputer
+	// registers the Texture lifecycle owner's ApplyTextureTurn transaction
+	// for texture_revision. committersOnce creates it.
+	committers     *committer.Registry
+	committersOnce sync.Once
 	// evidenceEmbeds is the Texture owner's evidence-embed seam and its jobs
 	// (station TE, texture_evidence_embeds.go).
 	evidenceEmbeds evidenceEmbedding
@@ -661,28 +661,6 @@ func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, comput
 	rt.deliveryHooksMu.Lock()
 	defer rt.deliveryHooksMu.Unlock()
 	rt.dispatchActor = fn
-}
-
-// TextureCellAuthorizer commits a staged full-RLM texture authoring intent
-// (R3d: a choir texture cell act) through the canonical Texture turn
-// transaction. autoputer binds the texture lifecycle owner; the desk-cell
-// reducer calls it — the desk carrier never imports the owner package, so
-// this is the structural seam.
-type TextureCellAuthorizer interface {
-	// CommitCellTextureAuthor commits bodyJSON — a yaegikernel.TextureTurn
-	// (Write, Done, Wait, Reject, or the runtime's Idle, with the dispatch
-	// fold) — for the desk activation run rec, through the atomic
-	// ApplyTextureTurn / lifecycle commit. revisionIdentity is the deterministic
-	// per-cell idempotency identity the reducer derives so a replayed cell
-	// replays the same commit rather than minting a second head. Returns a
-	// JSON receipt describing the commit (revision_id/command/result).
-	CommitCellTextureAuthor(ctx context.Context, rec *types.RunRecord, bodyJSON string, revisionIdentity string) (string, error)
-}
-
-// SetTextureCellAuthorizer binds the texture lifecycle owner's cell-authoring
-// commit path (R3d). autoputer calls it after building the owner handler.
-func (rt *Runtime) SetTextureCellAuthorizer(a TextureCellAuthorizer) {
-	rt.textureCellAuthorizer = a
 }
 
 // SetTextureCaptures binds the capture store Texture cites from.

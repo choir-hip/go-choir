@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
+	"github.com/yusefmosiah/go-choir/internal/committer"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
@@ -683,7 +684,12 @@ func Run() {
 	// authoring is a choir.* cell verb committed by the bound owner via
 	// ApplyTextureTurn. Do NOT register the retired typed texture tools
 	// (patch/rewrite/decision/email-draft) onto the sealed cell registry.
-	rt.Runtime.SetTextureCellAuthorizer(textureHandler)
+	// The owner is the committer for texture_revision: a desk holding
+	// commit.texture_revision hands it its turn (app-agent desks F7). It
+	// lives as long as the process, so its dispose is not kept.
+	if _, err := rt.Runtime.Committers().Register(agentcore.TextureRevisionKind, committer.Func(textureHandler.CommitCellTextureAuthor)); err != nil {
+		boot.fatalf("autoputer: register the Texture committer: %v", err)
+	}
 	// Station TE: a frozen candidate's captures are embedded in its
 	// trajectory's document by Texture's own package (texture.evidence_embeds).
 	rt.Runtime.SetTextureEvidenceEmbedder(textureHandler)

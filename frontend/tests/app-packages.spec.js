@@ -56,13 +56,6 @@ const badCases = [
   ['wrong-schema', (root) => writeManifest(root, 'extra', { ...imageManifest(root), name: 'extra', schema: 'nope/v0', contributes: { desks: [] } }), /schema must be/],
   ['bad-name', (root) => writeManifest(root, 'Bad_Name', { ...imageManifest(root), name: 'Bad_Name', contributes: { desks: [] } }), /name must match/],
   ['dir-mismatch', (root) => writeManifest(root, 'other', { ...imageManifest(root), name: 'another', contributes: { desks: [] } }), /must equal its directory/],
-  ['static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', contributes: { desks: [] } }), /"texture" is a static registry id/],
-  ['static-id-alias', (root) => {
-    const m = imageManifest(root);
-    m.app.aliases = ['texture'];
-    fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
-  }, /"texture" is a static registry id/],
-  ['texture-static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', contributes: { desks: [] } }), /"texture" is a static registry id/],
   ['reserved', (root) => writeManifest(root, 'management', { ...imageManifest(root), name: 'management', contributes: { desks: [] } }), /reserved shell or system-desk name/],
   ['package-alias-clash', (root) => {
     const m = { ...imageManifest(root), name: 'viewer', contributes: { desks: [] } };
@@ -135,7 +128,6 @@ const badCases = [
   }, /ghost: missing choir-package\.json/],
   ['manifest-filtered-away', (root) => fs.rmSync(path.join(root, 'src/packages/image/choir-package.json')), /image: missing choir-package\.json/],
   ['zero-packages', (root) => fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true }), /required package "image" is missing/],
-  ['empty-registry', (root) => fs.writeFileSync(path.join(root, 'src/lib/apps/registry.ts'), 'export const x = 1;\n'), /static app ids \(floor/],
 ];
 
 test.describe('check-packages.mjs', () => {

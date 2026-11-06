@@ -1,0 +1,72 @@
+{
+  "schema": "choir.package/v2",
+  "name": "texture",
+  "version": "1.0.0",
+  "display": {
+    "title": "Texture",
+    "icon": "📝",
+    "description": "Versioned artifact editor"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "requires_sdk": "^2.2",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 50
+    },
+    "window": {
+      "singleton": false,
+      "heavy": true,
+      "desktop": {
+        "width": 960,
+        "height": 720,
+        "minWidth": 680,
+        "minHeight": 520
+      },
+      "compact": {
+        "minWidth": 280,
+        "minHeight": 420
+      }
+    },
+    "auth": {
+      "preview": "public-preview"
+    },
+    "theme": {
+      "surface": "document",
+      "shellDataAttr": "data-texture-app",
+      "contentClass": "texture-content"
+    }
+  },
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": [],
+    "links": [
+      {
+        "app": "texture",
+        "params": [
+          { "name": "doc", "context": "docId" },
+          { "name": "doc_id", "context": "docId" },
+          { "name": "title", "context": "windowTitle" }
+        ],
+        "launch": {
+          "requireAny": ["doc", "doc_id"],
+          "context": { "createInitialVersion": false, "allowMultiple": true }
+        }
+      },
+      {
+        "app": "texture",
+        "params": [],
+        "route": { "prefix": "/pub/texture/", "context": "publishedRoutePath" },
+        "launch": {
+          "windowTitle": "Published Texture",
+          "context": { "allowMultiple": true }
+        }
+      }
+    ]
+  },
+  "capabilities": []
+}

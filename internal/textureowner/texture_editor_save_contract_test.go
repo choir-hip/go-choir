@@ -41,7 +41,7 @@ func TestTextureEditorSaveBodyContract(t *testing.T) {
 		return w
 	}
 
-	// The body frontend/src/lib/texture.js createRevision sent before the fix.
+	// The body frontend/src/packages/texture/texture.js createRevision sent before the fix.
 	legacy := post(`{"content":"first save","author_kind":"user","author_label":"owner@example.com","metadata":{"surface":"texture_editor"}}`)
 	if legacy.Code != http.StatusBadRequest {
 		t.Fatalf("editor body with authorship fields: status = %d body=%s, want 400 (strict decoder)", legacy.Code, legacy.Body.String())

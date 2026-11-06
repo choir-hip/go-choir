@@ -133,6 +133,27 @@ func TestParseManifestTakesAnSDKRange(t *testing.T) {
 	}
 }
 
+// T1: the first-party Texture package carries the Texture desk and takes its
+// name; it declares no kinds (they are the desk's). The same name with kinds,
+// or published, is refused.
+//
+// Failure modes: K1 a first-party package of a desk name declares kinds
+// (writer confusion); K2 a published package takes the carried desk's name;
+// K3 a desk that is not package-carried lends its name.
+func TestFirstPartyPackageTakesTheNameOfTheDeskItCarries(t *testing.T) {
+	kindless := fixtureJSON(t, func(v map[string]any) { v["name"] = "texture"; v["kinds"] = []any{} })
+	if _, err := ParseManifest(kindless, OriginFirstParty); err != nil {
+		t.Fatalf("first-party texture without kinds: %v", err)
+	}
+	if _, err := ParseManifest(kindless, OriginPublished); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("published texture: err = %v, want ErrInvalidManifest (K2)", err)
+	}
+	other := fixtureJSON(t, func(v map[string]any) { v["name"] = "management"; v["kinds"] = []any{} })
+	if _, err := ParseManifest(other, OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("first-party management: err = %v, want ErrInvalidManifest (K3)", err)
+	}
+}
+
 func TestParseManifestRefusesANameThatIsADeskOrTheShell(t *testing.T) {
 	for _, name := range []string{
 		"texture", "management", "engineering", "research", "autoradio", // built-in desk writers

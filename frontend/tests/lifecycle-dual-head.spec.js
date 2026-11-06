@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { lifecycleCurrentDocumentRevisionID } from '../src/lib/texture.js';
+
+import { closeSources, loadSource } from './helpers/source-modules.js';
+
+let lifecycleCurrentDocumentRevisionID;
+test.beforeAll(async () => {
+  ({ lifecycleCurrentDocumentRevisionID } = await loadSource('/src/packages/texture/texture.js'));
+});
+test.afterAll(closeSources);
+
 
 test('lifecycle document editing prefers the current document head over the terminal artifact head', () => {
   expect(lifecycleCurrentDocumentRevisionID({

@@ -1,12 +1,14 @@
 import { test, expect } from './helpers/fixtures.js';
-import {
-  projectStructuredTextureDocText,
-  renderLegacyStrong,
-  renderStructuredTextureDocHTML,
-  serializeEditorStructuredDoc,
-  sourceEntitiesForStructuredDoc,
-} from '../src/lib/texture-structured-editor-doc.ts';
-import { buildPublishedCitationContext } from '../src/lib/texture-published-citations.ts';
+
+import { closeSources, loadSource } from './helpers/source-modules.js';
+
+let projectStructuredTextureDocText, renderLegacyStrong, renderStructuredTextureDocHTML, serializeEditorStructuredDoc, sourceEntitiesForStructuredDoc, buildPublishedCitationContext;
+test.beforeAll(async () => {
+  ({ projectStructuredTextureDocText, renderLegacyStrong, renderStructuredTextureDocHTML, serializeEditorStructuredDoc, sourceEntitiesForStructuredDoc } = await loadSource('/src/packages/texture/texture-structured-editor-doc.ts'));
+  ({ buildPublishedCitationContext } = await loadSource('/src/packages/texture/texture-published-citations.ts'));
+});
+test.afterAll(closeSources);
+
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;

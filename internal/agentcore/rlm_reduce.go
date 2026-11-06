@@ -803,7 +803,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 	var records cellRecords
 	if isRecordsDesk(role) || role == agentprofile.ManagementTask {
 		runID := ""
-		if role != agentprofile.Texture {
+		if !deskCommits(role, TextureRevisionKind) {
 			// Texture's frame decides what its cells see (Cut 2 2a).
 			runID = execCtx.RunID
 		}
@@ -812,7 +812,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 		}
 		// A Texture cell reads, and marks read, only the records its frame
 		// showed (Cut 2 2a).
-		if role == agentprofile.Texture {
+		if deskCommits(role, TextureRevisionKind) {
 			records = capToTextureFrame(records, rt.textureFrameMarkForRun(ctx, execCtx.RunRecord))
 		}
 	}
@@ -1084,7 +1084,7 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	// fold into the cell's turn before the loop, so they never
 	// reach the act path. commitTray is shared by commit and crash recovery,
 	// so both fold the same way.
-	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Texture {
+	if r.rec != nil && deskCommits(r.rec.AgentProfile, TextureRevisionKind) {
 		var folded []yaegikernel.StagedIntent
 		var err error
 		// A Cast that answers a rebase notice carries the notice record's own
@@ -1338,19 +1338,21 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 }
 
 // commitTextureAuthorIntent commits a Texture cell's turn (choir.Write,
-// Done, Wait, Reject, with its dispatch folded in) through the bound texture
-// lifecycle owner's ApplyTextureTurn transaction. The revision identity is
-// deterministic per cell so a replayed cell replays the same commit rather
-// than minting a second head.
+// Done, Wait, Reject, with its dispatch folded in) through the committer
+// registered for texture_revision (the Texture lifecycle owner's
+// ApplyTextureTurn transaction). The cell's desk must hold
+// commit.texture_revision; a desk without it commits nothing. The revision
+// identity is deterministic per cell so a replayed cell replays the same
+// commit rather than minting a second head.
 // It mails no envelope — the commit lands on the lifecycle/document head, so
 // it returns sequence 0 (not a mailbox act).
 func (r *rlmCallReduction) commitTextureAuthorIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
 	rt := r.rt()
-	if rt == nil || rt.textureCellAuthorizer == nil {
-		return 0, fmt.Errorf("reduce: texture_turn intent without a bound texture authorizer")
+	if rt == nil {
+		return 0, fmt.Errorf("reduce: texture_turn intent without a runtime")
 	}
 	revisionIdentity := intentIdempotencyKey(r.scope, in.LocalID, "texture", in.Body)
-	receipt, err := rt.textureCellAuthorizer.CommitCellTextureAuthor(ctx, r.rec, in.Body, revisionIdentity)
+	receipt, err := rt.commitDeskTurn(ctx, r.scope.FromRole, TextureRevisionKind, r.rec, in.Body, revisionIdentity)
 	if err != nil {
 		return 0, err
 	}

@@ -202,6 +202,13 @@ type Desk struct {
 	// FirstParty marks an app desk an in-tree first-party package carries
 	// under a reserved slug (the Mail desk, MA4.7). Only NewAppDesk sets it.
 	FirstParty bool
+	// Packaged marks a system desk that the in-tree first-party package of
+	// the desk's own name carries: the desk's window is that package's app,
+	// and app and desk land together (the Texture package, slice T1). Only
+	// that first-party package may take the desk's name (CarriedByPackage).
+	// It grants nothing, so Equal does not compare it and the desk protocol
+	// lock does not carry it.
+	Packaged bool
 	// Accepts are the plain-language intents an app desk takes from the
 	// prompt bar (its package's contributes.desks[].accepts, plan MA4.8): the
 	// prompt router's candidate descriptions. They grant nothing, so Equal
@@ -363,6 +370,7 @@ var system = []Desk{
 			"choir.story_library_head", "choir.story_index",
 		},
 		ModelRole: Texture, Restart: RestartContract,
+		Packaged: true,
 		Profile: true, Prompt: true, Identity: IdentitySubject,
 	},
 	{
@@ -769,6 +777,14 @@ func Renamed(name string) (string, bool) {
 // package, and only a spec marked FirstParty, which internal/appdesk sets
 // solely for the manifest the image ships for that package, may take it.
 var firstPartyAppSlugs = map[string]bool{"mail": true}
+
+// CarriedByPackage reports whether name is a registered desk that the
+// in-tree first-party package of the same name carries (Desk.Packaged): that
+// package, and no other, may take the desk's name.
+func CarriedByPackage(name string) bool {
+	d, ok := Lookup(name)
+	return ok && d.Packaged
+}
 
 // FirstPartyAppSlug reports whether slug is a reserved slug an in-tree
 // first-party package registers its desk under.

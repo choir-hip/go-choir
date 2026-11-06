@@ -30,6 +30,7 @@ var builtinPackageNames = []string{
 	"reader",
 	"settings",
 	"slides",
+	"texture",
 	"video",
 }
 
@@ -47,5 +48,4 @@ var shellAppNames = []string{
 	"research",
 	"shell",
 	"system",
-	"texture",
 }

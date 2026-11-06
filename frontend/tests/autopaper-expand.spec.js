@@ -45,7 +45,7 @@ import {
   expansionIsOpen,
   fateLine,
   latestRequest,
-} from '../src/lib/autopaper-expand.ts';
+} from '../src/packages/texture/autopaper-expand.ts';
 
 const BASE_URL = (process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173').replace(/\/+$/, '');
 

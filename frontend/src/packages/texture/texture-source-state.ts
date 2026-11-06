@@ -1,7 +1,7 @@
 import {
   publicationBundleSourceEntities,
   sourceEntityID,
-} from './texture-source-renderer';
+} from '../../lib/app-sdk';
 
 function objectValue(value: any): any {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};

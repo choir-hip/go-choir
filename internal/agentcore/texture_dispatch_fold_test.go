@@ -192,7 +192,7 @@ func TestDeskGoEvalTextureWriteAndCastCommitAsOneTurn(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt, s := testRuntime(t)
 	auth := &stubCellAuthorizer{}
-	rt.SetTextureCellAuthorizer(auth)
+	bindTextureCommitter(t, rt, auth)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	doc := types.Document{DocID: "doc-cast", OwnerID: "owner-1", Title: "Chips", CreatedAt: now, UpdatedAt: now}

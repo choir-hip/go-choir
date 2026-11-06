@@ -1,9 +1,9 @@
-import { fetchWithRenewal as renewingFetch } from './auth.js';
+import { fetchWithRenewal as renewingFetch, onDocumentEvent, onWindowEvent } from '../../lib/app-sdk';
 import { withAppIdentity, withAppQuery } from './app-identity.js';
 
 // Lifecycle is read through Texture's projection endpoints and every call names
 // the Texture app (MA3.10).
-const fetchWithRenewal = (url, options = {}) => renewingFetch(url, withAppIdentity('texture', options));
+const fetchWithRenewal = (url, options = {}) => renewingFetch(url, withAppIdentity(options));
 
 const DURABLE_WORK_SCHEMA = 'choir.durable_work.v1';
 
@@ -90,7 +90,7 @@ export async function observeLifecycle(trajectoryId, handlers = {}, options = {}
   };
 
   const connect = async (after) => {
-    const es = new EventSource(withAppQuery('texture', `/api/texture/lifecycle/${encodeURIComponent(trajectoryId)}/stream?after=${after}`), { withCredentials: true });
+    const es = new EventSource(withAppQuery(`/api/texture/lifecycle/${encodeURIComponent(trajectoryId)}/stream?after=${after}`), { withCredentials: true });
     stream = es;
     const gate = attach(es);
     try {
@@ -154,13 +154,11 @@ const onResume = () => {
   const esClosed = typeof EventSource !== 'undefined' && stream?.readyState === EventSource.CLOSED;
   if (streamDead || esClosed) void reconnect();
 };
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', onResume);
-}
-if (typeof window !== 'undefined') {
-  window.addEventListener('pageshow', onResume);
-  window.addEventListener('online', onResume);
-}
+const stopResume = [
+  onDocumentEvent('visibilitychange', onResume),
+  onWindowEvent('pageshow', onResume),
+  onWindowEvent('online', onResume),
+];
 
 let initialConnectError = null;
 try {
@@ -179,12 +177,6 @@ try {
 return () => {
   closed = true;
   if (stream) stream.close();
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('visibilitychange', onResume);
-  }
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('pageshow', onResume);
-    window.removeEventListener('online', onResume);
-  }
+  for (const stop of stopResume) stop();
 };
 }

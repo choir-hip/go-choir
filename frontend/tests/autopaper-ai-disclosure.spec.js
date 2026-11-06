@@ -18,7 +18,7 @@
  *   npx playwright test tests/autopaper-ai-disclosure.spec.js
  */
 import { expect, test } from '@playwright/test';
-import { aiDisclosureHTML, AI_DISCLOSURE_TEXT } from '../src/lib/texture-ai-disclosure.ts';
+import { aiDisclosureHTML, AI_DISCLOSURE_TEXT } from '../src/packages/texture/texture-ai-disclosure.ts';
 
 const BASE_URL = (process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173').replace(/\/+$/, '');
 

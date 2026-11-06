@@ -225,6 +225,15 @@ export {
   validateThemeConfig,
 } from './theme';
 
+// Source entities in the Texture package's terms (2.2.0, slice T1): Texture
+// moved into a package and reads these from the shared source renderer.
+export {
+  parseTextureRelatedRef,
+  publicationBundleSourceEntities,
+  sourceEntityID,
+  textureEntityPinnedRevisionID,
+} from './texture-source-renderer';
+
 // The Choir mark's geometry (1.5.0, slice H3): a surface that draws the mark
 // (the prompt bar's desk button) draws these paths in its own svg.
 export { TETRA_MARK_PATHS, TETRA_MARK_VIEWBOX } from './tetramark';

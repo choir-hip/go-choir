@@ -55,7 +55,7 @@ test('L3: a long value or a control character refuses the link', () => {
 test('L1, L2, L4, L6: a foreign app, a shell parameter, a repeated app and an expression are refused', () => {
   const s = svc();
   expect(() => s.add({ ...notes(), app: 'email' }, 'notes')).toThrow(/not the package's own/);
-  expect(() => s.add({ ...notes(), params: [{ name: 'doc' }] }, 'notes')).toThrow(/shell's/);
+  expect(() => s.add({ ...notes(), params: [{ name: 'draft' }] }, 'notes')).toThrow(/shell's/);
   expect(() => s.add({ ...notes(), params: [{ name: 'app' }] }, 'notes')).toThrow(/shell's/);
   s.add(notes(), 'notes');
   expect(() => s.add(notes(), 'notes')).toThrow(/already declared/);
@@ -92,7 +92,7 @@ test('the manifest gate refuses a bad link and accepts a good one', () => {
   const good = run((n) => ({ links: [{ app: n, params: [{ name: 'photo', context: 'photoId' }], launch: { requireAny: ['photo'] } }] }));
   expect(good.status, good.out).toBe(0);
   expect(run(link({ app: 'files' })).out).toMatch(/app must be the package's own/);
-  expect(run(link({ params: [{ name: 'doc' }] })).out).toMatch(/parameter the shell owns/);
+  expect(run(link({ params: [{ name: 'draft' }] })).out).toMatch(/parameter the shell owns/);
   expect(run(link({ launch: { context: { a: 'param:zzz' } } })).out).toMatch(/not declared/);
 });
 

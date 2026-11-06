@@ -5,6 +5,7 @@
 <script lang="ts">
   import { afterUpdate, createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import AutopaperExpand from './AutopaperExpand.svelte';
+  import { onWindowEvent } from '../../lib/app-sdk';
 
   export let toolbarHidden = false;
   export let versionLabel = '';
@@ -154,12 +155,15 @@
 
   onMount(() => {
     observer = new ResizeObserver(() => fit());
+    stopPointerDown = onWindowEvent('pointerdown', onWindowPointerDown as EventListener);
     fit();
     // Web fonts change the widths after the first measure.
     void document.fonts?.ready.then(fit);
   });
   afterUpdate(fit);
+  let stopPointerDown = () => {};
   onDestroy(() => {
+    stopPointerDown();
     observer?.disconnect();
     observer = null;
     observed.clear();
@@ -225,7 +229,6 @@
   }
 </script>
 
-<svelte:window on:pointerdown={onWindowPointerDown} />
 
 <div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-texture-toolbar>
   <div class="tb-row" bind:this={rowEl}>

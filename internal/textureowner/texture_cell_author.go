@@ -24,7 +24,8 @@ import (
 // texture_cell_author.go — a Texture cell's turn (Cut 2 2a). The cell builds
 // one yaegikernel.TextureTurn with choir.Write, Done, Wait and Reject; the
 // reducer folds its dispatch in and calls CommitCellTextureAuthor (the
-// agentcore.TextureCellAuthorizer seam), which commits it through the atomic
+// committer autoputer registers for agentcore.TextureRevisionKind), which
+// commits it through the atomic
 // ApplyTextureTurn transaction:
 //
 //   - Write: the script materializes against the revision the cell's frame
@@ -38,7 +39,8 @@ import (
 // Texture stays the sole writer of canonical revisions: nothing else here
 // mints one.
 
-// CommitCellTextureAuthor implements agentcore.TextureCellAuthorizer. bodyJSON
+// CommitCellTextureAuthor is the texture_revision committer (autoputer
+// registers it as a committer.Func). bodyJSON
 // is the folded turn; revisionIdentity is the deterministic per-cell
 // idempotency identity the reducer derives, so a replayed cell replays the
 // same commit. Returns a JSON receipt describing the commit.

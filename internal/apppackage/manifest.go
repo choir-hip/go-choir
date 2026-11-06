@@ -262,7 +262,11 @@ func (m Manifest) ValidateOn(p Platform) error {
 	if m.Origin != OriginFirstParty && m.Origin != OriginPublished {
 		return invalid("origin %q is not %s or %s", m.Origin, OriginFirstParty, OriginPublished)
 	}
-	if err := checkName(m.Name); err != nil {
+	if err := checkName(m.Name); err != nil && !(m.Origin == OriginFirstParty && len(m.Kinds) == 0 && deskmanifest.CarriedByPackage(m.Name)) {
+		// A first-party package may take the name of the system desk it
+		// carries (the Texture package and the Texture desk, slice T1), and
+		// declares no kinds of its own: the desk's kinds are the desk's. A
+		// published package never takes a desk's name.
 		return err
 	}
 	// B3: the -candidate suffix names a self-development candidate package

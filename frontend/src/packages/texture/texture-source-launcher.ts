@@ -4,7 +4,7 @@ import {
   sourceEntityOpenPlan,
   sourceEntityTargetURL,
   sourceEntityTitle,
-} from './texture-source-renderer';
+} from '../../lib/app-sdk';
 
 export function sourceEntityLaunchPayload(entity: any): any | null {
   if (!entity) return null;

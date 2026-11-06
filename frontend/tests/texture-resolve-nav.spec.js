@@ -1,5 +1,13 @@
 import { test, expect } from './helpers/fixtures.js';
-import { resolvePublication } from '../src/lib/texture.js';
+
+import { closeSources, loadSource } from './helpers/source-modules.js';
+
+let resolvePublication;
+test.beforeAll(async () => {
+  ({ resolvePublication } = await loadSource('/src/packages/texture/texture.js'));
+});
+test.afterAll(closeSources);
+
 
 // The published reader polls the bare link every minute only to learn
 // whether a newer version exists. A poll that rebuilt the whole bundle cost

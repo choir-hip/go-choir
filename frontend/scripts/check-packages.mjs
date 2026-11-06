@@ -55,13 +55,11 @@ function lookupGrant(name) {
   const family = i > 0 && Object.hasOwn(GRANTS, name.slice(0, i)) ? GRANTS[name.slice(0, i)] : undefined;
   return family?.family && /^[a-z][a-z0-9_]{0,31}$/.test(name.slice(i + 1)) ? family : undefined;
 }
-// Texture is the one static app left (T1 moves it); the floor only catches a parser that finds none.
-const MIN_STATIC_IDS = 1;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = [
   'audio', 'autopaper', 'browser', 'calendar', 'compute-monitor', 'content', 'desktop-icons', 'files', 'image',
-  'launcher', 'library-next', 'mail', 'menu-default', 'overview', 'notifications', 'podcast', 'prompt-bar', 'pulse', 'reader', 'settings', 'slides', 'video',
+  'launcher', 'library-next', 'mail', 'menu-default', 'overview', 'notifications', 'podcast', 'prompt-bar', 'pulse', 'reader', 'settings', 'slides', 'texture', 'video',
 ];
 // The shell slots a package may provide (internal/apppackage/provides.go ShellServices).
 const SHELL_SERVICES = new Set(['contextMenu.renderer', 'desktop.icons', 'launcher', 'notifications.host', 'overview', 'prompt']);
@@ -95,17 +93,11 @@ function geometry(obj, where) {
   }
 }
 
-// ---- static registry facts (ids and file routes the packages must not take) ----
+// ---- static facts (file routes the packages must not take) ----
+// The shell has no static app rows (slice T1 moved the last one, Texture), so
+// the only static facts are the file-route table's extensions.
 
 function staticFacts() {
-  const registry = readFileSync(join(frontendRoot, 'src/lib/apps/registry.ts'), 'utf8');
-  const start = registry.indexOf('const STATIC_APPS = [');
-  const end = registry.indexOf('] satisfies ChoirAppDefinition[]');
-  const block = start >= 0 && end > start ? registry.slice(start, end) : '';
-  const ids = new Set();
-  for (const m of block.matchAll(/^ {4}id: (?:'([a-z0-9-]+)'|TEXTURE_APP_ID),/gm)) {
-    ids.add(m[1] || 'texture');
-  }
   // The one file-route table is data (src/lib/file-routes.json), read as data.
   const exts = new Set();
   let table = null;
@@ -127,12 +119,9 @@ function staticFacts() {
     if (route.default !== undefined && typeof route.default !== 'boolean') fail(where, 'default must be a boolean');
     if (route.default !== false) route.extensions.forEach((e) => exts.add(e));
   }
-  if (ids.size < MIN_STATIC_IDS) {
-    fail('registry.ts', `parsed ${ids.size} static app ids (floor ${MIN_STATIC_IDS}); the layout changed, so the clash check cannot be trusted`);
-  }
   // Every app is a package now, so the table may hold no click route; it must still parse.
   if (!Array.isArray(table?.routes)) fail('file-routes.json', 'routes must be an array; the clash check cannot be trusted');
-  return { ids, exts };
+  return { exts };
 }
 
 // ---- contributes.commands and contributes.keybindings (services/commands.ts has the runtime rules) ----
@@ -158,7 +147,7 @@ function normalizeKey(key) {
 // contributes.links: the rules of services/links.ts (L1 to L6), as data.
 const LINK_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const LINK_CONTEXT_KEY = /^[a-z][A-Za-z0-9_]{0,31}$/;
-const LINK_RESERVED = new Set(['app', 'title', 'doc', 'doc_id', 'draft', 'approval', 'intake', 'intake_id']);
+const LINK_RESERVED = new Set(['app', 'draft', 'approval', 'intake', 'intake_id']);
 function checkLinks(contributes, owner, where) {
   if (contributes.links === undefined) return;
   if (!Array.isArray(contributes.links)) {
@@ -168,13 +157,24 @@ function checkLinks(contributes, owner, where) {
   const apps = new Set();
   contributes.links.forEach((link, i) => {
     const at = `${where} links[${i}]`;
-    if (!strictKeys(link, at, ['app', 'params'], ['launch'])) return;
+    if (!strictKeys(link, at, ['app', 'params'], ['launch', 'route'])) return;
     if (link.app !== owner) fail(at, `app must be the package's own ("${owner}")`);
-    if (apps.has(link.app)) fail(at, `app "${link.app}" is listed twice`);
-    apps.add(link.app);
+    // One parameter rule and one public route rule per app (L4).
+    const slot = `${link.route === undefined ? 'link' : 'route'}:${link.app}`;
+    if (apps.has(slot)) fail(at, `app "${link.app}" is listed twice`);
+    apps.add(slot);
+    if (link.route !== undefined) {
+      // L8: a public route is the package's own /pub/<name>/ and takes no parameters.
+      if (strictKeys(link.route, `${at} route`, ['prefix', 'context'], [])) {
+        if (link.route.prefix !== `/pub/${owner}/`) fail(`${at} route`, `prefix must be the package's own "/pub/${owner}/"`);
+        if (!(typeof link.route.context === 'string' && LINK_CONTEXT_KEY.test(link.route.context))) fail(`${at} route`, 'context must be a key word');
+      }
+      if (!Array.isArray(link.params) || link.params.length !== 0) fail(at, 'a route rule takes no parameters');
+      if (isObject(link.launch) && (link.launch.home !== undefined || link.launch.requireAny !== undefined)) fail(`${at} launch`, 'a route rule has no home or requireAny');
+    }
     const names = new Set();
     const isHome = isObject(link.launch) && link.launch.home === true;
-    if (!Array.isArray(link.params) || (link.params.length === 0 && !isHome)) fail(at, 'params must list at least one parameter');
+    if (!Array.isArray(link.params) || (link.params.length === 0 && !isHome && link.route === undefined)) fail(at, 'params must list at least one parameter');
     (Array.isArray(link.params) ? link.params : []).forEach((p, j) => {
       if (!strictKeys(p, `${at} params[${j}]`, ['name'], ['required', 'context'])) return;
       if (typeof p.name !== 'string' || !LINK_NAME.test(p.name)) fail(`${at} params[${j}]`, 'name must be a lowercase word');
@@ -466,7 +466,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
 // ---- run ----
 
 async function main() {
-  const { ids: staticIds, exts: staticExts } = staticFacts();
+  const { exts: staticExts } = staticFacts();
   // Every entry under src/packages must be a real directory that stays under it:
   // a symlink or stray file would be skipped here while Vite's glob can still match it.
   const dirs = [];
@@ -493,8 +493,7 @@ async function main() {
   const claimedIds = new Map(); // id -> package that holds it
   const claimedExts = new Map(); // ext -> package that holds it
   const claim = (id, owner, where) => {
-    if (staticIds.has(id)) fail(where, `"${id}" is a static registry id (delete the static entry in the same change to take it)`);
-    else if (RETIRED_APP_IDS[id] && RETIRED_APP_IDS[id] !== owner) fail(where, `"${id}" is a retired app id held by package "${RETIRED_APP_IDS[id]}"`);
+    if (RETIRED_APP_IDS[id] && RETIRED_APP_IDS[id] !== owner) fail(where, `"${id}" is a retired app id held by package "${RETIRED_APP_IDS[id]}"`);
     else if (RESERVED_NAMES.has(id)) fail(where, `"${id}" is a reserved shell or system-desk name`);
     else if (claimedIds.has(id)) fail(where, `"${id}" is already held by package "${claimedIds.get(id)}"`);
     claimedIds.set(id, claimedIds.get(id) || owner);

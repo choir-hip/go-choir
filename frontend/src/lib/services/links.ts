@@ -11,9 +11,23 @@
 // with `context` fills that key; a param without it is consumed (cleared from
 // the address bar, as the old `intake` parameters were) and nothing more.
 // `required: true` refuses the link without it; `requireAny` refuses it
-// without at least one of the named params. A link no rule accepts is cleared
-// and ignored. The shell's two older special cases (Texture's `doc`, Mail's
-// `draft`/`approval`) stay in App.svelte until those apps move into packages.
+// without at least one of the named params. Two params may fill one context
+// key (an older spelling of a parameter): the first one present wins. A param
+// whose context is `windowTitle` names the window. A link no rule accepts is
+// cleared and ignored. Mail's older special case (`draft`/`approval`) stays
+// in App.svelte until Mail's links move into its manifest.
+//
+// A public route (slice T1) is a rule with `route` instead of parameters: the
+// page path under the package's own public prefix opens its app, with the
+// path in one context key:
+//
+//   { "app": "texture", "params": [],
+//     "route": { "prefix": "/pub/texture/", "context": "publishedRoutePath" },
+//     "launch": { "windowTitle": "Published Texture", "context": { "allowMultiple": true } } }
+//
+// `/pub/texture/a-story` opens Texture with { publishedRoutePath:
+// '/pub/texture/a-story', allowMultiple: true }. A package has at most one
+// parameter rule and one route rule.
 //
 // Failure modes:
 //  L1 a package claims another app's link: refused, `app` is the package's own;
@@ -25,7 +39,10 @@
 //     being cleared (the leak differential);
 //  L7 more than one rule claiming the signed-out home: the second is refused;
 //  L6 a context value that is not a literal or `param:<name>` of this rule:
-//     the rule is refused (no expressions in data).
+//     the rule is refused (no expressions in data);
+//  L8 a route outside the package's own prefix (/pub/<package>/): refused, a
+//     package cannot answer another app's public pages; a route path that is
+//     too long or holds control characters opens nothing (L3 for paths).
 import { getAppDefinition } from '../apps/registry';
 import { registerContributionPoint } from '../contributions';
 
@@ -37,7 +54,8 @@ export type LinkLaunch = {
   requireAny?: string[];
   context?: Record<string, string | number | boolean>;
 };
-export type LinkRule = { app: string; params: LinkParam[]; launch?: LinkLaunch };
+export type LinkRoute = { prefix: string; context: string };
+export type LinkRule = { app: string; params: LinkParam[]; route?: LinkRoute; launch?: LinkLaunch };
 export type LinkIntent = {
   kind: 'app_launch';
   source: 'url';
@@ -49,14 +67,21 @@ export type LinkIntent = {
 
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const CONTEXT_KEY = /^[a-z][A-Za-z0-9_]{0,31}$/;
-const RESERVED_PARAMS = new Set(['app', 'title', 'doc', 'doc_id', 'draft', 'approval', 'intake', 'intake_id']);
+const RESERVED_PARAMS = new Set(['app', 'draft', 'approval', 'intake', 'intake_id']);
 const MAX_VALUE = 512;
 
 export function validateLink(rule: LinkRule, owner: string): string | null {
   if (!rule || typeof rule !== 'object' || typeof rule.app !== 'string') return 'a link is { app, params, launch }';
   if (rule.app !== owner) return `link for app "${rule.app}" is not the package's own ("${owner}")`;
   if (rule.launch?.home !== undefined && typeof rule.launch.home !== 'boolean') return `link ${rule.app}: home must be a boolean`;
-  if (!Array.isArray(rule.params) || (rule.params.length === 0 && rule.launch?.home !== true)) return `link ${rule.app}: params must list at least one parameter`;
+  if (rule.route !== undefined) {
+    const r = rule.route;
+    if (!r || typeof r !== 'object' || r.prefix !== `/pub/${owner}/`) return `link ${rule.app}: a route's prefix is the package's own "/pub/${owner}/"`;
+    if (typeof r.context !== 'string' || !CONTEXT_KEY.test(r.context)) return `link ${rule.app}: route context "${r.context}" is not a word`;
+    if (!Array.isArray(rule.params) || rule.params.length !== 0) return `link ${rule.app}: a route rule takes no parameters`;
+    if (rule.launch?.home !== undefined || rule.launch?.requireAny !== undefined) return `link ${rule.app}: a route rule has no home or requireAny`;
+  }
+  if (!Array.isArray(rule.params) || (rule.params.length === 0 && rule.launch?.home !== true && rule.route === undefined)) return `link ${rule.app}: params must list at least one parameter`;
   const names = new Set<string>();
   for (const p of rule.params) {
     if (!p || typeof p.name !== 'string' || !NAME.test(p.name)) return `link ${rule.app}: parameter names are lowercase words`;
@@ -82,15 +107,41 @@ export function validateLink(rule: LinkRule, owner: string): string | null {
 
 export function createLinks(describeApp: (appId: string) => { name: string; icon: string } | null) {
   const rules = new Map<string, LinkRule>();
+  const routes = new Map<string, LinkRule>();
 
   function add(rule: LinkRule, owner: string): () => void {
     const problem = validateLink(rule, owner);
     if (problem) throw new Error(problem);
-    if (rules.has(rule.app)) throw new Error(`a link for app "${rule.app}" is already declared`);
+    const table = rule.route ? routes : rules;
+    if (table.has(rule.app)) throw new Error(`a ${rule.route ? 'route' : 'link'} for app "${rule.app}" is already declared`);
     if (rule.launch?.home && [...rules.values()].some((r) => r.launch?.home)) throw new Error(`link ${rule.app}: another app is already the signed-out home`);
     const frozen = JSON.parse(JSON.stringify(rule)) as LinkRule;
-    rules.set(rule.app, frozen);
-    return () => { if (rules.get(rule.app) === frozen) rules.delete(rule.app); };
+    table.set(rule.app, frozen);
+    return () => { if (table.get(rule.app) === frozen) table.delete(rule.app); };
+  }
+
+  /** The launch a page path asks for (a public route), or null (no rule, an unsafe path). */
+  function resolveRoute(pathname: string): LinkIntent | null {
+    const raw = String(pathname || '');
+    if (raw.length > MAX_VALUE || /[\u0000-\u001f]/.test(raw)) return null;
+    for (const rule of routes.values()) {
+      const prefix = rule.route!.prefix;
+      if (!raw.startsWith(prefix)) continue;
+      const path = raw.replace(/\/+$/, '');
+      if (path.length <= prefix.length - 1) return null;
+      const launch = rule.launch ?? {};
+      const appContext: Record<string, unknown> = { ...(launch.context ?? {}) };
+      appContext[rule.route!.context] = path;
+      const app = describeApp(rule.app);
+      appContext.windowTitle = launch.windowTitle || app?.name || rule.app;
+      return { kind: 'app_launch', source: 'url', appId: rule.app, appName: app?.name || rule.app, icon: app?.icon || '', appContext };
+    }
+    return null;
+  }
+
+  /** The context key an app's public route fills (one window per value), or '' when it has none. */
+  function routeContextFor(appId: string): string {
+    return routes.get(appId)?.route?.context || '';
   }
 
   /** The parameters packages' links consume, to clear them from the address bar with the shell's own. */
@@ -128,17 +179,18 @@ export function createLinks(describeApp: (appId: string) => { name: string; icon
     const launch = rule.launch ?? {};
     if (launch.requireAny?.length && !launch.requireAny.some((n) => values[n])) return null;
     const appContext: Record<string, unknown> = {};
-    for (const p of rule.params) if (p.context) appContext[p.context] = values[p.name] ?? '';
+    // Two params may fill one key (an older spelling): the first present wins.
+    for (const p of rule.params) if (p.context && (values[p.name] || !(p.context in appContext))) appContext[p.context] = values[p.name] ?? '';
     for (const [key, value] of Object.entries(launch.context ?? {})) {
       if (typeof value === 'string' && value.startsWith('param:')) appContext[key] = values[value.slice(6)] ?? '';
       else appContext[key] = value;
     }
     const app = describeApp(rule.app);
-    appContext.windowTitle = launch.windowTitle || app?.name || rule.app;
+    appContext.windowTitle = (typeof appContext.windowTitle === 'string' && appContext.windowTitle) || launch.windowTitle || app?.name || rule.app;
     return { kind: 'app_launch', source: 'url', appId: rule.app, appName: app?.name || rule.app, icon: app?.icon || '', appContext };
   }
 
-  return { add, resolve, homeIntent, consumedParams, has: (app: string) => rules.has(app) };
+  return { add, resolve, resolveRoute, routeContextFor, homeIntent, consumedParams, has: (app: string) => rules.has(app) || routes.has(app) };
 }
 
 // ---- the shell's service ----

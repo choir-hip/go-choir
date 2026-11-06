@@ -15,7 +15,7 @@
 // Everything is read from the bundle the public resolve route returns; it
 // never calls a computer.
 
-import { escapeHTML, sourceEntityID, sourceEntityTitle, sourceEntityTargetURL } from './texture-source-renderer';
+import { escapeHTML, sourceEntityID, sourceEntityTitle, sourceEntityTargetURL } from '../../lib/app-sdk';
 
 export type CheckState = 'exact' | 'tolerant' | 'pending' | 'unread' | 'failed';
 

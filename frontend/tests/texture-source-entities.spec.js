@@ -22,9 +22,17 @@ import {
   sourceEvidenceStateLabel,
   textureRelatedMarkdownTarget,
 } from '../src/lib/texture-source-renderer.ts';
-import { sourceEntityLaunchPayload } from '../src/lib/texture-source-launcher.ts';
-import { revisionSourceEntities } from '../src/lib/texture-source-state.ts';
 import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
+
+import { closeSources, loadSource } from './helpers/source-modules.js';
+
+let sourceEntityLaunchPayload, revisionSourceEntities;
+test.beforeAll(async () => {
+  ({ sourceEntityLaunchPayload } = await loadSource('/src/packages/texture/texture-source-launcher.ts'));
+  ({ revisionSourceEntities } = await loadSource('/src/packages/texture/texture-source-state.ts'));
+});
+test.afterAll(closeSources);
+
 
 const sourceContractMatrix = JSON.parse(readFileSync(fileURLToPath(
   new URL('../../internal/sourcecontract/testdata/source_contract_matrix.json', import.meta.url),

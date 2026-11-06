@@ -6,7 +6,7 @@
     sourceEntityTitle,
     sourceEvidenceState,
     sourceEvidenceStateLabel,
-  } from './texture-source-renderer';
+  } from '../../lib/app-sdk';
   import { modelProvenanceRows, modelSwitchLines } from './texture-model-provenance';
 
   export let currentDoc = null;

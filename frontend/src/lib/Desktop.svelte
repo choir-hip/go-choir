@@ -58,7 +58,6 @@
   import { setTheme as setShellTheme } from './services/theme';
   import { bindCommandActions, commands, installKeyCapture } from './services/commands';
   import fileRoutes from './file-routes.json';
-  import { openFileDocument } from './texture.js';
   import {
     windows,
     activeWindowId,
@@ -95,7 +94,7 @@
   import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
   import { clearInstalledPackages, refreshInstalledPackages } from './apps/packages';
   import { clearProviderSelections, loadProviderSelections } from './services/provider-selection';
-  import { canOpenWith } from './open-with';
+  import { canOpenWith, TEXT_OPENER_APP_ID } from './open-with';
   import {
     createOverviewPreviewDecisions,
     getOverviewPreviewDecision,
@@ -210,7 +209,8 @@
   }
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
     lastOpenedPublicRoutePath = publicRoutePath;
-    openPublishedTexture(publicRoutePath, !authenticated);
+    const routed = links.resolveRoute(publicRoutePath);
+    if (routed) openRoutedApp(routed.appId, routed.appContext);
   }
   $: if (
     mounted &&
@@ -1127,12 +1127,10 @@
     dispatch('authrequired', detail);
   }
 
+  // A public route's page path, as links.resolveRoute fills it: one leading
+  // slash, no trailing ones.
   function normalizePublicRoutePath(routePath) {
-    const normalized = `/${String(routePath || '').trim().replace(/^\/+/, '')}`;
-    if (normalized.startsWith('/pub/texture/')) {
-      return normalized.replace(/\/+$/, '');
-    }
-    return normalized;
+    return `/${String(routePath || '').trim().replace(/^\/+/, '')}`.replace(/\/+$/, '');
   }
 
   function windowsSnapshot() {
@@ -1143,15 +1141,18 @@
     return current;
   }
 
-  // A published Texture opens read-only in a Texture window; one window per
-  // route, so opening the same story again raises its window.
-  function openPublishedTexture(routePath, guest = false, appContext = {}) {
-    const normalizedRoutePath = normalizePublicRoutePath(routePath);
+  // A package's public route (contributes.links route rule) opens its app in
+  // a large window; one window per page path, so opening the same page again
+  // raises its window. A signed-out visitor's window is a guest window (the
+  // app shows the page read-only).
+  function openRoutedApp(appId, appContext = {}) {
+    const key = links.routeContextFor(appId);
+    const routePath = normalizePublicRoutePath(appContext[key] || '');
     const matchingWindows = windowsSnapshot().filter((win) =>
-      normalizeAppId(win.appId) === 'texture' &&
+      normalizeAppId(win.appId) === appId &&
       win.mode !== 'closed' &&
       win.mode !== 'hidden' &&
-      normalizePublicRoutePath(win.appContext?.publishedRoutePath || '') === normalizedRoutePath
+      normalizePublicRoutePath(win.appContext?.[key] || '') === routePath
     );
 
     if (matchingWindows.length > 0) {
@@ -1171,11 +1172,11 @@
       return;
     }
 
-    openApp('texture', 'Texture', '📝', {
-      windowTitle: 'Published Texture',
+    const appDef = getAppDefinition(appId);
+    openApp(appId, appDef?.name || appId, appDef?.icon || '', {
       ...appContext,
-      publishedRoutePath: normalizedRoutePath,
-      publishedGuest: guest,
+      [key]: routePath,
+      guestMode: !authenticated,
       allowMultiple: true,
       windowGeometry: largePublicWindowGeometry(),
     });
@@ -1193,8 +1194,10 @@
       return;
     }
     const launchContext = event.detail.appContext || {};
-    if (appId === 'texture' && launchContext.publishedRoutePath) {
-      openPublishedTexture(launchContext.publishedRoutePath, !authenticated, launchContext);
+    // A launch that names a page of the app's public route opens it as one.
+    const routeKey = links.routeContextFor(appId);
+    if (routeKey && launchContext[routeKey]) {
+      openRoutedApp(appId, launchContext);
       return;
     }
     openApp(appId, event.detail.appName || appDef.name, event.detail.icon || appDef.icon, {
@@ -1291,55 +1294,23 @@
   $: promptRoute = $promptRouteStore;
   const handlePromptSubmit = (event) => promptSubmitter.submit(event.detail || {});
 
-  async function handleOpenTextFile(event) {
-    if (!authenticated) {
-      const fileName = event.detail?.fileName || 'Preview document';
-      openApp('texture', 'Texture', getAppIcon('texture'), {
-        windowTitle: fileName,
-        fileName,
-        initialContent: `# ${fileName}\n\nThis is a local preview opened from Files. Sign in to open real private files or save changes.`,
-        allowMultiple: true,
-      });
-      return;
-    }
+  // A text file opens in the text opener's window, which reads the file and
+  // opens its document itself (the Texture package, open-with.ts).
+  function handleOpenTextFile(event) {
     const pathSegments = event.detail?.pathSegments || [];
     const fileName = event.detail?.fileName || pathSegments[pathSegments.length - 1] || 'Document';
-    const importToTexture = event.detail?.importToTexture === true;
-    const path = '/api/files/' + pathSegments.map(encodeURIComponent).join('/');
-
-    try {
-      let content = '';
-      if (!importToTexture) {
-        const res = await fetchWithRenewal(path, { method: 'GET' });
-        if (!res.ok) {
-          if (res.status === 401) {
-            dispatch('authexpired');
-            return;
-          }
-          showToast(`Could not open ${fileName}`);
-          return;
-        }
-        content = await res.text();
-      }
-      const doc = await openFileDocument({
-        sourcePath: pathSegments.join('/'),
-        title: fileName,
-        initialContent: content,
-      });
-      openApp('texture', 'Texture', '📝', {
-        windowTitle: fileName,
-        fileName,
-        docId: doc.doc_id,
-        sourcePath: pathSegments.join('/'),
-      });
-      showToast(importToTexture ? `Imported ${fileName} into Texture` : `Opened ${fileName} in Texture`);
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      showToast(`Could not open ${fileName}`);
+    const appDef = getAppDefinition(TEXT_OPENER_APP_ID);
+    if (!appDef) {
+      showToast(`Could not open ${fileName}`, { kind: 'error' });
+      return;
     }
+    openApp(TEXT_OPENER_APP_ID, appDef.name, appDef.icon, {
+      windowTitle: fileName,
+      fileName,
+      openSourcePath: pathSegments.join('/'),
+      importFile: event.detail?.importToTexture === true,
+      allowMultiple: true,
+    });
   }
 
   // Every app a file route names: the static table (file-routes.json) and the installed packages' `opens`.

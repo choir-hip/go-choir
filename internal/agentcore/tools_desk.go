@@ -656,7 +656,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// revision the frame showed, its blocks by alias for Write, and
 			// the frame's record sources for {{cite}} handles.
 			var docSnapshot *yaegikernel.DocSnapshot
-			if deskRole == agentprofile.Texture && execCtx.RunRecord != nil {
+			if deskCommits(deskRole, TextureRevisionKind) && execCtx.RunRecord != nil {
 				docSnapshot = textureDocSnapshotForRun(ctx, rt, execCtx.RunRecord, reduction.records)
 				if docSnapshot != nil {
 					// The frame showed the cell the owner's document.
@@ -781,7 +781,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				}
 			}
 			if reduction.active && result.Error == "" {
-				if deskRole != agentprofile.Texture {
+				if !deskCommits(deskRole, TextureRevisionKind) {
 					reduction.records = reduction.records.capToShown(rt.noteRecordsShown(execCtx.RunID, result.RecordsShown))
 				}
 				// What choir.Records() showed taints the run before its acts
@@ -801,7 +801,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				// not the cell, answers a trigger no cell authored a turn for
 				// (answerIdleTextureTrigger): a read-only cell that committed a
 				// turn consumed reports the model had not read yet (rerun 12).
-				if deskRole == agentprofile.Texture {
+				if deskCommits(deskRole, TextureRevisionKind) {
 					rt.noteTextureCell(execCtx.RunID, result.Intents)
 				}
 			}
@@ -1204,12 +1204,16 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 		return nil
 	}
 	cells, ran := rt.takeTextureActivationCells(rec.RunID)
-	if !ran || cells.applied || rt.textureCellAuthorizer == nil {
+	if !ran || cells.applied {
 		return nil
 	}
-	// Only Texture activations owe the trigger a turn; a failed or cancelled
-	// one is settled by the occurrence's own failure path.
-	if !runHasProfile(rec, agentprofile.Texture) || rec.State == types.RunFailed || rec.State == types.RunCancelled {
+	if _, bound := rt.Committers().Lookup(TextureRevisionKind); !bound {
+		return nil
+	}
+	// Only an activation of a desk that commits Texture turns (it holds
+	// commit.texture_revision) owes the trigger a turn; a failed or
+	// cancelled one is settled by the occurrence's own failure path.
+	if !deskCommits(agentProfileForRun(rec), TextureRevisionKind) || rec.State == types.RunFailed || rec.State == types.RunCancelled {
 		return nil
 	}
 	docID := strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
@@ -1243,7 +1247,7 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 		return err
 	}
 	sum := sha256.Sum256([]byte(rec.RunID + "\x1f" + docID + "\x1f" + doc.CurrentRevisionID))
-	_, err = rt.textureCellAuthorizer.CommitCellTextureAuthor(ctx, rec, string(body), "rlm-texture-idle:"+hex.EncodeToString(sum[:8]))
+	_, err = rt.commitDeskTurn(ctx, agentProfileForRun(rec), TextureRevisionKind, rec, string(body), "rlm-texture-idle:"+hex.EncodeToString(sum[:8]))
 	if err != nil {
 		// A non-pending mutation or mismatched doc means the trigger was already
 		// consumed through another path. That is success for our purpose.

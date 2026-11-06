@@ -21,7 +21,7 @@ import (
 // TextureEvidenceEmbedder embeds a frozen candidate's captures in its
 // trajectory's Texture document. autoputer binds the Texture owner handler;
 // the desk carrier never imports the owner package, so this is the seam (the
-// same shape as TextureCellAuthorizer). computerID scopes the Texture
+// same shape as the texture_revision committer). computerID scopes the Texture
 // document; selfdevComputerID scopes the self-development operation (the
 // same computer, named by the self-development surface). It returns a JSON
 // receipt.

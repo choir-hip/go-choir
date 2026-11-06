@@ -74,6 +74,16 @@ async function change(pkg: string, contributes: unknown, fingerprint: string): P
   applyKeys(pkg, body);
 }
 
+/**
+ * Resolves when every contribution change asked for so far has applied. The
+ * in-tree packages' contributions are asked for when the registry loads, so a
+ * caller at boot (App.svelte's deep links and public routes) waits on this
+ * before it reads a contributed rule.
+ */
+export function contributionsSettled(): Promise<void> {
+  return chain;
+}
+
 /** Packages whose contributions are live. */
 export function contributingPackages(): string[] {
   return [...applied.keys()].sort();

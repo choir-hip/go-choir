@@ -11,8 +11,8 @@
 // is rendered into that HTML after the last paragraph rather than placed
 // beside the article.
 
-import { AUTOPAPER_SECTIONS, parsePublicationRoute, storyPath } from './autopaper';
-import { escapeHTML } from './texture-source-renderer';
+import { AUTOPAPER_SECTIONS, parsePublicationRoute, storyPath } from '../../lib/app-sdk';
+import { escapeHTML } from '../../lib/app-sdk';
 
 /** The most links the block shows, whatever the server sends. */
 export const RELATED_MAX_LINKS = 5;

@@ -19,12 +19,11 @@
  *   POST   /api/platform/publications/{id}/proposals — submit reader derivative proposal
  */
 
-import { fetchWithRenewal as renewingFetch } from './auth.js';
-import { withAppIdentity } from './app-identity.js';
-import { withDesktopSelector } from './desktop-selector.js';
+import { fetchWithRenewal as renewingFetch } from '../../lib/app-sdk';
+import { withAppIdentity, withDesktopSelector } from './app-identity.js';
 
 // Every call names the Texture app (MA3.10).
-const fetchWithRenewal = (url, options = {}) => renewingFetch(url, withAppIdentity('texture', options));
+const fetchWithRenewal = (url, options = {}) => renewingFetch(url, withAppIdentity(options));
 
 function texturePath(path) {
   return `/api/texture${path}`;
@@ -138,9 +137,9 @@ export async function createRevision(docId, { content, bodyDoc, sourceEntities, 
   if (allowRebase) {
     body.allow_rebase = true;
   }
-  const document = await getDocument(docId);
-  if (document?.trajectory_id) {
-    const lifecycleRes = await fetchWithRenewal(`/api/texture/lifecycle/${encodeURIComponent(document.trajectory_id)}`, {
+  const doc = await getDocument(docId);
+  if (doc?.trajectory_id) {
+    const lifecycleRes = await fetchWithRenewal(`/api/texture/lifecycle/${encodeURIComponent(doc.trajectory_id)}`, {
       method: 'GET',
     });
     if (!lifecycleRes.ok) {
@@ -259,8 +258,8 @@ export async function submitAgentRevision(docId, payload = {}) {
 }
 
 export async function cancelAgentRevision(docId, options = {}) {
-  const document = await getDocument(docId);
-  const trajectoryId = String(document.trajectory_id || '').trim();
+  const doc = await getDocument(docId);
+  const trajectoryId = String(doc.trajectory_id || '').trim();
   if (!trajectoryId) {
     throw new Error('Document has no durable lifecycle');
   }

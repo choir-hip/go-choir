@@ -71,7 +71,19 @@ type ThemeFile struct {
 type Link struct {
 	App    string      `json:"app"`
 	Params []LinkParam `json:"params"`
+	// Route makes the rule a public route: a page path under the package's
+	// own /pub/<name>/ opens its app with the path in one context key
+	// (slice T1; frontend/src/lib/services/links.ts). A route rule takes no
+	// parameters.
+	Route  *LinkRoute  `json:"route,omitempty"`
 	Launch *LinkLaunch `json:"launch,omitempty"`
+}
+
+// LinkRoute is a public route: Prefix is "/pub/<package>/", Context the
+// window context key the page path fills.
+type LinkRoute struct {
+	Prefix  string `json:"prefix"`
+	Context string `json:"context"`
 }
 
 // LinkParam is one URL parameter of a link. Context names the window context
@@ -100,7 +112,9 @@ var (
 	themeFileRe     = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.json$`)
 	linkNameRe      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 	linkContextKey  = regexp.MustCompile(`^[a-z][A-Za-z0-9_]{0,31}$`)
-	linkReserved    = map[string]bool{"app": true, "title": true, "doc": true, "doc_id": true}
+	// The parameters the shell itself reads (Mail's older special case in
+	// App.svelte); Texture's doc, doc_id and title are its manifest's own (T1).
+	linkReserved    = map[string]bool{"app": true, "draft": true, "approval": true, "intake": true, "intake_id": true}
 	lockedKeys      = map[string]bool{"Mod+K": true}
 	commandActions  = map[string][]string{"openApp": {"app"}, "openFile": {"path"}, "copyText": {"text"}, "setTheme": {"theme"}, "toast": {"message"}}
 	commandOptional = map[string][]string{"copyText": {"label"}}
@@ -373,14 +387,30 @@ func (m Manifest) validateLinks() error {
 		if l.App != m.Name {
 			return invalid("%s.app %q is not the package's own (%q)", w, l.App, m.Name)
 		}
-		if apps[l.App] {
+		// One parameter rule and one public route rule per app.
+		slot := "link:" + l.App
+		if l.Route != nil {
+			slot = "route:" + l.App
+		}
+		if apps[slot] {
 			return invalid("%s.app %q is declared twice", w, l.App)
 		}
-		apps[l.App] = true
+		apps[slot] = true
 		if l.Launch != nil && l.Launch.Home && m.Origin != OriginFirstParty {
 			return invalid("%s.launch.home: the signed-out home is first-party only", w)
 		}
-		if (len(l.Params) == 0 && !(l.Launch != nil && l.Launch.Home)) || len(l.Params) > maxLinkParams {
+		if l.Route != nil {
+			switch {
+			case l.Route.Prefix != "/pub/"+m.Name+"/":
+				return invalid("%s.route.prefix %q is not the package's own %q", w, l.Route.Prefix, "/pub/"+m.Name+"/")
+			case !linkContextKey.MatchString(l.Route.Context):
+				return invalid("%s.route.context %q must be a key word", w, l.Route.Context)
+			case len(l.Params) != 0:
+				return invalid("%s: a route rule takes no parameters", w)
+			case l.Launch != nil && (l.Launch.Home || len(l.Launch.RequireAny) > 0):
+				return invalid("%s.launch: a route rule has no home or requireAny", w)
+			}
+		} else if (len(l.Params) == 0 && !(l.Launch != nil && l.Launch.Home)) || len(l.Params) > maxLinkParams {
 			return invalid("%s.params must list one to %d parameters", w, maxLinkParams)
 		}
 		names := map[string]bool{}

@@ -1,0 +1,30 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "Texture opens on the recent-documents landing and lists the owner's documents from the stubbed /api/texture/documents.",
+  "ready": "[data-texture-editor]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/texture/documents",
+      "status": 200,
+      "json": {
+        "documents": [
+          {
+            "doc_id": "doc-contract-1",
+            "title": "Contract document",
+            "current_revision_id": "rev-1",
+            "current_version": 2,
+            "created_at": "2026-11-01T09:00:00Z",
+            "updated_at": "2026-11-02T09:00:00Z"
+          }
+        ]
+      }
+    }
+  ],
+  "expect": [
+    { "selector": "[data-texture-recent]" },
+    { "selector": "[data-texture-new-document]" },
+    { "selector": "[data-texture-recent-document]", "count": 1 },
+    { "selector": "[data-texture-recent-document]", "text": "Contract document" }
+  ]
+}

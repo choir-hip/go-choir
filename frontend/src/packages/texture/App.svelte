@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
-  import { AuthRequiredError, fetchWithRenewal } from './auth.js';
+  import { AuthRequiredError, fetchWithRenewal } from '../../lib/app-sdk';
   import {
     cancelAgentRevision,
     createDocument,
@@ -23,6 +23,7 @@
     lifecycleCurrentDocumentRevisionID,
     listRevisions,
     openDocumentStream,
+    openFileDocument,
     publishTexture,
     publishTextureAsOpinion,
     resolvePublication,
@@ -30,8 +31,8 @@
     submitAgentRevision,
     submitPublicationProposal,
   } from './texture.js';
-  import { addLiveEventListener, liveEventKind } from './live-events.js';
-  import { copyText, openApp, requireAuth, sessionExpired, setAppContext } from './shell-services';
+  import { addLiveEventListener, liveEventKind } from '../../lib/app-sdk';
+  import { copyText, onWindowEvent, openApp, repeatEvery, requireAuth, sessionExpired, setAppContext, toast } from '../../lib/app-sdk';
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
@@ -42,9 +43,9 @@
     parseTextureRelatedRef,
     sourceEntityID,
     textureEntityPinnedRevisionID,
-  } from './texture-source-renderer';
+  } from '../../lib/app-sdk';
   import { buildPublishedCitationContext, renderPublishedSourcesHTML } from './texture-published-citations';
-  import { renderMarkdownBlocks } from './texture-markdown-renderer';
+  import { renderMarkdownBlocks } from '../../lib/app-sdk';
   import {
     projectStructuredTextureDocText,
     renderStructuredTextureDocHTML,
@@ -145,7 +146,9 @@
   // route, and that poll.
   let publishedCitations = null;
   let publishedLatestSeen = 0;
+  // The disposer of the published-version poll (SDK repeatEvery), or null.
   let publishedPollTimer = null;
+  let stopResizeListener = () => {};
   let publishedDerivativeActive = false;
   let publishedTransclusions = [];
   let publishedProposal = null;
@@ -365,11 +368,20 @@
     return true;
   }
 
+  // A published page opened by a signed-out visitor (the shell's public route
+  // passes guestMode; publishedGuest is the spelling of windows saved before
+  // Texture became a package). A guest reads; it is offered no edit.
+  function isPublishedGuest(ctx) {
+    return !!ctx?.publishedRoutePath && !!(ctx?.guestMode || ctx?.publishedGuest);
+  }
+
   function getContextKey(ctx) {
     const key = {
       allowMultiple: !!ctx?.allowMultiple,
       docId: ctx?.docId || '',
       sourcePath: ctx?.sourcePath || '',
+      openSourcePath: ctx?.openSourcePath || '',
+      importFile: !!ctx?.importFile,
       fileName: ctx?.fileName || '',
       windowTitle: ctx?.windowTitle || '',
       initialContent: ctx?.initialContent || '',
@@ -380,7 +392,7 @@
       createdFrom: ctx?.createdFrom || '',
       createInitialVersion: !!ctx?.createInitialVersion,
       publishedRoutePath: ctx?.publishedRoutePath || '',
-      publishedGuest: !!ctx?.publishedGuest,
+      publishedGuest: isPublishedGuest(ctx),
       startPublishedDerivative: !!ctx?.startPublishedDerivative,
       initialRevisionId: ctx?.initialRevisionId || '',
     };
@@ -391,6 +403,7 @@
     return !ctx?.publishedRoutePath &&
       !ctx?.docId &&
       !ctx?.sourcePath &&
+      !ctx?.openSourcePath &&
       !ctx?.initialContent &&
       !ctx?.seedPrompt &&
       !ctx?.createInitialVersion;
@@ -952,10 +965,16 @@
         return;
       }
 
-      const initialValue = appContext.initialContent ?? appContext.seedPrompt ?? '';
+      const initialValue = appContext.initialContent ?? appContext.seedPrompt ?? (
+        appContext.openSourcePath && !authenticated ? guestFilePreview(appContext) : ''
+      );
 
       if (!authenticated) {
         loadGuestDocument(initialValue);
+        return;
+      }
+
+      if (appContext.openSourcePath && !appContext.docId && !(await openSourceFile(appContext))) {
         return;
       }
 
@@ -1010,6 +1029,51 @@
     } finally {
       loading = false;
     }
+  }
+
+  function sourceFileName(ctx) {
+    const path = String(ctx?.openSourcePath || '');
+    return ctx?.fileName || path.split('/').pop() || 'Document';
+  }
+
+  function guestFilePreview(ctx) {
+    const fileName = sourceFileName(ctx);
+    return `# ${fileName}\n\nThis is a local preview opened from Files. Sign in to open real private files or save changes.`;
+  }
+
+  // A file from Files opened as text (the shell's text opener hands Texture
+  // its path): Texture reads it and opens the document aliased to that path,
+  // or, for an import, a new document from it. The window then holds the
+  // document like any other.
+  async function openSourceFile(ctx) {
+    const sourcePath = String(ctx.openSourcePath || '');
+    const fileName = sourceFileName(ctx);
+    let content = '';
+    if (!ctx.importFile) {
+      const res = await fetchWithRenewal('/api/files/' + sourcePath.split('/').map(encodeURIComponent).join('/'), { method: 'GET' });
+      if (res.status === 401) {
+        sessionExpired();
+        return false;
+      }
+      if (!res.ok) {
+        error = `Could not open ${fileName}`;
+        toast(`Could not open ${fileName}`);
+        return false;
+      }
+      content = await res.text();
+    }
+    let doc;
+    try {
+      doc = await openFileDocument({ sourcePath, title: fileName, initialContent: content });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) throw err;
+      error = `Could not open ${fileName}`;
+      toast(`Could not open ${fileName}`);
+      return false;
+    }
+    publishWindowContext({ docId: doc.doc_id, sourcePath, openSourcePath: '', importFile: false, windowTitle: fileName, fileName }, fileName);
+    toast(ctx.importFile ? `Imported ${fileName} into Texture` : `Opened ${fileName} in Texture`);
+    return true;
   }
 
   function loadGuestDocument(initialValue = '') {
@@ -1108,7 +1172,7 @@
     stopPublishedPoll();
     const bare = publishedBareRoute();
     if (!bare) return;
-    publishedPollTimer = setInterval(async () => {
+    publishedPollTimer = repeatEvery(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
         const latest = await resolvePublication(bare, { view: 'nav' });
@@ -1121,7 +1185,7 @@
   }
 
   function stopPublishedPoll() {
-    if (publishedPollTimer) clearInterval(publishedPollTimer);
+    if (publishedPollTimer) publishedPollTimer();
     publishedPollTimer = null;
   }
 
@@ -1925,7 +1989,7 @@
         void loadRecentDocuments();
       }
     });
-    window.addEventListener('resize', refreshSourceJournalFlow);
+    stopResizeListener = onWindowEvent('resize', refreshSourceJournalFlow);
   });
 
   onDestroy(() => {
@@ -1934,7 +1998,7 @@
     cancelSourceDiagnosis();
     closeDocumentStream();
     removeLiveListener();
-    window.removeEventListener('resize', refreshSourceJournalFlow);
+    stopResizeListener();
   });
 </script>
 
@@ -1990,7 +2054,7 @@
       {revisionLineLabel}
       stateLabel={toolbarStateLabel}
       isPublishedReader={isPublishedMode && !publishedDerivativeActive}
-      allowPublishedEdit={!appContext?.publishedReadOnly}
+      allowPublishedEdit={!appContext?.publishedReadOnly && !isPublishedGuest(appContext)}
       {isPublishedMode}
       {isViewingHistorical}
       {currentUser}

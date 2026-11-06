@@ -28,13 +28,15 @@
  *   npx playwright test tests/autopaper-related.spec.js
  */
 import { expect, test } from '@playwright/test';
-import {
-  RELATED_MAX_LINKS,
-  relatedAgeLabel,
-  relatedLinkTarget,
-  renderRelatedHTML,
-  visibleRelatedLinks,
-} from '../src/lib/texture-related-stories.ts';
+
+import { closeSources, loadSource } from './helpers/source-modules.js';
+
+let RELATED_MAX_LINKS, relatedAgeLabel, relatedLinkTarget, renderRelatedHTML, visibleRelatedLinks;
+test.beforeAll(async () => {
+  ({ RELATED_MAX_LINKS, relatedAgeLabel, relatedLinkTarget, renderRelatedHTML, visibleRelatedLinks } = await loadSource('/src/packages/texture/texture-related-stories.ts'));
+});
+test.afterAll(closeSources);
+
 
 const BASE_URL = (process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173').replace(/\/+$/, '');
 const NOW = Date.parse('2026-10-20T12:00:00Z');

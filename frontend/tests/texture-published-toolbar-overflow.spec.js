@@ -24,6 +24,8 @@
  *   R6 The fit is a fixed breakpoint: widening the window after a narrow load
  *      must bring the controls back into the row and remove the menu button,
  *      and narrowing it again must bring the button back.
+ *   R7 A signed-out reader is offered Edit: a guest reads a published page
+ *      (MA5.T1), so the toolbar holds no Edit in the row or the menu.
  *
  *   cd frontend && npm run build && npx vite preview --port 4173 --strictPort &
  *   npx playwright test tests/texture-published-toolbar-overflow.spec.js
@@ -166,7 +168,9 @@ test.describe('the toolbar at phone width', () => {
       await moreButton(page).click();
       const inMenu = await menuLabels(page);
       const all = [...labels, ...inMenu].join('|');
-      for (const want of ['More research', 'Edit', 'Copy text', 'Download']) expect(all, want).toContain(want);
+      for (const want of ['More research', 'Copy text', 'Download']) expect(all, want).toContain(want);
+      // A signed-out reader reads: no Edit in the row or the menu (MA5.T1).
+      expect(all, 'no Edit for a guest').not.toContain('Edit');
       await expect(expandButton(page), 'one More research button, not a copy').toHaveCount(1);
       // More research is visible in the row or the first item of the menu.
       if (!labels.some((l) => l.startsWith('More research'))) expect(inMenu[0]).toContain('More research');
@@ -194,7 +198,7 @@ test.describe('the toolbar at phone width', () => {
     await expect(moreButton(page)).toHaveAttribute('aria-expanded', 'true');
     await expect(menu(page)).toBeVisible();
     // The hidden controls, in priority order, with More research first.
-    expect(await menuLabels(page)).toEqual(['More research', 'Edit', 'Copy text', 'Download']);
+    expect(await menuLabels(page)).toEqual(['More research', 'Copy text', 'Download']);
     await expect(expandButton(page)).toBeVisible();
     await expect(expandButton(page)).toBeEnabled();
 
@@ -213,7 +217,7 @@ test.describe('the toolbar at phone width', () => {
     expect(geometry.left).toBeGreaterThanOrEqual(0);
     expect(geometry.right).toBeLessThanOrEqual(geometry.viewport[0]);
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewport[1]);
-    expect(geometry.heights.length).toBe(4);
+    expect(geometry.heights.length).toBe(3);
     for (const h of geometry.heights) expect(h, 'menu control height').toBeGreaterThanOrEqual(44);
 
     // The control in the menu is the toolbar's control: pressing it asks once,
@@ -259,7 +263,7 @@ test.describe('the toolbar at phone width', () => {
     await expect(moreButton(page)).toHaveAttribute('aria-expanded', 'true');
     await expect.poll(focused).toBe('More research');
     await page.keyboard.press('ArrowDown');
-    await expect.poll(focused).toBe('Edit');
+    await expect.poll(focused).toBe('Copy text');
     await page.keyboard.press('End');
     await expect.poll(focused).toBe('Download');
     await page.keyboard.press('ArrowDown');
@@ -317,7 +321,7 @@ test.describe('the toolbar follows the width it is given', () => {
     await setWindowWidth(page, 1100);
     await expect(moreButton(page)).toBeHidden();
     const wide = await toolbarFit(page);
-    for (const want of ['More research', 'Edit', 'Copy text', 'Download']) expect(wide.controls.map((c) => c.label).join('|'), want).toContain(want);
+    for (const want of ['More research', 'Copy text', 'Download']) expect(wide.controls.map((c) => c.label).join('|'), want).toContain(want);
     expectOneRow(wide, 'wide');
     await expect(menu(page)).toBeHidden();
 
@@ -328,7 +332,7 @@ test.describe('the toolbar follows the width it is given', () => {
     if (mid.moreVisible) {
       await moreButton(page).click();
       const all = [...mid.controls.map((c) => c.label), ...(await menuLabels(page))].join('|');
-      for (const want of ['More research', 'Edit', 'Copy text', 'Download']) expect(all, want).toContain(want);
+      for (const want of ['More research', 'Copy text', 'Download']) expect(all, want).toContain(want);
     }
   });
 });

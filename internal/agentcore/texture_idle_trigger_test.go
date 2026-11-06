@@ -31,7 +31,7 @@ import (
 
 type recordingCellAuthorizer struct{ bodies []string }
 
-func (a *recordingCellAuthorizer) CommitCellTextureAuthor(_ context.Context, _ *types.RunRecord, bodyJSON, _ string) (string, error) {
+func (a *recordingCellAuthorizer) Commit(_ context.Context, _ *types.RunRecord, bodyJSON, _ string) (string, error) {
 	a.bodies = append(a.bodies, bodyJSON)
 	return `{"op":"decide"}`, nil
 }
@@ -40,7 +40,7 @@ func idleTriggerTextureRun(t *testing.T) (*Runtime, *recordingCellAuthorizer, ty
 	t.Helper()
 	rt, s := testRuntime(t)
 	auth := &recordingCellAuthorizer{}
-	rt.SetTextureCellAuthorizer(auth)
+	bindTextureCommitter(t, rt, auth)
 	const ownerID, docID = "owner-idle", "doc-idle"
 	seedDurableTextureSubject(t, s, ownerID, docID)
 	rec := types.RunRecord{

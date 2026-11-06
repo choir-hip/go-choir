@@ -36,23 +36,17 @@ if (check && !existsSync(resolve(root, 'internal/apppackage'))) {
   fail('internal/apppackage is missing; --check cannot compare the generated table');
 }
 
-// Names a published package may not take: the shell's static app ids
-// (frontend/src/lib/apps/registry.ts STATIC_APPS) and the reserved shell and
-// system names of check-packages.mjs. A published package of such a name would
-// shadow or confuse the built-in app (review of MA2.3, B2).
+// Names a published package may not take: the reserved shell and system names
+// of check-packages.mjs, and the retired app ids that now alias a first-party
+// package (pdf, epub: reader; email: mail). The shell has no static app rows
+// (slice T1 moved the last one, Texture, into its package); a published package
+// of a first-party package's name is refused by builtinPackageNames instead.
+// A published package of such a name would shadow or confuse the built-in app
+// (review of MA2.3, B2).
 const RESERVED_NAMES = [
   'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research',
 ];
-// Retired app ids that now alias a first-party package (pdf, epub: reader; email: mail): a published package may not take them.
 const shellAppNames = new Set([...RESERVED_NAMES, 'pdf', 'epub', 'email']);
-{
-  const registry = readFileSync(resolve(root, 'frontend/src/lib/apps/registry.ts'), 'utf8');
-  const start = registry.indexOf('const STATIC_APPS = [');
-  const end = registry.indexOf('] satisfies ChoirAppDefinition[]');
-  const block = start >= 0 && end > start ? registry.slice(start, end) : '';
-  for (const m of block.matchAll(/^ {4}id: (?:'([a-z0-9-]+)'|TEXTURE_APP_ID),/gm)) shellAppNames.add(m[1] || 'texture');
-  if (shellAppNames.size < RESERVED_NAMES.length + 4) fail('registry.ts: parsed too few static app ids; the layout changed');
-}
 
 const builtinNames = [];
 const packages = [];
