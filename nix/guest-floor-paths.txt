@@ -47,6 +47,7 @@ internal/coagentpacket
 internal/computerevent
 internal/computerversion
 internal/deskmanifest
+internal/gomodule
 internal/hostlink
 internal/mirrorgrant
 internal/normtext

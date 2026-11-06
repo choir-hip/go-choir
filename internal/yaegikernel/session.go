@@ -7,15 +7,20 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"path"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"testing/fstest"
 	"time"
 
 	"github.com/traefik/yaegi/interp"
+	"github.com/traefik/yaegi/stdlib"
+
+	"github.com/yusefmosiah/go-choir/internal/gomodule"
 )
 
 // Session is a persistent Yaegi interpreter that retains variables across
@@ -82,13 +87,48 @@ func (w *switchWriter) setTarget(target io.Writer) {
 // surface. Symbols are loaded once; every cell shares
 // them, so prebound modules (Def 2 item 3) are bound once per activation.
 func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, error) {
+	return NewSessionWithGoModules(allowlist, extraSymbols, nil)
+}
+
+// NewSessionWithGoModules is NewSession with a desk's Go module bundle (plan
+// MA6.5). The bundle is loaded through gomodule.Bundle.Load against this
+// binary's curated list: every module re-hashed against its h1:, the closure
+// re-walked. The interpreter's source filesystem is the reached packages'
+// files and nothing else (empty without a bundle), so yaegi never reads a
+// package from the real filesystem. Binary symbol tables are chosen from the
+// base allowlist only (review r1, S2); the bundle's imports widen only the
+// static import check. They are imported once here, bounded by
+// goModuleLoadTimeout, so module init code runs at worker start, where a
+// failure refuses the worker, never inside a cell.
+func NewSessionWithGoModules(allowlist *Allowlist, extraSymbols interp.Exports, bundle *gomodule.Bundle) (*Session, error) {
 	if allowlist == nil {
 		allowlist = NewDefaultSafeAllowlist()
 	}
+	symbols := buildFilteredSymbols(allowlist, extraSymbols)
+	var loaded gomodule.Loaded
+	source := fs.FS(fstest.MapFS{})
+	if bundle != nil {
+		curated, err := curatedGoModules()
+		if err != nil {
+			return nil, fmt.Errorf("yaegi: go modules: %w", err)
+		}
+		if loaded, err = bundle.Load(curated); err != nil {
+			return nil, fmt.Errorf("yaegi: go modules: %w", err)
+		}
+		// A package path that names a binary symbol table would be bound to
+		// that table, not to the module's source.
+		for _, p := range loaded.Packages {
+			if bindsBinarySymbols(p, extraSymbols) {
+				return nil, fmt.Errorf("yaegi: go modules: package %q is the path of a binary symbol table", p)
+			}
+		}
+		source = loaded.FS
+		allowlist = allowlist.with(loaded.Imports...)
+	}
 	stdout := &switchWriter{}
 	stderr := &switchWriter{}
-	i := interp.New(interp.Options{Stdout: stdout, Stderr: stderr})
-	if err := i.Use(buildFilteredSymbols(allowlist, extraSymbols)); err != nil {
+	i := interp.New(interp.Options{Stdout: stdout, Stderr: stderr, GoPath: ".", SourcecodeFilesystem: source})
+	if err := i.Use(symbols); err != nil {
 		return nil, fmt.Errorf("yaegi: load session symbols: %w", err)
 	}
 	s := &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}, declaredNames: map[string]bool{}}
@@ -124,6 +164,13 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 			return nil, fmt.Errorf("yaegi: predeclare choir binding: %w", err)
 		}
 	}
+	// The desk's Go modules (MA6.5): imported now, after the stdlib
+	// predeclares, so a cell finds them bound like fmt.
+	for _, path := range loaded.Imports {
+		if err := s.loadGoModulePackage(path); err != nil {
+			return nil, err
+		}
+	}
 	// yaegi v0.16.1 predates Go 1.21's min and max builtins; models reach
 	// for them (s[:min(n, len(s))], cluster G of
 	// docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
@@ -132,6 +179,56 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 		return nil, fmt.Errorf("yaegi: predeclare min and max: %w", err)
 	}
 	return s, nil
+}
+
+// goModuleLoadTimeout bounds one module package's import (its init code and
+// package variables) at session start; it is below the spawner's ready
+// timeout (sessionReadyTimeout), so a slow init refuses the worker by name
+// instead of looking like a worker that never started.
+var goModuleLoadTimeout = 5 * time.Second
+
+// loadGoModulePackage imports one module package, bounded. On a timeout the
+// import keeps the session's lock, so the session is abandoned unclosed: the
+// worker exits on the error.
+func (s *Session) loadGoModulePackage(path string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), goModuleLoadTimeout)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Eval(ctx, "import \""+path+"\"")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			s.Close()
+			return fmt.Errorf("yaegi: load go module package %s: %w", path, err)
+		}
+		return nil
+	case <-time.After(goModuleLoadTimeout):
+		return fmt.Errorf("yaegi: load go module package %s: its init did not finish within %s", path, goModuleLoadTimeout)
+	}
+}
+
+// curatedGoModules is the curated list a session loads bundles against: this
+// binary's own. Tests replace it to load fixture modules.
+var curatedGoModules = gomodule.Curated
+
+// bindsBinarySymbols reports whether an import path is the path of a binary
+// symbol table yaegi knows (the whole stdlib table, including yaegi's own
+// unfiltered stdlib.Symbols entry, or a prebound package such as choir).
+func bindsBinarySymbols(p string, extra interp.Exports) bool {
+	for k := range stdlib.Symbols {
+		if cleanImportPathFromSymbolKey(k) == p {
+			return true
+		}
+	}
+	for k := range extra {
+		if cleanImportPathFromSymbolKey(k) == p {
+			return true
+		}
+	}
+	return false
 }
 
 const minMaxPrelude = `min := func(x int, rest ...int) int {

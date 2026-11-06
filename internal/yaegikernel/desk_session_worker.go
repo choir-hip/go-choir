@@ -180,6 +180,9 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if workerArg == "" {
 		return nil, fmt.Errorf("desk worker arg required (worker mode entrypoint)")
 	}
+	if err := checkGoModulesCarry(cfg.Session.GoModules); err != nil {
+		return nil, err
+	}
 	if err := workerCrashes.admit(cfg.Session.Role); err != nil {
 		return nil, err
 	}
@@ -321,7 +324,7 @@ func (c DeskSessionWorkerConfig) sessionEnv() []string {
 	if carry := appDeskCarry(prefix, c.Session.Role, c.Session.DeskEpoch); carry != "" {
 		env = append(env, carry)
 	}
-	return env
+	return append(env, goModulesEnv(prefix, c.Session.GoModules)...)
 }
 
 // SessionWorkerConfigFromEnv reconstructs the config the host spawner wrote —
@@ -336,7 +339,11 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 	if v := getenv(prefix + "EPOCH"); v != "" {
 		fmt.Sscanf(v, "%d", &epoch)
 	}
+	goModules, goModulesSum, goModulesErr := readGoModulesEnv(getenv, prefix)
 	return SessionWorkerConfig{
+		GoModules:        goModules,
+		GoModulesSHA256:  goModulesSum,
+		goModulesErr:     goModulesErr,
 		AllowedPackages:  splitCSV(getenv(prefix + "ALLOWED_PACKAGES")),
 		ComputerID:       getenv(prefix + "COMPUTER_ID"),
 		ActivationID:     getenv(prefix + "ACTIVATION"),

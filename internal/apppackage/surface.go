@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/gomodule"
 )
 
 // SurfaceDomain versions the behaviour-surface hash's input format.
@@ -117,41 +119,23 @@ func (d dirSource) Read(p string) ([]byte, error) {
 }
 
 // baseImportSet is every desk's yaegi import set before grants add to it: the
-// precommitment-records protocol package (choir) and the pure standard library
-// packages of internal/yaegikernel.DefaultSafeStdlibPackages (a test holds the
-// two together). Nothing with effects is here (R26).
-var baseImportSet = []string{
-	"bytes", "choir", "encoding/base64", "encoding/hex", "encoding/json", "errors", "fmt",
-	"math", "math/big", "math/rand/v2", "regexp", "sort", "strconv", "strings", "time",
-	"unicode", "unicode/utf8",
-}
-
-// bannedImports are refused for desk code whatever the grants: the capability
-// gate of R42, applied to the source the platform builds. "C" is cgo.
-var bannedImports = map[string]bool{
-	"unsafe": true, "reflect": true, "runtime": true, "runtime/cgo": true, "plugin": true,
-	"syscall": true, "os": true, "os/exec": true, "os/signal": true, "net": true,
-	"net/http": true, "net/rpc": true, "io/ioutil": true, "embed": true, "C": true,
-	"debug/elf": true, "debug/macho": true, "debug/pe": true,
-}
+// precommitment-records protocol package (choir) and the desk standard-library
+// set (internal/gomodule.Stdlib, the list the yaegi cell allowlist reads too).
+// Nothing with effects is here (R26).
+var baseImportSet = append([]string{"choir"}, gomodule.Stdlib()...)
 
 // ImportSet is the desk's yaegi import set, derived from its package's grants
 // by the host and never authored. No grant implies a package yet, so the set is
-// the base set; MA6.6 widens it by grant. It is part of the behaviour-surface
-// hash.
+// the base set; MA6.6 widens it by grant. It is not part of the
+// behaviour-surface hash (a platform fact, see BehaviourSurface).
 func (m Manifest) ImportSet() []string {
 	return append([]string{}, baseImportSet...)
 }
 
-// CuratedModules is the platform-reviewed list of third-party Go modules a
-// desk may import (R42). It starts empty: a non-standard-library import is
-// refused until a module is reviewed once for everyone.
-func CuratedModules() []string { return nil }
-
 // CheckGoSource refuses a desk source file whose imports leave the desk's
-// import set: a banned package, cgo, a package outside the set, or a
-// third-party module not on the curated list. It reads imports only (the file
-// is never type-checked or run), and refuses a file that does not parse.
+// import set: a banned package, cgo, or a package outside allowed (the desk's
+// set plus its go_imports). It reads imports only (the file is never
+// type-checked or run), and refuses a file that does not parse.
 func CheckGoSource(name string, src []byte, allowed []string) error {
 	// The whole file is parsed: a directive after the import block is scanned,
 	// and a file that does not parse is refused (review N1).
@@ -163,18 +147,15 @@ func CheckGoSource(name string, src []byte, allowed []string) error {
 	for _, a := range allowed {
 		ok[a] = true
 	}
-	for _, a := range CuratedModules() {
-		ok[a] = true
-	}
 	for _, imp := range f.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
 			return invalid("%s: bad import %s", name, imp.Path.Value)
 		}
-		switch {
-		case bannedImports[path]:
-			return invalid("%s: import %q is banned for desk code", name, path)
-		case !ok[path]:
+		if reason, banned := gomodule.BannedReason(path); banned {
+			return invalid("%s: import %q is banned for desk code: %s", name, path, reason)
+		}
+		if !ok[path] {
 			return invalid("%s: import %q is outside the desk's import set", name, path)
 		}
 	}
@@ -200,6 +181,8 @@ type surfaceDesk struct {
 	Tools     []surfaceFile   `json:"tools"`
 	Schedules []Schedule      `json:"schedules"`
 	Accepts   json.RawMessage `json:"accepts"`
+	// GoImports is omitted for a desk with none, so earlier hashes hold.
+	GoImports []string `json:"go_imports,omitempty"`
 }
 
 type surfaceKind struct {
@@ -240,16 +223,22 @@ type surfaceDoc struct {
 	// Provides is omitted for a package that draws no shell surface, so
 	// every earlier hash holds.
 	Provides []Provide `json:"provides,omitempty"`
+	// GoModules are the package's verified Go modules with their curated
+	// h1: hashes (MA6.5), omitted when there are none.
+	GoModules []gomodule.Module `json:"go_modules,omitempty"`
 }
 
 // BehaviourSurface is the sha256 (lowercase hex) over what the package may do
 // on a computer: the app's entry, abi, SDK range and aliases, the files it
 // opens (media types and extensions, with whether it is the default opener);
 // each desk's name, prompt file, code and tool files (by
-// content), schedules and accepts; every kind with its schema and versions;
+// content), schedules, accepts and go_imports; every kind with its schema and
+// versions;
 // the kinds it reads; the capability ceiling with its arguments (the egress
-// hosts among them); and the bytes of every file in the release tree except the
-// manifest, by sorted path. The derived import set is not in the hash: it is a
+// hosts among them); the Go modules (sorted by path, each with its curated
+// h1:, MA6.5; omitted when there are none, as each desk's go_imports is, so no
+// earlier package's hash moves); and the bytes of every file in the release
+// tree except the manifest, by sorted path. The derived import set is not in the hash: it is a
 // platform fact and a platform release that widens it would otherwise move every
 // package's surface (it follows from the hashed grants and the platform
 // version). Any change moves the hash,
@@ -258,8 +247,9 @@ type surfaceDoc struct {
 // matter: lists are sorted and JSON is canonical.
 //
 // It also runs the source gate: desk Go files that import outside the desk's
-// set are refused here, so a hash is never issued for a package the gate
-// would refuse. files may be nil only when the manifest names no desk file.
+// set, and Go modules that fail the curated list or the import closure
+// (ErrGoModule), are refused here, so a hash is never issued for a package the
+// gate would refuse. files may be nil only when the manifest names no desk file.
 func (m Manifest) BehaviourSurface(src Source) (string, error) {
 	doc, err := m.surfaceDocument(src)
 	if err != nil {
@@ -305,7 +295,11 @@ func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 			doc.Files = append(doc.Files, surfaceFile{Path: p, SHA256: hex.EncodeToString(sum[:])})
 		}
 	}
-	read := func(p string, isGo bool) (surfaceFile, error) {
+	goMods, verified, err := m.goModuleSources(src)
+	if err != nil {
+		return surfaceDoc{}, err
+	}
+	read := func(p string, isGo bool, imports []string) (surfaceFile, error) {
 		raw, err := src.Read(p)
 		if err != nil {
 			return surfaceFile{}, invalid("%s: %v", p, err)
@@ -340,19 +334,23 @@ func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 	})
 	for _, d := range m.Contributes.Desks {
 		sd := surfaceDesk{Name: d.Name, Tools: []surfaceFile{}, Schedules: append([]Schedule{}, d.Schedules...)}
-		var err error
-		if sd.Prompt, err = read(d.Prompt, false); err != nil {
+		bundle, err := m.resolveDesk(d, goMods)
+		if err != nil {
+			return surfaceDoc{}, err
+		}
+		allowed := append(append([]string{}, imports...), bundle.Imports...)
+		if sd.Prompt, err = read(d.Prompt, false, allowed); err != nil {
 			return surfaceDoc{}, err
 		}
 		if d.Code != "" {
-			f, err := read(d.Code, true)
+			f, err := read(d.Code, true, allowed)
 			if err != nil {
 				return surfaceDoc{}, err
 			}
 			sd.Code = &f
 		}
 		for _, t := range d.Tools {
-			f, err := read(t, true)
+			f, err := read(t, true, allowed)
 			if err != nil {
 				return surfaceDoc{}, err
 			}
@@ -363,8 +361,13 @@ func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 		if sd.Accepts, err = canonicalRaw(d.Accepts, "null"); err != nil {
 			return surfaceDoc{}, err
 		}
+		if len(bundle.Imports) > 0 {
+			sd.GoImports = bundle.Imports
+		}
 		doc.Desks = append(doc.Desks, sd)
 	}
+	// Sorted by path, each with its curated h1: (review r1, D1).
+	doc.GoModules = verified
 	sort.Slice(doc.Desks, func(i, j int) bool { return doc.Desks[i].Name < doc.Desks[j].Name })
 	for _, k := range m.Kinds {
 		schema, err := canonicalRaw(k.Schema, "null")

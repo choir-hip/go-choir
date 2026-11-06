@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Re-checks every entry of the curated Go module list
+# (internal/gomodule/curated.txt; plan MA6.5, R42) against the Go checksum
+# database: `go mod download` verifies each module version against GOSUMDB
+# (sum.golang.org) and reports its h1: hash, which must equal the listed one.
+# Run it for every addition or version bump to the list. It needs the network
+# (the module proxy and the checksum database); the publish gate itself never
+# does. It downloads into a fresh, empty module cache (a cached copy proves
+# nothing), through the pinned public proxy, and refuses to run with the
+# checksum database turned off.
+#
+#   scripts/check-curated-go-modules [--list FILE]
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+list="$root/internal/gomodule/curated.txt"
+while [ $# -gt 0 ]; do
+	case $1 in
+	--list) list=$2; shift 2 ;;
+	*) echo "usage: $0 [--list FILE]" >&2; exit 2 ;;
+	esac
+done
+
+sumdb="${GOSUMDB_OVERRIDE:-sum.golang.org}"
+case "$sumdb" in
+''|off|*,off|off,*)
+	echo "curated-go-modules: FAIL: the checksum database is off (GOSUMDB_OVERRIDE=$sumdb); refusing" >&2
+	exit 2 ;;
+esac
+if [ "${GOSUMDB:-}" = off ]; then
+	echo "curated-go-modules: FAIL: GOSUMDB=off in the environment; refusing" >&2
+	exit 2
+fi
+
+work=$(mktemp -d)
+# The fresh module cache is read-only once filled; make it removable.
+trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT
+mkdir -p "$work/mod" "$work/modcache"
+cd "$work/mod"
+export GOMODCACHE="$work/modcache" GOPATH="$work/gopath"
+export GOPROXY=https://proxy.golang.org GOSUMDB="$sumdb"
+export GOFLAGS=-mod=mod GONOSUMDB= GONOSUMCHECK= GONOSUMIGNORE= GOPRIVATE= GOINSECURE= GONOPROXY= GOTOOLCHAIN=local
+go mod init curated.check >/dev/null 2>&1
+
+fail=0
+n=0
+while read -r path version sum rest; do
+	case "$path" in ''|'#'*) continue ;; esac
+	n=$((n + 1))
+	if [ -n "$rest" ] || [ -z "$sum" ]; then
+		echo "curated-go-modules: FAIL: line for $path: want \"path version h1:hash\"" >&2
+		fail=1
+		continue
+	fi
+	got=$(go mod download -json "$path@$version" | sed -n 's/^[[:space:]]*"Sum": "\(h1:[^"]*\)".*/\1/p')
+	if [ "$got" != "$sum" ]; then
+		echo "curated-go-modules: FAIL: $path $version lists $sum; the checksum database has ${got:-nothing}" >&2
+		fail=1
+	else
+		echo "curated-go-modules: ok: $path $version $sum"
+	fi
+done < "$list"
+if [ "$n" -eq 0 ]; then
+	echo "curated-go-modules: the list is empty"
+fi
+exit "$fail"

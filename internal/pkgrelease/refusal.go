@@ -59,6 +59,12 @@ const (
 	// ReasonUsesExceedGrants: the module calls an SDK name whose grant the
 	// manifest does not hold.
 	ReasonUsesExceedGrants = "package_uses_exceed_grants"
+	// ReasonGoModuleRefused: a Go module the package ships fails the gate
+	// (R42, MA6.5): not on the curated list, not its checksum database hash,
+	// or an import closure reaching a banned package, cgo, linkname, assembly
+	// or anything outside the desk's import set. The detail names the code
+	// (gomodule) and the import chain.
+	ReasonGoModuleRefused = "package_go_module_refused"
 	// Publisher-side (guest) refusals.
 	ReasonChangeNotConfined = "package_change_not_confined"
 	ReasonParentUnpublished = "package_parent_unpublished"

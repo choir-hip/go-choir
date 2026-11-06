@@ -303,6 +303,22 @@ fmt.Println("sum", sum)`, "sum 85344"},
 b, _ := json.Marshal(map[string]int{"a": 1})
 loc, lerr := time.LoadLocation("UTC")
 fmt.Println(string(b), hex.EncodeToString(b)[:4], rand.IntN(10) < 10, time.Now().In(loc).Year() > 2000, lerr, regexp.MustCompile("a+").MatchString("caab"))`, `{"a":1} 7b22 true true <nil> true`},
+		// The packages MA6.5 added, under the seccomp filter: fan-out and
+		// join, a deadline, hashing, compression, URL and CSV parsing.
+		{"widened_stdlib", `import ("fmt"; "sync"; "context"; "time"; "crypto/sha256"; "compress/gzip"; "bytes"; "io"; "net/url"; "encoding/csv"; "sync/atomic")
+var wg sync.WaitGroup
+var n atomic.Int64
+for i := 0; i < 32; i++ { wg.Add(1); go func() { defer wg.Done(); n.Add(1) }() }
+wg.Wait()
+ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+<-ctx.Done(); cancel()
+var zb bytes.Buffer
+zw := gzip.NewWriter(&zb); zw.Write([]byte("packed")); zw.Close()
+zr, _ := gzip.NewReader(&zb); unz, _ := io.ReadAll(zr)
+u, _ := url.Parse("https://example.com/x?q=1")
+recs, _ := csv.NewReader(bytes.NewBufferString("a,b\n")).ReadAll()
+sum := sha256.Sum256([]byte("x"))
+fmt.Println(n.Load(), ctx.Err(), sum[0], string(unz), u.Query().Get("q"), len(recs[0]))`, "32 context deadline exceeded 45 packed 1 2"},
 	}
 	for _, c := range cells {
 		res, err := w.EvalCell(ctx, c.src, nil, nil, nil, nil, nil)

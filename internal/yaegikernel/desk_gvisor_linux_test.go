@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/gomodule"
 )
 
 // MA6.4: every desk worker under gVisor, one sandbox per trust class.
@@ -52,6 +53,10 @@ func TestDeskGvisorHelperProcess(t *testing.T) {
 	}
 	if os.Getenv("CHOIR_DESK_GVISOR_CHILD") != "1" {
 		return
+	}
+	// A test's fixture modules: the curated list this worker loads against.
+	if raw := os.Getenv("CHOIR_TEST_GO_MODULES_CURATED"); raw != "" {
+		curatedGoModules = func() ([]gomodule.Module, error) { return gomodule.ParseCurated([]byte(raw)) }
 	}
 	CloseInheritedFDs()
 	cfg := SessionWorkerConfigFromEnv(nil, "")
@@ -354,14 +359,103 @@ func TestGvisorCellBenchmark(t *testing.T) {
 			sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
 			out[name] = [2]time.Duration{ds[len(ds)/2], ds[len(ds)*99/100]}
 		}
+		// MA6.5: a worker that loads the curated go-difflib; its spawn to
+		// ready and a cell that diffs with it.
+		cfg.Session.GoModules = encodedBundle(t, difflibBundle(t))
+		start = time.Now()
+		wm, err := SpawnDeskSessionWorker(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer wm.Close()
+		t.Logf("gvisor=%v spawn to ready with go modules %s", gv, time.Since(start))
+		var ds []time.Duration
+		for i := 0; i < n; i++ {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			s := time.Now()
+			res, err := wm.Eval(ctx, moduleCell)
+			cancel()
+			if err != nil || res.Error != "" {
+				t.Fatalf("module: %v %s", err, res.Error)
+			}
+			ds = append(ds, time.Since(s))
+		}
+		sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
+		out["module"] = [2]time.Duration{ds[len(ds)/2], ds[len(ds)*99/100]}
 		return out
 	}
 	var native, gv map[string][2]time.Duration
 	t.Run("native", func(t *testing.T) { native = run(t, false) })
 	t.Run("gvisor", func(t *testing.T) { gv = run(t, true) })
-	for _, name := range []string{"trivial", "verb", "alloc", "fib25"} {
+	for _, name := range []string{"trivial", "verb", "alloc", "fib25", "module"} {
 		t.Logf("%-8s native p50 %8s p99 %8s | gvisor p50 %8s p99 %8s | ratio p50 %.2fx", name, native[name][0], native[name][1], gv[name][0], gv[name][1], float64(gv[name][0])/float64(native[name][0]))
 	}
+}
+
+// TestGvisorDeskCellCallsAGoModuleAndAHostVerb is MA6.5's proof under the
+// MA6.4 sandbox: the bundle crosses into the gVisor process spec, the worker
+// loads the curated module, and one cell calls it and a host verb.
+func TestGvisorDeskCellCallsAGoModuleAndAHostVerb(t *testing.T) {
+	requireGvisor(t)
+	cfg := gvisorTestConfig(t, "research")
+	cfg.Session.GoModules = encodedBundle(t, difflibBundle(t))
+	var seen atomic.Int32
+	cfg.Egress = func(context.Context, BrokerAction, json.RawMessage) (json.RawMessage, error) {
+		seen.Add(1)
+		return json.RawMessage(`{"text":"from the desk's host"}`), nil
+	}
+	w, err := SpawnDeskSessionWorker(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if w.gvisor == nil {
+		t.Fatal("the worker is not in a gVisor sandbox")
+	}
+	gvEvalCell(t, w, moduleCell, moduleCellWant)
+	if seen.Load() != 1 {
+		t.Fatalf("host verb calls: %d", seen.Load())
+	}
+	// A bad carry is refused inside the sandbox too.
+	bad := gvisorTestConfig(t, "research")
+	bad.Session.GoModules = cfg.Session.GoModules
+	bad.ExtraEnv = append(bad.ExtraEnv, "CHOIR_DESK_SESSION_GO_MODULES_SHA256="+strings.Repeat("0", 64))
+	if w2, err := SpawnDeskSessionWorker(bad); err == nil {
+		w2.Close()
+		t.Fatal("a gVisor worker with an altered carry became ready")
+	}
+}
+
+// TestGvisorLargestGoModuleBundleCrosses: a bundle at the source cap crosses
+// the environment into the sandbox in several parts and loads.
+func TestGvisorLargestGoModuleBundleCrosses(t *testing.T) {
+	requireGvisor(t)
+	body := strings.Repeat("x", gomodule.MaxBundleBytes-4096)
+	files := map[string][]byte{"big.go": []byte("package big\n\nconst S = `" + body + "`\n\nfunc N() int { return len(S) }\n")}
+	mod := gomodule.Module{Path: "example.com/big", Version: "v0.1.0"}
+	sum, err := gomodule.Hash1(mod.String(), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod.Sum = sum
+	b, err := gomodule.Resolve([]gomodule.Module{mod}, []gomodule.ModuleSource{{Module: gomodule.Module{Path: mod.Path, Version: mod.Version}, Files: files}}, []string{mod.Path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := gvisorTestConfig(t, "research")
+	cfg.Session.GoModules = encodedBundle(t, b)
+	cfg.ExtraEnv = append(cfg.ExtraEnv, "CHOIR_TEST_GO_MODULES_CURATED="+mod.Path+" "+mod.Version+" "+mod.Sum)
+	if parts := len(goModulesEnv("P_", cfg.Session.GoModules)) - 2; parts < 4 {
+		t.Fatalf("the cap bundle crosses in %d parts; the test wants several", parts)
+	}
+	start := time.Now()
+	w, err := SpawnDeskSessionWorker(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	t.Logf("cap bundle (%d bytes encoded) spawn to ready %s", len(cfg.Session.GoModules), time.Since(start))
+	gvEvalCell(t, w, "fmt.Println(big.N())", strconv.Itoa(len(body)))
 }
 
 // TestGvisorConcurrentSpawnsShareOneSandbox: concurrent spawns of one class

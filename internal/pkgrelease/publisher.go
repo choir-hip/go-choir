@@ -181,6 +181,11 @@ func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 // checkManifest is CheckManifest that also returns the parsed manifest, from
 // which the host derives what the Library shows (VerifyHostFacts).
 func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, string, apppackage.Manifest, error) {
+	return checkManifestOn(name, raw, files, apppackage.CurrentPlatform())
+}
+
+// checkManifestOn is checkManifest on a stated platform.
+func checkManifestOn(name string, raw []byte, files apppackage.Source, platform apppackage.Platform) (Manifest, string, apppackage.Manifest, error) {
 	// Kinds first: a first-party package's kinds are generated into
 	// internal/apppackage/firstparty_gen.go, outside the package, so a
 	// release cannot carry them until runtime install (S12).
@@ -195,7 +200,7 @@ func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 	if err := reviewPlatform(raw); err != nil {
 		return Manifest{}, "", apppackage.Manifest{}, err
 	}
-	manifest, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
+	manifest, err := apppackage.ParseManifestOn(raw, apppackage.OriginPublished, platform)
 	if err != nil {
 		switch {
 		case errors.Is(err, apppackage.ErrPublisherDeclared):
@@ -212,6 +217,9 @@ func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 	}
 	surface, err := manifest.BehaviourSurface(files)
 	if err != nil {
+		if errors.Is(err, apppackage.ErrGoModule) {
+			return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonGoModuleRefused, "%v", err)
+		}
 		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonManifestInvalid, "%v", err)
 	}
 	if err := reviewData(manifest, files); err != nil {

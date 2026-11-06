@@ -3,31 +3,28 @@ package yaegikernel
 import (
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/gomodule"
 )
 
-// DefaultSafeStdlibPackages defines the restrictive allowlist of safe standard library
-// packages permitted for model-authored Go evaluation in restricted profiles.
-var DefaultSafeStdlibPackages = map[string]bool{
-	"fmt":             true,
-	"strings":         true,
-	"bytes":           true,
-	"time":            true,
-	"math":            true,
-	"math/big":        true,
-	"math/rand/v2":    true,
-	"sort":            true,
-	"strconv":         true,
-	"unicode":         true,
-	"unicode/utf8":    true,
-	"encoding/json":   true,
-	"encoding/base64": true,
-	"encoding/hex":    true,
-	"errors":          true,
-	"regexp":          true,
-}
+// DefaultSafeStdlibPackages is the desk standard-library set every desk's
+// cells may import (plan MA6.5): internal/gomodule.Stdlib, the one list the
+// package desk import set and the Go module closure check also read. It
+// widened from 16 packages by expressivity under the MA6.4 sandbox
+// (docs/design/ma65-yaegi-go-modules-2026-11-06.md section 2); nothing in it
+// reaches the OS.
+var DefaultSafeStdlibPackages = func() map[string]bool {
+	m := map[string]bool{}
+	for _, p := range gomodule.Stdlib() {
+		m[p] = true
+	}
+	return m
+}()
 
 // BannedPackages defines packages that must NEVER be imported by model-authored
-// code under any profile, to prevent sandbox escapes and ambient privilege inheritance.
+// code under any profile, to prevent sandbox escapes and ambient privilege
+// inheritance. gomodule.BannedReason also bans whole trees (runtime/, os/,
+// debug/ and the like); IsAllowed asks both.
 var BannedPackages = map[string]string{
 	"unsafe":    "unsafe memory access is strictly forbidden",
 	"reflect":   "runtime reflection is forbidden in sandbox",
@@ -64,6 +61,19 @@ func NewAllowlist(packages ...string) *Allowlist {
 	return &Allowlist{allowed: m}
 }
 
+// with returns a copy of the allowlist that also admits packages (a desk's
+// verified Go module imports).
+func (a *Allowlist) with(packages ...string) *Allowlist {
+	m := make(map[string]bool, len(a.allowed)+len(packages))
+	for p := range a.allowed {
+		m[p] = true
+	}
+	for _, p := range packages {
+		m[p] = true
+	}
+	return &Allowlist{allowed: m}
+}
+
 // NewDefaultSafeAllowlist creates an allowlist with standard safe packages.
 func NewDefaultSafeAllowlist() *Allowlist {
 	m := make(map[string]bool)
@@ -87,6 +97,9 @@ func DefaultSafeStdlibPackagesList() []string {
 func (a *Allowlist) IsAllowed(importPath string) error {
 	importPath = strings.TrimSpace(strings.Trim(importPath, `"`))
 	if reason, banned := BannedPackages[importPath]; banned {
+		return fmt.Errorf("import %q refused: %s", importPath, reason)
+	}
+	if reason, banned := gomodule.BannedReason(importPath); banned {
 		return fmt.Errorf("import %q refused: %s", importPath, reason)
 	}
 	if a == nil || a.allowed == nil || !a.allowed[importPath] {

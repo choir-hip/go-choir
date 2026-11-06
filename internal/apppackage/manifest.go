@@ -103,6 +103,11 @@ type Manifest struct {
 	Capabilities []Capability `json:"capabilities"`
 	// Provides are the shell surfaces the package draws (provides.go).
 	Provides []Provide `json:"provides,omitempty"`
+	// GoModules are the third-party Go modules the package's desks load, each
+	// path@version (plan MA6.5, R42). Each must be on the curated list
+	// (internal/gomodule/curated.txt) and the release must carry its whole
+	// module content at gomod/<escaped path>@<version>/ (gomodule.go).
+	GoModules []string `json:"go_modules,omitempty"`
 
 	Origin string `json:"-"`
 }
@@ -137,6 +142,10 @@ type Desk struct {
 	// Accepts is what the desk takes from the prompt bar. Its shape is fixed
 	// by MA4.8; MA2.3 decodes it as a bounded list and hashes it.
 	Accepts json.RawMessage `json:"accepts,omitempty"`
+	// GoImports are the packages of the package's GoModules this desk's cells
+	// may import (MA6.5). Their import closure is checked at publish and
+	// install; the worker loads it.
+	GoImports []string `json:"go_imports,omitempty"`
 }
 
 // Schedule is a standing intent of a desk.
@@ -205,6 +214,12 @@ type Kind struct {
 //     (ErrPublisherDeclared);
 //   - unknown fields and trailing data.
 func ParseManifest(raw []byte, origin string) (Manifest, error) {
+	return ParseManifestOn(raw, origin, CurrentPlatform())
+}
+
+// ParseManifestOn is ParseManifest on a stated platform (the publish path's
+// tests state the Phase 6 platform to reach the checks behind R24's gate).
+func ParseManifestOn(raw []byte, origin string, p Platform) (Manifest, error) {
 	if len(raw) > MaxManifestBytes {
 		return Manifest{}, invalid("manifest exceeds %d bytes", MaxManifestBytes)
 	}
@@ -225,7 +240,7 @@ func ParseManifest(raw []byte, origin string) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("%w: trailing data after the JSON value", ErrInvalidManifest)
 	}
 	m.Origin = origin
-	if err := m.Validate(); err != nil {
+	if err := m.ValidateOn(p); err != nil {
 		return Manifest{}, err
 	}
 	return m, nil
@@ -327,6 +342,9 @@ func (m Manifest) ValidateOn(p Platform) error {
 		}
 	}
 	if err := m.validateDesks(); err != nil {
+		return err
+	}
+	if err := m.validateGoModules(); err != nil {
 		return err
 	}
 	if err := m.validateContributes(); err != nil {

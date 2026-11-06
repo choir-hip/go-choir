@@ -45,6 +45,18 @@ type SessionWorkerConfig struct {
 	// already in flight (plan MA4.2, B2). It is not the broker Epoch above,
 	// which is the handle issuer's constant and counts worker generations.
 	DeskEpoch uint64
+	// GoModules is the canonical encoding of the desk's verified Go module
+	// bundle (gomodule.Bundle.Encode; plan MA6.5), or empty. The spawner
+	// carries it in the worker's environment with its sha256; the worker
+	// checks the digest, decodes strictly, re-runs the closure check and
+	// loads it, or does not start.
+	GoModules []byte
+	// GoModulesSHA256 is the digest the worker read beside GoModules (set
+	// only by SessionWorkerConfigFromEnv; the spawner computes it).
+	GoModulesSHA256 string
+	// goModulesErr is a malformed carry the worker found reading its
+	// environment; the worker refuses to start on it.
+	goModulesErr error
 }
 
 // ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one
@@ -84,6 +96,10 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 		return nil, nil, nil
 	}
 	allowlist := NewAllowlist(cfg.AllowedPackages...)
+	bundle, err := cfg.goModuleBundle()
+	if err != nil {
+		return fail("go modules", err)
+	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return fail("secret", err)
@@ -108,7 +124,7 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 	if err != nil {
 		return fail("choirscope", err)
 	}
-	sess, err := NewSession(allowlist, scope.ChoirExports())
+	sess, err := NewSessionWithGoModules(allowlist, scope.ChoirExports(), bundle)
 	if err != nil {
 		return fail("session", err)
 	}

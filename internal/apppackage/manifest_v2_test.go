@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/gomodule"
 	"github.com/yusefmosiah/go-choir/internal/promptroute"
 )
 
@@ -432,7 +433,7 @@ func TestH7DeskSourceImportGate(t *testing.T) {
 		"embed":         "package main\nimport _ \"embed\"\n",
 		"plugin":        "package main\nimport \"plugin\"\n",
 		"third party":   "package main\nimport \"github.com/x/y\"\n",
-		"outside set":   "package main\nimport \"compress/gzip\"\n",
+		"outside set":   "package main\nimport \"path/filepath\"\n",
 		"dot import":    "package main\nimport . \"unsafe\"\n",
 		"linkname":      "package main\n//go:linkname f runtime.f\nfunc f()\n",
 		"not go":        "this is not go",
@@ -622,10 +623,10 @@ func TestBehaviourSurfaceOfAFrontEndOnlyPackageNeedsNoFiles(t *testing.T) {
 }
 
 func TestImportSetMatchesTheYaegiDefaultPlusChoir(t *testing.T) {
-	// internal/yaegikernel is not imported (a heavy dependency); the list is
-	// the 16 of DefaultSafeStdlibPackages plus choir. Count and spot-check.
+	// internal/yaegikernel is not imported (a heavy dependency); both read
+	// internal/gomodule.Stdlib, so the set is that list plus choir.
 	set := fixture(t).ImportSet()
-	if len(set) != 17 {
+	if len(set) != len(gomodule.Stdlib())+1 {
 		t.Fatalf("import set = %v", set)
 	}
 	for _, banned := range []string{"os", "os/exec", "net", "net/http", "unsafe", "syscall", "reflect", "runtime"} {

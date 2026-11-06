@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -572,7 +573,8 @@ func (m *deskSessionWorkers) closeAll() {
 }
 
 func sameDeskSessionConfig(a, b yaegikernel.SessionWorkerConfig) bool {
-	return a.Role == b.Role && a.DeskEpoch == b.DeskEpoch && a.ComputerID == b.ComputerID && a.AllowedRoot == b.AllowedRoot
+	return a.Role == b.Role && a.DeskEpoch == b.DeskEpoch && a.ComputerID == b.ComputerID && a.AllowedRoot == b.AllowedRoot &&
+		bytes.Equal(a.GoModules, b.GoModules)
 }
 
 // newDeskGoEvalTool evaluates model-authored Go source for a non-capsule desk

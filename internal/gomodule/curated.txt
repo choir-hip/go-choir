@@ -1,0 +1,20 @@
+# The curated list of third-party Go modules a desk may load (R42; plan MA6.5;
+# docs/design/ma65-yaegi-go-modules-2026-11-06.md section 7).
+#
+# One module version per line: path version h1:hash, the hash exactly as
+# go.sum and sum.golang.org record it. A release's vendored copy must hash to
+# it. An addition or a version bump is a red code change under tier-2 review
+# (the import closure is checked mechanically at publish, but the list is the
+# human review: "reviewed once for everyone"), and must pass
+# scripts/check-curated-go-modules, which re-checks every line against the Go
+# checksum database.
+#
+# Each entry has its module content under internal/gomodule/testdata/gomod/
+# and internal/yaegikernel's TestEveryCuratedModuleLoadsInYaegi loads every
+# package of it that passes the closure check: yaegi interprets, so a module it
+# cannot interpret (go-humanize v1.0.1: "mismatched types untyped float and
+# untyped float64") is not curated.
+#
+# go-difflib: unified and context diffs of line slices (Texture revisions);
+# pure (bufio, bytes, fmt, io, strings); also in Choir's own go.sum.
+github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=

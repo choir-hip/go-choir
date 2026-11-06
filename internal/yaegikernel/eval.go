@@ -80,13 +80,27 @@ func AsEvalError(err error) (*EvalError, bool) {
 
 // buildFilteredSymbols merges allowlisted stdlib symbols with extra custom
 // symbols (e.g. choir client bindings) for the persistent Session.
+//
+// A symbol whose type mentions unsafe.Pointer anywhere (a parameter, a
+// result, an exported field or method of a type it names) is dropped: yaegi
+// converts *T and uintptr to and from unsafe.Pointer, so one such symbol
+// (sync/atomic's LoadPointer, StorePointer, SwapPointer, CompareAndSwapPointer)
+// brings unsafe into a cell without the unsafe package (review r1, S1).
 func buildFilteredSymbols(allowlist *Allowlist, extraSymbols interp.Exports) interp.Exports {
 	filteredSymbols := make(interp.Exports)
 	for pkgKey, symbols := range stdlib.Symbols {
 		importPath := cleanImportPathFromSymbolKey(pkgKey)
-		if err := allowlist.IsAllowed(importPath); err == nil {
-			filteredSymbols[pkgKey] = symbols
+		if err := allowlist.IsAllowed(importPath); err != nil {
+			continue
 		}
+		kept := make(map[string]reflect.Value, len(symbols))
+		for name, v := range symbols {
+			if v.IsValid() && typeMentionsUnsafe(v.Type(), map[reflect.Type]bool{}) {
+				continue
+			}
+			kept[name] = v
+		}
+		filteredSymbols[pkgKey] = kept
 	}
 
 	// Merge extra custom symbols (e.g. choir client bindings)
@@ -119,6 +133,50 @@ func checkImports(allowlist *Allowlist, src string) error {
 		}
 	}
 	return nil
+}
+
+// typeMentionsUnsafe reports whether t reaches unsafe.Pointer through its
+// elements, function signature, exported fields or exported methods.
+func typeMentionsUnsafe(t reflect.Type, seen map[reflect.Type]bool) bool {
+	if t == nil || seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch t.Kind() {
+	case reflect.UnsafePointer:
+		return true
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan:
+		if typeMentionsUnsafe(t.Elem(), seen) {
+			return true
+		}
+	case reflect.Map:
+		if typeMentionsUnsafe(t.Key(), seen) || typeMentionsUnsafe(t.Elem(), seen) {
+			return true
+		}
+	case reflect.Func:
+		for i := 0; i < t.NumIn(); i++ {
+			if typeMentionsUnsafe(t.In(i), seen) {
+				return true
+			}
+		}
+		for i := 0; i < t.NumOut(); i++ {
+			if typeMentionsUnsafe(t.Out(i), seen) {
+				return true
+			}
+		}
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if f := t.Field(i); f.IsExported() && typeMentionsUnsafe(f.Type, seen) {
+				return true
+			}
+		}
+	}
+	for i := 0; i < t.NumMethod(); i++ {
+		if typeMentionsUnsafe(t.Method(i).Type, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanImportPathFromSymbolKey(key string) string {
