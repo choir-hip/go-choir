@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 // MA4.8 router decision rule. Ways it could fail (written first):
@@ -21,7 +22,12 @@ import (
 //     name one.
 //  R5 The logged distribution is not clamped.
 //  R6 The accepts shape admits junk (control characters, duplicates, an
-//     unknown request kind or an unknown field).
+//     unknown field, a request kind the router would not send).
+//  R7 An abstained route offers the default it already took as a one-tap
+//     alternative (review r1 item 8).
+//  R8 A package desk's focus is taken without a ref, with an oversized or
+//     non-canonical ref, with another owner's object, or with a kind the
+//     desk is not the custodian of (review r1 item 1).
 
 const def = "texture-default"
 
@@ -79,8 +85,8 @@ func TestDecideTakesOnlyCandidatesAboveTheta(t *testing.T) {
 	}
 	// R2: below theta abstains to the default and offers the top choices.
 	d = Decide(cands, map[string]float64{"app:mail": 0.55, def: 0.45}, Theta)
-	if d.Destination != def || d.Rule != RuleAbstain || len(d.Alternatives) != 2 || d.Alternatives[0] != "app:mail" {
-		t.Fatalf("R2: %+v", d)
+	if d.Destination != def || d.Rule != RuleAbstain || len(d.Alternatives) != 1 || d.Alternatives[0] != "app:mail" {
+		t.Fatalf("R2/R7: %+v", d)
 	}
 	d = Decide(cands, map[string]float64{"app:mail": 0.8, def: 0.2}, Theta)
 	if d.Destination != "app:mail" || d.App != "mail" || d.Rule != RuleJudge || d.Probability != 0.8 {
@@ -103,9 +109,9 @@ func TestDecideTakesOnlyCandidatesAboveTheta(t *testing.T) {
 }
 
 func TestAcceptsShape(t *testing.T) {
-	good := `["summarize a thread", {"intent": "reply to an email", "request_kind": "ask"}]`
+	good := `["summarize a thread", {"intent": "reply to an email"}]`
 	list, err := ParseAccepts(json.RawMessage(good))
-	if err != nil || len(list) != 2 || list[1].RequestKind != RequestKindAsk || strings.Join(Intents(list), "|") != "summarize a thread|reply to an email" {
+	if err != nil || len(list) != 2 || strings.Join(Intents(list), "|") != "summarize a thread|reply to an email" {
 		t.Fatalf("good: %v %+v", err, list)
 	}
 	for name, raw := range map[string]string{
@@ -116,12 +122,50 @@ func TestAcceptsShape(t *testing.T) {
 		"padded":        `[" x"]`,
 		"control char":  `["a\u0007b"]`,
 		"duplicate":     `["x","x"]`,
-		"unknown kind":  `[{"intent":"x","request_kind":"escalate"}]`,
+		"request kind":  `[{"intent":"x","request_kind":"ask"}]`,
 		"unknown field": `[{"intent":"x","grant":"world.read"}]`,
 		"too long":      `["` + strings.Repeat("a", MaxIntentRunes+1) + `"]`,
 	} {
 		if _, err := ParseAccepts(json.RawMessage(raw)); err == nil {
 			t.Errorf("R6 %s: accepted", name)
+		}
+	}
+}
+
+// R8
+func TestFocusKindNeedsTheOwnersObjectOfAKindTheDeskKeeps(t *testing.T) {
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:focuskind", Verbs: []string{"Cast"},
+		Taint: deskmanifest.TaintUntrustedInput, UID: 62904, WorkerMaxBytes: 64 << 20, OwnedKinds: []string{"choir.app.focuskind.note"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deskmanifest.RegisterApp(d); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = deskmanifest.RetireApp("app:focuskind") })
+	registerApp(t, "focusnone", 62905, "notes")
+	own, err := objectgraph.BuildCanonicalID("choir.app.focuskind.note", "owner-1", "n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign, err := objectgraph.BuildCanonicalID("texture.document", "owner-1", "doc-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind, err := FocusKind("app:focuskind", "owner-1", own); err != nil || kind != "choir.app.focuskind.note" {
+		t.Fatalf("own note: %q %v", kind, err)
+	}
+	for name, c := range map[string][3]string{
+		"empty":         {"app:focuskind", "owner-1", ""},
+		"oversized":     {"app:focuskind", "owner-1", own + strings.Repeat("a", MaxObjectRefBytes)},
+		"not canonical": {"app:focuskind", "owner-1", "msg-42"},
+		"other owner":   {"app:focuskind", "owner-2", own},
+		"foreign kind":  {"app:focuskind", "owner-1", foreign},
+		"owns no kind":  {"app:focusnone", "owner-1", own},
+		"not routable":  {"app:missing", "owner-1", own},
+	} {
+		if _, err := FocusKind(c[0], c[1], c[2]); err == nil {
+			t.Errorf("R8 %s: accepted", name)
 		}
 	}
 }

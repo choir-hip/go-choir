@@ -138,6 +138,11 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		writeAPIJSON(w, status, apiError{Error: message})
 		return
 	}
+	// A routed submit to a package desk has no Texture hand-off; its command
+	// id is still the submit's (review r1 item 10).
+	if handoff.Conductor.CommandID == "" {
+		handoff.Conductor.CommandID = commandID
+	}
 	writeAPIJSON(w, http.StatusAccepted, promptBarSubmitResponse{
 		Schema:       types.DurableWorkSchemaV1,
 		SubmissionID: rec.RunID,
@@ -163,16 +168,22 @@ func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter
 	defaultDesk := agentprofile.Texture
 	app := strings.TrimSpace(focus.AppAgentID)
 	ref := strings.TrimSpace(focus.ObjectRef)
+	// An in-process caller is refused before any registry answer, so the
+	// refusal says nothing about which desks exist (review r1 item 6).
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a focused submit is an owner act; address the app agent's desk"})
+		return
+	}
 	if len(focus.Selection) > promptBarSelectionBytes {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus selection is too long"})
 		return
 	}
-	if !promptroute.Addressable(defaultDesk, app) {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus names an app agent the prompt bar cannot address"})
+	if len(ref) > promptroute.MaxObjectRefBytes {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus object_ref is too long"})
 		return
 	}
-	if strings.TrimSpace(r.RemoteAddr) == "" {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a focused submit is an owner act; address the app agent's desk"})
+	if !promptroute.Addressable(defaultDesk, app) {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus names an app agent the prompt bar cannot address"})
 		return
 	}
 	if app == defaultDesk {
@@ -183,8 +194,15 @@ func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter
 		h.continuePromptBarDocument(ctx, w, r, ownerID, ref, text, commandID)
 		return
 	}
+	// A package desk's focus names the owner's object of a kind that desk is
+	// the custodian of; the request carries that kind's owner_private label.
+	kind, err := promptroute.FocusKind(app, ownerID, ref)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
 	runID := h.Core.PromptBarRunID(ownerID, commandID)
-	if _, err := h.Core.DeliverOwnerRequest(ctx, ownerID, runID, app, text, &agentcore.OwnerFocus{AppAgentID: app, ObjectRef: ref, Selection: focus.Selection}, ""); err != nil {
+	if _, err := h.Core.DeliverOwnerRequest(ctx, ownerID, runID, app, text, &agentcore.OwnerFocus{AppAgentID: app, ObjectRef: ref, Kind: kind, Selection: focus.Selection}, ""); err != nil {
 		log.Printf("texture prompt bar: focused request to %s: %v", app, err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
 		return
@@ -300,9 +318,16 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 	if routed != nil && routed.Rule != promptroute.RuleContentURL && routed.Destination != defaultDesk {
 		if _, err := h.Core.DeliverOwnerRequest(ctx, ownerID, runID, routed.Destination, text, nil, routed.RecordID); err != nil {
 			log.Printf("texture prompt bar: hand-off to %s: %v; taking the default route", routed.Destination, err)
-			routed.Destination, routed.App, routed.Reason = defaultDesk, defaultDesk, "the hand-off could not be written"
+			// The route record stays as frozen (the router's prediction); the
+			// dispatch record and the run say it was not delivered.
+			if rerr := h.Core.RecordRouteDispatchFailure(ctx, ownerID, runID, *routed, err); rerr != nil {
+				log.Printf("texture prompt bar: record the failed hand-off of %s: %v", runID, rerr)
+			}
+			routed.Destination, routed.App = defaultDesk, defaultDesk
+			routed.Reason, routed.Dispatch = "the hand-off could not be written", agentcore.RouteDispatchFailed
 		} else {
 			requestedApp = routed.App
+			routed.Dispatch = agentcore.RouteDispatchDelivered
 		}
 	}
 	title := provider.InitialTextureTitle(text, "")

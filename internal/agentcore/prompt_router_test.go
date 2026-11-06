@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/promptroute"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -33,6 +35,14 @@ import (
 //  F7 The decision is not recorded before the app opens, or the record lacks
 //     the distribution, the model, the rule or the run.
 //  F8 The choice bound drifts from System 1's host bound.
+//
+// Review r1 (written before the fixes):
+//  F9  A panic in the router or in its System 1 call fails the submit or
+//      crashes the guest instead of taking the default.
+//  F10 A call that ends at the router's deadline with a wrapped error is
+//      recorded judge_failed, not judge_timeout.
+//  F11 A route whose hand-off failed leaves the ledger claiming delivery.
+//  F12 An abstained route offers the default it took as an alternative.
 
 func registerRouterApp(t *testing.T, slug string, uid uint32, accepts ...string) {
 	t.Helper()
@@ -131,7 +141,7 @@ func TestRouterAbstainsBelowTheta(t *testing.T) {
 	f.judge.first = 0.55
 	f.judge.prefer = map[string]string{promptroute.QuestionID: "app:abstainmail"}
 	r := f.rt.RoutePrompt(context.Background(), f.owner, "run-abstain", "hmm", agentprofile.Texture)
-	if r.Destination != agentprofile.Texture || r.Rule != promptroute.RuleAbstain || len(r.Alternatives) == 0 || r.Alternatives[0] != "app:abstainmail" {
+	if r.Destination != agentprofile.Texture || r.Rule != promptroute.RuleAbstain || len(r.Alternatives) != 1 || r.Alternatives[0] != "app:abstainmail" {
 		t.Fatalf("route = %+v", r)
 	}
 	if rec := routeRecord(t, f, "run-abstain"); rec.SubjectRefs["alternatives"] == "" {
@@ -234,5 +244,67 @@ func TestRouterReplayAsksNothing(t *testing.T) {
 	again := f.rt.RoutePrompt(context.Background(), f.owner, runID, "check email", agentprofile.Texture)
 	if !again.Replayed || again.Destination != "app:replaymail" || f.judge.callCount() != calls {
 		t.Fatalf("replay = %+v, calls %d -> %d", again, calls, f.judge.callCount())
+	}
+}
+
+// F9
+func TestRouterPanicTakesTheDefault(t *testing.T) {
+	f := newSystem1Fixture(t)
+	registerRouterApp(t, "panicmail", 62939, "email")
+	prev := promptRouterAsk
+	promptRouterAsk = func(*Runtime, context.Context, toolregistry.ExecutionContext, string, string, system1Ask) (json.RawMessage, error) {
+		panic("boom in the service")
+	}
+	t.Cleanup(func() { promptRouterAsk = prev })
+	r := f.rt.RoutePrompt(context.Background(), f.owner, "run-panic", "email", agentprofile.Texture)
+	if r.Destination != agentprofile.Texture || r.Rule != promptroute.RuleJudgeFailed || r.RecordID == "" {
+		t.Fatalf("route = %+v", r)
+	}
+}
+
+// F10
+func TestRouterDeadlineWithAWrappedErrorIsATimeout(t *testing.T) {
+	f := newSystem1Fixture(t)
+	registerRouterApp(t, "latemail", 62940, "email")
+	prevAsk, prevTimeout := promptRouterAsk, promptRouterTimeout
+	promptRouterTimeout = 100 * time.Millisecond
+	// The service answers just inside the router's timer, with its deadline
+	// error formatted as text (system1Call's %s).
+	promptRouterAsk = func(_ *Runtime, ctx context.Context, _ toolregistry.ExecutionContext, _, _ string, _ system1Ask) (json.RawMessage, error) {
+		<-ctx.Done()
+		return nil, fmt.Errorf("choir.System1: the judge call failed: %s", ctx.Err().Error())
+	}
+	t.Cleanup(func() { promptRouterAsk, promptRouterTimeout = prevAsk, prevTimeout })
+	r := f.rt.RoutePrompt(context.Background(), f.owner, "run-late", "email", agentprofile.Texture)
+	if r.Destination != agentprofile.Texture || r.Rule != promptroute.RuleJudgeTimeout {
+		t.Fatalf("route = %+v", r)
+	}
+}
+
+// F11
+func TestRouterDispatchFailureIsOnTheLedgerAndTheRun(t *testing.T) {
+	f := newSystem1Fixture(t)
+	route := PromptRoute{Decision: promptroute.Decision{Destination: "app:gone", App: "gone", Rule: promptroute.RuleJudge}, RecordID: "route:run-gone"}
+	if err := f.rt.RecordRouteDispatchFailure(context.Background(), f.owner, "run-gone", route, errors.New("store refused")); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := f.s.ListCommitmentRecords(context.Background(), f.owner, f.computer, promptroute.Service, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range recs {
+		if r.RecordID == "route:run-gone:dispatch" {
+			found = r.SubjectRefs["dispatch"] == RouteDispatchFailed && r.SubjectRefs["routed_to"] == "app:gone" &&
+				len(r.RelatedIDs) == 1 && r.RelatedIDs[0] == "route:run-gone" && strings.Contains(r.SubjectRefs["reason"], "store refused")
+		}
+	}
+	if !found {
+		t.Fatalf("no dispatch record: %+v", recs)
+	}
+	route.Destination, route.App, route.Reason, route.Dispatch = agentprofile.Texture, agentprofile.Texture, "the hand-off could not be written", RouteDispatchFailed
+	m := route.Metadata()
+	if m[runMetadataRouteDispatch] != RouteDispatchFailed || m[runMetadataRouteReason] == "" {
+		t.Fatalf("run metadata = %v", m)
 	}
 }

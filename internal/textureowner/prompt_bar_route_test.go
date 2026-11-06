@@ -15,6 +15,15 @@ package textureowner
 //  D5 A focused submit to a package desk carries no owner-origin request with
 //     the focus, labelled for that app only.
 //  D6 The decision run does not carry the route record it followed.
+//
+// Review r1 (written before the fixes):
+//  D7 A package-desk focus is taken with no object_ref, an oversized or
+//     non-canonical ref, another owner's object, or a kind the focused desk
+//     is not the custodian of; or its request is labelled by the app, not by
+//     the focused object's kind.
+//  D8 An in-process caller learns from a 400 vs a 403 which desks exist.
+//  D9 A routed hand-off is labelled as the router's own record, or its 202
+//     carries no command id.
 
 import (
 	"context"
@@ -27,6 +36,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/promptroute"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -71,8 +81,13 @@ func (j *routeJudge) count() int {
 
 func registerRouteDesk(t *testing.T, slug string, uid uint32, accepts ...string) string {
 	t.Helper()
+	return registerRouteDeskOwning(t, slug, uid, nil, accepts...)
+}
+
+func registerRouteDeskOwning(t *testing.T, slug string, uid uint32, kinds []string, accepts ...string) string {
+	t.Helper()
 	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:" + slug, Verbs: []string{"Cast"},
-		Taint: deskmanifest.TaintUntrustedInput, UID: uid, WorkerMaxBytes: 64 << 20, Accepts: accepts})
+		Taint: deskmanifest.TaintUntrustedInput, UID: uid, WorkerMaxBytes: 64 << 20, Accepts: accepts, OwnedKinds: kinds})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,13 +144,17 @@ func TestPromptBarRoutesToAnInstalledPackageDesk(t *testing.T) {
 	if resp["doc_id"] != nil && resp["doc_id"] != "" {
 		t.Fatalf("D1: a routed submit created a Texture: %v", resp)
 	}
+	if resp["command_id"] != "route-mail" {
+		t.Fatalf("D9: the routed 202 carries no command id: %v", resp)
+	}
 	d := decisionOf(t, handler, owner, resp["submission_id"].(string))
 	if d.Action != "open_app" || d.App != "routebar" || d.RouteRule != promptroute.RuleJudge || d.RouteRecordID == "" {
 		t.Fatalf("D1/D6: decision = %+v", d)
 	}
 	reqs := ownerRecords(t, handler, owner, desk+":"+owner)
 	if len(reqs) != 1 || reqs[0].Provenance.Origin != types.OriginOwner || reqs[0].Directive == nil ||
-		reqs[0].Directive.Objective != "summarize my inbox from today" || len(reqs[0].RelatedIDs) != 1 || reqs[0].RelatedIDs[0] != d.RouteRecordID {
+		reqs[0].Directive.Objective != "summarize my inbox from today" || len(reqs[0].RelatedIDs) != 1 || reqs[0].RelatedIDs[0] != d.RouteRecordID ||
+		strings.Join(reqs[0].Provenance.Labels, ",") != types.OwnerPrivateLabel("prompt_bar") {
 		t.Fatalf("D1: hand-off records = %+v", reqs)
 	}
 	// A retry of the same command pays nothing and opens the same app.
@@ -181,12 +200,14 @@ func TestPromptBarInProcessCallerIsNotRouted(t *testing.T) {
 // D4, D5
 func TestPromptBarFocusGoesToTheFocusedAppAgentOnly(t *testing.T) {
 	core, handler := testAPISetup(t)
-	desk := registerRouteDesk(t, "routefocus", 62954, "email")
+	const noteKind = "choir.app.routefocus.note"
+	desk := registerRouteDeskOwning(t, "routefocus", 62954, []string{noteKind}, "email")
 	registerRouteDesk(t, "routefocus-candidate", 62955, "email")
 	judge := &routeJudge{prefer: desk, p: 0.99}
 	core.SetCandidateJudge(judge)
 	owner := "user-focus"
-	focus := map[string]string{"app_agent_id": desk, "object_ref": "msg-42", "selection": "the second paragraph"}
+	ref := canonicalRef(t, noteKind, owner, "n42")
+	focus := map[string]string{"app_agent_id": desk, "object_ref": ref, "selection": "the second paragraph"}
 	w := postPromptBar(t, handler, owner, map[string]any{"text": "reply yes", "command_id": "focus-1", "focus": focus}, false)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
@@ -195,8 +216,8 @@ func TestPromptBarFocusGoesToTheFocusedAppAgentOnly(t *testing.T) {
 		t.Fatalf("D4: a focused submit asked the conductor (%d calls)", judge.count())
 	}
 	reqs := ownerRecords(t, handler, owner, desk+":"+owner)
-	if len(reqs) != 1 || reqs[0].Directive.TargetRef != "msg-42" || reqs[0].Directive.Body != "the second paragraph" ||
-		strings.Join(reqs[0].Provenance.Labels, ",") != types.OwnerPrivateLabel("routefocus") {
+	if len(reqs) != 1 || reqs[0].Directive.TargetRef != ref || reqs[0].Directive.Body != "the second paragraph" ||
+		strings.Join(reqs[0].Provenance.Labels, ",") != types.OwnerPrivateLabel(noteKind)+","+types.OwnerPrivateLabel("prompt_bar") {
 		t.Fatalf("D5: focused request = %+v", reqs)
 	}
 	if recs := ownerRecords(t, handler, owner, promptroute.Service); len(recs) != 0 {
@@ -210,11 +231,41 @@ func TestPromptBarFocusGoesToTheFocusedAppAgentOnly(t *testing.T) {
 			t.Fatalf("D4: focus on %q: status=%d body=%s", name, w.Code, w.Body.String())
 		}
 	}
-	if w := postPromptBar(t, handler, owner, map[string]any{"text": "do it", "command_id": "inproc-focus", "focus": focus}, true); w.Code != http.StatusForbidden {
-		t.Fatalf("D4: in-process focus status=%d", w.Code)
+	// D8: an in-process caller is refused alike for a registered and an
+	// unregistered desk.
+	for _, name := range []string{desk, "app:not-installed", agentprofile.Engineering} {
+		if w := postPromptBar(t, handler, owner, map[string]any{"text": "do it", "command_id": "inproc-focus-" + name,
+			"focus": map[string]string{"app_agent_id": name, "object_ref": ref}}, true); w.Code != http.StatusForbidden {
+			t.Fatalf("D4/D8: in-process focus on %s status=%d", name, w.Code)
+		}
+	}
+	// D7
+	for name, badRef := range map[string]string{
+		"missing":       "",
+		"not canonical": "msg-42",
+		"oversized":     ref + strings.Repeat("a", promptroute.MaxObjectRefBytes),
+		"other owner":   canonicalRef(t, noteKind, "user-mallory", "n42"),
+		"foreign kind":  canonicalRef(t, "texture.document", owner, "doc-1"),
+	} {
+		if w := postPromptBar(t, handler, owner, map[string]any{"text": "do it", "command_id": "bad-ref-" + strings.ReplaceAll(name, " ", "-"),
+			"focus": map[string]string{"app_agent_id": desk, "object_ref": badRef}}, false); w.Code != http.StatusBadRequest {
+			t.Fatalf("D7: %s ref status=%d body=%s", name, w.Code, w.Body.String())
+		}
+	}
+	if reqs := ownerRecords(t, handler, owner, desk+":"+owner); len(reqs) != 1 {
+		t.Fatalf("D7: a refused focus wrote a request: %d", len(reqs))
 	}
 	if w := postPromptBar(t, handler, owner, map[string]any{"text": "do it", "command_id": "unknown-field",
 		"focus": map[string]string{"app_agent_id": desk, "object_ref": "x", "desk": "engineering"}}, false); w.Code != http.StatusBadRequest {
 		t.Fatalf("D4: an unknown focus field status=%d", w.Code)
 	}
+}
+
+func canonicalRef(t *testing.T, kind, owner, suffix string) string {
+	t.Helper()
+	id, err := objectgraph.BuildCanonicalID(objectgraph.ObjectKind(kind), owner, suffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

@@ -53,11 +53,33 @@ const (
 	runMetadataRouteApp          = "route_app"
 	runMetadataRouteRule         = "route_rule"
 	runMetadataRouteAlternatives = "route_alternatives"
+	runMetadataRouteReason       = "route_reason"
+	runMetadataRouteDispatch     = "route_dispatch"
+)
+
+// Dispatch outcomes of a route (run metadata route_dispatch).
+const (
+	RouteDispatchDelivered = "delivered"
+	RouteDispatchFailed    = "failed"
 )
 
 // routerLabel is the provenance label of the router's call and records: the
 // owner's own text, private to the owner (plan 9.2 item 6).
 var routerLabel = types.OwnerPrivateLabel("router")
+
+// ownerTextLabel is the label of the owner's typed text on every hand-off to
+// a desk (routed or focused): the owner's own input from the prompt bar. A
+// focused hand-off also carries owner_private:<kind of the focused object>,
+// the label of the custodian's data it points at. The router's own call and
+// route record keep owner_private:router (plan 9.2 item 6), so the router's
+// records and a desk's requests are told apart (review r1 item 4).
+var ownerTextLabel = types.OwnerPrivateLabel("prompt_bar")
+
+// promptRouterAsk is the router's System 1 call; a var so a test can make it
+// fail in ways a judge cannot (a panic in the service).
+var promptRouterAsk = func(rt *Runtime, ctx context.Context, exec toolregistry.ExecutionContext, owner, computer string, ask system1Ask) (json.RawMessage, error) {
+	return rt.System1().Ask(ctx, exec, owner, computer, ask)
+}
 
 // PromptRoute is one route as the prompt bar reads it.
 type PromptRoute struct {
@@ -71,6 +93,10 @@ type PromptRoute struct {
 	// Replayed marks a route read back from an earlier submit of the same
 	// command: no question was asked and no record written.
 	Replayed bool `json:"replayed,omitempty"`
+	// Dispatch is the hand-off's outcome for a route to a package desk:
+	// delivered, or failed (the default was opened instead and a dispatch
+	// record on the ledger says so).
+	Dispatch string `json:"dispatch,omitempty"`
 }
 
 // Metadata is the route as prompt-bar run metadata.
@@ -86,6 +112,12 @@ func (r PromptRoute) Metadata() map[string]any {
 	if len(r.Alternatives) > 0 {
 		m[runMetadataRouteAlternatives] = strings.Join(r.Alternatives, ",")
 	}
+	if r.Reason != "" {
+		m[runMetadataRouteReason] = r.Reason
+	}
+	if r.Dispatch != "" {
+		m[runMetadataRouteDispatch] = r.Dispatch
+	}
 	return m
 }
 
@@ -98,8 +130,16 @@ func (rt *Runtime) PromptBarRunID(ownerID, commandID string) string {
 
 // RoutePrompt routes the owner's text among the candidates the registry
 // derives, defaulting to defaultDesk. It never fails: every failure is the
-// default route, recorded with its cause.
-func (rt *Runtime) RoutePrompt(ctx context.Context, ownerID, runID, text, defaultDesk string) PromptRoute {
+// default route, recorded with its cause, and a panic in the router is the
+// default route too (review r1 item 2).
+func (rt *Runtime) RoutePrompt(ctx context.Context, ownerID, runID, text, defaultDesk string) (route PromptRoute) {
+	defer func() {
+		if p := recover(); p != nil {
+			log.Printf("prompt router: panic routing %s: %v; taking the default route", runID, p)
+			route = PromptRoute{Decision: promptroute.Decision{Destination: defaultDesk, App: defaultDesk,
+				Rule: promptroute.RuleJudgeFailed, Reason: "the router panicked"}, RecordError: "the router panicked"}
+		}
+	}()
 	candidates := promptroute.Candidates(defaultDesk)
 	if replay, ok := rt.promptRouteReplay(ctx, ownerID, runID); ok {
 		return replay
@@ -110,8 +150,8 @@ func (rt *Runtime) RoutePrompt(ctx context.Context, ownerID, runID, text, defaul
 	if rt == nil || rt.candidateJudge == nil {
 		return rt.freezeRoute(ctx, ownerID, runID, candidates, PromptRoute{Decision: promptroute.Fallback(candidates, promptroute.RuleNoJudge, "no decision model is bound on this computer")})
 	}
-	route := rt.askRouter(ctx, ownerID, runID, text, candidates)
-	return rt.freezeRoute(ctx, ownerID, runID, candidates, route)
+	asked := rt.askRouter(ctx, ownerID, runID, text, candidates)
+	return rt.freezeRoute(ctx, ownerID, runID, candidates, asked)
 }
 
 // RecordRuleRoute freezes a rule route: the deterministic URL classifier's
@@ -144,7 +184,8 @@ func (rt *Runtime) promptRouteReplay(ctx context.Context, ownerID, runID string)
 	}
 	r := PromptRoute{Replayed: true, RecordID: metadataStringValue(rec.Metadata, runMetadataRouteRecordID), Decision: promptroute.Decision{
 		Destination: dest, App: metadataStringValue(rec.Metadata, runMetadataRouteApp), Rule: metadataStringValue(rec.Metadata, runMetadataRouteRule),
-	}}
+		Reason: metadataStringValue(rec.Metadata, runMetadataRouteReason),
+	}, Dispatch: metadataStringValue(rec.Metadata, runMetadataRouteDispatch)}
 	if alts := metadataStringValue(rec.Metadata, runMetadataRouteAlternatives); alts != "" {
 		r.Alternatives = strings.Split(alts, ",")
 	}
@@ -166,21 +207,31 @@ func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, c
 		raw   json.RawMessage
 		model string
 		err   error
+		// late: the call ended at the router's deadline, whatever error
+		// text the service wrapped it in (review r1 item 7).
+		late bool
 	}
 	done := make(chan answer, 1)
 	askCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptRouterTimeout)
 	exec := toolregistry.ExecutionContext{RunID: runID, AgentID: promptroute.Service, OwnerID: ownerID, ComputerID: rt.cfg.ComputerID}
 	go func() {
 		defer cancel()
+		// A panic in the service is an error answer, never a crashed guest.
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("prompt router: panic in the System 1 call of %s: %v", runID, p)
+				done <- answer{err: fmt.Errorf("the System 1 call panicked")}
+			}
+		}()
 		var model string
-		raw, err := rt.System1().Ask(askCtx, exec, ownerID, rt.cfg.ComputerID, system1Ask{
+		raw, err := promptRouterAsk(rt, askCtx, exec, ownerID, rt.cfg.ComputerID, system1Ask{
 			questions: questions, labels: types.NewLabelSet(routerLabel), model: &model,
 			hostText: map[string]string{
 				routerHostInputRef:        "The owner's input to the prompt bar: " + routerBound(text),
 				routerHostDestinationsRef: promptroute.Destinations(candidates),
 			},
 		})
-		done <- answer{raw: raw, model: model, err: err}
+		done <- answer{raw: raw, model: model, err: err, late: errors.Is(askCtx.Err(), context.DeadlineExceeded)}
 	}()
 	timer := time.NewTimer(promptRouterTimeout)
 	defer timer.Stop()
@@ -193,7 +244,7 @@ func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, c
 	}
 	if got.err != nil {
 		rule := promptroute.RuleJudgeFailed
-		if errors.Is(got.err, context.DeadlineExceeded) {
+		if got.late {
 			rule = promptroute.RuleJudgeTimeout
 		}
 		return PromptRoute{Decision: promptroute.Fallback(candidates, rule, system1Message(got.err))}
@@ -283,6 +334,13 @@ func (rt *Runtime) freezeRoute(ctx context.Context, ownerID, runID string, candi
 		EmitterKind:  types.CommitmentEmitterSystem, ComputerID: rt.cfg.ComputerID, SubjectRefs: subject,
 	}
 	if _, err := rt.store.AppendCommitmentRecord(context.WithoutCancel(ctx), ownerID, rt.cfg.ComputerID, rec); err != nil {
+		route.RecordError = err.Error()
+		if route.Rule == promptroute.RuleContentURL {
+			// The URL rule is deterministic and opens no desk: its app opens
+			// whether or not its record could be written.
+			log.Printf("prompt router: record the rule route of %s: %v", runID, err)
+			return route
+		}
 		log.Printf("prompt router: record the route of %s: %v; taking the default route", runID, err)
 		route.Decision = promptroute.Fallback(candidates, route.Rule, "the route record could not be written")
 		route.RecordError = err.Error()
@@ -293,29 +351,36 @@ func (rt *Runtime) freezeRoute(ctx context.Context, ownerID, runID string, candi
 }
 
 // OwnerFocus is a focused submit's focus (plan 9.2, "Focus-aware request"):
-// the focused window's app agent, the ref of its focused object and an
-// optional bounded selection inside it. It goes only to that app agent.
+// the focused window's app agent, the ref of its focused object, the object's
+// kind (checked by promptroute.FocusKind: the owner's object, of a kind the
+// desk is custodian of) and an optional bounded selection inside it. It goes
+// only to that app agent.
 type OwnerFocus struct {
 	AppAgentID string
 	ObjectRef  string
+	Kind       string
 	Selection  string
 }
 
 // DeliverOwnerRequest is the hand-off to a package desk: an owner-origin
 // request record (a Cast directive) addressed to the desk, carrying the
-// owner's text and, for a focused submit, the focus labelled
-// owner_private:<app>. The desk decides what the text is for. The record id
+// owner's text (labelled owner_private:prompt_bar) and, for a focused submit,
+// the focus, labelled owner_private:<kind of the focused object> as well. The
+// desk decides what the text is for. The record id
 // is one per prompt-bar run, so a retry re-mints nothing.
 func (rt *Runtime) DeliverOwnerRequest(ctx context.Context, ownerID, runID, desk, text string, focus *OwnerFocus, routeRecordID string) (string, error) {
 	if rt == nil || rt.store == nil {
 		return "", fmt.Errorf("owner request: no store")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	labels := types.NewLabelSet(routerLabel)
+	if focus != nil && strings.TrimSpace(focus.Kind) == "" {
+		return "", fmt.Errorf("owner request to %s: a focus needs its object's checked kind", desk)
+	}
+	labels := types.NewLabelSet(ownerTextLabel)
 	directive := &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: text}
 	subject := map[string]string{"prompt_bar_run": runID, "desk": desk}
 	if focus != nil {
-		labels = types.NewLabelSet(types.OwnerPrivateLabel(promptroute.AppOf(desk)))
+		labels = types.NewLabelSet(ownerTextLabel, types.OwnerPrivateLabel(focus.Kind))
 		directive.TargetRef = focus.ObjectRef
 		directive.Body = focus.Selection
 		subject["focus_object_ref"] = focus.ObjectRef
@@ -339,4 +404,37 @@ func (rt *Runtime) DeliverOwnerRequest(ctx context.Context, ownerID, runID, desk
 		return "", fmt.Errorf("owner request to %s: %w", desk, err)
 	}
 	return rec.RecordID, nil
+}
+
+// RecordRouteDispatchFailure records that a frozen route to a package desk
+// was not delivered (its hand-off record could not be written) and the
+// default opened instead (review r1 item 3): a report on the ledger, linked
+// to the route record, so the ledger never claims a delivered route. The run
+// metadata carries the same outcome (PromptRoute.Dispatch and Reason).
+func (rt *Runtime) RecordRouteDispatchFailure(ctx context.Context, ownerID, runID string, route PromptRoute, cause error) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("route dispatch: no store")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	reason := "the hand-off could not be written"
+	if cause != nil {
+		reason += ": " + cause.Error()
+	}
+	var related []string
+	if route.RecordID != "" {
+		related = []string{route.RecordID}
+	}
+	rec := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: promptRouteRecordID(runID) + ":dispatch", Kind: types.CommitmentKindReport,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance: types.CommitmentProvenance{AgentID: promptroute.Service, ModelID: "rule:dispatch", RunID: runID, Origin: types.OriginSystem,
+			CommittedAt: now, Labels: types.NewLabelSet(routerLabel).Strings()},
+		Prediction:  types.CommitmentPrediction{Hypothesis: "the route to " + route.Destination + " was not delivered", CommittedAt: now},
+		Observation: types.CommitmentObservation{Excerpt: reason, SourceRef: "prompt_bar_run:" + runID, ObservedAt: now},
+		Addressee:   promptroute.Service, EmitterKind: types.CommitmentEmitterSystem, ComputerID: rt.cfg.ComputerID,
+		SubjectRefs: map[string]string{"dispatch": RouteDispatchFailed, "routed_to": route.Destination, "prompt_bar_run": runID, "reason": reason},
+		RelatedIDs:  related,
+	}
+	_, err := rt.store.AppendCommitmentRecord(context.WithoutCancel(ctx), ownerID, rt.cfg.ComputerID, rec)
+	return err
 }

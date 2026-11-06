@@ -87,20 +87,18 @@ const (
 
 // Accept is one entry of a package desk's `accepts` (plan 9.2 item 1, a
 // field of contributes.desks[]): a plain-language intent the desk takes from
-// the prompt bar, and the request kind the router sends it. The manifest
-// writes an entry as a string (the intent) or as an object.
+// the prompt bar. The manifest writes an entry as a string (the intent) or as
+// an object {intent}. Every hand-off is a Cast: the request kinds the plan
+// mentions are not declared until a desk needs another one (review r1 item
+// 5: a declared kind the router did not send was dead).
 type Accept struct {
 	Intent string `json:"intent"`
-	// RequestKind is "cast" (the default) or "ask".
-	RequestKind string `json:"request_kind,omitempty"`
 }
 
 // Bounds of an accepts declaration.
 const (
-	MaxAccepts      = 64
-	MaxIntentRunes  = 200
-	RequestKindCast = "cast"
-	RequestKindAsk  = "ask"
+	MaxAccepts     = 64
+	MaxIntentRunes = 200
 )
 
 // UnmarshalJSON reads a string or a strict object.
@@ -119,7 +117,7 @@ func (a *Accept) UnmarshalJSON(raw []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(t))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&p); err != nil {
-		return fmt.Errorf("an accepts entry is a string or {intent, request_kind}: %w", err)
+		return fmt.Errorf("an accepts entry is a string or {intent}: %w", err)
 	}
 	*a = Accept(p)
 	return nil
@@ -139,11 +137,6 @@ func (a Accept) Validate() error {
 			return errors.New("an intent has no control characters")
 		}
 	}
-	switch a.RequestKind {
-	case "", RequestKindCast, RequestKindAsk:
-	default:
-		return fmt.Errorf("request_kind %q is not cast or ask", a.RequestKind)
-	}
 	return nil
 }
 
@@ -155,7 +148,7 @@ func ParseAccepts(raw json.RawMessage) ([]Accept, error) {
 	}
 	var list []Accept
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, fmt.Errorf("accepts must be a list of strings or {intent, request_kind} objects: %w", err)
+		return nil, fmt.Errorf("accepts must be a list of strings or {intent} objects: %w", err)
 	}
 	if list == nil {
 		return nil, errors.New("accepts must be a list")
@@ -250,6 +243,40 @@ func Addressable(defaultDesk, desk string) bool {
 	return ok
 }
 
+// MaxObjectRefBytes bounds a focus object_ref.
+const MaxObjectRefBytes = 512
+
+// FocusKind checks a package desk's focus (plan 9.2, "Focus-aware request"):
+// the ref is required, bounded, a canonical object id of ownerID's, and of a
+// kind desk is the custodian of (its OwnedKinds). It returns that kind, whose
+// owner_private label the focused request carries. A desk that owns no kind
+// takes no focus.
+func FocusKind(desk, ownerID, ref string) (string, error) {
+	if ref == "" {
+		return "", errors.New("focus object_ref is required")
+	}
+	if len(ref) > MaxObjectRefBytes {
+		return "", fmt.Errorf("focus object_ref is over %d bytes", MaxObjectRefBytes)
+	}
+	d, ok := routableDesk(desk)
+	if !ok {
+		return "", errors.New("focus names an app agent the prompt bar cannot address")
+	}
+	kind, owner, _, err := objectgraph.ParseCanonicalID(ref)
+	if err != nil {
+		return "", errors.New("focus object_ref is not an object id")
+	}
+	if owner != ownerID {
+		return "", errors.New("focus object_ref is not the owner's object")
+	}
+	for _, k := range d.OwnedKinds {
+		if k == string(kind) {
+			return k, nil
+		}
+	}
+	return "", fmt.Errorf("the focused app agent is not the custodian of %s", kind)
+}
+
 // AppOf is the app (package) a package desk belongs to: app:<slug> is <slug>.
 // Any other name is its own app.
 func AppOf(desk string) string {
@@ -331,12 +358,15 @@ func Decide(candidates []Candidate, given map[string]float64, theta float64) Dec
 		return Decision{Destination: top.Desk, App: top.App, Rule: RuleJudge, Probability: dist[top.Desk], Distribution: dist}
 	}
 	def := defaultOf(candidates)
-	alts := ranked
-	if len(alts) > MaxAlternatives {
-		alts = alts[:MaxAlternatives]
+	// The one-tap choices are the destinations other than the one taken.
+	var alts []string
+	for _, name := range ranked {
+		if name != def.Desk && len(alts) < MaxAlternatives {
+			alts = append(alts, name)
+		}
 	}
 	return Decision{Destination: def.Desk, App: def.App, Rule: RuleAbstain, Probability: dist[def.Desk], Distribution: dist,
-		Alternatives: append([]string(nil), alts...),
+		Alternatives: alts,
 		Reason:       fmt.Sprintf("the top candidate %s at %.2f is below theta %.2f", top.Desk, dist[top.Desk], theta)}
 }
 
