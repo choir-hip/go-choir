@@ -51,7 +51,7 @@ func TestResolveAddressEveryDeskToEveryDesk(t *testing.T) {
 					if !r.Forwarded {
 						t.Errorf("%s -> %s: not forwarded", from, name)
 					}
-				case recipient.Instance == deskmanifest.InstanceOwner:
+				case recipient.Instance == deskmanifest.InstancePerOwner:
 					want = to + ":" + contractOwner
 					if name != to {
 						continue // a subject other than the owner is not the owner's inbox

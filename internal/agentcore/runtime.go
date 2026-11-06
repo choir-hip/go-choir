@@ -856,10 +856,11 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 	if d, ok := deskmanifest.Lookup(profile); ok {
 		switch d.Identity {
 		case deskmanifest.IdentityOwner:
+			// A per_owner desk's identity is its instance (MA4.9).
+			if id, ok := d.OwnerInstance(ownerID); ok {
+				return id
+			}
 			if ownerID != "" {
-				if d.Name == agentprofile.Management {
-					return persistentManagementAgentID(ownerID)
-				}
 				return d.Name + ":" + ownerID
 			}
 		case deskmanifest.IdentitySubject:
@@ -881,12 +882,19 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 	return uuid.New().String()
 }
 
+// persistentManagementAgentID is the owner's instance of the desk that holds
+// the admission ledger (admit.assignment, MA4.9): the persistent per-owner
+// coherence desk, <desk>:<owner>. With no owner it is the bare desk name, the
+// spelling older callers compare against; it is never a second owner's id.
 func persistentManagementAgentID(ownerID string) string {
-	ownerID = strings.TrimSpace(ownerID)
-	if ownerID == "" {
-		return agentprofile.Management
+	holder, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
+	if !ok {
+		return ""
 	}
-	return agentprofile.Management + ":" + ownerID
+	if id, instanced := holder.OwnerInstance(ownerID); instanced {
+		return id
+	}
+	return holder.Name
 }
 
 func defaultChannelID(profile string, metadata map[string]any, parent *types.RunRecord, agentID string) string {

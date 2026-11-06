@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -165,7 +166,11 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	if target.AgentID == "" || target.OwnerID != ownerID || target.ComputerID != computerID || targetProfile == "" {
 		return fmt.Errorf("update_coagent target scope/profile is not authoritative")
 	}
-	if callerProfile == agentprofile.Management && targetProfile == agentprofile.Engineering {
+	// The admission ledger's holder updating an assignment desk (MA4.9: the
+	// grant and the target's instance, not the desks' names) reaches only the
+	// assignment it opened.
+	if targetDesk, ok := deskmanifest.Lookup(targetProfile); ok && targetDesk.Instance == deskmanifest.InstanceAssignment &&
+		deskmanifest.Holds(callerProfile, deskmanifest.GrantAdmitAssignment) {
 		trajectoryID := strings.TrimSpace(trajectoryIDForRun(execution.RunRecord))
 		if trajectoryID == "" {
 			return fmt.Errorf("update_coagent super to co-super requires caller trajectory")

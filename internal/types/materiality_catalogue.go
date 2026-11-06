@@ -26,22 +26,15 @@ type MaterialityEntry struct {
 	ImpactFloor ImpactClass
 }
 
-// The custodian of deskmanifest.AdmissionKind admits every request kind
-// today; its owner in the deskmanifest registry is the custodian of the
-// catalogue's kinds (no desk name is written here, R3).
+// The holder of the admission ledger (the admit.assignment grant, MA4.9)
+// admits every request kind today, so it is the custodian of the catalogue's
+// kinds (no desk name is written here, R3).
 func admissionCustodian() string {
-	for _, name := range deskmanifest.Names() {
-		d, ok := deskmanifest.Lookup(name)
-		if !ok {
-			continue
-		}
-		for _, k := range d.OwnedKinds {
-			if k == deskmanifest.AdmissionKind {
-				return d.Name
-			}
-		}
+	d, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
+	if !ok {
+		return ""
 	}
-	return ""
+	return d.Name
 }
 
 // MaterialityCatalogue lists the entries, in a stable order.

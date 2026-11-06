@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/updater"
@@ -62,6 +62,24 @@ type PlatformUpdateReport struct {
 	Replayed   bool                                `json:"replayed"`
 }
 
+// ErrPlatformUpdateNoHolder marks a computer on which no desk holds the
+// platform.update grant: the update is refused before any mutation, never
+// applied under a default actor.
+var ErrPlatformUpdateNoHolder = errors.New("platform update: no desk holds the platform.update grant")
+
+// platformUpdateActor is the desk the host applies a platform update as: the
+// sole holder of the platform.update grant (MA4.9; management, a first-party
+// system desk). Each canonical event of an update names it. It is "" only on a
+// computer whose registry has no holder, which ApplyPlatformUpdate refuses
+// before it writes anything.
+func platformUpdateActor() string {
+	d, ok := deskmanifest.GrantHolder(deskmanifest.GrantPlatformUpdate)
+	if !ok {
+		return ""
+	}
+	return d.Name
+}
+
 // platformUpdateIdempotencyKey namespaces canonical events for one update.
 func platformUpdateIdempotencyKey(kind, updateID string) string {
 	return "platform-update-" + kind + "-" + updateID
@@ -76,6 +94,9 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	report := PlatformUpdateReport{UpdateID: offer.UpdateID, ComputerID: offer.ComputerID}
 	if rt == nil || rt.selfdevUpdater == nil || rt.selfdevControl == nil || rt.selfdevVerifier == nil || rt.selfdevRoute == nil || rt.eventAppender == nil || rt.store == nil {
 		return report, fmt.Errorf("platform update: runtime surface incomplete")
+	}
+	if platformUpdateActor() == "" {
+		return report, ErrPlatformUpdateNoHolder
 	}
 	if offer.ComputerID != rt.selfdevComputerID {
 		return report, fmt.Errorf("platform update: offer binds a different computer")
@@ -181,7 +202,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: acceptedEventID, ComputerID: computerID,
 			EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: acceptedKey,
-			ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
+			ActorProfile:   platformUpdateActor(), AuthorityRef: "platform-control:update",
 			PrivacyClass:      "owner",
 			ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
 			VerifierRefs:                     offer.VerifierRefs,
@@ -226,7 +247,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: startedEventID, ComputerID: computerID,
 			EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: startedKey,
-			ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:choir-updater",
+			ActorProfile:   platformUpdateActor(), AuthorityRef: "guest-core:choir-updater",
 			PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
 			ProposedEffectRef: offerDigest, DecisionRef: acceptedDigest,
 			ReducerVersion: computerevent.ReducerVersionV1,
@@ -334,7 +355,7 @@ func (rt *Runtime) recordPlatformUpdateApplied(ctx context.Context, offer selfde
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: appliedEventID, ComputerID: computerID,
 		EventKind: computerevent.EventMaterializationApplied, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: appliedKey,
-		ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:choir-updater",
+		ActorProfile:   platformUpdateActor(), AuthorityRef: "guest-core:choir-updater",
 		PrivacyClass:      "owner",
 		ProposedEffectRef: offerDigest, DecisionRef: acceptedDigest,
 		ResultingEffectiveCommitment: head.DesiredStateCommitment,
@@ -450,7 +471,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: computerevent.EventCheckpointPublished, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: checkpointEventIdempotency,
-			ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:checkpoint",
+			ActorProfile:   platformUpdateActor(), AuthorityRef: "platform-control:checkpoint",
 			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
 			ProposedEffectRef: checkpoint.Checkpoint.Digest, DecisionRef: acceptedDigest,
 			ReducerVersion: computerevent.ReducerVersionV1,
@@ -573,7 +594,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: computerevent.EventRouteProjectionUpdated, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: routeEventIdempotency,
-			ActorProfile:   agentprofile.Management, AuthorityRef: "vmctl:route-cas",
+			ActorProfile:   platformUpdateActor(), AuthorityRef: "vmctl:route-cas",
 			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
 			ProposedEffectRef: routeAuthorization.Receipt.ArtifactDigest, DecisionRef: acceptedDigest,
 			ReducerVersion: computerevent.ReducerVersionV1,
@@ -754,7 +775,7 @@ func (rt *Runtime) recordPlatformUpdateFailed(ctx context.Context, offer selfdev
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: offer.ComputerID,
 		EventKind: computerevent.EventMaterializationFailed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: failedKey,
-		ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:choir-updater",
+		ActorProfile:   platformUpdateActor(), AuthorityRef: "guest-core:choir-updater",
 		PrivacyClass:      "owner",
 		ProposedEffectRef: offerDigest, DecisionRef: acceptedDigest,
 		ReducerVersion: computerevent.ReducerVersionV1,
@@ -1144,7 +1165,7 @@ func (rt *Runtime) recordPlatformUpdateSettlementHeld(ctx context.Context, updat
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: rt.selfdevComputerID,
 		EventKind: computerevent.EventRecoveryRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: key,
-		ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:crash-settlement",
+		ActorProfile:   platformUpdateActor(), AuthorityRef: "guest-core:crash-settlement",
 		PrivacyClass:      "owner",
 		ProposedEffectRef: offerDigest, DecisionRef: decisionRef,
 		ReducerVersion: computerevent.ReducerVersionV1,

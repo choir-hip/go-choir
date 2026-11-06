@@ -151,20 +151,10 @@ func init() {
 	RegisterInboxClass(InboxClass{Name: jobInboxClass, Addressable: false})
 }
 
-// assignmentHolder is the system desk that owns the assignment kind.
+// assignmentHolder is the desk that holds the admission ledger (the
+// admit.assignment grant, MA4.9).
 func assignmentHolder() (deskmanifest.Desk, bool) {
-	for _, name := range deskmanifest.Names() {
-		d, ok := deskmanifest.Lookup(name)
-		if !ok || d.Kind != deskmanifest.KindSystem {
-			continue
-		}
-		for _, k := range d.OwnedKinds {
-			if k == deskmanifest.AdmissionKind {
-				return d, true
-			}
-		}
-	}
-	return deskmanifest.Desk{}, false
+	return deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
 }
 
 // ResolveAddress is the inbox a request lands in. Every address but the empty
@@ -254,18 +244,20 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	// holder's inbox as an admission request. Authority never travels.
 	if recipient.Instance == deskmanifest.InstanceAssignment && !holdsAssignments(sender) {
 		holder, ok := assignmentHolder()
-		if !ok || holder.Instance != deskmanifest.InstanceOwner || owner == "" {
+		inbox, instanced := holder.OwnerInstance(owner)
+		if !ok || !instanced {
 			return Route{}, fmt.Errorf("no %s inbox to forward %q to", holder.Name, to)
 		}
-		return Route{Inbox: holder.Name + ":" + owner, OnRoute: true, Forwarded: true}, nil
+		return Route{Inbox: inbox, OnRoute: true, Forwarded: true}, nil
 	}
 
 	switch recipient.Instance {
-	case deskmanifest.InstanceOwner:
-		if owner == "" || (hasSubject && toSubject != owner) {
+	case deskmanifest.InstancePerOwner:
+		inbox, instanced := recipient.OwnerInstance(owner)
+		if !instanced || (hasSubject && toSubject != strings.TrimSpace(owner)) {
 			return Route{}, fmt.Errorf("%q is not this computer's %s inbox (%s:<owner>)", to, recipient.Name, recipient.Name)
 		}
-		return Route{Inbox: recipient.Name + ":" + owner, OnRoute: true}, nil
+		return Route{Inbox: inbox, OnRoute: true}, nil
 	case deskmanifest.InstanceSubject:
 		if sender.Instance == deskmanifest.InstanceSubject {
 			// A subject desk talks to its subject's other desks.
@@ -275,7 +267,7 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 			return Route{Inbox: recipient.Name + ":" + fromSubject, OnRoute: true}, nil
 		}
 		if !named {
-			if sender.Instance == deskmanifest.InstanceOwner {
+			if sender.Instance == deskmanifest.InstancePerOwner {
 				return Route{}, fmt.Errorf("%s addresses a %s by its inbox: pass the record's from (%s:<doc>), not %q", sender.Name, recipient.Name, recipient.Name, to)
 			}
 			return Route{}, fmt.Errorf("%s names the %s inbox it means (%s:<doc>), not %q", sender.Name, recipient.Name, recipient.Name, to)
@@ -310,16 +302,10 @@ func markForwarded(in yaegikernel.StagedIntent, sender string) yaegikernel.Stage
 	return in
 }
 
+// holdsAssignments reports whether a desk admits assignments: it holds the
+// admission ledger grant, which only a first-party system desk may hold.
 func holdsAssignments(d deskmanifest.Desk) bool {
-	if d.Kind != deskmanifest.KindSystem {
-		return false
-	}
-	for _, k := range d.OwnedKinds {
-		if k == deskmanifest.AdmissionKind {
-			return true
-		}
-	}
-	return false
+	return d.HasGrant(deskmanifest.GrantAdmitAssignment)
 }
 
 // isRecordsDesk reports whether a desk's conversations run on records: it

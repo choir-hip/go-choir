@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -515,7 +516,8 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 	}
 	deskProfile := strings.TrimSpace(r.rec.AgentProfile)
-	parent := deskProfile == agentprofile.Management && !task
+	// The admission ledger's holder opens engineering assignments (MA4.9).
+	parent := deskmanifest.Holds(deskProfile, deskmanifest.GrantAdmitAssignment) && !task
 	// A management task stages only its intake acts and Done (§4.1): the
 	// kernel exports nothing else to it, and the reducer refuses anything
 	// else a cell might carry, before anything commits.

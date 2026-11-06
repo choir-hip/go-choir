@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -125,8 +126,14 @@ func (rt *Runtime) productAPIRequest(ctx context.Context, ownerID, ownerEmail, m
 }
 
 // productAPIEgress decodes the cell's payload and calls productAPIRequest
-// with the caller's owner identity. Bound into the desk egress dispatch.
-func (rt *Runtime) productAPIEgress(ctx context.Context, ownerID, ownerEmail string, payload json.RawMessage) (json.RawMessage, error) {
+// with the caller's owner identity. Bound into the desk egress dispatch. The
+// host serves it only to a desk that holds the product.api grant (MA4.9): the
+// daemon's frame check refuses the action first, and this is the host's own
+// check, so no path that reaches the host without the frame check widens it.
+func (rt *Runtime) productAPIEgress(ctx context.Context, deskRole, ownerID, ownerEmail string, payload json.RawMessage) (json.RawMessage, error) {
+	if !deskmanifest.Holds(strings.TrimSpace(deskRole), "product.api") {
+		return nil, fmt.Errorf("product_api is served under the product.api grant, which %q does not hold", deskRole)
+	}
 	var in struct {
 		Method string          `json:"method"`
 		Path   string          `json:"path"`

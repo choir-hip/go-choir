@@ -145,8 +145,10 @@ type Instance string
 const (
 	// InstanceNone: the desk has no records inbox.
 	InstanceNone Instance = ""
-	// InstanceOwner: one per owner, <desk>:<owner>.
-	InstanceOwner Instance = "owner"
+	// InstancePerOwner: one per owner, <desk>:<owner>. It is also the desk's
+	// persistent identity: its agent id is the same <desk>:<owner>
+	// (OwnerInstance), so the inbox and the agent never disagree (MA4.9).
+	InstancePerOwner Instance = "per_owner"
 	// InstanceSubject: one per subject (a document), <desk>:<doc>.
 	InstanceSubject Instance = "subject"
 	// InstanceAssignment: one per assignment, <desk>:<assignment>; only
@@ -317,7 +319,7 @@ const mib = 1 << 20
 var system = []Desk{
 	{
 		Name: Management, Kind: KindSystem, Carrier: CarrierDeskWorker,
-		Instance: InstanceOwner,
+		Instance: InstancePerOwner,
 		// Management delegates engineering work and reports; it does not
 		// touch the filesystem (mutation is capsule-bound under
 		// engineering). It reads the captures a capture arrival names and
@@ -326,7 +328,10 @@ var system = []Desk{
 			G("act.escalate"), G("act.precommit"), G("act.report"), G("act.report_packet"), G("act.resolve"), G("act.disagree"),
 			G("product.api"), G("captures.read"), G("intake.read"), G("intake.dispose"), G("assignment.verify"),
 			G("delegate.task"), G("calibration.read"), G("calibration.restate"),
-			G("updates.read"), G("cell.deadline", "5m0s")},
+			G("updates.read"), G("cell.deadline", "5m0s"),
+			// The admission ledger and the platform update (MA4.9): one
+			// holder each, first-party only.
+			G("admit.assignment"), G("platform.update")},
 		Sandbox: Sandbox{Profile: "desk_cell", UID: 61001},
 		Taint:   TaintPrivileged,
 		Memory:  Memory{WorkerMaxBytes: 768 * mib},
@@ -338,7 +343,7 @@ var system = []Desk{
 			"choir.world_event", "choir.event_membership", "choir.source_schedule",
 		},
 		ModelRole: Management, Restart: RestartContract,
-		Profile: true, Prompt: true, Identity: IdentityOwner, OwnChannel: true,
+		Profile: true, Prompt: true, OwnChannel: true,
 	},
 	{
 		Name: Texture, Kind: KindSystem, Carrier: CarrierDeskWorker,
@@ -493,6 +498,16 @@ func register(d Desk) error {
 	}
 	if _, exists := registry[d.Name]; exists {
 		return fmt.Errorf("desk %s is already registered", d.Name)
+	}
+	for g := range soleHolderGrants {
+		if !d.HasGrant(g) {
+			continue
+		}
+		for _, o := range registry {
+			if o.HasGrant(g) {
+				return fmt.Errorf("desk %s: grant %s has one holder, and %s holds it", d.Name, g, o.Name)
+			}
+		}
 	}
 	registry[d.Name] = d.clone()
 	return nil
@@ -682,9 +697,12 @@ func validateStructure(d Desk) error {
 		return fmt.Errorf("desk %s: no taint class", d.Name)
 	}
 	switch d.Instance {
-	case InstanceNone, InstanceOwner, InstanceSubject, InstanceAssignment:
+	case InstanceNone, InstancePerOwner, InstanceSubject, InstanceAssignment:
 	default:
-		return fmt.Errorf("desk %s: instance %q is not none, owner, subject or assignment", d.Name, d.Instance)
+		return fmt.Errorf("desk %s: instance %q is not none, per_owner, subject or assignment", d.Name, d.Instance)
+	}
+	if d.Instance == InstancePerOwner && d.Identity != IdentityOwner {
+		return fmt.Errorf("desk %s: a per_owner desk's identity is its instance (<desk>:<owner>), not %q", d.Name, d.Identity)
 	}
 	if d.Kind == KindRole && d.Instance != InstanceNone {
 		return fmt.Errorf("desk %s: a role has no inbox of its own", d.Name)
@@ -989,11 +1007,17 @@ func validAccepts(intents []string) error {
 	return nil
 }
 
-// AdmissionKind is the object kind whose custodian admits engineering work and
-// every request kind today: the disposition of an arrival. The assignment
-// records themselves are the kernel's commons (the lifecycle batches mix
-// desks), so the holder of this kind is the marker for who admits.
-const AdmissionKind = "choir.capture_disposition"
+// OwnerInstance is the inbox and the persistent agent id of a per_owner desk
+// for one owner: <desk>:<owner> (MA4.9). The owner id is trimmed; an empty
+// owner, or a desk that is not per_owner, has no instance, so two owners
+// never share one id and no caller falls back to a bare desk name.
+func (d Desk) OwnerInstance(owner string) (string, bool) {
+	owner = strings.TrimSpace(owner)
+	if d.Instance != InstancePerOwner || owner == "" {
+		return "", false
+	}
+	return d.Name + ":" + owner, true
+}
 
 // Equal reports whether two rows grant the same authority. A nil and an
 // empty list are equal.

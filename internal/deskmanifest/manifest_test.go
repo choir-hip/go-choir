@@ -97,7 +97,7 @@ func TestFrameActionsArePinned(t *testing.T) {
 // table the manifest replaced.
 func TestInstancesAndCapsuleVerbsKeepTheirOldAuthority(t *testing.T) {
 	instances := map[string]Instance{
-		Management: InstanceOwner, Texture: InstanceSubject, Research: InstanceSubject,
+		Management: InstancePerOwner, Texture: InstanceSubject, Research: InstanceSubject,
 		Engineering: InstanceAssignment, Conductor: InstanceNone,
 		ManagementTask: InstanceNone, ResearchWeb: InstanceNone, ResearchTexture: InstanceNone,
 	}
@@ -128,7 +128,7 @@ func TestLookupReturnsCopies(t *testing.T) {
 	d, _ := Lookup(Research)
 	d.Verbs[0] = "Exec"
 	d.CapsuleVerbs[0] = "exec"
-	d.OwnedKinds = append(d.OwnedKinds, AdmissionKind)
+	d.OwnedKinds = append(d.OwnedKinds, "choir.capture_disposition")
 	again, _ := Lookup(Research)
 	if again.Verbs[0] == "Exec" || again.CapsuleVerbs[0] == "exec" || len(again.OwnedKinds) != 1 {
 		t.Fatal("a caller changed the manifest through a returned copy")
@@ -462,21 +462,19 @@ func TestInstanceIsValidatedAndExactlyOneDeskHoldsAssignments(t *testing.T) {
 	if validateStructure(bad) == nil {
 		t.Error("a misspelt instance validated")
 	}
-	role := Desk{Name: "x", Kind: KindRole, Carrier: CarrierNone, Taint: TaintPrivileged, Restart: RestartContract, Instance: InstanceOwner}
+	role := Desk{Name: "x", Kind: KindRole, Carrier: CarrierNone, Taint: TaintPrivileged, Restart: RestartContract, Instance: InstancePerOwner}
 	if validateStructure(role) == nil {
 		t.Error("a role with an inbox validated")
 	}
 	holders := 0
 	for _, n := range Names() {
 		d, _ := Lookup(n)
-		for _, k := range d.OwnedKinds {
-			if k == AdmissionKind {
-				holders++
-			}
+		if d.HasGrant(GrantAdmitAssignment) {
+			holders++
 		}
 	}
 	if holders != 1 {
-		t.Errorf("%d desks own the assignment kind, want exactly 1", holders)
+		t.Errorf("%d desks hold admit.assignment, want exactly 1", holders)
 	}
 }
 

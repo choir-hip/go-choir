@@ -109,6 +109,16 @@ var catalogue = map[string]grantSpec{
 	"product.api":       {Verbs: []string{"ProductAPI"}, Privileged: true},
 	"delegate.task":     {Verbs: []string{"Delegate", "CancelTask"}, Privileged: true},
 	"assignment.verify": {Verbs: []string{"Verify"}, Privileged: true},
+	// The admission ledger (plan MA4.9, D9): the holder admits engineering
+	// work, receives the requests other desks aim at an assignment desk, and
+	// is the custodian every request kind's materiality names. It carries no
+	// verb: the reducer and the address resolver read it.
+	"admit.assignment": {Privileged: true},
+	// The platform update (MA4.9): the host's platform-update path acts as
+	// this grant's holder, and each canonical event of an update names it.
+	// It carries no verb: a platform update is a platform-signed offer the
+	// host applies, never a cell's call.
+	"platform.update": {Privileged: true},
 
 	// Texture's document verbs.
 	"doc.read":                {Verbs: []string{"ReadDoc"}},
@@ -189,6 +199,42 @@ func (d Desk) Grant(name string) (Grant, bool) {
 
 // HasGrant reports whether the desk holds the named grant.
 func (d Desk) HasGrant(name string) bool { _, ok := d.Grant(name); return ok }
+
+// Grants with exactly one holder on a computer (MA4.9): the admission ledger
+// and the platform update. Registration refuses a second holder, so the
+// question "who admits" or "who updates" has one answer and never a union.
+const (
+	GrantAdmitAssignment = "admit.assignment"
+	GrantPlatformUpdate  = "platform.update"
+)
+
+var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true}
+
+// GrantHolder is the one registered desk that holds a sole-holder grant
+// (admit.assignment, platform.update). It reports false for any other grant
+// and when no desk holds it: unknown is deny, never a default desk.
+func GrantHolder(name string) (Desk, bool) {
+	if !soleHolderGrants[name] {
+		return Desk{}, false
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, d := range registry {
+		if d.HasGrant(name) {
+			return d.clone(), true
+		}
+	}
+	return Desk{}, false
+}
+
+// Holds reports whether the desk named name holds the grant. An unknown desk
+// holds nothing.
+func Holds(name, grant string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	d, ok := registry[name]
+	return ok && d.HasGrant(grant)
+}
 
 // MayRule reports whether the desk may stage a Precommit carrying a rule of
 // this kind (precommit.rule).
@@ -278,6 +324,11 @@ func GrantsForVerbs(verbs []string) ([]Grant, error) {
 // refuses an unknown grant, a bad argument and a verb set the grants do not
 // produce.
 func (d *Desk) resolve() error {
+	// A per_owner desk's persistent identity is its instance (MA4.9): one
+	// agent per owner, <desk>:<owner>. It is computed, never declared beside.
+	if d.Instance == InstancePerOwner && d.Identity == IdentityRun {
+		d.Identity = IdentityOwner
+	}
 	if len(d.Grants) == 0 {
 		return nil
 	}

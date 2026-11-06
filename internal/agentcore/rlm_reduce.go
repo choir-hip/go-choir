@@ -2241,8 +2241,13 @@ func directiveTargetAgentID(scope ReductionScope, addressee string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("reduce: directive addressee %q is not a known desk: %w", addressee, err)
 	}
-	if profile == agentprofile.Management {
-		return persistentManagementAgentID(scope.OwnerID), nil
+	// A per_owner desk is addressed by its owner instance (MA4.9).
+	if d, ok := deskmanifest.Lookup(profile); ok && d.Instance == deskmanifest.InstancePerOwner {
+		id, instanced := d.OwnerInstance(scope.OwnerID)
+		if !instanced {
+			return "", fmt.Errorf("reduce: directive addressee %q needs the owner it belongs to", addressee)
+		}
+		return id, nil
 	}
 	docID := strings.TrimSpace(scope.ChannelID)
 	if docID == "" {

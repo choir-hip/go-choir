@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -63,14 +64,16 @@ func captureLabelView(l store.CaptureLabel) yaegikernel.CaptureLabelView {
 	return v
 }
 
-// storiesEgress serves ActionStories for a management cell.
+// storiesEgress serves ActionStories for a cell whose desk holds the
+// intake.read grant (management and its task today; MA4.9: the grant, not the
+// desk's name, admits it).
 func (rt *Runtime) storiesEgress(ctx context.Context, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
 	role := strings.TrimSpace(exec.Role)
 	if role == "" && exec.RunRecord != nil {
 		role = agentProfileForRun(exec.RunRecord)
 	}
-	if role != agentprofile.Management && role != agentprofile.ManagementTask {
-		return nil, fmt.Errorf("the story library is management's")
+	if !deskmanifest.Holds(role, "intake.read") {
+		return nil, fmt.Errorf("the story library is read under the intake.read grant, which %q does not hold", role)
 	}
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("stories host unavailable")

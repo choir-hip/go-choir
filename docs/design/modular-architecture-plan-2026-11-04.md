@@ -710,6 +710,7 @@ publishing levels; a test pins the two agree on privilege):
 | `cancel.assignment` (privileged) | `CancelAssignment` | management |
 | `intake.read`; `intake.dispose` (privileged) | `Stories`; `Feed`, `Decline` | management, the task |
 | `product.api`, `delegate.task`, `assignment.verify` (privileged) | `ProductAPI`; `Delegate`, `CancelTask`; `Verify` | management |
+| `admit.assignment`, `platform.update` (privileged; one holder each, MA4.9) | no verb: the admission ledger (the address resolver's forward, the reducer's engineering Cast, the materiality custodian) and the actor of every platform-update event | management |
 | `precommit.rule(<12 closed kinds>)` (privileged) | rule-settled Precommit; `validateEngineeringPrecommit` reads it | engineering |
 | `doc.read`, `commit.texture_revision`, `texture.turn` | `ReadDoc`; `Write`; `Wait`, `Reject` | texture |
 | `world.read`, `source.poll`, `evidence.write`, `evidence.read`, `run.memory`, `research.spawn`, `system1.call`, `story.relate`, `capsule.read` | the world and evidence verbs | research (the child holds `world.read`, `captures.read`, `evidence.read`) |

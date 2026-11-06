@@ -979,6 +979,8 @@ func TestManifestAndRuntimeGrantCataloguesAgreeOnPrivilege(t *testing.T) {
 		"desk.delegate.task":     "delegate.task",
 		"desk.capsule.mutate":    "capsule.mutate",
 		"desk.world.read":        "world.read",
+		"desk.platform.update":   "platform.update",
+		"desk.admit.assignment":  "admit.assignment",
 	}
 	for manifestName, runtimeName := range pairs {
 		level, ok := GrantLevel(manifestName)
