@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,7 +18,8 @@ import (
 // request and stored nowhere. With replay=1 it adds the replay of settled
 // records: both weight candidates' calibration and AUC on the next failure,
 // and the one the replay picks. It is read-only; nothing here grants or
-// revokes (the lease policy and the act gate are later slices).
+// revokes (the lease policy reads its own derivation, leases.go; the act gate
+// is a later slice).
 
 // trustLedgerWindow bounds the newest ledger records the view reads.
 const trustLedgerWindow = 20000
@@ -32,6 +34,20 @@ type trustResponse struct {
 	Replay     *trust.ReplayReport `json:"replay,omitempty"`
 	// ReplayNote says when the replay read fewer records than the view.
 	ReplayNote string `json:"replay_note,omitempty"`
+}
+
+// trustInputs reads the ledger window a trust view is derived from: the
+// newest casts and settlements of the owner on the computer.
+func (rt *Runtime) trustInputs(ctx context.Context, ownerID, computerID string) (trust.Inputs, error) {
+	casts, err := rt.store.ListSubCallRecords(ctx, ownerID, computerID, types.SubCallCast, 5000)
+	if err != nil {
+		return trust.Inputs{}, fmt.Errorf("casts: %w", err)
+	}
+	settlements, err := rt.store.ListSubCallRecords(ctx, ownerID, computerID, types.SubCallSettlement, trustLedgerWindow)
+	if err != nil {
+		return trust.Inputs{}, fmt.Errorf("settlements: %w", err)
+	}
+	return trust.Inputs{Records: append(casts, settlements...)}, nil
 }
 
 // HandleTrust serves GET /api/trust.
@@ -52,19 +68,12 @@ func (h *APIHandler) HandleTrust(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	computerID := rt.TextureComputerID()
-	casts, err := rt.store.ListSubCallRecords(ctx, ownerID, computerID, types.SubCallCast, 5000)
+	in, err := rt.trustInputs(ctx, ownerID, computerID)
 	if err != nil {
-		log.Printf("runtime api: trust casts: %v", err)
+		log.Printf("runtime api: trust: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read the sub-call ledger"})
 		return
 	}
-	settlements, err := rt.store.ListSubCallRecords(ctx, ownerID, computerID, types.SubCallSettlement, trustLedgerWindow)
-	if err != nil {
-		log.Printf("runtime api: trust settlements: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read the sub-call ledger"})
-		return
-	}
-	in := trust.Inputs{Records: append(casts, settlements...)}
 	replayNote := ""
 	replayIn := in
 	if len(in.Records) > trustReplayMaxRecords {

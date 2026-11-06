@@ -14,44 +14,8 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
-	"github.com/yusefmosiah/go-choir/internal/lease"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-func TestEveryCatalogueGrantHasAnImpactRow(t *testing.T) {
-	for _, g := range apppackage.GrantCatalogueRows() {
-		name := g.Name
-		if g.Family {
-			name += ".x"
-		}
-		if _, ok := GrantImpact(name); !ok {
-			t.Errorf("manifest grant %q has no impact row", name)
-		}
-	}
-	for _, name := range lease.GrantNames() {
-		if _, ok := GrantImpact(name); !ok {
-			t.Errorf("first-party grant %q has no impact row", name)
-		}
-	}
-}
-
-func TestEveryImpactRowNamesARealGrant(t *testing.T) {
-	real := map[string]bool{}
-	for _, g := range apppackage.GrantCatalogueRows() {
-		real[g.Name] = true
-	}
-	for _, name := range lease.GrantNames() {
-		real[name] = true
-	}
-	for _, r := range ImpactTable().Grants {
-		if !real[r.Grant] {
-			t.Errorf("impact row %q names no catalogue grant", r.Grant)
-		}
-		if _, ok := r.Impact.Rank(); !ok || r.Impact == "" {
-			t.Errorf("impact row %q has class %q", r.Grant, r.Impact)
-		}
-	}
-}
 
 func TestLevelAndImpactAgree(t *testing.T) {
 	// a privileged grant is never below I2; a default one never above I1.

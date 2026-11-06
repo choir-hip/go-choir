@@ -11,9 +11,12 @@
 // owner sees every lease and revokes any; an uninstall, a yank or a retirement
 // of the desk revokes its leases; and the run's end ends them.
 //
-// Until the trust policy (MA7.4) every lease is per-task: its lifetime is the
-// run it was asked for. A crash restart never resumes a run, so the boot pass
-// ends every lease still open (EndAll) along with the runs the crash closed.
+// A lease is per-task unless the trust policy (MA7.4, policy.go) finds the
+// holder's record strong in the lease's class: a per-task lease's lifetime is
+// the run it was asked for; a durable one lives a stated period, serves the
+// holder's runs that ask, and renews without asking while the record holds. A
+// crash restart never resumes a run, so the boot pass ends every lease still
+// open (EndAll), durable ones included, along with the runs the crash closed.
 // A planned restart's one resume asks for its leases again.
 //
 // The reader gate (objectgraph.checkReadKind) and the capture frame handler
@@ -109,6 +112,30 @@ type Record struct {
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
 	// Uses counts the reads served against the lease (the use log).
 	Uses int `json:"uses,omitempty"`
+
+	// The lease policy (MA7.4, policy.go). A durable lease is not ended by its
+	// run: Runs are the runs of the holder that asked and were attached
+	// (HolderRunID is the first), it lives to ExpiresAt, and it renews without
+	// asking (Renewals) while the record earns it. A per-task lease has
+	// Durable false and Runs empty. HolderModel is the model of the run that
+	// asked, read again at renewal; AskedLife is the desk's own duration
+	// bound, if it named one. Basis says why the lease got its life.
+	Durable     bool          `json:"durable,omitempty"`
+	Runs        []string      `json:"runs,omitempty"`
+	HolderModel string        `json:"holder_model,omitempty"`
+	AskedLife   time.Duration `json:"asked_life,omitempty"`
+	Renewals    int           `json:"renewals,omitempty"`
+	Basis       *Basis        `json:"basis,omitempty"`
+}
+
+// clone copies r with its own slices.
+func (r Record) clone() Record {
+	r.Runs = append([]string(nil), r.Runs...)
+	if r.Basis != nil {
+		b := *r.Basis
+		r.Basis = &b
+	}
+	return r
 }
 
 // Sentence renders the lease for the owner's view.
@@ -130,6 +157,10 @@ func (r Record) Sentence() string {
 		what = append(what, fmt.Sprintf("%d named ref(s)", len(r.Scope.Refs)))
 	}
 	s := fmt.Sprintf("%s may read %s in run %s, for: %s (%s)", r.Holder, strings.Join(what, " and "), r.HolderRunID, r.Purpose, r.State)
+	if r.Durable {
+		s = fmt.Sprintf("%s may read %s in the runs that ask (%d so far) until %s, renewed %d time(s) on its record, for: %s (%s)",
+			r.Holder, strings.Join(what, " and "), len(r.Runs), r.ExpiresAt.Format(time.RFC3339), r.Renewals, r.Purpose, r.State)
+	}
 	if r.EndReason != "" {
 		s += ": " + r.EndReason
 	}
@@ -157,6 +188,12 @@ type Service struct {
 	issueMu sync.Mutex
 	seq     int
 	remove  func()
+
+	// trust is the policy's snapshot of the trust view per owner and fidelity the
+	// events the breaker hook reported that no snapshot shows yet (policy.go).
+	// Both are guarded by mu.
+	trust    map[string]*trustSnapshot // by owner
+	fidelity map[fidelityKey]time.Time
 }
 
 // New returns a service over p. It revokes a desk's leases when the desk is
@@ -329,14 +366,36 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 			return Record{}, refuse("%v", err)
 		}
 	}
+	// The lease policy shapes a desk's own ask; the platform's grants and
+	// the capsule copy stay per-task (policy.go).
+	var dec decision
+	if !req.capsule && !req.grant {
+		dec = s.decidePolicy(req.OwnerID, []string{req.Desk, deskName}, req.ModelID, req.Scope)
+		if dec.durable {
+			if got, ok := s.attachDurable(ctx, req.OwnerID, req.ComputerID, string(holder), req.RunID, req.Scope); ok {
+				return got, nil
+			}
+		}
+	}
 	now := s.now()
 	r := Record{
 		LeaseID: "lease-" + hex.EncodeToString(sum[6:12]), OwnerID: req.OwnerID, ComputerID: req.ComputerID,
 		Holder: deskName, HolderWriter: string(holder), HolderRunID: req.RunID, Assignment: req.Assignment,
 		Custodians: custodians, Scope: req.Scope, Purpose: req.Purpose, RequestRef: requestID,
-		NotBefore: now, IssuedAt: now, State: StateActive,
+		NotBefore: now, IssuedAt: now, State: StateActive, HolderModel: req.ModelID,
 	}
-	if req.Duration > 0 {
+	if !req.capsule && !req.grant {
+		b := dec.basis
+		r.Basis = &b
+	}
+	switch {
+	case dec.durable:
+		life := dec.life
+		if req.Duration > 0 && req.Duration < life {
+			life, r.AskedLife = req.Duration, req.Duration
+		}
+		r.Durable, r.Runs, r.ExpiresAt = true, []string{req.RunID}, now.Add(life)
+	case req.Duration > 0:
 		d := req.Duration
 		if d > MaxDuration {
 			d = MaxDuration
@@ -348,8 +407,9 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 	}
 	s.mu.Lock()
 	s.live[r.LeaseID] = &r
+	out := r.clone()
 	s.mu.Unlock()
-	return r, nil
+	return out, nil
 }
 
 // kernelServiceAddressee is the request's addressee: the lease service.
@@ -504,17 +564,42 @@ func scopeSummary(s Scope) string {
 }
 
 // liveFor returns the live leases of holder in runID that are inside their
-// window, and ends any whose expiry passed.
+// window: a per-task lease of that run, or a durable lease the run attached
+// to. A per-task lease whose expiry passed is ended; a durable one is renewed
+// or ended (renewOrEnd).
 func (s *Service) liveFor(holder objectgraph.Writer, runID string) []*Record {
 	now := s.now()
-	var out, expired []*Record
+	var expired, due []string
 	s.mu.Lock()
-	for _, r := range s.live {
-		if r.HolderWriter != string(holder) || r.HolderRunID != runID {
+	for id, r := range s.live {
+		if r.HolderWriter != string(holder) || !r.heldIn(runID) {
 			continue
 		}
 		if !r.ExpiresAt.IsZero() && !now.Before(r.ExpiresAt) {
-			expired = append(expired, r)
+			if r.Durable {
+				due = append(due, id)
+			} else {
+				expired = append(expired, id)
+			}
+		}
+	}
+	s.mu.Unlock()
+	for _, id := range expired {
+		s.end(context.Background(), id, StateEnded, ReasonExpired)
+	}
+	for _, id := range due {
+		s.renewOrEnd(context.Background(), id)
+	}
+	if len(due) > 0 {
+		now = s.now()
+	}
+	var out []*Record
+	s.mu.Lock()
+	for _, r := range s.live {
+		if r.HolderWriter != string(holder) || !r.heldIn(runID) {
+			continue
+		}
+		if !r.ExpiresAt.IsZero() && !now.Before(r.ExpiresAt) {
 			continue
 		}
 		if now.Before(r.NotBefore) {
@@ -523,10 +608,16 @@ func (s *Service) liveFor(holder objectgraph.Writer, runID string) []*Record {
 		out = append(out, r)
 	}
 	s.mu.Unlock()
-	for _, r := range expired {
-		s.end(context.Background(), r.LeaseID, StateEnded, ReasonExpired)
-	}
 	return out
+}
+
+// heldIn reports whether runID holds r: the run a per-task lease is for, or a
+// run attached to a durable lease. Callers hold mu.
+func (r *Record) heldIn(runID string) bool {
+	if r.Durable {
+		return containsString(r.Runs, runID)
+	}
+	return r.HolderRunID == runID
 }
 
 // deskOf resolves the holder's registered desk for the ceiling re-check. A
@@ -541,8 +632,7 @@ func (s *Service) AdmitsKind(holder objectgraph.Writer, runID string, kind objec
 			continue
 		}
 		for _, k := range r.Scope.Kinds {
-			if k == string(kind) && withinCeiling(desk, Scope{Kinds: []string{k}}) == nil {
-				s.noteUse(r.LeaseID)
+			if k == string(kind) && withinCeiling(desk, Scope{Kinds: []string{k}}) == nil && s.noteUse(r.LeaseID) {
 				return true
 			}
 		}
@@ -580,8 +670,7 @@ func (s *Service) AdmitsCapture(holder objectgraph.Writer, runID, captureID stri
 			}
 			match = private > 0 && all
 		}
-		if match {
-			s.noteUse(r.LeaseID)
+		if match && s.noteUse(r.LeaseID) {
 			return true
 		}
 	}
@@ -635,18 +724,25 @@ func (s *Service) admitsGrant(holder objectgraph.Writer, runID, ownerID, grant, 
 				continue
 			}
 		}
-		s.noteUse(r.LeaseID)
-		return r.LeaseID, true
+		if s.noteUse(r.LeaseID) {
+			return r.LeaseID, true
+		}
 	}
 	return "", false
 }
 
-func (s *Service) noteUse(id string) {
+// noteUse counts a use of a lease that is still live and reports whether it
+// was. A revoke between liveFor and here wins: the admission is refused, so no
+// read is admitted once a revoke has returned.
+func (s *Service) noteUse(id string) bool {
 	s.mu.Lock()
-	if r := s.live[id]; r != nil {
-		r.Uses++
+	defer s.mu.Unlock()
+	r := s.live[id]
+	if r == nil {
+		return false
 	}
-	s.mu.Unlock()
+	r.Uses++
+	return true
 }
 
 // end moves a live lease to a terminal state and writes it to the tape. The
@@ -660,7 +756,7 @@ func (s *Service) end(ctx context.Context, id, state, reason string) bool {
 		return false
 	}
 	delete(s.live, id)
-	done := *r
+	done := r.clone()
 	s.mu.Unlock()
 	now := s.now()
 	done.State, done.EndReason, done.EndedAt = state, reason, &now
@@ -683,12 +779,35 @@ func (s *Service) matching(f func(*Record) bool) []string {
 	return ids
 }
 
-// EndRun ends the leases of a run that finished. It returns how many.
+// EndRun ends the per-task leases of a run that finished and detaches the run
+// from the durable leases it attached to (a durable lease outlives the run
+// and lives to its expiry). It returns how many leases it ended.
 func (s *Service) EndRun(ctx context.Context, runID, reason string) int {
 	n := 0
-	for _, id := range s.matching(func(r *Record) bool { return r.HolderRunID == runID }) {
+	for _, id := range s.matching(func(r *Record) bool { return !r.Durable && r.HolderRunID == runID }) {
 		if s.end(ctx, id, StateEnded, reason) {
 			n++
+		}
+	}
+	var detached []Record
+	s.mu.Lock()
+	for _, r := range s.live {
+		if !r.Durable || !containsString(r.Runs, runID) {
+			continue
+		}
+		kept := r.Runs[:0:0]
+		for _, v := range r.Runs {
+			if v != runID {
+				kept = append(kept, v)
+			}
+		}
+		r.Runs = kept
+		detached = append(detached, r.clone())
+	}
+	s.mu.Unlock()
+	for _, r := range detached {
+		if err := s.p.PutLease(context.WithoutCancel(ctx), r); err != nil {
+			log.Printf("lease: record run %s leaving %s: %v", runID, r.LeaseID, err)
 		}
 	}
 	return n
@@ -744,7 +863,7 @@ func (s *Service) Live(ownerID string) []Record {
 	var out []Record
 	for _, r := range s.live {
 		if ownerID == "" || r.OwnerID == ownerID {
-			out = append(out, *r)
+			out = append(out, r.clone())
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].IssuedAt.Before(out[j].IssuedAt) })
@@ -761,7 +880,7 @@ func (s *Service) All(ctx context.Context, ownerID, computerID string) ([]Record
 	s.mu.Lock()
 	for i := range recs {
 		if r := s.live[recs[i].LeaseID]; r != nil {
-			recs[i] = *r
+			recs[i] = r.clone()
 		}
 	}
 	s.mu.Unlock()

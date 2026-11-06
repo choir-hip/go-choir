@@ -78,6 +78,10 @@ type Runtime struct {
 	// leases is the lease service (leases.go, MA3.4): custodian-issued,
 	// per-task grants the reader gate and the capture frame handler consult.
 	leases *lease.Service
+	// leaseTrustMu serialises the lease policy's trust feed (leases.go,
+	// MA7.4); leaseTrustFed is when it last pushed a view, per owner.
+	leaseTrustMu  sync.Mutex
+	leaseTrustFed map[string]time.Time
 	// engineerClockFired holds the assignments whose budget line has been
 	// shown (assignment id:attempt:revision -> struct{}); engineer_clock.go.
 	engineerClockFired sync.Map

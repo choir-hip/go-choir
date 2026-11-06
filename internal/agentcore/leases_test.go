@@ -301,3 +301,29 @@ func mustDeskWriter(t *testing.T, desk string) objectgraph.Writer {
 	}
 	return w
 }
+
+// (MA7.4) A desk's lease request feeds the lease policy a trust view derived
+// from the owner's ledger before it is decided. A ledger with no record of the
+// desk is a thin record: the lease is per-task and ends with its run.
+func TestALeaseRequestFeedsThePolicyAThinRecordIsPerTask(t *testing.T) {
+	rt, _ := testRuntime(t)
+	registerLeaseApp(t, "policyfeed", 62815, true)
+	if _, ok := rt.leases.TrustAge("owner-ma34"); ok {
+		t.Fatal("a trust view was read before any request")
+	}
+	run := leaseRunRecord("policyfeed", "run-p")
+	rec, err := rt.RequestLease(context.Background(), run, lease.Scope{CaptureIDs: []string{"c1"}}, "x", 0, leaseFields())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if age, ok := rt.leases.TrustAge("owner-ma34"); !ok || age < 0 || age > lease.TrustMaxAge {
+		t.Fatalf("the request did not feed a fresh trust view: %v, %v", age, ok)
+	}
+	if rec.Durable || rec.Basis == nil || rec.Basis.Durable {
+		t.Fatalf("a desk with no record got %+v", rec)
+	}
+	rt.endRunLeases(context.Background(), run.RunID, lease.ReasonRunEnded)
+	if live := rt.leases.Live("owner-ma34"); len(live) != 0 {
+		t.Fatalf("a per-task lease outlived its run: %+v", live)
+	}
+}

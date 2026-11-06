@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/lease"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/trust"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -85,10 +86,59 @@ func (rt *Runtime) RequestLease(ctx context.Context, rec *types.RunRecord, scope
 	if rt.leases == nil {
 		return lease.Record{}, lease.ErrRefused
 	}
+	rt.feedLeaseTrust(rec.OwnerID, rec.ComputerID)
 	return rt.leases.Request(ctx, lease.Request{
 		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, Desk: rec.AgentProfile, RunID: rec.RunID,
 		AgentID: rec.AgentID, ModelID: recordModelID(ctx, rec), Scope: scope, Purpose: purpose, Duration: duration, Fields: fields,
 	})
+}
+
+// leaseTrustEvery is how often a lease request re-derives the trust view the
+// lease policy reads. It is well inside lease.TrustMaxAge, so a desk that asks
+// often reads a fresh view, and a view older than that bound is no view.
+const leaseTrustEvery = 30 * time.Second
+
+// leaseTrustTimeout bounds one derivation; past it the policy keeps its last
+// view, or none, and a lease is per-task.
+const leaseTrustTimeout = 10 * time.Second
+
+// feedLeaseTrust derives the trust view (as GET /api/trust does) and pushes
+// its rows to the lease policy (MA7.4), at most once per leaseTrustEvery per
+// owner: the
+// policy reads the rows for a lease's duration, and a row whose breaker is set
+// revokes the holder's leases in its class. It then renews or ends the leases
+// past their expiry. The derivation runs here, on the request path and outside
+// any store read, because the reader gate asks the lease service from inside
+// store reads and the service never reads the store. It reads under its own
+// context, without the requesting desk's reader.
+func (rt *Runtime) feedLeaseTrust(ownerID, computerID string) {
+	if rt == nil || rt.leases == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" {
+		return
+	}
+	rt.leaseTrustMu.Lock()
+	defer rt.leaseTrustMu.Unlock()
+	if fed := rt.leaseTrustFed[ownerID]; !fed.IsZero() && time.Since(fed) < leaseTrustEvery {
+		return
+	}
+	if strings.TrimSpace(computerID) == "" {
+		computerID = rt.TextureComputerID()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), leaseTrustTimeout)
+	defer cancel()
+	in, err := rt.trustInputs(ctx, ownerID, computerID)
+	if err != nil {
+		log.Printf("runtime: lease policy: trust view: %v", err)
+		return
+	}
+	view := trust.Derive(in, trust.DefaultParams())
+	if rt.leaseTrustFed == nil {
+		rt.leaseTrustFed = map[string]time.Time{}
+	}
+	rt.leaseTrustFed[ownerID] = time.Now()
+	if n := rt.leases.ObserveTrust(ctx, ownerID, view.Rows); n > 0 {
+		log.Printf("runtime: lease policy: the breaker revoked %d lease(s) on a fidelity event", n)
+	}
+	rt.leases.Sweep(ctx)
 }
 
 // requestLeaseEgress serves choir.RequestLease from a desk cell. The holder
