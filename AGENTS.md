@@ -373,9 +373,13 @@ capsule, apply and skew refusals; the health guards and automatic rollback;
 R0 and the paper held until each is seen healthy. Ordinary releases walk
 the rings. Name every expedite in the next report.
 
-**Agent models** (owner, 2026-10-22): Sonnet subagents for following a plan,
-optimizing a metric, and investigations; Opus for design and open-ended
-work.
+**Agent models** (owner, 2026-10-22; widened 2026-11-06: "don't use opus
+for review. Opus for open ended design only, and sonnet for investigations,
+linear implementation, optimizing metrics, code review, etc"): Opus for
+open-ended design only. Sonnet for everything else: investigations, linear
+implementation (builders), optimizing a metric, and code review. A Claude
+review seat is always Sonnet, never Opus; when DeepSeek cannot serve a tier 2
+review, the second seat is a Sonnet subagent beside Devin.
 
 **Hard problems: change the frame before the patch** (owner, 2026-10-31:
 "when having a recurring problem, ask foundational questions, redefine it, go
