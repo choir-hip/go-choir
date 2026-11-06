@@ -185,6 +185,10 @@ type system1Ask struct {
 	// labels are the labels of the run the call serves, recorded with the
 	// call on the tape.
 	labels types.LabelSet
+	// model, when set, receives the model the judge reported for an answered
+	// call: a host caller that freezes its own record (the prompt router's
+	// route record, MA4.8) names the model there.
+	model *string
 }
 
 // system1Subject is what a host-built question asks about.
@@ -306,6 +310,9 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 		return nil, err
 	}
 	model := firstNonEmpty(distribution.Model, candidateJudgmentModel)
+	if ask.model != nil {
+		*ask.model = model
+	}
 	// A model call is logged with its provider and the run's labels, never
 	// gated (R15, MA3.6).
 	log.Print(toolregistry.ModelCallLine(runID, "decision-model", model, ask.labels.Strings()))

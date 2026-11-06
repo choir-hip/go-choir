@@ -3,12 +3,14 @@ package apppackage
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/promptroute"
 )
 
 // MA2.3 failure modes, written before the code: what a hostile manifest (or a
@@ -695,9 +697,9 @@ func TestH10H11CandidateSuffixSchedulesAndPrompts(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	big := make([]any, maxAccepts+1)
+	big := make([]any, promptroute.MaxAccepts+1)
 	for i := range big {
-		big[i] = "x"
+		big[i] = fmt.Sprintf("intent %d", i)
 	}
 	if _, err := parseAs(t, OriginFirstParty, func(v map[string]any) {
 		deskV(v)

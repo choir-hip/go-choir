@@ -62,6 +62,10 @@ type ConductorDecision struct {
 	ObligationIDs        []string `json:"obligation_ids,omitempty"`
 	ReducerSeq           int64    `json:"reducer_seq,omitempty"`
 	SnapshotCursor       int64    `json:"snapshot_cursor,omitempty"`
+	// The prompt router's route (MA4.8).
+	RouteRecordID     string   `json:"route_record_id,omitempty"`
+	RouteRule         string   `json:"route_rule,omitempty"`
+	RouteAlternatives []string `json:"route_alternatives,omitempty"`
 }
 
 // HandoffDecision records the durable Texture objects created or reused by a handoff.

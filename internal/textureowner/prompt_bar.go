@@ -13,6 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/promptroute"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -27,11 +28,23 @@ const promptBarCommitTimeout = 120 * time.Second
 type promptBarSubmitRequest struct {
 	Text      string `json:"text"`
 	CommandID string `json:"command_id,omitempty"`
-	// ContinueDocID names the owner's document the prompt builds on: the
-	// submit is that document's owner revise instead of a new document
-	// (FE-02 step 1, docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md).
-	ContinueDocID string `json:"continue_doc_id,omitempty"`
+	// Focus is the focused window's app agent and object (plan MA4.8,
+	// "Focus-aware request"; it replaced continue_doc_id). With a focus the
+	// text goes to that app agent, which decides what it is for; without one
+	// the conductor routes it. The focus never reaches the conductor.
+	Focus *promptBarFocus `json:"focus,omitempty"`
 }
+
+// promptBarFocus is a focused submit's focus: a desk id of the registry, the
+// typed ref of the focused object and an optional bounded selection.
+type promptBarFocus struct {
+	AppAgentID string `json:"app_agent_id"`
+	ObjectRef  string `json:"object_ref"`
+	Selection  string `json:"selection,omitempty"`
+}
+
+// promptBarSelectionBytes bounds a focus selection.
+const promptBarSelectionBytes = 16 << 10
 
 const promptBarContinueSchemaV1 = "choir.prompt_bar_continue.v1"
 
@@ -109,12 +122,14 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 
 	commitCtx, commitCancel := context.WithTimeout(context.WithoutCancel(r.Context()), promptBarCommitTimeout)
 	defer commitCancel()
-	if docID := strings.TrimSpace(req.ContinueDocID); docID != "" {
-		h.continuePromptBarDocument(commitCtx, w, r, ownerID, docID, text, commandID)
+	if req.Focus != nil {
+		h.submitFocusedPrompt(commitCtx, w, r, ownerID, *req.Focus, text, commandID)
 		return
 	}
 	commitCtx = ownerTextContext(commitCtx, r)
-	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, authenticatedUserEmail(r), text, commandID, true)
+	// The owner's own submit is routed; an in-process desk caller (management
+	// creating a Texture through choir.ProductAPI) asked for a Texture.
+	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, authenticatedUserEmail(r), text, commandID, true, strings.TrimSpace(r.RemoteAddr) != "")
 	if err != nil {
 		status, message := promptBarSubmitFailure(err)
 		if status != http.StatusConflict && status != http.StatusServiceUnavailable {
@@ -137,6 +152,60 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// submitFocusedPrompt sends a focused submit to the focused app agent (plan
+// MA4.8): the default desk's focus on one of the owner's documents is that
+// document's owner revise; a package desk's focus is an owner-origin request
+// record to that desk, which decides what the text is for, and the decision
+// opens its app. The conductor is not asked and sees nothing of the focus. A
+// focus naming any other desk (a system desk, a role, a candidate, a package
+// the owner has not installed) is refused.
+func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID string, focus promptBarFocus, text, commandID string) {
+	defaultDesk := agentprofile.Texture
+	app := strings.TrimSpace(focus.AppAgentID)
+	ref := strings.TrimSpace(focus.ObjectRef)
+	if len(focus.Selection) > promptBarSelectionBytes {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus selection is too long"})
+		return
+	}
+	if !promptroute.Addressable(defaultDesk, app) {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus names an app agent the prompt bar cannot address"})
+		return
+	}
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a focused submit is an owner act; address the app agent's desk"})
+		return
+	}
+	if app == defaultDesk {
+		if ref == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus object_ref is required"})
+			return
+		}
+		h.continuePromptBarDocument(ctx, w, r, ownerID, ref, text, commandID)
+		return
+	}
+	runID := h.Core.PromptBarRunID(ownerID, commandID)
+	if _, err := h.Core.DeliverOwnerRequest(ctx, ownerID, runID, app, text, &agentcore.OwnerFocus{AppAgentID: app, ObjectRef: ref, Selection: focus.Selection}, ""); err != nil {
+		log.Printf("texture prompt bar: focused request to %s: %v", app, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
+		return
+	}
+	metadata := promptBarMetadata(text, commandID, authenticatedUserEmail(r), promptroute.AppOf(app))
+	metadata["focus_app_agent_id"] = app
+	rec, err := h.Core.CompletePromptBarDecision(ctx, text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
+		Action: "open_app", App: promptroute.AppOf(app), Title: provider.InitialTextureTitle(text, ""),
+	})
+	if err != nil {
+		status, message := promptBarSubmitFailure(err)
+		writeAPIJSON(w, status, apiError{Error: message})
+		return
+	}
+	writeAPIJSON(w, http.StatusAccepted, promptBarSubmitResponse{
+		Schema: types.DurableWorkSchemaV1, SubmissionID: rec.RunID, State: rec.State,
+		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		StatusURL: "/api/prompt-bar/submissions/" + rec.RunID, CommandID: commandID,
+	})
+}
+
 // continuePromptBarDocument answers a prompt-bar submit that builds on
 // docID: the owner revise of that document, with the same authority, head
 // and idempotency rules as /revise (the command id is its client request
@@ -145,7 +214,7 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 // revision through the prompt bar must not open that door.
 func (h *Handler) continuePromptBarDocument(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID, docID, text, commandID string) {
 	if strings.TrimSpace(r.RemoteAddr) == "" {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "continue_doc_id is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a focused submit is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
 		return
 	}
 	receipt, err := h.reviseOwnerDocument(ctx, ownerID, docID, textureAgentRevisionRequest{Prompt: text, ClientRequestID: commandID})
@@ -200,33 +269,44 @@ func promptBarSubmitFailure(err error) (int, string) {
 	}
 }
 
-// submitPromptBar records the conductor decision and, for Texture, the
-// handoff: the prompt bar's submit path. classify routes content links to
-// their apps; an owner request built by the computer itself (a release
-// adoption, P8) is always Texture's.
-func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text, commandID string, classify bool) (*types.RunRecord, HandoffDecision, error) {
-	requestedApp := agentprofile.Texture
+// submitPromptBar records the conductor decision and hands off: the prompt
+// bar's submit path. classify routes content links to their apps by the URL
+// rule; route asks the prompt router (MA4.8) for everything else, and only the
+// owner's own submit is routed. An owner request built by the computer itself
+// (a release adoption, P8) is always Texture's. Every route is a route record,
+// and the default route (Texture) is the fallback of every router failure.
+func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text, commandID string, classify, route bool) (*types.RunRecord, HandoffDecision, error) {
+	defaultDesk := agentprofile.Texture
+	requestedApp := defaultDesk
 	var sourceURL, mediaType, appHint string
+	var routed *agentcore.PromptRoute
+	runID := h.Core.PromptBarRunID(ownerID, commandID)
 	if classify {
 		if classifiedApp, classifiedURL, classifiedMediaType, ok := contentowner.ClassifyPromptBarContentIntent(text); ok {
 			requestedApp, appHint = classifiedApp, classifiedApp
 			sourceURL, mediaType = classifiedURL, classifiedMediaType
+			if route {
+				r := h.Core.RecordRuleRoute(ctx, ownerID, runID, classifiedApp, defaultDesk)
+				routed = &r
+			}
+		} else if route {
+			r := h.Core.RoutePrompt(ctx, ownerID, runID, text, defaultDesk)
+			routed = &r
+		}
+	}
+	// A route to a package desk hands off by an owner-origin request record
+	// to that desk and opens its app. A hand-off that cannot be written takes
+	// the default route.
+	if routed != nil && routed.Rule != promptroute.RuleContentURL && routed.Destination != defaultDesk {
+		if _, err := h.Core.DeliverOwnerRequest(ctx, ownerID, runID, routed.Destination, text, nil, routed.RecordID); err != nil {
+			log.Printf("texture prompt bar: hand-off to %s: %v; taking the default route", routed.Destination, err)
+			routed.Destination, routed.App, routed.Reason = defaultDesk, defaultDesk, "the hand-off could not be written"
+		} else {
+			requestedApp = routed.App
 		}
 	}
 	title := provider.InitialTextureTitle(text, "")
-	metadata := map[string]any{
-		"agent_profile":          agentprofile.Conductor,
-		"agent_role":             agentprofile.Conductor,
-		"input_source":           "prompt_bar",
-		"requested_app":          requestedApp,
-		"seed_prompt":            text,
-		"initial_document_title": title,
-		"submission_surface":     "prompt_bar",
-		"lifecycle_command_id":   commandID,
-	}
-	if ownerEmail != "" {
-		metadata["owner_email"] = ownerEmail
-	}
+	metadata := promptBarMetadata(text, commandID, ownerEmail, requestedApp)
 	if sourceURL != "" {
 		metadata["content_source_url"] = sourceURL
 		metadata["content_media_type"] = mediaType
@@ -235,15 +315,33 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 	var handoff HandoffDecision
 	rec, err := h.Core.CompletePromptBarDecision(ctx, text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
 		Action: "open_app", App: requestedApp, Title: title,
-		SourceURL: sourceURL, MediaType: mediaType, AppHint: appHint,
+		SourceURL: sourceURL, MediaType: mediaType, AppHint: appHint, Route: routed,
 	})
-	if err == nil && requestedApp == agentprofile.Texture {
+	if err == nil && requestedApp == defaultDesk {
 		handoff, err = h.EnsureTextureHandoff(ctx, rec, HandoffRequest{
 			Kind: HandoffKindUserPrompt, CallerProfile: agentprofile.Conductor,
 			Objective: text, Title: title,
 		})
 	}
 	return rec, handoff, err
+}
+
+// promptBarMetadata is a prompt-bar decision run's metadata.
+func promptBarMetadata(text, commandID, ownerEmail, requestedApp string) map[string]any {
+	metadata := map[string]any{
+		"agent_profile":          agentprofile.Conductor,
+		"agent_role":             agentprofile.Conductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          requestedApp,
+		"seed_prompt":            text,
+		"initial_document_title": provider.InitialTextureTitle(text, ""),
+		"submission_surface":     "prompt_bar",
+		"lifecycle_command_id":   commandID,
+	}
+	if ownerEmail != "" {
+		metadata["owner_email"] = ownerEmail
+	}
+	return metadata
 }
 
 // HandlePromptBarSubmission returns product-level state for one owner-scoped submission.

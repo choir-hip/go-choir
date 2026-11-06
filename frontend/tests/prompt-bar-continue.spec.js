@@ -9,13 +9,13 @@
  * Ways it can fail (P11-P13 in the problem doc):
  *   C1 No chip, or the chip does not default to continue, when a Texture
  *      document window is active.
- *   C2 The continue submit does not carry continue_doc_id for that document,
+ *   C2 The continue submit does not carry focus.object_ref (was continue_doc_id) for that document,
  *      or changes the owner's text.
  *   C3 A continue opens a new Texture window instead of keeping the
  *      document's, or the window does not take the receipt.
  *   C4 One tap does not switch to "New document", or the override still
- *      sends continue_doc_id, or it leaks to the next document in view.
- *   C5 A chip shows, or continue_doc_id is sent, with no Texture document
+ *      sends the focus, or it leaks to the next document in view.
+ *   C5 A chip shows, or a focus is sent, with no Texture document
  *      in view.
  *   C6 The chip adds a band or covers the prompt: the prompt surface grows,
  *      the chip leaves the command field, or the input is not usable, at
@@ -111,14 +111,14 @@ async function mockComputer(page, { windows = [], activeWindowId = '', gate = nu
       submits.push(request);
       if (gate) await gate;
       status = 202;
-      body = request.continue_doc_id
+      body = request.focus?.object_ref
         ? {
             schema: 'choir.prompt_bar_continue.v1',
             continued: true,
             command_id: request.command_id,
-            doc_id: request.continue_doc_id,
+            doc_id: request.focus?.object_ref,
             trajectory_id: 'trajectory-next',
-            revision_id: `${request.continue_doc_id}-rev-2`,
+            revision_id: `${request.focus?.object_ref}-rev-2`,
             request_id: 'request-1',
             replay: false,
           }
@@ -167,7 +167,7 @@ test('C1 C2 C3: the chip defaults to continuing the document in view', async ({ 
   const typed = 'add a section on `neap tides` [1] and café';
   await send(page, typed);
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].continue_doc_id).toBe('doc-tides');
+  expect(submits[0].focus?.object_ref).toBe('doc-tides');
   expect(submits[0].text).toBe(typed);
 
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(1);
@@ -189,7 +189,7 @@ test('C4: one tap switches to a new document, and the override does not leak', a
 
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].continue_doc_id).toBeUndefined();
+  expect(submits[0].focus?.object_ref).toBeUndefined();
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });
 
   // The new document is now in view; the chip defaults to it, not to "new".
@@ -203,7 +203,7 @@ test('C5: no chip and no continue without a Texture document in view', async ({ 
   await expect(page.locator('[data-prompt-target]')).toHaveCount(0);
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].continue_doc_id).toBeUndefined();
+  expect(submits[0].focus?.object_ref).toBeUndefined();
 });
 
 for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
@@ -250,11 +250,11 @@ test('C7: a single URL defaults to a new document, and a tap still continues', a
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue');
   await input.press('Enter');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].continue_doc_id).toBe('doc-tides');
+  expect(submits[0].focus?.object_ref).toBe('doc-tides');
 
   await send(page, 'https://example.com/tides/article');
   await expect.poll(() => submits.length).toBe(2);
-  expect(submits[1].continue_doc_id).toBeUndefined();
+  expect(submits[1].focus?.object_ref).toBeUndefined();
 
   // Text that is not one URL keeps the continue default.
   await input.fill('summarize https://example.com/tides/article');
@@ -271,7 +271,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
   await chip.click();
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].continue_doc_id).toBeUndefined();
+  expect(submits[0].focus?.object_ref).toBeUndefined();
 
   await input.fill('and add a map');
   await input.press('Enter');
@@ -285,7 +285,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
   await expect(chip).toContainText(DOCS['doc-new'].title);
   await input.press('Enter');
   await expect.poll(() => submits.length).toBe(2);
-  expect(submits[1].continue_doc_id).toBe('doc-new');
+  expect(submits[1].focus?.object_ref).toBe('doc-new');
 });
 
 test('C9: a window closed before the receipt reopens and follows the continue', async ({ page }) => {
@@ -296,7 +296,7 @@ test('C9: a window closed before the receipt reopens and follows the continue', 
   await expect(page.locator('[data-command-field] [data-prompt-target]')).toBeVisible({ timeout: 10_000 });
   await send(page, 'add a section on neap tides');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].continue_doc_id).toBe('doc-tides');
+  expect(submits[0].focus?.object_ref).toBe('doc-tides');
 
   await page.locator('[data-window][data-window-app-id="texture"] [data-window-close]').click();
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(0);

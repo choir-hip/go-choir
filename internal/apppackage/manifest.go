@@ -28,6 +28,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/promptroute"
 )
 
 const (
@@ -381,7 +382,6 @@ const (
 	maxDesks     = 8
 	maxSchedules = 16
 	maxTools     = 32
-	maxAccepts   = 64
 	// minScheduleSeconds is the floor of a standing intent's period.
 	minScheduleSeconds = 60
 	maxAcceptsBytes    = 32 << 10
@@ -471,20 +471,13 @@ func checkAccepts(raw json.RawMessage) error {
 	if len(raw) > maxAcceptsBytes {
 		return fmt.Errorf("over %d bytes", maxAcceptsBytes)
 	}
-	var list []json.RawMessage
-	if err := json.Unmarshal(raw, &list); err != nil || list == nil {
+	// The shape is the prompt router's (plan MA4.8): a list of intents, each a
+	// string or {intent, request_kind}.
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return errors.New("must be a list")
 	}
-	if len(list) > maxAccepts {
-		return fmt.Errorf("at most %d entries", maxAccepts)
-	}
-	for _, e := range list {
-		t := bytes.TrimSpace(e)
-		if len(t) == 0 || (t[0] != '{' && t[0] != '"') {
-			return errors.New("each entry is a string or an object")
-		}
-	}
-	return nil
+	_, err := promptroute.ParseAccepts(raw)
+	return err
 }
 
 // checkPath admits a clean relative path of plain segments with one of the

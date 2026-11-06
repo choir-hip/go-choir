@@ -35,6 +35,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/promptroute"
 )
 
 // Manifest is the desk member of an app package manifest: the desk the
@@ -63,6 +64,10 @@ type Manifest struct {
 	// LeaseGrants is the grant part of the ceiling (MA4.7): the first-party
 	// typed grants, such as mail.read, the desk may ask their custodian for.
 	LeaseGrants []string `json:"lease_grants,omitempty"`
+	// Accepts is what the desk takes from the prompt bar (plan MA4.8): the
+	// prompt router's candidate description. It grants nothing. Absent keeps
+	// the manifest's digest what it was before the field existed.
+	Accepts []promptroute.Accept `json:"accepts,omitempty"`
 }
 
 // Code is a typed refusal.
@@ -249,6 +254,13 @@ func validate(m Manifest, candidate bool) []Refusal {
 	if m.WorkerMaxBytes == 0 || m.WorkerMaxBytes > memoryCap {
 		refuse(CodeMemoryOverCap, "worker memory %d must be set and at most %d", m.WorkerMaxBytes, memoryCap)
 	}
+	if err := promptroute.ValidateAccepts(m.Accepts); err != nil {
+		refuse(CodeDesk, "accepts: %v", err)
+	}
+	if candidate && len(m.Accepts) > 0 {
+		// A candidate has no inbound routing (plan MA4.3).
+		refuse(CodeDesk, "a candidate takes nothing from the prompt bar; accepts must be empty")
+	}
 	if len(m.Egress) > 0 {
 		refuse(CodeEgressNotGranted, "egress %v has no owner grant path yet (NET-10)", m.Egress)
 	}
@@ -376,7 +388,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: uids[m.Package], WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants, FirstParty: firstParty(m)})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants, FirstParty: firstParty(m), Accepts: promptroute.Intents(m.Accepts)})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				return false
@@ -433,7 +445,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: nextUID, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants, FirstParty: firstParty(m)})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants, FirstParty: firstParty(m), Accepts: promptroute.Intents(m.Accepts)})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue

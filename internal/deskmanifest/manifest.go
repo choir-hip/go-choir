@@ -28,8 +28,10 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Desk names, in the spelling the code already uses.
@@ -198,6 +200,13 @@ type Desk struct {
 	// FirstParty marks an app desk an in-tree first-party package carries
 	// under a reserved slug (the Mail desk, MA4.7). Only NewAppDesk sets it.
 	FirstParty bool
+	// Accepts are the plain-language intents an app desk takes from the
+	// prompt bar (its package's contributes.desks[].accepts, plan MA4.8): the
+	// prompt router's candidate descriptions. They grant nothing, so Equal
+	// (authority) does not compare them and the desk protocol lock does not
+	// carry them; a desk with none is never a router candidate. A system desk
+	// declares none.
+	Accepts []string
 	// ModelRole is the modelpolicy role key. Declared; no consumer yet.
 	ModelRole string
 	// Restart is the restart contract. Declared; every desk has the same.
@@ -501,6 +510,7 @@ func (d Desk) clone() Desk {
 	d.OwnedKinds = cp(d.OwnedKinds)
 	d.LeaseKinds = cp(d.LeaseKinds)
 	d.LeaseGrants = cp(d.LeaseGrants)
+	d.Accepts = cp(d.Accepts)
 	d.Modules = cp(d.Modules)
 	d.Grants = cloneGrants(d.Grants)
 	return d
@@ -791,6 +801,8 @@ type AppDeskSpec struct {
 	// internal/appdesk sets it only for the desk manifest the image ships for
 	// that in-tree package, never from a manifest on the tape alone.
 	FirstParty bool
+	// Accepts are the prompt-bar intents (Desk.Accepts).
+	Accepts []string
 }
 
 // NewAppDesk validates an app desk. It can only give an app desk less than a
@@ -832,6 +844,9 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 			return Desk{}, fmt.Errorf("app desk %s: lease ceiling grant %q is not a grant name", spec.Name, g)
 		}
 	}
+	if err := validAccepts(spec.Accepts); err != nil {
+		return Desk{}, fmt.Errorf("app desk %s: accepts: %w", spec.Name, err)
+	}
 	d := Desk{
 		Name: spec.Name, Kind: KindApp, Carrier: CarrierDeskWorker,
 		Verbs: append([]string{}, spec.Verbs...), CapsuleVerbs: []string{},
@@ -842,7 +857,11 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		LeaseKinds: append([]string{}, spec.LeaseKinds...), LeaseCaptures: spec.LeaseCaptures,
 		LeaseGrants: append([]string{}, spec.LeaseGrants...),
 		FirstParty:  spec.FirstParty,
+		Accepts:     append([]string(nil), spec.Accepts...),
 		Profile:     true,
+	}
+	if len(d.Accepts) == 0 {
+		d.Accepts = nil
 	}
 	grants, err := GrantsForVerbs(spec.Verbs)
 	if err != nil {
@@ -935,7 +954,39 @@ func (d Desk) AppSpec() AppDeskSpec {
 	return AppDeskSpec{Name: c.Name, Verbs: c.Verbs, Taint: c.Taint, UID: c.Sandbox.UID,
 		WorkerMaxBytes: c.Memory.WorkerMaxBytes, OwnedKinds: c.OwnedKinds,
 		LeaseKinds: c.LeaseKinds, LeaseCaptures: c.LeaseCaptures, LeaseGrants: c.LeaseGrants,
-		FirstParty: c.FirstParty}
+		FirstParty: c.FirstParty, Accepts: c.Accepts}
+}
+
+// Bounds of an app desk's accepts (the prompt router's intents; the package
+// manifest's full shape is promptroute.Accept).
+const (
+	maxAcceptIntents     = 64
+	maxAcceptIntentRunes = 200
+)
+
+// validAccepts checks an app desk's prompt-bar intents: at most 64, each 1 to
+// 200 characters with no control character, none twice.
+func validAccepts(intents []string) error {
+	if len(intents) > maxAcceptIntents {
+		return fmt.Errorf("at most %d intents", maxAcceptIntents)
+	}
+	seen := map[string]bool{}
+	for _, in := range intents {
+		n := utf8.RuneCountInString(in)
+		if n == 0 || n > maxAcceptIntentRunes || strings.TrimSpace(in) != in {
+			return fmt.Errorf("intent %q must be 1-%d characters with no leading or trailing space", in, maxAcceptIntentRunes)
+		}
+		for _, r := range in {
+			if r < 0x20 || r == 0x7f {
+				return fmt.Errorf("intent %q has a control character", in)
+			}
+		}
+		if seen[in] {
+			return fmt.Errorf("intent %q is declared twice", in)
+		}
+		seen[in] = true
+	}
+	return nil
 }
 
 // AdmissionKind is the object kind whose custodian admits engineering work and

@@ -12,10 +12,13 @@ export async function submitConductorPrompt(text, options = {}) {
 
   const commandId = options.commandId || crypto.randomUUID();
   const body = { text: prompt, command_id: commandId };
-  // continue_doc_id builds on that document (the owner revise) instead of
-  // creating a new one; the response then carries continued: true.
+  // A focus sends the text to the focused app agent, which decides what it
+  // is for (plan MA4.8; it replaced continue_doc_id). The Texture chip's
+  // document is the only focus the shell sends until H3: its submit is that
+  // document's owner revise, and the response carries continued: true.
+  // Without a focus the conductor routes the text.
   const continueDocId = (options.continueDocId || '').trim();
-  if (continueDocId) body.continue_doc_id = continueDocId;
+  if (continueDocId) body.focus = { app_agent_id: 'texture', object_ref: continueDocId };
   const res = await fetchWithRenewal('/api/prompt-bar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -1,7 +1,7 @@
 package textureowner
 
 // FE-02 step 1 (docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md):
-// a prompt-bar submit with continue_doc_id builds on that document through
+// a prompt-bar submit focused on a document (MA4.8 focus; was continue_doc_id) builds on that document through
 // the owner revise instead of creating a new one. The failure modes P1-P10
 // are named in the problem doc; each test names the ones it covers.
 
@@ -21,7 +21,7 @@ import (
 
 // postPromptBar posts body to /api/prompt-bar as owner. inProcess clears
 // RemoteAddr, the marker of a desk's in-process ProductAPI call.
-func postPromptBar(t *testing.T, handler *Handler, owner string, body map[string]string, inProcess bool) *httptest.ResponseRecorder {
+func postPromptBar(t *testing.T, handler *Handler, owner string, body map[string]any, inProcess bool) *httptest.ResponseRecorder {
 	t.Helper()
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestPromptBarContinueRevisesLiveDocument(t *testing.T) {
 	// Backticks, brackets, a blank line and non-ASCII: the shapes SD-07 saw
 	// retyped. Outer whitespace is trimmed as the new-document path trims it.
 	typed := "  build on this: add `costs` [1]\n\n- keep «quotes» and café  \n"
-	w := postPromptBar(t, handler, start.OwnerID, map[string]string{"text": typed, "command_id": "continue-live", "continue_doc_id": docID}, false)
+	w := postPromptBar(t, handler, start.OwnerID, map[string]any{"text": typed, "command_id": "continue-live", "focus": textureFocus(docID)}, false)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("P2: continue status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -160,7 +160,7 @@ func TestPromptBarContinueSettledDocumentStartsNextTrajectory(t *testing.T) {
 	recordContinueDispatches(core)
 	settleDocumentTrajectory(t, s, start.OwnerID, start.ComputerID, docID, start.TrajectoryID)
 
-	w := postPromptBar(t, handler, start.OwnerID, map[string]string{"text": "next episode: add a section on costs", "command_id": "continue-settled", "continue_doc_id": docID}, false)
+	w := postPromptBar(t, handler, start.OwnerID, map[string]any{"text": "next episode: add a section on costs", "command_id": "continue-settled", "focus": textureFocus(docID)}, false)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("P3: continue on a settled document status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -193,8 +193,8 @@ func TestPromptBarContinueRefusesAnotherOwnersDocument(t *testing.T) {
 	docID := start.InitialDocument.DocID
 	mu, dispatches := recordContinueDispatches(core)
 
-	other := postPromptBar(t, handler, "user-mallory", map[string]string{"text": "rewrite it my way", "command_id": "steal", "continue_doc_id": docID}, false)
-	missing := postPromptBar(t, handler, "user-mallory", map[string]string{"text": "rewrite it my way", "command_id": "missing", "continue_doc_id": "doc-that-does-not-exist"}, false)
+	other := postPromptBar(t, handler, "user-mallory", map[string]any{"text": "rewrite it my way", "command_id": "steal", "focus": textureFocus(docID)}, false)
+	missing := postPromptBar(t, handler, "user-mallory", map[string]any{"text": "rewrite it my way", "command_id": "missing", "focus": textureFocus("doc-that-does-not-exist")}, false)
 	if other.Code != http.StatusNotFound || missing.Code != http.StatusNotFound || other.Body.String() != missing.Body.String() {
 		t.Fatalf("P4: other owner's doc %d %s; missing doc %d %s; want the same 404", other.Code, other.Body.String(), missing.Code, missing.Body.String())
 	}
@@ -239,7 +239,7 @@ func TestPromptBarContinueRefusesCancelledDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := postPromptBar(t, handler, start.OwnerID, map[string]string{"text": "continue anyway", "command_id": "after-cancel", "continue_doc_id": docID}, false)
+	w := postPromptBar(t, handler, start.OwnerID, map[string]any{"text": "continue anyway", "command_id": "after-cancel", "focus": textureFocus(docID)}, false)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("P5: continue on a cancelled document status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -256,7 +256,7 @@ func TestPromptBarContinueRefusesCancelledDocument(t *testing.T) {
 	}
 }
 
-// P6: without continue_doc_id the prompt bar still creates a new document
+// P6: without a focus the prompt bar still creates a new document
 // through the conductor, and leaves an existing document alone.
 func TestPromptBarWithoutContinueCreatesNewDocument(t *testing.T) {
 	requireNoUndeclaredWrites(t)
@@ -264,7 +264,7 @@ func TestPromptBarWithoutContinueCreatesNewDocument(t *testing.T) {
 	s := core.Store()
 	start := startObservationLifecycle(t, s)
 
-	w := postPromptBar(t, handler, start.OwnerID, map[string]string{"text": "write one short sentence about tides", "command_id": "new-doc"}, false)
+	w := postPromptBar(t, handler, start.OwnerID, map[string]any{"text": "write one short sentence about tides", "command_id": "new-doc"}, false)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("P6: submit status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -302,7 +302,7 @@ func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	start := startObservationLifecycle(t, s)
 	docID := start.InitialDocument.DocID
 	recordContinueDispatches(core)
-	body := map[string]string{"text": "add a summary", "command_id": "continue-retry", "continue_doc_id": docID}
+	body := map[string]any{"text": "add a summary", "command_id": "continue-retry", "focus": textureFocus(docID)}
 
 	first := postPromptBar(t, handler, start.OwnerID, body, false)
 	if first.Code != http.StatusAccepted {
@@ -328,7 +328,7 @@ func TestPromptBarContinueRefusesInProcessDesk(t *testing.T) {
 	docID := start.InitialDocument.DocID
 	mu, dispatches := recordContinueDispatches(core)
 
-	w := postPromptBar(t, handler, start.OwnerID, map[string]string{"text": "revise it for the owner", "command_id": "desk-continue", "continue_doc_id": docID}, true)
+	w := postPromptBar(t, handler, start.OwnerID, map[string]any{"text": "revise it for the owner", "command_id": "desk-continue", "focus": textureFocus(docID)}, true)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("P9: in-process continue status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -352,7 +352,7 @@ func TestPromptBarContinueRefusesUnboundDocument(t *testing.T) {
 	if err := handler.Store.CreateDocument(t.Context(), doc); err != nil {
 		t.Fatal(err)
 	}
-	w := postPromptBar(t, handler, "user-1", map[string]string{"text": "build on this", "command_id": "unbound", "continue_doc_id": doc.DocID}, false)
+	w := postPromptBar(t, handler, "user-1", map[string]any{"text": "build on this", "command_id": "unbound", "focus": textureFocus(doc.DocID)}, false)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "not lifecycle-bound") {
 		t.Fatalf("unbound continue status=%d body=%s, want 409 not lifecycle-bound", w.Code, w.Body.String())
 	}
@@ -362,4 +362,10 @@ func TestPromptBarContinueRefusesUnboundDocument(t *testing.T) {
 	if got := ownerTrajectoryCount(t, core.Store(), "user-1", "autoputer-test"); got != 0 {
 		t.Fatalf("a refused continue started %d trajectories", got)
 	}
+}
+
+// textureFocus is the focus the shell's Texture chip sends for docID (MA4.8;
+// it replaced continue_doc_id).
+func textureFocus(docID string) map[string]string {
+	return map[string]string{"app_agent_id": agentprofile.Texture, "object_ref": docID}
 }

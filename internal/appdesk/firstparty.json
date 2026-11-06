@@ -4,6 +4,10 @@
     "verbs": ["Reply", "Report", "Done"],
     "taint_class": "untrusted_input",
     "worker_max_bytes": 134217728,
-    "owned_object_kinds": []
+    "owned_object_kinds": [],
+    "accepts": [
+      "read, find or summarize the owner's email",
+      "draft, reply to or send an email"
+    ]
   }}
 ]}

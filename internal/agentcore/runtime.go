@@ -1443,7 +1443,7 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	now := time.Now().UTC()
 	runID := uuid.New().String()
 	if commandID := strings.TrimSpace(metadataStringValue(metadata, "lifecycle_command_id")); commandID != "" {
-		runID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"choir:prompt-bar", ownerID, rt.cfg.ComputerID, commandID}, ":"))).String()
+		runID = rt.PromptBarRunID(ownerID, commandID)
 		existing, existingErr := rt.getRunForComputer(ctx, ownerID, runID)
 		if existingErr == nil {
 			if existing.Prompt != prompt || metadataStringValue(existing.Metadata, "lifecycle_command_id") != commandID {
@@ -4538,6 +4538,11 @@ type conductorDecision struct {
 	FramingRevisionID    string `json:"framing_revision_id,omitempty"`
 	InitialRevisionID    string `json:"initial_revision_id,omitempty"`
 	InitialLoopID        string `json:"initial_loop_id,omitempty"`
+	// The route (MA4.8): the route record, the rule that decided it and an
+	// abstained route's one-tap alternatives.
+	RouteRecordID     string   `json:"route_record_id,omitempty"`
+	RouteRule         string   `json:"route_rule,omitempty"`
+	RouteAlternatives []string `json:"route_alternatives,omitempty"`
 }
 
 func conductorRequestedApp(rec *types.RunRecord) string {

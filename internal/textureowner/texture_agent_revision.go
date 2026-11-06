@@ -111,7 +111,7 @@ func writeOwnerRevisionRefusal(w http.ResponseWriter, err error) {
 }
 
 // reviseOwnerDocument is the owner revise of one document: /revise and the
-// prompt bar's continue_doc_id both reach the canonical write through it
+// prompt bar's focused submit both reach the canonical write through it
 // (FE-02 step 1, docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md).
 // The document is read owner-scoped, so another owner's document is the
 // same 404 as a missing one.

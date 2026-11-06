@@ -35,17 +35,30 @@ type PromptBarDecisionSpec struct {
 	SourceURL string
 	MediaType string
 	AppHint   string
+	// Route is the prompt router's route this decision follows (MA4.8).
+	Route *PromptRoute
 }
 
-// CompletePromptBarDecision records a deterministic conductor decision without
-// taking ownership of the selected app's state.
+// CompletePromptBarDecision records the conductor decision (the router's route
+// and the app it opens) without taking ownership of the selected app's state.
 func (rt *Runtime) CompletePromptBarDecision(ctx context.Context, text, ownerID string, metadata map[string]any, spec PromptBarDecisionSpec) (*types.RunRecord, error) {
-	return rt.completePromptBarDecisionRun(ctx, text, ownerID, metadata, conductorDecision{
+	decision := conductorDecision{
 		Action:    spec.Action,
 		App:       spec.App,
 		Title:     spec.Title,
 		SourceURL: spec.SourceURL,
 		MediaType: spec.MediaType,
 		AppHint:   spec.AppHint,
-	})
+	}
+	if spec.Route != nil {
+		if metadata == nil {
+			metadata = map[string]any{}
+		}
+		decision.RouteRecordID, decision.RouteRule = spec.Route.RecordID, spec.Route.Rule
+		decision.RouteAlternatives = append([]string(nil), spec.Route.Alternatives...)
+		for k, v := range spec.Route.Metadata() {
+			metadata[k] = v
+		}
+	}
+	return rt.completePromptBarDecisionRun(ctx, text, ownerID, metadata, decision)
 }
