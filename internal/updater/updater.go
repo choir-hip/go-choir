@@ -522,6 +522,16 @@ func (u *Updater) checkStoreFloor(manifest ReleaseManifest, path string) error {
 // refusing it would stop checkpoint derivation on every floored computer
 // that never applied a release. A declared epoch below the floor is refused
 // on every path.
+// ErrStoreFloorRefused marks a release the guest store floor refuses: a
+// cause that does not change on a retry (a store or I/O failure reading the
+// floor is not one).
+var ErrStoreFloorRefused = errors.New("updater: refused by the guest store floor")
+
+type storeFloorRefusal struct{ msg string }
+
+func (r storeFloorRefusal) Error() string        { return r.msg }
+func (r storeFloorRefusal) Is(target error) bool { return target == ErrStoreFloorRefused }
+
 func checkManifestAgainstFloor(storeSchemaPath string, manifest ReleaseManifest, path string, allowUndeclared bool) error {
 	if strings.TrimSpace(storeSchemaPath) == "" {
 		return nil
@@ -537,10 +547,10 @@ func checkManifestAgainstFloor(storeSchemaPath string, manifest ReleaseManifest,
 		if allowUndeclared {
 			return nil
 		}
-		return fmt.Errorf("updater: %s refused: the guest store floor is %d (%s) and the release declares no store schema epoch, so nothing proves it is at or above the floor", path, floor.Version, floor.Reason)
+		return storeFloorRefusal{fmt.Sprintf("updater: %s refused: the guest store floor is %d (%s) and the release declares no store schema epoch, so nothing proves it is at or above the floor", path, floor.Version, floor.Reason)}
 	}
 	if manifest.StoreSchemaVersion < floor.Version {
-		return fmt.Errorf("updater: %s refused: release store schema %d is below the guest store floor %d (%s)", path, manifest.StoreSchemaVersion, floor.Version, floor.Reason)
+		return storeFloorRefusal{fmt.Sprintf("updater: %s refused: release store schema %d is below the guest store floor %d (%s)", path, manifest.StoreSchemaVersion, floor.Version, floor.Reason)}
 	}
 	return nil
 }
@@ -606,6 +616,43 @@ func (u *Updater) trustedSourceDir(source, releaseDigest string) (string, error)
 }
 
 func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseManifest) error {
+	return stageReleaseAt(u.root, sourceDir, releaseDir, manifest)
+}
+
+// StageBaselineRelease stages the booted image's baseline release at
+// releases/<digest> without touching `current`, so a caller can then swap to
+// it atomically with RestagePinnedRelease (the forced-modularity migration's
+// stage-then-swap; docs/design/forced-modularity-build-2026-11-04.md, PM13).
+// The source must be trusted (the immutable /nix/store, or the updater's own
+// incoming store), the manifest a genesis baseline of that source, and its
+// declared epoch at or above every store floor named.
+func StageBaselineRelease(root, sourceDir string, manifest ReleaseManifest, storeSchemaPaths ...string) error {
+	root = filepath.Clean(root)
+	if root == "." || !filepath.IsAbs(root) {
+		return fmt.Errorf("updater: stage requires an absolute updater root")
+	}
+	sourceDir = filepath.Clean(sourceDir)
+	if !strings.HasPrefix(sourceDir, "/nix/store/") && !strings.HasPrefix(sourceDir, filepath.Join(root, "incoming")+string(os.PathSeparator)) {
+		return fmt.Errorf("updater: baseline source %s is not trusted", sourceDir)
+	}
+	if manifest.Marker != "genesis-baseline" || manifest.LayeringEntrypoint != "" || !computerevent.IsSHA256(manifest.ContentDigest) {
+		return fmt.Errorf("updater: not a baseline manifest")
+	}
+	if finalized, err := FinalizeManifest(manifest); err != nil || finalized.ContentDigest != manifest.ContentDigest {
+		return fmt.Errorf("updater: baseline manifest digest mismatch")
+	}
+	for _, schemaPath := range storeSchemaPaths {
+		if err := checkManifestAgainstFloor(schemaPath, manifest, "baseline stage", true); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "releases"), 0o700); err != nil {
+		return err
+	}
+	return stageReleaseAt(root, sourceDir, filepath.Join(root, "releases", manifest.ContentDigest), manifest)
+}
+
+func stageReleaseAt(root, sourceDir, releaseDir string, manifest ReleaseManifest) error {
 	if err := verifyManifest(sourceDir, manifest); err != nil {
 		return err
 	}
@@ -614,7 +661,7 @@ func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseMan
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	temporary, err := os.MkdirTemp(filepath.Join(u.root, "releases"), ".stage-")
+	temporary, err := os.MkdirTemp(filepath.Join(root, "releases"), ".stage-")
 	if err != nil {
 		return err
 	}
@@ -634,7 +681,7 @@ func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseMan
 	// one state authority (S2-e). restorePrior then reverts exec with the
 	// same swap; a release that predates the in-dir entrypoint is backfilled
 	// by ensureReleaseEntrypoint on the restore path.
-	entrypoint, err := resolveLayeringEntrypoint(filepath.Join(u.root, "store"), manifest)
+	entrypoint, err := resolveLayeringEntrypoint(filepath.Join(root, "store"), manifest)
 	if err != nil {
 		return err
 	}

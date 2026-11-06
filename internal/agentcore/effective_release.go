@@ -64,6 +64,9 @@ type EffectiveRelease struct {
 	// reconcile.
 	Diverged         *bool              `json:"diverged,omitempty"`
 	SourceProjection *sourceproj.Result `json:"source_projection,omitempty"`
+	// PackageMigration is the forced-modularity migration's last attempt
+	// this process saw (package_migration.go): owner-visible on /health.
+	PackageMigration *packageMigrationStatus `json:"package_migration,omitempty"`
 }
 
 // EffectiveEventHead is the computer's event chain head as the guest store
@@ -150,6 +153,7 @@ func (rt *Runtime) EffectiveRelease(ctx context.Context) EffectiveRelease {
 		diverged := projection.Diverged
 		out.Diverged, out.SourceProjection = &diverged, projection
 	}
+	out.PackageMigration = rt.packageMigrationStatusView()
 	return out
 }
 

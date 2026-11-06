@@ -72,7 +72,11 @@ func lenientManifest(raw json.RawMessage) apppackage.Manifest {
 
 // installReviewGate refuses an install whose widened ceiling has no sealed
 // accepting verdict, running the review when none exists.
-func (rt *Runtime) installReviewGate(ctx context.Context, ownerID, computerID, releaseID string, rec pkgrelease.Record, treePatch []byte, module pkgruntime.Module, current *store.PackageInstall) *installRefusal {
+// installReviewDeferred refuses a release that needs a review when the caller
+// asked not to run one now (the boot migration).
+const installReviewDeferred = "install_review_deferred"
+
+func (rt *Runtime) installReviewGate(ctx context.Context, ownerID, computerID, releaseID string, rec pkgrelease.Record, treePatch []byte, module pkgruntime.Module, current *store.PackageInstall, deferReview bool) *installRefusal {
 	subject := installreview.Subject{
 		ReleaseID: releaseID, PatchSHA256: computerevent.DigestBytes(treePatch), ManifestSHA256: rec.Manifest.SHA256,
 		BehaviourSurface: rec.Manifest.BehaviourSurface, Package: rec.Package.Name, Publisher: rec.Track,
@@ -84,6 +88,9 @@ func (rt *Runtime) installReviewGate(ctx context.Context, ownerID, computerID, r
 	widened := subject.Widened() || rec.Manifest.Level != string(apppackage.LevelDefault) || rec.Manifest.DesksCount > 0
 	if !widened {
 		return nil
+	}
+	if deferReview && rt.installReviewSigner == nil {
+		return refuseInstall(http.StatusConflict, installReviewDeferred, "this release widens the computer's ceiling and needs an install review; this computer has no verdict signer now")
 	}
 	if rt.installReviewSigner == nil {
 		return refuseInstall(http.StatusServiceUnavailable, "install_review_unavailable", "this release widens the computer's ceiling and needs a review verdict; this computer has no verdict signer")
@@ -106,6 +113,9 @@ func (rt *Runtime) installReviewGate(ctx context.Context, ownerID, computerID, r
 	decision, refusal := read()
 	if refusal != nil {
 		return refusal
+	}
+	if decision.Reason == installreview.ReasonRequired && deferReview {
+		return refuseInstall(http.StatusConflict, installReviewDeferred, "this release widens the computer's ceiling and needs an install review; it was not run now")
 	}
 	if decision.Reason == installreview.ReasonRequired {
 		if refusal := rt.runInstallReview(ctx, ownerID, computerID, rec, subject, module); refusal != nil {

@@ -260,11 +260,21 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	if err != nil {
 		return report, err
 	}
+	// One writer of `current` at a time (PM13), and never over a stack that
+	// still holds package source the migration has not moved out (PM14): the
+	// offer's release does not carry it, so the source would be gone.
+	rt.currentReleaseMu.Lock()
+	if refusal := rt.unmigratedPackageStackRefusal(ctx); refusal != "" {
+		rt.currentReleaseMu.Unlock()
+		return report, errors.New(refusal)
+	}
 	restartPlanned, spentErr := rt.markPlannedRestart("platform_update", offer.UpdateID)
 	if spentErr != nil {
+		rt.currentReleaseMu.Unlock()
 		return report, spentErr
 	}
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
+	rt.currentReleaseMu.Unlock()
 	restartPlanned(applyErr)
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
 	if keyErr != nil {

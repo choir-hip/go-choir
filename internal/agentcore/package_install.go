@@ -41,7 +41,6 @@ const (
 	installStateInstalled   = "installed"
 	installStateReplaced    = "replaced"
 	installStateUninstalled = "uninstalled"
-	installStateSource      = "source"
 )
 
 // installRequestMaxBytes bounds the install body: a package record, its
@@ -71,6 +70,10 @@ type packageInstallRequest struct {
 // automatic policy, or the platform's yank or forced update and the listing
 // version it acted on.
 type installChange struct {
+	// deferReview: a release that needs an install review is refused
+	// (install_review_deferred) instead of running the seats now. The boot
+	// migration sets it, so no seat runs at boot (PM20).
+	deferReview    bool
 	trigger        string
 	forced         bool
 	platformReason string
@@ -92,8 +95,9 @@ type PackageInstallView struct {
 	store.PackageInstall
 	// State: installed (this record is the package's current install),
 	// replaced (a later install or uninstall of the package superseded it),
-	// uninstalled (this uninstall is the package's latest record), or
-	// source (a source-patch install from before runtime install).
+	// or uninstalled (this uninstall is the package's latest record). A
+	// source-patch record from before runtime install is history: replaced
+	// (forced modularity M3; its source left the stack with the migration).
 	State string `json:"state"`
 	// PatchMatchesRelease is true when the record is in force: an install
 	// is the package's current install, an uninstall is its latest record.
@@ -225,7 +229,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	// The install review gate (MA7.5): a widened ceiling stores its module
 	// and records only with a sealed accepting verdict for exactly these
 	// bytes.
-	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, module, current); refusal != nil {
+	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, module, current, request.change.deferReview); refusal != nil {
 		return PackageInstallView{}, false, refusal
 	}
 	sha := ""
@@ -422,7 +426,10 @@ func currentPackageInstalls(records []store.PackageInstall) map[string]*store.Pa
 func (rt *Runtime) installView(item store.PackageInstall, all []store.PackageInstall) PackageInstallView {
 	view := PackageInstallView{PackageInstall: item}
 	if item.Mode != store.PackageInstallModeRuntime {
-		view.State = installStateSource
+		// A source-patch record from before runtime install: history, never
+		// in force (the fold leaves it out). The tape is replayed, not
+		// rewritten, so it is shown, not converted.
+		view.State = installStateReplaced
 		return view
 	}
 	var latest *store.PackageInstall

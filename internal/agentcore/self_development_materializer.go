@@ -1513,6 +1513,10 @@ func (rt *Runtime) applyOrReadJournal(ctx context.Context, request updater.Apply
 	if holdErr := rt.verifierKeyHold(ctx); holdErr != nil {
 		return updater.ApplyResult{}, nil, holdErr
 	}
+	// One writer of `current` at a time (PM13): the package migration and a
+	// restore wait for the apply, and the apply for them.
+	rt.currentReleaseMu.Lock()
+	defer rt.currentReleaseMu.Unlock()
 	restartPlanned, spentErr := rt.markPlannedRestart(reason, target)
 	if spentErr != nil {
 		return updater.ApplyResult{}, nil, spentErr

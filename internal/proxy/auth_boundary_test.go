@@ -205,6 +205,10 @@ func TestOwnerActsRefuseAgentAndAdminKeys(t *testing.T) {
 		{"approve", http.MethodPost, base + "/self-development/operations/op-1/decision", `{"decision":"approve"}`, "computer:self_development:approve", "guest"},
 		{"unparseable decision", http.MethodPost, base + "/self-development/operations/op-1/decision", `not json`, "computer:self_development:approve", "guest"},
 		{"rollback", http.MethodPost, base + "/self-development/rollbacks", `{}`, "computer:self_development:rollback", "guest"},
+		// Forced modularity M3: the migration rollback is a rollback-class act.
+		{"package migration rollback", http.MethodPost, base + "/self-development/package-migration-rollback", `{}`, "computer:self_development:rollback", "guest"},
+		// PM22: installing a set-aside package is an install-class act.
+		{"package migration install", http.MethodPost, base + "/self-development/package-migration-install", `{}`, releasePublishScope, "guest"},
 		// U4 slice 8: the owner's rebase retry is an approval-class act.
 		{"rebase retry", http.MethodPost, base + "/self-development/rebase-retry", `{}`, "computer:self_development:approve", "guest"},
 		{"abandon", http.MethodPost, base + "/self-development/abandonments", `{}`, "computer:self_development:approve", "guest"},

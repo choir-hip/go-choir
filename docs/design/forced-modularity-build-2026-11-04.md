@@ -797,3 +797,220 @@ Deferred, named (each is M3 scope that did not land here):
    paths) and refuses casts; its served build is unchanged. Self-development
    is paused until gate G anyway. The legacy source-mode install records
    (`installStateSource`, "Earlier source install") go with the migration.
+
+## Build notes: M3 boot migration (2026-11-06)
+
+Written before the code. This is deferred item 3 and the legacy-record part
+of section 4 step 5. Observed on d@e (read-only product API, 2026-11-06):
+`effective_release.source_projection.state = stack_package_path`, operation
+`selfdev-534017c7e5002466af83df914e6b7d50`, stack base `91fb7c57`, booted
+`5c83a08f`. The cumulative patch is package-only: it adds
+`frontend/src/packages/slides-next/{App.svelte,choir-package.json}`, and that
+manifest is the deleted v1 schema (`choir.app-package/v1`). d@e has no
+runtime installs. Its served SPA is the release's own copy (non-layered,
+built on `91fb7c57`), so d@e serves a frontend four days behind its base.
+
+### What the migration is
+
+One attempt per (stack operation, booted base) pair, started from the boot
+source-projection pass (and again after a base fetch lands), never by a
+resumer. It runs only when reconcile says `stack_package_path` and the booted
+base's objects are in the guest repository. It reads only the tape and the
+bound bundle; nothing it writes is read back as input except its own attempt
+record, which only bounds attempts.
+
+1. **Classify** the stack patch (`packagepath.Classify`). A patch with any
+   platform path is *mixed*: refused for the pair (`package_migration_mixed`),
+   nothing moved. Rebuilding a platform-only stack needs a host build and a
+   corpusd receipt kind of its own; it is a named residual, not this slice.
+2. **Snapshot.** The pre-migration release stays pinned at
+   `releases/<digest>` (nothing in the updater collects releases); the
+   stack's deterministic projection commit is kept at
+   `refs/choir/kept/<operation>`; the installs in force are listed. The
+   attempt record (`<updater root>/package-migration/<pair>.json`, written by
+   rename) holds all three and the step reached.
+3. **Per package root** in the patch: if the booted base already holds the
+   identical subtree, it is *upstreamed* (nothing to install). Otherwise the
+   root's own patch is drafted into a release record on the owner's track
+   (`pkgrelease.DraftPackage`, the operation's decision as its operation
+   fields, deterministic, so a re-run names the same release id) and
+   installed at run time through `installPackage` (trigger `migration`). A
+   refusal that is the package's own (manifest, build, review gate: any 4xx)
+   marks it *kept*: its bytes stay at the kept ref and in
+   `package-migration/<pair>/<name>.patch`, and the record names the reason.
+   A server-side failure (5xx, git, store) fails the attempt.
+4. **Swap.** The served build becomes the booted base: `current` moves to
+   the booted image's baseline release (restaged when that release is
+   already pinned; otherwise `current` is removed and the existing baseline
+   import runs, exactly a fresh computer's first boot). The running binary
+   is the base's already (a package-only release is never layered), so no
+   restart is needed: the computer surface reads `current/frontend` per
+   request.
+5. **Reconcile** the projection (now an empty stack) and check the
+   **differential**:
+   - D1: every package root the stack changed is installed (an install in
+     force with the drafted release id and its module present), upstreamed,
+     or kept with a reason;
+   - D2: the served release is the booted base's baseline (`current`'s
+     content digest equals the baseline manifest of the booted release
+     root), or `current` is absent and the surface serves that root;
+   - D3: the projection is no longer diverged;
+   - D4: every install in force before is still in force, unless the
+     migration replaced its package.
+   A failed differential rolls back automatically (below) and the attempt
+   is `failed`.
+6. **Record** the outcome on the attempt record, on `/health`
+   (`effective_release.package_migration`) and as one ledger record
+   (system-committed observation, like the Cast warning), so the owner sees
+   it.
+
+Publishing the drafted release (section 4 step 1b) waits for deferred item
+1: the publish authority for a package operation is its decision, and the
+migration must use that same authority rather than mint a second one. The
+release record and its blobs are deterministic and the install carries
+them, so a later publish names the same release. Step 1a (find an existing
+listing) is an optimization over the same bytes and also needs the catalog;
+it waits with 1b.
+
+### Failure modes (each has a test)
+
+| # | Failure | Guard |
+|---|---|---|
+| PM1 | a crash after some installs, before the swap | the record is non-terminal at the next boot and is closed "interrupted by a restart"; the stack is still the old one; installs are idempotent by release id; a new attempt starts only on a boot that followed a planned restart (or the next deploy, a new pair); two interrupted attempts close the pair |
+| PM2 | a crash after `current` is removed, before the import | the surface falls back to the booted release root; the boot's own surface pass imports the baseline; the projection then reads an empty stack, so no new attempt starts |
+| PM3 | a re-run after success | the stack is empty, so reconcile never says `stack_package_path`; the pair's record says done |
+| PM4 | an app that cannot be installed under today's contract (d@e's v1 manifest) | kept, named, its bytes kept; the computer is not held at `stack_package_path` forever by a package it cannot load |
+| PM5 | a transient failure (5xx, git, the updater) | the attempt fails, its own installs are uninstalled (trigger `migration_rollback`), nothing is swapped; the pair is closed, and the next deploy is a new pair |
+| PM6 | a mixed stack | refused for the pair, nothing moved; one attempt per deploy |
+| PM7 | an operation is open | no attempt (not counted); the next trigger checks again |
+| PM8 | the differential fails after the swap | automatic rollback from the snapshot; `failed` |
+| PM9 | the owner wants the old state back | the owner's `package-migration-rollback` act runs `rollbackPackageMigration`: restage the pinned release, uninstall the migration's installs, record `rolled_back`; the pair is not migrated again (the next deploy is a new pair) |
+| PM10 | two triggers at once | one mutex; the second sees the record |
+| PM11 | the booted base objects are missing | no attempt until the fetch lands |
+| PM12 | the base already carries the package | upstreamed, nothing installed |
+
+Restart rules: the attempt is an obligation, closed at boot when found open.
+The pair's migration is a standing platform intent (the stack must hold no
+package path), so a later boot's attempt is new work, like a schedule's next
+tick; the planned-boot requirement and the two-interruption bound keep a
+migration that crashes the computer from looping.
+
+The legacy source-mode install records are history: a tape is replayed, not
+rewritten, so they are not converted to runtime records (a runtime record
+would fold as an install in force with no module). `installView` shows them
+as `replaced`, the `source` state and the Library's "source" branch are
+deleted. `Mode` stays, because the fold needs it to leave those rows out.
+
+### Residuals after the migration build (named, not built)
+
+- **Mixed stacks.** A stack with platform paths is refused
+  (`package_migration_mixed`). Serving base plus the platform hunks needs
+  the clean-rebase pipeline with a new corpusd receipt kind (the patch is the
+  old patch minus the package roots, not the same bytes). No computer is
+  known to hold one; the migration's refusal reports any that does.
+- **Publish.** Section 4 step 1a/1b: the drafted release is installed, not
+  published. It waits for deferred item 1's authority.
+- **The rollback act** is built: `POST /api/computers/<id>/self-development/package-migration-rollback`
+  with `{"pair": "<effective_release.package_migration.pair>"}`, a
+  rollback-class owner act at the proxy, gated exactly like the sibling
+  `rollbacks` route: an owner session, or a key that carries `owner_acts`
+  and `computer:self_development:rollback`; agent and admin keys are
+  refused. The guest checks the owner again. `{"rearm": "<operation id>"}`
+  on the same route lifts the owner's hold (PM15). See review r1 below.
+- **Deferred item 2's seed fix (the capsule seeds from the installed head).**
+  Not built, because the obvious fix breaks platform operations. Two facts:
+  (1) an install keeps no source on the computer: `installPackage` stores
+  the module and records `patch_sha256`, but the tree patch bytes are
+  dropped, so there is nothing to seed from; (2) a capsule cast from a seed
+  commit (projection HEAD plus the installed package trees) would make every
+  platform operation's cumulative patch (`composeFreezePatch`, stack base to
+  seed plus change) carry the installed package paths, and the stack would
+  refuse it as mixed. The fix needs both: the install keeps its tree patch in
+  the module store, and the seed applies only to a Cast whose spec names the
+  package (a package operation is declared at Cast, not discovered at
+  Freeze), with Freeze composing a package operation against the seed
+  commit and a platform operation against the projection commit.
+- **H1 (base computers keep their genesis frontend).** The migration serves
+  the booted base by importing the baseline when `current` is absent, which
+  is what a fresh computer does. Whether an older base computer's `current`
+  genesis copy is refreshed at a deploy is still the open H1 of the update
+  architecture design; the migration neither fixes nor depends on it.
+
+### Review r1 (2026-11-06): two seats sent it back; failure modes PM13-PM24
+
+Written before the r1 code. Each row has a test or names why not.
+
+| # | Failure | Guard |
+|---|---|---|
+| PM13 | another writer moves `current` while the migration runs: a selfdev apply, a resumed platform update, a tape restore, the boot baseline import (Devin 1, scenarios B and C) | one guest lock, `currentReleaseMu`, held by every in-process writer of `current` (the apply calls, the restore's restage, the baseline import) and by the migration from the snapshot to the end of the differential; the migration re-reads `current` under it and stops (deferred) if it no longer names the stack's release |
+| PM14 | a resumed platform update swaps `current` before the migration runs, so the projection reads `base` and the package source is gone with no record (Devin 1, scenario A) | under the same lock, a platform transition is refused (`package_stack_unmigrated`) while `current` names a release whose stack changes package paths and the projection does not say it is upstreamed; the refusal is a correctness refusal like release skew. A tape restore is an owner act and is not refused; restoring away from a package stack is named in the residuals |
+| PM15 | the owner rolls back, and the next deploy (a new pair, no record) migrates the stack again (S2) | the rollback writes a hold per operation (`package-migration/hold-<op>.json`); no attempt starts for that operation on any base while it stands; `/health` shows `held`. The owner lifts it with `{"rearm": "<operation id>"}` (the next boot migrates) or takes the stack off with the self-development rollback to a prior applied head |
+| PM16 | the owner's rollback restores over newer work (Devin 2, S1) | refused 409 `package_migration_drifted` unless `current` is the release the attempt served and no operation is open; it runs under `currentReleaseMu` |
+| PM17 | an interrupted attempt's installs are never undone (S3) | the record (not the attempt) lists every install intent (package, release id) before `installPackage` runs; undo and rollback uninstall every in-force install of those release ids with trigger `migration`, whichever attempt made it, including one made by an install that crashed before its attempt saw the answer |
+| PM18 | a crash after the swap closes the attempt with no way back (S4) | the target release digest is recorded before the swap; the rollback accepts a `done` attempt, or an `interrupted` one at `swap` or `differential` whose target is `current` |
+| PM19 | a record write fails after the swap and the swap is left unrestored (S5) | after the swap every failure path restores the snapshot |
+| PM20 | a transient refusal is kept for good, or burns the pair (S6, Devin 4) | kept only for the package's own permanent refusals (the draft and record reasons, content and secret refusals, a failed build, uses beyond grants, a review rejection, a built-in name not the owner's); a release that needs an install review is kept for review without running seats at boot; every other refusal (5xx, a seat unavailable, attempts exhausted, a store or git failure) ends the attempt `deferred`, undoes its installs, swaps nothing, and does not close the pair: a new attempt starts on the next planned boot, three deferrals close it |
+| PM21 | wiring gaps or a transient snapshot read burn the pair (Devin 5) | `deferred`, as PM20 |
+| PM22 | a kept app leaves no product trace (Devin 6) | `GET .../packages/installs` carries `set_aside` (package, reason, pair) and the Library lists it with its reason and an "Install" button; the owner's `POST .../self-development/package-migration-install {"pair","package"}` (an install-class owner act) drafts the kept bytes again and installs them through the ordinary path, seats included |
+| PM23 | a migrated built-in app shadows the base copy and stops getting base updates (S7) | a package that is a built-in app is kept (`builtin_shadow`), not installed; the base copy serves; the owner may install the kept copy deliberately (PM22) |
+| PM24 | bookkeeping: the close-once flag set before the scan, a stale running attempt ignored by mayStart, unsynced patch files, the baseline digest derived twice, restages without the store floor (Devin 7, 8, 9, 3) | the flag is set only after a clean scan and a running attempt found under the lock is closed first; patch files are fsynced; the baseline manifest is resolved once per attempt and the differential compares against it; every migration restage passes the store schema floor |
+
+As built (r1), where the code went past the table:
+- PM13: the migration takes `currentReleaseMu` before it reads the applied
+  stack, so the read of `current`, the snapshot, the swap and the
+  differential are one critical section. The swap is
+  `updater.StageBaselineRelease` (stages `releases/<digest>` from the
+  trusted baseline root, store floor checked) then `RestagePinnedRelease`
+  (one rename of `current`); `current` is never removed.
+- PM14: an unreadable applied stack also refuses the platform update (it
+  cannot be shown to hold no package source).
+- PM17: a pair closed by its bounds (two interruptions, three deferrals)
+  uninstalls its intents once (`closed_undone`), since its caller saw the
+  stack still served.
+- PM20: with no verdict signer, a release that needs a review is also kept
+  for review at boot (`install_review_deferred`), not deferred.
+- PM20: a deferred or interrupted pair retries once per boot that followed a
+  planned restart (a process-local tried set), never twice in one boot.
+- PM22: the proxy maps `package-migration-install` to its own action,
+  `migration-install`: POST only, the install scope, the owner-act gate,
+  and the body passed through (the guest drafts from its own kept bytes;
+  nothing is read from the catalog).
+
+### Review r2 (2026-11-06): one blocking item; failure modes PM25-PM30
+
+Written before the r2 code.
+
+| # | Failure | Guard |
+|---|---|---|
+| PM25 | a transient record write (EMFILE, ENOSPC) inside `step()`, or a rename or write failure in the stage or swap, ends the attempt `failed`; `failed` closes the pair, and with PM14 refusing platform updates over the unmigrated stack no new pair forms: a transient fault wedges the computer (Devin r2, 1) | every I/O-class cause is `deferred` (record writes, stage and swap I/O), after a restore too; `failed` is kept for causes a retry cannot change: the store floor's refusal (`updater.ErrStoreFloorRefused`, new), a corrupt pinned release, a differential mismatch after a swap. A failed pair's kept packages stay on the set-aside list. Test: a record write fails at the packages step, then the next planned boot finishes |
+| PM26 | `ensureServingBaseline` read `current` before taking the lock, so a checkpoint bind could capture the pre-swap manifest (Devin r2, 4) | the read and the import are one critical section under `currentReleaseMu`. The updater daemon's `HoldApplyKey` reads `current` in another process, where the guest lock cannot reach; it is safe because PM7 refuses an attempt while an operation is open, so a swap never lands under a journal the fence is judging (at worst a different dead journal reads `unknown` instead of `nothing installed`: tape noise, not a wrong transition) |
+| PM27 | a tape restore restages `current`, and a base-fetch-triggered migration in the window before the restart swaps it to the baseline, so the restore does not take (Devin r2, 5) | a restore that restaged `current` sets a process flag under the lock; while it stands (until the restart, which is a new process) no attempt starts |
+| PM28 | the rollback of an attempt cut at the swap whose swap never landed (or was restored) is refused as drifted, so the owner cannot hold the operation (Devin r2, 2) | for an attempt that did not end done (interrupted, deferred or failed), `current` equal to the snapshot release is admitted: the rollback writes the hold, undoes the intents and ends `rolled_back` |
+| PM29 | the platform-update refusal admitted an apply in flight (`Pending`): fail open where an unreadable stack refuses (Devin r2, 6) | refused until it settles |
+| PM30 | the owner's set-aside install held `packageMigrationMu` across the install review (minutes), stalling the boot machinery (Devin r2, 3) | the record is read under the lock; the draft and the install run without it; the record is re-read under the lock to mark the package installed |
+
+### Review r3 (2026-11-06): one blocking item; PM31
+
+| # | failure | answer |
+|---|---|---|
+| PM31 | the differential could not tell "read and mismatched" from "could not read" (installs unreadable, module bytes unreadable, `current` unreadable, reconcile error), so a transient read ended `failed`, closed the pair and left the stack refusing every update (Devin r2, 1) | each check records a mismatch or an unknown; an attempt with unknowns and no mismatch defers (bounded, planned boots only) and restores the snapshot; `failed` stays for a comparison that read and failed |
+
+Devin r2's non-blocking items 2-7 (a restore flag with no restart pending, the review under `packageInstallMu`, holding a pre-snapshot attempt, a late record write read as interrupted, the closed-pair undo not restaging `current`, and the smaller nits) are residuals of this station, bounded and not wedging.
+
+Named, not built in r1:
+- **S8.** The staged baseline release carries the route's current code and
+  artifact refs, which can still name the old operation's. Stamping the base
+  identity changes what checkpoint binding reads and wants its own design;
+  the served bytes are the booted base's either way.
+- A tape restore to a checkpoint before the migration brings the package
+  stack back on a pair that is already `done`; no attempt starts for it
+  (the pair is closed). The owner's way out is the rearm (PM15) only after
+  a rollback; for a restore, a code fix (count a restore as a new pair) is
+  the residual.
+- A mixed stack (refused, PM6) or a held one (PM15) keeps the platform
+  update refused (PM14) until the owner rolls the change back with the
+  self-development rollback, or rearms the hold. That is deliberate: either
+  way out is an owner act, and the source is never dropped silently.
+- A rearm takes effect at the next boot; it does not start an attempt.
+- The Library's playwright spec does not yet mock `set_aside`; the Go
+  tests prove the route and the listing.

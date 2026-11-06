@@ -73,6 +73,16 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		return strings.TrimSpace(decoded), "read", true
 	case "rollbacks":
 		return strings.TrimSpace(decoded), "rollback", true
+	case "package-migration-rollback":
+		// Forced modularity M3: the owner puts a migrated computer's
+		// pre-migration release back. A rollback-class owner act.
+		return strings.TrimSpace(decoded), "rollback", true
+	case "package-migration-install":
+		// Forced modularity M3 (PM22): the owner installs a package the
+		// migration set aside. An install-class owner act; the computer
+		// drafts the release from its own kept source, so the body passes
+		// through.
+		return strings.TrimSpace(decoded), "migration-install", true
 	case "kernel-capabilities", "verifier-key":
 		return strings.TrimSpace(decoded), "read", true
 	case "abandonments":
@@ -104,7 +114,7 @@ func isSelfDevelopmentGuestPath(path string) bool {
 
 func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 	switch action {
-	case "approve", "rollback", "rebase-retry", "abandon":
+	case "approve", "rollback", "rebase-retry", "abandon", "migration-install":
 		return method == http.MethodPost
 	case "read":
 		return method == http.MethodGet
@@ -492,7 +502,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		// An approval-class act: the approve scope plus the owner-act gate below.
 		requiredScope = "computer:self_development:approve"
 	}
-	if action == "install" {
+	if action == "install" || action == "migration-install" {
 		// Installing a package is an approval-class act: the approve
 		// scope plus the owner-act gate below.
 		requiredScope = releasePublishScope
@@ -519,7 +529,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		if !authorizeOwnerAct(w, authResult, "self-development rollback") {
 			return
 		}
-	case "install":
+	case "install", "migration-install":
 		if !authorizeOwnerAct(w, authResult, "package install") {
 			return
 		}

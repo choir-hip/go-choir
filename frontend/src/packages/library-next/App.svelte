@@ -11,6 +11,8 @@
   import Icon from './Icon.svelte';
   import {
     installListOf,
+    installSetAside,
+    setAsideOf,
     descriptionOf,
     formatDay,
     inFlightFor,
@@ -77,6 +79,9 @@
   let pageGeneration = 0;
 
   let installs = [];
+  // setAside: apps a past change made that the forced-modularity migration
+  // did not install, each with why; the owner may install one.
+  let setAside = [];
   // Where each installed release came from: release id -> { track, seq }.
   // An installed app belongs to one maker; another maker's app of the same
   // name is not it.
@@ -228,10 +233,13 @@
   async function refreshInstalls() {
     if (!computerId) return;
     try {
-      installs = installListOf(await loadInstalls(computerId));
+      const body = await loadInstalls(computerId);
+      installs = installListOf(body);
+      setAside = setAsideOf(body);
       await resolveInstalled();
     } catch (err) {
       installs = [];
+      setAside = [];
       if (err && err.name === 'AuthRequiredError') reportAuth('install_read');
     }
   }
@@ -367,6 +375,21 @@
           };
     } catch (err) {
       confirm = null;
+      if (err && err.name === 'AuthRequiredError') reportAuth('install');
+      message = { tone: 'bad', text: messageOf(err) + ' Nothing was installed.' };
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doInstallSetAside(item) {
+    if (!item || busy || !computerId) return;
+    busy = true;
+    try {
+      await installSetAside(computerId, item.pair, item.package);
+      await refreshInstalls();
+      message = { tone: 'ok', text: 'Installed ' + item.package + '. Open it from the launcher.' };
+    } catch (err) {
       if (err && err.name === 'AuthRequiredError') reportAuth('install');
       message = { tone: 'bad', text: messageOf(err) + ' Nothing was installed.' };
     } finally {
@@ -606,6 +629,25 @@
               <li class="lib-version" data-platform-removed-row data-package={item.package}>
                 <span>{item.package}</span>
                 <span class="lib-note" data-platform-line>{platformLine(installs, item.package)}</span>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+      {#if setAside.length}
+        <section class="lib-section" data-set-aside-section>
+          <h3 class="lib-h3">Set aside</h3>
+          <p class="lib-note">Apps an earlier change made on this computer. They were not installed when apps moved out of the platform; each says why.</p>
+          <ul class="lib-version-list">
+            {#each setAside as item (item.pair + ':' + item.package)}
+              <li class="lib-version" data-set-aside-row data-package={item.package}>
+                <span>{item.package}</span>
+                <span class="lib-note" data-set-aside-reason>{item.reason}</span>
+                {#if item.installable}
+                  <button class="lib-btn lib-btn-primary lib-btn-small" data-set-aside-install disabled={busy || !computerId} on:click={() => doInstallSetAside(item)}>
+                    Install
+                  </button>
+                {/if}
               </li>
             {/each}
           </ul>

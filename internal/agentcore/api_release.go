@@ -112,7 +112,9 @@ func (h *APIHandler) handlePackageInstalls(w http.ResponseWriter, r *http.Reques
 		for _, item := range list {
 			views = append(views, h.rt.installView(item, list))
 		}
-		writeAPIJSON(w, http.StatusOK, map[string]any{"installs": views})
+		// set_aside: the packages the forced-modularity migration kept, which
+		// the owner may install from the Library (PM22).
+		writeAPIJSON(w, http.StatusOK, map[string]any{"installs": views, "set_aside": h.rt.packageMigrationSetAsideList()})
 	case installID != "" && r.Method == http.MethodGet:
 		item, err := h.rt.store.GetPackageInstall(r.Context(), ownerID, computerID, installID)
 		if errors.Is(err, store.ErrNotFound) {

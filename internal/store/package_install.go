@@ -90,6 +90,11 @@ type PackageInstall struct {
 const (
 	PackageInstallTriggerAutomatic = "automatic"
 	PackageInstallTriggerPlatform  = "platform"
+	// PackageInstallTriggerMigration: the forced-modularity migration moved
+	// the package out of the computer's source stack into this install;
+	// PackageInstallTriggerMigrationRollback: a migration's install undone.
+	PackageInstallTriggerMigration         = "migration"
+	PackageInstallTriggerMigrationRollback = "migration_rollback"
 )
 
 // PackageInstallFile is one data file of an install: its path in the package

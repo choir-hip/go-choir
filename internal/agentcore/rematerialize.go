@@ -77,6 +77,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 
 	rt.workspaceReplaceMu.Lock()
 	defer rt.workspaceReplaceMu.Unlock()
+	// The restore restages `current`: one writer at a time (PM13).
+	rt.currentReleaseMu.Lock()
+	defer rt.currentReleaseMu.Unlock()
 	if rt.store == nil {
 		return report, fmt.Errorf("%w: runtime store is not configured", ErrRematerializeUnavailable)
 	}
@@ -280,6 +283,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	report.PinCheckoutUsed = false
 	report.ExecChanged = rt.restoreExecChanged(checkpoint.Request.ReleaseDigest)
 	keepRestaged = true
+	// PM27: `current` now names the restored release, which this process
+	// does not run; no migration moves it before the restart into it.
+	rt.restoreRestaged.Store(true)
 	return report, nil
 }
 
@@ -568,6 +574,10 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
+	// `current` is read and, when missing, imported under one lock (PM13,
+	// PM26): a migration's swap cannot land between the read and the import.
+	rt.currentReleaseMu.Lock()
+	defer rt.currentReleaseMu.Unlock()
 	manifest, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot)
 	if err == nil {
 		if strings.TrimSpace(manifest.ComputerID) != computerID {
@@ -581,22 +591,7 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 		// layout refused (layered-release-spa-underivable-2026-10-09).
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable (current release: %v; trusted baseline root: %t)", err, strings.TrimSpace(baselineRoot) != "")
 	}
-	codeRef := "code:genesis"
-	artifactRef := "artifact-program:genesis"
-	if rt.selfdevRoute != nil {
-		slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
-		if err == nil {
-			if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err == nil && !resolution.RouteAbsent {
-				if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
-					codeRef = rCode
-				}
-				if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
-					artifactRef = rArt
-				}
-			}
-		}
-	}
-	manifest, err = updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
+	manifest, err = rt.servingBaselineManifest(ctx, computerID, baselineRoot)
 	if err != nil {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
 	}
@@ -617,6 +612,29 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	}
 	rt.recordStartupManifest(manifest)
 	return manifest, nil
+}
+
+// servingBaselineManifest is the baseline release manifest of baselineRoot as
+// this computer imports it: its code and artifact refs are the route's
+// current ones, or genesis when no route answers. The boot import and the
+// forced-modularity migration name the same release through it.
+func (rt *Runtime) servingBaselineManifest(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error) {
+	codeRef := "code:genesis"
+	artifactRef := "artifact-program:genesis"
+	if rt.selfdevRoute != nil {
+		slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
+		if err == nil {
+			if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err == nil && !resolution.RouteAbsent {
+				if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
+					codeRef = rCode
+				}
+				if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
+					artifactRef = rArt
+				}
+			}
+		}
+	}
+	return updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
 }
 
 // startupManifestFacts is one consistent read of the startup-manifest fields.

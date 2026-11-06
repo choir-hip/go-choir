@@ -165,6 +165,19 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusOK, report)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "self-development" && parts[2] == "package-migration-rollback" {
+		// Forced modularity M3: the owner restores a migration's snapshot.
+		// An owner act (the proxy's gate): the computer routes are
+		// read-only to a desk.
+		h.packageMigrationRollbackOwnerAct(w, r, ownerID)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "self-development" && parts[2] == "package-migration-install" {
+		// Forced modularity M3 (PM22): the owner installs a package the
+		// migration set aside. An install-class owner act (the proxy's gate).
+		h.packageMigrationInstallOwnerAct(w, r, ownerID)
+		return
+	}
 	if len(parts) == 3 && parts[1] == "self-development" && parts[2] == "rebase-retry" {
 		// U4 slice 8: the owner re-opens a spent rebase pair. An owner act:
 		// the computer routes are read-only to a desk.

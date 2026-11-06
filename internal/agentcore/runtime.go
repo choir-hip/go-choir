@@ -559,6 +559,30 @@ type Runtime struct {
 	packageBuilder   PackageModuleBuilder
 	packageModules   pkgruntime.Store
 	packageInstallMu sync.Mutex
+	// The forced-modularity migration (package_migration.go): one attempt at
+	// a time, the last record for /health, and the trusted baseline release
+	// root (empty: trustedBaselineReleaseRoot; tests name a root under the
+	// updater's incoming store).
+	// currentReleaseMu serializes every in-process writer of the updater's
+	// `current` pointer: the apply calls (self-development, platform
+	// update), the tape restore's restage, the boot baseline import and the
+	// package migration (PM13). Taken after packageMigrationMu, never before.
+	currentReleaseMu sync.Mutex
+	// restoreRestaged: a tape restore restaged `current` and this process
+	// has not restarted into it; the package migration waits (PM27).
+	restoreRestaged        atomic.Bool
+	packageMigrationMu     sync.Mutex
+	packageMigrationClosed bool
+	// packageMigrationTried: the pairs this process already attempted, so a
+	// deferred or interrupted pair retries once per planned boot, not once
+	// per trigger (PM20).
+	packageMigrationTried    map[string]bool
+	packageMigrationStatusMu sync.Mutex // guards packageMigrationLast only: /health never waits on an attempt
+	packageMigrationLast     *packageMigrationStatus
+	packageMigrationBaseline string
+	packageMigrationAt       func(step string)
+	// packageMigrationWriteFault: tests inject a record write failure.
+	packageMigrationWriteFault func(rec *packageMigrationRecord) error
 	// Updates (F1, package_update.go): the last update sync's view per
 	// package, and the candidates' extracted surfaces by release id.
 	packageUpdateMu     sync.Mutex

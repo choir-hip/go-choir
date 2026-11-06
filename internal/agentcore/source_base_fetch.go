@@ -52,6 +52,9 @@ func (rt *Runtime) startSourceProjection(ctx context.Context, reason string) {
 		return
 	}
 	rt.reconcileSourceProjectionLogged(ctx, reason)
+	// Forced modularity: a stack holding package source is migrated once
+	// per (operation, booted base); a no-op on every other computer.
+	rt.migratePackageStackLogged(ctx, reason)
 	rt.ensureSourceBaseObjects(ctx)
 }
 
@@ -92,6 +95,7 @@ func (rt *Runtime) ensureSourceBaseObjects(ctx context.Context) {
 		rt.recordSourceBaseFetch(result, attempt)
 		if result.Outcome == sourceproj.FetchFetched {
 			rt.reconcileSourceProjectionLogged(ctx, "base_fetch")
+			rt.migratePackageStackLogged(ctx, "base_fetch")
 			return
 		}
 		if result.Done() || attempt >= len(tune.Backoff) || !sleepBaseFetch(ctx, tune.Backoff[attempt]) {

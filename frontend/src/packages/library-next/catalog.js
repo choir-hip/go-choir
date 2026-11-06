@@ -127,6 +127,38 @@ export async function loadInstalls(computerId) {
   return requestJSON(path, { headers: { accept: 'application/json' } });
 }
 
+// installSetAside asks this computer to install a package the migration set
+// aside, drafted from the computer's own kept source. The owner's act; the
+// install review runs when the app needs one.
+export async function installSetAside(computerId, pair, pkg) {
+  const path = '/api/computers/' + encodeURIComponent(computerId) + '/self-development/package-migration-install';
+  let res;
+  try {
+    res = await fetchWithRenewal(path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ pair, package: pkg }),
+    });
+  } catch (err) {
+    if (err && err.name === 'AuthRequiredError') throw err;
+    throw new CatalogError(UNREACHABLE, 0, 'unreachable');
+  }
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (_err) {
+    body = null;
+  }
+  if (res.status !== 201) {
+    const reason = body && typeof body.reason === 'string' ? body.reason : '';
+    const detail = body && typeof body.error === 'string' ? body.error : '';
+    throw new CatalogError(detail || plainReason(reason, res.status), res.status, reason);
+  }
+  notifyPackagesChanged();
+  return body && typeof body === 'object' ? body : {};
+}
+
 // installRelease asks this computer to install a release (action "install")
 // or remove one it installed ("uninstall"). The platform reads the release
 // and its files from the Library itself; the record, when sent, must be the
@@ -423,17 +455,14 @@ export function sortedByNewest(releases) {
 // installState names where one install record stands: 'done' when it is in
 // force (a runtime install is the package's current install, an uninstall its
 // latest record), 'replaced' when a later install or uninstall of the package
-// superseded it, and, for a source install from before runtime install,
-// 'failed' when its operation failed, was rejected or was rolled back,
-// 'approve' while the change waits for the owner's approval, and 'working'
-// otherwise.
+// superseded it (a source install from before runtime install is history and
+// arrives as replaced), and otherwise 'failed' when its operation failed, was
+// rejected or was rolled back, 'approve' while the change waits for the
+// owner's approval, and 'working'.
 export function installState(item) {
   if (!item) return '';
   if (item.patch_matches_release === true) return 'done';
   if (item.state === 'replaced') return 'replaced';
-  // A source install from before runtime install: what it did is in this
-  // computer's source; it is neither running nor failed.
-  if (item.state === 'source') return 'source';
   const state = String((item.operation && item.operation.state) || '');
   if (state === 'failed' || state === 'rejected' || state === 'rolled_back') return 'failed';
   if (state === 'applied') return 'failed';
@@ -445,6 +474,14 @@ export function installState(item) {
 export function installListOf(body) {
   const list = body && body.installs;
   return Array.isArray(list) ? list.filter(Boolean) : [];
+}
+
+// setAsideOf reads the packages the forced-modularity migration set aside on
+// this computer (GET installs' set_aside): apps a past change made that are
+// not installed, each with why.
+export function setAsideOf(body) {
+  const list = body && body.set_aside;
+  return Array.isArray(list) ? list.filter((item) => item && item.pair && item.package) : [];
 }
 
 // ---- the app store's plain words ----
