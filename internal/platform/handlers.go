@@ -53,6 +53,12 @@ type Handler struct {
 	// when none are configured.
 	platformOperators     map[string][32]byte
 	platformOperatorsOpen bool
+	// platformOperatorUsers are the accounts that hold the platform
+	// operator role and act from their own session with an owner-act
+	// receipt (CHOIR_PLATFORM_OPERATOR_USERS, supplied at deploy;
+	// docs/design/platform-operator-account-2026-11-06.md). Empty: no
+	// account holds it.
+	platformOperatorUsers map[string]bool
 }
 type healthResponse struct {
 	Status  string         `json:"status"`

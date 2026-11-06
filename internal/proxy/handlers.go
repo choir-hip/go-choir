@@ -158,6 +158,10 @@ type AuthResult struct {
 	// "session-jwt-sha256:<sha256 of the access JWT>" (the JWT has no jti)
 	// or "api-key:<key id>". Never the secret itself.
 	CredentialRef string
+	// SignInMethod is the session's "am" claim (passkey, email_code,
+	// email_link); a token without it reads as passkey (auth issues "am"
+	// on every token). Empty for API keys.
+	SignInMethod string
 }
 
 // APIKeyValidator is the interface the proxy uses to validate Bearer token
@@ -543,10 +547,14 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 		return nil, errors.New("token is not an access token")
 	}
 	email, _ := claims["email"].(string)
+	signInMethod, _ := claims["am"].(string)
+	if signInMethod == "" {
+		signInMethod = "passkey"
+	}
 
 	tokenSum := sha256.Sum256([]byte(cookie.Value))
 	return &AuthResult{UserID: userID, Email: strings.TrimSpace(email), Valid: true, AuthMethod: "cookie",
-		CredentialRef: "session-jwt-sha256:" + hex.EncodeToString(tokenSum[:])}, nil
+		CredentialRef: "session-jwt-sha256:" + hex.EncodeToString(tokenSum[:]), SignInMethod: signInMethod}, nil
 }
 
 // authenticate tries cookie-based JWT auth first (browser sessions), then
@@ -975,6 +983,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case path == "/api/platform/retrieval/search":
 		h.HandlePlatformRetrievalSearch(w, r)
+		return
+	case path == platformOperatorYankPath:
+		h.HandlePlatformOperatorYank(w, r)
 		return
 	case strings.HasPrefix(path, "/api/platform/publications/") && strings.HasSuffix(path, "/proposals"):
 		h.HandlePublicationProposal(w, r)

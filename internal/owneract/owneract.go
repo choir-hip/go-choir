@@ -90,7 +90,19 @@ const (
 	// Its subject binds the new key, the key it replaces and the reason
 	// (selfdevprotocol.VerifierKeyRepinSubject).
 	ActVerifierRepin = "computer.verifier.repin"
+	// ActPlatformYank is a platform operator's yank or forced update of a
+	// package release, made from the operator's own signed-in session
+	// (docs/design/platform-operator-account-2026-11-06.md). Its computer
+	// id is PlatformComputerID; its subject binds the release, the forced
+	// target and the reason's digest (platform.PlatformYankSubject).
+	ActPlatformYank = "platform.package.yank"
 )
+
+// PlatformComputerID fills the computer id of a receipt for a platform act,
+// which is no computer's act. Real computer ids are computer-<32 hex>, so a
+// receipt for a computer act never verifies as a platform act, nor the
+// reverse.
+const PlatformComputerID = "platform"
 
 // Auth methods.
 const (

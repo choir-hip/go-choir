@@ -2,7 +2,10 @@ package platform
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
@@ -215,5 +219,191 @@ func TestPublisherForceRequestIsANoteAndExecutesNothing(t *testing.T) {
 	notes, err := w.h.releaseStore().ListObjectsByMetadataPage(context.Background(), string(PackageForceRequestKind), "$.release_id", r1.id, "owner-a", "", objectgraph.NormalizedLimit(10))
 	if err != nil || len(notes) != 1 {
 		t.Fatalf("F1 note = %d %v", len(notes), err)
+	}
+}
+
+// The operator account's yank (docs/design/platform-operator-account-2026-11-06.md),
+// written before the code. Failure modes pinned here:
+//
+//	O1  the route answers a receipt while no account holds the role;
+//	O2  a receipt for an account outside CHOIR_PLATFORM_OPERATOR_USERS writes;
+//	O3  a receipt that binds another release, target or reason writes;
+//	O4  a receipt for a computer act, or from an API key, writes;
+//	O5  a request carries a receipt and a token and one of them wins;
+//	O6  a receipt from a guest transport writes;
+//	O7  the act writes without its receipt recorded first, or the same
+//	    receipt acts twice;
+//	O8  observe mode (CHOIR_OWNER_ACT_MODE unset) admits an unverified act;
+//	O9  the roster parses a malformed or upper-case id, or too many.
+
+const testOperatorUser = "1111aaaa-2222-3333-4444-55555555beef"
+
+func (w *pkgWorld) operatorReceipt(user, computerID, method string, req PlatformYankRequest) string {
+	w.t.Helper()
+	receipt, err := w.signer.Mint(owneract.Act{
+		Kind: owneract.ActPlatformYank, OwnerUserID: user, AuthMethod: method,
+		CredentialRef: "session-jwt-sha256:test", ComputerID: computerID, Subject: PlatformYankSubject(req),
+	}, time.Now())
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	encoded, err := owneract.Encode(receipt)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return encoded
+}
+
+func (w *pkgWorld) yankByReceipt(receipt string, req PlatformYankRequest, mutate func(*http.Request)) *httptest.ResponseRecorder {
+	w.t.Helper()
+	body, _ := json.Marshal(req)
+	r := httptest.NewRequest(http.MethodPost, platformOperatorYankRoute, strings.NewReader(string(body)))
+	r.Header.Set(owneract.Header, receipt)
+	if mutate != nil {
+		mutate(r)
+	}
+	rec := httptest.NewRecorder()
+	w.h.HandlePlatformYank(rec, r)
+	return rec
+}
+
+func TestPlatformYankByOperatorAccountSession(t *testing.T) {
+	w := newPkgWorld(t)
+	_, private, _ := ed25519.GenerateKey(rand.Reader)
+	signer, err := owneract.NewSigner(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.signer = signer
+	verifier, err := owneract.NewVerifier(signer.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// O8: observe, the default on Node B; the route verifies anyway.
+	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActObserve, verifier))
+	r1 := w.build("<p>one</p>\n", "owner-a", nil)
+	w.published(r1)
+	r2 := w.build("<p>two</p>\n", "owner-a", &r1)
+	w.published(r2)
+	req := PlatformYankRequest{ReleaseID: r1.id, Reason: "CVE-2: the reader leaks", ForcedRelease: r2.id}
+	good := func() string {
+		return w.operatorReceipt(testOperatorUser, owneract.PlatformComputerID, owneract.AuthMethodSession, req)
+	}
+	chainLen := func() int {
+		chains, _, err := w.h.trackChains(context.Background(), "owner-a", "reader")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(chains[r1.id])
+	}
+
+	// O1: nobody holds the role and no token is configured.
+	if rec := w.yankByReceipt(good(), req, nil); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("O1 closed = %d %s", rec.Code, rec.Body.String())
+	}
+	if n, err := w.h.ConfigurePlatformOperatorUsers(testOperatorUser); err != nil || n != 1 {
+		t.Fatalf("configure = %d %v", n, err)
+	}
+	// O2: another account.
+	other := w.operatorReceipt("99999999-2222-3333-4444-555555555555", owneract.PlatformComputerID, owneract.AuthMethodSession, req)
+	if rec := w.yankByReceipt(other, req, nil); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "not a platform operator") {
+		t.Fatalf("O2 non-operator = %d %s", rec.Code, rec.Body.String())
+	}
+	// O3: the receipt binds another reason, another target.
+	if rec := w.yankByReceipt(good(), PlatformYankRequest{ReleaseID: r1.id, Reason: "something else", ForcedRelease: r2.id}, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("O3 other reason = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := w.yankByReceipt(good(), PlatformYankRequest{ReleaseID: r1.id, Reason: req.Reason}, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("O3 dropped target = %d %s", rec.Code, rec.Body.String())
+	}
+	// O4: a computer act's receipt; an API key's receipt.
+	if rec := w.yankByReceipt(w.operatorReceipt(testOperatorUser, computerOf("owner-a"), owneract.AuthMethodSession, req), req, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("O4 computer receipt = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := w.yankByReceipt(w.operatorReceipt(testOperatorUser, owneract.PlatformComputerID, owneract.AuthMethodAPIKey, req), req, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("O4 api key receipt = %d %s", rec.Code, rec.Body.String())
+	}
+	// O5: both credentials.
+	w.h.ConfigurePlatformOperators("ops:secret")
+	both := func(r *http.Request) {
+		r.Header.Set("X-Choir-Operator", "ops")
+		r.Header.Set("X-Choir-Operator-Token", "secret")
+	}
+	if rec := w.yankByReceipt(good(), req, both); rec.Code != http.StatusBadRequest {
+		t.Fatalf("O5 both credentials = %d %s", rec.Code, rec.Body.String())
+	}
+	// O6: a guest transport.
+	if rec := w.yankByReceipt(good(), req, func(r *http.Request) { r.RemoteAddr = "10.0.0.7:4000" }); rec.Code != http.StatusForbidden {
+		t.Fatalf("O6 guest transport = %d %s", rec.Code, rec.Body.String())
+	}
+	if n := chainLen(); n != 1 {
+		t.Fatalf("a refused act wrote: chain length %d", n)
+	}
+	var refused int
+	if err := w.h.service.store.db.QueryRow(`SELECT COUNT(*) FROM owner_act_receipts WHERE act_kind=?`, owneract.ActPlatformYank).Scan(&refused); err != nil || refused != 0 {
+		t.Fatalf("refused acts recorded: %d %v", refused, err)
+	}
+
+	// The act.
+	receipt := good()
+	rec := w.yankByReceipt(receipt, req, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("operator yank = %d %s", rec.Code, rec.Body.String())
+	}
+	chains, _, err := w.h.trackChains(context.Background(), "owner-a", "reader")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := chains[r1.id][len(chains[r1.id])-1]
+	if last.State != pkgrelease.StateYanked || last.StateActor != "platform:user:"+testOperatorUser || last.ForcedRelease != r2.id {
+		t.Fatalf("operator yank version = %+v", last)
+	}
+	// O7: the receipt is on record with the version it left, once.
+	want, _ := last.Digest()
+	var owner, computer, bound string
+	if err := w.h.service.store.db.QueryRow(`SELECT owner_user_id, computer_id, mode_receipt_digest FROM owner_act_receipts WHERE act_kind=?`, owneract.ActPlatformYank).Scan(&owner, &computer, &bound); err != nil {
+		t.Fatalf("O7 receipt record: %v", err)
+	}
+	if owner != testOperatorUser || computer != owneract.PlatformComputerID || bound != want {
+		t.Fatalf("O7 receipt record = %s %s %s, want listing %s", owner, computer, bound, want)
+	}
+	if rec := w.yankByReceipt(receipt, req, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("O7 replay = %d %s", rec.Code, rec.Body.String())
+	}
+	// A fresh receipt for the same act changes nothing and is recorded.
+	if rec := w.yankByReceipt(good(), req, nil); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"changed":true`) {
+		t.Fatalf("repeat act = %d %s", rec.Code, rec.Body.String())
+	}
+	// The break-glass token path is unchanged.
+	if rec := w.yank("ops", "secret", PlatformYankRequest{ReleaseID: r2.id, Reason: "break glass"}); rec.Code != http.StatusOK {
+		t.Fatalf("token path = %d %s", rec.Code, rec.Body.String())
+	}
+	// No verifier key: the receipt path refuses, the token path still works.
+	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActEnforce, nil))
+	if rec := w.yankByReceipt(good(), req, nil); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("no verifier = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestParsePlatformOperatorUsers(t *testing.T) {
+	for _, raw := range []string{"", "none", " "} {
+		if users, err := ParsePlatformOperatorUsers(raw); err != nil || len(users) != 0 {
+			t.Fatalf("%q = %v %v", raw, users, err)
+		}
+	}
+	users, err := ParsePlatformOperatorUsers(testOperatorUser + "," + "99999999-2222-3333-4444-555555555555")
+	if err != nil || len(users) != 2 || !users[testOperatorUser] {
+		t.Fatalf("two ids = %v %v", users, err)
+	}
+	many := []string{}
+	for i := 0; i < 9; i++ {
+		many = append(many, fmt.Sprintf("%08d-2222-3333-4444-555555555555", i))
+	}
+	for _, raw := range []string{
+		strings.ToUpper(testOperatorUser), "owner@example.com", testOperatorUser + ",", "x", strings.Join(many, ","),
+	} {
+		if users, err := ParsePlatformOperatorUsers(raw); err == nil || len(users) != 0 {
+			t.Fatalf("O9 %q = %v %v", raw, users, err)
+		}
 	}
 }

@@ -1370,11 +1370,20 @@ jobs:
           REFRESH_ACTIVE_COMPUTERS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
+          # The accounts that hold the platform operator role, supplied at
+          # deploy and never in the repo (docs/design/platform-operator-account-2026-11-06.md).
+          PLATFORM_OPERATOR_USERS: ${{ secrets.CHOIR_PLATFORM_OPERATOR_USERS }}
         # choir-deploy's forced command is the gate (scripts/node-b-ci-gate):
         # it runs .github/scripts/node-b-ci-deploy from this commit, as root,
         # once it has checked the commit is on main (SEC-14).
         run: |
           request="deploy DEPLOY_COMMIT=${DEPLOY_COMMIT} DEPLOY_RUN_ID=${DEPLOY_RUN_ID} DEPLOY_RUN_ATTEMPT=${DEPLOY_RUN_ATTEMPT} DEPLOY_HOST=${DEPLOY_HOST} DEPLOY_FRONTEND=${DEPLOY_FRONTEND} DEPLOY_VMCTL_RESTART=${DEPLOY_VMCTL_RESTART} DEPLOY_ACTIVE_VM_REFRESH=${DEPLOY_ACTIVE_VM_REFRESH} REFRESH_ACTIVE_COMPUTERS=${REFRESH_ACTIVE_COMPUTERS} DEPLOY_HOST_OS=${DEPLOY_HOST_OS} HOST_SERVICES=${HOST_SERVICES}"
+          # Sent only when the secret is set: a deploy without the key leaves
+          # Node B's roster as it is (the value "none" empties it).
+          operator_users=$(printf '%s' "${PLATFORM_OPERATOR_USERS}" | tr -d '[:space:]')
+          if [ -n "$operator_users" ]; then
+            request="${request} PLATFORM_OPERATOR_USERS=${operator_users}"
+          fi
           ssh -n go-choir-node-b "$request"
 
       - name: Cleanup SSH

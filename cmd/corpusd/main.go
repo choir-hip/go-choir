@@ -198,6 +198,13 @@ func main() {
 		log.Fatalf("corpusd key escrow routes: %v", err)
 	}
 	handler.ConfigurePlatformOperators(cfg.PlatformOperatorsRaw)
+	// The platform operator role (docs/design/platform-operator-account-2026-11-06.md):
+	// account ids supplied at deploy; a malformed list grants nobody.
+	if count, err := handler.ConfigurePlatformOperatorUsers(cfg.PlatformOperatorUsersRaw); err != nil {
+		log.Printf("corpusd: platform operator accounts: %v", err)
+	} else {
+		log.Printf("corpusd: platform operator accounts: %d", count)
+	}
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
 

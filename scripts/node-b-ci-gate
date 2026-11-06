@@ -12,6 +12,9 @@
 #   deploy   the prebuild keys plus DEPLOY_RUN_ID=<n> DEPLOY_RUN_ATTEMPT=<n>
 #            DEPLOY_VMCTL_RESTART=<bool> DEPLOY_ACTIVE_VM_REFRESH=<bool>
 #            REFRESH_ACTIVE_COMPUTERS=<bool>
+#            and, optionally, PLATFORM_OPERATOR_USERS=<none | 1 to 8
+#            lower-case user ids, comma-separated>: the accounts that hold
+#            the platform operator role (docs/design/platform-operator-account-2026-11-06.md)
 #
 # For prebuild and deploy the gate fetches main and the commit, refuses a
 # commit that is not an ancestor of origin/main (GitHub serves fork pull
@@ -115,6 +118,9 @@ epoch_gate() {
 prebuild_keys=(DEPLOY_COMMIT DEPLOY_FRONTEND DEPLOY_HOST DEPLOY_HOST_OS HOST_SERVICES)
 deploy_keys=(DEPLOY_COMMIT DEPLOY_RUN_ID DEPLOY_RUN_ATTEMPT DEPLOY_HOST DEPLOY_FRONTEND
   DEPLOY_VMCTL_RESTART DEPLOY_ACTIVE_VM_REFRESH REFRESH_ACTIVE_COMPUTERS DEPLOY_HOST_OS HOST_SERVICES)
+# Optional deploy keys: absent, the program leaves what they set as it is.
+deploy_optional_keys=(PLATFORM_OPERATOR_USERS)
+uuid_re='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
 value_ok() {
   local key="$1"
@@ -123,6 +129,7 @@ value_ok() {
     DEPLOY_COMMIT) [[ "$value" =~ ^[0-9a-f]{40}$ ]] ;;
     DEPLOY_RUN_ID | DEPLOY_RUN_ATTEMPT) [[ "$value" =~ ^[1-9][0-9]{0,19}$ ]] ;;
     HOST_SERVICES) [[ "$value" =~ ^([a-z][a-z0-9-]{0,39}(,[a-z][a-z0-9-]{0,39}){0,31})?$ ]] ;;
+    PLATFORM_OPERATOR_USERS) [[ "$value" =~ ^(none|${uuid_re}(,${uuid_re}){0,7})$ ]] ;;
     *) [[ "$value" == true || "$value" == false ]] ;;
   esac
 }
@@ -142,7 +149,7 @@ parse() {
   local words
   read -r -a words <<<"$request"
   verb="${words[0]}"
-  local keys
+  local keys optional=()
   case "$verb" in
     receipt)
       ((${#words[@]} == 1)) || refuse "receipt takes no arguments"
@@ -158,6 +165,7 @@ parse() {
     deploy)
       repo=/opt/go-choir
       keys=("${deploy_keys[@]}")
+      optional=("${deploy_optional_keys[@]}")
       ;;
     *) refuse "unknown verb" ;;
   esac
@@ -169,7 +177,7 @@ parse() {
     key="${word%%=*}"
     value="${word#*=}"
     local known=false k
-    for k in "${keys[@]}"; do
+    for k in "${keys[@]}" "${optional[@]}"; do
       [ "$k" = "$key" ] && known=true
     done
     [ "$known" = true ] || refuse "unknown key ${key} for ${verb}"
@@ -182,6 +190,10 @@ parse() {
     [ -n "${given[$key]+set}" ] || refuse "missing key ${key} for ${verb}"
     env+=("${key}=${given[$key]}")
   done
+  for key in "${optional[@]}"; do
+    [ -n "${given[$key]+set}" ] && env+=("${key}=${given[$key]}")
+  done
+  return 0
 }
 
 print_plan() {

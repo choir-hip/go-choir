@@ -34,12 +34,17 @@ type Config struct {
 	// PlatformOperatorsRaw names the platform operators of the break-glass
 	// package yank and forced update (F1): name:token,...
 	PlatformOperatorsRaw string
-	VmctlURL             string
-	ArtifactGCMode       string
-	ArtifactGCGrace      string
-	ArtifactGCInterval   string
-	ArtifactGCMaxDeletes string
-	ArtifactGCMaxBytes   string
+	// PlatformOperatorUsersRaw is CHOIR_PLATFORM_OPERATOR_USERS: the account
+	// ids (comma-separated) that hold the platform operator role and act
+	// from their own signed-in session. Supplied at deploy, never in the
+	// repo (docs/design/platform-operator-account-2026-11-06.md).
+	PlatformOperatorUsersRaw string
+	VmctlURL                 string
+	ArtifactGCMode           string
+	ArtifactGCGrace          string
+	ArtifactGCInterval       string
+	ArtifactGCMaxDeletes     string
+	ArtifactGCMaxBytes       string
 	// ArtifactGCNamespaces is PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES: the
 	// comma list an active run may delete from (ParseArtifactGCNamespaces).
 	ArtifactGCNamespaces string
@@ -74,29 +79,30 @@ type Config struct {
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:                  envOr("CORPUSD_PORT", DefaultPort),
-		ControlDSN:            envOr(EnvPGControlDSN, DefaultPGControlDSN),
-		GraphDSN:              envOr(EnvPGGraphDSN, DefaultPGGraphDSN),
-		ArtifactsRoot:         envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
-		SigningKeyPath:        envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
-		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
-		KeyEscrowOperatorsRaw: os.Getenv("CHOIR_KEY_ESCROW_OPERATORS"),
-		PlatformOperatorsRaw:  os.Getenv("CHOIR_PLATFORM_OPERATORS"),
-		VmctlURL:              os.Getenv("CORPUSD_VMCTL_URL"),
-		ArtifactGCMode:        os.Getenv("PLATFORM_ARTIFACT_GC_MODE"),
-		ArtifactGCGrace:       os.Getenv("PLATFORM_ARTIFACT_GC_GRACE"),
-		ArtifactGCInterval:    os.Getenv("PLATFORM_ARTIFACT_GC_INTERVAL"),
-		ArtifactGCMaxDeletes:  os.Getenv("PLATFORM_ARTIFACT_GC_MAX_DELETES"),
-		ArtifactGCMaxBytes:    os.Getenv("PLATFORM_ARTIFACT_GC_MAX_BYTES"),
-		ArtifactGCNamespaces:  os.Getenv("PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES"),
-		TapeSweepMode:         os.Getenv("PLATFORM_TAPE_SWEEP_MODE"),
-		TapeSweepArchiveDir:   os.Getenv("PLATFORM_TAPE_SWEEP_ARCHIVE_DIR"),
-		TapeSegments:          os.Getenv("PLATFORM_TAPE_SEGMENTS"),
-		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
-		PublicBaseURL:         os.Getenv("CORPUSD_PUBLIC_BASE_URL"),
-		OpinionListingRaw:     os.Getenv("CORPUSD_OPINION_LISTING"),
-		OpinionDailyLimitRaw:  os.Getenv("CORPUSD_OPINION_DAILY_LIMIT"),
-		FrontImportancePath:   envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
+		Port:                     envOr("CORPUSD_PORT", DefaultPort),
+		ControlDSN:               envOr(EnvPGControlDSN, DefaultPGControlDSN),
+		GraphDSN:                 envOr(EnvPGGraphDSN, DefaultPGGraphDSN),
+		ArtifactsRoot:            envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
+		SigningKeyPath:           envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
+		KeyEscrowKeyPath:         envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
+		KeyEscrowOperatorsRaw:    os.Getenv("CHOIR_KEY_ESCROW_OPERATORS"),
+		PlatformOperatorsRaw:     os.Getenv("CHOIR_PLATFORM_OPERATORS"),
+		PlatformOperatorUsersRaw: os.Getenv("CHOIR_PLATFORM_OPERATOR_USERS"),
+		VmctlURL:                 os.Getenv("CORPUSD_VMCTL_URL"),
+		ArtifactGCMode:           os.Getenv("PLATFORM_ARTIFACT_GC_MODE"),
+		ArtifactGCGrace:          os.Getenv("PLATFORM_ARTIFACT_GC_GRACE"),
+		ArtifactGCInterval:       os.Getenv("PLATFORM_ARTIFACT_GC_INTERVAL"),
+		ArtifactGCMaxDeletes:     os.Getenv("PLATFORM_ARTIFACT_GC_MAX_DELETES"),
+		ArtifactGCMaxBytes:       os.Getenv("PLATFORM_ARTIFACT_GC_MAX_BYTES"),
+		ArtifactGCNamespaces:     os.Getenv("PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES"),
+		TapeSweepMode:            os.Getenv("PLATFORM_TAPE_SWEEP_MODE"),
+		TapeSweepArchiveDir:      os.Getenv("PLATFORM_TAPE_SWEEP_ARCHIVE_DIR"),
+		TapeSegments:             os.Getenv("PLATFORM_TAPE_SEGMENTS"),
+		AutopaperOwnersRaw:       os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
+		PublicBaseURL:            os.Getenv("CORPUSD_PUBLIC_BASE_URL"),
+		OpinionListingRaw:        os.Getenv("CORPUSD_OPINION_LISTING"),
+		OpinionDailyLimitRaw:     os.Getenv("CORPUSD_OPINION_DAILY_LIMIT"),
+		FrontImportancePath:      envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

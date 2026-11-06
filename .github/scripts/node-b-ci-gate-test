@@ -16,6 +16,10 @@
 #     (a fork's pull request head). Checked on Node B by FP0; the parser
 #     cannot see it.
 #  9. It treats --print-plan as anything but a dry parse.
+# 11. It accepts PLATFORM_OPERATOR_USERS on prebuild, or anything but "none"
+#     or one to eight lower-case user ids (an email, upper case, a stray
+#     comma, a ninth id), or requires it (the workflow sends it only when the
+#     owner set the secret).
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -330,6 +334,41 @@ refuse "${prebuild_ok/autoputer,vmctl/..}"
 refuse "${prebuild_ok/autoputer,vmctl/a.b}"
 refuse "${prebuild_ok/autoputer,vmctl/-x}"
 refuse "${prebuild_ok/autoputer,vmctl/Auth}"
+
+# 11: the optional operator roster.
+deploy_plan="verb=deploy
+repo=/opt/go-choir
+script=.github/scripts/node-b-ci-deploy
+env=DEPLOY_COMMIT=$sha
+env=DEPLOY_RUN_ID=18712345678
+env=DEPLOY_RUN_ATTEMPT=1
+env=DEPLOY_HOST=true
+env=DEPLOY_FRONTEND=false
+env=DEPLOY_VMCTL_RESTART=true
+env=DEPLOY_ACTIVE_VM_REFRESH=false
+env=REFRESH_ACTIVE_COMPUTERS=false
+env=DEPLOY_HOST_OS=true
+env=HOST_SERVICES="
+op1=1111aaaa-2222-3333-4444-55555555beef
+op2=2222bbbb-2222-3333-4444-55555555beef
+accept "$deploy_ok" "$deploy_plan"
+accept "$deploy_ok PLATFORM_OPERATOR_USERS=$op1" "$deploy_plan
+env=PLATFORM_OPERATOR_USERS=$op1"
+accept "$deploy_ok PLATFORM_OPERATOR_USERS=$op1,$op2" "$deploy_plan
+env=PLATFORM_OPERATOR_USERS=$op1,$op2"
+accept "$deploy_ok PLATFORM_OPERATOR_USERS=none" "$deploy_plan
+env=PLATFORM_OPERATOR_USERS=none"
+nine="$op1"
+for _ in 1 2 3 4 5 6 7 8; do nine="$nine,$op1"; done
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=$nine"
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS="
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=$op1,"
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=,$op1"
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=${op1:0:35}"
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=1111AAAA-2222-3333-4444-55555555BEEF"
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=owner@example.com"
+refuse "$deploy_ok PLATFORM_OPERATOR_USERS=$op1 PLATFORM_OPERATOR_USERS=$op2"
+refuse "$prebuild_ok PLATFORM_OPERATOR_USERS=$op1"
 
 # Length bound.
 refuse "$deploy_ok$(printf ' X=%.0s' $(seq 1 600))"

@@ -496,6 +496,44 @@
   fi
   note_phase "service activation"
 
+  # The platform operator accounts (docs/design/platform-operator-account-2026-11-06.md),
+  # supplied at deploy from the owner's GitHub secret, never in the repo.
+  # Written only when the request carried them ("none" empties the roster),
+  # by a create and rename inside the unit env directory every unit hides,
+  # so no unit sees the file (host containment: an env file is never replaced outside that directory).
+  # corpusd reads it at start; a change restarts corpusd. The ids are not
+  # printed.
+  if [ -n "${PLATFORM_OPERATOR_USERS+set}" ]; then
+    echo "==> Platform operator accounts"
+    operators_dir=/var/lib/go-choir/unit-env
+    operators_env="${operators_dir}/corpusd-operators.env"
+    operators_value="${PLATFORM_OPERATOR_USERS}"
+    if [ "$operators_value" = none ]; then
+      operators_value=
+    fi
+    operators_line="CHOIR_PLATFORM_OPERATOR_USERS=${operators_value}"
+    if [ ! -d "$operators_dir" ] || [ -L "$operators_dir" ]; then
+      echo "    ${operators_dir} is not the unit env directory; the activation makes it" >&2
+      exit 1
+    fi
+    if [ -f "$operators_env" ] && [ ! -L "$operators_env" ] && [ "$(cat -- "$operators_env")" = "$operators_line" ]; then
+      echo "    Unchanged"
+    else
+      rm -f "${operators_env}.part"
+      install -m 0600 -o root -g root /dev/null "${operators_env}.part"
+      printf '%s\n' "$operators_line" >"${operators_env}.part"
+      mv -f "${operators_env}.part" "$operators_env"
+      systemctl reset-failed go-choir-corpusd 2>/dev/null || true
+      systemctl restart go-choir-corpusd
+      systemctl is-active --quiet go-choir-corpusd
+      operators_count=0
+      if [ -n "$operators_value" ]; then
+        operators_count=$(printf '%s\n' "$operators_value" | awk -F, '{print NF}')
+      fi
+      echo "    Wrote ${operators_count} account(s); restarted go-choir-corpusd"
+    fi
+  fi
+
   echo "==> Waiting for services to start"
   if [ "${service_pointer_deploy}" = "true" ]; then
     echo "    Service pointer deploys already wait for selected systemd restarts; health probes below perform readiness retries"

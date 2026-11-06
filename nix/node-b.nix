@@ -1081,6 +1081,12 @@ in
         # back to the window of its newest captures. Absent: the routes
         # answer.
         (unitEnvFile "corpusd-retrieval.env")
+        # The accounts that hold the platform operator role
+        # (CHOIR_PLATFORM_OPERATOR_USERS), written only by the deploy from
+        # the owner's GitHub secret (.github/scripts/node-b-ci-deploy;
+        # docs/design/platform-operator-account-2026-11-06.md). Absent: no
+        # account holds the role; the break-glass token path is unchanged.
+        (unitEnvFile "corpusd-operators.env")
       ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
