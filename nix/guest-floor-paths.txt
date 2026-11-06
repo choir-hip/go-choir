@@ -50,6 +50,7 @@ internal/hostlink
 internal/mirrorgrant
 internal/normtext
 internal/ownerfiles
+internal/packagepath
 internal/quotematch
 internal/receiptsigner
 internal/sourcecontract
