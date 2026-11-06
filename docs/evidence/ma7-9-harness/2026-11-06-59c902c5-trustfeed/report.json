@@ -1,0 +1,516 @@
+{
+  "schema": "choir.trust_harness.report.v1",
+  "computer_id": "computer-59c902c5d46caecc0a180a8557164e72",
+  "build_commit": "e3162eccd5079e47df7cc181ae46ce22c8b38fd1",
+  "as_of": "2026-11-06T08:00:45Z",
+  "inputs_sha256": "6a11d642c2a3c53ebd77be2a76de78d24566a7113f7a19a8ca869e6f0c248612",
+  "deadline": "2027-01-29",
+  "served": {
+    "gate_replay_by_day": true,
+    "gated_acts": true,
+    "prereg_units": true
+  },
+  "inert": {
+    "rows": [
+      {
+        "desk": "agent",
+        "model": "none",
+        "prompt_version": "",
+        "precommitments": 1024,
+        "inert_precommitments": 0,
+        "inert_precommit_rate": 0,
+        "delegations": 0,
+        "inert_delegations": 0,
+        "inert_delegation_rate": 0
+      },
+      {
+        "desk": "engineering",
+        "model": "chatgpt/gpt-6-luna",
+        "prompt_version": "",
+        "precommitments": 1,
+        "inert_precommitments": 1,
+        "inert_precommit_rate": 1,
+        "delegations": 0,
+        "inert_delegations": 0,
+        "inert_delegation_rate": 0,
+        "by_flag": {
+          "no_typed_question": 1
+        }
+      },
+      {
+        "desk": "management",
+        "model": "chatgpt/gpt-6-luna",
+        "prompt_version": "",
+        "precommitments": 1,
+        "inert_precommitments": 1,
+        "inert_precommit_rate": 1,
+        "delegations": 21,
+        "inert_delegations": 0,
+        "inert_delegation_rate": 0,
+        "by_flag": {
+          "no_typed_question": 22
+        }
+      },
+      {
+        "desk": "management",
+        "model": "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017",
+        "prompt_version": "",
+        "precommitments": 0,
+        "inert_precommitments": 0,
+        "inert_precommit_rate": 0,
+        "delegations": 21,
+        "inert_delegations": 0,
+        "inert_delegation_rate": 0,
+        "by_flag": {
+          "no_typed_question": 3
+        }
+      },
+      {
+        "desk": "texture",
+        "model": "",
+        "prompt_version": "",
+        "precommitments": 5,
+        "inert_precommitments": 5,
+        "inert_precommit_rate": 1,
+        "delegations": 50,
+        "inert_delegations": 0,
+        "inert_delegation_rate": 0,
+        "by_flag": {
+          "no_typed_question": 52
+        }
+      },
+      {
+        "desk": "texture",
+        "model": "",
+        "prompt_version": "514750e629bf",
+        "precommitments": 82,
+        "inert_precommitments": 78,
+        "inert_precommit_rate": 0.95122,
+        "delegations": 78,
+        "inert_delegations": 0,
+        "inert_delegation_rate": 0,
+        "by_flag": {
+          "no_typed_question": 78
+        }
+      }
+    ],
+    "judge_agreement": {
+      "sampled": 0,
+      "agree": 0,
+      "both_inert": 0,
+      "both_informative": 0,
+      "rules_only": 0,
+      "judge_only": 0,
+      "agreement_rate": 0
+    },
+    "precommitments": 1113,
+    "inert_precommitments": 85,
+    "inert_precommit_rate": 0.07637,
+    "delegations": 170,
+    "inert_delegations": 0,
+    "inert_delegation_rate": 0,
+    "note": "before tuning: no prompt has been tuned against these rates yet (plan 4.4, measure then tune); each prompt version is its own row, so a tuned prompt shows as a new row"
+  },
+  "ledger": {
+    "path": "docs/definitions/choir-modular-architecture-2026-11-04.precommit.md",
+    "sha256": "9eb9cebb73663a9e8c18c5df86b410b37261da835a84d35044042f7a5e318981",
+    "records": 30,
+    "by_resolution": {
+      "confirmed": 9,
+      "contradicted": 4,
+      "open": 13,
+      "qualified": 1,
+      "unresolved": 2,
+      "void": 1
+    },
+    "by_settler": {
+      "devin": 3,
+      "rule": 11
+    },
+    "probability": {
+      "n": 8,
+      "brier": 0.189375,
+      "log_score": -0.559927,
+      "brier_skill_vs_half": 0.2425,
+      "sharpness": 0.125,
+      "calibration": [
+        {
+          "lo": 0,
+          "hi": 0.5,
+          "n": 1,
+          "mean_p": 0.4,
+          "freq": 1
+        },
+        {
+          "lo": 0.5,
+          "hi": 0.7,
+          "n": 4,
+          "mean_p": 0.5375,
+          "freq": 0.5
+        },
+        {
+          "lo": 0.7,
+          "hi": 0.9,
+          "n": 3,
+          "mean_p": 0.75,
+          "freq": 1
+        },
+        {
+          "lo": 0.9,
+          "hi": 1,
+          "n": 0,
+          "mean_p": 0,
+          "freq": 0
+        }
+      ]
+    },
+    "interval": {
+      "n": 6,
+      "covered": 3,
+      "coverage": 0.5,
+      "nominal": 0.8,
+      "mean_scaled_interval_score": 3.844676,
+      "n_log_ratio": 5,
+      "mean_log_ratio": -0.050343,
+      "mean_abs_log_ratio": 0.736102,
+      "mean_relative_width": 1.457639
+    },
+    "scored": [
+      {
+        "id": "R0-01",
+        "kind": "interval",
+        "resolution": "contradicted",
+        "settler": "rule",
+        "estimate": 1.6,
+        "lo": 1.2,
+        "hi": 2.5,
+        "observed": 4.5,
+        "covered": false,
+        "interval_score": 21.3,
+        "log_ratio": 1.034074
+      },
+      {
+        "id": "R0-02",
+        "kind": "interval",
+        "resolution": "confirmed",
+        "settler": "rule",
+        "estimate": 2,
+        "lo": 1.3,
+        "hi": 3.5,
+        "observed": 1.5,
+        "covered": true,
+        "interval_score": 2.2,
+        "log_ratio": -0.287682
+      },
+      {
+        "id": "R0-03",
+        "kind": "probability",
+        "resolution": "confirmed",
+        "settler": "rule",
+        "p": 0.8,
+        "outcome": 1,
+        "brier": 0.04,
+        "log": -0.223144
+      },
+      {
+        "id": "R0-05",
+        "kind": "interval",
+        "resolution": "confirmed",
+        "settler": "rule",
+        "estimate": 45,
+        "lo": 25,
+        "hi": 90,
+        "observed": 49,
+        "covered": true,
+        "interval_score": 65,
+        "log_ratio": 0.085158
+      },
+      {
+        "id": "R0-07",
+        "kind": "probability",
+        "resolution": "contradicted",
+        "settler": "rule",
+        "p": 0.5,
+        "outcome": 0,
+        "brier": 0.25,
+        "log": -0.693147
+      },
+      {
+        "id": "R0-08",
+        "kind": "probability",
+        "resolution": "confirmed",
+        "settler": "devin",
+        "p": 0.4,
+        "outcome": 1,
+        "brier": 0.36,
+        "log": -0.916291
+      },
+      {
+        "id": "R0-09",
+        "kind": "interval",
+        "resolution": "confirmed",
+        "settler": "devin",
+        "estimate": 2,
+        "lo": 0,
+        "hi": 5,
+        "observed": 0,
+        "covered": true,
+        "interval_score": 5
+      },
+      {
+        "id": "R0-12",
+        "kind": "probability",
+        "resolution": "confirmed",
+        "settler": "rule",
+        "p": 0.75,
+        "outcome": 1,
+        "brier": 0.0625,
+        "log": -0.287682
+      },
+      {
+        "id": "R0b-01",
+        "kind": "probability",
+        "resolution": "confirmed",
+        "settler": "devin",
+        "p": 0.7,
+        "outcome": 1,
+        "brier": 0.09,
+        "log": -0.356675
+      },
+      {
+        "id": "R0b-02",
+        "kind": "interval",
+        "resolution": "contradicted",
+        "settler": "rule",
+        "estimate": 1.5,
+        "lo": 0.5,
+        "hi": 3,
+        "observed": 0.28,
+        "covered": false,
+        "interval_score": 4.7,
+        "log_ratio": -1.678431
+      },
+      {
+        "id": "R0b-03",
+        "kind": "probability",
+        "resolution": "qualified",
+        "settler": "rule",
+        "p": 0.55,
+        "outcome": 0,
+        "brier": 0.3025,
+        "log": -0.798508
+      },
+      {
+        "id": "R0b-04",
+        "kind": "interval",
+        "resolution": "contradicted",
+        "settler": "rule",
+        "estimate": 900,
+        "lo": 500,
+        "hi": 1600,
+        "observed": 1632,
+        "covered": false,
+        "interval_score": 1420,
+        "log_ratio": 0.595167
+      },
+      {
+        "id": "R0b-05",
+        "kind": "probability",
+        "resolution": "confirmed",
+        "settler": "rule",
+        "p": 0.6,
+        "outcome": 1,
+        "brier": 0.16,
+        "log": -0.510826
+      },
+      {
+        "id": "R0b-08",
+        "kind": "probability",
+        "resolution": "confirmed",
+        "settler": "rule",
+        "p": 0.5,
+        "outcome": 1,
+        "brier": 0.25,
+        "log": -0.693147
+      }
+    ]
+  },
+  "tests": [
+    {
+      "id": "P1",
+      "name": "H4: a track record beats success rate, benchmarks, popularity and ratings",
+      "status": "unresolved",
+      "reason": "below the minimum n (0 of 30 positive units, 0 of 5 subjects); outcome metrics sealed until the minimum n or 2027-01-29",
+      "min_n": "30 positive units from at least 5 subjects",
+      "n": {
+        "cutoffs": 0,
+        "dropped_no_act": 0,
+        "dropped_open_window": 0,
+        "material_items": 0,
+        "positive_units": 0,
+        "replay_pairs": 26,
+        "subjects": 0,
+        "units": 0,
+        "units_without_row": 0,
+        "view_rows": 18
+      },
+      "sealed": true
+    },
+    {
+      "id": "P2",
+      "name": "Trust conjecture: the LCB ordering predicts the next material failure at a usable tap rate",
+      "status": "unresolved",
+      "reason": "below the minimum n (0 of 30 events); outcome metrics sealed until the minimum n or 2027-01-29",
+      "min_n": "30 events",
+      "n": {
+        "cutoffs": 0,
+        "dropped_no_act": 0,
+        "dropped_open_window": 0,
+        "gate_acts": 0,
+        "gate_taps": 0,
+        "material_items": 0,
+        "positive_units": 0,
+        "replay_pairs": 26,
+        "subjects": 0,
+        "units": 0,
+        "units_without_row": 0,
+        "view_rows": 18
+      },
+      "sealed": true
+    },
+    {
+      "id": "P3",
+      "name": "H-A1: outcome-built weights reward extremizers",
+      "status": "unresolved",
+      "reason": "no data source: the frozen consequence sets and their realized materiality are not in the trust inputs",
+      "min_n": "200 settled records with 3+ consequences, 20 with an I3/I4 consequence",
+      "n": {
+        "units": 0
+      },
+      "sealed": true
+    },
+    {
+      "id": "P4",
+      "name": "H-A2: flip-rate relevance predicts reverts",
+      "status": "unresolved",
+      "reason": "no data source: the flip-rate sampler (MA7.10) is not built",
+      "min_n": "300 actions with sampled relevance and 40 reverts",
+      "n": {
+        "units": 0
+      },
+      "sealed": true
+    },
+    {
+      "id": "P5",
+      "name": "H-C1: raw pseudo-counts overconfident; tempered or capped chosen",
+      "status": "unresolved",
+      "reason": "capped k=3 ships provisionally; the choice was not made by replay (26 pairs; the held-out log-loss test against raw is not built, the server replay picks by Brier at 20 pairs or more)",
+      "min_n": "30 failure events and 20 (s, k) cells with at least 10 settled records",
+      "n": {
+        "cutoffs": 0,
+        "dropped_no_act": 0,
+        "dropped_open_window": 0,
+        "material_items": 0,
+        "positive_units": 0,
+        "replay_pairs": 26,
+        "subjects": 0,
+        "units": 0,
+        "units_without_row": 0,
+        "view_rows": 18
+      },
+      "sealed": true
+    },
+    {
+      "id": "P6",
+      "name": "H-B3: spot-checks beat peer agreement",
+      "status": "unresolved",
+      "reason": "no data source: the anchor sample (MA7.10) is not built",
+      "min_n": "4 scorers, 200 anchored items, 2 question types",
+      "n": {
+        "units": 0
+      },
+      "sealed": true
+    },
+    {
+      "id": "P7",
+      "name": "H-B4: PPI covers, saves under 2x for strong agents",
+      "status": "unresolved",
+      "reason": "no data source: the anchor sample (MA7.10) is not built",
+      "min_n": "2 agents with a 300-item anchored pool",
+      "n": {
+        "units": 0
+      },
+      "sealed": true
+    },
+    {
+      "id": "P8",
+      "name": "H8: satisfice, then diversify",
+      "status": "unresolved",
+      "reason": "no data source: the Phase 8 switchback has not started",
+      "min_n": "6 blocks and 20 rated apps per policy",
+      "n": {
+        "units": 0
+      },
+      "sealed": true
+    },
+    {
+      "id": "P9",
+      "name": "Score 2 adds no predictive value beyond scores 1 and 3",
+      "status": "unresolved",
+      "reason": "no data source: no realized-materiality window has closed in the trust inputs",
+      "min_n": "30 failure events among units with a score-2 aggregate",
+      "n": {
+        "units": 0
+      },
+      "sealed": true
+    }
+  ],
+  "gate_taps": {
+    "served": true,
+    "acts": 0,
+    "gated": 0,
+    "breaker": 0,
+    "taps_per_day_mean": 0,
+    "days_counted": 0,
+    "taps_per_day_median": 0,
+    "taps_per_day_p90": 0,
+    "note": "n=0: no material act (I2 and up) of a desk in the settled records"
+  },
+  "measured": {
+    "leases": {
+      "n": 32,
+      "by_state": {
+        "ended": 32
+      },
+      "by_end_reason": {
+        "run ended": 32
+      },
+      "durable": 0,
+      "renewals": 0,
+      "revoked_by_fidelity": 0,
+      "n_ended": 32,
+      "duration_hours_median": 0.000204,
+      "duration_hours_p90": 0.05963,
+      "durable_hours_median": 0
+    },
+    "gated_acts": {
+      "served": true,
+      "n": 0,
+      "approved": 0,
+      "denied": 0,
+      "open": 0,
+      "breaker": 0,
+      "by_class": {},
+      "answer_minutes_median": 0,
+      "answer_minutes_p90": 0
+    },
+    "act_gate_counts": {}
+  },
+  "drills": {
+    "n": 0,
+    "gated": 0,
+    "time_to_gate_hours_median": 0,
+    "time_to_gate_hours_max": 0,
+    "note": "n=0: no planted-package drill has run on d@e"
+  }
+}
