@@ -18,12 +18,13 @@ require (
 	github.com/moby/sys/capability v0.4.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/sergi/go-diff v1.3.1
-	github.com/traefik/yaegi v0.16.1
+	github.com/traefik/yaegi v0.16.3
 	golang.org/x/crypto v0.57.0
 	golang.org/x/net v0.60.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v2 v2.4.0
+	kernel.org/pub/linux/libs/security/libcap/psx v1.2.77
 	modernc.org/sqlite v1.49.0
 )
 
@@ -53,8 +54,10 @@ require (
 	go.uber.org/goleak v1.3.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	kernel.org/pub/linux/libs/security/libcap/psx v1.2.77 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+// choir-hip/yaegi = upstream v0.16.3 + traefik/yaegi#1752 (goroutine closure race) + #1739 (select race); remove when upstream releases both.
+replace github.com/traefik/yaegi => github.com/choir-hip/yaegi v0.16.4-0.20261106162235-3805d15424cc

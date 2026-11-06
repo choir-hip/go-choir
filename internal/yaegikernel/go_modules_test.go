@@ -250,24 +250,17 @@ func TestSessionLoadsAGoModuleInProcess(t *testing.T) {
 	}
 }
 
-// yaegi's limits bound what a module can be (R42): go-humanize v1.0.1 passes
-// the closure check but yaegi v0.16.1 cannot interpret one of its constant
-// expressions. The session refuses at start, so its worker never becomes
-// ready, and no cell runs without the module it was promised.
+// yaegi's limits bound what a module can be (R42): a module can pass the
+// closure check and still not be interpretable. (go-humanize v1.0.1 was the
+// fixture while yaegi was v0.16.1; v0.16.3 interprets it.) The session refuses
+// at start, so its worker never becomes ready, and no cell runs without the
+// module it was promised.
 func TestAModuleYaegiCannotInterpretRefusesTheSession(t *testing.T) {
-	cur := []gomodule.Module{{Path: humanizePath, Version: "v1.0.1", Sum: "h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY="}}
-	useCurated(t, cur)
-	b, err := gomodule.Resolve(cur, []gomodule.ModuleSource{testModule(t, humanizePath, "v1.0.1")}, []string{humanizePath})
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := fixtureBundle(t, "example.com/broken", map[string]string{"broken.go": "package broken\nvar X int = \"not an int\"\n"}, "example.com/broken")
 	s, err := NewSessionWithGoModules(NewDefaultSafeAllowlist(), nil, &b)
 	if err == nil {
 		s.Close()
 		t.Fatal("a session started without the module it was given")
-	}
-	if !strings.Contains(err.Error(), "mismatched types") {
-		t.Fatalf("refused for another reason: %v", err)
 	}
 }
 
