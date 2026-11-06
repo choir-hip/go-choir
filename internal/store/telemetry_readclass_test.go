@@ -34,6 +34,7 @@ var listEventsCallSiteClass = map[string]ReadConsistency{
 	// acknowledged kinds only; a second caller fails here until it adds a
 	// channel index or a union.
 	"internal/agentcore/system1_verb.go ListAcknowledgedEventsByChannel":   ReadConsistent, // replay lookup and the story.relation dedup
+	"internal/agentcore/act_gate.go ListAcknowledgedEventsByChannel":       ReadConsistent, // the breaker trips on the tape are read back in write order to rebuild a tripped class (MA7.8)
 	"internal/agentcore/disclosure_tap.go ListAcknowledgedEventsByChannel": ReadConsistent, // the owner tap: a pending disclosure, its answer and its one use are read back in write order (MA3.6)
 }
 
