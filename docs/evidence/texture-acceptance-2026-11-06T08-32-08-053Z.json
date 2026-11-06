@@ -1,0 +1,196 @@
+{
+  "started_at": "2026-11-06T08:32:08.054Z",
+  "checks": {
+    "T1_list": {
+      "at": "2026-11-06T08:32:20.828Z",
+      "status": [
+        200,
+        200
+      ],
+      "ms": [
+        27,
+        26
+      ],
+      "count": 0
+    },
+    "T2a_first_draft": {
+      "at": "2026-11-06T08:37:24.903Z",
+      "pass": false,
+      "seconds": 304,
+      "appagent_revisions": 0,
+      "document": {
+        "doc_id": "79bb350f-55f0-5912-9fbb-775288699a8d",
+        "owner_id": "730e11d0-7808-490e-b2b3-598f7e06e187",
+        "title": "Acceptance 1793953940771",
+        "computer_id": "computer-927d63c277b15c69fb2f0117e6184471",
+        "trajectory_id": "9de3a671-f7b6-52f0-8d6f-85b36ca3a08b",
+        "current_revision_id": "c486e31c-d198-546b-aa38-0447450ffe42",
+        "current_version_number": 0,
+        "created_at": "2026-11-06T08:32:20.804Z",
+        "updated_at": "2026-11-06T08:32:20.804Z",
+        "revision_count": 1,
+        "last_editor": "730e11d0-7808-490e-b2b3-598f7e06e187",
+        "last_author_kind": "user"
+      },
+      "obligations": {
+        "computer_id": "computer-927d63c277b15c69fb2f0117e6184471",
+        "generated_at": "2026-11-06T08:37:24.876313938Z",
+        "restart": {
+          "kind": "crash_or_stop"
+        },
+        "wakes": {
+          "unprojected": 0,
+          "retrying": 0,
+          "exhausted": 0
+        },
+        "runs": {
+          "passivated": 1
+        },
+        "oldest_run_at": {
+          "passivated": "2026-11-06T08:32:35Z"
+        },
+        "open_work_items": {
+          "count": 0
+        },
+        "actors": {
+          "due": 0,
+          "deferred": 2,
+          "max_defer_count": 0,
+          "oldest_unprocessed_at": "2026-11-06T08:32:20Z",
+          "next_not_before": "2026-11-06T09:32:20Z",
+          "by_kind": {
+            "activation_budget_deadline": 1,
+            "cell_terminal_deadline": 1
+          },
+          "samples": [
+            {
+              "update_id": "12f3edb7-1860-52bf-8a61-7ca23fd527e8",
+              "to_agent_id": "730e11d0-7808-490e-b2b3-598f7e06e187\u0000computer-927d63c277b15c69fb2f0117e6184471\u0000texture:79bb350f-55f0-5912-9fbb-775288699a8d",
+              "kind": "activation_budget_deadline",
+              "created_at": "2026-11-06T08:32:20Z",
+              "not_before": "2026-11-06T09:32:20Z",
+              "defer_count": 0,
+              "attempts": 0
+            },
+            {
+              "update_id": "ce5f69f0-c7d6-5d3e-b8ad-dac3aa69e35c",
+              "to_agent_id": "730e11d0-7808-490e-b2b3-598f7e06e187\u0000computer-927d63c277b15c69fb2f0117e6184471\u0000texture:79bb350f-55f0-5912-9fbb-775288699a8d",
+              "kind": "cell_terminal_deadline",
+              "created_at": "2026-11-06T08:32:35Z",
+              "not_before": "2026-11-06T09:32:20Z",
+              "defer_count": 0,
+              "attempts": 0
+            }
+          ]
+        },
+        "selfdev": {
+          "open": 0,
+          "busy": 0,
+          "stalled": 0
+        }
+      }
+    },
+    "T2b_revise": {
+      "at": "2026-11-06T08:37:35.371Z",
+      "pass": true,
+      "seconds": 10,
+      "appagent_revisions": 1
+    },
+    "T3_chevrons": {
+      "at": "2026-11-06T08:37:35.494Z",
+      "reads": [
+        {
+          "id": "6b8fdb68-bc0c-5a5e-ae78-d63ced5d095e",
+          "status": 200,
+          "ms": 22
+        },
+        {
+          "id": "ef637acb-225b-5a27-a658-1899f8f3d0af",
+          "status": 200,
+          "ms": 27
+        },
+        {
+          "id": "c486e31c-d198-546b-aa38-0447450ffe42",
+          "status": 200,
+          "ms": 26
+        }
+      ]
+    },
+    "T4_reload_idle": {
+      "at": "2026-11-06T08:37:50.690Z",
+      "pending_reads": [
+        false,
+        false,
+        false
+      ]
+    },
+    "T5_cancel": {
+      "at": "2026-11-06T08:37:51.165Z",
+      "pending_seen": true,
+      "cancel_status": 200,
+      "cleared": true,
+      "seconds_to_clear": 0,
+      "appagent_before": 1
+    },
+    "T5b_revise_after_cancel": {
+      "at": "2026-11-06T08:37:51.192Z",
+      "pass": false,
+      "status": 409,
+      "body": {
+        "error": "durable lifecycle state is unavailable or terminal"
+      }
+    },
+    "T6_research": {
+      "at": "2026-11-06T08:40:07.684Z",
+      "landed": true,
+      "revision": "c9651e7c-0414-564f-8d0b-268fe1731d5d",
+      "source_entities": 2,
+      "source_refs": 2
+    },
+    "T6_idle": {
+      "at": "2026-11-06T08:40:07.747Z",
+      "idle": true,
+      "pending": false
+    },
+    "T7_crash_interrupts": {
+      "at": "2026-11-06T08:42:17.635Z",
+      "refresh": "{\"vm_id\":\"vm-478f7bae0f47c3668bb2c0dc6d3e9278\",\"computer_id\":\"computer-927d63c277b15c69fb2f0117e6184471\",\"user_id\":\"730e11d0-7808-490e-b2b3-598f7e06e187\",\"desktop_id\":\"primary\",\"kind\":\"interactive\",\"computer_url\":\"http://10.205.222.2:8085\",\"state\":\"active\"}",
+      "back": true,
+      "interrupted": true,
+      "pending": false,
+      "appagent_before": 2,
+      "appagent_after": 2
+    },
+    "T8_obligations_after_crash": {
+      "at": "2026-11-06T08:42:17.668Z",
+      "status": 200,
+      "ms": 25,
+      "restart": {
+        "kind": "crash_or_stop"
+      },
+      "wakes": {
+        "unprojected": 0,
+        "retrying": 0,
+        "exhausted": 0
+      },
+      "runs": {},
+      "open_work_items": {
+        "count": 1,
+        "oldest_at": "2026-11-06T08:40:07Z"
+      }
+    },
+    "summary": {
+      "at": "2026-11-06T08:42:17.672Z",
+      "result": "fail",
+      "failed": [
+        "T2a_first_draft",
+        "T5b_revise_after_cancel"
+      ]
+    }
+  },
+  "base_url": "https://choir.news",
+  "doc_id": "79bb350f-55f0-5912-9fbb-775288699a8d",
+  "doc_id_research": "f8d0e5f1-d9dc-5ac3-8e56-0f240ba4897e",
+  "result": "fail",
+  "finished_at": "2026-11-06T08:42:17.672Z"
+}
