@@ -235,12 +235,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    Phases 1 and 2 closed 2026-11-05 04:31Z (every MA1 and MA2 slice on main,
-    staging 4b8cf26ad). Now: land 222d946f8 (desks see their own inert count)
-    after the committed baseline, then the Phase 3 prediction round (plan
-    rule 7), then Phase 3 custody and labels from MA3.1.
-  source_ref: origin/main 4b8cf26ad
-  deploy_identity: staging 4b8cf26ad35918109d7335a06185b284728151f2
+    (Rewritten 2026-11-06 13:00Z; the 2026-11-05 card was stale.) Phases 1 to
+    3 closed. Phase 4 landed through MA4.9; MA4.10 (engineering as a package)
+    waits for a week of MA4.6 to MA4.9 staging runs, MA4.11 after it. Phase 5
+    landed through MA5.T1 (Texture app and desk as one package, e23eeee24);
+    the M3 remainder (automated decision, candidate overlay, boot migration)
+    is open and needs a corpusd authority design. Phase 6: MA6.1 to MA6.5 on
+    main and accepted on d@e (gVisor desk workers ad180ea7d; yaegi Go modules
+    5c83a08ff); MA6.6 code mode is building in worktree ma66; MA6.7 (capsule
+    pilot) needs Phase 8 rounds. Phase 7: MA7.1 to MA7.9 landed, the trust
+    view has rows on d@e (e3162eccd), the harness outcome tests are sealed
+    below their minimum n; MA7.10 (anchor sample, flip-rate sampler) not
+    built. Phase 8 not started.
+  source_ref: origin/main 4e63947a6
+  deploy_identity: staging 5c83a08ffdd478679efaf3e604538fe9093db04f (security epoch 86)
   candidate:
     id: none
     state: none
@@ -293,26 +301,33 @@ now:
     owner_ratification_ref: MA0.5, owner 2026-11-04 ("Yes I sign off"), after the walkthrough that settled R39 to R42 and removed tool servers
   belief:
     believed_state: >-
-      Desks talk only through records; one data-driven resolver routes them;
-      requests carry p_success, weight and settler; sub-calls and delegations
-      are scored Casts with a blind asynchronous judge; inertness is counted;
-      the desk protocol 1.0.0 is locked with every registry authority field;
-      a final Report cannot close a round over an unread Cast. Security epoch
-      51. The sub-call path is not exercised on d@e (no prompt teaches
-      choir.Research); every typed request on d@e is inert (no typed question).
+      Every desk worker on d@e runs under gVisor in required mode, one sandbox
+      per trust class, with a bounded-wait memory admission; desk cells may
+      import 54 pure stdlib packages and curated, h1-pinned Go modules (no
+      daemon path carries a bundle yet: R24 still refuses published desks).
+      The Texture app is a package; registry.ts has no static rows; the
+      committer is registered by kind behind a grant. The trust view reads
+      desk Casts (18 rows on d@e). Reader and writer gates are empty in
+      observe mode across every acceptance; the disclosure gate sees only
+      owner_private:capture asks on research to texture.
     main_uncertainty: >-
-      whether custody enforcement (Phase 3) breaks desks on paths d@e never
-      exercises, and whether the judge should settle desk-to-desk Casts
-      (owner question d)
-    next_observation: the Phase 3 prediction round committed, then MA3.1's custodian assignment against the writer registry
+      whether code mode (MA6.6) with per-desk import sets changes desk
+      behaviour on paths d@e never exercises, and whether the enforce flip of
+      the disclosure gate can be decided without the owner (it is not decided
+      alone)
+    next_observation: MA6.6's measured frame-call bound and its tier 2 review
   blocker_or_risk: >-
-    Owner questions open (none blocking): (a) other publishers' front-end
-    packages before the iframe sandbox, (b) the 19 hidden v1 releases,
-    (d) judge on desk-to-desk Casts. Stranded d@e trajectory 5c725f71 needs
-    an owner revise. MA1.4 residuals N5, N6, N8, N9.
+    Not blocking, owner decisions: the disclosure enforce flip
+    (owner_private:capture research to texture policy); the H3 pasted-URL
+    chip default; F1's staging proof needs CHOIR_PLATFORM_OPERATORS on Node
+    B. Waits: MA4.10 needs a week of staging runs; MA6.7 needs Phase 8. Open
+    defects not patched (old system): the Texture first draft after create
+    waits for the next owner act (T2a); revise after cancel 409 (T5b).
+    DeepSeek review seat unavailable (402); a Claude Opus seat stands in.
+    The paper key expires 2026-11-12.
   next_action: >-
-    Land 222d946f8; author and commit the Phase 3 prediction round; start
-    MA3.1 (custodian per WriterRuntime kind) with a Sonnet builder.
+    Review and land MA6.6 (tier 2); design the M3 corpusd authority; write
+    the checkpoint letter for the owner.
 
 receipts:
   - id: P0_plan_review
