@@ -3,6 +3,7 @@ package mediastate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -174,8 +175,12 @@ func (h *Handler) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 
 // handleSelections serves /api/preferences/packages.selection: the owner's
 // selection records, {"<slot>": {"package", "release", "at"}} (slice L2). A
-// write replaces the set; absent reads as {} (every slot ranked by the
-// kernel's default order). It is a fact on the owner's tape, not a switch.
+// write carries the slots it changes and is merged per slot into the stored
+// set (slice L4: a write for one slot never clobbers another's, so two
+// windows, or a choice and the platform's yank fallback, cannot lose each
+// other's records); the answer and the live event carry the merged set.
+// Absent reads as {} (every slot ranked by the kernel's default order). It
+// is a fact on the owner's tape, not a switch.
 func (h *Handler) handleSelections(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
@@ -188,13 +193,7 @@ func (h *Handler) handleSelections(w http.ResponseWriter, r *http.Request) {
 		rec, getErr := h.store.GetUserPreference(r.Context(), ownerID, key)
 		value := apppackage.Selections{}
 		if getErr == nil {
-			// A stored value this build no longer reads (a slot it does not
-			// have) reads as no selection, never as an error.
-			if raw, err := json.Marshal(rec.Value["value"]); err == nil {
-				if parsed, err := apppackage.ParseSelections(raw); err == nil {
-					value = parsed
-				}
-			}
+			value = readSelections(rec)
 		}
 		resp := settingResponse{Key: key, Value: value, Default: getErr != nil}
 		if getErr == nil {
@@ -214,10 +213,20 @@ func (h *Handler) handleSelections(w http.ResponseWriter, r *http.Request) {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "a selections write is {\"value\": {\"<slot>\": {\"package\": ..., \"at\": ...}}}"})
 			return
 		}
-		sel, err := apppackage.ParseSelections(req.Value)
+		changes, err := apppackage.ParseSelections(req.Value)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
+		}
+		h.selectionMu.Lock()
+		defer h.selectionMu.Unlock()
+		sel, err := h.storedSelections(r.Context(), ownerID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read the selections"})
+			return
+		}
+		for slot, rec := range changes {
+			sel[slot] = rec
 		}
 		var value map[string]any
 		normalized, _ := json.Marshal(sel)
@@ -239,6 +248,31 @@ func (h *Handler) handleSelections(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, PUT")
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// readSelections reads a stored selections value. A value this build no
+// longer reads (a slot it does not have) reads as no selection, never as an
+// error.
+func readSelections(rec types.UserPreference) apppackage.Selections {
+	if raw, err := json.Marshal(rec.Value["value"]); err == nil {
+		if parsed, err := apppackage.ParseSelections(raw); err == nil {
+			return parsed
+		}
+	}
+	return apppackage.Selections{}
+}
+
+// storedSelections is the owner's stored set (empty when absent). A failed
+// read is an error, so a merge never writes over records it could not see.
+func (h *Handler) storedSelections(ctx context.Context, ownerID string) (apppackage.Selections, error) {
+	rec, err := h.store.GetUserPreference(ctx, ownerID, apppackage.SelectionKey)
+	if errors.Is(err, store.ErrNotFound) {
+		return apppackage.Selections{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return readSelections(rec), nil
 }
 
 func (h *Handler) getSetting(w http.ResponseWriter, r *http.Request, ownerID, key string, decl apppackage.SettingField) {

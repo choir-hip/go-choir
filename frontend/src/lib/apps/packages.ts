@@ -251,6 +251,28 @@ let refreshSeq = 0;
 // platform's yank or forced update lands. The installed set is read after it.
 let updatesSynced = false;
 
+/** A package the platform acted on at the sync: yanked (removed) or replaced by its forced release. */
+export type PlatformAct = { package: string; state: 'removed_by_platform' | 'updated_by_platform'; detail: string };
+type PlatformActListener = (acts: PlatformAct[]) => void;
+const platformActListeners = new Set<PlatformActListener>();
+/**
+ * Hear the platform's acts from each sync (slice L4: a yanked release leaves
+ * the kernel's ranking, and its slots fall back to the base). Returns the
+ * disposer.
+ */
+export function onPlatformActs(fn: PlatformActListener): () => void {
+  platformActListeners.add(fn);
+  return () => { platformActListeners.delete(fn); };
+}
+
+function platformActs(body: unknown): PlatformAct[] {
+  const updates = (body as { updates?: unknown })?.updates;
+  if (!Array.isArray(updates)) return [];
+  return updates
+    .filter((u) => u && typeof u.package === 'string' && (u.state === 'removed_by_platform' || u.state === 'updated_by_platform'))
+    .map((u) => ({ package: u.package, state: u.state, detail: typeof u.detail === 'string' ? u.detail : '' }));
+}
+
 async function syncPackageUpdatesOnce(): Promise<void> {
   if (updatesSynced) return;
   try {
@@ -259,11 +281,14 @@ async function syncPackageUpdatesOnce(): Promise<void> {
     const computerId = String((await boot.json())?.computer_id || '');
     if (!computerId) return;
     updatesSynced = true;
-    await fetchWithRenewal(`/api/computers/${encodeURIComponent(computerId)}/packages/updates`, {
+    const res = await fetchWithRenewal(`/api/computers/${encodeURIComponent(computerId)}/packages/updates`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: '{}',
     });
+    if (!res.ok) return;
+    const acts = platformActs(await res.json());
+    if (acts.length) for (const fn of platformActListeners) fn(acts);
   } catch {
     // The installed set stands; the next sign-in or the Library syncs again.
   }

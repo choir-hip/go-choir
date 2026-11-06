@@ -102,13 +102,14 @@ test('failover: watchdog un-ranks a provider after N failures in the window; bas
   k.services.provide(k.scope('n'), S, { id: 'new', impl: 'new', priority: 60, grants: ['rank.high'] });
   await k.services.settled();
   expect(k.services.resolve(S)).toBe('new');
-  k.services.reportFailure(S, 'new', 'throw 1');
+  expect(k.services.reportFailure(S, 'new', 'throw 1')).toBe(false);
   t = 500; // outside the window: the first failure aged out
-  k.services.reportFailure(S, 'new', 'throw 2');
+  expect(k.services.reportFailure(S, 'new', 'throw 2')).toBe(false);
   await k.services.settled();
   expect(k.services.resolve(S)).toBe('new');
   t = 520;
-  k.services.reportFailure(S, 'new', 'budget overrun');
+  expect(k.services.reportFailure(S, 'new', 'budget overrun')).toBe(true); // the report that trips it says so, once
+  expect(k.services.reportFailure(S, 'new', 'after')).toBe(false);
   await k.services.settled();
   expect(k.services.resolve(S)).toBe('base');
   const entry = k.snapshot().services[S].providers.find((x) => x.id === 'new');
@@ -124,7 +125,9 @@ test('no healthy candidate: no active provider and consumers stay inactive', asy
   k.services.consume(k.scope('c'), [S], () => { on++; });
   await k.services.settled();
   expect(on).toBe(1);
-  k.services.setHealthy(S, 'base', false);
+  expect(k.services.trip(S, 'base', 'set aside by the test')).toBe(true);
+  expect(k.services.trip(S, 'base', 'again')).toBe(false);
+  expect(k.snapshot().services[S].providers[0].tripped).toBe('set aside by the test');
   await k.services.settled();
   expect(k.services.resolve(S)).toBeUndefined();
   expect(k.snapshot().services[S].consumers[0].active).toBe(false);

@@ -61,6 +61,10 @@ func TestTierReviewRefusesAPackWithAnUnsafeValueOrLowContrast(t *testing.T) {
 		`red; background: blue`,
 		`expression(alert(1))`,
 		`@import "x.css"`,
+		`red\3b background: blue`,
+		`red\; background: blue`,
+		`red\7d body\7b color: red`,
+		`red/**/\3B x: y`,
 	} {
 		err := check(nightTheme(func(v map[string]any) { v["colors"].(map[string]any)["selected"] = bad }))
 		if ReasonOf(err) != ReasonUnsafeValue {

@@ -26,12 +26,21 @@
 //  S4 the package leaves (its scope is disposed): its surface unmounts and the
 //     slot falls to the next provider or the last resort;
 //  S5 no provider at all at boot: the last resort shows once registration has
-//     settled, never as a flash before the packages have registered.
+//     settled, never as a flash before the packages have registered;
+//  S6 a broken surface package hides the fix (slice L4): the boot recovery
+//     entry, ?recovery=core, registers no surface package for that session,
+//     so every slot shows the host's last resort and the recovery surface
+//     opens; nothing about it is stored, and a reload without it is the
+//     normal shell;
+//  S7 a failover nobody sees: the provider set aside keeps its reason in the
+//     kernel's snapshot (the recovery surface and Settings show it) and the
+//     owner gets one toast (decision 4), not one per failure.
 import type { ComponentType } from 'svelte';
 import { readable, writable, type Readable } from 'svelte/store';
 import type { Scope } from './kernel';
 import { shellKernel } from './shell-kernel';
 import { sdkSatisfies } from './sdk-version';
+import { announceFailover } from './services/failover';
 
 export const SURFACE_SLOTS = ['launcher', 'desktop.icons', 'overview', 'prompt', 'notifications.host'] as const;
 export type SurfaceSlot = (typeof SURFACE_SLOTS)[number];
@@ -41,6 +50,19 @@ export type SurfaceSpec = { id: string; component: ComponentType; priority?: num
 const abi = (slot: string) => `choir.service/${slot}/v1`;
 const ID = /^[a-z][a-z0-9-]{0,63}$/;
 const isSlot = (s: string): s is SurfaceSlot => (SURFACE_SLOTS as readonly string[]).includes(s);
+
+/**
+ * The boot recovery entry (S6): ?recovery=core loads only the host's
+ * last-resort surfaces for this page load. Read once, from the URL, never
+ * stored.
+ */
+export const recoveryBoot: boolean = (() => {
+  try {
+    return typeof location !== 'undefined' && new URLSearchParams(location.search).get('recovery') === 'core';
+  } catch {
+    return false;
+  }
+})();
 
 const root = shellKernel.root;
 for (const slot of SURFACE_SLOTS) shellKernel.services.define(root, slot, abi(slot));
@@ -80,10 +102,10 @@ export function registerSurface(scope: Scope, slot: string, spec: SurfaceSpec): 
   return () => { void dispose(); };
 }
 
-/** A surface failed to mount (S3): out of the ranking for this session. */
+/** A surface failed to mount (S3): out of the ranking for this registration, with the reason. */
 export function reportSurfaceFailure(slot: SurfaceSlot, id: string, reason: string): void {
-  console.warn(`[shell] the ${slot} surface of ${id} failed and is set aside: ${reason}`);
-  shellKernel.services.setHealthy(slot, id, false);
+  const why = `failed to mount: ${reason}`;
+  if (shellKernel.services.trip(slot, id, why)) announceFailover(slot, id, why);
   setActive(slot, null, id);
 }
 
@@ -165,7 +187,8 @@ export function addSurfaceRegistrar(fn: Registrar): void {
   registrars.push(fn);
 }
 
-for (const s of inTreeSurfaces()) registerSlotSurface(s, surfaceScope(s.name));
+// S6: the recovery boot registers none; the recovery surface's "Use default" still can.
+if (!recoveryBoot) for (const s of inTreeSurfaces()) registerSlotSurface(s, surfaceScope(s.name));
 
 /**
  * The recovery surface's "use default": the in-tree package's surfaces are
@@ -183,11 +206,11 @@ export async function restoreSurfacePackage(name: string): Promise<void> {
 
 /** The slots the recovery surface lists: the surface slots and the context-menu renderer. */
 export const RECOVERY_SLOTS = [...SURFACE_SLOTS, 'contextMenu.renderer'] as const;
-export type RecoveryRow = { slot: string; active: string | null; lastResort: boolean; defaultPackage: string; failed: string[] };
+export type RecoveryRow = { slot: string; active: string | null; lastResort: boolean; defaultPackage: string; failed: { id: string; reason: string }[] };
 
 /** For each slot: who draws it, whether the host's last resort does, its default package and the providers set aside. */
 export function describeRecovery(): RecoveryRow[] {
-  const services = (shellKernel.services.describe().services || {}) as Record<string, { active: string | null; providers: { id: string; healthy: boolean }[] }>;
+  const services = (shellKernel.services.describe().services || {}) as Record<string, { active: string | null; providers: { id: string; healthy: boolean; tripped: string | null }[] }>;
   const tree = inTreeSurfaces();
   return RECOVERY_SLOTS.map((slot) => {
     const active = services[slot]?.active ?? null;
@@ -196,7 +219,7 @@ export function describeRecovery(): RecoveryRow[] {
       active,
       lastResort: active === null || active === 'last-resort',
       defaultPackage: tree.find((s) => s.slot === slot)?.name || '',
-      failed: (services[slot]?.providers ?? []).filter((p) => !p.healthy).map((p) => p.id),
+      failed: (services[slot]?.providers ?? []).filter((p) => !p.healthy).map((p) => ({ id: p.id, reason: p.tripped || 'set aside' })),
     };
   });
 }

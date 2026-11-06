@@ -22,7 +22,9 @@
 //  X1 a renderer with no render function, or an unknown service ABI: refused,
 //     the base keeps serving;
 //  X2 a renderer that throws or returns false: reported against it (three in
-//     the window un-rank it) and the base renders this menu;
+//     the window un-rank it, with the reason, and the owner gets one toast)
+//     and the base renders this menu; one that answers but takes longer than
+//     RENDER_BUDGET_MS is reported the same way (its menu stands);
 //  X3 a handler that throws, runs over budget, or returns junk: skipped by the
 //     kernel (P2), the menu opens with the previous items;
 //  X4 a handler removes or relabels an essential item: the original returns;
@@ -39,6 +41,7 @@ import { registerContributionPoint } from '../contributions';
 import { shellKernel } from '../shell-kernel';
 import type { Scope } from '../kernel';
 import { commands, evaluateWhen } from './commands';
+import { announceFailover } from './failover';
 import type { ContextMenuEntry, ContextMenuItem, ContextMenuRequest, ContextMenuTarget } from '../context-menu-state';
 
 export const RENDERER_SLOT = 'contextMenu.renderer';
@@ -47,6 +50,8 @@ export const BUILD_PIPELINE = 'contextMenu.build';
 export const BASE_RENDERER_ID = 'last-resort';
 export const USE_DEFAULT_ID = 'use-default-menu';
 export const MAX_ITEMS = 60;
+/** A renderer's time to answer one menu before it counts as a failure (X2). */
+export const RENDER_BUDGET_MS = 250;
 const MAX_LABEL = 120;
 
 export type RenderRequest = ContextMenuRequest & { seq: number };
@@ -276,14 +281,23 @@ function withContributors(items: ContextMenuEntry[], target: ContextMenuTarget):
   return out;
 }
 
+function fail(id: string, reason: string): void {
+  if (shellKernel.services.reportFailure(RENDERER_SLOT, id, reason)) announceFailover(RENDERER_SLOT, id, reason);
+}
+
 function render(request: RenderRequest): void {
   const active = activeRenderer();
   if (active && active.id !== BASE_RENDERER_ID) {
+    const started = performance.now();
     try {
-      if (active.impl.render(request) !== false) return;
-      shellKernel.services.reportFailure(RENDERER_SLOT, active.id, 'render returned false');
+      if (active.impl.render(request) !== false) {
+        const took = performance.now() - started;
+        if (took > RENDER_BUDGET_MS) fail(active.id, `render over budget (${Math.round(took)} ms)`);
+        return;
+      }
+      fail(active.id, 'render returned false');
     } catch (err) {
-      shellKernel.services.reportFailure(RENDERER_SLOT, active.id, `render threw: ${String(err)}`);
+      fail(active.id, `render threw: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   baseRender?.(request); // X2: the base answers

@@ -15,7 +15,7 @@ import LastResortMenu from './LastResortMenu.svelte';
 import { contextMenuState } from './context-menu-state';
 import { packageIdentityContext } from './package-identity';
 import type { Scope } from './kernel';
-import { addSurfaceRegistrar, inTreeSurfaces, surfaceScope, type InTreeSurface } from './shell-slots';
+import { addSurfaceRegistrar, inTreeSurfaces, recoveryBoot, surfaceScope, type InTreeSurface } from './shell-slots';
 import { sdkSatisfies } from './sdk-version';
 import { BASE_RENDERER_ID, RENDERER_SLOT, installBaseRenderer, registerContextMenuRenderer, type RenderRequest } from './services/context-menu';
 
@@ -83,6 +83,7 @@ function registerRendererSurface(s: InTreeSurface, scope: Scope): void {
   });
 }
 
-for (const s of inTreeSurfaces()) registerRendererSurface(s, surfaceScope(s.name));
+// The recovery boot (?recovery=core) registers none: the last-resort menu answers (shell-slots S6).
+if (!recoveryBoot) for (const s of inTreeSurfaces()) registerRendererSurface(s, surfaceScope(s.name));
 // The recovery surface's "use default" registers it again (shell-slots restoreSurfacePackage).
 addSurfaceRegistrar(registerRendererSurface);

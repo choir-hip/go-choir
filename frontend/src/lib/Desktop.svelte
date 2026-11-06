@@ -4,7 +4,8 @@
   The launcher, desktop icons, overview, prompt bar, notifications and the
   context-menu renderer are packages (lib/shell-slots.ts, lib/menu-host.ts);
   for a slot with no healthy package the host shows its last-resort surface
-  (LastResort.svelte), and Mod+Alt+R opens the recovery surface. The prompt
+  (LastResort.svelte), and Mod+Alt+R opens the recovery surface; a page
+  loaded with ?recovery=core loads no surface package and opens it (L4). The prompt
   bar's door is lib/prompt-submit.ts.
 
   Layout:
@@ -49,7 +50,7 @@
   import AppHost from './AppHost.svelte';
   import ShellSlot from './ShellSlot.svelte';
   import LastResort from './LastResort.svelte';
-  import { activeSurfaces, describeRecovery, launcherState, restoreSurfacePackage, setLauncherOpen, toggleLauncher } from './shell-slots';
+  import { activeSurfaces, describeRecovery, launcherState, recoveryBoot, restoreSurfacePackage, setLauncherOpen, toggleLauncher } from './shell-slots';
   import { promptTargetFor } from './prompt-focus';
   import { dismissNotification, notifications, postNotification } from './services/notifications';
   import './menu-host';
@@ -1622,6 +1623,8 @@
     window.addEventListener('pagehide', handlePageHide);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
+    // The boot recovery entry (?recovery=core, L4): the recovery surface opens at once.
+    if (recoveryBoot) openRecovery();
     if (authenticated) {
       startAuthenticatedDesktop();
       // A page load with a live session mounts already signed in, so the
@@ -1830,7 +1833,7 @@
   {/if}
 
   {#if recoveryOpen}
-    <LastResort kind="recovery" rows={recoveryRows} on:close={() => (recoveryOpen = false)} on:restore={(event) => restoreDefaultSurface(event.detail.name)} />
+    <LastResort kind="recovery" rows={recoveryRows} {recoveryBoot} on:close={() => (recoveryOpen = false)} on:restore={(event) => restoreDefaultSurface(event.detail.name)} />
   {/if}
 
   <ShellSlot name="notifications.host" props={{ notifications: $notifications }} on={{ dismiss: (event) => dismissNotification(event.detail?.id) }}>

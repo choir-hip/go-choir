@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +28,9 @@ type Handler struct {
 	// settings names the settings a package declares for an owner's computer
 	// (preferences.go); nil declares none, so every package setting is refused.
 	settings SettingSource
+	// selectionMu serializes the read-merge-write of the selection records
+	// (preferences.go handleSelections), so two slots' writes both land.
+	selectionMu sync.Mutex
 }
 
 // NewHandler constructs the media-state control plane.

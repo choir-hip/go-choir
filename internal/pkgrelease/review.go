@@ -209,13 +209,16 @@ func decodeCSSEscapes(v string) string {
 
 // SafeCSSValue is the shell's isSafeCSSValue: a non-empty string of at most
 // 512 characters that cannot end its declaration and calls nothing that
-// fetches, escapes decoded.
+// fetches. Both checks run on the value as written and with its escapes and
+// comments decoded, so an escaped break (\3b, \;, \7d) is refused like a
+// plain one wherever the value is later interpolated.
 func SafeCSSValue(v any) bool {
 	s, ok := v.(string)
 	if !ok || s == "" || utf8.RuneCountInString(s) > 512 {
 		return false
 	}
-	return !cssBreak.MatchString(s) && !cssFetching.MatchString(decodeCSSEscapes(s))
+	decoded := decodeCSSEscapes(s)
+	return !cssBreak.MatchString(s) && !cssBreak.MatchString(decoded) && !cssFetching.MatchString(decoded)
 }
 
 func channels(v string) ([3]float64, bool) {

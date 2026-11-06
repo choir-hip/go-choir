@@ -18,7 +18,9 @@
   export let windows: Array<{ windowId: string; title: string; mode: string }> = [];
   export let disabled = false;
   export let notifications: Array<{ id: number; title: string; body: string; kind: string }> = [];
-  export let rows: Array<{ slot: string; active: string | null; lastResort: boolean; defaultPackage: string; failed: string[] }> = [];
+  export let rows: Array<{ slot: string; active: string | null; lastResort: boolean; defaultPackage: string; failed: Array<{ id: string; reason: string }> }> = [];
+  /** The boot recovery entry (?recovery=core): no surface package was loaded. */
+  export let recoveryBoot = false;
 
   const dispatch = createEventDispatcher();
   let text = '';
@@ -46,13 +48,16 @@
     <strong>Shell recovery</strong>
     <button type="button" data-last-resort-close on:click={() => dispatch('close')}>Close</button>
   </header>
+  {#if recoveryBoot}
+    <p data-recovery-boot>Recovery session: no surface package was loaded. Nothing here is saved; reload without ?recovery=core for the normal desktop.</p>
+  {/if}
   <table>
     <thead><tr><th>Slot</th><th>Drawn by</th><th></th></tr></thead>
     <tbody>
       {#each rows as row (row.slot)}
         <tr data-recovery-slot={row.slot} data-recovery-last-resort={row.lastResort ? 'true' : 'false'}>
           <td>{row.slot}</td>
-          <td>{row.lastResort ? 'last resort' : row.active}{#if row.failed.length} (set aside: {row.failed.join(', ')}){/if}</td>
+          <td>{row.lastResort ? 'last resort' : row.active}{#each row.failed as f (f.id)}<span class="last-resort-failed" data-recovery-failed={f.id}> (set aside: {f.id}, {f.reason})</span>{/each}</td>
           <td>
             {#if row.defaultPackage && row.active !== row.defaultPackage}
               <button type="button" data-recovery-restore={row.defaultPackage} on:click={() => dispatch('restore', { name: row.defaultPackage })}>Use default ({row.defaultPackage})</button>

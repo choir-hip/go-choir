@@ -22,12 +22,22 @@
 //  P4 another window's write (live event setting.updated): this shell
 //     applies the new set, its own echo ignored;
 //  P5 sign-out: every applied choice is withdrawn from the kernel, so the
-//     next owner starts from the default order.
+//     next owner starts from the default order;
+//  P6 two writes race (Settings in two windows, a choice and a yank): a write
+//     carries only the slots it changes and the computer merges it into the
+//     stored set (internal/mediastate handleSelections), so one slot's write
+//     never clobbers another's; the shell applies the merged set it returns;
+//  P7 the platform yanks (or force-replaces) a release that draws or was
+//     chosen for a slot (slice L4): at the next sync the provider is set aside
+//     in the kernel with the platform's reason, and the slot's base-image
+//     package is recorded as the choice, so the slot falls back to the base,
+//     never to another third party's provider by priority.
 import { get } from 'svelte/store';
 import type { Disposer, Scope } from '../kernel';
 import { shellKernel } from '../shell-kernel';
 import { RECOVERY_SLOTS, inTreeSurfaces } from '../shell-slots';
-import { installedPackages } from '../apps/packages';
+import { installedPackages, onPlatformActs, type PlatformAct } from '../apps/packages';
+import { announceFailover } from './failover';
 import { fetchWithRenewal } from '../auth.js';
 import { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from '../live-events.js';
 
@@ -103,8 +113,15 @@ function listen(): void {
   });
 }
 
+let loading: Promise<void> | null = null;
+
 /** Sign-in: read the owner's records and apply them (P2: any failure leaves the default order). */
-export async function loadProviderSelections(): Promise<void> {
+export function loadProviderSelections(): Promise<void> {
+  loading = readSelections();
+  return loading;
+}
+
+async function readSelections(): Promise<void> {
   listen();
   try {
     const res = await fetchWithRenewal(URL, { method: 'GET', cache: 'no-store' });
@@ -130,28 +147,73 @@ function releaseOf(pkg: string): string | undefined {
   return rec && SHA256.test(String(rec.release_id || '')) ? rec.release_id : undefined;
 }
 
-/** Record the owner's choice of provider for a slot, then rank it first (P3: nothing is applied unless the record is). */
-export async function selectProvider(slot: string, pkg: string): Promise<SelectionResult> {
-  if (!slotList().includes(slot)) return { ok: false, error: `"${slot}" is not a shell slot` };
-  if (!NAME.test(String(pkg || '')) || pkg === LAST_RESORT) return { ok: false, error: `"${pkg}" is not a package` };
+function recordFor(pkg: string): SelectionRecord {
   const release = releaseOf(pkg);
-  const next: Records = { ...records, [slot]: { package: pkg, ...(release ? { release } : {}), at: new Date().toISOString() } };
+  return { package: pkg, ...(release ? { release } : {}), at: new Date().toISOString() };
+}
+
+/** Write only the slots that change (P6); the computer merges them and returns the whole set, which is applied. */
+async function writeSlots(changes: Records): Promise<SelectionResult> {
+  let merged: Records;
   try {
     const res = await fetchWithRenewal(URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Choir-Device': currentDeviceId() },
-      body: JSON.stringify({ value: next }),
+      body: JSON.stringify({ value: changes }),
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      return { ok: false, error: String(body?.error || `the selection was not saved (${res.status})`) };
-    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: String(body?.error || `the selection was not saved (${res.status})`) };
+    merged = body && typeof body.value === 'object' && body.value ? readRecords(body.value) : { ...records, ...changes };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'the selection was not saved' };
   }
-  await apply(next);
+  await apply(merged);
   return { ok: true };
 }
+
+/** Record the owner's choice of provider for a slot, then rank it first (P3: nothing is applied unless the record is). */
+export async function selectProvider(slot: string, pkg: string): Promise<SelectionResult> {
+  if (!slotList().includes(slot)) return { ok: false, error: `"${slot}" is not a shell slot` };
+  if (!NAME.test(String(pkg || '')) || pkg === LAST_RESORT) return { ok: false, error: `"${pkg}" is not a package` };
+  return writeSlots({ [slot]: recordFor(pkg) });
+}
+
+/**
+ * P7: the platform's acts from the update sync reach the kernel. Every slot
+ * the acted-on package draws or was chosen for falls back to its base-image
+ * package (recorded, so the fallback survives a reload), and the package's
+ * registration is set aside with the platform's reason.
+ */
+export async function fallBackFromPlatformActs(acts: PlatformAct[]): Promise<SelectionResult> {
+  if (loading) await loading.catch(() => undefined);
+  await shellKernel.services.settled();
+  const services = (shellKernel.services.describe().services || {}) as Record<string, { active: string | null; providers: { id: string }[] }>;
+  const changes: Records = {};
+  const tripped: [string, string, string][] = [];
+  for (const act of acts) {
+    const why = act.state === 'removed_by_platform'
+      ? `yanked by the platform${act.detail ? `: ${act.detail}` : ''}`
+      : `replaced by the platform${act.detail ? `: ${act.detail}` : ''}`;
+    for (const slot of slotList()) {
+      const base = defaultPackageOf(slot);
+      if (!base || act.package === base) continue;
+      const drew = services[slot]?.active === act.package;
+      const chosen = records[slot]?.package === act.package;
+      if (drew || chosen) changes[slot] = recordFor(base);
+      if (services[slot]?.providers.some((p) => p.id === act.package)) tripped.push([slot, act.package, why]);
+    }
+  }
+  for (const [slot, id, why] of tripped) {
+    if (shellKernel.services.trip(slot, id, why)) announceFailover(slot, id, why);
+  }
+  if (Object.keys(changes).length === 0) {
+    await shellKernel.services.settled();
+    return { ok: true };
+  }
+  return writeSlots(changes);
+}
+
+onPlatformActs((acts) => { void fallBackFromPlatformActs(acts); });
 
 /** "Use default": select the slot's base-image package; nothing is uninstalled. */
 export async function useDefaultProvider(slot: string): Promise<SelectionResult> {

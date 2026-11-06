@@ -229,6 +229,16 @@
 
   $: themeValidation = validateThemeConfig(selectedTheme);
   $: themePreviewVars = themeCSSVariables(selectedTheme);
+  // The preview swatch's variables are set one property at a time, never
+  // interpolated into a style string, so no value can end its declaration.
+  function cssVars(node: HTMLElement, vars: Record<string, string>) {
+    const set = (next: Record<string, string>) => {
+      node.removeAttribute('style');
+      for (const [key, value] of Object.entries(next || {})) node.style.setProperty(key, String(value));
+    };
+    set(vars);
+    return { update: set };
+  }
 
   async function refreshStatus() {
     loading = true;
@@ -553,7 +563,7 @@
         <h3>Theme</h3>
         <p class="muted">Validated theme config with editable presets.</p>
       </div>
-      <div class="theme-swatch" style={Object.entries(themePreviewVars).map(([key, value]) => `${key}: ${value}`).join('; ')} aria-label="Current theme preview">
+      <div class="theme-swatch" use:cssVars={themePreviewVars} aria-label="Current theme preview">
         <span></span>
         <span></span>
         <span></span>

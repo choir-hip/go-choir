@@ -381,12 +381,13 @@ function decodeCSSEscapes(value: string): string {
     .replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
+// Both checks run on the value as written and decoded: an escaped break
+// (\3b, \;, \7d) is refused like a plain one (L4, Devin L3 finding).
+const CSS_BREAK = /[;{}\u0000-\u001f]/;
 function isSafeCSSValue(value: unknown): value is string {
-  return typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= 512 &&
-    !/[;{}\u0000-\u001f]/.test(value) &&
-    !FETCHING.test(decodeCSSEscapes(value));
+  if (typeof value !== 'string' || value.length === 0 || value.length > 512 || CSS_BREAK.test(value)) return false;
+  const decoded = decodeCSSEscapes(value);
+  return !CSS_BREAK.test(decoded) && !FETCHING.test(decoded);
 }
 
 function mergeStringGroup(baseGroup: Record<string, string>, candidate: unknown): Record<string, string> {

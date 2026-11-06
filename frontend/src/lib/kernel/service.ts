@@ -219,30 +219,36 @@ export class Services {
   }
 
   /**
-   * Operator health flag. Semantics: false takes the provider out of the
-   * ranking; true puts it back, unless the watchdog has tripped it. A trip
-   * (reportFailure, failed activate) is permanent for this registration: the
-   * provider stays inactive and setHealthy(..., true) does not clear it.
-   * Recovery is to dispose the registration and provide it again.
+   * Take a provider out of the ranking at once, with the reason recorded (a
+   * surface that failed to mount, a yanked release). Like a watchdog trip it
+   * is permanent for this registration: the reason stays in describe() and
+   * recovery is to dispose the registration and provide it again (V3).
+   * Returns true when this call set it aside (false: unknown, or already).
    */
-  setHealthy(name: string, id: string, healthy: boolean): void {
+  trip(name: string, id: string, reason: string): boolean {
     const p = this.table.get(name)?.providers.find((x) => x.spec.id === id);
-    if (!p) return;
-    p.healthy = healthy;
+    if (!p || p.tripped) return false;
+    p.tripped = reason || 'set aside';
     this.enqueue(() => this.reconcile(name));
+    return true;
   }
 
-  /** Watchdog: record a throw or budget overrun against a provider (V3). */
-  reportFailure(name: string, id: string, reason: string): void {
+  /**
+   * Watchdog: record a throw or budget overrun against a provider (V3). N in
+   * the window trip it. Returns true on the report that tripped it, so the
+   * caller tells the owner once (decision 4: failover is silent with one
+   * visible record).
+   */
+  reportFailure(name: string, id: string, reason: string): boolean {
     const p = this.table.get(name)?.providers.find((x) => x.spec.id === id);
-    if (!p || p.tripped) return;
+    if (!p || p.tripped) return false;
     const t = this.now();
     p.failures = p.failures.filter((f) => t - f < this.watchdog.windowMs);
     p.failures.push(t);
-    if (p.failures.length >= this.watchdog.failures) {
-      p.tripped = reason;
-      this.enqueue(() => this.reconcile(name));
-    }
+    if (p.failures.length < this.watchdog.failures) return false;
+    p.tripped = reason;
+    this.enqueue(() => this.reconcile(name));
+    return true;
   }
 
   /** Deterministic ranking (V2). Returns the winner for a slot or null. */
