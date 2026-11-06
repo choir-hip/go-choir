@@ -111,9 +111,6 @@ type DeskRow struct {
 	// keeps its hash.
 	LeaseKinds    []string `json:"lease_kinds,omitempty"`
 	LeaseCaptures bool     `json:"lease_captures,omitempty"`
-	// LeaseGrants is the grant part of the lease ceiling (MA4.7), omitted
-	// when empty for the same reason.
-	LeaseGrants []string `json:"lease_grants,omitempty"`
 	// Grants are the desk's authority as name or name(args), sorted (MA4.1);
 	// EndsRun marks a role that holds the lifecycle grant its parent lacks.
 	Grants  []string `json:"grants,omitempty"`
@@ -322,7 +319,6 @@ func Classify(old, cur *Surface) Result {
 		setDiffMajor(&r, "desk "+d+" owned kind", o.OwnedKinds, c.OwnedKinds)
 		// The lease ceiling is authority: a widening is major.
 		setDiffMajor(&r, "desk "+d+" lease kind", o.LeaseKinds, c.LeaseKinds)
-		setDiffMajor(&r, "desk "+d+" lease grant", o.LeaseGrants, c.LeaseGrants)
 		setDiffMajor(&r, "desk "+d+" grant", o.Grants, c.Grants)
 		for _, f := range []struct{ what, o, c string }{
 			{"carrier", o.Carrier, c.Carrier}, {"instance", o.Instance, c.Instance},

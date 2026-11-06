@@ -9,7 +9,7 @@ import (
 // The vocabulary is the desk registry (MA2.5, F1). Pinned against the closed
 // list it replaced.
 func TestCanonicalAndIsLiveEqualTheClosedList(t *testing.T) {
-	canonical := []string{"management", "engineering", "research", "texture", "conductor", "mail", "management_task", "processor", "reconciler", "verifier"}
+	canonical := []string{"management", "engineering", "research", "texture", "conductor", "email", "management_task", "processor", "reconciler", "verifier"}
 	for _, n := range canonical {
 		if got, err := Canonical(" " + n + " "); err != nil || got != n {
 			t.Errorf("Canonical(%q) = %q, %v", n, got, err)
@@ -18,7 +18,7 @@ func TestCanonicalAndIsLiveEqualTheClosedList(t *testing.T) {
 	if got, _ := Canonical("verifier-multimodal"); got != "verifier_multimodal" {
 		t.Errorf("hyphenated multimodal verifier = %q", got)
 	}
-	live := map[string]bool{"management": true, "engineering": true, "research": true, "texture": true, "conductor": true, "mail": true, "verifier": true, "verifier_multimodal": true}
+	live := map[string]bool{"management": true, "engineering": true, "research": true, "texture": true, "conductor": true, "email": true, "verifier": true, "verifier_multimodal": true}
 	for _, n := range append(canonical, "verifier_multimodal") {
 		if IsLive(n) != live[n] {
 			t.Errorf("IsLive(%q) = %v", n, IsLive(n))
@@ -49,18 +49,5 @@ func TestRegisteredDeskBecomesAProfileAndRetiredOneRefuses(t *testing.T) {
 	}
 	if _, err := Canonical("app:profiletest"); err == nil || IsLive("app:profiletest") {
 		t.Fatal("a retired desk still resolves")
-	}
-}
-
-// The Mail desk absorbed the email row (MA4.7): a record written before the
-// move names "email", and it resolves to the Mail desk, not to nothing.
-func TestTheEmailProfileOfOlderRecordsIsTheMailDesk(t *testing.T) {
-	for _, n := range []string{"email", " Email "} {
-		if got, err := Canonical(n); err != nil || got != Mail {
-			t.Errorf("Canonical(%q) = %q, %v; want %q", n, got, err, Mail)
-		}
-	}
-	if !IsLive("email") {
-		t.Error("an older email run does not resolve to the live Mail desk")
 	}
 }

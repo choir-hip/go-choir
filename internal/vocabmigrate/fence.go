@@ -40,8 +40,6 @@ var v2LiveSet = map[string]bool{
 	"texture": true, "conductor": true, "processor": true,
 	"reconciler": true, "email": true, "verifier": true,
 	"verifier_multimodal": true, "management_task": true,
-	// The Mail desk (MA4.7); "email" above is its name before the move.
-	"mail": true,
 }
 
 // Field is one role-bearing value presented to the fence.

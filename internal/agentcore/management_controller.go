@@ -2005,7 +2005,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, nil
 	}
 	first := updates[0]
-	if profile == "" || profile == agentprofile.Mail || profile == agentprofile.Conductor || profile == agentprofile.Management {
+	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Management {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))

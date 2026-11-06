@@ -60,9 +60,6 @@ type Manifest struct {
 	// each lease inside it.
 	LeaseKinds    []string `json:"lease_kinds,omitempty"`
 	LeaseCaptures bool     `json:"lease_captures,omitempty"`
-	// LeaseGrants is the grant part of the ceiling (MA4.7): the first-party
-	// typed grants, such as mail.read, the desk may ask their custodian for.
-	LeaseGrants []string `json:"lease_grants,omitempty"`
 }
 
 // Code is a typed refusal.
@@ -371,7 +368,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: uids[m.Package], WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				return false
@@ -428,7 +425,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(m.Package), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: nextUID, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue
@@ -492,7 +489,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 			}
 			d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: DeskName(cand), Verbs: m.Verbs,
 				Taint: deskmanifest.TaintUntrustedInput, UID: uid, WorkerMaxBytes: m.WorkerMaxBytes, OwnedKinds: m.OwnedKinds,
-				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures, LeaseGrants: m.LeaseGrants})
+				LeaseKinds: m.LeaseKinds, LeaseCaptures: m.LeaseCaptures})
 			if err != nil {
 				refuse(CodeDesk, "%v", err)
 				continue

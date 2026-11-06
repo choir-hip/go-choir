@@ -22,7 +22,7 @@ reasoning = "low"
 `
 	roles := []string{
 		agentprofile.Conductor, agentprofile.Texture, agentprofile.Management, ManagementTaskRole,
-		agentprofile.Engineering, agentprofile.Research, agentprofile.Mail, VerifierRole, MultimodalVerifierRole,
+		agentprofile.Engineering, agentprofile.Research, agentprofile.Email, VerifierRole, MultimodalVerifierRole,
 	}
 	text := arm
 	for _, role := range roles {

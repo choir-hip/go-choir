@@ -77,7 +77,7 @@ var pinnedFrame = map[string][]string{
 	ManagementTask: {"read_capture", "stories"},
 	Engineering:    {},
 	Conductor:      {},
-	Mail:           {},
+	Email:          {},
 }
 
 func TestFrameActionsArePinned(t *testing.T) {
@@ -98,7 +98,7 @@ func TestFrameActionsArePinned(t *testing.T) {
 func TestInstancesAndCapsuleVerbsKeepTheirOldAuthority(t *testing.T) {
 	instances := map[string]Instance{
 		Management: InstanceOwner, Texture: InstanceSubject, Research: InstanceSubject,
-		Engineering: InstanceAssignment, Conductor: InstanceNone, Mail: InstanceNone,
+		Engineering: InstanceAssignment, Conductor: InstanceNone, Email: InstanceNone,
 		ManagementTask: InstanceNone, ResearchChild: InstanceNone,
 	}
 	for name, want := range instances {
@@ -175,7 +175,7 @@ func TestCellUIDsAreDistinctPerWorkerClass(t *testing.T) {
 
 func TestTaintClasses(t *testing.T) {
 	want := map[string]Taint{
-		Research: TaintUntrustedInput, ResearchChild: TaintUntrustedInput, Mail: TaintUntrustedInput,
+		Research: TaintUntrustedInput, ResearchChild: TaintUntrustedInput, Email: TaintUntrustedInput,
 		Management: TaintPrivileged, Texture: TaintPrivileged, Engineering: TaintPrivileged,
 		ManagementTask: TaintPrivileged, Conductor: TaintPrivileged,
 	}

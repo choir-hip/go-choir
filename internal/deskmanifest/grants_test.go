@@ -77,7 +77,7 @@ func TestGrantUnionReproducesTodaysAuthority(t *testing.T) {
 		}
 	}
 	// A desk with no grants keeps its (empty) fields: the carrier-less rows.
-	for _, name := range []string{"conductor", "mail"} {
+	for _, name := range []string{"conductor", "email"} {
 		if d, _ := Lookup(name); len(d.Grants) != 0 || len(d.Verbs) != 0 {
 			t.Errorf("%s should hold nothing", name)
 		}

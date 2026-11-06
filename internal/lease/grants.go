@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -32,28 +31,14 @@ const GrantTextureSearch = "texture.search"
 // Texture run messages research; a desk never asks for it.
 const GrantTextureBrief = "texture.brief"
 
-// GrantMailRead is the Mail custodian's guarded read of one email by ref
-// (MA4.7): the Mail desk issues it per task, for the refs it names, and its
-// service (internal/maildesk) reads maild as the custodian for exactly those.
-const GrantMailRead = "mail.read"
-
-// WriterMail is the Mail desk's writer: the custodian of mail.read.
-var WriterMail = objectgraph.Writer("desk:" + deskmanifest.Mail)
-
 type grantRow struct {
 	custodian objectgraph.Writer
-	// holders are the writers of the desks the table names as holders.
+	// holders are the writers of the desks whose ceiling may name the grant.
 	holders []objectgraph.Writer
 	// labels are the owner-private labels a disclosure grant admits at the
 	// desk-message sink (AdmitsMessageLabel). A grant with none admits no
 	// message.
 	labels []string
-	// ceiling admits any desk whose manifest ceiling names the grant
-	// (deskmanifest.Desk.LeaseGrants): install review covers it.
-	ceiling bool
-	// byRef scopes the grant by ref (Scope.Refs): a lease serves the refs it
-	// names and no other.
-	byRef bool
 }
 
 var grantTable = map[string]grantRow{
@@ -67,7 +52,6 @@ var grantTable = map[string]grantRow{
 		custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{objectgraph.WriterResearch},
 		labels: []string{types.OwnerPrivateLabel("document"), types.OwnerPrivateLabel(strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"))},
 	},
-	GrantMailRead: {custodian: WriterMail, ceiling: true, byRef: true},
 }
 
 // grantAdmitsLabel reports whether the grant table admits label for grant.
@@ -80,29 +64,19 @@ func grantAdmitsLabel(grant, label string) bool {
 	return false
 }
 
-func grantByRef(grant string) bool { return grantTable[grant].byRef }
-
 func grantCustodian(grant string) (objectgraph.Writer, bool) {
 	row, ok := grantTable[grant]
 	return row.custodian, ok
 }
 
-func grantAllowed(desk deskmanifest.Desk, grant string) error {
-	row, ok := grantTable[grant]
-	if !ok {
+func grantAllowed(desk, grant string) error {
+	if _, ok := grantTable[grant]; !ok {
 		return refuse("grant %q is not a first-party grant", grant)
 	}
-	if w, ok := objectgraph.DeskWriter(desk.Name); ok && GrantHeldBy(grant, w) {
+	if w, ok := objectgraph.DeskWriter(desk); ok && GrantHeldBy(grant, w) {
 		return nil
 	}
-	if row.ceiling {
-		for _, g := range desk.LeaseGrants {
-			if g == grant {
-				return nil
-			}
-		}
-	}
-	return refuse("desk %q's ceiling does not name grant %q", desk.Name, grant)
+	return refuse("desk %q's ceiling does not name grant %q", desk, grant)
 }
 
 // GrantHeldBy reports whether the grant table names writer as a holder.
@@ -162,7 +136,7 @@ func (s *Service) IssueTextureBrief(ctx context.Context, ownerID, computerID, se
 	if !ok {
 		return Record{}, refuse("desk %q is not registered", holder)
 	}
-	if err := grantAllowed(holderDesk, GrantTextureBrief); err != nil {
+	if err := grantAllowed(holderDesk.Name, GrantTextureBrief); err != nil {
 		return Record{}, err
 	}
 	holderWriter, _ := objectgraph.DeskWriter(holderDesk.Name)
@@ -208,39 +182,13 @@ func (s *Service) AdmitsMessageLabel(holder objectgraph.Writer, runID, label str
 			continue
 		}
 		for _, g := range r.Scope.Grants {
-			if grantAdmitsLabel(g, label) && grantAllowed(desk, g) == nil {
+			if grantAdmitsLabel(g, label) && grantAllowed(desk.Name, g) == nil {
 				s.noteUse(r.LeaseID)
 				return true
 			}
 		}
 	}
 	return false
-}
-
-// IssueGrant is a custodian's answer to a desk's request for a first-party
-// grant: the request is a scored precommitment addressed to the custodian, the
-// desk's ceiling must name the grant, and the custodian's rule sees the live
-// leases the run already holds. custodian must be the grant's custodian in the
-// table; the caller is the custodian's own first-party service.
-func (s *Service) IssueGrant(ctx context.Context, custodian objectgraph.Writer, req Request, rule func(held []Record) error) (Record, error) {
-	if len(req.Scope.Grants) == 0 {
-		return Record{}, refuse("a grant request names its grant")
-	}
-	for _, g := range req.Scope.Grants {
-		c, ok := grantCustodian(g)
-		if !ok {
-			return Record{}, refuse("grant %q is not a first-party grant", g)
-		}
-		if c != custodian {
-			return Record{}, refuse("grant %q is issued by %s, not %s", g, c, custodian)
-		}
-	}
-	req.grant = true
-	req.addressee = string(custodian)
-	req.rule = rule
-	s.issueMu.Lock()
-	defer s.issueMu.Unlock()
-	return s.Request(ctx, req)
 }
 
 // GrantNames lists the first-party typed grants, sorted.

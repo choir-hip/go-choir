@@ -69,11 +69,3 @@ func TestFenceRejectsUnknownVocabulary(t *testing.T) {
 		t.Error("fence accepted empty active vocabulary")
 	}
 }
-
-// The Mail desk absorbed the email row (MA4.7): the V2 history name folds to
-// mail.
-func TestV2EmailFoldsToMail(t *testing.T) {
-	if got := normalizeV2Live["email"]; got != "mail" {
-		t.Errorf("normalizeV2Live[email] = %q, want mail", got)
-	}
-}

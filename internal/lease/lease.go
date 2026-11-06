@@ -70,10 +70,6 @@ type Scope struct {
 	// opens no kind to the reader gate; the custodian's service checks it
 	// (objectgraph.LeaseAdmitsGrant) and then reads as the custodian.
 	Grants []string `json:"grants,omitempty"`
-	// Refs name the objects of a ref-scoped grant (mail.read: email refs):
-	// the grant serves those refs and no other (MA4.7). Only a grant lease
-	// carries refs, and only for a grant the table marks by-ref.
-	Refs []string `json:"refs,omitempty"`
 }
 
 func (s Scope) empty() bool {
@@ -126,9 +122,6 @@ func (r Record) Sentence() string {
 	if len(r.Scope.Grants) > 0 {
 		what = append(what, "the grants "+strings.Join(r.Scope.Grants, ", "))
 	}
-	if len(r.Scope.Refs) > 0 {
-		what = append(what, fmt.Sprintf("%d named ref(s)", len(r.Scope.Refs)))
-	}
 	s := fmt.Sprintf("%s may read %s in run %s, for: %s (%s)", r.Holder, strings.Join(what, " and "), r.HolderRunID, r.Purpose, r.State)
 	if r.EndReason != "" {
 		s += ": " + r.EndReason
@@ -150,13 +143,10 @@ type Service struct {
 	p   Persistence
 	now func() time.Time
 
-	mu   sync.Mutex
-	live map[string]*Record // lease id -> live lease
-	// issueMu serialises custodian-ruled grant requests (IssueGrant), so a
-	// rule that counts the run's live leases sees every earlier issue.
-	issueMu sync.Mutex
-	seq     int
-	remove  func()
+	mu     sync.Mutex
+	live   map[string]*Record // lease id -> live lease
+	seq    int
+	remove func()
 }
 
 // New returns a service over p. It revokes a desk's leases when the desk is
@@ -222,14 +212,6 @@ type Request struct {
 	// grant marks a platform-issued first-party grant lease (IssueTextureSearch):
 	// its bound is the grant table (grants.go), not a desk ceiling.
 	grant bool
-	// addressee is the custodian a grant request is addressed to (IssueGrant);
-	// empty is the lease service itself.
-	addressee string
-	// rule is the custodian's own rule for a grant request (IssueGrant): it
-	// sees the live leases the holder's run already has and refuses or admits.
-	// It runs after the request is on the tape, so a refused ask leaves its
-	// record.
-	rule func(held []Record) error
 }
 
 // ErrRefused wraps every refusal of a request.
@@ -274,10 +256,6 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 	// it. A directive would be excluded from scoring.
 	pYes := *req.Fields.PSuccess
 	claim := "the lease serves its stated purpose: " + req.Purpose
-	addressee := kernelServiceAddressee
-	if req.addressee != "" {
-		addressee = req.addressee
-	}
 	rec := types.CommitmentRecord{
 		SchemaID:    types.CommitmentRecordSchemaV1,
 		RecordID:    requestID,
@@ -286,7 +264,7 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 		Precommit: &types.CommitmentPrecommit{
 			Question:     claim,
 			Distribution: map[string]float64{"yes": pYes, "no": 1 - pYes},
-			Resolver:     addressee,
+			Resolver:     kernelServiceAddressee,
 		},
 		Provenance: types.CommitmentProvenance{
 			AgentID: req.AgentID, ModelID: req.ModelID, Desk: req.Desk, RunID: req.RunID, Origin: origin,
@@ -301,7 +279,7 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 			CommittedAt: s.now().Format(time.RFC3339Nano),
 		},
 		EvidenceRefs: []string{"scope:" + scopeSummary(req.Scope)},
-		Addressee:    addressee,
+		Addressee:    kernelServiceAddressee,
 	}
 	if err := rec.StampRequest(types.RequestLease, req.Fields); err != nil {
 		return Record{}, refuse("%v", err)
@@ -316,18 +294,6 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 	deskName, holder, custodians, err := s.decide(req)
 	if err != nil {
 		return Record{}, err
-	}
-	if req.rule != nil {
-		var held []Record
-		for _, r := range s.liveFor(holder, req.RunID) {
-			held = append(held, *r)
-		}
-		if err := req.rule(held); err != nil {
-			if errors.Is(err, ErrRefused) {
-				return Record{}, err
-			}
-			return Record{}, refuse("%v", err)
-		}
 	}
 	now := s.now()
 	r := Record{
@@ -371,34 +337,18 @@ func (s *Service) decide(req Request) (string, objectgraph.Writer, []string, err
 			return "", "", nil, refuse("a grant lease names grants only")
 		}
 		var custodians []string
-		byRef := false
 		for _, g := range req.Scope.Grants {
-			if err := grantAllowed(desk, g); err != nil {
+			if err := grantAllowed(desk.Name, g); err != nil {
 				return "", "", nil, err
 			}
 			c, _ := grantCustodian(g)
 			custodians = append(custodians, string(c))
-			byRef = byRef || grantByRef(g)
-		}
-		// The by-ref shape is the lease layer's, not only the custodian's:
-		// one grant, one ref, and the custodian's own rule decides it.
-		if byRef && (len(req.Scope.Grants) != 1 || len(req.Scope.Refs) != 1) {
-			return "", "", nil, refuse("a by-ref grant is asked for alone and names exactly one ref")
-		}
-		if byRef && req.rule == nil {
-			return "", "", nil, refuse("a by-ref grant is issued only under its custodian's rule")
-		}
-		if !byRef && len(req.Scope.Refs) > 0 {
-			return "", "", nil, refuse("refs scope only a by-ref grant")
 		}
 		sort.Strings(custodians)
 		return desk.Name, holder, custodians, nil
 	}
 	if len(req.Scope.Grants) > 0 {
 		return "", "", nil, refuse("a first-party grant is issued by its custodian, never asked for")
-	}
-	if len(req.Scope.Refs) > 0 {
-		return "", "", nil, refuse("refs scope only a by-ref grant")
 	}
 	if req.capsule {
 		allowed := map[string]bool{}
@@ -480,7 +430,7 @@ func normalizeScope(s Scope) Scope {
 		sort.Strings(out)
 		return out
 	}
-	return Scope{Kinds: clean(s.Kinds), CaptureIDs: clean(s.CaptureIDs), CaptureLabels: clean(s.CaptureLabels), Grants: clean(s.Grants), Refs: clean(s.Refs)}
+	return Scope{Kinds: clean(s.Kinds), CaptureIDs: clean(s.CaptureIDs), CaptureLabels: clean(s.CaptureLabels), Grants: clean(s.Grants)}
 }
 
 func scopeSummary(s Scope) string {
@@ -496,9 +446,6 @@ func scopeSummary(s Scope) string {
 	}
 	if len(s.Grants) > 0 {
 		parts = append(parts, "grants="+strings.Join(s.Grants, ","))
-	}
-	if len(s.Refs) > 0 {
-		parts = append(parts, "refs="+strings.Join(s.Refs, ","))
 	}
 	return strings.Join(parts, " ")
 }
@@ -592,51 +539,17 @@ func (s *Service) AdmitsCapture(holder objectgraph.Writer, runID, captureID stri
 // live lease of holder in runID that names grant, and counts the use. The grant
 // table is re-checked on every use, as the ceiling is for kinds.
 func (s *Service) AdmitsGrant(holder objectgraph.Writer, runID, grant string) (string, bool) {
-	// A by-ref grant admits a named ref only (AdmitsGrantRef).
-	if grantByRef(grant) {
-		return "", false
-	}
-	return s.admitsGrant(holder, runID, "", grant, "")
-}
-
-// AdmitsGrantRef implements objectgraph.LeaseAuthority: AdmitsGrant for a
-// by-ref grant, where the lease must be ownerID's and name ref.
-func (s *Service) AdmitsGrantRef(holder objectgraph.Writer, runID, ownerID, grant, ref string) (string, bool) {
-	if !grantByRef(grant) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ownerID) == "" {
-		return "", false
-	}
-	return s.admitsGrant(holder, runID, ownerID, grant, ref)
-}
-
-// admitsGrant finds a live lease of holder in runID naming grant; a non-empty
-// ownerID binds it to that owner and a non-empty ref to that ref.
-func (s *Service) admitsGrant(holder objectgraph.Writer, runID, ownerID, grant, ref string) (string, bool) {
 	for _, r := range s.liveFor(holder, runID) {
 		desk, ok := deskOf(r)
-		if !ok || grantAllowed(desk, grant) != nil {
+		if !ok || grantAllowed(desk.Name, grant) != nil {
 			continue
 		}
-		if ownerID != "" && r.OwnerID != ownerID {
-			continue
-		}
-		named := false
 		for _, g := range r.Scope.Grants {
-			named = named || g == grant
-		}
-		if !named {
-			continue
-		}
-		if ref != "" {
-			covered := false
-			for _, want := range r.Scope.Refs {
-				covered = covered || want == ref
-			}
-			if !covered {
-				continue
+			if g == grant {
+				s.noteUse(r.LeaseID)
+				return r.LeaseID, true
 			}
 		}
-		s.noteUse(r.LeaseID)
-		return r.LeaseID, true
 	}
 	return "", false
 }
