@@ -18,8 +18,8 @@
 #      projection and the rebase offer have no switch since capsule overlay
 #      S4; owner-act records have none since fix 13 of
 #      docs/problems/selfdev-round-blockers-cluster-2026-11-03.md)
-#   2  a fresh document requests a small source change A; approve it; wait for
-#      it to apply; /health shows source_projection.state "projected" with the
+#   2  a fresh document requests a small source change A; consensus decides
+#      it (no owner approval since 2026-11-06); wait for it to apply; /health shows source_projection.state "projected" with the
 #      operation opA and base B
 #   3  WAIT for FP0 to land a main commit that edits the file A changed (a
 #      commit that leaves A's paths alone is grafted: stack_rematerialized, no
@@ -30,7 +30,7 @@
 #      notice, opA and B'; the claim exists; the capsule source is B'; the
 #      rebase offer is staged
 #   5  the rebase candidate freezes with base B' and a tree that is A on B'
-#   6  approve it; the lineage receipt exists with verdict pass; the owner-act
+#   6  consensus applies it; the lineage receipt exists with verdict pass; the owner-act
 #      "apply" record names its sha256; /health is "projected" on B'; a fresh
 #      ordinary cast is admitted
 #   7  conflict run: A2 creates frontend/public/u4-proof-a2.txt and is applied;
@@ -114,7 +114,7 @@ fail_step() { log "FAIL: $*"; FAILED=1; }
 
 log "health $(api GET /health | jq -c '{deployed: .build.deployed_commit}')"
 if [ "$DRY" = 1 ]; then
-  log "dry run: would set the root desk switch, request change A, approve and apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
+  log "dry run: would set the root desk switch, request change A, let consensus apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
   setting texture.root_desk true
   exit 0
 fi
@@ -129,10 +129,9 @@ if [ "$PHASE" = all ] || [ "$PHASE" = apply ]; then
   # Step 2.
   A=$(cli texture create --title "U4 proof A: footer line" --content "Add one line of plain text reading 'U4 proof A' to the footer of the frontend (a small source change). Build, test and freeze it." --request-id "u4-proof-A-$(date +%s)" | jq -r .doc_id)
   log "document A=$A"
-  opA=""; for i in $(seq 1 120); do opA=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opA" ] && break; sleep 15; done
+  opA=""; for i in $(seq 1 120); do opA=$(cli self-dev list --state awaiting_approval --state accepted --state materializing --state applied | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opA" ] && break; sleep 15; done
   [ -n "$opA" ] || { log "no candidate for A"; exit 1; }
   log "candidate opA=$opA"
-  cli self-dev approve --operation "$opA" > "$OUT/approve-opA.json"
   wait_op "$opA" applied > "$OUT/opA-applied.json"
   P=$(wait_for "projected on B after A" 900 '.state == "projected"')
   B=$(printf '%s' "$P" | jq -r .base); opAid=$(printf '%s' "$P" | jq -r .operation_id)
@@ -173,7 +172,7 @@ if [ "$PHASE" = all ] || [ "$PHASE" = rebase ]; then
   log "rebase assignment $ASSIGN"
   cli lifecycle capsule-evidence --attempt 1 "$mtraj" "$ASSIGN" > "$OUT/capsule-evidence.json" || true
   # Step 5: wait for the rebase candidate and read its patch.
-  opR=""; for i in $(seq 1 160); do opR=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opR" ] && [ "$opR" != "$opAid" ] && break; sleep 15; done
+  opR=""; for i in $(seq 1 160); do opR=$(cli self-dev list --state awaiting_approval --state accepted --state materializing --state applied | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opR" ] && [ "$opR" != "$opAid" ] && break; sleep 15; done
   [ -n "$opR" ] || { log "no rebase candidate"; exit 1; }
   cli self-dev patch --operation "$opR" --out "$OUT/rebase-candidate.patch" > "$OUT/rebase-candidate.json"
   cli self-dev show --operation "$opR" > "$OUT/opR-show.json"
@@ -181,8 +180,7 @@ if [ "$PHASE" = all ] || [ "$PHASE" = rebase ]; then
   log "candidate $opR base ${candBase:-unknown} (want $Bp)"
   [ "$candBase" = "$Bp" ] || { echo "{\"verdict\":\"fail\",\"reason\":\"candidate base $candBase is not $Bp\"}" > "$OUT/evidence.json"; exit 1; }
   # Step 6 [needs base-join for the stale-base refusal; U4's own check covers the
-  # content]. Approve and wait for the apply.
-  cli self-dev approve --operation "$opR" > "$OUT/approve-opR.json"
+  # content]. Wait for the apply (consensus decides; there is no owner approval).
   wait_op "$opR" applied > "$OUT/opR-applied.json"
   P=$(wait_for "projected on B' after the rebase" 900 '.state == "projected"')
   [ "$(printf '%s' "$P" | jq -r .base)" = "$Bp" ] || { log "stack base is not B' after the rebase"; exit 1; }
@@ -225,13 +223,12 @@ if [ "$PHASE" = all ] || [ "$PHASE" = conflict ]; then
   # (U4 proof Z) can freeze a candidate in the same window.
   a2traj=$(api GET "/api/texture/documents/$A2" | jq -r .trajectory_id)
   opA2=""; for i in $(seq 1 160); do
-    opA2=$(cli self-dev list --state awaiting_approval | jq -r --arg t "$a2traj" '[(.operations // .)[] | select(.trajectory_id == $t)] | sort_by(.created_at) | last | .operation_id // empty')
+    opA2=$(cli self-dev list --state awaiting_approval --state accepted --state materializing --state applied | jq -r --arg t "$a2traj" '[(.operations // .)[] | select(.trajectory_id == $t)] | sort_by(.created_at) | last | .operation_id // empty')
     [ -n "$opA2" ] && ! grep -qx "$opA2" "$OUT/ops-before-a2.txt" && break; opA2=""; sleep 15
   done
   [ -n "$opA2" ] || { log "no candidate for A2"; exit 1; }
   cli self-dev patch --operation "$opA2" --out "$OUT/a2.patch" > "$OUT/a2-patch.json"
   grep -q "$A2FILE" "$OUT/a2.patch" || { log "A2's patch does not touch $A2FILE"; exit 1; }
-  cli self-dev approve --operation "$opA2" > "$OUT/approve-opA2.json"
   wait_op "$opA2" applied > "$OUT/opA2-applied.json"
   P=$(wait_for "projected after A2" 900 '.state == "projected"')
   Bcur=$(printf '%s' "$P" | jq -r .booted_base)
@@ -251,7 +248,7 @@ if [ "$PHASE" = all ] || [ "$PHASE" = conflict ]; then
   [ -n "$got" ] || { echo "{\"verdict\":\"fail\",\"reason\":\"$NID never reached the root\"}" > "$OUT/evidence.json"; exit 1; }
   known > "$OUT/ops-before-rebase2.txt"; echo "$opA2" >> "$OUT/ops-before-rebase2.txt"
   opR2=""; for i in $(seq 1 200); do
-    opR2=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty')
+    opR2=$(cli self-dev list --state awaiting_approval --state accepted --state materializing --state applied | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty')
     [ -n "$opR2" ] && ! grep -qx "$opR2" "$OUT/ops-before-rebase2.txt" && break; opR2=""; sleep 15
   done
   [ -n "$opR2" ] || { log "no rebase candidate for the conflict run"; exit 1; }
@@ -260,7 +257,6 @@ if [ "$PHASE" = all ] || [ "$PHASE" = conflict ]; then
   [ "$candBase" = "$Bpp" ] || { log "conflict candidate base $candBase is not $Bpp"; exit 1; }
   grep -q "$A2FILE" "$OUT/rebase2-candidate.patch" || { log "the conflict candidate does not contain $A2FILE (it was dropped)"; exit 1; }
   if grep -q "conflict with the new base: .*$A2FILE" "$OUT/master-trace-7.json" 2>/dev/null; then offer_named=true; else offer_named=false; log "soft: the offer's conflict list is not in the trace export"; fi
-  cli self-dev approve --operation "$opR2" > "$OUT/approve-opR2.json"
   wait_op "$opR2" applied > "$OUT/opR2-applied.json"
   wait_for "projected on B'' after the conflict rebase" 900 '.state == "projected"' >/dev/null
   resolved=""

@@ -10,16 +10,16 @@
 //     operations list route, with each state change;
 //   - timings: V0 is the prompt, V1 the first Texture revision, and every
 //     later revision and operation transition as seconds after V0;
-//   - with --approve, the owner's single approval (accept_once bound to the
-//     frozen candidate, through the public routes — no host access), the
-//     applied state, and the desktop after the computer serves the change.
+//   - the applied state, and the desktop after the computer serves the change.
+//     Consensus decides the candidate (no owner approval since 2026-11-06), so
+//     the demo only watches; an applied change is the owner's to revert.
 //
 // Evidence goes to --out (default: a fresh directory under the OS temp dir,
 // never the repo). With no open operation, it stops after --idle-minutes
 // (default 30) without a new revision.
 //
 //   node scripts/demo_selfdev_prompt_bar.mjs --label demo-computer-2026-10-10 \
-//     --name minesweeper --prompt "Make a Minesweeper game" [--approve] [--hours 3]
+//     --name minesweeper --prompt "Make a Minesweeper game" [--hours 3]
 import { createRequire } from 'node:module';
 import { appendFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -38,7 +38,6 @@ function arg(name, fallback) {
 const label = arg('label');
 const name = arg('name', 'demo');
 const prompt = arg('prompt');
-const approve = arg('approve', false) === true;
 const hours = Number(arg('hours', 3));
 const pollMs = Number(arg('poll-seconds', 20)) * 1000;
 const idleMs = Number(arg('idle-minutes', 30)) * 60_000;
@@ -58,7 +57,7 @@ const outDir = arg('out', join(tmpdir(), 'choir-demo', `${name}-${started.toISOS
 mkdirSync(join(outDir, 'revisions'), { recursive: true });
 mkdirSync(join(outDir, 'screens'), { recursive: true });
 
-const manifest = { name, prompt, label, computer_id: computerID, started_at: started.toISOString(), base_url: BASE_URL, approve, steps: [], revisions: [], operations: {}, timings: [] };
+const manifest = { name, prompt, label, computer_id: computerID, started_at: started.toISOString(), base_url: BASE_URL, steps: [], revisions: [], operations: {}, timings: [] };
 let v0 = null;
 function mark(event, at = new Date(), extra) {
   if (!v0) return;
@@ -178,35 +177,6 @@ async function saveRevision(docID, title, revision, index) {
 
 const selfDev = (rest) => `/api/computers/${encodeURIComponent(computerID)}/self-development/${rest}`;
 
-// approveOnce is the owner's single approval: arm accept_once bound to exactly
-// the frozen candidate, the event heads and the state commitments, then post
-// the approve decision that consumes it (the same steps as choir self-dev
-// approve).
-async function approveOnce(operation) {
-  const head = (await getJSON(selfDev('head'))).json;
-  const mode = (await getJSON(selfDev('mode'))).json;
-  const binding = {
-    bundle_digest: operation.bundle_digest,
-    expected_desired_event_head: head.desired_event_head,
-    expected_effective_event_head: head.effective_event_head,
-    expected_pending_transition_ref: head.pending_transition_ref ?? '',
-    expected_desired_state_commitment: head.desired_state_commitment,
-    expected_effective_state_commitment: head.effective_state_commitment,
-  };
-  const expires = new Date(Date.now() + 15 * 60_000);
-  expires.setUTCMilliseconds(0);
-  const arm = await api('PUT', selfDev('mode'), {
-    mode: 'accept_once', expected_generation: mode.generation, idempotency_key: `demo-accept-once:${operation.operation_id}`,
-    operation_id: operation.operation_id, expires_at: expires.toISOString().replace('.000Z', 'Z'), ...binding,
-  });
-  if (arm.status !== 200) throw new Error(`arm accept_once: ${arm.status} ${JSON.stringify(arm.json ?? arm.text).slice(0, 300)}`);
-  const decision = await postJSON(selfDev(`operations/${encodeURIComponent(operation.operation_id)}/decision`), {
-    decision: 'approve', idempotency_key: `demo-approve:${operation.operation_id}`, verifier_ref: operation.verifier_refs[0], ...binding,
-  });
-  if (decision.status !== 200) throw new Error(`approve: ${decision.status} ${JSON.stringify(decision.json ?? decision.text).slice(0, 300)}`);
-  return decision;
-}
-
 try {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForSelector('[data-prompt-input]', { timeout: 300_000 });
@@ -240,7 +210,6 @@ try {
   let followupSent = !followup;
   const operationStates = {};
   const deadline = Date.now() + hours * 3600_000;
-  let approved = false;
   let finished = null;
   let lastChange = Date.now();
   while (Date.now() < deadline && !finished) {
@@ -277,13 +246,6 @@ try {
         log('operation', { operationID, state });
         await screenshot(`operation-${state}`);
       }
-      if (state === 'awaiting_approval' && approve && !approved) {
-        approved = true;
-        const decision = await approveOnce(operation);
-        manifest.approval = { at: new Date().toISOString(), status: decision.status };
-        log('approved', { operationID });
-        await screenshot('approved');
-      }
       if (state === 'applied') {
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
         await page.waitForSelector('[data-prompt-input]', { timeout: 300_000 }).catch(() => {});
@@ -292,7 +254,6 @@ try {
         finished = { state, operationID };
       }
       if (['failed', 'rejected', 'cancelled', 'rolled_back'].includes(state)) finished = { state, operationID };
-      if (state === 'awaiting_approval' && !approve) finished = { state, operationID };
     }
     if (!followupSent && headRevision.size > 0 && Date.now() - lastChange > followupIdleMs) {
       const [docID, head] = [...headRevision.entries()][0];

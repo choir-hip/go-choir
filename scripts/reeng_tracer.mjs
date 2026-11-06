@@ -1142,8 +1142,9 @@ async function paperScenario(c, out, n, deadline, phase) {
 // engineeringScenario is the cut-1 self-development drill on records (C1e
 // step 4, acceptance 3; docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md,
 // design docs/archive/reports/c1e-b1-design-note-2026-10-13.md). On a fresh test
-// computer: the owner arms propose_only (Freeze opens a candidate only under
-// a proposing mode; a fresh computer's mode is off), then asks for one small
+// computer: a fresh computer has no mode row, which is apply (Freeze opens a
+// candidate under any mode but off; only an owner who wrote off needs the
+// drill to write apply), then asks for one small
 // change only engineering can make (a static file on the computer's frontend
 // whose content is a per-run token, checked in the capsule before Freeze).
 // The drill watches, through product routes only:
@@ -1157,9 +1158,9 @@ async function paperScenario(c, out, n, deadline, phase) {
 //      bundle:<digest> equal to the operation's;
 //   5. management's Verify (verifier_refs on the operation) and the owner
 //      decision boundary (awaiting_approval);
-//   6. the owner's approval act: pin a pre-apply checkpoint, read the head,
-//      arm accept_once bound to this operation and head, POST the decision;
-//   7. the apply: exactly one new boot after the approval, served by
+//   6. no owner act: consensus decides the candidate (pin a pre-apply
+//      checkpoint before the request, since the decision follows Verify);
+//   7. the apply: exactly one new boot after the decision, served by
 //      /api/runtime/obligations as restart kind planned, reason
 //      self_development_apply, and the operation reaching applied with its
 //      materialization, checkpoint and route receipts;
@@ -1185,10 +1186,10 @@ async function paperScenario(c, out, n, deadline, phase) {
 //       be present when the operation reaches awaiting_approval. Verify
 //       cannot precede the Report: it refuses a non-completed assignment,
 //       and the row turns completed in the Report's own transaction (D3).
-//   P4. The approval reached around the owner (harness ballots, an SSH mode
-//       arm). The only arm is accept_once through PUT
-//       /api/computers/{id}/self-development/mode, and the decision is the
-//       owner's POST .../operations/{id}/decision with the same binding.
+//   P4. A decision reached around corpusd's poster (harness ballots, an SSH
+//       mode write). Owner approval is retired; the only decision that
+//       applies is the poster's, and the only mode writes are off and apply
+//       through PUT /api/computers/{id}/self-development/mode.
 //   P5. A restore that lands somewhere else (a post-apply checkpoint), or
 //       whose witness did not match. The restore report must name the pinned
 //       checkpoint's digest, with witness_matched and frontend_restaged, and
@@ -1210,15 +1211,15 @@ async function paperScenario(c, out, n, deadline, phase) {
 //       --timeout-min. The receipt names the last phase reached; a slow desk
 //       is a finding, and the lead may raise --timeout-min.
 //   F2. A fresh computer's self-development mode is off, so Freeze would be
-//       refused. The drill arms propose_only before the request.
+//       refused. A fresh computer has no row (apply); the drill writes apply
+//       only for a computer the owner set off.
 //   F3. The guest is unreachable while the apply restarts it (status 0 or
 //       502). Reads during the apply and the restore retry; an unreachable
 //       window is recorded, not failed.
 //   F4. The event head moves between the binding read and the decision
 //       (409). The binding is re-read and the decision retried, at most three
 //       times, each with its own idempotency key.
-//   F5. accept_once refuses a non-canonical expiry. expires_at is whole
-//       seconds, UTC, with no fractional part.
+//   F5. (retired with accept_once: no mode write carries an expiry now.)
 //   F6. A self-development apply changes the guest's build identity on
 //       purpose (CLAUDE.md "Product restore vs platform deploy"). The build
 //       is fenced only up to the decision boundary; after it, the build is
@@ -1331,8 +1332,8 @@ const bootSig = (obs) => (obs?.status === 200 && Array.isArray(obs.body?.recent_
 const isNewBoot = (prev, cur) => Boolean(prev && cur && cur.first !== prev.first && (cur.len < 512 || cur.len < prev.len));
 const CRASH_LINE = /crash boot|treating boot as a crash/;
 
-// canonicalExpiry is a whole-second UTC instant in Go's RFC3339Nano form,
-// which accept_once requires (no fractional part, Z).
+// canonicalExpiry is a whole-second UTC instant in Go's RFC3339Nano form
+// (no fractional part, Z); no mode write needs one since accept_once retired.
 const canonicalExpiry = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.000Z$/, 'Z');
 
 async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, options = {}) {
