@@ -294,3 +294,41 @@ func TestRevertConcurrentTapsAreOneAct(t *testing.T) {
 	}
 	fx.waitForState(t, a.id, selfdev.StateRolledBack)
 }
+
+// An orphaned request whose booted base moved since is not a permanent wedge:
+// the retry binds the row to the event's recorded digest, the drive refuses at
+// its own target check, the refusal discharges the pending transition, and the
+// next revert works.
+func TestRevertOrphanWithAMovedBaseClosesFailedAndUnwedges(t *testing.T) {
+	ctx := context.Background()
+	fx := joinFixture(t, "rv-moved", joinTestBaseA, joinTestBaseA)
+	fx.withBaselineRoot(t)
+	first := fx.applyPlain(t, "op-rv-moved-1")
+	accepted, found, err := fx.store.EventByDigest(ctx, fx.computerID, first.DecisionEvent)
+	if err != nil || !found {
+		t.Fatalf("accept event: found=%v err=%v", found, err)
+	}
+	key := "revert:" + first.OperationID + ":" + first.OperationID
+	// The event recorded a base digest that is not today's.
+	event, err := rollbackRequestedEvent(fx.computerID, "owner", "selfdev-rollback-requested-"+key, strings.Repeat("d", 64), first.TrajectoryID, first.CapsuleID, strings.Repeat("e", 64), accepted.ExpectedEffectiveEventHead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fx.waitForStableHead(t)
+	if _, err := fx.appender.AppendNew(ctx, event, computerevent.TransitionInput{TargetStateCommitment: accepted.ExpectedEffectiveStateCommitment}, nil); err != nil {
+		t.Fatal(err)
+	}
+	code, opened := fx.revert(t, first.OperationID)
+	if code != http.StatusCreated {
+		t.Fatalf("retry of an orphan with a moved base status=%d, want the row opened", code)
+	}
+	fx.waitForState(t, opened.OperationID, selfdev.StateFailed)
+	if head, _ := fx.store.Head(ctx, fx.computerID); head == nil || head.PendingTransitionRef != "" {
+		t.Fatalf("head after the refusal = %+v; want the pending transition discharged", head)
+	}
+	code, next := fx.revert(t, first.OperationID)
+	if code != http.StatusCreated || next.OperationID == opened.OperationID {
+		t.Fatalf("the next revert status=%d operation=%s; want a new act", code, next.OperationID)
+	}
+	fx.waitForState(t, next.OperationID, selfdev.StateRolledBack)
+}

@@ -324,28 +324,36 @@ func (h *APIHandler) openBaseRestore(w http.ResponseWriter, ctx context.Context,
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "the booted base release is unavailable"})
 		return
 	}
-	commitmentBytes, err := computerevent.CanonicalJSON(map[string]string{
-		"kind": "base_restore", "reverted_operation": reverted.OperationID, "target_event_head": priorHead,
-		"base_release": target.ContentDigest, "idempotency_key": key,
-	})
-	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "invalid revert request"})
-		return
-	}
-	commitment := computerevent.DigestBytes(commitmentBytes)
 	eventIdempotency := "selfdev-rollback-requested-" + key
 	existingEvent, eventFound, err := rt.store.EventByIdempotency(ctx, computerID, eventIdempotency)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert event lookup failed"})
 		return
 	}
+	// The release the row is bound to. An orphaned request keeps the digest its
+	// event recorded, even if the booted base has moved since: the row then
+	// refuses at drive (the target no longer matches), the refusal discharges
+	// the pending transition and the row closes failed, so the tape is never
+	// left pending with no owner.
+	releaseDigest := target.ContentDigest
 	if eventFound {
-		if existingEvent.EventKind != computerevent.EventRollbackRequested || existingEvent.DecisionRef != priorHead || existingEvent.ProposedEffectRef != target.ContentDigest {
+		if existingEvent.EventKind != computerevent.EventRollbackRequested || existingEvent.DecisionRef != priorHead || !computerevent.IsSHA256(existingEvent.ProposedEffectRef) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "revert event binding changed"})
 			return
 		}
-	} else {
-		event, err := rollbackRequestedEvent(computerID, ownerID, eventIdempotency, commitment, reverted.TrajectoryID, reverted.CapsuleID, target.ContentDigest, priorHead)
+		releaseDigest = existingEvent.ProposedEffectRef
+	}
+	commitmentBytes, err := computerevent.CanonicalJSON(map[string]string{
+		"kind": "base_restore", "reverted_operation": reverted.OperationID, "target_event_head": priorHead,
+		"base_release": releaseDigest, "idempotency_key": key,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "invalid revert request"})
+		return
+	}
+	commitment := computerevent.DigestBytes(commitmentBytes)
+	if !eventFound {
+		event, err := rollbackRequestedEvent(computerID, ownerID, eventIdempotency, commitment, reverted.TrajectoryID, reverted.CapsuleID, releaseDigest, priorHead)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert event identity unavailable"})
 			return
@@ -375,8 +383,8 @@ func (h *APIHandler) openBaseRestore(w http.ResponseWriter, ctx context.Context,
 		ComputerID: computerID, IdempotencyKey: key, RequestCommitment: commitment,
 		RollbackEvent: requestedDigest, DecisionActor: ownerID, CurrentDesired: next.DesiredEventHead,
 		CurrentEffective: next.EffectiveEventHead, PriorEffectiveHead: priorHead, RevertedOperation: reverted.OperationID,
-		TrajectoryID: reverted.TrajectoryID, BaseReleaseDigest: target.ContentDigest,
-		CodeRef:           target.CodeRef, ArtifactProgramRef: target.ArtifactProgramRef, RouteGeneration: generation,
+		TrajectoryID: reverted.TrajectoryID, BaseReleaseDigest: releaseDigest,
+		CodeRef: target.CodeRef, ArtifactProgramRef: target.ArtifactProgramRef, RouteGeneration: generation,
 	})
 	if err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})

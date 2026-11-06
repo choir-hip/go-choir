@@ -428,6 +428,12 @@ func (s *Store) StartRollback(ctx context.Context, request RollbackStartRequest)
 		}
 		return existing, err
 	}
+	// One operation changes the stack at a time, checked inside the write lock.
+	if open, found, err := s.StackChangingOperation(ctx, request.ComputerID); err != nil {
+		return Operation{}, err
+	} else if found {
+		return Operation{}, fmt.Errorf("%w: %s is %s", ErrOperationOpen, open.OperationID, open.State)
+	}
 	now := s.now().UTC().Truncate(time.Microsecond)
 	operation := Operation{
 		IdempotencyKey: request.IdempotencyKey,
