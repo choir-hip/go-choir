@@ -7,6 +7,7 @@
   import { addLiveEventListener, liveEventKind } from '../../lib/app-sdk';
   import { settingSections } from '../../lib/app-sdk';
   import PackageSettings from './PackageSettings.svelte';
+  import WhoProvides from './WhoProvides.svelte';
   import {
     DEFAULT_THEME,
     listThemes,
@@ -641,6 +642,14 @@
           Reset layout
         </button>
       </div>
+    </section>
+
+    <section class="settings-card" data-settings-providers>
+      <div>
+        <h3>Who provides this?</h3>
+        <p class="muted">The package drawing each part of Choir's own screen, and your choice. Use default switches back without uninstalling anything.</p>
+      </div>
+      <WhoProvides />
     </section>
 
     {#if $settingSections.length > 0}

@@ -115,6 +115,9 @@
   $: shelf = packages.filter((pkg) => matchesFacet(pkg, facet));
   $: facts = page.head ? factsOf(page.head) : null;
   $: displaces = facts && view.kind === 'app' ? displacesOf(facts, installs, packages, tracks, view.name, view.track) : [];
+  // The install confirm says what the confirmed release would replace, from
+  // that release's own facts (an older version may provide other slots).
+  $: confirmDisplaces = confirm && view.kind === 'app' ? displacesOf(factsOf(confirm), installs, packages, tracks, view.name, view.track) : [];
   $: installedUses = installed ? usesOf(installed) : null;
 
   onMount(() => {
@@ -681,7 +684,7 @@
             <section class="lib-section" data-app-facts>
               <h3 class="lib-h3">What it is</h3>
               <p class="lib-facts-kind">
-                <span class="lib-tag" data-app-kind={facts.kind}>{kindName(facts.kind) || 'App'}</span>
+                {#if kindName(facts.kind)}<span class="lib-tag" data-app-kind={facts.kind}>{kindName(facts.kind)}</span>{/if}
                 <span class="lib-note" data-app-tier={facts.tier}>{tierLine(facts.tier)}</span>
               </p>
               {#if facts.facets.length}
@@ -704,10 +707,12 @@
               {/if}
 
               <h3 class="lib-h3" data-ceiling-title>What it may ask for</h3>
-              {#if !facts.recorded}
-                <p class="lib-note" data-ceiling-unrecorded>This version was published before the Library recorded what an app may ask for.</p>
-              {:else}
+              {#if levelLine(facts.level)}
                 <p class="lib-note" data-level={facts.level}>{levelLine(facts.level)}</p>
+              {/if}
+              {#if !facts.recorded}
+                <p class="lib-note" data-ceiling-unrecorded>This version was published before the Library recorded each permission it may ask for.</p>
+              {:else}
                 {#if facts.ceiling.length}
                   <ul class="lib-ceiling" data-ceiling>
                     {#each ceilingLines(facts) as line, index (index)}
@@ -802,8 +807,8 @@
         {#if confirm.facts && factsOf(confirm).level === 'extended'}
           <p class="lib-note" data-confirm-level>{levelLine('extended')}</p>
         {/if}
-        {#if displaces.length}
-          <p class="lib-note" data-confirm-displaces>It will be used instead of {displaces.join(', and ')}.</p>
+        {#if confirmDisplaces.length}
+          <p class="lib-note" data-confirm-displaces>It will be used instead of {confirmDisplaces.join(', and ')}.</p>
         {/if}
         {#if confirmReplaces}
           <p class="lib-note" data-confirm-replaces>

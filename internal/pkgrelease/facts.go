@@ -78,7 +78,8 @@ func FactsFromMetadata(metadata json.RawMessage, summary Manifest) ListingFacts 
 		if f.Ceiling == nil {
 			f.Ceiling = []apppackage.CeilingGrant{}
 		}
-		f.Recorded = true
+		// Recorded is what the host kept (FactsOf sets it): metadata never
+		// promotes facts the host did not record.
 		return f
 	}
 	return FactsFromSummary(summary)

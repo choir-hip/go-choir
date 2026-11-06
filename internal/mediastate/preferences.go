@@ -60,6 +60,10 @@ func (h *Handler) HandlePreference(w http.ResponseWriter, r *http.Request) {
 		h.handleUpdatePolicy(w, r)
 		return
 	}
+	if key == apppackage.SelectionKey {
+		h.handleSelections(w, r)
+		return
+	}
 	pkg, field, ok := apppackage.SplitSettingKey(key)
 	if !ok {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "unknown preference"})
@@ -162,6 +166,75 @@ func (h *Handler) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 			"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
 		})
 		writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: policy, UpdatedAt: updated})
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+// handleSelections serves /api/preferences/packages.selection: the owner's
+// selection records, {"<slot>": {"package", "release", "at"}} (slice L2). A
+// write replaces the set; absent reads as {} (every slot ranked by the
+// kernel's default order). It is a fact on the owner's tape, not a switch.
+func (h *Handler) handleSelections(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	key := apppackage.SelectionKey
+	switch r.Method {
+	case http.MethodGet:
+		rec, getErr := h.store.GetUserPreference(r.Context(), ownerID, key)
+		value := apppackage.Selections{}
+		if getErr == nil {
+			// A stored value this build no longer reads (a slot it does not
+			// have) reads as no selection, never as an error.
+			if raw, err := json.Marshal(rec.Value["value"]); err == nil {
+				if parsed, err := apppackage.ParseSelections(raw); err == nil {
+					value = parsed
+				}
+			}
+		}
+		resp := settingResponse{Key: key, Value: value, Default: getErr != nil}
+		if getErr == nil {
+			resp.UpdatedAt = rec.UpdatedAt.UTC().Format(time.RFC3339Nano)
+		}
+		writeAPIJSON(w, http.StatusOK, resp)
+	case http.MethodPut:
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<10))
+		if err != nil {
+			writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "selections too large"})
+			return
+		}
+		var req settingRequest
+		dec := json.NewDecoder(strings.NewReader(string(body)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil || dec.More() || len(req.Value) == 0 {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "a selections write is {\"value\": {\"<slot>\": {\"package\": ..., \"at\": ...}}}"})
+			return
+		}
+		sel, err := apppackage.ParseSelections(req.Value)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		var value map[string]any
+		normalized, _ := json.Marshal(sel)
+		_ = json.Unmarshal(normalized, &value)
+		rec, err := h.store.SaveUserPreference(r.Context(), types.UserPreference{
+			OwnerID: ownerID, PreferenceKey: key, Value: map[string]any{"value": value}, UpdatedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save the selections"})
+			return
+		}
+		updated := rec.UpdatedAt.UTC().Format(time.RFC3339Nano)
+		_, _ = h.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventSettingUpdated, map[string]any{
+			"key": key, "value": value, "updated_at": updated,
+			"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
+		})
+		writeAPIJSON(w, http.StatusOK, settingResponse{Key: key, Value: sel, UpdatedAt: updated})
 	default:
 		w.Header().Set("Allow", "GET, PUT")
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

@@ -161,6 +161,14 @@ export type { Disposer } from './event-helpers';
 export { getSetting, onSetting, setSetting, settingSections } from './services/settings';
 export type { PackageSettingsSection, SettingField, SettingResult, SettingsSection } from './services/settings';
 
+// Who provides each shell slot (2.1.0, slice L2): the providers of every
+// single-slot shell service from the kernel's snapshot, the owner's recorded
+// choice (a selection record on the owner's tape) and "Use default", which
+// selects the slot's base-image package and uninstalls nothing. Shell-wide:
+// each implies ui.shell (the Settings app's "Who provides this?").
+export { providerSlots, selectProvider, useDefaultProvider } from './services/provider-selection';
+export type { ProviderRow, ProviderSlot, SelectionResult } from './services/provider-selection';
+
 // The open windows as a store, and which window has focus (1.4.0, slice C9).
 export { windowList } from './window-list';
 export type { WindowEntry } from './window-list';

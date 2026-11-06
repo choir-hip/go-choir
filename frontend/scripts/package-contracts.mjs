@@ -29,7 +29,8 @@
 // shell chrome. The runner opens the package the way a person does (the app
 // switcher, the launcher entry, the window) in a shell whose backend is a stub
 // that answers the boot routes (/auth/session, /api/shell/bootstrap,
-// /api/desktop/state, /api/preferences/theme, /api/packages/installed and the
+// /api/desktop/state, /api/preferences/theme, the selection records
+// (/api/preferences/packages.selection), /api/packages/installed and the
 // update sync), the
 // contract's `api` entries, and 404 for the rest. Any uncaught exception, a
 // console error that is not the browser's own "Failed to load resource" line,
@@ -361,6 +362,7 @@ export async function stubBackend(page, { installed = [], modules = new Map(), a
     // F1: the shell (once per sign-in) and the Library sync updates; the stub computer has none.
     if (p === `/api/computers/${STUB_COMPUTER_ID}/packages/updates` && req.method() === 'POST') return route.fulfill({ json: { updates: [], policy: { default: 'manual', apps: {} } } });
     if (p === '/api/preferences/theme' && req.method() === 'GET') return route.fulfill({ json: { theme: {} } }); // no stored preference
+    if (p === '/api/preferences/packages.selection' && req.method() === 'GET') return route.fulfill({ json: { key: 'packages.selection', value: {}, default: true } }); // no selection record (L2)
     const m = /^\/api\/packages\/modules\/([0-9a-f]{64})\.js$/.exec(p);
     if (m && modules.has(m[1])) return route.fulfill({ status: 200, contentType: 'text/javascript', body: modules.get(m[1]) });
     onUnanswered(`${req.method()} ${p}`);

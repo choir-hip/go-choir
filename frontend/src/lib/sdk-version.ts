@@ -6,7 +6,7 @@
 // write the new lock: node scripts/sdk-surface.mjs --write. CI refuses a
 // surface change without the bump it needs (src/lib/sdk-surface/<version>.json;
 // docs/design/modularity-check-build-2026-11-04.md).
-export const SDK_VERSION = '2.0.0';
+export const SDK_VERSION = '2.1.0';
 
 /** Whether version (MAJOR.MINOR.PATCH) satisfies range (^MAJOR.MINOR). */
 export function sdkSatisfies(range: string, version: string = SDK_VERSION): boolean {

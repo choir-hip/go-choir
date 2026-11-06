@@ -93,6 +93,7 @@
   } from './stores/desktop.js';
   import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
   import { clearInstalledPackages, refreshInstalledPackages } from './apps/packages';
+  import { clearProviderSelections, loadProviderSelections } from './services/provider-selection';
   import { canOpenWith } from './open-with';
   import {
     createOverviewPreviewDecisions,
@@ -185,6 +186,7 @@
     if (authenticated) {
       startAuthenticatedDesktop();
       void refreshInstalledPackages();
+      void loadProviderSelections();
     } else {
       if (wasAuthenticated) {
         void flushDesktopState({ keepalive: true, allowSignedOutTransition: true });
@@ -243,6 +245,7 @@
     // sign-out transition, and a signed-out mount after a sign-out that
     // happened while Desktop was unmounted (S12 review round 2).
     clearInstalledPackages();
+    void clearProviderSelections();
     closeLiveChannel();
     bootstrapData = null;
     bootstrapError = '';
@@ -1625,6 +1628,7 @@
       // sign-in transition above never fires: read the installed set here too
       // (modularity check finding F1; docs/design/s12-runtime-install-build-2026-11-04.md).
       void refreshInstalledPackages();
+      void loadProviderSelections();
     } else {
       enterPublicDesktop();
     }
