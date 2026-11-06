@@ -10,7 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
-    "requires_sdk": "^1.1",
+    "requires_sdk": "^2.0",
     "aliases": [],
     "launcher": {
       "menu": true,
@@ -38,22 +38,22 @@
       "contentClass": "video-content"
     }
   },
-  "opens": [
-    {
-      "media_type": "video/mp4",
-      "extensions": [
-        "mp4",
-        "m4v",
-        "webm",
-        "mov",
-        "avi",
-        "mkv"
-      ]
-    }
-  ],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
+    "opens": [
+      {
+        "media_type": "video/mp4",
+        "extensions": [
+          "mp4",
+          "m4v",
+          "webm",
+          "mov",
+          "avi",
+          "mkv"
+        ]
+      }
+    ],
     "desks": []
   },
   "capabilities": []

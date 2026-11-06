@@ -39,7 +39,7 @@ const FIXTURE_MANIFEST = {
   schema: 'choir.package/v2', name: 'fixture', version: '1.0.0',
   display: { title: 'Fixture', icon: 'F', description: 'Runtime install fixture' },
   app: {
-    entry: 'App.svelte', abi: 'choir.app-frontend/svelte-inline/v1', aliases: [], requires_sdk: '^1.0',
+    entry: 'App.svelte', abi: 'choir.app-frontend/svelte-inline/v1', aliases: [], requires_sdk: '^2.0',
     launcher: { menu: true, desktopIcon: false, order: 900 }, window: { singleton: false, heavy: false },
     auth: { preview: 'private' }, theme: { surface: 'standard', shellDataAttr: 'data-fixture-window', contentClass: 'fixture-content' },
   },
@@ -78,12 +78,12 @@ function buildModule(name, files) {
     fs.mkdirSync(path.dirname(path.join(pkg, rel)), { recursive: true });
     fs.writeFileSync(path.join(pkg, rel), content);
   }
-  for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'legacy-events.json', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
+  for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
   fs.copyFileSync(path.join(frontendRoot, 'package.json'), path.join(front, 'package.json'));
   fs.symlinkSync(path.join(frontendRoot, 'node_modules'), path.join(front, 'node_modules'));
   const out = path.join(tmp, 'module.js');
   const manifest = JSON.parse(files['choir-package.json']);
-  const r = spawnSync(process.execPath, [path.join(front, 'build-module.mjs'), front, name, out, manifest.app.requires_sdk || '^1.0'], { encoding: 'utf8', cwd: front });
+  const r = spawnSync(process.execPath, [path.join(front, 'build-module.mjs'), front, name, out, manifest.app.requires_sdk || '^2.0'], { encoding: 'utf8', cwd: front });
   const bytes = r.status === 0 ? fs.readFileSync(out) : null;
   fs.rmSync(tmp, { recursive: true, force: true });
   return { code: r.status, log: `${r.stdout}${r.stderr}`, bytes };
@@ -130,13 +130,14 @@ test.describe('runtime install: module/v1 build and verified load', () => {
         const mod = await loadPackageModule(record);
         const target = document.getElementById('target');
         const sdk = Object.freeze({ appTitle: (s) => 'SDK says ' + s });
-        window.__choirHandle = mod.mount(target, { sdk, package: record.name, windowId: 'w-1', props: { windowId: 'w-1' }, dispatch: () => {} });
+        window.__choirHandle = mod.mount(target, { sdk, package: record.name, windowId: 'w-1', props: { windowId: 'w-1' } });
         return true;
       };
     `);
     const out = await build({
       root: frontendRoot, configFile: false, logLevel: 'error', publicDir: false,
-      plugins: [svelte({ configFile: false, preprocess: vitePreprocess() })],
+      // The loader's module imports the base packages' list (M4); the harness needs none.
+      plugins: [{ name: 'no-base-packages', resolveId: (id) => (id === 'virtual:choir-base-packages' ? '\0base' : null), load: (id) => (id === '\0base' ? 'export default [];' : null) }, svelte({ configFile: false, preprocess: vitePreprocess() })],
       build: { write: false, minify: false, rollupOptions: { input: entry, output: { format: 'es', entryFileNames: 'harness.js', chunkFileNames: '[name]-[hash].js' } } },
     });
     fs.rmSync(entry, { force: true });
@@ -150,7 +151,10 @@ test.describe('runtime install: module/v1 build and verified load', () => {
 
   test('every in-tree first-party package builds to one module/v1 module (B1, B2)', async () => {
     for (const name of fs.readdirSync(path.join(frontendRoot, 'src/packages'))) {
-      const r = buildModule(name, readPackage(name));
+      const files = readPackage(name);
+      // A surface-only package (launcher, overview, ...) has no app to build.
+      if (!JSON.parse(files['choir-package.json']).app) continue;
+      const r = buildModule(name, files);
       expect(r.code, `${name}: ${r.log}`).toBe(0);
       const code = r.bytes.toString('utf8');
       expect(code).toContain('"choir.app-frontend/module/v1"');
@@ -180,10 +184,10 @@ test.describe('runtime install: module/v1 build and verified load', () => {
     });
     await page.goto(`${ORIGIN}/`);
     await page.waitForFunction(() => typeof window.__choirLoad === 'function');
-    const record = { name: 'fixture', install_id: 'i-1', release_id: 'r', requires_sdk: '^1.0', manifest: FIXTURE_MANIFEST, available: true, module: { abi: 'choir.app-frontend/module/v1', sha256: digest, url: `/api/packages/modules/${digest}.js` } };
+    const record = { name: 'fixture', install_id: 'i-1', release_id: 'r', requires_sdk: '^2.0', manifest: FIXTURE_MANIFEST, available: true, module: { abi: 'choir.app-frontend/module/v1', sha256: digest, url: `/api/packages/modules/${digest}.js` } };
 
     const loaded = await page.evaluate((r) => window.__choirLoad(r), record);
-    expect(loaded, JSON.stringify(loaded)).toMatchObject({ ok: true, abi: 'choir.app-frontend/module/v1', requires_sdk: '^1.0', sdk_imports: ['appTitle'], inRange: true });
+    expect(loaded, JSON.stringify(loaded)).toMatchObject({ ok: true, abi: 'choir.app-frontend/module/v1', requires_sdk: '^2.0', sdk_imports: ['appTitle'], inRange: true });
 
     // L1: one byte changed is refused, never run.
     served = Buffer.concat([fixture.bytes, Buffer.from('\nwindow.__tampered = true;\n')]);

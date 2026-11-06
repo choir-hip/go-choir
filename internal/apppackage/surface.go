@@ -327,7 +327,7 @@ func (m Manifest) surfaceDocument(src Source) (surfaceDoc, error) {
 		doc.App = &surfaceApp{Entry: m.App.Entry, ABI: m.App.ABI, RequiresSDK: m.App.RequiresSDK, Aliases: al}
 	}
 	doc.Opens = []surfaceOpens{}
-	for _, o := range m.Opens {
+	for _, o := range m.Contributes.Opens {
 		ext := append([]string{}, o.Extensions...)
 		sort.Strings(ext)
 		doc.Opens = append(doc.Opens, surfaceOpens{MediaType: o.MediaType, Extensions: ext, Default: o.IsDefault()})

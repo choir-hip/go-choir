@@ -10,7 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
-    "requires_sdk": "^1.4",
+    "requires_sdk": "^2.0",
     "aliases": [],
     "launcher": {
       "menu": true,
@@ -34,7 +34,6 @@
       "contentClass": "settings-content"
     }
   },
-  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {

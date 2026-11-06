@@ -1,4 +1,5 @@
 <script>
+  import { requireAuth as shellRequireAuth, sessionExpired as shellSessionExpired, setAppContext as shellSetAppContext } from '../../lib/app-sdk';
   // Reader: one window for PDFs and EPUBs.
   //
   // A first-party package (src/packages/reader), published as the default
@@ -12,7 +13,7 @@
   // chapters. Both are dynamic imports, so a window that only reads EPUB text
   // never loads pdfjs. Position goes through the shell's media progress route
   // when the user is signed in; text settings are local to the browser.
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     clampNumber,
     loadRecentMedia,
@@ -65,8 +66,6 @@
   export let appContext = {};
   export let windowId = '';
   export let authenticated = false;
-
-  const dispatch = createEventDispatcher();
   // Phones and narrow containers put the secondary controls behind one
   // overflow button; the shell sets the class on both surfaces.
   const COMPACT_QUERY = '(max-width: 640px)';
@@ -355,7 +354,7 @@
       if (result.authRequired && !key) {
         authNeeded = true;
         status = 'auth';
-        dispatch('authexpired', { kind: 'app_launch', appId: 'reader', appName: 'Reader', appContext: { windowTitle: source.title } });
+        shellSessionExpired();
         return;
       }
       if (format === 'epub') {
@@ -782,7 +781,7 @@
   // library to hold the file: Open file and a drop ask the shell for sign-in
   // and do nothing else — no sample swapped in, no toast, no error line.
   function askForUploadSession() {
-    dispatch('authrequired', { kind: 'file_upload', appId: 'reader', appName: 'Reader' });
+    shellRequireAuth({ kind: 'file_upload', appId: 'reader', appName: 'Reader' });
   }
 
   async function acceptDroppedFiles(files) {
@@ -870,7 +869,7 @@
     pageCount = 0;
     pdfPage = 1;
     format = kind === 'epub' ? 'epub' : 'pdf';
-    dispatch('contextchange', { windowId, appContext: context, title: context.windowTitle });
+    shellSetAppContext({ windowId, appContext: context, title: context.windowTitle });
     await tick();
     if (sourceKey) await loadSource();
     else await loadSourceDirect();
@@ -886,7 +885,7 @@
   }
 
   function openAuth() {
-    dispatch('authexpired', { kind: 'app_launch', appId: 'reader', appName: 'Reader', appContext: { windowTitle: source.title || 'Reader' } });
+    shellSessionExpired();
   }
 
   function handleKeydown(event) {

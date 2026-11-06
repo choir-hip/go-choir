@@ -31,7 +31,8 @@
     data-browser-import-texture  — open that snapshot in Texture
 -->
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { openApp as shellOpenApp, sessionExpired as shellSessionExpired, toast as shellToast } from '../../lib/app-sdk';
+  
   import { AuthRequiredError } from '../../lib/app-sdk';
   import {
     renderInlineMarkdown,
@@ -44,7 +45,6 @@
 
   export let appContext = {};
   export let authenticated = false;
-  const dispatch = createEventDispatcher();
 
   // ---- State ----
   const sourceEntity = appContext?.sourceEntity || null;
@@ -86,8 +86,7 @@
   // (ContentViewer posts /api/content/import-url); Web Lens makes no request.
   function openSnapshot() {
     if (!target || !authenticated) return;
-    dispatch('launchapp', {
-      appId: 'content',
+    shellOpenApp('content', {
       appName: 'Source',
       appContext: {
         sourceUrl: target,
@@ -131,7 +130,7 @@
       });
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       error = err.message || 'Web Lens snapshot import failed';
@@ -139,8 +138,15 @@
       return;
     }
     busy = false;
-    dispatch('opentexture', {
-      title,
+    // The Texture window opens on the snapshot (SDK 2.0.0: openApp, not the opentexture event).
+    shellOpenApp('texture', {
+      appName: 'Texture',
+      icon: '📝',
+      appContext: {
+      windowTitle: title,
+      docId: '',
+      createInitialVersion: true,
+      allowMultiple: true,
       initialContent: [
         '# Source reader import',
         '',
@@ -156,8 +162,9 @@
       sourceContentId: contentItem?.content_id || '',
       appHint: 'content',
       createdFrom: 'web_lens',
-      toastMessage: 'Opened Web Lens snapshot in Texture',
+      },
     });
+    shellToast('Opened Web Lens snapshot in Texture');
   }
 
   function renderSnapshotMarkdown(value) {

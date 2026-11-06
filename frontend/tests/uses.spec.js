@@ -51,7 +51,7 @@ test('B3: extraction refuses every way around the named import, the same as the 
 });
 
 test('review r2: every file the build analyzes is read for uses, tsx and jsx included', async () => {
-  for (const [file, body] of [['helper.tsx', `import { submitPrompt } from ${SDK};\nexport const f = () => submitPrompt;\n`], ['helper.jsx', `import { logout } from ${SDK};\nexport const f = () => logout;\n`], ['helper.mts', `import { openApp } from ${SDK};\nexport const f = openApp;\n`], ['helper.cjs', `import { showOverview } from ${SDK};\nexport const f = showOverview;\n`]]) {
+  for (const [file, body] of [['helper.tsx', `import { submitPrompt } from ${SDK};\nexport const f = () => submitPrompt;\n`], ['helper.jsx', `import { logout } from ${SDK};\nexport const f = () => logout;\n`], ['helper.mts', `import { closeOtherWindows } from ${SDK};\nexport const f = closeOtherWindows;\n`], ['helper.cjs', `import { showOverview } from ${SDK};\nexport const f = showOverview;\n`]]) {
     const dir = tmpPackage({ 'App.svelte': svelteWith(''), [file]: body });
     const uses = await extractUses(dir);
     expect(uses.grants, file).toEqual(['ui.shell']);
@@ -75,9 +75,12 @@ test('check-packages refuses a grant name that is a prototype property', () => {
 
 test('B2: every shell-wide function implies ui.shell; the pure helpers imply nothing', async () => {
   const sections = readSections(root);
-  for (const name of ['logout', 'windowAction', 'setAppContext', 'openApp', 'openFile', 'listWindows', 'setTheme', 'submitPrompt', 'showOverview', 'showDesktop', 'closeOtherWindows', 'resetDesktop', 'requireAuth', 'sessionExpired', 'focus', 'restore', 'suspendBackgroundHeavyWindows']) {
+  for (const name of ['logout', 'windowAction', 'listWindows', 'setTheme', 'submitPrompt', 'showOverview', 'showDesktop', 'closeOtherWindows', 'resetDesktop', 'focus', 'restore', 'suspendBackgroundHeavyWindows']) {
     expect(sections.grants[name], name).toBe('ui.shell');
   }
+  // SDK 2.0.0 (X1): what a window asks of the shell for itself replaced the
+  // forwarded events every app could send, so it implies no grant.
+  for (const name of ['openApp', 'openFile', 'requireAuth', 'sessionExpired', 'setAppContext']) expect(sections.grants[name], name).toBeUndefined();
   for (const name of ['toast', 'copyText', 'buildInfo', 'getTheme', 'onThemeChange', 'registerCommand', 'fetchWithRenewal']) expect(sections.grants[name], name).toBeUndefined();
   // Every name in grants is a name the SDK exports and a grant in the catalogue.
   const catalogue = JSON.parse(fs.readFileSync(path.join(root, 'src/lib/sdk-surface/grants.json'), 'utf8')).grants;

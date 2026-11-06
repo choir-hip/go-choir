@@ -19,7 +19,7 @@ import (
 //	P9 tier stated by the publisher (a platform fact).
 func providerV(v map[string]any) {
 	delete(v, "app")
-	v["opens"] = []any{}
+	setOpens(v, []any{})
 	v["capabilities"] = []any{map[string]any{"grant": "ui.shell"}}
 	v["provides"] = []any{map[string]any{
 		"service": "launcher", "abi": "choir.service/launcher/v1", "entry": "Launcher.surface.svelte", "requires_sdk": "^1.5",

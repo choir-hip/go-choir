@@ -10,6 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
+    "requires_sdk": "^2.0",
     "aliases": [],
     "launcher": {
       "menu": true,
@@ -39,17 +40,17 @@
       "contentClass": "calendar-content"
     }
   },
-  "opens": [
-    {
-      "media_type": "text/calendar",
-      "extensions": [
-        "ics"
-      ]
-    }
-  ],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
+    "opens": [
+      {
+        "media_type": "text/calendar",
+        "extensions": [
+          "ics"
+        ]
+      }
+    ],
     "desks": []
   },
   "capabilities": []

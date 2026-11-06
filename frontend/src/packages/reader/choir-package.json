@@ -11,7 +11,7 @@
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
     "aliases": ["pdf", "epub"],
-    "requires_sdk": "^1.2",
+    "requires_sdk": "^2.0",
     "launcher": { "menu": true, "desktopIcon": false, "order": 110 },
     "window": {
       "singleton": false,
@@ -26,12 +26,14 @@
       "contentClass": "reader-content"
     }
   },
-  "opens": [
-    { "media_type": "application/pdf", "extensions": ["pdf"] },
-    { "media_type": "application/epub+zip", "extensions": ["epub"] }
-  ],
   "kinds": [],
   "uses_kinds": [],
-  "contributes": { "desks": [] },
+  "contributes": {
+    "desks": [],
+    "opens": [
+      { "media_type": "application/pdf", "extensions": ["pdf"] },
+      { "media_type": "application/epub+zip", "extensions": ["epub"] }
+    ]
+  },
   "capabilities": []
 }

@@ -1,6 +1,7 @@
 <script>
+  import { sessionExpired as shellSessionExpired } from '../../lib/app-sdk';
   import { onMount } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
+  
   import { fetchWithRenewal, AuthRequiredError } from '../../lib/app-sdk';
   import { browserOpenableSourceURL } from '../../lib/app-sdk';
   import { renderMarkdownBlocks } from '../../lib/app-sdk';
@@ -17,8 +18,6 @@
   } from '../../lib/app-sdk';
 
   export let appContext = {};
-
-  const dispatch = createEventDispatcher();
 
   let item = appContext?.contentItem || null;
   let loading = false;
@@ -74,7 +73,7 @@
           });
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -84,7 +83,7 @@
       item = await res.json();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       error = 'Content load failed';

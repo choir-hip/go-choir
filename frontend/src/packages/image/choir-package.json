@@ -10,6 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
+    "requires_sdk": "^2.0",
     "aliases": [],
     "launcher": { "menu": true, "desktopIcon": false, "order": 80 },
     "window": {
@@ -25,14 +26,16 @@
       "contentClass": "image-content"
     }
   },
-  "opens": [
-    {
-      "media_type": "image/png",
-      "extensions": ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg"]
-    }
-  ],
   "kinds": [],
   "uses_kinds": [],
-  "contributes": { "desks": [] },
+  "contributes": {
+    "desks": [],
+    "opens": [
+      {
+        "media_type": "image/png",
+        "extensions": ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg"]
+      }
+    ]
+  },
   "capabilities": []
 }

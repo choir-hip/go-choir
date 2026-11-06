@@ -5,9 +5,9 @@
   // fetched by digest and verified (packages.ts), checked against the shell
   // SDK (requires_sdk, and every SDK name it imports), and mounted into a
   // plain element with ctx: { sdk, package, release, windowId, props,
-  // launchContext, dispatch }. It runs in the shell's origin, which is why only
+  // launchContext } (SDK 2.0.0 removed dispatch with the forwarded events). It runs in the shell's origin, which is why only
   // the owner's own releases install before the sandboxed frame (S13).
-  import { createEventDispatcher, getContext, onDestroy } from 'svelte';
+  import { getContext, onDestroy } from 'svelte';
   import * as appSdk from '../app-sdk';
   import { SDK_VERSION, sdkSatisfies } from '../sdk-version';
   import { bindRegisterCommand } from '../services/commands';
@@ -22,7 +22,6 @@
 
   type FrameState = 'loading' | 'mounted' | 'refused' | 'failed' | 'unavailable';
 
-  const dispatch = createEventDispatcher();
   // AppHost provides the window's launch context; the module's own Svelte
   // reads it through ctx.launchContext.
   const launchContext = getContext(Symbol.for('choir.launch-context'));
@@ -101,7 +100,6 @@
         windowId,
         props,
         launchContext,
-        dispatch: (type: string, detail: any) => dispatch(type, detail),
       });
       if (mine !== token) {
         result?.destroy?.();

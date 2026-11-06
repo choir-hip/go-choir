@@ -1371,45 +1371,6 @@
     showToast(`Opened ${detail.fileName || appId}`);
   }
 
-  function handleOpenTextureFromContent(event) {
-    if (!authenticated) {
-      const detail = event.detail || {};
-      openApp('texture', 'Texture', getAppIcon('texture'), {
-        windowTitle: detail.title || 'Preview note',
-        initialContent: detail.initialContent || `# ${detail.title || 'Preview note'}\n\nThis is a local preview opened from public content. Sign in to save it as durable Texture.`,
-        seedPrompt: detail.seedPrompt || '',
-        sourceUrl: detail.sourceUrl || '',
-        sourceContentId: detail.sourceContentId || '',
-        appHint: detail.appHint || '',
-        allowMultiple: true,
-        guestMode: true,
-        preview: true,
-        createdFrom: detail.createdFrom || 'content_viewer_preview',
-      });
-      showToast(detail.toastMessage || 'Opened local Texture preview');
-      return;
-    }
-    if (!desktopReady) {
-      showToast('Desktop is still connecting');
-      return;
-    }
-    const detail = event.detail || {};
-    const docId = detail.docId || '';
-    openApp('texture', 'Texture', '📝', {
-      windowTitle: detail.title || 'Radio Brief',
-      docId,
-      initialContent: detail.initialContent || '',
-      seedPrompt: detail.seedPrompt || '',
-      createInitialVersion: docId ? false : detail.createInitialVersion !== false,
-      allowMultiple: true,
-      sourceUrl: detail.sourceUrl || '',
-      sourceContentId: detail.sourceContentId || '',
-      appHint: detail.appHint || '',
-      createdFrom: detail.createdFrom || 'content_viewer',
-    });
-    showToast(detail.toastMessage || 'Opened in Texture');
-  }
-
   function handleIconPositionsChanged() {
     scheduleSave();
   }
@@ -1816,17 +1777,6 @@
                 {currentUser}
                 {authenticated}
                 {theme}
-                on:authexpired={() => dispatch('authexpired')}
-                on:authrequired={(event) => requestAuth(event.detail || {})}
-                on:opentextfile={handleOpenTextFile}
-                on:openmediafile={handleOpenMediaFile}
-                on:opentexture={handleOpenTextureFromContent}
-                on:launchapp={handleLaunchApp}
-                on:clearsavedwindows={handleClearDesktopWindows}
-                on:keepwindowonly={handleKeepWindowOnly}
-                on:resetdesktop={handleResetDesktop}
-                on:opencomputemonitor={handleOpenComputeMonitor}
-                on:contextchange={handleWindowAppContextChange}
               />
             {/if}
           </FloatingWindow>

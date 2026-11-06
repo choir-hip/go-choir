@@ -27,7 +27,7 @@ func Manifest(name, extraApp string) string {
     "window": {"singleton": false, "heavy": false},
     "auth": {"preview": "private"},
     "theme": {"surface": "standard", "shellDataAttr": "data-fixture-window", "contentClass": "fixture-content"}},
-  "opens": [], "kinds": [], "uses_kinds": [], "contributes": {"desks": []}, "capabilities": []
+  "kinds": [], "uses_kinds": [], "contributes": {"desks": []}, "capabilities": []
 }
 `
 }

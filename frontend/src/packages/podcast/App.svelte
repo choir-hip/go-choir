@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { requireAuth as shellRequireAuth, sessionExpired as shellSessionExpired } from '../../lib/app-sdk';
   import { onDestroy, onMount } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
+  
   import { fetchWithRenewal, AuthRequiredError } from '../../lib/app-sdk';
   import { buildListenPath, formatTime, parsePodcastFeed } from './podcast.js';
   import { loadMediaProgress, saveMediaPosition } from '../../lib/app-sdk';
@@ -9,8 +10,6 @@
 
   export let appContext = {};
   export let authenticated = false;
-
-  const dispatch = createEventDispatcher();
 
   let item = appContext?.contentItem || null;
   let loading = false;
@@ -104,7 +103,7 @@
           });
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -115,7 +114,7 @@
       upsertLibraryItem(item);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       error = 'Podcast load failed';
@@ -139,7 +138,7 @@
       const res = await fetchWithRenewal('/api/podcast/subscriptions?limit=100');
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -153,7 +152,7 @@
         .filter(Boolean);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       libraryError = 'Podcast library failed';
@@ -174,7 +173,7 @@
       });
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
         }
         return;
       }
@@ -184,7 +183,7 @@
         .filter(Boolean);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
       }
     }
   }
@@ -277,7 +276,7 @@
       const res = await fetchWithRenewal(`/api/podcast/search?q=${encodeURIComponent(query)}&limit=12`);
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -292,7 +291,7 @@
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       libraryError = 'Podcast search failed';
@@ -323,7 +322,7 @@
       });
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -336,7 +335,7 @@
       upsertLibraryItem(item);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       libraryError = 'Podcast import failed';
@@ -369,7 +368,7 @@
   }
 
   function requestAuth(kind = 'podcast') {
-    dispatch('authrequired', { kind, appId: 'podcast', appName: 'Podcast' });
+    shellRequireAuth({ kind, appId: 'podcast', appName: 'Podcast' });
   }
 
   function episodeProgressSource(episode = activeEpisode) {

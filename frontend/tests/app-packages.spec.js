@@ -53,19 +53,19 @@ function runCheck(root) {
 const badCases = [
   ['bad-json', (root) => writeManifest(root, 'broken', '{not json'), /not valid JSON/],
   ['unknown-field', (root) => writeManifest(root, 'extra', { ...imageManifest(root), name: 'extra', surprise: 1 }), /unknown field "surprise"/],
-  ['wrong-schema', (root) => writeManifest(root, 'extra', { ...imageManifest(root), name: 'extra', schema: 'nope/v0', opens: [] }), /schema must be/],
-  ['bad-name', (root) => writeManifest(root, 'Bad_Name', { ...imageManifest(root), name: 'Bad_Name', opens: [] }), /name must match/],
-  ['dir-mismatch', (root) => writeManifest(root, 'other', { ...imageManifest(root), name: 'another', opens: [] }), /must equal its directory/],
-  ['static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', opens: [] }), /"texture" is a static registry id/],
+  ['wrong-schema', (root) => writeManifest(root, 'extra', { ...imageManifest(root), name: 'extra', schema: 'nope/v0', contributes: { desks: [] } }), /schema must be/],
+  ['bad-name', (root) => writeManifest(root, 'Bad_Name', { ...imageManifest(root), name: 'Bad_Name', contributes: { desks: [] } }), /name must match/],
+  ['dir-mismatch', (root) => writeManifest(root, 'other', { ...imageManifest(root), name: 'another', contributes: { desks: [] } }), /must equal its directory/],
+  ['static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', contributes: { desks: [] } }), /"texture" is a static registry id/],
   ['static-id-alias', (root) => {
     const m = imageManifest(root);
     m.app.aliases = ['texture'];
     fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
   }, /"texture" is a static registry id/],
-  ['texture-static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', opens: [] }), /"texture" is a static registry id/],
-  ['reserved', (root) => writeManifest(root, 'management', { ...imageManifest(root), name: 'management', opens: [] }), /reserved shell or system-desk name/],
+  ['texture-static-id', (root) => writeManifest(root, 'texture', { ...imageManifest(root), name: 'texture', contributes: { desks: [] } }), /"texture" is a static registry id/],
+  ['reserved', (root) => writeManifest(root, 'management', { ...imageManifest(root), name: 'management', contributes: { desks: [] } }), /reserved shell or system-desk name/],
   ['package-alias-clash', (root) => {
-    const m = { ...imageManifest(root), name: 'viewer', opens: [] };
+    const m = { ...imageManifest(root), name: 'viewer', contributes: { desks: [] } };
     m.app = { ...m.app, aliases: ['image'] };
     writeManifest(root, 'viewer', m);
   }, /"image" is already held by package "image"/],
@@ -76,7 +76,7 @@ const badCases = [
     const table = JSON.parse(fs.readFileSync(tablePath, 'utf8'));
     table.routes.push({ appId: 'texture', mediaType: 'audio/midi', extensions: ['mid'] });
     fs.writeFileSync(tablePath, JSON.stringify(table, null, 2));
-    writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', opens: [{ media_type: 'audio/midi', extensions: ['mid'] }] });
+    writeManifest(root, 'viewer', { ...imageManifest(root), name: 'viewer', contributes: { desks: [], opens: [{ media_type: 'audio/midi', extensions: ['mid'] }] } });
   }, /extension "mid" is still routed by the static/],
   ['missing-entry', (root) => fs.rmSync(path.join(root, 'src/packages/image/App.svelte')), /missing App\.svelte/],
   ['bad-requires-sdk', (root) => {
@@ -125,7 +125,7 @@ const badCases = [
     fs.cpSync(path.join(root, 'src/packages/image'), path.join(root, 'src/packages/viewer'), { recursive: true });
     const m = imageManifest(root);
     m.name = 'viewer';
-    m.opens = [];
+    m.contributes = { ...m.contributes, contributes: { desks: [] } };
     fs.writeFileSync(path.join(root, 'src/packages/viewer/choir-package.json'), JSON.stringify(m));
     fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true });
   }, /required package "image" is missing/],
@@ -151,7 +151,7 @@ test.describe('check-packages.mjs', () => {
     expect(runCheck(root).code).toBe(0);
     const m = imageManifest(root);
     m.name = 'viewer2';
-    m.opens = [{ media_type: 'image/x-test', extensions: ['xtest'] }];
+    m.contributes = { ...m.contributes, opens: [{ media_type: 'image/x-test', extensions: ['xtest'] }] };
     m.app.theme = { ...m.app.theme, shellDataAttr: 'data-viewer2-window' };
     writeManifest(root, 'viewer2', m);
     const r = runCheck(root);
@@ -466,7 +466,7 @@ test.describe('image viewer package in the shell', () => {
       ...JSON.parse(fs.readFileSync(path.join(frontendRoot, 'src/packages/image/choir-package.json'), 'utf8')),
       name: 'zz-bad-fixture',
       app: { entry: 'App.svelte', aliases: 'not-an-array', launcher: 7 },
-      opens: [{ media_type: 'x/y', extensions: 'zzz' }],
+      contributes: { desks: [], opens: [{ media_type: 'x/y', extensions: 'zzz' }] },
     };
     fs.mkdirSync(badDir, { recursive: true });
     try {

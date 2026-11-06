@@ -366,7 +366,8 @@ function checkManifest(manifest, dirName, where, pkgDir) {
   const provider = isObject(manifest) && manifest.provides !== undefined && manifest.app === undefined;
   const ok = strictKeys(
     manifest, where,
-    provider ? ['schema', 'name', 'version', 'display', 'opens', 'provides'] : ['schema', 'name', 'version', 'display', 'app', 'opens'],
+    // SDK 2.0.0 (X1): opens moved into contributes; a top-level opens is refused as an unknown key.
+    provider ? ['schema', 'name', 'version', 'display', 'provides'] : ['schema', 'name', 'version', 'display', 'app'],
     ['kinds', 'uses_kinds', 'contributes', 'capabilities'],
   );
   if (!ok) return;
@@ -381,7 +382,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
 
   if (provider) {
     checkProvides(manifest, where, pkgDir);
-    if (Array.isArray(manifest.opens) && manifest.opens.length) fail(where, 'opens needs an app to open the file');
+    if (Array.isArray(manifest.contributes?.opens) && manifest.contributes.opens.length) fail(where, 'contributes.opens needs an app to open the file');
   }
   const app = manifest.app;
   if (!provider && strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases', 'requires_sdk'])) {
@@ -415,16 +416,17 @@ function checkManifest(manifest, dirName, where, pkgDir) {
     }
   }
 
-  if (!Array.isArray(manifest.opens)) fail(where, 'opens must be an array');
+  const opens = manifest.contributes?.opens;
+  if (opens !== undefined && !Array.isArray(opens)) fail(where, 'contributes.opens must be an array');
   else {
-    manifest.opens.forEach((o, i) => {
+    (opens || []).forEach((o, i) => {
       // default: false offers the package under Open with only; the extension
       // keeps its default opener, so it may be one another app routes.
-      if (!strictKeys(o, `${where} opens[${i}]`, ['media_type', 'extensions'], ['default'])) return;
-      if (o.default !== undefined && typeof o.default !== 'boolean') fail(`${where} opens[${i}]`, 'default must be a boolean');
-      if (!str(o.media_type)) fail(`${where} opens[${i}]`, 'media_type must be a non-empty string');
+      if (!strictKeys(o, `${where} contributes.opens[${i}]`, ['media_type', 'extensions'], ['default'])) return;
+      if (o.default !== undefined && typeof o.default !== 'boolean') fail(`${where} contributes.opens[${i}]`, 'default must be a boolean');
+      if (!str(o.media_type)) fail(`${where} contributes.opens[${i}]`, 'media_type must be a non-empty string');
       if (!Array.isArray(o.extensions) || o.extensions.length === 0 || o.extensions.some((e) => typeof e !== 'string' || !EXT_RE.test(e))) {
-        fail(`${where} opens[${i}]`, 'extensions must be a non-empty array of lowercase extensions without a dot');
+        fail(`${where} contributes.opens[${i}]`, 'extensions must be a non-empty array of lowercase extensions without a dot');
       }
     });
   }
@@ -433,7 +435,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
   if (Array.isArray(manifest.kinds) ? manifest.kinds.length > 0 : manifest.kinds !== undefined) fail(where, 'kinds must be empty in P1 (package-declared kinds land with P2)');
   if (manifest.uses_kinds !== undefined && !(Array.isArray(manifest.uses_kinds) && manifest.uses_kinds.length === 0)) fail(where, 'uses_kinds must be empty in P1');
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
-  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links', 'settings', 'menus'])) {
+  if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links', 'settings', 'menus', 'opens'])) {
     const c = manifest.contributes;
     if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
     checkCommands(c, manifest.name, `${where} contributes`);
@@ -541,7 +543,7 @@ async function main() {
     if (new Set([name, ...aliases]).size !== aliases.length + 1) fail(where, 'name and aliases must be distinct');
     for (const id of new Set([name, ...aliases])) claim(id, name, where);
     const ownExts = new Set();
-    for (const o of Array.isArray(manifest?.opens) ? manifest.opens : []) {
+    for (const o of Array.isArray(manifest?.contributes?.opens) ? manifest.contributes.opens : []) {
       for (const e of Array.isArray(o?.extensions) ? o.extensions : []) {
         if (o?.default === false) {
           // Open with only: no clash with other apps, but not twice in one package.

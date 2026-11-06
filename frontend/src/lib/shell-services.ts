@@ -5,8 +5,8 @@
 // mount (bindShellHost, which returns the disposer) and every call goes to
 // them. A package never receives the host, only these functions, so a T1
 // package is grant-checked at the bridge and an in-tree package calls the same
-// ones. They replace the forwarded events (authexpired, launchapp, ...) that
-// stay until SDK 2.0.0 (X1).
+// ones. They replaced the forwarded events (authexpired, launchapp, ...),
+// which SDK 2.0.0 (X1) deleted: an app asks the shell only through these.
 //
 // Failure modes:
 //  F1 a call with no desktop mounted (logged-out boot, a unit): functions that
@@ -113,14 +113,29 @@ export function openApp(appId: string, context: OpenAppContext = {}): void {
 /**
  * Open a Files path ('Documents/notes.md') with the app that opens it: the
  * media app its extension routes to, Texture for text, else a download (F5).
+ * `appId` and `mediaType` open it with the app the owner chose (Open with);
+ * `asText` opens it in Texture whatever its extension, and `importToTexture`
+ * makes a new Texture document from it rather than reading the file.
  */
-export function openFile(path: string, options: { appId?: string; mediaType?: string } = {}): void {
+export type OpenFileOptions = {
+  appId?: string;
+  mediaType?: string;
+  openedWith?: 'default' | 'choice';
+  asText?: boolean;
+  importToTexture?: boolean;
+};
+
+export function openFile(path: string, options: OpenFileOptions = {}): void {
   const pathSegments = String(path || '').split('/').filter(Boolean);
   const fileName = pathSegments[pathSegments.length - 1] || '';
   if (!fileName) return;
   const h = host();
+  if (options.asText) {
+    h.openTextFile?.({ pathSegments, fileName, importToTexture: options.importToTexture === true });
+    return;
+  }
   const route = options.appId
-    ? { appId: options.appId, mediaType: options.mediaType || '', openedWith: 'choice' as const }
+    ? { appId: options.appId, mediaType: options.mediaType || '', openedWith: options.openedWith || 'choice' }
     : mediaRouteForFileName(fileName);
   if (route) {
     h.openMediaFile?.({ ...route, pathSegments, filePath: pathSegments.join('/'), fileName });

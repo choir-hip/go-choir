@@ -1,5 +1,6 @@
 <script>
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { sessionExpired as shellSessionExpired, setAppContext as shellSetAppContext } from '../../lib/app-sdk';
+  import { onMount, tick } from 'svelte';
   import {
     loadContextContentItem,
     loadRecentMedia,
@@ -15,7 +16,6 @@
   export let authenticated = false;
 
   const kind = 'calendar';
-  const dispatch = createEventDispatcher();
 
   const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MONTHS = [
@@ -367,7 +367,7 @@
     const result = await loadContextContentItem(effectiveContext, item, 'Calendar');
     loading = false;
     if (result.authRequired) {
-      dispatch('authexpired');
+      shellSessionExpired();
       return;
     }
     if (result.error) {
@@ -384,7 +384,7 @@
     item = null;
     error = '';
     loadedSourceKey = '';
-    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    shellSetAppContext({ windowId, appContext: selectedContext, title: selectedContext.windowTitle });
     await tick();
     await loadContentItem();
   }

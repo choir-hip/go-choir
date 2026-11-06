@@ -239,11 +239,11 @@ export async function buildPackageModule({ name, dir, frontendRoot = FRONTEND_RO
     const front = path.join(tmp, 'frontend');
     fs.mkdirSync(path.join(front, 'src/packages'), { recursive: true });
     fs.cpSync(dir, path.join(front, 'src/packages', name), { recursive: true, dereference: false });
-    for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'legacy-events.json', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
+    for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
     fs.copyFileSync(path.join(frontendRoot, 'package.json'), path.join(front, 'package.json'));
     fs.symlinkSync(path.join(frontendRoot, 'node_modules'), path.join(front, 'node_modules'));
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'choir-package.json'), 'utf8'));
-    const requiresSdk = manifest?.app?.requires_sdk || '^1.0';
+    const requiresSdk = manifest?.app?.requires_sdk || '^2.0';
     const out = path.join(tmp, 'module.js');
     const r = spawnSync(process.execPath, [path.join(front, 'build-module.mjs'), front, name, out, requiresSdk], { encoding: 'utf8', cwd: front });
     const log = `${r.stdout || ''}${r.stderr || ''}`.trim();
@@ -524,7 +524,7 @@ export async function checkPackages({ browser, base, packages, modes = MODES, sd
       version: pkg.manifest?.version || null,
       tree_digest: pkg.tree_digest,
       contract_digest: pkg.contract_digest,
-      requires_sdk: pkg.manifest?.app?.requires_sdk || '^1.0',
+      requires_sdk: pkg.manifest?.app?.requires_sdk || '^2.0',
       sdk_imports: null,
       min_sdk: null,
       module: null,

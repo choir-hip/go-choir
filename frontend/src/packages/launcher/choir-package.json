@@ -7,7 +7,6 @@
     "icon": "☰",
     "description": "The apps, the overview and the account row"
   },
-  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
@@ -19,7 +18,7 @@
       "service": "launcher",
       "abi": "choir.service/launcher/v1",
       "entry": "Launcher.surface.svelte",
-      "requires_sdk": "^1.4"
+      "requires_sdk": "^2.0"
     }
   ]
 }

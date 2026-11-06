@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { sessionExpired as shellSessionExpired } from '../../lib/app-sdk';
+  import { onDestroy, onMount } from 'svelte';
   import {
     AuthRequiredError,
     addLiveEventListener,
@@ -16,8 +17,6 @@
 
   export let windowId = '';
   export let authenticated = false;
-
-  const dispatch = createEventDispatcher();
   let status = null;
   let loading = false;
   let error = '';
@@ -74,7 +73,7 @@
       status = await fetchComputeStatus();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       error = err?.message || 'Could not load compute status';
@@ -95,7 +94,7 @@
       await refresh();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       actionStatus = err?.message || 'Wake request failed';

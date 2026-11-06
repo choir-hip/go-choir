@@ -51,6 +51,16 @@ func fixture(t *testing.T) Manifest {
 	return m
 }
 
+// setOpens sets contributes.opens (SDK 2.0.0 moved opens there from the top level).
+func setOpens(v map[string]any, opens []any) {
+	c, _ := v["contributes"].(map[string]any)
+	if c == nil {
+		c = map[string]any{}
+		v["contributes"] = c
+	}
+	c["opens"] = opens
+}
+
 func fixtureJSON(t *testing.T, mutate func(map[string]any)) []byte {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/p2btest.choir-package.json")
@@ -93,10 +103,10 @@ func TestParseManifestRefusesWhatP1AndTheSlicesDoNotAdmit(t *testing.T) {
 		"an SDK range not ^M.m":      func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = ">=1.0" },
 		"an SDK version, not range":  func(v map[string]any) { v["app"].(map[string]any)["requires_sdk"] = "1.0.0" },
 		"an extension claimed twice": func(v map[string]any) {
-			v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"x", "x"}}}
+			setOpens(v, []any{map[string]any{"media_type": "a/b", "extensions": []any{"x", "x"}}})
 		},
 		"an upper-case extension": func(v map[string]any) {
-			v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"PDF"}}}
+			setOpens(v, []any{map[string]any{"media_type": "a/b", "extensions": []any{"PDF"}}})
 		},
 	}
 	for name, mutate := range cases {
@@ -490,22 +500,22 @@ func TestRegisterFirstPartyRefusesAReservedDeskName(t *testing.T) {
 // field stays a default route.
 func TestParseManifestOpensDefaultFlag(t *testing.T) {
 	m, err := ParseManifest(fixtureJSON(t, func(v map[string]any) {
-		v["opens"] = []any{
+		setOpens(v, []any{
 			map[string]any{"media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "extensions": []any{"pptx"}, "default": false},
 			map[string]any{"media_type": "text/x-deck", "extensions": []any{"deck"}},
-		}
+		})
 	}), OriginFirstParty)
 	if err != nil {
 		t.Fatalf("open-with-only entry refused: %v", err)
 	}
-	if len(m.Opens) != 2 || m.Opens[0].Default == nil || *m.Opens[0].Default || m.Opens[1].Default != nil {
-		t.Fatalf("opens = %+v", m.Opens)
+	if len(m.Contributes.Opens) != 2 || m.Contributes.Opens[0].Default == nil || *m.Contributes.Opens[0].Default || m.Contributes.Opens[1].Default != nil {
+		t.Fatalf("opens = %+v", m.Contributes.Opens)
 	}
-	if !m.Opens[1].IsDefault() || m.Opens[0].IsDefault() {
-		t.Fatalf("IsDefault: %v %v", m.Opens[0].IsDefault(), m.Opens[1].IsDefault())
+	if !m.Contributes.Opens[1].IsDefault() || m.Contributes.Opens[0].IsDefault() {
+		t.Fatalf("IsDefault: %v %v", m.Contributes.Opens[0].IsDefault(), m.Contributes.Opens[1].IsDefault())
 	}
 	_, err = ParseManifest(fixtureJSON(t, func(v map[string]any) {
-		v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"x"}, "default": "no"}}
+		setOpens(v, []any{map[string]any{"media_type": "a/b", "extensions": []any{"x"}, "default": "no"}})
 	}), OriginFirstParty)
 	if !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("string default: err = %v, want ErrInvalidManifest", err)

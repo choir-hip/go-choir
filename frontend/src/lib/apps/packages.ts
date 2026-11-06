@@ -30,8 +30,7 @@ type PackageManifest = {
     auth: ChoirAppDefinition['auth'];
     theme: ChoirAppDefinition['theme'];
   };
-  opens?: { media_type: string; extensions: string[]; default?: boolean }[];
-  contributes?: Record<string, unknown>;
+  contributes?: Record<string, unknown> & { opens?: { media_type: string; extensions: string[]; default?: boolean }[] };
 };
 
 // `default: false` routes offer the package under Open with only; the
@@ -110,10 +109,10 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
         continue;
       }
       const packageAliases = manifest.app.aliases ?? [];
-      const opensList = manifest.opens ?? [];
+      const opensList = (isObject(manifest.contributes) ? manifest.contributes.opens : undefined) ?? [];
       if (!Array.isArray(packageAliases) || !packageAliases.every((a) => typeof a === 'string') || !Array.isArray(opensList)
         || !opensList.every((o) => isObject(o) && Array.isArray(o.extensions) && (o.default === undefined || typeof o.default === 'boolean'))) {
-        console.warn(`[packages] skipped ${name}: aliases (strings), opens and opens[].extensions must be arrays`);
+        console.warn(`[packages] skipped ${name}: aliases (strings), contributes.opens and its extensions must be arrays`);
         continue;
       }
       const claimed = [name, ...packageAliases];

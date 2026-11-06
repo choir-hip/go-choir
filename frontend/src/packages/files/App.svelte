@@ -41,7 +41,8 @@
     data-files-status     — status line (copied, duplicated, renamed)
 -->
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { openFile as shellOpenFile, requireAuth as shellRequireAuth, sessionExpired as shellSessionExpired } from '../../lib/app-sdk';
+  import { onMount } from 'svelte';
   import {
     AuthRequiredError,
     addLiveEventListener,
@@ -51,7 +52,6 @@
     dropZone,
     fetchWithRenewal,
     isOwnLiveEvent,
-    isTextFileName,
     liveEventKind,
     liveEventPayload,
     mediaRouteForFileName,
@@ -60,8 +60,6 @@
   } from '../../lib/app-sdk';
   import type { ContextMenuEntry, FileOpener } from '../../lib/app-sdk';
   import { previewFiles, previewFolderEntries } from './preview-data';
-
-  const dispatch = createEventDispatcher();
   export let authenticated = false;
 
   // Auto-focus action for inputs
@@ -124,7 +122,7 @@
       if (!res.ok) {
         if (res.status === 401) {
           // Session expired and renewal failed — trigger auth fallback.
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -146,7 +144,7 @@
       });
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       error = 'Failed to load directory. Please try again.';
@@ -158,7 +156,7 @@
   async function createFolder() {
     newFolderError = '';
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
+      shellRequireAuth({ kind: 'file_mutation', appId: 'files', appName: 'Files' });
       return;
     }
     const name = newFolderName.trim();
@@ -183,7 +181,7 @@
       });
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -200,7 +198,7 @@
       await fetchDirectory(currentPath);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       newFolderError = 'Failed to create folder.';
@@ -211,7 +209,7 @@
     if (!deleteTarget) return;
     deleteError = '';
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
+      shellRequireAuth({ kind: 'file_mutation', appId: 'files', appName: 'Files' });
       return;
     }
 
@@ -226,7 +224,7 @@
       });
       if (!res.ok) {
         if (res.status === 401) {
-          dispatch('authexpired');
+          shellSessionExpired();
           return;
         }
         const body = await res.json().catch(() => ({}));
@@ -238,7 +236,7 @@
       await fetchDirectory(currentPath);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       deleteError = 'Failed to delete.';
@@ -249,7 +247,7 @@
     uploadError = '';
     uploadStatus = '';
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_upload', appId: 'files', appName: 'Files' });
+      shellRequireAuth({ kind: 'file_upload', appId: 'files', appName: 'Files' });
       return;
     }
     const selected = Array.from(files || []);
@@ -274,7 +272,7 @@
         });
         if (!res.ok) {
           if (res.status === 401) {
-            dispatch('authexpired');
+            shellSessionExpired();
             return;
           }
           const body = await res.json().catch(() => ({}));
@@ -288,7 +286,7 @@
       await fetchDirectory(currentPath);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       uploadError = 'Upload failed.';
@@ -399,24 +397,21 @@
 
   // Open with: the user's choice of app for this file (Open keeps the default).
   function openWith(entry, fileOpener: FileOpener) {
-    const pathSegments = entrySegments(entry);
+    const path = entrySegments(entry).join('/');
     if (fileOpener.via === 'text') {
-      dispatch('opentextfile', { pathSegments, fileName: entry.name });
+      shellOpenFile(path, { asText: true });
       return;
     }
-    dispatch('openmediafile', {
+    shellOpenFile(path, {
       appId: fileOpener.appId,
       mediaType: fileOpener.mediaType,
-      pathSegments,
-      filePath: pathSegments.join('/'),
-      fileName: entry.name,
       openedWith: fileOpener.isDefault ? 'default' : 'choice',
     });
   }
 
   function requireAuth(kind = 'file_mutation') {
     if (authenticated) return true;
-    dispatch('authrequired', { kind, appId: 'files', appName: 'Files' });
+    shellRequireAuth({ kind, appId: 'files', appName: 'Files' });
     return false;
   }
 
@@ -465,7 +460,7 @@
       // to the new name, then delete the old one.
       if (res.status === 405) res = await renameByCopy(fromUrl, '/api/files/' + [...currentPath, to].map(encodeURIComponent).join('/'));
       if (res.status === 401) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       if (!res.ok) {
@@ -478,7 +473,7 @@
       await fetchDirectory(currentPath);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       renameError = `Could not rename ${from}.`;
@@ -529,7 +524,7 @@
     try {
       const src = await fetchWithRenewal(entryApiPath(entry));
       if (src.status === 401) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       if (!src.ok) {
@@ -554,7 +549,7 @@
       await fetchDirectory(currentPath);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       uploadError = `Could not duplicate ${entry.name}.`;
@@ -593,7 +588,7 @@
       await fetchDirectory(currentPath);
     } catch (err) {
       if (err?.authRequired) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       uploadError = err?.message || 'Upload failed.';
@@ -659,7 +654,7 @@
 
   function handleDroppedUploadError(err) {
     if (err?.authRequired) {
-      dispatch('authexpired');
+      shellSessionExpired();
       return;
     }
     uploadError = err?.message || 'Upload failed.';
@@ -670,47 +665,14 @@
     if (entry.type === 'directory') {
       navigateIntoDirectory(entry.name);
     } else {
-      const mediaRoute = mediaRouteForFileName(entry.name);
-      if (mediaRoute) {
-        const pathSegments = [...currentPath, entry.name];
-        dispatch('openmediafile', {
-          ...mediaRoute,
-          pathSegments,
-          filePath: pathSegments.join('/'),
-          fileName: entry.name,
-        });
-        return;
-      }
-
-      if (isTextFileName(entry.name)) {
-        dispatch('opentextfile', {
-          pathSegments: [...currentPath, entry.name],
-          fileName: entry.name,
-        });
-        return;
-      }
-
-      // Trigger download for unknown non-text files.
-      const path = currentPath.length > 0
-        ? '/api/files/' + [...currentPath, entry.name].map(encodeURIComponent).join('/')
-        : '/api/files/' + encodeURIComponent(entry.name);
-
-      const a = document.createElement('a');
-      a.href = path;
-      a.download = entry.name;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      // The shell opens it with its default app: the media app its extension
+      // routes to, Texture for text, else a download.
+      shellOpenFile([...currentPath, entry.name].join('/'));
     }
   }
 
   function handleImportIntoTexture(entry) {
-    dispatch('opentextfile', {
-      pathSegments: [...currentPath, entry.name],
-      fileName: entry.name,
-      importToTexture: true,
-    });
+    shellOpenFile([...currentPath, entry.name].join('/'), { asText: true, importToTexture: true });
   }
 
   function isTextureShortcutName(name) {
@@ -747,7 +709,7 @@
 
   function handleUploadClick() {
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_upload', appId: 'files', appName: 'Files' });
+      shellRequireAuth({ kind: 'file_upload', appId: 'files', appName: 'Files' });
       return;
     }
     uploadInputEl?.click();
@@ -769,7 +731,7 @@
 
   function startDelete(entry) {
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
+      shellRequireAuth({ kind: 'file_mutation', appId: 'files', appName: 'Files' });
       return;
     }
     cancelRename();

@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { openApp as shellOpenApp, requireAuth as shellRequireAuth, sessionExpired as shellSessionExpired, setAppContext as shellSetAppContext } from '../../lib/app-sdk';
+  import { onDestroy, onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError, onDocumentEvent, onWindowEvent } from '../../lib/app-sdk';
 
   export let authenticated = false;
   export let appContext = {};
   export let windowId = '';
-
-  const dispatch = createEventDispatcher();
 
   const folders = [
     { id: 'inbox', label: 'Inbox', icon: 'inbox' },
@@ -262,7 +261,7 @@
       clearTimeout(appStateEmitTimer);
       appStateEmitTimer = null;
     }
-    dispatch('contextchange', {
+    shellSetAppContext({
       windowId,
       appContext: currentMailAppContext(),
       title: 'Mail',
@@ -670,7 +669,7 @@
 
   function requireAuth(kind) {
     if (authenticated) return false;
-    dispatch('authrequired', { kind, appId: 'mail', appName: 'Mail' });
+    shellRequireAuth({ kind, appId: 'mail', appName: 'Mail' });
     return true;
   }
 
@@ -1062,7 +1061,7 @@
 
   function handleError(err) {
     if (err instanceof AuthRequiredError) {
-      dispatch('authexpired');
+      shellSessionExpired();
       return;
     }
     error = err?.message || 'Mail action failed';
@@ -1309,8 +1308,7 @@
   }
 
   function handleAddToCalendar(attachment) {
-    dispatch('launchapp', {
-      appId: 'calendar',
+    shellOpenApp('calendar', {
       appName: 'Calendar',
       icon: '📅',
       appContext: {

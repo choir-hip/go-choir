@@ -1,5 +1,6 @@
 <script>
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { requireAuth as shellRequireAuth, sessionExpired as shellSessionExpired, setAppContext as shellSetAppContext } from '../../lib/app-sdk';
+  import { onMount, tick } from 'svelte';
   import {
     appTitle,
     clampNumber,
@@ -22,7 +23,6 @@
   let uploadingDeck = false;
 
   const kind = 'slides';
-  const dispatch = createEventDispatcher();
 
   let item = appContext?.contentItem || null;
   let loading = false;
@@ -312,7 +312,7 @@
     const result = await loadContextContentItem(effectiveContext, item, appTitle(kind));
     loading = false;
     if (result.authRequired) {
-      dispatch('authexpired');
+      shellSessionExpired();
       return;
     }
     if (result.error) {
@@ -331,7 +331,7 @@
     slides = [];
     currentSlide = 0;
     loadedSourceKey = '';
-    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    shellSetAppContext({ windowId, appContext: selectedContext, title: selectedContext.windowTitle });
     await tick();
     await loadContentItem();
   }
@@ -344,7 +344,7 @@
 
   function handleUploadFailure(err) {
     if (err?.authRequired) {
-      dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' });
+      shellRequireAuth({ kind: 'file_upload', appId: 'slides', appName: 'Slides' });
       return;
     }
     uploadError = err?.message || 'Upload failed.';
@@ -353,7 +353,7 @@
   async function uploadDeck() {
     uploadError = '';
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' });
+      shellRequireAuth({ kind: 'file_upload', appId: 'slides', appName: 'Slides' });
       return;
     }
     // Busy only once a file is chosen: a dismissed picker may never report it.
@@ -447,7 +447,7 @@
   data-slides-app
   tabindex="0"
   on:keydown={handleKeydown}
-  use:dropZone={{ accept: DECK_ACCEPT, multiple: false, enabled: () => authenticated, onDisabledDrop: () => dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' }), onUploaded: (paths) => paths[0] && openUploadedPath(paths[0]), onError: handleUploadFailure }}
+  use:dropZone={{ accept: DECK_ACCEPT, multiple: false, enabled: () => authenticated, onDisabledDrop: () => shellRequireAuth({ kind: 'file_upload', appId: 'slides', appName: 'Slides' }), onUploaded: (paths) => paths[0] && openUploadedPath(paths[0]), onError: handleUploadFailure }}
 >
   <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">S</span><div><p class="eyebrow">PRESENTATION</p><h1>{item?.title || source.title || 'Slides'}</h1></div></div>{#if slides.length}<div class="top-actions">{#if uploadError}<span class="upload-error" role="alert" data-slides-upload-error-top>{uploadError}</span>{/if}<button class="control-button" data-slides-upload-top on:click={uploadDeck} disabled={uploadingDeck} aria-label="Upload a deck">Upload</button><span class="deck-count">{slides.length} slides</span><button class="control-button primary" on:click={toggleFullscreen} aria-label={isFullscreen ? 'Exit presentation mode' : 'Present fullscreen'}>Present <span aria-hidden="true">⛶</span></button></div>{/if}</header>
   {#if loading}<div class="state-panel" role="status"><span class="spinner" aria-hidden="true"></span><h2>Preparing your presentation</h2><p>Loading slides…</p></div>

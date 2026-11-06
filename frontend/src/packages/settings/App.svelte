@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { sessionExpired as shellSessionExpired } from '../../lib/app-sdk';
+  import { onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from '../../lib/app-sdk';
   import { buildInfo, copyText, openApp, resetDesktop } from '../../lib/app-sdk';
   import { getTheme, onThemeChange, setTheme } from '../../lib/app-sdk';
@@ -17,8 +18,6 @@
 
   export let currentUser = null;
   export let currentTheme = DEFAULT_THEME;
-
-  const dispatch = createEventDispatcher();
 
   let loading = true;
   let error = '';
@@ -118,7 +117,7 @@
       const data = await res.json();
       apiKeys = Array.isArray(data) ? data : (data.keys || []);
     } catch (err) {
-      if (err instanceof AuthRequiredError) { dispatch('authexpired'); return; }
+      if (err instanceof AuthRequiredError) { shellSessionExpired(); return; }
       apiKeyError = err.message || 'Failed to load API keys';
     } finally {
       apiKeyLoading = false;
@@ -164,7 +163,7 @@
       apiKeyNotice = 'API key created. Copy the secret now — it won\'t be shown again.';
       void loadAPIKeys();
     } catch (err) {
-      if (err instanceof AuthRequiredError) { dispatch('authexpired'); return; }
+      if (err instanceof AuthRequiredError) { shellSessionExpired(); return; }
       apiKeyError = err.message || 'Failed to create API key';
     }
   }
@@ -178,7 +177,7 @@
       apiKeyNotice = 'API key revoked.';
       void loadAPIKeys();
     } catch (err) {
-      if (err instanceof AuthRequiredError) { dispatch('authexpired'); return; }
+      if (err instanceof AuthRequiredError) { shellSessionExpired(); return; }
       apiKeyError = err.message || 'Failed to revoke API key';
     }
   }
@@ -241,7 +240,7 @@
       health = await res.json();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        shellSessionExpired();
         return;
       }
       error = err.message || 'Runtime status unavailable';

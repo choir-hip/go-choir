@@ -49,7 +49,7 @@ func exportManifest(name, origin string) string {
 	return `{"schema":"choir.package/v2",` + declared + `"name":"` + name + `","version":"1.0.0",` +
 		`"display":{"title":"` + name + `","icon":"","description":""},` +
 		`"app":{"entry":"App.svelte","abi":"choir.app-frontend/svelte-inline/v1","aliases":[],"launcher":{"menu":true,"desktopIcon":false,"order":900},"window":{"singleton":false,"heavy":false},"auth":{"preview":"private"},"theme":{"surface":"standard","shellDataAttr":"data-x","contentClass":"x"}},` +
-		`"opens":[],"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}` + "\n"
+		`"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}` + "\n"
 }
 
 func newExportWorld(t *testing.T) *exportWorld {

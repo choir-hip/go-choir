@@ -196,7 +196,7 @@ test('review r2: no package registration carries core; core is a reserved packag
   fs.cpSync(path.join(dir, 'src/packages/image'), path.join(dir, 'src/packages/core'), { recursive: true });
   const p = path.join(dir, 'src/packages/core/choir-package.json');
   const m = JSON.parse(fs.readFileSync(p, 'utf8'));
-  m.name = 'core'; m.opens = [];
+  m.name = 'core'; m.contributes = { ...m.contributes, opens: [] };
   fs.writeFileSync(p, JSON.stringify(m, null, 2));
   const r = spawnSync(process.execPath, ['scripts/check-packages.mjs'], { cwd: dir, encoding: 'utf8' });
   fs.rmSync(dir, { recursive: true, force: true });

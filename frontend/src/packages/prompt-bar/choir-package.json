@@ -7,7 +7,6 @@
     "icon": "⌘",
     "description": "The command field, its focus chip, the window tray and the desk button"
   },
-  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
@@ -19,7 +18,7 @@
       "service": "prompt",
       "abi": "choir.service/prompt/v1",
       "entry": "PromptBar.surface.svelte",
-      "requires_sdk": "^1.5"
+      "requires_sdk": "^2.0"
     }
   ]
 }

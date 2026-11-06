@@ -50,8 +50,7 @@ func installManifest(title string) string {
   "display": {"title": "` + title + `", "icon": "D", "description": "Demo"},
   "app": {"entry": "App.svelte", "abi": "choir.app-frontend/svelte-inline/v1", "aliases": [],
     "launcher": {"menu": true, "desktopIcon": false, "order": 1}, "window": {"singleton": false, "heavy": false}, "auth": {"preview": "private"}, "theme": {"surface": "standard", "shellDataAttr": "data-x-window", "contentClass": "x-content"}},
-  "opens": [],
-  "kinds": [],
+    "kinds": [],
   "uses_kinds": [],
   "contributes": {"desks": []},
   "capabilities": []

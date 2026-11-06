@@ -7,7 +7,7 @@
     - prompt/apply creates a user revision, then invokes the texture appagent
 -->
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     cancelAgentRevision,
@@ -31,7 +31,7 @@
     submitPublicationProposal,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
-  import { copyText } from './shell-services';
+  import { copyText, openApp, requireAuth, sessionExpired, setAppContext } from './shell-services';
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
@@ -94,7 +94,6 @@
   export let appContext = {};
   export let windowId = '';
 
-  const dispatch = createEventDispatcher();
 
   let loading = true;
   let submitting = false;
@@ -274,7 +273,7 @@
     };
     appContext = merged;
     initializedKey = getContextKey(merged);
-    dispatch('contextchange', {
+    setAppContext({
       windowId,
       appContext: merged,
       title: title || merged.windowTitle || normalizeTitle(merged),
@@ -480,7 +479,7 @@
   }
 
   function requestPublishedEditAuth() {
-    dispatch('authrequired', {
+    requireAuth({
       kind: 'published_texture_edit',
       routePath: publishedRoutePath || appContext.publishedRoutePath || '',
       title: titleForPublishedBundle(),
@@ -702,7 +701,7 @@
       fileName: appContext.fileName || bits[bits.length - 1] || '',
     };
     initializedKey = getContextKey(appContext);
-    dispatch('contextchange', {
+    setAppContext({
       windowId,
       appContext,
       title: appContext.windowTitle || appContext.fileName || 'Texture',
@@ -719,7 +718,7 @@
   async function ensureCurrentRevisionSaved(statusPrefix = 'Saving user version…') {
     if (!currentDoc) return null;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'save_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      requireAuth({ kind: 'save_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return null;
     }
     if (autosavePromise) {
@@ -783,7 +782,7 @@
       saveStatus = 'Saved';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Autosave failed';
@@ -1004,7 +1003,7 @@
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to initialize Texture';
@@ -1134,7 +1133,7 @@
       recentDocuments = response.documents || [];
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to load recent Textures';
@@ -1178,7 +1177,7 @@
       saveStatus = auto ? 'Private version ready' : 'Private version created';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to create private version';
@@ -1227,7 +1226,7 @@
       void connectDocumentStream(currentDoc.doc_id, currentDoc.trajectory_id || '');
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to create Texture';
@@ -1240,7 +1239,7 @@
   async function handlePrompt() {
     if (!currentDoc || loading || submitting || agentPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'save_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      requireAuth({ kind: 'save_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
 
@@ -1267,7 +1266,7 @@
       saveStatus = synthStatusLabel();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to prompt Texture';
@@ -1291,7 +1290,7 @@
       saveStatus = 'Revision cancelled. You can revise again from the current version.';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to cancel revision';
@@ -1309,7 +1308,7 @@
     const opinion = options?.opinion === true;
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'publish_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      requireAuth({ kind: 'publish_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     publishedActionPending = true;
@@ -1339,7 +1338,7 @@
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || (opinion ? 'Failed to publish as opinion' : 'Failed to publish Texture');
@@ -1363,7 +1362,7 @@
       saveStatus = `Restored ${versionLabel}`;
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to restore version';
@@ -1399,7 +1398,7 @@
       modelProvenance = await getTextureModelProvenance(currentDoc.doc_id);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       modelProvenanceError = err?.message || 'Model provenance unavailable';
@@ -1431,7 +1430,7 @@
       return;
     }
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'texture_diagnosis', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      requireAuth({ kind: 'texture_diagnosis', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const controller = new AbortController();
@@ -1451,7 +1450,7 @@
       saveStatus = 'Source diagnosis loaded';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       if (err?.name === 'AbortError') {
@@ -1567,7 +1566,7 @@
       saveStatus = 'Proposal recorded for author';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
+        sessionExpired();
         return;
       }
       error = err.message || 'Failed to submit proposal';
@@ -1634,7 +1633,7 @@
 
   function handleSourceEntityOpen(entity) {
     const payload = sourceEntityLaunchPayload(entity);
-    if (payload) dispatch('launchapp', payload);
+    if (payload) openApp(payload.appId, payload);
   }
 
   function handleSourceOpenButton(button) {
@@ -1651,8 +1650,7 @@
     const revisionID = textureEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-texture-related-revision-id') || '');
     const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-texture-label') || 'Related Texture').trim();
     const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
-    dispatch('launchapp', {
-      appId: 'texture',
+    openApp('texture', {
       appName: 'Texture',
       icon: '📝',
       appContext: {

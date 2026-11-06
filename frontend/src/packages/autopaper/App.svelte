@@ -28,7 +28,8 @@
   Reads only the public front list route, logged out.
 -->
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { openApp as shellOpenApp } from '../../lib/app-sdk';
+  import { onMount } from 'svelte';
   import AutopaperStory from './AutopaperStory.svelte';
   import {
     AUTOPAPER_SECTIONS,
@@ -54,8 +55,6 @@
 
   /** The Autopaper tagline, as the app registry describes it. */
   const TAGLINE = 'Living stories with checked sources';
-
-  const dispatch = createEventDispatcher();
 
   // The first page is the front page; older pages extend "More stories" in
   // the order the server returns them, so paging never reshuffles the front.
@@ -215,8 +214,7 @@
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!route) return;
     event.preventDefault();
-    dispatch('launchapp', {
-      appId: 'texture',
+    shellOpenApp('texture', {
       appName: 'Texture',
       icon: '📝',
       appContext: storyTextureContext(route, row.title, row.kind === 'opinion'),

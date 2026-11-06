@@ -212,7 +212,7 @@ func TestManifestDescriptionIsOneBoundedLine(t *testing.T) {
 	raw := []byte(`{"schema":"choir.package/v2","name":"reader","version":"1.0.0",` +
 		`"display":{"title":"Reader","icon":"R","description":"Reads\n  the   news\r\n today"},` +
 		`"app":{"entry":"App.svelte","abi":"choir.app-frontend/svelte-inline/v1","aliases":[],"launcher":{"menu":true,"desktopIcon":false,"order":1},"window":{"singleton":false,"heavy":false},"auth":{"preview":"public-preview"},"theme":{"surface":"standard","shellDataAttr":"data-x-window","contentClass":"x-content"}},` +
-		`"opens":[],"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}`)
+		`"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}`)
 	if got := ManifestDescription(raw); got != "Reads the news today" {
 		t.Fatalf("description = %q", got)
 	}

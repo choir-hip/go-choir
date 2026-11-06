@@ -97,7 +97,6 @@ type Manifest struct {
 	Version      string       `json:"version"`
 	Display      Display      `json:"display"`
 	App          *App         `json:"app,omitempty"`
-	Opens        []Opens      `json:"opens"`
 	Kinds        []Kind       `json:"kinds"`
 	UsesKinds    []string     `json:"uses_kinds"`
 	Contributes  Contributes  `json:"contributes"`
@@ -118,6 +117,9 @@ type Contributes struct {
 	Menus       []Menu       `json:"menus"`
 	// Settings are the sections of the Settings app the package adds (S6).
 	Settings []SettingsSection `json:"settings"`
+	// Opens are the media-type and extension routes of the package's app
+	// (SDK 2.0.0, X1: moved in from the top level).
+	Opens []Opens `json:"opens"`
 }
 
 // Desk is one desk the package contributes (a persistent root agent desk,
@@ -298,19 +300,19 @@ func (m Manifest) ValidateOn(p Platform) error {
 		}
 	}
 	seenExt := map[string]bool{}
-	for i, o := range m.Opens {
+	for i, o := range m.Contributes.Opens {
 		if m.App == nil {
-			return invalid("opens needs an app to open the file")
+			return invalid("contributes.opens needs an app to open the file")
 		}
 		if strings.TrimSpace(o.MediaType) == "" || strings.ContainsAny(o.MediaType, " \t\r\n") {
-			return invalid("opens[%d].media_type is required and has no whitespace", i)
+			return invalid("contributes.opens[%d].media_type is required and has no whitespace", i)
 		}
 		for _, e := range o.Extensions {
 			if e == "" || e != strings.ToLower(e) || strings.ContainsAny(e, " \t\r\n/\\") {
-				return invalid("opens[%d].extensions: %q is not a lower-case extension", i, e)
+				return invalid("contributes.opens[%d].extensions: %q is not a lower-case extension", i, e)
 			}
 			if seenExt[e] {
-				return invalid("opens: extension %q is claimed twice", e)
+				return invalid("contributes.opens: extension %q is claimed twice", e)
 			}
 			seenExt[e] = true
 		}
@@ -349,8 +351,8 @@ func (m Manifest) ValidateOn(p Platform) error {
 		// (the shell builds no media routes or aliases from them), and the
 		// clash checks that guard them exist only for in-tree packages. A
 		// published manifest carries neither until they are wired (review N3).
-		if len(m.Opens) > 0 || (m.App != nil && len(m.App.Aliases) > 0) {
-			return invalid("opens and app.aliases are first-party only until an installed package's routes are wired")
+		if len(m.Contributes.Opens) > 0 || (m.App != nil && len(m.App.Aliases) > 0) {
+			return invalid("contributes.opens and app.aliases are first-party only until an installed package's routes are wired")
 		}
 	}
 	return m.validateKinds()

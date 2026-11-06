@@ -10,7 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
-    "requires_sdk": "^1.2",
+    "requires_sdk": "^2.0",
     "aliases": [],
     "launcher": {
       "menu": true,
@@ -40,26 +40,26 @@
       "contentClass": "slides-content"
     }
   },
-  "opens": [
-    {
-      "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "extensions": [
-        "pptx",
-        "html",
-        "htm"
-      ]
-    },
-    {
-      "media_type": "application/pdf",
-      "extensions": [
-        "pdf"
-      ],
-      "default": false
-    }
-  ],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
+    "opens": [
+      {
+        "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "extensions": [
+          "pptx",
+          "html",
+          "htm"
+        ]
+      },
+      {
+        "media_type": "application/pdf",
+        "extensions": [
+          "pdf"
+        ],
+        "default": false
+      }
+    ],
     "desks": []
   },
   "capabilities": []

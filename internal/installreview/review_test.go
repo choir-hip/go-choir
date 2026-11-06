@@ -39,7 +39,7 @@ func manifestWith(t *testing.T, caps string, desks string) apppackage.Manifest {
 	t.Helper()
 	raw := `{"schema":"choir.package/v2","name":"demo-next","version":"1.0.0",
 "display":{"title":"Demo","icon":"D","description":"Demo"},
-"opens":[],"kinds":[],"uses_kinds":[],"contributes":{"desks":[` + desks + `]},"capabilities":[` + caps + `]}`
+"kinds":[],"uses_kinds":[],"contributes":{"desks":[` + desks + `]},"capabilities":[` + caps + `]}`
 	var m apppackage.Manifest
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		t.Fatal(err)

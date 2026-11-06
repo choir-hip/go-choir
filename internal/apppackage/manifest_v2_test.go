@@ -70,7 +70,7 @@ func TestH1StrictKeysDuplicatesAndLimits(t *testing.T) {
 	}
 	g := string(good)
 	cases := map[string]string{
-		"unknown top-level key":   strings.Replace(g, `"opens"`, `"extra": 1, "opens"`, 1),
+		"unknown top-level key":   strings.Replace(g, `"kinds"`, `"extra": 1, "kinds"`, 1),
 		"case-folded key":         strings.Replace(g, `"name": "p2btest"`, `"Name": "p2btest"`, 1),
 		"case-folded nested key":  strings.Replace(g, `"entry"`, `"Entry"`, 1),
 		"duplicate top-level key": strings.Replace(g, `"name": "p2btest",`, `"name": "p2btest", "name": "other",`, 1),
@@ -90,7 +90,7 @@ func TestH1StrictKeysDuplicatesAndLimits(t *testing.T) {
 		t.Fatalf("oversize: %v", err)
 	}
 	deep := strings.Repeat(`[`, 40) + strings.Repeat(`]`, 40)
-	if _, err := ParseManifest([]byte(strings.Replace(g, `"opens"`, `"x": `+deep+`, "opens"`, 1)), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
+	if _, err := ParseManifest([]byte(strings.Replace(g, `"kinds"`, `"x": `+deep+`, "kinds"`, 1)), OriginFirstParty); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("deep: %v", err)
 	}
 	// An unknown origin string from the caller is refused too.
@@ -298,7 +298,7 @@ func TestH4GrantShapeRefusals(t *testing.T) {
 			if name == "ui grant, no app" {
 				mut = func(v map[string]any) {
 					delete(v, "app")
-					v["opens"] = []any{}
+					setOpens(v, []any{})
 					deskV(v)
 					v["capabilities"] = []any{map[string]any{"grant": "ui.captures.read"}}
 				}
@@ -357,7 +357,7 @@ func TestH5DesksFromAPublishedOriginWaitForTheSandbox(t *testing.T) {
 	}
 	m, err := ParseManifest(v2JSON(t, func(v map[string]any) {
 		deskV(v)
-		v["opens"] = []any{}
+		setOpens(v, []any{})
 		v["app"].(map[string]any)["aliases"] = []any{}
 	}), OriginFirstParty)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestH5DesksFromAPublishedOriginWaitForTheSandbox(t *testing.T) {
 	if _, err := parseAs(t, OriginPublished, func(v map[string]any) {
 		v["kinds"] = []any{}
 		v["uses_kinds"] = []any{}
-		v["opens"] = []any{}
+		setOpens(v, []any{})
 		v["app"].(map[string]any)["aliases"] = []any{}
 	}); err != nil {
 		t.Fatalf("published front-end package: %v", err)
@@ -651,8 +651,8 @@ func TestH9ClassIsInferred(t *testing.T) {
 	}{
 		{"app", func(v map[string]any) {}, ClassApp, true},
 		{"app+desk", deskV, ClassAppDesk, true},
-		{"desk", func(v map[string]any) { delete(v, "app"); v["opens"] = []any{}; deskV(v) }, ClassDesk, true},
-		{"data", func(v map[string]any) { delete(v, "app"); v["opens"] = []any{} }, ClassData, false},
+		{"desk", func(v map[string]any) { delete(v, "app"); setOpens(v, []any{}); deskV(v) }, ClassDesk, true},
+		{"data", func(v map[string]any) { delete(v, "app"); setOpens(v, []any{}) }, ClassData, false},
 	}
 	for _, c := range cases {
 		m, err := parseAs(t, OriginFirstParty, c.mut)
@@ -664,7 +664,7 @@ func TestH9ClassIsInferred(t *testing.T) {
 		}
 	}
 	// Nothing at all is refused.
-	if _, err := parseAs(t, OriginFirstParty, func(v map[string]any) { delete(v, "app"); v["opens"] = []any{}; v["kinds"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
+	if _, err := parseAs(t, OriginFirstParty, func(v map[string]any) { delete(v, "app"); setOpens(v, []any{}); v["kinds"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
 		t.Errorf("empty package: %v", err)
 	}
 	// opens without an app.
@@ -772,7 +772,7 @@ func TestB2PublishedNamesCannotTakeAShellAppName(t *testing.T) {
 			v["name"] = n
 			v["kinds"] = []any{}
 			v["uses_kinds"] = []any{}
-			v["opens"] = []any{}
+			setOpens(v, []any{})
 			v["app"].(map[string]any)["aliases"] = []any{}
 		})
 		if !errors.Is(err, ErrInvalidManifest) {
@@ -825,13 +825,13 @@ func TestN2AppBlockOpensAndAliasesMoveTheHash(t *testing.T) {
 		"requires_sdk": func(v map[string]any) { app(v)["requires_sdk"] = "^1.2" },
 		"alias":        func(v map[string]any) { app(v)["aliases"] = []any{"p2b", "extra"} },
 		"opens ext": func(v map[string]any) {
-			v["opens"] = []any{map[string]any{"media_type": "application/x-p2btest", "extensions": []any{"p2b", "p3b"}}}
+			setOpens(v, []any{map[string]any{"media_type": "application/x-p2btest", "extensions": []any{"p2b", "p3b"}}})
 		},
 		"opens type": func(v map[string]any) {
-			v["opens"] = []any{map[string]any{"media_type": "application/x-other", "extensions": []any{"p2b"}}}
+			setOpens(v, []any{map[string]any{"media_type": "application/x-other", "extensions": []any{"p2b"}}})
 		},
-		"opens off":   func(v map[string]any) { v["opens"] = []any{} },
-		"app removed": func(v map[string]any) { delete(v, "app"); v["opens"] = []any{} },
+		"opens off":   func(v map[string]any) { setOpens(v, []any{}) },
+		"app removed": func(v map[string]any) { delete(v, "app"); setOpens(v, []any{}) },
 	} {
 		if h(mut) == base {
 			t.Errorf("%s did not move the hash", name)
@@ -849,7 +849,7 @@ func TestN3PublishedManifestsCarryNoOpensOrAliases(t *testing.T) {
 	plain := func(v map[string]any) {
 		v["kinds"] = []any{}
 		v["uses_kinds"] = []any{}
-		v["opens"] = []any{}
+		setOpens(v, []any{})
 		v["app"].(map[string]any)["aliases"] = []any{}
 	}
 	if _, err := parseAs(t, OriginPublished, func(v map[string]any) { v["kinds"] = []any{}; v["uses_kinds"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
@@ -860,7 +860,7 @@ func TestN3PublishedManifestsCarryNoOpensOrAliases(t *testing.T) {
 	}
 	if _, err := parseAs(t, OriginPublished, func(v map[string]any) {
 		plain(v)
-		v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"zz"}}}
+		setOpens(v, []any{map[string]any{"media_type": "a/b", "extensions": []any{"zz"}}})
 	}); !errors.Is(err, ErrInvalidManifest) {
 		t.Errorf("published opens: %v", err)
 	}
@@ -951,7 +951,7 @@ func TestAppBlockIsValidatedInGo(t *testing.T) {
 	}
 	for name, mut := range cases {
 		for _, origin := range []string{OriginFirstParty, OriginPublished} {
-			if _, err := parseAs(t, origin, func(v map[string]any) { mut(v); v["opens"] = []any{}; app(v)["aliases"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
+			if _, err := parseAs(t, origin, func(v map[string]any) { mut(v); setOpens(v, []any{}); app(v)["aliases"] = []any{} }); !errors.Is(err, ErrInvalidManifest) {
 				t.Errorf("%s (%s): %v", name, origin, err)
 			}
 		}

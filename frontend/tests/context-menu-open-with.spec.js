@@ -34,7 +34,7 @@ const frontendRoot = path.resolve(__dirname, '..');
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
-// ---- O1: the manifest's "opens" ----
+// ---- O1: the manifest's contributes.opens (top level before SDK 2.0.0) ----
 
 function makeFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'choir-openwith-'));
@@ -52,7 +52,7 @@ function deckManifest(name, opens) {
   m.name = name;
   m.display = { title: 'Deck', icon: '🎞️', description: 'Deck player' };
   m.app.theme = { ...m.app.theme, shellDataAttr: `data-${name}-window` };
-  m.opens = opens;
+  m.contributes = { ...(m.contributes || {}), opens };
   return m;
 }
 
@@ -92,8 +92,8 @@ test.describe('manifest "opens" with default', () => {
     writePackage(root, 'deck2', deckManifest('deck2', [{ media_type: PPTX, extensions: ['.pptx'], default: false }]));
     const r = runCheck(root);
     expect(r.code).toBe(1);
-    expect(r.out).toMatch(/deck\/choir-package\.json opens\[0\]: default must be a boolean/);
-    expect(r.out).toMatch(/deck2\/choir-package\.json opens\[0\]: extensions must be/);
+    expect(r.out).toMatch(/deck\/choir-package\.json contributes\.opens\[0\]: default must be a boolean/);
+    expect(r.out).toMatch(/deck2\/choir-package\.json contributes\.opens\[0\]: extensions must be/);
   });
 });
 

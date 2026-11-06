@@ -54,8 +54,6 @@ function scriptFiles(frontendRoot) {
     'package-boundary-plugin.mjs': path.join(frontendRoot, 'scripts/package-boundary-plugin.mjs'),
     'css-fetch-functions.json': path.join(frontendRoot, 'scripts/css-fetch-functions.json'),
   };
-  const legacy = path.join(frontendRoot, 'src/lib/sdk-surface/legacy-events.json');
-  if (fs.existsSync(legacy)) files['legacy-events.json'] = legacy;
   return files;
 }
 
@@ -81,7 +79,12 @@ export function basePackages(frontendRoot = FRONTEND_ROOT) {
   for (const name of fs.readdirSync(dir).sort()) {
     const manifestFile = path.join(dir, name, 'choir-package.json');
     if (!fs.existsSync(manifestFile)) continue;
-    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    let manifest;
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    } catch {
+      continue; // check-packages refuses it in the build; the shell skips it
+    }
     if (manifest && typeof manifest.app === 'object' && manifest.app) out.push({ name, dir: path.join(dir, name), manifest });
   }
   return out;
@@ -94,7 +97,7 @@ export function basePackages(frontendRoot = FRONTEND_ROOT) {
  * input is the same (B2).
  */
 export async function buildBaseModule({ name, dir, manifest }, { frontendRoot = FRONTEND_ROOT, cacheDir } = {}) {
-  const requiresSdk = manifest?.app?.requires_sdk || '^1.0';
+  const requiresSdk = manifest?.app?.requires_sdk || '^2.0';
   const scripts = scriptFiles(frontendRoot);
   const key = createHash('sha256');
   key.update(`${name}\0${requiresSdk}\0${treeDigest(dir)}\n`);
@@ -132,8 +135,13 @@ export async function buildBaseModule({ name, dir, manifest }, { frontendRoot = 
   }
 }
 
-/** buildBaseModules builds every app package, a few at a time. */
-export async function buildBaseModules({ frontendRoot = FRONTEND_ROOT, cacheDir } = {}) {
+/**
+ * buildBaseModules builds every app package, a few at a time. `tolerant` (the
+ * dev server) leaves a package that fails out with a console note, so one
+ * broken package being edited never takes the dev shell down; the build is
+ * never tolerant (B1).
+ */
+export async function buildBaseModules({ frontendRoot = FRONTEND_ROOT, cacheDir, tolerant = false } = {}) {
   const pkgs = basePackages(frontendRoot);
   const width = Math.max(1, Math.min(6, Math.floor(os.cpus().length / 2)));
   const results = new Array(pkgs.length);
@@ -142,11 +150,16 @@ export async function buildBaseModules({ frontendRoot = FRONTEND_ROOT, cacheDir 
   const worker = async () => {
     while (next < pkgs.length) {
       const i = next++;
-      results[i] = await buildBaseModule(pkgs[i], { frontendRoot, cacheDir });
+      try {
+        results[i] = await buildBaseModule(pkgs[i], { frontendRoot, cacheDir });
+      } catch (err) {
+        if (!tolerant) throw err;
+        console.warn(`[base-modules] ${pkgs[i].name} left out: ${String(err.message).split('\n')[0]}`);
+      }
     }
   };
   await Promise.all(Array.from({ length: width }, worker));
-  return results;
+  return results.filter(Boolean);
 }
 
 /** The Vite plugin: builds the base modules, emits them, and answers the virtual module. */
@@ -155,7 +168,7 @@ export default function baseModules({ root = FRONTEND_ROOT } = {}) {
   let command = 'build';
   const cacheDir = path.join(root, 'node_modules/.cache/choir-base-modules');
   const ensure = () => {
-    if (!built) built = buildBaseModules({ frontendRoot: root, cacheDir });
+    if (!built) built = buildBaseModules({ frontendRoot: root, cacheDir, tolerant: command === 'serve' });
     return built;
   };
   return {
@@ -176,6 +189,19 @@ export default function baseModules({ root = FRONTEND_ROOT } = {}) {
       return `export default ${JSON.stringify(list)};\n`;
     },
     configureServer(server) {
+      // A package added, edited or removed: build again and reload the shell.
+      const packagesDir = path.join(root, 'src/packages') + path.sep;
+      let timer = null;
+      server.watcher.on('all', (_event, file) => {
+        if (!String(file).startsWith(packagesDir)) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          built = null;
+          const mod = server.moduleGraph.getModuleById(RESOLVED);
+          if (mod) server.moduleGraph.invalidateModule(mod);
+          server.ws.send({ type: 'full-reload' });
+        }, 200);
+      });
       // B3: the dev server serves the same bytes at the same URL.
       server.middlewares.use(async (req, res, next) => {
         const m = /^\/assets\/packages\/([0-9a-f]{64})\.js$/.exec((req.url || '').split('?')[0]);

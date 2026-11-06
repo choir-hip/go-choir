@@ -10,7 +10,7 @@
   "app": {
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
-    "requires_sdk": "^1.1",
+    "requires_sdk": "^2.0",
     "aliases": [],
     "launcher": {
       "menu": true,
@@ -38,24 +38,24 @@
       "contentClass": "audio-content"
     }
   },
-  "opens": [
-    {
-      "media_type": "audio/mpeg",
-      "extensions": [
-        "mp3",
-        "m4a",
-        "aac",
-        "ogg",
-        "oga",
-        "wav",
-        "flac",
-        "opus"
-      ]
-    }
-  ],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
+    "opens": [
+      {
+        "media_type": "audio/mpeg",
+        "extensions": [
+          "mp3",
+          "m4a",
+          "aac",
+          "ogg",
+          "oga",
+          "wav",
+          "flac",
+          "opus"
+        ]
+      }
+    ],
     "desks": []
   },
   "capabilities": []

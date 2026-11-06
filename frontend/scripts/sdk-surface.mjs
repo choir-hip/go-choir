@@ -169,8 +169,6 @@ export function extractSurface({ frontendRoot = DEFAULT_ROOT, sdkFile = path.joi
     names: sortObject(names),
     types: sortObject(types),
   };
-  const legacy = readLegacyEvents(frontendRoot);
-  if (legacy) surface.legacy_events = legacy;
   const sections = readSections(frontendRoot);
   if (sections) surface.sections = sections;
   surface.digest = surfaceDigest(surface);
@@ -209,17 +207,6 @@ function flattenSections(sections) {
   for (const [k, type] of Object.entries(sections?.props || {})) put(`props.${k}`, type);
   for (const [name, grant] of Object.entries(sections?.grants || {})) put(`grants.${name}`, grant);
   return out;
-}
-
-/** The events an app may still dispatch (src/lib/sdk-surface/legacy-events.json), or null before 1.1.0. */
-export function readLegacyEvents(frontendRoot = DEFAULT_ROOT) {
-  const file = path.join(frontendRoot, LOCK_REL, 'legacy-events.json');
-  if (!existsSync(file)) return null;
-  const events = JSON.parse(readFileSync(file, 'utf8')).events;
-  if (!Array.isArray(events) || events.some((e) => !/^[a-z]{3,40}$/.test(e)) || new Set(events).size !== events.length) {
-    throw new Error(`${path.relative(frontendRoot, file)}: events must be a list of distinct lowercase names`);
-  }
-  return [...events].sort();
 }
 
 function sortObject(obj) {
@@ -324,7 +311,8 @@ export function compareSurfaces(before, after, { frontendRoot = DEFAULT_ROOT } =
   visit('types', 'type ');
   const verdicts = compatibility(pairs, frontendRoot);
   for (const p of pairs) changed.push({ name: p.key, kind: p.kind, need: verdicts[p.key], before: p.old, after: p.new });
-  // The events an app may dispatch: one leaving breaks the apps that send it (major); one joining is new (minor).
+  // The events an app could dispatch (locks 1.1.0 to 1.6.0; 2.0.0 deleted them):
+  // one leaving breaks the apps that send it (major); one joining is new (minor).
   if (before.legacy_events || after.legacy_events) {
     const a = new Set(before.legacy_events || []);
     const b = new Set(after.legacy_events || []);
@@ -503,7 +491,7 @@ export function lockHistory({ base, dir = lockDir() }) {
   for (const line of diff.stdout.split('\n').filter(Boolean)) {
     const [status, file] = line.split('\t');
     // Only the version locks (MAJOR.MINOR.PATCH.json) are history; sections.json,
-    // grants.json and legacy-events.json are inputs the next lock is written from.
+    // and grants.json are inputs the next lock is written from.
     if (!/(^|\/)\d+\.\d+\.\d+\.json$/.test(file)) continue;
     out.changed.push(`${status} ${file}`);
     if (status !== 'A') {

@@ -11,7 +11,7 @@
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
     "aliases": [],
-    "requires_sdk": "^1.1",
+    "requires_sdk": "^2.0",
     "launcher": { "menu": true, "desktopIcon": true, "order": 10 },
     "window": {
       "singleton": true,
@@ -24,7 +24,6 @@
       "contentClass": "files-content"
     }
   },
-  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": { "desks": [] },

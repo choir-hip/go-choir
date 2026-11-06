@@ -1,11 +1,12 @@
 <script>
+  import { requireAuth as shellRequireAuth } from '../../lib/app-sdk';
   // Library: an app store. Every app listed here has screenshots and can be
   // installed on this computer. A card is an app and the person who made it
   // (shown by their account email); an app opens as one page with its
   // screenshots, what it promised and a plain Install button. Nothing here
   // shows an id: the catalog, the install route and the install list are the
   // platform's, read through app-sdk's renewing fetch.
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
   import { fetchWithRenewal, onWindowEvent } from '../../lib/app-sdk';
   import Icon from './Icon.svelte';
   import {
@@ -35,8 +36,6 @@
     versionLabel,
   } from './catalog';
   import './library.css';
-
-  const dispatch = createEventDispatcher();
 
   export let authenticated = false;
   export let appContext = {};
@@ -365,7 +364,7 @@
   }
 
   function reportAuth(kind) {
-    dispatch('authrequired', { kind, appId: 'library-next', appName: 'Library' });
+    shellRequireAuth({ kind, appId: 'library-next', appName: 'Library' });
   }
 
   function messageOf(err) {

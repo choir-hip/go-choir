@@ -7,7 +7,6 @@
     "icon": "☰",
     "description": "The default context menu: keyboard, submenus and the theme's tokens"
   },
-  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
@@ -19,7 +18,7 @@
       "service": "contextMenu.renderer",
       "abi": "choir.service/contextMenu.renderer/v1",
       "entry": "Menu.surface.svelte",
-      "requires_sdk": "^1.4",
+      "requires_sdk": "^2.0",
       "priority": 10
     }
   ]

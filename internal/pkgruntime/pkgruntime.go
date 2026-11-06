@@ -48,13 +48,6 @@ var buildScript []byte
 //go:embed package-boundary-plugin.mjs
 var boundaryPlugin []byte
 
-// legacyEvents is the events list the module shim forwards (SDK 1.1.0: one
-// source, frontend/src/lib/sdk-surface/legacy-events.json, which the SDK lock
-// records; a test keeps this copy equal).
-//
-//go:embed legacy-events.json
-var legacyEvents []byte
-
 // cssFetchFunctions is the list of CSS functions that fetch, which the boundary
 // plugin's CSS gate reads beside itself (frontend/scripts/css-fetch-functions.json,
 // shared with the theme gate; a test keeps this copy equal).
@@ -176,7 +169,7 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 		return Module{}, fmt.Errorf("pkgruntime: requires_sdk %q is not ^MAJOR.MINOR", requires)
 	}
 	front := filepath.Join(tree, "frontend")
-	for name, body := range map[string][]byte{"build-module.mjs": buildScript, "package-boundary-plugin.mjs": boundaryPlugin, "legacy-events.json": legacyEvents, "css-fetch-functions.json": cssFetchFunctions} {
+	for name, body := range map[string][]byte{"build-module.mjs": buildScript, "package-boundary-plugin.mjs": boundaryPlugin, "css-fetch-functions.json": cssFetchFunctions} {
 		if err := os.WriteFile(filepath.Join(front, name), body, 0o444); err != nil {
 			return Module{}, err
 		}

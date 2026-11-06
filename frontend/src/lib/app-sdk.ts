@@ -41,9 +41,10 @@ export { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, l
 // the session cannot be renewed.
 export { AuthRequiredError, fetchWithRenewal } from './auth.js';
 
-// The app registry: which app opens which file kind (Open with).
-export { PACKAGE_MEDIA_ROUTES, getAppDefinition } from './apps/registry';
-export type { PackageMediaRoute } from './apps/packages';
+// The app registry: an app's definition (name, icon, window). Which app opens
+// which file kind is answered by openersForFile and extensionsOpenedBy below
+// (2.0.0 removed the derived PACKAGE_MEDIA_ROUTES list).
+export { getAppDefinition } from './apps/registry';
 
 // Context menus: right-click, long press on touch, Shift+F10 and the Menu key.
 export {
@@ -75,10 +76,11 @@ export {
 } from './file-upload';
 export type { DropZoneOptions, UploadFailure, UploadOptions } from './file-upload';
 
-// Shell functions (1.1.0): what an app asks of the shell. They replace the
+// Shell functions (1.1.0): what an app asks of the shell. They replaced the
 // events an app dispatched (authexpired, authrequired, launchapp, opentextfile,
 // openmediafile, opentexture, contextchange, clearsavedwindows, keepwindowonly,
-// resetdesktop, opencomputemonitor), which stay forwarded until 2.0.0.
+// resetdesktop, opencomputemonitor); 2.0.0 (X1) deleted the events, and the
+// shell forwards none.
 export {
   buildInfo,
   closeOtherWindows,
@@ -100,6 +102,7 @@ export {
 export type {
   AppContextChange,
   AuthRequest,
+  OpenFileOptions,
   OpenAppContext,
   PromptFocus,
   PromptOptions,

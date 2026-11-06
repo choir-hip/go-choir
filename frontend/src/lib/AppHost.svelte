@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
   import AppSurface from './apps/AppSurface.svelte';
   import { getAppDefinition, registryRevision, type ChoirAppDefinition } from './apps/registry';
   import type { ComponentType } from 'svelte';
@@ -7,14 +6,11 @@
   import { writable } from 'svelte/store';
   import { provideLaunchContext } from './launch-file';
   import { providePackageIdentity } from './package-identity';
-  import legacyEvents from './sdk-surface/legacy-events.json';
 
   export let win: any;
   export let currentUser: any = null;
   export let authenticated = false;
   export let theme: any = null;
-
-  const dispatch = createEventDispatcher();
 
   let loadedApp: ChoirAppDefinition | null = null;
   let Component: ComponentType | null = null;
@@ -63,24 +59,8 @@
     window.location.reload();
   }
 
-  // The events an app dispatches to the shell (SDK 1.1.0 functions replace them;
-  // 2.0.0 deletes the list). One source: sdk-surface/legacy-events.json, the
-  // same list the lock records and the installed-package shim carries.
-  let instance: any = null;
-  let offs: Array<() => void> = [];
-  $: bindForwards(instance);
-
-  function bindForwards(component: any) {
-    offs.forEach((off) => off());
-    offs = component && typeof component.$on === 'function'
-      ? legacyEvents.events.map((type: string) => component.$on(type, (event: CustomEvent) => forward(type, event)))
-      : [];
-  }
-  onDestroy(() => offs.forEach((off) => off()));
-
-  function forward(type: string, event: CustomEvent) {
-    dispatch(type, event.detail || {});
-  }
+  // An app asks the shell through the SDK's functions (lib/shell-services.ts);
+  // SDK 2.0.0 deleted the forwarded events, so the host listens to nothing.
 </script>
 
 {#if app}
@@ -93,7 +73,6 @@
         {authenticated}
         {appContext}
         currentTheme={theme}
-        bind:this={instance}
       />
     {:else if loadError}
       <div class="app-load-state app-load-error" role="alert">

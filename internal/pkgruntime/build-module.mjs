@@ -74,9 +74,6 @@ export const __sdk = new Proxy({}, {
 `);
 
 const ENTRY_ID = '\0choir-module-entry';
-// The forwarded events: one list (the SDK lock's legacy_events), laid out
-// beside this script as legacy-events.json by the Go side.
-const EVENTS = JSON.parse(readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'legacy-events.json'), 'utf8')).events;
 
 const sdkImports = new Set();
 
@@ -96,7 +93,6 @@ export const abi = 'choir.app-frontend/module/v1';
 export const requires_sdk = ${JSON.stringify(requiresSdk)};
 export const sdk_imports = "__CHOIR_SDK_IMPORTS__";
 const STYLE = "__CHOIR_CSS__";
-const EVENTS = ${JSON.stringify(EVENTS)};
 export function mount(target, ctx) {
   bindSdk(ctx && ctx.sdk);
   let style = null;
@@ -108,10 +104,9 @@ export function mount(target, ctx) {
   }
   const context = new Map([[Symbol.for('choir.launch-context'), ctx && ctx.launchContext]]);
   const app = new App({ target, props: (ctx && ctx.props) || {}, context });
-  const offs = EVENTS.map((type) => app.$on(type, (event) => ctx && ctx.dispatch && ctx.dispatch(type, event.detail)));
   return {
     update(props) { app.$set(props); },
-    destroy() { offs.forEach((off) => off()); app.$destroy(); if (style) style.remove(); },
+    destroy() { app.$destroy(); if (style) style.remove(); },
   };
 }
 `;

@@ -20,6 +20,7 @@ import { installTetraMarkFavicon } from './lib/tetramark';
 import baseModules from 'virtual:choir-base-packages';
 import * as appSdk from './lib/app-sdk';
 import { loadPackageModule, MODULE_ABI } from './lib/apps/packages';
+import { bindShellHost } from './lib/shell-services';
 
 applyThemeToElement(document.documentElement, DEFAULT_THEME);
 installTetraMarkFavicon();
@@ -38,6 +39,7 @@ if (signIn) {
 // the Reader asks the shell for one. This page has no shell: sign-in lives on
 // the desktop, so the request goes there.
 const toDesktop = () => window.location.assign('/');
+bindShellHost({ requireAuth: toDesktop });
 
 async function mountReader() {
   const mod = baseModules.find((m) => m.name === 'reader');
@@ -59,9 +61,6 @@ async function mountReader() {
     windowId: '',
     props: { authenticated: false },
     launchContext: null,
-    dispatch: (type) => {
-      if (type === 'authrequired') toDesktop();
-    },
   });
 }
 

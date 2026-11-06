@@ -7,7 +7,6 @@
     "icon": "🗂",
     "description": "The app icons on the desktop surface"
   },
-  "opens": [],
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
@@ -19,7 +18,7 @@
       "service": "desktop.icons",
       "abi": "choir.service/desktop.icons/v1",
       "entry": "DesktopIcons.surface.svelte",
-      "requires_sdk": "^1.4"
+      "requires_sdk": "^2.0"
     }
   ]
 }

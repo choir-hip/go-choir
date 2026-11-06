@@ -12,7 +12,6 @@
     "auth": { "preview": "private" },
     "theme": { "surface": "standard", "shellDataAttr": "data-p2btest", "contentClass": "p2btest-content" }
   },
-  "opens": [{ "media_type": "application/x-p2btest", "extensions": ["p2b"] }],
   "kinds": [
     {
       "kind": "choir.app.p2btest.note",
@@ -44,6 +43,6 @@
     }
   ],
   "uses_kinds": ["choir.content_item"],
-  "contributes": { "desks": [] },
+  "contributes": { "desks": [], "opens": [{ "media_type": "application/x-p2btest", "extensions": ["p2b"] }] },
   "capabilities": []
 }

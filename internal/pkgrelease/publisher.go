@@ -206,7 +206,7 @@ func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 	}
 	summary := Manifest{
 		SHA256: computerevent.DigestBytes(raw), Schema: manifest.Schema,
-		KindsCount: len(manifest.Kinds), OpensCount: len(manifest.Opens), DesksCount: len(manifest.Contributes.Desks),
+		KindsCount: len(manifest.Kinds), OpensCount: len(manifest.Contributes.Opens), DesksCount: len(manifest.Contributes.Desks),
 		Class: string(manifest.Class()), Level: string(manifest.Level()), BehaviourSurface: surface,
 	}
 	if manifest.App != nil {

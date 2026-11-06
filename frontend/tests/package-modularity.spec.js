@@ -280,7 +280,7 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       schema: 'choir.package/v2', name, version: '1.0.0',
       display: { title: name, icon: 'F', description: 'Contract fixture' },
       app: {
-        entry: 'App.svelte', abi: 'choir.app-frontend/svelte-inline/v1', aliases: [],
+        entry: 'App.svelte', abi: 'choir.app-frontend/svelte-inline/v1', aliases: [], requires_sdk: '^2.0',
         launcher: { menu: true, desktopIcon: false, order: 950 }, window: { singleton: false, heavy: false },
         auth: { preview: 'private' }, theme: { surface: 'standard', shellDataAttr: `data-${name}-window`, contentClass: `${name}-content` },
         ...extra,
@@ -303,6 +303,8 @@ test.describe('modularity: the SDK lock and every package contract', () => {
     fixture('fx-late-throw', `<script>import { onMount } from 'svelte'; onMount(() => { setTimeout(() => { throw new Error('fixture throws later'); }, 50); });</script>\n<section data-fixture-app><p data-fixture-title>Fixture</p></section>\n`);
     fixture('fx-no-name', `<script>import { noSuchSdkName } from '../../lib/app-sdk';</script>\n<section data-fixture-app><p data-fixture-title>Fixture {noSuchSdkName}</p></section>\n`);
     fixture('fx-future-sdk', GOOD, { extra: { requires_sdk: '^9.0' } });
+    // X1: a package written for SDK 1.x that still dispatches a legacy event: 2.0.0 deleted the events, so the shell refuses it.
+    fixture('fx-legacy-event', `<script>import { createEventDispatcher } from 'svelte'; const dispatch = createEventDispatcher(); dispatch('authexpired');</script>\n<section data-fixture-app><p data-fixture-title>Fixture</p></section>\n`, { extra: { requires_sdk: '^1.4' } });
     const FETCHES = `<script>import { onMount } from 'svelte'; import { fetchWithRenewal } from '../../lib/app-sdk'; onMount(() => { fetchWithRenewal('/api/fixture/data').catch(() => {}); });</script>\n<section data-fixture-app><p data-fixture-title>Fixture</p></section>\n`;
     fixture('fx-unanswered', FETCHES);
     fixture('fx-allowed', FETCHES, { more: { allow_unanswered: [{ request: 'GET /api/fixture/data', reason: 'the fixture renders without its data' }] } });
@@ -329,8 +331,9 @@ test.describe('modularity: the SDK lock and every package contract', () => {
       expect(problems('fx-late-throw')).toMatch(/uncaught: .*fixture throws later/);
       expect(problems('fx-no-name')).toMatch(/state refused\).*uses SDK names this shell lacks: noSuchSdkName/);
       expect(problems('fx-future-sdk')).toMatch(/state refused\).*needs SDK \^9\.0; this shell has \d+\.\d+\.\d+/);
+      expect(problems('fx-legacy-event')).toMatch(/state refused\).*needs SDK \^1\.4; this shell has 2\.\d+\.\d+/);
       // A refused or failed app never takes the shell down with it.
-      for (const n of ['fx-throws', 'fx-no-name', 'fx-future-sdk']) expect(by[n].modes.installed.boot_errors).toEqual([]);
+      for (const n of ['fx-throws', 'fx-no-name', 'fx-future-sdk', 'fx-legacy-event']) expect(by[n].modes.installed.boot_errors).toEqual([]);
       for (const n of Object.keys(by).filter((k) => !['fx-good', 'fx-allowed', 'fx-stubbed'].includes(k))) expect(by[n].pass, n).toBe(false);
       parts.checks.runner_negative = {
         pass: true,

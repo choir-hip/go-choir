@@ -1,6 +1,6 @@
 {
   "schema": "choir.sdk-sections/v1",
-  "note": "What packages can rely on beside the SDK's names: the pipelines (name and payload type), the services (ABI ids), the contributes keys (their entry schemas and the when keys), the mount ctx, the props an app window is mounted with (SDK 1.6.0, M5), and the SDK names that imply a grant (every shell-wide function implies ui.shell, the one grant the plan settles for the whole shell; plan section 11). Each lock records it as `sections` (SDK 1.2.0, slice U1). scripts/sdk-surface.mjs diffs it: adding an entry is a minor change, removing or retyping one is a major change. The static `uses` check reads the same file. Design notes: a single grant (ui.shell) covers the whole shell on purpose; the mutation-bearing helpers beside it (uploads, content items, media state, live events, fetchWithRenewal, context menus) imply nothing and rely on backend authority until the Phase 6 bridge refines this table, which it reads literally. uses are compared with capabilities in the in-tree build only (check-packages); the installed path does not check them until Phase 6.",
+  "note": "What packages can rely on beside the SDK's names: the pipelines (name and payload type), the services (ABI ids), the contributes keys (their entry schemas and the when keys), the mount ctx (2.0.0 removed dispatch with the forwarded events), the props an app window is mounted with (SDK 1.6.0, M5), and the SDK names that imply a grant (every shell-wide function implies ui.shell; SDK 2.0.0 leaves out the five a window asks of the shell for itself, openApp, openFile, requireAuth, sessionExpired and setAppContext, which replaced the forwarded events every app could send with no grant, the one grant the plan settles for the whole shell; plan section 11). Each lock records it as `sections` (SDK 1.2.0, slice U1). scripts/sdk-surface.mjs diffs it: adding an entry is a minor change, removing or retyping one is a major change. The static `uses` check reads the same file. Design notes: a single grant (ui.shell) covers the whole shell on purpose; the mutation-bearing helpers beside it (uploads, content items, media state, live events, fetchWithRenewal, context menus) imply nothing and rely on backend authority until the Phase 6 bridge refines this table, which it reads literally. uses are compared with capabilities in the in-tree build only (check-packages); the installed path does not check them until Phase 6.",
   "pipelines": {
     "commands.resolve": {
       "payload": "{ commands: CommandEntry[]; context: Record<string, unknown> }"
@@ -33,23 +33,26 @@
     "commands": {
       "entry": "{ id: string; title: string; scope: 'global' | 'app' | `target:${string}`; run: { action: 'openApp' | 'openFile' | 'copyText' | 'setTheme' | 'toast' } | { handler: true }; when?: string }"
     },
+    "desks": {
+      "entry": "reserved"
+    },
     "keybindings": {
       "entry": "{ key: string; command: string; when?: string }"
-    },
-    "themes": {
-      "entry": "{ id: string; file: string }"
     },
     "links": {
       "entry": "{ app: string; params: { name: string; required?: boolean; context?: string }[]; launch?: { windowTitle?: string; requireAny?: string[]; context?: Record<string, string | number | boolean> } }"
     },
-    "settings": {
-      "entry": "{ section: string; fields: { key: string; type: 'boolean' | 'string' | 'number'; default: unknown; label: string; enum?: string[] }[] }"
-    },
     "menus": {
       "entry": "{ target: string; command: string; group?: string; order?: number; when?: string }"
     },
-    "desks": {
-      "entry": "reserved"
+    "opens": {
+      "entry": "{ media_type: string; extensions: string[]; default?: boolean }"
+    },
+    "settings": {
+      "entry": "{ section: string; fields: { key: string; type: 'boolean' | 'string' | 'number'; default: unknown; label: string; enum?: string[] }[] }"
+    },
+    "themes": {
+      "entry": "{ id: string; file: string }"
     },
     "when_keys": [
       "overview.open",
@@ -59,7 +62,6 @@
     ]
   },
   "ctx": [
-    "dispatch",
     "launchContext",
     "package",
     "props",
@@ -72,13 +74,8 @@
     "focus": "ui.shell",
     "listWindows": "ui.shell",
     "logout": "ui.shell",
-    "openApp": "ui.shell",
-    "openFile": "ui.shell",
-    "requireAuth": "ui.shell",
     "resetDesktop": "ui.shell",
     "restore": "ui.shell",
-    "sessionExpired": "ui.shell",
-    "setAppContext": "ui.shell",
     "setTheme": "ui.shell",
     "showDesktop": "ui.shell",
     "showOverview": "ui.shell",

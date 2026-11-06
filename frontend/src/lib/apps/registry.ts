@@ -84,7 +84,8 @@ const contributedFingerprints = new Map<string, string>();
 
 export const APP_REGISTRY: ChoirAppDefinition[] = [...STATIC_APPS, ...PACKAGES.apps];
 
-// File routes contributed by packages' `opens`; media-utils.js consults them first.
+// File routes contributed by packages' `contributes.opens`; media-utils.js consults them first.
+// The shell's own (2.0.0 took it out of the SDK; a package asks openersForFile).
 export const PACKAGE_MEDIA_ROUTES = PACKAGES.mediaRoutes;
 
 export function normalizeAppId(appId: string): string {

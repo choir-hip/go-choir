@@ -42,7 +42,7 @@ test('R3: the clash gate reads the table, and refuses a package that claims a st
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'));
   const manifestPath = path.join(dir, 'src/packages/image/choir-package.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  manifest.opens.push({ media_type: 'audio/mpeg', extensions: ['mp3'] });
+  manifest.contributes.opens.push({ media_type: 'audio/mpeg', extensions: ['mp3'] });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   // The shell's table holds no click route of its own now (every app is a package): the copy gets one.
   const tablePath = path.join(dir, 'src/lib/file-routes.json');

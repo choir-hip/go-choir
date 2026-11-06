@@ -1,5 +1,6 @@
 <script>
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { sessionExpired as shellSessionExpired, setAppContext as shellSetAppContext } from '../../lib/app-sdk';
+  import { onMount, tick } from 'svelte';
   import {
     appTitle,
     clampNumber,
@@ -18,7 +19,6 @@
   export let windowId = '';
 
   const kind = 'image';
-  const dispatch = createEventDispatcher();
 
   let item = appContext?.contentItem || null;
   let loading = false;
@@ -76,7 +76,7 @@
     const result = await loadContextContentItem(effectiveContext, item, appTitle(kind));
     loading = false;
     if (result.authRequired) {
-      dispatch('authexpired');
+      shellSessionExpired();
       return;
     }
     if (result.error) {
@@ -90,7 +90,7 @@
     selectedContext = recentMediaAppContext(entry);
     item = null;
     error = '';
-    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    shellSetAppContext({ windowId, appContext: selectedContext, title: selectedContext.windowTitle });
     await tick();
     await loadContentItem();
   }
