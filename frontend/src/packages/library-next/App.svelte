@@ -22,12 +22,14 @@
     loadPackageReleases,
     loadPackages,
     loadRelease,
+    loadReputation,
     mediaOf,
     outcomeLabel,
     plainReason,
     precommitmentsOf,
     predictionLabel,
     releaseIdOf,
+    reputationSentences,
     seqOf,
     sortedByNewest,
     versionLabel,
@@ -210,8 +212,25 @@
     void loadApp(pkg);
   }
 
+  // The maker's record on this computer (MA7.6): sentences with their n.
+  let reputation = { sentences: [], loaded: false, failed: false };
+
+  function loadMakerRecord(pkg, gen) {
+    reputation = { sentences: [], loaded: false, failed: false };
+    const publisher = pkg && pkg.track;
+    if (!publisher) return;
+    loadReputation(publisher)
+      .then((body) => {
+        if (gen === pageGeneration) reputation = { sentences: reputationSentences(body), loaded: true, failed: false };
+      })
+      .catch(() => {
+        if (gen === pageGeneration) reputation = { sentences: [], loaded: true, failed: true };
+      });
+  }
+
   async function loadApp(pkg) {
     const gen = ++pageGeneration;
+    loadMakerRecord(pkg, gen);
     try {
       const [head, history] = await Promise.all([
         loadRelease(pkg.head_release_id),
@@ -560,6 +579,21 @@
               </ul>
             {:else}
               <p class="lib-note">The maker made no promises about this version.</p>
+            {/if}
+            <h3 class="lib-h3" data-maker-record-title>The maker's record on this computer</h3>
+            {#if reputation.sentences.length}
+              <ul class="lib-rep" data-maker-record>
+                {#each reputation.sentences as sentence, index (index)}
+                  <li class="lib-rep-line" data-maker-sentence data-n={sentence.n}>
+                    <span>{sentence.text}</span>
+                    <span class="lib-rep-n" data-maker-n>n = {sentence.n}</span>
+                  </li>
+                {/each}
+              </ul>
+            {:else if reputation.failed}
+              <p class="lib-note" data-maker-record-error>The maker's record could not be read right now.</p>
+            {:else if !reputation.loaded}
+              <p class="lib-note" data-maker-record-loading>Reading the maker's record…</p>
             {/if}
           </section>
 

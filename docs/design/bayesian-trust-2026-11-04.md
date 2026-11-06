@@ -488,6 +488,23 @@ never content, so the Library aggregates a publisher's record across installs
 without seeing anyone's data. Owner star ratings, if added later, are E6-weight
 evidence weighted by the rater's own record, never the headline.
 
+**As built (MA7.6, 2026-11-05; `internal/trust/reputation.go`,
+`internal/agentcore/package_reputation.go`, the Library's app page).**
+`GET /api/packages/reputation?publisher=<track>` answers a maker's record on
+the owner's computer as sentences, each with its n (no score, no stars, no
+mean): settled acts of the maker's installed packages' desks per class, the
+fidelity events among them, the sealed install review verdicts on its
+releases ("Reviewed: A of R accepted"), and settled review predictions. With
+nothing settled it says so with n = 0. The same outcomes come back as a
+bundle signed by the guest-core key (receipt kind `PublisherOutcomes`), and
+`trust.Aggregate` verifies bundles per computer key and counts each outcome
+once. The publisher id is the release's track (the maker's account); the
+Choir address is display only. Missing: (a) no route publishes signed bundles
+to the platform and corpusd does not aggregate them, so the Library shows
+this computer's record only; (b) a computer's guest-core public key is not
+yet served to a reader for `Aggregate`; (c) the count of packages a maker
+published is the catalog's and is not in the block yet.
+
 ## 9. Costs
 
 No spend ceiling (owner). Every model call is attributed to computer, desk,

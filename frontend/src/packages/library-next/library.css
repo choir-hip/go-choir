@@ -465,6 +465,29 @@
   font-size: 0.8rem;
 }
 
+.lib-rep {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lib-rep-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.lib-rep-n {
+  color: var(--choir-text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .lib-versions {
   border: 1px solid var(--choir-border);
   border-radius: var(--choir-radius-control-sm);

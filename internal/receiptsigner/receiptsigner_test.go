@@ -51,12 +51,19 @@ func TestGuestSignerScopesExecutionIdentityIssuer(t *testing.T) {
 	}
 }
 
-// MA7.5: the autoputer seals install review verdicts; the updater cannot.
+// MA7.5 and MA7.6: the autoputer seals install review verdicts and signs
+// publisher outcome bundles; the updater cannot.
 func TestGuestSignerScopesInstallReviewVerdictIssuer(t *testing.T) {
+	for _, kind := range []string{installReviewVerdictKind, publisherOutcomesKind} {
+		guestSignerScopesAutoputerKind(t, kind)
+	}
+}
+
+func guestSignerScopesAutoputerKind(t *testing.T, kind string) {
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	handler := testHandler(t, ModeGuestCore, now)
 	request := SignReceiptRequest{
-		ReceiptKind: installReviewVerdictKind, Issuer: "choir-autoputer", IssuedAt: now.Format(time.RFC3339Nano),
+		ReceiptKind: kind, Issuer: "choir-autoputer", IssuedAt: now.Format(time.RFC3339Nano),
 		KindFields: map[string]any{"computer_id": "computer-1", "record_id": "install-review-1", "verdict": "accept"},
 	}
 	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusOK {

@@ -105,6 +105,22 @@ export async function loadRelease(releaseId) {
   return requestJSON('/api/catalog/releases/' + encodeURIComponent(releaseId), { headers: { accept: 'application/json' } });
 }
 
+// loadReputation reads a maker's record on this computer (MA7.6): sentences,
+// each with the n it rests on, never a score. publisher is the release's
+// track (its maker's account); it is sent, never shown.
+export async function loadReputation(publisher) {
+  const path = '/api/packages/reputation?publisher=' + encodeURIComponent(String(publisher || ''));
+  return requestJSON(path, { headers: { accept: 'application/json' } });
+}
+
+// reputationSentences keeps the well-formed sentences of a reputation answer.
+export function reputationSentences(body) {
+  const list = body && Array.isArray(body.sentences) ? body.sentences : [];
+  return list
+    .filter((s) => s && typeof s.text === 'string' && s.text && Number.isInteger(Number(s.n)) && Number(s.n) >= 0)
+    .map((s) => ({ text: s.text, n: Number(s.n) }));
+}
+
 // loadInstalls reads what is installed on this computer.
 export async function loadInstalls(computerId) {
   const path = '/api/computers/' + encodeURIComponent(computerId) + '/packages/installs';

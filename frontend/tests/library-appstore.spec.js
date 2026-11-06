@@ -20,7 +20,10 @@
 //   S6  Install, Installed and Uninstall do not follow the install list;
 //   S7  the version history is open by default or labelled with an id;
 //   S8  the page scrolls sideways, or the Install button is below the first
-//       screen on a phone.
+//       screen on a phone;
+//   S9  the maker's record (MA7.6) shows a score, stars or a bare rate, a
+//       sentence without its n, or reads a maker with nothing settled as a
+//       record.
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -98,7 +101,7 @@ function world() {
       publisher_address: app.email, own: false,
     });
   });
-  return { releases, byTrack, entries, installs: [], posts: [] };
+  return { releases, byTrack, entries, installs: [], posts: [], reputationAsks: [] };
 }
 
 // answer routes the catalog and the install list for one page, statefully.
@@ -124,6 +127,18 @@ async function answerCatalog(page, w) {
     if (m) {
       const video = [...w.releases.values()].some((r) => r.media.some((i) => p.endsWith(i.sha256) && i.kind === 'video'));
       return route.fulfill({ status: 200, contentType: video ? 'video/webm' : 'image/png', body: video ? WEBM : PNG });
+    }
+    if (p === '/api/packages/reputation' && req.method() === 'GET') {
+      const who = url.searchParams.get('publisher');
+      w.reputationAsks.push(who);
+      if (who === hex(1)) {
+        return json({ publisher: who, n: 7, sentences: [
+          { text: 'ui.read.kind (I1): 5 of 6 settled acts within commitment.', n: 6 },
+          { text: 'No fidelity events in 6 settled acts.', n: 6 },
+          { text: 'Reviewed: 1 of 1 accepted.', n: 1 },
+        ] });
+      }
+      return json({ publisher: who, n: 0, sentences: [{ text: 'No settled outcomes for this maker yet.', n: 0 }] });
     }
     if (p === `/api/computers/${COMPUTER}/packages/installs`) {
       if (req.method() === 'GET') return json({ installs: w.installs });
@@ -260,6 +275,13 @@ test.describe('the Library is an app store', () => {
       expect(precText).toContain('Came true');
       expect(precText).toContain('Not settled yet');
       expect(precText).toContain('Did not come true');
+      // S9: the maker's record is sentences, each with its n; never a score.
+      const record = app.locator('[data-maker-record]');
+      await expect(record.locator('[data-maker-sentence]')).toHaveCount(3);
+      await expect(record).toContainText('Reviewed: 1 of 1 accepted.');
+      await expect(record.locator('[data-maker-n]')).toHaveText(['n = 6', 'n = 6', 'n = 1']);
+      expect(await record.innerText()).not.toMatch(/score|rating|stars|★|\d\s*\/\s*5\b/i);
+      expect(w.reputationAsks).toContain(hex(1));
 
       // S5: three screenshots to swipe, the video, a tap enlarges.
       const shots = app.locator('[data-shot]');
@@ -325,6 +347,11 @@ test.describe('the Library is an app store', () => {
       await content.locator('[data-back]').click();
       await content.locator('[data-package-row][data-package="files-next"]').nth(1).click();
       await expect(content.locator('[data-app-publisher]')).toHaveText('10000042@choir.news');
+      // S9: nothing settled is said so, with n = 0 and no rate.
+      await expect(content.locator('[data-maker-sentence]')).toHaveCount(1);
+      await expect(content.locator('[data-maker-sentence]')).toContainText('No settled outcomes for this maker yet.');
+      await expect(content.locator('[data-maker-n]')).toHaveText('n = 0');
+      expect(await content.locator('[data-maker-record]').innerText()).not.toMatch(/%/);
       await expect(content.locator('[data-versions]')).toHaveCount(0);
       const plain = await content.innerText();
       expect(plain).not.toMatch(HEX_RUN);

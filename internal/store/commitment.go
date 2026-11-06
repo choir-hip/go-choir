@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -95,6 +96,38 @@ func (s *Store) ListCommitmentRecords(ctx context.Context, ownerID, computerID, 
 		matches = append(matches, objectgraph.JSONFieldMatch{JSONPath: "$.addressee", Value: addressee})
 	}
 	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
+		}
+		records = append(records, rec)
+	}
+	return records, nil
+}
+
+// subjectRefKeyRe bounds the subject_refs key a list matches on.
+var subjectRefKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
+
+// ListCommitmentRecordsBySubjectRef lists commitment records for one
+// owner/computer whose subject_refs[key] is value (the install review's
+// records of one publisher, MA7.6).
+func (s *Store) ListCommitmentRecordsBySubjectRef(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, value = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(value)
+	if ownerID == "" || computerID == "" || value == "" || !subjectRefKeyRe.MatchString(key) {
+		return nil, fmt.Errorf("commitment record list by subject ref requires owner, computer, a key and a value")
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, []objectgraph.JSONFieldMatch{{JSONPath: "$.subject_refs." + key, Value: value}}, limit)
 	if err != nil {
 		return nil, err
 	}

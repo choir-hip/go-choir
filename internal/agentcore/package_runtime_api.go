@@ -15,6 +15,7 @@ import (
 //	GET /api/packages/installed              this computer's installed packages
 //	GET /api/packages/modules/<sha256>.js    one module, verified against its name
 //	GET /api/packages/files/<sha256>.json    one data file (a theme pack's theme)
+//	GET /api/packages/reputation?publisher=<track>  a publisher's track record as sentences (MA7.6)
 //
 // All are the owner's reads on their own computer (the proxy forwards
 // /api/* with the authenticated owner). A module is served only when an
@@ -87,6 +88,8 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	current := currentPackageInstalls(records)
 
 	switch {
+	case r.URL.Path == packagesReputationPath:
+		h.servePackageReputation(w, r, ownerID, computerID)
 	case r.URL.Path == packagesInstalledPath:
 		out := make([]InstalledPackage, 0, len(current))
 		for name, item := range current {
