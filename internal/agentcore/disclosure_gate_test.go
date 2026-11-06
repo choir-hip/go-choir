@@ -655,7 +655,9 @@ func TestAResearchAnswerCarryingTextureLabelsIsAdmittedByTheCustodian(t *testing
 // the recipient desk, the message kind and the labels, and changes no decision.
 func TestTheGateTalliesTheSiteOfAnObservedAsk(t *testing.T) {
 	f := newDisclosureFixture(t, "sites", 62840)
-	exec := f.run(t, "run-sites", f.desk, "x", types.OwnerPrivateLabel("document"))
+	// A system desk is decided in observe mode; a package desk is always
+	// enforced, so the fixture's app desk would block.
+	exec := f.run(t, "run-sites", agentprofile.Texture, "x", types.OwnerPrivateLabel("document"))
 	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
 	in := yaegikernel.StagedIntent{LocalID: "s1", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Management + ":inst-secret-1", Statement: "private body text"}
 	if err := r.gateMessageDisclosure(context.Background(), in); err != nil {
