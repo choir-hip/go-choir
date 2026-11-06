@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/installreview"
 	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"log"
 	"net/http"
@@ -550,6 +551,11 @@ type Runtime struct {
 	packageBuilder   PackageModuleBuilder
 	packageModules   pkgruntime.Store
 	packageInstallMu sync.Mutex
+	// The install review gate (MA7.5, install_review.go): the guest-core
+	// signer that seals verdicts, and the seats (nil: the Devin and DeepSeek
+	// roster on the gateway provider).
+	installReviewSigner installreview.Signer
+	installReviewSeats  map[string]installreview.Seat
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex

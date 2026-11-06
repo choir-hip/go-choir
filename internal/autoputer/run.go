@@ -558,6 +558,17 @@ func Run() {
 	if opt, ok := packageRuntimeOption(); ok {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: runtime package install wired")
+		// MA7.5: the guest-core signer seals install review verdicts; with
+		// none, a widened-ceiling install is refused (no verdict signer).
+		socket := strings.TrimSpace(os.Getenv("CHOIR_GUEST_SIGNER_SOCKET"))
+		if socket == "" {
+			socket = "/run/choir-signers/guest-core/signer.sock"
+		}
+		if verdicts, err := receiptsigner.NewClient(socket, receiptsigner.ModeGuestCore); err != nil {
+			log.Printf("autoputer: install review verdict signer unavailable: %v", err)
+		} else {
+			coreOpts = append(coreOpts, agentcore.WithInstallReviewSigner(verdicts))
+		}
 	}
 	if opt, ok, err := selfDevelopmentRouteOption(); err != nil {
 		boot.fatalf("autoputer: configure self-development route: %v", err)

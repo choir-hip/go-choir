@@ -194,6 +194,12 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if !pack && (module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0) {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "package_build_failed", "the builder returned no module/v1 module")
 	}
+	// The install review gate (MA7.5): a widened ceiling stores its module
+	// and records only with a sealed accepting verdict for exactly these
+	// bytes.
+	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, module, current); refusal != nil {
+		return PackageInstallView{}, false, refusal
+	}
 	sha := ""
 	if !pack {
 		if sha, err = rt.packageModules.Put(module.Bytes); err != nil {

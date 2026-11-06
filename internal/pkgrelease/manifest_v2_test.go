@@ -109,6 +109,11 @@ func TestRecordRefusesWhatTheManifestSummaryMayNotClaim(t *testing.T) {
 	if err := mod(func(*Manifest) {}); err != nil {
 		t.Fatal(err)
 	}
+	// MA7.5: an extended release is a valid record; its install waits on a
+	// sealed install review verdict on the computer (internal/installreview).
+	if err := mod(func(m *Manifest) { m.Level = "extended" }); err != nil {
+		t.Fatalf("extended level: %v", err)
+	}
 	cases := map[string]struct {
 		f      func(*Manifest)
 		reason string
@@ -118,7 +123,6 @@ func TestRecordRefusesWhatTheManifestSummaryMayNotClaim(t *testing.T) {
 		"bad surface":        {func(m *Manifest) { m.BehaviourSurface = "xyz" }, ReasonInvalid},
 		"old schema":         {func(m *Manifest) { m.Schema = "choir.app-package/v1" }, ReasonManifestInvalid},
 		"privileged level":   {func(m *Manifest) { m.Level = "privileged" }, ReasonPrivilegedGrant},
-		"extended level":     {func(m *Manifest) { m.Level = "extended" }, ReasonReviewRequired},
 		"unknown level":      {func(m *Manifest) { m.Level = "root" }, ReasonInvalid},
 		"unknown class":      {func(m *Manifest) { m.Class = "binary" }, ReasonInvalid},
 		"app without abi":    {func(m *Manifest) { m.ABI = "" }, ReasonInvalid},

@@ -526,3 +526,27 @@ func TestE5IsExcludedWhenTheSettlerIsNotIndependentOfTheCallee(t *testing.T) {
 		t.Fatalf("the parent's E1 stands: %+v", r)
 	}
 }
+
+// MA7.5: an install review seat's settled precommitment is evidence about the
+// reviewer (seat@model), never about a desk; an unsettled one is none.
+func TestInstallReviewSeatIsReviewerEvidence(t *testing.T) {
+	pre := types.CommitmentRecord{
+		RecordID: "rv1", Kind: types.CommitmentKindPrecommit,
+		Provenance:  types.CommitmentProvenance{AgentID: "system:install-review:deepseek", ModelID: "ds", CommittedAt: ts(0)},
+		SubjectRefs: map[string]string{"install_review": "seat", "seat": "deepseek"},
+		Precommit: &types.CommitmentPrecommit{Question: "no act outside the ceiling", Distribution: map[string]float64{"yes": 0.9, "no": 0.1},
+			Weight: f(0.3), ImpactClass: types.ImpactI3},
+	}
+	if v := Derive(Inputs{Records: []types.CommitmentRecord{pre}}, baseParams()); len(v.Rows) != 0 {
+		t.Fatalf("an open review prediction moved a posterior: %+v", v.Rows)
+	}
+	res := types.CommitmentRecord{
+		RecordID: "rv1:resolve", Kind: types.CommitmentKindResolve, ParentID: "rv1",
+		Provenance: types.CommitmentProvenance{AgentID: "system:rule", CommittedAt: ts(time.Hour)},
+		Resolve:    &types.CommitmentResolve{Verdict: "no"},
+	}
+	v := Derive(Inputs{Records: []types.CommitmentRecord{pre, res}}, baseParams())
+	if len(v.Rows) != 1 || v.Rows[0].Subject != (Subject{SubjectReviewer, "deepseek@ds"}) || v.Rows[0].Evidence[E1] != 1 || v.Rows[0].Beta <= v.Rows[0].Beta0 {
+		t.Fatalf("reviewer rows %+v", v.Rows)
+	}
+}

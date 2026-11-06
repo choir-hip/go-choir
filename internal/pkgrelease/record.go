@@ -439,9 +439,10 @@ func (m Manifest) validate() error {
 		return fail("manifest class %q does not match its abi and desks_count", m.Class)
 	}
 	switch apppackage.Level(m.Level) {
-	case apppackage.LevelDefault:
-	case apppackage.LevelExtended:
-		return refuse(ReasonReviewRequired, "an extended-level release needs a platform review record, and the review pipeline (MA7.5) is not built")
+	case apppackage.LevelDefault, apppackage.LevelExtended:
+		// An extended release may be listed; it installs only with a sealed
+		// install review verdict on the installing computer (MA7.5,
+		// internal/installreview).
 	case apppackage.LevelPrivileged:
 		return refuse(ReasonPrivilegedGrant, "a privileged grant is first-party only; a Library release cannot carry one")
 	default:

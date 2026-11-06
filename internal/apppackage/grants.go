@@ -16,8 +16,8 @@ const (
 	// LevelDefault: own kinds, the act set, captures.read, requests to other
 	// desks. Anyone may publish; install shows the declared list.
 	LevelDefault Level = "default"
-	// LevelExtended: ceilings the owner approves per grant at install; a
-	// platform review record is required for the listing to appear.
+	// LevelExtended: ceilings the owner approves per grant at install; the
+	// install waits on a sealed install review verdict (MA7.5).
 	LevelExtended Level = "extended"
 	// LevelPrivileged: first-party only, refused for any other origin at
 	// validation and again at the daemon's frame check.

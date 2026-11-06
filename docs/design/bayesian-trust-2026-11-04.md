@@ -450,6 +450,27 @@ A blocking-real finding is E7 evidence against the package and publisher. A
 self-development candidate goes through steps 1 to 3 at the computer's own
 publisher record.
 
+**As built (MA7.5, 2026-11-05; `internal/installreview`, `internal/agentcore/install_review.go`).**
+The gate is on the installing computer. An install whose ceiling is widened
+(an extended grant, a desk, or an update that adds any ceiling entry) stores
+its module and records only with a verdict for exactly its release id, tree,
+manifest and behaviour surface, sealed by the computer's guest-core signer
+(receipt kind `InstallReviewVerdict`). With none, the pipeline runs inside the
+install: mechanical checks, then the seats of the table (one seat is Devin;
+two are Devin and DeepSeek on Synthetic), each answer an open precommitment
+record with the two standard predictions; a reject stands for that digest.
+Settled seat records are E1 evidence about the reviewer (`seat@model`).
+Record validation no longer refuses an extended release, so one can be
+listed. Missing: (a) no Devin provider exists in the platform's catalog or
+gateway, so every plan needing the Devin seat is refused
+`install_review_seat_unavailable` and no widened release installs in
+production until one is wired (nothing substitutes for it); (b) the
+default-level "I0 to I1, thin: one seat" cell takes mechanical checks only
+until a seat can run; (c) the review predictions are not yet settled by
+rule (that needs the frame-log evidence of MA7.8); (d) step 4, publishing the
+review receipt with the release, is not built; (e) a blocking finding is not
+yet written as E7 evidence.
+
 ## 8. Publisher reputation in the Library
 
 Owner: "track user reputation of publishers in library." Reputation is the

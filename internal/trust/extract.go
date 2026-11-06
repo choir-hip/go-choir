@@ -462,8 +462,15 @@ func (x *extractor) precommit(rec types.CommitmentRecord, resolves []types.Commi
 		return
 	}
 	desk := recordDesk(rec)
+	var direct []Subject
 	if desk == "" {
-		return
+		// An install review seat's precommitment (MA7.5) is evidence about
+		// the reviewer: the seat on its model.
+		r, ok := ReviewerOf(rec)
+		if !ok {
+			return
+		}
+		direct = []Subject{r}
 	}
 	var res types.CommitmentRecord
 	for _, r := range resolves {
@@ -505,8 +512,22 @@ func (x *extractor) precommit(rec types.CommitmentRecord, resolves []types.Commi
 		return
 	}
 	at := parseTime(res.Provenance.CommittedAt)
-	x.out.Items = append(x.out.Items, Item{Class: E1, RecordID: rec.RecordID, Desk: desk, Model: rec.Provenance.ModelID, Action: class, At: at,
+	model := rec.Provenance.ModelID
+	if desk == "" {
+		model = ""
+	}
+	x.out.Items = append(x.out.Items, Item{Class: E1, RecordID: rec.RecordID, Desk: desk, Model: model, Direct: direct, Action: class, At: at,
 		W: w, D: d, Skill: true, M: 1, Settler: settler})
+}
+
+// ReviewerOf is the reviewer subject of an install review seat's record
+// (internal/installreview): seat@model.
+func ReviewerOf(rec types.CommitmentRecord) (Subject, bool) {
+	seat := strings.TrimSpace(rec.SubjectRefs["seat"])
+	if rec.SubjectRefs["install_review"] != "seat" || seat == "" || !strings.HasPrefix(rec.Provenance.AgentID, "system:install-review:") {
+		return Subject{}, false
+	}
+	return Subject{Kind: SubjectReviewer, ID: seat + "@" + strings.TrimSpace(rec.Provenance.ModelID)}, true
 }
 
 // request is a settled desk request with a stated p_success: the sender's

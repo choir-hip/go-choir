@@ -26,7 +26,9 @@ const (
 	ReasonPrivilegedGrant = "package_privileged_grant"
 	// ReasonDeskNeedsSandbox: a publisher's desk waits for the Phase 6 sandbox.
 	ReasonDeskNeedsSandbox = "package_desk_needs_sandbox"
-	// ReasonReviewRequired: the level needs a platform review record.
+	// ReasonReviewRequired: the level needs a review. Since MA7.5 the
+	// install gate refuses with installreview.ReasonRequired instead; the
+	// code is kept so a stored refusal still reads.
 	ReasonReviewRequired = "package_review_required"
 	// ReasonPublisherDeclared: the manifest states a fact only the platform sets.
 	ReasonPublisherDeclared = "package_publisher_declared"

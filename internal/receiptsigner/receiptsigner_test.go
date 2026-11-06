@@ -51,6 +51,27 @@ func TestGuestSignerScopesExecutionIdentityIssuer(t *testing.T) {
 	}
 }
 
+// MA7.5: the autoputer seals install review verdicts; the updater cannot.
+func TestGuestSignerScopesInstallReviewVerdictIssuer(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	handler := testHandler(t, ModeGuestCore, now)
+	request := SignReceiptRequest{
+		ReceiptKind: installReviewVerdictKind, Issuer: "choir-autoputer", IssuedAt: now.Format(time.RFC3339Nano),
+		KindFields: map[string]any{"computer_id": "computer-1", "record_id": "install-review-1", "verdict": "accept"},
+	}
+	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusOK {
+		t.Fatalf("install review verdict refused: %d %s", response.Code, response.Body.String())
+	}
+	request.Issuer = "choir-updater"
+	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusBadRequest {
+		t.Fatalf("updater sealed an install review verdict: %d", response.Code)
+	}
+	request.Issuer, request.KindFields["computer_id"] = "choir-autoputer", "computer-2"
+	if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusBadRequest {
+		t.Fatalf("a verdict for another computer was sealed: %d", response.Code)
+	}
+}
+
 func TestVerifierSignerCannotSignUpdaterReceipt(t *testing.T) {
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	handler := testHandler(t, ModeVerifier, now)

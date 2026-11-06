@@ -99,8 +99,10 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	validIssuer := (request.ReceiptKind == "ExecutionIdentity" && request.Issuer == "choir-autoputer") ||
+		// MA7.5: the autoputer seals its install review verdicts.
+		(request.ReceiptKind == installReviewVerdictKind && request.Issuer == "choir-autoputer") ||
 		(request.ReceiptKind == consensusBallotKind && request.Issuer == consensusBallotIssuer && guestBallotSeatAllowed(request.KindFields)) ||
-		(request.ReceiptKind != "ExecutionIdentity" && request.ReceiptKind != consensusBallotKind && request.Issuer == "choir-updater")
+		(request.ReceiptKind != "ExecutionIdentity" && request.ReceiptKind != consensusBallotKind && request.ReceiptKind != installReviewVerdictKind && request.Issuer == "choir-updater")
 	if !validIssuer || !allowedGuestReceipt(request.ReceiptKind) || fmt.Sprint(request.KindFields["computer_id"]) != h.computerID {
 		log.Printf("receipt signer: refused kind=%q issuer=%q computer_id=%q want_computer_id=%q valid_issuer=%v", request.ReceiptKind, request.Issuer, fmt.Sprint(request.KindFields["computer_id"]), h.computerID, validIssuer)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
@@ -122,9 +124,13 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, receipt)
 }
 
+// installReviewVerdictKind is installreview.ReceiptKind (MA7.5): the seal on
+// an install review verdict, issued by the autoputer only.
+const installReviewVerdictKind = "InstallReviewVerdict"
+
 func allowedGuestReceipt(kind string) bool {
 	switch kind {
-	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt", "ExecutionIdentity", consensusBallotKind:
+	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt", "ExecutionIdentity", consensusBallotKind, installReviewVerdictKind:
 		return true
 	default:
 		return false
