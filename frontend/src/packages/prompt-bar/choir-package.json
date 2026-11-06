@@ -1,0 +1,25 @@
+{
+  "schema": "choir.package/v2",
+  "name": "prompt-bar",
+  "version": "1.0.0",
+  "display": {
+    "title": "Prompt bar",
+    "icon": "⌘",
+    "description": "The command field, its focus chip, the window tray and the desk button"
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": [{ "grant": "ui.shell" }],
+  "provides": [
+    {
+      "service": "prompt",
+      "abi": "choir.service/prompt/v1",
+      "entry": "PromptBar.surface.svelte",
+      "requires_sdk": "^1.5"
+    }
+  ]
+}

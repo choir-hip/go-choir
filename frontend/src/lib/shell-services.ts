@@ -32,7 +32,13 @@ export type AuthRequest = { kind?: string; appId?: string; appName?: string };
 export type OpenAppContext = { appName?: string; icon?: string; appContext?: Record<string, unknown> } & Record<string, unknown>;
 export type WindowSummary = { windowId: string; appId: string; title: string; mode: string; focused: boolean };
 export type WindowAction = 'focus' | 'restore' | 'minimize' | 'maximize' | 'close';
-export type PromptOptions = { continueDocId?: string; continueWindowId?: string };
+/** A focused submit's focus (1.5.0, slice H3): the app agent (desk), its object and an optional selection. */
+export type PromptFocus = { app_agent_id: string; object_ref: string; selection?: string };
+/**
+ * focus (1.5.0) sends the text to that app agent; null sends it to the
+ * conductor. continueDocId is the 1.1.0 spelling of a Texture focus.
+ */
+export type PromptOptions = { continueDocId?: string; continueWindowId?: string; focus?: PromptFocus | null };
 export type AppContextChange = { windowId: string; appContext?: Record<string, unknown>; title?: string };
 
 /** What the desktop binds. Every member is optional so a host binds what it has. */
@@ -172,11 +178,13 @@ export function logout(): void {
   host().logout?.();
 }
 
-/** Send text through the prompt bar's door: the conductor routes it, or the window named continues. */
+/** Send text through the prompt bar's door: the focused app agent takes it, or the conductor routes it. */
 export async function submitPrompt(text: string, options: PromptOptions = {}): Promise<void> {
   const value = String(text ?? '').trim();
   if (!value) return;
-  await host().submitPrompt?.(value, { continueDocId: options.continueDocId || '', continueWindowId: options.continueWindowId || '' });
+  const forwarded: PromptOptions = { continueDocId: options.continueDocId || '', continueWindowId: options.continueWindowId || '' };
+  if (options.focus !== undefined) forwarded.focus = options.focus;
+  await host().submitPrompt?.(value, forwarded);
 }
 
 /** The running shell's build: service, version, commit and built_at. */

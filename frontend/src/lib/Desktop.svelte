@@ -38,13 +38,13 @@
     observeRemoteDriverSession,
     renewDriverLease,
   } from './live-events.js';
-  import PromptSurface from './PromptSurface.svelte';
   import ChoirField from './ChoirField.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
   import AppHost from './AppHost.svelte';
   import ShellSlot from './ShellSlot.svelte';
   import LastResort from './LastResort.svelte';
-  import { launcherState, setLauncherOpen } from './shell-slots';
+  import { launcherState, setLauncherOpen, toggleLauncher } from './shell-slots';
+  import { promptTargetFor, TEXTURE_AGENT } from './prompt-focus';
   import './menu-host';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
   import { setTheme as setShellTheme } from './services/theme';
@@ -111,6 +111,9 @@
   // True from prompt submit until the conductor's decision arrives; the
   // prompt surface sweeps an accent across that gap (about 0.6 s).
   let promptRouting = false;
+  // Where the last text went (slice H3): { state: 'routing' | 'routed', label }.
+  let promptRoute = null;
+  let promptRouteTimer = null;
   let mounted = false;
   let authenticatedStartupRunning = false;
   let lastAuthenticated = null;
@@ -191,8 +194,8 @@
   ) {
     lastPromptReplayId = promptReplay.id;
     submitPromptText(promptReplay.text, {
-      continueDocId: promptReplay.continueDocId || '',
-      continueWindowId: promptReplay.continueWindowId || '',
+      focus: promptReplay.focus || null,
+      windowId: promptReplay.windowId || '',
     });
   }
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
@@ -1262,22 +1265,37 @@
     dispatch('logout');
   }
 
+  // promptFocusOf reads a submit's focus: the 1.5.0 focus (null sends the
+  // text to the conductor), or the 1.1.0 continueDocId, a Texture focus.
+  function promptFocusOf(detail = {}) {
+    if (detail.focus !== undefined) return detail.focus || null;
+    const docId = String(detail.continueDocId || '').trim();
+    return docId ? { app_agent_id: TEXTURE_AGENT, object_ref: docId } : null;
+  }
+
   async function handlePromptSubmit(event) {
     const text = (event.detail?.text || '').trim();
     if (!text) return;
+    const focus = promptFocusOf(event.detail || {});
+    const windowId = event.detail?.windowId || event.detail?.continueWindowId || '';
     if (!authenticated) {
-      requestAuth({
-        kind: 'prompt',
-        text,
-        continueDocId: event.detail?.continueDocId || '',
-        continueWindowId: event.detail?.continueWindowId || '',
-      });
+      requestAuth({ kind: 'prompt', text, focus, windowId });
       return;
     }
-    submitPromptText(text, {
-      continueDocId: event.detail?.continueDocId || '',
-      continueWindowId: event.detail?.continueWindowId || '',
-    });
+    submitPromptText(text, { focus, windowId });
+  }
+
+  // showPromptRoute shows where the text went (the chip's destination line);
+  // a routed line clears itself.
+  function showPromptRoute(state, label) {
+    clearTimeout(promptRouteTimer);
+    promptRoute = label ? { state, label } : null;
+    if (state === 'routed') promptRouteTimer = setTimeout(() => { promptRoute = null; }, 2400);
+  }
+
+  function appLabel(appId, title = '') {
+    const name = getAppDefinition(appId)?.name || appId || 'App';
+    return title && title !== name ? `${name} · ${title}` : name;
   }
 
   // showContinuedDocument keeps a prompt-bar continue in the document's own
@@ -1307,13 +1325,10 @@
       openApp('texture', 'Texture', getAppIcon('texture'), { docId, allowMultiple: true, promptBarContinue });
     }
     scheduleSave();
-    promptStatus = `Continuing ${target?.title || 'the document'}...`;
-    setTimeout(() => {
-      if (promptStatus.startsWith('Continuing ')) promptStatus = '';
-    }, 1800);
+    showPromptRoute('routed', appLabel('texture', target?.title || ''));
   }
 
-  async function submitPromptText(text, { continueDocId = '', continueWindowId = '' } = {}) {
+  async function submitPromptText(text, { focus = null, windowId = '' } = {}) {
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -1322,34 +1337,33 @@
     const fallbackWindowTitle = text.length > 28 ? `${text.slice(0, 28)}…` : text;
 
     try {
-      promptStatus = continueDocId ? 'Sending to the document...' : 'Routing through conductor...';
       promptRouting = true;
-      const submission = await submitConductorPrompt(text, { continueDocId });
+      showPromptRoute('routing', focus ? appLabel(focus.app_agent_id === TEXTURE_AGENT ? 'texture' : focus.app_agent_id.replace(/^app:/, '')) : 'Conductor');
+      const submission = await submitConductorPrompt(text, { focus });
       if (submission.continued === true) {
         promptRouting = false;
-        showContinuedDocument(submission, continueWindowId);
+        showContinuedDocument(submission, windowId);
         return;
       }
       const conductorSubmissionId = submission.submission_id || '';
-      promptStatus = 'Waiting for conductor decision...';
       const decision = await waitForConductorDecision(conductorSubmissionId).finally(() => {
         promptRouting = false;
       });
 
       if (decision.action === 'toast') {
-        promptStatus = '';
+        showPromptRoute('', '');
         showToast(decision.message || 'Conductor acknowledged the request');
         return;
       }
 
       if (decision.action !== 'open_app') {
-        promptStatus = '';
+        showPromptRoute('', '');
         showToast('Conductor returned an unsupported route');
         return;
       }
 
       if (normalizeAppId(decision.app || '') === 'texture') {
-        promptStatus = `Opening ${decision.title || 'Texture'}...`;
+        showPromptRoute('routed', appLabel('texture', decision.title || ''));
         openApp('texture', 'Texture', '📝', {
           windowTitle: decision.title || fallbackWindowTitle,
           docId: decision.doc_id || '',
@@ -1359,13 +1373,10 @@
           conductorLoopId: conductorSubmissionId,
           initialLoopId: decision.initial_loop_id || '',
         });
-        setTimeout(() => {
-          if (promptStatus.startsWith('Opening ')) promptStatus = '';
-        }, 1800);
         return;
       }
 
-      promptStatus = `Opening ${decision.title || decision.app || 'app'}...`;
+      showPromptRoute('routed', appLabel(normalizeAppId(decision.app || 'browser'), decision.title || ''));
       openApp(decision.app || 'browser', decision.title || decision.app || fallbackWindowTitle, '', {
         windowTitle: decision.title || fallbackWindowTitle,
         sourceUrl: decision.source_url || text,
@@ -1374,16 +1385,13 @@
         contentId: decision.content_id || '',
         conductorLoopId: conductorSubmissionId,
       });
-      setTimeout(() => {
-        if (promptStatus.startsWith('Opening ')) promptStatus = '';
-      }, 1800);
     } catch (err) {
       promptRouting = false;
+      showPromptRoute('', '');
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      promptStatus = '';
       showToast(err.message || 'Conductor submission failed', { kind: 'error' });
     }
   }
@@ -1702,7 +1710,17 @@
       () => handleCloseDesktopOverview(),
     ),
     commands.registerKeybinding({ key: 'Escape', command: 'core.closeOverview', allowInInput: true }, 'core'),
+    // Cmd/Ctrl+K opens the desk: a core command on a locked key, the host's
+    // whichever prompt surface draws the desk button.
+    commands.registerCommand(
+      { id: 'core.toggleDesk', title: 'Open the desk', scope: 'global', run: { handler: true } },
+      'core',
+      () => toggleLauncher(),
+    ),
+    commands.registerKeybinding({ key: 'Mod+K', command: 'core.toggleDesk', allowInInput: true }, 'core'),
   ];
+  // The prompt bar's target: the focused window's app agent and object (H3).
+  $: promptTarget = promptTargetFor($windows, $activeWindowId, { authenticated });
   // registryRevision: installed packages join the launcher at run time.
   $: launcherApps = launcherAppsAt($registryRevision);
   function launcherAppsAt(_revision) {
@@ -1719,6 +1737,7 @@
   });
   onDestroy(() => {
     unbindShellHost();
+    clearTimeout(promptRouteTimer);
     removeOverviewCommand.forEach((remove) => remove());
     commands.setContext('overview.open', false);
     removeKeyCapture();
@@ -1976,22 +1995,35 @@
     />
   </ShellSlot>
 
-  <!-- PromptSurface -->
-  <PromptSurface
-    {authenticated}
-    placement={promptSurfacePlacement}
-    promptDisabled={!desktopReady}
-    {promptPlaceholder}
-    {promptStatus}
-    {promptRouting}
-    on:logout={handleLogout}
-    on:authrequest={() => requestAuth({ kind: 'sign_in' })}
-    on:promptsubmit={handlePromptSubmit}
-    on:launchapp={handleLaunchApp}
-    on:windowaction={handleTrayWindowAction}
-    on:showoverview={handleShowDesktopOverview}
-    on:showdesktop={handleShowDesktop}
-  />
+  <!-- The prompt bar: a surface package of the prompt slot (H3); the host keeps a last-resort field. -->
+  <ShellSlot
+    name="prompt"
+    props={{
+      authenticated,
+      placement: promptSurfacePlacement,
+      promptDisabled: !desktopReady,
+      promptPlaceholder,
+      promptStatus,
+      promptRouting,
+      liveStatus: $liveStatus,
+      launcherOpen: $launcherState.open,
+      launcherRestoreFocus: $launcherState.restoreFocus,
+      target: promptTarget,
+      route: promptRoute,
+    }}
+    on={{
+      promptsubmit: handlePromptSubmit,
+      windowaction: handleTrayWindowAction,
+      launcher: (event) => setLauncherOpen(!!event.detail?.open, { restoreFocus: !!event.detail?.restoreFocus }),
+    }}
+  >
+    <LastResort
+      kind="prompt"
+      disabled={!desktopReady}
+      on:submit={(event) => handlePromptSubmit({ detail: { text: event.detail.text, focus: null } })}
+      on:apps={() => toggleLauncher()}
+    />
+  </ShellSlot>
 </div>
 
 <style>

@@ -13,12 +13,17 @@ export async function submitConductorPrompt(text, options = {}) {
   const commandId = options.commandId || crypto.randomUUID();
   const body = { text: prompt, command_id: commandId };
   // A focus sends the text to the focused app agent, which decides what it
-  // is for (plan MA4.8; it replaced continue_doc_id). The Texture chip's
-  // document is the only focus the shell sends until H3: its submit is that
-  // document's owner revise, and the response carries continued: true.
-  // Without a focus the conductor routes the text.
-  const continueDocId = (options.continueDocId || '').trim();
-  if (continueDocId) body.focus = { app_agent_id: 'texture', object_ref: continueDocId };
+  // is for (plan MA4.8 and section 11.1, slice H3); without one the conductor
+  // routes it and sees nothing of the focus. Texture's focus answers with the
+  // document's owner revise (continued: true); a package desk's focus answers
+  // with a submission whose decision opens that app.
+  const focus = options.focus && typeof options.focus === 'object' ? options.focus : null;
+  const agent = String(focus?.app_agent_id || '').trim();
+  const ref = String(focus?.object_ref || '').trim();
+  if (agent && ref) {
+    body.focus = { app_agent_id: agent, object_ref: ref };
+    if (focus.selection) body.focus.selection = String(focus.selection);
+  }
   const res = await fetchWithRenewal('/api/prompt-bar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

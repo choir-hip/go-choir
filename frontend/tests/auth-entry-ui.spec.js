@@ -244,7 +244,7 @@ test('signed-out prompt survives registration and resumes through product prompt
   await page.locator('[data-register-view] [data-auth-submit]').click();
 
   await expect(page.locator('[data-auth-overlay]')).toHaveCount(0, { timeout: 30000 });
-  await expect(page.locator('[data-prompt-status]')).toContainText(/Routing|Waiting|Opening/, { timeout: 30000 });
+  await expect(page.locator('[data-prompt-route]')).toContainText(/Conductor|Texture/, { timeout: 30000 });
 
   const prewarmRequest = await prewarmPromise;
   expect(new URL(prewarmRequest.url()).origin).toBe(BASE_URL);

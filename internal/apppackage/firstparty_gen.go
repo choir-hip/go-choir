@@ -24,6 +24,7 @@ var builtinPackageNames = []string{
 	"menu-default",
 	"overview",
 	"podcast",
+	"prompt-bar",
 	"pulse",
 	"reader",
 	"settings",

@@ -109,6 +109,8 @@ async function openShell(page) {
   await stubLoggedOutBackend(page);
   await page.goto(BASE_URL);
   await expect(page.locator('[data-desk-menu-button]')).toBeVisible();
+  // The desktop is ready (the prompt takes its focus then, which would close a menu opened before).
+  await expect(page.locator('[data-prompt-input]')).toBeEnabled();
 }
 
 // A focusable target wired with the context-menu action, at (x, y).
@@ -243,6 +245,8 @@ test.describe('context menu primitive', () => {
     // A menu taller than the viewport is clamped and scrolls.
     await page.setViewportSize({ width: 400, height: 220 });
     await page.evaluate(async () => {
+      // The resize reaches the page a frame later, and a resize closes an open menu.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const sdk = await import('/src/lib/app-sdk.ts');
       const items = Array.from({ length: 30 }, (_, i) => ({ id: `row-${i}`, label: `Row ${i}` }));
       sdk.openContextMenu({ x: 390, y: 210, items });

@@ -1,6 +1,9 @@
 /**
  * The prompt bar builds on the Texture document in view (FE-02 step 1,
- * docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md).
+ * docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md),
+ * and since slice H3 (plan section 11.1, R31) one chip names what the text
+ * goes to for every app: the focused app agent and its object, the focused
+ * app as a hint when it cannot take the text, or the conductor.
  * Runs against the built frontend (vite preview) with the session, the
  * desktop state, the Texture routes and /api/prompt-bar mocked; the server
  * side is covered by internal/textureowner/prompt_bar_continue_test.go.
@@ -29,6 +32,16 @@
  *      continue the old document after a "New document" send).
  *   C9 A continue whose window was closed before the receipt came back
  *      reopens the document but the reopened window ignores the receipt.
+ * Slice H3 (written before the chip redesign):
+ *   H1 A package window's published focus does not reach the wire as
+ *      { app_agent_id: app:<package>, object_ref }, or the chip does not name
+ *      the app and its object.
+ *   H2 A focus the package's desk cannot be the custodian of (another
+ *      package's kind, a malformed ref, another app agent) is sent anyway:
+ *      the chip must show the app as a hint and the text go to the conductor.
+ *   H3 Clearing the chip still sends the focus, or no chip says the conductor
+ *      routes when nothing is focused.
+ *   H4 After a submit the bar does not show where the text went.
  *
  *   cd frontend && npm run build && npx vite preview --port 4173 --strictPort &
  *   npx playwright test tests/prompt-bar-continue.spec.js
@@ -111,7 +124,7 @@ async function mockComputer(page, { windows = [], activeWindowId = '', gate = nu
       submits.push(request);
       if (gate) await gate;
       status = 202;
-      body = request.focus?.object_ref
+      body = request.focus?.app_agent_id === 'texture'
         ? {
             schema: 'choir.prompt_bar_continue.v1',
             continued: true,
@@ -122,7 +135,11 @@ async function mockComputer(page, { windows = [], activeWindowId = '', gate = nu
             request_id: 'request-1',
             replay: false,
           }
-        : { schema: 'choir.durable_work.v1', submission_id: 'submission-new', state: 'completed', status_url: '/api/prompt-bar/submissions/submission-new', doc_id: 'doc-new' };
+        : request.focus
+          ? { schema: 'choir.durable_work.v1', submission_id: 'submission-focus', state: 'completed', status_url: '/api/prompt-bar/submissions/submission-focus' }
+          : { schema: 'choir.durable_work.v1', submission_id: 'submission-new', state: 'completed', status_url: '/api/prompt-bar/submissions/submission-new', doc_id: 'doc-new' };
+    } else if (path === '/api/prompt-bar/submissions/submission-focus') {
+      body = { submission_id: 'submission-focus', state: 'completed', decision: { action: 'open_app', app: 'files', title: 'Files' } };
     } else if (path === '/api/prompt-bar/submissions/submission-new') {
       body = {
         submission_id: 'submission-new',
@@ -160,14 +177,15 @@ test('C1 C2 C3: the chip defaults to continuing the document in view', async ({ 
 
   const chip = page.locator('[data-command-field] [data-prompt-target]');
   await expect(chip).toBeVisible({ timeout: 10_000 });
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue');
-  await expect(chip).toContainText('Continue');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
+  await expect(chip).toHaveAttribute('data-prompt-target-agent', 'texture');
+  await expect(chip).toContainText('Texture');
   await expect(chip).toContainText('Tide notes');
 
   const typed = 'add a section on `neap tides` [1] and café';
   await send(page, typed);
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].focus?.object_ref).toBe('doc-tides');
+  expect(submits[0].focus).toEqual({ app_agent_id: 'texture', object_ref: 'doc-tides' });
   expect(submits[0].text).toBe(typed);
 
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(1);
@@ -176,35 +194,97 @@ test('C1 C2 C3: the chip defaults to continuing the document in view', async ({ 
   await expect(page.locator('[data-window][data-window-app-id="texture"] [data-texture-save-status]').first()).toContainText(/Writing first draft|Revising/);
 });
 
-test('C4: one tap switches to a new document, and the override does not leak', async ({ page }) => {
+test('C4 H3: one tap clears the focus to the conductor, and the override does not leak', async ({ page }) => {
   const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides' });
   await openDesktop(page);
 
   const chip = page.locator('[data-command-field] [data-prompt-target]');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue', { timeout: 10_000 });
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
   await chip.click();
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'new');
-  await expect(chip).toContainText('New document');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
+  await expect(chip).toContainText('Conductor');
   await expect(chip).toHaveAttribute('aria-pressed', 'false');
+  // A second tap restores the focus; a third clears it again.
+  await chip.click();
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
+  await chip.click();
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
 
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].focus?.object_ref).toBeUndefined();
+  expect(submits[0].focus).toBeUndefined();
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });
+  // H4: the bar says where the text went.
+  await expect(page.locator('[data-prompt-route]')).toContainText('Texture · Write about currents');
 
-  // The new document is now in view; the chip defaults to it, not to "new".
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue', { timeout: 10_000 });
+  // The new document is now in view; the chip defaults to it, not to the conductor.
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
   await expect(chip).toContainText(DOCS['doc-new'].title);
 });
 
-test('C5: no chip and no continue without a Texture document in view', async ({ page }) => {
+test('C5 H3: with nothing focused the chip says the conductor routes, and no focus is sent', async ({ page }) => {
   const submits = await mockComputer(page);
   await openDesktop(page);
-  await expect(page.locator('[data-prompt-target]')).toHaveCount(0);
+  const chip = page.locator('[data-command-field] [data-prompt-target]');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor', { timeout: 10_000 });
+  await expect(chip).toContainText('Conductor');
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
-  expect(submits[0].focus?.object_ref).toBeUndefined();
+  expect(submits[0].focus).toBeUndefined();
+  await expect(page.locator('[data-prompt-route]')).toContainText('Texture · Write about currents', { timeout: 10_000 });
 });
+
+function packageWindow(windowId, appId, focus, title = 'Field notes') {
+  return {
+    window_id: windowId,
+    app_id: appId,
+    title,
+    geometry: { x: 120, y: 80, width: 760, height: 520 },
+    mode: 'normal',
+    z_index: 2,
+    app_context: focus ? { focus } : {},
+  };
+}
+
+test('H1: a package window\'s focus goes to its app agent and the chip names the app and object', async ({ page }) => {
+  const focus = { app_agent_id: 'app:files', object_ref: 'obj:choir.app.files.folder:owner-1:field-notes', label: 'Field notes' };
+  const submits = await mockComputer(page, { windows: [packageWindow('win-files', 'files', focus)], activeWindowId: 'win-files' });
+  await openDesktop(page);
+  const chip = page.locator('[data-command-field] [data-prompt-target]');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
+  await expect(chip).toHaveAttribute('data-prompt-target-agent', 'app:files');
+  await expect(chip).toContainText('Files');
+  await expect(chip).toContainText('Field notes');
+  await send(page, 'list what changed this week');
+  await expect.poll(() => submits.length).toBe(1);
+  expect(submits[0].focus).toEqual({ app_agent_id: 'app:files', object_ref: 'obj:choir.app.files.folder:owner-1:field-notes' });
+  await expect(page.locator('[data-prompt-route]')).toContainText('Files', { timeout: 10_000 });
+
+  // H3: cleared, the same window's text goes to the conductor.
+  await chip.click();
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
+  await send(page, 'something else');
+  await expect.poll(() => submits.length).toBe(2);
+  expect(submits[1].focus).toBeUndefined();
+});
+
+for (const [name, focus] of [
+  ['another package\'s kind', { app_agent_id: 'app:files', object_ref: 'obj:choir.app.mail.thread:owner-1:t1' }],
+  ['another app agent', { app_agent_id: 'app:mail', object_ref: 'obj:choir.app.files.folder:owner-1:f1' }],
+  ['a malformed ref', { app_agent_id: 'app:files', object_ref: 'folder-1' }],
+  ['no focus', null],
+]) {
+  test(`H2: a package window with ${name} shows the app as a hint and the conductor routes`, async ({ page }) => {
+    const submits = await mockComputer(page, { windows: [packageWindow('win-files', 'files', focus)], activeWindowId: 'win-files' });
+    await openDesktop(page);
+    const chip = page.locator('[data-command-field] [data-prompt-target]');
+    await expect(chip).toHaveAttribute('data-prompt-target-mode', 'hint', { timeout: 10_000 });
+    await expect(chip).toContainText('Files');
+    await send(page, 'list what changed this week');
+    await expect.poll(() => submits.length).toBe(1);
+    expect(submits[0].focus).toBeUndefined();
+  });
+}
 
 for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   test(`C6: the chip sits inside the command field at ${viewport.width}px`, async ({ page }) => {
@@ -238,16 +318,16 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
   });
 }
 
-test('C7: a single URL defaults to a new document, and a tap still continues', async ({ page }) => {
+test('C7: a single URL defaults to the conductor, and a tap still keeps the focus', async ({ page }) => {
   const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides' });
   const input = await openDesktop(page);
   const chip = page.locator('[data-command-field] [data-prompt-target]');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue', { timeout: 10_000 });
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
 
   await input.fill('  https://example.com/tides/article  ');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'new');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
   await chip.click();
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
   await input.press('Enter');
   await expect.poll(() => submits.length).toBe(1);
   expect(submits[0].focus?.object_ref).toBe('doc-tides');
@@ -258,9 +338,9 @@ test('C7: a single URL defaults to a new document, and a tap still continues', a
   await expect.poll(() => submits.length).toBe(2);
   expect(submits[1].focus?.object_ref).toBeUndefined();
 
-  // Text that is not one URL keeps the continue default.
+  // Text that is not one URL keeps the focus default.
   await input.fill('summarize https://example.com/tides/article');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
 });
 
 test('C8: no second send while the first is routing', async ({ page }) => {
@@ -269,7 +349,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
   const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides', gate });
   const input = await openDesktop(page);
   const chip = page.locator('[data-command-field] [data-prompt-target]');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue', { timeout: 10_000 });
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
   await chip.click();
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
@@ -280,7 +360,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
   await page.waitForTimeout(400);
   expect(submits.length).toBe(1);
   await expect(input).toHaveValue('and add a map');
-  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'new');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
 
   release();
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });

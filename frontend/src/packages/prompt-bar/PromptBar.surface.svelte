@@ -1,19 +1,44 @@
+<!--
+  The prompt bar: the desk button, the window tray, the command field with
+  its focus chip, the voice button and the online dot. A shell surface of the
+  prompt slot (lib/shell-slots.ts; plan section 11.1, slice H3, R31).
+
+  Slot ABI, props: authenticated, placement ('top' | 'bottom'), promptDisabled,
+  promptPlaceholder, promptStatus, promptRouting, liveStatus, launcherOpen,
+  launcherRestoreFocus, target (the focused window's prompt target:
+  { windowId, appId, appName, label, focus } where focus is
+  { app_agent_id, object_ref, selection? } or null) and route (where the last
+  text went: { state: 'routing' | 'routed', label }). Events: promptsubmit
+  ({ text, focus, windowId }; focus null sends the text to the conductor),
+  windowaction ({ windowId, action }), launcher ({ open, restoreFocus }).
+  Everything else is an SDK call. Cmd+K is the host's (core.toggleDesk).
+
+  One chip names what the text goes to: the focused app agent and its object
+  ("Texture · Tide notes"), the focused app as a hint when it has no desk to
+  take it (the conductor routes), or the conductor. One tap clears a focus to
+  the conductor and a second restores it. A single URL defaults to the
+  conductor, which opens it in its display app (review 284 item 1).
+-->
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
-  import TetraMark from './TetraMark.svelte';
-  import { commands } from './services/commands';
-  import { launcherState, setLauncherOpen } from './shell-slots';
   import {
-    activeWindowId,
-    windows,
-    openWindows,
-    restoreWindow,
-    focusWindow,
-    liveStatus as desktopLiveStatus,
-  } from './stores/desktop.js';
-  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
-  import { isSingleHttpUrl, promptContinueTarget } from './prompt-target.js';
-  import { contextMenu, type ContextMenuEntry } from './context-menu';
+    TETRA_MARK_PATHS,
+    TETRA_MARK_VIEWBOX,
+    addLiveEventListener,
+    contextMenu,
+    focus as focusWindow,
+    liveEventKind,
+    liveEventPayload,
+    onWindowEvent,
+    restore as restoreWindow,
+    windowList,
+    type ContextMenuEntry,
+    type PromptFocus,
+  } from '../../lib/app-sdk';
+  import { isSingleHttpUrl } from './url';
+
+  type PromptTarget = { windowId: string; appId: string; appName: string; label: string; focus: PromptFocus | null };
+  type PromptRoute = { state: 'routing' | 'routed'; label: string };
 
   export let authenticated = false;
   export let promptDisabled = false;
@@ -21,6 +46,11 @@
   export let promptStatus = '';
   export let promptRouting = false;
   export let placement: 'top' | 'bottom' = 'bottom';
+  export let liveStatus = 'disconnected';
+  export let launcherOpen = false;
+  export let launcherRestoreFocus = false;
+  export let target: PromptTarget | null = null;
+  export let route: PromptRoute | null = null;
 
   const dispatch = createEventDispatcher();
   let promptValue = '';
@@ -28,43 +58,60 @@
   let surfaceEl: HTMLDivElement | null = null;
   let deskButtonEl: HTMLButtonElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
-  $: sheetOpen = $launcherState.open;
+  $: sheetOpen = launcherOpen;
   let mobileSwitcherOpen = false;
   let promptFocused = false;
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
-  let removeCommands: Array<() => unknown> = [];
+  let removeResize = () => {};
   let promptWasDisabled = promptDisabled;
-  // The owner's one-tap choice of target ('continue' or 'new'; '' is the
-  // default). It belongs to the document in view and to one send: a
-  // different document, or the send settling, clears it.
-  let targetChoice = '';
-  let choiceDocId = '';
+  // The owner's one-tap choice ('conductor' clears the focus, 'focus' keeps
+  // it; '' is the default). It belongs to the target in view and to one
+  // send: a different target, or the send settling, clears it.
+  let choice = '';
+  let choiceKey = '';
   let choiceRouting = false;
 
-  const publicTicker = [
-  ];
+  const publicTicker: string[] = [];
 
+  $: openWindows = $windowList;
+  $: activeWindowId = openWindows.find((win) => win.focused)?.windowId || '';
   $: normalizedPlacement = placement === 'top' ? 'top' : 'bottom';
-  $: online = $desktopLiveStatus === 'connected' || !authenticated;
+  $: online = liveStatus === 'connected' || !authenticated;
   $: onlineLabel = authenticated
-    ? ($desktopLiveStatus === 'connected' ? 'Online' : $desktopLiveStatus === 'connecting' ? 'Connecting' : $desktopLiveStatus === 'error' ? 'Connection error' : 'Offline')
+    ? (liveStatus === 'connected' ? 'Online' : liveStatus === 'connecting' ? 'Connecting' : liveStatus === 'error' ? 'Connection error' : 'Offline')
     : 'Preview';
   $: chyronTickerItems = chyronItems.length > 0 ? [...chyronItems, ...chyronItems] : [];
-  $: continueTarget = promptContinueTarget($windows, $activeWindowId, { authenticated });
-  $: if ((continueTarget?.docId || '') !== choiceDocId) {
-    choiceDocId = continueTarget?.docId || '';
-    targetChoice = '';
+  $: targetKey = target ? `${target.windowId}|${target.focus?.app_agent_id || ''}|${target.focus?.object_ref || ''}` : '';
+  $: if (targetKey !== choiceKey) {
+    choiceKey = targetKey;
+    choice = '';
   }
   $: if (promptRouting) {
     choiceRouting = true;
   } else if (choiceRouting) {
     choiceRouting = false;
-    targetChoice = '';
+    choice = '';
   }
-  // The default is to continue, except for a single URL, which goes to the
-  // display app the conductor picks for it.
-  $: continuing = !!continueTarget && (targetChoice ? targetChoice === 'continue' : !isSingleHttpUrl(promptValue));
+  // What the text goes to: 'focus' (the focused app agent), 'hint' (the
+  // focused app has no desk to take it: the conductor routes, the chip names
+  // the app) or 'conductor'.
+  $: mode = !target
+    ? 'conductor'
+    : choice === 'conductor'
+      ? 'conductor'
+      : target.focus
+        ? (choice === 'focus' || !isSingleHttpUrl(promptValue) ? 'focus' : 'conductor')
+        : 'hint';
+  $: chipName = mode === 'conductor' ? 'Conductor' : target?.appName || '';
+  $: chipLabel = mode === 'conductor' ? '' : target?.label || '';
+  $: chipAria = mode === 'focus'
+    ? `To ${target?.appName}${chipLabel ? `: ${chipLabel}` : ''}. Tap to send to the conductor.`
+    : mode === 'hint'
+      ? `${target?.appName} is focused; the conductor routes. Tap to clear.`
+      : target
+        ? `To the conductor. Tap to send to ${target.appName}.`
+        : 'To the conductor, which routes the text.';
 
   function publishSurfaceMetrics() {
     if (!surfaceEl || typeof document === 'undefined') return;
@@ -83,12 +130,9 @@
       // With a target in view, one send at a time: a second send while the
       // first routes would read a target the first is still changing. The
       // text stays in the field.
-      if (promptRouting && continueTarget) return;
-      dispatch('promptsubmit', {
-        text: promptValue.trim(),
-        continueDocId: continuing ? continueTarget.docId : '',
-        continueWindowId: continuing ? continueTarget.windowId : '',
-      });
+      if (promptRouting && target) return;
+      const focus = mode === 'focus' && target?.focus ? target.focus : null;
+      dispatch('promptsubmit', { text: promptValue.trim(), focus, windowId: focus ? target?.windowId || '' : '' });
       promptValue = '';
       tick().then(resizePromptInput);
     } else if (event.key === 'Escape') {
@@ -96,10 +140,11 @@
     }
   }
 
-  // One tap flips the target and hands the focus back to the prompt, so the
-  // owner keeps typing.
-  function toggleContinueTarget() {
-    targetChoice = continuing ? 'new' : 'continue';
+  // One tap clears the focus to the conductor, a second restores it; the
+  // focus goes back to the prompt, so the owner keeps typing.
+  function toggleTarget() {
+    if (!target) return;
+    choice = mode === 'conductor' ? 'focus' : 'conductor';
     promptInputEl?.focus();
   }
 
@@ -119,7 +164,7 @@
   function openWindowFromTray(win: any) {
     if (win.mode === 'minimized') restoreWindow(win.windowId);
     else focusWindow(win.windowId);
-    setLauncherOpen(false);
+    dispatch('launcher', { open: false });
     mobileSwitcherOpen = false;
   }
 
@@ -143,21 +188,22 @@
   }
 
   function handleDeskButtonClick() {
-    const nextSheetOpen = !$launcherState.open;
-    setLauncherOpen(nextSheetOpen);
-    mobileSwitcherOpen = nextSheetOpen && isMobileViewport() && $openWindows.length > 0;
-    tick().then(publishSurfaceMetrics);
+    dispatch('launcher', { open: !launcherOpen });
   }
 
-  // The launcher closed itself (Escape, its Close button): the focus goes back
-  // to the button that opened it.
+  // The launcher opened (this button or the host's Cmd+K): on a phone with
+  // windows open, the field shows the app switcher. It closed itself (Escape,
+  // its Close button): the focus goes back to the button that opened it.
   let launcherWasOpen = false;
-  $: if ($launcherState.open) {
+  $: if (launcherOpen && !launcherWasOpen) {
     launcherWasOpen = true;
-  } else if (launcherWasOpen) {
+    mobileSwitcherOpen = isMobileViewport() && openWindows.length > 0;
+    tick().then(publishSurfaceMetrics);
+  } else if (!launcherOpen && launcherWasOpen) {
     launcherWasOpen = false;
     mobileSwitcherOpen = false;
-    if ($launcherState.restoreFocus) tick().then(() => deskButtonEl?.focus());
+    if (launcherRestoreFocus) tick().then(() => deskButtonEl?.focus());
+    tick().then(publishSurfaceMetrics);
   }
 
   function focusPromptWhenReady() {
@@ -220,21 +266,12 @@
       resizeObserver = new ResizeObserver(publishSurfaceMetrics);
       resizeObserver.observe(surfaceEl);
     }
-    window.addEventListener('resize', resizePromptInput);
-    // Cmd/Ctrl+K opens the desk: a core command on a locked key (services/commands.ts).
-    removeCommands = [
-      commands.registerCommand(
-        { id: 'core.toggleDesk', title: 'Open the desk', scope: 'global', run: { handler: true } },
-        'core',
-        () => handleDeskButtonClick(),
-      ),
-      commands.registerKeybinding({ key: 'Mod+K', command: 'core.toggleDesk', allowInInput: true }, 'core'),
-    ];
+    removeResize = onWindowEvent('resize', resizePromptInput);
     focusPromptWhenReady();
   });
 
   $: if (authenticated && chyronItems.some((item) => item.id.startsWith('public-'))) chyronItems = [];
-  $: if ($openWindows.length === 0 && mobileSwitcherOpen) mobileSwitcherOpen = false;
+  $: if (openWindows.length === 0 && mobileSwitcherOpen) mobileSwitcherOpen = false;
   $: if (!sheetOpen && mobileSwitcherOpen) mobileSwitcherOpen = false;
   $: if (promptDisabled) {
     promptWasDisabled = true;
@@ -246,8 +283,7 @@
   onDestroy(() => {
     removeLiveListener();
     resizeObserver?.disconnect();
-    window.removeEventListener('resize', resizePromptInput);
-    removeCommands.forEach((remove) => remove());
+    removeResize();
   });
 </script>
 
@@ -267,25 +303,27 @@
     class="desk-mark-button"
     data-desk-menu-button
     type="button"
-    aria-label="Open app switcher or Desk, {$openWindows.length} open windows"
+    aria-label="Open app switcher or Desk, {openWindows.length} open windows"
     aria-keyshortcuts="Meta+K Control+K"
     aria-expanded={sheetOpen || mobileSwitcherOpen ? 'true' : 'false'}
     title="Desk (⌘K)"
     on:click={handleDeskButtonClick}
   >
-    <TetraMark />
-    {#if $openWindows.length > 0}<span class="window-count" data-window-count>{$openWindows.length}</span>{/if}
+    <svg class="tetra-mark" viewBox={TETRA_MARK_VIEWBOX} role="img" aria-label="Desk" focusable="false">
+      {#each TETRA_MARK_PATHS as path}<path d={path} />{/each}
+    </svg>
+    {#if openWindows.length > 0}<span class="window-count" data-window-count>{openWindows.length}</span>{/if}
   </button>
 
   <div class="window-tray" data-window-tray>
-    {#each $openWindows as win (win.windowId)}
+    {#each openWindows as win (win.windowId)}
       <button
-        class:active={win.windowId === $activeWindowId}
+        class:active={win.windowId === activeWindowId}
         class:minimized={win.mode === 'minimized'}
         class="window-tray-item"
         data-window-tray-item
         data-window-mode={win.mode}
-        data-window-tray-item-active={win.windowId === $activeWindowId ? 'true' : 'false'}
+        data-window-tray-item-active={win.windowId === activeWindowId ? 'true' : 'false'}
         data-window-id={win.windowId}
         title={win.title}
         on:click={() => openWindowFromTray(win)}
@@ -296,12 +334,12 @@
     {/each}
   </div>
 
-  <div class="command-field" class:has-target={continueTarget && !mobileSwitcherOpen} data-command-field>
+  <div class="command-field" class:has-target={!mobileSwitcherOpen} data-command-field>
     {#if mobileSwitcherOpen}
       <div class="mobile-app-switcher" data-mobile-app-switcher aria-label="Open apps">
-        {#each $openWindows as win (win.windowId)}
+        {#each openWindows as win (win.windowId)}
           <button
-            class:active={win.windowId === $activeWindowId}
+            class:active={win.windowId === activeWindowId}
             class="mobile-app-switcher-item"
             type="button"
             title={win.title}
@@ -319,28 +357,28 @@
     {/if}
     {#if !mobileSwitcherOpen}
       {#if promptStatus}<div class="prompt-status" data-prompt-status>{promptStatus}</div>{/if}
-      {#if continueTarget}
-        <button
-          class="prompt-target"
-          class:new-document={!continuing}
-          type="button"
-          data-prompt-target
-          data-prompt-target-mode={continuing ? 'continue' : 'new'}
-          aria-pressed={continuing ? 'true' : 'false'}
-          aria-label={continuing ? `Continue ${continueTarget.title}. Tap for a new document.` : `New document. Tap to continue ${continueTarget.title}.`}
-          title={continuing ? `Builds on ${continueTarget.title}` : 'Starts a new document'}
-          on:click={toggleContinueTarget}
-        >
-          <span class="prompt-target-pill">
-            {#if continuing}
-              <span class="prompt-target-verb">Continue</span>
-              <span class="prompt-target-title">{continueTarget.title}</span>
-            {:else}
-              <span class="prompt-target-verb">New document</span>
-            {/if}
-          </span>
-        </button>
+      {#if route}
+        <div class="prompt-status" data-prompt-route data-prompt-route-state={route.state} aria-live="polite">
+          {route.state === 'routing' ? `${route.label}…` : `→ ${route.label}`}
+        </div>
       {/if}
+      <button
+        class="prompt-target"
+        class:new-document={mode !== 'focus'}
+        type="button"
+        data-prompt-target
+        data-prompt-target-mode={mode}
+        data-prompt-target-agent={mode === 'focus' ? target?.focus?.app_agent_id : ''}
+        aria-pressed={mode === 'focus' ? 'true' : 'false'}
+        aria-label={chipAria}
+        title={chipAria}
+        on:click={toggleTarget}
+      >
+        <span class="prompt-target-pill">
+          <span class="prompt-target-verb">{chipName}</span>
+          {#if chipLabel}<span class="prompt-target-sep" aria-hidden="true">·</span><span class="prompt-target-title">{chipLabel}</span>{/if}
+        </span>
+      </button>
       <textarea
         bind:this={promptInputEl}
         bind:value={promptValue}
@@ -365,7 +403,7 @@
       <line x1="8.5" y1="21" x2="15.5" y2="21" />
     </svg>
   </button>
-  <span class:online class="online-indicator" data-online-indicator data-live-status={$desktopLiveStatus} aria-label={onlineLabel} title={onlineLabel}></span>
+  <span class:online class="online-indicator" data-online-indicator data-live-status={liveStatus} aria-label={onlineLabel} title={onlineLabel}></span>
 </div>
 
 <style>
@@ -601,6 +639,21 @@
   .prompt-target-verb {
     flex: 0 0 auto;
     font-weight: 700;
+  }
+
+  .prompt-target-sep {
+    flex: 0 0 auto;
+    opacity: 0.6;
+  }
+
+  .tetra-mark {
+    display: block;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .tetra-mark path {
+    fill: currentColor;
   }
 
   .prompt-target-title {

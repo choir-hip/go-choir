@@ -48,7 +48,7 @@ test('covered product apps do not expose manual refresh or reload sync controls'
 
 test('desktop live state syncs passive sessions but protects the local driver', async () => {
   const source = await readRelative('src/lib/Desktop.svelte');
-  const promptSurfaceSource = await readRelative('src/lib/PromptSurface.svelte');
+  const promptSurfaceSource = await readRelative('src/packages/prompt-bar/PromptBar.surface.svelte');
 
   expect(source).toContain('function handleRemoteDesktopStateUpdate(message = {})');
   expect(source).toContain("document.visibilityState === 'hidden'");
@@ -61,10 +61,11 @@ test('desktop live state syncs passive sessions but protects the local driver', 
   expect(source).toContain("liveStatus.set('connected')");
   expect(source).toContain('markConnected();');
   expect(source).toContain('ws?.readyState === WebSocket.OPEN');
-  expect(promptSurfaceSource).toContain('liveStatus as desktopLiveStatus');
-  expect(promptSurfaceSource).toContain('$desktopLiveStatus');
+  // The prompt bar is a surface package (H3): the host hands it the live status.
+  expect(source).toContain('liveStatus: $liveStatus');
+  expect(promptSurfaceSource).toContain("export let liveStatus");
   expect(promptSurfaceSource).toContain('onlineLabel');
-  expect(promptSurfaceSource).toContain('data-live-status={$desktopLiveStatus}');
+  expect(promptSurfaceSource).toContain('data-live-status={liveStatus}');
   expect(source).not.toMatch(
     /message\.kind === 'desktop\.state\.updated'[\s\S]{0,120}void loadDesktopState\(\);/,
   );

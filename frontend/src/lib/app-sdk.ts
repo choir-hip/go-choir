@@ -101,6 +101,7 @@ export type {
   AppContextChange,
   AuthRequest,
   OpenAppContext,
+  PromptFocus,
   PromptOptions,
   ToastKind,
   ToastOptions,
@@ -212,3 +213,7 @@ export {
   themeCSSVariables,
   validateThemeConfig,
 } from './theme';
+
+// The Choir mark's geometry (1.5.0, slice H3): a surface that draws the mark
+// (the prompt bar's desk button) draws these paths in its own svg.
+export { TETRA_MARK_PATHS, TETRA_MARK_VIEWBOX } from './tetramark';

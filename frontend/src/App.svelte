@@ -189,8 +189,8 @@
       promptReplay = {
         id: `prompt-replay-${++promptReplayCounter}`,
         text: intent.text,
-        continueDocId: intent.continueDocId || '',
-        continueWindowId: intent.continueWindowId || '',
+        focus: intent.focus || null,
+        windowId: intent.windowId || '',
       };
       return;
     }

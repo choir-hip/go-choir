@@ -3,18 +3,35 @@
   (docs/design/modular-architecture-2026-11-04.md section 1, item 7). Plain,
   unthemed beyond the tokens, and small: it exists so a broken or absent
   surface package never locks the owner out. Each `kind` is one slot's
-  fallback; `apps`, `windows` and the handlers are what that slot needs.
+  fallback; `apps`, `windows` and the handlers are what that slot needs. The
+  prompt's fallback is a plain field at the bottom: Enter sends the text to the
+  conductor (no focus), and Apps opens the launcher.
 -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
-  export let kind: 'launcher' | 'overview';
+  export let kind: 'launcher' | 'overview' | 'prompt';
   export let apps: Array<{ id: string; name: string; icon: string }> = [];
   export let windows: Array<{ windowId: string; title: string; mode: string }> = [];
+  export let disabled = false;
 
   const dispatch = createEventDispatcher();
+  let text = '';
+
+  function onPromptKey(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.shiftKey || disabled || !text.trim()) return;
+    event.preventDefault();
+    dispatch('submit', { text: text.trim() });
+    text = '';
+  }
 </script>
 
+{#if kind === 'prompt'}
+<form class="last-resort-prompt" data-last-resort="prompt" on:submit|preventDefault>
+  <button type="button" data-last-resort-apps on:click={() => dispatch('apps')}>Apps</button>
+  <textarea rows="1" bind:value={text} {disabled} aria-label="Command prompt" data-last-resort-prompt-input on:keydown={onPromptKey} />
+</form>
+{:else}
 <section class="last-resort" data-last-resort={kind} role="dialog" aria-label={kind === 'launcher' ? 'Apps' : 'Open windows'}>
   <header>
     <strong>{kind === 'launcher' ? 'Apps' : 'Open windows'}</strong>
@@ -32,6 +49,7 @@
     {/if}
   </ul>
 </section>
+{/if}
 
 <style>
   .last-resort {
@@ -48,6 +66,27 @@
     border-radius: 8px;
     color: var(--choir-fg, #111);
     background: var(--choir-bg, #fff);
+  }
+
+  .last-resort-prompt {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 10000;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--choir-border, currentColor);
+    border-radius: 8px;
+    color: var(--choir-fg, #111);
+    background: var(--choir-bg, #fff);
+  }
+
+  .last-resort-prompt textarea {
+    flex: 1;
+    min-height: 40px;
+    font: inherit;
   }
 
   header {

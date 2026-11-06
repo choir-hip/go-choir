@@ -16,6 +16,10 @@
 //  S3 a surface that fails is out of the ranking and the slot falls back;
 //  S4 the package leaves: its surface goes, the slot falls to the last resort;
 //  S5 the last resort does not flash before the boot registrations settle.
+// H3, the prompt bar:
+//  P1 with the prompt-bar package gone the owner has no door: the host's
+//     last-resort field must take text (to the conductor) and open the apps;
+//  P2 Cmd+K, the host's command, stops opening the desk with the package gone.
 //
 //   cd frontend && npx vite --port 5173 &
 //   npx playwright test tests/shell-surfaces.spec.js
@@ -43,7 +47,7 @@ test.describe('the slots on the kernel', () => {
   test.afterAll(async () => { await vite?.close(); });
 
   test('every shell slot is drawn by its in-tree package, an ordinary provider in the snapshot', () => {
-    const want = { launcher: 'launcher', 'desktop.icons': 'desktop-icons', overview: 'overview' };
+    const want = { launcher: 'launcher', 'desktop.icons': 'desktop-icons', overview: 'overview', prompt: 'prompt-bar' };
     const slots = Object.fromEntries(M.describeSlots().map((s) => [s.slot, s]));
     for (const [slot, pkg] of Object.entries(want)) {
       expect(slots[slot].active, slot).toBe(pkg);
@@ -151,5 +155,28 @@ test.describe('the drills in the shell', () => {
     await lastResort.locator('[data-context-menu-item="open"]').click();
     await expect(lastResort).toHaveCount(0);
     await expect(page.locator('[data-window][data-window-app-id="files"]')).toBeVisible();
+  });
+
+  test('H3: the prompt bar renders from its package; without it the last-resort field takes text and Cmd+K still opens the desk', async ({ page }) => {
+    await openShell(page);
+    await expect(page.locator('[data-shell-slot="prompt"]')).toHaveAttribute('data-shell-slot-provider', 'prompt-bar');
+    await expect(page.locator('[data-prompt-surface]')).toBeVisible();
+
+    await removeSurfacePackages(page, ['prompt-bar']);
+    await expect(page.locator('[data-prompt-surface]')).toHaveCount(0);
+    const field = page.locator('[data-last-resort="prompt"]');
+    await expect(field).toBeVisible();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
+    await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
+    await expect(page.locator('[data-desk-sheet]')).toHaveCount(0);
+    await field.locator('[data-last-resort-apps]').click();
+    await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-desk-sheet]')).toHaveCount(0);
+    // Signed out, a submit asks the visitor to sign in, as the prompt bar does.
+    await field.locator('[data-last-resort-prompt-input]').fill('Write about currents');
+    await field.locator('[data-last-resort-prompt-input]').press('Enter');
+    await expect(page.locator('[data-auth-overlay]')).toBeVisible();
   });
 });
