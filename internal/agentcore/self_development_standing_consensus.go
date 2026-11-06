@@ -64,7 +64,20 @@ const (
 // management's Verify returns while the host builds. An attempt that ends
 // without a decision closes the operation failed with its reason.
 func (rt *Runtime) triggerStandingConsensus(operationID, verifierRunID string) {
-	if rt == nil || rt.selfdevControl == nil || rt.selfdevBallotSigner == nil || rt.selfdevOperations == nil || rt.store == nil {
+	if rt == nil {
+		return
+	}
+	if rt.selfdevControl == nil || rt.selfdevBallotSigner == nil || rt.selfdevOperations == nil || rt.store == nil {
+		// Nothing parks: a computer that cannot run the attempt closes the
+		// operation with that reason (when it has an operation store at all).
+		if rt.selfdevOperations != nil {
+			computerID := firstNonEmpty(rt.standingComputerID(), rt.cfg.ComputerID)
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+				rt.closeUndecidedSelfDevelopmentOperation(ctx, computerID, operationID, "standing consensus: the decision authority is not wired on this computer")
+			}()
+		}
 		return
 	}
 	go func() {

@@ -179,14 +179,18 @@ func (rt *Runtime) closeUndecidedSelfDevelopmentOperationsAtBoot(ctx context.Con
 		if err := rt.selfdevOperations.RecordIntentError(ctx, computerID, operation.OperationID, selfdevUndecidedInterruptedByRestart); err != nil {
 			log.Printf("selfdev: boot: record the reason on %s: %v", operation.OperationID, err)
 		}
-		if _, err := rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, selfdev.StateAwaitingApproval, selfdev.StateFailed, func(next *selfdev.Operation) error {
+		closed, err := rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, selfdev.StateAwaitingApproval, selfdev.StateFailed, func(next *selfdev.Operation) error {
 			next.TerminalError = selfdevUndecidedInterruptedByRestart
 			return nil
-		}); err != nil {
+		})
+		if err != nil {
 			log.Printf("selfdev: boot: close %s from awaiting_approval: %v", operation.OperationID, err)
 			continue
 		}
 		log.Printf("selfdev: boot: %s closed from awaiting_approval: %s", operation.OperationID, selfdevUndecidedInterruptedByRestart)
+		// The owner reading the candidate's document learns it closed, as the
+		// attempt close tells it (the record is the wake; no turn is forced).
+		rt.notifyTextureOfOwnerAct(ctx, rt.selfdevRouteOwnerID, closed, types.OwnerActFail, "")
 	}
 }
 

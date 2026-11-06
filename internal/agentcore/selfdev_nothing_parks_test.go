@@ -14,12 +14,14 @@ package agentcore
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const paperComputerForTest = "computer-1355b83bced1613eb048ee28d66688a8" // the Autopaper paper computer
@@ -118,5 +120,52 @@ func TestPlatformComputerDoesNotSelfDevelopOnTheGuestSide(t *testing.T) {
 	f.writeMode(t, "apply")
 	if err := f.rt.selfDevelopmentProposalAuthorized(ctx); err != nil {
 		t.Fatalf("freeze under mode apply: %v", err)
+	}
+}
+
+// The boot close tells Texture, as the attempt close does: the owner reading
+// the document learns the candidate closed, and why.
+func TestBootCloseWakesTheCandidatesTexture(t *testing.T) {
+	f := newP4Fixture(t)
+	ctx := context.Background()
+	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-boot-close")
+	f.trajectoryID = trajectoryID
+	operation := f.verify(t, f.freeze(t, "park-boot-wake", "closed at boot"))
+	f.rt.closeUndecidedSelfDevelopmentOperationsAtBoot(ctx, f.computerID)
+	got := ownerActRecords(t, f.store, "owner", f.computerID, inbox)
+	if len(got) != 1 {
+		t.Fatalf("the boot close left %d owner-act records, want 1: %+v", len(got), got)
+	}
+	checkOwnerActRecord(t, got[0], inbox, operation.OperationID, types.OwnerActFail)
+	if !strings.Contains(got[0].Directive.Body, "before a decision") || !strings.Contains(got[0].Directive.Body, selfdevUndecidedInterruptedByRestart) {
+		t.Fatalf("the wake does not say the candidate closed before a decision, and why: %q", got[0].Directive.Body)
+	}
+}
+
+// A computer that cannot run the attempt at all (no decision authority wired)
+// still closes the operation instead of parking it.
+func TestTriggerWithoutADecisionAuthorityClosesTheOperation(t *testing.T) {
+	f := newP4Fixture(t)
+	operation := f.verify(t, f.freeze(t, "park-no-authority", "no decision authority"))
+	bare := &Runtime{selfdevOperations: f.rt.selfdevOperations, store: f.rt.store, selfdevComputerID: f.computerID}
+	bare.triggerStandingConsensus(operation.OperationID, "run:management-p4")
+	closed := f.waitForState(t, operation.OperationID, selfdev.StateFailed)
+	if !strings.Contains(closed.TerminalError, "decision authority") || !strings.Contains(closed.LastIntentError, "decision authority") {
+		t.Fatalf("closed without the reason: terminal=%q intent=%q", closed.TerminalError, closed.LastIntentError)
+	}
+}
+
+// Reject is the fail-safe decision: the owner can reject a still-undecided
+// candidate whatever the mode, off included.
+func TestOwnerRejectWorksOnAnOffComputer(t *testing.T) {
+	f := newP4Fixture(t)
+	ctx := context.Background()
+	operation := f.verify(t, f.freeze(t, "park-reject-off", "rejected under off"))
+	f.writeMode(t, "off")
+	request := ownerActDecisionRequest(t, f, operation, "reject", "reject-under-off")
+	handler := &APIHandler{rt: f.rt}
+	decided, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, request)
+	if status != http.StatusOK || err != nil || decided.State != selfdev.StateRejected {
+		t.Fatalf("reject under mode off answered %d %v: %+v", status, err, decided)
 	}
 }

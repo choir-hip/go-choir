@@ -442,7 +442,9 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 		currentMode.Receipt.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
 		return selfdev.Operation{}, http.StatusConflict, errors.New("current mode receipt is invalid")
 	}
-	if platform.CanonicalSelfDevelopmentMode(currentMode.Mode) != platform.SelfDevelopmentModeApply {
+	// Reject is the fail-safe decision and works under any mode, off
+	// included (the receipt checks above still hold); approve needs apply.
+	if platform.CanonicalSelfDevelopmentMode(currentMode.Mode) != platform.SelfDevelopmentModeApply && request.Decision != "reject" {
 		return selfdev.Operation{}, http.StatusConflict, errors.New("current mode does not authorize this decision")
 	}
 	var consensusReceiptBytes []byte
