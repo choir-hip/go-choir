@@ -555,3 +555,21 @@ func TestCleanRebaseGateAdmitsAChainOfCleanRebases(t *testing.T) {
 	}
 	_ = firstReceipt
 }
+
+// A platform computer does not self-develop (owner ruling 2026-11-06): the
+// clean rebase branch refuses it before anything else, as the poster does.
+func TestCleanRebaseGateRefusesAPlatformComputer(t *testing.T) {
+	f := newCleanRebaseFixture(t)
+	c := newCleanRebaseCase()
+	jobs := fakeJobs{}
+	event, _ := f.write(t, c, "op-2", jobs)
+	// The same event, valid for an ordinary computer, is refused on the paper's.
+	if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); reason != "" || err != nil {
+		t.Fatalf("control: the ordinary computer's clean rebase refused: %q %v", reason, err)
+	}
+	event.ComputerID = paperComputerID
+	reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event)
+	if err != nil || !strings.Contains(reason, "platform computer") {
+		t.Fatalf("clean rebase on the paper computer: %q %v", reason, err)
+	}
+}

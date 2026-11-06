@@ -383,7 +383,7 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	selection := decisionpolicy.PolicySelectionReceipt{
 		ReceiptKind: decisionpolicy.ReceiptKindPolicySelection, PolicyDigest: policyDigest,
 		SeatManifestDigest: manifestDigest, SubjectDigest: subjectDigest,
-		SelectedAtHead: arm.receiptDigest, SelectedSequence: arm.generation + 1, // the reducer requires a nonzero sequence; a no-row computer is generation 0
+		SelectedAtHead: arm.receiptDigest, SelectedSequence: max(arm.generation, 1), // the reducer requires a nonzero sequence; a no-row computer is generation 0, recorded as 1 here (the decision's standing_generation is the true value)
 	}
 	if selection.SelectionDigest, err = selection.Digest(); err != nil {
 		return ConsensusResponse{}, err

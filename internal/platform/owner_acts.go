@@ -319,8 +319,12 @@ func (a *OwnerActAuthority) admitEffectAccepted(ctx context.Context, tx *sql.Tx,
 	// P4: the consensus branch always enforces. There is no pre-P4
 	// consensus traffic to observe, and observe would admit exactly the
 	// guest-forged quorum the branch exists to stop. The clean rebase
-	// branch (owner 2026-11-04) always enforces for the same reason.
-	enforce := a.Enforcing() || IsConsensusAuthority(event.AuthorityRef) || IsCleanRebaseAuthority(event.AuthorityRef)
+	// branch (owner 2026-11-04) always enforces for the same reason. So does
+	// every authority but the platform update: owner approval is retired
+	// (an external-owner effect_accepted has nothing left to observe), and an
+	// empty or unknown authority was never legitimate traffic. Only the
+	// platform update offer keeps the observe window.
+	enforce := a.Enforcing() || strings.TrimSpace(event.AuthorityRef) != AuthorityPlatformUpdate
 	if err != nil {
 		if enforce {
 			return fmt.Errorf("%w: authority lookup failed: %v", ErrEffectAdmissionRefused, err)
@@ -330,7 +334,7 @@ func (a *OwnerActAuthority) admitEffectAccepted(ctx context.Context, tx *sql.Tx,
 	}
 	if reason != "" {
 		if enforce && !a.Enforcing() {
-			log.Printf("owner-act: enforce (consensus/clean rebase): refused effect_accepted %s computer=%s: %s", eventDigest, event.ComputerID, reason)
+			log.Printf("owner-act: enforce (every authority but the platform update): refused effect_accepted %s computer=%s: %s", eventDigest, event.ComputerID, reason)
 			return fmt.Errorf("%w: %s", ErrEffectAdmissionRefused, reason)
 		}
 		return a.refuse(ErrEffectAdmissionRefused, "effect_accepted "+eventDigest+" authority="+event.AuthorityRef, event.ComputerID, reason)

@@ -371,12 +371,20 @@ func TestEffectAdmissionPlatformUpdateNeedsAnOfferCorpusdMinted(t *testing.T) {
 	}
 }
 
-func TestEffectAdmissionObserveLogsAndAdmits(t *testing.T) {
+// Observe mode keeps its window for the platform update only. Owner approval
+// is retired and an empty or unknown authority was never legitimate traffic,
+// so a guest cannot append them under the fleet's observe default
+// (nix/node-b.nix ownerActMode).
+func TestEffectAdmissionObserveStillRefusesRetiredAndUnknownAuthorities(t *testing.T) {
 	f := newAdmissionFixture(t, OwnerActObserve)
 	head := f.seedHead(t, f.computerID)
-	// A guest-appended acceptance with no traceable authority is only logged.
-	if err := f.append(t, accepted(t, head, "external-owner:x", "op-1", digestOf('b'), []string{"artifact:sha256:" + digestOf('f')}, digestOf('d'))); err != nil {
-		t.Fatalf("observe refused: %v", err)
+	inputs := []string{"artifact:sha256:" + digestOf('f')}
+	refused(t, "observe external-owner", f.append(t, accepted(t, head, "external-owner:x", "op-1", digestOf('b'), inputs, digestOf('d'))))
+	refused(t, "observe unknown authority", f.append(t, accepted(t, head, "guest:self", "op-1", digestOf('b'), inputs, digestOf('d'))))
+	// The platform update still observes: an offer corpusd never minted is
+	// only logged.
+	if err := f.append(t, accepted(t, head, AuthorityPlatformUpdate, "", digestOf('c'), nil, digestOf('0'))); err != nil {
+		t.Fatalf("observe refused a platform update: %v", err)
 	}
 }
 

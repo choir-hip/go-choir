@@ -70,6 +70,12 @@ func (s *Service) ReadTapeObject(computerID string, ns tapestore.NS, digest stri
 }
 
 func (a *OwnerActAuthority) cleanRebaseRefusal(ctx context.Context, tx *sql.Tx, event computerevent.Event, _ string) (string, func() error, error) {
+	// A platform computer does not self-develop (owner ruling 2026-11-06),
+	// and a clean rebase is a self-development apply: the same refusal as the
+	// poster's, from corpusd's own tier file (an unreadable file refuses).
+	if platform, err := platformComputer(event.ComputerID); platform || err != nil {
+		return "a platform computer does not self-develop (owner ruling 2026-11-06); no clean rebase applies", nil, nil
+	}
 	receiptDigest, ok := selfdevprotocol.CleanRebaseReceiptDigestFromAuthority(event.AuthorityRef)
 	if !ok {
 		return "clean rebase authority names no receipt digest", nil, nil
