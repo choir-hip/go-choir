@@ -650,3 +650,31 @@ func TestAResearchAnswerCarryingTextureLabelsIsAdmittedByTheCustodian(t *testing
 		t.Fatalf("texture labels to management = %v", err)
 	}
 }
+
+// The gate records who asked: a built-in desk's observed ask names the sender,
+// the recipient desk, the message kind and the labels, and changes no decision.
+func TestTheGateTalliesTheSiteOfAnObservedAsk(t *testing.T) {
+	f := newDisclosureFixture(t, "sites", 62840)
+	exec := f.run(t, "run-sites", f.desk, "x", types.OwnerPrivateLabel("document"))
+	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
+	in := yaegikernel.StagedIntent{LocalID: "s1", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Management + ":inst-secret-1", Statement: "private body text"}
+	if err := r.gateMessageDisclosure(context.Background(), in); err != nil {
+		t.Fatalf("an observed ask blocked: %v", err)
+	}
+	sites := disclosure.Sites()
+	found := false
+	for k, n := range sites {
+		if strings.Contains(k, "private") && !strings.Contains(k, "owner_private:document") || strings.Contains(k, "secret") || strings.Contains(k, "body") {
+			t.Fatalf("a site key carries content: %q", k)
+		}
+		if strings.HasPrefix(k, "desk_message|ask|") && strings.Contains(k, "->"+agentprofile.Management+"|cast|owner_private:document") && n == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("sites = %v", sites)
+	}
+	if disclosure.Counts()["desk_message|owner_private|ask|observed"] != 1 {
+		t.Fatalf("counts = %v", disclosure.Counts())
+	}
+}

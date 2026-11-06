@@ -36,6 +36,7 @@ package disclosure
 import (
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -358,11 +359,12 @@ func Counts() map[string]uint64 {
 	return out
 }
 
-// ResetCounts clears the counters (tests).
+// ResetCounts clears the counters and the sites (tests).
 func ResetCounts() {
 	countMu.Lock()
 	counts = map[string]uint64{}
 	logged = map[string]bool{}
+	siteCounts = map[string]uint64{}
 	countMu.Unlock()
 }
 
@@ -372,4 +374,84 @@ func NoteUnreadable(sink Sink, outcome string) {
 	countMu.Lock()
 	counts[fmt.Sprintf("%s|unreadable|labels|%s", sink, outcome)]++
 	countMu.Unlock()
+}
+
+// maxSites bounds the distinct site keys; further new keys count under
+// sitesOverflowKey.
+const (
+	maxSites         = 64
+	sitesOverflowKey = "overflow"
+)
+
+var siteCounts = map[string]uint64{}
+
+// Site is where an ask or deny came from: desk names and a message kind only,
+// never content, a URL or an owner identifier.
+type Site struct {
+	// Sender is the desk whose run reached the sink.
+	Sender string
+	// Recipient is the desk a message goes to; other sinks name themselves.
+	Recipient string
+	// Kind is the message kind (cast, report, reply) when known.
+	Kind string
+}
+
+// siteToken keeps a field to a short run of [a-z0-9_.:-]: anything else
+// (spaces, pipes, slashes, query strings) is dropped, so a key can carry a
+// name and nothing composed.
+func siteToken(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '.', r == ':', r == '-':
+			b.WriteRune(r)
+		}
+		if b.Len() >= 48 {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "-"
+	}
+	return b.String()
+}
+
+// NoteSite tallies one ask or deny under
+// "sink|decision|sender->recipient|kind|labels", the labels that asked sorted
+// and comma-joined. An allow is not recorded. It changes no decision and no
+// count.
+func NoteSite(v Verdict, s Site) {
+	if v.Decision == Allow {
+		return
+	}
+	recipient := string(v.Sink)
+	if v.Sink == SinkDeskMessage {
+		recipient = siteToken(s.Recipient)
+	}
+	var asked []string
+	for _, h := range v.Hits {
+		if h.Decision != Allow {
+			asked = append(asked, siteToken(h.Label))
+		}
+	}
+	sort.Strings(asked)
+	key := fmt.Sprintf("%s|%s|%s->%s|%s|%s", v.Sink, v.Decision, siteToken(s.Sender), recipient, siteToken(s.Kind), strings.Join(asked, ","))
+	countMu.Lock()
+	defer countMu.Unlock()
+	if _, seen := siteCounts[key]; !seen && len(siteCounts) >= maxSites {
+		key = sitesOverflowKey
+	}
+	siteCounts[key]++
+}
+
+// Sites returns the ask and deny sites tallied, bounded at maxSites keys plus
+// overflow.
+func Sites() map[string]uint64 {
+	countMu.Lock()
+	defer countMu.Unlock()
+	out := make(map[string]uint64, len(siteCounts))
+	for k, v := range siteCounts {
+		out[k] = v
+	}
+	return out
 }

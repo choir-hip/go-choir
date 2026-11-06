@@ -948,7 +948,9 @@ type writerGateObservability struct {
 	Mode   string            `json:"mode"`
 	Counts map[string]uint64 `json:"counts"`
 	// Sites, on the object-graph gates, tallies "kind|outcome|function
-	// (file:line)" of the first caller outside the graph and the store.
+	// (file:line)" of the first caller outside the graph and the store; on
+	// the disclosure gate, "sink|decision|sender->recipient|kind|labels" of
+	// each ask or deny (desk, kind and label names only).
 	Sites map[string]uint64 `json:"sites,omitempty"`
 }
 
@@ -1017,7 +1019,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		},
 		RouteAppGate: &writerGateObservability{Mode: "observe", Counts: routekinds.Counts()},
 		DisclosureGate: &writerGateObservability{
-			Mode: disclosure.CurrentMode().String(), Counts: disclosure.Counts(),
+			Mode: disclosure.CurrentMode().String(), Counts: disclosure.Counts(), Sites: disclosure.Sites(),
 		},
 	}
 	if r.URL.Query().Get("goroutines") == "1" {

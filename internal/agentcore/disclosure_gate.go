@@ -95,6 +95,9 @@ type disclosureCall struct {
 	// replies in the owner's own thread (mail_send only). The gate names no
 	// desk: the custodian's path is the one that sets it.
 	mailReply bool
+	// kind is the message kind of a desk message (cast, report, reply), for
+	// the sites tally only.
+	kind string
 }
 
 // disclosurePayload is the body of a disclosure.decision event.
@@ -227,6 +230,21 @@ func (rt *Runtime) gateEgressCall(ctx context.Context, deskRole string, exec too
 	return rt.gateDisclosure(ctx, disclosureCall{exec: exec, deskRole: deskRole, sink: disclosure.SinkEgress, target: target, summary: summary})
 }
 
+// messageTargetDesk is the desk a desk message goes to, without its instance
+// suffix; other sinks have none (the tally names the sink).
+func messageTargetDesk(call disclosureCall) string {
+	if call.sink != disclosure.SinkDeskMessage {
+		return ""
+	}
+	// resolveMessageDesk keeps a package desk's app:<name> whole; the cut is
+	// only the fallback for a target it cannot resolve.
+	if to, ok := resolveMessageDesk(call.target); ok {
+		return to
+	}
+	head, _, _ := strings.Cut(strings.TrimSpace(call.target), ":")
+	return canonicalDeskName(head)
+}
+
 // disclosureFacts computes the admission facts of a sink attempt.
 func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
 	switch call.sink {
@@ -287,6 +305,9 @@ func (rt *Runtime) gateDisclosure(ctx context.Context, call disclosureCall) erro
 		disclosure.Note(verdict, "allowed")
 		return nil
 	}
+	disclosure.NoteSite(verdict, disclosure.Site{
+		Sender: canonicalDeskName(strings.TrimSpace(call.deskRole)), Recipient: messageTargetDesk(call), Kind: call.kind,
+	})
 	if !enforcedDesk {
 		// A built-in desk observes: counted, logged once, not blocked, and no
 		// System 1 call is spent on it.
@@ -586,7 +607,7 @@ func (r *rlmCallReduction) gateMessage(ctx context.Context, kind, to, body strin
 		exec: toolregistry.ExecutionContext{
 			RunID: r.scope.RunID, OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID, AgentID: r.scope.DeskAgentID, RunRecord: r.rec,
 		},
-		deskRole: r.rec.AgentProfile, sink: disclosure.SinkDeskMessage, target: to,
+		deskRole: r.rec.AgentProfile, sink: disclosure.SinkDeskMessage, target: to, kind: kind,
 		summary: kind + " " + disclosureBound(body, disclosureSummaryRunes),
 	})
 }

@@ -1,6 +1,8 @@
 package disclosure
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -162,5 +164,55 @@ func TestModeDefaultsToObserveAndRestores(t *testing.T) {
 	restore()
 	if CurrentMode() != ModeObserve {
 		t.Fatal("mode did not restore")
+	}
+}
+
+// Ways the sites tally could fail (written before the code): it records an
+// allow; it records content (a URL with a query, an owner identifier, a body);
+// it grows without bound; it changes a decision or the counts.
+
+func TestSitesRecordOnlyAskAndDenyAsDeskKindAndLabelNames(t *testing.T) {
+	ResetCounts()
+	t.Cleanup(ResetCounts)
+	labels := types.NewLabelSet(types.OwnerPrivateLabel("document"), types.LabelWorldUntrusted)
+	ask := Decide(labels, SinkDeskMessage, Facts{})
+	allow := Decide(types.NewLabelSet(types.LabelWorldUntrusted), SinkDeskMessage, Facts{})
+	NoteSite(allow, Site{Sender: "texture", Recipient: "research", Kind: "cast"})
+	if len(Sites()) != 0 {
+		t.Fatalf("an allow was recorded: %v", Sites())
+	}
+	NoteSite(ask, Site{Sender: "texture", Recipient: "research", Kind: "cast"})
+	NoteSite(ask, Site{Sender: "texture", Recipient: "research", Kind: "cast"})
+	want := "desk_message|ask|texture->research|cast|owner_private:document"
+	if got := Sites(); len(got) != 1 || got[want] != 2 {
+		t.Fatalf("sites = %v, want %q x2", got, want)
+	}
+	// Non-desk sinks name the sink, never the target; a hostile field cannot
+	// smuggle content or a separator.
+	pub := Decide(labels, SinkPublication, Facts{})
+	NoteSite(pub, Site{Sender: "texture", Recipient: "https://x.test/a?token=SECRET", Kind: "body text|with pipes"})
+	for k := range Sites() {
+		if strings.Contains(k, "SECRET") || strings.Contains(k, "x.test") || strings.Contains(k, " ") || strings.Count(k, "|") != 4 {
+			t.Fatalf("a key carries content or a stray separator: %q", k)
+		}
+	}
+	if Sites()["publication|ask|texture->publication|bodytextwithpipes|owner_private:document"] != 1 {
+		t.Fatalf("sites = %v", Sites())
+	}
+	if c := Counts(); len(c) != 0 {
+		t.Fatalf("NoteSite changed the counts: %v", c)
+	}
+}
+
+func TestSitesAreBounded(t *testing.T) {
+	ResetCounts()
+	t.Cleanup(ResetCounts)
+	v := Decide(types.NewLabelSet(types.OwnerPrivateLabel("document")), SinkDeskMessage, Facts{})
+	for i := 0; i < 200; i++ {
+		NoteSite(v, Site{Sender: "texture", Recipient: fmt.Sprintf("desk%d", i), Kind: "cast"})
+	}
+	got := Sites()
+	if len(got) != maxSites+1 || got[sitesOverflowKey] != 200-maxSites {
+		t.Fatalf("len=%d overflow=%d", len(got), got[sitesOverflowKey])
 	}
 }
