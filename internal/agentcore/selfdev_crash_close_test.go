@@ -14,8 +14,10 @@ import (
 // Ways the closer can fail:
 //  1. An executing operation survives a crash boot and pins the busy probe.
 //  2. A planned boot closes work it should resume.
-//  3. It closes awaiting_approval (the owner's decision) or a state the
-//     materializer recovers from the updater journal.
+//  3. It closes a state the materializer recovers from the updater journal,
+//     or fails to close an awaiting_approval operation with no decision on the
+//     tape (every boot closes those: nothing parks,
+//     docs/design/selfdev-apply-and-revert-2026-11-06.md 3.4).
 //  4. A closed operation carries no visible fate.
 //  5. It touches another computer's operations.
 
@@ -75,6 +77,12 @@ func TestCrashBootClosesPreDecisionSelfDevelopmentOperations(t *testing.T) {
 			}
 			continue
 		}
+		if id == "op-awaiting" {
+			if operation.State != selfdev.StateFailed || operation.TerminalError != selfdevUndecidedInterruptedByRestart || operation.LastIntentError != selfdevUndecidedInterruptedByRestart {
+				t.Errorf("%s after crash boot = %s %q / %q, want failed %q", id, operation.State, operation.TerminalError, operation.LastIntentError, selfdevUndecidedInterruptedByRestart)
+			}
+			continue
+		}
 		if operation.State != before {
 			t.Errorf("%s moved from %s to %s; the crash closer only closes pre-decision states", id, before, operation.State)
 		}
@@ -99,6 +107,14 @@ func TestPlannedBootKeepsSelfDevelopmentOperations(t *testing.T) {
 		operation, err := operations.Get(ctx, rt.cfg.ComputerID, id)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if id == "op-awaiting" {
+			// A planned boot closes an undecided candidate too: the attempt
+			// that would decide it died with the process and nothing resumes it.
+			if operation.State != selfdev.StateFailed || operation.TerminalError != selfdevUndecidedInterruptedByRestart {
+				t.Errorf("planned boot left the undecided %s at %s %q", id, operation.State, operation.TerminalError)
+			}
+			continue
 		}
 		if operation.State != before {
 			t.Errorf("planned boot moved %s from %s to %s", id, before, operation.State)

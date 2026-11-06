@@ -115,7 +115,11 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 		}
 		return body
 	case types.OwnerActFail:
-		body := fmt.Sprintf("Self-development candidate %s failed after its decision: it was not applied, and the computer keeps the release it had.", id)
+		after := " after its decision"
+		if strings.TrimSpace(operation.DecisionEvent) == "" {
+			after = " before a decision"
+		}
+		body := fmt.Sprintf("Self-development candidate %s failed%s: it was not applied, and the computer keeps the release it had.", id, after)
 		if cause := strings.TrimSpace(operation.TerminalError); cause != "" {
 			body += " The cause:\n\n" + cause
 		}

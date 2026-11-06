@@ -106,22 +106,33 @@ const selfdevInterruptedByRestart = "interrupted by a restart"
 // that desk run, so nothing would advance the operation again, and the busy
 // probe would count it forever
 // (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
-// awaiting_approval waits on the owner and stays. The post-decision states,
-// and ops whose owner decision committed before the crash, are marked
-// interrupted: the materializer settles them from the updater journal and
-// never applies them (L1a-3b). A planned boot closes nothing.
+// The post-decision states, and ops whose decision committed before the
+// crash, are marked interrupted: the materializer settles them from the
+// updater journal and never applies them (L1a-3b). A planned boot closes no
+// pre-decision desk operation, and keeps recoverSelfDevelopmentDecision for a
+// decided one.
+//
+// Every boot, crash or planned, closes each awaiting_approval operation with
+// no finalized decision failed, "interrupted by a restart before its decision"
+// (docs/design/selfdev-apply-and-revert-2026-11-06.md 3.4): the attempt that
+// would decide it died with the process, and nothing resumes it. That is also
+// the first-boot sweep of every candidate parked under the old approval queue.
 func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context) {
 	if rt == nil || rt.selfdevOperations == nil {
-		return
-	}
-	if _, planned := rt.BootWasPlannedRestart(); planned {
 		return
 	}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	if computerID == "" {
 		return
 	}
-	rt.markSelfDevelopmentOperationsInterruptedAfterCrash(ctx)
+	_, planned := rt.BootWasPlannedRestart()
+	if !planned {
+		rt.markSelfDevelopmentOperationsInterruptedAfterCrash(ctx)
+	}
+	rt.closeUndecidedSelfDevelopmentOperationsAtBoot(ctx, computerID)
+	if planned {
+		return
+	}
 	operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.PreDecisionStates...)
 	if err != nil {
 		log.Printf("selfdev: crash boot: list pre-decision operations: %v", err)
@@ -136,6 +147,46 @@ func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context)
 			continue
 		}
 		log.Printf("selfdev: crash boot: %s closed from %s: %s", operation.OperationID, operation.State, selfdevInterruptedByRestart)
+	}
+}
+
+// selfdevUndecidedInterruptedByRestart is the visible fate of an
+// awaiting_approval operation a boot found with no decision on the tape.
+const selfdevUndecidedInterruptedByRestart = "interrupted by a restart before its decision"
+
+// closeUndecidedSelfDevelopmentOperationsAtBoot closes each awaiting_approval
+// operation with no finalized decision failed. It asks
+// FinalizedDecisionForOperation first: an operation whose decision is on the
+// tape but not projected is left to the settlement path (the planned boot's
+// recoverSelfDevelopmentDecision, the crash boot's interrupted mark), never
+// this close. An unreadable tape closes nothing.
+func (rt *Runtime) closeUndecidedSelfDevelopmentOperationsAtBoot(ctx context.Context, computerID string) {
+	if rt.store == nil {
+		return
+	}
+	operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateAwaitingApproval)
+	if err != nil {
+		log.Printf("selfdev: boot: list awaiting-approval operations: %v", err)
+		return
+	}
+	for _, operation := range operations {
+		if _, found, lookupErr := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID); lookupErr != nil || found {
+			if lookupErr != nil {
+				log.Printf("selfdev: boot: decision lookup for %s: %v", operation.OperationID, lookupErr)
+			}
+			continue
+		}
+		if err := rt.selfdevOperations.RecordIntentError(ctx, computerID, operation.OperationID, selfdevUndecidedInterruptedByRestart); err != nil {
+			log.Printf("selfdev: boot: record the reason on %s: %v", operation.OperationID, err)
+		}
+		if _, err := rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, selfdev.StateAwaitingApproval, selfdev.StateFailed, func(next *selfdev.Operation) error {
+			next.TerminalError = selfdevUndecidedInterruptedByRestart
+			return nil
+		}); err != nil {
+			log.Printf("selfdev: boot: close %s from awaiting_approval: %v", operation.OperationID, err)
+			continue
+		}
+		log.Printf("selfdev: boot: %s closed from awaiting_approval: %s", operation.OperationID, selfdevUndecidedInterruptedByRestart)
 	}
 }
 
