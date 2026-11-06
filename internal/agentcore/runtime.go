@@ -579,6 +579,7 @@ type Runtime struct {
 	packageMigrationTried    map[string]bool
 	packageMigrationStatusMu sync.Mutex // guards packageMigrationLast only: /health never waits on an attempt
 	packageMigrationLast     *packageMigrationStatus
+	packageMigrationWait     *packageMigrationWaiting // PM33: why no attempt runs now; same mutex
 	packageMigrationBaseline string
 	packageMigrationAt       func(step string)
 	// packageMigrationWriteFault: tests inject a record write failure.

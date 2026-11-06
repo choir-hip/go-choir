@@ -48,6 +48,15 @@ var AllStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerif
 
 var OpenStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerified, StateAwaitingApproval, StateAccepted, StateMaterializing, StateRollbackPending, StateDegraded}
 
+// StackChangingStates are the open states in which an operation is changing,
+// or about to change, the applied stack or the served `current` release: the
+// owner has decided (accepted), the updater is installing (materializing), a
+// rollback is installing (rollback_pending), or an apply landed with its tail
+// unsettled (degraded). An open operation in any other state (a candidate
+// being built, or awaiting_approval) is parked: it waits on a decision and
+// changes neither.
+var StackChangingStates = []string{StateAccepted, StateMaterializing, StateRollbackPending, StateDegraded}
+
 // PreDecisionStates are the states a desk run drives forward with its tools.
 // When that run is gone, nothing else advances them.
 var PreDecisionStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerified}
@@ -335,6 +344,17 @@ func (s *Store) ListByStates(ctx context.Context, computerID string, states ...s
 // OpenOperation returns the computer's oldest unsettled operation, if any.
 func (s *Store) OpenOperation(ctx context.Context, computerID string) (Operation, bool, error) {
 	open, err := s.ListByStates(ctx, computerID, OpenStates...)
+	if err != nil || len(open) == 0 {
+		return Operation{}, false, err
+	}
+	return open[0], true, nil
+}
+
+// StackChangingOperation returns the computer's oldest operation that is
+// changing the stack or `current` (StackChangingStates), if any. A parked
+// operation does not count.
+func (s *Store) StackChangingOperation(ctx context.Context, computerID string) (Operation, bool, error) {
+	open, err := s.ListByStates(ctx, computerID, StackChangingStates...)
 	if err != nil || len(open) == 0 {
 		return Operation{}, false, err
 	}

@@ -201,7 +201,18 @@ type packageMigrationStatus struct {
 	OperationID string `json:"operation_id"`
 	BootedBase  string `json:"booted_base"`
 	Held        bool   `json:"held,omitempty"`
+	// Waiting is why no attempt is running now (PM33). It is in memory, per
+	// process, recomputed each boot, and is never part of an attempt record.
+	Waiting *packageMigrationWaiting `json:"waiting,omitempty"`
 	packageMigrationAttempt
+}
+
+// packageMigrationWaiting is the visible deferral of an attempt that has not
+// started: the reason, when this process first saw it, and the last pass.
+type packageMigrationWaiting struct {
+	Reason string `json:"reason"`
+	Since  string `json:"since"`
+	At     string `json:"at"`
 }
 
 func packageMigrationPair(operationID, booted string) string {
@@ -281,10 +292,34 @@ func (rt *Runtime) packageMigrationStatusView() *packageMigrationStatus {
 	rt.packageMigrationStatusMu.Lock()
 	defer rt.packageMigrationStatusMu.Unlock()
 	if rt.packageMigrationLast == nil {
-		return nil
+		if rt.packageMigrationWait == nil {
+			return nil
+		}
+		return &packageMigrationStatus{Waiting: rt.packageMigrationWait}
 	}
 	copied := *rt.packageMigrationLast
+	copied.Waiting = rt.packageMigrationWait
 	return &copied
+}
+
+// setPackageMigrationWaiting records why this pass ran no attempt (PM33). The
+// reason is logged and shown on /health; it consumes no budget.
+func (rt *Runtime) setPackageMigrationWaiting(reason string) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	rt.packageMigrationStatusMu.Lock()
+	since := now
+	if rt.packageMigrationWait != nil && rt.packageMigrationWait.Reason == reason {
+		since = rt.packageMigrationWait.Since
+	}
+	rt.packageMigrationWait = &packageMigrationWaiting{Reason: reason, Since: since, At: now}
+	rt.packageMigrationStatusMu.Unlock()
+	log.Printf("package migration: waiting: %s", reason)
+}
+
+func (rt *Runtime) clearPackageMigrationWaiting() {
+	rt.packageMigrationStatusMu.Lock()
+	rt.packageMigrationWait = nil
+	rt.packageMigrationStatusMu.Unlock()
 }
 
 func (a *packageMigrationAttempt) end(outcome, reason string) {
@@ -446,12 +481,15 @@ func (rt *Runtime) migratePackageStack(ctx context.Context, trigger string) (*pa
 
 	result := rt.sourceProjectionStatus()
 	if result == nil || result.State != sourceproj.StatePackagePath {
+		rt.clearPackageMigrationWaiting() // nothing to migrate
 		return nil, nil
 	}
 	repo := rt.releaseRepo()
 	booted := strings.TrimSpace(result.BootedBase)
 	if booted == "" || !sourceproj.HasCommit(ctx, repo, booted) {
-		return nil, nil // PM11: the base fetch's reconcile triggers again
+		// PM11: the base fetch's reconcile triggers again
+		rt.setPackageMigrationWaiting("the booted base " + shortDigest(booted) + "'s objects are not on this computer yet; the base fetch triggers the migration again")
+		return nil, nil
 	}
 	// PM13: `current` is read and written under one lock, held to the end.
 	rt.currentReleaseMu.Lock()
@@ -459,23 +497,40 @@ func (rt *Runtime) migratePackageStack(ctx context.Context, trigger string) (*pa
 	in := rt.sourceProjectionInput(ctx)
 	top := in.Top
 	if top == nil || in.TopUnavailable != "" || len(top.Patch) == 0 || in.Pending {
+		why := "the applied stack's top operation is not readable yet"
+		switch {
+		case in.Pending:
+			why = "an apply is in flight; the migration waits for it to settle"
+		case in.TopUnavailable != "":
+			why = "the applied stack's top operation is unavailable: " + in.TopUnavailable
+		}
+		rt.setPackageMigrationWaiting(why)
 		return nil, nil
 	}
 	if rt.restoreRestaged.Load() {
 		// PM27: a tape restore restaged `current` and the restart into it
 		// is pending; the migration waits for the restored boot.
-		return nil, errors.New("a tape restore restaged the served release and the restart into it is pending; no attempt now")
+		err := errors.New("a tape restore restaged the served release and the restart into it is pending; no attempt now")
+		rt.setPackageMigrationWaiting(err.Error())
+		return nil, err
 	}
 	if top.OperationID != result.OperationID {
-		return nil, fmt.Errorf("the applied stack moved since the projection (%s, was %s); the next reconcile triggers again", top.OperationID, result.OperationID)
+		err := fmt.Errorf("the applied stack moved since the projection (%s, was %s); the next reconcile triggers again", top.OperationID, result.OperationID)
+		rt.setPackageMigrationWaiting(err.Error())
+		return nil, err
 	}
 	if rt.selfdevOperations != nil {
-		if open, found, err := rt.selfdevOperations.OpenOperation(ctx, rt.cfg.ComputerID); err != nil {
-			return nil, fmt.Errorf("read the open operation: %w", err)
+		// PM7, narrowed by PM32: only an operation that is changing the
+		// stack or `current` holds the attempt; a parked one does not.
+		if open, found, err := rt.selfdevOperations.StackChangingOperation(ctx, rt.cfg.ComputerID); err != nil {
+			return nil, fmt.Errorf("read the stack-changing operation: %w", err)
 		} else if found {
-			return nil, fmt.Errorf("operation %s is open (%s); no attempt now", open.OperationID, open.State) // PM7
+			err := fmt.Errorf("operation %s is %s and is changing the stack; no attempt now", open.OperationID, open.State)
+			rt.setPackageMigrationWaiting(err.Error())
+			return nil, err
 		}
 	}
+	rt.clearPackageMigrationWaiting()
 	pair := packageMigrationPair(top.OperationID, booted)
 	rec, err := rt.loadPackageMigration(pair)
 	if err != nil {
@@ -972,7 +1027,7 @@ func (rt *Runtime) rollbackPackageMigration(ctx context.Context, pair string) (*
 		return rec, fmt.Errorf("%w: the computer serves %s, not the release %s the migration served (nor its snapshot %s); restoring the snapshot would undo a later change", errPackageMigrationDrifted, shortDigest(current.ContentDigest), shortDigest(served), shortDigest(alreadyRestored))
 	}
 	if rt.selfdevOperations != nil {
-		if open, found, err := rt.selfdevOperations.OpenOperation(ctx, rt.cfg.ComputerID); err != nil {
+		if open, found, err := rt.selfdevOperations.StackChangingOperation(ctx, rt.cfg.ComputerID); err != nil {
 			return rec, fmt.Errorf("%w: the open operation cannot be read: %v", errPackageMigrationDrifted, err)
 		} else if found {
 			return rec, fmt.Errorf("%w: operation %s is open (%s)", errPackageMigrationDrifted, open.OperationID, open.State)

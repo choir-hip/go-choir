@@ -471,15 +471,63 @@ func TestPackageMigrationWiringGapDefers(t *testing.T) {
 	}
 }
 
-// PM7: an open operation holds the attempt (not counted).
-func TestPackageMigrationWaitsForAnOpenOperation(t *testing.T) {
+// PM32 (owner ruling 2026-11-06): a parked operation, one waiting on a
+// decision or still being built, changes neither the stack nor `current`, so
+// it does not hold the attempt.
+func TestPackageMigrationParkedOperationDoesNotBlock(t *testing.T) {
+	for _, state := range []string{"awaiting_approval", "requested", "executing", "frozen", "verified"} {
+		t.Run(state, func(t *testing.T) {
+			e := newPMEnv(t, pmPackageFiles("hello-app", pmManifest("hello-app"), "<p>hi</p>\n"), nil)
+			insertReleaseOperation(t, e.rt.store, releaseOpRow{operationID: "op-parked", computerID: pmComputer, state: state, bundleDigest: strings.Repeat("1", 64)})
+			rec := e.migrate(t)
+			if a := e.lastAttempt(t, rec); a.Outcome != pmDone {
+				t.Fatalf("a parked %s operation must not hold the attempt: %+v", state, a)
+			}
+			if view := e.rt.packageMigrationStatusView(); view == nil || view.Waiting != nil || view.Outcome != pmDone {
+				t.Fatalf("health after a done attempt = %+v", view)
+			}
+		})
+	}
+}
+
+// PM7 narrowed: an operation that is changing the stack or `current` still
+// holds the attempt (not counted), and /health says why.
+func TestPackageMigrationStackChangingOperationBlocksAndHealthShowsWhy(t *testing.T) {
+	for _, state := range []string{"accepted", "materializing", "rollback_pending", "degraded"} {
+		t.Run(state, func(t *testing.T) {
+			e := newPMEnv(t, pmPackageFiles("hello-app", pmManifest("hello-app"), "<p>hi</p>\n"), nil)
+			insertReleaseOperation(t, e.rt.store, releaseOpRow{operationID: "op-open", computerID: pmComputer, state: state, bundleDigest: strings.Repeat("1", 64)})
+			if _, err := e.rt.migratePackageStack(context.Background(), "boot"); err == nil || !strings.Contains(err.Error(), "op-open") {
+				t.Fatalf("a %s operation must hold the attempt: %v", state, err)
+			}
+			if rec := e.record(t); rec != nil {
+				t.Fatalf("a held attempt must not be recorded: %+v", rec)
+			}
+			view := e.rt.packageMigrationStatusView()
+			if view == nil || view.Waiting == nil || !strings.Contains(view.Waiting.Reason, "op-open") || view.Waiting.Since == "" {
+				t.Fatalf("health must show the waiting reason: %+v", view)
+			}
+		})
+	}
+}
+
+// PM33: the base objects missing is a visible wait, and the wait clears when
+// the attempt runs.
+func TestPackageMigrationBaseObjectsMissingShowsAWaitingReason(t *testing.T) {
 	e := newPMEnv(t, pmPackageFiles("hello-app", pmManifest("hello-app"), "<p>hi</p>\n"), nil)
-	insertReleaseOperation(t, e.rt.store, releaseOpRow{operationID: "op-open", computerID: pmComputer, state: "awaiting_approval", bundleDigest: strings.Repeat("1", 64)})
-	if _, err := e.rt.migratePackageStack(context.Background(), "boot"); err == nil || !strings.Contains(err.Error(), "op-open") {
-		t.Fatalf("an open operation must hold the attempt: %v", err)
+	setBootedBase(t, e.rt, strings.Repeat("a", 40))
+	e.rt.sourceProjectionMu.Lock()
+	e.rt.sourceProjectionLast.BootedBase = strings.Repeat("a", 40) // the projection saw a base whose objects are not here
+	e.rt.sourceProjectionMu.Unlock()
+	if _, err := e.rt.migratePackageStack(context.Background(), "boot"); err != nil {
+		t.Fatal(err)
+	}
+	view := e.rt.packageMigrationStatusView()
+	if view == nil || view.Waiting == nil || !strings.Contains(view.Waiting.Reason, "base") {
+		t.Fatalf("health must show why no attempt ran: %+v", view)
 	}
 	if rec := e.record(t); rec != nil {
-		t.Fatalf("a held attempt must not be recorded: %+v", rec)
+		t.Fatalf("a waiting reason is not an attempt: %+v", rec)
 	}
 }
 
