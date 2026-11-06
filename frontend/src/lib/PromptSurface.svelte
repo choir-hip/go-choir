@@ -2,23 +2,19 @@
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import TetraMark from './TetraMark.svelte';
   import { commands } from './services/commands';
-  import DeskSheet from './DeskSheet.svelte';
+  import { launcherState, setLauncherOpen } from './shell-slots';
   import {
     activeWindowId,
     windows,
     openWindows,
     restoreWindow,
     focusWindow,
-    LAUNCHER_APPS,
-    registryRevision,
     liveStatus as desktopLiveStatus,
-    showDesktopMode,
   } from './stores/desktop.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
   import { isSingleHttpUrl, promptContinueTarget } from './prompt-target.js';
   import { contextMenu, type ContextMenuEntry } from './context-menu';
 
-  export let currentUser: any = null;
   export let authenticated = false;
   export let promptDisabled = false;
   export let promptPlaceholder = '';
@@ -32,7 +28,7 @@
   let surfaceEl: HTMLDivElement | null = null;
   let deskButtonEl: HTMLButtonElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
-  let sheetOpen = false;
+  $: sheetOpen = $launcherState.open;
   let mobileSwitcherOpen = false;
   let promptFocused = false;
   let chyronItems: Array<{ id: string; text: string }> = [];
@@ -46,12 +42,6 @@
   let choiceDocId = '';
   let choiceRouting = false;
 
-  // registryRevision: installed packages join the launcher at run time.
-  $: launcherApps = launcherAppsAt($registryRevision);
-
-  function launcherAppsAt(_revision: number) {
-    return [...LAUNCHER_APPS];
-  }
   const publicTicker = [
   ];
 
@@ -129,7 +119,7 @@
   function openWindowFromTray(win: any) {
     if (win.mode === 'minimized') restoreWindow(win.windowId);
     else focusWindow(win.windowId);
-    sheetOpen = false;
+    setLauncherOpen(false);
     mobileSwitcherOpen = false;
   }
 
@@ -148,32 +138,26 @@
     ];
   }
 
-  function launchApp(app: any) {
-    dispatch('launchapp', {
-      appId: app.id,
-      appName: app.name,
-      icon: app.icon,
-      appContext: app.id === 'podcast' ? { appHint: 'podcast', windowTitle: 'Podcast' } : {},
-    });
-    sheetOpen = false;
-    mobileSwitcherOpen = false;
-  }
-
   function isMobileViewport() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
   }
 
   function handleDeskButtonClick() {
-    const nextSheetOpen = !sheetOpen;
-    sheetOpen = nextSheetOpen;
+    const nextSheetOpen = !$launcherState.open;
+    setLauncherOpen(nextSheetOpen);
     mobileSwitcherOpen = nextSheetOpen && isMobileViewport() && $openWindows.length > 0;
     tick().then(publishSurfaceMetrics);
   }
 
-  function closeDesk({ restoreFocus = true } = {}) {
-    sheetOpen = false;
+  // The launcher closed itself (Escape, its Close button): the focus goes back
+  // to the button that opened it.
+  let launcherWasOpen = false;
+  $: if ($launcherState.open) {
+    launcherWasOpen = true;
+  } else if (launcherWasOpen) {
+    launcherWasOpen = false;
     mobileSwitcherOpen = false;
-    if (restoreFocus) tick().then(() => deskButtonEl?.focus());
+    if ($launcherState.restoreFocus) tick().then(() => deskButtonEl?.focus());
   }
 
   function focusPromptWhenReady() {
@@ -266,23 +250,6 @@
     removeCommands.forEach((remove) => remove());
   });
 </script>
-
-{#if sheetOpen}
-  <DeskSheet
-    {normalizedPlacement}
-    {launcherApps}
-    openWindows={$openWindows}
-    {authenticated}
-    {currentUser}
-    showDesktopActive={$showDesktopMode}
-    on:close={() => closeDesk()}
-    on:showoverview={() => { sheetOpen = false; dispatch('showoverview'); }}
-    on:showdesktop={() => { sheetOpen = false; dispatch('showdesktop'); }}
-    on:launchapp={(event) => launchApp(event.detail.app)}
-    on:authrequest={() => dispatch('authrequest')}
-    on:logout={() => dispatch('logout')}
-  />
-{/if}
 
 <div
   class="prompt-surface placement-{normalizedPlacement}"

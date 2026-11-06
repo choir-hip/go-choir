@@ -128,8 +128,8 @@ func (m Manifest) validateCapabilities() error {
 			return invalid("capabilities[%d]: %q is not a grant in the catalogue", i, c.Grant)
 		}
 		switch domain := c.Grant[:strings.Index(c.Grant, ".")]; {
-		case domain == "ui" && m.App == nil:
-			return invalid("capabilities[%d]: %s is a front-end grant and the package has no app", i, c.Grant)
+		case domain == "ui" && m.App == nil && len(m.Provides) == 0:
+			return invalid("capabilities[%d]: %s is a front-end grant and the package has no app or shell surface", i, c.Grant)
 		case domain == "desk" && !hasDesk:
 			return invalid("capabilities[%d]: %s is a desk grant and the package contributes no desk", i, c.Grant)
 		}
@@ -199,6 +199,8 @@ func (m Manifest) Class() Class {
 		return ClassDesk
 	case m.App != nil:
 		return ClassApp
+	case len(m.Provides) > 0:
+		return ClassProvider
 	}
 	return ClassData
 }

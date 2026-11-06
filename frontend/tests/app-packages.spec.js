@@ -155,7 +155,7 @@ test.describe('check-packages.mjs', () => {
     m.app.theme = { ...m.app.theme, shellDataAttr: 'data-viewer2-window' };
     writeManifest(root, 'viewer2', m);
     const r = runCheck(root);
-    expect(r.out).toContain('17 package(s) ok');
+    expect(r.out).toContain(`${fs.readdirSync(path.join(root, 'src/packages')).length} package(s) ok`);
     expect(r.code).toBe(0);
   });
 

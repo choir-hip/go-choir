@@ -103,7 +103,7 @@
 }
 
 /* ── desktop icons ─────────────────────────────────────────────────────
-   The existing entrance lives in FloatingDesktopIcons.svelte; this adds the
+   The existing entrance lives in packages/desktop-icons/DesktopIcons.surface.svelte; this adds the
    resting and pressed states it never had. A launcher that only responds on
    click feels broken; a launcher that leans toward you feels alive. */
 [data-desktop-icon] {

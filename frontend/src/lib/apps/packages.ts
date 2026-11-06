@@ -66,6 +66,15 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
       const entryPath = manifestPath.replace(/choir-package\.json$/, 'App.svelte');
       const component = componentModules[entryPath];
       const name = manifest?.name;
+      // A shell-surface package draws no window (shell-slots.ts registers its
+      // surfaces); what it contributes still applies.
+      if (typeof name === 'string' && name && manifest.app === undefined && Array.isArray((manifest as any).provides) && isObject(manifest.display)) {
+        if (!taken.has(name)) {
+          taken.add(name);
+          if (isObject(manifest.contributes)) contributions.push({ name, contributes: manifest.contributes });
+        }
+        continue;
+      }
       if (typeof name !== 'string' || !name || !isObject(manifest.app) || !isObject(manifest.display)) {
         console.warn(`[packages] skipped ${manifestPath}: malformed manifest`);
         continue;

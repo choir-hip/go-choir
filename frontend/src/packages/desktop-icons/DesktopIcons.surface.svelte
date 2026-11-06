@@ -1,16 +1,18 @@
 <!--
-  FloatingDesktopIcons — freely-draggable desktop icons on the desktop surface.
-
-  Displays 4 app icons (Files, Browser, Terminal, Settings) as emoji + label,
-  positioned in a grid by default. Users can drag icons to any position.
-  Icon positions persist via the desktop state API.
+  DesktopIcons: the app icons on the desktop surface, freely draggable. A
+  shell surface of the desktop.icons slot (lib/shell-slots.ts).
 
   Interactions:
     - Click: opens/focuses the app window (single-instance)
     - Press and hold: enters drag mode, then move to reposition the icon
     - Drag: moves the icon freely on the desktop surface (does not open the app)
 
-  Icons sit at z-index below windows so windows cover them.
+  Slot ABI, props: apps (the desktop icon apps: { id, name, icon }),
+  positions ({ [appId]: { x, y } }), selected (the selected app id),
+  authenticated. Events: move ({ appId, x, y }), arrange ({ positions }),
+  select ({ appId }), saved (the owner finished moving icons). Opening an app,
+  asking to sign in, the context menu, uploads and toasts are SDK calls; the
+  window list is the SDK's.
 
   Data attributes for test targeting:
     data-desktop-surface   — the desktop surface container holding icons
@@ -20,21 +22,23 @@
     data-desktop-icon-label — text label span
 -->
 <script>
-  import { createEventDispatcher } from 'svelte';
-  import { onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import {
-    DESKTOP_ICON_APPS,
-    windows,
-    activeWindowId,
-    iconPositions,
-    selectedIconId,
-    moveIcon,
-  } from './stores/desktop.js';
-  import { contextMenu, openContextMenu } from './context-menu';
-  import { extensionsOpenedBy } from './open-with';
-  import { mediaRouteForFileName } from './media-utils.js';
-  import { pickAndUploadFiles } from './file-upload';
+    contextMenu,
+    extensionsOpenedBy,
+    mediaRouteForFileName,
+    onWindowEvent,
+    openApp,
+    openContextMenu,
+    pickAndUploadFiles,
+    requireAuth,
+    toast,
+    windowList,
+  } from '../../lib/app-sdk';
 
+  export let apps = [];
+  export let positions = {};
+  export let selected = '';
   export let authenticated = false;
 
   const dispatch = createEventDispatcher();
@@ -140,16 +144,16 @@
   function normalizeIconPositions() {
     if (!surfaceEl) return;
     const bounds = safeBounds();
-    const positions = $iconPositions || {};
-    const needsReflow = DESKTOP_ICON_APPS.some((app) => !positionIsVisible(positions[app.id], bounds));
+    const current = positions || {};
+    const needsReflow = apps.some((app) => !positionIsVisible(current[app.id], bounds));
     if (!needsReflow) return;
 
     const nextPositions = {};
-    DESKTOP_ICON_APPS.forEach((app, index) => {
+    apps.forEach((app, index) => {
       nextPositions[app.id] = gridPosition(index, bounds);
     });
-    iconPositions.set(nextPositions);
-    dispatch('iconpositionschanged');
+    dispatch('arrange', { positions: nextPositions });
+    dispatch('saved');
   }
 
   function scheduleNormalizeIconPositions() {
@@ -160,15 +164,22 @@
     });
   }
 
-  /** Check if an app has an open (non-closed) window */
-  function isAppOpen($windows, appId) {
-    return $windows.some((w) => w.appId === appId && w.mode !== 'closed');
+  /** Check if an app has an open window */
+  function isAppOpen(list, appId) {
+    return list.some((w) => w.appId === appId);
   }
 
   /** Check if an app's window is the active one */
-  function isAppActive($windows, $activeWindowId, appId) {
-    const activeWin = $windows.find((w) => w.windowId === $activeWindowId);
-    return activeWin && activeWin.appId === appId;
+  function isAppActive(list, appId) {
+    return list.some((w) => w.focused && w.appId === appId);
+  }
+
+  function launch(app, appContext) {
+    openApp(app.id, { appName: app.name, icon: app.icon, ...(appContext ? { appContext } : {}) });
+  }
+
+  function select(appId) {
+    dispatch('select', { appId });
   }
 
   /** Handle click — open/focus the app window unless it trails a drag. */
@@ -177,15 +188,15 @@
       suppressClick = false;
       return;
     }
-    selectedIconId.set(app.id);
-    dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
+    select(app.id);
+    launch(app);
   }
 
   // ---- Context menu: Open, and Upload and open for apps that open files ----
 
   async function uploadAndOpen(app, exts) {
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'file_upload', appId: app.id, appName: app.name });
+      requireAuth({ kind: 'file_upload', appId: app.id, appName: app.name });
       return;
     }
     try {
@@ -194,31 +205,26 @@
       if (!path) return;
       const fileName = path.split('/').pop() || path;
       const route = mediaRouteForFileName(fileName);
-      dispatch('launchapp', {
-        appId: app.id,
-        appName: app.name,
-        icon: app.icon,
-        appContext: {
-          windowTitle: fileName,
-          fileName,
-          filePath: path,
-          mediaType: route?.mediaType || '',
-          openedWith: 'choice',
-          allowMultiple: true,
-        },
+      launch(app, {
+        windowTitle: fileName,
+        fileName,
+        filePath: path,
+        mediaType: route?.mediaType || '',
+        openedWith: 'choice',
+        allowMultiple: true,
       });
     } catch (err) {
       if (err?.authRequired) {
-        dispatch('authrequired', { kind: 'file_upload', appId: app.id, appName: app.name });
+        requireAuth({ kind: 'file_upload', appId: app.id, appName: app.name });
         return;
       }
-      dispatch('toast', { message: err?.message || 'Upload failed', kind: 'error' });
+      toast(err?.message || 'Upload failed', { kind: 'error' });
     }
   }
 
   function iconMenuItems(app) {
     const exts = extensionsOpenedBy(app.id);
-    const items = [{ id: 'open', label: 'Open', onSelect: () => dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon }) }];
+    const items = [{ id: 'open', label: 'Open', onSelect: () => launch(app) }];
     if (exts.length) {
       items.push({ id: 'upload-open', label: 'Upload and open…', onSelect: () => void uploadAndOpen(app, exts) });
     }
@@ -232,7 +238,7 @@
   function handleKeydown(event, app) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
-    dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
+    launch(app);
   }
 
   /** Handle press start on an icon (mouse or touch). */
@@ -250,7 +256,7 @@
     suppressClick = false;
     clearTimeout(pressTimer);
     pressTimer = setTimeout(() => armDragMode(), LONG_PRESS_MS);
-    selectedIconId.set(app.id);
+    select(app.id);
   }
 
   /** Hold time elapsed — enter drag mode. */
@@ -263,7 +269,7 @@
     armY = lastPointerY;
     movedAfterArm = false;
     const surfaceRect = surfaceEl?.getBoundingClientRect();
-    const pos = $iconPositions[pressAppId] || { x: 0, y: 0 };
+    const pos = (positions || {})[pressAppId] || { x: 0, y: 0 };
     dragOffsetX = lastPointerX - (surfaceRect?.left || 0) - pos.x;
     dragOffsetY = lastPointerY - (surfaceRect?.top || 0) - pos.y;
   }
@@ -288,7 +294,7 @@
     const bounds = safeBounds();
     const newX = Math.max(0, Math.min(x - rect.left - dragOffsetX, bounds.maxX));
     const newY = Math.max(0, Math.min(y - rect.top - dragOffsetY, bounds.maxY));
-    moveIcon(pressAppId, newX, newY);
+    dispatch('move', { appId: pressAppId, x: newX, y: newY });
   }
 
   /** Handle pointer release — end the press (and any drag). */
@@ -302,11 +308,11 @@
     if (dragging) {
       dragging = false;
       if (pressIsTouch && !movedAfterArm) {
-        const app = DESKTOP_ICON_APPS.find((candidate) => candidate.id === heldAppId);
+        const app = apps.find((candidate) => candidate.id === heldAppId);
         if (app) openIconMenuAt(app, lastPointerX, lastPointerY);
         return;
       }
-      dispatch('iconpositionschanged');
+      dispatch('saved');
     }
   }
 
@@ -335,13 +341,16 @@
     updatePointer(touch.clientX, touch.clientY, () => event.preventDefault());
   }
 
+  let offWindowEvents = [];
   onMount(() => {
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', endPress);
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', endPress);
-    window.addEventListener('touchcancel', endPress);
-    window.addEventListener('resize', scheduleNormalizeIconPositions);
+    offWindowEvents = [
+      onWindowEvent('mousemove', handleMouseMove),
+      onWindowEvent('mouseup', endPress),
+      onWindowEvent('touchmove', handleTouchMove, { passive: false }),
+      onWindowEvent('touchend', endPress),
+      onWindowEvent('touchcancel', endPress),
+      onWindowEvent('resize', scheduleNormalizeIconPositions),
+    ];
     window.visualViewport?.addEventListener('resize', scheduleNormalizeIconPositions);
     resizeObserver = new ResizeObserver(scheduleNormalizeIconPositions);
     if (surfaceEl) resizeObserver.observe(surfaceEl);
@@ -350,12 +359,7 @@
 
   onDestroy(() => {
     if (normalizeFrame) cancelAnimationFrame(normalizeFrame);
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', endPress);
-    window.removeEventListener('touchmove', handleTouchMove);
-    window.removeEventListener('touchend', endPress);
-    window.removeEventListener('touchcancel', endPress);
-    window.removeEventListener('resize', scheduleNormalizeIconPositions);
+    offWindowEvents.forEach((off) => off());
     window.visualViewport?.removeEventListener('resize', scheduleNormalizeIconPositions);
     resizeObserver?.disconnect();
   });
@@ -367,13 +371,13 @@
   class="desktop-surface"
   bind:this={surfaceEl}
   data-desktop-surface
-  on:click={() => selectedIconId.set('')}
+  on:click={() => select('')}
 >
-  {#each DESKTOP_ICON_APPS as app (app.id)}
-    {@const pos = $iconPositions[app.id] || { x: 32, y: 32 }}
-    {@const isOpen = isAppOpen($windows, app.id)}
-    {@const isActive = isAppActive($windows, $activeWindowId, app.id)}
-    {@const isSelected = $selectedIconId === app.id}
+  {#each apps as app (app.id)}
+    {@const pos = (positions || {})[app.id] || { x: 32, y: 32 }}
+    {@const isOpen = isAppOpen($windowList, app.id)}
+    {@const isActive = isAppActive($windowList, app.id)}
+    {@const isSelected = selected === app.id}
     <div
       class="desktop-icon {isActive ? 'icon-active' : ''} {isSelected ? 'icon-selected' : ''} {isOpen ? 'icon-open' : ''} {dragging && pressAppId === app.id ? 'icon-dragging' : ''}"
       style="left: {pos.x}px; top: {pos.y}px;"

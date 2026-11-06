@@ -1,0 +1,25 @@
+{
+  "schema": "choir.package/v2",
+  "name": "desktop-icons",
+  "version": "1.0.0",
+  "display": {
+    "title": "Desktop icons",
+    "icon": "🗂",
+    "description": "The app icons on the desktop surface"
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": [{ "grant": "ui.shell" }],
+  "provides": [
+    {
+      "service": "desktop.icons",
+      "abi": "choir.service/desktop.icons/v1",
+      "entry": "DesktopIcons.surface.svelte",
+      "requires_sdk": "^1.4"
+    }
+  ]
+}

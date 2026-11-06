@@ -102,6 +102,8 @@ type Manifest struct {
 	UsesKinds    []string     `json:"uses_kinds"`
 	Contributes  Contributes  `json:"contributes"`
 	Capabilities []Capability `json:"capabilities"`
+	// Provides are the shell surfaces the package draws (provides.go).
+	Provides []Provide `json:"provides,omitempty"`
 
 	Origin string `json:"-"`
 }
@@ -287,8 +289,8 @@ func (m Manifest) ValidateOn(p Platform) error {
 	if utf8.RuneCountInString(m.Display.Description) > 200 {
 		return invalid("display.description is at most 200 characters")
 	}
-	if m.App == nil && len(m.Contributes.Desks) == 0 && len(m.Kinds) == 0 && m.contributesNothingElse() {
-		return invalid("the package contributes nothing: it needs an app, a desk, a kind, a command, a keybinding, a theme or a link")
+	if m.App == nil && len(m.Contributes.Desks) == 0 && len(m.Kinds) == 0 && len(m.Provides) == 0 && m.contributesNothingElse() {
+		return invalid("the package contributes nothing: it needs an app, a desk, a kind, a shell surface, a command, a keybinding, a theme or a link")
 	}
 	if m.App != nil {
 		if err := m.validateApp(); err != nil {
@@ -325,6 +327,9 @@ func (m Manifest) ValidateOn(p Platform) error {
 		return err
 	}
 	if err := m.validateCapabilities(); err != nil {
+		return err
+	}
+	if err := m.validateProvides(); err != nil {
 		return err
 	}
 	if m.Origin != OriginFirstParty {

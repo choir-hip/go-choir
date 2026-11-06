@@ -10,6 +10,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from '
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractUses, usesProblems } from './package-uses.mjs';
+import { compareVersions, rangeFloor, readSdkVersion, requiresProblem } from './sdk-surface.mjs';
 
 const argv = process.argv.slice(2);
 const rootFlag = argv.indexOf('--root');
@@ -59,9 +60,11 @@ const MIN_STATIC_IDS = 1;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = [
-  'audio', 'autopaper', 'browser', 'calendar', 'compute-monitor', 'content', 'files', 'image',
-  'library-next', 'mail', 'podcast', 'pulse', 'reader', 'settings', 'slides', 'video',
+  'audio', 'autopaper', 'browser', 'calendar', 'compute-monitor', 'content', 'desktop-icons', 'files', 'image',
+  'launcher', 'library-next', 'mail', 'overview', 'podcast', 'pulse', 'reader', 'settings', 'slides', 'video',
 ];
+// The shell slots a package may provide (internal/apppackage/provides.go ShellServices).
+const SHELL_SERVICES = new Set(['contextMenu.renderer', 'desktop.icons', 'launcher', 'notifications.host', 'overview', 'prompt']);
 
 const fail = (where, message) => errors.push(`${where}: ${message}`);
 
@@ -337,10 +340,33 @@ const inside = (dir, target) => target === dir || target.startsWith(dir + sep);
 
 // ---- manifest ----
 
+// provides: the shell surfaces a package draws (the rules of internal/apppackage/provides.go).
+function checkProvides(manifest, where, pkgDir) {
+  if (!Array.isArray(manifest.provides) || manifest.provides.length === 0 || manifest.provides.length > 4) {
+    fail(where, 'provides must list one to four shell surfaces');
+    return;
+  }
+  if (!(manifest.capabilities || []).some((c) => c?.grant === 'ui.shell')) fail(where, 'a package that provides a shell surface needs the ui.shell grant');
+  const services = new Set();
+  manifest.provides.forEach((p, i) => {
+    const at = `${where} provides[${i}]`;
+    if (!strictKeys(p, at, ['service', 'abi', 'entry'], ['requires_sdk', 'priority'])) return;
+    if (!SHELL_SERVICES.has(p.service)) fail(at, `service must be one of ${[...SHELL_SERVICES].join(', ')}`);
+    else if (services.has(p.service)) fail(at, `service ${p.service} is provided twice`);
+    services.add(p.service);
+    if (p.abi !== `choir.service/${p.service}/v1`) fail(at, `abi must be "choir.service/${p.service}/v1"`);
+    if (typeof p.entry !== 'string' || !/^[A-Za-z0-9_-]+\.surface\.svelte$/.test(p.entry)) fail(at, 'entry must be <Name>.surface.svelte at the package root');
+    else if (!existsSync(join(pkgDir, p.entry))) fail(at, `entry ${p.entry} does not exist`);
+    if (p.requires_sdk !== undefined && (typeof p.requires_sdk !== 'string' || !/^\^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$/.test(p.requires_sdk))) fail(at, 'requires_sdk must be "^MAJOR.MINOR"');
+    if (p.priority !== undefined && !(Number.isInteger(p.priority) && p.priority >= 0 && p.priority <= 50)) fail(at, 'priority must be a whole number from 0 to 50');
+  });
+}
+
 function checkManifest(manifest, dirName, where, pkgDir) {
+  const provider = isObject(manifest) && manifest.provides !== undefined && manifest.app === undefined;
   const ok = strictKeys(
     manifest, where,
-    ['schema', 'name', 'version', 'display', 'app', 'opens'],
+    provider ? ['schema', 'name', 'version', 'display', 'opens', 'provides'] : ['schema', 'name', 'version', 'display', 'app', 'opens'],
     ['kinds', 'uses_kinds', 'contributes', 'capabilities'],
   );
   if (!ok) return;
@@ -353,8 +379,12 @@ function checkManifest(manifest, dirName, where, pkgDir) {
     for (const k of ['title', 'icon', 'description']) if (!str(manifest.display[k])) fail(`${where} display`, `"${k}" must be a non-empty string`);
   }
 
+  if (provider) {
+    checkProvides(manifest, where, pkgDir);
+    if (Array.isArray(manifest.opens) && manifest.opens.length) fail(where, 'opens needs an app to open the file');
+  }
   const app = manifest.app;
-  if (strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases', 'requires_sdk'])) {
+  if (!provider && strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases', 'requires_sdk'])) {
     if (app.requires_sdk !== undefined && (typeof app.requires_sdk !== 'string' || !/^\^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$/.test(app.requires_sdk))) {
       fail(`${where} app`, 'requires_sdk must be "^MAJOR.MINOR"');
     }
@@ -487,11 +517,22 @@ async function main() {
     checkManifest(manifest, dir, where, pkgDir);
     // `uses` is extracted, never authored: the grants the SDK names a package imports imply must be declared.
     try {
-      for (const problem of usesProblems(await extractUses(pkgDir), manifest)) fail(where, problem);
+      const uses = await extractUses(pkgDir);
+      for (const problem of usesProblems(uses, manifest)) fail(where, problem);
+      // A shell surface has no window contract run (package-contracts): its
+      // requires_sdk is held here to the names it uses (L10) and to this shell.
+      const lockDirectory = join(frontendRoot, 'src/lib/sdk-surface');
+      for (const p of Array.isArray(manifest?.provides) && existsSync(lockDirectory) ? manifest.provides : []) {
+        const range = typeof p?.requires_sdk === 'string' ? p.requires_sdk : '^1.0';
+        const problem = requiresProblem(range, uses.sdk, lockDirectory);
+        if (problem) fail(where, `provides ${p?.service}: ${problem} (L10)`);
+        const floor = rangeFloor(range);
+        if (floor && compareVersions(floor, readSdkVersion(frontendRoot)) > 0) fail(where, `provides ${p?.service}: requires_sdk ${range} is above this shell's SDK ${readSdkVersion(frontendRoot)}`);
+      }
     } catch (err) {
       fail(where, err.message);
     }
-    if (!existsSync(join(pkgDir, 'App.svelte'))) fail(`src/packages/${dir}`, 'missing App.svelte');
+    if (manifest?.app !== undefined && !existsSync(join(pkgDir, 'App.svelte'))) fail(`src/packages/${dir}`, 'missing App.svelte');
     if (errors.length > before && !(typeof manifest?.name === 'string' && NAME_RE.test(manifest.name))) continue;
 
     // name, alias and extension clashes

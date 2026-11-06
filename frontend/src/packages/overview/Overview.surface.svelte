@@ -1,11 +1,19 @@
+<!--
+  Overview: every open window at once, to switch, suspend and clean up. A shell
+  surface of the overview slot (lib/shell-slots.ts); the host opens and closes
+  it (Escape is the host's core.closeOverview).
+
+  Slot ABI, props: windows (the window host's windows, with geometry),
+  activeWindowId, authenticated, previewDecisions (windowId to { state }).
+  Events: close, focuswindow, minimizewindow, closewindow, suspendwindow
+  ({ windowId }), suspendbackground, opencomputemonitor, keepactiveonly
+  ({ windowId }), clearsavedwindows: the window manager's verbs, which stay
+  host.
+-->
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { isHeavyAppId } from './stores/desktop.js';
-  import { commands } from './services/commands';
-  import {
-    getOverviewPreviewDecision,
-    summarizeOverviewPreviewDecisions,
-  } from './desktop-overview-preview.js';
+  import { isHeavyAppId, onWindowEvent } from '../../lib/app-sdk';
+  import { getOverviewPreviewDecision, summarizeOverviewPreviewDecisions } from './preview.js';
 
   export let windows = [];
   export let activeWindowId = '';
@@ -103,36 +111,21 @@
     const maxZ = Math.max(...zValues, 1);
     const zRange = Math.max(1, maxZ - minZ);
     const left = Math.max(0, Math.min(92, ((win.x || 0) / viewportWidth) * 100));
-    const top = Math.max(0, Math.min(88, ((win.y || 0) / viewportHeight) * 100));
+    const topPct = Math.max(0, Math.min(88, ((win.y || 0) / viewportHeight) * 100));
     const dense = openWindows.length >= 10;
     const width = Math.max(dense ? 10 : 18, Math.min(92, ((win.width || 260) / viewportWidth) * 100));
     const height = Math.max(dense ? 9 : 18, Math.min(82, ((win.height || 180) / viewportHeight) * 100));
     const layer = 10 + Math.round(((win.zIndex || 0) - minZ) / zRange * 80);
-    return `left:${left}%; top:${top}%; width:${width}%; height:${height}%; z-index:${layer};`;
+    return `left:${left}%; top:${topPct}%; width:${width}%; height:${height}%; z-index:${layer};`;
   }
 
-  // Escape closes the overview: a core command and a keybinding the shell's key
-  // capture resolves (services/commands.ts), live while this overview is open.
-  let removeCommands = [];
+  let offResize = () => {};
   onMount(() => {
     refreshViewport();
-    window.addEventListener('resize', refreshViewport);
-    commands.setContext('overview.open', true);
-    removeCommands = [
-      commands.registerCommand(
-        { id: 'core.closeOverview', title: 'Close Desktop Overview', scope: 'global', run: { handler: true }, when: 'overview.open' },
-        'core',
-        () => closeOverview(),
-      ),
-      commands.registerKeybinding({ key: 'Escape', command: 'core.closeOverview', allowInInput: true }, 'core'),
-    ];
+    offResize = onWindowEvent('resize', refreshViewport);
   });
 
-  onDestroy(() => {
-    window.removeEventListener('resize', refreshViewport);
-    commands.setContext('overview.open', false);
-    removeCommands.forEach((remove) => remove());
-  });
+  onDestroy(() => offResize());
 </script>
 
 <section class="desktop-overview" data-desktop-overview aria-modal="true" role="dialog" aria-labelledby="desktop-overview-title">

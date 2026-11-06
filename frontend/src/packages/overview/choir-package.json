@@ -1,0 +1,25 @@
+{
+  "schema": "choir.package/v2",
+  "name": "overview",
+  "version": "1.0.0",
+  "display": {
+    "title": "Desktop Overview",
+    "icon": "▦",
+    "description": "Every open window at once: switch, suspend and clean up"
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": [{ "grant": "ui.shell" }],
+  "provides": [
+    {
+      "service": "overview",
+      "abi": "choir.service/overview/v1",
+      "entry": "Overview.surface.svelte",
+      "requires_sdk": "^1.4"
+    }
+  ]
+}

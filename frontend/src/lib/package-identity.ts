@@ -22,3 +22,8 @@ export function currentPackageName(): string {
     return '';
   }
 }
+
+/** The context a host gives a component it mounts by hand (a shell surface): the package's identity, fixed. */
+export function packageIdentityContext(name: string): Map<unknown, unknown> {
+  return new Map<unknown, unknown>([[KEY, () => name]]);
+}

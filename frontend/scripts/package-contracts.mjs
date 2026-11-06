@@ -202,6 +202,9 @@ export function loadPackages(packagesDir = path.join(FRONTEND_ROOT, 'src/package
     } catch (e) {
       row.problems.push(`choir-package.json: ${e.message}`);
     }
+    // A shell-surface package (provides, no app) draws no window, so it has no
+    // window contract; its SDK names are checked by surfacePackages() below.
+    if (row.manifest && row.manifest.app === undefined && Array.isArray(row.manifest.provides)) continue;
     const contractFile = path.join(dir, CONTRACT_FILE);
     if (!fs.existsSync(contractFile)) {
       row.problems.push(`no ${CONTRACT_FILE}: every package carries a smoke contract (docs/design/modularity-check-build-2026-11-04.md)`);

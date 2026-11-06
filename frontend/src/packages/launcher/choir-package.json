@@ -1,0 +1,25 @@
+{
+  "schema": "choir.package/v2",
+  "name": "launcher",
+  "version": "1.0.0",
+  "display": {
+    "title": "Launcher",
+    "icon": "☰",
+    "description": "The apps, the overview and the account row"
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": [{ "grant": "ui.shell" }],
+  "provides": [
+    {
+      "service": "launcher",
+      "abi": "choir.service/launcher/v1",
+      "entry": "Launcher.surface.svelte",
+      "requires_sdk": "^1.4"
+    }
+  ]
+}

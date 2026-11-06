@@ -1,9 +1,19 @@
-<script lang="ts">
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+<!--
+  The launcher (the Desk sheet): the apps, the overview, show desktop and the
+  account row. A shell surface of the launcher slot (lib/shell-slots.ts).
 
-  export let normalizedPlacement: 'top' | 'bottom' = 'bottom';
-  export let launcherApps: any[] = [];
-  export let openWindows: any[] = [];
+  Slot ABI, props: placement ('top' | 'bottom'), apps (the launcher apps:
+  { id, name, icon, description }), openCount, authenticated, currentUser,
+  showDesktopActive. Event: close ({ restoreFocus }). Everything else is an SDK
+  call.
+-->
+<script lang="ts">
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import { logout, onWindowEvent, openApp, requireAuth, showDesktop, showOverview } from '../../lib/app-sdk';
+
+  export let placement: 'top' | 'bottom' = 'bottom';
+  export let apps: Array<{ id: string; name: string; icon: string; description: string }> = [];
+  export let openCount = 0;
   export let authenticated = false;
   export let currentUser: any = null;
   export let showDesktopActive = false;
@@ -11,32 +21,49 @@
   const dispatch = createEventDispatcher();
   let closeButton: HTMLButtonElement | null = null;
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    event.stopPropagation();
-    dispatch('close');
+  $: normalizedPlacement = placement === 'top' ? 'top' : 'bottom';
+
+  function close(restoreFocus = true) {
+    dispatch('close', { restoreFocus });
   }
+
+  function launch(app: { id: string; name: string; icon: string }) {
+    openApp(app.id, {
+      appName: app.name,
+      icon: app.icon,
+      appContext: app.id === 'podcast' ? { appHint: 'podcast', windowTitle: 'Podcast' } : {},
+    });
+    close(false);
+  }
+
+  function handleKeydown(event: Event) {
+    const key = event as KeyboardEvent;
+    if (key.key !== 'Escape') return;
+    key.preventDefault();
+    key.stopPropagation();
+    close();
+  }
+
+  const offKeydown = onWindowEvent('keydown', handleKeydown);
+  onDestroy(offKeydown);
 
   onMount(() => {
     tick().then(() => closeButton?.focus());
   });
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
-
-<button class="desk-sheet-backdrop" data-desk-sheet-backdrop type="button" aria-label="Close Desk" on:click={() => dispatch('close')}></button>
+<button class="desk-sheet-backdrop" data-desk-sheet-backdrop type="button" aria-label="Close Desk" on:click={() => close()}></button>
 <section class="desk-sheet placement-{normalizedPlacement}" data-desk-sheet role="dialog" aria-modal="true" aria-labelledby="desk-sheet-title">
   <div class="sheet-handle" aria-hidden="true"></div>
   <header>
     <div>
       <p id="desk-sheet-title">Desk</p>
-      <h2>{openWindows.length} open</h2>
+      <h2>{openCount} open</h2>
     </div>
-    <button bind:this={closeButton} type="button" data-desk-sheet-close on:click={() => dispatch('close')}>Close</button>
+    <button bind:this={closeButton} type="button" data-desk-sheet-close on:click={() => close()}>Close</button>
   </header>
 
-  <button class="overview-card" data-desk-overview type="button" on:click={() => dispatch('showoverview')}>
+  <button class="overview-card" data-desk-overview type="button" on:click={() => { close(false); showOverview(); }}>
     <span>▦</span>
     <strong>Desktop Overview</strong>
     <small>Switch, suspend, focus, and clean up windows</small>
@@ -45,8 +72,8 @@
   <section class="desk-section">
     <h3>Apps</h3>
     <div class="app-grid" data-desk-sheet-apps>
-      {#each launcherApps as app}
-        <button data-desk-sheet-app data-desk-app-id={app.id} type="button" on:click={() => dispatch('launchapp', { app })}>
+      {#each apps as app}
+        <button data-desk-sheet-app data-desk-app-id={app.id} type="button" on:click={() => launch(app)}>
           <span>{app.icon}</span>
           <strong>{app.name}</strong>
           <small>{app.description}</small>
@@ -55,17 +82,17 @@
     </div>
   </section>
 
-  <button class="plain-row" data-desk-show-desktop type="button" on:click={() => dispatch('showdesktop')}>
+  <button class="plain-row" data-desk-show-desktop type="button" on:click={() => { close(false); showDesktop(); }}>
     {showDesktopActive ? 'Restore windows' : 'Show desktop'}
   </button>
 
   <footer>
     {#if authenticated}
       <span data-prompt-surface-user>{currentUser?.email || 'signed in'}</span>
-      <button type="button" data-prompt-surface-logout on:click={() => dispatch('logout')}>Sign out</button>
+      <button type="button" data-prompt-surface-logout on:click={() => { close(false); logout(); }}>Sign out</button>
     {:else}
       <span data-prompt-surface-user>Public preview</span>
-      <button type="button" data-prompt-surface-login on:click={() => dispatch('authrequest')}>Sign in</button>
+      <button type="button" data-prompt-surface-login on:click={() => { close(false); requireAuth({ kind: 'sign_in' }); }}>Sign in</button>
     {/if}
   </footer>
 </section>

@@ -38,12 +38,13 @@
     observeRemoteDriverSession,
     renewDriverLease,
   } from './live-events.js';
-  import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
   import PromptSurface from './PromptSurface.svelte';
   import ChoirField from './ChoirField.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
-  import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
+  import ShellSlot from './ShellSlot.svelte';
+  import LastResort from './LastResort.svelte';
+  import { launcherState, setLauncherOpen } from './shell-slots';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
   import { setTheme as setShellTheme } from './services/theme';
   import { bindCommandActions, commands, installKeyCapture } from './services/commands';
@@ -56,6 +57,11 @@
     iconPositions,
     showDesktopMode,
     selectedIconId,
+    moveIcon,
+    openWindows as openWindowList,
+    LAUNCHER_APPS,
+    DESKTOP_ICON_APPS,
+    registryRevision,
     toggleShowDesktop,
     openApp,
     closeWindow,
@@ -1685,6 +1691,23 @@
   // Commands and shortcuts (services/commands.ts): the shell captures keydown once,
   // and a declarative command acts through these.
   $: commands.setContext('window.app', ($windows.find((win) => win.windowId === $activeWindowId) || {}).appId || '');
+  // The overview is a surface package; whether it is open is the host's, so
+  // Escape closing it is a core command live while it is open.
+  $: commands.setContext('overview.open', desktopReady && desktopOverviewOpen);
+  const removeOverviewCommand = [
+    commands.registerCommand(
+      { id: 'core.closeOverview', title: 'Close Desktop Overview', scope: 'global', run: { handler: true }, when: 'overview.open' },
+      'core',
+      () => handleCloseDesktopOverview(),
+    ),
+    commands.registerKeybinding({ key: 'Escape', command: 'core.closeOverview', allowInInput: true }, 'core'),
+  ];
+  // registryRevision: installed packages join the launcher at run time.
+  $: launcherApps = launcherAppsAt($registryRevision);
+  function launcherAppsAt(_revision) {
+    return LAUNCHER_APPS.map((app) => ({ id: app.id, name: app.name, icon: app.icon, description: app.description }));
+  }
+  const desktopIconApps = DESKTOP_ICON_APPS.map((app) => ({ id: app.id, name: app.name, icon: app.icon }));
   const removeKeyCapture = installKeyCapture();
   const unbindCommandActions = bindCommandActions({
     openApp: (app) => handleLaunchApp({ detail: { appId: app } }),
@@ -1695,6 +1718,8 @@
   });
   onDestroy(() => {
     unbindShellHost();
+    removeOverviewCommand.forEach((remove) => remove());
+    commands.setContext('overview.open', false);
     removeKeyCapture();
     unbindCommandActions();
   });
@@ -1766,12 +1791,15 @@
     </div>
 
     <!-- Floating desktop icons (z-index below windows) -->
-    <FloatingDesktopIcons
-      {authenticated}
-      on:launchapp={handleLaunchApp}
-      on:authrequired={(event) => requestAuth(event.detail || {})}
-      on:toast={(event) => showToast(event.detail?.message || '', { kind: event.detail?.kind || 'info' })}
-      on:iconpositionschanged={handleIconPositionsChanged}
+    <ShellSlot
+      name="desktop.icons"
+      props={{ apps: desktopIconApps, positions: $iconPositions, selected: $selectedIconId, authenticated }}
+      on={{
+        move: (event) => moveIcon(event.detail.appId, event.detail.x, event.detail.y),
+        arrange: (event) => setIconPositions(event.detail.positions || {}),
+        select: (event) => selectedIconId.set(event.detail?.appId || ''),
+        saved: handleIconPositionsChanged,
+      }}
     />
 
     <!-- Floating windows (rendered on top of icons) -->
@@ -1881,23 +1909,24 @@
       {/each}
     {/if}
 
-    {#if desktopReady && desktopOverviewOpen}
-      <DesktopOverview
-        windows={$windows}
-        activeWindowId={$activeWindowId}
-        {authenticated}
-        previewDecisions={overviewPreviewDecisions}
-        on:close={handleCloseDesktopOverview}
-        on:focuswindow={handleOverviewFocusWindow}
-        on:minimizewindow={handleOverviewMinimizeWindow}
-        on:closewindow={handleOverviewCloseWindow}
-        on:suspendwindow={handleOverviewSuspendWindow}
-        on:suspendbackground={handleOverviewSuspendBackground}
-        on:opencomputemonitor={handleOverviewOpenComputeMonitor}
-        on:keepactiveonly={handleOverviewKeepActiveOnly}
-        on:clearsavedwindows={handleOverviewClearSavedWindows}
-      />
-    {/if}
+    <ShellSlot
+      name="overview"
+      enabled={desktopReady && desktopOverviewOpen}
+      props={{ windows: $windows, activeWindowId: $activeWindowId, authenticated, previewDecisions: overviewPreviewDecisions }}
+      on={{
+        close: handleCloseDesktopOverview,
+        focuswindow: handleOverviewFocusWindow,
+        minimizewindow: handleOverviewMinimizeWindow,
+        closewindow: handleOverviewCloseWindow,
+        suspendwindow: handleOverviewSuspendWindow,
+        suspendbackground: handleOverviewSuspendBackground,
+        opencomputemonitor: handleOverviewOpenComputeMonitor,
+        keepactiveonly: handleOverviewKeepActiveOnly,
+        clearsavedwindows: handleOverviewClearSavedWindows,
+      }}
+    >
+      <LastResort kind="overview" windows={$windows} on:close={handleCloseDesktopOverview} on:focus={handleOverviewFocusWindow} />
+    </ShellSlot>
   </div>
 
   {#if authenticated && !desktopReady}
@@ -1932,9 +1961,22 @@
     </div>
   {/if}
 
+  <ShellSlot
+    name="launcher"
+    enabled={$launcherState.open}
+    props={{ placement: promptSurfacePlacement, apps: launcherApps, openCount: $openWindowList.length, authenticated, currentUser, showDesktopActive: $showDesktopMode }}
+    on={{ close: (event) => setLauncherOpen(false, { restoreFocus: event.detail?.restoreFocus !== false }) }}
+  >
+    <LastResort
+      kind="launcher"
+      apps={launcherApps}
+      on:close={() => setLauncherOpen(false, { restoreFocus: true })}
+      on:launch={(event) => { setLauncherOpen(false); handleLaunchApp({ detail: { appId: event.detail.app.id, appName: event.detail.app.name, icon: event.detail.app.icon } }); }}
+    />
+  </ShellSlot>
+
   <!-- PromptSurface -->
   <PromptSurface
-    {currentUser}
     {authenticated}
     placement={promptSurfacePlacement}
     promptDisabled={!desktopReady}

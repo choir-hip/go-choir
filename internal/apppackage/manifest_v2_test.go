@@ -745,9 +745,14 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", p, err)
 		}
-		// Only the two apps that call shell functions hold ui.shell, a privileged grant.
+		// Only the two apps that call shell functions hold ui.shell, a privileged
+		// grant; a shell-surface provider holds it by definition (H1 to H4).
 		privilegedOK := m.Name == "settings" || m.Name == "compute-monitor"
-		if m.Class() != ClassApp || (m.Level() != LevelDefault && !(privilegedOK && m.Level() == LevelPrivileged)) {
+		if m.Class() == ClassProvider {
+			if m.Level() != LevelPrivileged {
+				t.Errorf("%s: provider at level %s", p, m.Level())
+			}
+		} else if m.Class() != ClassApp || (m.Level() != LevelDefault && !(privilegedOK && m.Level() == LevelPrivileged)) {
 			t.Errorf("%s: class %s level %s", p, m.Class(), m.Level())
 		}
 		if _, err := m.BehaviourSurface(DirSource(filepath.Dir(p))); err != nil {

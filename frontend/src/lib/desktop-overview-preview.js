@@ -77,20 +77,3 @@ export function getOverviewPreviewDecision(decisions = {}, windowId = '') {
     liveLimit: 0,
   };
 }
-
-export function summarizeOverviewPreviewDecisions(decisions = {}) {
-  const summary = {
-    live: 0,
-    card: 0,
-    suspended: 0,
-    redacted: 0,
-    normal: 0,
-  };
-
-  Object.values(decisions || {}).forEach((decision) => {
-    const state = decision?.state || 'normal';
-    summary[state] = (summary[state] || 0) + 1;
-  });
-
-  return summary;
-}
