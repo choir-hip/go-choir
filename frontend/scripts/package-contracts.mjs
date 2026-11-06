@@ -37,25 +37,31 @@
 // stub's drift from the shell's boot, after it the package's, unless the
 // contract lists it in allow_unanswered with a reason.
 //
-// Two modes:
+// Three modes (the first two run by default):
 //   in-tree    the package as the base ships it: the shell build builds it into
 //              a module/v1 module beside the shell and mounts it through the
 //              loader (forced modularity M4; scripts/base-modules.mjs);
 //   installed  the package built to one module/v1 module by the computer's own
 //              build (internal/pkgruntime/build-module.mjs) and listed as an
-//              installed package, so the shell's real loader checks its
-//              digest, requires_sdk and SDK names and mounts it.
+//              installed package on the owner's own track, so the shell's real
+//              loader checks its digest, requires_sdk and SDK names and mounts it;
+//   sandboxed  the same module listed on a stranger's track (isolation
+//              "frame"), so the shell runs it in the opaque-origin sandboxed
+//              frame (MA6.1) and every SDK call crosses the bridge. Selectors
+//              resolve inside the frame. A package that uses SDK names the
+//              frame does not offer is refused there, by design: this mode is
+//              for packages written for the frame (tests/fixtures/sandboxed-packages).
 //
 // The Playwright spec (tests/package-modularity.spec.js) is the CI gate and
 // uses the exports. The CLI runs the same contracts against any built shell:
 //
 //   node scripts/package-contracts.mjs [--dist DIR] [--packages-dir DIR]
-//        [--only a,b] [--modes in-tree,installed] [--receipt FILE]
+//        [--only a,b] [--modes in-tree,installed,sandboxed] [--receipt FILE]
 //
 // --dist is a built shell (default: build this tree into a temp directory).
 // --packages-dir holds package trees with their contracts (default
 // src/packages). Trees from elsewhere (a computer's installed releases) run in
-// the installed mode only. Chromium: $CHOIR_BROWSER if set, else Playwright's.
+// the installed or sandboxed modes only. Chromium: $CHOIR_BROWSER if set, else Playwright's.
 // Exit 0 when every row passed, 1 otherwise; the receipt is written either way.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -73,7 +79,11 @@ export const MODULE_ABI = 'choir.app-frontend/module/v1';
 /** The stub computer's id; a contract's `api` paths that name a computer use it. */
 export const STUB_COMPUTER_ID = 'contract-computer';
 export const STUB_USER = 'contract-owner';
-export const MODES = ['in-tree', 'installed'];
+export const MODES = ['in-tree', 'installed', 'sandboxed'];
+/** The modes a run takes when none are named: the sandboxed mode is for packages written for the frame. */
+export const DEFAULT_MODES = ['in-tree', 'installed'];
+/** The publisher of a sandboxed-mode release: any track but the stub owner's. */
+export const STUB_STRANGER = 'contract-stranger';
 
 const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(FRONTEND_ROOT, '..');
@@ -307,13 +317,20 @@ export function serveDist(dist) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) })));
 }
 
-/** installedRecord is the GET /api/packages/installed row for a built module. */
-export function installedRecord(manifest, built) {
+/**
+ * installedRecord is the GET /api/packages/installed row for a built module:
+ * on the owner's own track (isolation "shell"), or a stranger's (isolation
+ * "frame") with `stranger`.
+ */
+export function installedRecord(manifest, built, { stranger = false } = {}) {
   return {
     name: manifest.name,
     release_id: `contract-${built.sha256.slice(0, 16)}`,
     install_id: `contract-install-${manifest.name}`,
     installed_at: '2026-11-04T00:00:00Z',
+    track: stranger ? STUB_STRANGER : STUB_USER,
+    isolation: stranger ? 'frame' : 'shell',
+    uses: [...(built.sdk_imports || [])],
     requires_sdk: built.requires_sdk,
     manifest,
     module: { abi: MODULE_ABI, sha256: built.sha256, url: `/api/packages/modules/${built.sha256}.js` },
@@ -360,6 +377,15 @@ export function requestPattern(request) {
 
 const windowSel = (name) => `[data-window][data-window-app-id="${name}"]`;
 const contentSel = (name) => `${windowSel(name)} [data-window-content]`;
+
+async function until(fn, timeout) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    if (await fn().catch(() => false)) return;
+    if (Date.now() > end) throw new Error('timed out');
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 
 async function step(fn, what) {
   try {
@@ -423,7 +449,7 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
       await entry.click();
     }
     await step(() => page.locator(windowSel(name)).first().waitFor({ timeout: STEP_MS }), `no ${name} window opened`);
-    const content = page.locator(contentSel(name)).first();
+    let content = page.locator(contentSel(name)).first();
     // Both modes mount a module through the shell's loader (M4): the base copy
     // in-tree, the installed release in installed mode, never the other one.
     {
@@ -436,12 +462,17 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
       }, `${contentSel(name)} [data-package-frame]`, { timeout: STEP_MS }), 'the module never left loading');
       const state = await settled.jsonValue();
       const install = (await frame.getAttribute('data-package-install')) || '';
-      if (mode === 'installed' && install.startsWith('base:')) throw new Error('the window mounts the base copy: the installed release did not replace it');
+      const isolation = (await frame.getAttribute('data-package-isolation')) || '';
+      if (mode !== 'in-tree' && install.startsWith('base:')) throw new Error('the window mounts the base copy: the installed release did not replace it');
       if (mode === 'in-tree' && !install.startsWith('base:')) throw new Error(`the window mounts ${install || 'no record'}, not the base copy`);
+      const realm = mode === 'sandboxed' ? 'frame' : 'shell';
+      if (isolation !== realm) throw new Error(`the ${mode} module runs in the ${isolation || 'unnamed'} realm, not the ${realm}`);
       if (state !== 'mounted') {
         const why = await frame.innerText().catch(() => '');
-        throw new Error(`the shell did not mount the ${mode === 'installed' ? 'installed' : 'base'} module (state ${state}): ${why.replace(/\s+/g, ' ').trim()}`);
+        throw new Error(`the shell did not mount the ${mode === 'in-tree' ? 'base' : mode} module (state ${state}): ${why.replace(/\s+/g, ' ').trim()}`);
       }
+      // Sandboxed: the app's document is the frame's, so selectors resolve there.
+      if (mode === 'sandboxed') content = page.frameLocator(`${contentSel(name)} iframe[data-package-sandbox]`).first().locator('body');
     }
     try {
       await content.locator(pkg.contract.ready).first().waitFor({ state: 'visible', timeout: STEP_MS });
@@ -478,11 +509,11 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
       else {
         try {
           if (st.count !== undefined) {
-            await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length === n, [`${contentSel(name)} ${st.see}`, st.count], { timeout: STEP_MS });
+            await until(async () => (await content.locator(st.see).count()) === st.count, STEP_MS);
           } else {
             await loc.waitFor({ state: 'visible', timeout: STEP_MS });
           }
-          if (st.text !== undefined) await page.waitForFunction(([sel, t]) => (document.querySelector(sel)?.innerText || '').includes(t), [`${contentSel(name)} ${st.see}`, st.text], { timeout: STEP_MS });
+          if (st.text !== undefined) await until(async () => (await loc.innerText({ timeout: 500 })).includes(st.text), STEP_MS);
         } catch {
           row.problems.push(`${what}${st.text !== undefined ? ` text ${JSON.stringify(st.text)}` : ''}${st.count !== undefined ? ` count ${st.count}` : ''} did not hold`);
           break;
@@ -518,7 +549,7 @@ export async function runContract(context, { base, pkg, mode, installed = [], mo
  * served shell and returns the package rows of the receipt. sdkCheck(row,
  * built) may add SDK problems (the spec passes the lock checks).
  */
-export async function checkPackages({ browser, base, packages, modes = MODES, sdkCheck = null, screenshotDir = '' }) {
+export async function checkPackages({ browser, base, packages, modes = DEFAULT_MODES, sdkCheck = null, screenshotDir = '' }) {
   const rows = [];
   const built = new Map();
   for (const pkg of packages) {
@@ -537,7 +568,7 @@ export async function checkPackages({ browser, base, packages, modes = MODES, sd
     };
     rows.push(row);
     if (!pkg.manifest) continue;
-    if (modes.includes('installed') || sdkCheck) {
+    if (modes.includes('installed') || modes.includes('sandboxed') || sdkCheck) {
       const b = await buildPackageModule({ name: pkg.name, dir: pkg.dir });
       if (!b.ok) {
         // Name the refusal itself (the boundary plugin's or the build's own line), not Node's stack dump after it.
@@ -553,7 +584,7 @@ export async function checkPackages({ browser, base, packages, modes = MODES, sd
       }
     }
   }
-  const installedAll = [...built.entries()].map(([name, b]) => installedRecord(packages.find((p) => p.name === name).manifest, b));
+  const manifestOf = (name) => packages.find((p) => p.name === name).manifest;
   const modules = new Map([...built.values()].map((b) => [b.sha256, b.bytes]));
   for (const row of rows) {
     const pkg = packages.find((p) => p.name === row.name);
@@ -562,12 +593,12 @@ export async function checkPackages({ browser, base, packages, modes = MODES, sd
         row.modes[mode] = { mode, pass: false, ms: 0, problems: ['not run: no valid contract'] };
         continue;
       }
-      if (mode === 'installed' && !built.has(row.name)) {
+      if (mode !== 'in-tree' && !built.has(row.name)) {
         row.modes[mode] = { mode, pass: false, ms: 0, problems: ['not run: no module'] };
         continue;
       }
-      // Installed: only this package is listed, so a failure is its own.
-      const installed = mode === 'installed' ? installedAll.filter((r) => r.name === row.name) : [];
+      // Installed and sandboxed: only this package is listed, so a failure is its own.
+      const installed = mode === 'in-tree' ? [] : [installedRecord(manifestOf(row.name), built.get(row.name), { stranger: mode === 'sandboxed' })];
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       try {
         row.modes[mode] = await runContract(context, {
@@ -626,9 +657,9 @@ async function main(argv) {
   const ownPackages = path.join(FRONTEND_ROOT, 'src/packages');
   const packagesDir = path.resolve(argValue(argv, '--packages-dir') || ownPackages);
   const foreign = packagesDir !== ownPackages;
-  const modes = (argValue(argv, '--modes') || (foreign ? 'installed' : MODES.join(','))).split(',').filter(Boolean);
+  const modes = (argValue(argv, '--modes') || (foreign ? 'installed' : DEFAULT_MODES.join(','))).split(',').filter(Boolean);
   for (const m of modes) if (!MODES.includes(m)) throw new Error(`unknown mode ${m}; modes are ${MODES.join(', ')}`);
-  if (foreign && modes.includes('in-tree')) throw new Error('--packages-dir trees are not in the shell build; run them in the installed mode only');
+  if (foreign && modes.includes('in-tree')) throw new Error('--packages-dir trees are not in the shell build; run them in the installed or sandboxed mode');
   const only = (argValue(argv, '--only') || '').split(',').filter(Boolean);
   const receiptFile = path.resolve(argValue(argv, '--receipt') || path.join(FRONTEND_ROOT, 'test-results/modularity-receipt.json'));
   let dist = argValue(argv, '--dist');

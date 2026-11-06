@@ -6,10 +6,13 @@
 // EventSource, which cannot set headers, uses the choir_app query parameter).
 // The check follows the object-graph gates: a route serving built-in kinds
 // counts a call from another app, or from none, and logs the first of each,
-// but lets it through; a route serving package kinds refuses it. Until the
-// Phase 6 iframe sandbox the identity is the app's own claim and same-origin
-// code can lie about it, so the count is evidence and the refusal protects
-// packages from each other's honest mistakes; Phase 6 makes it unforgeable.
+// but lets it through; a route serving package kinds refuses it. A release
+// from another owner's track runs in the MA6.1 sandboxed frame, whose bridge
+// sets the header itself and reaches only /api/app-packages/<its name>/, so
+// for that code the identity is unforgeable. Code in the shell's realm (the
+// base packages, the owner's own track) still names itself and could lie, so
+// for it the count is evidence and the refusal protects packages from each
+// other's honest mistakes.
 //
 // A request that already declares a desk reader (a ProductAPI call a desk
 // makes in process) is not an app UI and passes unchecked: the object-graph

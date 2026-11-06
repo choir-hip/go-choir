@@ -25,8 +25,10 @@
 // capability a dependency package exposes. The checks here make the
 // honest reach visible (named imports, named globals) and refuse the common
 // ways around that; they cannot make hostile code safe. The enforcement
-// boundary for third-party code is the sandboxed iframe of MA6.1; until then
-// this gate only holds first-party and reviewed code to the contract.
+// boundary for third-party code is the sandboxed iframe of MA6.1
+// (src/lib/apps/package-sandbox.ts: a release on another owner's track runs
+// in an opaque-origin frame); this gate holds the code that runs in the
+// shell's realm (first-party and the owner's own track) to the contract.
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

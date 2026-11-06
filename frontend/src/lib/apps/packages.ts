@@ -172,6 +172,13 @@ export type InstalledPackageRecord = {
   /** The owner id of the track the release is on (own track vs a stranger's). */
   track?: string;
   publisher_computer_id?: string;
+  /**
+   * Where the code runs (MA6.1): "shell" only for a release on the owner's
+   * own track; anything else, or nothing, is the sandboxed frame.
+   */
+  isolation?: string;
+  /** The SDK names the computer's build extracted from the source: a framed package's bridge ceiling. */
+  uses?: string[];
   requires_sdk: string;
   manifest: PackageManifest;
   /** Empty for a pack (a package with no app). */
@@ -346,12 +353,7 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * Fetches an installed package's module, refuses bytes whose SHA-256 is not
- * the listed digest, and imports the verified bytes (never the URL), so what
- * runs is exactly what was checked.
- */
-export async function loadPackageModule(record: InstalledPackageRecord): Promise<PackageModule> {
+async function verifiedModuleBytes(record: InstalledPackageRecord): Promise<ArrayBuffer> {
   if (record.module.abi !== MODULE_ABI) throw new PackageLoadError('refused', `unsupported module ABI ${record.module.abi}`);
   const res = await fetchWithRenewal(record.module.url, {});
   if (!res.ok) throw new PackageLoadError('unavailable', `the package's module is unavailable (${res.status})`);
@@ -360,6 +362,25 @@ export async function loadPackageModule(record: InstalledPackageRecord): Promise
   if (actual !== record.module.sha256) {
     throw new PackageLoadError('refused', `module digest ${actual} is not the installed ${record.module.sha256}`);
   }
+  return bytes;
+}
+
+/**
+ * The verified module's source text, for a sandboxed frame (MA6.1): the shell
+ * checks the digest and never imports the bytes itself.
+ */
+export async function fetchVerifiedModule(record: InstalledPackageRecord): Promise<string> {
+  return new TextDecoder().decode(await verifiedModuleBytes(record));
+}
+
+/**
+ * Fetches an installed package's module, refuses bytes whose SHA-256 is not
+ * the listed digest, and imports the verified bytes (never the URL), so what
+ * runs is exactly what was checked. Shell realm only (the base copy and the
+ * owner's own track); a framed package goes through fetchVerifiedModule.
+ */
+export async function loadPackageModule(record: InstalledPackageRecord): Promise<PackageModule> {
+  const bytes = await verifiedModuleBytes(record);
   const url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
   try {
     return (await import(/* @vite-ignore */ url)) as PackageModule;

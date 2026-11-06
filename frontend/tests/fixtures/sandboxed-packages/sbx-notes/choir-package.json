@@ -1,0 +1,24 @@
+{
+  "schema": "choir.package/v2",
+  "name": "sbx-notes",
+  "version": "1.0.0",
+  "display": {
+    "title": "Sandboxed Notes",
+    "icon": "N",
+    "description": "A stranger's notes app, run in the sandboxed frame"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "requires_sdk": "^2.0",
+    "aliases": [],
+    "launcher": { "menu": true, "desktopIcon": false, "order": 990 },
+    "window": { "singleton": true, "heavy": false },
+    "auth": { "preview": "private" },
+    "theme": { "surface": "standard", "shellDataAttr": "data-sbx-notes-window", "contentClass": "sbx-notes-content" }
+  },
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": { "desks": [] },
+  "capabilities": []
+}

@@ -1,8 +1,8 @@
 // The app identity an app UI names itself with on its API calls (modular
 // architecture plan MA3.10). The server's route-to-kind table counts a call to
 // an app's route from another app, or from none, and refuses it on a route
-// that serves package kinds (internal/routekinds). Until the Phase 6 iframe
-// sandbox the identity is the app's own claim.
+// that serves package kinds (internal/routekinds). In the shell's realm the
+// identity is the app's own claim; for a framed app (MA6.1) the bridge sets it.
 export const APP_HEADER = 'X-Choir-App';
 export const APP_QUERY = 'choir_app';
 

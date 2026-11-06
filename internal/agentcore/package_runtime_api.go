@@ -36,7 +36,17 @@ type InstalledPackage struct {
 	Publisher   string `json:"publisher_computer_id,omitempty"`
 	// Track is the owner id of the track the release is on: the shell tells
 	// the owner's own track from a stranger's by it.
-	Track       string          `json:"track,omitempty"`
+	Track string `json:"track,omitempty"`
+	// Isolation is where the shell runs the package's code (MA6.1): "shell"
+	// for a release on the owner's own track (the owner's code, in the
+	// shell's realm like the base packages), "frame" for every other track
+	// (an opaque-origin sandboxed iframe that reaches the shell only through
+	// the bridge, grant-checked per call). The shell treats any other value,
+	// or none, as "frame".
+	Isolation string `json:"isolation"`
+	// Uses are the SDK names the computer's build extracted from the
+	// package's source: the bridge answers a framed package only for these.
+	Uses        []string        `json:"uses"`
 	RequiresSDK string          `json:"requires_sdk"`
 	Manifest    json.RawMessage `json:"manifest"`
 	// Module is empty for a pack (a package with no app: its themes,
@@ -50,6 +60,21 @@ type InstalledPackage struct {
 	// available, one that needs the owner's approval, or what the platform
 	// did. Absent until a sync has run.
 	Update *PackageUpdateView `json:"update,omitempty"`
+}
+
+// Where the shell runs an installed package's code (MA6.1).
+const (
+	isolationShell = "shell"
+	isolationFrame = "frame"
+)
+
+// packageIsolation is "shell" only for a release on the owner's own track;
+// a stranger's release, or one whose track is unknown, runs in the frame.
+func packageIsolation(track, ownerID string) string {
+	if track != "" && track == ownerID {
+		return isolationShell
+	}
+	return isolationFrame
 }
 
 // InstalledFile is one data file of an installed package.
@@ -109,6 +134,7 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 				Name: name, ReleaseID: item.ReleaseID, InstallID: item.InstallID,
 				InstalledAt: item.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 				Publisher:   item.PublisherComputerID, Track: item.PublisherTrack, RequiresSDK: item.RequiresSDK, Manifest: item.Manifest,
+				Isolation: packageIsolation(item.PublisherTrack, ownerID), Uses: append([]string{}, item.Uses...),
 				Module: module, Files: files,
 				Available: rt.installBytesPresent(*item),
 				Update:    rt.packageUpdateView(name),

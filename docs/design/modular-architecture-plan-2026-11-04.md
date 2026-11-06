@@ -1761,6 +1761,21 @@ gVisor pilot (R41, MA6.7). Open question 2 is settled.
     publishers before S13 (modular section 1). After MA6.1, such packages
     install and read only the routes their ceiling names, through the bridge.
   - First-party code-bearing packages are not affected.
+- **MA6.1 as built (2026-11-06).** The computer's installed list says where a
+  release's code runs (`isolation`): "shell" only for the owner's own track,
+  "frame" for every other track (the shell treats anything else as a frame).
+  A framed release runs in an opaque-origin iframe (`sandbox="allow-scripts
+  allow-forms"`, srcdoc with a meta CSP of `default-src 'none'` and
+  `connect-src` only its `ui.net.egress` hosts) and speaks to the shell over
+  one MessagePort. The bridge answers a fixed set of SDK names, intersected
+  with the `uses` the computer's build extracted; `fetchWithRenewal` reaches
+  only `/api/app-packages/<name>/` with `X-Choir-App` set by the shell;
+  window verbs act on the frame's own window. A module that uses a name the
+  frame does not offer is refused before it runs. Base packages and the
+  owner's own track stay in the shell's realm (renderers stay T2).
+  Deferred: `ui.read.kind` routes, registerCommand, context menus, uploads
+  and file reads across the bridge; self-navigation of the frame is detected
+  and stopped, not prevented (the CSP cannot close it).
 
 ### 12.2 Security process (R27)
 

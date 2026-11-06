@@ -24,7 +24,7 @@ import (
 //
 //	F1  a record whose bytes do not hash to the id is installed;
 //	F3  tree bytes that are not the record's are built;
-//	S1  another owner's release runs in the shell origin (before S13's frame);
+//	S1  another owner's release runs in the shell's realm (MA6.1: it is framed);
 //	S2  an install changes the source tree, asks the desks, or records an
 //	    install before its module is stored;
 //	S3  a repeat install builds and records again;
@@ -290,6 +290,10 @@ func TestRuntimeInstallInstallsReplacesUninstallsAndReinstalls(t *testing.T) {
 		pkgs[0].Module.ABI != pkgruntime.ModuleABI || pkgs[0].Module.URL != packageModulesPrefix+view.ModuleSHA256+".js" {
 		t.Fatalf("S2 installed = %+v", pkgs)
 	}
+	// MA6.1: the owner's own track runs in the shell's realm.
+	if pkgs[0].Isolation != isolationShell || pkgs[0].Uses == nil {
+		t.Fatalf("S2 isolation = %q uses = %v", pkgs[0].Isolation, pkgs[0].Uses)
+	}
 	w := packagesCall(t, e.h, pkgs[0].Module.URL, e.owner)
 	if w.Code != http.StatusOK || computerevent.DigestBytes(w.Body.Bytes()) != view.ModuleSHA256 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/javascript") {
 		t.Fatalf("S2 module = %d %s", w.Code, w.Header())
@@ -511,6 +515,10 @@ func TestRuntimeInstallInstallsAnotherOwnersRelease(t *testing.T) {
 	// tell the owner's own track from a stranger's.
 	if pkgs := e.installed(t); len(pkgs) != 1 || pkgs[0].Track != "owner-x" || pkgs[0].Publisher != "computer-owner-x" {
 		t.Fatalf("installed = %+v", pkgs)
+	}
+	// MA6.1: a stranger's release runs only in the sandboxed frame.
+	if got := e.installed(t)[0].Isolation; got != isolationFrame {
+		t.Fatalf("another owner's isolation = %q", got)
 	}
 	code, view, reason = e.post(t, []byte(`{"release_id":"`+otherID+`","action":"uninstall"}`))
 	if code != http.StatusCreated || view.State != installStateUninstalled {

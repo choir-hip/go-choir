@@ -1,0 +1,60 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "A stranger's app in the sandboxed frame lists its notes from its own route, is refused another app's route at the bridge, and adds a note.",
+  "ready": "[data-sbx-notes]",
+  "expect": [
+    {
+      "selector": "[data-sbx-note]",
+      "count": 1
+    },
+    {
+      "selector": "[data-sbx-outside]",
+      "text": "refused"
+    }
+  ],
+  "steps": [
+    {
+      "see": "[data-sbx-status]",
+      "text": "ready"
+    },
+    {
+      "click": "[data-sbx-add]"
+    },
+    {
+      "see": "[data-sbx-status]",
+      "text": "saved"
+    },
+    {
+      "see": "[data-sbx-note]",
+      "count": 2
+    }
+  ],
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/app-packages/sbx-notes/notes",
+      "status": 200,
+      "json": {
+        "notes": [
+          {
+            "text": "first"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/app-packages/sbx-notes/notes",
+      "status": 200,
+      "json": {
+        "ok": true
+      }
+    }
+  ],
+  "expect_requests": [
+    {
+      "request": "POST /api/app-packages/sbx-notes/notes",
+      "body": "hello from the frame"
+    }
+  ]
+}

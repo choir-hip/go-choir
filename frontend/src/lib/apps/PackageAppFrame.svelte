@@ -2,16 +2,22 @@
   // Hosts one package's module: a base package shipped beside the shell
   // (forced modularity M4) or an installed release (runtime install, S12;
   // docs/design/s12-runtime-install-build-2026-11-04.md), by one path. The module is
-  // fetched by digest and verified (packages.ts), checked against the shell
-  // SDK (requires_sdk, and every SDK name it imports), and mounted into a
-  // plain element with ctx: { sdk, package, release, windowId, props,
-  // launchContext } (SDK 2.0.0 removed dispatch with the forwarded events). It runs in the shell's origin, which is why only
-  // the owner's own releases install before the sandboxed frame (S13).
+  // fetched by digest and verified (packages.ts) and checked against the shell
+  // SDK (requires_sdk, and every SDK name it uses). Then one of two realms:
+  //  - shell: the base packages and releases on the owner's own track mount
+  //    into a plain element with ctx: { sdk, package, release, windowId,
+  //    props, launchContext }; registerCommand and setAppContext are bound to
+  //    this package and this window;
+  //  - frame (MA6.1): every other release runs in an opaque-origin sandboxed
+  //    iframe and reaches the shell only through the bridge, each call checked
+  //    against its ceiling (package-sandbox.ts). The computer says which
+  //    (`isolation`); anything but "shell" is a frame.
   import { getContext, onDestroy } from 'svelte';
   import * as appSdk from '../app-sdk';
   import { SDK_VERSION, sdkSatisfies } from '../sdk-version';
   import { bindRegisterCommand } from '../services/commands';
-  import { loadPackageModule, PackageLoadError, type InstalledPackageRecord } from './packages';
+  import { fetchVerifiedModule, isBaseRecord, loadPackageModule, PackageLoadError, type InstalledPackageRecord } from './packages';
+  import { mountSandboxed, sandboxMissing } from './package-sandbox';
   import { packageRecordFor, registryRevision } from './registry';
 
   export let windowId = '';
@@ -32,6 +38,7 @@
   let state: FrameState = 'loading';
   let message = '';
   let handle: { update?: (props: any) => void; destroy?: () => void } | null = null;
+  let isolation: 'shell' | 'frame' = 'shell';
   let mountedKey = '';
   let token = 0;
 
@@ -72,16 +79,22 @@
       message = `${name || 'This package'} is not installed on this computer.`;
       return;
     }
-    const key = `${rec.install_id}|${rec.module.sha256}`;
+    const realm = isolationOf(rec);
+    const key = `${rec.install_id}|${rec.module.sha256}|${realm}`;
     if (key === mountedKey && state === 'mounted') return;
     teardown();
     const mine = token;
     mountedKey = key;
+    isolation = realm;
     state = 'loading';
     message = '';
     try {
       if (!sdkSatisfies(rec.requires_sdk)) {
         throw new PackageLoadError('refused', `${rec.name} needs SDK ${rec.requires_sdk}; this shell has ${SDK_VERSION}.`);
+      }
+      if (realm === 'frame') {
+        await mountFramed(rec, el, mine);
+        return;
       }
       const mod = await loadPackageModule(rec);
       if (mine !== token) return;
@@ -94,7 +107,12 @@
       }
       // registerCommand is bound to this package: its commands are owned by rec.name whatever id they ask for (B5).
       const result = mod.mount(el, {
-        sdk: Object.freeze({ ...sdk, registerCommand: bindRegisterCommand(rec.name) }),
+        sdk: Object.freeze({
+          ...sdk,
+          registerCommand: bindRegisterCommand(rec.name),
+          // A module tells the shell only its own window's context and title.
+          setAppContext: (change: any) => appSdk.setAppContext({ ...(change || {}), windowId }),
+        }),
         package: rec.name,
         release: rec.release_id,
         windowId,
@@ -115,10 +133,40 @@
     }
   }
 
+  /** Where the record's code runs: the base copy and the owner's own track in the shell, every other release framed. */
+  function isolationOf(rec: InstalledPackageRecord): 'shell' | 'frame' {
+    return isBaseRecord(rec) || rec.isolation === 'shell' ? 'shell' : 'frame';
+  }
+
+  async function mountFramed(rec: InstalledPackageRecord, el: HTMLElement, mine: number) {
+    const uses = Array.isArray(rec.uses) ? rec.uses.map(String) : null;
+    if (!uses) throw new PackageLoadError('refused', `${rec.name} runs in a sandboxed frame, and this computer did not say which SDK names it uses.`);
+    const missing = sandboxMissing(uses);
+    if (missing.length) throw new PackageLoadError('refused', `${rec.name} runs in a sandboxed frame, which does not offer: ${missing.join(', ')}.`);
+    const code = await fetchVerifiedModule(rec);
+    if (mine !== token) return;
+    const sandboxed = mountSandboxed(el, {
+      pkg: rec.name,
+      release: rec.release_id,
+      windowId,
+      manifest: rec.manifest,
+      uses,
+      code,
+      props,
+      launchContext: launchContext as any,
+      onState(next, why) {
+        if (mine !== token) return;
+        state = next;
+        message = why || '';
+      },
+    });
+    handle = { update: (p: any) => sandboxed.update(p), destroy: () => sandboxed.destroy() };
+  }
+
   onDestroy(teardown);
 </script>
 
-<div class="package-frame" data-package-frame data-package-name={name} data-package-install={record?.install_id || ''} data-package-state={state}>
+<div class="package-frame" data-package-frame data-package-name={name} data-package-install={record?.install_id || ''} data-package-state={state} data-package-isolation={isolation}>
   <div class="package-mount" bind:this={target} hidden={state !== 'mounted'}></div>
   {#if state === 'loading'}
     <div class="package-state" role="status" aria-live="polite">Opening {record?.manifest?.display?.title || name}…</div>
@@ -149,6 +197,15 @@
 
   .package-mount[hidden] {
     display: none;
+  }
+
+  .package-mount :global(iframe.package-sandbox) {
+    flex: 1;
+    display: block;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: transparent;
   }
 
   .package-state {
