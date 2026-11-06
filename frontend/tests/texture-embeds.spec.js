@@ -194,6 +194,27 @@ test('an apply with no screenshot still gets an entry with a Revert action', asy
   expect(inserted).toHaveLength(2);
 });
 
+test('an operation the computer no longer carries is not counted, hosted or reverted', async () => {
+  const ops = [
+    { operation_id: 'a', state: 'applied', trajectory_id: 't', created_at: '2026-11-06T10:00:00Z' },
+    { operation_id: 'b', state: 'applied', trajectory_id: 't', created_at: '2026-11-06T11:00:00Z' },
+    { operation_id: 'c', state: 'applied', trajectory_id: 't', created_at: '2026-11-06T12:00:00Z' },
+  ];
+  expect(laterAppliesAfter(ops, 'a', ['a', 'c'])).toBe(1);
+  expect(laterAppliesAfter(ops, 'a')).toBe(2);
+  expect(applyEntriesToAdd(ops, 't', new Set(), ['a', 'c']).map((op) => op.operation_id)).toEqual(['a', 'c']);
+  const attrs = { 'data-embed-operation': 'b', 'data-embed-computer': 'computer-1' };
+  const button = { disabled: false, textContent: 'Revert', getAttribute: (k) => attrs[k], closest() { return this; } };
+  const calls = [];
+  const fetchFn = async (url, init) => {
+    calls.push(init?.method || 'GET');
+    return { ok: true, json: async () => ({ operations: ops, live_operation_ids: ['a', 'c'] }) };
+  };
+  expect(await handleRevertClick({ closest: () => button }, fetchFn, () => true)).toBe(true);
+  expect(button.textContent).toBe('Already undone');
+  expect(calls).toEqual(['GET']);
+});
+
 test('the Revert click confirms, then posts the owner revert once', async () => {
   const attrs = { 'data-embed-operation': 'a', 'data-embed-computer': 'computer-1' };
   const button = { disabled: false, textContent: 'Revert', getAttribute: (k) => attrs[k], closest() { return this; } };

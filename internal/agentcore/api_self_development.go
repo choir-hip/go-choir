@@ -325,6 +325,16 @@ func (h *APIHandler) listSelfDevelopmentOperations(w http.ResponseWriter, r *htt
 	}
 	slices.Reverse(operations)
 	listing := map[string]any{"operations": operations}
+	// Which applied operations the computer's state still carries: an
+	// operation a later revert or rollback undid still reads applied.
+	if live, liveErr := h.liveOperations(r.Context(), computerID); liveErr == nil {
+		ids := make([]string, 0, len(live))
+		for id := range live {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		listing["live_operation_ids"] = ids
+	}
 	// The route slot's current generation is what a rollback's
 	// expected_route_generation must equal. It is read through the resolver
 	// the rollback check uses, and left out when the route does not resolve.
@@ -827,9 +837,20 @@ func (h *APIHandler) openSelfDevelopmentRollback(w http.ResponseWriter, ctx cont
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "rollback projection unavailable"})
 		return
 	}
+	// The row names the rollback_requested event itself, not whatever event is
+	// the head by now.
+	requested, requestedFound, requestedErr := h.rt.store.EventByIdempotency(ctx, computerID, eventIdempotency)
+	requestedDigest := ""
+	if requestedErr == nil && requestedFound {
+		requestedDigest, _ = requested.Digest()
+	}
+	if requestedDigest == "" {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "rollback event unavailable"})
+		return
+	}
 	operation, err := h.rt.selfdevOperations.StartRollback(ctx, selfdev.RollbackStartRequest{
 		ComputerID: computerID, IdempotencyKey: request.IdempotencyKey, RequestCommitment: commitment,
-		RollbackEvent: nextHead.CanonicalEventHead, DecisionActor: ownerID, CurrentDesired: nextHead.DesiredEventHead,
+		RollbackEvent: requestedDigest, DecisionActor: ownerID, CurrentDesired: nextHead.DesiredEventHead,
 		CurrentEffective: nextHead.EffectiveEventHead, Target: target, RouteGeneration: request.ExpectedRouteGeneration,
 	})
 	if err != nil {

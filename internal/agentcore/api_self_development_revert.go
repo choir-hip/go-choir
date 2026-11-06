@@ -23,6 +23,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -100,14 +101,34 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusOK, *latest)
 		return
 	}
+	live, err := h.liveOperations(ctx, computerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
+		return
+	}
+	if !live[reverted.OperationID] {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "operation " + operationID + " was already undone by a later revert or rollback; reverting it would reinstall an earlier change"})
+		return
+	}
 	head, err := rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "event head unavailable"})
 		return
 	}
+	// An orphaned revert: this revert's own rollback_requested event committed
+	// but its row was never created (a crash, a head read or a start that
+	// failed). The pending transition is then ours, and the openers' replay
+	// paths finish it; any other pending transition is not ours to touch.
 	if head.PendingTransitionRef != "" {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "a transition is pending on the event head; wait for it to settle before reverting"})
-		return
+		own, found, err := rt.store.EventByIdempotency(ctx, computerID, "selfdev-rollback-requested-"+key)
+		ownDigest := ""
+		if err == nil && found {
+			ownDigest, _ = own.Digest()
+		}
+		if ownDigest == "" || head.PendingTransitionRef != ownDigest {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "a transition is pending on the event head; wait for it to settle before reverting"})
+			return
+		}
 	}
 	if head.EffectiveEventHead == priorHead {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "the computer is already in the state before operation " + operationID})
@@ -124,27 +145,132 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
 		return
 	}
+	// Open through a buffer: a tap that loses a race to the same act gets that
+	// act's row, not a 409.
+	buf := &revertBuffer{header: http.Header{}}
 	if priorErr == nil && revertTargetHasEvidence(prior) {
 		if generation == 0 {
 			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "rollback route authority unavailable"})
 			return
 		}
-		h.openSelfDevelopmentRollback(w, ctx, ownerID, computerID, selfDevelopmentRollbackRequest{
+		h.openSelfDevelopmentRollback(buf, ctx, ownerID, computerID, selfDevelopmentRollbackRequest{
 			ExpectedDesiredHead: head.DesiredEventHead, CurrentAppliedHead: head.EffectiveEventHead,
 			ToAppliedHead: prior.EffectiveHead, PriorMaterialization: prior.MaterializationReceipt,
 			PriorCheckpoint: prior.CheckpointRef, ExpectedRouteGeneration: generation, IdempotencyKey: key,
 		})
-		return
-	}
-	// The prior state is a checkpoint with no operation evidence.
-	if priorErr != nil {
-		priorEvent, ok, err := rt.store.EventByDigest(ctx, computerID, priorHead)
-		if err != nil || !ok || (priorEvent.EventKind != computerevent.EventGenesisImported && priorEvent.EventKind != computerevent.EventMaterializationApplied) {
+	} else {
+		// No evidence to roll back to: only a genesis row, an earlier base
+		// restore, or a checkpoint event with no row is restored as the base.
+		restorable := false
+		if priorErr == nil {
+			restorable = strings.HasPrefix(prior.OperationID, "genesis-") || selfdev.IsBaseRestore(prior)
+		} else {
+			priorEvent, ok, err := rt.store.EventByDigest(ctx, computerID, priorHead)
+			restorable = err == nil && ok && (priorEvent.EventKind == computerevent.EventGenesisImported || priorEvent.EventKind == computerevent.EventMaterializationApplied)
+		}
+		if !restorable {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "the state before operation " + operationID + " is not a restorable checkpoint"})
 			return
 		}
+		h.openBaseRestore(buf, ctx, ownerID, computerID, reverted, key, priorHead, priorCommitment, generation)
 	}
-	h.openBaseRestore(w, ctx, ownerID, computerID, reverted, key, priorHead, priorCommitment, generation)
+	if buf.status == http.StatusConflict || buf.status >= 500 {
+		for attempt := 0; attempt < 10; attempt++ {
+			if existing, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, key); err == nil && found &&
+				(existing.State == selfdev.StateRollbackPending || existing.State == selfdev.StateRolledBack) {
+				writeAPIJSON(w, http.StatusOK, existing)
+				return
+			}
+			if buf.status != http.StatusConflict {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				attempt = 10
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}
+	buf.flushTo(w)
+}
+
+// revertBuffer holds an opener's answer until the revert decides it is final.
+type revertBuffer struct {
+	header http.Header
+	status int
+	body   []byte
+}
+
+func (b *revertBuffer) Header() http.Header { return b.header }
+func (b *revertBuffer) WriteHeader(status int) {
+	if b.status == 0 {
+		b.status = status
+	}
+}
+func (b *revertBuffer) Write(p []byte) (int, error) {
+	if b.status == 0 {
+		b.status = http.StatusOK
+	}
+	b.body = append(b.body, p...)
+	return len(p), nil
+}
+func (b *revertBuffer) flushTo(w http.ResponseWriter) {
+	for key, values := range b.header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	if b.status == 0 {
+		b.status = http.StatusOK
+	}
+	w.WriteHeader(b.status)
+	_, _ = w.Write(b.body)
+}
+
+// liveOperations is the set of operations whose change the computer's current
+// state still carries (liveOperationSet).
+func (h *APIHandler) liveOperations(ctx context.Context, computerID string) (map[string]bool, error) {
+	rows, err := h.rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateApplied, selfdev.StateRolledBack)
+	if err != nil {
+		return nil, err
+	}
+	return liveOperationSet(rows), nil
+}
+
+// liveOperationSet replays the settled rows in creation order: an apply adds
+// itself; a rollback or base restore returns to the live set recorded when its
+// target head was current (empty for a checkpoint with no row). An operation a
+// later rollback undid still reads applied, so state alone cannot say.
+func liveOperationSet(rows []selfdev.Operation) map[string]bool {
+	sorted := append([]selfdev.Operation(nil), rows...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		a, errA := time.Parse(time.RFC3339Nano, sorted[i].CreatedAt)
+		b, errB := time.Parse(time.RFC3339Nano, sorted[j].CreatedAt)
+		if errA != nil || errB != nil {
+			return sorted[i].CreatedAt < sorted[j].CreatedAt
+		}
+		return a.Before(b)
+	})
+	live := map[string]bool{}
+	snapshots := map[string]map[string]bool{}
+	copySet := func(in map[string]bool) map[string]bool {
+		out := make(map[string]bool, len(in))
+		for k, v := range in {
+			out[k] = v
+		}
+		return out
+	}
+	for _, row := range sorted {
+		if row.State == selfdev.StateRolledBack && strings.HasPrefix(row.OperationID, "rollback-") {
+			live = copySet(snapshots[row.BaseHead])
+		} else if row.State == selfdev.StateApplied {
+			live[row.OperationID] = true
+		} else {
+			continue
+		}
+		snapshots[row.EffectiveHead] = copySet(live)
+	}
+	return live
 }
 
 // selfdevOperationMissing: the store's single-row reads answer sql.ErrNoRows.
@@ -214,7 +340,7 @@ func (h *APIHandler) openBaseRestore(w http.ResponseWriter, ctx context.Context,
 		return
 	}
 	if eventFound {
-		if existingEvent.EventKind != computerevent.EventRollbackRequested || existingEvent.DecisionRef != priorHead {
+		if existingEvent.EventKind != computerevent.EventRollbackRequested || existingEvent.DecisionRef != priorHead || existingEvent.ProposedEffectRef != target.ContentDigest {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "revert event binding changed"})
 			return
 		}
@@ -234,11 +360,22 @@ func (h *APIHandler) openBaseRestore(w http.ResponseWriter, ctx context.Context,
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert projection unavailable"})
 		return
 	}
+	// The row names the rollback_requested event itself, not whatever event is
+	// the head by now.
+	stored, ok, err := rt.store.EventByIdempotency(ctx, computerID, eventIdempotency)
+	requestedDigest := ""
+	if err == nil && ok {
+		requestedDigest, _ = stored.Digest()
+	}
+	if requestedDigest == "" {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert event unavailable"})
+		return
+	}
 	operation, err := rt.selfdevOperations.StartBaseRestore(ctx, selfdev.BaseRestoreStartRequest{
 		ComputerID: computerID, IdempotencyKey: key, RequestCommitment: commitment,
-		RollbackEvent: next.CanonicalEventHead, DecisionActor: ownerID, CurrentDesired: next.DesiredEventHead,
+		RollbackEvent: requestedDigest, DecisionActor: ownerID, CurrentDesired: next.DesiredEventHead,
 		CurrentEffective: next.EffectiveEventHead, PriorEffectiveHead: priorHead, RevertedOperation: reverted.OperationID,
-		BaseReleaseDigest: target.ContentDigest,
+		TrajectoryID: reverted.TrajectoryID, BaseReleaseDigest: target.ContentDigest,
 		CodeRef:           target.CodeRef, ArtifactProgramRef: target.ArtifactProgramRef, RouteGeneration: generation,
 	})
 	if err != nil {

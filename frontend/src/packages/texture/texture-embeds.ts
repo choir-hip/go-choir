@@ -221,8 +221,11 @@ export function isRevertable(result: ListingResult | null): boolean {
  * How many applied operations were created after this one. A revert restores
  * the state before it, so each of them is undone with it.
  */
-export function laterAppliesAfter(operations: any[], operationID: string): number {
-  const list = Array.isArray(operations) ? operations : [];
+export function laterAppliesAfter(operations: any[], operationID: string, liveIDs?: string[] | null): number {
+  const live = Array.isArray(liveIDs) ? new Set(liveIDs) : null;
+  // An operation a later revert undid still reads applied; the server lists
+  // which ones the computer still carries.
+  const list = (Array.isArray(operations) ? operations : []).filter((op) => !live || live.has(str(op?.operation_id)) || str(op?.operation_id) === operationID);
   const target = list.find((op) => str(op?.operation_id) === operationID);
   const at = Date.parse(str(target?.created_at));
   if (!target || Number.isNaN(at)) return 0;
@@ -257,7 +260,12 @@ export async function handleRevertClick(
     const res = await fetchFn(operationsListPath(computerID), { credentials: 'same-origin', headers: { 'X-Choir-App': 'texture' } });
     if (res.ok) {
       const body = await res.json();
-      later = laterAppliesAfter(body?.operations, operationID);
+      if (Array.isArray(body?.live_operation_ids) && !body.live_operation_ids.includes(operationID)) {
+        button.disabled = true;
+        button.textContent = 'Already undone';
+        return true;
+      }
+      later = laterAppliesAfter(body?.operations, operationID, body?.live_operation_ids);
     }
   } catch {
     // The warning is best effort; the guest decides what the revert does.
@@ -315,10 +323,11 @@ export function applyEntryHTML(op: any, computerID: string): string {
 }
 
 /** Applied operations of the document's trajectory that have no Revert host yet. */
-export function applyEntriesToAdd(operations: any[], trajectoryID: string, hostedOperationIDs: Set<string>): any[] {
+export function applyEntriesToAdd(operations: any[], trajectoryID: string, hostedOperationIDs: Set<string>, liveIDs?: string[] | null): any[] {
   const list = Array.isArray(operations) ? operations : [];
+  const live = Array.isArray(liveIDs) ? new Set(liveIDs) : null;
   return list
-    .filter((op) => op?.state === 'applied' && str(op?.trajectory_id) === trajectoryID && !hostedOperationIDs.has(str(op?.operation_id)))
+    .filter((op) => op?.state === 'applied' && str(op?.trajectory_id) === trajectoryID && !hostedOperationIDs.has(str(op?.operation_id)) && (!live || live.has(str(op?.operation_id))))
     .sort((a, b) => Date.parse(str(a?.created_at)) - Date.parse(str(b?.created_at)));
 }
 
@@ -346,7 +355,7 @@ export async function hydrateApplyEntries(root: any, trajectoryID: string, fetch
     for (const node of Array.from(root.querySelectorAll?.('[data-texture-embed][data-embed-operation]') || []) as any[]) {
       hosted.add(String(node.getAttribute('data-embed-operation') || ''));
     }
-    for (const op of applyEntriesToAdd(body?.operations, trajectory, hosted)) {
+    for (const op of applyEntriesToAdd(body?.operations, trajectory, hosted, body?.live_operation_ids)) {
       root.insertAdjacentHTML('beforeend', applyEntryHTML(op, computerID));
     }
   } catch {

@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -171,4 +172,125 @@ func TestRevertRefusesWhatIsNotAnAppliedOperation(t *testing.T) {
 	if code, _ := fx.revert(t, rollback.OperationID); code != http.StatusConflict {
 		t.Fatalf("revert of a rollback status=%d, want 409", code)
 	}
+}
+
+// An orphaned revert (its rollback_requested event committed, its row never
+// created) is finished by the next tap, not refused for good.
+func TestRevertFinishesAnOrphanedBaseRestore(t *testing.T) {
+	ctx := context.Background()
+	fx := joinFixture(t, "rv-orphan", joinTestBaseA, joinTestBaseA)
+	baseline := fx.withBaselineRoot(t)
+	first := fx.applyPlain(t, "op-rv-orphan-1")
+	accepted, found, err := fx.store.EventByDigest(ctx, fx.computerID, first.DecisionEvent)
+	if err != nil || !found {
+		t.Fatalf("accept event: found=%v err=%v", found, err)
+	}
+	target, err := fx.rt.servingBaselineManifest(ctx, fx.computerID, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := "revert:" + first.OperationID + ":" + first.OperationID
+	event, err := rollbackRequestedEvent(fx.computerID, "owner", "selfdev-rollback-requested-"+key, strings.Repeat("d", 64), first.TrajectoryID, first.CapsuleID, target.ContentDigest, accepted.ExpectedEffectiveEventHead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fx.waitForStableHead(t)
+	if _, err := fx.appender.AppendNew(ctx, event, computerevent.TransitionInput{TargetStateCommitment: accepted.ExpectedEffectiveStateCommitment}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if head, _ := fx.store.Head(ctx, fx.computerID); head == nil || head.PendingTransitionRef == "" {
+		t.Fatal("setup: the orphaned request leaves the transition pending")
+	}
+	code, opened := fx.revert(t, first.OperationID)
+	if code != http.StatusCreated || !selfdev.IsBaseRestore(opened) {
+		t.Fatalf("revert of an orphaned request status=%d operation=%+v; want it finished", code, opened)
+	}
+	fx.waitForState(t, opened.OperationID, selfdev.StateRolledBack)
+	if head, _ := fx.store.Head(ctx, fx.computerID); head == nil || head.PendingTransitionRef != "" {
+		t.Fatalf("head after the finished revert = %+v; want the transition discharged", head)
+	}
+	if opened.TrajectoryID != first.TrajectoryID {
+		t.Fatalf("the revert row's trajectory %q, want the candidate's %q", opened.TrajectoryID, first.TrajectoryID)
+	}
+}
+
+// A revert of an operation a later revert already undid would reinstall the
+// earlier change; it is refused, and the listing says what is still live.
+func TestRevertRefusesAnAlreadyUndoneOperation(t *testing.T) {
+	fx := joinFixture(t, "rv-undone", joinTestBaseA, joinTestBaseA)
+	fx.withBaselineRoot(t)
+	a := fx.applyPlain(t, "op-rv-undone-a")
+	x := fx.applyPlain(t, "op-rv-undone-x")
+	code, undoA := fx.revert(t, a.OperationID)
+	if code != http.StatusCreated {
+		t.Fatalf("revert of the first apply status=%d", code)
+	}
+	fx.waitForState(t, undoA.OperationID, selfdev.StateRolledBack)
+	if code, _ := fx.revert(t, x.OperationID); code != http.StatusConflict {
+		t.Fatalf("revert of an operation already undone status=%d, want 409", code)
+	}
+	recorder := httptest.NewRecorder()
+	(&APIHandler{rt: fx.rt}).listSelfDevelopmentOperations(recorder, httptest.NewRequest(http.MethodGet, "/", nil), fx.computerID)
+	var listing struct {
+		Live []string `json:"live_operation_ids"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&listing); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range listing.Live {
+		if id == a.OperationID || id == x.OperationID {
+			t.Fatalf("live operations %v still name an undone operation", listing.Live)
+		}
+	}
+}
+
+func TestLiveOperationSetFollowsRollbacks(t *testing.T) {
+	at := func(n int) string { return time.Date(2026, 11, 6, 10, n, 0, 0, time.UTC).Format(time.RFC3339Nano) }
+	h := func(c string) string { return strings.Repeat(c, 64) }
+	rows := []selfdev.Operation{
+		{OperationID: "selfdev-a", State: selfdev.StateApplied, EffectiveHead: h("1"), CreatedAt: at(1)},
+		{OperationID: "selfdev-b", State: selfdev.StateApplied, EffectiveHead: h("2"), CreatedAt: at(2)},
+		{OperationID: "rollback-1", State: selfdev.StateRolledBack, BaseHead: h("1"), EffectiveHead: h("3"), CreatedAt: at(3)},
+		{OperationID: "selfdev-c", State: selfdev.StateApplied, EffectiveHead: h("4"), CreatedAt: at(4)},
+	}
+	live := liveOperationSet(rows)
+	if live["selfdev-b"] || !live["selfdev-a"] || !live["selfdev-c"] {
+		t.Fatalf("live = %v; a and c survive, b was undone", live)
+	}
+	rows = append(rows, selfdev.Operation{OperationID: "rollback-2", State: selfdev.StateRolledBack, BaseHead: h("9"), EffectiveHead: h("5"), CreatedAt: at(5)})
+	if live := liveOperationSet(rows); len(live) != 0 {
+		t.Fatalf("live = %v; a restore to a checkpoint with no row undoes all", live)
+	}
+}
+
+// Two taps at once are one act: the loser gets the winner's row.
+func TestRevertConcurrentTapsAreOneAct(t *testing.T) {
+	fx := joinFixture(t, "rv-race", joinTestBaseA, joinTestBaseA)
+	fx.withBaselineRoot(t)
+	first := fx.applyPlain(t, "op-rv-race-1")
+	fx.waitForStableHead(t)
+	type answer struct {
+		code int
+		id   string
+	}
+	results := make(chan answer, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			recorder := httptest.NewRecorder()
+			(&APIHandler{rt: fx.rt}).revertSelfDevelopmentOperation(recorder, httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}")), "owner", fx.computerID, first.OperationID)
+			var op selfdev.Operation
+			_ = json.NewDecoder(recorder.Body).Decode(&op)
+			results <- answer{recorder.Code, op.OperationID}
+		}()
+	}
+	a, b := <-results, <-results
+	for _, got := range []answer{a, b} {
+		if got.code != http.StatusOK && got.code != http.StatusCreated {
+			t.Fatalf("a concurrent tap got %d, want the same act's row", got.code)
+		}
+	}
+	if a.id == "" || a.id != b.id {
+		t.Fatalf("taps answered operations %q and %q; want one act", a.id, b.id)
+	}
+	fx.waitForState(t, a.id, selfdev.StateRolledBack)
 }
