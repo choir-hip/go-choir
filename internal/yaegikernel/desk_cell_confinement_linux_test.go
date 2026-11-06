@@ -95,6 +95,11 @@ func runEscapeProbes(cfg SessionWorkerConfig) probeResults {
 	out["read_etc_passwd"] = errString(err)
 	_, err = os.ReadFile("/proc/1/environ")
 	out["read_pid1_environ"] = errString(err)
+	// Exists in both shapes (the reduced /proc keeps the worker's own pid)
+	// and DAC lets the worker read it; only Landlock refuses it (the domain
+	// grants /proc/<pid>/task alone).
+	_, err = os.ReadFile("/proc/self/status")
+	out["read_proc_self_status"] = errString(err)
 	socket := func(domain, typ, proto int) error {
 		fd, err := unix.Socket(domain, typ, proto)
 		if err == nil {
@@ -344,9 +349,11 @@ func requireEPERM(t *testing.T, probes probeResults, names ...string) {
 }
 
 func landlockEnforced(probes probeResults) bool {
-	// With Landlock a world-readable file outside the grants is unreadable;
-	// without it only DAC applies and /etc/passwd stays readable.
-	return probes["read_etc_passwd"] != ""
+	// With Landlock a DAC-readable file outside the grants is unreadable;
+	// without it only DAC applies and it stays readable. Not /etc/passwd:
+	// since MA6.2 the worker's mount namespace has no /etc, so that read
+	// fails (ENOENT) on a kernel without Landlock too.
+	return probes["read_proc_self_status"] != ""
 }
 
 func kernelHasLandlock() bool {
