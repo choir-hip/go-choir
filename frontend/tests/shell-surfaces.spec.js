@@ -2,7 +2,8 @@
 // lib/ShellSlot.svelte; plan section 11). Two parts:
 //
 //  - the slots on the real kernel, loaded through vite (no browser): every
-//    shell slot has its in-tree surface package as the active provider, a bad
+//    shell slot (the context-menu renderer among them, H2) has its in-tree
+//    surface package as the active provider, a bad
 //    registration is refused, a failed surface is set aside, and a package that
 //    leaves takes its surface with it;
 //  - the drills in the shell (vite dev server, like context-menu-open-with):
@@ -19,6 +20,8 @@
 //   cd frontend && npx vite --port 5173 &
 //   npx playwright test tests/shell-surfaces.spec.js
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -27,11 +30,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 
 test.describe('the slots on the kernel', () => {
-  let vite; let M; let K;
+  let vite; let M; let K; let C;
   test.beforeAll(async () => {
-    vite = await createServer({ root, server: { middlewareMode: true, hmr: false, watch: null }, appType: 'custom', logLevel: 'silent' });
+    // Its own dependency cache, so this server never re-optimizes the dev server's under a running page.
+    vite = await createServer({ root, cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), 'choir-surfaces-vite-')), server: { middlewareMode: true, hmr: false, watch: null }, appType: 'custom', logLevel: 'silent' });
     M = await vite.ssrLoadModule('/src/lib/shell-slots.ts');
     K = await vite.ssrLoadModule('/src/lib/shell-kernel.ts');
+    C = await vite.ssrLoadModule('/src/lib/services/context-menu.ts');
+    await vite.ssrLoadModule('/src/lib/menu-host.ts');
     await K.shellKernel.services.settled();
   });
   test.afterAll(async () => { await vite?.close(); });
@@ -50,6 +56,10 @@ test.describe('the slots on the kernel', () => {
     }
     const services = K.shellKernel.services.describe().services;
     expect(services.launcher.abi).toBe('choir.service/launcher/v1');
+    // H2: the context menu's default renderer is the menu-default package; the host's last resort is the base.
+    expect(services[C.RENDERER_SLOT].active).toBe('menu-default');
+    expect(services[C.RENDERER_SLOT].providers.map((p) => p.id).sort()).toEqual([C.BASE_RENDERER_ID, 'menu-default'].sort());
+    expect(tree.find((s) => s.slot === C.RENDERER_SLOT)).toMatchObject({ name: 'menu-default', priority: 10 });
   });
 
   test('S1: a surface for no slot, or without a component, is refused', () => {
@@ -83,6 +93,13 @@ test.describe('the slots on the kernel', () => {
 });
 
 test.describe('the drills in the shell', () => {
+  // The shell's own instance of shell-slots.ts: the URL the page loaded it by (a dev server may add ?t=).
+  const removeSurfacePackages = (page, names) => page.evaluate(async (list) => {
+    const entry = performance.getEntriesByType('resource').map((e) => e.name).find((n) => new URL(n).pathname === '/src/lib/shell-slots.ts');
+    const slots = await import(/* @vite-ignore */ entry || '/src/lib/shell-slots.ts');
+    for (const name of list) await slots.removeSurfacePackage(name);
+  }, names);
+
   async function openShell(page) {
     await page.route(/\/(auth|api)\//, (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthenticated"}' }));
     await page.goto(BASE_URL);
@@ -106,16 +123,32 @@ test.describe('the drills in the shell', () => {
 
   test('with the launcher package gone the last-resort launcher opens apps; with the icons gone windows still work', async ({ page }) => {
     await openShell(page);
-    await page.evaluate(async () => {
-      const slots = await import('/src/lib/shell-slots.ts');
-      await slots.removeSurfacePackage('launcher');
-      await slots.removeSurfacePackage('desktop-icons');
-    });
+    await removeSurfacePackages(page, ['launcher', 'desktop-icons']);
     await expect(page.locator('[data-desktop-icon]')).toHaveCount(0);
     await page.locator('[data-desk-menu-button]').click();
     const lastResort = page.locator('[data-last-resort="launcher"]');
     await expect(lastResort).toBeVisible();
     await lastResort.locator('[data-last-resort-app="files"]').click();
+    await expect(lastResort).toHaveCount(0);
+    await expect(page.locator('[data-window][data-window-app-id="files"]')).toBeVisible();
+  });
+
+  test('H2: the menu-default package renders the context menu; without it the last-resort menu answers and runs the item', async ({ page }) => {
+    await openShell(page);
+    const icon = page.locator('[data-desktop-icon][data-desktop-icon-id="files"]');
+    await icon.click({ button: 'right' });
+    const menu = page.locator('[data-context-menu]').first();
+    await expect(menu).toBeVisible();
+    await expect(page.locator('[data-last-resort="menu"]')).toHaveCount(0);
+    await expect(menu.locator('[data-context-menu-item="use-default-menu"]')).toHaveCount(0); // the default offers no escape from itself
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-context-menu]')).toHaveCount(0);
+
+    await removeSurfacePackages(page, ['menu-default']);
+    await icon.click({ button: 'right' });
+    const lastResort = page.locator('[data-last-resort="menu"]');
+    await expect(lastResort).toBeVisible();
+    await lastResort.locator('[data-context-menu-item="open"]').click();
     await expect(lastResort).toHaveCount(0);
     await expect(page.locator('[data-window][data-window-app-id="files"]')).toBeVisible();
   });

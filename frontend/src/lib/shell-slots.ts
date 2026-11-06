@@ -126,7 +126,8 @@ export function inTreeSurfaces(): { name: string; slot: string; component: Compo
 // contributes front door disposes and re-applies the package scope when its
 // set changes; a surface must not go with it).
 const surfaceScopes = new Map<string, Scope>();
-function surfaceScope(name: string): Scope {
+/** The scope a package's surfaces live in (context-menu.ts registers renderer packages in it). */
+export function surfaceScope(name: string): Scope {
   const existing = surfaceScopes.get(name);
   if (existing && !existing.disposed) return existing;
   const scope = shellKernel.scope(`surface:${name}`);

@@ -45,6 +45,7 @@
   import ShellSlot from './ShellSlot.svelte';
   import LastResort from './LastResort.svelte';
   import { launcherState, setLauncherOpen } from './shell-slots';
+  import './menu-host';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
   import { setTheme as setShellTheme } from './services/theme';
   import { bindCommandActions, commands, installKeyCapture } from './services/commands';

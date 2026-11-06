@@ -1,12 +1,14 @@
 // The context menu on the slot (slice S4; docs/design/modular-architecture-2026-11-04.md
 // sections 2.2, 2.4 and 5; plan section 11). Three seams, all in the shell kernel:
 //
-//  - `contextMenu.renderer` is a single-slot service. The base provider
-//    (`menu-default`, ContextMenu.svelte) is always there; a package may provide
-//    another (tier T2: it sees every menu, file names included). The ranking is
-//    the kernel's. A renderer that fails its contract is refused at
-//    registration; one that fails while rendering is reported to the watchdog
-//    and the base menu opens in its place, so a right-click always answers.
+//  - `contextMenu.renderer` is a single-slot service. Its default provider is
+//    the `menu-default` package (packages/menu-default, slice H2), an ordinary
+//    provider; the base is the host's last-resort list menu
+//    (LastResortMenu.svelte), always there. A package may provide another
+//    (tier T2: it sees every menu, file names included). The ranking is the
+//    kernel's. A renderer that fails its contract is refused at registration;
+//    one that fails while rendering is reported to the watchdog and the base
+//    menu opens in its place, so a right-click always answers.
 //  - `contextMenu.build` is a pipeline over the menu's items. Handlers get a
 //    frozen list of plain descriptors (no callbacks) led by the public target
 //    { kind, ext, name }, and return a list. An item names a `command`; it
@@ -42,7 +44,7 @@ import type { ContextMenuEntry, ContextMenuItem, ContextMenuRequest, ContextMenu
 export const RENDERER_SLOT = 'contextMenu.renderer';
 export const RENDERER_ABI = 'choir.service/contextMenu.renderer/v1';
 export const BUILD_PIPELINE = 'contextMenu.build';
-export const BASE_RENDERER_ID = 'menu-default';
+export const BASE_RENDERER_ID = 'last-resort';
 export const USE_DEFAULT_ID = 'use-default-menu';
 export const MAX_ITEMS = 60;
 const MAX_LABEL = 120;
@@ -58,6 +60,8 @@ export interface RendererSpec {
   tier?: 'policy' | 'user' | 'app' | 'core';
   priority?: number;
   grants?: string[];
+  /** A default the base image ships (menu-default): no "Use default menu" escape is offered while it renders. */
+  isDefault?: boolean;
 }
 type Descriptor = {
   id: string;
@@ -96,8 +100,9 @@ function contractError(spec: RendererSpec): string | null {
 }
 
 let baseRender: ((request: RenderRequest) => void) | null = null;
+const defaultRenderers = new Set<string>();
 
-/** context-menu.ts installs the default menu (ContextMenu.svelte) as the base provider. */
+/** context-menu.ts installs the last-resort menu (LastResortMenu.svelte) as the base provider. */
 export function installBaseRenderer(render: (request: RenderRequest) => void): void {
   baseRender = render;
   shellKernel.services.provide(root, RENDERER_SLOT, {
@@ -114,7 +119,11 @@ export function registerContextMenuRenderer(scope: Scope, spec: RendererSpec): (
   const bad = contractError(spec);
   if (bad) throw new Error(bad);
   if (spec.id === BASE_RENDERER_ID) throw new Error(`renderer id "${BASE_RENDERER_ID}" is the shell's`);
-  return shellKernel.services.provide(scope, RENDERER_SLOT, { id: spec.id, impl: spec.impl, tier: spec.tier ?? 'app', priority: spec.priority, grants: spec.grants });
+  const dispose = shellKernel.services.provide(scope, RENDERER_SLOT, { id: spec.id, impl: spec.impl, tier: spec.tier ?? 'app', priority: spec.priority, grants: spec.grants });
+  if (!spec.isDefault) return dispose;
+  defaultRenderers.add(spec.id);
+  const off = scope.effect(() => { defaultRenderers.delete(spec.id); });
+  return () => { void off(); void dispose(); };
 }
 
 function activeRenderer(): { id: string; impl: ContextMenuRenderer } | null {
@@ -292,7 +301,7 @@ export function presentMenu(request: ContextMenuRequest): boolean {
   let items = withContributors((request.items || []).filter(Boolean), target);
   if (!items.length) return false;
   const active = activeRenderer();
-  if (active && active.id !== BASE_RENDERER_ID) {
+  if (active && active.id !== BASE_RENDERER_ID && !defaultRenderers.has(active.id)) {
     const id = active.id;
     items = [...items, { separator: true }, { id: USE_DEFAULT_ID, label: 'Use default menu', essential: true, onSelect: () => { void shellKernel.services.decline(root, RENDERER_SLOT, id); } }];
   }

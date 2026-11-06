@@ -61,7 +61,8 @@ test('Open with is a host contribution on file targets, after Open, with the app
 test('X1, X2: a renderer that fails its contract is refused; one that throws falls back and is un-ranked; one that passes is used and can be set aside', async () => {
   const scope = K.packageScope('menu-compact');
   expect(() => M.registerContextMenuRenderer(scope, { id: 'broken', impl: {} })).toThrow(/render must be a function/);
-  expect(() => M.registerContextMenuRenderer(scope, { id: 'menu-default', impl: { render() {} } })).toThrow(/shell's/);
+  // the base is the host's last-resort menu (H2: menu-default is an ordinary package provider)
+  expect(() => M.registerContextMenuRenderer(scope, { id: 'last-resort', impl: { render() {} } })).toThrow(/shell's/);
   await K.shellKernel.services.settled();
   let [who] = await Promise.resolve(present({ x: 0, y: 0, items: base() }));
   expect(who).toBe('base');
@@ -96,7 +97,7 @@ test('X1, X2: a renderer that fails its contract is refused; one that throws fal
   }
   await K.shellKernel.services.settled();
   const info = K.shellKernel.services.describe().services[M.RENDERER_SLOT];
-  expect(info.active).toBe('menu-default');
+  expect(info.active).toBe(M.BASE_RENDERER_ID);
   expect(info.providers.find((p) => p.id === 'bad').tripped).toMatch(/boom/);
   await K.disposePackageScope('menu-bad');
   await K.shellKernel.services.settled();

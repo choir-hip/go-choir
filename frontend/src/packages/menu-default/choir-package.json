@@ -1,0 +1,26 @@
+{
+  "schema": "choir.package/v2",
+  "name": "menu-default",
+  "version": "1.0.0",
+  "display": {
+    "title": "Menu",
+    "icon": "☰",
+    "description": "The default context menu: keyboard, submenus and the theme's tokens"
+  },
+  "opens": [],
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": [{ "grant": "ui.shell" }],
+  "provides": [
+    {
+      "service": "contextMenu.renderer",
+      "abi": "choir.service/contextMenu.renderer/v1",
+      "entry": "Menu.surface.svelte",
+      "requires_sdk": "^1.4",
+      "priority": 10
+    }
+  ]
+}

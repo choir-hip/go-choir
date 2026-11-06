@@ -1,8 +1,13 @@
 <!--
-  ContextMenu — the shell's one context menu (owner, 2026-11-03: "everything
-  needs context menu right click"). It renders whatever context-menu.ts put in
-  contextMenuState; nothing mounts it by hand (context-menu.ts mounts one host
-  on first use).
+  Menu — the default context-menu renderer (owner, 2026-11-03: "everything
+  needs context menu right click"), a shell surface of the
+  contextMenu.renderer slot (lib/services/context-menu.ts). The host mounts it
+  on first use and hands it each menu it renders as the `request` prop; it
+  closes through the SDK (closeContextMenu). When it is gone or fails, the
+  host's last-resort menu renders instead.
+
+  Slot ABI, props: request (the menu to show: { x, y, items, label,
+  returnFocus, target, seq }, or null for none).
 
   WAI-ARIA menu pattern: role=menu / menuitem, roving focus, ArrowUp/Down
   (wrapping, skipping disabled items), Home/End, Enter/Space, ArrowRight and
@@ -16,14 +21,12 @@
 -->
 <script lang="ts">
   import { onDestroy, tick } from 'svelte';
-  import {
-    contextMenuState,
-    isSeparator,
-    placeMenu,
-    placeSubmenu,
-    type ContextMenuEntry,
-    type ContextMenuItem,
-  } from './context-menu-state';
+  import { closeContextMenu, onWindowEvent, placeMenu, placeSubmenu } from '../../lib/app-sdk';
+  import type { ContextMenuEntry, ContextMenuItem } from '../../lib/app-sdk';
+
+  export let request: any = null;
+
+  const isSeparator = (entry: ContextMenuEntry): entry is { separator: true } => Boolean(entry && (entry as { separator?: boolean }).separator === true);
 
   let rootEl: HTMLDivElement | null = null;
   let subEl: HTMLDivElement | null = null;
@@ -35,16 +38,17 @@
   let current: any = null;
   let returnFocus: HTMLElement | null = null;
 
-  const unsubscribe = contextMenuState.subscribe((value) => {
+  $: onRequest(request);
+
+  function onRequest(value: any) {
     if (value && (!current || value.seq !== current.seq)) {
       void openMenu(value);
     } else if (!value && current) {
       teardown(true);
     }
-  });
+  }
 
   onDestroy(() => {
-    unsubscribe();
     removeGlobalListeners();
   });
 
@@ -95,7 +99,7 @@
   function close(restoreFocus = true) {
     if (!current) return;
     teardown(restoreFocus);
-    contextMenuState.set(null);
+    closeContextMenu();
   }
 
   function enabledButtons(panel: HTMLElement | null): HTMLElement[] {
@@ -114,9 +118,9 @@
       subIndex = index;
       subPlaced = false;
       await tick();
-      const parent = rootEl?.querySelector<HTMLElement>(`[data-context-menu-index="${index}"]`);
-      if (!subEl || !parent) return;
-      const prect = parent.getBoundingClientRect();
+      const parentItem = rootEl?.querySelector<HTMLElement>(`[data-context-menu-index="${index}"]`);
+      if (!subEl || !parentItem) return;
+      const prect = parentItem.getBoundingClientRect();
       const srect = subEl.getBoundingClientRect();
       subPos = placeSubmenu(prect, { width: srect.width, height: srect.height }, viewport());
       subPlaced = true;
@@ -248,22 +252,23 @@
     }
   }
 
+  let offGlobal: Array<() => void> = [];
+
   function addGlobalListeners() {
-    window.addEventListener('pointerdown', onOutsidePointer, true);
-    window.addEventListener('contextmenu', onOutsideContextMenu, true);
-    window.addEventListener('wheel', onWheel, { capture: true, passive: true });
-    window.addEventListener('resize', onResize);
-    window.addEventListener('blur', onBlur);
-    window.addEventListener('keydown', onKeydown);
+    removeGlobalListeners();
+    offGlobal = [
+      onWindowEvent('pointerdown', onOutsidePointer as EventListener, true),
+      onWindowEvent('contextmenu', onOutsideContextMenu as EventListener, true),
+      onWindowEvent('wheel', onWheel as EventListener, { capture: true, passive: true }),
+      onWindowEvent('resize', onResize),
+      onWindowEvent('blur', onBlur),
+      onWindowEvent('keydown', onKeydown as EventListener),
+    ];
   }
 
   function removeGlobalListeners() {
-    window.removeEventListener('pointerdown', onOutsidePointer, true);
-    window.removeEventListener('contextmenu', onOutsideContextMenu, true);
-    window.removeEventListener('wheel', onWheel, { capture: true } as any);
-    window.removeEventListener('resize', onResize);
-    window.removeEventListener('blur', onBlur);
-    window.removeEventListener('keydown', onKeydown);
+    offGlobal.forEach((off) => off());
+    offGlobal = [];
   }
 </script>
 

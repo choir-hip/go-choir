@@ -252,6 +252,8 @@ test('C7: a single URL defaults to a new document, and a tap still continues', a
   await expect.poll(() => submits.length).toBe(1);
   expect(submits[0].focus?.object_ref).toBe('doc-tides');
 
+  // One send at a time with a target in view: wait for the first to route.
+  await expect(page.locator('[data-prompt-surface]')).toHaveAttribute('data-routing', 'false');
   await send(page, 'https://example.com/tides/article');
   await expect.poll(() => submits.length).toBe(2);
   expect(submits[1].focus?.object_ref).toBeUndefined();

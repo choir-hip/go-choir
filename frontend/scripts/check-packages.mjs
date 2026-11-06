@@ -61,7 +61,7 @@ const MIN_STATIC_IDS = 1;
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = [
   'audio', 'autopaper', 'browser', 'calendar', 'compute-monitor', 'content', 'desktop-icons', 'files', 'image',
-  'launcher', 'library-next', 'mail', 'overview', 'podcast', 'pulse', 'reader', 'settings', 'slides', 'video',
+  'launcher', 'library-next', 'mail', 'menu-default', 'overview', 'podcast', 'pulse', 'reader', 'settings', 'slides', 'video',
 ];
 // The shell slots a package may provide (internal/apppackage/provides.go ShellServices).
 const SHELL_SERVICES = new Set(['contextMenu.renderer', 'desktop.icons', 'launcher', 'notifications.host', 'overview', 'prompt']);

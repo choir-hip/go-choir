@@ -1,7 +1,9 @@
 // The context-menu API (owner, 2026-11-03: "everything needs context menu
-// right click"). One menu at a time, rendered by ContextMenu.svelte, which is
-// mounted once on document.body the first time a menu opens; the shell and
-// every package (through app-sdk.ts) share it.
+// right click"). One menu at a time, rendered by the active renderer of the
+// contextMenu.renderer slot (the menu-default package, or the host's
+// last-resort menu; menu-host.ts mounts them), once on document.body the
+// first time each renders; the shell and every package (through app-sdk.ts)
+// share it.
 //
 //   use:contextMenu={items | () => items | { items, label, longPress }}
 //     right-click, a long press on touch (550 ms, cancelled by movement), and
@@ -10,7 +12,6 @@
 //   openContextMenu({ x, y, items, label })   open one at a point yourself
 //   closeContextMenu()
 import { get } from 'svelte/store';
-import ContextMenu from './ContextMenu.svelte';
 import {
   contextMenuState,
   placeMenu,
@@ -21,7 +22,7 @@ import {
   type ContextMenuSeparator,
   type ContextMenuTarget,
 } from './context-menu-state';
-import { installBaseRenderer, presentMenu } from './services/context-menu';
+import { presentMenu } from './services/context-menu';
 import './services/open-with-menu';
 
 export { contextMenuState, placeMenu, placeSubmenu };
@@ -29,21 +30,6 @@ export type { ContextMenuEntry, ContextMenuItem, ContextMenuRequest, ContextMenu
 
 export const LONG_PRESS_MS = 550;
 const LONG_PRESS_SLOP_PX = 10;
-
-let host: ContextMenu | null = null;
-
-function ensureHost() {
-  if (host || typeof document === 'undefined') return;
-  host = new ContextMenu({ target: document.body });
-}
-
-// The default menu is the base provider of the contextMenu.renderer slot
-// (services/context-menu.ts): a package's renderer ranks over it, and it
-// answers when that renderer fails.
-installBaseRenderer((request) => {
-  ensureHost();
-  contextMenuState.set(request);
-});
 
 /**
  * Opens a menu at viewport point (x, y): host contributions (Open with on a
