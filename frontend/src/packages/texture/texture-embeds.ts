@@ -297,6 +297,63 @@ function addRevertButton(figure: any, operationID: string, computerID: string): 
   slot.appendChild(button);
 }
 
+/**
+ * An applied operation's entry in the document that is bound to its
+ * trajectory: what applied it and a Revert action, so every apply has a host
+ * even when the candidate has no screenshot embed. It carries data-texture-embed
+ * (no id), so the editor neither reads its text as the owner's nor saves it.
+ */
+export function applyEntryHTML(op: any, computerID: string): string {
+  const id = str(op?.operation_id);
+  const decision = str(op?.decision_event);
+  const actor = str(op?.decision_actor);
+  const how = actor && !/^(owner|user)/.test(actor) ? 'on a consensus decision' : 'after a decision';
+  const digest = DIGEST_RE.test(decision) ? ` · sha256:${shortDigest(decision)}` : '';
+  return `<figure class="texture-embed texture-embed-apply" contenteditable="false" data-texture-embed data-texture-apply-entry data-embed-kind="apply" data-embed-operation="${escapeHTML(id)}" data-embed-computer="${escapeHTML(computerID)}">`
+    + `<figcaption><span class="texture-embed-caption">Applied ${escapeHTML(how)}: candidate ${escapeHTML(id)}${escapeHTML(digest)}</span>`
+    + `<span class="texture-embed-revert" data-texture-embed-revert-slot><button type="button" class="texture-embed-revert-button" data-texture-embed-revert data-embed-operation="${escapeHTML(id)}" data-embed-computer="${escapeHTML(computerID)}">Revert</button></span></figcaption></figure>`;
+}
+
+/** Applied operations of the document's trajectory that have no Revert host yet. */
+export function applyEntriesToAdd(operations: any[], trajectoryID: string, hostedOperationIDs: Set<string>): any[] {
+  const list = Array.isArray(operations) ? operations : [];
+  return list
+    .filter((op) => op?.state === 'applied' && str(op?.trajectory_id) === trajectoryID && !hostedOperationIDs.has(str(op?.operation_id)))
+    .sort((a, b) => Date.parse(str(a?.created_at)) - Date.parse(str(b?.created_at)));
+}
+
+let computerIDPromise: Promise<string> | null = null;
+
+/**
+ * Adds an apply entry with a Revert action for each applied operation of the
+ * document's trajectory that no evidence embed already hosts.
+ */
+export async function hydrateApplyEntries(root: any, trajectoryID: string, fetchFn: (url: string, init?: any) => Promise<any>): Promise<void> {
+  const trajectory = str(trajectoryID);
+  if (!root || !trajectory) return;
+  try {
+    if (!computerIDPromise) {
+      computerIDPromise = fetchFn('/api/shell/bootstrap', { credentials: 'same-origin', headers: { accept: 'application/json' } })
+        .then(async (res: any) => (res.ok ? str((await res.json())?.computer_id) : ''))
+        .catch(() => '');
+    }
+    const computerID = await computerIDPromise;
+    if (!computerID) { computerIDPromise = null; return; }
+    const res = await fetchFn(operationsListPath(computerID), { credentials: 'same-origin', headers: { 'X-Choir-App': 'texture' } });
+    if (!res.ok) return;
+    const body = await res.json();
+    const hosted = new Set<string>();
+    for (const node of Array.from(root.querySelectorAll?.('[data-texture-embed][data-embed-operation]') || []) as any[]) {
+      hosted.add(String(node.getAttribute('data-embed-operation') || ''));
+    }
+    for (const op of applyEntriesToAdd(body?.operations, trajectory, hosted)) {
+      root.insertAdjacentHTML('beforeend', applyEntryHTML(op, computerID));
+    }
+  } catch {
+    // The entry is a convenience; the route still reverts.
+  }
+}
+
 const identityCache = new Map<string, Promise<ListingResult>>();
 
 /**

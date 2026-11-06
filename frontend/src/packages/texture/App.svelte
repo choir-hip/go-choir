@@ -86,7 +86,7 @@
   import './texture-published-citations.css';
   import './texture-related-stories.css';
   import './texture-embeds.css';
-  import { handleRevertClick, hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
+  import { handleRevertClick, hydrateApplyEntries, hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
   import { opinionLabelHTML, pieceDisclosureHTML } from './texture-ai-disclosure';
   import { publishedModelProvenance, renderModelProvenanceHTML } from './texture-model-provenance';
 
@@ -250,6 +250,8 @@
       editorSurface.innerHTML = html;
       // Evidence embeds read their candidate's identity live (station TE).
       hydrateEmbedIdentity(editorSurface, fetchWithRenewal);
+      // Every apply of this document's candidate has a Revert action.
+      void hydrateApplyEntries(editorSurface, currentDoc?.trajectory_id || '', fetchWithRenewal);
     }
   }
 

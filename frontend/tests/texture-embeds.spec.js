@@ -15,6 +15,9 @@
 import { test, expect } from '@playwright/test';
 import {
   allBlankOperations,
+  applyEntriesToAdd,
+  applyEntryHTML,
+  hydrateApplyEntries,
   embedProjectionText,
   evidenceIdentityText,
   evidenceListingPath,
@@ -158,6 +161,37 @@ test('a Revert action warns when later applies are undone with the candidate', a
   expect(isRevertable({ status: 200, listing: { state: 'rolled_back' } })).toBe(false);
   expect(isRevertable({ status: 404 })).toBe(false);
   expect(isRevertable(null)).toBe(false);
+});
+
+test('an apply with no screenshot still gets an entry with a Revert action', async () => {
+  const decision = 'c'.repeat(64);
+  const ops = [
+    { operation_id: 'op-a', state: 'applied', trajectory_id: 'traj-1', decision_actor: 'consensus:reversible-selfdev-v1', decision_event: decision, created_at: '2026-11-06T10:00:00Z' },
+    { operation_id: 'op-b', state: 'applied', trajectory_id: 'traj-other', created_at: '2026-11-06T11:00:00Z' },
+    { operation_id: 'op-c', state: 'failed', trajectory_id: 'traj-1', created_at: '2026-11-06T12:00:00Z' },
+    { operation_id: 'op-d', state: 'applied', trajectory_id: 'traj-1', decision_actor: 'user-1', created_at: '2026-11-06T13:00:00Z' },
+  ];
+  const added = applyEntriesToAdd(ops, 'traj-1', new Set(['op-d']));
+  expect(added.map((op) => op.operation_id)).toEqual(['op-a']);
+  const html = applyEntryHTML(ops[0], 'computer-1');
+  expect(html).toContain('on a consensus decision');
+  expect(html).toContain('sha256:cccccccccccc');
+  expect(html).toContain('data-texture-embed ');
+  expect(html).toContain('data-texture-embed-revert');
+  expect(html).toContain('data-embed-operation="op-a"');
+  expect(html).not.toMatch(/\son[a-z]+=/i);
+  expect(html).not.toContain('data-texture-embed-id');
+  const inserted = [];
+  const root = { querySelectorAll: () => [], insertAdjacentHTML: (where, markup) => inserted.push([where, markup]) };
+  const fetchFn = async (url) => ({
+    ok: true,
+    json: async () => (url === '/api/shell/bootstrap' ? { computer_id: 'computer-1' } : { operations: ops }),
+  });
+  await hydrateApplyEntries(root, 'traj-1', fetchFn);
+  expect(inserted).toHaveLength(2);
+  expect(inserted[0][1]).toContain('op-a');
+  await hydrateApplyEntries(root, '', fetchFn);
+  expect(inserted).toHaveLength(2);
 });
 
 test('the Revert click confirms, then posts the owner revert once', async () => {
