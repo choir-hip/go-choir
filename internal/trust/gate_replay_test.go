@@ -31,4 +31,8 @@ func TestGateReplayCountsTaps(t *testing.T) {
 	if rep.ByImpact["I2"] != 3 {
 		t.Fatalf("by impact %v", rep.ByImpact)
 	}
+	// MA7.9: per-day counts give the tap rate a median and a p90.
+	if rep.ActsByDay["2026-11-01"] != 3 || rep.GatedByDay["2026-11-01"] != 3 || len(rep.ActsByDay) != 1 {
+		t.Fatalf("by day %v %v", rep.ActsByDay, rep.GatedByDay)
+	}
 }

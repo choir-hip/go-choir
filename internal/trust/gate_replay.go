@@ -26,6 +26,11 @@ type GateReport struct {
 	TapsPerDay float64 `json:"taps_per_day"`
 	// ByImpact counts the gated acts per impact class.
 	ByImpact map[string]int `json:"by_impact,omitempty"`
+	// ActsByDay and GatedByDay count the walked and the gated acts per UTC
+	// day ("2006-01-02"), so the taps per computer-day have a median and a
+	// 90th percentile (pre-registration P2), not only a mean (MA7.9).
+	ActsByDay  map[string]int `json:"acts_by_day,omitempty"`
+	GatedByDay map[string]int `json:"gated_by_day,omitempty"`
 }
 
 // GateReplay replays the gate rule over in.
@@ -47,7 +52,7 @@ func GateReplay(in Inputs, base Params) GateReport {
 		}
 		by[gk{it.Desk, it.Action}] = append(by[gk{it.Desk, it.Action}], it)
 	}
-	rep := GateReport{ByImpact: map[string]int{}}
+	rep := GateReport{ByImpact: map[string]int{}, ActsByDay: map[string]int{}, GatedByDay: map[string]int{}}
 	var first, last time.Time
 	for k, seq := range by {
 		r, ok := k.c.Impact.Rank()
@@ -58,6 +63,8 @@ func GateReplay(in Inputs, base Params) GateReport {
 		sort.SliceStable(seq, func(i, j int) bool { return seq[i].At.Before(seq[j].At) })
 		for j, act := range seq {
 			rep.Acts++
+			day := act.At.UTC().Format("2006-01-02")
+			rep.ActsByDay[day]++
 			if first.IsZero() || act.At.Before(first) {
 				first = act.At
 			}
@@ -83,6 +90,7 @@ func GateReplay(in Inputs, base Params) GateReport {
 			}
 			if !autonomous {
 				rep.Gated++
+				rep.GatedByDay[day]++
 				rep.ByImpact[string(k.c.Impact)]++
 				if breaker {
 					rep.Breaker++
@@ -97,6 +105,9 @@ func GateReplay(in Inputs, base Params) GateReport {
 	rep.TapsPerDay = float64(rep.Gated) / rep.Days
 	if len(rep.ByImpact) == 0 {
 		rep.ByImpact = nil
+	}
+	if len(rep.ActsByDay) == 0 {
+		rep.ActsByDay, rep.GatedByDay = nil, nil
 	}
 	return rep
 }

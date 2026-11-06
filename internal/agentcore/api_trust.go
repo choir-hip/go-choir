@@ -2,10 +2,12 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/trust"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -18,8 +20,10 @@ import (
 // request and stored nowhere. With replay=1 it adds the replay of settled
 // records: both weight candidates' calibration and AUC on the next failure,
 // the one the replay picks, and the act gate's rule replayed (gated acts and
-// owner taps per day). It is read-only; nothing here grants or revokes (the
-// lease policy and the act gate read their own derivation, leases.go and
+// owner taps per day), the pre-registered units of the evidence harness
+// (MA7.9) and the gated acts as the tape measured them. It is read-only;
+// nothing here grants or revokes (the lease policy and the act gate read
+// their own derivation, leases.go and
 // act_gate.go). The inputs include the breaker's trips (E3) and the owner's
 // answers to gated acts (E6).
 
@@ -39,6 +43,61 @@ type trustResponse struct {
 	GateReplay *trust.GateReport `json:"gate_replay,omitempty"`
 	// ReplayNote says when the replay read fewer records than the view.
 	ReplayNote string `json:"replay_note,omitempty"`
+	// PreregUnits are the pre-registered units of P1 and P2 drawn from the
+	// same records (MA7.9): predictors from before each weekly cutoff and the
+	// label from its 14-day window. They are the evidence harness's input
+	// (cmd/trustharness); no outcome metric is computed here.
+	PreregUnits *trust.PreregUnitSet `json:"prereg_units,omitempty"`
+	// GatedActs are the act gate's taps as measured on the disclosure tape:
+	// when each was asked and how and when the owner answered (MA7.9 c).
+	GatedActs []gatedActObservation `json:"gated_acts,omitempty"`
+}
+
+// gatedActObservation is one gated act on the disclosure tape, without its
+// summary or target (the harness counts and times them; it reads no content).
+type gatedActObservation struct {
+	Desk       string            `json:"desk"`
+	Class      trust.ActionClass `json:"class"`
+	Breaker    bool              `json:"breaker,omitempty"`
+	AskedAt    time.Time         `json:"asked_at"`
+	Answer     string            `json:"answer,omitempty"`
+	AnsweredAt *time.Time        `json:"answered_at,omitempty"`
+}
+
+// gatedActs reads the act gate's taps from the disclosure tape in time order.
+func (rt *Runtime) gatedActs(ctx context.Context, owner, computer string) ([]gatedActObservation, error) {
+	_, events, err := rt.disclosureFold(ctx, owner, computer)
+	if err != nil {
+		return nil, err
+	}
+	out := []gatedActObservation{}
+	byPending := map[string]int{}
+	for _, ev := range events {
+		if ev.Kind != types.EventDisclosure {
+			continue
+		}
+		var p disclosurePayload
+		if json.Unmarshal(ev.Payload, &p) != nil || p.Sink != actGateSink {
+			continue
+		}
+		switch ev.Phase {
+		case disclosurePhasePending:
+			if p.Gate == nil {
+				continue
+			}
+			byPending[ev.EventID] = len(out)
+			out = append(out, gatedActObservation{Desk: p.Desk, Class: p.Gate.Class, Breaker: p.Gate.Breaker, AskedAt: ev.Timestamp.UTC()})
+		case disclosurePhaseApproved, disclosurePhaseDenied:
+			i, ok := byPending[p.DisclosureID]
+			if !ok || out[i].Answer != "" {
+				continue
+			}
+			at := ev.Timestamp.UTC()
+			out[i].Answer, out[i].AnsweredAt = ev.Phase, &at
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].AskedAt.Before(out[j].AskedAt) })
+	return out, nil
 }
 
 // trustInputs reads the ledger window a trust view is derived from: the
@@ -99,6 +158,15 @@ func (h *APIHandler) HandleTrust(w http.ResponseWriter, r *http.Request) {
 		gate := trust.GateReplay(replayIn, trust.DefaultParams())
 		resp.GateReplay = &gate
 		resp.ReplayNote = replayNote
+		units := trust.PreregUnits(replayIn, trust.DefaultParams())
+		resp.PreregUnits = &units
+		gated, err := rt.gatedActs(ctx, ownerID, computerID)
+		if err != nil {
+			log.Printf("runtime api: trust: gated acts: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read the gated acts"})
+			return
+		}
+		resp.GatedActs = gated
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }

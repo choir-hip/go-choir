@@ -534,3 +534,23 @@ build slice.
 | P8 | H8: satisfice, then diversify | Goodhart H8, R36 | arms, Phase 8 switchback | unresolved most likely | Phase 8 |
 | P9 | Score 2 adds no predictive value beyond scores 1 and 3 | plan 10.1 | replay | null holds | MA7.2 |
 | H1 | Autopaper front-page quantilizer | Goodhart H1 | deferred (R37) | not registered | Autopaper unit |
+
+## 2026-11-06: MA7.9 harness landed; first run on d@e (counts only)
+
+The harness is `cmd/trustharness` with `internal/trustharness` (scoring) and
+`trust.PreregUnits` (the units of section 1, served on
+`GET /api/trust?replay=1` as `prereg_units`); the commit that adds this entry
+implements P1 and P2 as registered above and reports P3 to P9 by their data
+source. No test text above is amended. Two procedural choices the entries
+above left open, fixed here before any outcome was seen: weekly cutoffs fall
+on Monday 00:00 UTC, the first strictly after the first material item; a
+unit's window must close by the latest evidence, or the unit is dropped as
+open. The split date of P1's held-out log loss is not fixed yet: no unit
+exists.
+
+First run: d@e (computer-59c902c5), as of 2026-11-06T07:05:57Z, build
+181e95c77, artifact `docs/evidence/ma7-9-harness/2026-11-06-59c902c5/`.
+That build predates the harness, so it served no `prereg_units`; its replay
+walked 0 pairs over 0 trust rows and the gate replay 0 material acts. Every
+test is **unresolved** with n = 0; nothing was sealed that had data, because
+there was none. No outcome metric was computed or seen.

@@ -181,6 +181,25 @@ func TestTheOwnersAnswerToAGatedActPassesOnceAndIsEvidence(t *testing.T) {
 	if acts["approve"] != 1 || acts["reject"] != 1 {
 		t.Fatalf("owner acts = %+v", in2.OwnerActs)
 	}
+	// MA7.9 (c): the evidence harness measures the taps from the tape: each
+	// gated act once, with the owner's answer and when it came.
+	obs, err := f.rt.gatedActs(context.Background(), f.owner, f.computer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers := map[string]int{}
+	for _, o := range obs {
+		if o.Desk != f.desk || o.Class.Impact != types.ImpactI3 {
+			t.Fatalf("gated act = %+v", o)
+		}
+		answers[o.Answer]++
+		if o.Answer != "" && (o.AnsweredAt == nil || o.AnsweredAt.Before(o.AskedAt)) {
+			t.Fatalf("answer time = %+v", o)
+		}
+	}
+	if answers[disclosurePhaseApproved] != 1 || answers[disclosurePhaseDenied] != 1 {
+		t.Fatalf("measured taps = %+v", obs)
+	}
 }
 
 // 5: a first-party desk's material act passes and is counted; a package

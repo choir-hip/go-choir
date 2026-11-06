@@ -32,6 +32,14 @@ func TestTrustRouteDerivesTheViewAndNeverStoresIt(t *testing.T) {
 	if code != http.StatusOK || resp.View.TableDigest == "" || resp.Replay == nil || len(resp.Replay.Candidates) != 2 {
 		t.Fatalf("empty ledger: %d %+v", code, resp)
 	}
+	// MA7.9: the replay serves the pre-registered units and the measured
+	// taps, empty and present (an absent field means an older build).
+	if resp.PreregUnits == nil || resp.PreregUnits.Units == nil || resp.PreregUnits.Window != "336h0m0s" {
+		t.Fatalf("prereg units: %+v", resp.PreregUnits)
+	}
+	if _, plain := get(f.owner, ""); plain.PreregUnits != nil || plain.GatedActs != nil {
+		t.Fatal("the plain view carried the replay's units")
+	}
 	req := httptest.NewRequest(http.MethodPost, "/api/trust", nil)
 	req.Header.Set("X-Authenticated-User", f.owner)
 	rec := httptest.NewRecorder()

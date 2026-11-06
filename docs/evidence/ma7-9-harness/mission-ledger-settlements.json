@@ -1,0 +1,16 @@
+[
+  {"id": "R0-01", "settler": "rule", "observed": 4.5, "quote": "Warm `go build` 0.45 s against 0.1 s native: ratio about 4.5, outside [1.2, 2.5]"},
+  {"id": "R0-02", "settler": "rule", "observed": 1.5, "quote": "Cold `go build` 16.3 to 17.1 s against 11.1 s: ratio about 1.5, inside [1.3, 3.5]"},
+  {"id": "R0-03", "settler": "rule", "quote": "Go build, test, git status and commit all ran unmodified. p = 0.80; Brier 0.04."},
+  {"id": "R0-05", "settler": "rule", "observed": 49, "quote": "Fixed cost of a sandbox about 49 MiB (sentry 37, launcher 8, gofer 7), inside [25, 90]"},
+  {"id": "R0-07", "settler": "rule", "quote": "runsc cannot run inside Landlock (it denies `mount`), and inside the cell seccomp filter only with about 180 added syscalls. p = 0.50; Brier 0.25."},
+  {"id": "R0-08", "settler": "devin", "quote": "Devin's first review of the consolidated plan returned ACCEPT. p = 0.40; Brier 0.36"},
+  {"id": "R0-09", "settler": "devin", "observed": 0, "quote": "Zero blocking findings (seven non-blocking amendments), inside [0, 5]"},
+  {"id": "R0b-01", "settler": "devin", "quote": "Devin's goal-file review returned ACCEPT, 0 blocking findings, 8 non-blocking amendments (folded). p = 0.70; Brier 0.09."},
+  {"id": "R0b-04", "settler": "rule", "observed": 1632, "quote": "MA1.1 deleted 1632 net non-test Go lines (61 added, 1693 deleted; `git diff --numstat` over `*.go` not `*_test.go`), outside [500, 1600]"},
+  {"id": "R0b-03", "settler": "rule", "outcome": 0, "quote": "(the claim as worded: contradicted, p 0.55, Brier 0.30)"},
+  {"id": "R0b-05", "settler": "rule", "quote": "read back through GET /api/inboxes/research:<doc>/records with no code fix. p = 0.60; Brier 0.16."},
+  {"id": "R0b-08", "settler": "rule", "quote": "Phase 1 took three hotfixes on staging before it closed, all ring-expedited"},
+  {"id": "R0b-02", "settler": "rule", "observed": 0.28, "quote": "that is 6 h 38 min, 0.28 days, below the interval [0.5, 3]"},
+  {"id": "R0-12", "settler": "rule", "quote": "p = 0.75; Brier 0.06."}
+]

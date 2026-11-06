@@ -1,0 +1,671 @@
+{
+  "schema": "choir.trust_harness.inputs.v1",
+  "computer_id": "computer-59c902c5d46caecc0a180a8557164e72",
+  "fetched_at": "2026-11-06T07:05:57Z",
+  "build_commit": "181e95c772bc7529b5e5cc28da77169b8b92af11",
+  "served": {
+    "gate_replay_by_day": false,
+    "gated_acts": false,
+    "prereg_units": false
+  },
+  "view_rows": 0,
+  "replay": {
+    "candidates": [
+      {
+        "mode": "capped",
+        "cap": 2,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      },
+      {
+        "mode": "tempered",
+        "eta": 0.25,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      }
+    ],
+    "grid": [
+      {
+        "mode": "tempered",
+        "eta": 0.25,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      },
+      {
+        "mode": "tempered",
+        "eta": 0.5,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      },
+      {
+        "mode": "tempered",
+        "eta": 1,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      },
+      {
+        "mode": "capped",
+        "cap": 2,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      },
+      {
+        "mode": "capped",
+        "cap": 3,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      },
+      {
+        "mode": "capped",
+        "cap": 5,
+        "n": 0,
+        "brier": 0,
+        "ece": 0,
+        "auc": 0.5,
+        "auc_defined": false
+      }
+    ],
+    "chosen": {
+      "mode": "capped",
+      "cap": 2,
+      "n": 0,
+      "brier": 0,
+      "ece": 0,
+      "auc": 0.5,
+      "auc_defined": false
+    },
+    "insufficient": true,
+    "pairs": 0
+  },
+  "gate_replay": {
+    "acts": 0,
+    "gated": 0,
+    "breaker": 0,
+    "days": 1,
+    "taps_per_day": 0
+  },
+  "inert_rates": [
+    {
+      "desk": "agent",
+      "model": "none",
+      "prompt_version": "",
+      "precommitments": 1024,
+      "inert_precommitments": 0,
+      "inert_precommit_rate": 0,
+      "delegations": 0,
+      "inert_delegations": 0,
+      "inert_delegation_rate": 0
+    },
+    {
+      "desk": "engineering",
+      "model": "chatgpt/gpt-6-luna",
+      "prompt_version": "",
+      "precommitments": 1,
+      "inert_precommitments": 1,
+      "inert_precommit_rate": 1,
+      "delegations": 0,
+      "inert_delegations": 0,
+      "inert_delegation_rate": 0,
+      "by_flag": {
+        "no_typed_question": 1
+      }
+    },
+    {
+      "desk": "management",
+      "model": "chatgpt/gpt-6-luna",
+      "prompt_version": "",
+      "precommitments": 1,
+      "inert_precommitments": 1,
+      "inert_precommit_rate": 1,
+      "delegations": 21,
+      "inert_delegations": 0,
+      "inert_delegation_rate": 0,
+      "by_flag": {
+        "no_typed_question": 22
+      }
+    },
+    {
+      "desk": "management",
+      "model": "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "prompt_version": "",
+      "precommitments": 0,
+      "inert_precommitments": 0,
+      "inert_precommit_rate": 0,
+      "delegations": 21,
+      "inert_delegations": 0,
+      "inert_delegation_rate": 0,
+      "by_flag": {
+        "no_typed_question": 3
+      }
+    },
+    {
+      "desk": "texture",
+      "model": "",
+      "prompt_version": "",
+      "precommitments": 5,
+      "inert_precommitments": 5,
+      "inert_precommit_rate": 1,
+      "delegations": 50,
+      "inert_delegations": 0,
+      "inert_delegation_rate": 0,
+      "by_flag": {
+        "no_typed_question": 52
+      }
+    },
+    {
+      "desk": "texture",
+      "model": "",
+      "prompt_version": "514750e629bf",
+      "precommitments": 76,
+      "inert_precommitments": 72,
+      "inert_precommit_rate": 0.9473684210526315,
+      "delegations": 72,
+      "inert_delegations": 0,
+      "inert_delegation_rate": 0,
+      "by_flag": {
+        "no_typed_question": 72
+      }
+    }
+  ],
+  "inert_agreement": {
+    "sampled": 0,
+    "agree": 0,
+    "both_inert": 0,
+    "both_informative": 0,
+    "rules_only": 0,
+    "judge_only": 0,
+    "agreement_rate": 0
+  },
+  "settlements_by_plane": {
+    "desk_cast": {
+      "confirmed": 5,
+      "contradicted": 11
+    }
+  },
+  "leases": [
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T06:50:27.190263803Z",
+      "ended_at": "2026-11-06T06:50:27.964733941Z",
+      "expires_at": "2026-11-06T07:50:27.190263803Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T06:49:32.056757127Z",
+      "ended_at": "2026-11-06T06:49:32.817499965Z",
+      "expires_at": "2026-11-06T07:49:32.056757127Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T06:12:10.041685143Z",
+      "ended_at": "2026-11-06T06:12:10.759424133Z",
+      "expires_at": "2026-11-06T07:12:10.041685143Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T05:50:58.251022079Z",
+      "ended_at": "2026-11-06T05:50:58.990177874Z",
+      "expires_at": "2026-11-06T06:50:58.251022079Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T05:30:26.487266837Z",
+      "ended_at": "2026-11-06T05:30:27.104053425Z",
+      "expires_at": "2026-11-06T06:30:26.487266837Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T05:02:09.781098059Z",
+      "ended_at": "2026-11-06T05:02:10.099758552Z",
+      "expires_at": "2026-11-06T06:02:09.781098059Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T05:01:28.108399596Z",
+      "ended_at": "2026-11-06T05:01:28.728806958Z",
+      "expires_at": "2026-11-06T06:01:28.108399596Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T03:46:22.79248645Z",
+      "ended_at": "2026-11-06T03:46:23.518951601Z",
+      "expires_at": "2026-11-06T04:46:22.79248645Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T03:45:14.543443598Z",
+      "ended_at": "2026-11-06T03:45:15.210214925Z",
+      "expires_at": "2026-11-06T04:45:14.543443598Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T02:55:22.30104413Z",
+      "ended_at": "2026-11-06T02:55:22.771225469Z",
+      "expires_at": "2026-11-06T03:55:22.30104413Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T02:30:33.379460518Z",
+      "ended_at": "2026-11-06T02:30:33.952690247Z",
+      "expires_at": "2026-11-06T03:30:33.379460518Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T01:59:36.164935012Z",
+      "ended_at": "2026-11-06T01:59:36.972057718Z",
+      "expires_at": "2026-11-06T02:59:36.164935012Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T01:47:06.585262738Z",
+      "ended_at": "2026-11-06T01:47:07.249608428Z",
+      "expires_at": "2026-11-06T02:47:06.585262738Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T01:11:33.667396876Z",
+      "ended_at": "2026-11-06T01:11:34.266381682Z",
+      "expires_at": "2026-11-06T02:11:33.667396876Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T00:45:09.138247849Z",
+      "ended_at": "2026-11-06T00:45:09.460001894Z",
+      "expires_at": "2026-11-06T01:45:09.138247849Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T00:45:06.623748106Z",
+      "ended_at": "2026-11-06T00:50:58.855773463Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T00:43:06.039856779Z",
+      "ended_at": "2026-11-06T00:43:10.457780233Z",
+      "expires_at": "2026-11-06T01:43:06.039856779Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T00:40:41.946554228Z",
+      "ended_at": "2026-11-06T00:45:06.134593371Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-06T00:40:41.399611144Z",
+      "ended_at": "2026-11-06T00:40:42.131536689Z",
+      "expires_at": "2026-11-06T01:40:41.399611144Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T23:49:26.347446486Z",
+      "ended_at": "2026-11-05T23:51:40.951934801Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T23:10:37.320523034Z",
+      "ended_at": "2026-11-05T23:15:36.673166114Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T23:09:35.545648929Z",
+      "ended_at": "2026-11-05T23:10:36.681811768Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T21:20:20.449228595Z",
+      "ended_at": "2026-11-05T21:24:04.012425966Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T19:35:56.433509606Z",
+      "ended_at": "2026-11-05T19:37:49.203236548Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T18:45:23.561794279Z",
+      "ended_at": "2026-11-05T18:45:52.117548713Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    },
+    {
+      "holder": "research",
+      "state": "ended",
+      "end_reason": "run ended",
+      "issued_at": "2026-11-05T18:44:38.44906789Z",
+      "ended_at": "2026-11-05T18:45:00.88681874Z",
+      "expires_at": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "drills": [],
+  "ledger": {
+    "path": "docs/definitions/choir-modular-architecture-2026-11-04.precommit.md",
+    "sha256": "9eb9cebb73663a9e8c18c5df86b410b37261da835a84d35044042f7a5e318981",
+    "records": [
+      {
+        "id": "R0-01",
+        "kind": "interval",
+        "estimate": 1.6,
+        "lo": 1.2,
+        "hi": 2.5,
+        "resolution": "contradicted",
+        "settler": "rule",
+        "observed": 4.5,
+        "quote": "Warm `go build` 0.45 s against 0.1 s native: ratio about 4.5, outside [1.2, 2.5]"
+      },
+      {
+        "id": "R0-02",
+        "kind": "interval",
+        "estimate": 2,
+        "lo": 1.3,
+        "hi": 3.5,
+        "resolution": "confirmed",
+        "settler": "rule",
+        "observed": 1.5,
+        "quote": "Cold `go build` 16.3 to 17.1 s against 11.1 s: ratio about 1.5, inside [1.3, 3.5]"
+      },
+      {
+        "id": "R0-03",
+        "kind": "probability",
+        "p": 0.8,
+        "resolution": "confirmed",
+        "settler": "rule",
+        "outcome": 1,
+        "quote": "Go build, test, git status and commit all ran unmodified. p = 0.80; Brier 0.04."
+      },
+      {
+        "id": "R0-04",
+        "kind": "probability",
+        "p": 0.4,
+        "resolution": "unresolved"
+      },
+      {
+        "id": "R0-05",
+        "kind": "interval",
+        "estimate": 45,
+        "lo": 25,
+        "hi": 90,
+        "resolution": "confirmed",
+        "settler": "rule",
+        "observed": 49,
+        "quote": "Fixed cost of a sandbox about 49 MiB (sentry 37, launcher 8, gofer 7), inside [25, 90]"
+      },
+      {
+        "id": "R0-06",
+        "kind": "interval",
+        "estimate": 35,
+        "lo": 15,
+        "hi": 70,
+        "resolution": "void"
+      },
+      {
+        "id": "R0-07",
+        "kind": "probability",
+        "p": 0.5,
+        "resolution": "contradicted",
+        "settler": "rule",
+        "outcome": 0,
+        "quote": "runsc cannot run inside Landlock (it denies `mount`), and inside the cell seccomp filter only with about 180 added syscalls. p = 0.50; Brier 0.25."
+      },
+      {
+        "id": "R0-08",
+        "kind": "probability",
+        "p": 0.4,
+        "resolution": "confirmed",
+        "settler": "devin",
+        "outcome": 1,
+        "quote": "Devin's first review of the consolidated plan returned ACCEPT. p = 0.40; Brier 0.36"
+      },
+      {
+        "id": "R0-09",
+        "kind": "interval",
+        "estimate": 2,
+        "lo": 0,
+        "hi": 5,
+        "resolution": "confirmed",
+        "settler": "devin",
+        "observed": 0,
+        "quote": "Zero blocking findings (seven non-blocking amendments), inside [0, 5]"
+      },
+      {
+        "id": "R0-10",
+        "kind": "interval",
+        "estimate": 1.5,
+        "lo": 0.5,
+        "hi": 4,
+        "resolution": "open"
+      },
+      {
+        "id": "R0-11",
+        "kind": "probability",
+        "p": 0.65,
+        "resolution": "open"
+      },
+      {
+        "id": "R0-12",
+        "kind": "probability",
+        "p": 0.75,
+        "resolution": "confirmed",
+        "settler": "rule",
+        "outcome": 1,
+        "quote": "p = 0.75; Brier 0.06."
+      },
+      {
+        "id": "R0-13",
+        "kind": "probability",
+        "p": 0.75,
+        "resolution": "open"
+      },
+      {
+        "id": "R0-14",
+        "kind": "interval",
+        "estimate": 14,
+        "lo": 7,
+        "hi": 30,
+        "resolution": "open"
+      },
+      {
+        "id": "R0-15",
+        "kind": "interval",
+        "estimate": 0.65,
+        "lo": 0.52,
+        "hi": 0.8,
+        "resolution": "open"
+      },
+      {
+        "id": "R0b-01",
+        "kind": "probability",
+        "p": 0.7,
+        "resolution": "confirmed",
+        "settler": "devin",
+        "outcome": 1,
+        "quote": "Devin's goal-file review returned ACCEPT, 0 blocking findings, 8 non-blocking amendments (folded). p = 0.70; Brier 0.09."
+      },
+      {
+        "id": "R0b-02",
+        "kind": "interval",
+        "estimate": 1.5,
+        "lo": 0.5,
+        "hi": 3,
+        "resolution": "contradicted",
+        "settler": "rule",
+        "observed": 0.28,
+        "quote": "that is 6 h 38 min, 0.28 days, below the interval [0.5, 3]"
+      },
+      {
+        "id": "R0b-03",
+        "kind": "probability",
+        "p": 0.55,
+        "resolution": "qualified",
+        "settler": "rule",
+        "outcome": 0,
+        "quote": "(the claim as worded: contradicted, p 0.55, Brier 0.30)"
+      },
+      {
+        "id": "R0b-04",
+        "kind": "interval",
+        "estimate": 900,
+        "lo": 500,
+        "hi": 1600,
+        "resolution": "contradicted",
+        "settler": "rule",
+        "observed": 1632,
+        "quote": "MA1.1 deleted 1632 net non-test Go lines (61 added, 1693 deleted; `git diff --numstat` over `*.go` not `*_test.go`), outside [500, 1600]"
+      },
+      {
+        "id": "R0b-05",
+        "kind": "probability",
+        "p": 0.6,
+        "resolution": "confirmed",
+        "settler": "rule",
+        "outcome": 1,
+        "quote": "read back through GET /api/inboxes/research:\u003cdoc\u003e/records with no code fix. p = 0.60; Brier 0.16."
+      },
+      {
+        "id": "R0b-06",
+        "kind": "probability",
+        "p": 0.75,
+        "resolution": "open"
+      },
+      {
+        "id": "R0b-07",
+        "kind": "interval",
+        "estimate": 20,
+        "lo": 5,
+        "hi": 45,
+        "resolution": "unresolved"
+      },
+      {
+        "id": "R0b-08",
+        "kind": "probability",
+        "p": 0.5,
+        "resolution": "confirmed",
+        "settler": "rule",
+        "outcome": 1,
+        "quote": "Phase 1 took three hotfixes on staging before it closed, all ring-expedited"
+      },
+      {
+        "id": "R1-01",
+        "kind": "interval",
+        "estimate": 1.2,
+        "lo": 0.4,
+        "hi": 3,
+        "resolution": "open"
+      },
+      {
+        "id": "R1-02",
+        "kind": "probability",
+        "p": 0.7,
+        "resolution": "open"
+      },
+      {
+        "id": "R1-03",
+        "kind": "probability",
+        "p": 0.55,
+        "resolution": "open"
+      },
+      {
+        "id": "R1-04",
+        "kind": "interval",
+        "estimate": 18,
+        "lo": 12,
+        "hi": 28,
+        "resolution": "open"
+      },
+      {
+        "id": "R1-05",
+        "kind": "probability",
+        "p": 0.6,
+        "resolution": "open"
+      },
+      {
+        "id": "R1-06",
+        "kind": "probability",
+        "p": 0.5,
+        "resolution": "open"
+      },
+      {
+        "id": "R1-07",
+        "kind": "probability",
+        "p": 0.25,
+        "resolution": "open"
+      }
+    ]
+  }
+}
