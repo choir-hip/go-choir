@@ -516,3 +516,174 @@ export function inFlightFor(installs, name) {
   const list = Array.isArray(installs) ? installs : [];
   return list.find((item) => item && item.package === name && installState(item) === 'working') || null;
 }
+
+// ---- what an app is (L1) ----
+//
+// The host derives a release's facts from the manifest it verified at publish
+// (kind, tier, level, slots, facets, ceiling) and the catalog serves them
+// beside the record. They are shown in words; a raw grant name appears only
+// for a grant these words do not know yet.
+
+const KINDS = { app: 'App', pack: 'Pack', provider: 'Provider' };
+
+const TIERS = {
+  T0: 'Data only: Choir checks it and applies it, and it runs no code.',
+  T1: 'Runs its own code, which reaches the rest of Choir only through the app SDK.',
+  T2: "Draws part of Choir's own screen, which only Choir's reviewed apps may do.",
+};
+
+const LEVELS = {
+  default: 'Basic permissions: it installs once you confirm.',
+  extended: 'Asks for more than the basic permissions: it installs only after a review on this computer.',
+  privileged: "Asks for permissions only Choir's own apps may hold.",
+};
+
+const FACETS = {
+  agent: 'Agent',
+  commands: 'Commands',
+  keybindings: 'Shortcuts',
+  kinds: 'Data types',
+  links: 'Links',
+  menus: 'Menu items',
+  opens: 'Opens files',
+  settings: 'Settings',
+  themes: 'Themes',
+};
+
+const SLOTS = {
+  'contextMenu.renderer': 'context menu',
+  'desktop.icons': 'desktop icons',
+  launcher: 'launcher',
+  'notifications.host': 'notifications',
+  overview: 'overview',
+  prompt: 'prompt bar',
+};
+
+const GRANTS = {
+  'ui.captures.read': () => 'Read your captures in its window',
+  'ui.read.kind': (a) => 'Read your ' + a + ' records in its window',
+  'ui.net.egress': (a) => 'Reach ' + a + ' on the internet from its window',
+  'ui.shell': () => "Draw part of Choir's own screen",
+  'desk.act': () => 'Act on your computer through its agent',
+  'desk.act.cancel': () => "Cancel its agent's own acts",
+  'desk.captures.read': () => 'Let its agent read your captures',
+  'desk.intake.read': () => 'Let its agent read what you send it',
+  'desk.request': (a) => 'Ask other agents for help: ' + a,
+  'desk.texture.search': () => 'Let its agent search your documents',
+  'desk.mail.read': (a) => 'Let its agent read the mail you point it to (' + a + ')',
+  'desk.net.egress': (a) => 'Let its agent reach ' + a + ' on the internet',
+  'desk.read.kind': (a) => 'Let its agent read your ' + a + ' records',
+};
+
+function strings(list) {
+  return Array.isArray(list) ? list.filter((v) => typeof v === 'string' && v) : [];
+}
+
+function normalizeFacts(raw) {
+  const f = raw && typeof raw === 'object' ? raw : {};
+  const ceiling = Array.isArray(f.ceiling)
+    ? f.ceiling.filter((c) => c && typeof c.grant === 'string' && c.grant).map((c) => ({ grant: c.grant, args: strings(c.args), level: String(c.level || '') }))
+    : [];
+  return {
+    kind: KINDS[f.kind] ? f.kind : '',
+    tier: TIERS[f.tier] ? f.tier : '',
+    level: LEVELS[f.level] ? f.level : '',
+    slots: strings(f.slots),
+    facets: strings(f.facets),
+    ceiling,
+    recorded: f.recorded === true,
+  };
+}
+
+// factsOf is a release's facts; entryFactsOf a shelf card's (its head's).
+export function factsOf(release) {
+  return normalizeFacts(release && release.facts);
+}
+
+export function entryFactsOf(entry) {
+  return normalizeFacts(entry && entry.head_facts);
+}
+
+export function kindName(kind) {
+  return KINDS[kind] || '';
+}
+
+export function tierLine(tier) {
+  return TIERS[tier] || '';
+}
+
+export function levelLine(level) {
+  return LEVELS[level] || '';
+}
+
+export function facetName(facet) {
+  return FACETS[facet] || facet;
+}
+
+export function slotName(slot) {
+  return SLOTS[slot] || slot;
+}
+
+// ceilingLines says each grant of the ceiling in words, with its level.
+export function ceilingLines(facts) {
+  return (facts && Array.isArray(facts.ceiling) ? facts.ceiling : []).map((c) => {
+    const say = GRANTS[c.grant];
+    const args = (c.args || []).join(', ');
+    return { text: say ? say(args) : c.grant + (args ? ' (' + args + ')' : ''), level: c.level, grant: c.grant };
+  });
+}
+
+// leased: a desk's grants are lent under the lease policy; a window's are
+// checked by the SDK bridge on every call.
+export function hasDeskGrant(facts) {
+  return Boolean(facts && Array.isArray(facts.ceiling) && facts.ceiling.some((c) => String(c.grant).startsWith('desk.')));
+}
+
+// shelfFacets are the filters the shelf offers: each kind and each slot
+// present among the cards, in a stable order.
+export function shelfFacets(entries) {
+  const kinds = new Set();
+  const slots = new Set();
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const f = entryFactsOf(entry);
+    if (f.kind) kinds.add(f.kind);
+    for (const s of f.slots) slots.add(s);
+  }
+  const out = [];
+  for (const kind of Object.keys(KINDS)) if (kinds.has(kind)) out.push({ type: 'kind', value: kind, label: KINDS[kind] + 's' });
+  for (const slot of [...slots].sort()) out.push({ type: 'slot', value: slot, label: 'Provides the ' + slotName(slot) });
+  return out;
+}
+
+export function matchesFacet(entry, filter) {
+  if (!filter) return true;
+  const f = entryFactsOf(entry);
+  if (filter.type === 'kind') return f.kind === filter.value;
+  if (filter.type === 'slot') return f.slots.includes(filter.value);
+  return true;
+}
+
+// displacesOf says what installing a release would stop being used, one line
+// per slot it provides: another installed app that provides the slot now, or
+// Choir's built-in one. A window app displaces nothing here (another maker's
+// app of the same name is said apart, installedElsewhere).
+export function displacesOf(facts, installs, entries, tracks, name, track) {
+  const out = [];
+  for (const slot of (facts && facts.slots) || []) {
+    const current = (Array.isArray(entries) ? entries : []).find(
+      (entry) =>
+        !(entry.package === name && entry.track === track) &&
+        entryFactsOf(entry).slots.includes(slot) &&
+        installedFor(installs, entry.package, entry.track, tracks),
+    );
+    out.push(current ? 'the ' + slotName(slot) + ' from ' + current.package : "Choir's built-in " + slotName(slot));
+  }
+  return out;
+}
+
+// usesOf is what an installed release uses of Choir, as this computer's build
+// extracted it, or null when the install did not record it.
+export function usesOf(install) {
+  if (!install || install.uses_recorded !== true) return null;
+  return strings(install.uses).slice().sort();
+}

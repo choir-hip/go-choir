@@ -474,3 +474,14 @@ func containsString(list []string, v string) bool {
 	}
 	return false
 }
+
+// PolicySentence says the lease policy in words for the Library's block (L1):
+// how a desk's grants are lent inside the ceiling the release lists. It is
+// built from the policy numbers above, so the words cannot drift from them.
+func PolicySentence() string {
+	return fmt.Sprintf("A desk's permissions are lent one task at a time and never go beyond what the app lists here. "+
+		"A desk with a strong record for that kind of act (at least %d settled outcomes, with a lower bound of %d%%) "+
+		"may hold one for %d to %d hours, renewed while its record holds. A broken commitment ends the loan at once, "+
+		"and you can end any loan yourself.",
+		DurableMinN, int(math.Round(DurableFloor*100)), int(DurableMin/time.Hour), int(DurableMax/time.Hour))
+}

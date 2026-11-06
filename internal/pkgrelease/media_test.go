@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
@@ -209,16 +210,23 @@ func TestRequireScreenshotRefusesNoneAndVideoOnly(t *testing.T) {
 // A manifest may hold a multi-line display description; the card's one-line
 // form is derived from it by the host.
 func TestManifestDescriptionIsOneBoundedLine(t *testing.T) {
+	describe := func(raw []byte) string {
+		m, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manifestDescription(m)
+	}
 	raw := []byte(`{"schema":"choir.package/v2","name":"reader","version":"1.0.0",` +
 		`"display":{"title":"Reader","icon":"R","description":"Reads\n  the   news\r\n today"},` +
 		`"app":{"entry":"App.svelte","abi":"choir.app-frontend/svelte-inline/v1","aliases":[],"launcher":{"menu":true,"desktopIcon":false,"order":1},"window":{"singleton":false,"heavy":false},"auth":{"preview":"public-preview"},"theme":{"surface":"standard","shellDataAttr":"data-x-window","contentClass":"x-content"}},` +
 		`"kinds":[],"uses_kinds":[],"contributes":{"desks":[]},"capabilities":[]}`)
-	if got := ManifestDescription(raw); got != "Reads the news today" {
+	if got := describe(raw); got != "Reads the news today" {
 		t.Fatalf("description = %q", got)
 	}
 	// A description at the manifest's own bound still passes the record's.
 	edge := strings.Repeat("a", 198) + `\n` + "b"
-	got := ManifestDescription([]byte(strings.Replace(string(raw), "Reads\\n  the   news\\r\\n today", edge, 1)))
+	got := describe([]byte(strings.Replace(string(raw), "Reads\\n  the   news\\r\\n today", edge, 1)))
 	if n := len([]rune(got)); n == 0 || n > 200 || strings.ContainsAny(got, "\r\n") {
 		t.Fatalf("edge description is %d runes: %q", n, got)
 	}

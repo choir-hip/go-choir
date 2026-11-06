@@ -24,6 +24,14 @@
 //   S9  the maker's record (MA7.6) shows a score, stars or a bare rate, a
 //       sentence without its n, or reads a maker with nothing settled as a
 //       record.
+//   L1  (Library kinds) a pack or a provider is shown without its kind, its
+//       tier in words or its facets; the shelf cannot be narrowed by kind or
+//       by slot; a provider does not say which built-in part it would replace;
+//       the ceiling is not shown grant by grant with the ones that need review
+//       marked; a desk's grants come without the lease policy; a release from
+//       before L1 claims a ceiling the host never kept; an installed app's
+//       extracted uses are not shown; a raw grant id or tier code is the only
+//       text a person gets.
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -52,11 +60,28 @@ const APPS = [
   { name: 'files-next', owner: hex(3), email: '10000042@choir.news', desc: '', shots: 2, video: false, versions: 1 },
 ];
 
-function world() {
+const APP_FACTS = { kind: 'app', tier: 'T1', level: 'default', slots: [], facets: ['opens'], ceiling: [], recorded: true };
+const LEASE_POLICY = "A desk's permissions are lent one task at a time and never go beyond what the app lists here.";
+
+// L1: a pack, a provider, a desk-bearing app with an extended ceiling, and an
+// app published before the facts were kept.
+const KIND_APPS = [
+  { name: 'paper-night', owner: hex(11), email: '021@choir.news', desc: 'A dark theme', shots: 1, video: false, versions: 1,
+    facts: { kind: 'pack', tier: 'T0', level: 'default', slots: [], facets: ['commands', 'keybindings', 'themes'], ceiling: [], recorded: true } },
+  { name: 'menu-compact', owner: hex(12), email: '022@choir.news', desc: 'A compact context menu', shots: 1, video: false, versions: 1,
+    facts: { kind: 'provider', tier: 'T2', level: 'privileged', slots: ['contextMenu.renderer'], facets: [], ceiling: [{ grant: 'ui.shell', level: 'privileged' }], recorded: true } },
+  { name: 'clip-agent', owner: hex(13), email: '023@choir.news', desc: 'Cuts clips for you', shots: 1, video: false, versions: 1,
+    facts: { kind: 'app', tier: 'T1', level: 'extended', slots: [], facets: ['agent'], recorded: true,
+      ceiling: [{ grant: 'desk.act', level: 'default' }, { grant: 'desk.read.kind', args: ['video_asset'], level: 'extended' }] } },
+  { name: 'old-notes', owner: hex(14), email: '024@choir.news', desc: 'Notes', shots: 1, video: false, versions: 1,
+    facts: { kind: 'app', tier: 'T1', level: 'default', slots: [], facets: [], ceiling: [], recorded: false } },
+];
+
+function world(apps = APPS) {
   const releases = new Map(); // id -> view
   const byTrack = new Map(); // name\ntrack -> [ids newest first]
   const entries = [];
-  APPS.forEach((app, ai) => {
+  apps.forEach((app, ai) => {
     const ids = [];
     for (let v = 1; v <= app.versions; v += 1) {
       const id = hex(100 + ai * 10 + v);
@@ -71,6 +96,8 @@ function world() {
       }
       releases.set(id, {
         release_id: id,
+        facts: app.facts || APP_FACTS,
+        lease_policy: LEASE_POLICY,
         published_at: v === 1 && app.versions > 1 ? '2026-11-03T09:15:00Z' : '2026-11-04T06:27:00Z',
         publisher_address: app.email,
         description: app.desc,
@@ -97,7 +124,7 @@ function world() {
     const head = releases.get(ids[0]);
     entries.push({
       package: app.name, track: app.owner, head_release_id: ids[0], head_seq: app.versions, releases: app.versions,
-      head_media: head.media, head_description: app.desc, head_published_at: head.published_at,
+      head_media: head.media, head_description: app.desc, head_published_at: head.published_at, head_facts: head.facts,
       publisher_address: app.email, own: false,
     });
   });
@@ -445,6 +472,78 @@ test.describe('the Library is an app store', () => {
     await expect.poll(() => w.posts.length).toBe(1);
     expect(w.posts[0]).toMatchObject({ release_id: hex(777), action: 'uninstall' });
     await expect(content.locator('[data-installed-row]', { hasText: 'old-app' })).toHaveCount(0);
+    await context.close();
+  });
+
+  test('L1: kinds, tiers, facets, slots, the ceiling and the lease policy', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
+    const w = world([...APPS, ...KIND_APPS]);
+    const [clipId] = w.byTrack.get(`clip-agent\n${hex(13)}`);
+    w.installs.push({ install_id: 'ad-clip', release_id: clipId, package: 'clip-agent', action: 'install', mode: 'runtime', patch_matches_release: true, uses: ['requireAuth', 'fetchWithRenewal'], uses_recorded: true });
+    await stubBackend(page, { api: [] });
+    await answerCatalog(page, w);
+    const { content } = await openLibrary(page, server.base);
+
+    // The shelf: a kind on every card, and filters by kind and by slot.
+    await expect(content.locator('[data-package-row]')).toHaveCount(7);
+    await expect(content.locator('[data-package-row][data-package="paper-night"] [data-card-kind]')).toHaveText('Pack');
+    await expect(content.locator('[data-package-row][data-package="menu-compact"] [data-card-kind]')).toHaveText('Provider');
+    const filters = content.locator('[data-facets] [data-facet-filter]');
+    await expect(filters).toHaveText(['All', 'Apps', 'Packs', 'Providers', 'Provides the context menu']);
+    await content.locator('[data-facet-filter="kind:pack"]').click();
+    await expect(content.locator('[data-package-row]')).toHaveCount(1);
+    await expect(content.locator('[data-package-row]')).toHaveAttribute('data-package', 'paper-night');
+    await content.locator('[data-facet-filter="slot:contextMenu.renderer"]').click();
+    await expect(content.locator('[data-package-row]')).toHaveCount(1);
+    await expect(content.locator('[data-package-row]')).toHaveAttribute('data-package', 'menu-compact');
+    await content.locator('[data-facet-filter="all"]').click();
+    await expect(content.locator('[data-package-row]')).toHaveCount(7);
+
+    const app = content.locator('[data-app-view]');
+    // A pack: T0 in words, its facets, asks for nothing.
+    await content.locator('[data-package-row][data-package="paper-night"]').click();
+    const facts = app.locator('[data-app-facts]');
+    await expect(facts.locator('[data-app-kind]')).toHaveText('Pack');
+    await expect(facts.locator('[data-app-tier="T0"]')).toContainText('runs no code');
+    await expect(facts.locator('[data-facet]')).toHaveText(['Commands', 'Shortcuts', 'Themes']);
+    await expect(facts.locator('[data-ceiling-empty]')).toContainText('no permissions');
+    await expect(facts.locator('[data-displaces]')).toHaveCount(0);
+    expect(await facts.innerText()).not.toMatch(/\bT[012]\b|ui\.|desk\./);
+    await content.locator('[data-back]').click();
+
+    // A provider: T2, its slot, what it would replace, its privileged grant.
+    await content.locator('[data-package-row][data-package="menu-compact"]').click();
+    await expect(facts.locator('[data-app-kind]')).toHaveText('Provider');
+    await expect(facts.locator('[data-app-tier="T2"]')).toContainText("Choir's own screen");
+    await expect(facts.locator('[data-slots]')).toHaveText('Provides the context menu.');
+    await expect(facts.locator('[data-displaces]')).toContainText("Choir's built-in context menu");
+    await expect(facts.locator('[data-ceiling-grant="ui.shell"]')).toHaveAttribute('data-grant-level', 'privileged');
+    await expect(facts.locator('[data-level="privileged"]')).toContainText("Choir's own apps");
+    await expect(facts.locator('[data-lease-policy]')).toHaveCount(0);
+    await app.locator('[data-install-button]').click();
+    await expect(content.locator('[data-confirm-displaces]')).toContainText("Choir's built-in context menu");
+    await content.locator('[data-confirm-cancel]').click();
+    await content.locator('[data-back]').click();
+
+    // A desk-bearing app: the ceiling grant by grant, review marked, the
+    // lease policy, and (installed) the uses this computer extracted.
+    await content.locator('[data-package-row][data-package="clip-agent"]').click();
+    await expect(facts.locator('[data-facet]')).toHaveText(['Agent']);
+    await expect(facts.locator('[data-ceiling-grant]')).toHaveCount(2);
+    await expect(facts.locator('[data-ceiling-grant="desk.read.kind"]')).toContainText('video_asset records');
+    await expect(facts.locator('[data-ceiling-grant="desk.read.kind"]')).toContainText('Needs review');
+    await expect(facts.locator('[data-ceiling-grant="desk.act"]')).not.toContainText('Needs review');
+    await expect(facts.locator('[data-level="extended"]')).toContainText('review on this computer');
+    await expect(facts.locator('[data-lease-policy]')).toContainText('one task at a time');
+    await expect(facts.locator('[data-uses]')).toHaveText('Uses these parts of Choir: fetchWithRenewal, requireAuth.');
+    await content.locator('[data-back]').click();
+
+    // Published before L1: no claimed ceiling.
+    await content.locator('[data-package-row][data-package="old-notes"]').click();
+    await expect(facts.locator('[data-ceiling-unrecorded]')).toContainText('published before');
+    await expect(facts.locator('[data-ceiling], [data-ceiling-empty]')).toHaveCount(0);
     await context.close();
   });
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/lease"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
@@ -95,6 +96,12 @@ type PackageReleaseView struct {
 	// host at publish and kept in the object's metadata; "" for a release
 	// published before it was kept.
 	Description string `json:"description,omitempty"`
+	// Facts are what the Library shows of the release (L1): kind, tier,
+	// level, slots, facets and ceiling, host-derived at publish.
+	Facts pkgrelease.ListingFacts `json:"facts"`
+	// LeasePolicy says in words how a desk's grants are lent inside the
+	// ceiling (MA7.4), for the Library block.
+	LeasePolicy string `json:"lease_policy"`
 }
 
 type packageAPIError struct {
@@ -584,10 +591,16 @@ func packageView(obj objectgraph.Object, releaseID string, listing pkgrelease.Li
 	}
 	_ = json.Unmarshal(obj.Metadata, &metadata)
 	media := []PackageMediaView{}
+	var summary pkgrelease.Manifest
 	if record, err := pkgrelease.Decode(obj.Body); err == nil {
 		media = mediaViews(releaseID, record)
+		summary = record.Manifest
 	}
-	return PackageReleaseView{ReleaseID: releaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body), Listing: listing, Media: media, Description: metadata.Description}
+	return PackageReleaseView{
+		ReleaseID: releaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body),
+		Listing: listing, Media: media, Description: metadata.Description,
+		Facts: pkgrelease.FactsFromMetadata(obj.Metadata, summary), LeasePolicy: lease.PolicySentence(),
+	}
 }
 
 func (h *Handler) readPackageBlob(blob pkgrelease.Blob) ([]byte, error) {
@@ -723,7 +736,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	description, err := pkgrelease.VerifyHostDescribed(ctx, in)
+	verified, err := pkgrelease.VerifyHostFacts(ctx, in)
 	if err != nil {
 		writePackageRefusal(w, err)
 		return
@@ -765,11 +778,14 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 			"publisher_computer_id": computerID, "operation_id": record.Operation.OperationID,
 			"tree": record.Source.Tree, "parent_kind": record.Parent.Kind, "published_at": now.Format(time.RFC3339Nano),
 		}
-		if description != "" {
+		if verified.Description != "" {
 			// The manifest's one-line description, derived by the host from
 			// the bytes it verified: listing-side metadata, not in the record.
-			metaFields["description"] = description
+			metaFields["description"] = verified.Description
 		}
+		// The Library's facts (kind, tier, level, slots, facets, ceiling),
+		// derived by the host from the same bytes: listing-side metadata too.
+		metaFields[pkgrelease.MetadataFactsKey] = verified.Facts
 		metadata, err := objectgraph.NormalizeMetadata(metaFields)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package metadata"})
@@ -902,6 +918,9 @@ type PackageCatalogEntry struct {
 	// head was published and the manifest's one-line description.
 	HeadPublishedAt string `json:"head_published_at,omitempty"`
 	HeadDescription string `json:"head_description,omitempty"`
+	// HeadFacts are the head release's Library facts (L1), so the shelf can
+	// show the kind and offer facets by kind and slot without a second read.
+	HeadFacts pkgrelease.ListingFacts `json:"head_facts"`
 }
 
 func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
@@ -987,8 +1006,8 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			entry.HeadReleaseID, entry.HeadSeq = head.RecordID, head.Seq
 			record := decoded[head.RecordID]
 			entry.HeadMedia = mediaViews(head.RecordID, record)
-			entry.HeadDescription = packageView(records[head.RecordID], head.RecordID, head).Description
-			entry.HeadPublishedAt = packageView(records[head.RecordID], head.RecordID, head).PublishedAt
+			view := packageView(records[head.RecordID], head.RecordID, head)
+			entry.HeadDescription, entry.HeadPublishedAt, entry.HeadFacts = view.Description, view.PublishedAt, view.Facts
 		}
 		entries = append(entries, entry)
 	}

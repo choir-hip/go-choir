@@ -104,16 +104,11 @@ func ReadFile(ctx context.Context, repo, tree, path string) ([]byte, error) {
 	return raw, nil
 }
 
-// ManifestDescription is the manifest's display description as one line of at
-// most 200 characters (whitespace collapsed); "" when the bytes do not parse
-// (CheckManifest refuses those first). The host derives it from the manifest
-// it verifies and stores it beside the release as listing-side metadata: the
-// record carries none, so the record format is unchanged.
-func ManifestDescription(raw []byte) string {
-	manifest, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
-	if err != nil {
-		return ""
-	}
+// manifestDescription is the manifest's display description as one line of
+// at most 200 characters (whitespace collapsed). The host derives it from the
+// manifest it verifies and stores it beside the release as listing-side
+// metadata: the record carries none, so the record format is unchanged.
+func manifestDescription(manifest apppackage.Manifest) string {
 	// One line of at most 200 characters: the record's Validate refuses
 	// more, and a manifest may hold a longer or multi-line description.
 	line := strings.Join(strings.Fields(manifest.Display.Description), " ")
@@ -176,6 +171,13 @@ func (t treeSource) Read(path string) ([]byte, error) {
 // behaviour-surface hash and the desk import gate. It returns the record's
 // manifest summary and the manifest version.
 func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, string, error) {
+	summary, version, _, err := checkManifest(name, raw, files)
+	return summary, version, err
+}
+
+// checkManifest is CheckManifest that also returns the parsed manifest, from
+// which the host derives what the Library shows (VerifyHostFacts).
+func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, string, apppackage.Manifest, error) {
 	// Kinds first: a first-party package's kinds are generated into
 	// internal/apppackage/firstparty_gen.go, outside the package, so a
 	// release cannot carry them until runtime install (S12).
@@ -183,26 +185,26 @@ func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 		Kinds []json.RawMessage `json:"kinds"`
 	}
 	if err := json.Unmarshal(raw, &probe); err == nil && len(probe.Kinds) > 0 {
-		return Manifest{}, "", refuse(ReasonKindsNeedPlatform, "the manifest declares %d kinds; a package's kinds need the platform until runtime install (S12)", len(probe.Kinds))
+		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonKindsNeedPlatform, "the manifest declares %d kinds; a package's kinds need the platform until runtime install (S12)", len(probe.Kinds))
 	}
 	manifest, err := apppackage.ParseManifest(raw, apppackage.OriginPublished)
 	if err != nil {
 		switch {
 		case errors.Is(err, apppackage.ErrPublisherDeclared):
-			return Manifest{}, "", refuse(ReasonPublisherDeclared, "%v", err)
+			return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonPublisherDeclared, "%v", err)
 		case errors.Is(err, apppackage.ErrPrivilegedGrant):
-			return Manifest{}, "", refuse(ReasonPrivilegedGrant, "%v", err)
+			return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonPrivilegedGrant, "%v", err)
 		case errors.Is(err, apppackage.ErrDeskNeedsSandbox):
-			return Manifest{}, "", refuse(ReasonDeskNeedsSandbox, "%v", err)
+			return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonDeskNeedsSandbox, "%v", err)
 		}
-		return Manifest{}, "", refuse(ReasonManifestInvalid, "%v", err)
+		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonManifestInvalid, "%v", err)
 	}
 	if manifest.Name != name {
-		return Manifest{}, "", refuse(ReasonManifestInvalid, "the manifest names package %q, the release %q", manifest.Name, name)
+		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonManifestInvalid, "the manifest names package %q, the release %q", manifest.Name, name)
 	}
 	surface, err := manifest.BehaviourSurface(files)
 	if err != nil {
-		return Manifest{}, "", refuse(ReasonManifestInvalid, "%v", err)
+		return Manifest{}, "", apppackage.Manifest{}, refuse(ReasonManifestInvalid, "%v", err)
 	}
 	summary := Manifest{
 		SHA256: computerevent.DigestBytes(raw), Schema: manifest.Schema,
@@ -213,7 +215,7 @@ func CheckManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 		summary.ABI = manifest.App.ABI
 		summary.RequiresSDK = manifest.App.RequiresSDK
 	}
-	return summary, manifest.Version, nil
+	return summary, manifest.Version, manifest, nil
 }
 
 // AddedSecrets runs the release's refusal-grade secret scan over the lines

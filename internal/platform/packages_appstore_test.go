@@ -127,3 +127,46 @@ func TestCatalogSkipsATrackWithNoHead(t *testing.T) {
 		t.Fatalf("N2 a headless card is listed: %+v", got)
 	}
 }
+
+// L1 (plan section 11, Library kinds). Failure modes, written before the code:
+//
+//	K1  the release view or the shelf card lacks the kind, tier, level,
+//	    facets, slots or ceiling, or they are not the host's derivation of the
+//	    manifest it verified;
+//	K2  the record carries them (the record format must not change);
+//	K3  a release published before L1 shows no kind, or claims a recorded
+//	    ceiling the host never kept;
+//	K4  the block carries no lease policy.
+func TestReleaseViewAndCardCarryTheHostDerivedLibraryFacts(t *testing.T) {
+	w := newPkgWorld(t)
+	b := w.build("<p>v2</p>\n", "owner-a", nil)
+	for _, key := range []string{`"facts"`, `"tier"`, `"ceiling"`} {
+		if strings.Contains(string(b.raw), key) {
+			t.Fatalf("K2 the record carries %s: %s", key, b.raw)
+		}
+	}
+	view := w.published(b)
+	f := view.Facts
+	if f.Kind != "app" || f.Tier != "T1" || f.Level != "default" || !f.Recorded || f.Slots == nil || f.Facets == nil || f.Ceiling == nil {
+		t.Fatalf("K1 view facts = %+v", f)
+	}
+	if !strings.Contains(view.LeasePolicy, "one task at a time") {
+		t.Fatalf("K4 lease policy = %q", view.LeasePolicy)
+	}
+	got := w.catalogOf("owner-b")
+	if len(got) != 1 || got[0].HeadFacts.Kind != "app" || got[0].HeadFacts.Tier != "T1" || !got[0].HeadFacts.Recorded {
+		t.Fatalf("K1 catalog = %+v", got)
+	}
+
+	// K3: a release stored without the facts reads its kind from the summary.
+	legacy := w.withMedia(w.build("<p>old</p>\n", "owner-c", nil))
+	w.publishLegacy(legacy)
+	rec := w.read(packagesRoute + "/releases/" + legacy.id + "?owner_id=owner-c")
+	var lv PackageReleaseView
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &lv) != nil {
+		t.Fatalf("legacy read = %d %s", rec.Code, rec.Body.String())
+	}
+	if lv.Facts.Kind != "app" || lv.Facts.Tier != "T1" || lv.Facts.Recorded || len(lv.Facts.Ceiling) != 0 {
+		t.Fatalf("K3 legacy facts = %+v", lv.Facts)
+	}
+}

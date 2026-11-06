@@ -90,87 +90,94 @@ type HostInput struct {
 // A release parent's id is the caller's to have resolved: ParentRelease is
 // the listed record it read under that id.
 func VerifyHost(ctx context.Context, in HostInput) error {
-	_, err := VerifyHostDescribed(ctx, in)
+	_, err := VerifyHostFacts(ctx, in)
 	return err
 }
 
-// VerifyHostDescribed is VerifyHost and also returns the one-line display
-// description of the manifest it verified (ManifestDescription of the very
-// bytes check 5 validated), for the app store card. It is derived by the
-// host, so the record never carries it and no publisher can claim one.
-func VerifyHostDescribed(ctx context.Context, in HostInput) (string, error) {
+// Verified is what the host derived from the manifest bytes check 5
+// validated, for the Library: the one-line display description and the
+// listing facts (facts.go). The host derives both, so the record never
+// carries them and no publisher can claim one.
+type Verified struct {
+	Description string
+	Facts       ListingFacts
+}
+
+// VerifyHostFacts is VerifyHost and also returns what the Library shows of
+// the manifest it verified.
+func VerifyHostFacts(ctx context.Context, in HostInput) (Verified, error) {
 	rec := in.Record.Normalize()
 	if err := rec.Validate(); err != nil {
-		return "", err
+		return Verified{}, err
 	}
 	root := rec.Source.Root
 	if err := VerifyBlob(rec.Source.TreePatch, in.TreePatch); err != nil {
-		return "", err
+		return Verified{}, err
 	}
 	if err := VerifyBlob(rec.Source.ReviewPatch, in.ReviewPatch); err != nil {
-		return "", err
+		return Verified{}, err
 	}
 	switch {
 	case rec.ParentPatch != nil:
 		if err := VerifyBlob(*rec.ParentPatch, in.ParentPatch); err != nil {
-			return "", err
+			return Verified{}, err
 		}
 	case len(in.ParentPatch) != 0:
-		return "", refuse(ReasonInvalid, "parent_patch bytes for a record that names none")
+		return Verified{}, refuse(ReasonInvalid, "parent_patch bytes for a record that names none")
 	}
 	s, err := newScratch(ctx, "")
 	if err != nil {
-		return "", fmt.Errorf("pkgrelease: scratch repository: %w", err)
+		return Verified{}, fmt.Errorf("pkgrelease: scratch repository: %w", err)
 	}
 	defer s.close()
 
 	// Check 1: the content, applied to the empty tree, is confined.
 	full, err := s.apply(ctx, EmptyTree, in.TreePatch)
 	if err != nil {
-		return "", refuse(ReasonInvalid, "tree_patch does not apply to the empty tree: %v", err)
+		return Verified{}, refuse(ReasonInvalid, "tree_patch does not apply to the empty tree: %v", err)
 	}
 	if err := s.confined(ctx, full, root); err != nil {
-		return "", err
+		return Verified{}, err
 	}
 	// Check 2: the subtree at the root is the record's tree.
 	tree, present, err := subtreeIn(ctx, s.dir, nil, full, root)
 	if err != nil || !present || tree != rec.Source.Tree {
-		return "", refuse(ReasonTreeMismatch, "tree_patch makes %q at %s, the record names %s", tree, root, rec.Source.Tree)
+		return Verified{}, refuse(ReasonTreeMismatch, "tree_patch makes %q at %s, the record names %s", tree, root, rec.Source.Tree)
 	}
 
 	// Check 3: the parent's full-path tree, from bytes the host verified.
 	parentFull, err := hostParent(ctx, s, rec, in)
 	if err != nil {
-		return "", err
+		return Verified{}, err
 	}
 	reviewed, err := s.apply(ctx, parentFull, in.ReviewPatch)
 	if err != nil {
-		return "", refuse(ReasonReviewMismatch, "review_patch does not apply to the parent: %v", err)
+		return Verified{}, refuse(ReasonReviewMismatch, "review_patch does not apply to the parent: %v", err)
 	}
 	// Both sides hold only the root, so the review patch must rebuild the
 	// release's full tree exactly: the same subtree and nothing beside it.
 	if reviewed != full {
-		return "", refuse(ReasonReviewMismatch, "review_patch turns the parent into tree %s, not the release's %s", reviewed, full)
+		return Verified{}, refuse(ReasonReviewMismatch, "review_patch turns the parent into tree %s, not the release's %s", reviewed, full)
 	}
 
 	// Check 4: no added line carries a secret.
 	if kinds := AddedSecrets(in.TreePatch); len(kinds) > 0 {
-		return "", refuse(ReasonSecretFound, "tree_patch adds secret content (%s)", strings.Join(kinds, ", "))
+		return Verified{}, refuse(ReasonSecretFound, "tree_patch adds secret content (%s)", strings.Join(kinds, ", "))
 	}
 
 	// Check 5: the manifest validates and is the record's summary.
 	raw, err := gitRun(ctx, s.dir, nil, nil, "cat-file", "blob", full+":"+root+"/choir-package.json")
 	if err != nil || len(raw) > maxManifestBytes {
-		return "", refuse(ReasonManifestInvalid, "the release holds no readable %s/choir-package.json", root)
+		return Verified{}, refuse(ReasonManifestInvalid, "the release holds no readable %s/choir-package.json", root)
 	}
-	summary, version, err := CheckManifest(rec.Package.Name, raw, treeFiles(ctx, s.dir, nil, full, root))
+	summary, version, manifest, err := checkManifest(rec.Package.Name, raw, treeFiles(ctx, s.dir, nil, full, root))
 	if err != nil {
-		return "", err
+		return Verified{}, err
 	}
 	if summary != rec.Manifest || version != rec.Package.ManifestVersion {
-		return "", refuse(ReasonManifestInvalid, "the record's manifest summary %+v (version %s) is not the bytes' %+v (version %s)", rec.Manifest, rec.Package.ManifestVersion, summary, version)
+		return Verified{}, refuse(ReasonManifestInvalid, "the record's manifest summary %+v (version %s) is not the bytes' %+v (version %s)", rec.Manifest, rec.Package.ManifestVersion, summary, version)
 	}
-	return ManifestDescription(raw), nil
+	return Verified{Description: manifestDescription(manifest), Facts: FactsOf(manifest)}, nil
 }
 
 // hostParent is the parent's full-path tree in s, from the parent release's

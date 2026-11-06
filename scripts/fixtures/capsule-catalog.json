@@ -6,6 +6,15 @@
     "packages": [
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 5201,
@@ -14,7 +23,7 @@
             "media_type": "image/png",
             "name": "01-before-files-next-desktop.png",
             "sha256": "534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
-            "url": "/api/catalog/releases/f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003/media/534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
+            "url": "/api/catalog/releases/cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172/media/534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
             "width": 1280
           },
           {
@@ -24,12 +33,12 @@
             "media_type": "image/png",
             "name": "01-after-files-next-desktop.png",
             "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
-            "url": "/api/catalog/releases/f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+            "url": "/api/catalog/releases/cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-06T03:52:32.44Z",
-        "head_release_id": "f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003",
+        "head_published_at": "2026-11-06T05:28:09.42537Z",
+        "head_release_id": "cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172",
         "head_seq": 1,
         "package": "files-next",
         "releases": 1,
@@ -37,6 +46,15 @@
       },
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 4832,
@@ -45,7 +63,7 @@
             "media_type": "image/png",
             "name": "01-before-files-next-desktop.png",
             "sha256": "2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
-            "url": "/api/catalog/releases/65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831/media/2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
+            "url": "/api/catalog/releases/a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d/media/2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
             "width": 1280
           },
           {
@@ -55,12 +73,12 @@
             "media_type": "image/png",
             "name": "01-after-files-next-desktop.png",
             "sha256": "0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
-            "url": "/api/catalog/releases/65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
+            "url": "/api/catalog/releases/a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-06T03:52:33.996759Z",
-        "head_release_id": "65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831",
+        "head_published_at": "2026-11-06T05:28:10.288911Z",
+        "head_release_id": "a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d",
         "head_seq": 2,
         "package": "files-next",
         "releases": 2,
@@ -68,6 +86,15 @@
       },
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 5000,
@@ -76,7 +103,7 @@
             "media_type": "image/png",
             "name": "01-before-files-next-desktop.png",
             "sha256": "0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
-            "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
+            "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
             "width": 1280
           },
           {
@@ -86,7 +113,7 @@
             "media_type": "image/png",
             "name": "01-after-files-next-desktop.png",
             "sha256": "d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
-            "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
+            "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
             "width": 1280
           },
           {
@@ -96,7 +123,7 @@
             "media_type": "image/png",
             "name": "files-next-desktop-2.png",
             "sha256": "55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
-            "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
+            "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
             "width": 1280
           },
           {
@@ -106,12 +133,12 @@
             "media_type": "image/png",
             "name": "files-next-phone-1-mobile.png",
             "sha256": "e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
-            "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
+            "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
             "width": 390
           }
         ],
-        "head_published_at": "2026-11-06T03:52:35.796036Z",
-        "head_release_id": "8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2",
+        "head_published_at": "2026-11-06T05:28:11.277362Z",
+        "head_release_id": "1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5",
         "head_seq": 3,
         "package": "files-next",
         "releases": 3,
@@ -119,6 +146,15 @@
       },
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 5195,
@@ -127,7 +163,7 @@
             "media_type": "image/png",
             "name": "01-before-library-next-desktop.png",
             "sha256": "bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
-            "url": "/api/catalog/releases/00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c/media/bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
+            "url": "/api/catalog/releases/7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431/media/bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
             "width": 1280
           },
           {
@@ -137,12 +173,12 @@
             "media_type": "image/png",
             "name": "01-after-library-next-desktop.png",
             "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
-            "url": "/api/catalog/releases/00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+            "url": "/api/catalog/releases/7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-06T03:52:45.631555Z",
-        "head_release_id": "00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c",
+        "head_published_at": "2026-11-06T05:28:17.734714Z",
+        "head_release_id": "7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431",
         "head_seq": 1,
         "package": "library-next",
         "releases": 1,
@@ -150,6 +186,15 @@
       },
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 4832,
@@ -158,7 +203,7 @@
             "media_type": "image/png",
             "name": "01-before-library-next-desktop.png",
             "sha256": "ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
-            "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
+            "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
             "width": 1280
           },
           {
@@ -168,7 +213,7 @@
             "media_type": "image/png",
             "name": "01-after-library-next-desktop.png",
             "sha256": "e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
-            "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
+            "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
             "width": 1280
           },
           {
@@ -178,7 +223,7 @@
             "media_type": "image/png",
             "name": "library-next-desktop-2.png",
             "sha256": "9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
-            "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
+            "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
             "width": 1280
           },
           {
@@ -188,7 +233,7 @@
             "media_type": "image/png",
             "name": "library-next-phone-1-mobile.png",
             "sha256": "5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
-            "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
+            "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
             "width": 390
           },
           {
@@ -197,11 +242,11 @@
             "media_type": "video/webm",
             "name": "library-next-walkthrough.webm",
             "sha256": "34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e",
-            "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
+            "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
           }
         ],
-        "head_published_at": "2026-11-06T03:52:47.224805Z",
-        "head_release_id": "7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a",
+        "head_published_at": "2026-11-06T05:28:18.673842Z",
+        "head_release_id": "37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff",
         "head_seq": 2,
         "package": "library-next",
         "releases": 2,
@@ -209,6 +254,15 @@
       },
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 4995,
@@ -217,7 +271,7 @@
             "media_type": "image/png",
             "name": "01-before-slides-next-desktop.png",
             "sha256": "4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
-            "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
+            "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
             "width": 1280
           },
           {
@@ -227,7 +281,7 @@
             "media_type": "image/png",
             "name": "01-after-slides-next-desktop.png",
             "sha256": "d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
-            "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
+            "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
             "width": 1280
           },
           {
@@ -237,7 +291,7 @@
             "media_type": "image/png",
             "name": "slides-next-desktop-2.png",
             "sha256": "b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
-            "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
+            "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
             "width": 1280
           },
           {
@@ -247,7 +301,7 @@
             "media_type": "image/png",
             "name": "slides-next-desktop-3.png",
             "sha256": "dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
-            "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
+            "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
             "width": 1280
           },
           {
@@ -257,12 +311,12 @@
             "media_type": "image/png",
             "name": "slides-next-phone-1-mobile.png",
             "sha256": "5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
-            "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
+            "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
             "width": 390
           }
         ],
-        "head_published_at": "2026-11-06T03:52:40.012455Z",
-        "head_release_id": "9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be",
+        "head_published_at": "2026-11-06T05:28:14.094816Z",
+        "head_release_id": "c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6",
         "head_seq": 2,
         "package": "slides-next",
         "releases": 2,
@@ -270,6 +324,15 @@
       },
       {
         "head_description": "Read",
+        "head_facts": {
+          "ceiling": [],
+          "facets": [],
+          "kind": "app",
+          "level": "default",
+          "recorded": true,
+          "slots": [],
+          "tier": "T1"
+        },
         "head_media": [
           {
             "bytes": 5198,
@@ -278,7 +341,7 @@
             "media_type": "image/png",
             "name": "01-before-slides-next-desktop.png",
             "sha256": "21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
-            "url": "/api/catalog/releases/ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128/media/21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
+            "url": "/api/catalog/releases/5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5/media/21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
             "width": 1280
           },
           {
@@ -288,12 +351,12 @@
             "media_type": "image/png",
             "name": "01-after-slides-next-desktop.png",
             "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
-            "url": "/api/catalog/releases/ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+            "url": "/api/catalog/releases/5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
             "width": 1280
           }
         ],
-        "head_published_at": "2026-11-06T03:52:41.349565Z",
-        "head_release_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
+        "head_published_at": "2026-11-06T05:28:15.033297Z",
+        "head_release_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
         "head_seq": 2,
         "package": "slides-next",
         "releases": 3,
@@ -308,11 +371,21 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "files-next",
-            "record_id": "8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2",
+            "record_id": "1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -337,7 +410,7 @@
               "media_type": "image/png",
               "name": "01-before-files-next-desktop.png",
               "sha256": "0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
-              "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
+              "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
               "width": 1280
             },
             {
@@ -347,7 +420,7 @@
               "media_type": "image/png",
               "name": "01-after-files-next-desktop.png",
               "sha256": "d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
-              "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
+              "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
               "width": 1280
             },
             {
@@ -357,7 +430,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-2.png",
               "sha256": "55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
-              "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
+              "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
               "width": 1280
             },
             {
@@ -367,7 +440,7 @@
               "media_type": "image/png",
               "name": "files-next-phone-1-mobile.png",
               "sha256": "e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
-              "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
+              "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
               "width": 390
             }
           ],
@@ -382,7 +455,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+              "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
             },
             "media": [
               {
@@ -434,8 +507,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6",
-              "tree": "9705e9702d5e3afd2665d4bb916bba9d6ae35919"
+              "release_id": "b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27",
+              "tree": "2fab9568314bbb8b99ed91530313be71034dac23"
             },
             "precommitments": [
               {
@@ -451,7 +524,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte",
                 "frontend/src/packages/files-next/files-store.js"
@@ -461,22 +534,32 @@
                 "sha256": "93ef0ec657aa08c81b12fbbd14d6f9b9f0ab04079712e7216c49c321950ba566"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "0223e25be6b31cdcc81655a0e1db3aa0cb5afd99",
+              "tree": "bd86bad12db0d63f968a219db982e0a19ddd0f86",
               "tree_patch": {
-                "bytes": 2603,
-                "sha256": "162fd125df17f549d3f6eb8da1a6f2b91c6f30b32fc9fd81c01936cfe62a4362"
+                "bytes": 2589,
+                "sha256": "6683ec842c5b9c7f0209f9876404115e33476690999dad9f4d459301c9d79609"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2"
+          "release_id": "1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5"
         },
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "files-next",
-            "record_id": "a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6",
+            "record_id": "b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -501,7 +584,7 @@
               "media_type": "image/png",
               "name": "01-before-files-next-desktop.png",
               "sha256": "df9630e7076b7f4b204cd58d043a5c1965e90c3a8854b6476a167dfcb2063380",
-              "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/df9630e7076b7f4b204cd58d043a5c1965e90c3a8854b6476a167dfcb2063380",
+              "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/df9630e7076b7f4b204cd58d043a5c1965e90c3a8854b6476a167dfcb2063380",
               "width": 1280
             },
             {
@@ -511,7 +594,7 @@
               "media_type": "image/png",
               "name": "01-after-files-next-desktop.png",
               "sha256": "2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
-              "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
+              "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
               "width": 1280
             },
             {
@@ -521,7 +604,7 @@
               "media_type": "image/png",
               "name": "files-next-desktop-2.png",
               "sha256": "f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
-              "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
+              "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
               "width": 1280
             },
             {
@@ -531,7 +614,7 @@
               "media_type": "image/png",
               "name": "files-next-phone-1-mobile.png",
               "sha256": "962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
-              "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
+              "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
               "width": 390
             }
           ],
@@ -548,7 +631,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+              "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
             },
             "media": [
               {
@@ -600,8 +683,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d",
-              "tree": "0b7271472ef3944ed746d06bee016da4a47802d6"
+              "release_id": "e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632",
+              "tree": "4b06ff4071a1f8e4aafbe62a5d5141fb05197f3a"
             },
             "precommitments": [
               {
@@ -625,7 +708,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/files-next/App.svelte",
                 "frontend/src/packages/files-next/RenameDialog.svelte"
@@ -635,22 +718,32 @@
                 "sha256": "d7fc62e493157e9b0b588b713c611886b361f771b849e691367d06e6a5bd7f61"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "9705e9702d5e3afd2665d4bb916bba9d6ae35919",
+              "tree": "2fab9568314bbb8b99ed91530313be71034dac23",
               "tree_patch": {
-                "bytes": 2503,
-                "sha256": "05557f68fc906bfb73f22c2cc166c4f812e4193e5bd0d7e4cc7e8022f3e50fef"
+                "bytes": 2489,
+                "sha256": "e19356d70086d887ca4b9e774e4bd35b3dd0cc6613fdeaffee036762da1178ea"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6"
+          "release_id": "b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27"
         },
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "files-next",
-            "record_id": "9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d",
+            "record_id": "e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -675,7 +768,7 @@
               "media_type": "image/png",
               "name": "01-before-files-next-desktop.png",
               "sha256": "d8df3c2d3e323cdbcfa92ee1bd77c9bb0a7670cb54a7d59c2201de6833341bcc",
-              "url": "/api/catalog/releases/9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d/media/d8df3c2d3e323cdbcfa92ee1bd77c9bb0a7670cb54a7d59c2201de6833341bcc",
+              "url": "/api/catalog/releases/e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632/media/d8df3c2d3e323cdbcfa92ee1bd77c9bb0a7670cb54a7d59c2201de6833341bcc",
               "width": 1280
             },
             {
@@ -685,7 +778,7 @@
               "media_type": "image/png",
               "name": "01-after-files-next-desktop.png",
               "sha256": "e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
-              "url": "/api/catalog/releases/9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
+              "url": "/api/catalog/releases/e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
               "width": 1280
             }
           ],
@@ -700,7 +793,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+              "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
             },
             "media": [
               {
@@ -733,13 +826,13 @@
               "name": "files-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "a488950e4af78f5eccda1c7ede36d9e62fec3dbf"
+              "tree": "8cddb76cd293b86ba0a39c10ace2fda4a56662a1"
             },
             "parent_patch": {
-              "bytes": 1967,
-              "sha256": "5e7133a12ec576107296d74c781b8f2995f8a34f2a839b97ec3f84cf64634600"
+              "bytes": 1953,
+              "sha256": "34299a69e51ee77fe1f5041e4bb267dd6808cea65343939f715481d67abfc197"
             },
             "precommitments": [
               {
@@ -757,7 +850,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte"
               ],
@@ -766,15 +859,15 @@
                 "sha256": "f4940e7c426743137da43d28c5dd6a41e4c8e147d87895e29352a8d7156013b6"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "0b7271472ef3944ed746d06bee016da4a47802d6",
+              "tree": "4b06ff4071a1f8e4aafbe62a5d5141fb05197f3a",
               "tree_patch": {
-                "bytes": 2064,
-                "sha256": "bfcc0cc6328cbef31e1825292e1bc5c3c4bdd47397498f5650a2fb8ce9070aea"
+                "bytes": 2050,
+                "sha256": "17d211cf18bd853aa1db709010fbec071e90a92b121be63c0536b00957fc96bd"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d"
+          "release_id": "e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632"
         }
       ],
       "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
@@ -784,11 +877,21 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831",
+          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "files-next",
-            "record_id": "65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831",
+            "record_id": "a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -813,7 +916,7 @@
               "media_type": "image/png",
               "name": "01-before-files-next-desktop.png",
               "sha256": "2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
-              "url": "/api/catalog/releases/65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831/media/2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
+              "url": "/api/catalog/releases/a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d/media/2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
               "width": 1280
             },
             {
@@ -823,7 +926,7 @@
               "media_type": "image/png",
               "name": "01-after-files-next-desktop.png",
               "sha256": "0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
-              "url": "/api/catalog/releases/65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
+              "url": "/api/catalog/releases/a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
               "width": 1280
             }
           ],
@@ -838,7 +941,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+              "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
             },
             "media": [
               {
@@ -872,8 +975,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b",
-              "tree": "b026ae6c241ccb4e1aa6d52f96e44e54430091d1"
+              "release_id": "9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca",
+              "tree": "5e807869010254b3397ecd41c6cc58f78bce081f"
             },
             "precommitments": [
               {
@@ -889,7 +992,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte",
                 "frontend/src/packages/files-next/files-store.js"
@@ -899,22 +1002,32 @@
                 "sha256": "3e3c52bc409ccc8acb72390d3d954072776b93a00cb0d9b10b1466eb9315b40e"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "e455e2e429876d33c5fe285ec7a14119aea2072d",
+              "tree": "7ac0b9f649b0474f3ebbba63b30f13ebf8ddbfaf",
               "tree_patch": {
-                "bytes": 2191,
-                "sha256": "d239ad4b6dbf16c8c1b55c98e06bd3df4e09744617950c32445070a92ee08873"
+                "bytes": 2177,
+                "sha256": "94e79e6041678d3ea4119bd641d6f0e2349448ca582ed433b8036dfc96250c9e"
               }
             },
             "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
           },
-          "release_id": "65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831"
+          "release_id": "a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d"
         },
         {
-          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b",
+          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "files-next",
-            "record_id": "f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b",
+            "record_id": "9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -939,7 +1052,7 @@
               "media_type": "image/png",
               "name": "01-before-files-next-desktop.png",
               "sha256": "51f859b4fad55dc40d2bacdaad7374ab13548c58988f5134f320023f64baf9c2",
-              "url": "/api/catalog/releases/f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b/media/51f859b4fad55dc40d2bacdaad7374ab13548c58988f5134f320023f64baf9c2",
+              "url": "/api/catalog/releases/9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca/media/51f859b4fad55dc40d2bacdaad7374ab13548c58988f5134f320023f64baf9c2",
               "width": 1280
             },
             {
@@ -949,7 +1062,7 @@
               "media_type": "image/png",
               "name": "01-after-files-next-desktop.png",
               "sha256": "378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
-              "url": "/api/catalog/releases/f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
+              "url": "/api/catalog/releases/9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
               "width": 1280
             }
           ],
@@ -964,7 +1077,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+              "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
             },
             "media": [
               {
@@ -997,13 +1110,13 @@
               "name": "files-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "a488950e4af78f5eccda1c7ede36d9e62fec3dbf"
+              "tree": "8cddb76cd293b86ba0a39c10ace2fda4a56662a1"
             },
             "parent_patch": {
-              "bytes": 1967,
-              "sha256": "5e7133a12ec576107296d74c781b8f2995f8a34f2a839b97ec3f84cf64634600"
+              "bytes": 1953,
+              "sha256": "34299a69e51ee77fe1f5041e4bb267dd6808cea65343939f715481d67abfc197"
             },
             "precommitments": [
               {
@@ -1021,7 +1134,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/files-next/files-store.js"
               ],
@@ -1030,15 +1143,15 @@
                 "sha256": "3edbd2f20b2ab85e1a1d982d6c67fd5f836a7b6ca113737e98e66a9d5cc26e1c"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "b026ae6c241ccb4e1aa6d52f96e44e54430091d1",
+              "tree": "5e807869010254b3397ecd41c6cc58f78bce081f",
               "tree_patch": {
-                "bytes": 2070,
-                "sha256": "22b98b2ec5e3bc22f9e4ebe456d5f25e28ef0748b304df8ee6a6cad52fcd05ca"
+                "bytes": 2056,
+                "sha256": "4daedf165834d1a9aa890314a56e14b29cabea0d1ba098cc977e631145c1b0f6"
               }
             },
             "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
           },
-          "release_id": "f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b"
+          "release_id": "9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca"
         }
       ],
       "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
@@ -1048,11 +1161,21 @@
       "package": "files-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003",
+          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "files-next",
-            "record_id": "f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003",
+            "record_id": "cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1077,7 +1200,7 @@
               "media_type": "image/png",
               "name": "01-before-files-next-desktop.png",
               "sha256": "534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
-              "url": "/api/catalog/releases/f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003/media/534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
+              "url": "/api/catalog/releases/cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172/media/534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
               "width": 1280
             },
             {
@@ -1087,7 +1210,7 @@
               "media_type": "image/png",
               "name": "01-after-files-next-desktop.png",
               "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
-              "url": "/api/catalog/releases/f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+              "url": "/api/catalog/releases/cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
               "width": 1280
             }
           ],
@@ -1102,7 +1225,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+              "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
             },
             "media": [
               {
@@ -1135,13 +1258,13 @@
               "name": "files-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "a488950e4af78f5eccda1c7ede36d9e62fec3dbf"
+              "tree": "8cddb76cd293b86ba0a39c10ace2fda4a56662a1"
             },
             "parent_patch": {
-              "bytes": 1967,
-              "sha256": "5e7133a12ec576107296d74c781b8f2995f8a34f2a839b97ec3f84cf64634600"
+              "bytes": 1953,
+              "sha256": "34299a69e51ee77fe1f5041e4bb267dd6808cea65343939f715481d67abfc197"
             },
             "precommitments": [
               {
@@ -1159,7 +1282,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/files-next/FileTree.svelte"
               ],
@@ -1168,15 +1291,15 @@
                 "sha256": "50810803d75291993a374d667ce6f3cc53766e64042fc8fac8c863f040689ff9"
               },
               "root": "frontend/src/packages/files-next",
-              "tree": "646aeac534b4de9b7677872290a8669327662bb7",
+              "tree": "f2b5b7bef97477fd71b2104fa688716af474fcbf",
               "tree_patch": {
-                "bytes": 1979,
-                "sha256": "224186eb1076eeccc59782d1222033df1d54aa13c53c2c12e5133b56187228a4"
+                "bytes": 1965,
+                "sha256": "c2dbb736e51bb79c87cf57409b096a3edd4ff9847f437530c3d2b6f039d444c7"
               }
             },
             "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
           },
-          "release_id": "f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003"
+          "release_id": "cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172"
         }
       ],
       "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
@@ -1186,11 +1309,21 @@
       "package": "slides-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be",
+          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "slides-next",
-            "record_id": "9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be",
+            "record_id": "c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1215,7 +1348,7 @@
               "media_type": "image/png",
               "name": "01-before-slides-next-desktop.png",
               "sha256": "4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
-              "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
+              "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
               "width": 1280
             },
             {
@@ -1225,7 +1358,7 @@
               "media_type": "image/png",
               "name": "01-after-slides-next-desktop.png",
               "sha256": "d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
-              "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
+              "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
               "width": 1280
             },
             {
@@ -1235,7 +1368,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-2.png",
               "sha256": "b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
-              "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
+              "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
               "width": 1280
             },
             {
@@ -1245,7 +1378,7 @@
               "media_type": "image/png",
               "name": "slides-next-desktop-3.png",
               "sha256": "dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
-              "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
+              "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
               "width": 1280
             },
             {
@@ -1255,7 +1388,7 @@
               "media_type": "image/png",
               "name": "slides-next-phone-1-mobile.png",
               "sha256": "5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
-              "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
+              "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
               "width": 390
             }
           ],
@@ -1270,7 +1403,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+              "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
             },
             "media": [
               {
@@ -1331,8 +1464,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55",
-              "tree": "e1a87042a005346140be8755bc6a125d8f564ba8"
+              "release_id": "dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7",
+              "tree": "01928b72884dc2e62c66a81f514c0ffb799427c1"
             },
             "precommitments": [
               {
@@ -1358,7 +1491,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/slides-next/App.svelte",
                 "frontend/src/packages/slides-next/Present.svelte"
@@ -1368,22 +1501,32 @@
                 "sha256": "736dbeda688d85f432e022a55cdec35e152a72fbd15beef4cbd93dce9761d395"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "24cca2786eddaf814bb3a942952aff361516809f",
+              "tree": "6cf3d168c623c228b5ec52cfc4e7d168da9a2f51",
               "tree_patch": {
-                "bytes": 2513,
-                "sha256": "44676f7e35ec77efcad126156477a9d94e0672ad4c8a514c24eec77301dd402d"
+                "bytes": 2499,
+                "sha256": "446873b19c602a072ca0a91b1371c3d4cad4d34d44d369db4196159ac6c79663"
               }
             },
             "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
           },
-          "release_id": "9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be"
+          "release_id": "c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6"
         },
         {
-          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55",
+          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "slides-next",
-            "record_id": "31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55",
+            "record_id": "dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1408,7 +1551,7 @@
               "media_type": "image/png",
               "name": "01-before-slides-next-desktop.png",
               "sha256": "343d6371336868d78e54362d241e4e2302e0eba443889a215726f2aa7813bd25",
-              "url": "/api/catalog/releases/31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55/media/343d6371336868d78e54362d241e4e2302e0eba443889a215726f2aa7813bd25",
+              "url": "/api/catalog/releases/dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7/media/343d6371336868d78e54362d241e4e2302e0eba443889a215726f2aa7813bd25",
               "width": 1280
             },
             {
@@ -1418,7 +1561,7 @@
               "media_type": "image/png",
               "name": "01-after-slides-next-desktop.png",
               "sha256": "62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
-              "url": "/api/catalog/releases/31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
+              "url": "/api/catalog/releases/dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
               "width": 1280
             }
           ],
@@ -1433,7 +1576,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+              "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
             },
             "media": [
               {
@@ -1466,13 +1609,13 @@
               "name": "slides-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "ab69fb28598cdd515a39c7e5ec5c6f4a43148795"
+              "tree": "4da328f8cfe2fab70658589623a615a59ef8ead2"
             },
             "parent_patch": {
-              "bytes": 1999,
-              "sha256": "c31ed360ed18badee2e597e6c9f09ec3759739959663417623bef46b79595a7b"
+              "bytes": 1985,
+              "sha256": "a55004e9a402a1dfc5711495cbc70e45696a7fbad1a843ef7f2baa4c3cd5d1bc"
             },
             "precommitments": [
               {
@@ -1490,7 +1633,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/slides-next/Deck.svelte"
               ],
@@ -1499,15 +1642,15 @@
                 "sha256": "85c3dca79c4f5726963c21fb982d3e905359a8676a7c4527b26d242f17b67dfc"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "e1a87042a005346140be8755bc6a125d8f564ba8",
+              "tree": "01928b72884dc2e62c66a81f514c0ffb799427c1",
               "tree_patch": {
-                "bytes": 2109,
-                "sha256": "8240abe00f12a30cb36720c368fed9b268246548c34aa7b29bd76817f96f4129"
+                "bytes": 2095,
+                "sha256": "c34c9b0c7e39c6509ce564a5e1beb468de4f87f7f22ca30fdf2a6e2bc8c6efe9"
               }
             },
             "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
           },
-          "release_id": "31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55"
+          "release_id": "dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7"
         }
       ],
       "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
@@ -1517,12 +1660,22 @@
       "package": "slides-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2",
+          "canonical_id": "obj:choir.package_release:b3duZXI:41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "slides-next",
-            "prev_version_digest": "537edcab3670529336847bea34888ce3ed956f99f3e0c2bc0cc1476f119c6804",
-            "record_id": "be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2",
+            "prev_version_digest": "e70e5f7d07b3a085366e511ebe11c1bebfa8006a470dc965895581ec024d182c",
+            "record_id": "41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1547,7 +1700,7 @@
               "media_type": "image/png",
               "name": "01-before-slides-next-desktop.png",
               "sha256": "9f0ac21f9cf5c452bb0058ea8a4485494f06935ae9b88573736b7402b8ea47ac",
-              "url": "/api/catalog/releases/be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2/media/9f0ac21f9cf5c452bb0058ea8a4485494f06935ae9b88573736b7402b8ea47ac",
+              "url": "/api/catalog/releases/41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff/media/9f0ac21f9cf5c452bb0058ea8a4485494f06935ae9b88573736b7402b8ea47ac",
               "width": 1280
             },
             {
@@ -1557,7 +1710,7 @@
               "media_type": "image/png",
               "name": "01-after-slides-next-desktop.png",
               "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
-              "url": "/api/catalog/releases/be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+              "url": "/api/catalog/releases/41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
               "width": 1280
             }
           ],
@@ -1572,7 +1725,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+              "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
             },
             "media": [
               {
@@ -1606,8 +1759,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
-              "tree": "79d653a6872105e1ee43398bc3573ce3aa8c33e9"
+              "release_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
+              "tree": "218109a4bcc23dae4b0504d2922177f6ab5a6666"
             },
             "precommitments": [
               {
@@ -1623,7 +1776,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/slides-next/slide-render.js"
               ],
@@ -1632,22 +1785,32 @@
                 "sha256": "c4e170ab5bfb8b6dcec4d86174209d1097e39d942cd45e23c9eb90699a3f2edf"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "b5cfaf06052b8a287fd7fd23a03989a50c30c0a3",
+              "tree": "bdf4a23c2417e9620cc5c67d62bd1682213ef683",
               "tree_patch": {
-                "bytes": 2068,
-                "sha256": "4f8dedf20164a1e4f5b2a2b3c4e42bafa4b6e515e52e6cfa6e6dc63ef1c81681"
+                "bytes": 2054,
+                "sha256": "f87534a9e22afd7e3837d204e7122c5cc71d04e6272f9ac35b4265afb7a9e218"
               }
             },
             "track": "owner"
           },
-          "release_id": "be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2"
+          "release_id": "41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff"
         },
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
+          "canonical_id": "obj:choir.package_release:b3duZXI:5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "slides-next",
-            "record_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
+            "record_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1672,7 +1835,7 @@
               "media_type": "image/png",
               "name": "01-before-slides-next-desktop.png",
               "sha256": "21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
-              "url": "/api/catalog/releases/ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128/media/21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
+              "url": "/api/catalog/releases/5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5/media/21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
               "width": 1280
             },
             {
@@ -1682,7 +1845,7 @@
               "media_type": "image/png",
               "name": "01-after-slides-next-desktop.png",
               "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
-              "url": "/api/catalog/releases/ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+              "url": "/api/catalog/releases/5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
               "width": 1280
             }
           ],
@@ -1697,7 +1860,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+              "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
             },
             "media": [
               {
@@ -1731,8 +1894,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67",
-              "tree": "9ed0ca26a33920e49f0f97e105c41f516450db29"
+              "release_id": "66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81",
+              "tree": "d4e22d3c5222a82b51bf9686eff9a798d5742ada"
             },
             "precommitments": [
               {
@@ -1750,7 +1913,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/slides-next/Deck.svelte"
               ],
@@ -1759,22 +1922,32 @@
                 "sha256": "d52881f8db2bdec3da3cfa00f9c2525f9ff75536c54a7fbc07628abbcb2f4679"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "79d653a6872105e1ee43398bc3573ce3aa8c33e9",
+              "tree": "218109a4bcc23dae4b0504d2922177f6ab5a6666",
               "tree_patch": {
-                "bytes": 2045,
-                "sha256": "98e0293c1ce0a9f64831703341574cf6f896e5af4899f0cda713e9cfab79b859"
+                "bytes": 2031,
+                "sha256": "81c4178531ce5fab5f458f4c0a76090f7ced31718bc8931e75b457e7259c11c8"
               }
             },
             "track": "owner"
           },
-          "release_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128"
+          "release_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5"
         },
         {
-          "canonical_id": "obj:choir.package_release:b3duZXI:7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67",
+          "canonical_id": "obj:choir.package_release:b3duZXI:66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "slides-next",
-            "record_id": "7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67",
+            "record_id": "66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1799,7 +1972,7 @@
               "media_type": "image/png",
               "name": "01-before-slides-next-desktop.png",
               "sha256": "0e610bbae6c713b790f5083a1d7ae774ee4c0a847e07e83ac57e0339ec2a03e2",
-              "url": "/api/catalog/releases/7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67/media/0e610bbae6c713b790f5083a1d7ae774ee4c0a847e07e83ac57e0339ec2a03e2",
+              "url": "/api/catalog/releases/66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81/media/0e610bbae6c713b790f5083a1d7ae774ee4c0a847e07e83ac57e0339ec2a03e2",
               "width": 1280
             },
             {
@@ -1809,7 +1982,7 @@
               "media_type": "image/png",
               "name": "01-after-slides-next-desktop.png",
               "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
-              "url": "/api/catalog/releases/7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+              "url": "/api/catalog/releases/66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
               "width": 1280
             }
           ],
@@ -1824,7 +1997,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+              "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
             },
             "media": [
               {
@@ -1857,13 +2030,13 @@
               "name": "slides-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "ab69fb28598cdd515a39c7e5ec5c6f4a43148795"
+              "tree": "4da328f8cfe2fab70658589623a615a59ef8ead2"
             },
             "parent_patch": {
-              "bytes": 1999,
-              "sha256": "c31ed360ed18badee2e597e6c9f09ec3759739959663417623bef46b79595a7b"
+              "bytes": 1985,
+              "sha256": "a55004e9a402a1dfc5711495cbc70e45696a7fbad1a843ef7f2baa4c3cd5d1bc"
             },
             "precommitments": [
               {
@@ -1881,7 +2054,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/slides-next/slide-render.js"
               ],
@@ -1890,15 +2063,15 @@
                 "sha256": "62ca4d3d1514ece2ee4b69d1281c737e8666b0b59c04bc76f6edb211adbf2ac5"
               },
               "root": "frontend/src/packages/slides-next",
-              "tree": "9ed0ca26a33920e49f0f97e105c41f516450db29",
+              "tree": "d4e22d3c5222a82b51bf9686eff9a798d5742ada",
               "tree_patch": {
-                "bytes": 2026,
-                "sha256": "3a18a5a1a9c8e7c7d1a6240282308bcf88bec4fb200401a9c944fc741a623215"
+                "bytes": 2012,
+                "sha256": "88c53b23b55c877bb9521cd49f626ead8ee8191178039fcebd81e5da9a6f37c8"
               }
             },
             "track": "owner"
           },
-          "release_id": "7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67"
+          "release_id": "66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81"
         }
       ],
       "track": "owner"
@@ -1908,11 +2081,21 @@
       "package": "library-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "library-next",
-            "record_id": "7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a",
+            "record_id": "37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -1937,7 +2120,7 @@
               "media_type": "image/png",
               "name": "01-before-library-next-desktop.png",
               "sha256": "ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
-              "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
+              "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
               "width": 1280
             },
             {
@@ -1947,7 +2130,7 @@
               "media_type": "image/png",
               "name": "01-after-library-next-desktop.png",
               "sha256": "e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
-              "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
+              "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
               "width": 1280
             },
             {
@@ -1957,7 +2140,7 @@
               "media_type": "image/png",
               "name": "library-next-desktop-2.png",
               "sha256": "9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
-              "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
+              "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
               "width": 1280
             },
             {
@@ -1967,7 +2150,7 @@
               "media_type": "image/png",
               "name": "library-next-phone-1-mobile.png",
               "sha256": "5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
-              "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
+              "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
               "width": 390
             },
             {
@@ -1976,7 +2159,7 @@
               "media_type": "video/webm",
               "name": "library-next-walkthrough.webm",
               "sha256": "34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e",
-              "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
+              "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
             }
           ],
           "published_at": "2026-11-03T02:53:00.000000Z",
@@ -1990,7 +2173,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "30f24050c0a3f50fcbcffd8c750e715ef83b2688b497cf3f22b43cc55ed7707f"
+              "sha256": "457ee499e06696e843163bf849f56678ec35ad703365e02d4594ef75169e03bb"
             },
             "media": [
               {
@@ -2049,8 +2232,8 @@
             },
             "parent": {
               "kind": "release",
-              "release_id": "8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5",
-              "tree": "2d1693e2f4c254565d6696f35a7ba2ad37ece3e2"
+              "release_id": "87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a",
+              "tree": "14b9dda0afe14678cf9578358cfab7b0888387c6"
             },
             "precommitments": [
               {
@@ -2066,7 +2249,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/library-next/Catalog.svelte",
                 "frontend/src/packages/library-next/ReleasePane.svelte"
@@ -2076,22 +2259,32 @@
                 "sha256": "f2ae8d92ef012aa8301322f9994e68d90620386e343e0921e6378678540329fa"
               },
               "root": "frontend/src/packages/library-next",
-              "tree": "5da1d0bc3232ad55ae0d5f8e2157a86b9ef006b3",
+              "tree": "fd1c8924c6128b96c37b142baf5adeffcbc9984e",
               "tree_patch": {
-                "bytes": 2519,
-                "sha256": "5f53b1c4d293e029168f6e5e0742363c69282d5478a14d1ac651c8ebb2ae6a32"
+                "bytes": 2505,
+                "sha256": "7613e207ab0c9dbfca3a2d74a1e06594e7d68df12a313eb1ff18379f66a1004d"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a"
+          "release_id": "37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff"
         },
         {
-          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "library-next",
-            "record_id": "8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5",
+            "record_id": "87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -2116,7 +2309,7 @@
               "media_type": "image/png",
               "name": "01-before-library-next-desktop.png",
               "sha256": "a0397a01f5af6ffb4f8017dd69dc8dedb1bd62e0b99fc91c59ae6527cff7c981",
-              "url": "/api/catalog/releases/8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5/media/a0397a01f5af6ffb4f8017dd69dc8dedb1bd62e0b99fc91c59ae6527cff7c981",
+              "url": "/api/catalog/releases/87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a/media/a0397a01f5af6ffb4f8017dd69dc8dedb1bd62e0b99fc91c59ae6527cff7c981",
               "width": 1280
             },
             {
@@ -2126,7 +2319,7 @@
               "media_type": "image/png",
               "name": "01-after-library-next-desktop.png",
               "sha256": "228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
-              "url": "/api/catalog/releases/8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
+              "url": "/api/catalog/releases/87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
               "width": 1280
             },
             {
@@ -2136,7 +2329,7 @@
               "media_type": "image/png",
               "name": "library-next-phone-1-mobile.png",
               "sha256": "cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
-              "url": "/api/catalog/releases/8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
+              "url": "/api/catalog/releases/87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
               "width": 390
             }
           ],
@@ -2151,7 +2344,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "30f24050c0a3f50fcbcffd8c750e715ef83b2688b497cf3f22b43cc55ed7707f"
+              "sha256": "457ee499e06696e843163bf849f56678ec35ad703365e02d4594ef75169e03bb"
             },
             "media": [
               {
@@ -2193,13 +2386,13 @@
               "name": "library-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "1dae613d6fdf0f27eef08661f24cc68ec8c52cbe"
+              "tree": "29b0128eedb2a7cfec1df5513249933311f9df94"
             },
             "parent_patch": {
-              "bytes": 2026,
-              "sha256": "a730d7a4bcbf42ac4874e8626b949793a99eecd2a02803bdd8fa234d952474d8"
+              "bytes": 2012,
+              "sha256": "f970cfb51690a229f88e5594150f0b9a6e2ca6bd1254ac80edfd07e0c3502abf"
             },
             "precommitments": [
               {
@@ -2217,7 +2410,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/library-next/Catalog.svelte"
               ],
@@ -2226,15 +2419,15 @@
                 "sha256": "82bd845b266cab4e18c19b8682acf4d6804d393e23b0ed629c0f4312e397de5b"
               },
               "root": "frontend/src/packages/library-next",
-              "tree": "2d1693e2f4c254565d6696f35a7ba2ad37ece3e2",
+              "tree": "14b9dda0afe14678cf9578358cfab7b0888387c6",
               "tree_patch": {
-                "bytes": 2140,
-                "sha256": "3d8b9dad2a2dcfda13cec75b8c6d550b1fd5cdbbfa9b02501954b5fee913905b"
+                "bytes": 2126,
+                "sha256": "ddba5bab35962e75592d930182178cafa3dfc284f8ccd4f5c60fd91d5b5fe44b"
               }
             },
             "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
-          "release_id": "8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5"
+          "release_id": "87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a"
         }
       ],
       "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
@@ -2244,11 +2437,21 @@
       "package": "library-next",
       "releases": [
         {
-          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c",
+          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431",
           "description": "Read",
+          "facts": {
+            "ceiling": [],
+            "facets": [],
+            "kind": "app",
+            "level": "default",
+            "recorded": true,
+            "slots": [],
+            "tier": "T1"
+          },
+          "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
           "listing": {
             "package": "library-next",
-            "record_id": "00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c",
+            "record_id": "7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431",
             "record_kind": "package_release",
             "scopes": [
               "owner",
@@ -2273,7 +2476,7 @@
               "media_type": "image/png",
               "name": "01-before-library-next-desktop.png",
               "sha256": "bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
-              "url": "/api/catalog/releases/00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c/media/bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
+              "url": "/api/catalog/releases/7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431/media/bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
               "width": 1280
             },
             {
@@ -2283,7 +2486,7 @@
               "media_type": "image/png",
               "name": "01-after-library-next-desktop.png",
               "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
-              "url": "/api/catalog/releases/00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+              "url": "/api/catalog/releases/7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
               "width": 1280
             }
           ],
@@ -2298,7 +2501,7 @@
               "level": "default",
               "opens_count": 0,
               "schema": "choir.package/v2",
-              "sha256": "30f24050c0a3f50fcbcffd8c750e715ef83b2688b497cf3f22b43cc55ed7707f"
+              "sha256": "457ee499e06696e843163bf849f56678ec35ad703365e02d4594ef75169e03bb"
             },
             "media": [
               {
@@ -2331,13 +2534,13 @@
               "name": "library-next"
             },
             "parent": {
-              "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "kind": "base",
-              "tree": "1dae613d6fdf0f27eef08661f24cc68ec8c52cbe"
+              "tree": "29b0128eedb2a7cfec1df5513249933311f9df94"
             },
             "parent_patch": {
-              "bytes": 2026,
-              "sha256": "a730d7a4bcbf42ac4874e8626b949793a99eecd2a02803bdd8fa234d952474d8"
+              "bytes": 2012,
+              "sha256": "f970cfb51690a229f88e5594150f0b9a6e2ca6bd1254ac80edfd07e0c3502abf"
             },
             "precommitments": [
               {
@@ -2355,7 +2558,7 @@
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+              "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
               "changed_paths": [
                 "frontend/src/packages/library-next/catalog-client.js"
               ],
@@ -2364,15 +2567,15 @@
                 "sha256": "ca9c475c96cdd3931bd9e5fc0b5c0ad08a4198fd0800dd3fe383a58fdec79a98"
               },
               "root": "frontend/src/packages/library-next",
-              "tree": "9bee2427f15297057032da898557ecf25d9c48d2",
+              "tree": "076fdbfe1355ba5425ede888a3475fe4624cec3e",
               "tree_patch": {
-                "bytes": 2124,
-                "sha256": "859be31f9d6765e4fce88b2e1b72cb99d481d8fbc30333014309ce76889fbb2d"
+                "bytes": 2110,
+                "sha256": "2c71299766a043646d59f83c5d7dcaf650fa00c63636468208a3d0d34f0cf90e"
               }
             },
             "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
           },
-          "release_id": "00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c"
+          "release_id": "7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431"
         }
       ],
       "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
@@ -2380,11 +2583,21 @@
   ],
   "releases": [
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "library-next",
-        "record_id": "7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a",
+        "record_id": "37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2409,7 +2622,7 @@
           "media_type": "image/png",
           "name": "01-before-library-next-desktop.png",
           "sha256": "ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
-          "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
+          "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/ef0dd99bcb62487b9f6f5f674a9db397b47e9c8a92a268731bd35dd98bb8ff34",
           "width": 1280
         },
         {
@@ -2419,7 +2632,7 @@
           "media_type": "image/png",
           "name": "01-after-library-next-desktop.png",
           "sha256": "e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
-          "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
+          "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/e6dfc014963ebef4ba834373a0348d7de2ba84b1a87395145cd183a990cfb98c",
           "width": 1280
         },
         {
@@ -2429,7 +2642,7 @@
           "media_type": "image/png",
           "name": "library-next-desktop-2.png",
           "sha256": "9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
-          "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
+          "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/9feaf9e135f16283c901a313aa654d49b96e60606f80ede23cf32488eddaea86",
           "width": 1280
         },
         {
@@ -2439,7 +2652,7 @@
           "media_type": "image/png",
           "name": "library-next-phone-1-mobile.png",
           "sha256": "5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
-          "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
+          "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/5f9bcb10dee69ce5f93ff2050eb660d98fe7e80e14ccfe3fb05838f93b14974a",
           "width": 390
         },
         {
@@ -2448,7 +2661,7 @@
           "media_type": "video/webm",
           "name": "library-next-walkthrough.webm",
           "sha256": "34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e",
-          "url": "/api/catalog/releases/7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
+          "url": "/api/catalog/releases/37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff/media/34c37cc3a1daeb1bac2567cb8473928ae54ddb022ed96e35c91a64832238631e"
         }
       ],
       "published_at": "2026-11-03T02:53:00.000000Z",
@@ -2462,7 +2675,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "30f24050c0a3f50fcbcffd8c750e715ef83b2688b497cf3f22b43cc55ed7707f"
+          "sha256": "457ee499e06696e843163bf849f56678ec35ad703365e02d4594ef75169e03bb"
         },
         "media": [
           {
@@ -2521,8 +2734,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5",
-          "tree": "2d1693e2f4c254565d6696f35a7ba2ad37ece3e2"
+          "release_id": "87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a",
+          "tree": "14b9dda0afe14678cf9578358cfab7b0888387c6"
         },
         "precommitments": [
           {
@@ -2538,7 +2751,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/library-next/Catalog.svelte",
             "frontend/src/packages/library-next/ReleasePane.svelte"
@@ -2548,22 +2761,32 @@
             "sha256": "f2ae8d92ef012aa8301322f9994e68d90620386e343e0921e6378678540329fa"
           },
           "root": "frontend/src/packages/library-next",
-          "tree": "5da1d0bc3232ad55ae0d5f8e2157a86b9ef006b3",
+          "tree": "fd1c8924c6128b96c37b142baf5adeffcbc9984e",
           "tree_patch": {
-            "bytes": 2519,
-            "sha256": "5f53b1c4d293e029168f6e5e0742363c69282d5478a14d1ac651c8ebb2ae6a32"
+            "bytes": 2505,
+            "sha256": "7613e207ab0c9dbfca3a2d74a1e06594e7d68df12a313eb1ff18379f66a1004d"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "7258ad0b580e233ed0852b5c8d154b9231dbc84562707aadb62c04548f85b70a"
+      "release_id": "37fb8ef69ad172266748dd254318c34596dac1244f5d54fd4ce457174fb859ff"
     },
     {
-      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c",
+      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "library-next",
-        "record_id": "00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c",
+        "record_id": "7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2588,7 +2811,7 @@
           "media_type": "image/png",
           "name": "01-before-library-next-desktop.png",
           "sha256": "bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
-          "url": "/api/catalog/releases/00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c/media/bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
+          "url": "/api/catalog/releases/7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431/media/bc6f944d8495d3e2b524e1fb3579f98f73416f5b5e23a7c215df7757eb2c4399",
           "width": 1280
         },
         {
@@ -2598,7 +2821,7 @@
           "media_type": "image/png",
           "name": "01-after-library-next-desktop.png",
           "sha256": "b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
-          "url": "/api/catalog/releases/00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
+          "url": "/api/catalog/releases/7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431/media/b8fb0751bbb01ea40980580b64eb67bac8845df22b8c68f0f50f221e72b2417f",
           "width": 1280
         }
       ],
@@ -2613,7 +2836,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "30f24050c0a3f50fcbcffd8c750e715ef83b2688b497cf3f22b43cc55ed7707f"
+          "sha256": "457ee499e06696e843163bf849f56678ec35ad703365e02d4594ef75169e03bb"
         },
         "media": [
           {
@@ -2646,13 +2869,13 @@
           "name": "library-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "1dae613d6fdf0f27eef08661f24cc68ec8c52cbe"
+          "tree": "29b0128eedb2a7cfec1df5513249933311f9df94"
         },
         "parent_patch": {
-          "bytes": 2026,
-          "sha256": "a730d7a4bcbf42ac4874e8626b949793a99eecd2a02803bdd8fa234d952474d8"
+          "bytes": 2012,
+          "sha256": "f970cfb51690a229f88e5594150f0b9a6e2ca6bd1254ac80edfd07e0c3502abf"
         },
         "precommitments": [
           {
@@ -2670,7 +2893,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/library-next/catalog-client.js"
           ],
@@ -2679,22 +2902,32 @@
             "sha256": "ca9c475c96cdd3931bd9e5fc0b5c0ad08a4198fd0800dd3fe383a58fdec79a98"
           },
           "root": "frontend/src/packages/library-next",
-          "tree": "9bee2427f15297057032da898557ecf25d9c48d2",
+          "tree": "076fdbfe1355ba5425ede888a3475fe4624cec3e",
           "tree_patch": {
-            "bytes": 2124,
-            "sha256": "859be31f9d6765e4fce88b2e1b72cb99d481d8fbc30333014309ce76889fbb2d"
+            "bytes": 2110,
+            "sha256": "2c71299766a043646d59f83c5d7dcaf650fa00c63636468208a3d0d34f0cf90e"
           }
         },
         "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
       },
-      "release_id": "00981a3b831434dffd67368253d7de981a3f5e9bf52a1e182727600ad62cc12c"
+      "release_id": "7530c3b1d73fb6c0ce87fe514fd202644b37cea60bb496f1862d15d20c579431"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "library-next",
-        "record_id": "8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5",
+        "record_id": "87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2719,7 +2952,7 @@
           "media_type": "image/png",
           "name": "01-before-library-next-desktop.png",
           "sha256": "a0397a01f5af6ffb4f8017dd69dc8dedb1bd62e0b99fc91c59ae6527cff7c981",
-          "url": "/api/catalog/releases/8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5/media/a0397a01f5af6ffb4f8017dd69dc8dedb1bd62e0b99fc91c59ae6527cff7c981",
+          "url": "/api/catalog/releases/87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a/media/a0397a01f5af6ffb4f8017dd69dc8dedb1bd62e0b99fc91c59ae6527cff7c981",
           "width": 1280
         },
         {
@@ -2729,7 +2962,7 @@
           "media_type": "image/png",
           "name": "01-after-library-next-desktop.png",
           "sha256": "228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
-          "url": "/api/catalog/releases/8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
+          "url": "/api/catalog/releases/87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a/media/228c12faec77c1ef9cb251eb2abfa330c1572a82541e817c1159611d1547bf9e",
           "width": 1280
         },
         {
@@ -2739,7 +2972,7 @@
           "media_type": "image/png",
           "name": "library-next-phone-1-mobile.png",
           "sha256": "cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
-          "url": "/api/catalog/releases/8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
+          "url": "/api/catalog/releases/87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a/media/cf6481b630d5e7d6a44a55daa9d6a2829e8b1789abb062233b871d82caf5533f",
           "width": 390
         }
       ],
@@ -2754,7 +2987,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "30f24050c0a3f50fcbcffd8c750e715ef83b2688b497cf3f22b43cc55ed7707f"
+          "sha256": "457ee499e06696e843163bf849f56678ec35ad703365e02d4594ef75169e03bb"
         },
         "media": [
           {
@@ -2796,13 +3029,13 @@
           "name": "library-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "1dae613d6fdf0f27eef08661f24cc68ec8c52cbe"
+          "tree": "29b0128eedb2a7cfec1df5513249933311f9df94"
         },
         "parent_patch": {
-          "bytes": 2026,
-          "sha256": "a730d7a4bcbf42ac4874e8626b949793a99eecd2a02803bdd8fa234d952474d8"
+          "bytes": 2012,
+          "sha256": "f970cfb51690a229f88e5594150f0b9a6e2ca6bd1254ac80edfd07e0c3502abf"
         },
         "precommitments": [
           {
@@ -2820,7 +3053,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/library-next/Catalog.svelte"
           ],
@@ -2829,23 +3062,33 @@
             "sha256": "82bd845b266cab4e18c19b8682acf4d6804d393e23b0ed629c0f4312e397de5b"
           },
           "root": "frontend/src/packages/library-next",
-          "tree": "2d1693e2f4c254565d6696f35a7ba2ad37ece3e2",
+          "tree": "14b9dda0afe14678cf9578358cfab7b0888387c6",
           "tree_patch": {
-            "bytes": 2140,
-            "sha256": "3d8b9dad2a2dcfda13cec75b8c6d550b1fd5cdbbfa9b02501954b5fee913905b"
+            "bytes": 2126,
+            "sha256": "ddba5bab35962e75592d930182178cafa3dfc284f8ccd4f5c60fd91d5b5fe44b"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "8142d0394ce9d1ce2fee003ea2e7781092ee00c0c781737be00066299ba758f5"
+      "release_id": "87e7dc15a3463955cffc8730edae6902c3324f150398af85154c25afcc41f99a"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2",
+      "canonical_id": "obj:choir.package_release:b3duZXI:41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "slides-next",
-        "prev_version_digest": "537edcab3670529336847bea34888ce3ed956f99f3e0c2bc0cc1476f119c6804",
-        "record_id": "be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2",
+        "prev_version_digest": "e70e5f7d07b3a085366e511ebe11c1bebfa8006a470dc965895581ec024d182c",
+        "record_id": "41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2870,7 +3113,7 @@
           "media_type": "image/png",
           "name": "01-before-slides-next-desktop.png",
           "sha256": "9f0ac21f9cf5c452bb0058ea8a4485494f06935ae9b88573736b7402b8ea47ac",
-          "url": "/api/catalog/releases/be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2/media/9f0ac21f9cf5c452bb0058ea8a4485494f06935ae9b88573736b7402b8ea47ac",
+          "url": "/api/catalog/releases/41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff/media/9f0ac21f9cf5c452bb0058ea8a4485494f06935ae9b88573736b7402b8ea47ac",
           "width": 1280
         },
         {
@@ -2880,7 +3123,7 @@
           "media_type": "image/png",
           "name": "01-after-slides-next-desktop.png",
           "sha256": "f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
-          "url": "/api/catalog/releases/be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
+          "url": "/api/catalog/releases/41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff/media/f2dee5d9c1f9b19e50dc43bed8a851fb61c033140d33011d8e9f03e6e38853d6",
           "width": 1280
         }
       ],
@@ -2895,7 +3138,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+          "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
         },
         "media": [
           {
@@ -2929,8 +3172,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
-          "tree": "79d653a6872105e1ee43398bc3573ce3aa8c33e9"
+          "release_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
+          "tree": "218109a4bcc23dae4b0504d2922177f6ab5a6666"
         },
         "precommitments": [
           {
@@ -2946,7 +3189,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/slides-next/slide-render.js"
           ],
@@ -2955,22 +3198,32 @@
             "sha256": "c4e170ab5bfb8b6dcec4d86174209d1097e39d942cd45e23c9eb90699a3f2edf"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "b5cfaf06052b8a287fd7fd23a03989a50c30c0a3",
+          "tree": "bdf4a23c2417e9620cc5c67d62bd1682213ef683",
           "tree_patch": {
-            "bytes": 2068,
-            "sha256": "4f8dedf20164a1e4f5b2a2b3c4e42bafa4b6e515e52e6cfa6e6dc63ef1c81681"
+            "bytes": 2054,
+            "sha256": "f87534a9e22afd7e3837d204e7122c5cc71d04e6272f9ac35b4265afb7a9e218"
           }
         },
         "track": "owner"
       },
-      "release_id": "be2cfd7b742075894efebde97d046c3863d262e10843d690cd1101b04ac9d9c2"
+      "release_id": "41427824475cb06da6573c1967b2d87e0b758fd96e37c6e0a7008d5a106c31ff"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
+      "canonical_id": "obj:choir.package_release:b3duZXI:5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "slides-next",
-        "record_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128",
+        "record_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -2995,7 +3248,7 @@
           "media_type": "image/png",
           "name": "01-before-slides-next-desktop.png",
           "sha256": "21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
-          "url": "/api/catalog/releases/ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128/media/21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
+          "url": "/api/catalog/releases/5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5/media/21ad2f3a88ba26135ba6c2715a6771107e36da3e4d46e2b28562bf60f6f6fde2",
           "width": 1280
         },
         {
@@ -3005,7 +3258,7 @@
           "media_type": "image/png",
           "name": "01-after-slides-next-desktop.png",
           "sha256": "056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
-          "url": "/api/catalog/releases/ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
+          "url": "/api/catalog/releases/5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5/media/056004afe57c133c9b5ec50c431a85a1785c0a93dd2f1754531d0ff6fc1e582f",
           "width": 1280
         }
       ],
@@ -3020,7 +3273,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+          "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
         },
         "media": [
           {
@@ -3054,8 +3307,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67",
-          "tree": "9ed0ca26a33920e49f0f97e105c41f516450db29"
+          "release_id": "66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81",
+          "tree": "d4e22d3c5222a82b51bf9686eff9a798d5742ada"
         },
         "precommitments": [
           {
@@ -3073,7 +3326,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/slides-next/Deck.svelte"
           ],
@@ -3082,22 +3335,32 @@
             "sha256": "d52881f8db2bdec3da3cfa00f9c2525f9ff75536c54a7fbc07628abbcb2f4679"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "79d653a6872105e1ee43398bc3573ce3aa8c33e9",
+          "tree": "218109a4bcc23dae4b0504d2922177f6ab5a6666",
           "tree_patch": {
-            "bytes": 2045,
-            "sha256": "98e0293c1ce0a9f64831703341574cf6f896e5af4899f0cda713e9cfab79b859"
+            "bytes": 2031,
+            "sha256": "81c4178531ce5fab5f458f4c0a76090f7ced31718bc8931e75b457e7259c11c8"
           }
         },
         "track": "owner"
       },
-      "release_id": "ccd301bfabc3d553484a8e8b2b4517c47b8f8eac56916cd537d3bc76e7560128"
+      "release_id": "5c28ddb1a9f9770cb9e2aa55c7658cc74850502c701ecc0e820cf9a9205f3da5"
     },
     {
-      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be",
+      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "slides-next",
-        "record_id": "9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be",
+        "record_id": "c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3122,7 +3385,7 @@
           "media_type": "image/png",
           "name": "01-before-slides-next-desktop.png",
           "sha256": "4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
-          "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
+          "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/4b58dd805ee2dbe6b404674bd2e9da4d702831022757d835f1901ab7b54f1d18",
           "width": 1280
         },
         {
@@ -3132,7 +3395,7 @@
           "media_type": "image/png",
           "name": "01-after-slides-next-desktop.png",
           "sha256": "d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
-          "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
+          "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/d42c9b938c82e3aaf2d8317b186a7c7ddd3348fad15fe6e68528b427b29075e7",
           "width": 1280
         },
         {
@@ -3142,7 +3405,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-2.png",
           "sha256": "b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
-          "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
+          "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/b8092067e1de76c370645ae594237d015caf3c88ccc90870deacef75b289e39b",
           "width": 1280
         },
         {
@@ -3152,7 +3415,7 @@
           "media_type": "image/png",
           "name": "slides-next-desktop-3.png",
           "sha256": "dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
-          "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
+          "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/dd4bb0b242898767e9c9d51090135200a9be6b3f0646a5d4d80ed9c130ce806b",
           "width": 1280
         },
         {
@@ -3162,7 +3425,7 @@
           "media_type": "image/png",
           "name": "slides-next-phone-1-mobile.png",
           "sha256": "5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
-          "url": "/api/catalog/releases/9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
+          "url": "/api/catalog/releases/c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6/media/5af49d467962bd2f5c2e009f3e00070a9f676c6e7c9eb41b12a01b40f2b83787",
           "width": 390
         }
       ],
@@ -3177,7 +3440,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+          "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
         },
         "media": [
           {
@@ -3238,8 +3501,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55",
-          "tree": "e1a87042a005346140be8755bc6a125d8f564ba8"
+          "release_id": "dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7",
+          "tree": "01928b72884dc2e62c66a81f514c0ffb799427c1"
         },
         "precommitments": [
           {
@@ -3265,7 +3528,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/slides-next/App.svelte",
             "frontend/src/packages/slides-next/Present.svelte"
@@ -3275,22 +3538,32 @@
             "sha256": "736dbeda688d85f432e022a55cdec35e152a72fbd15beef4cbd93dce9761d395"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "24cca2786eddaf814bb3a942952aff361516809f",
+          "tree": "6cf3d168c623c228b5ec52cfc4e7d168da9a2f51",
           "tree_patch": {
-            "bytes": 2513,
-            "sha256": "44676f7e35ec77efcad126156477a9d94e0672ad4c8a514c24eec77301dd402d"
+            "bytes": 2499,
+            "sha256": "446873b19c602a072ca0a91b1371c3d4cad4d34d44d369db4196159ac6c79663"
           }
         },
         "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
       },
-      "release_id": "9c849341d45dbd407feac37cb16152d4fefa91b3f187ca4b19b99f39bcd9a9be"
+      "release_id": "c49ca0ad8343349956a329694f1b63c42f65170023ed2114c301fb2e9e07c4f6"
     },
     {
-      "canonical_id": "obj:choir.package_release:b3duZXI:7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67",
+      "canonical_id": "obj:choir.package_release:b3duZXI:66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "slides-next",
-        "record_id": "7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67",
+        "record_id": "66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3315,7 +3588,7 @@
           "media_type": "image/png",
           "name": "01-before-slides-next-desktop.png",
           "sha256": "0e610bbae6c713b790f5083a1d7ae774ee4c0a847e07e83ac57e0339ec2a03e2",
-          "url": "/api/catalog/releases/7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67/media/0e610bbae6c713b790f5083a1d7ae774ee4c0a847e07e83ac57e0339ec2a03e2",
+          "url": "/api/catalog/releases/66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81/media/0e610bbae6c713b790f5083a1d7ae774ee4c0a847e07e83ac57e0339ec2a03e2",
           "width": 1280
         },
         {
@@ -3325,7 +3598,7 @@
           "media_type": "image/png",
           "name": "01-after-slides-next-desktop.png",
           "sha256": "f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
-          "url": "/api/catalog/releases/7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
+          "url": "/api/catalog/releases/66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81/media/f6c30aaba59a2a9c9f4f61e022ee81b3982b648f06e3f25ee965481c8ad8d963",
           "width": 1280
         }
       ],
@@ -3340,7 +3613,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+          "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
         },
         "media": [
           {
@@ -3373,13 +3646,13 @@
           "name": "slides-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "ab69fb28598cdd515a39c7e5ec5c6f4a43148795"
+          "tree": "4da328f8cfe2fab70658589623a615a59ef8ead2"
         },
         "parent_patch": {
-          "bytes": 1999,
-          "sha256": "c31ed360ed18badee2e597e6c9f09ec3759739959663417623bef46b79595a7b"
+          "bytes": 1985,
+          "sha256": "a55004e9a402a1dfc5711495cbc70e45696a7fbad1a843ef7f2baa4c3cd5d1bc"
         },
         "precommitments": [
           {
@@ -3397,7 +3670,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/slides-next/slide-render.js"
           ],
@@ -3406,22 +3679,32 @@
             "sha256": "62ca4d3d1514ece2ee4b69d1281c737e8666b0b59c04bc76f6edb211adbf2ac5"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "9ed0ca26a33920e49f0f97e105c41f516450db29",
+          "tree": "d4e22d3c5222a82b51bf9686eff9a798d5742ada",
           "tree_patch": {
-            "bytes": 2026,
-            "sha256": "3a18a5a1a9c8e7c7d1a6240282308bcf88bec4fb200401a9c944fc741a623215"
+            "bytes": 2012,
+            "sha256": "88c53b23b55c877bb9521cd49f626ead8ee8191178039fcebd81e5da9a6f37c8"
           }
         },
         "track": "owner"
       },
-      "release_id": "7f78dc35845fc750e9a37ebb0b200bef1b21e90bda28a700e42c613333e59d67"
+      "release_id": "66fbca584f819deb4e8c59f15fe13e9dc314758fd7cc337a8433bed8ffa4ec81"
     },
     {
-      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55",
+      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "slides-next",
-        "record_id": "31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55",
+        "record_id": "dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3446,7 +3729,7 @@
           "media_type": "image/png",
           "name": "01-before-slides-next-desktop.png",
           "sha256": "343d6371336868d78e54362d241e4e2302e0eba443889a215726f2aa7813bd25",
-          "url": "/api/catalog/releases/31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55/media/343d6371336868d78e54362d241e4e2302e0eba443889a215726f2aa7813bd25",
+          "url": "/api/catalog/releases/dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7/media/343d6371336868d78e54362d241e4e2302e0eba443889a215726f2aa7813bd25",
           "width": 1280
         },
         {
@@ -3456,7 +3739,7 @@
           "media_type": "image/png",
           "name": "01-after-slides-next-desktop.png",
           "sha256": "62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
-          "url": "/api/catalog/releases/31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
+          "url": "/api/catalog/releases/dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7/media/62256d169294dc09a61caa0f3dcebbd1210d3b4f94ab5a6071311d8ddb25bb93",
           "width": 1280
         }
       ],
@@ -3471,7 +3754,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "9d6abcb246331ad07cb745b1980bf6f605da9fb92a9b8d77f60b7b95de21db36"
+          "sha256": "2ba4d2981829eff2c37f9013ef9b8a44d9fc5ed448b8aaecc84d490550251615"
         },
         "media": [
           {
@@ -3504,13 +3787,13 @@
           "name": "slides-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "ab69fb28598cdd515a39c7e5ec5c6f4a43148795"
+          "tree": "4da328f8cfe2fab70658589623a615a59ef8ead2"
         },
         "parent_patch": {
-          "bytes": 1999,
-          "sha256": "c31ed360ed18badee2e597e6c9f09ec3759739959663417623bef46b79595a7b"
+          "bytes": 1985,
+          "sha256": "a55004e9a402a1dfc5711495cbc70e45696a7fbad1a843ef7f2baa4c3cd5d1bc"
         },
         "precommitments": [
           {
@@ -3528,7 +3811,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/slides-next/Deck.svelte"
           ],
@@ -3537,22 +3820,32 @@
             "sha256": "85c3dca79c4f5726963c21fb982d3e905359a8676a7c4527b26d242f17b67dfc"
           },
           "root": "frontend/src/packages/slides-next",
-          "tree": "e1a87042a005346140be8755bc6a125d8f564ba8",
+          "tree": "01928b72884dc2e62c66a81f514c0ffb799427c1",
           "tree_patch": {
-            "bytes": 2109,
-            "sha256": "8240abe00f12a30cb36720c368fed9b268246548c34aa7b29bd76817f96f4129"
+            "bytes": 2095,
+            "sha256": "c34c9b0c7e39c6509ce564a5e1beb468de4f87f7f22ca30fdf2a6e2bc8c6efe9"
           }
         },
         "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
       },
-      "release_id": "31c43ec80c63ceb1c99ca098ea23d56313d2852f351911f6014d017ae7865e55"
+      "release_id": "dd923b7a2eb89740ee3dc908640b52b3fcb0c017d7e942222bdffe7d679c60a7"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "files-next",
-        "record_id": "8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2",
+        "record_id": "1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3577,7 +3870,7 @@
           "media_type": "image/png",
           "name": "01-before-files-next-desktop.png",
           "sha256": "0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
-          "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
+          "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/0363dbe66530ade2a8b25605656fd1010ed5710b3633ce03813e0ecbea2c9f9d",
           "width": 1280
         },
         {
@@ -3587,7 +3880,7 @@
           "media_type": "image/png",
           "name": "01-after-files-next-desktop.png",
           "sha256": "d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
-          "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
+          "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/d0d71e87e947585466364220310ce663582665d1822ef743454cf64d5b74e825",
           "width": 1280
         },
         {
@@ -3597,7 +3890,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-2.png",
           "sha256": "55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
-          "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
+          "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/55416e21f6a7258b9efd002de278867a3f2642d441cc04ed59ca892642ea7fc2",
           "width": 1280
         },
         {
@@ -3607,7 +3900,7 @@
           "media_type": "image/png",
           "name": "files-next-phone-1-mobile.png",
           "sha256": "e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
-          "url": "/api/catalog/releases/8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
+          "url": "/api/catalog/releases/1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5/media/e302dc0df13872c76e09810f21b04c020ec1c738478930e6afe597bc7a763bf8",
           "width": 390
         }
       ],
@@ -3622,7 +3915,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+          "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
         },
         "media": [
           {
@@ -3674,8 +3967,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6",
-          "tree": "9705e9702d5e3afd2665d4bb916bba9d6ae35919"
+          "release_id": "b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27",
+          "tree": "2fab9568314bbb8b99ed91530313be71034dac23"
         },
         "precommitments": [
           {
@@ -3691,7 +3984,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte",
             "frontend/src/packages/files-next/files-store.js"
@@ -3701,22 +3994,32 @@
             "sha256": "93ef0ec657aa08c81b12fbbd14d6f9b9f0ab04079712e7216c49c321950ba566"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "0223e25be6b31cdcc81655a0e1db3aa0cb5afd99",
+          "tree": "bd86bad12db0d63f968a219db982e0a19ddd0f86",
           "tree_patch": {
-            "bytes": 2603,
-            "sha256": "162fd125df17f549d3f6eb8da1a6f2b91c6f30b32fc9fd81c01936cfe62a4362"
+            "bytes": 2589,
+            "sha256": "6683ec842c5b9c7f0209f9876404115e33476690999dad9f4d459301c9d79609"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "8db8de0ee16997b0989f52c33f11056a22c0943edd1553d5fc08d6f3741927f2"
+      "release_id": "1e9ec0159c0d52f6c2e453320c7d965e445f83b93265e2763d19a675d93fbbc5"
     },
     {
-      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831",
+      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "files-next",
-        "record_id": "65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831",
+        "record_id": "a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3741,7 +4044,7 @@
           "media_type": "image/png",
           "name": "01-before-files-next-desktop.png",
           "sha256": "2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
-          "url": "/api/catalog/releases/65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831/media/2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
+          "url": "/api/catalog/releases/a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d/media/2b7312941298c26c516ea066053ee854ba80025e899cafda352db8ecb7604e2f",
           "width": 1280
         },
         {
@@ -3751,7 +4054,7 @@
           "media_type": "image/png",
           "name": "01-after-files-next-desktop.png",
           "sha256": "0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
-          "url": "/api/catalog/releases/65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
+          "url": "/api/catalog/releases/a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d/media/0511364eaa729c17b3070ea4920ba198628480d347a4a43395ae4cd2ff166c9a",
           "width": 1280
         }
       ],
@@ -3766,7 +4069,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+          "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
         },
         "media": [
           {
@@ -3800,8 +4103,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b",
-          "tree": "b026ae6c241ccb4e1aa6d52f96e44e54430091d1"
+          "release_id": "9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca",
+          "tree": "5e807869010254b3397ecd41c6cc58f78bce081f"
         },
         "precommitments": [
           {
@@ -3817,7 +4120,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte",
             "frontend/src/packages/files-next/files-store.js"
@@ -3827,22 +4130,32 @@
             "sha256": "3e3c52bc409ccc8acb72390d3d954072776b93a00cb0d9b10b1466eb9315b40e"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "e455e2e429876d33c5fe285ec7a14119aea2072d",
+          "tree": "7ac0b9f649b0474f3ebbba63b30f13ebf8ddbfaf",
           "tree_patch": {
-            "bytes": 2191,
-            "sha256": "d239ad4b6dbf16c8c1b55c98e06bd3df4e09744617950c32445070a92ee08873"
+            "bytes": 2177,
+            "sha256": "94e79e6041678d3ea4119bd641d6f0e2349448ca582ed433b8036dfc96250c9e"
           }
         },
         "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
       },
-      "release_id": "65d5d7efda28439626ab07f239412ae53f0f36d7ee4c3bb619c23fe5387f0831"
+      "release_id": "a2d63aacf4c7a3b4d64cb082f12a396c4d8fd8a10b06b86cc4f06e12a562715d"
     },
     {
-      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003",
+      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "files-next",
-        "record_id": "f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003",
+        "record_id": "cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3867,7 +4180,7 @@
           "media_type": "image/png",
           "name": "01-before-files-next-desktop.png",
           "sha256": "534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
-          "url": "/api/catalog/releases/f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003/media/534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
+          "url": "/api/catalog/releases/cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172/media/534d34699ef9cd571c24b177b77118132edac090a38f60b0179293b0d10eca3d",
           "width": 1280
         },
         {
@@ -3877,7 +4190,7 @@
           "media_type": "image/png",
           "name": "01-after-files-next-desktop.png",
           "sha256": "f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
-          "url": "/api/catalog/releases/f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
+          "url": "/api/catalog/releases/cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172/media/f6fa9974151b4ae03f1b0d5db6efa3fcf68c98fe3e85723c212ebbb0f2197987",
           "width": 1280
         }
       ],
@@ -3892,7 +4205,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+          "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
         },
         "media": [
           {
@@ -3925,13 +4238,13 @@
           "name": "files-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "a488950e4af78f5eccda1c7ede36d9e62fec3dbf"
+          "tree": "8cddb76cd293b86ba0a39c10ace2fda4a56662a1"
         },
         "parent_patch": {
-          "bytes": 1967,
-          "sha256": "5e7133a12ec576107296d74c781b8f2995f8a34f2a839b97ec3f84cf64634600"
+          "bytes": 1953,
+          "sha256": "34299a69e51ee77fe1f5041e4bb267dd6808cea65343939f715481d67abfc197"
         },
         "precommitments": [
           {
@@ -3949,7 +4262,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte"
           ],
@@ -3958,22 +4271,32 @@
             "sha256": "50810803d75291993a374d667ce6f3cc53766e64042fc8fac8c863f040689ff9"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "646aeac534b4de9b7677872290a8669327662bb7",
+          "tree": "f2b5b7bef97477fd71b2104fa688716af474fcbf",
           "tree_patch": {
-            "bytes": 1979,
-            "sha256": "224186eb1076eeccc59782d1222033df1d54aa13c53c2c12e5133b56187228a4"
+            "bytes": 1965,
+            "sha256": "c2dbb736e51bb79c87cf57409b096a3edd4ff9847f437530c3d2b6f039d444c7"
           }
         },
         "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
       },
-      "release_id": "f30042333a1d119921663a5b8d8f6c16f4039fb4901a0ee978191c32005d3003"
+      "release_id": "cddb52d4e2a3a8ad480736ac7549192abf9a64a47d944055f58cf3da8bcbd172"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "files-next",
-        "record_id": "a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6",
+        "record_id": "b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -3998,7 +4321,7 @@
           "media_type": "image/png",
           "name": "01-before-files-next-desktop.png",
           "sha256": "df9630e7076b7f4b204cd58d043a5c1965e90c3a8854b6476a167dfcb2063380",
-          "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/df9630e7076b7f4b204cd58d043a5c1965e90c3a8854b6476a167dfcb2063380",
+          "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/df9630e7076b7f4b204cd58d043a5c1965e90c3a8854b6476a167dfcb2063380",
           "width": 1280
         },
         {
@@ -4008,7 +4331,7 @@
           "media_type": "image/png",
           "name": "01-after-files-next-desktop.png",
           "sha256": "2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
-          "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
+          "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/2e519e61502a4ec63e746b1e753276ae7080d45bdc1640ef8e013fe3f5ceaef0",
           "width": 1280
         },
         {
@@ -4018,7 +4341,7 @@
           "media_type": "image/png",
           "name": "files-next-desktop-2.png",
           "sha256": "f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
-          "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
+          "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/f94ee88a8dc466b1e8f7b7d04b016c1a3dd195c0482165dc7637e8500d50299d",
           "width": 1280
         },
         {
@@ -4028,7 +4351,7 @@
           "media_type": "image/png",
           "name": "files-next-phone-1-mobile.png",
           "sha256": "962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
-          "url": "/api/catalog/releases/a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
+          "url": "/api/catalog/releases/b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27/media/962a6d14c076b189de6fcaabb8a77d8b30f2dfdb9b7b6bbac8442aba72dfd4fc",
           "width": 390
         }
       ],
@@ -4045,7 +4368,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+          "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
         },
         "media": [
           {
@@ -4097,8 +4420,8 @@
         },
         "parent": {
           "kind": "release",
-          "release_id": "9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d",
-          "tree": "0b7271472ef3944ed746d06bee016da4a47802d6"
+          "release_id": "e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632",
+          "tree": "4b06ff4071a1f8e4aafbe62a5d5141fb05197f3a"
         },
         "precommitments": [
           {
@@ -4122,7 +4445,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/files-next/App.svelte",
             "frontend/src/packages/files-next/RenameDialog.svelte"
@@ -4132,22 +4455,32 @@
             "sha256": "d7fc62e493157e9b0b588b713c611886b361f771b849e691367d06e6a5bd7f61"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "9705e9702d5e3afd2665d4bb916bba9d6ae35919",
+          "tree": "2fab9568314bbb8b99ed91530313be71034dac23",
           "tree_patch": {
-            "bytes": 2503,
-            "sha256": "05557f68fc906bfb73f22c2cc166c4f812e4193e5bd0d7e4cc7e8022f3e50fef"
+            "bytes": 2489,
+            "sha256": "e19356d70086d887ca4b9e774e4bd35b3dd0cc6613fdeaffee036762da1178ea"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "a56d713198698113e8cb54917c4de095ca84a9e1cd51b3af4da65a3c192118d6"
+      "release_id": "b55aed6b681065fc38af1c83d80a3c667dc4c82ca734da49ed2bf75c8f918c27"
     },
     {
-      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b",
+      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "files-next",
-        "record_id": "f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b",
+        "record_id": "9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -4172,7 +4505,7 @@
           "media_type": "image/png",
           "name": "01-before-files-next-desktop.png",
           "sha256": "51f859b4fad55dc40d2bacdaad7374ab13548c58988f5134f320023f64baf9c2",
-          "url": "/api/catalog/releases/f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b/media/51f859b4fad55dc40d2bacdaad7374ab13548c58988f5134f320023f64baf9c2",
+          "url": "/api/catalog/releases/9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca/media/51f859b4fad55dc40d2bacdaad7374ab13548c58988f5134f320023f64baf9c2",
           "width": 1280
         },
         {
@@ -4182,7 +4515,7 @@
           "media_type": "image/png",
           "name": "01-after-files-next-desktop.png",
           "sha256": "378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
-          "url": "/api/catalog/releases/f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
+          "url": "/api/catalog/releases/9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca/media/378c604b016c446092cf97357a2ebf18272cda078f7a6ac68acffe635632ebb2",
           "width": 1280
         }
       ],
@@ -4197,7 +4530,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+          "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
         },
         "media": [
           {
@@ -4230,13 +4563,13 @@
           "name": "files-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "a488950e4af78f5eccda1c7ede36d9e62fec3dbf"
+          "tree": "8cddb76cd293b86ba0a39c10ace2fda4a56662a1"
         },
         "parent_patch": {
-          "bytes": 1967,
-          "sha256": "5e7133a12ec576107296d74c781b8f2995f8a34f2a839b97ec3f84cf64634600"
+          "bytes": 1953,
+          "sha256": "34299a69e51ee77fe1f5041e4bb267dd6808cea65343939f715481d67abfc197"
         },
         "precommitments": [
           {
@@ -4254,7 +4587,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/files-next/files-store.js"
           ],
@@ -4263,22 +4596,32 @@
             "sha256": "3edbd2f20b2ab85e1a1d982d6c67fd5f836a7b6ca113737e98e66a9d5cc26e1c"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "b026ae6c241ccb4e1aa6d52f96e44e54430091d1",
+          "tree": "5e807869010254b3397ecd41c6cc58f78bce081f",
           "tree_patch": {
-            "bytes": 2070,
-            "sha256": "22b98b2ec5e3bc22f9e4ebe456d5f25e28ef0748b304df8ee6a6cad52fcd05ca"
+            "bytes": 2056,
+            "sha256": "4daedf165834d1a9aa890314a56e14b29cabea0d1ba098cc977e631145c1b0f6"
           }
         },
         "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
       },
-      "release_id": "f94760f8eba7f32d8d384b2f6f51d286207591d01588a762556fa49d2371959b"
+      "release_id": "9ee478339896ffedbccccccfaea93b6cbd3ecff3a4f44f3e689eca76088042ca"
     },
     {
-      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632",
       "description": "Read",
+      "facts": {
+        "ceiling": [],
+        "facets": [],
+        "kind": "app",
+        "level": "default",
+        "recorded": true,
+        "slots": [],
+        "tier": "T1"
+      },
+      "lease_policy": "A desk's permissions are lent one task at a time and never go beyond what the app lists here. A desk with a strong record for that kind of act (at least 20 settled outcomes, with a lower bound of 80%) may hold one for 2 to 24 hours, renewed while its record holds. A broken commitment ends the loan at once, and you can end any loan yourself.",
       "listing": {
         "package": "files-next",
-        "record_id": "9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d",
+        "record_id": "e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632",
         "record_kind": "package_release",
         "scopes": [
           "owner",
@@ -4303,7 +4646,7 @@
           "media_type": "image/png",
           "name": "01-before-files-next-desktop.png",
           "sha256": "d8df3c2d3e323cdbcfa92ee1bd77c9bb0a7670cb54a7d59c2201de6833341bcc",
-          "url": "/api/catalog/releases/9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d/media/d8df3c2d3e323cdbcfa92ee1bd77c9bb0a7670cb54a7d59c2201de6833341bcc",
+          "url": "/api/catalog/releases/e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632/media/d8df3c2d3e323cdbcfa92ee1bd77c9bb0a7670cb54a7d59c2201de6833341bcc",
           "width": 1280
         },
         {
@@ -4313,7 +4656,7 @@
           "media_type": "image/png",
           "name": "01-after-files-next-desktop.png",
           "sha256": "e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
-          "url": "/api/catalog/releases/9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
+          "url": "/api/catalog/releases/e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632/media/e03d70b06463dc5b1a88a7f9d879d6100e6eaee963ab1703bde7cb56c440af5e",
           "width": 1280
         }
       ],
@@ -4328,7 +4671,7 @@
           "level": "default",
           "opens_count": 0,
           "schema": "choir.package/v2",
-          "sha256": "c3f55cca72a4f35c0fec19e7280c672b45ba07d02950818851f8977ee95c0b0c"
+          "sha256": "9dabf5b6975d538fa47f684b1b2e8a4fef62787f44d628af87ae9cee2bbd3dd4"
         },
         "media": [
           {
@@ -4361,13 +4704,13 @@
           "name": "files-next"
         },
         "parent": {
-          "commit": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "commit": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "kind": "base",
-          "tree": "a488950e4af78f5eccda1c7ede36d9e62fec3dbf"
+          "tree": "8cddb76cd293b86ba0a39c10ace2fda4a56662a1"
         },
         "parent_patch": {
-          "bytes": 1967,
-          "sha256": "5e7133a12ec576107296d74c781b8f2995f8a34f2a839b97ec3f84cf64634600"
+          "bytes": 1953,
+          "sha256": "34299a69e51ee77fe1f5041e4bb267dd6808cea65343939f715481d67abfc197"
         },
         "precommitments": [
           {
@@ -4385,7 +4728,7 @@
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "b1d0903712288f32239aac2d667ea6a541620acf",
+          "built_on": "529844ad3790dd60b2d28ba15f4aba5a2a1550d3",
           "changed_paths": [
             "frontend/src/packages/files-next/FileTree.svelte"
           ],
@@ -4394,15 +4737,15 @@
             "sha256": "f4940e7c426743137da43d28c5dd6a41e4c8e147d87895e29352a8d7156013b6"
           },
           "root": "frontend/src/packages/files-next",
-          "tree": "0b7271472ef3944ed746d06bee016da4a47802d6",
+          "tree": "4b06ff4071a1f8e4aafbe62a5d5141fb05197f3a",
           "tree_patch": {
-            "bytes": 2064,
-            "sha256": "bfcc0cc6328cbef31e1825292e1bc5c3c4bdd47397498f5650a2fb8ce9070aea"
+            "bytes": 2050,
+            "sha256": "17d211cf18bd853aa1db709010fbec071e90a92b121be63c0536b00957fc96bd"
           }
         },
         "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
       },
-      "release_id": "9a249a04b12e69f54b1b2f02158c8bfae3bff45593fe013be878ccde2866722d"
+      "release_id": "e67aef23366ec00cb977824887a2cfb61f242ed21e8f5a923a0310305f16a632"
     }
   ]
 }

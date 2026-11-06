@@ -40,6 +40,19 @@
     seqOf,
     sortedByNewest,
     versionLabel,
+    ceilingLines,
+    displacesOf,
+    entryFactsOf,
+    facetName,
+    factsOf,
+    hasDeskGrant,
+    kindName,
+    levelLine,
+    matchesFacet,
+    shelfFacets,
+    slotName,
+    tierLine,
+    usesOf,
   } from './catalog';
   import './library.css';
 
@@ -94,6 +107,15 @@
   let updates = {};
   let policy = { default: 'manual', apps: {} };
   $: pageUpdate = installed ? updates[String(installed.package)] || null : null;
+  // What the app is (L1): the host's facts about the head release, the shelf's
+  // facet filter, and what installing it would stop being used.
+  let facet = null; // { type: 'kind' | 'slot', value }
+  $: facets = shelfFacets(packages);
+  $: if (facet && !facets.some((f) => f.type === facet.type && f.value === facet.value)) facet = null;
+  $: shelf = packages.filter((pkg) => matchesFacet(pkg, facet));
+  $: facts = page.head ? factsOf(page.head) : null;
+  $: displaces = facts && view.kind === 'app' ? displacesOf(facts, installs, packages, tracks, view.name, view.track) : [];
+  $: installedUses = installed ? usesOf(installed) : null;
 
   onMount(() => {
     void boot();
@@ -501,8 +523,17 @@
             <p class="lib-note">An app appears here once its maker publishes it with screenshots.</p>
           </div>
         {:else}
+          {#if facets.length > 1 || facets.some((f) => f.type === 'slot')}
+            <div class="lib-facets" data-facets role="group" aria-label="Show">
+              <button class="lib-facet" class:lib-facet-on={!facet} data-facet-filter="all" aria-pressed={!facet} on:click={() => (facet = null)}>All</button>
+              {#each facets as f (f.type + ':' + f.value)}
+                {@const on = Boolean(facet && facet.type === f.type && facet.value === f.value)}
+                <button class="lib-facet" class:lib-facet-on={on} data-facet-filter={f.type + ':' + f.value} aria-pressed={on} on:click={() => (facet = on ? null : { type: f.type, value: f.value })}>{f.label}</button>
+              {/each}
+            </div>
+          {/if}
           <ul class="lib-cards">
-            {#each packages as pkg (cardKey(pkg))}
+            {#each shelf as pkg (cardKey(pkg))}
               {@const thumb = thumbOf(pkg)}
               <li>
                 <button class="lib-card" data-package-row data-package={pkg.package} on:click={() => openApp(pkg)}>
@@ -518,6 +549,9 @@
                       {pkg.package}
                       {#if cardInstalled(pkg, installs, tracks)}<span class="lib-tag lib-tag-ok" data-card-installed>Installed</span>{/if}
                     </span>
+                    {#if kindName(entryFactsOf(pkg).kind)}
+                      <span class="lib-card-kind" data-card-kind={entryFactsOf(pkg).kind}>{kindName(entryFactsOf(pkg).kind)}</span>
+                    {/if}
                     {#if pkg.head_description}
                       <span class="lib-card-desc" data-card-desc>{pkg.head_description}</span>
                     {/if}
@@ -643,6 +677,56 @@
             </ul>
           </div>
 
+          {#if facts}
+            <section class="lib-section" data-app-facts>
+              <h3 class="lib-h3">What it is</h3>
+              <p class="lib-facts-kind">
+                <span class="lib-tag" data-app-kind={facts.kind}>{kindName(facts.kind) || 'App'}</span>
+                <span class="lib-note" data-app-tier={facts.tier}>{tierLine(facts.tier)}</span>
+              </p>
+              {#if facts.facets.length}
+                <ul class="lib-facet-list">
+                  {#each facts.facets as name (name)}
+                    <li class="lib-tag" data-facet={name}>{facetName(name)}</li>
+                  {/each}
+                </ul>
+              {/if}
+              {#if facts.slots.length}
+                <p class="lib-note" data-slots>Provides the {facts.slots.map(slotName).join(', ')}.</p>
+              {/if}
+              {#if displaces.length && !installed}
+                <p class="lib-note" data-displaces>Installing it and using it replaces {displaces.join(', and ')}. You can switch back.</p>
+              {/if}
+              {#if installedUses}
+                <p class="lib-note" data-uses>
+                  {installedUses.length ? 'Uses these parts of Choir: ' + installedUses.join(', ') + '.' : 'Uses no part of Choir beyond its own window.'}
+                </p>
+              {/if}
+
+              <h3 class="lib-h3" data-ceiling-title>What it may ask for</h3>
+              {#if !facts.recorded}
+                <p class="lib-note" data-ceiling-unrecorded>This version was published before the Library recorded what an app may ask for.</p>
+              {:else}
+                <p class="lib-note" data-level={facts.level}>{levelLine(facts.level)}</p>
+                {#if facts.ceiling.length}
+                  <ul class="lib-ceiling" data-ceiling>
+                    {#each ceilingLines(facts) as line, index (index)}
+                      <li class="lib-ceiling-line" data-ceiling-grant={line.grant} data-grant-level={line.level}>
+                        <span>{line.text}</span>
+                        {#if line.level === 'extended'}<span class="lib-tag lib-tag-warn">Needs review</span>{/if}
+                      </li>
+                    {/each}
+                  </ul>
+                  {#if hasDeskGrant(facts) && page.head.lease_policy}
+                    <p class="lib-note" data-lease-policy>{page.head.lease_policy}</p>
+                  {/if}
+                {:else}
+                  <p class="lib-note" data-ceiling-empty>It asks for no permissions.</p>
+                {/if}
+              {/if}
+            </section>
+          {/if}
+
           <section class="lib-section" data-track-record>
             <h3 class="lib-h3">What the maker promised</h3>
             {#if precommitmentsOf(page.head).length}
@@ -715,6 +799,12 @@
           Made by {publisherOfRelease(confirm, page.entry)}. It will be added to your launcher and run with your
           account's access, so install apps only from people you trust.
         </p>
+        {#if confirm.facts && factsOf(confirm).level === 'extended'}
+          <p class="lib-note" data-confirm-level>{levelLine('extended')}</p>
+        {/if}
+        {#if displaces.length}
+          <p class="lib-note" data-confirm-displaces>It will be used instead of {displaces.join(', and ')}.</p>
+        {/if}
         {#if confirmReplaces}
           <p class="lib-note" data-confirm-replaces>
             This replaces the {view.name} that is installed now, which is a different maker's app.
