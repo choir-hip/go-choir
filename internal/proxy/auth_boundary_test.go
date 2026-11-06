@@ -203,6 +203,8 @@ func TestOwnerActsRefuseAgentAndAdminKeys(t *testing.T) {
 	}{
 		{"mode set", http.MethodPut, base + "/self-development/mode", `{"mode":"apply"}`, "computer:self_development:mode", "corpusd"},
 		{"rollback", http.MethodPost, base + "/self-development/rollbacks", `{}`, "computer:self_development:rollback", "guest"},
+		// R3: the owner's revert of an applied operation is a rollback-class act.
+		{"revert", http.MethodPost, base + "/self-development/operations/op-1/revert", `{}`, "computer:self_development:rollback", "guest"},
 		// Forced modularity M3: the migration rollback is a rollback-class act.
 		{"package migration rollback", http.MethodPost, base + "/self-development/package-migration-rollback", `{}`, "computer:self_development:rollback", "guest"},
 		// PM22: installing a set-aside package is an install-class act.

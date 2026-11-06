@@ -223,6 +223,14 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.abandonSelfDevelopmentOperation(w, r, ownerID, computerID)
+	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "revert":
+		// R3: the owner's revert of an applied operation; the guest assembles
+		// the rollback bindings from its current head.
+		if r.Method != http.MethodPost {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.revertSelfDevelopmentOperation(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "decision":
 		if r.Method != http.MethodPost {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -695,6 +703,23 @@ func selfDevelopmentContainsString(values []string, wanted string) bool {
 	return false
 }
 
+// rollbackRequestedEvent is the owner's rollback_requested event, shared by the
+// rollback route and the revert route (api_self_development_revert.go).
+func rollbackRequestedEvent(computerID, ownerID, idempotencyKey, commitment, trajectoryID, capsuleID, proposedEffectRef, decisionRef string) (computerevent.Event, error) {
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		return computerevent.Event{}, err
+	}
+	return computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+		EventKind: computerevent.EventRollbackRequested, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: idempotencyKey, TrajectoryID: trajectoryID, CapsuleID: capsuleID,
+		ActorProfile: agentprofile.Management, AuthorityRef: "owner:" + ownerID, RequestCommitment: commitment,
+		PayloadCommitment: commitment, PrivacyClass: "owner", ProposedEffectRef: proposedEffectRef,
+		DecisionRef: decisionRef, ReducerVersion: computerevent.ReducerVersionV1,
+	}, nil
+}
+
 func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
 	var request selfDevelopmentRollbackRequest
 	if h.rt.eventAppender == nil || h.rt.store == nil || h.rt.selfdevRoute == nil {
@@ -711,13 +736,20 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "complete rollback bindings are required"})
 		return
 	}
+	h.openSelfDevelopmentRollback(w, r.Context(), ownerID, computerID, request)
+}
+
+// openSelfDevelopmentRollback runs the rollback open once the bindings are
+// complete. The owner route and the revert route (api_self_development_revert.go)
+// both end here for a target that is an earlier applied operation.
+func (h *APIHandler) openSelfDevelopmentRollback(w http.ResponseWriter, ctx context.Context, ownerID, computerID string, request selfDevelopmentRollbackRequest) {
 	canonicalRequest, err := computerevent.CanonicalJSON(request)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid rollback request"})
 		return
 	}
 	commitment := computerevent.DigestBytes(canonicalRequest)
-	if existing, found, lookupErr := h.rt.selfdevOperations.GetByIdempotency(r.Context(), computerID, request.IdempotencyKey); lookupErr != nil {
+	if existing, found, lookupErr := h.rt.selfdevOperations.GetByIdempotency(ctx, computerID, request.IdempotencyKey); lookupErr != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "rollback lookup failed"})
 		return
 	} else if found {
@@ -729,12 +761,12 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		return
 	}
 	eventIdempotency := "selfdev-rollback-requested-" + request.IdempotencyKey
-	existingRollbackEvent, eventFound, err := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
+	existingRollbackEvent, eventFound, err := h.rt.store.EventByIdempotency(ctx, computerID, eventIdempotency)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "rollback event lookup failed"})
 		return
 	}
-	head, err := h.rt.store.Head(r.Context(), computerID)
+	head, err := h.rt.store.Head(ctx, computerID)
 	eventDigest := ""
 	if eventFound {
 		eventDigest, _ = existingRollbackEvent.Digest()
@@ -745,7 +777,7 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "rollback head preconditions changed"})
 		return
 	}
-	targetEvent, found, err := h.rt.store.EventByDigest(r.Context(), computerID, request.ToAppliedHead)
+	targetEvent, found, err := h.rt.store.EventByDigest(ctx, computerID, request.ToAppliedHead)
 	// A genesis baseline has no recorded verification event, so a rollback to
 	// it could apply and then never record its success (R7). Refuse at open
 	// until a genesis evidence path exists.
@@ -757,7 +789,7 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "rollback target is not a prior applied event"})
 		return
 	}
-	target, err := h.rt.selfdevOperations.GetByEffectiveHead(r.Context(), computerID, request.ToAppliedHead)
+	target, err := h.rt.selfdevOperations.GetByEffectiveHead(ctx, computerID, request.ToAppliedHead)
 	if err != nil || target.MaterializationReceipt != request.PriorMaterialization || target.CheckpointRef != request.PriorCheckpoint ||
 		!computerevent.IsSHA256(target.ReleaseDigest) || target.CodeRef == "" || target.ArtifactProgramRef == "" ||
 		len(target.VerifierRefs) == 0 || !computerevent.IsSHA256(target.VerifierRefs[0]) || target.RouteReceipt == "" {
@@ -769,7 +801,7 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "rollback route authority unavailable"})
 		return
 	}
-	route, err := h.rt.selfdevRoute.ResolveComputerVersionRoute(r.Context(), routeSlotID)
+	route, err := h.rt.selfdevRoute.ResolveComputerVersionRoute(ctx, routeSlotID)
 	if err != nil || route.Slot.Generation != request.ExpectedRouteGeneration {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "rollback route generation changed"})
 		return
@@ -780,30 +812,22 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 			return
 		}
 	} else {
-		eventID, eventErr := computerevent.NewEventID()
+		event, eventErr := rollbackRequestedEvent(computerID, ownerID, eventIdempotency, commitment, target.TrajectoryID, target.CapsuleID, target.BundleDigest, request.ToAppliedHead)
 		if eventErr != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "rollback event identity unavailable"})
 			return
 		}
-		event := computerevent.Event{
-			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
-			EventKind: computerevent.EventRollbackRequested, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-			IdempotencyKey: eventIdempotency, TrajectoryID: target.TrajectoryID, CapsuleID: target.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "owner:" + ownerID, RequestCommitment: commitment,
-			PayloadCommitment: commitment, PrivacyClass: "owner", ProposedEffectRef: target.BundleDigest,
-			DecisionRef: request.ToAppliedHead, ReducerVersion: computerevent.ReducerVersionV1,
-		}
-		if _, err := h.rt.eventAppender.AppendNew(r.Context(), event, computerevent.TransitionInput{TargetStateCommitment: targetEvent.ResultingEffectiveCommitment}, nil); err != nil {
+		if _, err := h.rt.eventAppender.AppendNew(ctx, event, computerevent.TransitionInput{TargetStateCommitment: targetEvent.ResultingEffectiveCommitment}, nil); err != nil {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 			return
 		}
 	}
-	nextHead, err := h.rt.store.Head(r.Context(), computerID)
+	nextHead, err := h.rt.store.Head(ctx, computerID)
 	if err != nil || nextHead == nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "rollback projection unavailable"})
 		return
 	}
-	operation, err := h.rt.selfdevOperations.StartRollback(r.Context(), selfdev.RollbackStartRequest{
+	operation, err := h.rt.selfdevOperations.StartRollback(ctx, selfdev.RollbackStartRequest{
 		ComputerID: computerID, IdempotencyKey: request.IdempotencyKey, RequestCommitment: commitment,
 		RollbackEvent: nextHead.CanonicalEventHead, DecisionActor: ownerID, CurrentDesired: nextHead.DesiredEventHead,
 		CurrentEffective: nextHead.EffectiveEventHead, Target: target, RouteGeneration: request.ExpectedRouteGeneration,

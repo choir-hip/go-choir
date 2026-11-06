@@ -107,6 +107,12 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 	case types.OwnerActApprove:
 		return fmt.Sprintf("%s approved self-development candidate %s. It is accepted and the computer applies it; a separate record says when it is applied or fails.", who, id)
 	case types.OwnerActApply:
+		if who != "The owner" {
+			// R3: a consensus apply has no owner approval to answer for it, so
+			// the record says what decided it and how the owner undoes it. The
+			// Revert action on the candidate's embed calls the same route.
+			return fmt.Sprintf("Self-development candidate %s is applied on a consensus decision (%s), with no owner approval: the computer now runs it. The owner can undo it with Revert on the candidate in this document (POST /api/computers/%s/self-development/operations/%s/revert); reverting an earlier candidate also undoes every later one.", id, strings.TrimSpace(operation.DecisionEvent), strings.TrimSpace(operation.ComputerID), id)
+		}
 		return fmt.Sprintf("Self-development candidate %s is applied: the computer now runs it, after it was approved.", id)
 	case types.OwnerActReject:
 		body := fmt.Sprintf("%s rejected self-development candidate %s. It will not be applied.", who, id)

@@ -86,7 +86,7 @@
   import './texture-published-citations.css';
   import './texture-related-stories.css';
   import './texture-embeds.css';
-  import { hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
+  import { handleRevertClick, hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
   import { opinionLabelHTML, pieceDisclosureHTML } from './texture-ai-disclosure';
   import { publishedModelProvenance, renderModelProvenanceHTML } from './texture-model-provenance';
 
@@ -1741,6 +1741,12 @@
   }
 
   function handleEditorClick(event) {
+    if (event.target?.closest?.('[data-texture-embed-revert]')) {
+      event.preventDefault();
+      event.stopPropagation();
+      void handleRevertClick(event.target, fetchWithRenewal, (text) => window.confirm(text));
+      return;
+    }
     const related = relatedLinkTarget(event);
     if (related) {
       event.preventDefault();

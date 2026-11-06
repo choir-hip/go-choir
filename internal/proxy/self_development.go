@@ -94,6 +94,11 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "decision" {
 		return strings.TrimSpace(decoded), "approve", true
 	}
+	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "revert" {
+		// R3: the owner's revert of an applied operation. A rollback-class
+		// owner act: the rollback scope and the owner-act gate apply.
+		return strings.TrimSpace(decoded), "rollback", true
+	}
 	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch" || parts[2] == "release-witness") {
 		return strings.TrimSpace(decoded), "read", true
 	}

@@ -259,6 +259,9 @@ func (rt *Runtime) markSelfDevelopmentOperationsInterruptedAfterCrash(ctx contex
 // neither: failed with the effective release unknown); a running apply
 // settles on a later pass.
 func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context, operation selfdev.Operation, rollback bool) error {
+	if selfdev.IsBaseRestore(operation) {
+		return rt.baseRestoreSelfDevelopmentOperation(ctx, operation, true)
+	}
 	key := "selfdev-apply-" + operation.DecisionEvent
 	if rollback {
 		key = "selfdev-rollback-apply-" + operation.DecisionEvent
@@ -1007,6 +1010,10 @@ func pinnedReleaseUnusable(err error) bool {
 // forward, and one whose installed release is unusable settles forward
 // without the tail; neither retries forever.
 func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
+	if selfdev.IsBaseRestore(operation) {
+		// R3: the target is the booted base; there is no updater journal.
+		return rt.baseRestoreSelfDevelopmentOperation(ctx, operation, false)
+	}
 	journalKey := "selfdev-rollback-apply-" + operation.DecisionEvent
 	journaled, journalFound, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, journalKey)
 	if journalErr != nil {
@@ -1106,7 +1113,7 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 // recordMaterializationApplied: the crash-boot settlement runs it before, and
 // outside, the settlement's attempt bound, so a store that refuses the append
 // for a while never spends the bound and never leaves the transition pending.
-func (rt *Runtime) appendMaterializationAppliedEvent(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, eventKind computerevent.EventKind) error {
+func (rt *Runtime) appendMaterializationAppliedEvent(ctx context.Context, operation selfdev.Operation, result any, eventKind computerevent.EventKind) error {
 	payload, err := computerevent.CanonicalJSON(result)
 	if err != nil {
 		return err

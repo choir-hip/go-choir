@@ -260,6 +260,48 @@ closes. The comments at `self_development_materializer.go:109` and
   owner-act tools are exposed there; rollback today is CLI-only and this
   design does not change that.
 
+**R3 build note (base restore evidence).** What the build carries, exactly:
+
+- *Prior state.* An applied operation's `base_head` is the canonical head at
+  its freeze, not the state before it. The prior effective head is read from
+  its accept event (`DecisionEvent`): `expected_effective_event_head` and
+  `expected_effective_state_commitment`. The route looks up the operation whose
+  effective head is that prior head. If it is an applied or rolled-back
+  operation with full evidence, the revert opens the existing rollback to it
+  (`openSelfDevelopmentRollback`, the same checks). Otherwise, if the prior is
+  a genesis operation, an earlier base restore, or an event of kind
+  `genesis_imported` or `materialization_applied` with no operation (a platform
+  update), it opens a base restore. Any other prior is refused 409.
+- *Operation row.* `rollback-<uuid>`, state `rollback_pending`, idempotency key
+  `revert:<X>:<latest landed>`; `prompt_artifact_ref` = `base-restore:<X>`
+  (the subject, and the marker `selfdev.IsBaseRestore` reads); `base_head` = the
+  prior effective head; `bundle_digest` = `release_digest` = the booted base
+  manifest's content digest (the target); `code_ref` and `artifact_program_ref`
+  = the baseline manifest's; `verifier_refs` empty; no checkpoint, route
+  receipt or materialization receipt at open. `decision_event` is the
+  `rollback_requested` event, whose `decision_ref` is the prior effective head
+  and whose target state commitment is the prior commitment.
+- *Applied tail.* Under `currentReleaseMu`: `StageBaselineRelease`, then
+  `RestagePinnedRelease` under the store floor, then `recordStartupManifest`
+  (the M3 swap). Then one `rollback_applied` event whose payload is
+  `choir.selfdev.base-restore.v1` {operation, reverted operation, target event
+  head, baseline release digest, marker, refs}, and the row settles
+  `rolled_back` with `materialization_receipt` = the digest of that payload.
+  No verifier certificate, no checkpoint, no route transition: the evidence is
+  the pinned payload, the event head receipt over it, and the served release's
+  digest equalling the row's target. The row's `effective_head` is the new head,
+  so the next apply's prior resolves to this row, which is again a base target.
+- *Refusals and crash.* The booted base digest changing between open and drive,
+  a store-floor refusal or a corrupt baseline settle the row `failed` (a typed
+  refusal, the transition discharged). A crash boot never swaps: it records the
+  tail if the base is already served, and otherwise closes the row `failed`,
+  "interrupted by a restart".
+- *Residuals.* The route slot still names the reverted release's version, and
+  the baseline manifest is labelled with the route's current refs, as the M3
+  migration labels it. A layered release's binary runs until the next restart
+  (the row's terminal note says so). The restored base is the booted image's
+  release, not a platform update's release when the two differ.
+
 ### 3.6 Harm, and what bounds it
 
 | failure | answer |

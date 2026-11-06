@@ -460,6 +460,95 @@ func (s *Store) StartRollback(ctx context.Context, request RollbackStartRequest)
 	return operation, nil
 }
 
+// BaseRestoreStartRequest opens a revert whose target is the booted base
+// release, not an earlier applied operation (design selfdev-apply-and-revert
+// 3.5, R3 build note). The target has no verification evidence, so the row
+// carries no verifier refs; its target is the base manifest digest and its
+// subject is the reverted operation.
+type BaseRestoreStartRequest struct {
+	ComputerID         string
+	IdempotencyKey     string
+	RequestCommitment  string
+	RollbackEvent      string
+	DecisionActor      string
+	CurrentDesired     string
+	CurrentEffective   string
+	PriorEffectiveHead string
+	RevertedOperation  string
+	TrajectoryID       string
+	BaseReleaseDigest  string
+	CodeRef            string
+	ArtifactProgramRef string
+	RouteGeneration    uint64
+}
+
+// BaseRestorePrefix marks a rollback row whose target is the booted base. The
+// reverted operation id follows it in prompt_artifact_ref.
+const BaseRestorePrefix = "base-restore:"
+
+// IsBaseRestore reports whether the operation is a base-restore revert.
+func IsBaseRestore(operation Operation) bool {
+	return strings.HasPrefix(operation.OperationID, "rollback-") && strings.HasPrefix(operation.PromptArtifactRef, BaseRestorePrefix)
+}
+
+// BaseRestoreSubject is the operation a base-restore revert reverted.
+func BaseRestoreSubject(operation Operation) string {
+	return strings.TrimPrefix(operation.PromptArtifactRef, BaseRestorePrefix)
+}
+
+func (s *Store) StartBaseRestore(ctx context.Context, request BaseRestoreStartRequest) (Operation, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	request.ComputerID, request.IdempotencyKey = strings.TrimSpace(request.ComputerID), strings.TrimSpace(request.IdempotencyKey)
+	if request.ComputerID == "" || request.IdempotencyKey == "" || strings.TrimSpace(request.RevertedOperation) == "" ||
+		!computerevent.IsSHA256(request.RequestCommitment) || !computerevent.IsSHA256(request.RollbackEvent) ||
+		!computerevent.IsSHA256(request.CurrentDesired) || !computerevent.IsSHA256(request.CurrentEffective) ||
+		!computerevent.IsSHA256(request.PriorEffectiveHead) || !computerevent.IsSHA256(request.BaseReleaseDigest) ||
+		request.CodeRef == "" || request.ArtifactProgramRef == "" {
+		return Operation{}, fmt.Errorf("self-development base restore: complete current bindings and the base release are required")
+	}
+	if existing, found, err := s.byIdempotency(ctx, request.ComputerID, request.IdempotencyKey); err != nil || found {
+		if found && existing.RequestCommitment != request.RequestCommitment {
+			return Operation{}, fmt.Errorf("%w: base restore idempotency commitment changed", ErrConflict)
+		}
+		return existing, err
+	}
+	now := s.now().UTC().Truncate(time.Microsecond)
+	trajectoryID := strings.TrimSpace(request.TrajectoryID)
+	if trajectoryID == "" {
+		trajectoryID = "trajectory-rollback-" + uuid.NewString()
+	}
+	operation := Operation{
+		IdempotencyKey: request.IdempotencyKey,
+		OperationID:    "rollback-" + uuid.NewString(), RequestCommitment: request.RequestCommitment, ComputerID: request.ComputerID,
+		TrajectoryID: trajectoryID, BaseHead: request.PriorEffectiveHead, PromptArtifactRef: BaseRestorePrefix + request.RevertedOperation,
+		BundleDigest: request.BaseReleaseDigest, ReleaseDigest: request.BaseReleaseDigest,
+		CodeRef: request.CodeRef, ArtifactProgramRef: request.ArtifactProgramRef, VerifierRefs: []string{},
+		DecisionActor: request.DecisionActor, DecisionEvent: request.RollbackEvent,
+		DesiredHead: request.CurrentDesired, EffectiveHead: request.CurrentEffective,
+		State: StateRollbackPending, CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+	}
+	if request.RouteGeneration > 0 {
+		generation := request.RouteGeneration
+		operation.RouteGeneration = &generation
+	}
+	if s.projection != nil {
+		if err := s.appendOperationProjection(ctx, operation, ""); err != nil {
+			return Operation{}, err
+		}
+		return operation, nil
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_receipt, route_generation, state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		operation.OperationID, operation.ComputerID, request.IdempotencyKey, operation.RequestCommitment, operation.TrajectoryID, operation.BaseHead, operation.PromptArtifactRef, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, "[]", operation.DecisionActor, operation.DecisionEvent, operation.DesiredHead, operation.EffectiveHead, "", "", "", operation.RouteGeneration, operation.State, now, now)
+	if err != nil {
+		if replay, found, readErr := s.byIdempotency(ctx, request.ComputerID, request.IdempotencyKey); readErr == nil && found && replay.RequestCommitment == request.RequestCommitment {
+			return replay, nil
+		}
+		return Operation{}, err
+	}
+	return operation, nil
+}
+
 func (s *Store) Transition(ctx context.Context, computerID, operationID, expectedState, nextState string, mutate func(*Operation) error) (Operation, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()

@@ -18,8 +18,13 @@ import {
   embedProjectionText,
   evidenceIdentityText,
   evidenceListingPath,
+  handleRevertClick,
+  isRevertable,
+  laterAppliesAfter,
   markEmbedUnresolvable,
   renderEmbedBlockHTML,
+  revertConfirmText,
+  revertPath,
   serializeEmbedElement,
 } from '../src/packages/texture/texture-embeds.ts';
 
@@ -133,4 +138,49 @@ test('the projection matches the server and the identity line reads the live lis
   expect(line).toContain('awaiting_approval');
   expect(evidenceIdentityText('selfdev-op-1', { status: 410 })).toContain('no longer retained');
   expect(evidenceIdentityText('selfdev-op-1', { status: 404 })).toContain('no longer retained');
+});
+
+test('a Revert action warns when later applies are undone with the candidate', async () => {
+  const ops = [
+    { operation_id: 'a', state: 'applied', created_at: '2026-11-06T10:00:00Z' },
+    { operation_id: 'b', state: 'applied', created_at: '2026-11-06T11:00:00.5Z' },
+    { operation_id: 'c', state: 'failed', created_at: '2026-11-06T12:00:00Z' },
+    { operation_id: 'd', state: 'applied', created_at: '2026-11-06T13:00:00Z' },
+  ];
+  expect(laterAppliesAfter(ops, 'a')).toBe(2);
+  expect(laterAppliesAfter(ops, 'd')).toBe(0);
+  expect(laterAppliesAfter(ops, 'missing')).toBe(0);
+  expect(revertConfirmText(0)).not.toContain('also undoes');
+  expect(revertConfirmText(1)).toContain('also undoes 1 later applied change,');
+  expect(revertConfirmText(2)).toContain('2 later applied changes');
+  expect(revertPath('computer-1', 'selfdev-op-1')).toBe('/api/computers/computer-1/self-development/operations/selfdev-op-1/revert');
+  expect(isRevertable({ status: 200, listing: { state: 'applied' } })).toBe(true);
+  expect(isRevertable({ status: 200, listing: { state: 'rolled_back' } })).toBe(false);
+  expect(isRevertable({ status: 404 })).toBe(false);
+  expect(isRevertable(null)).toBe(false);
+});
+
+test('the Revert click confirms, then posts the owner revert once', async () => {
+  const attrs = { 'data-embed-operation': 'a', 'data-embed-computer': 'computer-1' };
+  const button = { disabled: false, textContent: 'Revert', getAttribute: (k) => attrs[k], closest() { return this; } };
+  const target = { closest: (selector) => (selector === '[data-texture-embed-revert]' ? button : null) };
+  const calls = [];
+  const fetchFn = async (url, init) => {
+    calls.push([url, init?.method || 'GET']);
+    if (url.endsWith('/operations')) {
+      return { ok: true, json: async () => ({ operations: [{ operation_id: 'a', state: 'applied', created_at: '2026-11-06T10:00:00Z' }, { operation_id: 'b', state: 'applied', created_at: '2026-11-06T11:00:00Z' }] }) };
+    }
+    return { ok: true, status: 201, json: async () => ({ state: 'rollback_pending' }) };
+  };
+  let asked = '';
+  expect(await handleRevertClick({ closest: () => null }, fetchFn, () => true)).toBe(false);
+  expect(await handleRevertClick(target, fetchFn, (text) => { asked = text; return false; })).toBe(true);
+  expect(asked).toContain('also undoes 1 later applied change');
+  expect(calls.filter(([, method]) => method === 'POST')).toHaveLength(0);
+  expect(await handleRevertClick(target, fetchFn, () => true)).toBe(true);
+  expect(calls.filter(([url, method]) => method === 'POST' && url.endsWith('/operations/a/revert'))).toHaveLength(1);
+  expect(button.disabled).toBe(true);
+  expect(button.textContent).toBe('Reverting started');
+  expect(await handleRevertClick(target, fetchFn, () => true)).toBe(true);
+  expect(calls.filter(([, method]) => method === 'POST')).toHaveLength(1);
 });

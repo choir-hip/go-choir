@@ -146,7 +146,7 @@ export function renderEmbedBlockHTML(node: EmbedNode, options: { allBlank?: Set<
     })}><div class="texture-embed-frame">${media}${unresolvableHTML(e, validDigest)}</div>`
       + `<figcaption>${badge}<span class="texture-embed-caption">${escapeHTML(e.caption)}</span>`
       + (e.file ? ` <code data-texture-embed-file>${escapeHTML(e.file)}</code>` : e.route ? ` <code>${escapeHTML(e.route)}</code>` : '')
-      + `<span class="texture-embed-identity" data-texture-embed-identity>candidate ${escapeHTML(e.operationID)}</span>${allBlank}</figcaption></figure>`;
+      + `<span class="texture-embed-identity" data-texture-embed-identity>candidate ${escapeHTML(e.operationID)}</span><span class="texture-embed-revert" data-texture-embed-revert-slot></span>${allBlank}</figcaption></figure>`;
   }
   if (e.kind === 'image') {
     const state = validDigest ? 'loading' : 'unresolvable';
@@ -203,6 +203,100 @@ export function evidenceListingPath(computerID: string, operationID: string): st
   return `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(operationID)}`;
 }
 
+export function operationsListPath(computerID: string): string {
+  return `/api/computers/${encodeURIComponent(computerID)}/self-development/operations`;
+}
+
+/** The owner's revert of an applied operation (design selfdev-apply-and-revert 3.5). */
+export function revertPath(computerID: string, operationID: string): string {
+  return `${evidenceListingPath(computerID, operationID)}/revert`;
+}
+
+/** Whether the listing says the operation is applied and can be reverted. */
+export function isRevertable(result: ListingResult | null): boolean {
+  return !!result && result.status === 200 && result.listing?.state === 'applied';
+}
+
+/**
+ * How many applied operations were created after this one. A revert restores
+ * the state before it, so each of them is undone with it.
+ */
+export function laterAppliesAfter(operations: any[], operationID: string): number {
+  const list = Array.isArray(operations) ? operations : [];
+  const target = list.find((op) => str(op?.operation_id) === operationID);
+  const at = Date.parse(str(target?.created_at));
+  if (!target || Number.isNaN(at)) return 0;
+  return list.filter((op) => op?.state === 'applied' && str(op?.operation_id) !== operationID && Date.parse(str(op?.created_at)) > at).length;
+}
+
+export function revertConfirmText(later: number): string {
+  if (later > 0) {
+    const noun = later === 1 ? 'later applied change' : 'later applied changes';
+    return `Reverting this change also undoes ${later} ${noun}, because the computer returns to the state before it. Continue?`;
+  }
+  return 'Revert this change? The computer returns to the state before it.';
+}
+
+/**
+ * Click on a Revert button: read the operations, warn when later applies are
+ * undone with this one, then post the owner's revert. Returns whether the
+ * click was a revert click. The route is idempotent: a second tap starts nothing.
+ */
+export async function handleRevertClick(
+  target: any,
+  fetchFn: (url: string, init?: any) => Promise<any>,
+  confirmFn: (text: string) => boolean,
+): Promise<boolean> {
+  const button = target?.closest?.('[data-texture-embed-revert]');
+  if (!button) return false;
+  const operationID = String(button.getAttribute('data-embed-operation') || '');
+  const computerID = String(button.getAttribute('data-embed-computer') || '');
+  if (!operationID || !computerID || button.disabled) return true;
+  let later = 0;
+  try {
+    const res = await fetchFn(operationsListPath(computerID), { credentials: 'same-origin', headers: { 'X-Choir-App': 'texture' } });
+    if (res.ok) {
+      const body = await res.json();
+      later = laterAppliesAfter(body?.operations, operationID);
+    }
+  } catch {
+    // The warning is best effort; the guest decides what the revert does.
+  }
+  if (!confirmFn(revertConfirmText(later))) return true;
+  button.disabled = true;
+  button.textContent = 'Reverting…';
+  try {
+    const res = await fetchFn(revertPath(computerID, operationID), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Choir-App': 'texture' }, body: '{}',
+    });
+    if (res.ok) {
+      const op = await res.json().catch(() => ({}));
+      button.textContent = op?.state === 'rolled_back' ? 'Reverted' : 'Reverting started';
+    } else {
+      button.disabled = false;
+      button.textContent = `Revert refused (${res.status})`;
+    }
+  } catch {
+    button.disabled = false;
+    button.textContent = 'Revert failed';
+  }
+  return true;
+}
+
+function addRevertButton(figure: any, operationID: string, computerID: string): void {
+  const slot = figure.querySelector?.('[data-texture-embed-revert-slot]');
+  if (!slot || slot.querySelector?.('[data-texture-embed-revert]')) return;
+  const button = figure.ownerDocument.createElement('button');
+  button.type = 'button';
+  button.className = 'texture-embed-revert-button';
+  button.setAttribute('data-texture-embed-revert', '');
+  button.setAttribute('data-embed-operation', operationID);
+  button.setAttribute('data-embed-computer', computerID);
+  button.textContent = 'Revert';
+  slot.appendChild(button);
+}
+
 const identityCache = new Map<string, Promise<ListingResult>>();
 
 /**
@@ -226,6 +320,7 @@ export function hydrateEmbedIdentity(root: any, fetchFn: (url: string, init?: an
     }
     pending.then((result) => {
       line.textContent = evidenceIdentityText(operationID, result);
+      if (isRevertable(result)) addRevertButton(figure, operationID, computerID);
     });
   }
 }
