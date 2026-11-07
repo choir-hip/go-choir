@@ -751,6 +751,67 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		}
 		return true
 	}
+	// nextImageCapable returns the index in options.fallbackLLMConfigs of the
+	// first remaining member that may take an image, or -1.
+	nextImageCapable := func() int {
+		for k := nextFallback; k < len(options.fallbackLLMConfigs); k++ {
+			if modelcatalog.SupportsImage(options.fallbackLLMConfigs[k].Model) {
+				return k
+			}
+		}
+		return -1
+	}
+	// noImageModelError names the run's order when an image turn has no
+	// member that may take it. A pinned model and a NoFailover pool are a
+	// run with no fallbacks, so they fail here and are never rerouted.
+	noImageModelError := func(cause error) error {
+		tried := []string{activeLLMConfig.Provider + "/" + activeLLMConfig.Model}
+		for _, f := range options.fallbackLLMConfigs[min(nextFallback, len(options.fallbackLLMConfigs)):] {
+			tried = append(tried, f.Provider+"/"+f.Model)
+		}
+		msg := "no model in this run's order can take image input: tried " + strings.Join(tried, ", ")
+		if cause != nil {
+			return fmt.Errorf("%s: %w", msg, cause)
+		}
+		return errors.New(msg)
+	}
+	// advanceFallback hands the rest of the run to options.fallbackLLMConfigs[idx]
+	// and records why on the trace (event "model_failover").
+	advanceFallback := func(idx int, cause string) {
+		from := activeLLMConfig
+		left[servingSelectionID(from)] = true
+		activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[idx], from)
+		nextFallback = idx + 1
+		served.Switch(modelSwitch(from, activeLLMConfig, "model_failover"))
+		if baseConversationID != "" {
+			options.conversationID = baseConversationID + "#failover"
+			if nextFallback > 1 {
+				options.conversationID += strconv.Itoa(nextFallback)
+			}
+		}
+		if baseCacheKey != "" {
+			// The key doubles as OpenCode's session: a failed-over
+			// thread leaves the session pinned to the failing route.
+			// It is keyed by the serving selection, not the failover
+			// ordinal, so a model that is failover1 on one call and
+			// failover2 on the next keeps one cache key.
+			cacheKey = failoverCacheKey(baseCacheKey, options.llmConfig, activeLLMConfig)
+		}
+		messages = stripProviderReplay(messages)
+		transientAttempts = 0
+		if emit != nil {
+			payload, _ := json.Marshal(map[string]any{
+				"reason":         "model_failover",
+				"from_provider":  from.Provider,
+				"from_model":     from.Model,
+				"to_provider":    activeLLMConfig.Provider,
+				"to_model":       activeLLMConfig.Model,
+				"provider_error": cause,
+				"members_left":   len(options.fallbackLLMConfigs) - nextFallback,
+			})
+			emit(types.EventRunRetry, "model_failover", payload)
+		}
+	}
 	for i := 0; ; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
 			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
@@ -763,6 +824,17 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		// goes on with the next one that can serve it.
 		if ctx.Err() == nil && !ledger.Until(activeLLMConfig, providerQuotaNow()).IsZero() {
 			switchOnQuota("known_exhausted", nil)
+		}
+
+		// An image turn never goes to a member that may not take it: the
+		// gateway would refuse the call. Move to the first image-capable
+		// member of the order, or fail by name.
+		if ctx.Err() == nil && !modelcatalog.SupportsImage(activeLLMConfig.Model) && messagesCarryImage(messages) {
+			idx := nextImageCapable()
+			if idx < 0 {
+				return "", totalUsage, noImageModelError(nil)
+			}
+			advanceFallback(idx, modelcatalog.ImageRefusal(activeLLMConfig.Model))
 		}
 
 		req := provideriface.ToolLoopRequest{
@@ -988,44 +1060,20 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			// (docs/problems/free-model-429-opens-provider-circuit-stub-
 			// stories-2026-10-14.md). Never on our own cancellation.
 			if nextFallback < len(options.fallbackLLMConfigs) && ctx.Err() == nil && IsModelFailoverError(err) {
-				from := activeLLMConfig
-				left[servingSelectionID(from)] = true
-				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[nextFallback], from)
-				nextFallback++
-				served.Switch(modelSwitch(from, activeLLMConfig, "model_failover"))
+				idx := nextFallback
+				if messagesCarryImage(messages) {
+					// Skip members that may not take the image the history carries.
+					idx = nextImageCapable()
+					if idx < 0 {
+						return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, noImageModelError(err))
+					}
+				}
 				// Only an error the backoff would have waited on owes the
 				// last member a round: a 5xx or an open circuit never had one.
 				if IsProviderRateLimitError(err) && failsOverWithoutRetry(err) {
 					skippedRetryRounds++
 				}
-				if baseConversationID != "" {
-					options.conversationID = baseConversationID + "#failover"
-					if nextFallback > 1 {
-						options.conversationID += strconv.Itoa(nextFallback)
-					}
-				}
-				if baseCacheKey != "" {
-					// The key doubles as OpenCode's session: a failed-over
-					// thread leaves the session pinned to the failing route.
-					// It is keyed by the serving selection, not the failover
-					// ordinal, so a model that is failover1 on one call and
-					// failover2 on the next keeps one cache key.
-					cacheKey = failoverCacheKey(baseCacheKey, options.llmConfig, activeLLMConfig)
-				}
-				messages = stripProviderReplay(messages)
-				transientAttempts = 0
-				if emit != nil {
-					payload, _ := json.Marshal(map[string]any{
-						"reason":         "model_failover",
-						"from_provider":  from.Provider,
-						"from_model":     from.Model,
-						"to_provider":    activeLLMConfig.Provider,
-						"to_model":       activeLLMConfig.Model,
-						"provider_error": err.Error(),
-						"members_left":   len(options.fallbackLLMConfigs) - nextFallback,
-					})
-					emit(types.EventRunRetry, "model_failover", payload)
-				}
+				advanceFallback(idx, err.Error())
 				continue
 			}
 			// Transient provider outage (gateway 429/5xx or an equivalent
