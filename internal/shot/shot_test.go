@@ -26,6 +26,13 @@ func findBrowser() string {
 	if b := os.Getenv(capsule.BrowserEnv); b != "" {
 		return b
 	}
+	// On CI the PATH browser is the runner's own Chrome, not the pinned
+	// Chromium a guest runs; it failed to start or to answer its debug socket
+	// on loaded runners (three runs on 2026-11-07). CI names a browser through
+	// the env var or skips.
+	if os.Getenv("CI") != "" {
+		return ""
+	}
 	for _, n := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"} {
 		if p, err := exec.LookPath(n); err == nil {
 			return p
