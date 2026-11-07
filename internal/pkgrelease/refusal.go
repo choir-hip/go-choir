@@ -68,6 +68,9 @@ const (
 	// Publisher-side (guest) refusals.
 	ReasonChangeNotConfined = "package_change_not_confined"
 	ReasonParentUnpublished = "package_parent_unpublished"
+	// ReasonPatchInapplicable: the operation's patch does not apply to the
+	// claimed base commit (or the host cannot read that commit).
+	ReasonPatchInapplicable = "package_patch_inapplicable"
 )
 
 // Refusal is a typed refusal: Reason is the code, Detail the prose.

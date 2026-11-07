@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -129,7 +130,7 @@ func (p *pdFixture) record(patch []byte, op, bundleDigest string, tweak func(*pk
 		ParentPatch: pkgBlob(src.Blobs.ParentPatch),
 		Manifest:    src.Manifest,
 		Publisher:   pkgrelease.Publisher{OwnerID: pdOwner, ComputerID: p.computerID},
-		Operation:   pkgrelease.Operation{OperationID: op, BundleDigest: bundleDigest, DecisionEvent: strings.Repeat("e", 64)},
+		Operation:   pkgrelease.Operation{OperationID: op, BundleDigest: bundleDigest, DecisionEvent: digestOf('a')},
 		Media:       []pkgrelease.Media{mediaShot("01-before-home.png", p.shots[0], 16, 16), mediaShot("01-after-home.png", p.shots[1], 16, 16)},
 	}
 	if tweak != nil {
@@ -160,6 +161,7 @@ func (p *pdFixture) publish(b built, decision string, tweak func(*PackagePublish
 	}
 	r := httptest.NewRequest(http.MethodPost, "/internal/computers/self-development/package-publish?computer_id="+computer, bytes.NewReader(body))
 	r.RemoteAddr = "172.16.0.2:40000"
+	r.Header.Set("Authorization", "Bearer "+p.guestToken)
 	w := httptest.NewRecorder()
 	p.handler.HandlePackagePublishByDecision(w, r)
 	return w
@@ -440,6 +442,8 @@ func TestPublishByDecisionRefusesAPlatformComputer(t *testing.T) {
 	}
 	f.handler.guestLookup = fakeGuestLookup{"172.16.0.2": {Found: true, UserID: pdOwner, ComputerID: paperComputerID}}
 	f.queryComputer = paperComputerID
+	f.handler.eventAuth = hostBuildAuth{computer: paperComputerID}
+	f.guestToken = paperComputerID
 	b := f.record(f.patch, "op-pkg", bundle, func(r *pkgrelease.Record) { r.Publisher.ComputerID = paperComputerID })
 	w := f.publish(b, decision.DecisionDigest, nil)
 	f.wantRefused(w, http.StatusForbidden, reasonPublishAuthority)
@@ -507,5 +511,160 @@ func TestPublishByDecisionRefusesWhatTheDecisionIsNot(t *testing.T) {
 	f.wantRefused(f.publish(b, decision.DecisionDigest, nil), http.StatusForbidden, reasonPackageNotDecided)
 	if f.listedCount() != 0 {
 		t.Fatal("something published")
+	}
+}
+
+// --- D7 P1/P2 review follow-ups ---
+//
+// Failure modes pinned here:
+//
+//	R1  a guest claims a held commit that is not the booted base and does not
+//	    descend from it, and the seat decides over it;
+//	R2  a record carrying another decision event than the one the tape
+//	    admitted publishes by the decision;
+//	R3  the body is read (or the slots taken) before the caller is bound, the
+//	    publish needs no event:append capability, or publishes are unbounded;
+//	R4  a claimed commit missing from the store or a patch that does not apply
+//	    answers 500 (or 503 at the seat) with no named reason;
+//	R5  a non-internal caller's OwnerID on the consensus route is believed.
+
+// commitOn makes a commit on parent with App.svelte set to content.
+func (p *pdFixture) commitOn(parent, content string) string {
+	t := p.t()
+	env := []string{"GIT_INDEX_FILE=" + t.TempDir() + "/index"}
+	if parent != "" {
+		pkgGit(t, p.w.repo, env, "", "read-tree", parent)
+	}
+	sha := pkgGit(t, p.w.repo, nil, content, "hash-object", "-w", "--stdin")
+	pkgGit(t, p.w.repo, env, "", "update-index", "--add", "--cacheinfo", "100644,"+sha+","+pkgRoot+"/App.svelte")
+	tree := pkgGit(t, p.w.repo, env, "", "write-tree")
+	args := []string{"commit-tree", tree, "-m", "c"}
+	if parent != "" {
+		args = append(args, "-p", parent)
+	}
+	return pkgGit(t, p.w.repo, nil, "", args...)
+}
+
+func TestPackageSeatClaimedBaseMustBeTheBootedBaseOrDescendFromIt(t *testing.T) {
+	f := newPDFixture(t)
+	f.setBundle(strings.Repeat("c", 40), f.patch, f.readerEffect()) // stack commits: bundle base is not the claim
+	// An unrelated root commit corpusd holds: held, but not the booted lineage.
+	stranger := f.commitOn("", "<p>stranger</p>\n")
+	if _, err := f.decide(t, f.packageRequest("op-stranger", stranger)); !errors.Is(err, ErrConsensusRefused) || !strings.Contains(err.Error(), "does not descend") {
+		t.Fatalf("a held commit outside the booted lineage: %v", err)
+	}
+	// A descendant of the booted base is the stack base the design names.
+	child := f.commitOn(f.w.base, "<p>child</p>\n")
+	if _, err := f.decide(t, f.packageRequest("op-child", child)); err != nil {
+		// the patch is over base; a child with a changed App.svelte may not
+		// apply, which is a reject vote or refusal other than ancestry
+		if strings.Contains(err.Error(), "descend") {
+			t.Fatalf("a descendant of the booted base: %v", err)
+		}
+	}
+	// The booted base itself.
+	if _, err := f.decide(t, f.packageRequest("op-self", f.w.base)); err != nil {
+		t.Fatalf("the booted base: %v", err)
+	}
+}
+
+func TestPublishByDecisionRefusesAnotherDecisionEvent(t *testing.T) {
+	f, decision, bundle := newPublishedWorld(t)
+	b := f.record(f.patch, "op-pkg", bundle, func(r *pkgrelease.Record) { r.Operation.DecisionEvent = digestOf('b') })
+	f.wantRefused(f.publish(b, decision.DecisionDigest, nil), http.StatusForbidden, reasonDecisionMismatch)
+	if f.listedCount() != 0 {
+		t.Fatal("something published")
+	}
+}
+
+func TestPublishByDecisionBindsAndAuthorizesBeforeReadingTheBody(t *testing.T) {
+	f, decision, bundle := newPublishedWorld(t)
+	b := f.record(f.patch, "op-pkg", bundle, nil)
+	probe := &readProbe{}
+	post := func(remote, bearer string) *httptest.ResponseRecorder {
+		probe.read = false
+		r := httptest.NewRequest(http.MethodPost, "/internal/computers/self-development/package-publish?computer_id="+f.computerID, probe)
+		r.RemoteAddr = remote
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		w := httptest.NewRecorder()
+		f.handler.HandlePackagePublishByDecision(w, r)
+		return w
+	}
+	if w := post("172.16.0.99:40000", f.guestToken); w.Code != http.StatusForbidden || probe.read {
+		t.Fatalf("an unbound caller: %d read=%v", w.Code, probe.read)
+	}
+	if w := post("172.16.0.2:40000", ""); w.Code != http.StatusForbidden || probe.read {
+		t.Fatalf("no event:append capability: %d read=%v", w.Code, probe.read)
+	}
+	// The bound, authorized publish still lists.
+	if w := f.publish(b, decision.DecisionDigest, nil); w.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", w.Code, w.Body.String())
+	}
+}
+
+type readProbe struct{ read bool }
+
+func (r *readProbe) Read([]byte) (int, error) { r.read = true; return 0, io.EOF }
+
+func TestPublishByDecisionBoundsConcurrencyAndBodySize(t *testing.T) {
+	f, decision, bundle := newPublishedWorld(t)
+	b := f.record(f.patch, "op-pkg", bundle, nil)
+	for i := 0; i < maxConcurrentPackagePublishes; i++ {
+		packagePublishSlots <- struct{}{}
+	}
+	w := f.publish(b, decision.DecisionDigest, nil)
+	for i := 0; i < maxConcurrentPackagePublishes; i++ {
+		<-packagePublishSlots
+	}
+	f.wantRefused(w, http.StatusTooManyRequests, reasonPublishBusy)
+	// A body past the base64 cap is cut off while decoding.
+	huge := strings.NewReader(`{"source_patch":"` + strings.Repeat("A", maxPackagePublishBody+1024) + `"}`)
+	r := httptest.NewRequest(http.MethodPost, "/internal/computers/self-development/package-publish?computer_id="+f.computerID, huge)
+	r.RemoteAddr = "172.16.0.2:40000"
+	r.Header.Set("Authorization", "Bearer "+f.guestToken)
+	rec := httptest.NewRecorder()
+	f.handler.HandlePackagePublishByDecision(rec, r)
+	f.wantRefused(rec, http.StatusRequestEntityTooLarge, pkgrelease.ReasonBlobTooLarge)
+}
+
+func TestPublishByDecisionNamesAnUnreachableBaseAndAnInapplicablePatch(t *testing.T) {
+	f, decision, bundle := newPublishedWorld(t)
+	b := f.record(f.patch, "op-pkg", bundle, nil)
+	f.wantRefused(f.publish(b, decision.DecisionDigest, func(r *PackagePublishByDecisionRequest) { r.ClaimedPlatformBase = strings.Repeat("d", 40) }),
+		http.StatusUnprocessableEntity, reasonBaseUnavailable)
+	// A held commit the frozen patch does not apply to (its App.svelte differs).
+	other := f.commitOn("", "<p>other</p>\n")
+	f.wantRefused(f.publish(b, decision.DecisionDigest, func(r *PackagePublishByDecisionRequest) { r.ClaimedPlatformBase = other }),
+		http.StatusUnprocessableEntity, pkgrelease.ReasonPatchInapplicable)
+	if f.listedCount() != 0 {
+		t.Fatal("something published")
+	}
+}
+
+func TestConsensusRouteIgnoresANonInternalCallersOwnerID(t *testing.T) {
+	f := newPDFixture(t)
+	f.setBundle(strings.Repeat("c", 40), f.patch, f.readerEffect())
+	request := f.packageRequest("op-pkg", f.w.base)
+	request.OwnerID = "owner-forged"
+	body, _ := json.Marshal(request)
+	// Unbound remote: the guest is no tap caller, so no owner is bound.
+	r := httptest.NewRequest(http.MethodPost, "/internal/computers/self-development/consensus?computer_id="+f.computerID, bytes.NewReader(body))
+	r.RemoteAddr = "172.16.0.99:40000"
+	r.Header.Set("Authorization", "Bearer "+f.guestToken)
+	w := httptest.NewRecorder()
+	f.handler.HandleSelfDevelopmentConsensus(w, r)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "none bound") {
+		t.Fatalf("forged owner: %d %s", w.Code, w.Body.String())
+	}
+	// Bound caller: the owner is vmctl's binding, not the guest's word.
+	r = httptest.NewRequest(http.MethodPost, "/internal/computers/self-development/consensus?computer_id="+f.computerID, bytes.NewReader(body))
+	r.RemoteAddr = "172.16.0.2:40000"
+	r.Header.Set("Authorization", "Bearer "+f.guestToken)
+	w = httptest.NewRecorder()
+	f.handler.HandleSelfDevelopmentConsensus(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("bound caller: %d %s", w.Code, w.Body.String())
 	}
 }

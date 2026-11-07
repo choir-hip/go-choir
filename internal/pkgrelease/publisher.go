@@ -326,7 +326,7 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	defer s.close()
 	after, err := s.apply(ctx, in.Base, in.Patch)
 	if err != nil {
-		return DraftSource{}, fmt.Errorf("pkgrelease: the operation's patch does not apply to its base %s: %w", in.Base, err)
+		return DraftSource{}, refuse(ReasonPatchInapplicable, "the operation's patch does not apply to its base %s: %v", in.Base, err)
 	}
 	opPaths, err := diffPaths(ctx, s, in.Base, after)
 	if err != nil {

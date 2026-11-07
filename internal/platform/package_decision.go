@@ -59,9 +59,11 @@ const (
 	reasonDecisionMismatch  = "decision_mismatch"
 	reasonPublisherAddress  = "publisher_address_required"
 	reasonPublisherLookup   = "publisher_address_unavailable"
+	reasonPublishBusy       = "publish_busy"
 	reasonDraftDigest       = "draft_digest_mismatch"
 	reasonMediaNotFrozen    = "media_not_frozen"
 	reasonPublishAuthority  = "publish_authority_refused"
+	reasonBaseUnavailable   = "claimed_base_unavailable"
 	reasonPackageNotDecided = "decision_not_a_package_decision"
 )
 
@@ -204,6 +206,12 @@ type bootedBaseCommits interface {
 	BootedBaseCommit(bootedBase string) (string, bool)
 }
 
+// maxConcurrentPackagePublishes bounds the by-decision publishes in flight:
+// each holds up to a 54 MB body and runs git.
+const maxConcurrentPackagePublishes = 2
+
+var packagePublishSlots = make(chan struct{}, maxConcurrentPackagePublishes)
+
 var gitCommitID = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 
 // castPackageSeatBallot is the capsule-verifier seat of a package decision.
@@ -244,26 +252,37 @@ func (a *ConsensusActuator) castPackageSeatBallot(ctx context.Context, computerI
 		return refuse("the claimed platform base is not a commit id")
 	}
 	bundleBase := strings.ToLower(strings.TrimSpace(bundle.SourcePatchBaseCommit))
-	if claimed == bundleBase {
-		// No projection commit stands between the bundle and the claim (an
-		// empty stack): the claim is the booted base's build commit.
-		resolver, ok := a.hostBuilds.(bootedBaseCommits)
-		if !ok {
-			return hostBuildVote{}, fmt.Errorf("%w: the booted base cannot be resolved here", ErrConsensusUnavailable)
-		}
-		commit, found := resolver.BootedBaseCommit(strings.TrimSpace(request.BaseImageManifestDigest))
-		if !found {
-			return refuse("the computer's booted base %s is not an image this host holds", request.BaseImageManifestDigest)
-		}
-		if commit != claimed {
-			return refuse("the claimed platform base %s is not the booted base's build commit %s", claimed, commit)
-		}
-	}
 	if err := a.seat.packageBaseHeld(ctx, claimed); err != nil {
 		if errors.Is(err, pkgrelease.ErrBaseUnavailable) && a.seat.packageBase == nil {
 			return hostBuildVote{}, fmt.Errorf("%w: %v", ErrConsensusUnavailable, err)
 		}
 		return refuse("the claimed platform base %s is not in corpusd's store", claimed)
+	}
+	// The claim is bound to the booted base for every claim (design 2.2): an
+	// empty stack (the claim is the bundle's own base) must equal the booted
+	// base's build commit; with stack commits it is the stack's base, which
+	// must be the booted base or descend from it.
+	resolver, ok := a.hostBuilds.(bootedBaseCommits)
+	if !ok {
+		return hostBuildVote{}, fmt.Errorf("%w: the booted base cannot be resolved here", ErrConsensusUnavailable)
+	}
+	booted, found := resolver.BootedBaseCommit(strings.TrimSpace(request.BaseImageManifestDigest))
+	if !found {
+		return refuse("the computer's booted base %s is not an image this host holds", request.BaseImageManifestDigest)
+	}
+	if claimed != booted {
+		if claimed == bundleBase {
+			return refuse("the claimed platform base %s is not the booted base's build commit %s", claimed, booted)
+		}
+		ancestry, ok := a.seat.packageBase.(interface {
+			IsAncestor(ctx context.Context, ancestor, descendant string) (bool, error)
+		})
+		if !ok {
+			return hostBuildVote{}, fmt.Errorf("%w: the base object store cannot answer ancestry", ErrConsensusUnavailable)
+		}
+		if descends, err := ancestry.IsAncestor(ctx, booted, claimed); err != nil || !descends {
+			return refuse("the claimed platform base %s does not descend from the booted base's build commit %s", claimed, booted)
+		}
 	}
 
 	draft, err := a.seat.derivePackageDraft(ctx, packageDraftInput{
@@ -534,10 +553,30 @@ func (h *Handler) HandlePackagePublishByDecision(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "package publish by decision unavailable"})
 		return
 	}
+	// The credential binds before any body byte is read, and at most
+	// maxConcurrentPackagePublishes run at once, so the decode is bounded in
+	// bytes and in number.
+	ownerID, computerID, internal, ok := h.packagePublishCaller(w, r)
+	if !ok {
+		return
+	}
+	select {
+	case packagePublishSlots <- struct{}{}:
+		defer func() { <-packagePublishSlots }()
+	default:
+		w.Header().Set("Retry-After", "5")
+		writeJSON(w, http.StatusTooManyRequests, packageAPIError{Error: "too many package publishes are running; retry shortly", Reason: reasonPublishBusy})
+		return
+	}
 	var request PackagePublishByDecisionRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPackagePublishBody))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, packageAPIError{Error: "the publish body exceeds the cap", Reason: pkgrelease.ReasonBlobTooLarge})
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid package publish request"})
 		return
 	}
@@ -545,39 +584,45 @@ func (h *Handler) HandlePackagePublishByDecision(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusRequestEntityTooLarge, packageAPIError{Error: "the publish payload exceeds 40 MiB", Reason: pkgrelease.ReasonBlobTooLarge})
 		return
 	}
-	ownerID, computerID, ok := h.packagePublishCaller(w, r, request)
-	if !ok {
+	if internal {
+		ownerID, computerID = strings.TrimSpace(request.OwnerID), strings.TrimSpace(request.ComputerID)
+		if ownerID == "" || computerID == "" {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "owner_id and computer_id are required of an internal caller"})
+			return
+		}
+	} else if (strings.TrimSpace(request.OwnerID) != "" && strings.TrimSpace(request.OwnerID) != ownerID) ||
+		(strings.TrimSpace(request.ComputerID) != "" && strings.TrimSpace(request.ComputerID) != computerID) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: errInternalCallerRequired.Error()})
 		return
 	}
 	h.publishByDecision(w, r, ownerID, computerID, request)
 }
 
-// packagePublishCaller names the owner and computer from the credential: a
-// host-internal caller states them; a guest is bound by vmctl to exactly one
-// of each, and the request's own claim, if any, must agree.
-func (h *Handler) packagePublishCaller(w http.ResponseWriter, r *http.Request, request PackagePublishByDecisionRequest) (ownerID, computerID string, ok bool) {
+// packagePublishCaller names the credential's owner and computer before the
+// body is read. A host-internal caller states them in the body (internal is
+// true and the names are empty here); a guest is bound by vmctl to exactly
+// one of each, must hold the event:append capability the consensus route
+// requires, and the request's own claim, read later, must agree.
+func (h *Handler) packagePublishCaller(w http.ResponseWriter, r *http.Request) (ownerID, computerID string, internal, ok bool) {
 	if trustedInternalCaller(r) {
-		ownerID, computerID = strings.TrimSpace(request.OwnerID), strings.TrimSpace(request.ComputerID)
-		if ownerID == "" || computerID == "" {
-			writeJSON(w, http.StatusBadRequest, apiError{Error: "owner_id and computer_id are required of an internal caller"})
-			return "", "", false
-		}
-		return ownerID, computerID, true
+		return "", "", true, true
 	}
 	ownership, err := bindTapCaller(r.Context(), h.guestLookup, r)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: errInternalCallerRequired.Error()})
-		return "", "", false
+		return "", "", false, false
 	}
 	ownerID, computerID = strings.TrimSpace(ownership.UserID), strings.TrimSpace(ownership.ComputerID)
 	if ownerID == "" || computerID == "" ||
-		(strings.TrimSpace(request.OwnerID) != "" && strings.TrimSpace(request.OwnerID) != ownerID) ||
-		(strings.TrimSpace(request.ComputerID) != "" && strings.TrimSpace(request.ComputerID) != computerID) ||
 		(strings.TrimSpace(r.URL.Query().Get("computer_id")) != "" && strings.TrimSpace(r.URL.Query().Get("computer_id")) != computerID) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: errInternalCallerRequired.Error()})
-		return "", "", false
+		return "", "", false, false
 	}
-	return ownerID, computerID, true
+	if h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:append") != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "package publish capability refused"})
+		return "", "", false, false
+	}
+	return ownerID, computerID, false, true
 }
 
 func (h *Handler) publishByDecision(w http.ResponseWriter, r *http.Request, ownerID, computerID string, request PackagePublishByDecisionRequest) {
@@ -644,8 +689,8 @@ func (h *Handler) publishByDecision(w http.ResponseWriter, r *http.Request, owne
 		refuse(http.StatusForbidden, reasonPublishAuthority, "the record's publisher or track is not the owner and computer bound to this credential")
 		return
 	}
-	if record.Operation.OperationID != row.operationID || record.Operation.BundleDigest != row.bundle {
-		refuse(http.StatusForbidden, reasonDecisionMismatch, "the record is of another operation or bundle than the decision")
+	if record.Operation.OperationID != row.operationID || record.Operation.BundleDigest != row.bundle || record.Operation.DecisionEvent != row.admitted {
+		refuse(http.StatusForbidden, reasonDecisionMismatch, "the record is of another operation, bundle or decision event than the decision")
 		return
 	}
 
@@ -687,6 +732,10 @@ func (h *Handler) publishByDecision(w http.ResponseWriter, r *http.Request, owne
 	// draft the seat voted on. The repeat of a publish that already took the
 	// decision (same release) skips it: the track head is that release by now.
 	if row.published != releaseID {
+		if err := h.packageBaseHeld(ctx, claimed); err != nil {
+			refuse(http.StatusUnprocessableEntity, reasonBaseUnavailable, "the claimed platform base %s is not in corpusd's store", claimed)
+			return
+		}
 		draft, err := h.derivePackageDraft(ctx, packageDraftInput{
 			OwnerID: ownerID, ComputerID: computerID, OperationID: row.operationID, BundleDigest: row.bundle,
 			Name: record.Package.Name, ClaimedBase: claimed, Patch: request.SourcePatch,

@@ -47,6 +47,22 @@ func (g GitStore) PackageTree(ctx context.Context, commit, root string) (string,
 	return tree, present, nil
 }
 
+// IsAncestor reports whether ancestor is reachable from descendant (or the
+// same commit), by git merge-base --is-ancestor. A shallow store that lacks
+// the history answers false, which fails closed.
+func (g GitStore) IsAncestor(ctx context.Context, ancestor, descendant string) (bool, error) {
+	if !gitObjectID.MatchString(ancestor) || !gitObjectID.MatchString(descendant) {
+		return false, fmt.Errorf("%w: not a commit id", ErrBaseUnavailable)
+	}
+	if ancestor == descendant {
+		return true, nil
+	}
+	if _, err := gitRun(ctx, g.Dir, nil, nil, "merge-base", "--is-ancestor", ancestor, descendant); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
 // Shallow reports git rev-parse --is-shallow-repository on the store. A
 // shallow store refuses every base parent older than the deploy, which
 // fails closed; corpusd reports the answer in its health detail.
