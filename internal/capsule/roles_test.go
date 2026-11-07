@@ -1,6 +1,10 @@
 package capsule
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -151,5 +155,53 @@ func TestAgentRoleMutatesCapsuleIsTheGrant(t *testing.T) {
 	}
 	if !RoleResearch.ReadsCapsules() || RoleManagement.ReadsCapsules() {
 		t.Error("ReadsCapsules is not capsule.read")
+	}
+}
+
+// MA4.10 second pass: no code path names a desk to decide capsule privilege.
+// Failure modes, written before the change:
+//  1. a mint site names RoleEngineering/RoleResearch/RoleManagement instead of
+//     asking the grant holder -> the scan below finds the constant outside
+//     roles.go;
+//  2. the derived role disagrees with the on-wire identifier of an existing
+//     capsule -> the derived values equal the identifiers;
+//  3. with no holder a mint site gets a usable role -> the derived role is ""
+//     and MutatesCapsule/ReadsCapsules are false for it.
+func TestRolesDeriveFromGrantHoldersAndKeepTheirWireIdentifiers(t *testing.T) {
+	if got := PerformerRole(); got != RoleEngineering || !got.MutatesCapsule() {
+		t.Errorf("PerformerRole = %q", got)
+	}
+	if got := InspectorRole(); got != RoleResearch || !got.ReadsCapsules() || got.MutatesCapsule() {
+		t.Errorf("InspectorRole = %q", got)
+	}
+	if got := AdmitterRole(); got != RoleManagement || got.MutatesCapsule() || got.ReadsCapsules() {
+		t.Errorf("AdmitterRole = %q", got)
+	}
+	if AgentRole("").MutatesCapsule() || AgentRole("").ReadsCapsules() {
+		t.Error("the empty role holds a capsule grant")
+	}
+}
+
+func TestNoProductionCodeNamesACapsuleRole(t *testing.T) {
+	re := regexp.MustCompile(`\bRole(Engineering|Research|Management)\b`)
+	for _, dir := range []string{".", "../agentcore", "../store"} {
+		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") || f == "roles.go" || f == filepath.Join(".", "roles.go") {
+				continue
+			}
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, line := range strings.Split(string(b), "\n") {
+				if c := strings.Index(line, "//"); c >= 0 {
+					line = line[:c]
+				}
+				if re.MatchString(line) {
+					t.Errorf("%s:%d names a capsule role constant: %s", f, i+1, strings.TrimSpace(line))
+				}
+			}
+		}
 	}
 }

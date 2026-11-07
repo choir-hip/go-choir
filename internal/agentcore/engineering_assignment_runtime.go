@@ -1023,13 +1023,13 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "spawn", phaseStarted)
 	spawnedAt := time.Now().UTC()
 	slot := "implementation"
-	capability, err := exec.MintCapabilityHandle(runID, capsule.RoleEngineering, capsuleID, opaque, 24*time.Hour, slot)
+	capability, err := exec.MintCapabilityHandle(runID, capsule.PerformerRole(), capsuleID, opaque, 24*time.Hour, slot)
 	grantedAt := time.Now().UTC()
 	if err != nil {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
 	}
-	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets()[capsule.RoleEngineering]))
-	for verb, allowed := range capsule.RoleVerbSets()[capsule.RoleEngineering] {
+	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets()[capsule.PerformerRole()]))
+	for verb, allowed := range capsule.RoleVerbSets()[capsule.PerformerRole()] {
 		if allowed {
 			compiledVerbs = append(compiledVerbs, verb)
 		}
@@ -1043,7 +1043,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		actualVerbs = append(actualVerbs, verb)
 	}
 	slices.Sort(actualVerbs)
-	if capability.AgentRole != capsule.RoleEngineering || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
+	if capability.AgentRole != capsule.PerformerRole() || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
 		capability.Handle != opaque || capability.Slot != slot || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
 		len(capability.Signature) == 0 || !capability.ExpiresAt.After(grantedAt) || capability.ExpiresAt.After(grantedAt.Add(24*time.Hour+time.Second)) {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability acknowledgement mismatch"))

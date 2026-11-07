@@ -994,10 +994,14 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	_ = cgroupFile.Close()
 	logPipe.started()
 	timer.phase("broker_start")
+	inspector := InspectorRole()
+	if inspector == "" {
+		return fmt.Errorf("capsule broker readiness: no desk holds capsule.read")
+	}
 	readinessCapability := &Capability{
 		CapabilityID: "broker-readiness-" + caps.ID, Handle: "broker-readiness", CapsuleID: caps.ID,
-		AgentRunID: "guest-core-readiness", AgentRole: RoleResearch, TargetCapsule: caps.ID,
-		Verbs: RoleVerbSets()[RoleResearch], ExpiresAt: time.Now().UTC().Add(time.Minute),
+		AgentRunID: "guest-core-readiness", AgentRole: inspector, TargetCapsule: caps.ID,
+		Verbs: RoleVerbSets()[inspector], ExpiresAt: time.Now().UTC().Add(time.Minute),
 	}
 	if err := SignCapability(readinessCapability, e.privateKey, "guest-ephemeral"); err != nil {
 		return fmt.Errorf("capsule sign broker readiness capability: %w", err)
@@ -1746,7 +1750,7 @@ func (e *Executor) GrantEngineering(managementRunID, controlHandle, engineeringR
 	if err != nil {
 		return "", err
 	}
-	capability, err := e.MintCapability(engineeringRunID, RoleEngineering, capsuleID, ttl)
+	capability, err := e.MintCapability(engineeringRunID, PerformerRole(), capsuleID, ttl)
 	if err != nil {
 		return "", err
 	}

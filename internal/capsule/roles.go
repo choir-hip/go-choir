@@ -63,3 +63,41 @@ func (r AgentRole) MutatesCapsule() bool { return deskmanifest.MutatesCapsule(st
 // ReadsCapsules reports whether the role holds capsule.read: read-only
 // inspection across capsules.
 func (r AgentRole) ReadsCapsules() bool { return deskmanifest.ReadsCapsules(string(r)) }
+
+// PerformerRole is the capsule role of the desk that performs admitted
+// assignments, the holder of perform.assignment (MA4.10). The constants above
+// are the on-wire identifiers of existing capsules and capabilities; no code
+// path names one to decide privilege, it asks the grant holder. With no
+// holder the role is empty, and an empty role holds no capsule grant.
+func PerformerRole() AgentRole {
+	d, ok := deskmanifest.AssignmentPerformer()
+	if !ok {
+		return ""
+	}
+	return AgentRole(d.Name)
+}
+
+// AdmitterRole is the capsule role of the desk that admits assignments, the
+// holder of admit.assignment. It holds no capsule verb: it asks for, never
+// mutates, a capsule.
+func AdmitterRole() AgentRole {
+	d, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
+	if !ok {
+		return ""
+	}
+	return AgentRole(d.Name)
+}
+
+// InspectorRole is the capsule role of the system desk that reads capsules
+// without mutating them (capsule.read and not capsule.mutate), or "" if none
+// does. Desks are taken in name order so a second such desk cannot change the
+// answer between runs.
+func InspectorRole() AgentRole {
+	for _, name := range deskmanifest.Names() {
+		d, _ := deskmanifest.Lookup(name)
+		if d.Kind == deskmanifest.KindSystem && d.HasGrant("capsule.read") && !d.HasGrant("capsule.mutate") {
+			return AgentRole(name)
+		}
+	}
+	return ""
+}

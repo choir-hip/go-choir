@@ -360,8 +360,8 @@ func requireEngineeringCommandDigest(got, want string, err error) error {
 }
 
 func engineeringCompiledVerbs() []string {
-	verbs := make([]string, 0, len(capsule.RoleVerbSets()[capsule.RoleEngineering]))
-	for verb, allowed := range capsule.RoleVerbSets()[capsule.RoleEngineering] {
+	verbs := make([]string, 0, len(capsule.RoleVerbSets()[capsule.PerformerRole()]))
+	for verb, allowed := range capsule.RoleVerbSets()[capsule.PerformerRole()] {
 		if allowed {
 			verbs = append(verbs, verb)
 		}
@@ -375,7 +375,7 @@ func engineeringVerbSetDigest(verbs []string) string {
 		Schema string   `json:"schema"`
 		Role   string   `json:"role"`
 		Verbs  []string `json:"verbs"`
-	}{"choir.co_super_verb_set/v1", string(capsule.RoleEngineering), verbs})
+	}{"choir.co_super_verb_set/v1", string(capsule.PerformerRole()), verbs})
 	return objectgraph.SHA256(payload)
 }
 
@@ -444,7 +444,7 @@ func validateGrantPolicyAttestation(att types.EngineeringGrantPolicyAttestation,
 	if att.Schema != types.EngineeringGrantPolicyAttestationSchemaV1 || att.AssignmentID != assignment.AssignmentID || att.Attempt != assignment.Binding.Attempt ||
 		att.OwnerID != assignment.Binding.OwnerID || att.ComputerID != assignment.Binding.ComputerID || att.TrajectoryID != assignment.Binding.TrajectoryID ||
 		att.RunID != assignment.BoundRunID || att.CapsuleID != assignment.Binding.CapsuleID || att.TargetCapsule != assignment.Binding.CapsuleID ||
-		att.Role != string(capsule.RoleEngineering) || !slices.Equal(att.GrantedVerbs, verbs) || att.VerbSetDigest != engineeringVerbSetDigest(verbs) ||
+		att.Role != string(capsule.PerformerRole()) || !slices.Equal(att.GrantedVerbs, verbs) || att.VerbSetDigest != engineeringVerbSetDigest(verbs) ||
 		att.PolicyDigest != engineeringPolicyDigest(att.Role, verbs, assignment.Binding.NetworkMode, assignment.Binding.FilesystemMode, assignment.Binding.Writable) ||
 		!types.ValidSHA256Digest(att.SignedCapabilityDigest) || att.NetworkMode != assignment.Binding.NetworkMode ||
 		att.FilesystemMode != assignment.Binding.FilesystemMode || att.Writable != assignment.Binding.Writable ||

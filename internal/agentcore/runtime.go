@@ -4039,7 +4039,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		switch agentProfileForRun(rec) {
 		case agentprofile.Management:
 			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
-				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleManagement,
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.AdmitterRole(),
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 			})
 		case agentprofile.Engineering:

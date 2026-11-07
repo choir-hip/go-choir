@@ -142,14 +142,14 @@ func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleTo
 	if value == nil || value.Executor == nil || value.AgentRunID == "" {
 		return nil, fmt.Errorf("capsule authority unavailable")
 	}
-	if value.Role != role {
+	if role == "" || value.Role != role {
 		return nil, fmt.Errorf("capsule operation refused for role %q", value.Role)
 	}
 	return value, nil
 }
 
 func requireCurrentAssignedCapsule(ctx context.Context) (*CapsuleToolCtx, error) {
-	value, err := requireCapsuleRole(ctx, capsule.RoleEngineering)
+	value, err := requireCapsuleRole(ctx, capsule.PerformerRole())
 	if err != nil {
 		return nil, err
 	}

@@ -75,7 +75,7 @@ func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handl
 	toolCtx := &CapsuleToolCtx{
 		Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
 		OwnerID: rec.OwnerID, Images: rt.imageStore(), FilesRoot: rt.filesRoot(),
-		Role: capsule.RoleEngineering, CapsuleHandle: handle,
+		Role: capsule.PerformerRole(), CapsuleHandle: handle,
 		EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 		OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
 		BootedCommit: rt.buildCommit, ShotVerdict: rt.readShotVerdict,
