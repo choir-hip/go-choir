@@ -77,3 +77,32 @@ func TestVerifyFindingsAttachToVerify(t *testing.T) {
 		t.Fatalf("staged = %+v", got)
 	}
 }
+
+// apply-proof-5 on d@e: management could not build a finding in a cell
+// ("undefined selector choir.ShotFinding", "cannot use []map[string]any as
+// []yaegikernel.ShotFinding"), so no pass verdict could ever be staged. A
+// cell passes findings as plain maps, the shape the overlay teaches.
+func TestCellBuildsShotFindingsAsMaps(t *testing.T) {
+	out, staged := managementVerifyCell(t, `fmt.Println(choir.ShotVerdict("op-1", "pass", []map[string]any{
+	{"Pair": "01", "BeforeSHA256": "aa", "AfterSHA256": "bb", "Answers": map[string]string{"q1": "yes", "q2": "yes", "q3": "yes", "q4": "n/a", "q6": "yes"}, "Note": "unchanged, a log string"},
+}, ""))`)
+	if out.Error != "" || len(staged) != 1 || staged[0].Kind != IntentShotVerdict || len(staged[0].ShotFindings) != 1 {
+		t.Fatalf("error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
+	}
+	f := staged[0].ShotFindings[0]
+	if f.Pair != "01" || f.BeforeSHA256 != "aa" || f.AfterSHA256 != "bb" || f.Answers["q4"] != "n/a" || f.Note == "" {
+		t.Fatalf("finding = %+v", f)
+	}
+	// Answers as map[string]any and JSON key spelling work too.
+	out, staged = managementVerifyCell(t, `fmt.Println(choir.ShotVerdict("op-1", "pass", []map[string]any{
+	{"pair": "01", "before_sha256": "aa", "after_sha256": "bb", "answers": map[string]any{"q1": "yes"}},
+}, ""))`)
+	if out.Error != "" || len(staged) != 1 || staged[0].ShotFindings[0].Answers["q1"] != "yes" {
+		t.Fatalf("json spelling: error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
+	}
+	// A typo is refused by name, never dropped.
+	out, staged = managementVerifyCell(t, `fmt.Println(choir.ShotVerdict("op-1", "pass", []map[string]any{{"Pair": "01", "Answer": map[string]string{"q1": "yes"}}}, ""))`)
+	if len(staged) != 0 || !strings.Contains(out.Stdout, `unknown key "Answer"`) {
+		t.Fatalf("typo: error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
+	}
+}

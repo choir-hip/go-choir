@@ -1196,8 +1196,12 @@ func (s *ChoirScope) Screens(operationID string) (ScreensResult, error) {
 // after choir.Verify in the same cell: it errors when the cell has staged no
 // Verify, and at most once per cell. The findings land on the Verify
 // intent's ShotFindings. Management only.
-func (s *ChoirScope) VerifyFindings(findings []ShotFinding) error {
+func (s *ChoirScope) VerifyFindings(findings []map[string]any) error {
 	if err := s.mutateDenied("VerifyFindings"); err != nil {
+		return err
+	}
+	parsed, err := shotFindingsFromMaps(findings)
+	if err != nil {
 		return err
 	}
 	if !s.deskModule("VerifyFindings") {
@@ -1207,7 +1211,7 @@ func (s *ChoirScope) VerifyFindings(findings []ShotFinding) error {
 	if t == nil {
 		return fmt.Errorf("choir: verify findings require a bound cell")
 	}
-	return t.VerifyFindings(findings)
+	return t.VerifyFindings(parsed)
 }
 
 // ShotWait waits up to maxSeconds (clamped to 0..240) on a shot job and
@@ -1233,8 +1237,12 @@ func (s *ChoirScope) ShotWait(jobID string, maxSeconds int) (ShotWaitResult, err
 // ShotVerdict stages management's pass or fail on an operation's shot pair,
 // with one finding per screen pair. At most one per cell; requires a bound
 // cell. Management only.
-func (s *ChoirScope) ShotVerdict(operationID, verdict string, findings []ShotFinding, reason string) error {
+func (s *ChoirScope) ShotVerdict(operationID, verdict string, findings []map[string]any, reason string) error {
 	if err := s.mutateDenied("ShotVerdict"); err != nil {
+		return err
+	}
+	parsed, err := shotFindingsFromMaps(findings)
+	if err != nil {
 		return err
 	}
 	if !s.deskModule("ShotVerdict") {
@@ -1244,7 +1252,7 @@ func (s *ChoirScope) ShotVerdict(operationID, verdict string, findings []ShotFin
 	if t == nil {
 		return fmt.Errorf("choir: shot verdict requires a bound cell")
 	}
-	return t.ShotVerdict(operationID, verdict, findings, reason)
+	return t.ShotVerdict(operationID, verdict, parsed, reason)
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development
@@ -1799,4 +1807,66 @@ func (s *ChoirScope) Disagreement(disagreement any) (string, error) {
 		return "", err
 	}
 	return t.Disagreement(disagreementJSON)
+}
+
+// shotFindingsFromMaps reads the findings a cell passes as plain maps (a cell
+// cannot construct a host struct): keys Pair, BeforeSHA256, AfterSHA256,
+// Answers (q1..q6 to "yes", "no" or "n/a") and Note, in that spelling or the
+// JSON one (pair, before_sha256, ...). An unknown key or a non-string value
+// is refused by name, so a typo never drops an answer silently.
+func shotFindingsFromMaps(raw []map[string]any) ([]ShotFinding, error) {
+	out := make([]ShotFinding, 0, len(raw))
+	for i, m := range raw {
+		var f ShotFinding
+		for k, v := range m {
+			switch strings.ToLower(strings.ReplaceAll(k, "_", "")) {
+			case "pair", "beforesha256", "aftersha256", "note":
+				str, ok := v.(string)
+				if !ok {
+					return nil, fmt.Errorf("choir: finding %d: %s must be a string", i, k)
+				}
+				switch strings.ToLower(strings.ReplaceAll(k, "_", "")) {
+				case "pair":
+					f.Pair = str
+				case "beforesha256":
+					f.BeforeSHA256 = str
+				case "aftersha256":
+					f.AfterSHA256 = str
+				default:
+					f.Note = str
+				}
+			case "answers":
+				answers, err := shotAnswers(v)
+				if err != nil {
+					return nil, fmt.Errorf("choir: finding %d: %w", i, err)
+				}
+				f.Answers = answers
+			default:
+				return nil, fmt.Errorf("choir: finding %d: unknown key %q (keys: Pair, BeforeSHA256, AfterSHA256, Answers, Note)", i, k)
+			}
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+func shotAnswers(v any) (map[string]string, error) {
+	answers := map[string]string{}
+	switch m := v.(type) {
+	case map[string]string:
+		for k, a := range m {
+			answers[k] = a
+		}
+	case map[string]any:
+		for k, a := range m {
+			str, ok := a.(string)
+			if !ok {
+				return nil, fmt.Errorf("answer %s must be a string (yes, no or n/a)", k)
+			}
+			answers[k] = str
+		}
+	default:
+		return nil, fmt.Errorf("Answers must be a map of q1..q6 to yes, no or n/a")
+	}
+	return answers, nil
 }
