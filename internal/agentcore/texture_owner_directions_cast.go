@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -181,6 +182,16 @@ func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevis
 		}
 		rawIDs, named := spec[castOwnerRevisionKey]
 		if !named {
+			// X4 (MA4.10): a Cast to the desk that admits assignments, which
+			// names no revision (the restore round), still carries the owner's
+			// newest words, attached here once so no run context re-reads the
+			// tape at every render. Revisions listed now are the ones written
+			// at or before the commit.
+			if out2, ok, err := attachNewestOwnerWords(out, intents, i, spec, scope, list); err != nil {
+				return nil, err
+			} else if ok {
+				out = out2
+			}
 			continue
 		}
 		if err := refuseCellOwnerDirections(in); err != nil {
@@ -245,6 +256,59 @@ func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevis
 		return intents, nil
 	}
 	return out, nil
+}
+
+// attachNewestOwnerWords is the X4 attach for a Cast that names no owner
+// revision: when the Cast is to the holder of the admission ledger and the
+// document has an owner revision of this trajectory that carries words, the
+// newest one goes on the packet as the only owner_directions entry, marked
+// current. It reports false, and changes nothing, otherwise.
+func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec map[string]json.RawMessage, scope ownerRevisionScope, list func() ([]types.Revision, error)) ([]yaegikernel.StagedIntent, bool, error) {
+	in := intents[i]
+	holder, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
+	if !ok || list == nil || strings.TrimSpace(in.ToDesk) != holder.Name {
+		return out, false, nil
+	}
+	revisions, err := list()
+	if err != nil {
+		return nil, false, fmt.Errorf("reduce: Texture cast %s: list the document's revisions: %w", in.LocalID, err)
+	}
+	var best castOwnerDirection
+	var bestAt time.Time
+	found := false
+	for _, rev := range revisions {
+		if rev.AuthorKind != types.AuthorUser || rev.CreatedAt.IsZero() {
+			continue
+		}
+		d, err := ownerDirectionFromRevision(strings.TrimSpace(rev.RevisionID), scope, func(string) (types.Revision, error) { return rev, nil })
+		if err != nil || strings.TrimSpace(d.Text) == "" {
+			continue // another trajectory's, or an owner edit without words
+		}
+		if !found || rev.CreatedAt.After(bestAt) || (rev.CreatedAt.Equal(bestAt) && d.RevisionID > best.RevisionID) {
+			best, bestAt, found = d, rev.CreatedAt, true
+		}
+	}
+	if !found {
+		return out, false, nil
+	}
+	if len(best.Text) > castOwnerTextMax {
+		return nil, false, fmt.Errorf("reduce: Texture cast %s: the owner's newest words are %d bytes; a Cast carries at most %d: name the revisions this Cast answers as owner_revision", in.LocalID, len(best.Text), castOwnerTextMax)
+	}
+	best.Current = true
+	attached, err := marshalVerbatim([]castOwnerDirection{best})
+	if err != nil {
+		return nil, false, fmt.Errorf("reduce: Texture cast %s: encode owner_directions: %w", in.LocalID, err)
+	}
+	spec[castOwnerDirectionsKey] = attached
+	statement, err := marshalVerbatim(spec)
+	if err != nil {
+		return nil, false, fmt.Errorf("reduce: Texture cast %s: encode packet: %w", in.LocalID, err)
+	}
+	if out == nil {
+		out = append([]yaegikernel.StagedIntent(nil), intents...)
+	}
+	out[i].Statement = string(statement)
+	return out, true, nil
 }
 
 // earlierOwnerDirections picks the owner's earlier words for a Cast that

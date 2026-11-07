@@ -54,3 +54,12 @@ func (r AgentRole) HasVerb(verb string) bool {
 	}
 	return false
 }
+
+// MutatesCapsule reports whether the role holds capsule.mutate: it may bind a
+// capsule, run a job in it and write inside it (MA4.10: the capsule driver
+// asks the grant, never the desk's name). An unknown role fails closed.
+func (r AgentRole) MutatesCapsule() bool { return deskmanifest.MutatesCapsule(string(r)) }
+
+// ReadsCapsules reports whether the role holds capsule.read: read-only
+// inspection across capsules.
+func (r AgentRole) ReadsCapsules() bool { return deskmanifest.ReadsCapsules(string(r)) }

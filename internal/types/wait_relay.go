@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // An engineering wait relay is the progress relay's shape for a wait
@@ -42,8 +44,7 @@ func WaitRelayRecordID(engineeringInbox string, attempt uint64, episode, phase s
 func NewEngineeringWaitRelay(engineeringInbox, textureInbox, computerID string, attempt uint64, episode, phase, body string,
 	at time.Time, refs map[string]string) (CommitmentRecord, bool) {
 	engineeringInbox, textureInbox, body = strings.TrimSpace(engineeringInbox), strings.TrimSpace(textureInbox), strings.TrimSpace(body)
-	if body == "" || !strings.HasPrefix(textureInbox, "texture:") || !strings.HasPrefix(engineeringInbox, "engineering:") ||
-		engineeringInbox == "engineering:" || strings.TrimSpace(episode) == "" || (phase != WaitRelayStart && phase != WaitRelayEnd) {
+	if body == "" || !strings.HasPrefix(textureInbox, "texture:") || !deskmanifest.IsAssignmentInbox(engineeringInbox) || strings.TrimSpace(episode) == "" || (phase != WaitRelayStart && phase != WaitRelayEnd) {
 		return CommitmentRecord{}, false
 	}
 	subject := map[string]string{

@@ -1179,7 +1179,7 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	if strings.TrimSpace(agentRunID) == "" || strings.TrimSpace(handle) == "" || handle != strings.TrimSpace(handle) || ttl <= 0 || ttl > 24*time.Hour {
 		return nil, fmt.Errorf("capsule capability requires run identity, canonical opaque handle, and ttl in (0,24h]")
 	}
-	if role != RoleEngineering && role != RoleResearch {
+	if !role.MutatesCapsule() && !role.ReadsCapsules() {
 		return nil, fmt.Errorf("capsule capability role %q is not grantable", role)
 	}
 	// Slot is part of the minted authority: assigned Engineering runs carry
@@ -1190,12 +1190,12 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	default:
 		return nil, fmt.Errorf("capsule capability slot %q is not grantable", slot)
 	}
-	if role == RoleResearch && slot != "" {
+	if !role.MutatesCapsule() && slot != "" {
 		return nil, fmt.Errorf("capsule capability slot %q on a researcher grant", slot)
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if role == RoleEngineering {
+	if role.MutatesCapsule() {
 		if caps, ok := e.capsules[capsuleID]; !ok || caps.State != StateActive {
 			return nil, fmt.Errorf("capsule %s is not active", capsuleID)
 		}
@@ -1451,7 +1451,7 @@ func (e *Executor) persistReceiptArtifact(kind, ref string, canonical []byte) er
 
 func (e *Executor) PersistGrantedFreezeReceipt(ctx context.Context, agentRunID, handle string) (CapsuleFateReceipt, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return CapsuleFateReceipt{}, fmt.Errorf("capsule freeze receipt authority unavailable")
 	}
 	caps.mu.RLock()
@@ -1589,7 +1589,7 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 // side and says so, and the two are not required to match.
 func (e *Executor) ResolveGrantedExecutionReceiptsFor(ctx context.Context, agentRunID, handle string, refs []string, binding SubjectBinding) ([]ExecutionReceipt, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return nil, fmt.Errorf("capsule execution evidence unavailable")
 	}
 	caps.mu.RLock()
@@ -1658,7 +1658,7 @@ func (e *Executor) ResolveGrantedExecutionReceiptsFor(ctx context.Context, agent
 // capsule can change the tree before the quiesce.
 func (e *Executor) PreflightGrantedExecutionReceipts(ctx context.Context, agentRunID, handle string, refs []string, binding SubjectBinding) error {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return fmt.Errorf("capsule execution evidence unavailable")
 	}
 	caps.mu.RLock()
@@ -1765,7 +1765,7 @@ func (e *Executor) ExtractOwned(agentRunID, handle string) ([]FileChange, error)
 // diff. A frozen capsule may be retried after a later freeze step fails.
 func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string) ([]FileChange, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return nil, fmt.Errorf("capsule granted diff unavailable")
 	}
 	e.mu.RLock()
@@ -1800,7 +1800,7 @@ func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string
 }
 func (e *Executor) ThawGranted(ctx context.Context, agentRunID, handle string) error {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return fmt.Errorf("capsule granted thaw unavailable")
 	}
 	e.mu.RLock()
@@ -1828,7 +1828,7 @@ func (e *Executor) ThawGranted(ctx context.Context, agentRunID, handle string) e
 // writing the tree.
 func (e *Executor) InspectGrantedWorktree(ctx context.Context, agentRunID, handle string) (GrantedWorktree, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return GrantedWorktree{}, fmt.Errorf("capsule granted worktree unavailable")
 	}
 	caps.mu.RLock()
@@ -1925,14 +1925,14 @@ func liveReleaseFiles(ctx context.Context, caps *Capsule, changes []FileChange) 
 
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return "", fmt.Errorf("capsule granted identity unavailable")
 	}
 	return capability.TargetCapsule, nil
 }
 func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return "", fmt.Errorf("capsule granted worktree unavailable")
 	}
 	e.mu.RLock()
@@ -1961,7 +1961,7 @@ func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID,
 // verification; it never exposes a host path.
 func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, handle string) (SourcePreflight, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return SourcePreflight{}, fmt.Errorf("capsule candidate authority unavailable")
 	}
 	e.mu.RLock()
@@ -2024,7 +2024,7 @@ func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, hand
 
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return "", fmt.Errorf("capsule granted source snapshot unavailable")
 	}
 	e.mu.RLock()
@@ -2038,7 +2038,7 @@ func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string)
 
 func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (string, string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return "", "", fmt.Errorf("capsule freeze bindings unavailable")
 	}
 	e.mu.RLock()
@@ -2060,7 +2060,7 @@ func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (stri
 
 func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, incomingRoot string) (*StagedRelease, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleEngineering {
+	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return nil, fmt.Errorf("capsule release staging unavailable")
 	}
 	e.mu.RLock()

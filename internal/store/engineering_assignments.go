@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/deskprotocol"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -43,6 +44,21 @@ const (
 	ogEdgeReportAssignment     objectgraph.EdgeKind = "co_super_report_assignment"
 	ogEdgeReportCandidate      objectgraph.EdgeKind = "co_super_report_candidate"
 )
+
+// assignmentPerformer is the desk that performs admitted assignments: the
+// holder of the perform.assignment grant (MA4.10). Every check that used to ask
+// for the profile "engineering" asks the grant, and with no holder it refuses:
+// unknown is deny, never a default desk.
+func assignmentPerformer() (string, error) {
+	d, ok := deskmanifest.AssignmentPerformer()
+	if !ok {
+		return "", fmt.Errorf("co-super assignment: no desk holds %s: %w", deskmanifest.GrantPerformAssignment, ErrEngineeringAssignmentInvalid)
+	}
+	return d.Name, nil
+}
+
+// isAssignmentPerformer reports whether a profile or role is the performer's.
+func isAssignmentPerformer(name string) bool { return deskmanifest.IsAssignmentPerformer(name) }
 
 type engineeringAuthorityObjects struct {
 	trajectory    objectgraph.Object
@@ -726,7 +742,7 @@ func (s *Store) requireEngineeringAssignmentAuthority(ctx context.Context, bindi
 		return engineeringAuthorityObjects{}, err
 	}
 	if assignedAgent.OwnerID != binding.OwnerID || assignedAgent.ComputerID != binding.ComputerID ||
-		assignedAgent.AgentID != binding.AssignedAgentID || assignedAgent.Profile != agentprofile.Engineering || assignedAgent.Role != agentprofile.Engineering || assignedAgent.LifecycleVersion <= 0 {
+		assignedAgent.AgentID != binding.AssignedAgentID || !isAssignmentPerformer(assignedAgent.Profile) || !isAssignmentPerformer(assignedAgent.Role) || assignedAgent.LifecycleVersion <= 0 {
 		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: assigned lifecycle Engineering agent mismatch: %w", ErrEngineeringAssignmentInvalid)
 	}
 	authority.assignedAgent = assignedAgentObj
@@ -745,8 +761,8 @@ func (s *Store) requireEngineeringRecordsAdmission(ctx context.Context, assignme
 	refuse := func(format string, args ...any) error {
 		return fmt.Errorf("co-super assignment: records admission: "+format+": %w", append(args, ErrEngineeringAssignmentInvalid)...)
 	}
-	if binding.AssignedAgentID != agentprofile.Engineering+":"+assignmentID {
-		return objectgraph.Object{}, refuse("assigned inbox %s is not engineering:%s", binding.AssignedAgentID, assignmentID)
+	if inbox, ok := deskmanifest.AssignmentInbox(assignmentID); !ok || binding.AssignedAgentID != inbox {
+		return objectgraph.Object{}, refuse("assigned inbox %s is not the performer's inbox for assignment %s", binding.AssignedAgentID, assignmentID)
 	}
 	if records.OwnerID != binding.OwnerID || records.ComputerID != binding.ComputerID {
 		return objectgraph.Object{}, refuse("records command is outside the binding's scope")
@@ -843,8 +859,8 @@ func (s *Store) ListEngineeringAssignmentsByParentRound(ctx context.Context, own
 // EngineeringAssignmentForInbox returns the records assignment whose
 // engineering inbox is engineering:<assignmentID> (C1e D1).
 func (s *Store) EngineeringAssignmentForInbox(ctx context.Context, ownerID, computerID, inbox string) (types.EngineeringAssignment, error) {
-	assignmentID, ok := strings.CutPrefix(strings.TrimSpace(inbox), agentprofile.Engineering+":")
-	if !ok || assignmentID == "" {
+	assignmentID, ok := deskmanifest.AssignmentIDFromInbox(inbox)
+	if !ok {
 		return types.EngineeringAssignment{}, ErrNotFound
 	}
 	assignment, err := s.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, 1)
@@ -1290,7 +1306,11 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 
 	assignedAgent := req.AssignedAgent
 	assignedAgent.AgentID, assignedAgent.OwnerID, assignedAgent.ComputerID = req.Binding.AssignedAgentID, req.Binding.OwnerID, req.Binding.ComputerID
-	assignedAgent.Profile, assignedAgent.Role = agentprofile.Engineering, agentprofile.Engineering
+	performer, perr := assignmentPerformer()
+	if perr != nil {
+		return types.EngineeringAssignmentCommandResult{}, perr
+	}
+	assignedAgent.Profile, assignedAgent.Role = performer, performer
 	assignedAgent.ChannelID, assignedAgent.ActiveRunID = req.Binding.AssignedAgentID, ""
 	assignedAgent.LifecycleVersion, assignedAgent.LastReducerSeq = 1, transition.seq
 	assignedAgent.CreatedAt, assignedAgent.UpdatedAt = now, now
@@ -1513,7 +1533,7 @@ func validateEngineeringAssignmentRun(assignment types.EngineeringAssignment, as
 		metadataExactUint64(run.Metadata, "parent_round") != uint64(assignment.Binding.ParentRound) ||
 		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.ComputerID != assignment.Binding.ComputerID ||
 		run.TrajectoryID != assignment.Binding.TrajectoryID || run.AgentID != assignment.Binding.AssignedAgentID ||
-		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != agentprofile.Engineering || run.AgentRole != agentprofile.Engineering || run.State != types.RunPending ||
+		run.ChannelID != assignedAgent.ChannelID || !isAssignmentPerformer(run.AgentProfile) || !isAssignmentPerformer(run.AgentRole) || run.State != types.RunPending ||
 		run.RequestedByRunID != assignment.Binding.ParentRunID || !run.CreatedAt.IsZero() || !run.UpdatedAt.IsZero() ||
 		run.FinishedAt != nil || run.Result != "" || run.Error != "" ||
 		metadataExactString(run.Metadata, "requested_by_agent_id") != assignment.Binding.ParentAgentID ||

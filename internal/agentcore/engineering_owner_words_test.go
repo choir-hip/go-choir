@@ -83,11 +83,44 @@ func TestOwnerDirectionsAreChronologicalAndMarkTheCurrentOne(t *testing.T) {
 	}
 }
 
-func TestLatestOwnerWordsPicksTheNewestTheChainAnswers(t *testing.T) {
+// MA4.10, X4: the engineering run context reads the owner words attached to
+// the Cast record, and no render lists the tape. Failure modes, written before
+// the change:
+//   - X4a the render lists the document's revisions again (latestOwnerWords
+//     takes no lister and no cut-off: it reads the packet only);
+//   - X4b a Cast that names no revision (the restore round) has nothing
+//     attached, so the engineer is told nothing: the reducer attaches the
+//     newest owner revision at commit, and only on a Cast to the desk that
+//     holds the admission ledger;
+//   - X4c that attach takes another trajectory's revision, Texture's own, an
+//     owner edit without words, or a Cast to another desk gets owner words;
+//   - X4d a Cast that named a revision gets a second, newer one attached.
+func TestLatestOwnerWordsReadsOnlyTheCastRecord(t *testing.T) {
+	// The packet carries rounds 3 and 4: round 4 is the newest.
+	packet := `{"owner_revision":"rev-r4","owner_directions":[` +
+		`{"revision_id":"rev-r3","kind":"direction","at":"2026-11-03T18:30:00Z","text":"round 3: shoot a.png"},` +
+		`{"revision_id":"rev-r4","kind":"direction","at":"2026-11-03T18:40:00Z","text":"round 4: Step 0 measure, `+"`start`"+`\n"}]}`
+	got, source, ok := latestOwnerWords(packet)
+	if !ok || got.RevisionID != "rev-r4" || got.Text != "round 4: Step 0 measure, `start`\n" || !strings.Contains(source, "owner_directions") {
+		t.Fatalf("carried %+v (ok %v) from %q, want round 4 verbatim", got, ok, source)
+	}
+	// A Cast that carries round 3 is answered by round 3.
+	only3 := `{"owner_revision":"rev-r3","owner_directions":[{"revision_id":"rev-r3","kind":"direction","at":"2026-11-03T18:30:00Z","text":"round 3: shoot a.png"}]}`
+	if got, _, ok := latestOwnerWords(only3); !ok || got.RevisionID != "rev-r3" {
+		t.Fatalf("a Cast carrying round 3 carried %+v", got)
+	}
+	// A Cast with no attached words carries nothing; nothing is read from the tape.
+	for _, bare := range []string{`{"kind":"execution_request","summary":"retry the publication"}`, `{"summary":"x"}`, `not json`, ``} {
+		if got, _, ok := latestOwnerWords(bare); ok {
+			t.Fatalf("carried %+v from %q", got, bare)
+		}
+	}
+}
+
+func TestAnUnnamedCastToManagementCarriesTheNewestOwnerWordsAtCommit(t *testing.T) {
 	revs := ownerCastRevisions()
 	revs["rev-r3"] = ownerWordsRevision("rev-r3", 30, "round 3: shoot a.png")
-	revs["rev-r4"] = ownerWordsRevision("rev-r4", 40, "round 4: Step 0 measure, Step 1 `start the Claude delegate`, 15 minute budget\n```sh\nchoir-shot --open slides\n```\n")
-	revs["rev-after"] = ownerWordsRevision("rev-after", 55, "a direction after the Cast")
+	revs["rev-r4"] = ownerWordsRevision("rev-r4", 40, "round 4: Step 0 measure, Step 1 `start the Claude delegate`\n```sh\nchoir-shot --open slides\n```\n")
 	other := ownerWordsRevision("rev-other-traj-new", 41, "another trajectory's newer words")
 	other.TrajectoryID = "traj-0"
 	revs["rev-other-traj-new"] = other
@@ -104,44 +137,41 @@ func TestLatestOwnerWordsPicksTheNewestTheChainAnswers(t *testing.T) {
 		}
 		return out, nil
 	}
-	castAt := time.Date(2026, 11, 3, 18, 50, 0, 0, time.UTC)
-
-	// The packet carries rounds 3 and 4 (rounds as the runtime attaches
-	// them): round 4 is carried, not round 3.
-	packet := `{"owner_revision":"rev-r4","owner_directions":[` +
-		`{"revision_id":"rev-r3","kind":"direction","at":"2026-11-03T18:30:00Z","text":"round 3: shoot a.png"},` +
-		`{"revision_id":"rev-r4","kind":"direction","at":"2026-11-03T18:40:00Z","text":` + ownerPromptJSON(t, revs["rev-r4"]) + `}]}`
-	got, source, ok := latestOwnerWords(packet, castAt, ownerCastScope, list)
+	out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","summary":"retry the publication"}`)}, ownerCastScope, ownerCastLoader(revs), list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, source, ok := latestOwnerWords(out[0].Statement)
 	if !ok || got.RevisionID != "rev-r4" || got.Text != ownerPromptOf(t, revs["rev-r4"]) {
-		t.Fatalf("carried %+v (ok %v), want round 4 verbatim", got, ok)
+		t.Fatalf("an unnamed Cast carried %+v (ok %v) from %q, want rev-r4 verbatim", got, ok, source)
 	}
-	if source == "" {
-		t.Fatal("no source named")
+	_, directions := castOwnerDirectionsOf(t, out[0].Statement)
+	if len(directions) != 1 || !directions[0].Current {
+		t.Fatalf("attached %+v, want only the newest owner revision, marked current", directions)
 	}
-
-	// Deepseek's restore round: the Texture Cast named no revision. The
-	// newest owner revision on the trajectory at or before the Cast is
-	// carried; the later one, another trajectory's, Texture's and an
-	// owner edit are not.
-	got, source, ok = latestOwnerWords(`{"kind":"execution_request","summary":"retry the publication"}`, castAt, ownerCastScope, list)
-	if !ok || got.RevisionID != "rev-r4" {
-		t.Fatalf("no-name Cast carried %+v (ok %v), want rev-r4", got, ok)
+	// The packet's other keys are untouched.
+	if !strings.Contains(out[0].Statement, `"summary":"retry the publication"`) {
+		t.Fatalf("the packet lost its own keys: %s", out[0].Statement)
 	}
-	if !strings.Contains(source, "carried no owner words") {
-		t.Fatalf("source %q does not say the Cast carried none", source)
+	// The same Cast to another desk, or from a trajectory with no owner words,
+	// gets nothing attached.
+	to := ownerCast(`{"kind":"execution_request"}`)
+	to.ToDesk = "research"
+	if o, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{to}, ownerCastScope, ownerCastLoader(revs), list); err != nil || o[0].Statement != to.Statement {
+		t.Fatalf("a Cast to another desk was changed: %v %s", err, o[0].Statement)
 	}
-
-	// Review c1-r1 (DeepSeek F1): a Cast that carries round 3 is answered
-	// by round 3, even when the owner wrote round 4 before it committed;
-	// round 4's own Cast carries round 4.
-	only3 := `{"owner_revision":"rev-r3","owner_directions":[{"revision_id":"rev-r3","kind":"direction","at":"2026-11-03T18:30:00Z","text":"round 3: shoot a.png"}]}`
-	if got, source, ok := latestOwnerWords(only3, castAt, ownerCastScope, list); !ok || got.RevisionID != "rev-r3" || !strings.Contains(source, "owner_directions") {
-		t.Fatalf("a Cast carrying round 3 carried %+v from %q", got, source)
+	none := func() ([]types.Revision, error) { return nil, nil }
+	if o, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request"}`)}, ownerCastScope, ownerCastLoader(revs), none); err != nil || strings.Contains(o[0].Statement, "owner_directions") {
+		t.Fatalf("a Cast with no owner words got some: %v %s", err, o[0].Statement)
 	}
-
-	// A Cast with no time and no owner words carries nothing.
-	if got, _, ok := latestOwnerWords(`{"summary":"x"}`, time.Time{}, ownerCastScope, list); ok {
-		t.Fatalf("carried %+v with no cut-off and no packet words", got)
+	// A Cast that names a revision keeps exactly what it named plus its
+	// earlier history: no newer revision is attached (X4d).
+	named, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"owner_revision":"rev-r3"}`)}, ownerCastScope, ownerCastLoader(revs), list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w, _, ok := latestOwnerWords(named[0].Statement); !ok || w.RevisionID != "rev-r3" {
+		t.Fatalf("a named Cast carried %+v", w)
 	}
 }
 
@@ -162,7 +192,7 @@ func TestOwnerDirectionsOrderWithinOneSecond(t *testing.T) {
 	if len(directions) != 2 || directions[0].RevisionID != "rev-a" || directions[0].Current || directions[1].RevisionID != "rev-b" || !directions[1].Current {
 		t.Fatalf("within one second: %+v", directions)
 	}
-	if got, _, ok := latestOwnerWords(out[0].Statement, time.Time{}, ownerCastScope, nil); !ok || got.RevisionID != "rev-b" {
+	if got, _, ok := latestOwnerWords(out[0].Statement); !ok || got.RevisionID != "rev-b" {
 		t.Fatalf("carried %+v, want rev-b", got)
 	}
 }

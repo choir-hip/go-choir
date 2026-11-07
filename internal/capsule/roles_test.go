@@ -136,3 +136,20 @@ func TestRoleVerbSetsSeeLateRegisteredDesks(t *testing.T) {
 		t.Fatal("a retired desk keeps an entry")
 	}
 }
+
+// MA4.10: the capsule's role checks ask the grant, not the name. A role that
+// holds capsule.mutate may bind a job and a capsule; a role that does not, and
+// an unknown role, may not.
+func TestAgentRoleMutatesCapsuleIsTheGrant(t *testing.T) {
+	if !RoleEngineering.MutatesCapsule() {
+		t.Error("engineering does not mutate a capsule")
+	}
+	for _, r := range []AgentRole{RoleManagement, RoleResearch, "", "no-such-role"} {
+		if r.MutatesCapsule() {
+			t.Errorf("%q mutates a capsule", r)
+		}
+	}
+	if !RoleResearch.ReadsCapsules() || RoleManagement.ReadsCapsules() {
+		t.Error("ReadsCapsules is not capsule.read")
+	}
+}

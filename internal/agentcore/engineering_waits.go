@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -140,7 +140,8 @@ func (rt *Runtime) observeAssignmentWait(ctx context.Context, assignment types.E
 	e.current, e.updated = w.Clone(), now
 	if !e.announced && now.Sub(e.current.Since) >= waitAnnounceAfter && e.textureInbox != "" {
 		if e.startRec == nil {
-			if rec, ok := types.NewEngineeringWaitRelay(agentprofile.Engineering+":"+e.assignmentID, e.textureInbox, e.computerID, e.attempt, e.episodeID(),
+			fromInbox, _ := deskmanifest.AssignmentInbox(e.assignmentID)
+			if rec, ok := types.NewEngineeringWaitRelay(fromInbox, e.textureInbox, e.computerID, e.attempt, e.episodeID(),
 				types.WaitRelayStart, e.current.TextureLine(now), now, map[string]string{"wait_kind": string(e.current.Kind)}); ok {
 				e.startRec = &rec
 			}
@@ -191,7 +192,8 @@ func (e *assignmentWaitEntry) endLocked(now time.Time, outcome string) []waitRel
 	for kind, seconds := range e.tally.Seconds {
 		refs["waited_s:"+kind] = strconv.FormatInt(seconds, 10)
 	}
-	rec, ok := types.NewEngineeringWaitRelay(agentprofile.Engineering+":"+e.assignmentID, e.textureInbox, e.computerID, e.attempt, episode,
+	fromInbox, _ := deskmanifest.AssignmentInbox(e.assignmentID)
+	rec, ok := types.NewEngineeringWaitRelay(fromInbox, e.textureInbox, e.computerID, e.attempt, episode,
 		types.WaitRelayEnd, body, now, refs)
 	if !ok {
 		return nil
@@ -486,7 +488,7 @@ func (rt *Runtime) handleCapsuleJobWait(ev capsule.JobWaitEvent) {
 		return
 	}
 	ownerID, computerID, inbox := ev.Notify[jobNotifyOwner], ev.Notify[jobNotifyComputer], ev.Notify[jobNotifyInbox]
-	if ownerID == "" || computerID == "" || !strings.HasPrefix(inbox, agentprofile.Engineering+":") {
+	if ownerID == "" || computerID == "" || !deskmanifest.IsAssignmentInbox(inbox) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -518,7 +520,7 @@ func (rt *Runtime) handleCapsuleJobWait(ev capsule.JobWaitEvent) {
 // jobWaitAssignment resolves a job's engineering inbox to its assignment,
 // from the tracker when it already follows it.
 func (rt *Runtime) jobWaitAssignment(ctx context.Context, ownerID, computerID, inbox string) (types.EngineeringAssignment, bool) {
-	assignmentID := strings.TrimPrefix(inbox, agentprofile.Engineering+":")
+	assignmentID, _ := deskmanifest.AssignmentIDFromInbox(inbox)
 	t := &rt.assignmentWaits
 	t.mu.Lock()
 	var found *assignmentWaitEntry

@@ -120,6 +120,11 @@ var catalogue = map[string]grantSpec{
 	// It carries no verb: a platform update is a platform-signed offer the
 	// host applies, never a cell's call.
 	"platform.update": {Privileged: true},
+	// The assignment ledger's performer (MA4.10, D8): the holder performs the
+	// work an admitted assignment names, in its own instance and capsule. The
+	// assignment ledger asks this grant for the performing desk instead of a
+	// name. It carries no verb: the capsule verbs are capsule.mutate's.
+	"perform.assignment": {Privileged: true},
 
 	// Texture's document verbs.
 	"doc.read":                {Verbs: []string{"ReadDoc"}},
@@ -207,9 +212,12 @@ func (d Desk) HasGrant(name string) bool { _, ok := d.Grant(name); return ok }
 const (
 	GrantAdmitAssignment = "admit.assignment"
 	GrantPlatformUpdate  = "platform.update"
+	// GrantPerformAssignment is the performer of admitted assignments
+	// (MA4.10): one holder, the other half of the assignment ledger.
+	GrantPerformAssignment = "perform.assignment"
 )
 
-var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true}
+var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true}
 
 // GrantHolder is the one registered desk that holds a sole-holder grant
 // (admit.assignment, platform.update). It reports false for any other grant
@@ -457,3 +465,56 @@ func validateRole(d Desk, rows func(func(Desk))) error {
 	}
 	return nil
 }
+
+// AssignmentPerformer is the one desk that performs admitted assignments (the
+// perform.assignment grant, MA4.10). With no holder it reports false: unknown
+// is deny, never a default desk.
+func AssignmentPerformer() (Desk, bool) { return GrantHolder(GrantPerformAssignment) }
+
+// AssignmentInbox is the inbox and persistent agent id of the performer's
+// instance for one assignment: <performer>:<assignmentID>. An empty id, or
+// no performer, has none.
+func AssignmentInbox(assignmentID string) (string, bool) {
+	assignmentID = strings.TrimSpace(assignmentID)
+	d, ok := AssignmentPerformer()
+	if !ok || assignmentID == "" {
+		return "", false
+	}
+	return d.Name + ":" + assignmentID, true
+}
+
+// AssignmentIDFromInbox is the inverse of AssignmentInbox: the assignment id
+// of a performer inbox, or false for any other address (a bare desk name, an
+// empty id, another desk's inbox).
+func AssignmentIDFromInbox(inbox string) (string, bool) {
+	d, ok := AssignmentPerformer()
+	if !ok {
+		return "", false
+	}
+	id, ok := strings.CutPrefix(strings.TrimSpace(inbox), d.Name+":")
+	id = strings.TrimSpace(id)
+	if !ok || id == "" {
+		return "", false
+	}
+	return id, true
+}
+
+// IsAssignmentInbox reports whether the address is a performer inbox.
+func IsAssignmentInbox(inbox string) bool {
+	_, ok := AssignmentIDFromInbox(inbox)
+	return ok
+}
+
+// IsAssignmentPerformer reports whether the name is the performing desk.
+func IsAssignmentPerformer(name string) bool {
+	d, ok := AssignmentPerformer()
+	return ok && d.Name == strings.TrimSpace(name)
+}
+
+// MutatesCapsule reports whether the named desk may mutate a capsule
+// (capsule.mutate). An unknown desk, and a run role, mutate nothing.
+func MutatesCapsule(name string) bool { return Holds(name, "capsule.mutate") }
+
+// ReadsCapsules reports whether the named desk may inspect capsules
+// (capsule.read).
+func ReadsCapsules(name string) bool { return Holds(name, "capsule.read") }

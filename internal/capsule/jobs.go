@@ -181,7 +181,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	if err != nil {
 		return yaegikernel.JobView{}, err
 	}
-	if capability.AgentRole != RoleEngineering {
+	if !capability.AgentRole.MutatesCapsule() {
 		return yaegikernel.JobView{}, fmt.Errorf("capsule jobs are engineering's")
 	}
 	memoryNote := ""

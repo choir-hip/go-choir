@@ -405,7 +405,9 @@ var system = []Desk{
 		// freezing a candidate first.
 		Grants: []Grant{G("capsule.mutate"), G("selfdev.complete"), G("selfdev.freeze"),
 			G("act.precommit"), G("precommit.rule", PrecommitRuleKinds...), G("act.report"), G("act.ask"), G("act.reply"),
-			G("calibration.read"), G("calibration.restate")},
+			G("calibration.read"), G("calibration.restate"),
+			// The performer of admitted assignments (MA4.10): one holder.
+			G("perform.assignment")},
 		Sandbox: Sandbox{Profile: "capsule"},
 		Taint:   TaintPrivileged,
 		// A capsule asks for what the cmd/autoputer link needs (measured

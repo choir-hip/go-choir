@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
@@ -243,7 +244,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if rt == nil || rt.store == nil || caster == nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: runtime authority unavailable")
 	}
-	if to := strings.TrimSpace(in.ToDesk); to != agentprofile.Engineering {
+	if to := strings.TrimSpace(in.ToDesk); !deskmanifest.IsAssignmentPerformer(to) {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: address \"engineering\"; each Cast opens a new assignment with its own conversation (use Ask to speak into an open one), not %q", to)
 	}
 	objective := strings.TrimSpace(in.Objective)
@@ -352,7 +353,10 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if err != nil {
 		return engineeringCastPlan{}, err
 	}
-	assignedAgentID := agentprofile.Engineering + ":" + assignmentID
+	assignedAgentID, ok := deskmanifest.AssignmentInbox(assignmentID)
+	if !ok {
+		return engineeringCastPlan{}, fmt.Errorf("engineering cast: no desk holds %s", deskmanifest.GrantPerformAssignment)
+	}
 	binding := types.EngineeringAssignmentBinding{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 		ParentAgentID: management, ParentRunID: caster.RunID, ParentDecisionID: parentDecisionID,
@@ -734,12 +738,15 @@ func buildAssignedEngineeringRun(assignment types.EngineeringAssignment, runID, 
 	ownerID, computerID, trajectoryID := binding.OwnerID, binding.ComputerID, binding.TrajectoryID
 	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
 	agentID, capsuleID := binding.AssignedAgentID, binding.CapsuleID
+	// The performer is the holder of perform.assignment (MA4.10). With no
+	// holder the profile is empty and the store's bind check refuses the run.
+	performer := assignmentPerformerName()
 	return types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: binding.ParentRunID, TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, OwnerID: ownerID, ComputerID: computerID,
+		AgentProfile: performer, AgentRole: performer, OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunPending, Prompt: objective,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering, runMetadataAgentID: agentID,
+			runMetadataAgentProfile: performer, runMetadataAgentRole: performer, runMetadataAgentID: agentID,
 			runMetadataTrajectoryID: trajectoryID,
 			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": store.EngineeringParentProfileForBinding(binding),
 			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(binding.Kind),
@@ -1056,7 +1063,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
 		run.Metadata[modelpolicy.MetadataPolicyOverlayID] = overlay
 	}
-	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, agentprofile.Engineering, run.Metadata)
+	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, run.AgentProfile, run.Metadata)
 	// Fail closed on policy errors like the Texture eval path: an unknown or
 	// unresolvable overlay must not silently fall back to the default model.
 	if policyErr := metadataStringValue(run.Metadata, modelpolicy.MetadataPolicyError); policyErr != "" {
@@ -1167,4 +1174,14 @@ func engineeringAssignmentSpawnSpec(capsuleID, runID string, binding types.Engin
 // assignment does not: verification never depends on /computer.
 func engineeringSpawnGetsComputerState(binding types.EngineeringAssignmentBinding) bool {
 	return binding.Kind == types.EngineeringAssignmentImplementation
+}
+
+// assignmentPerformerName is the desk that performs admitted assignments, the
+// holder of perform.assignment (MA4.10), or "" with no holder.
+func assignmentPerformerName() string {
+	d, ok := deskmanifest.AssignmentPerformer()
+	if !ok {
+		return ""
+	}
+	return d.Name
 }
