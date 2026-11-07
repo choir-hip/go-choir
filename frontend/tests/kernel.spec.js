@@ -346,7 +346,7 @@ function makeFixture(mutate) {
   // The gate reads package names from the manifests (every app but Texture is a package).
   fs.cpSync(path.join(frontendRoot, 'src/packages'), path.join(root, 'src/packages'), {
     recursive: true,
-    filter: (src) => fs.statSync(src).isDirectory() || src.endsWith('choir-package.json'),
+    filter: (src) => fs.statSync(src).isDirectory() || src.endsWith('choir-package.json') || src.endsWith('base-packages.json'),
   });
   if (mutate) mutate(root);
   return root;

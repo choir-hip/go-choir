@@ -150,7 +150,7 @@ test.describe('runtime install: module/v1 build and verified load', () => {
   });
 
   test('every in-tree first-party package builds to one module/v1 module (B1, B2)', async () => {
-    for (const name of fs.readdirSync(path.join(frontendRoot, 'src/packages'))) {
+    for (const name of fs.readdirSync(path.join(frontendRoot, 'src/packages'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
       const files = readPackage(name);
       // A surface-only package (launcher, overview, ...) has no app to build.
       if (!JSON.parse(files['choir-package.json']).app) continue;

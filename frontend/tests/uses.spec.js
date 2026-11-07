@@ -97,7 +97,7 @@ test('B2: every shell-wide function implies ui.shell; the pure helpers imply not
 
 test('every in-tree package has its uses extracted, and none exceeds its grants', async () => {
   const sections = readSections(root);
-  for (const name of fs.readdirSync(path.join(root, 'src/packages'))) {
+  for (const name of fs.readdirSync(path.join(root, 'src/packages'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
     const dir = path.join(root, 'src/packages', name);
     const uses = await extractUses(dir, sections);
     // A package that imports the SDK has its uses extracted; one that needs
