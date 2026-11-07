@@ -478,6 +478,9 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 		if decisionErr != nil {
 			return selfdev.Operation{}, http.StatusConflict, decisionErr
 		}
+		if kindErr := checkOperationKindAgrees(operation, consensusDecisionKind(request.ConsensusDecision) == platform.ConsensusKindPackage); kindErr != nil {
+			return selfdev.Operation{}, http.StatusConflict, kindErr
+		}
 		consensusReceiptBytes = decisionBytes
 		consensusAuthority = decisionpolicy.DecisionAuthorityRef(decisionDigest)
 	}

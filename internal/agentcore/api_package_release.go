@@ -92,7 +92,6 @@ type packageDraftResult struct {
 	SourcePatch  []byte
 	PlatformBase string
 	Media        []pkgrelease.Media
-	MediaData    [][]byte
 }
 
 // packageDraftFailure is a refused or unavailable draft: either a pkgrelease
@@ -177,8 +176,7 @@ func (rt *Runtime) draftPackageRelease(ctx context.Context, ownerID, computerID 
 		record.ParentPatch = &parent
 	}
 	// The round's accepted screens and video, from the bound bundle only.
-	var mediaData [][]byte
-	if record.Media, mediaData, err = rt.operationMedia(operation); err != nil {
+	if record.Media, _, err = rt.operationMedia(operation); err != nil {
 		return nil, draftFailure(http.StatusServiceUnavailable, "bundle_unavailable", "%s", err.Error())
 	}
 	// No screenshot, no listing: refuse here with the reason, before the
@@ -206,7 +204,7 @@ func (rt *Runtime) draftPackageRelease(ctx context.Context, ownerID, computerID 
 	return &packageDraftResult{
 		Record: record, ReleaseID: releaseID, Canonical: canonical,
 		TreePatch: source.Blobs.TreePatch, ReviewPatch: source.Blobs.ReviewPatch, ParentPatch: source.Blobs.ParentPatch,
-		SourcePatch: patch, PlatformBase: platformBase, Media: record.Media, MediaData: mediaData,
+		SourcePatch: patch, PlatformBase: platformBase, Media: record.Media,
 	}, nil
 }
 

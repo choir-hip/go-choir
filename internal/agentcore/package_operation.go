@@ -177,11 +177,11 @@ func (rt *Runtime) reconcilePackageOperation(ctx context.Context, operation self
 	switch operation.State {
 	case selfdev.StateAccepted:
 		if rt.selfdevCrashInterruptedOp(operation.OperationID) {
-			return rt.settlePackageOperation(ctx, operation)
+			return rt.settlePackageOperation(ctx, operation, false)
 		}
 		return rt.materializePackageOperation(ctx, operation)
 	case selfdev.StateMaterializing:
-		return rt.settlePackageOperation(ctx, operation)
+		return rt.settlePackageOperation(ctx, operation, false)
 	}
 	return nil
 }
@@ -243,8 +243,15 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 		if !apppackageDraftableName(name) {
 			return fail("package %s is a built-in app; change it through a platform release", name)
 		}
+		// An update follows the owner's track head, which the decision's
+		// package block names (the head corpusd drafted over); a draft with no
+		// head would be a new package and corpusd answers track_moved.
+		headID, headTree, err := rt.packageDecisionHead(ctx, operation, decisionDigest)
+		if err != nil {
+			return fail("the decision's track head is unreadable: %v", err)
+		}
 		var failure *packageDraftFailure
-		if drafted, failure = rt.draftPackageRelease(ctx, ownerID, computerID, operation, packageDraftInput{Name: name}); failure != nil {
+		if drafted, failure = rt.draftPackageRelease(ctx, ownerID, computerID, operation, packageDraftInput{Name: name, HeadReleaseID: headID, HeadTree: headTree}); failure != nil {
 			return fail("the release cannot be drafted: %s", failure.Error())
 		}
 		draft = packageOperationDraft{
@@ -299,7 +306,7 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 		}
 		// No answer: the release may be public. Settle from facts, never retry.
 		log.Printf("selfdev package: operation %s: publish unanswered (%d): %v; settling from facts", operation.OperationID, status, err)
-		return rt.settlePackageOperation(ctx, operation)
+		return rt.settlePackageOperation(ctx, operation, true)
 	}
 	if response.ReleaseID != draft.ReleaseID {
 		return fail("published as %s but the draft names %s; install it from the Library", response.ReleaseID, draft.ReleaseID)
@@ -381,7 +388,7 @@ func (rt *Runtime) failPackageOperation(ctx context.Context, operation selfdev.O
 //   - a release is listed and the install exists: package_applied;
 //   - a release is listed and there is no install: failed, naming the release,
 //     "install it from the Library".
-func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev.Operation) error {
+func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev.Operation, unanswered bool) error {
 	draft, persisted, err := rt.loadPackageDraft(operation)
 	if err != nil {
 		return err
@@ -391,7 +398,8 @@ func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev
 		return rt.failPackageOperation(ctx, operation, selfdevInterruptedByRestart)
 	}
 	listed := ""
-	if lister, ok := rt.packagePublishClient().(PackageReleaseLister); ok {
+	lister, hasLister := rt.packagePublishClient().(PackageReleaseLister)
+	if hasLister {
 		releases, err := lister.PackageReleasesForOperation(ctx, operation.OperationID)
 		if err != nil {
 			// Unproven: the fate waits for a later pass; nothing is guessed.
@@ -405,16 +413,14 @@ func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev
 		}
 	} else {
 		// No lookup route: an install of the draft's release is proof it was
-		// published; otherwise the fact is unknown and the operation closes as
-		// interrupted (a release published without an install is then found
-		// in the Library by its publisher).
+		// published; otherwise the fact is unknown.
 		listed = draft.ReleaseID
 		if !rt.packageInstalledRelease(ctx, operation, listed) {
 			listed = ""
 		}
 	}
 	if listed == "" {
-		return rt.failPackageOperation(ctx, operation, selfdevInterruptedByRestart)
+		return rt.failPackageOperation(ctx, operation, packageUnlistedCause(draft, hasLister, unanswered))
 	}
 	ownerID, computerID := rt.selfdevRouteOwnerID, operation.ComputerID
 	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
@@ -428,6 +434,24 @@ func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev
 		}
 	}
 	return rt.failPackageOperation(ctx, operation, "published as "+listed+"; not installed here; install it from the Library")
+}
+
+// packageUnlistedCause is the terminal error of a settle that found no listed
+// release. With a lookup route, "no release listed" is a fact; without one, a
+// persisted draft means the release may be public, and the cause says so
+// instead of claiming it was not. A publish that went unanswered in the live
+// pass was not interrupted by a restart.
+func packageUnlistedCause(draft packageOperationDraft, hasLister, unanswered bool) string {
+	switch {
+	case hasLister && unanswered:
+		return "the publish was not answered and the Library lists no release for this operation"
+	case hasLister:
+		return selfdevInterruptedByRestart
+	case unanswered:
+		return "the publish was not answered; the release may be published as " + draft.ReleaseID + ", install it from the Library if it is"
+	default:
+		return "interrupted; the release may be published as " + draft.ReleaseID + ", install it from the Library if it is"
+	}
 }
 
 // packageAppliedResult is the package_applied event's payload.
@@ -492,8 +516,25 @@ func (rt *Runtime) revertPackageOperation(ctx context.Context, ownerID, computer
 	if reverted.PackageReleaseID == "" {
 		return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("operation %s published no release", reverted.OperationID)
 	}
-	if _, _, refusal := rt.uninstallPackageWith(ctx, ownerID, computerID, reverted.PackageReleaseID, installChange{trigger: store.PackageInstallTriggerSelfdev}); refusal != nil && refusal.reason != "package_not_installed" {
-		return selfdev.Operation{}, refusal.status, refusal
+	// Reverting an update uninstalls its release; it does not restore the
+	// prior version (docs/design/package-operation-decision-2026-11-06.md 2.5).
+	// A release no longer installed (replaced by a later install, or already
+	// uninstalled) is recorded rolled back with that reason.
+	note := ""
+	if _, _, refusal := rt.uninstallPackageWith(ctx, ownerID, computerID, reverted.PackageReleaseID, installChange{trigger: store.PackageInstallTriggerSelfdev}); refusal != nil {
+		if refusal.reason != "package_not_installed" {
+			return selfdev.Operation{}, refusal.status, refusal
+		}
+		note = "the release " + reverted.PackageReleaseID + " was already superseded: it is no longer installed (replaced by a later install or uninstalled), so the revert uninstalled nothing"
+	}
+	// The event names the package_applied event it undoes.
+	appliedEvent, found, err := rt.store.EventByIdempotency(ctx, computerID, "selfdev-"+string(computerevent.EventPackageApplied)+"-"+reverted.DecisionEvent)
+	if err != nil || !found {
+		return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("the package_applied event of operation %s is not on the tape", reverted.OperationID)
+	}
+	appliedDigest, err := appliedEvent.Digest()
+	if err != nil {
+		return selfdev.Operation{}, http.StatusInternalServerError, err
 	}
 	idempotency := "selfdev-" + string(computerevent.EventPackageReverted) + "-" + reverted.OperationID
 	if _, found, err := rt.store.EventByIdempotency(ctx, computerID, idempotency); err != nil {
@@ -514,7 +555,7 @@ func (rt *Runtime) revertPackageOperation(ctx context.Context, ownerID, computer
 			EventKind: computerevent.EventPackageReverted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, TrajectoryID: reverted.TrajectoryID, CapsuleID: reverted.CapsuleID,
 			ActorProfile: platformUpdateActor(), AuthorityRef: "owner:" + ownerID, PrivacyClass: "owner",
-			ProposedEffectRef: reverted.BundleDigest, DecisionRef: reverted.DecisionEvent,
+			ProposedEffectRef: reverted.BundleDigest, DecisionRef: appliedDigest,
 			ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, _, err := rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.package-reverted+json", "owner"); err != nil {
@@ -524,7 +565,7 @@ func (rt *Runtime) revertPackageOperation(ctx context.Context, ownerID, computer
 	// applied -> rolled_back has no edge in the platform state machine
 	// (rollback_pending is the rollback's own row); the package row is its
 	// own, so it takes the dedicated transition.
-	row, err := rt.selfdevOperations.RevertPackage(ctx, computerID, reverted.OperationID)
+	row, err := rt.selfdevOperations.RevertPackage(ctx, computerID, reverted.OperationID, note)
 	if err != nil {
 		return selfdev.Operation{}, http.StatusConflict, err
 	}
@@ -544,4 +585,74 @@ func (rt *Runtime) packageInstalledRelease(ctx context.Context, operation selfde
 		}
 	}
 	return false
+}
+
+// packageDecisionHead is the track head the consensus decision's package block
+// names as the draft's parent: the release id and tree, or "" for a new
+// package. It reads the decision receipt the poster signed, pinned on the tape
+// by its digest, so the guest drafts over the same parent the poster voted on.
+func (rt *Runtime) packageDecisionHead(ctx context.Context, operation selfdev.Operation, decisionDigest string) (string, string, error) {
+	if rt.eventPayloadReader == nil {
+		return "", "", errors.New("no event payload reader")
+	}
+	raw, err := rt.eventPayloadReader.FetchPayload(ctx, operation.ComputerID, decisionDigest)
+	if err != nil {
+		return "", "", err
+	}
+	var receipt computerevent.Receipt
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		return "", "", err
+	}
+	block, _ := receipt.KindFields["package"].(map[string]any)
+	if block == nil {
+		return "", "", errors.New("the decision carries no package block")
+	}
+	parent, _ := block["parent"].(map[string]any)
+	if parent == nil {
+		return "", "", nil
+	}
+	kind, _ := parent["kind"].(string)
+	if kind != pkgrelease.ParentRelease {
+		return "", "", nil
+	}
+	id, _ := parent["release_id"].(string)
+	tree, _ := parent["tree"].(string)
+	if id == "" || tree == "" {
+		return "", "", errors.New("the decision's release parent names no release or tree")
+	}
+	return id, tree, nil
+}
+
+// settlePackageAbandon is the owner's abandon of an open package operation,
+// settled from the package facts, not an updater journal: an install of the
+// draft's release settles it forward (applied); otherwise it closes failed
+// with the owner's reason, naming the persisted draft's release when one may
+// be public.
+func (rt *Runtime) settlePackageAbandon(ctx context.Context, operation selfdev.Operation, spec selfdevSettleSpec) (selfdev.Operation, error) {
+	draft, persisted, err := rt.loadPackageDraft(operation)
+	if err != nil {
+		return selfdev.Operation{}, err
+	}
+	if persisted && operation.State == selfdev.StateMaterializing {
+		prior, err := rt.packageInstalls(ctx, rt.selfdevRouteOwnerID, operation.ComputerID)
+		if err != nil {
+			return selfdev.Operation{}, err
+		}
+		for _, item := range currentPackageInstalls(prior) {
+			if item.ReleaseID == draft.ReleaseID {
+				if err := rt.recordPackageApplied(ctx, operation, draft, item.InstallID); err != nil {
+					return selfdev.Operation{}, settleConflict(err)
+				}
+				return rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
+			}
+		}
+	}
+	cause := spec.TerminalError
+	if persisted {
+		cause += "; the release may be published as " + draft.ReleaseID + ", install it from the Library if it is"
+	}
+	if err := rt.failPackageOperation(ctx, operation, cause); err != nil {
+		return selfdev.Operation{}, settleConflict(err)
+	}
+	return rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
 }

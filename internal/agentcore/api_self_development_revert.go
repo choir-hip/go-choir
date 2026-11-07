@@ -99,6 +99,20 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		return
 	}
 	priorHead, priorCommitment := accepted.ExpectedEffectiveEventHead, accepted.ExpectedEffectiveStateCommitment
+	prior, priorErr := rt.selfdevOperations.GetByEffectiveHead(ctx, computerID, priorHead)
+	if priorErr != nil && !selfdevOperationMissing(priorErr) {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
+		return
+	}
+	// The state before X skips package events: a package operation between X
+	// and the platform state it follows changed no platform release, and a
+	// platform revert never undoes a package install.
+	var skipErr error
+	prior, priorErr, priorHead, priorCommitment, skipErr = h.skipPackageEvents(ctx, computerID, prior, priorErr, priorHead, priorCommitment)
+	if skipErr != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "the state before operation " + operationID + " is not recorded on the tape: " + skipErr.Error()})
+		return
+	}
 	// The latest landed operation already restored this state and nothing has
 	// landed since: a second tap after the revert settled.
 	if latest != nil && latest.State == selfdev.StateRolledBack && latest.BaseHead == priorHead {
@@ -143,20 +157,6 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		if route, routeErr := rt.selfdevRoute.ResolveComputerVersionRoute(ctx, slotID); routeErr == nil {
 			generation = route.Slot.Generation
 		}
-	}
-	prior, priorErr := rt.selfdevOperations.GetByEffectiveHead(ctx, computerID, priorHead)
-	if priorErr != nil && !selfdevOperationMissing(priorErr) {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
-		return
-	}
-	// The state before X skips package events: a package operation between X
-	// and the platform state it follows changed no platform release, and a
-	// platform revert never undoes a package install.
-	var skipErr error
-	prior, priorErr, priorHead, priorCommitment, skipErr = h.skipPackageEvents(ctx, computerID, prior, priorErr, priorHead, priorCommitment)
-	if skipErr != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "the state before operation " + operationID + " is not recorded on the tape: " + skipErr.Error()})
-		return
 	}
 	// Open through a buffer: a tap that loses a race to the same act gets that
 	// act's row, not a 409.

@@ -588,10 +588,13 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 // the one edge only a package row takes (a platform operation is rolled back
 // by a rollback row of its own, never by itself). The row keeps its heads: they
 // name where the package landed, and a later platform revert reads them.
-func (s *Store) RevertPackage(ctx context.Context, computerID, operationID string) (Operation, error) {
+func (s *Store) RevertPackage(ctx context.Context, computerID, operationID, note string) (Operation, error) {
 	return s.transition(ctx, computerID, operationID, StateApplied, StateRolledBack, func(operation *Operation) error {
 		if !operation.IsPackage() {
 			return fmt.Errorf("%w: %s is not a package operation", ErrInvalidTransition, operation.OperationID)
+		}
+		if note != "" {
+			operation.TerminalError = note
 		}
 		return nil
 	}, true)

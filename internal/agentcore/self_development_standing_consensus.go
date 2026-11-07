@@ -241,6 +241,9 @@ func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifi
 	if err != nil {
 		return operation, err
 	}
+	if err := checkOperationKindAgrees(operation, classified.kind == platform.ConsensusKindPackage); err != nil {
+		return operation, err
+	}
 	// The host builds first: its vote is on the build. A package decision has
 	// no host build; its vote is on the draft.
 	var jobID string
@@ -516,4 +519,22 @@ func verifyStandingConsensusDecision(resolver computerevent.KeyResolver, current
 		return nil, "", err
 	}
 	return decisionBytes, computerevent.DigestBytes(decisionBytes), nil
+}
+
+// checkOperationKindAgrees refuses a decision whose kind disagrees with the
+// operation's recorded kind: a package decision on a platform row would host
+// build a package patch as a platform release, and the reverse would publish a
+// platform change as a package.
+func checkOperationKindAgrees(operation selfdev.Operation, decisionIsPackage bool) error {
+	if decisionIsPackage != operation.IsPackage() {
+		return fmt.Errorf("the decision is of kind %s but operation %s is of kind %s", kindWord(decisionIsPackage), operation.OperationID, kindWord(operation.IsPackage()))
+	}
+	return nil
+}
+
+func kindWord(isPackage bool) string {
+	if isPackage {
+		return selfdev.KindPackage
+	}
+	return "platform"
 }

@@ -276,6 +276,18 @@ func (rt *Runtime) appendArbitratedAppliedEvent(ctx context.Context, operation s
 // The settlement goes on the tape as a recovery_recorded event after the row
 // moved, so it never claims a settle that did not land.
 func (rt *Runtime) settleSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, spec selfdevSettleSpec) (selfdev.Operation, error) {
+	if operation.IsPackage() && spec.Act == selfdevSettleActAbandon {
+		// A package operation has no updater journal: its facts are the
+		// persisted draft and the install records (package_operation.go).
+		settled, err := rt.settlePackageAbandon(ctx, operation, spec)
+		if err != nil {
+			return selfdev.Operation{}, err
+		}
+		if err := rt.appendSettlementEvent(ctx, operation, operation.State, settled.State, spec); err != nil {
+			return settled, err
+		}
+		return settled, nil
+	}
 	hold, err := rt.holdSelfDevelopmentApply(operation)
 	if err != nil {
 		return selfdev.Operation{}, err

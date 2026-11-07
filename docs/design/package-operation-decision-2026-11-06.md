@@ -198,6 +198,13 @@ That is accepted and bounded by the window and the single consumption.
   (`api_self_development_revert.go:168-169`); not widened here. A platform
   rollback never undoes a package install;
   `liveOperationSet` tracks the two layers separately.
+- **Revert of an update uninstalls; it does not restore the prior version.**
+  Reverting a package operation removes the install it made, whatever the
+  package had before; the prior release comes back by the owner installing
+  it from the Library. Reverting an operation whose release is no longer
+  installed (a later install replaced it, or it was uninstalled) records
+  the row `rolled_back` with the reason "already superseded" and uninstalls
+  nothing. `package_reverted` names the `package_applied` event it undoes.
 - `latestLandedOperation` (revert idempotency) counts platform operations
   only for a platform revert and package operations only for a package
   revert.

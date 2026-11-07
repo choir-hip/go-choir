@@ -387,12 +387,12 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		return nil, fmt.Errorf("canonical capsule effect bundle draft: %w", err)
 	}
 	frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", record.ContentDigest)
-	if err := publishFrozenDraft(staged.TemporaryRoot, frozenRoot, draft); err != nil {
-		return nil, err
-	}
 	// The operation's layer, from the classification of its patch: the
 	// materializer, the revert route and the live-set readers branch on it.
-	operationKind := stagedOperationKind(staged.TemporaryRoot, staged.SourcePatchSHA)
+	operationKind, err := publishFrozenCandidate(staged.TemporaryRoot, frozenRoot, staged.SourcePatchSHA, draft)
+	if err != nil {
+		return nil, err
+	}
 	operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
 		next.CapsuleID = capsuleID
 		next.Kind = operationKind
@@ -631,6 +631,19 @@ func frozenTreeChanges(frozenGroups, liveGroups map[string][]transaction.ChangeR
 		out[i] = paths[path] + " " + path
 	}
 	return out
+}
+
+// publishFrozenCandidate classifies the staged source patch and then publishes
+// the draft: publishing renames the staged tree away, so the patch must be read
+// first (docs/design/package-operation-decision-2026-11-06.md 2.3; a kind read
+// after the rename was always empty and every package operation took the
+// platform materializer).
+func publishFrozenCandidate(temporaryRoot, frozenRoot, patchSHA string, draft []byte) (string, error) {
+	kind := stagedOperationKind(temporaryRoot, patchSHA)
+	if err := publishFrozenDraft(temporaryRoot, frozenRoot, draft); err != nil {
+		return "", err
+	}
+	return kind, nil
 }
 
 // publishFrozenDraft writes the draft into the staged tree and publishes the
