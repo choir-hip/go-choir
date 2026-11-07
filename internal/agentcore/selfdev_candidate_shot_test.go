@@ -3,6 +3,10 @@ package agentcore
 import (
 	"context"
 	"errors"
+	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -296,5 +300,106 @@ func TestDecodeBoundBundleAcceptsAShotPlan(t *testing.T) {
 	}
 	if decoded.ShotPlan == nil || len(decoded.ShotPlan.Views) != 1 || decoded.ShotPlan.Views[0].Name != "home" {
 		t.Fatalf("decoded plan = %+v", decoded.ShotPlan)
+	}
+}
+
+// The Complete guard through the reduction's commit: the refusal comes
+// before any side effect (no fate, report or envelope), so it reaches the
+// engineer as the cell's error like a Freeze refusal, the capsule stays
+// live, and the engineer can Freeze and Complete next. A cell that also
+// stages a Freeze is not refused here.
+func TestCommitRefusesCompleteWithAPlatformDiffAndNoFrozenOperation(t *testing.T) {
+	ctx := context.Background()
+	f := newStagingReplay(t)
+	f.toolCtx.CapsuleHandle = "handle-r9"
+	f.tree.live = capsule.GrantedWorktree{Changes: []capsule.FileChange{{Path: "workspace/platform/internal/x/x.go", Kind: capsule.ChangeModified, Mode: 0o644}}}
+	rt, st := testRuntime(t)
+	rec := *f.rec
+	rec.Metadata = map[string]any{"assignment_id": "assignment-never-froze", "assignment_kind": string(types.EngineeringAssignmentImplementation)}
+	scope := ReductionScope{
+		FromAgentID: "engineering:asg-1", DeskAgentID: "engineering:asg-1", FromRole: "engineering",
+		ChannelID: "engineering:asg-1", RunID: "run-r9", OwnerID: "owner-1", ComputerID: f.toolCtx.ComputerID,
+		ReturnTo: "management:m", CellID: "cell-guard",
+	}
+	r := &rlmCallReduction{active: true, mb: rt, st: st, ledger: st, scope: scope, rec: &rec, toolCtx: f.toolCtx}
+	complete := yaegikernel.StagedIntent{Kind: yaegikernel.IntentComplete, LocalID: "tray-1", Result: yaegikernel.CompleteCompleted, Verdict: "none", Summary: "done"}
+	err := r.commit(ctx, []yaegikernel.StagedIntent{complete})
+	if err == nil || !strings.Contains(err.Error(), "call choir.Freeze first; Complete does not freeze") {
+		t.Fatalf("commit = %v, want the Complete guard's refusal", err)
+	}
+	if fate, found, ferr := CellFate(ctx, st, "owner-1", "run-r9", "cell-guard"); ferr != nil || found {
+		t.Fatalf("the refused cell recorded a fate %q (found %v, err %v): the capsule would be stranded", fate, found, ferr)
+	}
+	// An assignment that froze passes the guard (the commit then fails on
+	// the fixture's missing assignment, not on the guard).
+	rec.Metadata["assignment_id"] = "assignment-r9"
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{complete}); err != nil && strings.Contains(err.Error(), "Complete does not freeze") {
+		t.Fatalf("the guard refused an assignment that froze: %v", err)
+	}
+	// A blocked Complete is not guarded: it must be able to end a round.
+	blocked := complete
+	blocked.Result = yaegikernel.CompleteBlocked
+	rec.Metadata["assignment_id"] = "assignment-never-froze"
+	if err := r.commit(ctx, []yaegikernel.StagedIntent{blocked}); err != nil && strings.Contains(err.Error(), "Complete does not freeze") {
+		t.Fatalf("a blocked Complete was guarded: %v", err)
+	}
+}
+
+// Verify: a plan bundle's per-shot review is skipped (no model call), the
+// numbered shots are checked against plan views, and the verdict records
+// shot_review deferred_to_candidate_shot. The bundle carries a stored,
+// resolvable screen, so a review that ran would call the judge.
+func TestVerifySkipsTheShotReviewForAPlanBundle(t *testing.T) {
+	ctx := context.Background()
+	rt, s, assignment := assignmentEndFixture(t, "owner-plan-verify")
+	rt.selfdevUpdaterRoot = t.TempDir()
+	operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateFrozen, "")
+	if _, err := rt.commitAssignedEngineeringReport(ctx, c1eGet(t, s, assignment), terminalAssignmentReport(assignment, types.EngineeringResultCompleted)); err != nil {
+		t.Fatal(err)
+	}
+	_, screens, data := screenFixture(t)
+	if _, _, err := rt.imageStore().Put(data); err != nil {
+		t.Fatal(err)
+	}
+	bundle := transaction.CapsuleEffectBundle{
+		BundleVersion: 1, ComputerID: assignment.Binding.ComputerID, TrajectoryRef: assignment.Binding.TrajectoryID,
+		VerifierReceipts: []string{}, Screens: screens, ShotPlan: defaultTestShotPlan(),
+	}
+	var err error
+	if bundle.ContentDigest, err = bundle.ComputeContentDigest(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := computerevent.CanonicalJSON(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", bundle.ContentDigest)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bundle.draft.json"), raw, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.store.DB().Exec(`UPDATE self_development_operations SET bundle_digest = ? WHERE operation_id = ?`, bundle.ContentDigest, operationID); err != nil {
+		t.Fatal(err)
+	}
+	judge := &scriptedJudge{answer: func(string) string { return allYes }}
+	rt.shotReviewCall = judge.call
+	intent := yaegikernel.StagedIntent{LocalID: "v1", TargetRef: assignment.AssignmentID, Decision: "pass", BundleDigest: bundle.ContentDigest, VerifierRefs: []string{"ref"}}
+	_, verr := verifyReduction(rt, assignment).commitVerifyIntent(ctx, intent)
+	if verr != nil && strings.Contains(verr.Error(), "per-shot review did not run") {
+		t.Fatalf("the per-shot review ran for a plan bundle: %v", verr)
+	}
+	if judge.calls != 0 {
+		t.Fatalf("the judge was called %d times for a plan bundle", judge.calls)
+	}
+
+	// The deferral and the plan-view numbered check, as the verdict records them.
+	missing, reason := planVerifyVerdict(bundle.ShotPlan, "01 the home; 02 the list; 03 a phone")
+	if len(missing) != 2 || !strings.Contains(reason, "missing shots the request names: 02, 03") {
+		t.Fatalf("missing=%v reason=%q", missing, reason)
+	}
+	if missing, reason := planVerifyVerdict(bundle.ShotPlan, "make it blue"); len(missing) != 0 || reason != "" {
+		t.Fatalf("a request with no numbered list: %v %q", missing, reason)
 	}
 }

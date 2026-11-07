@@ -875,6 +875,11 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 			return err
 		}
 	}
+	if r.toolCtx != nil && r.rec != nil {
+		if err := refuseCompleteWithoutFreeze(ctx, r.toolCtx, r.rec, intents); err != nil {
+			return err
+		}
+	}
 	// The run's labels at commit: everything its cells read, this one
 	// included, stamped on every record the tray writes (MA3.5).
 	if rt := r.rt(); rt != nil {
@@ -924,6 +929,35 @@ func refuseCompleteWhileJobRuns(jobs capsuleJobTable, runID string, intents []ya
 		if job, _, running := jobs.RunningJob(runID); running {
 			return fmt.Errorf("reduce: complete %s: job %s is still running; %s: this turn ends here and resumes when the job ends, with its outcome (or choir.Stop it in a cell of its own first)", in.LocalID, job.ID, completeWaitsForJobMarker)
 		}
+	}
+	return nil
+}
+
+// refuseCompleteWithoutFreeze is the Complete guard (tools_capsule.go
+// completeWithoutFreezeError): a cell that stages Complete(completed) for an
+// implementation assignment whose capsule diff touches /workspace/platform
+// and holds no live frozen operation is refused. Like the running-job and
+// partial refusals it runs before any side effect, so the refused cell
+// leaves no fate, report, cursor advance or envelope, and the capsule stays
+// live: the engineer reads the refusal in the cell's error as it reads a
+// Freeze refusal, then Freezes and Completes. A cell that also stages a
+// Freeze is not refused here: the Freeze commits first and a refused one
+// fails the cell itself.
+func refuseCompleteWithoutFreeze(ctx context.Context, toolCtx *CapsuleToolCtx, rec *types.RunRecord, intents []yaegikernel.StagedIntent) error {
+	var complete *yaegikernel.StagedIntent
+	for i := range intents {
+		switch {
+		case intents[i].Kind == yaegikernel.IntentFreeze:
+			return nil
+		case intents[i].Kind == yaegikernel.IntentComplete && strings.TrimSpace(intents[i].Result) == string(types.EngineeringResultCompleted):
+			complete = &intents[i]
+		}
+	}
+	if complete == nil || metadataStringValue(rec.Metadata, "assignment_kind") != string(types.EngineeringAssignmentImplementation) {
+		return nil
+	}
+	if err := completeWithoutFreezeError(ctx, toolCtx, metadataStringValue(rec.Metadata, "assignment_id")); err != nil {
+		return fmt.Errorf("reduce: complete %s: %w", complete.LocalID, err)
 	}
 	return nil
 }
@@ -1820,9 +1854,10 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		// with no model call, is the plan against the request: a numbered
 		// shot the request names that no plan view carries fails
 		// "missing: 05, 06" (FM12, FM9 moved from screens to plan views).
-		planned, planMissing := false, []string(nil)
+		planned, planMissing, planReason := false, []string(nil), ""
 		if bundle, _, readErr := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation); readErr == nil && bundle.ShotPlan != nil {
-			planned, planMissing = true, planShotsMissing(bundle.ShotPlan, requestedShots(request))
+			planned = true
+			planMissing, planReason = planVerifyVerdict(bundle.ShotPlan, request)
 		}
 		var review *shotReview
 		var reviewErr error
@@ -1845,7 +1880,7 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 			verdictExtra["shot_review"] = shotReviewDeferred
 			if len(planMissing) > 0 {
 				decision = "fail"
-				verdictExtra[verdictReasonKey] = shotReviewMarker + " rejected missing shots the request names: " + strings.Join(planMissing, ", ") + "; the shot plan has no such view"
+				verdictExtra[verdictReasonKey] = planReason
 			}
 		}
 		if review != nil {
@@ -2061,14 +2096,6 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	receipts, err := r.toolCtx.Executor.ResolveExecutionReceipts(executionRefs)
 	if err != nil {
 		return false, err
-	}
-	// The Complete guard: Complete does not freeze. A completed implementation
-	// round whose capsule diff touches /workspace/platform needs a live
-	// frozen operation (tools_capsule.go completeWithoutFreezeError).
-	if result == types.EngineeringResultCompleted && metadataStringValue(r.rec.Metadata, "assignment_kind") == string(types.EngineeringAssignmentImplementation) {
-		if guardErr := completeWithoutFreezeError(ctx, r.toolCtx, metadataStringValue(r.rec.Metadata, "assignment_id")); guardErr != nil {
-			return false, guardErr
-		}
 	}
 	// The screens the Freeze saved ride on the Report from the platform:
 	// management's judge reads the Report, not the Freeze result.

@@ -629,3 +629,15 @@ func planShotsMissing(plan *capsule.ShotPlan, wanted []requestedShot) []string {
 	}
 	return missing
 }
+
+// planVerifyVerdict is what Verify records for a plan bundle's shots: the
+// review is deferred to the candidate shot, and the only check is the
+// request's numbered shots against the plan's views. reason is "" when
+// nothing is missing.
+func planVerifyVerdict(plan *capsule.ShotPlan, request string) (missing []string, reason string) {
+	missing = planShotsMissing(plan, requestedShots(request))
+	if len(missing) > 0 {
+		reason = shotReviewMarker + " rejected missing shots the request names: " + strings.Join(missing, ", ") + "; the shot plan has no such view"
+	}
+	return missing, reason
+}

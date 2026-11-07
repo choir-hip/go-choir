@@ -28,10 +28,14 @@ import (
 //   - a plan rides on a package candidate, which is shot in its capsule.
 
 type sourceOnlyLayout struct {
-	source    map[string]string // workspace/platform-relative
-	tree      bool              // stage a release tree (frontend + binary)
-	screen    bool
-	plan      string // contents of /var/lib/artifact/shot-plan.json
+	source map[string]string // workspace/platform-relative
+	tree   bool              // stage a release tree (frontend + binary)
+	screen bool
+	plan   string // contents of /var/lib/artifact/shot-plan.json
+	// shots are screens by name with their mtime relative to the source
+	// files (which are an hour old): a before shot with an offset above -1h
+	// was shot after the first source edit.
+	shots     map[string]time.Duration
 	sourceRef string
 }
 
@@ -62,6 +66,19 @@ func stageSourceOnly(t *testing.T, l sourceOnlyLayout) (*StagedRelease, error) {
 	}
 	if l.screen {
 		write("var/lib/artifact/screens/home.png", string(testPNG(t, 1100, 750, false)), 0o644)
+	}
+	for name, offset := range l.shots {
+		write("var/lib/artifact/screens/"+name, string(testPNG(t, 1100, 750, false)), 0o644)
+		at := time.Now().Add(offset)
+		if err := os.Chtimes(filepath.Join(merged, "var/lib/artifact/screens", name), at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Hour)
+	for rel := range l.source {
+		if err := os.Chtimes(filepath.Join(merged, "workspace/platform", rel), old, old); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if l.plan != "" {
 		write("var/lib/artifact/shot-plan.json", l.plan, 0o644)
@@ -177,5 +194,26 @@ func TestStageGrantedReleaseRefusesAPlanOnAPackageCandidate(t *testing.T) {
 	_, err := stageSourceOnly(t, sourceOnlyLayout{source: pkg, plan: soPlan, screen: true, sourceRef: pinned})
 	if err == nil || !strings.Contains(err.Error(), "platform source change") {
 		t.Fatalf("a plan on a package candidate = %v", err)
+	}
+}
+
+// The late-before rule judges screens the capsule shot; a plan bundle's
+// before shots come from the running build on the platform, so the rule is
+// not applied to a plan bundle (design 3.3, Freeze rule). Without a plan
+// the same late before shot is still refused.
+func TestStageGrantedReleaseSkipsLateBeforeShotsForAPlanBundle(t *testing.T) {
+	pinned := "capsule-source-git:" + strings.Repeat("a", 40) + ":sha256:" + strings.Repeat("d", 64)
+	goChange := map[string]string{"internal/agentcore/x.go": "package agentcore\n"}
+	shots := map[string]time.Duration{"01-before-home.png": -2 * time.Hour, "01-after-home.png": -time.Minute}
+	late := map[string]time.Duration{"01-before-home.png": -30 * time.Minute, "01-after-home.png": -time.Minute}
+	if _, err := stageSourceOnly(t, sourceOnlyLayout{source: goChange, shots: shots, sourceRef: pinned}); err != nil {
+		t.Fatalf("control: a timely before shot was refused: %v", err)
+	}
+	_, err := stageSourceOnly(t, sourceOnlyLayout{source: goChange, shots: late, sourceRef: pinned})
+	if err == nil || !strings.Contains(err.Error(), BeforeAfterRequiredReason) {
+		t.Fatalf("without a plan a late before shot = %v, want before_after_required", err)
+	}
+	if _, err := stageSourceOnly(t, sourceOnlyLayout{source: goChange, shots: late, plan: soPlan, sourceRef: pinned}); err != nil {
+		t.Fatalf("a plan bundle must not be refused for a late before shot: %v", err)
 	}
 }
