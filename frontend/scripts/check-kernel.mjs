@@ -4,7 +4,8 @@
 //   1. Imports: kernel files import only other kernel files (no bare
 //      specifier, no path leaving src/lib/kernel/, no dynamic import).
 //   2. Names: kernel source names no app id, package name or desk. The list is
-//      built at check time from apps/registry.ts, src/packages/*/choir-package.json
+//      built at check time from apps/registry.ts, the base packages' choir-package.json
+//      (src/packages/base-packages.json lists them)
 //      and the legacy literals below.
 //   3. Responsibilities: the exported symbols per file equal the checked-in
 //      src/lib/kernel/responsibilities.json.
@@ -65,9 +66,14 @@ function builtNames() {
     // ids written as constants: export const X_ID = 'texture'
     for (const m of src.matchAll(/\b[A-Z][A-Z0-9_]*_ID\b\s*(?::[^=]+)?=\s*['"`]([a-z][a-z0-9-]*)['"`]/g)) names.add(m[1]);
   }
+  // Built-in names are the base packages, the committed allowlist; a package
+  // a capsule adds under src/packages is not a kernel built-in.
   const pk = join(frontendRoot, 'src/packages');
-  if (existsSync(pk)) {
-    for (const d of readdirSync(pk)) {
+  const allowlist = join(pk, 'base-packages.json');
+  if (existsSync(pk) && !existsSync(allowlist)) {
+    fail('src/packages/base-packages.json', 'missing: the kernel names list is built from the base package allowlist');
+  } else if (existsSync(allowlist)) {
+    for (const d of JSON.parse(readFileSync(allowlist, 'utf8')).packages ?? []) {
       const f = join(pk, d, 'choir-package.json');
       if (!existsSync(f)) continue;
       try {

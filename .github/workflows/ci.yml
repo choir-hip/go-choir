@@ -627,6 +627,21 @@ jobs:
   # The guest floor digest must not move on a commit-only change (D2 S1; review
   # 318 Low): pure Nix evaluation of the guest under two commit stamps. Runs when
   # the flake, go.mod or Go code changed (the sbom lane's inputs).
+  base-packages-listed:
+    name: Base Packages Are Listed
+    runs-on: ubuntu-latest
+    needs: plan
+    # Main only, and not part of `npm run build` (the capsule's verifier): a
+    # package a capsule adds is not a base package until a platform change
+    # lists it (docs/design/package-operation-decision-2026-11-06.md 2.6).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.frontend == 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Every package directory is in base-packages.json
+        shell: bash
+        run: scripts/check-base-packages
+
   guest-floor-commit-free:
     name: Guest Floor Digest Is Commit-Free
     runs-on: ubuntu-latest
@@ -647,7 +662,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, build-frontend, package-modularity, desk-protocol]
+    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, build-frontend, package-modularity, desk-protocol, base-packages-listed]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -711,6 +726,7 @@ jobs:
           require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
           require_if_run guest-floor-commit-free "${{ needs.guest-floor-commit-free.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
+          require_if_run base-packages-listed "${{ needs.base-packages-listed.result }}"
           require_success "${{ needs.plan.outputs.frontend }}" package-modularity "${{ needs.package-modularity.result }}"
           require_success "${{ needs.plan.outputs.go }}" desk-protocol "${{ needs.desk-protocol.result }}"
           echo "All selected CI gates passed"

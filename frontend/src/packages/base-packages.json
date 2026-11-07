@@ -1,0 +1,28 @@
+{
+  "schema": "choir.base-packages/v1",
+  "packages": [
+    "audio",
+    "autopaper",
+    "browser",
+    "calendar",
+    "compute-monitor",
+    "content",
+    "desktop-icons",
+    "files",
+    "image",
+    "launcher",
+    "library-next",
+    "mail",
+    "menu-default",
+    "notifications",
+    "overview",
+    "podcast",
+    "prompt-bar",
+    "pulse",
+    "reader",
+    "settings",
+    "slides",
+    "texture",
+    "video"
+  ]
+}

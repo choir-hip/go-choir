@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// Generates internal/apppackage/firstparty_gen.go from the first-party package
-// manifests (frontend/src/packages/*/choir-package.json): the table of data
+// Generates internal/apppackage/firstparty_gen.go from the base package
+// manifests (frontend/src/packages/<name>/choir-package.json for each name in
+// frontend/src/packages/base-packages.json, the committed allowlist; a
+// directory the list does not name is not built-in and registers no kinds,
+// docs/design/package-operation-decision-2026-11-06.md 2.6): the table of data
 // kinds each package declares, which the autoputer registers at boot through
 // objectgraph.RegisterPackageKind (docs/design/app-packages-replan-2026-10-24.md
 // section 2.2). With --check it writes nothing and exits 1 if the committed file
 // is stale, as generate-source-contract.mjs --check does. Go validates the
 // manifests in full (apppackage.ParseManifest, and a drift test over the same
 // directory); this script refuses only what it cannot generate from.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,15 +51,35 @@ const RESERVED_NAMES = [
 ];
 const shellAppNames = new Set([...RESERVED_NAMES, 'pdf', 'epub', 'email']);
 
+// The base packages are the allowlist, never a directory walk: a package a
+// capsule adds under src/packages must not become built-in by being there.
+const allowlistPath = resolve(packagesDir, 'base-packages.json');
+const baseNames = (() => {
+  if (!existsSync(allowlistPath)) {
+    if (!existsSync(packagesDir)) return [];
+    fail(`${allowlistPath} is missing; the base packages are the committed allowlist`);
+  }
+  let list;
+  try {
+    list = JSON.parse(readFileSync(allowlistPath, 'utf8'));
+  } catch (err) {
+    fail(`${allowlistPath}: ${err.message}`);
+  }
+  if (list.schema !== 'choir.base-packages/v1' || !Array.isArray(list.packages)) fail(`${allowlistPath}: want {"schema": "choir.base-packages/v1", "packages": [...]}`);
+  for (const n of list.packages) if (typeof n !== 'string' || n === '') fail(`${allowlistPath}: every entry must be a package name`);
+  if (new Set(list.packages).size !== list.packages.length) fail(`${allowlistPath}: a package is listed twice`);
+  return [...list.packages].sort();
+})();
+
 const builtinNames = [];
 const packages = [];
 // contributes.settings of each in-tree package, as canonical JSON: the settings
 // route (internal/mediastate) takes only a key a manifest declares.
 const settings = [];
 if (existsSync(packagesDir)) {
-  for (const dir of readdirSync(packagesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
+  for (const dir of baseNames) {
     const manifestPath = resolve(packagesDir, dir, 'choir-package.json');
-    if (!existsSync(manifestPath)) continue;
+    if (!existsSync(manifestPath)) fail(`${allowlistPath} lists ${dir}, which has no ${manifestPath}`);
     let manifest;
     try {
       manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));

@@ -4,6 +4,14 @@
 // shape, name/alias/extension clashes, directory rules and the required floor.
 // Import confinement is not here; see scripts/package-boundary-plugin.mjs.
 //
+// Origin-agnostic by design: every directory under src/packages is checked by
+// the same rules, whether it is a base package (listed in
+// src/packages/base-packages.json) or a package a capsule added. The rules for
+// a manifest are a superset of what publish accepts, so a package that passes
+// here can be published; the allowlist decides only what is built-in
+// (gen-package-kinds.mjs, check-kernel.mjs, the Go drift test), never what is
+// checked (docs/design/package-operation-decision-2026-11-06.md 2.6).
+//
 // Run by `npm run build`. `--root <frontend dir>` points it at a fixture tree
 // (tests/app-packages.spec.js does this to watch each bad case be refused).
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -474,6 +482,8 @@ async function main() {
     const realPackages = realpathSync(packagesDir);
     for (const n of readdirSync(packagesDir).sort()) {
       const full = join(packagesDir, n);
+      // The one file allowed beside the packages: the base allowlist.
+      if (n === 'base-packages.json' && lstatSync(full).isFile()) continue;
       if (!lstatSync(full).isDirectory() || !inside(realPackages, realpathSync(full))) {
         fail(`src/packages/${n}`, 'must be a real directory inside src/packages (no symlinks or stray files)');
         continue;

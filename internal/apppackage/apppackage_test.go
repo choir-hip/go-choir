@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -432,27 +433,33 @@ func TestRegisterFirstPartyIsIdempotentAndRegistersTheTable(t *testing.T) {
 // G1: the committed table is the one the manifests generate.
 func TestGeneratedTableMatchesTheFirstPartyManifests(t *testing.T) {
 	dir := filepath.Join("..", "..", "frontend", "src", "packages")
-	entries, err := os.ReadDir(dir)
+	// The base packages are the committed allowlist, never a directory walk:
+	// a package a capsule adds under the directory is not built-in
+	// (docs/design/package-operation-decision-2026-11-06.md 2.6).
+	listRaw, err := os.ReadFile(filepath.Join(dir, "base-packages.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		if len(firstPartyPackages) != 0 {
-			t.Fatalf("firstparty_gen.go holds %d packages but %s does not exist", len(firstPartyPackages), dir)
+			t.Fatalf("firstparty_gen.go holds %d packages but %s has no base-packages.json", len(firstPartyPackages), dir)
 		}
 		return
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
+	var list struct {
+		Schema   string   `json:"schema"`
+		Packages []string `json:"packages"`
+	}
+	if err := json.Unmarshal(listRaw, &list); err != nil || list.Schema != "choir.base-packages/v1" {
+		t.Fatalf("base-packages.json: schema %q err %v", list.Schema, err)
+	}
+	sort.Strings(list.Packages)
 	var want []firstPartyPackage
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
+	for _, name := range list.Packages {
+		e := dirEntryNamed{name}
 		raw, err := os.ReadFile(filepath.Join(dir, e.Name(), ManifestFile))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("base package %s: %v", e.Name(), err)
 		}
 		m, err := ParseManifest(raw, OriginFirstParty)
 		if err != nil {
@@ -560,3 +567,9 @@ func TestManifestRefusesSchedulesThatWakeADeskTooOften(t *testing.T) {
 		t.Fatalf("three one-minute schedules: %v", err)
 	}
 }
+
+// dirEntryNamed lets the allowlist loop read like the directory walk it
+// replaces.
+type dirEntryNamed struct{ name string }
+
+func (d dirEntryNamed) Name() string { return d.name }
