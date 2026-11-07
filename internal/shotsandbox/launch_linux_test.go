@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -17,6 +18,7 @@ import (
 // namespace the sandbox needs (a hardened CI host), failing on anything else.
 func launchOrSkip(t *testing.T, spec Spec) Result {
 	t.Helper()
+	requireSandboxHost(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if spec.WorkDir == "" {
@@ -30,6 +32,35 @@ func launchOrSkip(t *testing.T, spec Spec) Result {
 		t.Fatalf("launch: %v", err)
 	}
 	return res
+}
+
+var (
+	sandboxHostOnce sync.Once
+	sandboxHostErr  string
+)
+
+// requireSandboxHost skips when this host lets the sandbox create its user
+// namespace but not configure it: a hardened runner (Ubuntu's AppArmor
+// userns restriction) leaves the namespace without CAP_NET_ADMIN, so the
+// stage cannot bring its loopback up and fails closed. The guest, where
+// shots run, is root and configures it; the probe keeps these tests running
+// on every host that can.
+func requireSandboxHost(t *testing.T) {
+	t.Helper()
+	sandboxHostOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		res, err := Launch(ctx, os.Args[0], Spec{Probe: "listen:127.0.0.1:0", WorkDir: t.TempDir()})
+		switch {
+		case err != nil && (strings.Contains(err.Error(), "operation not permitted") || strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "no space left")):
+			sandboxHostErr = err.Error()
+		case err == nil && strings.Contains(res.Error, "could not confine itself") && strings.Contains(res.Error, "operation not permitted"):
+			sandboxHostErr = res.Error
+		}
+	})
+	if sandboxHostErr != "" {
+		t.Skipf("this host forbids configuring the sandbox's namespaces: %s", sandboxHostErr)
+	}
 }
 
 // nonLoopbackAddr is a host address outside the stage's namespace.
@@ -121,6 +152,7 @@ func TestLaunchCandidateDeathIsAResultWithTail(t *testing.T) {
 // FM6: the launcher's context ends a stage that is waiting on a candidate
 // that never serves; Launch returns and does not leave the group running.
 func TestLaunchContextEndKillsTheStage(t *testing.T) {
+	requireSandboxHost(t)
 	spec := stageSpec(t, "silent")
 	spec.ReadyTimeoutS = 600
 	spec.WorkDir = t.TempDir()
