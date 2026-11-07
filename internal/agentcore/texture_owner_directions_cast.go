@@ -274,14 +274,13 @@ func attachCastOwnerHistoryAt(intents []yaegikernel.StagedIntent, scope ownerRev
 // current. It reports false, and changes nothing, otherwise.
 func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec map[string]json.RawMessage, scope ownerRevisionScope, list func() ([]types.Revision, error), cutoff time.Time) ([]yaegikernel.StagedIntent, bool, error) {
 	in := intents[i]
-	holder, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
-	if !ok || list == nil || cutoff.IsZero() {
+	if list == nil || cutoff.IsZero() {
 		return out, false, nil
 	}
 	// The resolved destination decides: a Cast to the admission holder, or to
 	// the assignment desk, which the resolver forwards to the holder's inbox
 	// for a sender that does not admit (Texture).
-	if target := castTargetDesk(in.ToDesk); target != holder.Name && !deskmanifest.IsAssignmentPerformer(target) {
+	if !castsToAdmission(in.ToDesk) {
 		return out, false, nil
 	}
 	revisions, err := list()
@@ -399,13 +398,23 @@ func earlierOwnerDirections(ids []string, named []castOwnerDirection, textBytes 
 	return kept, omitted, nil
 }
 
+// castsToAdmission reports whether a Texture Cast's address resolves to the
+// admission holder's inbox: it names the holder, or the assignment desk, which
+// the resolver forwards to the holder for a sender that does not admit. The
+// attach and the packet bound share it so they cannot drift.
+func castsToAdmission(toDesk string) bool {
+	holder, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
+	target := castTargetDesk(toDesk)
+	return ok && (target == holder.Name || deskmanifest.IsAssignmentPerformer(target))
+}
+
 // refuseOversizedTextureCasts refuses a Texture Cast to management whose
 // packet, with what the runtime attached, is over textureCastPacketMax:
 // engineering, which reads the Texture Cast its assignment serves, reads
 // only that much (fix 9). Casts to other desks keep their own bounds.
 func refuseOversizedTextureCasts(intents []yaegikernel.StagedIntent) error {
 	for _, in := range intents {
-		if in.Kind == yaegikernel.IntentCast && strings.TrimSpace(in.ToDesk) == agentprofile.Management && len(in.Statement) > textureCastPacketMax {
+		if in.Kind == yaegikernel.IntentCast && castsToAdmission(in.ToDesk) && len(in.Statement) > textureCastPacketMax {
 			return fmt.Errorf("reduce: Texture cast %s: the packet is %d bytes, with any owner words the runtime attached; a Cast to management carries at most %d, which is what engineering reads: shorten the packet, name fewer owner revisions, or point at the request's files in the source tree", in.LocalID, len(in.Statement), textureCastPacketMax)
 		}
 	}

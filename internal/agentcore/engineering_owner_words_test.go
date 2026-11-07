@@ -460,3 +460,22 @@ func TestForgedOwnerDirectionsOnAnUnnamedCastAreRefused(t *testing.T) {
 		t.Fatalf("a forged owner_directions on an unnamed Cast survived: %v", err)
 	}
 }
+
+// Devin r2: the packet bound follows the same destination test as the attach.
+// A Cast spelled "Management", "management:x" or "engineering" (forwarded to
+// the admission holder) is bounded; one to research is not.
+func TestOversizedPacketRefusalFollowsTheResolvedDestination(t *testing.T) {
+	big := `{"kind":"execution_request","pad":"` + strings.Repeat("x", textureCastPacketMax) + `"}`
+	for _, to := range []string{"management", "Management", "management:x", " management ", "engineering", "Engineering:a1"} {
+		in := ownerCast(big)
+		in.ToDesk = to
+		if err := refuseOversizedTextureCasts([]yaegikernel.StagedIntent{in}); err == nil {
+			t.Errorf("an oversized Cast to %q was not refused", to)
+		}
+	}
+	in := ownerCast(big)
+	in.ToDesk = "research"
+	if err := refuseOversizedTextureCasts([]yaegikernel.StagedIntent{in}); err != nil {
+		t.Errorf("a Cast to research was bounded: %v", err)
+	}
+}
