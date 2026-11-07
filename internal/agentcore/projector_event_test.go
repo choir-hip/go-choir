@@ -36,7 +36,9 @@ func queueOneActorWake(t *testing.T, s *store.Store, suffix string, keep ...stri
 		if slices.Contains(keep, wake.TargetAgentID) {
 			continue
 		}
-		if err := s.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil {
+		// The running projector may mark the same wake first; its conflict
+		// leaves the state this setup wants (projected).
+		if err := s.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil && !errors.Is(err, store.ErrConcurrentStateChange) {
 			t.Fatalf("mark setup wake projected: %v", err)
 		}
 	}
