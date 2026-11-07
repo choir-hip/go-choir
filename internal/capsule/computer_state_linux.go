@@ -243,12 +243,12 @@ func mkdirOwned(dir string) error {
 // files write lock. Any failure to build a kept entry fails the whole walk:
 // a layer is whole or absent.
 func snapshotFilesTree(ctx context.Context, root, dest string, leaveOut map[string]string, receipt *ComputerStateReceipt) error {
-	return snapshotFilesTreeOwned(ctx, root, dest, leaveOut, receipt, computerLayerOwner, computerLayerGroup)
+	return snapshotFilesTreeOwned(ctx, root, dest, leaveOut, receipt, computerLayerOwner, computerLayerGroup, false)
 }
 
 // snapshotFilesTreeOwned is snapshotFilesTree with the owner of the
 // directories it makes.
-func snapshotFilesTreeOwned(ctx context.Context, root, dest string, leaveOut map[string]string, receipt *ComputerStateReceipt, uid, gid int) error {
+func snapshotFilesTreeOwned(ctx context.Context, root, dest string, leaveOut map[string]string, receipt *ComputerStateReceipt, uid, gid int, readOnly bool) error {
 	rootFD, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("open files root: %w", err)
@@ -264,7 +264,7 @@ func snapshotFilesTreeOwned(ctx context.Context, root, dest string, leaveOut map
 	}
 	defer unix.Close(destFD)
 	rootMnt, mntKnown := mountIDAt(rootFD, "")
-	w := snapshotWalk{ctx: ctx, dev: rootStat.Dev, mnt: rootMnt, mntKnown: mntKnown, leaveOut: leaveOut, receipt: receipt, uid: uid, gid: gid}
+	w := snapshotWalk{ctx: ctx, dev: rootStat.Dev, mnt: rootMnt, mntKnown: mntKnown, leaveOut: leaveOut, receipt: receipt, uid: uid, gid: gid, readOnly: readOnly}
 	return w.dir(rootFD, destFD, "")
 }
 
@@ -276,6 +276,9 @@ type snapshotWalk struct {
 	leaveOut map[string]string
 	receipt  *ComputerStateReceipt
 	uid, gid int
+	// readOnly leaves out a file anyone but its owner could write (the shot
+	// layer links live inodes and only reads them).
+	readOnly bool
 }
 
 func (w snapshotWalk) dir(srcFD, destFD int, rel string) error {
@@ -331,6 +334,10 @@ func (w snapshotWalk) dir(srcFD, destFD int, rel string) error {
 				// Counted, never named: the name of a file the owner kept
 				// unreadable is itself not for the capsule.
 				w.receipt.countLeaveOut(LeaveOutNotReadable)
+				continue
+			}
+			if w.readOnly && st.Mode&0o022 != 0 {
+				w.receipt.countLeaveOut(LeaveOutWritable)
 				continue
 			}
 			if err := w.link(srcFD, destFD, name, child, st); err != nil {

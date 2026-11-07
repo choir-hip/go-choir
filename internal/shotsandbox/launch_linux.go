@@ -18,6 +18,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 )
 
+// Residual (N1): the stage has no mount namespace, so the servers and the
+// browser see every path the sandbox id can traverse, not only their own
+// directories. What keeps the owner's data out of reach is the id and the
+// modes: the capsule state directory's boot dir is 0700 (state_dir_linux.go),
+// the live store and credentials are expected to sit in root-only directories
+// (unchecked here), and the files layer holds only o+r, non-writable files with the mailbox left out.
+// The live files root and mailbox directory are reachable by this id only if
+// their own modes allow it (to be checked on d@e). A CLONE_NEWNS with a
+// read-only bind layout (the stage's inputs, /nix/store, the work directory)
+// is cheap in this launcher, since the namespace flags are already set here
+// and the stage is the only process that needs the mounts, but it is not
+// built: the seccomp filter already refuses mount(2) to the workload.
+
 // Launch runs one pass in a new sandbox: the running build re-executed as the
 // stage (exe, empty for this process's own binary) in a new user and network
 // namespace, so it has loopback and nothing else, and reads the Result it

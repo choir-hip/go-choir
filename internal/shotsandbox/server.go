@@ -259,7 +259,7 @@ func startAutoputer(spec Spec, port int) (*exec.Cmd, <-chan struct{}, *tailBuffe
 	cmd.Dir = spec.WorkDir
 	cmd.Stdout = io.MultiWriter(log, tail)
 	cmd.Stderr = io.MultiWriter(log, tail)
-	setChildAttr(cmd)
+	setChildAttr(cmd, spec)
 	if err := cmd.Start(); err != nil {
 		_ = log.Close()
 		return nil, nil, nil, fmt.Errorf("the candidate autoputer did not start: %w", err)

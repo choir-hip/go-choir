@@ -45,9 +45,11 @@ import (
 //   - FM5 the two runs differ: one frozen plan drives both; the before run
 //     takes no video, the after run takes the plan's.
 //   - FM6 a hang: the sandbox pass has its own view/plan/stage deadlines, the
-//     review has its timeout, the worker has one for the whole run, and a
-//     panic or a context end leaves no event, so the watchdog (ensure) counts
-//     a silent death and the third writes "shot worker died".
+//     review has its timeout, and the worker has one for the whole run. A
+//     timeout inside a pass or the review is a fail verdict with its cause;
+//     only a panic, or the worker's own deadline ending before a verdict, leaves
+//     no event, and then the watchdog (ensure) counts a silent death and the
+//     third writes "shot worker died".
 //   - FM7 a crash: no event is written before the end, so a crash boot closes
 //     the accepted operation by the existing rule; a planned-restart re-run
 //     starts from scratch (the work directory is wiped first) and the event
@@ -89,6 +91,65 @@ type candidateShotDeps struct {
 	runningBinary, runningFrontend string
 	// browser, ffmpeg, fontconfig replace the environment's.
 	browser, ffmpeg, fontconfig string
+	// lchown and chownTree replace the ownership calls in tests.
+	lchown    func(path string, uid, gid int) error
+	chownTree func(root string, uid, gid int) error
+}
+
+// sweepShotWorkRootOnce removes what an earlier process left in the work
+// root (a crash mid-run), before this process's first worker makes its own
+// directory. Once per runtime: later workers only ever see their own.
+func (rt *Runtime) sweepShotWorkRootOnce() {
+	rt.shotSweepOnce.Do(func() {
+		deps := rt.shotDeps()
+		root := deps.workRoot
+		if root == "" {
+			root = defaultShotWorkRoot()
+		}
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if err := os.RemoveAll(filepath.Join(root, e.Name())); err != nil {
+				log.Printf("selfdev candidate shot: sweep %s: %v", e.Name(), err)
+			}
+		}
+	})
+}
+
+// handOver gives dir itself (no follow) to uid:gid, then each named entry
+// under it that exists, as a tree. The files layer gets only its top
+// directory: its subdirectories were made owned and its files are live links.
+func (d candidateShotDeps) handOver(dir string, uid, gid int, names ...string) error {
+	lchown, chownTree := d.lchown, d.chownTree
+	if lchown == nil {
+		lchown = os.Lchown
+	}
+	if chownTree == nil {
+		chownTree = capsule.ChownTreeNoFollow
+	}
+	if err := lchown(dir, uid, gid); err != nil {
+		return err
+	}
+	// The files layer's top directory, never its links.
+	if _, err := os.Lstat(filepath.Join(dir, "files")); err == nil {
+		if err := lchown(filepath.Join(dir, "files"), uid, gid); err != nil {
+			return err
+		}
+	}
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if err := chownTree(path, uid, gid); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (rt *Runtime) shotDeps() candidateShotDeps {
@@ -153,14 +214,19 @@ func (rt *Runtime) finishCandidateShot(key string, operation selfdev.Operation, 
 }
 
 func (rt *Runtime) runCandidateShotWorker(key string, state *shotWorkerState, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
+	terminal := false
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("selfdev candidate shot: operation %s: worker panicked: %v", operation.OperationID, r)
 		}
 		rt.shotWorkersMu.Lock()
 		state.running = false
+		if terminal {
+			delete(rt.shotWorkers, key) // N5: nothing will restart a worker for it
+		}
 		rt.shotWorkersMu.Unlock()
 	}()
+	rt.sweepShotWorkRootOnce()
 	ctx, cancel := context.WithTimeout(context.Background(), candidateShotWorkerTimeout)
 	defer cancel()
 	// A terminal operation gets no shots; a missing store is a wiring defect
@@ -172,6 +238,7 @@ func (rt *Runtime) runCandidateShotWorker(key string, state *shotWorkerState, op
 	}
 	if current.State != selfdev.StateAccepted {
 		log.Printf("selfdev candidate shot: operation %s is %s, not accepted; no shots", operation.OperationID, current.State)
+		terminal = true
 		return
 	}
 	started := time.Now()
@@ -189,7 +256,7 @@ type shotSide struct {
 	name, dir, binary, frontend string
 }
 
-func (s shotSide) spec(plan capsule.ShotPlan, env shotEnv, uid, gid int) shotsandbox.Spec {
+func (s shotSide) spec(plan capsule.ShotPlan, env shotEnv) shotsandbox.Spec {
 	return shotsandbox.Spec{
 		Binary: s.binary, Frontend: s.frontend, StorePath: filepath.Join(s.dir, "state"), FilesRoot: filepath.Join(s.dir, "files"),
 		OutDir: filepath.Join(s.dir, "out"), WorkDir: filepath.Join(s.dir, "work"), Plan: plan,
@@ -315,9 +382,6 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 		if err := os.Mkdir(files, 0o755); err != nil {
 			return fail("files layer: %v", err)
 		}
-		if err := os.Lchown(files, uid, gid); err != nil {
-			return fail("files layer: %v", err)
-		}
 		if _, err := capsule.BuildShotFilesLayer(ctx, filesRoot, sourceRoot, files, uid, gid); err != nil {
 			return fail("files layer: %v", err)
 		}
@@ -326,12 +390,14 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 				return fail("work directory: %v", err)
 			}
 		}
-		// Only what the worker made is handed over: never the files layer's
-		// linked inodes, which are the live ones.
-		for _, owned := range []string{filepath.Join(side.dir, "out"), filepath.Join(side.dir, "work"), filepath.Join(side.dir, "state.db"), filepath.Join(side.dir, "state.texture")} {
-			if err := capsule.ChownTreeNoFollow(owned, uid, gid); err != nil {
-				return fail("hand the work directory over: %v", err)
-			}
+		// The sandbox opens the store in WAL mode and must create
+		// state.db-wal and -shm beside the db, so the side directory itself
+		// is its own (S-B1). Below it only what the worker made is handed
+		// over, never the files layer's linked inodes, which are the live
+		// ones (the layer's directories were made owned by the walk); an
+		// absent entry, a store with no sidecar, is skipped (S-B2).
+		if err := deps.handOver(side.dir, uid, gid, "out", "work", "state.db", "state.texture"); err != nil {
+			return fail("hand the work directory over: %v", err)
 		}
 	}
 
@@ -352,7 +418,7 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 	results := map[string]shotsandbox.Result{}
 	for _, pass := range passes {
 		passCtx, cancel := context.WithTimeout(ctx, candidateShotPassTimeout)
-		result, err := launch(passCtx, pass.side.spec(pass.plan, env, uid, gid))
+		result, err := launch(passCtx, pass.side.spec(pass.plan, env))
 		cancel()
 		if err != nil {
 			return fail("the shots of %s did not run: %v", pass.what, err)

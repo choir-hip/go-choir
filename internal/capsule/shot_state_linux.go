@@ -79,7 +79,7 @@ func BuildShotFilesLayer(ctx context.Context, filesRoot, sourceRoot, dest string
 	}
 	var walkErr error
 	_ = ownerfiles.Exclusive(func() error {
-		walkErr = snapshotFilesTreeOwned(ctx, root, dest, leaveOut, &receipt, uid, gid)
+		walkErr = snapshotFilesTreeOwned(ctx, root, dest, leaveOut, &receipt, uid, gid, true)
 		return nil
 	})
 	if walkErr != nil {

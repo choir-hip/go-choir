@@ -75,11 +75,20 @@ func confine(spec Spec) error {
 			return fmt.Errorf("setuid: %w", err)
 		}
 	}
+	// Setuid should reach every thread; the kernel is asked, not trusted to
+	// have (D-B1). With no drop the ids are the namespace's root, zero.
+	if err := confineCheck(spec.RunAsUID, spec.RunAsGID); err != nil {
+		return err
+	}
 	if err := capsule.LoadWorkloadInetFilter(); err != nil {
 		return err
 	}
 	return nil
 }
+
+// confineCheck is the thread-id check; a test replaces it to make the stage
+// refuse.
+var confineCheck = verifyThreadIDs
 
 // loopbackUp sets IFF_UP on lo of the stage's own network namespace.
 func loopbackUp() error {

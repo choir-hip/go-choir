@@ -105,7 +105,10 @@ func (rt *Runtime) candidateShotGate(ctx context.Context, operation selfdev.Oper
 		rt.startCandidateShot(operation, bundle, *built)
 		return fmt.Errorf("%w: operation %s host build %s", errCandidateShotPending, operation.OperationID, built.Job.JobID)
 	}
-	if event.EventKind != computerevent.EventCandidateShot || rt.eventPayloadReader == nil {
+	if err := candidateShotKindCheck(event.EventKind); err != nil {
+		return err
+	}
+	if rt.eventPayloadReader == nil {
 		return fmt.Errorf("candidate shot event %s is unreadable", key)
 	}
 	raw, err := rt.eventPayloadReader.FetchPayload(ctx, operation.ComputerID, event.PayloadCommitment)
@@ -124,6 +127,16 @@ func (rt *Runtime) candidateShotGate(ctx context.Context, operation selfdev.Oper
 		return candidateShotFailure{Cause: payload.Cause}
 	}
 	return nil
+}
+
+// candidateShotKindCheck: nothing but the worker writes the candidate_shot
+// key, so another kind on it will never become a verdict and the operation
+// fails by name instead of staying pending forever.
+func candidateShotKindCheck(kind computerevent.EventKind) error {
+	if kind == computerevent.EventCandidateShot {
+		return nil
+	}
+	return candidateShotFailure{Cause: fmt.Sprintf("the event on the candidate_shot key is a %s event, not a candidate_shot", kind)}
 }
 
 // appendCandidateShot writes the operation's candidate_shot event,

@@ -16,6 +16,13 @@ import (
 // testStageHook makes this test binary the sandbox stage when the launcher
 // re-executes it, with a fake browser step in place of Chromium.
 func testStageHook() {
+	// The launcher sets HOME to the work directory: a marker file there makes
+	// this stage's thread-id check fail (threads_linux_test.go).
+	if home := os.Getenv("HOME"); home != "" && os.Getenv(StageEnv) != "" {
+		if _, err := os.Stat(filepath.Join(home, "refuse-confine")); err == nil {
+			confineCheck = func(uid, gid int) error { return fmt.Errorf("thread 7 still has Uid 0 0 0 0, want %d", uid) }
+		}
+	}
 	stageRun = func(ctx context.Context, opts shot.Options) ([]shot.Result, error) {
 		resp, err := http.Get(opts.BaseURL + "/api/ping")
 		if err != nil {

@@ -128,3 +128,38 @@ func TestBuildShotFilesLayerRefusesALayerInsideTheTreeItCopies(t *testing.T) {
 		t.Fatal("no files root was accepted")
 	}
 }
+
+// N2: the shot only reads the owner's files, so a file that anyone but its
+// owner could write is not linked into the layer (a linked inode is the live
+// one); the same walk for a capsule layer still links it.
+func TestBuildShotFilesLayerLeavesOutFilesOthersCanWrite(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "files")
+	writeLayerTree(t, root, map[string]os.FileMode{"ok.txt": 0o644, "world.txt": 0o666, "group.txt": 0o664})
+	dest := filepath.Join(t.TempDir(), "layer")
+	if err := os.Mkdir(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	uid, gid := ShotSandboxIDs()
+	receipt, err := BuildShotFilesLayer(context.Background(), root, "", dest, uid, gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "ok.txt")); err != nil {
+		t.Fatalf("the read-only file was not linked: %v", err)
+	}
+	for _, left := range []string{"world.txt", "group.txt"} {
+		if _, err := os.Lstat(filepath.Join(dest, left)); err == nil {
+			t.Fatalf("%s is writable by others and reached the shot layer", left)
+		}
+	}
+	if receipt.LeftOutCounts[LeaveOutWritable] != 2 {
+		t.Fatalf("left out = %v", receipt.LeftOutCounts)
+	}
+	capsuleDest := t.TempDir()
+	if err := snapshotFilesTree(context.Background(), root, capsuleDest, nil, &ComputerStateReceipt{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(capsuleDest, "world.txt")); err != nil {
+		t.Fatalf("the capsule layer must keep linking it: %v", err)
+	}
+}

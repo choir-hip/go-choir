@@ -44,6 +44,7 @@ const (
 	LeaveOutSource          = "source_lower"     // the computer's source is the capsule's /workspace/platform
 	LeaveOutMail            = "mail"             // the owner's emails need an owner decision
 	LeaveOutNotReadable     = "not_o+r"          // a mode the owner or a tool set; never raised, counted, never named
+	LeaveOutWritable        = "writable_by_others" // a shot layer only: g+w or o+w, counted, never named
 	LeaveOutSymlink         = "symlink"          // never followed
 	LeaveOutSpecial         = "special_file"     // socket, FIFO or device
 	LeaveOutTemporary       = "temporary"        // a writer's in-flight temporary file

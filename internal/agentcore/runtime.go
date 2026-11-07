@@ -253,6 +253,7 @@ type Runtime struct {
 	shotWorkersMu     sync.Mutex
 	shotWorkers       map[string]*shotWorkerState
 	candidateShotDeps *candidateShotDeps
+	shotSweepOnce     sync.Once
 	// researchChildCalls spaces every sub-RLM's model calls on this
 	// computer: research children and management tasks
 	// (subRLMCallSpacer, research_children.go).
