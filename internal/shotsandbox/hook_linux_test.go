@@ -20,7 +20,9 @@ func testStageHook() {
 	// this stage's thread-id check fail (threads_linux_test.go).
 	if home := os.Getenv("HOME"); home != "" && os.Getenv(StageEnv) != "" {
 		if _, err := os.Stat(filepath.Join(home, "refuse-confine")); err == nil {
-			confineCheck = func(uid, gid int) error { return fmt.Errorf("thread 7 still has Uid 0 0 0 0, want %d", uid) }
+			confineCheck = func(uid, gid int, groups bool) error {
+				return fmt.Errorf("thread 7 still has Uid 0 0 0 0, want %d", uid)
+			}
 		}
 	}
 	stageRun = func(ctx context.Context, opts shot.Options) ([]shot.Result, error) {

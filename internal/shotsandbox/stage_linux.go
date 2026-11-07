@@ -64,10 +64,15 @@ func confine(spec Spec) error {
 	if err := loopbackUp(); err != nil {
 		return fmt.Errorf("bring loopback up: %w", err)
 	}
-	if spec.RunAsUID != 0 || spec.RunAsGID != 0 {
-		// The group first, while the process still may (setgroups is denied in
-		// this namespace and root has none); setuid drops every capability with
-		// it, which is the point.
+	dropped := spec.RunAsUID != 0 || spec.RunAsGID != 0
+	if dropped {
+		// The launcher's supplementary groups would pass to every child
+		// (N8): clear them first, while setgroups is still allowed (the root
+		// launcher leaves it enabled), then the group, then the user; setuid
+		// drops every capability with it, which is the point.
+		if err := syscall.Setgroups([]int{}); err != nil {
+			return fmt.Errorf("setgroups: %w", err)
+		}
 		if err := syscall.Setgid(spec.RunAsGID); err != nil {
 			return fmt.Errorf("setgid: %w", err)
 		}
@@ -77,7 +82,7 @@ func confine(spec Spec) error {
 	}
 	// Setuid should reach every thread; the kernel is asked, not trusted to
 	// have (D-B1). With no drop the ids are the namespace's root, zero.
-	if err := confineCheck(spec.RunAsUID, spec.RunAsGID); err != nil {
+	if err := confineCheck(spec.RunAsUID, spec.RunAsGID, dropped); err != nil {
 		return err
 	}
 	if err := capsule.LoadWorkloadInetFilter(); err != nil {

@@ -46,7 +46,10 @@ func Launch(ctx context.Context, exe string, spec Spec) (Result, error) {
 	}
 	uid, gid := capsule.ShotSandboxIDs()
 	attr := &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNET,
+		Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNET,
+		// Setgroups stays allowed only for the root path below, so the stage can
+		// clear the launcher's supplementary groups (Go would run a
+		// Credential setgroups inside the new namespace, where it is denied).
 		GidMappingsEnableSetgroups: false,
 		Setpgid:                    true,
 		Pdeathsig:                  syscall.SIGKILL,
@@ -56,6 +59,7 @@ func Launch(ctx context.Context, exe string, spec Spec) (Result, error) {
 		// capabilities to bring lo up) and the stage drops to the sandbox id.
 		attr.UidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: 1}, {ContainerID: uid, HostID: uid, Size: 1}}
 		attr.GidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: 1}, {ContainerID: gid, HostID: gid, Size: 1}}
+		attr.GidMappingsEnableSetgroups = true // the stage clears its groups, then setgid
 		spec.RunAsUID, spec.RunAsGID = uid, gid
 	} else {
 		attr.UidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: uid, Size: 1}}

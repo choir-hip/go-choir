@@ -3,6 +3,7 @@
 package shotsandbox
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,9 +17,10 @@ var procTaskDir = "/proc/self/task"
 // of its uids (real, effective, saved, filesystem) and all four gids equal to
 // uid and gid. Whether syscall.Setuid reaches every thread depends on the
 // build (all threads since Go 1.16, by AllThreadsSyscall or, with cgo, by
-// libc's setxid); the stage does not rely on that: it reads the answer from
+// libc's setxid), and, when noGroups, a Groups line that is empty or only
+// gid; the stage does not rely on that: it reads the answer from
 // the kernel and runs nothing unless it is right (D-B1).
-func verifyThreadIDs(uid, gid int) error {
+func verifyThreadIDs(uid, gid int, noGroups bool) error {
 	tasks, err := os.ReadDir(procTaskDir)
 	if err != nil {
 		return fmt.Errorf("read threads: %w", err)
@@ -28,12 +30,24 @@ func verifyThreadIDs(uid, gid int) error {
 	}
 	for _, task := range tasks {
 		raw, err := os.ReadFile(filepath.Join(procTaskDir, task.Name(), "status"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue // the thread exited between the listing and the read (N9)
+		}
 		if err != nil {
 			return fmt.Errorf("thread %s: %w", task.Name(), err)
 		}
-		var sawUID, sawGID bool
+		var sawUID, sawGID, sawGroups bool
 		for _, line := range strings.Split(string(raw), "\n") {
 			key, rest, ok := strings.Cut(line, ":")
+			if ok && key == "Groups" && noGroups {
+				sawGroups = true
+				for _, g := range strings.Fields(rest) {
+					if g != fmt.Sprint(gid) {
+						return fmt.Errorf("thread %s still has supplementary group %s", task.Name(), g)
+					}
+				}
+				continue
+			}
 			if !ok || (key != "Uid" && key != "Gid") {
 				continue
 			}
@@ -54,6 +68,9 @@ func verifyThreadIDs(uid, gid int) error {
 			} else {
 				sawGID = true
 			}
+		}
+		if noGroups && !sawGroups {
+			return fmt.Errorf("thread %s: status has no Groups line", task.Name())
 		}
 		if !sawUID || !sawGID {
 			return fmt.Errorf("thread %s: status has no Uid or Gid line", task.Name())

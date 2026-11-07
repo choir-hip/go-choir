@@ -43,7 +43,7 @@ func fakeTasks(t *testing.T, threads map[string][2]string) {
 func TestVerifyThreadIDsRequiresEveryThreadAndEveryIDToMatch(t *testing.T) {
 	ok := [2]string{"65534\t65534\t65534\t65534", "65534\t65534\t65534\t65534"}
 	fakeTasks(t, map[string][2]string{"1": ok, "2": ok})
-	if err := verifyThreadIDs(65534, 65534); err != nil {
+	if err := verifyThreadIDs(65534, 65534, false); err != nil {
 		t.Fatalf("all threads dropped = %v", err)
 	}
 	for name, bad := range map[string][2]string{
@@ -54,22 +54,22 @@ func TestVerifyThreadIDsRequiresEveryThreadAndEveryIDToMatch(t *testing.T) {
 		"a line that is not four": {"65534", ok[1]},
 	} {
 		fakeTasks(t, map[string][2]string{"1": ok, "2": bad})
-		if err := verifyThreadIDs(65534, 65534); err == nil {
+		if err := verifyThreadIDs(65534, 65534, false); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
 	fakeTasks(t, map[string][2]string{})
-	if err := verifyThreadIDs(0, 0); err == nil {
+	if err := verifyThreadIDs(0, 0, false); err == nil {
 		t.Error("no threads listed was accepted")
 	}
 }
 
 // The real /proc of this process: every thread has the test's own ids.
 func TestVerifyThreadIDsReadsTheRealProcess(t *testing.T) {
-	if err := verifyThreadIDs(os.Getuid(), os.Getgid()); err != nil {
+	if err := verifyThreadIDs(os.Getuid(), os.Getgid(), false); err != nil {
 		t.Fatalf("this process's threads: %v", err)
 	}
-	if err := verifyThreadIDs(os.Getuid()+1, os.Getgid()); err == nil {
+	if err := verifyThreadIDs(os.Getuid()+1, os.Getgid(), false); err == nil {
 		t.Fatal("a wrong uid was accepted for the real threads")
 	}
 }
