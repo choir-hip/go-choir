@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -87,6 +88,8 @@ type candidateShotDeps struct {
 	launch func(ctx context.Context, spec shotsandbox.Spec) (shotsandbox.Result, error)
 	// workRoot holds the per-operation work directories.
 	workRoot string
+	// reachTop is where the sandbox reach check starts; empty is "/".
+	reachTop string
 	// runningBinary and runningFrontend are the running build's.
 	runningBinary, runningFrontend string
 	// browser, ffmpeg, fontconfig replace the environment's.
@@ -105,6 +108,21 @@ func (rt *Runtime) sweepShotWorkRootOnce() {
 		root := deps.workRoot
 		if root == "" {
 			root = defaultShotWorkRoot()
+		}
+		// The work root was under the capsule state directory before
+		// 2026-11-07; a crashed run there left a state copy nobody sweeps.
+		if deps.workRoot == "" {
+			if v := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR")); v != "" {
+				if err := os.RemoveAll(filepath.Join(v, "shot")); err != nil {
+					log.Printf("selfdev candidate shot: sweep the legacy work root: %v", err)
+				}
+			}
+		}
+		// The root is checked before anything under it is removed: a
+		// planted symlink or someone else's directory is not swept.
+		if err := prepareShotWorkRoot(root); err != nil {
+			log.Printf("selfdev candidate shot: sweep: work root: %v", err)
+			return
 		}
 		entries, err := os.ReadDir(root)
 		if err != nil {
@@ -330,20 +348,30 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 	if root == "" {
 		root = defaultShotWorkRoot()
 	}
+	reachTop := deps.reachTop
+	if reachTop == "" {
+		reachTop = "/"
+	}
 	opDir := filepath.Join(root, safeShotDirName(operation.OperationID))
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := prepareShotWorkRoot(root); err != nil {
 		return fail("work root: %v", err)
 	}
 	_ = os.RemoveAll(opDir)
-	if err := os.Mkdir(opDir, 0o755); err != nil {
+	if err := os.Mkdir(opDir, 0o711); err != nil {
+		return fail("work directory: %v", err)
+	}
+	if err := os.Chmod(opDir, 0o711); err != nil {
 		return fail("work directory: %v", err)
 	}
 	defer os.RemoveAll(opDir)
 	uid, gid := capsule.ShotSandboxIDs()
 	before := shotSide{name: "before", dir: filepath.Join(opDir, "before"), binary: filepath.Join(opDir, "bin", "running"), frontend: filepath.Join(opDir, "fe", "running")}
 	after := shotSide{name: "after", dir: filepath.Join(opDir, "after"), binary: filepath.Join(opDir, "bin", "candidate"), frontend: filepath.Join(opDir, "fe", "candidate")}
-	for _, d := range []string{filepath.Join(opDir, "bin"), filepath.Join(opDir, "fe"), before.dir, after.dir} {
-		if err := os.Mkdir(d, 0o755); err != nil {
+	// The builds are reachable by name (0711); the side directories, which
+	// will hold the state copies, are the sandbox user's alone (0700 after
+	// the hand-over). Modes are set, not left to the umask.
+	for d, mode := range map[string]fs.FileMode{filepath.Join(opDir, "bin"): 0o711, filepath.Join(opDir, "fe"): 0o711, before.dir: 0o700, after.dir: 0o700} {
+		if err := mkdirMode(d, mode); err != nil {
 			return fail("work directory: %v", err)
 		}
 	}
@@ -353,6 +381,11 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 		}
 		if err := linkOrCopyTree(src[1], side.frontend); err != nil {
 			return fail("%s frontend: %v", side.name, err)
+		}
+		for p, need := range map[string]fs.FileMode{side.binary: 0o005, filepath.Join(side.frontend, "index.html"): 0o004} {
+			if err := checkSandboxReach(reachTop, p, need); err != nil {
+				return fail("%s: the sandbox user cannot reach the staged build: %v", side.name, err)
+			}
 		}
 	}
 
@@ -379,14 +412,14 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 	filesRoot, sourceRoot := rt.filesRoot(), strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
 	for _, side := range []shotSide{before, after} {
 		files := filepath.Join(side.dir, "files")
-		if err := os.Mkdir(files, 0o755); err != nil {
+		if err := mkdirMode(files, 0o755); err != nil {
 			return fail("files layer: %v", err)
 		}
 		if _, err := capsule.BuildShotFilesLayer(ctx, filesRoot, sourceRoot, files, uid, gid); err != nil {
 			return fail("files layer: %v", err)
 		}
 		for _, d := range []string{"out", "work"} {
-			if err := os.Mkdir(filepath.Join(side.dir, d), 0o755); err != nil {
+			if err := mkdirMode(filepath.Join(side.dir, d), 0o700); err != nil {
 				return fail("work directory: %v", err)
 			}
 		}
@@ -416,6 +449,10 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 		what string
 	}{{before, beforePlan, "the running build"}, {after, plan, "the candidate"}}
 	results := map[string]shotsandbox.Result{}
+	// Each pass's shots are read as soon as it ends: both passes run as the
+	// same sandbox user with no mount namespace, so a candidate could
+	// otherwise rewrite the running build's shots before they are judged.
+	taken := map[string]map[string][]byte{}
 	for _, pass := range passes {
 		passCtx, cancel := context.WithTimeout(ctx, candidateShotPassTimeout)
 		result, err := launch(passCtx, pass.side.spec(pass.plan, env))
@@ -431,6 +468,7 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 			return fail("%s", cause)
 		}
 		results[pass.side.name] = result
+		taken[pass.side.name] = readShotOutputs(pass.side, pass.plan)
 	}
 
 	// 5. The pairs, named NN-before-<view> and NN-after-<view>.
@@ -440,8 +478,8 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 	for i, view := range plan.Views {
 		for _, side := range []shotSide{before, after} {
 			name := fmt.Sprintf("%02d-%s-%s.png", i+1, side.name, view.Name)
-			data, err := os.ReadFile(filepath.Join(side.dir, "out", view.Name+".png"))
-			if err != nil || !capsule.ValidScreenName(name) {
+			data, ok := taken[side.name][view.Name+".png"]
+			if !ok || !capsule.ValidScreenName(name) {
 				return fail("%s: the %s shot of view %s was not taken", name, side.name, view.Name)
 			}
 			if total += int64(len(data)); total > capsule.MaxScreensTotalBytes {
@@ -459,8 +497,8 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 	var video *computerevent.CandidateShotFile
 	if plan.Video != nil {
 		name := plan.Video.FileName()
-		data, err := os.ReadFile(filepath.Join(after.dir, "out", name))
-		if err != nil || !capsule.IsWebM(data) || len(data) > capsule.MaxVideoBytes {
+		data, ok := taken[after.name][name]
+		if !ok || !capsule.IsWebM(data) || len(data) > capsule.MaxVideoBytes {
 			return fail("the plan's video %s was not recorded as a WebM of at most %d bytes", name, capsule.MaxVideoBytes)
 		}
 		sum := sha256.Sum256(data)
@@ -701,17 +739,112 @@ func screenDimensions(filesRoot, rel string) (int, int) {
 	return w, h
 }
 
-// defaultShotWorkRoot is where the per-operation work directories go: the
-// capsule state volume (the data disk the floor check guards), else the
-// temp directory.
+// defaultShotWorkRoot is where the per-operation work directories go: a
+// sibling of the capsule state directory on the same volume (the data disk
+// the floor check guards), else the temp directory. Not inside it: the
+// capsule state directory is root-only (0700), and the sandbox user must
+// traverse to what the worker stages for it (apply-proof-4, 2026-11-07).
 func defaultShotWorkRoot() string {
 	if v := strings.TrimSpace(os.Getenv("CHOIR_SHOT_WORK_DIR")); v != "" {
 		return v
 	}
 	if v := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR")); v != "" {
-		return filepath.Join(v, "shot")
+		return filepath.Join(filepath.Dir(filepath.Clean(v)), "choir-shot")
 	}
 	return filepath.Join(os.TempDir(), "choir-shot")
+}
+
+// prepareShotWorkRoot makes the work root root-owned and traverse-only for
+// others (0711): the sandbox user can reach an operation directory by name
+// but cannot list the root.
+func prepareShotWorkRoot(root string) error {
+	if err := os.MkdirAll(root, 0o711); err != nil {
+		return err
+	}
+	// A root someone else made (the temp fallback is world-writable) could
+	// have its operation directories swapped between the check and the run.
+	info, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", root)
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Geteuid() {
+		return fmt.Errorf("%s is owned by uid %d, not this process", root, st.Uid)
+	}
+	return os.Chmod(root, 0o711)
+}
+
+// checkSandboxReach fails unless others can traverse every directory below
+// top down to path's parent and have the need bits on path (0o004 to read,
+// 0o005 to exec): what the sandbox user, which is neither the owner nor in
+// the group, needs. top itself is not checked; the worker passes "/".
+func checkSandboxReach(top, path string, need fs.FileMode) error {
+	top = filepath.Clean(top)
+	path = filepath.Clean(path)
+	rel, err := filepath.Rel(top, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		return fmt.Errorf("%s is not under %s", path, top)
+	}
+	dir := top
+	parts := strings.Split(filepath.Dir(rel), string(filepath.Separator))
+	for _, part := range parts {
+		if part == "." {
+			continue
+		}
+		dir = filepath.Join(dir, part)
+		info, err := os.Stat(dir)
+		if err != nil {
+			return err
+		}
+		if info.Mode().Perm()&0o001 == 0 {
+			return fmt.Errorf("%s is %v: others cannot traverse it", dir, info.Mode().Perm())
+		}
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode().Perm()&need != need {
+		return fmt.Errorf("%s is %v: others lack %v on it", path, info.Mode().Perm(), need)
+	}
+	return nil
+}
+
+// readShotOutputs reads what a pass left for its plan: a PNG per view and the
+// plan's video, each at most the bound its check will apply; a missing or
+// oversized one is left out and fails by name when the pair is assembled.
+func readShotOutputs(side shotSide, plan capsule.ShotPlan) map[string][]byte {
+	names := map[string]int64{}
+	for _, view := range plan.Views {
+		names[view.Name+".png"] = capsule.MaxScreensTotalBytes
+	}
+	if plan.Video != nil {
+		names[plan.Video.FileName()] = int64(capsule.MaxVideoBytes)
+	}
+	out := map[string][]byte{}
+	for name, limit := range names {
+		f, err := os.Open(filepath.Join(side.dir, "out", name))
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(f, limit+1))
+		f.Close()
+		if err != nil || int64(len(data)) > limit {
+			continue
+		}
+		out[name] = data
+	}
+	return out
+}
+
+// mkdirMode makes dir with exactly mode, whatever the umask.
+func mkdirMode(dir string, mode fs.FileMode) error {
+	if err := os.Mkdir(dir, mode); err != nil {
+		return err
+	}
+	return os.Chmod(dir, mode)
 }
 
 func safeShotDirName(operationID string) string {
@@ -725,8 +858,13 @@ func safeShotDirName(operationID string) string {
 // linkOrCopyFile puts src at dst: a hardlink when the volume allows it (the
 // store's files are immutable and world-readable), else a copy.
 func linkOrCopyFile(src, dst string, mode fs.FileMode) error {
-	if err := os.Link(src, dst); err == nil {
-		return nil
+	// A hardlink keeps the source's mode: link only a source that already
+	// grants others what the copy would.
+	// A source others can write would stay writable at a reachable name.
+	if info, err := os.Stat(src); err == nil && info.Mode().Perm()&mode&0o005 == mode&0o005 && info.Mode().Perm()&0o022 == 0 {
+		if err := os.Link(src, dst); err == nil {
+			return nil
+		}
 	}
 	in, err := os.Open(src)
 	if err != nil {
@@ -738,6 +876,10 @@ func linkOrCopyFile(src, dst string, mode fs.FileMode) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Chmod(mode); err != nil {
 		out.Close()
 		return err
 	}
@@ -757,7 +899,10 @@ func linkOrCopyTree(src, dst string) error {
 		target := filepath.Join(dst, rel)
 		switch {
 		case d.IsDir():
-			return os.MkdirAll(target, 0o755)
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			return os.Chmod(target, 0o755)
 		case d.Type().IsRegular():
 			return linkOrCopyFile(path, target, 0o644)
 		}

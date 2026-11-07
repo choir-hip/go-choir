@@ -51,16 +51,20 @@ import (
 // shotLauncher stands in for the sandbox: it records what each pass got and
 // writes a PNG per plan view into the pass's output directory.
 type shotLauncher struct {
-	mu          sync.Mutex
-	specs       map[string]shotsandbox.Spec
-	order       []string
-	digests     map[string]string
-	binaries    map[string]string
-	retained    map[string]string
-	frontends   map[string]string
-	failAfter   *shotsandbox.Result
-	panicAlways bool
-	panics      atomic.Int32
+	mu        sync.Mutex
+	specs     map[string]shotsandbox.Spec
+	order     []string
+	digests   map[string]string
+	binaries  map[string]string
+	retained  map[string]string
+	frontends map[string]string
+	sideModes map[string]os.FileMode
+	// rewriteBefore makes the after pass overwrite the before pass's shots,
+	// as a harness-aware candidate running as the same user could.
+	rewriteBefore bool
+	failAfter     *shotsandbox.Result
+	panicAlways   bool
+	panics        atomic.Int32
 }
 
 func sideOf(spec shotsandbox.Spec) string {
@@ -111,6 +115,10 @@ func (l *shotLauncher) launch(t *testing.T) func(context.Context, shotsandbox.Sp
 		l.digests[side] = fileDigest(t, spec.StorePath+".db")
 		l.binaries[side] = string(mustRead(t, spec.Binary))
 		l.frontends[side] = string(mustRead(t, filepath.Join(spec.Frontend, "index.html")))
+		if l.sideModes == nil {
+			l.sideModes = map[string]os.FileMode{}
+		}
+		l.sideModes[side] = mustStat(t, filepath.Dir(spec.StorePath)).Mode().Perm()
 		if side == "after" && l.failAfter != nil {
 			return *l.failAfter, nil
 		}
@@ -121,6 +129,14 @@ func (l *shotLauncher) launch(t *testing.T) func(context.Context, shotsandbox.Sp
 			}
 			if err := os.WriteFile(filepath.Join(spec.OutDir, v.Name+".png"), testPNG(t, 1440, 900, seed+i), 0o644); err != nil {
 				return shotsandbox.Result{}, err
+			}
+		}
+		if side == "after" && l.rewriteBefore {
+			for i, v := range spec.Plan.Views {
+				forged := filepath.Join(filepath.Dir(filepath.Dir(spec.OutDir)), "before", "out", v.Name+".png")
+				if err := os.WriteFile(forged, testPNG(t, 1440, 900, 40+i), 0o644); err != nil {
+					return shotsandbox.Result{}, err
+				}
 			}
 		}
 		if side == "before" {
@@ -179,8 +195,9 @@ func newWorkerFixture(t *testing.T, computerID string, answer func(name string) 
 		rt.candidateShotStarter = nil // the real worker
 		rt.cfg.StorePath = filepath.Join(t.TempDir(), "runtime.db")
 		rt.shotReviewCall = wf.judge.call
+		shotTop := t.TempDir()
 		rt.candidateShotDeps = &candidateShotDeps{
-			launch: wf.launcher.launch(t), workRoot: filepath.Join(t.TempDir(), "shot"),
+			launch: wf.launcher.launch(t), workRoot: filepath.Join(shotTop, "shot"), reachTop: shotTop,
 			runningBinary: running, runningFrontend: frontend, browser: "chromium-fake",
 		}
 		// A lease is a kind the capsule copy withholds.
@@ -238,6 +255,7 @@ func (wf *workerFixture) shotEvent(t *testing.T) computerevent.CandidateShotPayl
 
 func TestCandidateShotWorkerShootsBeforeAndAfterAndRecordsThePass(t *testing.T) {
 	wf := newWorkerFixture(t, "computer-worker-pass", nil)
+	wf.launcher.rewriteBefore = true
 	final := wf.drive(t, "op-worker-pass")
 	if final.State != selfdev.StateApplied {
 		t.Fatalf("operation = %s (%s), want applied after a passing shot", final.State, final.TerminalError)
@@ -248,6 +266,11 @@ func TestCandidateShotWorkerShootsBeforeAndAfterAndRecordsThePass(t *testing.T) 
 	}
 	if payload.Shots[0].Name != "01-before-home.png" || payload.Shots[1].Name != "01-after-home.png" {
 		t.Fatalf("shot names = %+v", payload.Shots)
+	}
+	// The before shot is the running build's, read before the candidate ran:
+	// the candidate's rewrite of it is not what was recorded.
+	if want := sha256.Sum256(testPNG(t, 1440, 900, 0)); payload.Shots[0].SHA256 != hex.EncodeToString(want[:]) {
+		t.Fatal("the recorded before shot is not the running build's: the candidate rewrote it")
 	}
 	if payload.Review == "" || !strings.Contains(payload.Review, "vision-x") {
 		t.Fatalf("review = %q", payload.Review)
@@ -275,6 +298,15 @@ func TestCandidateShotWorkerShootsBeforeAndAfterAndRecordsThePass(t *testing.T) 
 	for _, side := range []string{"before", "after"} {
 		if strings.HasPrefix(l.specs[side].StorePath, filepath.Dir(wf.rt.cfg.StorePath)) || strings.HasPrefix(l.specs[side].FilesRoot, wf.filesRoot) {
 			t.Fatalf("the %s pass was handed a live path: %+v", side, l.specs[side])
+		}
+	}
+	// The side directories, which hold the state copies, are the sandbox
+	// user's alone: the work root is traversable, so a state copy behind a
+	// 0755 side directory would be readable by any guest user who knows the
+	// operation id (Devin r1 on 3f29e2cf2).
+	for _, side := range []string{"before", "after"} {
+		if mode := l.sideModes[side]; mode&0o077 != 0 {
+			t.Fatalf("the %s side directory is %v: others can reach its state copy", side, mode)
 		}
 	}
 	// The copy withholds the kinds an engineering capsule's copy withholds:
