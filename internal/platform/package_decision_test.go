@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -666,5 +667,34 @@ func TestConsensusRouteIgnoresANonInternalCallersOwnerID(t *testing.T) {
 	f.handler.HandleSelfDevelopmentConsensus(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("bound caller: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// The capsule records the directories it passed through as effects
+// (package-proof-2 on d@e, selfdev-242672bc: frontend, frontend/src,
+// frontend/src/packages, frontend/src/packages/image beside the one edited
+// file). Those ancestors are not a platform change. Failure modes: a
+// directory effect classifies as a platform path; a deleted directory is
+// skipped and a package deletion passes as nothing.
+func TestClassifyOperationIgnoresAncestorDirectoryEffects(t *testing.T) {
+	packagePatch := []byte("diff --git a/" + pkgRoot + "/App.svelte b/" + pkgRoot + "/App.svelte\n--- a/" + pkgRoot + "/App.svelte\n+++ b/" + pkgRoot + "/App.svelte\n@@ -1 +1 @@\n-<p>reader</p>\n+<p>v2</p>\n")
+	dir := uint32(os.ModeDir | 0o755)
+	effect := func(path, kind string, mode uint32) map[string]any {
+		return map[string]any{"path": workspacePlatformPrefix + path, "kind": kind, "mode": mode}
+	}
+	raw, _ := json.Marshal(map[string]any{"ordered_file_effects": []map[string]any{
+		effect("frontend", "added", dir), effect("frontend/src", "added", dir),
+		effect("frontend/src/packages", "modified", dir), effect(pkgRoot, "modified", dir),
+		effect(pkgRoot+"/App.svelte", "modified", 0o644),
+	}})
+	kind, pkg, err := ClassifyOperation(packagePatch, raw)
+	if err != nil || kind != ConsensusKindPackage || pkg != "reader" {
+		t.Fatalf("ancestor directories: %q %q %v", kind, pkg, err)
+	}
+	gone, _ := json.Marshal(map[string]any{"ordered_file_effects": []map[string]any{
+		effect(pkgRoot+"/App.svelte", "modified", 0o644), effect("frontend/src/lib/old", "deleted", dir),
+	}})
+	if _, _, err := ClassifyOperation(packagePatch, gone); err == nil {
+		t.Fatal("a deleted platform directory beside a package change was not refused")
 	}
 }

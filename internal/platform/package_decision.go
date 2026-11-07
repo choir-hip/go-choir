@@ -22,6 +22,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -84,6 +85,8 @@ func ClassifyOperation(patch, bundle []byte) (kind, name string, err error) {
 	var fields struct {
 		Effects []struct {
 			Path string `json:"path"`
+			Kind string `json:"kind"`
+			Mode uint32 `json:"mode"`
 		} `json:"ordered_file_effects"`
 	}
 	if err := json.NewDecoder(bytes.NewReader(bundle)).Decode(&fields); err != nil {
@@ -91,6 +94,14 @@ func ClassifyOperation(patch, bundle []byte) (kind, name string, err error) {
 	}
 	var effects []string
 	for _, effect := range fields.Effects {
+		// A directory the capsule only created or touched on the way to a
+		// file (frontend, frontend/src, frontend/src/packages/<name>) is no
+		// change of its own: its files carry the change and are classified.
+		// package-proof-2 on d@e (selfdev-242672bc) was refused as mixing
+		// layers on exactly those ancestors. A deleted directory still counts.
+		if effect.Mode&uint32(os.ModeDir) != 0 && effect.Kind != "deleted" {
+			continue
+		}
 		p := strings.TrimLeft(strings.TrimSpace(effect.Path), "/")
 		if rel, ok := strings.CutPrefix(p, workspacePlatformPrefix); ok {
 			effects = append(effects, rel)
