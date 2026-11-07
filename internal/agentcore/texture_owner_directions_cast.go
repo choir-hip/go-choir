@@ -266,7 +266,7 @@ func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevis
 func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec map[string]json.RawMessage, scope ownerRevisionScope, list func() ([]types.Revision, error)) ([]yaegikernel.StagedIntent, bool, error) {
 	in := intents[i]
 	holder, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
-	if !ok || list == nil || strings.TrimSpace(in.ToDesk) != holder.Name {
+	if !ok || list == nil || castTargetDesk(in.ToDesk) != holder.Name {
 		return out, false, nil
 	}
 	revisions, err := list()
@@ -292,7 +292,7 @@ func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec
 		return out, false, nil
 	}
 	if len(best.Text) > castOwnerTextMax {
-		return nil, false, fmt.Errorf("reduce: Texture cast %s: the owner's newest words are %d bytes; a Cast carries at most %d: name the revisions this Cast answers as owner_revision", in.LocalID, len(best.Text), castOwnerTextMax)
+		return nil, false, fmt.Errorf("reduce: Texture cast %s: the owner's newest words (%d bytes) exceed the %d a Cast carries; shorten the owner's revision or point at its files in the source tree", in.LocalID, len(best.Text), castOwnerTextMax)
 	}
 	best.Current = true
 	attached, err := marshalVerbatim([]castOwnerDirection{best})

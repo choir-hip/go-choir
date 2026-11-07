@@ -50,7 +50,7 @@ const (
 // for the profile "engineering" asks the grant, and with no holder it refuses:
 // unknown is deny, never a default desk.
 func assignmentPerformer() (string, error) {
-	d, ok := deskmanifest.AssignmentPerformer()
+	d, ok := performerLookup()
 	if !ok {
 		return "", fmt.Errorf("co-super assignment: no desk holds %s: %w", deskmanifest.GrantPerformAssignment, ErrEngineeringAssignmentInvalid)
 	}
@@ -58,7 +58,14 @@ func assignmentPerformer() (string, error) {
 }
 
 // isAssignmentPerformer reports whether a profile or role is the performer's.
-func isAssignmentPerformer(name string) bool { return deskmanifest.IsAssignmentPerformer(name) }
+func isAssignmentPerformer(name string) bool {
+	d, ok := performerLookup()
+	return ok && d.Name == strings.TrimSpace(name)
+}
+
+// performerLookup is the registry question "who holds perform.assignment";
+// a test swaps it to prove the ledger refuses with no holder.
+var performerLookup = deskmanifest.AssignmentPerformer
 
 type engineeringAuthorityObjects struct {
 	trajectory    objectgraph.Object

@@ -346,3 +346,45 @@ func TestOwnerNotesSinceTheCast(t *testing.T) {
 		t.Fatal("expected no notes")
 	}
 }
+
+// Review r1 (Sonnet): the attach must route a Cast the way ResolveAddress and
+// engineeringCastIntent do: the part before ":" in its canonical spelling. A
+// Cast to "Management", "management:x" or " management " reaches management and
+// so carries the owner's words; one to another desk still does not.
+func TestUnnamedCastAttachRoutesLikeTheAddressResolver(t *testing.T) {
+	revs := ownerCastRevisions()
+	revs["rev-r4"] = ownerWordsRevision("rev-r4", 40, "round 4 words")
+	list := func() ([]types.Revision, error) {
+		out := make([]types.Revision, 0, len(revs))
+		for _, rev := range revs {
+			out = append(out, rev)
+		}
+		return out, nil
+	}
+	for _, to := range []string{"management", "Management", "management:x", " management ", "MANAGEMENT:main"} {
+		in := ownerCast(`{"kind":"execution_request"}`)
+		in.ToDesk = to
+		out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w, _, ok := latestOwnerWords(out[0].Statement); !ok || w.RevisionID != "rev-r4" {
+			t.Errorf("a Cast to %q carried %+v (ok %v), want rev-r4", to, w, ok)
+		}
+	}
+	for _, to := range []string{"research", "texture:x", "managementx", ""} {
+		in := ownerCast(`{"kind":"execution_request"}`)
+		in.ToDesk = to
+		out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list)
+		if err != nil || out[0].Statement != in.Statement {
+			t.Errorf("a Cast to %q was changed: %v %s", to, err, out[0].Statement)
+		}
+	}
+	// An oversized newest revision fails the commit and says the owner's words
+	// exceed the cap.
+	revs["rev-big"] = ownerWordsRevision("rev-big", 50, strings.Repeat("x", castOwnerTextMax+1))
+	in := ownerCast(`{"kind":"execution_request"}`)
+	if _, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list); err == nil || !strings.Contains(err.Error(), "exceed") {
+		t.Errorf("oversized newest words: %v", err)
+	}
+}

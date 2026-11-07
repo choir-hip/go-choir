@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"strings"
 	"sync"
 	"testing"
@@ -1857,5 +1858,21 @@ func TestListEngineeringSubjectCandidatesByTrajectory(t *testing.T) {
 	}
 	if other, err := s.ListEngineeringSubjectCandidates(ctx, "owner-elsewhere", f.computerID, opens[0].Binding.TrajectoryID); err != nil || len(other) != 0 {
 		t.Fatalf("another owner = %v, %v; want none", other, err)
+	}
+}
+
+// MA4.10 review: with no desk holding perform.assignment the ledger refuses
+// (unknown is deny) and no profile, role or inbox passes as the performer's.
+func TestAssignmentLedgerRefusesWithNoPerformerHolder(t *testing.T) {
+	prev := performerLookup
+	performerLookup = func() (deskmanifest.Desk, bool) { return deskmanifest.Desk{}, false }
+	defer func() { performerLookup = prev }()
+	if name, err := assignmentPerformer(); err == nil || !errors.Is(err, ErrEngineeringAssignmentInvalid) || name != "" {
+		t.Fatalf("assignmentPerformer = %q, %v; want a refusal", name, err)
+	}
+	for _, p := range []string{"", "engineering", "management"} {
+		if isAssignmentPerformer(p) {
+			t.Errorf("%q passed as the performer with no holder", p)
+		}
 	}
 }

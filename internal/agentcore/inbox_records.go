@@ -30,8 +30,15 @@ import (
 // engineeringCastIntent reports whether a staged act is a Cast to the
 // engineering desk: from management it opens a new assignment (C1e D4).
 func engineeringCastIntent(in yaegikernel.StagedIntent) bool {
-	desk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":")
-	return in.Kind == yaegikernel.IntentCast && canonicalDeskName(desk) == agentprofile.Engineering
+	return in.Kind == yaegikernel.IntentCast && castTargetDesk(in.ToDesk) == agentprofile.Engineering
+}
+
+// castTargetDesk is the desk a staged act's address names: the part before
+// ":" in its canonical spelling. The address resolver, engineeringCastIntent
+// and the owner-words attach all route through it, so they cannot drift.
+func castTargetDesk(toDesk string) string {
+	desk, _, _ := strings.Cut(strings.TrimSpace(toDesk), ":")
+	return canonicalDeskName(desk)
 }
 
 // cellRecords is the range of a desk's inbox one cell reads.
