@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/shotsandbox"
 )
 
 // apply-proof-4 on d@e (selfdev-df8c8b1c, 2026-11-07): the work root sat
@@ -111,4 +113,21 @@ func mustStat(t *testing.T, path string) os.FileInfo {
 		t.Fatal(err)
 	}
 	return info
+}
+
+// FR5: the operation directory's name is short whatever the operation id, so
+// the deepest path the sandbox makes (Chromium's socket under work/) fits the
+// unix socket limit; distinct operations get distinct names.
+func TestShotOperationDirNameIsShortAndDistinct(t *testing.T) {
+	a := safeShotDirName("selfdev-70be92c52c642159ebd9b45721f9441e")
+	b := safeShotDirName("selfdev-df8c8b1cc87a381199a016844dcf8c9e")
+	if len(a) > 16 || a == b || a != safeShotDirName("selfdev-70be92c52c642159ebd9b45721f9441e") {
+		t.Fatalf("names %q, %q", a, b)
+	}
+	t.Setenv("CHOIR_SHOT_WORK_DIR", "")
+	t.Setenv("CHOIR_CAPSULE_STATE_DIR", "/mnt/persistent/capsule-state")
+	work := filepath.Join(defaultShotWorkRoot(), a, "before", "work")
+	if err := shotsandbox.CheckWorkDirLength(work); err != nil {
+		t.Fatalf("the default layout: %v", err)
+	}
 }

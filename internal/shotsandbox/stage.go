@@ -101,6 +101,27 @@ func RunStage(ctx context.Context, spec Spec, run runFunc) (result Result) {
 	return Result{Files: files}
 }
 
+// maxUnixSocketPath is the longest path a unix socket can bind (sun_path is
+// 108 bytes with its NUL; capsule's executor uses the same bound), and
+// chromiumSocketSuffix the longest the browser adds under TMPDIR, the stage's
+// work directory, for its SingletonSocket: chromedp's chromedp-runnerN
+// profile (at most 42 bytes) or Chromium's own org.chromium.Chromium.XXXXXX
+// (45), the one d@e hit. Keep the larger. The check covers the browser's
+// socket only, not the candidate autoputer's TMPDIR (work/tmp).
+const (
+	maxUnixSocketPath    = 107
+	chromiumSocketSuffix = "/org.chromium.Chromium.XXXXXX/SingletonSocket"
+)
+
+// CheckWorkDirLength refuses a work directory too long for the browser's
+// socket, which would otherwise exit FATAL before the first shot.
+func CheckWorkDirLength(dir string) error {
+	if n := len(filepath.Clean(dir)) + len(chromiumSocketSuffix); n > maxUnixSocketPath {
+		return fmt.Errorf("the work directory %s is too long for the browser's socket: %d bytes, over the %d-byte unix socket limit", dir, n, maxUnixSocketPath)
+	}
+	return nil
+}
+
 func (s Spec) check() error {
 	switch {
 	case s.Browser == "":

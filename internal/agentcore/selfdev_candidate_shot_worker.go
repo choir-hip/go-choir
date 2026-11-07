@@ -375,6 +375,16 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 			return fail("work directory: %v", err)
 		}
 	}
+	// The production layout must leave the browser room for its socket
+	// under work/ (apply-proof-4 r2); a test's injected root is a long temp
+	// path and runs no browser. Checked before anything is staged.
+	if deps.workRoot == "" {
+		for _, side := range []shotSide{before, after} {
+			if err := shotsandbox.CheckWorkDirLength(filepath.Join(side.dir, "work")); err != nil {
+				return fail("%s: %v", side.name, err)
+			}
+		}
+	}
 	for side, src := range map[shotSide][2]string{before: {runningBinary, runningFrontend}, after: {candidateBinary, candidateFrontend}} {
 		if err := linkOrCopyFile(src[0], side.binary, 0o755); err != nil {
 			return fail("%s binary: %v", side.name, err)
@@ -847,10 +857,10 @@ func mkdirMode(dir string, mode fs.FileMode) error {
 	return os.Chmod(dir, mode)
 }
 
+// safeShotDirName is a short name for an operation's work directory: the
+// deepest path the sandbox makes, the browser's socket under work/, must fit
+// the unix socket limit, and an operation id is 40 bytes (apply-proof-4 r2).
 func safeShotDirName(operationID string) string {
-	if plainOperationID.MatchString(operationID) && !strings.Contains(operationID, "..") {
-		return operationID
-	}
 	sum := sha256.Sum256([]byte(operationID))
 	return hex.EncodeToString(sum[:8])
 }
