@@ -786,6 +786,9 @@ func (rt *Runtime) readShotVerdict(ctx context.Context, operation selfdev.Operat
 }
 
 func (rt *Runtime) shotVerdictFor(ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, hostJobID string) (computerevent.ShotVerdictPayload, bool) {
+	if rt == nil || rt.store == nil || rt.eventPayloadReader == nil || bundle.ShotPlan == nil {
+		return computerevent.ShotVerdictPayload{}, false
+	}
 	event, found, err := rt.store.EventByIdempotency(ctx, operation.ComputerID, computerevent.ShotVerdictKey(operation.OperationID, hostJobID))
 	if err != nil || !found || event.EventKind != computerevent.EventShotVerdict {
 		return computerevent.ShotVerdictPayload{}, false
