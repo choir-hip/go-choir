@@ -1519,11 +1519,17 @@ func estimateRawMessagesTokens(messages []json.RawMessage) int {
 	return total
 }
 
+// imageBlockTokens is what one image block weighs in a model request. The
+// block is a short ref in the transcript, but the gateway inlines the image
+// per request, so compaction must see the real weight (desk shots design
+// 3.5, FM11).
+const imageBlockTokens = 1500
+
 func estimateRawMessageTokens(msg json.RawMessage) int {
 	if len(msg) == 0 {
 		return 0
 	}
-	return len(msg)/4 + 1
+	return len(msg)/4 + 1 + imageBlockTokens*len(imageBlockPattern.FindAllIndex(msg, -1))
 }
 
 func estimateTextTokens(text string) int {

@@ -44,6 +44,14 @@ const (
 	// ActionStories pages the computer's story library, newest first:
 	// management's choir.Stories (L2a A2).
 	ActionStories BrokerAction = "stories"
+	// ActionShotStart starts the before/after shots of an accepted operation
+	// that owes shots; ActionShotWait waits on that job. Management's
+	// choir.ShotStart and choir.ShotWait (desk-shots-and-review §3.3).
+	ActionShotStart BrokerAction = "shot_start"
+	ActionShotWait  BrokerAction = "shot_wait"
+	// ActionScreens queues a frozen bundle's screens for management's model:
+	// choir.Screens.
+	ActionScreens BrokerAction = "screens"
 	// ActionSystem1 asks the decision judge closed questions for the research
 	// desk's choir.System1 (system1.go).
 	ActionSystem1 BrokerAction = "system1"
@@ -203,6 +211,70 @@ type ProductAPIPayload struct {
 	Method string          `json:"method"`
 	Path   string          `json:"path"`
 	Body   json.RawMessage `json:"body,omitempty"`
+}
+
+// ShotStartPayload defines ActionShotStart: the operation whose plan owes
+// shots.
+type ShotStartPayload struct {
+	OperationID string `json:"operation_id"`
+}
+
+// ShotStartResult is the started (or already live or finished) shot job.
+type ShotStartResult struct {
+	JobID string `json:"job_id"`
+	State string `json:"state"`
+}
+
+// ShotScreen is one shot of a job: its name, content digest and size.
+type ShotScreen struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// ScreensPayload defines ActionScreens.
+type ScreensPayload struct {
+	OperationID string `json:"operation_id"`
+}
+
+// ScreensResult is the frozen bundle's screens; ImagesQueued says they are
+// queued into the run's next turn.
+type ScreensResult struct {
+	OperationID  string       `json:"operation_id"`
+	State        string       `json:"state"`
+	Screens      []ShotScreen `json:"screens,omitempty"`
+	ImagesQueued bool         `json:"images_queued,omitempty"`
+}
+
+// ShotWaitPayload defines ActionShotWait: wait up to MaxSeconds (at most
+// 240) on a shot job.
+type ShotWaitPayload struct {
+	JobID      string `json:"job_id"`
+	MaxSeconds int    `json:"max_seconds"`
+}
+
+// ShotWaitResult is a shot job's state: running, done or failed (with the
+// cause). Screens and RecordedSize are set when done; ImagesQueued says the
+// job's images are queued into the run's next turn.
+type ShotWaitResult struct {
+	JobID        string       `json:"job_id"`
+	State        string       `json:"state"`
+	Cause        string       `json:"cause,omitempty"`
+	RecordedSize string       `json:"recorded_size,omitempty"`
+	Screens      []ShotScreen `json:"screens,omitempty"`
+	ImagesQueued bool         `json:"images_queued,omitempty"`
+}
+
+// ShotFinding is management's finding on one screen pair: the pair, both
+// digests and the answers (q1..q6: yes, no or n/a) to the overlay's six
+// questions.
+type ShotFinding struct {
+	Pair         string            `json:"pair"`
+	BeforeSHA256 string            `json:"before_sha256"`
+	AfterSHA256  string            `json:"after_sha256"`
+	Answers      map[string]string `json:"answers"`
+	Note         string            `json:"note,omitempty"`
 }
 
 // StoriesPayload defines ActionStories: a page of at most Limit stories
@@ -369,7 +441,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

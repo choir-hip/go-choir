@@ -30,7 +30,7 @@ func TestGrantUnionReproducesTodaysAuthority(t *testing.T) {
 	pinned := map[string]want{
 		"engineering": {verbs: []string{"Ask", "Calibration", "Complete", "Exec", "Freeze", "Poll", "Precommit", "Reply", "Report", "Restate", "Start", "Stop", "WriteFile"},
 			capsule: []string{"close_session", "exec", "go_eval", "init_session", "job_start", "job_status", "job_stop", "kill_session", "list_dir", "mkdir", "read_file", "remove", "stat", "write_file"}},
-		"management": {verbs: []string{"Ask", "Calibration", "CancelAct", "CancelAssignment", "CancelTask", "Cast", "Decline", "Delegate", "Disagreement", "Escalate", "Feed", "Precommit", "ProductAPI", "ReadCapture", "Reply", "Report", "ReportPacket", "Resolve", "Restate", "Stories", "Verify"},
+		"management": {verbs: []string{"Ask", "Calibration", "CancelAct", "CancelAssignment", "CancelTask", "Cast", "Decline", "Delegate", "Disagreement", "Escalate", "Feed", "Precommit", "ProductAPI", "ReadCapture", "Reply", "Report", "ReportPacket", "Resolve", "Restate", "Screens", "ShotStart", "ShotVerdict", "ShotWait", "Stories", "Verify", "VerifyFindings"},
 			modules: []string{"updates.read"}, cell: 300 * time.Second},
 		"management_task": {verbs: []string{"Cast", "Decline", "Done", "Feed", "ReadCapture", "Stories"}, cell: 300 * time.Second},
 		"research": {verbs: []string{"Ask", "CancelAct", "Cast", "Disagreement", "Escalate", "ListEvidence", "PollSource", "Precommit", "Read", "ReadCapture", "ReadEvidence", "Relate", "RelateStories", "Reply", "Report", "ReportPacket", "Research", "Resolve", "RunMemoryEntry", "SaveEvidence", "SearchStart", "SearchTexture", "SearchWait", "SearchWireCorpus", "Searches", "SourceAPI", "StoryAnalysis", "System1"},

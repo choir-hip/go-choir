@@ -29,6 +29,9 @@ const (
 	// (record_self_development_verification successor): the reducer records
 	// it against the exact frozen bundle on cell return.
 	IntentVerify = "verify"
+	// IntentShotVerdict stages management's verdict on an operation's
+	// before/after shot pair (desk-shots-and-review §3.3).
+	IntentShotVerdict = "shot_verdict"
 )
 
 // Semantic-act intent kinds (commitment-ledger carrier, mission R2). These
@@ -353,6 +356,9 @@ type StagedIntent struct {
 	Decision     string   `json:"decision,omitempty"`
 	VerifierRefs []string `json:"verifier_refs,omitempty"`
 	BundleDigest string   `json:"bundle_digest,omitempty"`
+	// ShotFindings (IntentShotVerdict): one finding per screen pair. TargetRef
+	// is the operation, Decision the verdict (pass or fail).
+	ShotFindings []ShotFinding `json:"shot_findings,omitempty"`
 	// Semantic-act fields (mission R2 commitment-ledger intents). TargetRef
 	// binds a Resolve/Reply/Cancel to the act it closes. Claim is a Report's
 	// typed claim text; ResolverID names the desk that accepts a Report.
@@ -504,6 +510,58 @@ func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bund
 		}
 	}
 	_, err := t.stage(StagedIntent{Kind: IntentVerify, TargetRef: assignmentID, Decision: decision, VerifierRefs: verifierRefs, BundleDigest: bundleDigest, Reason: NormalizeVerifyReason(reason...)})
+	return err
+}
+
+// VerifyFindings attaches per-screen findings to the cell's staged Verify
+// intent (StagedIntent.ShotFindings). Verify must already be staged in this
+// cell; findings attach at most once.
+func (t *Tray) VerifyFindings(findings []ShotFinding) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := range t.intents {
+		if t.intents[i].Kind != IntentVerify {
+			continue
+		}
+		if len(t.intents[i].ShotFindings) > 0 {
+			return fmt.Errorf("tray: verify findings already attached this cell")
+		}
+		if len(findings) == 0 {
+			return fmt.Errorf("tray: verify findings need at least one finding")
+		}
+		t.intents[i].ShotFindings = findings
+		return nil
+	}
+	return fmt.Errorf("tray: verify findings need this cell's Verify staged first")
+}
+
+// ShotVerdict stages management's verdict on an operation's shot pair. At
+// most one per cell. operationID rides TargetRef, verdict (pass or fail)
+// Decision; the reason is normalized like a Verify reason and required on a
+// fail. The reducer checks that the operation owes shots and that the
+// findings cover every screen.
+func (t *Tray) ShotVerdict(operationID, verdict string, findings []ShotFinding, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return fmt.Errorf("tray: shot verdict names the operation whose shots it judges")
+	}
+	switch verdict {
+	case "pass", "fail":
+	default:
+		return fmt.Errorf("tray: shot verdict %q not in {pass, fail}", verdict)
+	}
+	reason = NormalizeVerifyReason(reason)
+	if verdict == "fail" && reason == "" {
+		return fmt.Errorf("tray: a failing shot verdict needs a reason")
+	}
+	for _, in := range t.intents {
+		if in.Kind == IntentShotVerdict {
+			return fmt.Errorf("tray: at most one shot verdict per cell")
+		}
+	}
+	_, err := t.stage(StagedIntent{Kind: IntentShotVerdict, TargetRef: operationID, Decision: verdict, ShotFindings: findings, Reason: reason})
 	return err
 }
 

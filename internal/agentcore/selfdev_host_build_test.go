@@ -24,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/updater"
@@ -248,36 +249,35 @@ func newHostBuildFixture(t *testing.T, computerID, mode string) (*derivableSelfD
 	fx.configure(func(rt *Runtime) {
 		rt.selfdevGuestImageManifest = manifest
 		rt.selfdevHostBuilder = host
-		// The shot worker is not wired in L1's first half: this stands in
-		// for it, writing a passing candidate_shot for the host build the
-		// swap would install.
-		rt.candidateShotStarter = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
-			testWriteCandidateShot(t, fx.rt, operation, bundle, built, computerevent.CandidateShotPass, "")
+		// Management is not running here: this stands in for it, writing a
+		// passing shot verdict for the host build the swap would install.
+		rt.selfdevRouteOwnerID = "owner-shots"
+		rt.modelPolicy = modelpolicy.NewManager(modelpolicy.ManagerConfig{})
+		rt.shotsAskedHook = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
+			testWriteShotVerdict(t, fx.rt, operation, bundle, built, computerevent.ShotVerdictPass, "")
 		}
 	})
 	return fx, host
 }
 
-// testWriteCandidateShot writes the operation's candidate_shot event as the
-// shot worker will.
-func testWriteCandidateShot(t *testing.T, rt *Runtime, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease, verdict, cause string) {
+// testWriteShotVerdict writes the operation's shot_verdict event as
+// management's ShotVerdict reduction will.
+func testWriteShotVerdict(t *testing.T, rt *Runtime, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease, verdict, reason string) {
 	t.Helper()
 	planDigest, err := bundle.ShotPlan.Digest()
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	payload := computerevent.CandidateShotPayload{
-		HostBuildJobID: built.Job.JobID, PlanSHA256: planDigest, Verdict: verdict, Cause: cause,
+	payload := computerevent.ShotVerdictPayload{
+		HostBuildJobID: built.Job.JobID, ShotJobID: "shot-test-1", PlanSHA256: planDigest, Verdict: verdict, Reason: reason,
+		Judge: computerevent.ShotJudge{AgentID: "management:test", RunID: "run-test"},
 	}
-	if verdict == computerevent.CandidateShotPass {
-		payload.Shots = []computerevent.CandidateShotFile{
-			{Name: "01-before-home.png", SHA256: strings.Repeat("a", 64), Bytes: 1},
-			{Name: "01-after-home.png", SHA256: strings.Repeat("b", 64), Bytes: 1},
-		}
+	if verdict == computerevent.ShotVerdictPass {
+		payload.Findings = []computerevent.ShotFindingRecord{{Pair: "01-home", BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64)}}
 	}
-	if err := rt.appendCandidateShot(context.Background(), operation, payload); err != nil {
-		t.Errorf("append candidate_shot: %v", err)
+	if err := rt.appendShotVerdict(context.Background(), operation, payload); err != nil {
+		t.Errorf("append shot_verdict: %v", err)
 	}
 }
 

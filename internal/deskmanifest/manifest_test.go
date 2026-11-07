@@ -70,7 +70,7 @@ func TestOnlyEngineeringHoldsExecAndWriteFile(t *testing.T) {
 // pinnedFrame is each desk's frame table, written out. It equals the table in
 // yaegikernel's frame_role_test.go, which is pinned against the module sets.
 var pinnedFrame = map[string][]string{
-	Management:      {"product_api", "read_capture", "stories"},
+	Management:      {"product_api", "read_capture", "stories", "shot_start", "shot_wait", "screens"},
 	Texture:         {"read_capture"},
 	Research:        {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "relate", "source_api", "texture_search"},
 	ResearchWeb:     {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},

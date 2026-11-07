@@ -5,8 +5,6 @@ import (
 	"errors"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,10 +34,10 @@ func TestCandidateShotInterlockHoldsTheSwapUntilAPassingShot(t *testing.T) {
 	var started atomic.Int32
 	var write atomic.Bool
 	fx.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
+		rt.shotsAskedHook = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
 			started.Add(1)
 			if write.Load() {
-				testWriteCandidateShot(t, rt, operation, bundle, built, computerevent.CandidateShotPass, "")
+				testWriteShotVerdict(t, rt, operation, bundle, built, computerevent.ShotVerdictPass, "")
 			}
 		}
 	})
@@ -70,16 +68,16 @@ func TestCandidateShotInterlockHoldsTheSwapUntilAPassingShot(t *testing.T) {
 	if host.submits.Load() != 1 {
 		t.Fatalf("host builds = %d, want 1 (the shot gate does not rebuild)", host.submits.Load())
 	}
-	if kinds := fx.countEventKinds(); kinds[computerevent.EventCandidateShot] != 1 {
-		t.Fatalf("candidate_shot events = %d (%v)", kinds[computerevent.EventCandidateShot], kinds)
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventShotVerdict] != 1 {
+		t.Fatalf("candidate_shot events = %d (%v)", kinds[computerevent.EventShotVerdict], kinds)
 	}
 }
 
 func TestCandidateShotFailVerdictClosesTheOperationFailed(t *testing.T) {
 	fx, _ := newHostBuildFixture(t, "computer-shot-fail", "done")
 	fx.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
-			testWriteCandidateShot(t, rt, operation, bundle, built, computerevent.CandidateShotFail, "05-after-home.png Q2 (the list is empty)")
+		rt.shotsAskedHook = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
+			testWriteShotVerdict(t, rt, operation, bundle, built, computerevent.ShotVerdictFail, "05-after-home.png Q2 (the list is empty)")
 		}
 	})
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-shot-fail")
@@ -96,11 +94,11 @@ func TestCandidateShotFailVerdictClosesTheOperationFailed(t *testing.T) {
 func TestCandidateShotForeignHostBuildEventDoesNotUnlockTheSwap(t *testing.T) {
 	fx, _ := newHostBuildFixture(t, "computer-shot-foreign", "done")
 	fx.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
+		rt.shotsAskedHook = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
 			// A passing shot of some other host build (a prior rebase).
 			other := built
 			other.Job.JobID = "job-of-another-build"
-			testWriteCandidateShot(t, rt, operation, bundle, other, computerevent.CandidateShotPass, "")
+			testWriteShotVerdict(t, rt, operation, bundle, other, computerevent.ShotVerdictPass, "")
 		}
 	})
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-shot-foreign")
@@ -119,7 +117,7 @@ func TestCandidateShotPlatformBundleWithNeitherScreensNorPlanFailsByName(t *test
 	fx.noShotPlan = true
 	var started atomic.Int32
 	fx.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = func(selfdev.Operation, transaction.CapsuleEffectBundle, hostBuiltRelease) { started.Add(1) }
+		rt.shotsAskedHook = func(selfdev.Operation, transaction.CapsuleEffectBundle, hostBuiltRelease) { started.Add(1) }
 	})
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-shot-noplan")
 	fx.appendDecision(t, operation, bundleDigest, "decision-shot-noplan")
@@ -137,7 +135,7 @@ func TestCandidateShotGateSkipsJournalOnlySettle(t *testing.T) {
 	fx, _ := newHostBuildFixture(t, "computer-shot-journal", "done")
 	var started atomic.Int32
 	fx.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = func(selfdev.Operation, transaction.CapsuleEffectBundle, hostBuiltRelease) { started.Add(1) }
+		rt.shotsAskedHook = func(selfdev.Operation, transaction.CapsuleEffectBundle, hostBuiltRelease) { started.Add(1) }
 	})
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-shot-journal")
 	fx.appendDecision(t, operation, bundleDigest, "decision-shot-journal")
@@ -171,11 +169,11 @@ func TestCandidateShotGateExemptAndPackageOperationsAreNotGated(t *testing.T) {
 	if err := rt.candidateShotGate(context.Background(), selfdev.Operation{}, goChange, nil); !errors.As(err, &failure) {
 		t.Fatalf("a Go change with no plan = %v, want a candidateShotFailure", err)
 	}
-	// Engineer-supplied screens (the pre-plan route) stay valid.
+	// A platform bundle with screens and no plan is a legacy bundle: refused.
 	screened := goChange
 	screened.Screens = []capsule.ScreenFile{{Name: "01-after-home.png", SHA256: strings.Repeat("a", 64), Bytes: 1, Width: 1, Height: 1}}
-	if err := rt.candidateShotGate(context.Background(), selfdev.Operation{}, screened, nil); err != nil {
-		t.Fatalf("a bundle with its own screens was gated: %v", err)
+	if err := rt.candidateShotGate(context.Background(), selfdev.Operation{}, screened, nil); !errors.As(err, &failure) || !strings.Contains(failure.Cause, "legacy screens bundle") {
+		t.Fatalf("a legacy screens bundle = %v", err)
 	}
 }
 
@@ -280,9 +278,6 @@ func TestPlanShotsMissingChecksNumberedShotsAgainstPlanViews(t *testing.T) {
 	if got := planShotsMissing(nil, wanted); len(got) != 0 {
 		t.Fatalf("no plan is not a plan miss: %v", got)
 	}
-	if shotReviewDeferred != "deferred_to_candidate_shot" {
-		t.Fatalf("shotReviewDeferred = %q", shotReviewDeferred)
-	}
 }
 
 // The strict decoder of a frozen bundle (decodeBoundBundle) reads a plan
@@ -342,64 +337,5 @@ func TestCommitRefusesCompleteWithAPlatformDiffAndNoFrozenOperation(t *testing.T
 	rec.Metadata["assignment_id"] = "assignment-never-froze"
 	if err := r.commit(ctx, []yaegikernel.StagedIntent{blocked}); err != nil && strings.Contains(err.Error(), "Complete does not freeze") {
 		t.Fatalf("a blocked Complete was guarded: %v", err)
-	}
-}
-
-// Verify: a plan bundle's per-shot review is skipped (no model call), the
-// numbered shots are checked against plan views, and the verdict records
-// shot_review deferred_to_candidate_shot. The bundle carries a stored,
-// resolvable screen, so a review that ran would call the judge.
-func TestVerifySkipsTheShotReviewForAPlanBundle(t *testing.T) {
-	ctx := context.Background()
-	rt, s, assignment := assignmentEndFixture(t, "owner-plan-verify")
-	rt.selfdevUpdaterRoot = t.TempDir()
-	operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateFrozen, "")
-	if _, err := rt.commitAssignedEngineeringReport(ctx, c1eGet(t, s, assignment), terminalAssignmentReport(assignment, types.EngineeringResultCompleted)); err != nil {
-		t.Fatal(err)
-	}
-	_, screens, data := screenFixture(t)
-	if _, _, err := rt.imageStore().Put(data); err != nil {
-		t.Fatal(err)
-	}
-	bundle := transaction.CapsuleEffectBundle{
-		BundleVersion: 1, ComputerID: assignment.Binding.ComputerID, TrajectoryRef: assignment.Binding.TrajectoryID,
-		VerifierReceipts: []string{}, Screens: screens, ShotPlan: defaultTestShotPlan(),
-	}
-	var err error
-	if bundle.ContentDigest, err = bundle.ComputeContentDigest(); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := computerevent.CanonicalJSON(bundle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", bundle.ContentDigest)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "bundle.draft.json"), raw, 0o400); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := rt.store.DB().Exec(`UPDATE self_development_operations SET bundle_digest = ? WHERE operation_id = ?`, bundle.ContentDigest, operationID); err != nil {
-		t.Fatal(err)
-	}
-	judge := &scriptedJudge{answer: func(string) string { return allYes }}
-	rt.shotReviewCall = judge.call
-	intent := yaegikernel.StagedIntent{LocalID: "v1", TargetRef: assignment.AssignmentID, Decision: "pass", BundleDigest: bundle.ContentDigest, VerifierRefs: []string{"ref"}}
-	_, verr := verifyReduction(rt, assignment).commitVerifyIntent(ctx, intent)
-	if verr != nil && strings.Contains(verr.Error(), "per-shot review did not run") {
-		t.Fatalf("the per-shot review ran for a plan bundle: %v", verr)
-	}
-	if judge.calls != 0 {
-		t.Fatalf("the judge was called %d times for a plan bundle", judge.calls)
-	}
-
-	// The deferral and the plan-view numbered check, as the verdict records them.
-	missing, reason := planVerifyVerdict(bundle.ShotPlan, "01 the home; 02 the list; 03 a phone")
-	if len(missing) != 2 || !strings.Contains(reason, "missing shots the request names: 02, 03") {
-		t.Fatalf("missing=%v reason=%q", missing, reason)
-	}
-	if missing, reason := planVerifyVerdict(bundle.ShotPlan, "make it blue"); len(missing) != 0 || reason != "" {
-		t.Fatalf("a request with no numbered list: %v %q", missing, reason)
 	}
 }

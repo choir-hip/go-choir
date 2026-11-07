@@ -108,7 +108,8 @@ var catalogue = map[string]grantSpec{
 	"intake.dispose":    {Verbs: []string{"Feed", "Decline"}, Privileged: true},
 	"product.api":       {Verbs: []string{"ProductAPI"}, Privileged: true},
 	"delegate.task":     {Verbs: []string{"Delegate", "CancelTask"}, Privileged: true},
-	"assignment.verify": {Verbs: []string{"Verify"}, Privileged: true},
+	"assignment.verify": {Verbs: []string{"Verify", "VerifyFindings"}, Privileged: true},
+	"assignment.shots":  {Verbs: []string{"ShotStart", "ShotWait", "ShotVerdict", "Screens"}, Privileged: true},
 	// The admission ledger (plan MA4.9, D9): the holder admits engineering
 	// work, receives the requests other desks aim at an assignment desk, and
 	// is the custodian every request kind's materiality names. It carries no

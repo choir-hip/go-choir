@@ -172,6 +172,16 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.BundleDigest) == "" {
 				return fmt.Errorf("reduce: verify %s requires the inspected bundle digest", in.LocalID)
 			}
+		case yaegikernel.IntentShotVerdict:
+			if fromDesk != agentprofile.Management {
+				return fmt.Errorf("reduce: shot verdict %s: the shot verdict is management's", in.LocalID)
+			}
+			if in.Decision != "pass" && in.Decision != "fail" {
+				return fmt.Errorf("reduce: shot verdict %s decision %q invalid", in.LocalID, in.Decision)
+			}
+			if strings.TrimSpace(in.TargetRef) == "" {
+				return fmt.Errorf("reduce: shot verdict %s names no operation", in.LocalID)
+			}
 		case yaegikernel.IntentTextureTurn:
 			// A Texture cell's turn (Cut 2 2a): the commit arm runs
 			// ApplyTextureTurn via the bound owner. Doc bodies bind by the
@@ -1204,6 +1214,12 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			if err == nil {
 				r.verifyResult = out
 			}
+		case yaegikernel.IntentShotVerdict:
+			var out map[string]any
+			out, err = r.commitShotVerdictIntent(ctx, in)
+			if err == nil {
+				r.verifyResult = out
+			}
 		case yaegikernel.IntentRestate:
 			seq, err = r.commitRestateIntent(ctx, in)
 		case yaegikernel.IntentPrecommit:
@@ -1819,75 +1835,43 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if reason := yaegikernel.NormalizeVerifyReason(in.Reason); reason != "" {
 		verdictExtra[verdictReasonKey] = reason
 	}
-	// The judge's per-shot review (selfdev_shot_review.go): a pass on a
-	// frozen candidate with screens asks the six questions of every shot,
-	// and a "no" on 1, 2, 3, 5 or 6 turns the verdict into a fail. A replay
-	// of a pass the review already failed answers from the operation (FM3).
+	// A plan bundle's shots are taken after the host build and judged by
+	// management's own ShotVerdict (desk_shots.go): no model is called here.
+	// What Verify checks, with no model call, is the plan against the request
+	// (a numbered shot the request names that no plan view carries fails
+	// "missing: 05, 06"), the plan's size (at most shotMaxViews views, the
+	// images management is shown persist in its run's memory), and that the
+	// bundle is not a legacy screens bundle (FM10, §3.7).
 	decision := strings.TrimSpace(in.Decision)
-	if decision == "pass" && operation.State == selfdev.StateFailed && strings.HasPrefix(operation.TerminalError, selfDevelopmentJudgmentRejected+": "+shotReviewMarker) {
-		if operation.LastIntentError != "" {
-			stamp("")
-		}
-		return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": "fail", "verifier_ref": firstString(operation.VerifierRefs)}, nil
-	}
 	recordCtx := ctx
 	// A U4 rebase answers the platform's rebase notice, not the owner's
-	// request: it carries no screens and the request's shot list is the
-	// applied change's, so the per-shot review would fail every rebase on
-	// missing shots. Management's Verify and the owner's approval still
-	// decide it.
+	// request: the request's shot list is the applied change's, so the numbered
+	// check would fail every rebase on missing shots. Management's Verify and
+	// the owner's approval still decide it.
 	_, rebase := rt.rebaseLineage(context.WithoutCancel(ctx), assignment)
-	if decision == "pass" && operation.State == selfdev.StateFrozen && !rebase {
-		reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shotReviewTimeout+30*time.Second)
-		// The shot list the request names comes from the owner's words the
-		// round answers, read from the tape, never from a desk's restatement.
-		request, notes := "", ""
-		if rt.store != nil {
-			notes = rt.ownerNotesForAssignment(reviewCtx, r.scope.OwnerID, r.scope.ComputerID, assignment)
-			if words, _, _, ok := rt.ownerWordsForAssignment(reviewCtx, r.scope.OwnerID, r.scope.ComputerID, assignment); ok {
-				request = words.Text
+	if decision == "pass" && operation.State == selfdev.StateFrozen {
+		bundle, _, readErr := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation)
+		if readErr == nil {
+			refusal := verifyShotRefusal(operation, bundle)
+			if refusal == "" && len(bundle.Screens) > 0 {
+				refusal = r.verifyScreensRefusal(ctx, bundle, in.ShotFindings)
 			}
-		}
-		// A plan bundle's shots are taken by the platform after the host
-		// build and judged at that gate (candidate_shot, design 3.3), so
-		// the per-shot review is skipped here. What Verify can still check,
-		// with no model call, is the plan against the request: a numbered
-		// shot the request names that no plan view carries fails
-		// "missing: 05, 06" (FM12, FM9 moved from screens to plan views).
-		planned, planMissing, planReason := false, []string(nil), ""
-		if bundle, _, readErr := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation); readErr == nil && bundle.ShotPlan != nil {
-			planned = true
-			planMissing, planReason = planVerifyVerdict(bundle.ShotPlan, request)
-		}
-		var review *shotReview
-		var reviewErr error
-		if !planned {
-			review, reviewErr = rt.reviewCandidateShots(reviewCtx, r.scope.OwnerID, operation, request, notes)
-		}
-		cancel()
-		// The verdict a completed review decided is written past the cell's
-		// teardown too, so a cancel during the review does not discard it
-		// and bill a second review on the retry.
-		var cancelRecord context.CancelFunc
-		recordCtx, cancelRecord = context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
-		defer cancelRecord()
-		if reviewErr != nil {
-			reason := fmt.Sprintf("verify %s: the per-shot review did not run, so the candidate stays frozen; retry the Verify: %v", in.LocalID, reviewErr)
-			stamp(reason)
-			return nil, fmt.Errorf("reduce: %s", reason)
-		}
-		if planned {
-			verdictExtra["shot_review"] = shotReviewDeferred
-			if len(planMissing) > 0 {
-				decision = "fail"
-				verdictExtra[verdictReasonKey] = planReason
+			if refusal != "" {
+				reason := fmt.Sprintf("verify %s: %s", in.LocalID, refusal)
+				stamp(reason)
+				return nil, fmt.Errorf("reduce: %s", reason)
 			}
-		}
-		if review != nil {
-			verdictExtra["shot_review"] = review.record()
-			if review.rejected() {
-				decision = "fail"
-				verdictExtra[verdictReasonKey] = review.reason(in.Reason)
+			if bundle.ShotPlan != nil && !rebase {
+				request := ""
+				if rt.store != nil {
+					if words, _, _, ok := rt.ownerWordsForAssignment(ctx, r.scope.OwnerID, r.scope.ComputerID, assignment); ok {
+						request = words.Text
+					}
+				}
+				if missing, planReason := planVerifyVerdict(bundle.ShotPlan, request); len(missing) > 0 {
+					decision = "fail"
+					verdictExtra[verdictReasonKey] = planReason
+				}
 			}
 		}
 	}

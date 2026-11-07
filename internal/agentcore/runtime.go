@@ -253,19 +253,20 @@ type Runtime struct {
 	commitCaptureArrival func(ctx context.Context, req types.CommitInboxRecordsRequest) error
 
 	modelPolicy *modelpolicy.Manager
-	// shotReviewCall replaces the judge's per-shot review model call in
-	// tests (selfdev_shot_review.go); nil uses modelPolicy.
-	shotReviewCall shotReviewCall
-	// candidateShotStarter replaces startCandidateShot's body in tests
-	// (selfdev_candidate_shot.go); nil runs the production start.
-	candidateShotStarter func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease)
-	// shotWorkers is the candidate-shot watchdog's memory, one entry per
-	// (operation, host build); candidateShotDeps replaces the worker's
-	// sandbox launch and machine paths in tests (selfdev_candidate_shot_worker.go).
-	shotWorkersMu     sync.Mutex
-	shotWorkers       map[string]*shotWorkerState
+	// shotsAskedHook is called after the shots-owed gate commits its record, in
+	// tests that stand in for management's verdict (selfdev_candidate_shot.go);
+	// nil in production.
+	// shotsNow replaces the gate's clock in tests; nil is time.Now.
+	shotsNow       func() time.Time
+	shotsAskedHook func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease)
+	// candidateShotDeps replaces the shot job's sandbox launch and machine
+	// paths in tests (selfdev_shot_job.go); shotJobs is the live jobs and the
+	// queue of images a ShotWait owes a run (desk_shots.go).
 	candidateShotDeps *candidateShotDeps
 	shotSweepOnce     sync.Once
+	shotJobsMu        sync.Mutex
+	shotJobsLive      map[string]chan struct{}
+	shotImageQueue    map[string][]json.RawMessage
 	// researchChildCalls spaces every sub-RLM's model calls on this
 	// computer: research children and management tasks
 	// (subRLMCallSpacer, research_children.go).
@@ -4104,6 +4105,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// history, never the system prompt: the cached prefix holds.
 	calibrationTurns := rt.calibrationDigestInjector(rec, initialMessages)
 	injectUserTurns = composeInjectors(injectUserTurns, calibrationTurns)
+	// The images a ShotWait queued reach management's own model as one user
+	// turn after the cell that called it (desk_shots.go).
+	injectUserTurns = composeInjectors(injectUserTurns, rt.shotImageInjector(rec))
 	initialTurns := composeInjectors(frameTurns, calibrationTurns)
 	if appendInitialMailboxTurns {
 		initialTurns = injectUserTurns

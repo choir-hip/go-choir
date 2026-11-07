@@ -71,10 +71,13 @@ const (
 	// no head.
 	EventPackageApplied  EventKind = "package_applied"
 	EventPackageReverted EventKind = "package_reverted"
-	// EventCandidateShot records the platform's shots of a host-built
-	// platform candidate against the running build, before the swap
-	// (candidate_shot.go). A causal event: it moves no head.
+	// EventCandidateShot is the retired platform-signed record of a shot
+	// worker's verdict; nothing writes it, and the tape that holds one still
+	// reduces. EventShotVerdict records management's judgment of the shots of
+	// a host-built platform candidate, before the swap (shot_verdict.go). Both
+	// are causal events: they move no head.
 	EventCandidateShot EventKind = "candidate_shot"
+	EventShotVerdict   EventKind = "shot_verdict"
 )
 
 var validEventKinds = map[EventKind]struct{}{
@@ -87,7 +90,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
 	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
 	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {}, EventSnapshotRecorded: {},
-	EventPackageApplied: {}, EventPackageReverted: {}, EventCandidateShot: {},
+	EventPackageApplied: {}, EventPackageReverted: {}, EventCandidateShot: {}, EventShotVerdict: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no

@@ -127,7 +127,7 @@ func Reduce(current *Head, event Event, input TransitionInput) (Head, error) {
 		if event.DecisionRef == "" {
 			return Head{}, fmt.Errorf("%w: reverted package names no applied event", ErrInvalidTransition)
 		}
-	case EventCandidateShot:
+	case EventCandidateShot, EventShotVerdict:
 		// The shots of an accepted candidate: bound to the live pending
 		// decision and to the bundle it accepted, so a stale or foreign
 		// event cannot unlock a swap. It moves no head.

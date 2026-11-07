@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 // S-B1, S-B2: the side directory itself is handed to the sandbox id (the
@@ -57,40 +55,10 @@ func TestHandOverGivesTheSideDirectoryAndSkipsAbsentEntries(t *testing.T) {
 	}
 }
 
-// N4: another event kind on the candidate_shot key fails by name.
-func TestCandidateShotForeignKindOnTheKeyFailsByName(t *testing.T) {
-	var failure candidateShotFailure
-	if err := candidateShotKindCheck(computerevent.EventMaterializationStarted); !errors.As(err, &failure) || !strings.Contains(failure.Cause, "not a candidate_shot") {
-		t.Fatalf("foreign kind = %v", err)
-	}
-	if err := candidateShotKindCheck(computerevent.EventCandidateShot); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// N5: a worker that finds its operation terminal forgets it; the watchdog
-// keeps the entry only for a worker that may be restarted.
-func TestCandidateShotTerminalOperationDropsItsWatchdogEntry(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-n5", nil)
-	operation, _, _ := wf.seedOperationToAwaitingApproval(t, "op-worker-n5")
-	state := &shotWorkerState{running: true, starts: 1}
-	wf.rt.shotWorkersMu.Lock()
-	wf.rt.shotWorkers = map[string]*shotWorkerState{"k": state}
-	wf.rt.shotWorkersMu.Unlock()
-	bundle := decodeBundleForTest(t, mustRead(t, filepath.Join(wf.updaterRoot, "incoming", operation.BundleDigest, "bundle.json")))
-	wf.rt.runCandidateShotWorker("k", state, operation, bundle, hostBuiltRelease{})
-	wf.rt.shotWorkersMu.Lock()
-	_, kept := wf.rt.shotWorkers["k"]
-	wf.rt.shotWorkersMu.Unlock()
-	if kept {
-		t.Fatal("the watchdog kept an entry for a terminal operation")
-	}
-}
-
 // The first worker of a process sweeps what a crashed one left in the work
 // root, and a later worker does not sweep again.
 func TestCandidateShotSweepsTheWorkRootOncePerProcess(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-sweep", nil)
+	wf := newWorkerFixture(t, "computer-worker-sweep")
 	root := wf.rt.candidateShotDeps.workRoot
 	stale := filepath.Join(root, "selfdev-crashed", "before")
 	if err := os.MkdirAll(stale, 0o755); err != nil {

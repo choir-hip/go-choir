@@ -87,8 +87,6 @@ func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
 	}
 }
 
-
-
 func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)

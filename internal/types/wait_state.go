@@ -101,6 +101,10 @@ const (
 	// and has none yet
 	// (docs/problems/management-ends-without-verify-2026-11-04.md).
 	WaitKindVerifyOwed WaitKind = "verify_owed"
+	// WaitKindShotsOwed is an accepted platform candidate whose host build
+	// is done and whose shots management has not judged
+	// (docs/design/desk-shots-and-review-2026-11-07.md 3.4).
+	WaitKindShotsOwed WaitKind = "shots_owed"
 	// WaitKindLock is a wait for an in-process lock another step holds
 	// (internal/holdlock): the holder is named, and the wait gives up at
 	// its bound.
@@ -134,6 +138,8 @@ func (k WaitKind) Label() string {
 		return "a frozen candidate's decision"
 	case WaitKindVerifyOwed:
 		return "management's Verify"
+	case WaitKindShotsOwed:
+		return "management's shot verdict"
 	case WaitKindLock:
 		return "lock"
 	}

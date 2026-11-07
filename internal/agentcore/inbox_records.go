@@ -288,6 +288,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "unattended_request"
 	case types.IsVerifyOwedNotice(rec):
 		return "verify_owed"
+	case types.IsShotsOwedRecord(rec):
+		return "shots_owed"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:
@@ -1174,6 +1176,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	// A management activation that ends with a Verify owed arms its
 	// re-check (verify_owed.go).
 	rt.armVerifyOwedAfterRun(ctx, rec)
+	rt.armShotsOwedAfterRun(ctx, rec)
 	if !isRecordsDesk(agentProfileForRun(rec)) || isManagementTaskRun(rec) {
 		// A task is one round: its run's end closed it (above), and
 		// nothing re-arms it.

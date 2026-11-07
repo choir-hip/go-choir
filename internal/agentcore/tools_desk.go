@@ -1203,8 +1203,9 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 		// And each frozen candidate's wait for its decision, from durable
 		// state (retained_candidate.go).
 		pack.Waits = append(pack.Waits, rt.candidateDecisionWaitViews(ctx, ownerID, computerID)...)
-		// And each Verify it owes (verify_owed.go).
+		// And each Verify it owes (verify_owed.go), and each shot verdict.
 		pack.Waits = append(pack.Waits, rt.verifyOwedWaitViews(ctx, ownerID, computerID, agentID)...)
+		pack.Waits = append(pack.Waits, rt.shotsOwedWaitViews(ctx, ownerID, computerID)...)
 	} else if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
 		// An engineer sees its own assignment's wait, the deferred deploy
 		// refresh included (engineering_refresh_wait.go).
@@ -1431,6 +1432,15 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	}
 	if action == yaegikernel.ActionStories {
 		return rt.storiesEgress(egrCtx, deskRole, cellExec, payload)
+	}
+	if action == yaegikernel.ActionShotStart {
+		return rt.shotStartEgress(egrCtx, deskRole, cellExec, payload)
+	}
+	if action == yaegikernel.ActionScreens {
+		return rt.screensEgress(egrCtx, deskRole, cellExec, payload)
+	}
+	if action == yaegikernel.ActionShotWait {
+		return rt.shotWaitEgress(egrCtx, deskRole, cellExec, payload)
 	}
 	if action == yaegikernel.ActionResearch {
 		return rt.runResearchChildren(egrCtx, cellExec, payload)

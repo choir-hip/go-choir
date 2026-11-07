@@ -19,21 +19,21 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/lease"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/shotsandbox"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// The candidate-shot worker (selfdev_candidate_shot_worker.go, design 3.3).
-// Failure modes, decided before the code:
+// The shot job (selfdev_shot_job.go, desk_shots.go; docs/design/desk-shots-and-review-2026-11-07.md
+// 3.3, FM4-FM9, FM13, FM14). Failure modes, decided before the code:
 //
 //   - FM4 a run writes the live state, or the two runs do not start alike:
 //     the sandbox gets private copies that are identical at the start and
@@ -63,6 +63,7 @@ type shotLauncher struct {
 	// as a harness-aware candidate running as the same user could.
 	rewriteBefore bool
 	failAfter     *shotsandbox.Result
+	blank         bool
 	panicAlways   bool
 	panics        atomic.Int32
 }
@@ -127,7 +128,11 @@ func (l *shotLauncher) launch(t *testing.T) func(context.Context, shotsandbox.Sp
 			if side == "after" {
 				seed = 40
 			}
-			if err := os.WriteFile(filepath.Join(spec.OutDir, v.Name+".png"), testPNG(t, 1440, 900, seed+i), 0o644); err != nil {
+			data := testPNG(t, 1440, 900, seed+i)
+			if l.blank {
+				data = blankPNG(t, 1440, 900)
+			}
+			if err := os.WriteFile(filepath.Join(spec.OutDir, v.Name+".png"), data, 0o644); err != nil {
 				return shotsandbox.Result{}, err
 			}
 		}
@@ -164,12 +169,12 @@ func mustRead(t *testing.T, path string) []byte {
 type workerFixture struct {
 	*derivableSelfDevFixture
 	launcher  *shotLauncher
-	judge     *scriptedJudge
 	filesRoot string
 	opID      string
+	exec      toolregistry.ExecutionContext
 }
 
-func newWorkerFixture(t *testing.T, computerID string, answer func(name string) string) *workerFixture {
+func newWorkerFixture(t *testing.T, computerID string) *workerFixture {
 	t.Helper()
 	fx, _ := newHostBuildFixture(t, computerID, "done")
 	wf := &workerFixture{derivableSelfDevFixture: fx, launcher: &shotLauncher{}, filesRoot: t.TempDir()}
@@ -185,16 +190,9 @@ func newWorkerFixture(t *testing.T, computerID string, answer func(name string) 
 	if err := os.WriteFile(filepath.Join(frontend, "index.html"), []byte("<html>running</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	wf.judge = &scriptedJudge{answer: func(name string) string {
-		if answer != nil {
-			return answer(name)
-		}
-		return allYes
-	}}
 	fx.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = nil // the real worker
+		rt.shotsAskedHook = nil // management is the test below
 		rt.cfg.StorePath = filepath.Join(t.TempDir(), "runtime.db")
-		rt.shotReviewCall = wf.judge.call
 		shotTop := t.TempDir()
 		rt.candidateShotDeps = &candidateShotDeps{
 			launch: wf.launcher.launch(t), workRoot: filepath.Join(shotTop, "shot"), reachTop: shotTop,
@@ -205,87 +203,91 @@ func newWorkerFixture(t *testing.T, computerID string, answer func(name string) 
 			t.Fatal(err)
 		}
 	})
+	wf.exec = toolregistry.ExecutionContext{RunID: "run-mgmt-1", OwnerID: "owner-shots", ComputerID: computerID}
 	return wf
 }
 
-// drive freezes an operation, decides it, and runs the materializer until the
-// shot worker has written its verdict or the operation leaves accepted.
-func (wf *workerFixture) drive(t *testing.T, opID string) selfdev.Operation {
+// owed drives an operation to accepted with its host build done and the gate's
+// shots-owed record committed, and returns it.
+func (wf *workerFixture) owed(t *testing.T, opID string) selfdev.Operation {
 	t.Helper()
 	operation, bundleDigest, _ := wf.seedOperationToAwaitingApproval(t, opID)
 	wf.opID = operation.OperationID
 	wf.appendDecision(t, operation, bundleDigest, "decision-"+opID)
-	deadline := time.Now().Add(60 * time.Second)
-	for time.Now().Before(deadline) {
-		current, err := wf.operations.Get(context.Background(), wf.computerID, wf.opID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if current.State != selfdev.StateAccepted && current.State != selfdev.StateMaterializing && current.State != selfdev.StateAwaitingApproval {
-			return current
-		}
-		// The production retry wake polls a pending operation again; the
-		// test stands in for it.
-		if current.State == selfdev.StateAccepted {
-			wf.rt.reconcileSelfDevelopmentMaterialization(context.Background())
-		}
-		time.Sleep(25 * time.Millisecond)
+	accepted := wf.waitForState(t, operation.OperationID, selfdev.StateAccepted)
+	if err := wf.rt.materializeSelfDevelopmentOperation(context.Background(), accepted, false); !errors.Is(err, errCandidateShotPending) {
+		t.Fatalf("the gate = %v, want pending with the shots asked", err)
 	}
-	t.Fatalf("operation %s did not leave accepted", wf.opID)
-	return selfdev.Operation{}
+	return accepted
 }
 
-func (wf *workerFixture) shotEvent(t *testing.T) computerevent.CandidateShotPayload {
+func (wf *workerFixture) start(t *testing.T) yaegikernel.ShotStartResult {
 	t.Helper()
-	operation, err := wf.operations.Get(context.Background(), wf.computerID, wf.opID)
+	raw, err := wf.rt.shotStartEgress(context.Background(), "management", wf.exec, json.RawMessage(`{"operation_id":"`+wf.opID+`"}`))
 	if err != nil {
+		t.Fatalf("ShotStart: %v", err)
+	}
+	var out yaegikernel.ShotStartResult
+	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(wf.updaterRoot, "incoming", operation.BundleDigest, "bundle.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var bundle = decodeBundleForTest(t, raw)
-	payload, ok := wf.rt.readCandidateShot(context.Background(), operation, bundle)
-	if !ok {
-		t.Fatalf("no candidate_shot event for %s", wf.opID)
-	}
-	return payload
+	return out
 }
 
-func TestCandidateShotWorkerShootsBeforeAndAfterAndRecordsThePass(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-pass", nil)
+func (wf *workerFixture) wait(t *testing.T, jobID string) yaegikernel.ShotWaitResult {
+	t.Helper()
+	payload, _ := json.Marshal(yaegikernel.ShotWaitPayload{JobID: jobID, MaxSeconds: 60})
+	raw, err := wf.rt.shotWaitEgress(context.Background(), "management", wf.exec, payload)
+	if err != nil {
+		t.Fatalf("ShotWait: %v", err)
+	}
+	var out yaegikernel.ShotWaitResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestShotJobShootsBeforeAndAfterAndRecordsTheResult(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-pass")
 	wf.launcher.rewriteBefore = true
-	final := wf.drive(t, "op-worker-pass")
-	if final.State != selfdev.StateApplied {
-		t.Fatalf("operation = %s (%s), want applied after a passing shot", final.State, final.TerminalError)
+	wf.owed(t, "op-worker-pass")
+	job := wf.start(t)
+	// FM5: a second call is the same job.
+	if again := wf.start(t); again.JobID != job.JobID {
+		t.Fatalf("ShotStart twice = %s then %s", job.JobID, again.JobID)
 	}
-	payload := wf.shotEvent(t)
-	if payload.Verdict != computerevent.CandidateShotPass || len(payload.Shots) != 2 || payload.Copy == nil || payload.Copy.Bytes <= 0 {
-		t.Fatalf("payload = %+v", payload)
+	res := wf.wait(t, job.JobID)
+	if res.State != shotJobDone || len(res.Screens) != 2 || !res.ImagesQueued || res.RecordedSize != "1440x900" {
+		t.Fatalf("result = %+v", res)
 	}
-	if payload.Shots[0].Name != "01-before-home.png" || payload.Shots[1].Name != "01-after-home.png" {
-		t.Fatalf("shot names = %+v", payload.Shots)
+	if res.Screens[0].Name != "01-before-home.png" || res.Screens[1].Name != "01-after-home.png" {
+		t.Fatalf("shot names = %+v", res.Screens)
 	}
-	// The before shot is the running build's, read before the candidate ran:
-	// the candidate's rewrite of it is not what was recorded.
-	if want := sha256.Sum256(testPNG(t, 1440, 900, 0)); payload.Shots[0].SHA256 != hex.EncodeToString(want[:]) {
+	// The before shot is the running build's, read before the candidate ran.
+	if want := sha256.Sum256(testPNG(t, 1440, 900, 0)); res.Screens[0].SHA256 != hex.EncodeToString(want[:]) {
 		t.Fatal("the recorded before shot is not the running build's: the candidate rewrote it")
 	}
-	if payload.Review == "" || !strings.Contains(payload.Review, "vision-x") {
-		t.Fatalf("review = %q", payload.Review)
+	// The images are queued for this run as one user turn with the job's refs.
+	turns, _ := wf.rt.shotImageInjector(&types.RunRecord{RunID: wf.exec.RunID, AgentProfile: agentprofile.Management})(false)
+	if len(turns) != 1 {
+		t.Fatalf("queued turns = %d", len(turns))
 	}
-
+	refs := imageRefsOf(turns)
+	for _, s := range res.Screens {
+		if !refs[shotImageRef(s.SHA256)] {
+			t.Fatalf("the injected turn lacks %s", s.Name)
+		}
+	}
 	l := wf.launcher
 	if len(l.order) != 2 || l.order[0] != "before" || l.order[1] != "after" {
 		t.Fatalf("passes = %v, want the running build first, then the candidate", l.order)
 	}
-	// The running build serves the before pass, the host build's binary the after.
 	if l.binaries["before"] != "running-build" || !strings.Contains(l.binaries["after"], "host-built") {
 		t.Fatalf("binaries = %q", l.binaries)
 	}
-	// FM5: one plan for both, the video only where the plan asks.
-	if len(l.specs["before"].Plan.Views) != 1 || l.specs["before"].Plan.Views[0].Name != l.specs["after"].Plan.Views[0].Name || l.specs["before"].Plan.Views[0].Path != l.specs["after"].Plan.Views[0].Path {
+	// FM5: one plan for both.
+	if len(l.specs["before"].Plan.Views) != 1 || l.specs["before"].Plan.Views[0].Name != l.specs["after"].Plan.Views[0].Name {
 		t.Fatalf("plans differ: %+v vs %+v", l.specs["before"].Plan, l.specs["after"].Plan)
 	}
 	if !strings.Contains(l.frontends["after"], "host-built selfdev-probe") || !strings.Contains(l.frontends["before"], "running") {
@@ -299,27 +301,17 @@ func TestCandidateShotWorkerShootsBeforeAndAfterAndRecordsThePass(t *testing.T) 
 		if strings.HasPrefix(l.specs[side].StorePath, filepath.Dir(wf.rt.cfg.StorePath)) || strings.HasPrefix(l.specs[side].FilesRoot, wf.filesRoot) {
 			t.Fatalf("the %s pass was handed a live path: %+v", side, l.specs[side])
 		}
-	}
-	// The side directories, which hold the state copies, are the sandbox
-	// user's alone: the work root is traversable, so a state copy behind a
-	// 0755 side directory would be readable by any guest user who knows the
-	// operation id (Devin r1 on 3f29e2cf2).
-	for _, side := range []string{"before", "after"} {
 		if mode := l.sideModes[side]; mode&0o077 != 0 {
 			t.Fatalf("the %s side directory is %v: others can reach its state copy", side, mode)
 		}
 	}
-	// The copy withholds the kinds an engineering capsule's copy withholds:
-	// the live store still has the lease, the copy has none.
 	if live, _ := wf.rt.store.Leases().ListLeases(context.Background(), "owner", wf.computerID); len(live) != 1 {
 		t.Fatalf("the live store lost its lease: %d", len(live))
 	}
-	// The work directory is gone after the run.
 	if entries, _ := os.ReadDir(wf.rt.candidateShotDeps.workRoot); len(entries) != 0 {
 		t.Fatalf("work directory left behind: %v", entries)
 	}
-	// The screens are saved where the existing screens are: the asset store and Self-development/<op>/screens/.
-	for _, s := range payload.Shots {
+	for _, s := range res.Screens {
 		path := filepath.Join(wf.filesRoot, filepath.FromSlash(yaegikernel.SelfDevelopmentScreensDir(wf.opID)), s.Name)
 		if fileDigest(t, path) != s.SHA256 {
 			t.Fatalf("%s in the file tree is not the recorded shot", s.Name)
@@ -328,26 +320,80 @@ func TestCandidateShotWorkerShootsBeforeAndAfterAndRecordsThePass(t *testing.T) 
 			t.Fatalf("%s is not in the asset store", s.Name)
 		}
 	}
-	// CandidateScreens and the Report's note read the event for a plan bundle.
-	listing, err := wf.rt.CandidateScreens(context.Background(), wf.computerID, wf.opID)
-	if err != nil || len(listing.Screens) != 2 || listing.Screens[0].Width != 1440 || !listing.Screens[1].Resolvable {
-		t.Fatalf("CandidateScreens = %+v, %v", listing, err)
+}
+
+// FM7, FM13: a job still running in the durable result when this process runs
+// none is closed "restarted" by whatever reads it; a later ShotStart starts a
+// new job with a new id.
+func TestShotJobOpenAtBootIsRestartedAndAFreshStartMakesANewJob(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-boot")
+	wf.owed(t, "op-worker-boot")
+	job := wf.start(t)
+	if res := wf.wait(t, job.JobID); res.State != shotJobDone {
+		t.Fatalf("first job = %+v", res)
 	}
-	toolCtx := wf.rt.assignedEngineeringCapsuleToolCtx(&types.RunRecord{RunID: "run-worker", ComputerID: wf.computerID, OwnerID: "owner"}, "")
-	if toolCtx.CandidateShot == nil {
-		t.Fatal("the tool context cannot read the candidate shot")
+	// Plant an open job as a crashed process left it.
+	key := shotJobKey(wf.opID, mustHostJobID(t, wf))
+	rec, ok, err := wf.rt.readShotJobFile(key)
+	if err != nil || !ok {
+		t.Fatal(err)
 	}
-	operation, _ := wf.operations.Get(context.Background(), wf.computerID, wf.opID)
-	bundle := decodeBundleForTest(t, mustRead(t, filepath.Join(wf.updaterRoot, "incoming", operation.BundleDigest, "bundle.json")))
-	if note := candidateShotScreensNote(toolCtx, context.Background(), operation, bundle); !strings.Contains(note, "01-after-home.png") || !strings.Contains(note, "pass") {
-		t.Fatalf("note = %q", note)
+	rec.State, rec.Cause = shotJobRunning, ""
+	if err := wf.rt.writeShotJobFile(rec); err != nil {
+		t.Fatal(err)
+	}
+	if res := wf.wait(t, job.JobID); res.State != shotJobRestarted || res.Cause != shotJobEndedByRestart {
+		t.Fatalf("after a boot = %+v, want restarted", res)
+	}
+	next := wf.start(t)
+	if next.JobID == job.JobID {
+		t.Fatal("ShotStart after a restart returned the dead job")
+	}
+	if res := wf.wait(t, next.JobID); res.State != shotJobDone {
+		t.Fatalf("new job = %+v", res)
+	}
+	// The dead job's id is not the current job.
+	if res := wf.wait(t, job.JobID); res.State != shotJobFailed {
+		t.Fatalf("a superseded job id = %+v", res)
+	}
+}
+
+func mustHostJobID(t *testing.T, wf *workerFixture) string {
+	t.Helper()
+	info, refusal, err := wf.rt.shotsOwedFor(context.Background(), wf.computerID, wf.opID)
+	if err != nil || refusal != "" {
+		t.Fatalf("owed: %q %v", refusal, err)
+	}
+	return info.HostJobID
+}
+
+// FM14: ShotWait twice queues the images once per run; a run that would hold
+// more than the request cap is refused by name.
+func TestShotWaitQueuesOncePerRunAndRefusesOverTheCap(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-queue")
+	wf.owed(t, "op-worker-queue")
+	job := wf.start(t)
+	wf.wait(t, job.JobID)
+	inject := wf.rt.shotImageInjector(&types.RunRecord{RunID: wf.exec.RunID, AgentProfile: agentprofile.Management})
+	if turns, _ := inject(false); len(turns) != 1 {
+		t.Fatalf("turns = %d", len(turns))
+	}
+	if turns, _ := inject(false); len(turns) != 0 {
+		t.Fatal("the queue was not drained")
+	}
+	too := make([]shotJobScreen, 21)
+	for i := range too {
+		too[i] = shotJobScreen{Name: "x.png", SHA256: strings.Repeat("a", 63) + string(rune('a'+i%6))}
+	}
+	if err := wf.rt.queueImageSet(context.Background(), wf.exec, "test", too, nil); err == nil || !strings.Contains(err.Error(), "can be shown") {
+		t.Fatalf("21 images = %v", err)
 	}
 }
 
 // The lease-withheld kinds are not in the copies the passes get, and the live
 // owner file the layer links is read-only evidence: its bytes are untouched.
-func TestCandidateShotCopyWithholdsLeasesAndLinksOwnerFiles(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-copy", nil)
+func TestShotJobCopyWithholdsLeasesAndLinksOwnerFiles(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-copy")
 	var leases, owned atomic.Int32
 	inner := wf.rt.candidateShotDeps.launch
 	wf.configure(func(rt *Runtime) {
@@ -368,7 +414,8 @@ func TestCandidateShotCopyWithholdsLeasesAndLinksOwnerFiles(t *testing.T) {
 			return inner(ctx, spec)
 		}
 	})
-	wf.drive(t, "op-worker-copy")
+	wf.owed(t, "op-worker-copy")
+	wf.wait(t, wf.start(t).JobID)
 	if leases.Load() != 0 {
 		t.Fatalf("the shot copy holds %d leases: it must withhold what a capsule copy withholds", leases.Load())
 	}
@@ -380,120 +427,53 @@ func TestCandidateShotCopyWithholdsLeasesAndLinksOwnerFiles(t *testing.T) {
 	}
 }
 
-// FM9: a candidate that does not serve closes the operation failed with its
-// stderr tail, and nothing swaps.
-func TestCandidateShotCandidateThatDoesNotServeFailsTheOperation(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-noserve", nil)
+// FM6, FM9: a candidate that does not serve is a failed job with its stderr
+// tail, and a sandbox that panics is a failed job too.
+func TestShotJobFailuresAreFailedStatesWithTheirCause(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-noserve")
 	wf.launcher.failAfter = &shotsandbox.Result{Error: "the candidate autoputer exited before port 41234 accepted connections: panic: store schema is newer", Tail: "panic: store schema is newer"}
-	final := wf.drive(t, "op-worker-noserve")
-	if final.State != selfdev.StateFailed || !strings.Contains(final.TerminalError, "shot review: the shots of the candidate failed") || !strings.Contains(final.TerminalError, "store schema is newer") {
-		t.Fatalf("operation = %s %q", final.State, final.TerminalError)
+	wf.owed(t, "op-worker-noserve")
+	res := wf.wait(t, wf.start(t).JobID)
+	if res.State != shotJobFailed || !strings.Contains(res.Cause, "the shots of the candidate failed") || !strings.Contains(res.Cause, "store schema is newer") {
+		t.Fatalf("result = %+v", res)
 	}
-	if wf.applyCalls.Load() != 0 || wf.service.restarts != 0 {
-		t.Fatal("a candidate that did not serve was swapped in")
-	}
-	if payload := wf.shotEvent(t); payload.Verdict != computerevent.CandidateShotFail {
-		t.Fatalf("payload = %+v", payload)
-	}
-}
-
-// FM8: the review rejecting a pair is a fail naming the shot, and the screens
-// are still saved so the owner can see what was rejected.
-func TestCandidateShotReviewRejectionFailsAndKeepsTheScreens(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-reject", func(name string) string {
-		if strings.Contains(name, "01-after-home.png") {
-			return `"q1":"yes","q2":"no","q3":"yes","q4":"n/a","q6":"yes","why":"the list is empty"`
-		}
-		return allYes
-	})
-	final := wf.drive(t, "op-worker-reject")
-	if final.State != selfdev.StateFailed || !strings.Contains(final.TerminalError, "shot review: rejected 1 of 2 shots: 01-after-home.png Q2") {
-		t.Fatalf("operation = %s %q", final.State, final.TerminalError)
-	}
-	payload := wf.shotEvent(t)
-	if payload.Verdict != computerevent.CandidateShotFail || len(payload.Shots) != 2 {
-		t.Fatalf("payload = %+v", payload)
-	}
-	if _, err := os.Stat(filepath.Join(wf.filesRoot, filepath.FromSlash(yaegikernel.SelfDevelopmentScreensDir(wf.opID)), "01-after-home.png")); err != nil {
-		t.Fatalf("the rejected screen was not kept: %v", err)
+	wf2 := newWorkerFixture(t, "computer-worker-panic")
+	wf2.launcher.panicAlways = true
+	wf2.owed(t, "op-worker-panic")
+	if res := wf2.wait(t, wf2.start(t).JobID); res.State != shotJobFailed || !strings.Contains(res.Cause, "panicked") {
+		t.Fatalf("panic result = %+v", res)
 	}
 }
 
-// FM8: a review model that errors is a fail, never a pass by default.
-func TestCandidateShotReviewModelErrorFailsClosed(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-modelerr", nil)
-	wf.judge.err = errors.New("gateway 502")
-	final := wf.drive(t, "op-worker-modelerr")
-	if final.State != selfdev.StateFailed || !strings.Contains(final.TerminalError, "the shot review did not run") || !strings.Contains(final.TerminalError, "gateway 502") {
-		t.Fatalf("operation = %s %q", final.State, final.TerminalError)
-	}
-	if wf.applyCalls.Load() != 0 {
-		t.Fatal("an unreviewed candidate was swapped in")
+// The deterministic checks stay code: a blank shot fails the job.
+func TestShotJobBlankShotFailsTheJob(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-blank")
+	wf.launcher.blank = true
+	wf.owed(t, "op-worker-blank")
+	if res := wf.wait(t, wf.start(t).JobID); res.State != shotJobFailed || !strings.Contains(res.Cause, "blank") {
+		t.Fatalf("result = %+v", res)
 	}
 }
 
-// N4: a worker that dies silently is restarted at most twice; the third
-// silent death writes the failing verdict "shot worker died".
-func TestCandidateShotWatchdogRestartsTwiceThenFails(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-died", nil)
-	wf.launcher.panicAlways = true
-	final := wf.drive(t, "op-worker-died")
-	if final.State != selfdev.StateFailed || !strings.Contains(final.TerminalError, "shot review: "+candidateShotWorkerDied) {
-		t.Fatalf("operation = %s %q", final.State, final.TerminalError)
+// FM8: the shot verbs are management's.
+func TestShotVerbsRefuseAnyOtherDesk(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-desk")
+	wf.owed(t, "op-worker-desk")
+	if _, err := wf.rt.shotStartEgress(context.Background(), "research", wf.exec, json.RawMessage(`{"operation_id":"`+wf.opID+`"}`)); err == nil {
+		t.Fatal("research started shots")
 	}
-	if n := wf.launcher.panics.Load(); n != candidateShotMaxStarts {
-		t.Fatalf("the worker ran %d times before the verdict, want the first start and two restarts (%d)", n, candidateShotMaxStarts)
-	}
-	wf.rt.shotWorkersMu.Lock()
-	remaining := len(wf.rt.shotWorkers)
-	wf.rt.shotWorkersMu.Unlock()
-	if remaining != 0 {
-		t.Fatalf("the watchdog kept %d entries after the verdict", remaining)
+	if _, err := wf.rt.shotWaitEgress(context.Background(), "engineering", wf.exec, json.RawMessage(`{"job_id":"shot-x"}`)); err == nil {
+		t.Fatal("engineering waited on shots")
 	}
 }
 
-// A worker finds the operation no longer accepted and writes nothing.
-func TestCandidateShotWorkerSkipsATerminalOperation(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-terminal", nil)
-	operation, _, _ := wf.seedOperationToAwaitingApproval(t, "op-worker-terminal")
-	// awaiting approval is not accepted: no shots are taken for it.
-	state := &shotWorkerState{running: true, starts: 1}
-	wf.rt.shotWorkersMu.Lock()
-	wf.rt.shotWorkers = map[string]*shotWorkerState{"k": state}
-	wf.rt.shotWorkersMu.Unlock()
-	bundle := decodeBundleForTest(t, mustRead(t, filepath.Join(wf.updaterRoot, "incoming", operation.BundleDigest, "bundle.json")))
-	wf.rt.runCandidateShotWorker("k", state, operation, bundle, hostBuiltRelease{})
-	if n := len(wf.launcher.order); n != 0 {
-		t.Fatalf("a non-accepted operation was shot (%d passes)", n)
-	}
-	if wf.countEventKinds()[computerevent.EventCandidateShot] != 0 {
-		t.Fatal("a non-accepted operation got a candidate_shot")
-	}
-	if state.running {
-		t.Fatal("the worker did not mark itself finished")
-	}
-}
-
-// The event is idempotent on (operation, host build job): a re-run after a
-// planned restart cannot write a second one.
-func TestAppendCandidateShotIsIdempotentPerHostBuild(t *testing.T) {
-	wf := newWorkerFixture(t, "computer-worker-idem", nil)
-	wf.configure(func(rt *Runtime) {
-		rt.candidateShotStarter = func(selfdev.Operation, transaction.CapsuleEffectBundle, hostBuiltRelease) {}
-	})
-	operation, bundleDigest, _ := wf.seedOperationToAwaitingApproval(t, "op-worker-idem")
-	wf.appendDecision(t, operation, bundleDigest, "decision-op-worker-idem")
-	operation = wf.waitForState(t, operation.OperationID, selfdev.StateAccepted)
-	plan := strings.Repeat("c", 64)
-	pass := computerevent.CandidateShotPayload{HostBuildJobID: "job-1", PlanSHA256: plan, Verdict: computerevent.CandidateShotPass, Shots: []computerevent.CandidateShotFile{{Name: "01-before-home.png", SHA256: strings.Repeat("a", 64), Bytes: 1}}}
-	fail := computerevent.CandidateShotPayload{HostBuildJobID: "job-1", PlanSHA256: plan, Verdict: computerevent.CandidateShotFail, Cause: "late"}
-	for _, p := range []computerevent.CandidateShotPayload{pass, fail} {
-		if err := wf.rt.appendCandidateShot(context.Background(), operation, p); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if n := wf.countEventKinds()[computerevent.EventCandidateShot]; n != 1 {
-		t.Fatalf("candidate_shot events = %d, want 1", n)
+// FM9: an operation that owes no shots (not yet asked) is refused.
+func TestShotStartRefusesAnOperationThatOwesNoShots(t *testing.T) {
+	wf := newWorkerFixture(t, "computer-worker-notowed")
+	operation, _, _ := wf.seedOperationToAwaitingApproval(t, "op-worker-notowed")
+	wf.opID = operation.OperationID
+	if _, err := wf.rt.shotStartEgress(context.Background(), "management", wf.exec, json.RawMessage(`{"operation_id":"`+wf.opID+`"}`)); err == nil || !strings.Contains(err.Error(), "accepted") {
+		t.Fatalf("ShotStart on an unaccepted operation = %v", err)
 	}
 }
 
@@ -527,4 +507,14 @@ func decodeBundleForTest(t *testing.T, raw []byte) transaction.CapsuleEffectBund
 		t.Fatal(err)
 	}
 	return bundle
+}
+
+func blankPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

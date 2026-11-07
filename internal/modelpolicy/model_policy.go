@@ -234,6 +234,40 @@ func (m *Manager) ContinuationChain(ctx context.Context, ownerID string) []provi
 	return out
 }
 
+// RoleChain is the models a run of role may be served by, in the order the
+// tool loop would build them: the role's own selection (a pool expanded to its
+// members), then the computer's continuation chain. A run whose selection is a
+// single model still has the continuation chain behind it. The desk shots
+// gate asks whether any member may take an image before it asks a desk to look
+// at one (docs/design/desk-shots-and-review-2026-11-07.md 3.2).
+func (m *Manager) RoleChain(ctx context.Context, ownerID, role string) []provideriface.LLMSelection {
+	var out []provideriface.LLMSelection
+	seen := map[string]bool{}
+	add := func(selection provideriface.LLMSelection) {
+		provider, model := strings.TrimSpace(selection.Provider), strings.TrimSpace(selection.Model)
+		if model == "" || strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
+			return
+		}
+		if key := provider + "/" + model; !seen[key] {
+			seen[key] = true
+			out = append(out, selection)
+		}
+	}
+	policy, _ := m.Load(ctx, ownerID)
+	selection := policy.Resolve(role)
+	if strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
+		for _, member := range poolSelections(catalogPools()[strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)], selection) {
+			add(member)
+		}
+	} else {
+		add(selection)
+	}
+	for _, selection := range m.ContinuationChain(ctx, ownerID) {
+		add(selection)
+	}
+	return out
+}
+
 // stampResolved resolves role from policy and writes the selection into
 // metadata (EnrichMetadata's tail).
 func (m *Manager) stampResolved(policy Policy, role string, metadata map[string]any) map[string]any {

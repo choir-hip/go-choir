@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,67 +19,48 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/lease"
-	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/shotsandbox"
-	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// The candidate-shot worker (docs/design/source-only-freeze-and-candidate-
-// shots-2026-11-06.md 3.3, S2). One per operation and host build, started by
-// the gate (startCandidateShot) and run outside the materializer lock. It
-// shoots the frozen plan against the running build and then against the
-// host-built candidate, over private copies of the computer's state, in a
-// loopback-only sandbox (internal/shotsandbox); has the per-shot review judge
-// the pairs; saves the screens; and writes the one candidate_shot event.
+// The shot job (docs/design/desk-shots-and-review-2026-11-07.md 3.3). Management
+// starts one with choir.ShotStart for an accepted operation that owes shots;
+// it runs outside the materializer lock, shoots the frozen plan against the
+// running build and then against the host-built candidate, over private
+// copies of the computer's state, in a loopback-only sandbox
+// (internal/shotsandbox), saves the screens, and records a durable result
+// keyed by (operation, host build job). The platform judges nothing: management
+// looks at the images with its own model and records choir.ShotVerdict.
 //
 // Failure modes, decided before the code (FM numbers are the design's):
 //
-//   - FM4 a shot writes the live state: the store is read once through
-//     SnapshotToKinds into the worker's own directory, the before copy is a
+//   - a shot writes the live state: the store is read once through
+//     SnapshotToKinds into the job's own directory, the before copy is a
 //     plain file copy of that, the owner files are hardlinks the sandbox
 //     cannot write (it runs as the capsule's unprivileged id), and nothing
-//     but directories the worker made is ever chowned.
-//   - FM5 the two runs differ: one frozen plan drives both; the before run
-//     takes no video, the after run takes the plan's.
-//   - FM6 a hang: the sandbox pass has its own view/plan/stage deadlines, the
-//     review has its timeout, and the worker has one for the whole run. A
-//     timeout inside a pass or the review is a fail verdict with its cause;
-//     only a panic, or the worker's own deadline ending before a verdict, leaves
-//     no event, and then the watchdog (ensure) counts a silent death and the
-//     third writes "shot worker died".
-//   - FM7 a crash: no event is written before the end, so a crash boot closes
-//     the accepted operation by the existing rule; a planned-restart re-run
-//     starts from scratch (the work directory is wiped first) and the event
-//     is idempotent on (operation, host build job).
-//   - FM8 the review model is unavailable: the verdict is a fail with that
-//     cause, never a pass.
-//   - FM9 the candidate does not start or serve: the sandbox Result names it
-//     with the stderr tail, and the verdict fails with both.
+//     but directories the job made is ever chowned.
+//   - the two runs differ: one frozen plan drives both; the before run takes
+//     no video, the after run takes the plan's.
+//   - FM6 a hang or a failure (sandbox, browser, state copy, blank or
+//     mis-sized shot): the sandbox pass has its own deadlines, the job one
+//     for the whole run, and every failure is the job's failed state with its
+//     cause, which management's verdict then names.
+//   - FM7 a restart: the sandbox and browser die with the process, so a job
+//     still "running" in the durable result when none runs in this process is
+//     closed "ended by a restart" the first time anything reads it, and a
+//     later ShotStart starts a new job with a new id.
+//   - the candidate does not start or serve: the sandbox Result names it with
+//     the stderr tail.
 //   - a disk that cannot hold the copies: the capsule state floor check
-//     refuses, as a capsule copy would, and the verdict fails with it.
-//   - the swap racing a still-running worker: the worker holds no lock the
-//     materializer takes, and re-reads the operation before the run; a
-//     terminal operation gets no event.
+//     refuses, as a capsule copy would.
 
 const (
-	// candidateShotMaxStarts is the first start and its two restarts (N4).
-	candidateShotMaxStarts = 3
-	// candidateShotWorkerTimeout bounds the whole run, copies to event.
+	// candidateShotWorkerTimeout bounds the whole job, copies to result.
 	candidateShotWorkerTimeout = 30 * time.Minute
 	// candidateShotPassTimeout bounds one sandbox pass (before or after).
 	candidateShotPassTimeout = 10 * time.Minute
-
-	candidateShotWorkerDied = "shot worker died"
 )
-
-// shotWorkerState is the watchdog's memory of one operation's worker.
-type shotWorkerState struct {
-	running bool
-	starts  int
-}
 
 // candidateShotDeps are the worker's seams: the sandbox launch and the
 // paths a test cannot take from the machine. Nil uses the machine's own.
@@ -177,97 +157,6 @@ func (rt *Runtime) shotDeps() candidateShotDeps {
 	return candidateShotDeps{}
 }
 
-// ensureCandidateShotWorker is startCandidateShot's production body: start
-// the worker unless one is running; restart a dead one at most twice; the
-// third silent death writes the failing verdict (the watchdog, N4).
-func (rt *Runtime) ensureCandidateShotWorker(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
-	key := operation.OperationID + "/" + built.Job.JobID
-	rt.shotWorkersMu.Lock()
-	if rt.shotWorkers == nil {
-		rt.shotWorkers = map[string]*shotWorkerState{}
-	}
-	state := rt.shotWorkers[key]
-	if state == nil {
-		state = &shotWorkerState{}
-		rt.shotWorkers[key] = state
-	}
-	if state.running {
-		rt.shotWorkersMu.Unlock()
-		return
-	}
-	if state.starts >= candidateShotMaxStarts {
-		rt.shotWorkersMu.Unlock()
-		rt.finishCandidateShot(key, operation, bundle, built, func(base computerevent.CandidateShotPayload) computerevent.CandidateShotPayload {
-			base.Verdict, base.Cause = computerevent.CandidateShotFail, candidateShotWorkerDied
-			return base
-		})
-		return
-	}
-	state.starts++
-	state.running = true
-	rt.shotWorkersMu.Unlock()
-	go rt.runCandidateShotWorker(key, state, operation, bundle, built)
-}
-
-// finishCandidateShot writes the event for a verdict built from the
-// operation's bindings and forgets the watchdog state once it is written.
-func (rt *Runtime) finishCandidateShot(key string, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease, verdict func(computerevent.CandidateShotPayload) computerevent.CandidateShotPayload) {
-	planDigest, err := bundle.ShotPlan.Digest()
-	if err != nil {
-		log.Printf("selfdev candidate shot: operation %s: plan digest: %v", operation.OperationID, err)
-		return
-	}
-	payload := verdict(computerevent.CandidateShotPayload{
-		OperationID: operation.OperationID, BundleDigest: operation.BundleDigest, HostBuildJobID: built.Job.JobID, PlanSHA256: planDigest,
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if err := rt.appendCandidateShot(ctx, operation, payload); err != nil {
-		log.Printf("selfdev candidate shot: operation %s: write the %s verdict: %v", operation.OperationID, payload.Verdict, err)
-		return
-	}
-	rt.shotWorkersMu.Lock()
-	delete(rt.shotWorkers, key)
-	rt.shotWorkersMu.Unlock()
-}
-
-func (rt *Runtime) runCandidateShotWorker(key string, state *shotWorkerState, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
-	terminal := false
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("selfdev candidate shot: operation %s: worker panicked: %v", operation.OperationID, r)
-		}
-		rt.shotWorkersMu.Lock()
-		state.running = false
-		if terminal {
-			delete(rt.shotWorkers, key) // N5: nothing will restart a worker for it
-		}
-		rt.shotWorkersMu.Unlock()
-	}()
-	rt.sweepShotWorkRootOnce()
-	ctx, cancel := context.WithTimeout(context.Background(), candidateShotWorkerTimeout)
-	defer cancel()
-	// A terminal operation gets no shots; a missing store is a wiring defect
-	// the watchdog will count.
-	current, err := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
-	if err != nil {
-		log.Printf("selfdev candidate shot: operation %s: read: %v", operation.OperationID, err)
-		return
-	}
-	if current.State != selfdev.StateAccepted {
-		log.Printf("selfdev candidate shot: operation %s is %s, not accepted; no shots", operation.OperationID, current.State)
-		terminal = true
-		return
-	}
-	started := time.Now()
-	payload := rt.shootCandidate(ctx, current, bundle, built)
-	log.Printf("selfdev candidate shot: operation %s host build %s: %s in %s %s", operation.OperationID, built.Job.JobID, payload.Verdict, time.Since(started).Round(time.Millisecond), payload.Cause)
-	rt.finishCandidateShot(key, current, bundle, built, func(base computerevent.CandidateShotPayload) computerevent.CandidateShotPayload {
-		payload.OperationID, payload.BundleDigest, payload.HostBuildJobID, payload.PlanSHA256 = base.OperationID, base.BundleDigest, base.HostBuildJobID, base.PlanSHA256
-		return payload
-	})
-}
-
 // shotSide is one pass's directory: a state copy, a files layer, the
 // binaries and the outputs.
 type shotSide struct {
@@ -312,12 +201,11 @@ func (d candidateShotDeps) env(plan capsule.ShotPlan) (shotEnv, error) {
 }
 
 // shootCandidate runs the whole shot for one operation and host build and
-// returns its verdict. Every failure is a verdict with its cause; only the
-// event write can fail outside it.
-func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) (payload computerevent.CandidateShotPayload) {
-	fail := func(format string, args ...any) computerevent.CandidateShotPayload {
-		payload.Verdict, payload.Cause = computerevent.CandidateShotFail, truncateRunesShot(fmt.Sprintf(format, args...), 1800)
-		return payload
+// returns the job's result. Every failure is a failed result with its cause.
+func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) (result shotJobResult) {
+	fail := func(format string, args ...any) shotJobResult {
+		result.State, result.Cause = shotJobFailed, truncateRunesShot(fmt.Sprintf(format, args...), 1800)
+		return result
 	}
 	if bundle.ShotPlan == nil {
 		return fail("the bundle has no shot plan")
@@ -412,7 +300,7 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 	if err != nil {
 		return fail("state copy: %v", err)
 	}
-	payload.Copy = &computerevent.CandidateShotCopyReceipt{CopyMs: receipt.CopyMS, ScanMs: receipt.ScanMS, Bytes: receipt.Bytes}
+	_ = receipt
 	if err := copyStateCopy(after.dir, before.dir); err != nil {
 		return fail("state copy for the before run: %v", err)
 	}
@@ -458,26 +346,24 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 		plan capsule.ShotPlan
 		what string
 	}{{before, beforePlan, "the running build"}, {after, plan, "the candidate"}}
-	results := map[string]shotsandbox.Result{}
 	// Each pass's shots are read as soon as it ends: both passes run as the
 	// same sandbox user with no mount namespace, so a candidate could
 	// otherwise rewrite the running build's shots before they are judged.
 	taken := map[string]map[string][]byte{}
 	for _, pass := range passes {
 		passCtx, cancel := context.WithTimeout(ctx, candidateShotPassTimeout)
-		result, err := launch(passCtx, pass.side.spec(pass.plan, env))
+		res, err := launch(passCtx, pass.side.spec(pass.plan, env))
 		cancel()
 		if err != nil {
 			return fail("the shots of %s did not run: %v", pass.what, err)
 		}
-		if result.Error != "" {
-			cause := fmt.Sprintf("the shots of %s failed: %s", pass.what, result.Error)
-			if result.Tail != "" && !strings.Contains(result.Error, result.Tail) {
-				cause += " (stderr tail: " + result.Tail + ")"
+		if res.Error != "" {
+			cause := fmt.Sprintf("the shots of %s failed: %s", pass.what, res.Error)
+			if res.Tail != "" && !strings.Contains(res.Error, res.Tail) {
+				cause += " (stderr tail: " + res.Tail + ")"
 			}
 			return fail("%s", cause)
 		}
-		results[pass.side.name] = result
 		taken[pass.side.name] = readShotOutputs(pass.side, pass.plan)
 	}
 
@@ -499,12 +385,18 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 			if err != nil {
 				return fail("%s: %v", name, err)
 			}
+			if blank {
+				return fail("%s: the %s shot of view %s is blank", name, side.name, view.Name)
+			}
+			if !shotSizeOK(width, height) {
+				return fail("%s: the %s shot of view %s is %dx%d, not a recorded size", name, side.name, view.Name, width, height)
+			}
 			sum := sha256.Sum256(data)
 			screens = append(screens, capsule.ScreenFile{Name: name, SHA256: hex.EncodeToString(sum[:]), Bytes: int64(len(data)), Width: width, Height: height, Blank: blank})
 			contents[name] = data
 		}
 	}
-	var video *computerevent.CandidateShotFile
+	var video *computerevent.ShotFile
 	if plan.Video != nil {
 		name := plan.Video.FileName()
 		data, ok := taken[after.name][name]
@@ -512,45 +404,28 @@ func (rt *Runtime) shootCandidate(ctx context.Context, operation selfdev.Operati
 			return fail("the plan's video %s was not recorded as a WebM of at most %d bytes", name, capsule.MaxVideoBytes)
 		}
 		sum := sha256.Sum256(data)
-		video = &computerevent.CandidateShotFile{Name: name, SHA256: hex.EncodeToString(sum[:]), Bytes: int64(len(data))}
+		video = &computerevent.ShotFile{Name: name, SHA256: hex.EncodeToString(sum[:]), Bytes: int64(len(data))}
 		contents[name] = data
 	}
 
-	// 6. Save them, so the review can resolve them and the owner can see
+	// 6. Save them, so management's images resolve and the owner can see
 	// them whatever the verdict.
 	images, files := rt.imageStore(), rt.filesRoot()
 	for _, s := range screens {
-		payload.Shots = append(payload.Shots, computerevent.CandidateShotFile{Name: s.Name, SHA256: s.SHA256, Bytes: s.Bytes})
 		if err := storeScreenBytes(images, files, operation.OperationID, s.Name, s.SHA256, contents[s.Name], true); err != nil {
 			return fail("save %s: %v", s.Name, err)
 		}
+		result.Screens = append(result.Screens, shotJobScreen{Name: s.Name, SHA256: s.SHA256, Bytes: s.Bytes, Width: s.Width, Height: s.Height})
 	}
 	if video != nil {
-		payload.Shots = append(payload.Shots, *video)
 		if err := storeScreenBytes(nil, files, operation.OperationID, video.Name, video.SHA256, contents[video.Name], false); err != nil {
 			return fail("save %s: %v", video.Name, err)
 		}
+		result.Video = video
 	}
-
-	// 7. The review (FM8): the six questions of every pair, the numbered
-	// shots of the owner's request checked, fail-closed.
-	request, notes := rt.requestAndNotesForOperation(ctx, operation)
-	call, err := rt.shotReviewCaller(rt.selfdevRouteOwnerID)
-	if err != nil {
-		return fail("the shot review did not run: %v", err)
-	}
-	review, err := reviewShotsNoted(ctx, call, screens, requestedShots(request), notes, images.Has)
-	if err != nil {
-		return fail("the shot review did not run: %v", err)
-	}
-	if raw, merr := json.Marshal(review); merr == nil {
-		payload.Review = string(raw)
-	}
-	if review.rejected() {
-		return fail("%s", strings.TrimPrefix(review.reason(""), shotReviewMarker+" "))
-	}
-	payload.Verdict = computerevent.CandidateShotPass
-	return payload
+	result.RecordedSize = recordedSizeLine(result.Screens)
+	result.State = shotJobDone
+	return result
 }
 
 // materializeCandidateBuild puts the host build's closure in the updater's
@@ -612,128 +487,6 @@ func (rt *Runtime) runningBuild(deps candidateShotDeps, updaterRoot string) (bin
 		return "", "", errors.New("the running build's frontend was not found")
 	}
 	return binary, frontend, nil
-}
-
-// shotReviewCaller is the judge's per-shot model call (selfdev_shot_review.go).
-func (rt *Runtime) shotReviewCaller(ownerID string) (shotReviewCall, error) {
-	if rt.shotReviewCall != nil {
-		return rt.shotReviewCall, nil
-	}
-	if rt.modelPolicy == nil {
-		return nil, errors.New("the multimodal verifier is unavailable")
-	}
-	return func(ctx context.Context, prompt string, refs []string) (modelpolicy.VerifyOutcome, error) {
-		return rt.modelPolicy.VerifyImages(ctx, ownerID, shotReviewRole, prompt, refs)
-	}, nil
-}
-
-// requestAndNotesForOperation reads the owner's words the operation's
-// assignment answers, the way Verify does; "" when unreachable.
-func (rt *Runtime) requestAndNotesForOperation(ctx context.Context, operation selfdev.Operation) (request, notes string) {
-	assignment, ok := rt.assignmentOfOperation(ctx, operation)
-	if !ok || rt.store == nil {
-		return "", ""
-	}
-	ownerID := rt.selfdevRouteOwnerID
-	notes = rt.ownerNotesForAssignment(ctx, ownerID, operation.ComputerID, assignment)
-	if words, _, _, ok := rt.ownerWordsForAssignment(ctx, ownerID, operation.ComputerID, assignment); ok {
-		request = words.Text
-	}
-	return request, notes
-}
-
-// assignmentOfOperation finds the assignment whose current operation this is.
-func (rt *Runtime) assignmentOfOperation(ctx context.Context, operation selfdev.Operation) (types.EngineeringAssignment, bool) {
-	if rt.store == nil || rt.selfdevOperations == nil {
-		return types.EngineeringAssignment{}, false
-	}
-	assignments, err := rt.store.ListEngineeringAssignments(ctx, rt.selfdevRouteOwnerID, operation.ComputerID, operation.TrajectoryID)
-	if err != nil {
-		return types.EngineeringAssignment{}, false
-	}
-	for _, a := range assignments {
-		op, _, found, err := assignmentOperation(ctx, rt.selfdevOperations, operation.ComputerID, a.AssignmentID)
-		if err == nil && found && op.OperationID == operation.OperationID {
-			return a, true
-		}
-	}
-	return types.EngineeringAssignment{}, false
-}
-
-// readCandidateShot reads the operation's candidate_shot event for the host
-// build job its bundle derives (the job id is a function of the request), and
-// checks its bindings. Not found says none yet.
-func (rt *Runtime) readCandidateShot(ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) (computerevent.CandidateShotPayload, bool) {
-	if rt == nil || rt.store == nil || rt.eventPayloadReader == nil || bundle.ShotPlan == nil {
-		return computerevent.CandidateShotPayload{}, false
-	}
-	request, err := rt.selfDevelopmentHostBuildRequest(operation, bundle)
-	if err != nil {
-		return computerevent.CandidateShotPayload{}, false
-	}
-	jobID, err := request.JobID()
-	if err != nil {
-		return computerevent.CandidateShotPayload{}, false
-	}
-	event, found, err := rt.store.EventByIdempotency(ctx, operation.ComputerID, computerevent.CandidateShotKey(operation.OperationID, jobID))
-	if err != nil || !found || event.EventKind != computerevent.EventCandidateShot {
-		return computerevent.CandidateShotPayload{}, false
-	}
-	raw, err := rt.eventPayloadReader.FetchPayload(ctx, operation.ComputerID, event.PayloadCommitment)
-	if err != nil {
-		return computerevent.CandidateShotPayload{}, false
-	}
-	var payload computerevent.CandidateShotPayload
-	planDigest, derr := bundle.ShotPlan.Digest()
-	if json.Unmarshal(raw, &payload) != nil || payload.Validate() != nil || derr != nil ||
-		payload.OperationID != operation.OperationID || payload.BundleDigest != operation.BundleDigest || payload.HostBuildJobID != jobID || payload.PlanSHA256 != planDigest {
-		return computerevent.CandidateShotPayload{}, false
-	}
-	return payload, true
-}
-
-// candidateShotScreens lists a plan bundle's screens from its candidate_shot
-// event, as CandidateScreens does a screens bundle's from the bundle.
-func (rt *Runtime) candidateShotScreens(ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) (ScreensListing, error) {
-	payload, ok := rt.readCandidateShot(ctx, operation, bundle)
-	if !ok {
-		return ScreensListing{}, errors.New("the platform has not shot this candidate yet")
-	}
-	out := ScreensListing{OperationID: operation.OperationID, TrajectoryID: operation.TrajectoryID, ComputerID: operation.ComputerID, BundleDigest: operation.BundleDigest}
-	store := rt.imageStore()
-	dir := yaegikernel.SelfDevelopmentScreensDir(operation.OperationID)
-	for _, s := range payload.Shots {
-		if !capsule.ValidScreenName(s.Name) {
-			continue // the video is a file, not a screen
-		}
-		row := ScreenListingRow{Name: s.Name, File: dir + "/" + s.Name, SHA256: s.SHA256, Bytes: s.Bytes, Resolvable: store.Has(s.SHA256)}
-		row.Width, row.Height = screenDimensions(rt.filesRoot(), dir+"/"+s.Name)
-		out.Screens = append(out.Screens, row)
-	}
-	if len(out.Screens) == 0 {
-		return ScreensListing{}, errors.New("the candidate's shots recorded no screens")
-	}
-	return out, nil
-}
-
-// candidateShotScreensNote is frozenScreensNote for a plan bundle.
-func candidateShotScreensNote(toolCtx *CapsuleToolCtx, ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) string {
-	payload, ok := toolCtx.CandidateShot(ctx, operation, bundle)
-	if !ok {
-		return platformScreensHeading + ": none yet; the platform shoots a plan bundle's views after the host build, before the swap."
-	}
-	var b strings.Builder
-	b.WriteString(platformScreensHeading + " (candidate shot " + payload.Verdict + "):")
-	for _, s := range payload.Shots {
-		fmt.Fprintf(&b, "\n- %s: artifact:sha256:%s", s.Name, s.SHA256)
-		if !strings.HasSuffix(s.Name, ".png") {
-			b.WriteString(" (video)")
-		}
-	}
-	if payload.Verdict == computerevent.CandidateShotFail && payload.Cause != "" {
-		b.WriteString("\n- failed: " + payload.Cause)
-	}
-	return b.String()
 }
 
 // screenDimensions reads a saved PNG's size from the file tree, 0 when absent.

@@ -2,15 +2,20 @@ package computerevent
 
 import (
 	"errors"
-	"strings"
 	"testing"
 )
 
-// candidate_shot (candidate_shot.go). Failure modes: the event unlocks a
+// shot_verdict (shot_verdict.go). Failure modes: the event unlocks a
 // swap for a decision that is no longer pending (a stale worker); it moves a
 // head; a payload with an unknown verdict, a pass with no shots, or a fail
 // with no cause is accepted (FM8).
 func TestReducerCandidateShotBindsThePendingDecisionAndMovesNoHead(t *testing.T) {
+	for _, kind := range []EventKind{EventCandidateShot, EventShotVerdict} {
+		t.Run(string(kind), func(t *testing.T) { reducerShotKindBindsThePendingDecision(t, kind) })
+	}
+}
+
+func reducerShotKindBindsThePendingDecision(t *testing.T, kind EventKind) {
 	genesis := testEvent(t, nil, EventGenesisImported)
 	genesis.ResultingEffectiveCommitment = testDigestA
 	head, err := Reduce(nil, genesis, TransitionInput{TargetStateCommitment: testDigestA})
@@ -18,7 +23,7 @@ func TestReducerCandidateShotBindsThePendingDecisionAndMovesNoHead(t *testing.T)
 		t.Fatal(err)
 	}
 	// Nothing pending: refused.
-	idle := testEvent(t, &head, EventCandidateShot)
+	idle := testEvent(t, &head, kind)
 	idle.DecisionRef, idle.ProposedEffectRef = "decision:x", "artifact:bundle"
 	if _, err := Reduce(&head, idle, TransitionInput{}); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("candidate_shot with nothing pending: %v", err)
@@ -29,17 +34,17 @@ func TestReducerCandidateShotBindsThePendingDecisionAndMovesNoHead(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreign := testEvent(t, &pending, EventCandidateShot)
+	foreign := testEvent(t, &pending, kind)
 	foreign.DecisionRef, foreign.ProposedEffectRef = "decision:other", "artifact:bundle"
 	if _, err := Reduce(&pending, foreign, TransitionInput{}); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("candidate_shot naming another decision: %v", err)
 	}
-	unbound := testEvent(t, &pending, EventCandidateShot)
+	unbound := testEvent(t, &pending, kind)
 	unbound.DecisionRef = pending.PendingTransitionRef
 	if _, err := Reduce(&pending, unbound, TransitionInput{}); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("candidate_shot naming no bundle: %v", err)
 	}
-	shot := testEvent(t, &pending, EventCandidateShot)
+	shot := testEvent(t, &pending, kind)
 	shot.DecisionRef, shot.ProposedEffectRef = pending.PendingTransitionRef, "artifact:bundle"
 	next, err := Reduce(&pending, shot, TransitionInput{})
 	if err != nil {
@@ -52,38 +57,40 @@ func TestReducerCandidateShotBindsThePendingDecisionAndMovesNoHead(t *testing.T)
 	}
 }
 
-func TestCandidateShotPayloadValidate(t *testing.T) {
-	good := CandidateShotPayload{
-		OperationID: "op-1", BundleDigest: testDigestA, HostBuildJobID: "job-1", PlanSHA256: testDigestB,
-		Verdict: CandidateShotPass, Shots: []CandidateShotFile{{Name: "01-before-home.png", SHA256: testDigestA, Bytes: 10}},
+func TestShotVerdictPayloadValidate(t *testing.T) {
+	good := ShotVerdictPayload{
+		OperationID: "op-1", BundleDigest: testDigestA, HostBuildJobID: "job-1", ShotJobID: "shot-1", PlanSHA256: testDigestB,
+		Verdict: ShotVerdictPass, Findings: []ShotFindingRecord{{Pair: "01-home", BeforeSHA256: testDigestA, AfterSHA256: testDigestB}},
+		Shots: []ShotFile{{Name: "01-before-home.png", SHA256: testDigestA, Bytes: 10}},
 	}
 	if err := good.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	for name, fn := range map[string]func(p *CandidateShotPayload){
-		"unknown verdict": func(p *CandidateShotPayload) { p.Verdict = "maybe" },
-		"pass no shots":   func(p *CandidateShotPayload) { p.Shots = nil },
-		"fail no cause":   func(p *CandidateShotPayload) { p.Verdict, p.Cause = CandidateShotFail, " " },
-		"no job":          func(p *CandidateShotPayload) { p.HostBuildJobID = "" },
-		"bad plan digest": func(p *CandidateShotPayload) { p.PlanSHA256 = "x" },
-		"unbound shot":    func(p *CandidateShotPayload) { p.Shots[0].SHA256 = "x" },
+	for name, fn := range map[string]func(p *ShotVerdictPayload){
+		"unknown verdict": func(p *ShotVerdictPayload) { p.Verdict = "maybe" },
+		"pass no finding": func(p *ShotVerdictPayload) { p.Findings = nil },
+		"fail no reason":  func(p *ShotVerdictPayload) { p.Verdict, p.Reason = ShotVerdictFail, " " },
+		"no job":          func(p *ShotVerdictPayload) { p.HostBuildJobID = "" },
+		"no shot job":     func(p *ShotVerdictPayload) { p.ShotJobID = "" },
+		"bad plan digest": func(p *ShotVerdictPayload) { p.PlanSHA256 = "x" },
+		"unbound shot":    func(p *ShotVerdictPayload) { p.Shots = []ShotFile{{Name: "a.png", SHA256: "x"}} },
+		"unbound finding": func(p *ShotVerdictPayload) { p.Findings = []ShotFindingRecord{{Pair: "p", BeforeSHA256: "x", AfterSHA256: testDigestA}} },
 	} {
 		p := good
-		p.Shots = append([]CandidateShotFile(nil), good.Shots...)
 		fn(&p)
 		if err := p.Validate(); err == nil {
 			t.Errorf("%s: validated", name)
 		}
 	}
 	fail := good
-	fail.Verdict, fail.Cause, fail.Shots = CandidateShotFail, "shot worker died", nil
+	fail.Verdict, fail.Reason, fail.Findings = ShotVerdictFail, "the list is empty", nil
 	if err := fail.Validate(); err != nil {
-		t.Fatalf("a fail with its cause: %v", err)
+		t.Fatalf("a fail with its reason: %v", err)
 	}
-	if k := CandidateShotKey("op-1", "job-1"); !strings.Contains(k, "op-1") || !strings.Contains(k, "job-1") {
-		t.Fatalf("the key must name the operation and the job: %s", k)
+	if k := ShotVerdictKey("op-1", "job-1"); k != "shot-verdict:op-1:job-1" {
+		t.Fatalf("key = %s", k)
 	}
-	if CandidateShotKey("op-1", "job-1") == CandidateShotKey("op-1", "job-2") {
-		t.Fatal("two host builds share a candidate_shot key")
+	if ShotVerdictKey("op-1", "job-1") == ShotVerdictKey("op-1", "job-2") {
+		t.Fatal("two host builds share a shot verdict key")
 	}
 }

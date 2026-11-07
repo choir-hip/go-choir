@@ -200,14 +200,27 @@ func (rt *Runtime) managementVerifyOwedGuard(rec *types.RunRecord) toolregistry.
 			log.Printf("runtime: verify owed guard for run %s: %v", rec.RunID, err)
 			return toolregistry.ToolLoopCompletionGuardResult{}, nil
 		}
-		if len(owed) == 0 {
-			return toolregistry.ToolLoopCompletionGuardResult{}, nil
-		}
 		lines := make([]string, 0, len(owed))
 		for _, o := range owed {
 			lines = append(lines, o.Line())
 		}
-		return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Reason: "verify_owed", Instruction: strings.Join(lines, "\n")}, nil
+		// The shots-owed sibling: an accepted operation owing shots and no
+		// verdict is not ended over either.
+		shots, err := rt.shotsOwedBy(ctx, rt.runComputerID(rec))
+		if err != nil {
+			log.Printf("runtime: shots owed guard for run %s: %v", rec.RunID, err)
+		}
+		for _, o := range shots {
+			lines = append(lines, shotsOwedLine(o.Operation.OperationID))
+		}
+		if len(lines) == 0 {
+			return toolregistry.ToolLoopCompletionGuardResult{}, nil
+		}
+		reason := "verify_owed"
+		if len(owed) == 0 {
+			reason = "shots_owed"
+		}
+		return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Reason: reason, Instruction: strings.Join(lines, "\n")}, nil
 	}
 }
 
@@ -439,6 +452,99 @@ func (rt *Runtime) verifyOwedWaitViews(ctx context.Context, ownerID, computerID,
 			continue
 		}
 		out = append(out, types.AssignmentWaitView{AssignmentID: o.Assignment.AssignmentID, Attempt: o.Assignment.Binding.Attempt, Wait: verifyOwedWait(o, now)})
+	}
+	return out
+}
+
+// ---- the shots-owed sibling (docs/design/desk-shots-and-review-2026-11-07.md 3.4)
+//
+// An accepted platform operation whose host build is done owes management a
+// shot verdict. The gate commits the shots-owed record once and keeps the
+// clock (askManagementForShots: capped notices with fresh wake ids, then the
+// deadline); this file is management's side of it: the completion guard
+// (above, in managementVerifyOwedGuard), the end-of-run backstop and the
+// typed wait. Nothing arms at boot: the backstop runs at a run's end and the
+// gate's retry wake is the pending operation's own.
+
+// shotsOwedBy lists the accepted operations of computerID that owe shots
+// management has not judged.
+func (rt *Runtime) shotsOwedBy(ctx context.Context, computerID string) ([]shotsOwedInfo, error) {
+	if rt == nil || rt.store == nil || rt.selfdevOperations == nil || strings.TrimSpace(computerID) == "" {
+		return nil, nil
+	}
+	accepted, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateAccepted)
+	if err != nil {
+		return nil, fmt.Errorf("shots owed: list accepted operations: %w", err)
+	}
+	var out []shotsOwedInfo
+	for _, operation := range accepted {
+		if operation.IsPackage() {
+			continue
+		}
+		info, refusal, err := rt.shotsOwedFor(ctx, computerID, operation.OperationID)
+		if err != nil {
+			return out, err
+		}
+		if refusal == "" {
+			out = append(out, info)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Operation.OperationID < out[j].Operation.OperationID })
+	return out, nil
+}
+
+// armShotsOwedAfterRun is the backstop at a management activation's end: a
+// run that ended with shots owed asks the materializer to re-run the gate,
+// which notices management once it has been idle long enough. A run a crash
+// ended asks nothing.
+func (rt *Runtime) armShotsOwedAfterRun(ctx context.Context, rec *types.RunRecord) {
+	if rt == nil || !isPersistentManagementRun(rec) || !(rec.State.Terminal() || rec.State == types.RunPassivated) || rec.Error == runFateInterruptedByRestart {
+		return
+	}
+	owed, err := rt.shotsOwedBy(ctx, rt.runComputerID(rec))
+	if err != nil {
+		log.Printf("runtime: shots owed after run %s: %v", rec.RunID, err)
+		return
+	}
+	for _, o := range owed {
+		log.Printf("runtime: management run %s ended with the shots of %s owed; the gate re-checks", rec.RunID, o.Operation.OperationID)
+	}
+	if len(owed) > 0 {
+		rt.TriggerSelfDevelopmentReconcile()
+	}
+}
+
+// shotsOwedWait is an owed shot verdict as a typed wait, since the record.
+func shotsOwedWait(o shotsOwedInfo, now time.Time) *types.WaitState {
+	since := now
+	if at, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(o.Record.Provenance.CommittedAt)); err == nil && !at.IsZero() && !at.After(now) {
+		since = at
+	}
+	w := &types.WaitState{
+		Kind: types.WaitKindShotsOwed, Class: types.WaitClassPolicy,
+		Subject:  "operation " + o.Operation.OperationID,
+		Resource: "management's shot verdict on the host build of " + o.Operation.OperationID,
+		Need:     fmt.Sprintf("choir.ShotStart(%q), choir.ShotWait, then choir.ShotVerdict(%q, pass|fail, findings, reason)", o.Operation.OperationID, o.Operation.OperationID),
+		Holders:  []types.WaitHolder{{Who: "management", What: "ShotVerdict"}},
+		Since:    since.UTC(),
+		Detail:   strings.TrimSuffix(shotsOwedLine(o.Operation.OperationID), "."),
+	}
+	w.Stamp(now)
+	return w
+}
+
+// shotsOwedWaitViews is management's view of the shot verdicts it owes, one
+// typed wait each. The pack is context, never a gate.
+func (rt *Runtime) shotsOwedWaitViews(ctx context.Context, _, computerID string) []types.AssignmentWaitView {
+	owed, err := rt.shotsOwedBy(ctx, computerID)
+	if err != nil {
+		log.Printf("desk pack: shots owed: %v", err)
+		return nil
+	}
+	now := rt.assignmentWaitNow()
+	var out []types.AssignmentWaitView
+	for _, o := range owed {
+		out = append(out, types.AssignmentWaitView{AssignmentID: o.Operation.OperationID, Wait: shotsOwedWait(o, now)})
 	}
 	return out
 }

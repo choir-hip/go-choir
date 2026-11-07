@@ -441,6 +441,11 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Feed":             func() reflect.Value { return reflect.ValueOf(s.Feed) },
 		"Decline":          func() reflect.Value { return reflect.ValueOf(s.Decline) },
 		"Verify":           func() reflect.Value { return reflect.ValueOf(s.Verify) },
+		"ShotStart":        func() reflect.Value { return reflect.ValueOf(s.ShotStart) },
+		"Screens":          func() reflect.Value { return reflect.ValueOf(s.Screens) },
+		"VerifyFindings":   func() reflect.Value { return reflect.ValueOf(s.VerifyFindings) },
+		"ShotWait":         func() reflect.Value { return reflect.ValueOf(s.ShotWait) },
+		"ShotVerdict":      func() reflect.Value { return reflect.ValueOf(s.ShotVerdict) },
 		"Delegate":         func() reflect.Value { return reflect.ValueOf(s.Delegate) },
 		"CancelTask":       func() reflect.Value { return reflect.ValueOf(s.CancelTask) },
 		"Calibration":      func() reflect.Value { return reflect.ValueOf(s.Calibration) },
@@ -1159,6 +1164,87 @@ func (s *ChoirScope) Verify(assignmentID, decision string, verifierRefs []string
 		return fmt.Errorf("choir: verify requires a bound cell")
 	}
 	return t.Verify(assignmentID, decision, verifierRefs, bundleDigest, reason...)
+}
+
+// ShotStart starts the before/after shots of an accepted operation that owes
+// shots and returns the shot job (desk-shots-and-review §3.3). Management only.
+func (s *ChoirScope) ShotStart(operationID string) (ShotStartResult, error) {
+	if !s.deskModule("ShotStart") {
+		return ShotStartResult{}, fmt.Errorf("choir: shot verbs are management's")
+	}
+	var out ShotStartResult
+	if err := s.call(ActionShotStart, ShotStartPayload{OperationID: strings.TrimSpace(operationID)}, &out); err != nil {
+		return ShotStartResult{}, err
+	}
+	return out, nil
+}
+
+// Screens queues the frozen bundle's screens (a package candidate's) for the
+// run's model and returns them; look at them in a LATER cell. Management only.
+func (s *ChoirScope) Screens(operationID string) (ScreensResult, error) {
+	if !s.deskModule("Screens") {
+		return ScreensResult{}, fmt.Errorf("choir: shot verbs are management's")
+	}
+	var out ScreensResult
+	if err := s.call(ActionScreens, ScreensPayload{OperationID: strings.TrimSpace(operationID)}, &out); err != nil {
+		return ScreensResult{}, err
+	}
+	return out, nil
+}
+
+// VerifyFindings attaches per-screen findings to this cell's Verify. Call it
+// after choir.Verify in the same cell: it errors when the cell has staged no
+// Verify, and at most once per cell. The findings land on the Verify
+// intent's ShotFindings. Management only.
+func (s *ChoirScope) VerifyFindings(findings []ShotFinding) error {
+	if err := s.mutateDenied("VerifyFindings"); err != nil {
+		return err
+	}
+	if !s.deskModule("VerifyFindings") {
+		return fmt.Errorf("choir: verify is management's")
+	}
+	t := s.tray.Load()
+	if t == nil {
+		return fmt.Errorf("choir: verify findings require a bound cell")
+	}
+	return t.VerifyFindings(findings)
+}
+
+// ShotWait waits up to maxSeconds (clamped to 0..240) on a shot job and
+// returns its state; when done, the job's images are queued into the run's
+// next turn. Management only.
+func (s *ChoirScope) ShotWait(jobID string, maxSeconds int) (ShotWaitResult, error) {
+	if !s.deskModule("ShotWait") {
+		return ShotWaitResult{}, fmt.Errorf("choir: shot verbs are management's")
+	}
+	if maxSeconds < 0 {
+		maxSeconds = 0
+	}
+	if maxSeconds > 240 {
+		maxSeconds = 240
+	}
+	var out ShotWaitResult
+	if err := s.call(ActionShotWait, ShotWaitPayload{JobID: strings.TrimSpace(jobID), MaxSeconds: maxSeconds}, &out); err != nil {
+		return ShotWaitResult{}, err
+	}
+	return out, nil
+}
+
+// ShotVerdict stages management's pass or fail on an operation's shot pair,
+// with one finding per screen pair. At most one per cell; requires a bound
+// cell. Management only.
+func (s *ChoirScope) ShotVerdict(operationID, verdict string, findings []ShotFinding, reason string) error {
+	if err := s.mutateDenied("ShotVerdict"); err != nil {
+		return err
+	}
+	if !s.deskModule("ShotVerdict") {
+		return fmt.Errorf("choir: shot verbs are management's")
+	}
+	t := s.tray.Load()
+	if t == nil {
+		return fmt.Errorf("choir: shot verdict requires a bound cell")
+	}
+	return t.ShotVerdict(operationID, verdict, findings, reason)
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development

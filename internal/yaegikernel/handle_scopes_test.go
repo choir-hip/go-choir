@@ -29,7 +29,7 @@ func newTestBroker(t *testing.T) (*Broker, *HandleIssuer) {
 // Written independently of internal/deskmanifest: this table is the authority
 // the batch must not widen, and it is the narrowing it applies.
 var pinnedHandleScopes = map[string][]BrokerAction{
-	"management":               {ActionReadFile, ActionListDir, ActionProductAPI, ActionReadCapture, ActionStories},
+	"management":               {ActionReadFile, ActionListDir, ActionProductAPI, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens},
 	"texture":                  {ActionReadFile, ActionListDir, ActionReadCapture},
 	"research":                 append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions["research"]...),
 	SessionRoleResearchWeb:     append([]BrokerAction{ActionReadFile, ActionListDir}, pinnedFrameActions[SessionRoleResearchWeb]...),
@@ -80,7 +80,7 @@ var verbDispatch = map[string]BrokerAction{
 	"SearchStart": ActionSearchStart, "Read": ActionRead, "PollSource": ActionPollSource, "SourceAPI": ActionSourceAPI,
 	"ReadCapture": ActionReadCapture, "SearchWireCorpus": ActionSearchWireCorpus, "SaveEvidence": ActionSaveEvidence,
 	"ReadEvidence": ActionReadEvidence, "ListEvidence": ActionListEvidence, "RunMemoryEntry": ActionGetRunMemoryEntry,
-	"ProductAPI": ActionProductAPI, "Stories": ActionStories, "Research": ActionResearch, "System1": ActionSystem1,
+	"ProductAPI": ActionProductAPI, "Stories": ActionStories, "ShotStart": ActionShotStart, "ShotWait": ActionShotWait, "Screens": ActionScreens, "Research": ActionResearch, "System1": ActionSystem1,
 	"RelateStories": ActionRelateStories,
 	"Relate":        ActionRelate,
 	"SearchTexture": ActionTextureSearch,

@@ -104,6 +104,12 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 	if types.IsVerifyOwedNotice(rec) {
 		return true
 	}
+	// A shots-owed record or notice asks management for the shot verdict the
+	// self-development gate waits on (desk shots design 3.4). The gate commits
+	// the record once and the notices on its live clock, never at a boot.
+	if types.IsShotsOwedRecord(rec) {
+		return true
+	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {
 		return true
 	}

@@ -291,7 +291,7 @@ func (toolCtx *CapsuleToolCtx) frozenScreensNote(ctx context.Context, assignment
 		return ""
 	}
 	bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest), operation)
-	if err == nil && len(bundle.Screens) == 0 && bundle.ShotPlan != nil && toolCtx.CandidateShot != nil {
+	if err == nil && len(bundle.Screens) == 0 && bundle.ShotPlan != nil && toolCtx.ShotVerdict != nil {
 		return candidateShotScreensNote(toolCtx, ctx, operation, bundle)
 	}
 	if err != nil || len(bundle.Screens) == 0 {

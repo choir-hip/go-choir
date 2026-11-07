@@ -399,6 +399,18 @@ type WitnessRoute struct {
 	EventDecisionRef   string  `json:"event_decision_ref,omitempty"`
 }
 
+// WitnessShotVerdict is the shot_verdict event joined to the release.
+type WitnessShotVerdict struct {
+	Verdict        string `json:"verdict"`
+	Reason         string `json:"reason,omitempty"`
+	HostBuildJobID string `json:"host_build_job_id"`
+	ShotJobID      string `json:"shot_job_id"`
+	PlanSHA256     string `json:"plan_sha256"`
+	JudgeAgentID   string `json:"judge_agent_id"`
+	JudgeRunID     string `json:"judge_run_id"`
+	Findings       int    `json:"findings"`
+}
+
 // ReleaseWitness is the answer of the release-witness route.
 type ReleaseWitness struct {
 	Schema      string `json:"schema"`
@@ -410,19 +422,22 @@ type ReleaseWitness struct {
 	// read the other stores and the read could not be repeated to a stable
 	// answer (a materialization in flight): the sections may describe two
 	// moments.
-	ReadConsistent   bool              `json:"read_consistent"`
-	Operation        WitnessOperation  `json:"operation"`
-	Decision         WitnessDecision   `json:"decision"`
-	Bundle           WitnessBundle     `json:"bundle"`
-	TestResult       WitnessTestResult `json:"test_result"`
-	HostBuild        WitnessHostBuild  `json:"host_build"`
-	Applied          WitnessApplied    `json:"applied"`
-	Heads            WitnessHeads      `json:"heads"`
-	Checkpoint       WitnessCheckpoint `json:"checkpoint"`
-	Route            WitnessRoute      `json:"route"`
-	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
-	Bindings         []WitnessBinding  `json:"bindings"`
-	Summary          WitnessSummary    `json:"summary"`
+	ReadConsistent bool              `json:"read_consistent"`
+	Operation      WitnessOperation  `json:"operation"`
+	Decision       WitnessDecision   `json:"decision"`
+	Bundle         WitnessBundle     `json:"bundle"`
+	TestResult     WitnessTestResult `json:"test_result"`
+	HostBuild      WitnessHostBuild  `json:"host_build"`
+	// ShotVerdict names who judged the candidate's shots (desk shots design
+	// 3.9): management's shot_verdict event, when the bundle carries a plan.
+	ShotVerdict      *WitnessShotVerdict `json:"shot_verdict,omitempty"`
+	Applied          WitnessApplied      `json:"applied"`
+	Heads            WitnessHeads        `json:"heads"`
+	Checkpoint       WitnessCheckpoint   `json:"checkpoint"`
+	Route            WitnessRoute        `json:"route"`
+	EffectiveRelease *EffectiveRelease   `json:"effective_release,omitempty"`
+	Bindings         []WitnessBinding    `json:"bindings"`
+	Summary          WitnessSummary      `json:"summary"`
 }
 
 // witnessBindings collects the observations. It can only attach an
@@ -555,6 +570,12 @@ func (rt *Runtime) readReleaseWitness(ctx context.Context, operation selfdev.Ope
 	bundle, bundleOK := rt.witnessBundle(operation, &out, bindings)
 	rt.witnessTestResult(bundle, bundleOK, &out, bindings)
 	rt.witnessHostBuild(operation, bundle, bundleOK, consensus, &out, bindings)
+	if bundleOK && bundle.ShotPlan != nil {
+		if v, ok := rt.readShotVerdict(ctx, operation, bundle); ok {
+			out.ShotVerdict = &WitnessShotVerdict{Verdict: v.Verdict, Reason: witnessTruncate(v.Reason, 300), HostBuildJobID: v.HostBuildJobID, ShotJobID: v.ShotJobID,
+				PlanSHA256: v.PlanSHA256, JudgeAgentID: v.Judge.AgentID, JudgeRunID: v.Judge.RunID, Findings: len(v.Findings)}
+		}
+	}
 	rt.witnessApplied(ctx, operation, &out, bindings)
 	rt.witnessHeads(ctx, operation, &out)
 	rt.witnessCheckpointAndRoute(ctx, operation, &out, bindings)

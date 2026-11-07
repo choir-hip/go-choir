@@ -120,7 +120,7 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleListDir(ctx, req, receiptID, start)
 	case ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
 		return b.handleEgress(ctx, req, receiptID, start)
 	default:
 		return NewErrorResponse(req.RequestID, fmt.Sprintf("unsupported action %q", req.Action), time.Since(start))
