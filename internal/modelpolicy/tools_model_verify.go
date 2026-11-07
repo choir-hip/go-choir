@@ -138,6 +138,10 @@ func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCa
 	})
 }
 
+// verifyImageRefusal decides whether a model may not receive an image. It is
+// a variable only so a test can choose which pool member is text-only.
+var verifyImageRefusal = modelcatalog.ImageRefusal
+
 func (m *Manager) runVerify(ctx context.Context, input verifyModelCapabilityArgs) (VerifyOutcome, error) {
 	if m == nil || m.config.Provider == nil {
 		return VerifyOutcome{}, fmt.Errorf("verify_model_capability missing runtime provider")
@@ -156,12 +160,12 @@ func (m *Manager) runVerify(ctx context.Context, input verifyModelCapabilityArgs
 		return VerifyOutcome{}, err
 	}
 	hasImage := strings.TrimSpace(normalized.ImageURL) != "" || strings.TrimSpace(normalized.ImageBase64) != "" || strings.TrimSpace(normalized.ImageRef) != "" || len(normalized.ImageRefs) > 0
-	selection, policySource, err := m.resolveToolModelSelection(ctx, execution.OwnerID, role, input, hasImage)
+	selection, fallbacks, policySource, err := m.resolveToolModelSelection(ctx, execution.OwnerID, role, input, hasImage)
 	if err != nil {
 		return VerifyOutcome{}, err
 	}
 	if hasImage {
-		if refusal := modelcatalog.ImageRefusal(selection.Model); refusal != "" {
+		if refusal := verifyImageRefusal(selection.Model); refusal != "" {
 			return VerifyOutcome{}, fmt.Errorf("image input requires a multimodal model: %s", refusal)
 		}
 	}
@@ -170,31 +174,69 @@ func (m *Manager) runVerify(ctx context.Context, input verifyModelCapabilityArgs
 		return VerifyOutcome{}, err
 	}
 	messages := []json.RawMessage{buildVerificationUserMessage(prompt, normalized)}
-	maxTokens := provideriface.MaxInteractiveOutputTokensForSelection(selection, role)
-	response, err := toolregistry.AsToolLoopProvider(m.config.Provider).CallWithTools(ctx, provideriface.ToolLoopRequest{
-		Provider:        selection.Provider,
-		Model:           selection.Model,
-		ReasoningEffort: selection.ReasoningEffort,
-		ConversationID:  "model-verify:" + selection.Model,
+	loop := toolregistry.AsToolLoopProvider(m.config.Provider)
+	// A run fails over through its pool's order when a member answers
+	// circuit open, quota, a rate limit or a transport failure
+	// (toolregistry.IsModelFailoverError). The verify call does the same: it
+	// stops at the first success, skips members that may not see an image,
+	// and records the member that answered. A pinned model and a NoFailover
+	// pool have no fallbacks, so they are tried once.
+	var tried []string
+	var lastErr error
+	called := 0
+	for i, candidate := range append([]provideriface.LLMSelection{selection}, fallbacks...) {
+		if i > 0 {
+			if hasImage {
+				if refusal := verifyImageRefusal(candidate.Model); refusal != "" {
+					tried = append(tried, fmt.Sprintf("%s/%s skipped: %s", candidate.Provider, candidate.Model, refusal))
+					continue
+				}
+			}
+			// A caller's effort override applies to every member, as a run
+			// stamps the primary's effort on its fallbacks.
+			if candidate.ReasoningEffort == "" || strings.TrimSpace(input.ReasoningEffort) != "" {
+				candidate.ReasoningEffort = selection.ReasoningEffort
+			}
+		}
+		called++
+		maxTokens := provideriface.MaxInteractiveOutputTokensForSelection(candidate, role)
+		response, err := loop.CallWithTools(ctx, provideriface.ToolLoopRequest{
+			Provider:        candidate.Provider,
+			Model:           candidate.Model,
+			ReasoningEffort: candidate.ReasoningEffort,
+			ConversationID:  "model-verify:" + candidate.Model,
 
-		System:    "You are a Choir verifier. Answer only the verification prompt. Do not mutate state.",
-		Messages:  messages,
-		MaxTokens: maxTokens,
-	})
-	if err != nil {
-		return VerifyOutcome{}, &ModelCallError{err: err}
+			System:    "You are a Choir verifier. Answer only the verification prompt. Do not mutate state.",
+			Messages:  messages,
+			MaxTokens: maxTokens,
+		})
+		if err != nil {
+			lastErr = err
+			tried = append(tried, fmt.Sprintf("%s/%s failed: %v", candidate.Provider, candidate.Model, err))
+			// The caller's own deadline or cancel is not a member's failure:
+			// failing over on a dead context only repeats it.
+			if !toolregistry.IsModelFailoverError(err) || ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		return VerifyOutcome{
+			Role: role, Provider: candidate.Provider, Model: candidate.Model, ReasoningEffort: candidate.ReasoningEffort,
+			PolicySource: policySource, ImageInput: hasImage, ImageRef: normalized.ImageRef, MaxTokensRequested: maxTokens > 0,
+			StopReason: response.StopReason, ResponseModel: response.Model, Text: response.Text,
+			InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens,
+			ReasoningPresent: strings.TrimSpace(response.ReasoningContent) != "",
+		}, nil
 	}
-	return VerifyOutcome{
-		Role: role, Provider: selection.Provider, Model: selection.Model, ReasoningEffort: selection.ReasoningEffort,
-		PolicySource: policySource, ImageInput: hasImage, ImageRef: normalized.ImageRef, MaxTokensRequested: maxTokens > 0,
-		StopReason: response.StopReason, ResponseModel: response.Model, Text: response.Text,
-		InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens,
-		ReasoningPresent: strings.TrimSpace(response.ReasoningContent) != "",
-	}, nil
+	if called == 1 && len(tried) == 1 {
+		return VerifyOutcome{}, &ModelCallError{err: lastErr}
+	}
+	return VerifyOutcome{}, &ModelCallError{err: fmt.Errorf("verify call failed on %d pool members: %s: %w", called, strings.Join(tried, "; "), lastErr)}
 }
 
-func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role string, input verifyModelCapabilityArgs, needsImage bool) (provideriface.LLMSelection, string, error) {
+func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role string, input verifyModelCapabilityArgs, needsImage bool) (provideriface.LLMSelection, []provideriface.LLMSelection, string, error) {
 	var selection provideriface.LLMSelection
+	var poolFallbacks []provideriface.LLMSelection
 	policySource := "explicit"
 	if strings.TrimSpace(input.Provider) == "" && strings.TrimSpace(input.Model) == "" {
 		policy, err := m.Load(ctx, ownerID)
@@ -210,10 +252,12 @@ func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role s
 		// pool member is skipped, not sent an image.
 		var fallbacks []provideriface.LLMSelection
 		selection, fallbacks, _ = Assign(selection, fmt.Sprintf("verify:%d", time.Now().UnixNano()))
-		if needsImage && !modelcatalog.SupportsImage(selection.Model) {
-			for _, fallback := range fallbacks {
-				if modelcatalog.SupportsImage(fallback.Model) {
+		poolFallbacks = fallbacks
+		if needsImage && verifyImageRefusal(selection.Model) != "" {
+			for i, fallback := range fallbacks {
+				if verifyImageRefusal(fallback.Model) == "" {
 					selection = fallback
+					poolFallbacks = fallbacks[i+1:]
 					break
 				}
 			}
@@ -227,13 +271,13 @@ func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role s
 		}
 	}
 	if strings.TrimSpace(selection.Model) == "" {
-		return provideriface.LLMSelection{}, "", fmt.Errorf("model is required")
+		return provideriface.LLMSelection{}, nil, "", fmt.Errorf("model is required")
 	}
 	if strings.TrimSpace(selection.Provider) == "" {
 		selection.Provider = providerForCatalogModel(selection.Model)
 	}
 	if strings.TrimSpace(selection.Provider) == "" {
-		return provideriface.LLMSelection{}, "", fmt.Errorf("provider is required for model %q", selection.Model)
+		return provideriface.LLMSelection{}, nil, "", fmt.Errorf("provider is required for model %q", selection.Model)
 	}
 	if strings.TrimSpace(input.Provider) != "" {
 		selection.Provider = strings.TrimSpace(input.Provider)
@@ -244,7 +288,7 @@ func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role s
 	if strings.TrimSpace(input.ReasoningEffort) != "" {
 		selection.ReasoningEffort = strings.TrimSpace(input.ReasoningEffort)
 	}
-	return selection, policySource, nil
+	return selection, poolFallbacks, policySource, nil
 }
 
 func normalizeVerifyImageInput(input verifyModelCapabilityArgs) (verifyModelCapabilityArgs, error) {
