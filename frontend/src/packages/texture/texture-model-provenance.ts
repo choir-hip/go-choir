@@ -65,6 +65,7 @@ const VIA_LABELS: Record<string, string> = {
   selected: '',
   selected_unrecorded: 'chosen, before call logging',
   model_failover: 'pool fallback',
+  image_capability: 'moved to a model that can see images',
   provider_quota: 'quota failover',
   provider_quota_retry: 'quota failover',
   'claude-delegate': '',

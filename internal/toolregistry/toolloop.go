@@ -776,13 +776,18 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		return errors.New(msg)
 	}
 	// advanceFallback hands the rest of the run to options.fallbackLLMConfigs[idx]
-	// and records why on the trace (event "model_failover").
-	advanceFallback := func(idx int, cause string) {
+	// and records why on the trace: "model_failover" when the member failed,
+	// "image_capability" when an image turn moved off a member that may not
+	// take one. That member never failed, so it is not marked left: once
+	// compaction drops the image it is eligible again.
+	advanceFallback := func(idx int, cause, reason string) {
 		from := activeLLMConfig
-		left[servingSelectionID(from)] = true
+		if reason == "model_failover" {
+			left[servingSelectionID(from)] = true
+		}
 		activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[idx], from)
 		nextFallback = idx + 1
-		served.Switch(modelSwitch(from, activeLLMConfig, "model_failover"))
+		served.Switch(modelSwitch(from, activeLLMConfig, reason))
 		if baseConversationID != "" {
 			options.conversationID = baseConversationID + "#failover"
 			if nextFallback > 1 {
@@ -801,7 +806,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		transientAttempts = 0
 		if emit != nil {
 			payload, _ := json.Marshal(map[string]any{
-				"reason":         "model_failover",
+				"reason":         reason,
 				"from_provider":  from.Provider,
 				"from_model":     from.Model,
 				"to_provider":    activeLLMConfig.Provider,
@@ -809,7 +814,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				"provider_error": cause,
 				"members_left":   len(options.fallbackLLMConfigs) - nextFallback,
 			})
-			emit(types.EventRunRetry, "model_failover", payload)
+			emit(types.EventRunRetry, reason, payload)
 		}
 	}
 	for i := 0; ; i++ {
@@ -834,7 +839,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			if idx < 0 {
 				return "", totalUsage, noImageModelError(nil)
 			}
-			advanceFallback(idx, modelcatalog.ImageRefusal(activeLLMConfig.Model))
+			advanceFallback(idx, modelcatalog.ImageRefusal(activeLLMConfig.Model), "image_capability")
 		}
 
 		req := provideriface.ToolLoopRequest{
@@ -1073,7 +1078,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				if IsProviderRateLimitError(err) && failsOverWithoutRetry(err) {
 					skippedRetryRounds++
 				}
-				advanceFallback(idx, err.Error())
+				advanceFallback(idx, err.Error(), "model_failover")
 				continue
 			}
 			// Transient provider outage (gateway 429/5xx or an equivalent

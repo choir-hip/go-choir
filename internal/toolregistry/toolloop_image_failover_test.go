@@ -33,7 +33,7 @@ var textMessages = []json.RawMessage{json.RawMessage(`{"role":"user","content":"
 func runImageLoop(provider *modelFailingProvider, messages []json.RawMessage, cur provideriface.LLMSelection, fallbacks ...provideriface.LLMSelection) (string, error, []map[string]any) {
 	var events []map[string]any
 	emit := func(kind types.EventKind, name string, payload json.RawMessage) {
-		if name == "model_failover" {
+		if name == "model_failover" || name == "image_capability" {
 			m := map[string]any{}
 			_ = json.Unmarshal(payload, &m)
 			events = append(events, m)
@@ -55,7 +55,7 @@ func TestImageTurnOnTextOnlyMemberMovesToFirstCapableBeforeCalling(t *testing.T)
 	if len(p.requests) != 1 || p.requests[0].Model != "gpt-6-luna" {
 		t.Fatalf("requests = %d, want one call to gpt-6-luna and no doomed call", len(p.requests))
 	}
-	if len(events) != 1 || events[0]["from_model"] != "beam-free" || events[0]["to_model"] != "gpt-6-luna" {
+	if len(events) != 1 || events[0]["from_model"] != "beam-free" || events[0]["to_model"] != "gpt-6-luna" || events[0]["reason"] != "image_capability" {
 		t.Fatalf("failover events = %v", events)
 	}
 	if r, _ := events[0]["provider_error"].(string); !strings.Contains(r, "image") {
