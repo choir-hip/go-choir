@@ -40,6 +40,7 @@ const (
 	// shotJobRestarted is a job a boot closed (FM13): not a failure of the
 	// shots; management starts a new job and never records a verdict on it.
 	shotJobRestarted = "restarted"
+	shotJobStale     = "stale"
 
 	// shotJobEndedByRestart is the cause of a job a restart ended (FM7).
 	shotJobEndedByRestart = "ended by a restart"
@@ -154,26 +155,14 @@ func (rt *Runtime) writeShotJobFile(rec shotJobRecord) error {
 
 // loadShotJob reads a job and closes a "running" one that no goroutine of this
 // process runs: the sandbox and browser died with the process that started it,
-// whether the restart was planned or a crash (§3.3, FM7).
+// whether the restart was planned or a crash (§3.3, FM7). The file read and
+// the live check are one step under the jobs lock, and a finishing job writes
+// its result under the same lock, so a finished job is never closed as
+// restarted.
 func (rt *Runtime) loadShotJob(key string) (shotJobRecord, bool, error) {
-	rec, ok, err := rt.readShotJobFile(key)
-	if err != nil || !ok {
-		return rec, ok, err
-	}
-	if rec.State != shotJobRunning {
-		return rec, true, nil
-	}
 	rt.shotJobsMu.Lock()
-	_, live := rt.shotJobsLive[key]
-	rt.shotJobsMu.Unlock()
-	if live {
-		return rec, true, nil
-	}
-	rec.State, rec.Cause, rec.FinishedAt = shotJobRestarted, shotJobEndedByRestart, time.Now().UTC().Format(time.RFC3339Nano)
-	if err := rt.writeShotJobFile(rec); err != nil {
-		return rec, true, err
-	}
-	return rec, true, nil
+	defer rt.shotJobsMu.Unlock()
+	return rt.loadShotJobLocked(key)
 }
 
 // ---- what owes shots --------------------------------------------------------
@@ -186,6 +175,8 @@ type shotsOwedInfo struct {
 	HostJobID  string
 	PlanDigest string
 	Record     *types.CommitmentRecord
+	// Judged says the shot verdict is already on the tape.
+	Judged bool
 }
 
 func (rt *Runtime) shotsOwnerID() string { return strings.TrimSpace(rt.selfdevRouteOwnerID) }
@@ -225,6 +216,7 @@ func (rt *Runtime) shotsOwedFor(ctx context.Context, computerID, operationID str
 	if _, found, err := rt.store.EventByIdempotency(ctx, computerID, computerevent.ShotVerdictKey(operation.OperationID, info.HostJobID)); err != nil {
 		return info, "", err
 	} else if found {
+		info.Judged = true
 		return info, fmt.Sprintf("operation %s already has a shot verdict", operation.OperationID), nil
 	}
 	rec, err := rt.store.GetCommitmentRecord(ctx, rt.shotsOwnerID(), computerID, types.ShotsOwedRecordID(operation.OperationID, info.HostJobID))
@@ -361,14 +353,7 @@ func (rt *Runtime) runShotJob(key string, rec shotJobRecord, done chan struct{},
 			log.Printf("shot job %s: panicked: %v", rec.JobID, r)
 			result = shotJobResult{State: shotJobFailed, Cause: fmt.Sprintf("the shot job panicked: %v", r)}
 		}
-		rec.shotJobResult, rec.FinishedAt = result, time.Now().UTC().Format(time.RFC3339Nano)
-		if err := rt.writeShotJobFile(rec); err != nil {
-			log.Printf("shot job %s: write the result: %v", rec.JobID, err)
-		}
-		rt.shotJobsMu.Lock()
-		delete(rt.shotJobsLive, key)
-		rt.shotJobsMu.Unlock()
-		close(done)
+		rt.finishShotJob(key, rec, result, done)
 	}()
 	rt.sweepShotWorkRootOnce()
 	ctx, cancel := context.WithTimeout(context.Background(), candidateShotWorkerTimeout)
@@ -376,6 +361,19 @@ func (rt *Runtime) runShotJob(key string, rec shotJobRecord, done chan struct{},
 	started := time.Now()
 	result = rt.shootCandidate(ctx, operation, bundle, built)
 	log.Printf("shot job %s (operation %s host build %s): %s in %s %s", rec.JobID, operation.OperationID, built.Job.JobID, result.State, time.Since(started).Round(time.Millisecond), result.Cause)
+}
+
+// finishShotJob records the job's terminal result and leaves the live set in
+// one step under the jobs lock (see loadShotJob).
+func (rt *Runtime) finishShotJob(key string, rec shotJobRecord, result shotJobResult, done chan struct{}) {
+	rt.shotJobsMu.Lock()
+	rec.shotJobResult, rec.FinishedAt = result, time.Now().UTC().Format(time.RFC3339Nano)
+	if err := rt.writeShotJobFile(rec); err != nil {
+		log.Printf("shot job %s: write the result: %v", rec.JobID, err)
+	}
+	delete(rt.shotJobsLive, key)
+	rt.shotJobsMu.Unlock()
+	close(done)
 }
 
 // shotWaitEgress serves choir.ShotWait. On done it queues the job's images
@@ -400,7 +398,7 @@ func (rt *Runtime) shotWaitEgress(ctx context.Context, deskRole string, exec too
 			return nil, err
 		}
 		if !ok || rec.JobID != strings.TrimSpace(req.JobID) {
-			return json.Marshal(yaegikernel.ShotWaitResult{JobID: req.JobID, State: shotJobFailed, Cause: "this job is not the current job of its operation; call choir.ShotStart again"})
+			return json.Marshal(yaegikernel.ShotWaitResult{JobID: req.JobID, State: shotJobStale, Cause: "this job is not the current job of its operation; use the job choir.ShotStart returns now, and record no verdict on this one"})
 		}
 		if rec.State == shotJobRunning && time.Now().Before(deadline) {
 			rt.shotJobsMu.Lock()
@@ -466,34 +464,72 @@ func (rt *Runtime) queueImageSet(ctx context.Context, exec toolregistry.Executio
 	if len(screens) == 0 || len(screens) > provider.MaxImagesPerRequest {
 		return fmt.Errorf("shots: %s has %d screens; between 1 and %d can be shown", what, len(screens), provider.MaxImagesPerRequest)
 	}
-	held := map[string]bool{}
+	var context_ []json.RawMessage
 	if rt.store != nil && strings.TrimSpace(exec.OwnerID) != "" {
 		entries, err := rt.store.ListRunMemoryEntries(ctx, exec.OwnerID, runID)
 		if err != nil {
 			return fmt.Errorf("shots: read run memory: %w", err)
 		}
-		held = imageRefsOf(buildRunMemoryContext(entries))
-	}
-	all, fresh := len(held), 0
-	for _, s := range screens {
-		if !held[shotImageRef(s.SHA256)] {
-			all++
-			fresh++
-		}
-	}
-	if fresh == 0 {
-		return nil // already in the run's memory
-	}
-	if all > provider.MaxImagesPerRequest {
-		return fmt.Errorf("shots: showing %s would put %d images in your run, over the request cap of %d; finish this run's verdict on the images it holds, and judge the rest from a continuation run", what, all, provider.MaxImagesPerRequest)
+		context_ = buildRunMemoryContext(entries)
 	}
 	rt.shotJobsMu.Lock()
 	defer rt.shotJobsMu.Unlock()
+	queued := rt.shotImageQueue[runID]
+	// Idempotent per (run, set): when memory since the last compaction, or the
+	// turns already queued, hold every screen, nothing is queued (FM14).
+	have := imageRefsOf(context_)
+	for ref := range imageRefsOf(queued) {
+		have[ref] = true
+	}
+	fresh := false
+	for _, s := range screens {
+		if !have[shotImageRef(s.SHA256)] {
+			fresh = true
+		}
+	}
+	if !fresh {
+		return nil
+	}
+	// The cap counts image BLOCKS: the message carries every screen of the set
+	// again, so a shot two sets share is sent twice, and an image of any
+	// source kind in memory weighs the same.
+	total := imageBlockCount(context_) + imageBlockCount(queued) + len(screens)
+	if total > provider.MaxImagesPerRequest {
+		return fmt.Errorf("shots: showing %s would put %d images in your run, over the request cap of %d; finish this run's verdict on the images it holds, and judge the rest from a continuation run", what, total, provider.MaxImagesPerRequest)
+	}
 	if rt.shotImageQueue == nil {
 		rt.shotImageQueue = map[string][]json.RawMessage{}
 	}
-	rt.shotImageQueue[runID] = []json.RawMessage{message}
+	rt.shotImageQueue[runID] = append(rt.shotImageQueue[runID], message)
 	return nil
+}
+
+// imageBlockCount counts the image blocks of messages, whatever their source.
+func imageBlockCount(messages []json.RawMessage) int {
+	n := 0
+	for _, msg := range messages {
+		if !imageBlockPattern.Match(msg) {
+			continue
+		}
+		var m struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if json.Unmarshal(msg, &m) != nil {
+			continue
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(m.Content, &blocks) != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type == "image" {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // shotImageInjector hands the queued images to the tool loop after the cell
@@ -554,6 +590,25 @@ func imageRefsOf(messages []json.RawMessage) map[string]bool {
 // carrying every screen. A pass is never recorded on shots management did not
 // look at (FM3, FM12).
 func (r *rlmCallReduction) commitShotVerdictIntent(ctx context.Context, in yaegikernel.StagedIntent) (map[string]any, error) {
+	out, err := r.reduceShotVerdict(ctx, in)
+	if err != nil {
+		// A refusal is on the operation's history, as Verify's are.
+		if rt := r.rt(); rt != nil && rt.selfdevOperations != nil && strings.TrimSpace(in.TargetRef) != "" {
+			writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			reason := err.Error()
+			if len(reason) > 500 {
+				reason = reason[:500]
+			}
+			if rerr := rt.selfdevOperations.RecordIntentError(writeCtx, r.scope.ComputerID, strings.TrimSpace(in.TargetRef), reason); rerr != nil {
+				log.Printf("agentcore: record shot verdict intent error on %s failed (run %s): %v", in.TargetRef, r.scope.RunID, rerr)
+			}
+		}
+	}
+	return out, err
+}
+
+func (r *rlmCallReduction) reduceShotVerdict(ctx context.Context, in yaegikernel.StagedIntent) (map[string]any, error) {
 	rt := r.rt()
 	if r.rec == nil || rt == nil || rt.store == nil {
 		return nil, errors.New("reduce: shot verdict without authority")
@@ -572,6 +627,14 @@ func (r *rlmCallReduction) commitShotVerdictIntent(ctx context.Context, in yaegi
 	info, refusal, err := rt.shotsOwedFor(ctx, r.scope.ComputerID, in.TargetRef)
 	if err != nil {
 		return nil, err
+	}
+	if info.Judged {
+		// A replay of the verdict already recorded is success; a different
+		// one is refused.
+		if prior, ok := rt.shotVerdictFor(ctx, info.Operation, info.Bundle, info.HostJobID); ok && prior.Verdict == verdict {
+			return map[string]any{"operation_id": info.Operation.OperationID, "verdict": verdict, "shot_job_id": prior.ShotJobID}, nil
+		}
+		return nil, fmt.Errorf("reduce: shot verdict %s: operation %s already has a different shot verdict", in.LocalID, info.Operation.OperationID)
 	}
 	if refusal != "" {
 		return nil, fmt.Errorf("reduce: shot verdict %s: %s", in.LocalID, refusal)

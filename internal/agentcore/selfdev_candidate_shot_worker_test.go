@@ -353,7 +353,7 @@ func TestShotJobOpenAtBootIsRestartedAndAFreshStartMakesANewJob(t *testing.T) {
 		t.Fatalf("new job = %+v", res)
 	}
 	// The dead job's id is not the current job.
-	if res := wf.wait(t, job.JobID); res.State != shotJobFailed {
+	if res := wf.wait(t, job.JobID); res.State != shotJobStale {
 		t.Fatalf("a superseded job id = %+v", res)
 	}
 }
@@ -367,26 +367,30 @@ func mustHostJobID(t *testing.T, wf *workerFixture) string {
 	return info.HostJobID
 }
 
-// FM14: ShotWait twice queues the images once per run; a run that would hold
-// more than the request cap is refused by name.
+// FM14: ShotWait twice queues the images once per run (the second finds them
+// in run memory), and a run that would hold more than the request cap is
+// refused by name.
 func TestShotWaitQueuesOncePerRunAndRefusesOverTheCap(t *testing.T) {
 	wf := newWorkerFixture(t, "computer-worker-queue")
 	wf.owed(t, "op-worker-queue")
 	job := wf.start(t)
 	wf.wait(t, job.JobID)
 	inject := wf.rt.shotImageInjector(&types.RunRecord{RunID: wf.exec.RunID, AgentProfile: agentprofile.Management})
-	if turns, _ := inject(false); len(turns) != 1 {
+	turns, _ := inject(false)
+	if len(turns) != 1 {
 		t.Fatalf("turns = %d", len(turns))
 	}
-	if turns, _ := inject(false); len(turns) != 0 {
-		t.Fatal("the queue was not drained")
+	// The tool loop persists what it injects.
+	appendMemoryMessage(t, wf.rt, wf.exec, turns[0])
+	if res := wf.wait(t, job.JobID); !res.ImagesQueued {
+		t.Fatalf("second wait = %+v", res)
 	}
-	too := make([]shotJobScreen, 21)
-	for i := range too {
-		too[i] = shotJobScreen{Name: "x.png", SHA256: strings.Repeat("a", 63) + string(rune('a'+i%6))}
+	if again, _ := inject(false); len(again) != 0 {
+		t.Fatalf("the second ShotWait queued %d turns, want none: the images are in memory", len(again))
 	}
-	if err := wf.rt.queueImageSet(context.Background(), wf.exec, "test", too, nil); err == nil || !strings.Contains(err.Error(), "can be shown") {
-		t.Fatalf("21 images = %v", err)
+	// Held 2 + 19 fresh blocks is over the cap: refused by name.
+	if err := wf.rt.queueImageSet(context.Background(), wf.exec, "test", screensOf("c", 19, 0), json.RawMessage(`{}`)); err == nil || !strings.Contains(err.Error(), "request cap") {
+		t.Fatalf("held + fresh over the cap = %v", err)
 	}
 }
 

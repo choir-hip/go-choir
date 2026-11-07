@@ -159,6 +159,15 @@ func TestShotVerdictRefusals(t *testing.T) {
 	expect("a foreign shot", intent("pass", "", []yaegikernel.ShotFinding{{Pair: "p", BeforeSHA256: sha("a"), AfterSHA256: sha("c"), Answers: yes}}), "not in job")
 	no := map[string]string{"q1": "yes", "q2": "no", "q3": "yes", "q4": "n/a", "q6": "yes"}
 	expect("a pass with a no", intent("pass", "", []yaegikernel.ShotFinding{{Pair: "p", BeforeSHA256: sha("a"), AfterSHA256: sha("b"), Answers: no}}), "answers q2 no")
+	restarted := job
+	restarted.State, restarted.Cause = shotJobRestarted, shotJobEndedByRestart
+	if err := fx.rt.writeShotJobFile(restarted); err != nil {
+		t.Fatal(err)
+	}
+	expect("a restarted job", intent("fail", "x", nil), "ended by a restart")
+	if err := fx.rt.writeShotJobFile(job); err != nil {
+		t.Fatal(err)
+	}
 	// The run's memory holds the injected turn: the verdict is recorded once.
 	msg := shotImagesMessage(job)
 	if _, err := fx.rt.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{RunID: run.RunID, OwnerID: run.OwnerID, Kind: types.RunMemoryEntryMessage, Role: "user", Message: msg}); err != nil {
@@ -172,10 +181,18 @@ func TestShotVerdictRefusals(t *testing.T) {
 	if !ok || payload.Judge.RunID != run.RunID || payload.ShotJobID != job.JobID || len(payload.Findings) != 1 {
 		t.Fatalf("event = %+v, %v", payload, ok)
 	}
-	// A restarted job takes no verdict.
-	if _, refusal, _ := fx.rt.shotsOwedFor(ctx, fx.computerID, accepted.OperationID); refusal == "" {
-		t.Fatal("an operation with a verdict still owes shots")
+	// The refusals were stamped on the operation, as Verify's are.
+	if op, err := fx.operations.Get(ctx, fx.computerID, accepted.OperationID); err != nil || !strings.Contains(op.LastIntentError, "shot verdict") {
+		t.Fatalf("last intent error = %q, %v", op.LastIntentError, err)
 	}
+	// A replay of the same verdict is success, and writes nothing twice.
+	if out, err := reduce.commitShotVerdictIntent(ctx, intent("pass", "", full)); err != nil || out["verdict"] != "pass" {
+		t.Fatalf("replay = %v, %v", out, err)
+	}
+	if n := fx.countEventKinds()[computerevent.EventShotVerdict]; n != 1 {
+		t.Fatalf("shot_verdict events = %d", n)
+	}
+	fx.configure(func(*Runtime) {}) // waits out the reconcile the verdict triggered
 }
 
 func TestShotsOwedGuardAsksOverTheVerdict(t *testing.T) {
