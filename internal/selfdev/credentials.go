@@ -453,6 +453,79 @@ func (g *GuestCredentials) RequestConsensusDecision(ctx context.Context, request
 	return out, response.StatusCode, nil
 }
 
+// PackagePublishError is corpusd's refusal of a publish by decision: its HTTP
+// status, the machine reason (publisher_address_required, decision_expired,
+// decision_consumed, draft_digest_mismatch, media_not_frozen, track_moved, ...)
+// and its words. The materializer closes the operation failed with Reason.
+type PackagePublishError struct {
+	Status  int
+	Reason  string
+	Message string
+}
+
+func (e *PackagePublishError) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("package publish refused (%d, %s): %s", e.Status, e.Reason, e.Message)
+	}
+	return fmt.Sprintf("package publish refused (%d): %s", e.Status, e.Message)
+}
+
+// PublishPackageByDecision publishes the release of one admitted package
+// decision on this computer's own credential, with no owner act
+// (docs/design/package-operation-decision-2026-11-06.md 2.4). The request
+// carries the persisted draft record and its patches, the frozen source patch,
+// the claimed platform base, and the media bytes; the owner and computer are
+// the credential's binding at corpusd, never the request's. It returns the
+// published release (201 first publish, 200 for an identical repeat, which
+// names the same release) and the HTTP status. A refusal is a
+// *PackagePublishError.
+func (g *GuestCredentials) PublishPackageByDecision(ctx context.Context, request platform.PackagePublishByDecisionRequest) (platform.PackageReleaseView, int, error) {
+	if g == nil {
+		return platform.PackageReleaseView{}, 0, fmt.Errorf("guest credential: package publish authority unavailable")
+	}
+	// The binding is vmctl's; the request names no owner or computer.
+	request.OwnerID, request.ComputerID = "", ""
+	body, err := json.Marshal(request)
+	if err != nil {
+		return platform.PackageReleaseView{}, 0, err
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/internal/computers/self-development/package-publish?computer_id="+url.QueryEscape(g.computerID), bytes.NewReader(body))
+	if err != nil {
+		return platform.PackageReleaseView{}, 0, err
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return platform.PackageReleaseView{}, 0, err
+	}
+	httpRequest.Header.Set("Authorization", "Bearer "+token)
+	httpRequest.Header.Set("Content-Type", "application/json")
+	// The publish re-derives the draft and runs every host check; the media
+	// ride in the body.
+	client := hostlink.NewClient(5 * time.Minute)
+	response, err := client.Do(httpRequest)
+	if err != nil {
+		return platform.PackageReleaseView{}, 0, err
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		return platform.PackageReleaseView{}, response.StatusCode, err
+	}
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusCreated {
+		var failure struct {
+			Error  string `json:"error"`
+			Reason string `json:"reason"`
+		}
+		_ = json.Unmarshal(raw, &failure)
+		return platform.PackageReleaseView{}, response.StatusCode, &PackagePublishError{Status: response.StatusCode, Reason: failure.Reason, Message: failure.Error}
+	}
+	var view platform.PackageReleaseView
+	if err := json.Unmarshal(raw, &view); err != nil || view.ReleaseID == "" {
+		return platform.PackageReleaseView{}, response.StatusCode, fmt.Errorf("guest credential: package publish answered no release")
+	}
+	return view, response.StatusCode, nil
+}
+
 func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint selfdevprotocol.CheckpointRequest) (selfdevprotocol.CheckpointResponse, error) {
 	if g == nil || checkpoint.ComputerID != g.computerID {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("guest credential: checkpoint computer binding mismatch")

@@ -234,10 +234,20 @@ func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifi
 	if err != nil {
 		return operation, err
 	}
-	// The host builds first: its vote is on the build.
-	jobID, err := rt.standingHostBuild(ctx, operation, bundle)
+	// The frozen patch decides the kind (docs/design/package-operation-decision-2026-11-06.md
+	// 2.1): a package-only change takes the package seat, which drafts the
+	// release itself; anything else takes the host build.
+	classified, err := rt.standingClassify(ctx, operation, rawBundle)
 	if err != nil {
 		return operation, err
+	}
+	// The host builds first: its vote is on the build. A package decision has
+	// no host build; its vote is on the draft.
+	var jobID string
+	if classified.kind != platform.ConsensusKindPackage {
+		if jobID, err = rt.standingHostBuild(ctx, operation, bundle); err != nil {
+			return operation, err
+		}
 	}
 	bootedBase, err := updater.DigestFile(rt.guestImageManifestPath())
 	if err != nil {
@@ -270,6 +280,9 @@ func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifi
 			return operation, err
 		}
 		request.BaseImageManifestDigest, request.HostBuildJobID = bootedBase, jobID
+		if classified.kind == platform.ConsensusKindPackage {
+			request.Kind, request.SourcePatch, request.ClaimedPlatformBase = platform.ConsensusKindPackage, classified.patch, classified.claimedBase
+		}
 		response, status, askErr := rt.selfdevControl.RequestConsensusDecision(ctx, request)
 		pending := subject.PendingTransitionRef
 		decision := selfDevelopmentDecisionRequest{
@@ -282,8 +295,17 @@ func (rt *Runtime) runStandingConsensus(ctx context.Context, operationID, verifi
 		case askErr == nil:
 			// Defense in depth: the decision must name the build this guest
 			// built and staged, the one the materializer will apply.
-			if named := consensusDecisionHostBuildJob(response.Decision); named != jobID {
-				return operation, fmt.Errorf("consensus decision names host build %q, not this operation's %s", named, jobID)
+			if classified.kind == platform.ConsensusKindPackage {
+				if err := rt.verifyPackageDecisionDraft(ctx, classified, response.Decision); err != nil {
+					return operation, err
+				}
+			} else {
+				if consensusDecisionKind(response.Decision) != platform.ConsensusKindPlatform {
+					return operation, fmt.Errorf("consensus decision is of kind %q, not a platform decision", consensusDecisionKind(response.Decision))
+				}
+				if named := consensusDecisionHostBuildJob(response.Decision); named != jobID {
+					return operation, fmt.Errorf("consensus decision names host build %q, not this operation's %s", named, jobID)
+				}
 			}
 			decision.Decision = "approve"
 			decision.IdempotencyKey = "standing-consensus-" + response.DecisionDigest

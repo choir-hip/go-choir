@@ -453,6 +453,20 @@ func (s *Service) resolveBase(bootedBase string) (base buildBase, hostBase strin
 	return buildBase{}, hostBase, false, readErr
 }
 
+// BootedBaseCommit is the build commit of the guest image whose manifest
+// digest a computer booted: the deployed image or a retained release. ok is
+// false when the host holds no such image or its manifest names no commit.
+// A package decision binds its claimed platform base to it (package
+// operation decision 2.2).
+func (s *Service) BootedBaseCommit(bootedBase string) (string, bool) {
+	base, _, ok, _ := s.resolveBase(bootedBase)
+	if !ok {
+		return "", false
+	}
+	commit := manifestBuildCommit(base.manifest)
+	return commit, commit != ""
+}
+
 // baseRefusal refuses a build whose booted base is neither the host's
 // deployed guest image nor a retained release (H4), or whose patch base is
 // not that image's commit (H19). It returns the base to build on otherwise.

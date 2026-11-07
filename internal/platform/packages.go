@@ -53,6 +53,7 @@ func (h *Handler) ConfigurePackageBase(ctx context.Context, dir string) {
 		return
 	}
 	dir = strings.TrimSpace(dir)
+	h.packageBaseDir = dir
 	if dir == "" {
 		h.packageBase = nil
 		h.packageBaseStatus = &PackageBaseStatus{Error: "no base object store configured (CORPUSD_HOST_BUILD_SOURCE_DIR); every base parent refuses package_parent_unverifiable"}
@@ -211,7 +212,7 @@ func writePackageRefusal(w http.ResponseWriter, err error) {
 	case pkgrelease.ReasonTrackMoved, pkgrelease.ReasonParentUnverifiable, pkgrelease.ReasonBlobMismatch,
 		pkgrelease.ReasonRecordUnlisted, pkgrelease.ReasonListingConflict, pkgrelease.ReasonConfirmPathsRequired,
 		pkgrelease.ReasonConfirmPathsMismatch, pkgrelease.ReasonListingState, pkgrelease.ReasonListingMoved,
-		pkgrelease.ReasonOwnerActReplayed:
+		pkgrelease.ReasonOwnerActReplayed, reasonDecisionConsumed:
 		status = http.StatusConflict
 	case pkgrelease.ReasonBlobTooLarge:
 		status = http.StatusRequestEntityTooLarge
@@ -648,6 +649,35 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, refusal)
 		return
 	}
+	h.publishVerifiedRecord(w, r, publishParams{
+		record: record, releaseID: releaseID, ownerID: ownerID, computerID: computerID,
+		actor: actor, confirmPaths: request.ConfirmPaths,
+	})
+}
+
+// publishParams is a verified record on its way to the Library. Two callers
+// reach it: the owner's act through the proxy (a receipt, then the owner's
+// confirmed paths) and the package decision (publishByDecision, which
+// replaces both with the decision's bound draft and consumes it under claim).
+type publishParams struct {
+	record              pkgrelease.Record
+	releaseID           string
+	ownerID, computerID string
+	actor               string
+	confirmPaths        string
+	byDecision          bool
+	// claim consumes the decision, once, just before the first write and
+	// after every host check has passed; a non-nil error refuses the publish.
+	claim func(ctx context.Context) error
+}
+
+// publishVerifiedRecord runs every host check on a record whose id, owner
+// and computer the caller has established, under the track lock, and lists
+// it. It is the one publish path.
+func (h *Handler) publishVerifiedRecord(w http.ResponseWriter, r *http.Request, p publishParams) {
+	store := h.releaseStore()
+	record, releaseID, ownerID, computerID := p.record, p.releaseID, p.ownerID, p.computerID
+	var err error
 	in := pkgrelease.HostInput{Record: record, Base: h.packageBase}
 	if in.TreePatch, err = h.readPackageBlob(record.Source.TreePatch); err == nil {
 		in.ReviewPatch, err = h.readPackageBlob(record.Source.ReviewPatch)
@@ -750,7 +780,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		writePackageRefusal(w, err)
 		return
 	}
-	if confirm := strings.ToLower(strings.TrimSpace(request.ConfirmPaths)); confirm != preview.PathsDigest {
+	if confirm := strings.ToLower(strings.TrimSpace(p.confirmPaths)); !p.byDecision && confirm != preview.PathsDigest {
 		reason, detail := pkgrelease.ReasonConfirmPathsMismatch, "the confirmation names other paths than this release's; "+pkgrelease.PublicNotice(preview.PathsDigest)
 		if confirm == "" {
 			reason, detail = pkgrelease.ReasonConfirmPathsRequired, pkgrelease.PublicNotice(preview.PathsDigest)
@@ -759,6 +789,12 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if p.claim != nil {
+		if err := p.claim(ctx); err != nil {
+			writePackageRefusal(w, err)
+			return
+		}
+	}
 	now := time.Now().UTC()
 	obj := existing
 	inserted := false
@@ -810,7 +846,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 	listing := pkgrelease.Listing{
 		RecordKind: pkgrelease.RecordKindPackageRelease, RecordID: releaseID, Package: record.Package.Name,
 		Track: record.Track, Seq: maxSeq + 1, Scopes: publishScopes,
-		State: pkgrelease.StateListed, StateReason: "published", StateActor: actor, Version: 1,
+		State: pkgrelease.StateListed, StateReason: "published", StateActor: p.actor, Version: 1,
 	}
 	listingObj, err := listingObject(ownerID, computerID, listing, now)
 	if err != nil {

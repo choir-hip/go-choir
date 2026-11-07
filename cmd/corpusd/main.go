@@ -140,6 +140,13 @@ func main() {
 	// object store the host build already uses, read only.
 	handler.ConfigurePackageOwnerActs(ownerActs)
 	handler.ConfigurePackageBase(context.Background(), os.Getenv("CORPUSD_HOST_BUILD_SOURCE_DIR"))
+	// A package published by decision shows its maker by the numbered Choir
+	// address maild owns, asked as the proxy asks it (host-local maild).
+	maildURL := os.Getenv("CORPUSD_MAILD_URL")
+	if maildURL == "" {
+		maildURL = "http://127.0.0.1:8087"
+	}
+	handler.ConfigurePublisherAddresses(maildURL, nil)
 	log.Printf("corpusd: package base store: %q", os.Getenv("CORPUSD_HOST_BUILD_SOURCE_DIR"))
 	if err := handler.ConfigureComputerEvents(eventCAS, eventArtifacts, eventAuth); err != nil {
 		log.Fatalf("corpusd computer event routes: %v", err)

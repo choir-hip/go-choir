@@ -31,6 +31,11 @@ type Handler struct {
 	keyEscrow            *keyEscrowRuntime
 	guestLookup          guestOwnershipLookup
 	hostBuild            *hostbuild.Service
+	// packageBaseDir is the object store directory behind packageBase, the
+	// repository a package seat drafts in; publisherAddress is the lookup a
+	// publish by decision asks (package_decision.go).
+	packageBaseDir   string
+	publisherAddress publisherAddressLookup
 	// Library S2: the base-parent object store, its health detail, the
 	// publish's owner-act policy, and the lock that serializes a track's
 	// head and seq.
@@ -610,6 +615,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/lifecycle/control", h.HandleComputerLifecycleControl)
 	s.HandleFunc("/internal/computers/self-development/mode", h.HandleSelfDevelopmentMode)
 	s.HandleFunc("/internal/computers/self-development/consensus", h.HandleSelfDevelopmentConsensus)
+	s.HandleFunc("/internal/computers/self-development/package-publish", h.HandlePackagePublishByDecision)
 	s.HandleFunc("/internal/computers/events/head", h.HandleComputerEventHead)
 	s.HandleFunc("/internal/computers/events/pin", h.HandleComputerEventPin)
 	s.HandleFunc("/internal/computers/events/append", h.HandleComputerEventAppend)

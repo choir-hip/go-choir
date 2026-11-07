@@ -34,7 +34,17 @@ const paperComputerID = "computer-1355b83bced1613eb048ee28d66688a8" // the Autop
 
 // stubHostBuilds stands in for P5's hostbuild.Service: job records by id,
 // visible only to the computer that owns them (H13).
-type stubHostBuilds struct{ jobs map[string]hostbuild.Job }
+type stubHostBuilds struct {
+	jobs map[string]hostbuild.Job
+	// boots maps a booted base manifest digest to its build commit (the
+	// package seat's empty-stack binding).
+	boots map[string]string
+}
+
+func (s *stubHostBuilds) BootedBaseCommit(digest string) (string, bool) {
+	commit, ok := s.boots[digest]
+	return commit, ok
+}
 
 func (s *stubHostBuilds) Get(computerID, jobID string) (hostbuild.Job, bool) {
 	job, ok := s.jobs[jobID]

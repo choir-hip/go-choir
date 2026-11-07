@@ -91,6 +91,10 @@ CREATE TABLE IF NOT EXISTS consensus_decisions (
   PRIMARY KEY (decision_digest),
   CONSTRAINT consensus_decisions_subject_uq UNIQUE (computer_id, subject_digest, standing_generation)
 );
+ALTER TABLE consensus_decisions ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'platform';
+ALTER TABLE consensus_decisions ADD COLUMN IF NOT EXISTS package_source_patch_sha256 CHAR(64) NULL;
+ALTER TABLE consensus_decisions ADD COLUMN IF NOT EXISTS package_media_digests TEXT NULL;
+ALTER TABLE consensus_decisions ADD COLUMN IF NOT EXISTS published_release_id CHAR(64) NULL;
 CREATE TABLE IF NOT EXISTS consensus_guest_core_keys (
   computer_id VARCHAR(128) NOT NULL,
   key_id VARCHAR(255) NOT NULL,
@@ -153,6 +157,21 @@ type ConsensusRequest struct {
 	// HostBuildJobID is the job the guest built; it must be the job the
 	// poster derives (a legible refusal, not an input to the identity).
 	HostBuildJobID string `json:"host_build_job_id,omitempty"`
+	// Kind is "platform" (also when empty) or "package". A package decision
+	// is the capsule-verifier seat of corpusd's own draft of the package
+	// release, not a host build (docs/design/package-operation-decision-2026-11-06.md 2.2).
+	Kind string `json:"kind,omitempty"`
+	// SourcePatch is the frozen bundle's source patch bytes, for a package
+	// decision; corpusd checks them against the bundle's source_patch_sha256.
+	SourcePatch []byte `json:"source_patch,omitempty"`
+	// ClaimedPlatformBase is the stack's base commit the package draft is
+	// made over (the bundle's own base is usually a projection commit only
+	// the guest holds). Package decisions only.
+	ClaimedPlatformBase string `json:"claimed_platform_base,omitempty"`
+	// OwnerID names the owner for a package decision's track head. Only a
+	// host-internal caller's value is read; a guest's owner is vmctl's
+	// binding of its tap, set by the route.
+	OwnerID string `json:"owner_id,omitempty"`
 }
 
 // ConsensusResponse is a decision, or the dissent that stopped one.
@@ -175,6 +194,10 @@ type ConsensusActuator struct {
 	hostBuilds HostBuildJobs
 	now        func() time.Time
 	locks      [64]sync.Mutex
+	// seat drafts a package decision's release (package_decision.go): the
+	// handler, which holds the package store and base. Set by
+	// ConfigureConsensusActuator.
+	seat *Handler
 }
 
 // NewConsensusActuator wires the poster. hostBuilds may be nil: the poster
@@ -304,6 +327,8 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	}
 	subject := request.Subject
 	switch {
+	case request.Kind != "" && request.Kind != ConsensusKindPlatform && request.Kind != ConsensusKindPackage:
+		return ConsensusResponse{}, fmt.Errorf("%w: unknown decision kind %q", ErrConsensusRefused, request.Kind)
 	case computerID == "" || subject.ComputerID != computerID:
 		return ConsensusResponse{}, fmt.Errorf("%w: subject is for another computer", ErrConsensusRefused)
 	case strings.TrimSpace(request.OperationID) == "" || subject.OperationID != request.OperationID:
@@ -349,11 +374,18 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 		return ConsensusResponse{}, fmt.Errorf("%w: reviewer ballot: %v", ErrConsensusRefused, err)
 	}
 
-	// The capsule-verifier seat: corpusd's vote on its own P5 build of this
-	// operation, signed by platform-control, a key no guest holds.
-	hostVote, err := a.castHostBuildBallot(computerID, request, policyDigest, subjectDigest, now)
+	// The capsule-verifier seat: for a platform decision, corpusd's vote on
+	// its own P5 build of this operation; for a package decision, corpusd's
+	// vote on its own draft of the package release. Signed by
+	// platform-control, a key no guest holds.
+	var hostVote hostBuildVote
+	if request.Kind == ConsensusKindPackage {
+		hostVote, err = a.castPackageSeatBallot(ctx, computerID, request, policyDigest, subjectDigest, now)
+	} else {
+		hostVote, err = a.castHostBuildBallot(computerID, request, policyDigest, subjectDigest, now)
+	}
 	if errors.Is(err, ErrConsensusPending) {
-		return ConsensusResponse{Pending: true, Reason: err.Error(), HostBuildJobID: hostVote.job.JobID}, err
+		return ConsensusResponse{Pending: true, Reason: err.Error(), HostBuildJobID: hostVote.id()}, err
 	}
 	if err != nil {
 		return ConsensusResponse{}, err
@@ -373,7 +405,7 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	}
 	manifest := decisionpolicy.SeatManifestForPolicy(policy, map[string]string{
 		decisionpolicy.SeatAuthor:              "engineering desk, author of the bundle (recused from verification)",
-		decisionpolicy.SeatCapsuleVerifier:     "corpusd host build " + hostVote.job.JobID + " (platform-control " + host.Signer.KeyID + "): the bundle's source patch built at its base commit on the computer's booted base",
+		decisionpolicy.SeatCapsuleVerifier:     hostVote.seatDescription(host.Signer.KeyID),
 		decisionpolicy.SeatIndependentReviewer: "management Verify verdict, guest-core " + reviewer.Signer.KeyID,
 	})
 	manifestDigest, err := manifest.Digest()
@@ -401,10 +433,10 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	if err != nil {
 		reason := err.Error()
 		if hostVote.reason != "" {
-			reason += ": host build: " + hostVote.reason
+			reason += ": " + hostVote.reasonLabel() + ": " + hostVote.reason
 		}
 		log.Printf("consensus: computer=%s operation=%s dissent: %s", computerID, request.OperationID, reason)
-		return ConsensusResponse{Dissent: true, Reason: reason, BallotDigests: ballotDigests, HostBuildJobID: hostVote.job.JobID}, fmt.Errorf("%w: %s", ErrConsensusDissent, reason)
+		return ConsensusResponse{Dissent: true, Reason: reason, BallotDigests: ballotDigests, HostBuildJobID: hostVote.id()}, fmt.Errorf("%w: %s", ErrConsensusDissent, reason)
 	}
 
 	notAfter := now.Add(decisionpolicy.MaxBallotTTL)
@@ -417,11 +449,18 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 		"ballot_receipt_digests":       ballotDigests,
 		"standing_mode_receipt_digest": arm.receiptDigest, "standing_generation": arm.generation,
 		"not_after": notAfter.Format(time.RFC3339Nano),
-		"host_build": map[string]any{
+	}
+	if hostVote.pkg != nil {
+		// A package decision carries the draft the seat derived in place of
+		// a host build (2.2).
+		fields["kind"] = ConsensusKindPackage
+		fields["package"] = hostVote.pkg.receiptBlock()
+	} else {
+		fields["host_build"] = map[string]any{
 			"job_id": hostVote.job.JobID, "result_digest": hostVote.resultDigest,
 			"closure_digest": hostVote.job.Result.ClosureDigest, "builder_receipt_digest": hostVote.job.Result.BuilderReceiptDigest,
 			"code_commit": hostVote.job.Result.CodeCommit,
-		},
+		}
 	}
 	normalized, err := normalizeFields(fields)
 	if err != nil {
@@ -436,15 +475,22 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 		return ConsensusResponse{}, err
 	}
 	digest := computerevent.DigestBytes(raw)
-	_, err = a.store.db.ExecContext(ctx, `INSERT INTO consensus_decisions (decision_digest, computer_id, operation_id, subject_digest, bundle_digest, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment, policy_digest, standing_mode_receipt_digest, standing_generation, host_build_job_id, host_build_result_digest, not_after, decision_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	kind, patchSHA, mediaDigests := ConsensusKindPlatform, any(nil), any(nil)
+	if hostVote.pkg != nil {
+		kind, patchSHA, mediaDigests = ConsensusKindPackage, hostVote.pkg.sourcePatchSHA256, hostVote.pkg.mediaDigestsJSON()
+	}
+	// host_build_job_id holds a package decision's draft content digest and
+	// host_build_result_digest its seat verdict digest (2.2): the NOT NULL
+	// columns stay, no constraint changes.
+	_, err = a.store.db.ExecContext(ctx, `INSERT INTO consensus_decisions (decision_digest, computer_id, operation_id, subject_digest, bundle_digest, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment, policy_digest, standing_mode_receipt_digest, standing_generation, host_build_job_id, host_build_result_digest, not_after, decision_json, created_at, kind, package_source_patch_sha256, package_media_digests) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		digest, computerID, request.OperationID, subjectDigest, subject.BundleDigest, subject.DesiredEventHead, subject.EffectiveEventHead,
 		subject.PendingTransitionRef, subject.DesiredStateCommitment, subject.EffectiveStateCommitment, policyDigest,
-		arm.receiptDigest, arm.generation, hostVote.job.JobID, hostVote.resultDigest, notAfter, string(raw), now)
+		arm.receiptDigest, arm.generation, hostVote.id(), hostVote.resultDigest, notAfter, string(raw), now, kind, patchSHA, mediaDigests)
 	if err != nil {
 		return ConsensusResponse{}, fmt.Errorf("consensus actuator: record decision: %w", err)
 	}
-	log.Printf("consensus: computer=%s operation=%s bundle=%s decision=%s host_build=%s host=%s reviewer=%s", computerID, request.OperationID, subject.BundleDigest, digest, hostVote.job.JobID, host.Digest, reviewer.Digest)
-	return ConsensusResponse{Decision: &decision, DecisionDigest: digest, BallotDigests: ballotDigests, HostBuildJobID: hostVote.job.JobID}, nil
+	log.Printf("consensus: computer=%s operation=%s bundle=%s decision=%s %s=%s host=%s reviewer=%s", computerID, request.OperationID, subject.BundleDigest, digest, hostVote.reasonLabel(), hostVote.id(), host.Digest, reviewer.Digest)
+	return ConsensusResponse{Decision: &decision, DecisionDigest: digest, BallotDigests: ballotDigests, HostBuildJobID: hostVote.id()}, nil
 }
 
 // platformControlKey resolves corpusd's own platform-control key, the only
@@ -467,6 +513,8 @@ type hostBuildVote struct {
 	job          hostbuild.Job
 	resultDigest string
 	reason       string
+	// pkg is set for a package decision's seat, in place of job.
+	pkg *packageSeatResult
 }
 
 // bundleSourcePatch is what the poster reads from the frozen bundle bytes
@@ -669,6 +717,7 @@ func (h *Handler) ConfigureConsensusActuator(actuator *ConsensusActuator) error 
 		return fmt.Errorf("corpusd handler: consensus actuator is required")
 	}
 	h.consensus = actuator
+	actuator.seat = h
 	return nil
 }
 
@@ -699,6 +748,19 @@ func (h *Handler) HandleSelfDevelopmentConsensus(w http.ResponseWriter, r *http.
 	if err := decoder.Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid consensus request"})
 		return
+	}
+	// A package decision drafts the owner's track: the owner is vmctl's
+	// binding of the guest, or a host-internal caller's word; never the
+	// guest's own claim.
+	if trustedInternalCaller(r) && request.Kind == ConsensusKindPackage {
+		request.OwnerID = strings.TrimSpace(request.OwnerID)
+	} else {
+		request.OwnerID = ""
+		if request.Kind == ConsensusKindPackage {
+			if ownership, bindErr := bindTapCaller(r.Context(), h.guestLookup, r); bindErr == nil && strings.TrimSpace(ownership.ComputerID) == computerID {
+				request.OwnerID = strings.TrimSpace(ownership.UserID)
+			}
+		}
 	}
 	response, err := h.consensus.Decide(r.Context(), computerID, request)
 	switch {
