@@ -41,6 +41,8 @@ const (
 	MaxShotSteps = 20
 	// MaxShotStepMs bounds one wait_ms (and a wait_for) step.
 	MaxShotStepMs = 5000
+	// MaxShotPathBytes bounds a view's path.
+	MaxShotPathBytes = 2048
 	// MaxShotVideoSeconds bounds the recorded video.
 	MaxShotVideoSeconds = 20
 
@@ -104,11 +106,11 @@ func (p ShotPlan) Validate() error {
 		if !ValidScreenName(v.Name+".png") || strings.HasSuffix(strings.ToLower(v.Name), ".png") {
 			return fmt.Errorf("shot plan: view %d name %q is not a plain screen file stem", i, v.Name)
 		}
-		if seen[v.Name] {
+		if seen[strings.ToLower(v.Name)] {
 			return fmt.Errorf("shot plan: view name %q is used twice", v.Name)
 		}
-		seen[v.Name] = true
-		if !strings.HasPrefix(v.Path, "/") || strings.HasPrefix(v.Path, "//") || strings.ContainsAny(v.Path, "\\\r\n\x00") {
+		seen[strings.ToLower(v.Name)] = true
+		if len(v.Path) > MaxShotPathBytes || !strings.HasPrefix(v.Path, "/") || strings.HasPrefix(v.Path, "//") || strings.ContainsAny(v.Path, "\\\r\n\x00") {
 			return fmt.Errorf("shot plan: view %s path %q must be an absolute path on the base origin", v.Name, v.Path)
 		}
 		switch v.Viewport {
@@ -131,7 +133,7 @@ func (p ShotPlan) Validate() error {
 		}
 	}
 	if vd := p.Video; vd != nil {
-		if !seen[vd.View] {
+		if !seen[strings.ToLower(vd.View)] {
 			return fmt.Errorf("shot plan: video view %q is not a view", vd.View)
 		}
 		if vd.Seconds < 1 || vd.Seconds > MaxShotVideoSeconds {
@@ -179,12 +181,14 @@ func (s ShotStep) validate() error {
 	return nil
 }
 
-var shotKeys = []string{"ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "Backspace", "End", "Enter", "Escape", "Home", "PageDown", "PageUp", "Tab"}
+// ShotKeys is the one list of key names a press step may use; internal/shot
+// maps each to a browser key and a test keeps the two in step.
+var ShotKeys = []string{"ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "Backspace", "End", "Enter", "Escape", "Home", "PageDown", "PageUp", "Tab"}
 
-var shotKeyList = strings.Join(shotKeys, ", ")
+var shotKeyList = strings.Join(ShotKeys, ", ")
 
 func validShotKey(k string) (string, bool) {
-	for _, n := range shotKeys {
+	for _, n := range ShotKeys {
 		if n == k {
 			return k, true
 		}

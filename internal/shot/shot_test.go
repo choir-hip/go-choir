@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,8 @@ func TestRunEndToEnd(t *testing.T) {
 
 	plan := goodPlan()
 	plan.Views[1].Steps = []capsule.ShotStep{{Op: "wait_for", Selector: "#b"}, {Op: "click", Selector: "#b"}, {Op: "wait_ms", Ms: 200}}
+	plan.Views = append(plan.Views, capsule.ShotView{Name: "03-click-home", Path: "/", Viewport: "desktop",
+		Steps: []capsule.ShotStep{{Op: "click", Selector: "#b"}, {Op: "wait_ms", Ms: 200}}})
 	plan.Video = &capsule.ShotVideo{View: "02-after-home", Seconds: 3}
 	out := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -73,7 +76,7 @@ func TestRunEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res) != 3 {
+	if len(res) != 4 {
 		t.Fatalf("results: %+v", res)
 	}
 	for _, r := range res {
@@ -99,6 +102,10 @@ func TestRunEndToEnd(t *testing.T) {
 			t.Errorf("%s: %v", r.Path, derr)
 		}
 	}
+	// The click changes the page: same viewport, distinct digest.
+	if res[3].Name != "03-click-home" || res[3].SHA256 == res[0].SHA256 {
+		t.Errorf("the click did not change the desktop shot: %+v", res[3])
+	}
 	raw, err := os.ReadFile(res[2].Path)
 	if err != nil {
 		t.Fatal(err)
@@ -106,11 +113,27 @@ func TestRunEndToEnd(t *testing.T) {
 	if res[2].Kind != "webm" || !capsule.IsWebM(raw) || len(raw) > capsule.MaxVideoBytes {
 		t.Errorf("video invalid: %+v", res[2])
 	}
-	// The phone shot is after the click: the page must show it (a dark theme
-	// or the click colour); the desktop shot did not click.
+	// The 3 s video is trimmed to at most Seconds (+1 s of container slack).
 	if _, err := exec.LookPath("ffprobe"); err == nil {
-		o, _ := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", res[2].Path).Output()
-		t.Logf("video duration %s", strings.TrimSpace(string(o)))
+		pctx, pcancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer pcancel()
+		o, _ := exec.CommandContext(pctx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", res[2].Path).Output()
+		d, perr := strconv.ParseFloat(strings.TrimSpace(string(o)), 64)
+		if perr != nil || d <= 0 || d > 4 {
+			t.Errorf("video duration %q (%v); want 0 < d <= 4", o, perr)
+		}
+		t.Logf("video duration %v s", d)
+	}
+}
+
+func TestPressKeysCoverShotKeys(t *testing.T) {
+	for _, k := range capsule.ShotKeys {
+		if _, err := keyFor(k); err != nil {
+			t.Errorf("%s: %v", k, err)
+		}
+	}
+	if _, err := keyFor("F13"); err == nil {
+		t.Error("unknown key accepted")
 	}
 }
 

@@ -1,6 +1,7 @@
 package capsule
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -21,6 +22,8 @@ func TestValidate(t *testing.T) {
 		return p.Validate()
 	}
 	bad := map[string]func(p *ShotPlan){
+		"dup name case":  func(p *ShotPlan) { p.Views[1].Name = strings.ToUpper(p.Views[0].Name) },
+		"long path":      func(p *ShotPlan) { p.Views[0].Path = "/" + strings.Repeat("a", MaxShotPathBytes) },
 		"no views":       func(p *ShotPlan) { p.Views = nil },
 		"dup name":       func(p *ShotPlan) { p.Views[1].Name = p.Views[0].Name },
 		"slash name":     func(p *ShotPlan) { p.Views[0].Name = "../x" },

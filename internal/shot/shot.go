@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/storage"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
 
@@ -90,7 +92,13 @@ var pressKeys = map[string]string{
 	"PageDown": kb.PageDown, "PageUp": kb.PageUp, "Home": kb.Home, "End": kb.End,
 }
 
-func keyFor(name string) (string, bool) { k, ok := pressKeys[name]; return k, ok }
+// keyFor maps a capsule.ShotKeys name to a browser key; unknown is an error.
+func keyFor(name string) (string, error) {
+	if k, ok := pressKeys[name]; ok {
+		return k, nil
+	}
+	return "", fmt.Errorf("press key %q is not one of %s", name, strings.Join(capsule.ShotKeys, ", "))
+}
 
 // Run shoots the plan and returns the files it wrote, in plan order (the
 // video follows its view). On any error it removes what it wrote.
@@ -118,31 +126,37 @@ func Run(ctx context.Context, opts Options) (results []Result, err error) {
 	to := opts.Timeouts.withDefaults()
 	ctx, cancel := context.WithTimeout(ctx, to.Plan)
 	defer cancel()
+	// Every output path is registered before it is written, so a failure
+	// removes truncated and unread files too.
+	var written []string
+	track := func(path string) { written = append(written, path) }
 	defer func() {
 		if err != nil {
-			for _, r := range results {
-				_ = os.Remove(r.Path)
+			for _, p := range written {
+				_ = os.Remove(p)
 			}
 			results = nil
 		}
 	}()
 
-	env := os.Environ()
-	if opts.Fontconfig != "" {
-		env = append(env, "FONTCONFIG_FILE="+opts.Fontconfig)
-	}
-	allocOpts := []chromedp.ExecAllocatorOption{
+	allocOpts := append([]chromedp.ExecAllocatorOption(nil), chromedp.DefaultExecAllocatorOptions[:]...)
+	allocOpts = append(allocOpts,
 		chromedp.ExecPath(browser),
-		chromedp.Flag("headless", "new"),
+		chromedp.Headless,
+		// The defaults' feature lists (NetworkServiceInProcess, site-per-process off)
+		// starve Page.startScreencast of frames on current Chrome; clear them.
+		chromedp.Flag("disable-features", "Translate"),
+		chromedp.Flag("enable-features", ""),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("hide-scrollbars", true),
 		chromedp.Flag("force-color-profile", "srgb"),
 		chromedp.Flag("font-render-hinting", "none"),
-		chromedp.Flag("no-first-run", true),
-		chromedp.Flag("no-default-browser-check", true),
-		chromedp.ModifyCmdFunc(func(c *exec.Cmd) { c.Env = env }),
+	)
+	if opts.Fontconfig != "" {
+		// chromedp.Env keeps its own process setup (Pdeathsig on Linux).
+		allocOpts = append(allocOpts, chromedp.Env("FONTCONFIG_FILE="+opts.Fontconfig))
 	}
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, allocOpts...)
 	defer allocCancel()
@@ -156,9 +170,9 @@ func Run(ctx context.Context, opts Options) (results []Result, err error) {
 	for _, v := range opts.Plan.Views {
 		var rec *recorder
 		if vd := opts.Plan.Video; vd != nil && vd.View == v.Name {
-			rec = &recorder{minSeconds: vd.Seconds}
+			rec = &recorder{minSeconds: vd.Seconds, maxFrames: vd.Seconds*15 + 60}
 		}
-		res, verr := shootView(browserCtx, base, v, opts.OutDir, rec, to.View)
+		res, verr := shootView(browserCtx, base, v, opts.OutDir, rec, to.View, track)
 		if verr != nil {
 			if rec != nil && rec.dir != "" {
 				_ = os.RemoveAll(rec.dir)
@@ -167,7 +181,7 @@ func Run(ctx context.Context, opts Options) (results []Result, err error) {
 		}
 		results = append(results, res)
 		if rec != nil {
-			vres, verr := encodeVideo(ctx, ffmpeg, rec, opts.Plan.Video.FileName(), opts.OutDir, to.Encode)
+			vres, verr := encodeVideo(ctx, ffmpeg, rec, opts.Plan.Video.FileName(), opts.OutDir, to.Encode, track)
 			if verr != nil {
 				return results, fmt.Errorf("shot: video %s: %w", v.Name, verr)
 			}
@@ -192,34 +206,59 @@ type frame struct {
 	at   time.Time
 }
 
+// maxFrameBytes bounds the screencast scratch directory.
+const maxFrameBytes = 64 << 20
+
 type recorder struct {
 	minSeconds int
+	maxFrames  int
 	dir        string
 	mu         sync.Mutex
 	seq        int
+	bytes      int
+	err        error // the first write error; the run fails naming it
 	frames     []frame
 	start      time.Time
 }
 
-func (r *recorder) add(data []byte) {
+// add stores one frame. Frames past the frame or byte cap are dropped (the
+// video then ends early); a write error is kept and fails the run.
+func (r *recorder) add(data []byte) { r.addAt(data, time.Now()) }
+
+func (r *recorder) addAt(data []byte, at time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.err != nil || len(r.frames) >= r.maxFrames || r.bytes+len(data) > maxFrameBytes {
+		return
+	}
 	p := filepath.Join(r.dir, fmt.Sprintf("f%05d.jpg", r.seq))
 	r.seq++
-	if os.WriteFile(p, data, 0o600) == nil {
-		r.frames = append(r.frames, frame{path: p, at: time.Now()})
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		r.err = fmt.Errorf("screencast frame %s: %w", p, err)
+		return
 	}
+	r.bytes += len(data)
+	r.frames = append(r.frames, frame{path: p, at: at})
 }
 
-func shootView(parent context.Context, base *url.URL, v capsule.ShotView, outDir string, rec *recorder, timeout time.Duration) (Result, error) {
-	// One fresh page (target) per view.
+func shootView(parent context.Context, base *url.URL, v capsule.ShotView, outDir string, rec *recorder, timeout time.Duration, track func(string)) (Result, error) {
+	// One fresh page per view. A separate browser context per view
+	// (WithNewBrowserContext) fails on headless Chrome for macOS ("no browser
+	// is open"), so views are isolated by clearing cookies and the origin's
+	// storage before each one instead.
 	vctx, cancel := chromedp.NewContext(parent)
 	defer cancel()
 	vctx, cancelT := context.WithTimeout(vctx, timeout)
 	defer cancelT()
 
+	// Clear the origin's storage when the view ends (clearing it before the
+	// screencast starts stops Chrome from sending frames).
+	defer func() {
+		_ = chromedp.Run(vctx, storage.ClearDataForOrigin(base.Scheme+"://"+base.Host, "all"))
+	}()
 	vp := viewportFor(v.Viewport)
 	setup := chromedp.Tasks{
+		network.ClearBrowserCookies(),
 		emulation.SetDeviceMetricsOverride(vp.w, vp.h, vp.dpr, v.Viewport == capsule.ShotViewportPhone),
 	}
 	if v.Theme != "" {
@@ -284,6 +323,14 @@ func shootView(parent context.Context, base *url.URL, v capsule.ShotView, outDir
 			return Result{}, fmt.Errorf("stop screencast: %w", err)
 		}
 		_ = chromedp.Run(vctx, chromedp.Sleep(200*time.Millisecond)) // frames in flight
+		// Chrome sends a screencast frame only when the page paints; a static
+		// page may send none. The capture then stands for the whole video.
+		rec.mu.Lock()
+		empty := len(rec.frames) == 0
+		rec.mu.Unlock()
+		if empty {
+			rec.addAt(buf, rec.start)
+		}
 	}
 
 	cfg, err := png.DecodeConfig(bytes.NewReader(buf))
@@ -294,6 +341,7 @@ func shootView(parent context.Context, base *url.URL, v capsule.ShotView, outDir
 		return Result{}, fmt.Errorf("capture %dx%d, %d bytes exceeds the screen bounds", cfg.Width, cfg.Height, len(buf))
 	}
 	p := filepath.Join(outDir, v.Name+".png")
+	track(p)
 	if err := os.WriteFile(p, buf, 0o644); err != nil {
 		return Result{}, err
 	}
@@ -314,7 +362,10 @@ func runStep(ctx context.Context, s capsule.ShotStep) error {
 	case capsule.ShotOpFill:
 		a = chromedp.Tasks{chromedp.WaitVisible(s.Selector, chromedp.ByQuery), chromedp.Clear(s.Selector, chromedp.ByQuery), chromedp.SendKeys(s.Selector, s.Text, chromedp.ByQuery)}
 	case capsule.ShotOpPress:
-		k, _ := keyFor(s.Text)
+		k, kerr := keyFor(s.Text)
+		if kerr != nil {
+			return kerr
+		}
 		a = chromedp.KeyEvent(k)
 	case capsule.ShotOpWaitFor:
 		a = chromedp.WaitVisible(s.Selector, chromedp.ByQuery)
@@ -342,11 +393,15 @@ func runStep(ctx context.Context, s capsule.ShotStep) error {
 // encodeVideo turns the recorded JPEG frames into a VP8 WebM at 10 fps, each
 // frame held for its real display time, and checks it with the capsule's
 // video checks. The scratch frames are removed.
-func encodeVideo(ctx context.Context, ffmpeg string, rec *recorder, fileName, outDir string, timeout time.Duration) (Result, error) {
+func encodeVideo(ctx context.Context, ffmpeg string, rec *recorder, fileName, outDir string, timeout time.Duration, track func(string)) (Result, error) {
 	defer os.RemoveAll(rec.dir)
 	rec.mu.Lock()
 	frames := append([]frame(nil), rec.frames...)
+	werr := rec.err
 	rec.mu.Unlock()
+	if werr != nil {
+		return Result{}, werr
+	}
 	if len(frames) == 0 {
 		return Result{}, fmt.Errorf("the screencast produced no frames")
 	}
@@ -372,12 +427,21 @@ func encodeVideo(ctx context.Context, ffmpeg string, rec *recorder, fileName, ou
 		return Result{}, err
 	}
 	out := filepath.Join(outDir, fileName)
+	track(out)
+	// The video is the last minSeconds of the capture: a long load or step
+	// list cuts the start, never the final state.
+	trim := []string{"-t", fmt.Sprint(rec.minSeconds)}
+	if total := end.Sub(frames[0].at); total > time.Duration(rec.minSeconds)*time.Second {
+		trim = append([]string{"-ss", fmt.Sprintf("%.3f", (total - time.Duration(rec.minSeconds)*time.Second).Seconds())}, trim...)
+	}
 	ectx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ectx, ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+	args := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "concat", "-safe", "0", "-i", listPath,
 		"-vf", "fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-		"-c:v", "libvpx", "-b:v", "800k", "-crf", "32", "-an", "-t", fmt.Sprint(capsule.MaxShotVideoSeconds), out)
+		"-c:v", "libvpx", "-b:v", "800k", "-crf", "32", "-an"}
+	args = append(append(args, trim...), out)
+	cmd := exec.CommandContext(ectx, ffmpeg, args...)
 	if msg, err := cmd.CombinedOutput(); err != nil {
 		_ = os.Remove(out)
 		return Result{}, fmt.Errorf("ffmpeg: %w: %s", err, tail(string(msg), 1500))
