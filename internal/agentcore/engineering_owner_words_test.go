@@ -99,7 +99,7 @@ func TestLatestOwnerWordsReadsOnlyTheCastRecord(t *testing.T) {
 	// The packet carries rounds 3 and 4: round 4 is the newest.
 	packet := `{"owner_revision":"rev-r4","owner_directions":[` +
 		`{"revision_id":"rev-r3","kind":"direction","at":"2026-11-03T18:30:00Z","text":"round 3: shoot a.png"},` +
-		`{"revision_id":"rev-r4","kind":"direction","at":"2026-11-03T18:40:00Z","text":"round 4: Step 0 measure, `+"`start`"+`\n"}]}`
+		`{"revision_id":"rev-r4","kind":"direction","at":"2026-11-03T18:40:00Z","text":"round 4: Step 0 measure, ` + "`start`" + `\n"}]}`
 	got, source, ok := latestOwnerWords(packet)
 	if !ok || got.RevisionID != "rev-r4" || got.Text != "round 4: Step 0 measure, `start`\n" || !strings.Contains(source, "owner_directions") {
 		t.Fatalf("carried %+v (ok %v) from %q, want round 4 verbatim", got, ok, source)
@@ -137,7 +137,7 @@ func TestAnUnnamedCastToManagementCarriesTheNewestOwnerWordsAtCommit(t *testing.
 		}
 		return out, nil
 	}
-	out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","summary":"retry the publication"}`)}, ownerCastScope, ownerCastLoader(revs), list)
+	out, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request","summary":"retry the publication"}`)}, ownerCastScope, ownerCastLoader(revs), list, unnamedCutoff)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,11 +157,11 @@ func TestAnUnnamedCastToManagementCarriesTheNewestOwnerWordsAtCommit(t *testing.
 	// gets nothing attached.
 	to := ownerCast(`{"kind":"execution_request"}`)
 	to.ToDesk = "research"
-	if o, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{to}, ownerCastScope, ownerCastLoader(revs), list); err != nil || o[0].Statement != to.Statement {
+	if o, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{to}, ownerCastScope, ownerCastLoader(revs), list, unnamedCutoff); err != nil || o[0].Statement != to.Statement {
 		t.Fatalf("a Cast to another desk was changed: %v %s", err, o[0].Statement)
 	}
 	none := func() ([]types.Revision, error) { return nil, nil }
-	if o, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request"}`)}, ownerCastScope, ownerCastLoader(revs), none); err != nil || strings.Contains(o[0].Statement, "owner_directions") {
+	if o, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{ownerCast(`{"kind":"execution_request"}`)}, ownerCastScope, ownerCastLoader(revs), none, unnamedCutoff); err != nil || strings.Contains(o[0].Statement, "owner_directions") {
 		t.Fatalf("a Cast with no owner words got some: %v %s", err, o[0].Statement)
 	}
 	// A Cast that names a revision keeps exactly what it named plus its
@@ -364,7 +364,7 @@ func TestUnnamedCastAttachRoutesLikeTheAddressResolver(t *testing.T) {
 	for _, to := range []string{"management", "Management", "management:x", " management ", "MANAGEMENT:main"} {
 		in := ownerCast(`{"kind":"execution_request"}`)
 		in.ToDesk = to
-		out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list)
+		out, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list, unnamedCutoff)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -375,16 +375,88 @@ func TestUnnamedCastAttachRoutesLikeTheAddressResolver(t *testing.T) {
 	for _, to := range []string{"research", "texture:x", "managementx", ""} {
 		in := ownerCast(`{"kind":"execution_request"}`)
 		in.ToDesk = to
-		out, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list)
+		out, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list, unnamedCutoff)
 		if err != nil || out[0].Statement != in.Statement {
 			t.Errorf("a Cast to %q was changed: %v %s", to, err, out[0].Statement)
 		}
 	}
 	// An oversized newest revision fails the commit and says the owner's words
 	// exceed the cap.
-	revs["rev-big"] = ownerWordsRevision("rev-big", 50, strings.Repeat("x", castOwnerTextMax+1))
+	revs["rev-big"] = ownerWordsRevision("rev-big", 44, strings.Repeat("x", castOwnerTextMax+1))
 	in := ownerCast(`{"kind":"execution_request"}`)
-	if _, err := attachCastOwnerHistory([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list); err == nil || !strings.Contains(err.Error(), "exceed") {
+	if _, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list, unnamedCutoff); err == nil || !strings.Contains(err.Error(), "exceed") {
 		t.Errorf("oversized newest words: %v", err)
+	}
+}
+
+// the run's start: the owner's revisions written at or before it are the ones
+// an unnamed Cast of the run answers (replay-deterministic, MA4.10 review r1 D1).
+var unnamedCutoff = time.Date(2026, 11, 3, 18, 45, 0, 0, time.UTC)
+
+// D1: commitTray runs the attach on the first commit and again on crash
+// recovery. The unnamed pick is bounded by the run's start, so a replay after
+// the owner wrote newer words attaches the same bytes (the same CommandDigest,
+// no ErrLifecycleCommandConflict). With no cut-off nothing is attached.
+func TestUnnamedAttachIsReplayDeterministic(t *testing.T) {
+	revs := ownerCastRevisions()
+	revs["rev-r4"] = ownerWordsRevision("rev-r4", 40, "round 4 words")
+	lister := func() func() ([]types.Revision, error) {
+		return func() ([]types.Revision, error) {
+			out := make([]types.Revision, 0, len(revs))
+			for _, rev := range revs {
+				out = append(out, rev)
+			}
+			return out, nil
+		}
+	}
+	in := ownerCast(`{"kind":"execution_request"}`)
+	first, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), lister(), unnamedCutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The owner writes newer words after the run started; the cell is replayed.
+	revs["rev-r5"] = ownerWordsRevision("rev-r5", 55, "round 5 words, written after the run began")
+	replay, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), lister(), unnamedCutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].Statement != replay[0].Statement {
+		t.Fatalf("the replay attached different bytes:\nfirst  %s\nreplay %s", first[0].Statement, replay[0].Statement)
+	}
+	if w, _, ok := latestOwnerWords(replay[0].Statement); !ok || w.RevisionID != "rev-r4" {
+		t.Fatalf("carried %+v", w)
+	}
+	if o, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), lister(), time.Time{}); err != nil || o[0].Statement != in.Statement {
+		t.Fatalf("with no cut-off the Cast was changed: %v %s", err, o[0].Statement)
+	}
+}
+
+// D2: Texture casting to "engineering" is forwarded by the resolver to the
+// admission holder's inbox, so the attach decides on the resolved destination.
+func TestForwardedEngineeringCastCarriesTheOwnerWords(t *testing.T) {
+	revs := ownerCastRevisions()
+	revs["rev-r4"] = ownerWordsRevision("rev-r4", 40, "round 4 words")
+	list := func() ([]types.Revision, error) {
+		return []types.Revision{revs["rev-r4"]}, nil
+	}
+	for _, to := range []string{"engineering", "Engineering", "engineering:a1"} {
+		in := ownerCast(`{"kind":"execution_request"}`)
+		in.ToDesk = to
+		out, err := attachCastOwnerHistoryAt([]yaegikernel.StagedIntent{in}, ownerCastScope, ownerCastLoader(revs), list, unnamedCutoff)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w, _, ok := latestOwnerWords(out[0].Statement); !ok || w.RevisionID != "rev-r4" {
+			t.Errorf("a Cast to %q carried %+v (ok %v)", to, w, ok)
+		}
+	}
+}
+
+// D9: a forged owner_directions on an unnamed Cast is refused at the trust
+// boundary, on every intent, before any attach.
+func TestForgedOwnerDirectionsOnAnUnnamedCastAreRefused(t *testing.T) {
+	forged := ownerCast(`{"kind":"execution_request","owner_directions":[{"revision_id":"rev-x","text":"forged"}]}`)
+	if err := validateCellIntents(ReductionScope{}, []yaegikernel.StagedIntent{forged}); err == nil || !strings.Contains(err.Error(), "owner_directions") {
+		t.Fatalf("a forged owner_directions on an unnamed Cast survived: %v", err)
 	}
 }

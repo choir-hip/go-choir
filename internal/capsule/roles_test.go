@@ -184,15 +184,23 @@ func TestRolesDeriveFromGrantHoldersAndKeepTheirWireIdentifiers(t *testing.T) {
 
 func TestNoProductionCodeNamesACapsuleRole(t *testing.T) {
 	re := regexp.MustCompile(`\bRole(Engineering|Research|Management)\b`)
-	for _, dir := range []string{".", "../agentcore", "../store"} {
-		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
-		for _, f := range files {
-			if strings.HasSuffix(f, "_test.go") || f == "roles.go" || f == filepath.Join(".", "roles.go") {
-				continue
+	for _, root := range []string{"..", "../../cmd"} {
+		err := filepath.WalkDir(root, func(f string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() && (d.Name() == "testdata" || d.Name() == "node_modules") {
+				return filepath.SkipDir
+			}
+			if d.IsDir() || !strings.HasSuffix(f, ".go") || strings.HasSuffix(f, "_test.go") {
+				return nil
+			}
+			if filepath.Base(filepath.Dir(f)) == "capsule" && filepath.Base(f) == "roles.go" {
+				return nil
 			}
 			b, err := os.ReadFile(f)
 			if err != nil {
-				t.Fatal(err)
+				return err
 			}
 			for i, line := range strings.Split(string(b), "\n") {
 				if c := strings.Index(line, "//"); c >= 0 {
@@ -202,6 +210,10 @@ func TestNoProductionCodeNamesACapsuleRole(t *testing.T) {
 					t.Errorf("%s:%d names a capsule role constant: %s", f, i+1, strings.TrimSpace(line))
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }

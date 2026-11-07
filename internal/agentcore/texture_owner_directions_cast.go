@@ -171,6 +171,15 @@ func attachCastOwnerDirections(intents []yaegikernel.StagedIntent, scope ownerRe
 // cut-off is the named revisions' own time, so a replayed cell attaches the
 // same set. A nil list attaches only what is named.
 func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevisionScope, load func(string) (types.Revision, error), list func() ([]types.Revision, error)) ([]yaegikernel.StagedIntent, error) {
+	return attachCastOwnerHistoryAt(intents, scope, load, list, time.Time{})
+}
+
+// attachCastOwnerHistoryAt is attachCastOwnerHistory that also attaches, to a
+// Cast to the admission holder that names no revision, the owner's newest
+// words written at or before cutoff (X4, MA4.10). commitTray runs it again on
+// crash recovery, so the cut-off must be something the replay reproduces: the
+// caller passes the run's start. A zero cut-off attaches nothing.
+func attachCastOwnerHistoryAt(intents []yaegikernel.StagedIntent, scope ownerRevisionScope, load func(string) (types.Revision, error), list func() ([]types.Revision, error), cutoff time.Time) ([]yaegikernel.StagedIntent, error) {
 	var out []yaegikernel.StagedIntent
 	for i, in := range intents {
 		if in.Kind != yaegikernel.IntentCast {
@@ -187,7 +196,7 @@ func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevis
 			// newest words, attached here once so no run context re-reads the
 			// tape at every render. Revisions listed now are the ones written
 			// at or before the commit.
-			if out2, ok, err := attachNewestOwnerWords(out, intents, i, spec, scope, list); err != nil {
+			if out2, ok, err := attachNewestOwnerWords(out, intents, i, spec, scope, list, cutoff); err != nil {
 				return nil, err
 			} else if ok {
 				out = out2
@@ -263,10 +272,16 @@ func attachCastOwnerHistory(intents []yaegikernel.StagedIntent, scope ownerRevis
 // document has an owner revision of this trajectory that carries words, the
 // newest one goes on the packet as the only owner_directions entry, marked
 // current. It reports false, and changes nothing, otherwise.
-func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec map[string]json.RawMessage, scope ownerRevisionScope, list func() ([]types.Revision, error)) ([]yaegikernel.StagedIntent, bool, error) {
+func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec map[string]json.RawMessage, scope ownerRevisionScope, list func() ([]types.Revision, error), cutoff time.Time) ([]yaegikernel.StagedIntent, bool, error) {
 	in := intents[i]
 	holder, ok := deskmanifest.GrantHolder(deskmanifest.GrantAdmitAssignment)
-	if !ok || list == nil || castTargetDesk(in.ToDesk) != holder.Name {
+	if !ok || list == nil || cutoff.IsZero() {
+		return out, false, nil
+	}
+	// The resolved destination decides: a Cast to the admission holder, or to
+	// the assignment desk, which the resolver forwards to the holder's inbox
+	// for a sender that does not admit (Texture).
+	if target := castTargetDesk(in.ToDesk); target != holder.Name && !deskmanifest.IsAssignmentPerformer(target) {
 		return out, false, nil
 	}
 	revisions, err := list()
@@ -277,7 +292,7 @@ func attachNewestOwnerWords(out, intents []yaegikernel.StagedIntent, i int, spec
 	var bestAt time.Time
 	found := false
 	for _, rev := range revisions {
-		if rev.AuthorKind != types.AuthorUser || rev.CreatedAt.IsZero() {
+		if rev.AuthorKind != types.AuthorUser || rev.CreatedAt.IsZero() || rev.CreatedAt.After(cutoff) {
 			continue
 		}
 		d, err := ownerDirectionFromRevision(strings.TrimSpace(rev.RevisionID), scope, func(string) (types.Revision, error) { return rev, nil })
@@ -533,7 +548,11 @@ func (r *rlmCallReduction) attachTextureOwnerDirections(ctx context.Context, int
 		}
 		scope.TrajectoryID = strings.TrimSpace(firstNonEmpty(r.rec.TrajectoryID, metadataStringValue(r.rec.Metadata, "trajectory_id")))
 	}
-	out, err := attachCastOwnerHistory(intents, scope, func(id string) (types.Revision, error) {
+	var cutoff time.Time
+	if r.rec != nil {
+		cutoff = r.rec.CreatedAt
+	}
+	out, err := attachCastOwnerHistoryAt(intents, scope, func(id string) (types.Revision, error) {
 		if r.ledger == nil {
 			return types.Revision{}, fmt.Errorf("no store to read it from")
 		}
@@ -545,7 +564,7 @@ func (r *rlmCallReduction) attachTextureOwnerDirections(ctx context.Context, int
 		// No cut: the listing is read whole, so a long document's oldest
 		// owner words are not silently lost (the default keeps 1000).
 		return r.ledger.ListTextureRevisionsByScopeOG(ctx, scope.OwnerID, scope.ComputerID, scope.DocID, 1<<30)
-	})
+	}, cutoff)
 	if err != nil {
 		return nil, err
 	}

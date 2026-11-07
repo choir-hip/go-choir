@@ -113,3 +113,21 @@ func TestMutatesCapsuleIsTheCapsuleMutateGrant(t *testing.T) {
 		t.Error("an unknown desk reads capsules")
 	}
 }
+
+// Review r1 D6a: the local write_file/exec rule asks capsule.mutate, not the
+// desk's name. A desk without the grant that carries the verb is refused; a
+// row that holds the grant is not refused by this rule.
+func TestLocalCapsuleVerbsAreTheCapsuleMutateGrant(t *testing.T) {
+	eng, _ := Lookup(Engineering)
+	holder := eng.clone()
+	holder.Name = "other-capsule-desk"
+	if err := validateStructure(holder); err != nil && strings.Contains(err.Error(), "capsule.mutate") {
+		t.Errorf("a desk holding capsule.mutate was refused its verbs: %v", err)
+	}
+	bare := eng.clone()
+	bare.Name = "bare-desk"
+	bare.Grants = nil
+	if err := validateStructure(bare); err == nil || !strings.Contains(err.Error(), "capsule.mutate") {
+		t.Errorf("a desk with write_file and exec but no capsule.mutate: %v", err)
+	}
+}

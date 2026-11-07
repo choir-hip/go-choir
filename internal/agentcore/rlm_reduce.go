@@ -1160,7 +1160,7 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	// (Cut 1 L3a, L3b): their acts to Texture and their cursor advance commit
 	// as one transaction.
 	if r.rec != nil && (strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research || strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management ||
-		strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Engineering) {
+		deskmanifest.IsAssignmentPerformer(r.rec.AgentProfile)) {
 		var err error
 		if intents, err = r.commitRecordsRoute(ctx, intents, &receipt); err != nil {
 			return err

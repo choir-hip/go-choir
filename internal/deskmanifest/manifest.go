@@ -737,9 +737,9 @@ func validateStructure(d Desk) error {
 		}
 	}
 	for _, v := range d.Verbs {
-		if a, local, ok := VerbAction(v); ok && local && d.Name != Engineering {
+		if a, local, ok := VerbAction(v); ok && local && !d.HasGrant("capsule.mutate") {
 			if a == "write_file" || a == "exec" {
-				return fmt.Errorf("desk %s: only engineering holds %s", d.Name, a)
+				return fmt.Errorf("desk %s: only a desk holding capsule.mutate holds %s", d.Name, a)
 			}
 		}
 	}

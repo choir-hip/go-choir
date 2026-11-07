@@ -30,7 +30,7 @@ import (
 // engineeringCastIntent reports whether a staged act is a Cast to the
 // engineering desk: from management it opens a new assignment (C1e D4).
 func engineeringCastIntent(in yaegikernel.StagedIntent) bool {
-	return in.Kind == yaegikernel.IntentCast && castTargetDesk(in.ToDesk) == agentprofile.Engineering
+	return in.Kind == yaegikernel.IntentCast && deskmanifest.IsAssignmentPerformer(castTargetDesk(in.ToDesk))
 }
 
 // castTargetDesk is the desk a staged act's address names: the part before
