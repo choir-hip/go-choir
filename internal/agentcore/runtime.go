@@ -556,7 +556,10 @@ type Runtime struct {
 	sourceBaseFetchTune     *sourceBaseFetchTuning
 	// Runtime install (S12, package_install.go): the module builder, the
 	// per-computer module store, and one install or uninstall at a time.
-	packageBuilder   PackageModuleBuilder
+	packageBuilder PackageModuleBuilder
+	// packagePublisher publishes a package operation's release by its
+	// decision; nil uses the guest control credentials (package_operation.go).
+	packagePublisher PackagePublisher
 	packageModules   pkgruntime.Store
 	packageInstallMu sync.Mutex
 	// The forced-modularity migration (package_migration.go): one attempt at

@@ -299,7 +299,7 @@ func (rt *Runtime) appliedOperationForRelease(ctx context.Context, releaseDigest
 		return selfdev.Operation{}, false
 	}
 	for i := len(operations) - 1; i >= 0; i-- {
-		if operations[i].ReleaseDigest == releaseDigest && operations[i].BundleDigest != "" {
+		if !operations[i].IsPackage() && operations[i].ReleaseDigest == releaseDigest && operations[i].BundleDigest != "" {
 			return operations[i], true
 		}
 	}

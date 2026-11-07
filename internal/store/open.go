@@ -357,6 +357,21 @@ func (s *Store) bootstrap() error {
 		if _, err := s.db.ExecContext(ctx, schemaDDL); err != nil {
 			return fmt.Errorf("apply schema: %w", err)
 		}
+		// The package-operation columns (docs/design/
+		// package-operation-decision-2026-11-06.md 2.3) are additive with
+		// empty defaults, so an older binary's explicit-column writes still
+		// work: an existing table gains them here, a fresh one has them.
+		for _, column := range []string{"kind", "package_release_id", "package_install_id"} {
+			has, err := dbx.ColumnExists(ctx, s.db, dbx.SQLite, "self_development_operations", column)
+			if err != nil {
+				return fmt.Errorf("read self_development_operations columns: %w", err)
+			}
+			if !has {
+				if _, err := s.db.ExecContext(ctx, `ALTER TABLE self_development_operations ADD COLUMN `+column+` TEXT NOT NULL DEFAULT ''`); err != nil {
+					return fmt.Errorf("add self_development_operations.%s: %w", column, err)
+				}
+			}
+		}
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO store_meta (key, value) VALUES ('schema_version', ?)
 			ON CONFLICT (key) DO UPDATE SET value = excluded.value`, fmt.Sprintf("%d", storeSchemaVersion)); err != nil {
 			return fmt.Errorf("write store_meta schema_version: %w", err)

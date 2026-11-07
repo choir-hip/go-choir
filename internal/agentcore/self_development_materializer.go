@@ -515,6 +515,15 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 				continue
 			}
 		}
+		if operation.IsPackage() {
+			// A package operation has no updater journal, no host build and no
+			// route: its own branch (package_operation.go).
+			if packageErr := rt.reconcilePackageOperation(ctx, operation); packageErr != nil {
+				log.Printf("selfdev materializer: package operation %s in %s: %v", operation.OperationID, operation.State, packageErr)
+				rt.armSelfDevelopmentRetry(operation.OperationID)
+			}
+			continue
+		}
 		// A degraded operation carrying a route receipt completed a prior
 		// promote and was lost mid-rollback; a degraded operation without one
 		// was lost mid-apply. The route receipt — only ever written by
@@ -701,34 +710,7 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	}
 
 	if operation.State == selfdev.StateAccepted {
-		idempotency := "selfdev-materialization-started-" + operation.DecisionEvent
-		if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
-			return lookupErr
-		} else if !found {
-			eventID, eventErr := computerevent.NewEventID()
-			if eventErr != nil {
-				return eventErr
-			}
-			event := computerevent.Event{
-				SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
-				EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-				IdempotencyKey: idempotency, RequestCommitment: computerevent.ZeroHead,
-				TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, ActorProfile: agentprofile.Management,
-				AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
-				ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
-			}
-			if _, eventErr = rt.eventAppender.AppendNew(ctx, event, computerevent.TransitionInput{}, nil); eventErr != nil {
-				return eventErr
-			}
-		}
-		head, headErr := rt.store.Head(ctx, operation.ComputerID)
-		if headErr != nil || head == nil {
-			return fmt.Errorf("materializer: started head unavailable")
-		}
-		operation, err = rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateAccepted, selfdev.StateMaterializing, func(next *selfdev.Operation) error {
-			next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
-			return nil
-		})
+		operation, err = rt.startSelfDevelopmentMaterialization(ctx, operation)
 		if err != nil {
 			return err
 		}
@@ -861,6 +843,42 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		return applyErr
 	}
 	return rt.settleSelfDevelopmentRefusal(ctx, operation, applyErr)
+}
+
+// startSelfDevelopmentMaterialization moves an accepted operation to
+// materializing: the materialization_started event (idempotent on the decision
+// event) and the row's transition. It is the same first step for a platform
+// apply and a package operation.
+func (rt *Runtime) startSelfDevelopmentMaterialization(ctx context.Context, operation selfdev.Operation) (selfdev.Operation, error) {
+	idempotency := "selfdev-materialization-started-" + operation.DecisionEvent
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
+		return operation, lookupErr
+	} else if !found {
+		eventID, eventErr := computerevent.NewEventID()
+		if eventErr != nil {
+			return operation, eventErr
+		}
+		event := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
+			EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: idempotency, RequestCommitment: computerevent.ZeroHead,
+			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, ActorProfile: agentprofile.Management,
+			AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
+			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
+		}
+		if _, eventErr = rt.eventAppender.AppendNew(ctx, event, computerevent.TransitionInput{}, nil); eventErr != nil {
+			return operation, eventErr
+		}
+	}
+	head, headErr := rt.store.Head(ctx, operation.ComputerID)
+	if headErr != nil || head == nil {
+		return operation, fmt.Errorf("materializer: started head unavailable")
+	}
+	return rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateAccepted, selfdev.StateMaterializing, func(next *selfdev.Operation) error {
+		next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
+		return nil
+	})
+
 }
 
 // selfdevReasonBaseUnverifiable is the typed reason on an apply refused

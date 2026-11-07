@@ -199,37 +199,9 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	record.PublisherTrack = rec.Track
 	record.ReleaseBaseCommit, record.ReleaseTreeHash = rec.Source.BuiltOn, rec.Source.Tree
 
-	// 4. Verify and build: the bytes are the record's, confined to the
-	// package root, carry no secret and a valid manifest; then the module.
-	module, err := rt.packageBuilder.Build(ctx, rec, request.TreePatch)
-	if err != nil {
-		switch reason := pkgrelease.ReasonOf(err); {
-		case reason == pkgrelease.ReasonBlobMismatch || reason == pkgrelease.ReasonBlobTooLarge:
-			return PackageInstallView{}, false, refuseInstall(http.StatusConflict, "patch_digest_mismatch", "%v", err)
-		case reason == pkgrelease.ReasonSecretFound:
-			return PackageInstallView{}, false, refuseInstall(http.StatusUnprocessableEntity, "patch_secret_refused", "%v", err)
-		case reason != "":
-			return PackageInstallView{}, false, refuseInstall(http.StatusUnprocessableEntity, "package_content_invalid", "%v", err)
-		case errors.Is(err, pkgruntime.ErrBuild):
-			return PackageInstallView{}, false, refuseInstall(http.StatusUnprocessableEntity, "package_build_failed", "%v", err)
-		default:
-			return PackageInstallView{}, false, refuseInstall(http.StatusServiceUnavailable, "install_unavailable", "%v", err)
-		}
-	}
-	// An app is a module/v1 module; a pack (no app) is data only: no module.
-	pack := len(module.Bytes) == 0 && module.ABI == ""
-	if !pack && (module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0) {
-		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "package_build_failed", "the builder returned no module/v1 module")
-	}
-	// The tiered review's install-time T1 check (L3): the SDK names this
-	// computer's build extracted imply no grant the manifest does not hold.
-	if err := pkgrelease.CheckUses(module.Manifest, module.Uses); err != nil {
-		return PackageInstallView{}, false, refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonUsesExceedGrants, "%v", err)
-	}
-	// The install review gate (MA7.5): a widened ceiling stores its module
-	// and records only with a sealed accepting verdict for exactly these
-	// bytes.
-	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, module, current, request.change.deferReview); refusal != nil {
+	// 4. Verify and build, check the uses and the install review.
+	module, pack, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, current, request.change.deferReview)
+	if refusal != nil {
 		return PackageInstallView{}, false, refusal
 	}
 	sha := ""
@@ -257,6 +229,50 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
+}
+
+// buildCheckedModule is the check an install runs before it stores anything:
+// the verified build of the release's bytes into a module (or a pack), the
+// install-time uses check, and the install review gate. A package operation
+// runs it before its release is published, so a refusal publishes nothing.
+func (rt *Runtime) buildCheckedModule(ctx context.Context, ownerID, computerID, releaseID string, rec pkgrelease.Record, treePatch []byte, current *store.PackageInstall, deferReview bool) (pkgruntime.Module, bool, *installRefusal) {
+	if rt.packageBuilder == nil {
+		return pkgruntime.Module{}, false, refuseInstall(http.StatusServiceUnavailable, "install_unavailable", "this computer has no package builder")
+	}
+	// The bytes are the record's, confined to the package root, carry no
+	// secret and a valid manifest; then the module.
+	module, err := rt.packageBuilder.Build(ctx, rec, treePatch)
+	if err != nil {
+		switch reason := pkgrelease.ReasonOf(err); {
+		case reason == pkgrelease.ReasonBlobMismatch || reason == pkgrelease.ReasonBlobTooLarge:
+			return pkgruntime.Module{}, false, refuseInstall(http.StatusConflict, "patch_digest_mismatch", "%v", err)
+		case reason == pkgrelease.ReasonSecretFound:
+			return pkgruntime.Module{}, false, refuseInstall(http.StatusUnprocessableEntity, "patch_secret_refused", "%v", err)
+		case reason != "":
+			return pkgruntime.Module{}, false, refuseInstall(http.StatusUnprocessableEntity, "package_content_invalid", "%v", err)
+		case errors.Is(err, pkgruntime.ErrBuild):
+			return pkgruntime.Module{}, false, refuseInstall(http.StatusUnprocessableEntity, "package_build_failed", "%v", err)
+		default:
+			return pkgruntime.Module{}, false, refuseInstall(http.StatusServiceUnavailable, "install_unavailable", "%v", err)
+		}
+	}
+	// An app is a module/v1 module; a pack (no app) is data only: no module.
+	pack := len(module.Bytes) == 0 && module.ABI == ""
+	if !pack && (module.ABI != pkgruntime.ModuleABI || len(module.Bytes) == 0) {
+		return pkgruntime.Module{}, false, refuseInstall(http.StatusInternalServerError, "package_build_failed", "the builder returned no module/v1 module")
+	}
+	// The tiered review's install-time T1 check (L3): the SDK names this
+	// computer's build extracted imply no grant the manifest does not hold.
+	if err := pkgrelease.CheckUses(module.Manifest, module.Uses); err != nil {
+		return pkgruntime.Module{}, false, refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonUsesExceedGrants, "%v", err)
+	}
+	// The install review gate (MA7.5): a widened ceiling stores its module
+	// and records only with a sealed accepting verdict for exactly these
+	// bytes.
+	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, treePatch, module, current, deferReview); refusal != nil {
+		return pkgruntime.Module{}, false, refusal
+	}
+	return module, pack, nil
 }
 
 // PackageSettings is the contributes.settings package pkg declares on the

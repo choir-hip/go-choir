@@ -107,6 +107,26 @@ func Reduce(current *Head, event Event, input TransitionInput) (Head, error) {
 		next.DesiredEventHead = current.EffectiveEventHead
 		next.DesiredStateCommitment = current.EffectiveStateCommitment
 		next.PendingTransitionRef = ""
+	case EventPackageApplied:
+		// A package operation changes no platform state: it discharges its
+		// own pending transition and returns desired to the effective
+		// state's commitment. The effective head moves to this event (the
+		// state before and after are the same platform release), so the
+		// chain records where the package landed; a platform revert past it
+		// skips package events (docs/design/package-operation-decision-2026-11-06.md 2.5).
+		if current.PendingTransitionRef == "" || event.DecisionRef != current.PendingTransitionRef || event.ResultingEffectiveCommitment != current.EffectiveStateCommitment {
+			return Head{}, fmt.Errorf("%w: applied package does not match the pending transition", ErrInvalidTransition)
+		}
+		next.DesiredEventHead = digest
+		next.EffectiveEventHead = digest
+		next.DesiredStateCommitment = current.EffectiveStateCommitment
+		next.PendingTransitionRef = ""
+	case EventPackageReverted:
+		// The uninstall of a package operation's install: it names the
+		// package_applied event it undoes and moves no head.
+		if event.DecisionRef == "" {
+			return Head{}, fmt.Errorf("%w: reverted package names no applied event", ErrInvalidTransition)
+		}
 	case EventRollbackRequested:
 		if current.PendingTransitionRef != "" {
 			return Head{}, ErrPendingTransition

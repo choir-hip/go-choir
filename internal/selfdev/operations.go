@@ -112,7 +112,26 @@ type Operation struct {
 	LastIntentError string `json:"last_intent_error,omitempty"`
 	CreatedAt       string `json:"created_at"`
 	UpdatedAt       string `json:"updated_at"`
+	// Kind is the layer the operation changes, set at freeze from the
+	// classification of its source patch (docs/design/
+	// package-operation-decision-2026-11-06.md 2.3): KindPackage for a
+	// package-only patch, otherwise empty (a platform operation; rows from
+	// before the field read empty too).
+	Kind string `json:"kind,omitempty"`
+	// PackageReleaseID and PackageInstallID are the Library release a
+	// package operation published and the install it made on this computer.
+	// They are never ReleaseDigest, which stays empty for a package
+	// operation so the platform release readers never match it.
+	PackageReleaseID string `json:"package_release_id,omitempty"`
+	PackageInstallID string `json:"package_install_id,omitempty"`
 }
+
+// KindPackage marks a package operation (Operation.Kind).
+const KindPackage = "package"
+
+// IsPackage reports whether the operation changes a package, not the
+// platform.
+func (o Operation) IsPackage() bool { return o.Kind == KindPackage }
 
 type StartRequest struct {
 	ComputerID        string `json:"computer_id"`
@@ -562,9 +581,26 @@ func (s *Store) StartBaseRestore(ctx context.Context, request BaseRestoreStartRe
 }
 
 func (s *Store) Transition(ctx context.Context, computerID, operationID, expectedState, nextState string, mutate func(*Operation) error) (Operation, error) {
+	return s.transition(ctx, computerID, operationID, expectedState, nextState, mutate, false)
+}
+
+// RevertPackage records a reverted package operation: applied -> rolled_back,
+// the one edge only a package row takes (a platform operation is rolled back
+// by a rollback row of its own, never by itself). The row keeps its heads: they
+// name where the package landed, and a later platform revert reads them.
+func (s *Store) RevertPackage(ctx context.Context, computerID, operationID string) (Operation, error) {
+	return s.transition(ctx, computerID, operationID, StateApplied, StateRolledBack, func(operation *Operation) error {
+		if !operation.IsPackage() {
+			return fmt.Errorf("%w: %s is not a package operation", ErrInvalidTransition, operation.OperationID)
+		}
+		return nil
+	}, true)
+}
+
+func (s *Store) transition(ctx context.Context, computerID, operationID, expectedState, nextState string, mutate func(*Operation) error, packageRevert bool) (Operation, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if !allowedTransition(expectedState, nextState) {
+	if !allowedTransition(expectedState, nextState) && !(packageRevert && expectedState == StateApplied && nextState == StateRolledBack) {
 		return Operation{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, expectedState, nextState)
 	}
 
@@ -613,7 +649,7 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 	if err != nil {
 		return Operation{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE self_development_operations SET capsule_id=?, bundle_digest=?, release_digest=?, code_ref=?, artifact_program_ref=?, verifier_refs_json=?, decision_actor=?, decision_event=?, decision_receipt=?, desired_head=?, effective_head=?, materialization_receipt=?, checkpoint_ref=?, route_certificate=?, route_generation=?, route_receipt=?, mode_receipt=?, lifecycle_receipt=?, state=?, terminal_error=?, last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=? AND state=?`, operation.CapsuleID, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt, operation.LifecycleReceipt, operation.State, operation.TerminalError, operation.LastIntentError, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID), expectedState)
+	result, err := tx.ExecContext(ctx, `UPDATE self_development_operations SET capsule_id=?, bundle_digest=?, release_digest=?, code_ref=?, artifact_program_ref=?, verifier_refs_json=?, decision_actor=?, decision_event=?, decision_receipt=?, desired_head=?, effective_head=?, materialization_receipt=?, checkpoint_ref=?, route_certificate=?, route_generation=?, route_receipt=?, mode_receipt=?, lifecycle_receipt=?, state=?, terminal_error=?, last_intent_error=?, kind=?, package_release_id=?, package_install_id=?, updated_at=? WHERE computer_id=? AND operation_id=? AND state=?`, operation.CapsuleID, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt, operation.LifecycleReceipt, operation.State, operation.TerminalError, operation.LastIntentError, operation.Kind, operation.PackageReleaseID, operation.PackageInstallID, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID), expectedState)
 	if err != nil {
 		return Operation{}, err
 	}
@@ -742,6 +778,7 @@ func operationProjectionOp(operation Operation, expectedState string) (computere
 		ModeReceipt: operation.ModeReceipt, LifecycleReceipt: operation.LifecycleReceipt,
 		State: operation.State, TerminalError: operation.TerminalError, LastIntentError: operation.LastIntentError,
 		CreatedAt: operation.CreatedAt, UpdatedAt: operation.UpdatedAt, ExpectedState: expectedState,
+		Kind: operation.Kind, PackageReleaseID: operation.PackageReleaseID, PackageInstallID: operation.PackageInstallID,
 	})
 	if err != nil {
 		return computerevent.ProjectionOp{}, fmt.Errorf("marshal operation projection: %w", err)
@@ -753,7 +790,7 @@ func operationProjectionOp(operation Operation, expectedState string) (computere
 	}, nil
 }
 
-const operationSelect = `SELECT operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at FROM self_development_operations`
+const operationSelect = `SELECT operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at, kind, package_release_id, package_install_id FROM self_development_operations`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -762,7 +799,7 @@ func scanOperation(row rowScanner) (Operation, error) {
 	var verifiers string
 	var routeGeneration sql.NullInt64
 	var createdAt, updatedAt time.Time
-	err := row.Scan(&operation.OperationID, &operation.IdempotencyKey, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &operation.LastIntentError, &createdAt, &updatedAt)
+	err := row.Scan(&operation.OperationID, &operation.IdempotencyKey, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &operation.LastIntentError, &createdAt, &updatedAt, &operation.Kind, &operation.PackageReleaseID, &operation.PackageInstallID)
 	if err != nil {
 		return Operation{}, err
 	}

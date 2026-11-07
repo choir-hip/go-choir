@@ -95,6 +95,10 @@ const (
 	// PackageInstallTriggerMigrationRollback: a migration's install undone.
 	PackageInstallTriggerMigration         = "migration"
 	PackageInstallTriggerMigrationRollback = "migration_rollback"
+	// PackageInstallTriggerSelfdev: a package operation decided by consensus
+	// published its release and installed it on its own computer, or the
+	// owner's revert of that operation uninstalled it.
+	PackageInstallTriggerSelfdev = "selfdev"
 )
 
 // PackageInstallFile is one data file of an install: its path in the package

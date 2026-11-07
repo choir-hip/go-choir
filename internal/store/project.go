@@ -397,7 +397,8 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref,
 		verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head,
 		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
-		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at
+		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at,
+		kind, package_release_id, package_install_id
 		FROM self_development_operations WHERE operation_id=?`, operation.OperationID).Scan(
 		&existing.OperationID, &existing.IdempotencyKey, &existing.RequestCommitment, &existing.ComputerID,
 		&existing.TrajectoryID, &existing.CapsuleID, &existing.BaseHead, &existing.PromptArtifactRef,
@@ -405,7 +406,8 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		&existing.VerifierRefsJSON, &existing.DecisionActor, &existing.DecisionEvent, &existing.DecisionReceipt,
 		&existing.DesiredHead, &existing.EffectiveHead, &existing.MaterializationReceipt, &existing.CheckpointRef,
 		&existing.RouteCertificate, &routeGeneration, &existing.RouteReceipt, &existing.ModeReceipt,
-		&existing.LifecycleReceipt, &existing.State, &existing.TerminalError, &existing.LastIntentError, &existing.CreatedAt, &existing.UpdatedAt)
+		&existing.LifecycleReceipt, &existing.State, &existing.TerminalError, &existing.LastIntentError, &existing.CreatedAt, &existing.UpdatedAt,
+		&existing.Kind, &existing.PackageReleaseID, &existing.PackageInstallID)
 	if err == nil {
 		if routeGeneration.Valid {
 			value := uint64(routeGeneration.Int64)
@@ -445,8 +447,9 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref,
 		verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head,
 		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
-		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at,
+		kind, package_release_id, package_install_id
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT (operation_id) DO UPDATE SET
 		computer_id=excluded.computer_id, idempotency_key=excluded.idempotency_key, request_commitment=excluded.request_commitment,
 		trajectory_id=excluded.trajectory_id, capsule_id=excluded.capsule_id, base_head=excluded.base_head,
@@ -457,14 +460,16 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		checkpoint_ref=excluded.checkpoint_ref, route_certificate=excluded.route_certificate, route_generation=excluded.route_generation,
 		route_receipt=excluded.route_receipt, mode_receipt=excluded.mode_receipt, lifecycle_receipt=excluded.lifecycle_receipt,
 		state=excluded.state, terminal_error=excluded.terminal_error, last_intent_error=excluded.last_intent_error,
-		created_at=excluded.created_at, updated_at=excluded.updated_at`,
+		created_at=excluded.created_at, updated_at=excluded.updated_at,
+		kind=excluded.kind, package_release_id=excluded.package_release_id, package_install_id=excluded.package_install_id`,
 		operation.OperationID, operation.ComputerID, operation.IdempotencyKey, operation.RequestCommitment,
 		operation.TrajectoryID, operation.CapsuleID, operation.BaseHead, operation.PromptArtifactRef,
 		operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef,
 		operation.VerifierRefsJSON, operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt,
 		operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef,
 		operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt,
-		operation.LifecycleReceipt, operation.State, operation.TerminalError, operation.LastIntentError, operation.CreatedAt, operation.UpdatedAt)
+		operation.LifecycleReceipt, operation.State, operation.TerminalError, operation.LastIntentError, operation.CreatedAt, operation.UpdatedAt,
+		operation.Kind, operation.PackageReleaseID, operation.PackageInstallID)
 	if err != nil {
 		return fmt.Errorf("project self-development operation: %w", err)
 	}

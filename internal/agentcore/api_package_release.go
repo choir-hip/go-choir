@@ -1,9 +1,11 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -53,16 +55,88 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "operation is " + operation.State + "; only a decided package operation is published", Reason: "operation_not_decided"})
 		return
 	}
-	base, patch, err := h.rt.boundSourcePatch(operation)
-	switch {
-	case errors.Is(err, errNoSourcePatch):
-		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "the operation changed no source; a package release is source", Reason: "no_source_patch"})
-		return
-	case err != nil:
-		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
+	result, failure := h.rt.draftPackageRelease(ctx, ownerID, computerID, operation, packageDraftInput{
+		Name: name, HeadReleaseID: headID, HeadTree: headTree, TestCommand: strings.TrimSpace(query.Get("test_command")),
+	})
+	if failure != nil {
+		failure.write(w)
 		return
 	}
-	repo := h.rt.releaseRepo()
+	draft := map[string]any{
+		"release_id": result.ReleaseID, "record": json.RawMessage(result.Canonical),
+		"tree_patch_base64":   base64.StdEncoding.EncodeToString(result.TreePatch),
+		"review_patch_base64": base64.StdEncoding.EncodeToString(result.ReviewPatch),
+	}
+	if result.ParentPatch != nil {
+		draft["parent_patch_base64"] = base64.StdEncoding.EncodeToString(result.ParentPatch)
+	}
+	writeAPIJSON(w, http.StatusOK, draft)
+}
+
+// packageDraftInput names what a draft is of: the package and, for an update,
+// the track head it follows.
+type packageDraftInput struct {
+	Name, HeadReleaseID, HeadTree, TestCommand string
+}
+
+// packageDraftResult is a drafted release: the record (also canonical), its
+// three patches, the source patch, the base the platform claim names, and the
+// media items with their bytes.
+type packageDraftResult struct {
+	Record       pkgrelease.Record
+	ReleaseID    string
+	Canonical    []byte
+	TreePatch    []byte
+	ReviewPatch  []byte
+	ParentPatch  []byte
+	SourcePatch  []byte
+	PlatformBase string
+	Media        []pkgrelease.Media
+	MediaData    [][]byte
+}
+
+// packageDraftFailure is a refused or unavailable draft: either a pkgrelease
+// refusal (refusal != nil, written by writePackageDraftRefusal) or a status and
+// body of its own.
+type packageDraftFailure struct {
+	status  int
+	body    releaseAPIError
+	refusal error
+}
+
+func (f *packageDraftFailure) write(w http.ResponseWriter) {
+	if f.refusal != nil {
+		writePackageDraftRefusal(w, f.refusal)
+		return
+	}
+	writeAPIJSON(w, f.status, f.body)
+}
+
+func (f *packageDraftFailure) Error() string {
+	if f.refusal != nil {
+		return f.refusal.Error()
+	}
+	return f.body.Error
+}
+
+func draftRefusal(err error) *packageDraftFailure { return &packageDraftFailure{refusal: err} }
+
+func draftFailure(status int, reason, format string, args ...any) *packageDraftFailure {
+	return &packageDraftFailure{status: status, body: releaseAPIError{Error: fmt.Sprintf(format, args...), Reason: reason}}
+}
+
+// draftPackageRelease drafts the release of one package operation from its
+// frozen bundle (the shared body of the draft route and the package branch of
+// the materializer). It reads and writes nothing else.
+func (rt *Runtime) draftPackageRelease(ctx context.Context, ownerID, computerID string, operation selfdev.Operation, in packageDraftInput) (*packageDraftResult, *packageDraftFailure) {
+	base, patch, err := rt.boundSourcePatch(operation)
+	switch {
+	case errors.Is(err, errNoSourcePatch):
+		return nil, draftFailure(http.StatusConflict, "no_source_patch", "the operation changed no source; a package release is source")
+	case err != nil:
+		return nil, draftFailure(http.StatusServiceUnavailable, "bundle_unavailable", "%s", err.Error())
+	}
+	repo := rt.releaseRepo()
 	// A capsule cast from a projection commit built on the platform stack;
 	// the release names the stack base, whose package subtree is the same.
 	platformBase := base
@@ -70,21 +144,19 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		platformBase = stackBase
 	}
 	source, err := pkgrelease.DraftPackage(ctx, pkgrelease.DraftInput{
-		Repo: repo, Name: name, Base: base, Patch: patch, PlatformBase: platformBase,
-		HeadReleaseID: headID, HeadTree: headTree,
+		Repo: repo, Name: in.Name, Base: base, Patch: patch, PlatformBase: platformBase,
+		HeadReleaseID: in.HeadReleaseID, HeadTree: in.HeadTree,
 	})
 	if err != nil {
-		writePackageDraftRefusal(w, err)
-		return
+		return nil, draftRefusal(err)
 	}
-	precommitments, err := h.rt.releasePrecommitments(r, ownerID, computerID, operation)
+	precommitments, err := rt.releasePrecommitments(ctx, ownerID, computerID, operation)
 	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, releaseAPIError{Error: "precommitments unreadable: " + err.Error()})
-		return
+		return nil, draftFailure(http.StatusInternalServerError, "", "precommitments unreadable: %s", err.Error())
 	}
 	record := pkgrelease.Record{
 		Schema:  pkgrelease.Schema,
-		Package: pkgrelease.Package{Name: name, ManifestVersion: source.ManifestVersion},
+		Package: pkgrelease.Package{Name: in.Name, ManifestVersion: source.ManifestVersion},
 		Track:   ownerID,
 		Parent:  source.Parent,
 		Source: pkgrelease.Source{
@@ -98,53 +170,44 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 			MaterializationReceipt: operation.MaterializationReceipt, CheckpointRef: operation.CheckpointRef, VerifierRefs: operation.VerifierRefs,
 		},
 		Precommitments: precommitments,
-		Declarations:   pkgrelease.Declarations{TestCommand: strings.TrimSpace(query.Get("test_command"))},
+		Declarations:   pkgrelease.Declarations{TestCommand: in.TestCommand},
 	}
 	if source.Blobs.ParentPatch != nil {
 		parent := packageBlobRef(source.Blobs.ParentPatch)
 		record.ParentPatch = &parent
 	}
 	// The round's accepted screens and video, from the bound bundle only.
-	if record.Media, _, err = h.rt.operationMedia(operation); err != nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
-		return
+	var mediaData [][]byte
+	if record.Media, mediaData, err = rt.operationMedia(operation); err != nil {
+		return nil, draftFailure(http.StatusServiceUnavailable, "bundle_unavailable", "%s", err.Error())
 	}
 	// No screenshot, no listing: refuse here with the reason, before the
 	// owner is asked to confirm a publish the host would refuse.
 	if err := pkgrelease.RequireScreenshot(record); err != nil {
-		writePackageDraftRefusal(w, err)
-		return
+		return nil, draftRefusal(err)
 	}
 	// A release that updates a package shows the same view before and after
 	// (owner, 2026-11-04); a new package (empty parent) needs only after shots.
-	hasPair, err := h.rt.bundleHasBeforeAfter(operation)
+	hasPair, err := rt.bundleHasBeforeAfter(operation)
 	if err != nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: err.Error(), Reason: "bundle_unavailable"})
-		return
+		return nil, draftFailure(http.StatusServiceUnavailable, "bundle_unavailable", "%s", err.Error())
 	}
 	if err := packageUpdateNeedsBeforeAfter(record.Parent, hasPair); err != nil {
-		writeAPIJSON(w, http.StatusUnprocessableEntity, releaseAPIError{Error: err.Error(), Reason: capsule.BeforeAfterRequiredReason})
-		return
+		return nil, draftFailure(http.StatusUnprocessableEntity, capsule.BeforeAfterRequiredReason, "%s", err.Error())
 	}
 	if err := record.Validate(); err != nil {
-		writePackageDraftRefusal(w, err)
-		return
+		return nil, draftRefusal(err)
 	}
 	releaseID, err := record.ReleaseID()
 	if err != nil {
-		writePackageDraftRefusal(w, err)
-		return
+		return nil, draftRefusal(err)
 	}
 	canonical, _ := record.Canonical()
-	draft := map[string]any{
-		"release_id": releaseID, "record": json.RawMessage(canonical),
-		"tree_patch_base64":   base64.StdEncoding.EncodeToString(source.Blobs.TreePatch),
-		"review_patch_base64": base64.StdEncoding.EncodeToString(source.Blobs.ReviewPatch),
-	}
-	if source.Blobs.ParentPatch != nil {
-		draft["parent_patch_base64"] = base64.StdEncoding.EncodeToString(source.Blobs.ParentPatch)
-	}
-	writeAPIJSON(w, http.StatusOK, draft)
+	return &packageDraftResult{
+		Record: record, ReleaseID: releaseID, Canonical: canonical,
+		TreePatch: source.Blobs.TreePatch, ReviewPatch: source.Blobs.ReviewPatch, ParentPatch: source.Blobs.ParentPatch,
+		SourcePatch: patch, PlatformBase: platformBase, Media: record.Media, MediaData: mediaData,
+	}, nil
 }
 
 func packageBlobRef(raw []byte) pkgrelease.Blob {

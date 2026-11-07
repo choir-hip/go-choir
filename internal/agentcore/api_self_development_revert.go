@@ -63,7 +63,11 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
 		return
 	}
-	latest, err := h.latestLandedOperation(ctx, computerID)
+	if reverted.IsPackage() {
+		h.revertPackageOperation(w, ctx, ownerID, computerID, reverted)
+		return
+	}
+	latest, err := h.latestLandedOperation(ctx, computerID, false)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
 		return
@@ -145,6 +149,15 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "revert lookup failed"})
 		return
 	}
+	// The state before X skips package events: a package operation between X
+	// and the platform state it follows changed no platform release, and a
+	// platform revert never undoes a package install.
+	var skipErr error
+	prior, priorErr, priorHead, priorCommitment, skipErr = h.skipPackageEvents(ctx, computerID, prior, priorErr, priorHead, priorCommitment)
+	if skipErr != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "the state before operation " + operationID + " is not recorded on the tape: " + skipErr.Error()})
+		return
+	}
 	// Open through a buffer: a tap that loses a race to the same act gets that
 	// act's row, not a 409.
 	buf := &revertBuffer{header: http.Header{}}
@@ -192,6 +205,78 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		}
 	}
 	buf.flushTo(w)
+}
+
+// packagePriorHops bounds how many package events a platform revert skips.
+const packagePriorHops = 32
+
+// skipPackageEvents follows a platform revert's prior head past package
+// operations (docs/design/package-operation-decision-2026-11-06.md 2.5). While
+// the prior head names a package operation (its row, or a package_applied
+// event), the prior becomes that operation's own prior: the head and
+// commitment its accept event expected. It stops at the first platform state
+// (an applied platform operation, a base restore, genesis or a platform
+// checkpoint); the terminal set is the caller's restorable fallback, not
+// widened here.
+func (h *APIHandler) skipPackageEvents(ctx context.Context, computerID string, prior selfdev.Operation, priorErr error, priorHead, priorCommitment string) (selfdev.Operation, error, string, string, error) {
+	rt := h.rt
+	for hops := 0; ; hops++ {
+		decision := ""
+		switch {
+		case priorErr == nil && prior.IsPackage():
+			decision = prior.DecisionEvent
+		default:
+			event, ok, err := rt.store.EventByDigest(ctx, computerID, priorHead)
+			if err != nil {
+				return prior, priorErr, priorHead, priorCommitment, err
+			}
+			if ok && event.EventKind == computerevent.EventPackageApplied {
+				decision = event.DecisionRef
+			}
+		}
+		if decision == "" {
+			return prior, priorErr, priorHead, priorCommitment, nil
+		}
+		if hops >= packagePriorHops {
+			return prior, priorErr, priorHead, priorCommitment, errors.New("too many package operations between the operation and its platform prior")
+		}
+		accepted, ok, err := rt.store.EventByDigest(ctx, computerID, decision)
+		if err != nil || !ok || !computerevent.IsSHA256(accepted.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(accepted.ExpectedEffectiveStateCommitment) {
+			return prior, priorErr, priorHead, priorCommitment, errors.New("a package operation's own prior state is not recorded")
+		}
+		priorHead, priorCommitment = accepted.ExpectedEffectiveEventHead, accepted.ExpectedEffectiveStateCommitment
+		var lookupErr error
+		prior, lookupErr = rt.selfdevOperations.GetByEffectiveHead(ctx, computerID, priorHead)
+		if lookupErr != nil && !selfdevOperationMissing(lookupErr) {
+			return prior, lookupErr, priorHead, priorCommitment, lookupErr
+		}
+		priorErr = lookupErr
+	}
+}
+
+// revertPackageOperation is the revert of a package operation: it uninstalls
+// the install the operation made, appends package_reverted and records the row
+// rolled back. It never calls the updater and moves no platform head. A second
+// tap answers the settled row.
+func (h *APIHandler) revertPackageOperation(w http.ResponseWriter, ctx context.Context, ownerID, computerID string, reverted selfdev.Operation) {
+	switch reverted.State {
+	case selfdev.StateRolledBack:
+		writeAPIJSON(w, http.StatusOK, reverted)
+		return
+	case selfdev.StateApplied:
+	default:
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "operation " + reverted.OperationID + " is " + reverted.State + ": only an applied self-development operation is reverted"})
+		return
+	}
+	row, status, err := h.rt.revertPackageOperation(ctx, ownerID, computerID, reverted)
+	if err != nil {
+		if status == 0 {
+			status = http.StatusConflict
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, row)
 }
 
 // revertBuffer holds an opener's answer until the revert decides it is final.
@@ -251,6 +336,15 @@ func liveOperationSet(rows []selfdev.Operation) map[string]bool {
 		}
 		return a.Before(b)
 	})
+	// The platform layer only: a package operation is tracked on its own
+	// (its row is applied until its revert records it rolled back).
+	platform := make([]selfdev.Operation, 0, len(sorted))
+	for _, row := range sorted {
+		if !row.IsPackage() {
+			platform = append(platform, row)
+		}
+	}
+	sorted = platform
 	live := map[string]bool{}
 	snapshots := map[string]map[string]bool{}
 	copySet := func(in map[string]bool) map[string]bool {
@@ -290,9 +384,11 @@ func revertTargetHasEvidence(op selfdev.Operation) bool {
 		op.MaterializationReceipt != "" && op.CheckpointRef != "" && op.RouteReceipt != ""
 }
 
-// latestLandedOperation is the newest-created operation whose head landed or
-// whose attempt ended (the CLI's anchor for a rollback intent).
-func (h *APIHandler) latestLandedOperation(ctx context.Context, computerID string) (*selfdev.Operation, error) {
+// latestLandedOperation is the newest-created operation of one layer whose
+// head landed or whose attempt ended (the CLI's anchor for a rollback intent):
+// package operations only when packageLayer, platform operations only
+// otherwise.
+func (h *APIHandler) latestLandedOperation(ctx context.Context, computerID string, packageLayer bool) (*selfdev.Operation, error) {
 	landed, err := h.rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateApplied, selfdev.StateDegraded, selfdev.StateFailed, selfdev.StateRolledBack)
 	if err != nil {
 		return nil, err
@@ -300,6 +396,9 @@ func (h *APIHandler) latestLandedOperation(ctx context.Context, computerID strin
 	var best *selfdev.Operation
 	var bestAt time.Time
 	for index := range landed {
+		if landed[index].IsPackage() != packageLayer {
+			continue
+		}
 		at, parseErr := time.Parse(time.RFC3339Nano, landed[index].CreatedAt)
 		if parseErr != nil {
 			continue

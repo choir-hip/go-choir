@@ -110,6 +110,9 @@ func (rt *Runtime) rebaseOfferDeps() rebaseOfferDeps {
 			if operation.State != selfdev.StateApplied {
 				return "", nil, fmt.Errorf("operation %s is %s, not applied", operationID, operation.State)
 			}
+			if operation.IsPackage() {
+				return "", nil, fmt.Errorf("operation %s is a package operation, outside the source stack", operationID)
+			}
 			return rt.boundSourcePatch(operation)
 		},
 	}

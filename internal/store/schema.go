@@ -336,6 +336,9 @@ CREATE TABLE IF NOT EXISTS self_development_operations (
 	terminal_error TEXT NOT NULL DEFAULT '',
 	created_at                     DATETIME NOT NULL,
 	updated_at                     DATETIME NOT NULL,
+	kind TEXT NOT NULL DEFAULT '',
+	package_release_id TEXT NOT NULL DEFAULT '',
+	package_install_id TEXT NOT NULL DEFAULT '',
 	UNIQUE(computer_id, idempotency_key)
 );
 

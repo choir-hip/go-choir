@@ -162,7 +162,13 @@ type SelfDevelopmentOperationProjection struct {
 	LastIntentError string `json:"last_intent_error,omitempty"`
 	CreatedAt       string `json:"created_at"`
 	UpdatedAt       string `json:"updated_at"`
-	ExpectedState   string `json:"expected_state,omitempty"`
+	// Kind, PackageReleaseID and PackageInstallID are omitted while empty,
+	// like LastIntentError: an event written before they existed and an
+	// event without them are the same bytes (a platform operation).
+	Kind             string `json:"kind,omitempty"`
+	PackageReleaseID string `json:"package_release_id,omitempty"`
+	PackageInstallID string `json:"package_install_id,omitempty"`
+	ExpectedState    string `json:"expected_state,omitempty"`
 }
 
 // TextureAgentMutationProjection is the canonical row snapshot for Texture's

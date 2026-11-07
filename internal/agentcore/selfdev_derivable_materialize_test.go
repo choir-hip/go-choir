@@ -9,12 +9,14 @@ package agentcore
 // that is the derivable-wake mechanism under test, not a test-side drive loop.
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"io"
 	"io/fs"
 	"net"
@@ -22,6 +24,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -223,6 +226,10 @@ type derivableSelfDevFixture struct {
 	// a frontend-only candidate that still records its source patch and the
 	// base commit it was authored against (the plain release's join input).
 	sourceBase string
+	// packageSpec, when set, makes writeFrozenBundle freeze a package
+	// change: its source patch on the spec's base, with the spec's screens,
+	// and the operation takes kind package at freeze.
+	packageSpec *packageBundleSpec
 	// bootedManifest is the booted base image manifest path when the fixture
 	// was built with newDerivableSelfDevFixtureBooted.
 	bootedManifest string
@@ -741,6 +748,9 @@ func (fx *derivableSelfDevFixture) seedOperationToAwaitingApproval(t *testing.T,
 	}
 	operation, err = fx.operations.Transition(ctx, fx.computerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
 		next.BundleDigest = bundleDigest
+		if fx.packageSpec != nil {
+			next.Kind = selfdev.KindPackage
+		}
 		return nil
 	})
 	if err != nil {
@@ -853,7 +863,27 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 		Groups:                  map[string][]transaction.ChangeRecord{},
 		RuntimeFiles:            []capsule.FrozenReleaseFile{{Path: "frontend/index.html", SHA256: fileSHA, Mode: 0o444}},
 	}
-	if fx.goPatch != nil {
+	if fx.packageSpec != nil {
+		bundle.SourcePatchSHA256 = computerevent.DigestBytes(fx.packageSpec.patch)
+		bundle.SourcePatchBaseCommit = fx.packageSpec.base
+		names := make([]string, 0, len(fx.packageSpec.screens))
+		for name := range fx.packageSpec.screens {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			raw := fx.packageSpec.screens[name]
+			cfg, err := png.DecodeConfig(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, blank, err := capsule.CheckScreenPNG(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bundle.Screens = append(bundle.Screens, capsule.ScreenFile{Name: name, SHA256: computerevent.DigestBytes(raw), Bytes: int64(len(raw)), Width: cfg.Width, Height: cfg.Height, Blank: blank})
+		}
+	} else if fx.goPatch != nil {
 		bundle.OrderedFileEffects = append(bundle.OrderedFileEffects, transaction.ChangeRecord{Path: "workspace/platform/internal/selfdevprobe/probe.go", Kind: "added", Mode: 0o644})
 		bundle.SourcePatchSHA256 = computerevent.DigestBytes(fx.goPatch)
 		bundle.SourcePatchBaseCommit = hostBuildTestBaseCommit
@@ -881,7 +911,20 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 	if err := os.WriteFile(filepath.Join(incoming, "frontend", "index.html"), content, 0o444); err != nil {
 		t.Fatal(err)
 	}
-	if fx.goPatch != nil {
+	if fx.packageSpec != nil {
+		if err := os.WriteFile(filepath.Join(incoming, "source.patch"), fx.packageSpec.patch, 0o444); err != nil {
+			t.Fatal(err)
+		}
+		screensDir := filepath.Join(incoming, filepath.FromSlash(capsule.BundleScreensDir))
+		if err := os.MkdirAll(screensDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for name, raw := range fx.packageSpec.screens {
+			if err := os.WriteFile(filepath.Join(screensDir, name), raw, 0o444); err != nil {
+				t.Fatal(err)
+			}
+		}
+	} else if fx.goPatch != nil {
 		if err := os.WriteFile(filepath.Join(incoming, "source.patch"), fx.goPatch, 0o444); err != nil {
 			t.Fatal(err)
 		}

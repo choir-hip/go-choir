@@ -390,8 +390,12 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err := publishFrozenDraft(staged.TemporaryRoot, frozenRoot, draft); err != nil {
 		return nil, err
 	}
+	// The operation's layer, from the classification of its patch: the
+	// materializer, the revert route and the live-set readers branch on it.
+	operationKind := stagedOperationKind(staged.TemporaryRoot, staged.SourcePatchSHA)
 	operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
 		next.CapsuleID = capsuleID
+		next.Kind = operationKind
 		next.BundleDigest = record.ContentDigest
 		next.DesiredHead = headBefore.DesiredEventHead
 		next.EffectiveHead = headBefore.EffectiveEventHead

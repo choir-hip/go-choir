@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math"
@@ -22,11 +23,11 @@ type releaseAPIError struct {
 
 // releasePrecommitments reads engineering's rule-settled precommitments for
 // the assignment whose capsule froze the operation's bundle.
-func (rt *Runtime) releasePrecommitments(r *http.Request, ownerID, computerID string, operation selfdev.Operation) ([]release.Precommitment, error) {
+func (rt *Runtime) releasePrecommitments(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) ([]release.Precommitment, error) {
 	if rt.store == nil || strings.TrimSpace(operation.TrajectoryID) == "" {
 		return nil, nil
 	}
-	assignments, err := rt.store.ListEngineeringAssignments(r.Context(), ownerID, computerID, operation.TrajectoryID)
+	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, operation.TrajectoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -35,12 +36,12 @@ func (rt *Runtime) releasePrecommitments(r *http.Request, ownerID, computerID st
 		if operation.CapsuleID == "" || assignment.Binding.CapsuleID != operation.CapsuleID {
 			continue
 		}
-		records, err := rt.store.ListRulePrecommitRecords(r.Context(), ownerID, computerID, assignment.AssignmentID)
+		records, err := rt.store.ListRulePrecommitRecords(ctx, ownerID, computerID, assignment.AssignmentID)
 		if err != nil {
 			return nil, err
 		}
 		for _, precommit := range records {
-			resolve, err := rt.store.GetCommitmentRecord(r.Context(), ownerID, computerID, types.RuleResolveRecordID(precommit.RecordID))
+			resolve, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, types.RuleResolveRecordID(precommit.RecordID))
 			if err != nil {
 				return nil, err
 			}

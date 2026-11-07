@@ -144,6 +144,11 @@ func (rt *Runtime) cleanRebaseBeforeNotice(ctx context.Context, ownerID, compute
 	} else if rec != nil {
 		return false, "the pair already has a rebase notice"
 	}
+	// A package operation is not part of the source stack: there is nothing
+	// to re-apply onto a moved base (docs/design/package-operation-decision-2026-11-06.md 2.5).
+	if named, err := rt.selfdevOperations.Get(ctx, computerID, operationID); err == nil && named.IsPackage() {
+		return false, "the operation " + operationID + " is a package operation, outside the source stack"
+	}
 	key := cleanRebaseIdempotencyKey(operationID, booted)
 	existing, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, key)
 	if err != nil {

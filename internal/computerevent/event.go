@@ -63,6 +63,14 @@ const (
 	// (internal/snapshot): the boot path restores the newest one when the
 	// computer's disk is missing, then replays the events after its sequence.
 	EventSnapshotRecorded EventKind = "snapshot_recorded"
+	// EventPackageApplied records that a package operation published its
+	// release and installed it on this computer (docs/design/
+	// package-operation-decision-2026-11-06.md 2.5). It closes the
+	// operation's pending transition without moving the platform release.
+	// EventPackageReverted records the uninstall of that install; it moves
+	// no head.
+	EventPackageApplied  EventKind = "package_applied"
+	EventPackageReverted EventKind = "package_reverted"
 )
 
 var validEventKinds = map[EventKind]struct{}{
@@ -75,6 +83,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
 	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
 	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {}, EventSnapshotRecorded: {},
+	EventPackageApplied: {}, EventPackageReverted: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no
