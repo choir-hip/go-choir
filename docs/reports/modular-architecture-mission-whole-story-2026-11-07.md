@@ -134,6 +134,6 @@ Verifier key re-pin on d@e: old pin verifier-control-22033e8312994d59, new pin v
 
 Earlier Saturday landings: MA7.10 anchor sampler live 0047d0892; verify failover 7dee1c474; L1 shot path fixes fb9486ab9 and bf3bb7820 (superseded by DS2).
 
-Numbers: 303 commits on main dated after 17:00 UTC on November fourth (this morning's letter said 420, counted from a different start). Security epoch 41 to 97. Desk protocol 1.0.0 to 14.0.0. One revert (the mail desk, 819e36492). 41 Ring-Expedite commits over the mission.
+Numbers: 303 commits on main dated after five in the afternoon Eastern on November fourth (this morning's letter said 420, counted from a different start). Security epoch 41 to 97. Desk protocol 1.0.0 to 14.0.0. One revert (the mail desk, 819e36492). 41 Ring-Expedite commits over the mission.
 
 Not landed: MA4.11, MA6.7, Phase 8.
