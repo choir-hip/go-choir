@@ -613,14 +613,14 @@ func tests(in Inputs, taps GateTaps) []TestResult {
 
 	for _, nd := range []struct{ id, name, minN, why string }{
 		{"P3", "H-A1: outcome-built weights reward extremizers", "200 settled records with 3+ consequences, 20 with an I3/I4 consequence", "no data source: the frozen consequence sets and their realized materiality are not in the trust inputs"},
-		{"P4", "H-A2: flip-rate relevance predicts reverts", "300 actions with sampled relevance and 40 reverts", "no data source: the flip-rate sampler (MA7.10) is not built"},
-		{"P6", "H-B3: spot-checks beat peer agreement", "4 scorers, 200 anchored items, 2 question types", "no data source: the anchor sample (MA7.10) is not built"},
-		{"P7", "H-B4: PPI covers, saves under 2x for strong agents", "2 agents with a 300-item anchored pool", "no data source: the anchor sample (MA7.10) is not built"},
+		{"P4", "H-A2: flip-rate relevance predicts reverts", "300 actions with sampled relevance and 40 reverts", "no data source: the flip-rate sampler is built (MA7.10) but no pass runs it on live actions yet, so no relevance is recorded per action"},
 		{"P8", "H8: satisfice, then diversify", "6 blocks and 20 rated apps per policy", "no data source: the Phase 8 switchback has not started"},
 		{"P9", "Score 2 adds no predictive value beyond scores 1 and 3", "30 failure events among units with a score-2 aggregate", "no data source: no realized-materiality window has closed in the trust inputs"},
 	} {
 		out = append(out, TestResult{ID: nd.id, Name: nd.name, MinN: nd.minN, Status: "unresolved", Reason: nd.why, Sealed: true, N: map[string]int{"units": 0}})
 	}
+	p6, p7 := anchorTests(in, pastDeadline)
+	out = append(out, p6, p7)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }

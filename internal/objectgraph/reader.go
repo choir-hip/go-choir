@@ -196,6 +196,9 @@ var supplementalKindReaders = map[ObjectKind][]Writer{
 	"choir.capture_label":    {WriterResearch, WriterTexture},
 }
 
+// trustKinds are the built-in kinds whose reads are always enforced.
+var trustKinds = map[ObjectKind]bool{"choir.trust_anchor": true, "choir.trust_seed": true}
+
 // readerAdmits reports whether a read declared as (declared, ok) may read a
 // kind registered as reg.
 func readerAdmits(reg KindRegistration, declared Writer, ok bool) bool {
@@ -245,6 +248,17 @@ func checkReadKinds(ctx context.Context, kinds []ObjectKind) error {
 }
 
 func checkReadKind(ctx context.Context, kind ObjectKind) error {
+	// The sampler's seed and the anchored sample are refused to every reader
+	// but the trust service and the owner, whatever the gate's mode: a reader
+	// that could see them could tell which records are checked. The kernel is
+	// not admitted here, nor is an undeclared read.
+	if trustKinds[kind] {
+		if declared, ok := ReaderFrom(ctx); !ok || (declared != WriterTrust && declared != WriterOwner) {
+			recordReaderViolation(kind, declared, ok, "wrong_reader", WriterGateEnforce)
+			return fmt.Errorf("%w: kind %q is kept by %q", ErrWrongReader, kind, WriterTrust)
+		}
+		return nil
+	}
 	global := WriterGateMode(readerGateMode.Load())
 	if global == WriterGateOff {
 		return nil
@@ -282,8 +296,22 @@ func checkReadKind(ctx context.Context, kind ObjectKind) error {
 // not admitted to is counted once; in enforce mode (a package kind) its
 // objects are dropped from the result.
 func readableObjects(ctx context.Context, objs []Object) []Object {
-	if len(objs) == 0 || WriterGateMode(readerGateMode.Load()) == WriterGateOff {
+	if len(objs) == 0 {
 		return objs
+	}
+	if WriterGateMode(readerGateMode.Load()) == WriterGateOff {
+		// The gate being off does not open the trust kinds (checkReadKind
+		// refuses them whatever the mode): drop them from the result.
+		hasTrust := false
+		for _, obj := range objs {
+			if trustKinds[obj.ObjectKind] {
+				hasTrust = true
+				break
+			}
+		}
+		if !hasTrust {
+			return objs
+		}
 	}
 	var refused map[ObjectKind]bool
 	seen := map[ObjectKind]bool{}

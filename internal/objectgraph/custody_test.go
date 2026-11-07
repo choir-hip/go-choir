@@ -100,7 +100,7 @@ func TestDeriveCustodySetsTheWriterFromTheClaim(t *testing.T) {
 func TestServiceWriterConstantsAreDerivedFromServiceNames(t *testing.T) {
 	want := map[string]Writer{
 		kernelservice.Kernel: WriterKernel, kernelservice.Corpusd: WriterCorpusd, kernelservice.Store: WriterStore,
-		kernelservice.OwnerFiles: WriterOwnerFiles, kernelservice.Shell: WriterShell, kernelservice.Autoradio: WriterAutoradio, kernelservice.Lease: WriterLease,
+		kernelservice.OwnerFiles: WriterOwnerFiles, kernelservice.Shell: WriterShell, kernelservice.Autoradio: WriterAutoradio, kernelservice.Lease: WriterLease, kernelservice.Trust: WriterTrust,
 	}
 	for _, m := range kernelservice.All() {
 		w, ok := want[m.Name]

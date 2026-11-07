@@ -206,6 +206,8 @@ type trustResp struct {
 	GateReplay  *trust.GateReport       `json:"gate_replay"`
 	PreregUnits *trust.PreregUnitSet    `json:"prereg_units"`
 	GatedActs   []trustharness.GatedAct `json:"gated_acts"`
+	// AnchorSample is the MA7.10 spot-check sample; an older build omits it.
+	AnchorSample *trust.AnchorSample `json:"anchor_sample"`
 }
 
 type subcallsResp struct {
@@ -271,6 +273,8 @@ func fetch(c client) (trustharness.Inputs, error) {
 			in.GatedActs = []trustharness.GatedAct{}
 		}
 	}
+	in.AnchorSample = tr.AnchorSample
+	in.Served["anchor_sample"] = tr.AnchorSample != nil
 	if sc.Inert.Rates != nil {
 		in.InertRates = sc.Inert.Rates
 	}

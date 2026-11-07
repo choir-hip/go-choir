@@ -67,10 +67,10 @@ Calibration of the probabilities:
 | P1 H4: a track record beats success rate, benchmarks, popularity and ratings | unresolved | cutoffs 0, dropped_no_act 0, dropped_open_window 0, material_items 0, positive_units 0, replay_pairs 26, subjects 0, units 0, units_without_row 0, view_rows 18 | below the minimum n (0 of 30 positive units, 0 of 5 subjects); outcome metrics sealed until the minimum n or 2027-01-29 |
 | P2 Trust conjecture: the LCB ordering predicts the next material failure at a usable tap rate | unresolved | cutoffs 0, dropped_no_act 0, dropped_open_window 0, gate_acts 0, gate_taps 0, material_items 0, positive_units 0, replay_pairs 26, subjects 0, units 0, units_without_row 0, view_rows 18 | below the minimum n (0 of 30 events); outcome metrics sealed until the minimum n or 2027-01-29 |
 | P3 H-A1: outcome-built weights reward extremizers | unresolved | units 0 | no data source: the frozen consequence sets and their realized materiality are not in the trust inputs |
-| P4 H-A2: flip-rate relevance predicts reverts | unresolved | units 0 | no data source: the flip-rate sampler (MA7.10) is not built |
+| P4 H-A2: flip-rate relevance predicts reverts | unresolved | units 0 | no data source: the flip-rate sampler is built (MA7.10) but no pass runs it on live actions yet, so no relevance is recorded per action |
 | P5 H-C1: raw pseudo-counts overconfident; tempered or capped chosen | unresolved | cutoffs 0, dropped_no_act 0, dropped_open_window 0, material_items 0, positive_units 0, replay_pairs 26, subjects 0, units 0, units_without_row 0, view_rows 18 | capped k=3 ships provisionally; the choice was not made by replay (26 pairs; the held-out log-loss test against raw is not built, the server replay picks by Brier at 20 pairs or more) |
-| P6 H-B3: spot-checks beat peer agreement | unresolved | units 0 | no data source: the anchor sample (MA7.10) is not built |
-| P7 H-B4: PPI covers, saves under 2x for strong agents | unresolved | units 0 | no data source: the anchor sample (MA7.10) is not built |
+| P6 H-B3: spot-checks beat peer agreement | unresolved | anchored_items 0 | the computer's build did not serve an anchored sample |
+| P7 H-B4: PPI covers, saves under 2x for strong agents | unresolved | anchored_items 0 | the computer's build did not serve an anchored sample |
 | P8 H8: satisfice, then diversify | unresolved | units 0 | no data source: the Phase 8 switchback has not started |
 | P9 Score 2 adds no predictive value beyond scores 1 and 3 | unresolved | units 0 | no data source: no realized-materiality window has closed in the trust inputs |
 

@@ -135,9 +135,16 @@ func TestSealedBelowMinimumN(t *testing.T) {
 		}
 	}
 	// H2: tests with no data say so with n=0.
-	for _, id := range []string{"P3", "P4", "P6", "P7", "P8", "P9"} {
+	for _, id := range []string{"P3", "P4", "P8", "P9"} {
 		tr := testByID(r, id)
 		if tr.N["units"] != 0 || !strings.HasPrefix(tr.Reason, "no data source") || len(tr.Metrics) != 0 {
+			t.Fatalf("H2: %s %+v", id, tr)
+		}
+	}
+	// P6 and P7 read the anchored sample (MA7.10): an older build served none.
+	for _, id := range []string{"P6", "P7"} {
+		tr := testByID(r, id)
+		if tr.N["anchored_items"] != 0 || len(tr.Metrics) != 0 || !strings.Contains(tr.Reason, "did not serve") {
 			t.Fatalf("H2: %s %+v", id, tr)
 		}
 	}
