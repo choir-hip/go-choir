@@ -180,7 +180,7 @@ func TestShotSizes(t *testing.T) {
 	for _, c := range []struct {
 		w, h int
 		ok   bool
-	}{{1100, 750, true}, {1280, 800, true}, {2560, 1600, true}, {390, 844, true}, {1170, 2532, true}, {1024, 1536, false}, {1280, 2400, false}, {1100, 751, false}, {195, 422, false}, {0, 0, false}} {
+	}{{1100, 750, true}, {1280, 800, true}, {1440, 900, true}, {2880, 1800, true}, {3510, 2532, false}, {2560, 1600, true}, {390, 844, true}, {1170, 2532, true}, {1024, 1536, false}, {1280, 2400, false}, {1100, 751, false}, {195, 422, false}, {0, 0, false}} {
 		if got := shotSizeOK(c.w, c.h); got != c.ok {
 			t.Fatalf("%dx%d = %v, want %v", c.w, c.h, got, c.ok)
 		}

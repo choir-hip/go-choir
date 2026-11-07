@@ -28,25 +28,31 @@ var computerLayerOwner, computerLayerGroup = capsuleNamespaceHostID, capsuleName
 // when it is under root) and the owner's mailbox (ownerfiles.MailDir). The
 // root's symlinks are resolved here; empty leaves every capsule without it.
 func (e *Executor) SetComputerFilesRoot(root, sourceRoot string) {
-	e.computerFilesRoot, e.computerFilesLeaveOut = "", nil
+	e.computerFilesRoot, e.computerFilesLeaveOut = computerFilesLeaveOutFor(root, sourceRoot)
+}
+
+// computerFilesLeaveOutFor resolves root and names the directories a files
+// snapshot leaves out by structure: the capsule's own source and the mailbox.
+// An empty root gives none.
+func computerFilesLeaveOutFor(root, sourceRoot string) (string, map[string]string) {
 	if strings.TrimSpace(root) == "" {
-		return
+		return "", nil
 	}
 	resolved, err := filepath.EvalSymlinks(filepath.Clean(root))
 	if err != nil {
 		resolved = filepath.Clean(root)
 	}
-	e.computerFilesRoot = resolved
-	e.computerFilesLeaveOut = map[string]string{ownerfiles.MailDir: LeaveOutMail}
+	leaveOut := map[string]string{ownerfiles.MailDir: LeaveOutMail}
 	if strings.TrimSpace(sourceRoot) != "" {
 		source := filepath.Clean(sourceRoot)
 		if r, err := filepath.EvalSymlinks(source); err == nil {
 			source = r
 		}
 		if rel, err := filepath.Rel(resolved, source); err == nil && rel != "." && pathWithin(source, resolved) {
-			e.computerFilesLeaveOut[filepath.ToSlash(rel)] = LeaveOutSource
+			leaveOut[filepath.ToSlash(rel)] = LeaveOutSource
 		}
 	}
+	return resolved, leaveOut
 }
 
 // prepareComputerState decides and builds a spawn's files layer: withheld
@@ -237,6 +243,12 @@ func mkdirOwned(dir string) error {
 // files write lock. Any failure to build a kept entry fails the whole walk:
 // a layer is whole or absent.
 func snapshotFilesTree(ctx context.Context, root, dest string, leaveOut map[string]string, receipt *ComputerStateReceipt) error {
+	return snapshotFilesTreeOwned(ctx, root, dest, leaveOut, receipt, computerLayerOwner, computerLayerGroup)
+}
+
+// snapshotFilesTreeOwned is snapshotFilesTree with the owner of the
+// directories it makes.
+func snapshotFilesTreeOwned(ctx context.Context, root, dest string, leaveOut map[string]string, receipt *ComputerStateReceipt, uid, gid int) error {
 	rootFD, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("open files root: %w", err)
@@ -252,7 +264,7 @@ func snapshotFilesTree(ctx context.Context, root, dest string, leaveOut map[stri
 	}
 	defer unix.Close(destFD)
 	rootMnt, mntKnown := mountIDAt(rootFD, "")
-	w := snapshotWalk{ctx: ctx, dev: rootStat.Dev, mnt: rootMnt, mntKnown: mntKnown, leaveOut: leaveOut, receipt: receipt}
+	w := snapshotWalk{ctx: ctx, dev: rootStat.Dev, mnt: rootMnt, mntKnown: mntKnown, leaveOut: leaveOut, receipt: receipt, uid: uid, gid: gid}
 	return w.dir(rootFD, destFD, "")
 }
 
@@ -263,6 +275,7 @@ type snapshotWalk struct {
 	mntKnown bool
 	leaveOut map[string]string
 	receipt  *ComputerStateReceipt
+	uid, gid int
 }
 
 func (w snapshotWalk) dir(srcFD, destFD int, rel string) error {
@@ -362,7 +375,7 @@ func (w snapshotWalk) subdir(srcFD, childFD, destFD int, name, child string) err
 	if err := unix.Fchmodat(destFD, name, 0o755, 0); err != nil {
 		return fmt.Errorf("chmod %q: %w", child, err)
 	}
-	if err := unix.Fchownat(destFD, name, computerLayerOwner, computerLayerGroup, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if err := unix.Fchownat(destFD, name, w.uid, w.gid, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return fmt.Errorf("chown %q: %w", child, err)
 	}
 	childDest, err := unix.Openat(destFD, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)

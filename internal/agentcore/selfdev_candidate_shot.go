@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -50,17 +49,16 @@ type candidateShotFailure struct{ Cause string }
 func (f candidateShotFailure) Error() string { return "shot review: " + f.Cause }
 
 // startCandidateShot starts the shot worker for the operation's host-built
-// candidate, if it is not already running, and returns at once. The S2
-// builder fills this in: it must write exactly one candidate_shot event
+// candidate, if it is not already running, and returns at once. The worker
+// (selfdev_candidate_shot_worker.go) writes exactly one candidate_shot event
 // (appendCandidateShot) for (operation, built.Job.JobID), pass or fail, and
-// must hold no materializer lock. Until then it only logs, so a plan bundle
-// stays pending.
+// holds no materializer lock; a dead worker is restarted at most twice.
 func (rt *Runtime) startCandidateShot(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
 	if rt.candidateShotStarter != nil {
 		rt.candidateShotStarter(operation, bundle, built)
 		return
 	}
-	log.Printf("selfdev candidate shot: operation %s host build %s: no shot worker is wired; staying pending", operation.OperationID, built.Job.JobID)
+	rt.ensureCandidateShotWorker(operation, bundle, built)
 }
 
 // platformShotRelevantPaths are the bundle's non-exempt platform source

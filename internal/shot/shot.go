@@ -61,6 +61,9 @@ type Options struct {
 	// Fontconfig is FONTCONFIG_FILE for the browser; empty keeps the process's own.
 	Fontconfig string
 	Timeouts   Timeouts
+	// BeforeView runs before each view's page opens (the shot worker resets
+	// the served desktop here); an error fails the run naming the view.
+	BeforeView func(ctx context.Context, v capsule.ShotView) error
 }
 
 // Result is one written file.
@@ -168,6 +171,11 @@ func Run(ctx context.Context, opts Options) (results []Result, err error) {
 	}
 
 	for _, v := range opts.Plan.Views {
+		if opts.BeforeView != nil {
+			if herr := opts.BeforeView(ctx, v); herr != nil {
+				return results, fmt.Errorf("shot: view %s: before view: %w", v.Name, herr)
+			}
+		}
 		var rec *recorder
 		if vd := opts.Plan.Video; vd != nil && vd.View == v.Name {
 			rec = &recorder{minSeconds: vd.Seconds, maxFrames: vd.Seconds*15 + 60}

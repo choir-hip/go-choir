@@ -8,9 +8,14 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capfloor"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/doctool"
+	"github.com/yusefmosiah/go-choir/internal/shotsandbox"
 )
 
 func main() {
+	// The candidate-shot sandbox stage (internal/shotsandbox): the running
+	// build re-executed in a loopback-only namespace to serve and shoot a
+	// candidate. It never returns when it is the stage.
+	shotsandbox.MaybeRunStage()
 	if len(os.Args) > 1 && os.Args[1] == "desk-session" {
 		// Host desk-cell session worker (R3b): serve framed yaegi eval cells on
 		// the inherited session socket for a non-capsule desk activation. The

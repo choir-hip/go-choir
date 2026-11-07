@@ -181,13 +181,14 @@ func truncateRunesShot(s string, n int) string {
 	return string(runes[:n]) + "…"
 }
 
-// shotSizeOK is question 5: desktop 1100x750 or 1280x800 (at device pixel
+// shotSizeOK is question 5: desktop 1100x750, 1280x800 or 1440x900 (the
+// platform shot driver's desktop viewport, internal/shot) (at device pixel
 // ratio 1, 2 or 3), phone 390x844 at any DPR.
 func shotSizeOK(width, height int) bool {
 	if width <= 0 || height <= 0 {
 		return false
 	}
-	for _, size := range [][2]int{{1100, 750}, {1280, 800}} {
+	for _, size := range [][2]int{{1100, 750}, {1280, 800}, {1440, 900}} {
 		for dpr := 1; dpr <= 3; dpr++ {
 			if width == size[0]*dpr && height == size[1]*dpr {
 				return true
@@ -589,14 +590,9 @@ func (rt *Runtime) reviewCandidateShots(ctx context.Context, ownerID string, ope
 	if len(bundle.Screens) > capsule.MaxScreens {
 		return nil, fmt.Errorf("the bundle carries %d screens, over the %d a candidate may", len(bundle.Screens), capsule.MaxScreens)
 	}
-	call := rt.shotReviewCall
-	if call == nil {
-		if rt.modelPolicy == nil {
-			return nil, errors.New("the multimodal verifier is unavailable")
-		}
-		call = func(ctx context.Context, prompt string, refs []string) (modelpolicy.VerifyOutcome, error) {
-			return rt.modelPolicy.VerifyImages(ctx, ownerID, shotReviewRole, prompt, refs)
-		}
+	call, err := rt.shotReviewCaller(ownerID)
+	if err != nil {
+		return nil, err
 	}
 	images := rt.imageStore()
 	review, err := reviewShotsNoted(ctx, call, bundle.Screens, wanted, notes, images.Has)

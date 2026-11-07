@@ -96,13 +96,22 @@ func saveFrozenScreen(images screenAssetStore, filesRoot, frozenRoot, operationI
 	if hex.EncodeToString(sum[:]) != screen.SHA256 {
 		return errors.New("staged bytes are not the bundle's screen")
 	}
-	if images == nil {
-		return errors.New("no asset store")
-	}
-	if ref, _, err := images.Put(data); err != nil {
-		return fmt.Errorf("asset store write: %w", err)
-	} else if ref != "artifact:sha256:"+screen.SHA256 {
-		return fmt.Errorf("asset store filed it as %s", ref)
+	return storeScreenBytes(images, filesRoot, operationID, screen.Name, screen.SHA256, data, true)
+}
+
+// storeScreenBytes files screen bytes under the cited digest: in the asset
+// store (an image; a video is not one) and in the operation's screens
+// directory of the file tree. Idempotent by digest.
+func storeScreenBytes(images screenAssetStore, filesRoot, operationID, name, sha string, data []byte, asImage bool) error {
+	if asImage {
+		if images == nil {
+			return errors.New("no asset store")
+		}
+		if ref, _, err := images.Put(data); err != nil {
+			return fmt.Errorf("asset store write: %w", err)
+		} else if ref != "artifact:sha256:"+sha {
+			return fmt.Errorf("asset store filed it as %s", ref)
+		}
 	}
 	if strings.TrimSpace(filesRoot) == "" {
 		return errors.New("no file tree")
@@ -111,11 +120,11 @@ func saveFrozenScreen(images screenAssetStore, filesRoot, frozenRoot, operationI
 	if err != nil {
 		return fmt.Errorf("create screens directory: %w", err)
 	}
-	final := filepath.Join(target, screen.Name)
+	final := filepath.Join(target, name)
 	// Idempotent by digest: a file that already holds these bytes stays.
 	if info, err := os.Lstat(final); err == nil && info.Mode().IsRegular() {
 		if existing, err := os.ReadFile(final); err == nil {
-			if have := sha256.Sum256(existing); hex.EncodeToString(have[:]) == screen.SHA256 {
+			if have := sha256.Sum256(existing); hex.EncodeToString(have[:]) == sha {
 				return nil
 			}
 		}
@@ -247,6 +256,9 @@ func (rt *Runtime) CandidateScreens(ctx context.Context, computerID, operationID
 		return ScreensListing{}, err
 	}
 	if len(bundle.Screens) == 0 {
+		if bundle.ShotPlan != nil {
+			return rt.candidateShotScreens(ctx, operation, bundle)
+		}
 		return ScreensListing{}, errors.New("the candidate carries no screens")
 	}
 	store := rt.imageStore()
@@ -279,6 +291,9 @@ func (toolCtx *CapsuleToolCtx) frozenScreensNote(ctx context.Context, assignment
 		return ""
 	}
 	bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest), operation)
+	if err == nil && len(bundle.Screens) == 0 && bundle.ShotPlan != nil && toolCtx.CandidateShot != nil {
+		return candidateShotScreensNote(toolCtx, ctx, operation, bundle)
+	}
 	if err != nil || len(bundle.Screens) == 0 {
 		return ""
 	}

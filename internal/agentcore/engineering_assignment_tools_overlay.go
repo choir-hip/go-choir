@@ -78,7 +78,7 @@ func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handl
 		Role: capsule.RoleEngineering, CapsuleHandle: handle,
 		EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 		OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
-		BootedCommit: rt.buildCommit,
+		BootedCommit: rt.buildCommit, CandidateShot: rt.readCandidateShot,
 		ValidateCurrentObligation: func(callCtx context.Context) error {
 			return rt.validateAssignedEngineeringExecution(callCtx, rec)
 		},

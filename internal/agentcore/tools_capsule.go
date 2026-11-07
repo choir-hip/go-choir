@@ -71,6 +71,10 @@ type CapsuleToolCtx struct {
 	// BootedCommit answers the commit this computer booted (its running
 	// build). Freeze names it beside the release base; nil leaves it out.
 	BootedCommit func() string
+	// CandidateShot reads the candidate_shot event of a plan bundle's
+	// operation, the screens the platform took after the host build
+	// (selfdev_candidate_shot_worker.go); nil or not found says none yet.
+	CandidateShot func(ctx context.Context, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) (computerevent.CandidateShotPayload, bool)
 	// frozenTree is the executor read a second Freeze on a frozen operation
 	// takes to compare the capsule's tree with the candidate (R9-1); nil
 	// uses Executor. A test substitutes it to drive the replay check

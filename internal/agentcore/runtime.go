@@ -247,6 +247,12 @@ type Runtime struct {
 	// candidateShotStarter replaces startCandidateShot's body in tests
 	// (selfdev_candidate_shot.go); nil runs the production start.
 	candidateShotStarter func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease)
+	// shotWorkers is the candidate-shot watchdog's memory, one entry per
+	// (operation, host build); candidateShotDeps replaces the worker's
+	// sandbox launch and machine paths in tests (selfdev_candidate_shot_worker.go).
+	shotWorkersMu     sync.Mutex
+	shotWorkers       map[string]*shotWorkerState
+	candidateShotDeps *candidateShotDeps
 	// researchChildCalls spaces every sub-RLM's model calls on this
 	// computer: research children and management tasks
 	// (subRLMCallSpacer, research_children.go).

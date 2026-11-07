@@ -274,3 +274,13 @@ func (e *Executor) MemoryBudget() int64 { return 0 }
 // The store browser: capsules need the Linux guest kernel.
 func (e *Executor) SetBrowser(browser, fontconfig string) {}
 func (e *Executor) SetFfmpeg(ffmpeg string)               {}
+
+// The candidate shot's state (shot_state_linux.go): the shot sandbox needs
+// the Linux guest kernel.
+func ShotSandboxIDs() (uid, gid int)                      { return os.Geteuid(), os.Getegid() }
+func ChownTreeNoFollow(root string, uid, gid int) error   { return stubErr("shot state") }
+func CheckStateCopyFits(dir string, estimate int64) error { return stubErr("shot state") }
+func StateVolumeAboveFloor(dir string) error              { return stubErr("shot state") }
+func BuildShotFilesLayer(ctx context.Context, filesRoot, sourceRoot, dest string, uid, gid int) (ComputerStateReceipt, error) {
+	return ComputerStateReceipt{}, stubErr("shot state")
+}
