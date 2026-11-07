@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
@@ -465,7 +464,7 @@ func (rt *Runtime) recordPackageApplied(ctx context.Context, operation selfdev.O
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 			EventKind: computerevent.EventPackageApplied, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:package-install", PrivacyClass: "owner",
+			ActorProfile: platformUpdateActor(), AuthorityRef: "guest-core:package-install", PrivacyClass: "owner",
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
 			ResultingEffectiveCommitment: head.EffectiveStateCommitment,
 			ReducerVersion:               computerevent.ReducerVersionV1,
@@ -514,7 +513,7 @@ func (rt *Runtime) revertPackageOperation(ctx context.Context, ownerID, computer
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: computerevent.EventPackageReverted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, TrajectoryID: reverted.TrajectoryID, CapsuleID: reverted.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "owner:" + ownerID, PrivacyClass: "owner",
+			ActorProfile: platformUpdateActor(), AuthorityRef: "owner:" + ownerID, PrivacyClass: "owner",
 			ProposedEffectRef: reverted.BundleDigest, DecisionRef: reverted.DecisionEvent,
 			ReducerVersion: computerevent.ReducerVersionV1,
 		}
