@@ -66,7 +66,7 @@
   "internal/agentcore/texture_audit.go": 2,
   "internal/agentcore/texture_frame.go": 1,
   "internal/agentcore/texture_lifecycle_api.go": 12,
-  "internal/agentcore/texture_owner_directions_cast.go": 2,
+  "internal/agentcore/texture_owner_directions_cast.go": 1,
   "internal/agentcore/texture_rebase_notice_cast.go": 1,
   "internal/agentcore/tool_profiles.go": 23,
   "internal/agentcore/tools_capsule.go": 2,
