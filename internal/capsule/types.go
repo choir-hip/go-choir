@@ -395,6 +395,9 @@ type StagedRelease struct {
 	// Video is the one walkthrough video staged beside them; nil for none
 	// (screens_video.go).
 	Video *VideoFile
+	// ShotPlan is the engineer's validated shot plan for a platform
+	// candidate (shot_plan.go); nil for none.
+	ShotPlan *ShotPlan
 }
 
 // FileManifest is a snapshot of a file's metadata at commit time.

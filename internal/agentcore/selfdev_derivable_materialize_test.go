@@ -222,6 +222,16 @@ type derivableSelfDevFixture struct {
 	// workspace/platform Go effect, source.patch, and its sha and base
 	// commit (P5 host build tests).
 	goPatch []byte
+	// shotPlan, when set with goPatch, is the bundle's shot plan; goPatch
+	// alone gets defaultTestShotPlan (a platform candidate is never
+	// swapped without shots, design 3.3).
+	shotPlan *capsule.ShotPlan
+	// noShotPlan, with goPatch, freezes the bundle with neither screens nor
+	// a plan (the interlock must refuse it by name).
+	noShotPlan bool
+	// sourceOnly freezes the bundle as a source-only one: no release files,
+	// host_build provenance (design 3.1).
+	sourceOnly bool
 	// sourceBase, when set and goPatch is not, makes writeFrozenBundle freeze
 	// a frontend-only candidate that still records its source patch and the
 	// base commit it was authored against (the plain release's join input).
@@ -887,9 +897,19 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 		bundle.OrderedFileEffects = append(bundle.OrderedFileEffects, transaction.ChangeRecord{Path: "workspace/platform/internal/selfdevprobe/probe.go", Kind: "added", Mode: 0o644})
 		bundle.SourcePatchSHA256 = computerevent.DigestBytes(fx.goPatch)
 		bundle.SourcePatchBaseCommit = hostBuildTestBaseCommit
+		if !fx.noShotPlan {
+			bundle.ShotPlan = fx.shotPlan
+			if bundle.ShotPlan == nil {
+				bundle.ShotPlan = defaultTestShotPlan()
+			}
+		}
 	} else if fx.sourceBase != "" {
 		bundle.SourcePatchSHA256 = computerevent.DigestBytes([]byte(plainSourcePatch))
 		bundle.SourcePatchBaseCommit = fx.sourceBase
+	}
+	if fx.sourceOnly {
+		bundle.RuntimeFiles = []capsule.FrozenReleaseFile{}
+		bundle.ReleaseBinary = &capsule.ReleaseBinaryProvenance{Origin: capsule.ReleaseBinaryHostBuild}
 	}
 	contentDigest, err := bundle.ComputeContentDigest()
 	if err != nil {
@@ -1179,4 +1199,8 @@ func (fx *derivableSelfDevFixture) verifierDecisionJoin(ctx context.Context, req
 		return fmt.Errorf("checkpoint authority: verifier decision mismatch")
 	}
 	return nil
+}
+
+func defaultTestShotPlan() *capsule.ShotPlan {
+	return &capsule.ShotPlan{Views: []capsule.ShotView{{Name: "home", Path: "/", Viewport: "desktop"}}}
 }

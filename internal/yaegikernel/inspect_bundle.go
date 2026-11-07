@@ -65,6 +65,37 @@ type bundleDraftMirror struct {
 	LegacyVisualEvidence    json.RawMessage            `json:"visual_evidence,omitempty"`
 	Screens                 []mountedScreen            `json:"screens,omitempty"`
 	Video                   *mountedVideo              `json:"video,omitempty"`
+	ShotPlan                *mountedShotPlan           `json:"shot_plan,omitempty"`
+}
+
+// mountedShotPlan mirrors capsule.ShotPlan (the source-only freeze's
+// screenshot plan, docs/design/source-only-freeze-and-candidate-shots-2026-11-06.md).
+// This package cannot import capsule; the strict decode of the draft reaches
+// into this subtree, so a field the producer writes and this mirror lacks
+// fails the inspection, and a test in capsule/transaction holds the two equal.
+type mountedShotPlan struct {
+	Views []mountedShotView `json:"views"`
+	Video *mountedShotVideo `json:"video,omitempty"`
+}
+
+type mountedShotView struct {
+	Name     string            `json:"name"`
+	Path     string            `json:"path"`
+	Viewport string            `json:"viewport"`
+	Theme    string            `json:"theme,omitempty"`
+	Steps    []mountedShotStep `json:"steps,omitempty"`
+}
+
+type mountedShotStep struct {
+	Op       string `json:"op"`
+	Selector string `json:"selector,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Ms       int    `json:"ms,omitempty"`
+}
+
+type mountedShotVideo struct {
+	View    string `json:"view"`
+	Seconds int    `json:"seconds"`
 }
 
 // mountedVideoName and mountedVideoMaxBytes mirror capsule.ValidVideoName and
@@ -217,6 +248,11 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 	}
 	if video != nil {
 		out["video"] = video
+	}
+	if record.ShotPlan != nil {
+		// The plan is bound by the content digest recomputed above; a
+		// verifier reads it here instead of the raw draft.
+		out["shot_plan"] = record.ShotPlan
 	}
 	return out, nil
 }

@@ -605,3 +605,27 @@ func (rt *Runtime) reviewCandidateShots(ctx context.Context, ownerID string, ope
 	}
 	return &review, nil
 }
+
+// shotReviewDeferred is what a plan bundle's verdict records for the
+// per-shot review: the platform shoots and reviews the host-built candidate
+// at the candidate_shot gate before the swap (selfdev_candidate_shot.go).
+const shotReviewDeferred = "deferred_to_candidate_shot"
+
+// planShotsMissing lists the numbered shots the request names that the
+// plan has no view for. A plan view's number is its 1-based position (the
+// NN of NN-before-<view>.png). No model call; nil when the request names no
+// numbered list.
+func planShotsMissing(plan *capsule.ShotPlan, wanted []requestedShot) []string {
+	if plan == nil {
+		return nil
+	}
+	var missing []string
+	for _, w := range wanted {
+		n := 0
+		fmt.Sscanf(w.Number, "%d", &n)
+		if n < 1 || n > len(plan.Views) {
+			missing = append(missing, w.Number)
+		}
+	}
+	return missing
+}

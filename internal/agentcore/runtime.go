@@ -244,6 +244,9 @@ type Runtime struct {
 	// shotReviewCall replaces the judge's per-shot review model call in
 	// tests (selfdev_shot_review.go); nil uses modelPolicy.
 	shotReviewCall shotReviewCall
+	// candidateShotStarter replaces startCandidateShot's body in tests
+	// (selfdev_candidate_shot.go); nil runs the production start.
+	candidateShotStarter func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease)
 	// researchChildCalls spaces every sub-RLM's model calls on this
 	// computer: research children and management tasks
 	// (subRLMCallSpacer, research_children.go).

@@ -248,8 +248,37 @@ func newHostBuildFixture(t *testing.T, computerID, mode string) (*derivableSelfD
 	fx.configure(func(rt *Runtime) {
 		rt.selfdevGuestImageManifest = manifest
 		rt.selfdevHostBuilder = host
+		// The shot worker is not wired in L1's first half: this stands in
+		// for it, writing a passing candidate_shot for the host build the
+		// swap would install.
+		rt.candidateShotStarter = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
+			testWriteCandidateShot(t, fx.rt, operation, bundle, built, computerevent.CandidateShotPass, "")
+		}
 	})
 	return fx, host
+}
+
+// testWriteCandidateShot writes the operation's candidate_shot event as the
+// shot worker will.
+func testWriteCandidateShot(t *testing.T, rt *Runtime, operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease, verdict, cause string) {
+	t.Helper()
+	planDigest, err := bundle.ShotPlan.Digest()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	payload := computerevent.CandidateShotPayload{
+		HostBuildJobID: built.Job.JobID, PlanSHA256: planDigest, Verdict: verdict, Cause: cause,
+	}
+	if verdict == computerevent.CandidateShotPass {
+		payload.Shots = []computerevent.CandidateShotFile{
+			{Name: "01-before-home.png", SHA256: strings.Repeat("a", 64), Bytes: 1},
+			{Name: "01-after-home.png", SHA256: strings.Repeat("b", 64), Bytes: 1},
+		}
+	}
+	if err := rt.appendCandidateShot(context.Background(), operation, payload); err != nil {
+		t.Errorf("append candidate_shot: %v", err)
+	}
 }
 
 // G1, G6: an accepted Go change applies as the host-built layered release:

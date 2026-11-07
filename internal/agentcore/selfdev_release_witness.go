@@ -128,7 +128,7 @@ var selfdevGatePairs = []selfdevGatePair{
 		Pair: "bundle_source_patch", Left: "source.patch bytes", Right: "bundle source_patch_sha256",
 		Compared: true, ComparedAt: witnessAtHostBuild,
 		GateRef: "self_development_host_build.go:selfDevelopmentHostBuild (readBoundSourcePatch)",
-		Note:    "only on the host-build path; a frontend-only candidate has no source patch",
+		Note:    "only on the host-build path; a candidate that stages its own release files may carry no source patch",
 		Anchors: []witnessAnchor{{File: "self_development_host_build.go", Needle: "readBoundSourcePatch(", Min: 1}},
 	},
 	{
@@ -675,7 +675,7 @@ func (rt *Runtime) witnessBundle(operation selfdev.Operation, out *ReleaseWitnes
 	}
 	// bundle_source_patch: the gate reads the patch through readBoundSourcePatch.
 	if bundle.SourcePatchSHA256 == "" {
-		b.unknown("bundle_source_patch", "the bundle carries no source patch (a frontend-only candidate)")
+		b.unknown("bundle_source_patch", "the bundle carries no source patch (a candidate that stages its own release files)")
 	} else if _, status, patchErr := readBoundSourcePatch(filepath.Join(bundleRoot, "source.patch"), bundle.SourcePatchSHA256); patchErr != nil {
 		if status == http.StatusGone {
 			b.unknown("bundle_source_patch", patchErr.Error())
@@ -745,7 +745,10 @@ func (rt *Runtime) witnessHostBuild(operation selfdev.Operation, bundle transact
 	}
 	out.HostBuild.Required = consensus || len(selfDevelopmentBundleBinaryInputs(bundle)) > 0
 	if !out.HostBuild.Required {
-		reason := "no host build on this path: a frontend-only candidate applies as the capsule's files (a consensus decision would require one)"
+		reason := "no host build on this path: a candidate that stages its own release files applies as those files (a consensus decision would require one)"
+		if bundle.SourceOnly() {
+			reason = "no host build on this path: a source-only candidate with no Go input and no consensus decision has no release files to install, so the materializer fails it by name (a consensus decision would host-build it)"
+		}
 		b.unknown("bundle_host_build", reason)
 		b.unknown("builder_receipt_patch", reason)
 		return

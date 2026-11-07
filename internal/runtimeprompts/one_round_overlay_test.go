@@ -26,20 +26,27 @@ func TestManagementOverlaySaysTheDelegateRoundBuilds(t *testing.T) {
 	}
 }
 
-// Failure 28: Freeze refused to reuse the running binary because it was
-// built from another commit than the capsule source, and the overlay said
-// a frontend-only change never builds bin/autoputer. The no-Go branch must
-// say what to do on that refusal.
-func TestEngineeringOverlaySaysWhenAFrontendChangeBuildsTheBinary(t *testing.T) {
+// Failure 28, superseded by the source-only freeze (docs/design/
+// source-only-freeze-and-candidate-shots-2026-11-06.md 3.1): Freeze ships the
+// source and the host builds it, so no change is told to build or stage
+// bin/autoputer, and no recipe says to build it on a refusal. Failure modes:
+// the overlay still sends a frontend change to build the binary on a Freeze
+// refusal; it still stages a release tree.
+func TestEngineeringOverlaySaysAPlatformChangeNeverBuildsTheBinary(t *testing.T) {
 	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
-	noGo := overlay[strings.Index(overlay, "touches no Go input"):strings.Index(overlay, "A change that touches a Go input")]
-	for _, want := range []string{
-		"the running binary was built from",
+	for _, absent := range []string{
 		"build bin/autoputer from the workspace source as the second job",
-		"then Freeze again",
+		"the running binary was built from",
+		"FREEZE REQUIRES THE BUILT RELEASE TREE",
+		"Freeze stages this computer's running binary",
 	} {
-		if !strings.Contains(noGo, want) {
-			t.Errorf("the no-Go branch does not say %q", want)
+		if strings.Contains(overlay, absent) {
+			t.Errorf("the overlay still says %q", absent)
+		}
+	}
+	for _, want := range []string{"A platform change never builds bin/autoputer", "never stages a release tree", "never sets GOPROXY=off", "FREEZE SHIPS YOUR SOURCE"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("the overlay does not say %q", want)
 		}
 	}
 }
@@ -64,10 +71,10 @@ func TestEngineeringOverlayTeachesBoundedJobsAndTheBudget(t *testing.T) {
 			t.Errorf("the overlay does not say %q", want)
 		}
 	}
-	noGo := overlay[strings.Index(overlay, "touches no Go input"):strings.Index(overlay, "A change that touches a Go input")]
-	for _, want := range []string{"no go test", "frontend checks"} {
-		if !strings.Contains(noGo, want) {
-			t.Errorf("the no-Go branch does not say %q", want)
+	frontend := overlay[strings.Index(overlay, "Check a frontend change"):strings.Index(overlay, "Check a Go change")]
+	for _, want := range []string{"frontend check job", "package checks"} {
+		if !strings.Contains(frontend, want) {
+			t.Errorf("the frontend branch does not say %q", want)
 		}
 	}
 }

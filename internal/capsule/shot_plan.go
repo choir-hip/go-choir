@@ -1,8 +1,10 @@
 package capsule
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -37,6 +39,14 @@ import (
 //     MaxScreenBytes and the pixel bound before it counts.
 
 const (
+	// ShotPlanFile is where the engineer writes its plan in the capsule
+	// (an artifact path, beside the screens, outside /workspace/platform).
+	ShotPlanFile = "/var/lib/artifact/shot-plan.json"
+	// ShotPlanPrefix is ShotPlanFile as a capsule diff path.
+	ShotPlanPrefix = "var/lib/artifact/shot-plan.json"
+	// MaxShotPlanBytes bounds the plan file.
+	MaxShotPlanBytes = 64 << 10
+
 	// MaxShotSteps bounds one view's steps.
 	MaxShotSteps = 20
 	// MaxShotStepMs bounds one wait_ms (and a wait_for) step.
@@ -110,6 +120,14 @@ func (p ShotPlan) Validate() error {
 			return fmt.Errorf("shot plan: view name %q is used twice", v.Name)
 		}
 		seen[strings.ToLower(v.Name)] = true
+		// A view is numbered by its position (the NN of NN-before-<name>.png),
+		// so its name must make a valid, pairable screen name in both roles.
+		for _, role := range []string{"before", "after"} {
+			screen := fmt.Sprintf("%02d-%s-%s.png", i+1, role, v.Name)
+			if r, view := ScreenRole(screen); !ValidScreenName(screen) || string(r) != role || view != strings.ToLower(v.Name) {
+				return fmt.Errorf("shot plan: view %d name %q does not pair as %s", i, v.Name, role)
+			}
+		}
 		if len(v.Path) > MaxShotPathBytes || !strings.HasPrefix(v.Path, "/") || strings.HasPrefix(v.Path, "//") || strings.ContainsAny(v.Path, "\\\r\n\x00") {
 			return fmt.Errorf("shot plan: view %s path %q must be an absolute path on the base origin", v.Name, v.Path)
 		}
@@ -216,4 +234,25 @@ func (p ShotPlan) Digest() (string, error) {
 	}
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// DecodeShotPlan strictly decodes a plan file's bytes and validates it. An
+// unknown field, trailing data or an oversize file is refused, never dropped.
+func DecodeShotPlan(raw []byte) (*ShotPlan, error) {
+	if len(raw) > MaxShotPlanBytes {
+		return nil, fmt.Errorf("shot plan: %s is larger than %d bytes", ShotPlanFile, MaxShotPlanBytes)
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var plan ShotPlan
+	if err := dec.Decode(&plan); err != nil {
+		return nil, fmt.Errorf("shot plan: %s is not a valid plan: %w", ShotPlanFile, err)
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("shot plan: %s holds more than one JSON value", ShotPlanFile)
+	}
+	if err := plan.Validate(); err != nil {
+		return nil, err
+	}
+	return &plan, nil
 }

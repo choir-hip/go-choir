@@ -2246,71 +2246,93 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		files = append(files, FrozenReleaseFile{Path: filepath.ToSlash(clean), SHA256: hex.EncodeToString(hash.Sum(nil)), Mode: mode})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	if len(files) == 0 || files[0].Path == "" {
-		return nil, fmt.Errorf("capsule release contains no frozen runtime artifacts")
-	}
-	hasAutoputer, hasFrontend, stagedAutoputer := false, false, false
-	var binary *ReleaseBinaryProvenance
-	for _, file := range files {
-		if file.Path == ReleaseBinaryPath {
-			stagedAutoputer = true
-			if file.Mode&0o111 != 0 {
-				hasAutoputer = true
-				binary = &ReleaseBinaryProvenance{Origin: ReleaseBinaryCapsuleBuilt, SHA256: file.SHA256}
-			}
-		}
-		if file.Path == "frontend/index.html" || strings.HasPrefix(file.Path, "frontend/") {
-			hasFrontend = true
-		}
-	}
-	if !hasAutoputer && stagedAutoputer {
-		return nil, fmt.Errorf("capsule release must contain executable bin/autoputer")
-	}
-	if !hasFrontend {
-		return nil, fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
-	}
-	if !hasAutoputer {
-		// Option A (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md):
-		// a change with no binary input ships this computer's running
-		// binary, hashed and bound to the commit the capsule source is
-		// pinned to, instead of a capsule build.
-		running, runningErr := e.currentRunningBinary()
-		if runningErr != nil {
-			running = RunningBinary{}
-		}
-		reuseProof, err := PlanReleaseBinaryReuseWith(ctx, changes, caps.Spec.SourceArtifactRef, running, e.reuseDiffer())
-		if err != nil {
-			return nil, fmt.Errorf("capsule release must contain executable bin/autoputer: %w", errors.Join(err, runningErr))
-		}
-		reused, size, err := StageRunningBinary(ctx, temporary, running)
-		if err != nil {
-			return nil, err
-		}
-		total += size
-		if total > caps.MemoryMax {
-			return nil, fmt.Errorf("capsule release exceeds resource budget")
-		}
-		files = append(files, reused)
-		sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-		binary = &ReleaseBinaryProvenance{
-			Origin: ReleaseBinaryReusedRunning, SHA256: reused.SHA256,
-			RunningCommit:    strings.ToLower(strings.TrimSpace(running.Commit)),
-			SourceBaseCommit: SourceArtifactCommit(caps.Spec.SourceArtifactRef),
-			ReuseProof:       reuseProof,
-
-			StoreSchemaVersion: FreezeStoreSchemaVersion(),
-		}
-	}
 	// S2-f: source changes (workspace/platform, classified LedgerSource) are
 	// source-carried. Emit a unified diff the host builder can apply to the
-	// same checkout and rebuild into a layered release — the bundle records
-	// the patch + base commit as provenance.
-	patch, patchSHA, baseCommit, err := e.emitSourcePatch(caps, changes, temporary)
+	// same checkout and rebuild into a layered release - the bundle records
+	// the patch + base commit as provenance. The patch is emitted before the
+	// release checks below because the source-only decision needs it in hand
+	// (docs/design/source-only-freeze-and-candidate-shots-2026-11-06.md 3.1).
+	patch, patchSHA, baseCommit, layer, err := e.emitSourcePatchLayer(caps, changes, temporary)
 	if err != nil {
 		return nil, err
 	}
+	// Source-only freeze: a capsule that staged no release tree and made a
+	// source patch ships the source. The host builds it; the capsule cannot
+	// (one CPU, ~1 GiB, a ~14 minute link). With neither files nor a patch
+	// the refusal stands; a capsule that still stages a release tree keeps
+	// every check below (the tree is a test artifact, never installed).
+	sourceOnly := len(files) == 0 && patchSHA != ""
+	if !sourceOnly && (len(files) == 0 || files[0].Path == "") {
+		return nil, fmt.Errorf("capsule release contains no frozen runtime artifacts")
+	}
+	var binary *ReleaseBinaryProvenance
+	if sourceOnly {
+		binary = &ReleaseBinaryProvenance{Origin: ReleaseBinaryHostBuild}
+		files = nil
+	} else {
+		hasAutoputer, hasFrontend, stagedAutoputer := false, false, false
+		for _, file := range files {
+			if file.Path == ReleaseBinaryPath {
+				stagedAutoputer = true
+				if file.Mode&0o111 != 0 {
+					hasAutoputer = true
+					binary = &ReleaseBinaryProvenance{Origin: ReleaseBinaryCapsuleBuilt, SHA256: file.SHA256}
+				}
+			}
+			if file.Path == "frontend/index.html" || strings.HasPrefix(file.Path, "frontend/") {
+				hasFrontend = true
+			}
+		}
+		if !hasAutoputer && stagedAutoputer {
+			return nil, fmt.Errorf("capsule release must contain executable bin/autoputer")
+		}
+		if !hasFrontend {
+			return nil, fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
+		}
+		if !hasAutoputer {
+			// Option A (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md):
+			// a change with no binary input ships this computer's running
+			// binary, hashed and bound to the commit the capsule source is
+			// pinned to, instead of a capsule build.
+			running, runningErr := e.currentRunningBinary()
+			if runningErr != nil {
+				running = RunningBinary{}
+			}
+			reuseProof, err := PlanReleaseBinaryReuseWith(ctx, changes, caps.Spec.SourceArtifactRef, running, e.reuseDiffer())
+			if err != nil {
+				return nil, fmt.Errorf("capsule release must contain executable bin/autoputer: %w", errors.Join(err, runningErr))
+			}
+			reused, size, err := StageRunningBinary(ctx, temporary, running)
+			if err != nil {
+				return nil, err
+			}
+			total += size
+			if total > caps.MemoryMax {
+				return nil, fmt.Errorf("capsule release exceeds resource budget")
+			}
+			files = append(files, reused)
+			sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+			binary = &ReleaseBinaryProvenance{
+				Origin: ReleaseBinaryReusedRunning, SHA256: reused.SHA256,
+				RunningCommit:    strings.ToLower(strings.TrimSpace(running.Commit)),
+				SourceBaseCommit: SourceArtifactCommit(caps.Spec.SourceArtifactRef),
+				ReuseProof:       reuseProof,
+
+				StoreSchemaVersion: FreezeStoreSchemaVersion(),
+			}
+		}
+	}
+	// The shot plan (a platform candidate only: the platform shoots the
+	// host-built candidate; any other layer is shot in its capsule).
+	plan, err := e.readShotPlan(rootFD, changes)
+	if err != nil {
+		return nil, err
+	}
+	if plan != nil && (patchSHA == "" || layer != "") {
+		return nil, fmt.Errorf("capsule freeze: %s is for a platform source change; this candidate is %s", ShotPlanFile, describeCandidateLayer(patchSHA, layer))
+	}
 	// Screens: the engineer's own screenshots, beside release/.
-	screens, err := e.stageScreens(ctx, rootFD, changes, temporary)
+	screens, err := e.stageScreens(ctx, rootFD, changes, temporary, plan != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2320,7 +2342,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		_, isDir, err := readSourceBeneath(lowerRoot, platformSourcePrefix+"/"+rel)
 		return err == nil && isDir
 	}
-	if err := requireScreens(changes, screens, baseHasDir); err != nil {
+	if err := requireScreensOrPlan(changes, screens, baseHasDir, plan); err != nil {
 		return nil, err
 	}
 	video, err := e.stageVideo(ctx, rootFD, changes, temporary)
@@ -2333,6 +2355,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		Video:            video,
 		Files:            files,
 		Binary:           binary,
+		ShotPlan:         plan,
 		SourcePatch:      patch,
 		SourcePatchSHA:   patchSHA,
 		SourceBaseCommit: baseCommit,
@@ -2347,18 +2370,26 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 // (capsule-source-git:<commit>:sha256:<digest>) so the builder applies the
 // patch to the commit the capsule actually worked on.
 func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporary string) (patchPath, patchSHA, baseCommit string, err error) {
+	patchPath, patchSHA, baseCommit, _, err = e.emitSourcePatchLayer(caps, changes, temporary)
+	return
+}
+
+// emitSourcePatchLayer is emitSourcePatch that also names the patch's layer:
+// "" for a platform-only change, the package name for a package-only one.
+func (e *Executor) emitSourcePatchLayer(caps *Capsule, changes []FileChange, temporary string) (patchPath, patchSHA, baseCommit, layer string, err error) {
 	files, err := collectSourcePatchFiles(caps.MergedDir, changes)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	if len(files) == 0 {
-		return "", "", "", nil
+		return "", "", "", "", nil
 	}
 	// Forced modularity M2: one operation, one layer. A change set that
 	// touches a package and the platform (or two packages) is refused here,
 	// with both lists named, so the engineer casts one operation per layer.
-	if _, err := ClassifySourcePatchFiles(files); err != nil {
-		return "", "", "", err
+	layer, err = ClassifySourcePatchFiles(files)
+	if err != nil {
+		return "", "", "", "", err
 	}
 	// Recover the pinned base commit from the source artifact ref.
 	if ref := caps.Spec.SourceArtifactRef; strings.HasPrefix(ref, "capsule-source-git:") {
@@ -2369,22 +2400,22 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 	}
 	patch, err := renderSourcePatch(files)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	if len(patch) == 0 {
-		return "", "", "", nil
+		return "", "", "", "", nil
 	}
 	// The freeze claims the patch reconstructs the candidate; prove it
 	// with the builder's applier before any verifier sees the bundle.
 	if err := verifySourcePatch(context.Background(), patch, files); err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	patchPath = filepath.Join(temporary, "source.patch")
 	if err := os.WriteFile(patchPath, patch, 0o444); err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	sum := sha256.Sum256(patch)
-	return patchPath, hex.EncodeToString(sum[:]), baseCommit, nil
+	return patchPath, hex.EncodeToString(sum[:]), baseCommit, layer, nil
 }
 
 // ResolveOwnedCapsuleID is a trusted-core bridge for semantic event binding.

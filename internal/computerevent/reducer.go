@@ -127,6 +127,13 @@ func Reduce(current *Head, event Event, input TransitionInput) (Head, error) {
 		if event.DecisionRef == "" {
 			return Head{}, fmt.Errorf("%w: reverted package names no applied event", ErrInvalidTransition)
 		}
+	case EventCandidateShot:
+		// The shots of an accepted candidate: bound to the live pending
+		// decision and to the bundle it accepted, so a stale or foreign
+		// event cannot unlock a swap. It moves no head.
+		if current.PendingTransitionRef == "" || event.DecisionRef != current.PendingTransitionRef || event.ProposedEffectRef == "" {
+			return Head{}, fmt.Errorf("%w: candidate shot does not bind the pending decision", ErrInvalidTransition)
+		}
 	case EventRollbackRequested:
 		if current.PendingTransitionRef != "" {
 			return Head{}, ErrPendingTransition

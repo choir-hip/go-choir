@@ -111,7 +111,7 @@ func TestFrontendBuildJobUsesTheImageDependenciesOnlyWhenThePackageFilesMatch(t 
 
 	matched := run(t, true, true, false)
 	if matched.exit != 0 || strings.Contains(matched.npmCalls, "ci") || !strings.Contains(matched.npmCalls, "run build") ||
-		!strings.Contains(matched.npmCalls, "image") || strings.Join(matched.tree, ",") != clean || strings.Join(matched.release, ",") != "index.html" {
+		!strings.Contains(matched.npmCalls, "image") || strings.Join(matched.tree, ",") != clean || len(matched.release) != 0 {
 		t.Fatalf("matching package files: %+v", matched)
 	}
 	for name, r := range map[string]result{"lockfile differs": run(t, false, true, false), "no image dependencies": run(t, true, false, false)} {

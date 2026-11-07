@@ -190,3 +190,52 @@ func packageRootOf(rel string) string {
 	}
 	return root + name
 }
+
+// requireScreensOrPlan is the Freeze rule with a shot plan: a valid plan
+// satisfies screens_required and before_after_required for a platform
+// candidate, because the platform shoots the host-built candidate against
+// the running build before the swap (design 3.3, Freeze rule). The plan is
+// validated at read; an all-exempt change needs neither, as before.
+func requireScreensOrPlan(changes []FileChange, screens []ScreenFile, baseHasDir func(rel string) bool, plan *ShotPlan) error {
+	if plan != nil {
+		if err := plan.Validate(); err != nil {
+			return fmt.Errorf("capsule freeze: %w", err)
+		}
+		return nil
+	}
+	return requireScreens(changes, screens, baseHasDir)
+}
+
+// describeCandidateLayer names what a candidate is, for a refusal.
+func describeCandidateLayer(patchSHA, layer string) string {
+	switch {
+	case patchSHA == "":
+		return "a change with no source patch"
+	case layer != "":
+		return "a change to package " + layer
+	}
+	return "a platform change"
+}
+
+// ScreenRelevantPaths are the platform-relative paths among changes that a
+// screen must show: the non-exempt platform source changes (the same set
+// Freeze's screens rule judges). The materializer's candidate-shot
+// interlock reads a frozen bundle's effects through it.
+func ScreenRelevantPaths(changes []FileChange) []string {
+	return screenChangePaths(screenRelevantChanges(changes))
+}
+
+// PlatformSourceTouched says the diff changes a file under /workspace/platform
+// that a source patch would carry (not node_modules, .git or .cache). The
+// Complete guard reads it: such a diff is a candidate that must be frozen.
+func PlatformSourceTouched(changes []FileChange) bool {
+	for _, change := range changes {
+		p := strings.TrimPrefix(change.Path, "/")
+		rel, ok := strings.CutPrefix(p, platformWorkspacePrefix)
+		if !ok || change.Mode.IsDir() || rel == "" || carriedExcludedPrefix(rel) != "" {
+			continue
+		}
+		return true
+	}
+	return false
+}

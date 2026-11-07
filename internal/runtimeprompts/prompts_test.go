@@ -62,16 +62,25 @@ func TestRLMManagementOverlayCarriesNoSupportJudgement(t *testing.T) {
 // overlay places the release tree inside the workspace; the executor's
 // prefix moves and the overlay keeps the old one.
 func TestRLMEngineeringOverlayNamesTheReleaseRootFreezeReads(t *testing.T) {
+	// Superseded by the source-only freeze (docs/design/
+	// source-only-freeze-and-candidate-shots-2026-11-06.md 3.1): Freeze
+	// ships the source, so the overlay must not teach a release tree or a
+	// bin/autoputer build at all, and must say so.
 	root := "/" + capsule.ReleaseTreePrefix
 	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
-	if !strings.Contains(overlay, "at the capsule root, "+root) {
-		t.Fatalf("overlay does not name the capsule-root release tree %s: %q", root, overlay)
-	}
-	if !strings.Contains(overlay, `"go", "build", "-o", "`+root+`bin/autoputer"`) {
-		t.Fatalf("overlay does not build bin/autoputer into %s", root)
+	if strings.Contains(overlay, `"go", "build", "-o", "`+root+`bin/autoputer"`) {
+		t.Fatalf("overlay still builds bin/autoputer into %s", root)
 	}
 	if strings.Contains(overlay, capsule.ReleaseTreePrefix+" inside /workspace/platform") {
 		t.Fatalf("overlay places the release tree inside the workspace: %q", overlay)
+	}
+	for _, want := range []string{"never stages a release tree under " + root, "never sets GOPROXY=off"} {
+		if !strings.Contains(overlay, want) {
+			t.Fatalf("overlay does not say %q", want)
+		}
+	}
+	if strings.Contains(overlay, "GOPROXY=off") && !strings.Contains(overlay, "never sets GOPROXY=off") {
+		t.Fatalf("overlay teaches GOPROXY=off")
 	}
 }
 
@@ -84,14 +93,18 @@ func TestRLMEngineeringOverlayNamesTheReleaseRootFreezeReads(t *testing.T) {
 // window linking); the overlay tells the desk to copy a binary itself; the
 // overlay's Go-input list drifts from capsule.BinaryInputPath.
 func TestRLMEngineeringOverlayTeachesBinaryReuseForNonGoChanges(t *testing.T) {
+	// The source-only freeze retired binary reuse in the prompts: nothing
+	// tells the desk to reuse, copy or stage a binary. The Go-input list
+	// the overlay names must still match the executor's classification
+	// (the host builds those).
 	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
-	if strings.Contains(overlay, "a frontend-only change still ships the binary") {
-		t.Fatalf("overlay still demands a build for a frontend-only change")
-	}
-	for _, want := range []string{"touches no Go input", "Freeze stages this computer's running binary", "Never stage a stub"} {
-		if !strings.Contains(overlay, want) {
-			t.Errorf("overlay does not say %q", want)
+	for _, absent := range []string{"a frontend-only change still ships the binary", "Freeze stages this computer's running binary", "touches no Go input"} {
+		if strings.Contains(overlay, absent) {
+			t.Fatalf("overlay still says %q", absent)
 		}
+	}
+	if !strings.Contains(overlay, "Never stage a stub") {
+		t.Errorf("overlay does not say Never stage a stub")
 	}
 	for _, rel := range []string{"cmd/", "internal/", "vendor/", "nix/", "go.mod", "go.sum", "flake.nix", "flake.lock"} {
 		if !strings.Contains(overlay, rel) {
@@ -131,16 +144,14 @@ func TestRLMEngineeringOverlayTeachesBinaryReuseForNonGoChanges(t *testing.T) {
 func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
 	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
 
-	decide, goBuild := strings.Index(overlay, "touches no Go input"), strings.Index(overlay, `"go", "build", "-o"`)
-	if decide < 0 || goBuild < 0 || decide > goBuild {
-		t.Errorf("F1: the Go-input decision does not come before the Go build instruction")
+	if strings.Contains(overlay, `"go", "build", "-o"`) {
+		t.Errorf("F1: the overlay still teaches a Go build into a release tree")
 	}
 	for _, want := range []string{
-		"do not run go build",
-		"npm ci", "npm run build", "cp -rf --no-preserve=mode,ownership,timestamps dist/. /" + capsule.ReleaseTreePrefix + "frontend/", "rm -rf node_modules dist",
+		"npm ci", "npm run build", "rm -rf node_modules dist", "Never copy the build into /" + capsule.ReleaseTreePrefix,
 	} {
 		if !strings.Contains(overlay, want) {
-			t.Errorf("F1/F5: the no-Go build recipe does not say %q", want)
+			t.Errorf("F1/F5: the frontend check recipe does not say %q", want)
 		}
 	}
 
@@ -195,7 +206,7 @@ func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
 func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
 	for _, want := range []string{
-		`choir.Start([]string{"go", "build", "-o", "/var/lib/artifact/release/bin/autoputer"`,
+		`choir.Start([]string{"go", "-C", "/workspace/platform", "vet", "./..."}`,
 		`choir.Start([]string{"go", "test"`,
 		"never a choir.Exec and never a backgrounded shell",
 	} {
@@ -208,7 +219,7 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 			t.Errorf("J2: the overlay does not say %q", want)
 		}
 	}
-	for _, want := range []string{"a job is one, with its own receipt_ref", "the bin/autoputer build job for a Go change",
+	for _, want := range []string{"a job is one, with its own receipt_ref", "the go vet job for a Go change",
 		"a job whose state is failed, timeout or stopped", "during which the workspace changed"} {
 		if !strings.Contains(overlay, want) {
 			t.Errorf("J3: the overlay does not say %q", want)
@@ -224,7 +235,7 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 	// `npm ci && npm run build` inside one choir.Exec, which the overlay's
 	// own text says is killed at 30 s; the visual drill followed the recipe
 	// and hit the broker timeout three times.
-	noGo := overlay[strings.Index(overlay, "touches no Go input"):strings.Index(overlay, "A change that touches a Go input")]
+	noGo := overlay[strings.Index(overlay, "Check a frontend change"):strings.Index(overlay, "Check a Go change")]
 	if strings.Contains(noGo, "It fits within one choir.Exec") || !strings.Contains(noGo, "it is a job") ||
 		!strings.Contains(noGo, "never run any part of it in a choir.Exec") {
 		t.Errorf("J5: the no-Go build is not taught as a job: %q", noGo)
@@ -256,8 +267,8 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 	if !startedBuild {
 		t.Errorf("J5: no choir.Start recipe runs the npm build")
 	}
-	for _, want := range []string{"the job's own receipt_ref is the frontend build receipt you cite as buildRecipeRef",
-		"the frontend build job for a change with no Go input", "a second job (one job at a time)"} {
+	for _, want := range []string{"the job's own receipt_ref is the check receipt you cite as buildRecipeRef",
+		"the frontend check job for a frontend change", "as a second job after the check ends (one job at a time"} {
 		if !strings.Contains(overlay, want) {
 			t.Errorf("J5: the overlay does not say %q", want)
 		}
@@ -265,8 +276,7 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 	// Failures 6 and 7 of the cluster doc (S6-0 drill): a failed build was
 	// reported "completed", and a running job was reported as a blocker.
 	for _, want := range []string{
-		"never report the build done, to management or in a Report, unless its job's State is done with exit code 0",
-		"Never run the steps of this command as separate cells or jobs",
+		"Never report the check done unless its job's State is done with exit code 0",
 		"A running job is never a blocker: end your turn and wait to be woken",
 		`do not Complete "blocked" because a build or test is still running`,
 		"and neither is a job that is still running",

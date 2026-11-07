@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -1813,7 +1814,21 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 				request = words.Text
 			}
 		}
-		review, reviewErr := rt.reviewCandidateShots(reviewCtx, r.scope.OwnerID, operation, request, notes)
+		// A plan bundle's shots are taken by the platform after the host
+		// build and judged at that gate (candidate_shot, design 3.3), so
+		// the per-shot review is skipped here. What Verify can still check,
+		// with no model call, is the plan against the request: a numbered
+		// shot the request names that no plan view carries fails
+		// "missing: 05, 06" (FM12, FM9 moved from screens to plan views).
+		planned, planMissing := false, []string(nil)
+		if bundle, _, readErr := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation); readErr == nil && bundle.ShotPlan != nil {
+			planned, planMissing = true, planShotsMissing(bundle.ShotPlan, requestedShots(request))
+		}
+		var review *shotReview
+		var reviewErr error
+		if !planned {
+			review, reviewErr = rt.reviewCandidateShots(reviewCtx, r.scope.OwnerID, operation, request, notes)
+		}
 		cancel()
 		// The verdict a completed review decided is written past the cell's
 		// teardown too, so a cancel during the review does not discard it
@@ -1825,6 +1840,13 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 			reason := fmt.Sprintf("verify %s: the per-shot review did not run, so the candidate stays frozen; retry the Verify: %v", in.LocalID, reviewErr)
 			stamp(reason)
 			return nil, fmt.Errorf("reduce: %s", reason)
+		}
+		if planned {
+			verdictExtra["shot_review"] = shotReviewDeferred
+			if len(planMissing) > 0 {
+				decision = "fail"
+				verdictExtra[verdictReasonKey] = shotReviewMarker + " rejected missing shots the request names: " + strings.Join(planMissing, ", ") + "; the shot plan has no such view"
+			}
 		}
 		if review != nil {
 			verdictExtra["shot_review"] = review.record()
@@ -2039,6 +2061,14 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	receipts, err := r.toolCtx.Executor.ResolveExecutionReceipts(executionRefs)
 	if err != nil {
 		return false, err
+	}
+	// The Complete guard: Complete does not freeze. A completed implementation
+	// round whose capsule diff touches /workspace/platform needs a live
+	// frozen operation (tools_capsule.go completeWithoutFreezeError).
+	if result == types.EngineeringResultCompleted && metadataStringValue(r.rec.Metadata, "assignment_kind") == string(types.EngineeringAssignmentImplementation) {
+		if guardErr := completeWithoutFreezeError(ctx, r.toolCtx, metadataStringValue(r.rec.Metadata, "assignment_id")); guardErr != nil {
+			return false, guardErr
+		}
 	}
 	// The screens the Freeze saved ride on the Report from the platform:
 	// management's judge reads the Report, not the Freeze result.

@@ -351,7 +351,18 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err != nil {
 		return nil, err
 	}
-	runtimeIntent, err := computerevent.CanonicalJSON(files)
+	// A source-only bundle has no release files: its runtime intent is the
+	// source patch and its base commit (the ref keeps the runtime-artifact:
+	// prefix every reader of the bundle expects), and that one ref is its
+	// generated artifact.
+	var runtimeIntent []byte
+	if len(files) == 0 && staged.SourcePatchSHA != "" {
+		runtimeIntent, err = computerevent.CanonicalJSON(map[string]string{
+			"source_patch_sha256": staged.SourcePatchSHA, "source_patch_base_commit": staged.SourceBaseCommit,
+		})
+	} else {
+		runtimeIntent, err = computerevent.CanonicalJSON(files)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +370,9 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	generatedRefs := make([]string, len(files))
 	for index, file := range files {
 		generatedRefs[index] = "artifact:sha256:" + file.SHA256
+	}
+	if len(files) == 0 {
+		generatedRefs = []string{"runtime-artifact:sha256:" + runtimeDigest}
 	}
 	record.ComputerID = toolCtx.ComputerID
 	record.BaseEventHead = operation.BaseHead
@@ -375,6 +389,10 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	record.SourcePatchSHA256 = staged.SourcePatchSHA
 	record.SourcePatchBaseCommit = staged.SourceBaseCommit
 	record.RuntimeFiles = files
+	if record.RuntimeFiles == nil {
+		record.RuntimeFiles = []capsule.FrozenReleaseFile{}
+	}
+	record.ShotPlan = staged.ShotPlan
 	record.ReleaseBinary = staged.Binary
 	record.Screens = staged.Screens
 	record.Video = staged.Video
@@ -539,6 +557,13 @@ func frozenCandidateTreeChanged(ctx context.Context, toolCtx *CapsuleToolCtx, ha
 // release, not read from it, so its absence from the live tree is not a
 // removal.
 func frozenReleaseChanges(bundle transaction.CapsuleEffectBundle, live []capsule.FrozenReleaseFile) []string {
+	// A source-only bundle's release tree is not the candidate: whatever
+	// the capsule built there (a test binary) is never installed, so it is
+	// never diffed. The source tree is covered by the worktree digest and
+	// the classified groups.
+	if bundle.SourceOnly() {
+		return nil
+	}
 	reused := bundle.ReleaseBinary != nil && bundle.ReleaseBinary.Origin == capsule.ReleaseBinaryReusedRunning
 	frozen := map[string]capsule.FrozenReleaseFile{}
 	for _, file := range bundle.RuntimeFiles {
@@ -1285,4 +1310,48 @@ func shortCommit(c string) string {
 		return c[:12]
 	}
 	return c
+}
+
+// completeWithoutFreezeError is the Complete guard: an engineering
+// Complete(completed) whose capsule diff touches /workspace/platform refuses
+// when the assignment holds no live frozen operation, including after a
+// Freeze that was refused and left the capsule dirty. Complete does not
+// freeze: before this guard a round could end completed with a platform
+// diff and no operation, and the change vanished with the capsule
+// (apply-proof-2, docs/design/source-only-freeze-and-candidate-shots-2026-11-06.md 3.1).
+//
+// FM10: it fires only when the diff touches /workspace/platform, so a
+// legitimate no-change round, or one that changed only its artifacts,
+// completes as before. A tree that cannot be read is not a clean one: that
+// refuses too.
+func completeWithoutFreezeError(ctx context.Context, toolCtx *CapsuleToolCtx, assignmentID string) error {
+	if toolCtx == nil || toolCtx.CapsuleHandle == "" || toolCtx.OperationStore == nil {
+		return nil
+	}
+	var reader frozenTreeReader = toolCtx.frozenTree
+	if reader == nil {
+		if toolCtx.Executor == nil {
+			return nil
+		}
+		reader = toolCtx.Executor
+	}
+	live, err := reader.InspectGrantedWorktree(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle)
+	if err != nil {
+		return fmt.Errorf("Complete refused: this capsule's tree could not be read to check that its /workspace/platform changes are frozen (%v); call choir.Freeze first; Complete does not freeze", err)
+	}
+	if !capsule.PlatformSourceTouched(live.Changes) {
+		return nil
+	}
+	operation, _, found, err := assignmentOperation(ctx, toolCtx.OperationStore, toolCtx.ComputerID, assignmentID)
+	if err != nil {
+		return fmt.Errorf("Complete refused: the assignment's operation could not be read: %w", err)
+	}
+	if found && operation.BundleDigest != "" && operation.State != selfdev.StateExecuting && operation.State != selfdev.StateFailed {
+		return nil
+	}
+	why := "this assignment has no frozen candidate"
+	if found {
+		why = fmt.Sprintf("this assignment's operation %s is %s and holds no live frozen candidate", operation.OperationID, operation.State)
+	}
+	return fmt.Errorf("Complete refused: the capsule changes /workspace/platform and %s; call choir.Freeze first; Complete does not freeze. If a Freeze was refused, fix what it named and Freeze again", why)
 }

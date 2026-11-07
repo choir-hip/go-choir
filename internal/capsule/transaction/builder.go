@@ -74,6 +74,13 @@ type CapsuleEffectBundle struct {
 	// bundle with none canonicalizes as before
 	// (docs/problems/library-releases-have-no-screenshots-2026-11-04.md).
 	Video *capsule.VideoFile `json:"video,omitempty"`
+	// ShotPlan is the engineer's screenshot plan for a platform candidate
+	// (source-only freeze, docs/design/source-only-freeze-and-candidate-shots-2026-11-06.md
+	// 3.1/3.3): the platform shoots the host-built candidate against the
+	// running build before the swap. Bound by the content digest, so one
+	// plan drives the before and the after run. omitempty, so a bundle with
+	// none canonicalizes as before.
+	ShotPlan *capsule.ShotPlan `json:"shot_plan,omitempty"`
 }
 
 // ChangeRecord is a single file change in the transaction record.
@@ -127,11 +134,19 @@ func (r CapsuleEffectBundle) Validate(final bool) error {
 		!strings.HasPrefix(r.RuntimeArtifactRef, "runtime-artifact:sha256:") || !computerevent.IsSHA256(strings.TrimPrefix(r.RuntimeArtifactRef, "runtime-artifact:sha256:")) ||
 		!validExecutionRef(r.BuildRecipeRef) || len(r.OrderedFileEffects) == 0 || !validImmutableRefs(r.GeneratedArtifactRefs) ||
 		!validExecutionRefs(r.TestReceipts) || !validExecutionRefs(r.DependencyToolchainRefs) || !validImmutableRefs(r.ResourceReceipts) ||
-		len(r.RuntimeFiles) == 0 || r.Rejected || r.ContentDigest != contentDigest {
+		!r.runtimeIntentPresent() || r.Rejected || r.ContentDigest != contentDigest {
 		return fmt.Errorf("capsule effect bundle: complete immutable effect bindings are required")
 	}
-	if err := capsule.ValidateReleaseBinary(r.RuntimeFiles, r.ReleaseBinary); err != nil {
+	if err := capsule.ValidateReleaseBinaryForSource(r.RuntimeFiles, r.ReleaseBinary, r.SourcePatchSHA256); err != nil {
 		return fmt.Errorf("capsule effect bundle: %w", err)
+	}
+	if r.SourceOnly() && (r.ReleaseBinary == nil || r.ReleaseBinary.Origin != capsule.ReleaseBinaryHostBuild) {
+		return fmt.Errorf("capsule effect bundle: a source-only bundle records its binary as host_build")
+	}
+	if r.ShotPlan != nil {
+		if err := r.ShotPlan.Validate(); err != nil {
+			return fmt.Errorf("capsule effect bundle: %w", err)
+		}
 	}
 	if err := capsule.ValidateScreens(r.Screens); err != nil {
 		return fmt.Errorf("capsule effect bundle: %w", err)
@@ -143,6 +158,18 @@ func (r CapsuleEffectBundle) Validate(final bool) error {
 		return fmt.Errorf("capsule effect bundle: independent verifier receipt is required")
 	}
 	return nil
+}
+
+// SourceOnly says the bundle carries a source patch and no release tree: the
+// host builds the binary (source-only freeze).
+func (r CapsuleEffectBundle) SourceOnly() bool {
+	return len(r.RuntimeFiles) == 0 && r.SourcePatchSHA256 != ""
+}
+
+// runtimeIntentPresent: RuntimeFiles are required unless the bundle is
+// source-only, whose runtime intent is the source patch itself.
+func (r CapsuleEffectBundle) runtimeIntentPresent() bool {
+	return len(r.RuntimeFiles) != 0 || r.SourcePatchSHA256 != ""
 }
 
 func validExecutionRefs(refs []string) bool {

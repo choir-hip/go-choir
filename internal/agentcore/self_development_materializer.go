@@ -709,6 +709,22 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		}
 	}
 
+	// The candidate-shot interlock (design 3.3, FM11): no unshot platform
+	// candidate is ever swapped in. On every live pass, before any
+	// transition, outside any lock: pending while the shot worker runs, a
+	// failed operation on a failing verdict. A journal-only settlement calls
+	// no updater and needs no shot.
+	if !journalOnly {
+		if shotErr := rt.candidateShotGate(ctx, operation, bundle, hostBuilt); shotErr != nil {
+			var failure candidateShotFailure
+			if errors.As(shotErr, &failure) {
+				log.Printf("selfdev materializer: operation %s: %v; the computer keeps its current release", operation.OperationID, failure)
+				return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: "shot_review_failed"}, failure, operation.State)
+			}
+			return shotErr
+		}
+	}
+
 	if operation.State == selfdev.StateAccepted {
 		operation, err = rt.startSelfDevelopmentMaterialization(ctx, operation)
 		if err != nil {
@@ -758,6 +774,13 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		release = layeredSelfDevelopmentManifest(release, *hostBuilt)
 		sourceDir = hostBuilt.Dir
 	} else {
+		if len(bundle.RuntimeFiles) == 0 && !journalOnly {
+			// A source-only bundle has no release tree: only a host build
+			// can install it. One that reaches here was not host-built (no
+			// consensus decision and no Go input), so it fails by name
+			// instead of minting an empty plain manifest (FM1).
+			return rt.settleSelfDevelopmentRefusal(ctx, operation, errors.New("source-only bundle: it carries no release files and was not host-built (no consensus decision and no Go input), so there is nothing to install"))
+		}
 		if checkErr := checkPlainReleaseBinaryStillRunning(bundle); checkErr != nil && !journalOnly {
 			// Nothing was minted: the operation settles failed.
 			return rt.settleSelfDevelopmentRefusal(ctx, operation, checkErr)

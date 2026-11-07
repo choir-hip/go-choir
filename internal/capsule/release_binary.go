@@ -34,6 +34,12 @@ const (
 	// Freeze staged this computer's running executable instead of a build
 	// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option A).
 	ReleaseBinaryReusedRunning = "reused_running"
+	// ReleaseBinaryHostBuild: a source-only bundle. Freeze staged no
+	// release tree and no binary; the host builds the binary from the source
+	// patch at materialization (docs/design/source-only-freeze-and-candidate-shots-2026-11-06.md
+	// 3.1). It carries no sha and is admitted only with an empty
+	// RuntimeFiles and a source patch.
+	ReleaseBinaryHostBuild = "host_build"
 )
 
 // ReleaseBinaryProvenance says where a frozen release's bin/autoputer came
@@ -349,7 +355,24 @@ func StageRunningBinary(ctx context.Context, root string, running RunningBinary)
 // ValidateReleaseBinary checks a bundle's provenance record against its
 // release files. A nil record is a legacy bundle and passes.
 func ValidateReleaseBinary(files []FrozenReleaseFile, provenance *ReleaseBinaryProvenance) error {
+	return ValidateReleaseBinaryForSource(files, provenance, "")
+}
+
+// ValidateReleaseBinaryForSource is ValidateReleaseBinary for a bundle that
+// may be source-only: the host_build origin is admitted only with an empty
+// RuntimeFiles, no sha and a source patch digest (FM1).
+func ValidateReleaseBinaryForSource(files []FrozenReleaseFile, provenance *ReleaseBinaryProvenance, sourcePatchSHA string) error {
 	if provenance == nil {
+		return nil
+	}
+	if provenance.Origin == ReleaseBinaryHostBuild {
+		if len(files) != 0 || provenance.SHA256 != "" || provenance.RunningCommit != "" ||
+			provenance.SourceBaseCommit != "" || provenance.ReuseProof != "" || provenance.StoreSchemaVersion != 0 {
+			return fmt.Errorf("host-built release binary carries no files, sha or reuse record")
+		}
+		if sourcePatchSHA == "" {
+			return fmt.Errorf("host-built release binary requires a source patch")
+		}
 		return nil
 	}
 	var fileSHA string
