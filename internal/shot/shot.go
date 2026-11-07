@@ -27,6 +27,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 )
 
+// browserStartTimeout bounds how long Chromium may take to open its debug
+// socket.
+const browserStartTimeout = 60 * time.Second
+
 // Timeouts bounds a run. Zero fields take the defaults.
 type Timeouts struct {
 	View   time.Duration // one view, steps and capture (default 60s)
@@ -156,6 +160,11 @@ func Run(ctx context.Context, opts Options) (results []Result, err error) {
 		chromedp.Flag("hide-scrollbars", true),
 		chromedp.Flag("force-color-profile", "srgb"),
 		chromedp.Flag("font-render-hinting", "none"),
+		// chromedp waits 20 s for the browser's debug socket by default; a
+		// loaded guest or a race-enabled CI runner can start Chromium slower
+		// than that ("websocket url timeout reached", three CI runs on
+		// 2026-11-07). The run's own deadlines still bound it.
+		chromedp.WSURLReadTimeout(browserStartTimeout),
 	)
 	if opts.Fontconfig != "" {
 		// chromedp.Env keeps its own process setup (Pdeathsig on Linux).
