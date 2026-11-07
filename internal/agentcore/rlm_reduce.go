@@ -173,7 +173,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 				return fmt.Errorf("reduce: verify %s requires the inspected bundle digest", in.LocalID)
 			}
 		case yaegikernel.IntentShotVerdict:
-			if fromDesk != agentprofile.Management {
+			if !holdsShotGrant(fromDesk) {
 				return fmt.Errorf("reduce: shot verdict %s: the shot verdict is management's", in.LocalID)
 			}
 			if in.Decision != "pass" && in.Decision != "fail" {

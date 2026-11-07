@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,8 +46,12 @@ func TestShotsGateCommitsOnceNoticesThenFailsAtTheDeadline(t *testing.T) {
 	fx, accepted := shotsGateFixture(t, "computer-shots-clock")
 	ctx := context.Background()
 	base := time.Now()
-	clock := base
-	fx.configure(func(rt *Runtime) { rt.shotsNow = func() time.Time { return clock } })
+	// The gate's clock is read by the materializer's own goroutines, so the
+	// test moves it atomically and installs the seam once.
+	var clockNs atomic.Int64
+	clockNs.Store(base.UnixNano())
+	setClock := func(at time.Time) { clockNs.Store(at.UnixNano()) }
+	fx.configure(func(rt *Runtime) { rt.shotsNow = func() time.Time { return time.Unix(0, clockNs.Load()) } })
 	pass := func() error { return fx.rt.materializeSelfDevelopmentOperation(ctx, accepted, false) }
 	for i := 0; i < 2; i++ { // the record is committed once; a repeat is a replay
 		if err := pass(); !errors.Is(err, errCandidateShotPending) {
@@ -63,16 +68,14 @@ func TestShotsGateCommitsOnceNoticesThenFailsAtTheDeadline(t *testing.T) {
 	}
 	// Past the notice interval a notice goes out; a fresh id each, capped.
 	for i := 1; i <= types.ShotsOwedMaxNotices+1; i++ {
-		clock = clock.Add(shotsOwedNoticeAfter + time.Second)
-		fx.configure(func(rt *Runtime) { rt.shotsNow = func() time.Time { return clock } })
+		setClock(time.Unix(0, clockNs.Load()).Add(shotsOwedNoticeAfter + time.Second))
 		_ = pass()
 	}
 	if n, _ := fx.rt.shotsOwedNotices(ctx, "owner-shots", fx.computerID, accepted.OperationID, hostJob); n > types.ShotsOwedMaxNotices {
 		t.Fatalf("notices = %d, over the cap", n)
 	}
 	// The deadline closes the operation failed; nothing swapped.
-	clock = base.Add(shotsOwedDeadline + time.Minute)
-	fx.configure(func(rt *Runtime) { rt.shotsNow = func() time.Time { return clock } })
+	setClock(base.Add(shotsOwedDeadline + time.Minute))
 	_ = pass()
 	failed := fx.waitForState(t, accepted.OperationID, selfdev.StateFailed)
 	if !strings.Contains(failed.TerminalError, shotsNotJudgedInTime) {

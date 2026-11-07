@@ -525,7 +525,7 @@ func shotsOwedWait(o shotsOwedInfo, now time.Time) *types.WaitState {
 		Subject:  "operation " + o.Operation.OperationID,
 		Resource: "management's shot verdict on the host build of " + o.Operation.OperationID,
 		Need:     fmt.Sprintf("choir.ShotStart(%q), choir.ShotWait, then choir.ShotVerdict(%q, pass|fail, findings, reason)", o.Operation.OperationID, o.Operation.OperationID),
-		Holders:  []types.WaitHolder{{Who: "management", What: "ShotVerdict"}},
+		Holders:  []types.WaitHolder{{Who: shotJudgeDesk(), What: "ShotVerdict"}},
 		Since:    since.UTC(),
 		Detail:   strings.TrimSuffix(shotsOwedLine(o.Operation.OperationID), "."),
 	}

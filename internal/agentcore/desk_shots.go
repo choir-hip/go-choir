@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -63,6 +63,18 @@ const (
 
 	shotsNotJudgedInTime = "shots not judged in time"
 )
+
+// grantShots is the grant the registry gives the desk that shoots and judges
+// candidates (deskmanifest grants.go); no code here names that desk.
+const grantShots = "assignment.shots"
+
+func holdsShotGrant(desk string) bool { return deskmanifest.Holds(canonicalDeskName(desk), grantShots) }
+
+// shotJudgeDesk is the desk the registry says holds the shot verbs.
+func shotJudgeDesk() string {
+	d, _ := deskmanifest.GrantHolder(grantShots)
+	return d.Name
+}
 
 // ---- the durable job result -------------------------------------------------
 
@@ -248,7 +260,7 @@ func (rt *Runtime) managementCanSeeImages(ctx context.Context) (bool, string) {
 	if rt == nil || rt.modelPolicy == nil {
 		return false, "management's model chain cannot be resolved on this computer, so nothing can judge the shots; set a model policy for management that includes an image-capable model"
 	}
-	chain := rt.modelPolicy.RoleChain(ctx, rt.shotsOwnerID(), agentprofile.Management)
+	chain := rt.modelPolicy.RoleChain(ctx, rt.shotsOwnerID(), shotJudgeDesk())
 	var names []string
 	for _, member := range chain {
 		if modelcatalog.SupportsImage(member.Model) {
@@ -269,7 +281,7 @@ func (rt *Runtime) shotExecComputer(exec toolregistry.ExecutionContext) string {
 }
 
 func requireManagementShotDesk(deskRole string) error {
-	if canonicalDeskName(deskRole) != agentprofile.Management {
+	if !holdsShotGrant(deskRole) {
 		return fmt.Errorf("shots: the shot verbs are management's, not %q", deskRole)
 	}
 	return nil
@@ -535,7 +547,7 @@ func imageBlockCount(messages []json.RawMessage) int {
 // shotImageInjector hands the queued images to the tool loop after the cell
 // that called ShotWait, so the verdict comes in a later cell.
 func (rt *Runtime) shotImageInjector(rec *types.RunRecord) toolregistry.InjectUserTurnsFunc {
-	if rt == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Management {
+	if rt == nil || rec == nil || !holdsShotGrant(agentProfileForRun(rec)) {
 		return nil
 	}
 	return func(bool) ([]json.RawMessage, error) {
@@ -613,7 +625,7 @@ func (r *rlmCallReduction) reduceShotVerdict(ctx context.Context, in yaegikernel
 	if r.rec == nil || rt == nil || rt.store == nil {
 		return nil, errors.New("reduce: shot verdict without authority")
 	}
-	if strings.TrimSpace(r.rec.AgentProfile) != agentprofile.Management {
+	if !holdsShotGrant(r.rec.AgentProfile) {
 		return nil, fmt.Errorf("reduce: shot verdict %s: the shot verdict is management's", in.LocalID)
 	}
 	verdict := strings.TrimSpace(in.Decision)
