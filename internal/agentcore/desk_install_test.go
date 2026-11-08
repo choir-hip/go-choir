@@ -78,7 +78,7 @@ func newDrillEnv(t *testing.T) *drillEnv {
 	t.Helper()
 	e := newInstallEnv(t)
 	read := func(name string) string {
-		raw, err := os.ReadFile("../../frontend/src/packages/" + drillPkg + "/" + name)
+		raw, err := os.ReadFile("testdata/" + drillPkg + "/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}
