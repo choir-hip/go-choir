@@ -70,10 +70,12 @@ func asTextureReader(ctx context.Context) context.Context {
 	return objectgraph.WithReaderIfAbsent(ctx, w)
 }
 
-// listedByDesk reports whether the document list is asked for by a desk other
-// than Texture: a desk's in-process ProductAPI call (management's list route,
-// X7). The owner, the kernel and Texture list its documents; a desk lists the
-// story-index projection Texture publishes (writeStoryIndexList).
+// listedByDesk reports whether the document list is asked for by a desk: a
+// desk's in-process ProductAPI call (management's list route, X7). The owner
+// and the kernel list the documents; every desk, Texture's own runs included,
+// lists the story-index projection Texture publishes (writeStoryIndexList). A
+// Texture run works on one story and has no need of the owner's other
+// documents, which a public publish would otherwise carry (2026-11-08).
 func (h *Handler) listedByDesk(ctx context.Context) bool {
 	reader, ok := objectgraph.ReaderFrom(ctx)
 	if !ok {
@@ -81,9 +83,6 @@ func (h *Handler) listedByDesk(ctx context.Context) bool {
 	}
 	switch reader {
 	case objectgraph.WriterOwner, objectgraph.WriterKernel, objectgraph.WriterStore:
-		return false
-	}
-	if custodian, found := objectgraph.CustodianOf("choir.texture_document"); found && reader == custodian {
 		return false
 	}
 	return true

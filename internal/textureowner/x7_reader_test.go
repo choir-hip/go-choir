@@ -41,8 +41,10 @@ func TestManagementProductAPIListOfTextureRoutesCrossesNothing(t *testing.T) {
 	if code, n := list(""); code != http.StatusOK || n != 1 {
 		t.Fatalf("owner list: %d, %d documents; want 200 and the owner's document", code, n)
 	}
-	if code, n := list(objectgraph.WriterTexture); code != http.StatusOK || n != 1 {
-		t.Fatalf("texture list: %d, %d documents", code, n)
+	// Texture's own runs list the index too: a story run has no need of the
+	// owner's other documents, which a public publish would carry (2026-11-08).
+	if code, n := list(objectgraph.WriterTexture); code != http.StatusOK || n != 0 {
+		t.Fatalf("texture list: %d, %d documents; want 200 from the index", code, n)
 	}
 	// The desk lists the index: stories only, and the owner's plain document
 	// is Texture's, not management's.

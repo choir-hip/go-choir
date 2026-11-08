@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -246,9 +247,41 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 	case yaegikernel.ActionProductAPI:
 		var p yaegikernel.ProductAPIPayload
 		_ = json.Unmarshal(payload, &p)
-		return types.NewLabelSet(types.OwnerPrivateLabel(productAPIObjectKind(p.Path))), true
+		return productAPIReadLabels(p.Method, p.Path), true
 	}
 	return nil, false
+}
+
+// productAPIReadLabels labels a desk's product API call by what its answer
+// carries, not by its route's segment alone (2026-11-08: a story's Texture
+// run that started a Texture through POST /api/prompt-bar was labelled
+// prompt-bar, and every paper publish asked). A write answers a receipt and
+// reads nothing. A desk's document list is the story index
+// (textureowner.listedByDesk). The event index is built from the computer's
+// captures. Any other route keeps its segment's label, a POST that answers
+// content (model-policy/verify, run-acceptances/synthesize) included (Devin r2).
+func productAPIReadLabels(method, path string) types.LabelSet {
+	route := ""
+	if u, err := url.Parse(strings.TrimSpace(path)); err == nil {
+		route = strings.TrimSuffix(u.Path, "/")
+	}
+	if m := strings.ToUpper(strings.TrimSpace(method)); m != "" && m != http.MethodGet && productAPIReceiptWrites[route] {
+		return types.NewLabelSet()
+	}
+	switch route {
+	case "/api/texture/documents":
+		return types.NewLabelSet(types.OwnerPrivateLabel("story"))
+	case "/api/autopaper/events":
+		return captureReadLabels
+	}
+	return types.NewLabelSet(types.OwnerPrivateLabel(productAPIObjectKind(path)))
+}
+
+// productAPIReceiptWrites are the desk writes whose answer is a receipt (a
+// submission id and state, or the desk's own write echoed back).
+var productAPIReceiptWrites = map[string]bool{
+	"/api/prompt-bar":                  true,
+	"/api/autopaper/sources/schedules": true,
 }
 
 // productAPIObjectKind names the kind a product API route serves: the
