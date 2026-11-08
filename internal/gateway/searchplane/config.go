@@ -43,10 +43,6 @@ type Config struct {
 	// DailyCaps caps each named provider's calls per UTC day; a provider
 	// not named has no cap. Calls are counted whether or not capped.
 	DailyCaps map[string]int
-	// MonthlyQuotas paces a provider's monthly free allowance: each UTC
-	// day's cap is the period's remaining target over the days left
-	// (monthly.go), lowered further by any DailyCaps entry.
-	MonthlyQuotas map[string]MonthlyQuota
 	// MinResults is how many distinct URLs a search wants before it stops
 	// escalating (bounded by its max_results); DeepMinResults for a deep
 	// search.
@@ -167,14 +163,6 @@ const (
 // CHOIR_SEARCH_DEEP_MIN_RESULTS, CHOIR_SEARCH_MAX_PAID,
 // CHOIR_SEARCH_DEEP_MAX_PAID, CHOIR_SEARCH_ESCALATE_AFTER_MS and
 // CHOIR_SEARCH_ESCALATE_WINDOW_MS tune escalation.
-//
-// Keenable's monthly pace: CHOIR_SEARCH_KEENABLE_MONTHLY_ALLOWANCE (free
-// requests a period, default 100000; 0 turns the pace off),
-// CHOIR_SEARCH_KEENABLE_RENEW_DAY (day of month the period starts, UTC,
-// default 5), CHOIR_SEARCH_KEENABLE_MONTHLY_TARGET_PCT (share of the
-// allowance to spend, default 90) and CHOIR_SEARCH_KEENABLE_PERIOD_USED
-// ("N@YYYY-MM-DD": N calls made earlier in that day's period that the
-// daily counts never saw, from the billing page).
 func ConfigFromEnv() Config {
 	routing := RoutingBudget
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHOIR_SEARCH_ROUTING")), RoutingFanout) {
@@ -192,7 +180,6 @@ func ConfigFromEnv() Config {
 		EscalateWindow: time.Duration(envInt("CHOIR_SEARCH_ESCALATE_WINDOW_MS", int(DefaultEscalateWindow/time.Millisecond))) * time.Millisecond,
 		RequestTimeout: time.Duration(envInt("CHOIR_SEARCH_REQUEST_TIMEOUT_SECONDS", 30)) * time.Second,
 		MinInterval:    providerRPSFromEnv(),
-		MonthlyQuotas:  monthlyQuotasFromEnv(),
 		PaceWait:       time.Duration(envInt("CHOIR_SEARCH_PACE_WAIT_MS", int(DefaultPaceWait/time.Millisecond))) * time.Millisecond,
 		CacheTTL:       time.Duration(envInt("CHOIR_SEARCH_CACHE_TTL_SECONDS", int(DefaultCacheTTL/time.Second))) * time.Second,
 		CacheFreshTTL:  time.Duration(envInt("CHOIR_SEARCH_CACHE_FRESH_TTL_SECONDS", int(DefaultCacheFreshTTL/time.Second))) * time.Second,
@@ -222,29 +209,6 @@ func providerRPSFromEnv() map[string]time.Duration {
 		out[name] = time.Duration(float64(time.Second) / rate)
 	}
 	return out
-}
-
-// monthlyQuotasFromEnv is Keenable's monthly quota from the environment
-// (ConfigFromEnv); none when the allowance is 0.
-func monthlyQuotasFromEnv() map[string]MonthlyQuota {
-	q := MonthlyQuota{
-		Allowance: envInt("CHOIR_SEARCH_KEENABLE_MONTHLY_ALLOWANCE", DefaultKeenableMonthlyAllowance),
-		RenewDay:  envInt("CHOIR_SEARCH_KEENABLE_RENEW_DAY", DefaultKeenableRenewDay),
-		TargetPct: envInt("CHOIR_SEARCH_KEENABLE_MONTHLY_TARGET_PCT", DefaultKeenableTargetPct),
-	}
-	if q.Allowance <= 0 {
-		return map[string]MonthlyQuota{}
-	}
-	if q.RenewDay < 1 || q.RenewDay > 31 {
-		q.RenewDay = DefaultKeenableRenewDay
-	}
-	if q.TargetPct < 1 || q.TargetPct > 100 {
-		q.TargetPct = DefaultKeenableTargetPct
-	}
-	if used, day, ok := ParseQuotaSeed(os.Getenv("CHOIR_SEARCH_KEENABLE_PERIOD_USED")); ok {
-		q.SeedUsed, q.SeedDay = used, day
-	}
-	return map[string]MonthlyQuota{"keenable": q}
 }
 
 // parseProviderRPS reads "name=rate,..." into per-provider call intervals.
