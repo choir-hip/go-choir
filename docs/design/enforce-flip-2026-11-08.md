@@ -1,6 +1,6 @@
 # The enforce flip for the built-in kinds (F6), 2026-11-08
 
-Status: r1 (r0 sent back by Devin and a Sonnet seat; §6 amends it and governs where it differs). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
+Status: r2 (r0 sent back by Devin and a Sonnet seat, r1 by Devin; §6 and §7 amend it and govern where they differ). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
 Inputs: the prerequisite map (scratchpad f6-prereqs, 2026-11-08), ledger 2026-11-05T17:30Z and
 2026-11-06T01:50Z, and a fresh read of `GET /api/runtime/observability` on d@e at 6eb19408e
 after a day of drills (two accepted package installs, one rejected, four engineering rounds).
@@ -315,3 +315,66 @@ of S3 restores observe.
 
 The paper's intake and publish are proved on d@e under its own source schedule and story, never
 on the paper itself.
+
+## 7. r2 amendments (Devin r1 SEND BACK)
+
+### 7.1 The S3 test seam, made consistent (replaces §6.8's mechanism)
+
+The three gates keep an unexported mode. Product behaviour is enforce, with no default and no
+setter on any product path. Each gate package exports exactly one seam,
+`SetModeForTest(mode) (restore func())`. That seam calls `testing.Testing()` and panics when it
+returns false. A product binary that calls it dies at the call; it cannot run with a gate off.
+
+`internal/objectgraph/gatefixture.Observe(t)` wraps the three seams and registers the restore
+with `t.Cleanup`. The gate script `check-gatefixture-imports` refuses two things in any non
+_test.go file:
+- an import of gatefixture;
+- a call to any `SetModeForTest`.
+
+The panic is the runtime guard, and the lint is the static one.
+
+### 7.2 Capture reads, bound to the ruling (replaces §6.6)
+
+The built-in branch of capture_read_gate allows the read of an owner-private capture without a
+count only for desks that already hold capture authority:
+- Texture's kind (the owner ruling);
+- the research desk and its child roles (the exchange the ruling covers);
+- any desk holding `captures.read` or a LeaseCaptures ceiling. Management-task is one.
+
+Every other built-in desk, engineering included, keeps counting wrong_reader in S1 and S2. Those
+reads are refused at S3. Package desks stay refused, as today.
+
+### 7.3 Where a role's parent comes from (§6.2)
+
+The manifest gains a `Parent` field on KindRole rows. Management-task names the admitter grant
+(`admit.assignment`), and research child roles name `research.spawn`. Parentage is resolved by
+grant holder, never by a name prefix. outwardSender keeps stamping a task's outward cast with the
+parent desk. This is why §6.3's "sent by the admitter desk" holds on the delegated path.
+
+### 7.4 The D4 provenance walk (§6.3)
+
+The check reads only tape facts:
+1. It starts from the story's trajectory: StoryRefOpeningRecord and StoryRefOriginDesk
+   (types/story.go:35-38).
+2. It then reads the opening cast record and its sender, which must be the admitter grant holder.
+   From the cast it takes RelatedIDs and Cast.Captures, then the capture records' SourceID.
+3. Last it reads the source schedule record. Its writer must be the owner, through an owner act
+   recorded on the tape.
+
+An owner act that sets publish-auto directly also qualifies. Any break in the walk refuses the
+admission, and the publish asks as before.
+
+### 7.5 Truncated unfiltered reads
+
+At enforce, readableObjects drops non-admitted kinds from an unfiltered desk read, and each drop
+is counted (reader.go:295 records a reader violation). The caller sees a shorter result, not an
+error. S1 and S2 read those drop sites from observability like every other count. Any drop site
+on the proof round blocks S3.
+
+### 7.6 FM additions
+
+- FM5 gains the caster case: a publish-auto spec set by a caster that is not the admitter and not
+  on an owner schedule is not admitted.
+- FM9: a built-in desk outside §7.2's set reads an owner-private capture. It is counted in S1 and
+  S2, and refused in S3.
+- FM10: product code calls SetModeForTest. The lint refuses it, and at runtime it panics.
