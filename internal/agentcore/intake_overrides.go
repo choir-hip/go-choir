@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -98,8 +99,10 @@ func (rt *Runtime) recordLabelOverrides(ctx context.Context, ownerID, computerID
 		if !enabled {
 			return
 		}
+		// The headline is a host-copied scalar for the override record; no
+		// cell reads the document here (F6 S1 run 3).
 		if disposition == types.DispositionFeed && docID != "" {
-			if doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID); err == nil {
+			if doc, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), ownerID, computerID, docID); err == nil {
 				headline = doc.Title
 			}
 		}
