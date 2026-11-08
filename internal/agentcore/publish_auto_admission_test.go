@@ -95,7 +95,7 @@ func (f *publishAutoFixture) asks(t *testing.T, doc, desk string, labels ...stri
 func TestPublishAutoOnAnOwnerStampedScheduleIsAdmittedForTheStoryLabels(t *testing.T) {
 	f := newPublishAutoFixture(t, "pa1", 62861)
 	defer disclosure.SetMode(disclosure.ModeEnforce)()
-	capture, document, evidence := types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("document"), types.OwnerPrivateLabel("evidence")
+	capture, document, evidence, story := types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("document"), types.OwnerPrivateLabel("evidence"), types.OwnerPrivateLabel("story")
 	f.putSchedule(t, "rss:pa-owner", "req-owner-1")
 	f.arrival(t, "rss:pa-owner", "cap-pa-1")
 	arrivalID := types.CaptureArrivalRecordID("rss:pa-owner", []string{"cap-pa-1"})
@@ -104,7 +104,7 @@ func TestPublishAutoOnAnOwnerStampedScheduleIsAdmittedForTheStoryLabels(t *testi
 	// Through RelatedIDs, and by scanning the admitter's arrivals.
 	for name, related := range map[string][]string{"related": {arrivalID}, "scanned": nil} {
 		doc := f.openStory(t, manager, types.CastPublishAuto, []string{"cap-pa-1"}, related, types.CommitmentEmitterAgent)
-		if f.asks(t, doc, agentprofile.Texture, capture, document, evidence, types.LabelWorldUntrusted) {
+		if f.asks(t, doc, agentprofile.Texture, capture, document, evidence, story, types.LabelWorldUntrusted) {
 			t.Errorf("%s: a publish-auto story on an owner-stamped schedule asked", name)
 		}
 	}
@@ -113,7 +113,7 @@ func TestPublishAutoOnAnOwnerStampedScheduleIsAdmittedForTheStoryLabels(t *testi
 	doc := f.openStory(t, manager, types.CastPublishAuto, []string{"cap-pa-1"}, []string{arrivalID}, types.CommitmentEmitterAgent)
 
 	// FM5: a label outside the subset still asks, with the rest admitted.
-	for _, label := range []string{types.OwnerPrivateLabel("mail"), types.OwnerPrivateLabel("run_memory"), types.OwnerPrivateLabel("story"), types.OwnerPrivateLabel("texture")} {
+	for _, label := range []string{types.OwnerPrivateLabel("mail"), types.OwnerPrivateLabel("run_memory"), types.OwnerPrivateLabel("texture")} {
 		if !f.asks(t, doc, agentprofile.Texture, capture, label) {
 			t.Errorf("FM5: label %s rode a publish-auto admission", label)
 		}

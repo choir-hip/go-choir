@@ -216,6 +216,22 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 			t.Errorf("crossing on a built-in kind: %s", c)
 		}
 	}
+	// An intake task's report to its parent: the outward message is stamped
+	// with the parent, so it reads as management to management. It carries the
+	// capture, computers and story labels the day showed asking (d@e e27a0522c).
+	mgmtRec := types.RunRecord{RunID: "run-cz-task-report", AgentID: "agent-task-report", OwnerID: f.owner, ComputerID: f.computer, ChannelID: "ch-task-report",
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning, Prompt: "report"}
+	if err := s.CreateRun(ctx, mgmtRec); err != nil {
+		t.Fatal(err)
+	}
+	rt.taintRun(mgmtRec.RunID, types.NewLabelSet(types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("computers"), types.OwnerPrivateLabel("story")))
+	if _, err := rt.flushRunLabels(ctx, f.owner, f.computer, mgmtRec.RunID); err != nil {
+		t.Fatal(err)
+	}
+	taskRun := toolregistry.ExecutionContext{RunID: mgmtRec.RunID, AgentID: mgmtRec.AgentID, OwnerID: f.owner, ComputerID: f.computer, RunRecord: &mgmtRec}
+	if err := rt.gateDisclosure(ctx, disclosureCall{exec: taskRun, deskRole: agentprofile.Management, sink: disclosure.SinkDeskMessage, target: agentprofile.Management + ":" + f.owner, kind: "report"}); err != nil {
+		t.Errorf("the task's report to its parent was refused: %v", err)
+	}
 	// Enforce flip S1: the day leaves no disclosure ask site (the intake
 	// delegation to the task role included).
 	for site, n := range disclosure.Sites() {

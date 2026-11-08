@@ -188,7 +188,11 @@ type Facts struct {
 //
 // "texture" is the custodian's own label atom (store.textureSearchLabel), so it
 // is read from the registry's writer and not spelled here.
-var ownerFlowAtoms = []string{"capture", "evidence", "document", strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"), "model-policy", "computers", "prompt-bar"}
+//
+// "story" is the story document the owner's desks write and read along the
+// chain (the story index and the lifecycle of a story's document), the atom a
+// run takes from ActionStories (d@e e27a0522c: every story-flow message asked).
+var ownerFlowAtoms = []string{"capture", "evidence", "document", strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"), "story", "model-policy", "computers", "prompt-bar"}
 
 // OwnerFlowAtoms returns the atoms OwnerFlow carries, for tests and the
 // report.

@@ -45,6 +45,9 @@ var publishAutoLabels = map[string]bool{
 	types.OwnerPrivateLabel("capture"):  true,
 	types.OwnerPrivateLabel("document"): true,
 	types.OwnerPrivateLabel("evidence"): true,
+	// The story document is the content being published: a Texture run on a
+	// story reads the story index and its documents (ActionStories).
+	types.OwnerPrivateLabel("story"): true,
 }
 
 // publishAutoCaptureScan bounds the admitter-inbox scan that resolves a capture

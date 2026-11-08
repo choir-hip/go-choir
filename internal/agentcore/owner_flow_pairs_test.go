@@ -34,7 +34,12 @@ func TestOwnerFlowPairsAreTheDelegationChainOnly(t *testing.T) {
 		{res, mgmt, false}, {mgmt, res, false},
 		{task, tex, false}, {task, eng, false}, {task, res, false},
 		{deskmanifest.ResearchWeb, res, false}, {res, deskmanifest.ResearchWeb, false},
-		{tex, tex, false}, {mgmt, mgmt, false},
+		// A message whose two ends are the same built-in system desk discloses
+		// nothing to another custodian (a task's outward message is stamped with
+		// its parent): covered. A package desk, a role and an unknown name never pair.
+		{tex, tex, true}, {mgmt, mgmt, true}, {res, res, true}, {eng, eng, true},
+		{deskmanifest.Mail, deskmanifest.Mail, false}, {"app:notes", "app:notes", false},
+		{task, task, false}, {"nonexistent", "nonexistent", false},
 		{deskmanifest.Mail, tex, false}, {tex, deskmanifest.Mail, false},
 		{deskmanifest.Mail, mgmt, false}, {mgmt, "app:notes", false},
 		{"nonexistent", tex, false}, {tex, "", false}, {"", "", false},
@@ -92,7 +97,7 @@ func TestFM1AGrantHeldByAPackageDeskCoversNoPair(t *testing.T) {
 // seven atoms only.
 func TestFM2OwnerFlowLiftsOnlyAnAskOnTheDeskMessageSink(t *testing.T) {
 	atoms := disclosure.OwnerFlowAtoms()
-	want := []string{"capture", "evidence", "document", "texture", "model-policy", "computers", "prompt-bar"}
+	want := []string{"capture", "evidence", "document", "texture", "story", "model-policy", "computers", "prompt-bar"}
 	if len(atoms) != len(want) {
 		t.Fatalf("atoms = %v", atoms)
 	}
@@ -109,7 +114,7 @@ func TestFM2OwnerFlowLiftsOnlyAnAskOnTheDeskMessageSink(t *testing.T) {
 			}
 		}
 	}
-	for _, other := range []string{"mail", "run_memory", "story", "app_object", "router", "prompt_bar", "leases", "x"} {
+	for _, other := range []string{"mail", "run_memory", "app_object", "router", "prompt_bar", "leases", "x"} {
 		if disclosure.OwnerFlow(types.OwnerPrivateLabel(other), disclosure.SinkDeskMessage, true) {
 			t.Errorf("atom %s is covered", other)
 		}

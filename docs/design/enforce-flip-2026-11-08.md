@@ -455,3 +455,24 @@ Replaces §8.1's stamp rule:
   registered roles.
 - Seven existing tests asserted an ask or a count that the owner flow or the new readers remove;
   they were updated, not deleted.
+
+## 11. Two gaps the S1 deployed proof found (d@e e27a0522c)
+
+The reader, writer and act gates were clean. The disclosure gate still asked in two places.
+
+- **The `story` atom.** `owner_private:story` is the label a run takes from reading the story
+  index (ActionStories). It was in neither the OwnerFlow atom set (§6.2) nor the publish-auto
+  subset (§6.3), so every story-flow message asked (management to texture cast, texture to
+  research cast, research to texture report, management to engineering cast) and the one
+  publish-auto publication asked on `story` alone, though the provenance walk passed. Fix: `story`
+  joins both sets. It is the story document the owner's desks write and, under publish-auto, the
+  content being published. FM8 still holds: the atom maps to no custodian in custody, so it is
+  admitted only by the flow rule and the publish admission, never by custody.
+- **Same-desk messages.** An intake task's outward messages are stamped with its parent by
+  `outwardSender`, so the task's report to management reads as management to management, and
+  `pair` failed closed on `from == to`. Fix: a message whose two ends resolve to the same built-in
+  system desk (Texture, research, the admitter, the performer) discloses nothing to another
+  custodian, and OwnerFlow covers it for its atoms only. Package desks, roles and unknown names
+  never pair. The representative day gained the task's report to its parent and keeps its
+  no-ask assertion.
+

@@ -282,8 +282,16 @@ func currentOwnerFlowRoles() ownerFlowRoles {
 
 // pair reports whether a message from one desk to another is on the chain.
 func (r ownerFlowRoles) pair(from, to string) bool {
-	if from == "" || to == "" || from == to {
+	if from == "" || to == "" {
 		return false
+	}
+	if from == to {
+		// A message whose two ends are the same built-in system desk leaves no
+		// custody: an intake task's outward message is stamped with its parent
+		// (outwardSender), so its report reads as management to management.
+		// Only the system desks the roles resolved to count; a package desk, a
+		// role and an unknown name never pair.
+		return from == r.texture || from == r.research || from == r.admitter || from == r.performer
 	}
 	on := func(a, b string) bool {
 		switch {
