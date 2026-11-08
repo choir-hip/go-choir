@@ -547,6 +547,18 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 		}
 		objects = append(objects, recordObj)
 		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: recordObj.CanonicalID})
+		// An install-review-owed record mints its own re-entry wakes in this
+		// batch (the review's clock), so the record and its clock land together.
+		if types.IsInstallReviewOwedRecord(rec) {
+			dueWakes, err := actorWakeOutboxFromObject(recordObj, nil)
+			if err != nil {
+				return nil, nil, receipt, err
+			}
+			for _, w := range dueWakes {
+				objects = append(objects, w)
+				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: w.CanonicalID})
+			}
+		}
 		// The judge's work on a round with a scorable Cast, and the round's
 		// outcome when this record closes it (desk_cast_judge.go).
 		judgeObjects, judgeConditions, err := s.planDeskCastJudge(ctx, ownerID, computerID, rec, closed, judgePlan, now)

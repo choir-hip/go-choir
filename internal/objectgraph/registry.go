@@ -137,6 +137,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.desk_package_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.DeskPackageEvent"},
 		{Kind: "choir.lease", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "lease.Record"},
 		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
+		{Kind: "choir.package_install_pending", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstallPending"},
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file
 		// with a stable id and its plaintext digest, and the path view from a

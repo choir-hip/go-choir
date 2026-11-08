@@ -367,7 +367,9 @@
       await refreshInstalls();
       await refreshUpdates();
       const done = installedFor(installs, view.kind === 'app' ? view.name : '');
-      message = done
+      message = result.status === 202
+        ? { tone: 'ok', text: 'Management is reviewing this app; it installs when management accepts.' }
+        : done
         ? { tone: 'ok', text: 'Installed. Open it from the launcher.' }
         : {
             tone: 'ok',

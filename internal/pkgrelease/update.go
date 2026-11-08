@@ -220,6 +220,9 @@ const (
 	UpdateStateUpdated       = "updated"
 	UpdateStatePlatformYank  = "removed_by_platform"
 	UpdateStatePlatformForce = "updated_by_platform"
+	// UpdateStatePendingReview: the update widens the ceiling and waits on
+	// management's install review (desk-install-review-2026-11-08 7.3).
+	UpdateStatePendingReview = "pending_review"
 )
 
 // AutomaticCandidate decides whether an automatic installer takes a release

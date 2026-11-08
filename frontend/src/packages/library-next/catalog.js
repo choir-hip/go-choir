@@ -43,6 +43,8 @@ export function plainReason(reason, status = 0) {
       return 'The Library could not look up who made these apps because the address service did not answer. Try again in a moment.';
     case 'publisher_address_missing':
       return 'An app in the Library has a maker with no Choir address, which should never happen. Nothing changed on this computer.';
+    case 'install_review_owed':
+      return 'Management is reviewing this app; it installs when management accepts. Nothing changed on this computer yet.';
     case 'install_review_required':
     case 'install_review_seat_unavailable':
     case 'install_review_unavailable':
@@ -185,7 +187,8 @@ export async function installRelease(computerId, releaseId, record, action = 'in
     body = null;
   }
   if (res.status === 200 || res.status === 201) notifyPackagesChanged();
-  if (res.status !== 200 && res.status !== 201) {
+  // 202: the release widens the ceiling and waits on management's review.
+  if (res.status !== 200 && res.status !== 201 && res.status !== 202) {
     const reason = body && typeof body.reason === 'string' ? body.reason : '';
     throw new CatalogError(plainReason(reason, res.status), res.status, reason);
   }
@@ -463,6 +466,11 @@ export function installState(item) {
   if (!item) return '';
   if (item.patch_matches_release === true) return 'done';
   if (item.state === 'replaced') return 'replaced';
+  // An install waiting on management's review is working; one whose review
+  // closed without an install (rejected, timed out, interrupted by a restart,
+  // superseded by a newer install) or whose approved run failed is failed.
+  if (item.state === 'pending_review') return 'working';
+  if (['review_rejected', 'review_timed_out', 'review_interrupted', 'superseded', 'install_failed'].includes(item.state)) return 'failed';
   const state = String((item.operation && item.operation.state) || '');
   if (state === 'failed' || state === 'rejected' || state === 'rolled_back') return 'failed';
   if (state === 'applied') return 'failed';

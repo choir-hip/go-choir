@@ -1438,6 +1438,9 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	if action == yaegikernel.ActionScreens {
 		return rt.screensEgress(egrCtx, deskRole, cellExec, payload)
 	}
+	if action == yaegikernel.ActionInstallPacket {
+		return rt.installPacketEgress(egrCtx, deskRole, cellExec, payload)
+	}
 	if action == yaegikernel.ActionShotWait {
 		return rt.shotWaitEgress(egrCtx, deskRole, cellExec, payload)
 	}

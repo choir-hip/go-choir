@@ -297,6 +297,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "verify_owed"
 	case types.IsShotsOwedRecord(rec):
 		return "shots_owed"
+	case types.IsInstallReviewOwedRecord(rec):
+		return "install_review_owed"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:

@@ -30,6 +30,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
+	"github.com/yusefmosiah/go-choir/internal/installreview"
 	"github.com/yusefmosiah/go-choir/internal/packagepath"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -209,9 +210,11 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 	defer rt.notifyTextureOfApplyFailure(ctx, operation)
 	ownerID, computerID := rt.selfdevRouteOwnerID, operation.ComputerID
 	var err error
-	if operation, err = rt.startSelfDevelopmentMaterialization(ctx, operation); err != nil {
-		return err
-	}
+	// The draft, the checked build and the install review gate run while the
+	// operation is still accepted: a review management owes keeps it accepted
+	// (errInstallReviewPending, the pattern of errCandidateShotPending), and
+	// only a passed gate moves it to materializing, whose passes settle from
+	// facts and never drive the branch again.
 	fail := func(format string, args ...any) error {
 		return rt.failPackageOperation(ctx, operation, fmt.Sprintf(format, args...))
 	}
@@ -281,8 +284,19 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 	if err != nil {
 		return fail("the installs cannot be read: %v", err)
 	}
-	if _, _, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, draft.ReleaseID, rec, draft.TreePatch, currentPackageInstalls(prior)[draft.Package], false); refusal != nil {
+	if _, _, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, draft.ReleaseID, rec, draft.TreePatch, currentPackageInstalls(prior)[draft.Package], installReviewCtx{operation: &operation}); refusal != nil {
+		switch refusal.reason {
+		case reasonInstallReviewOwed:
+			return fmt.Errorf("%w: operation %s release %s", errInstallReviewPending, operation.OperationID, draft.ReleaseID)
+		case reasonInstallReviewTimedOut:
+			return fail("%s", installReviewNotJudged)
+		case installreview.ReasonRejected:
+			return fail("install review rejected: %s", refusal.detail)
+		}
 		return fail("refused before publish: %s", refusal.Error())
+	}
+	if operation, err = rt.startSelfDevelopmentMaterialization(ctx, operation); err != nil {
+		return err
 	}
 
 	// 4. Publish by decision.

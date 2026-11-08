@@ -214,12 +214,18 @@ func (rt *Runtime) managementVerifyOwedGuard(rec *types.RunRecord) toolregistry.
 		for _, o := range shots {
 			lines = append(lines, shotsOwedLine(o.Operation.OperationID))
 		}
+		// And so is an install review owed.
+		installLines := rt.installReviewOwedLines(ctx, rec.OwnerID, rt.runComputerID(rec))
+		lines = append(lines, installLines...)
 		if len(lines) == 0 {
 			return toolregistry.ToolLoopCompletionGuardResult{}, nil
 		}
 		reason := "verify_owed"
 		if len(owed) == 0 {
 			reason = "shots_owed"
+			if len(shots) == 0 {
+				reason = "install_review_owed"
+			}
 		}
 		return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Reason: reason, Instruction: strings.Join(lines, "\n")}, nil
 	}

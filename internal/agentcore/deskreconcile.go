@@ -101,6 +101,9 @@ func (rt *Runtime) closeOpenObligationsAtBoot(ctx context.Context) {
 	}()
 	rt.closePreBootRunsAfterCrash(ctx)
 	rt.closeOpenRoundsAfterCrash(ctx)
+	// The installs waiting on management's install review close with the
+	// fate "interrupted by a restart" (install_review_pending.go).
+	rt.closeInstallReviewPendingAfterCrash(ctx)
 }
 
 // deskOfRun is the desk a run belongs to for the boot tally: its role, or for a

@@ -19,6 +19,8 @@ import (
 type releaseAPIError struct {
 	Error  string `json:"error"`
 	Reason string `json:"reason,omitempty"`
+	// OwedRecord is the install-review-owed record a 202 install waits on.
+	OwedRecord string `json:"owed_record,omitempty"`
 }
 
 // releasePrecommitments reads engineering's rule-settled precommitments for
@@ -94,7 +96,7 @@ func (h *APIHandler) handlePackageInstalls(w http.ResponseWriter, r *http.Reques
 		}
 		view, created, refusal := h.rt.installPackage(r.Context(), ownerID, computerID, request)
 		if refusal != nil {
-			writeAPIJSON(w, refusal.status, releaseAPIError{Error: refusal.detail, Reason: refusal.reason})
+			writeAPIJSON(w, refusal.status, releaseAPIError{Error: refusal.detail, Reason: refusal.reason, OwedRecord: refusal.owed})
 			return
 		}
 		status := http.StatusOK
@@ -113,6 +115,10 @@ func (h *APIHandler) handlePackageInstalls(w http.ResponseWriter, r *http.Reques
 		for _, item := range list {
 			views = append(views, h.rt.installView(item, list))
 		}
+		// The installs still waiting on management's review, and the reviews
+		// that closed without an install (pending_review, review_rejected,
+		// review_timed_out, review_interrupted, superseded).
+		views = append(h.rt.pendingInstallViews(r.Context(), ownerID, computerID), views...)
 		// set_aside: the packages the forced-modularity migration kept, which
 		// the owner may install from the Library (PM22).
 		writeAPIJSON(w, http.StatusOK, map[string]any{"installs": views, "set_aside": h.rt.packageMigrationSetAsideList()})

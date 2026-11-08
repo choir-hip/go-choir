@@ -1,17 +1,18 @@
 // Package installreview is the install review pipeline of plan slice MA7.5
 // and the trust draft's section 7 (docs/design/bayesian-trust-2026-11-04.md):
 // one pipeline for every install and update whose ceiling is widened, whoever
-// wrote the code. Mechanical checks run first; then review seats sized by
-// risk (the highest impact class of the requested grants) and the
-// publisher's carried record. Each seat's answer is a precommitment record
-// (typed predictions that later evidence settles), and the pipeline's verdict
-// is a record sealed by the computer's guest-core signer. The install gate
-// honours only a sealed verdict for exactly the release, tree, manifest and
-// behaviour surface being installed.
+// wrote the code. Mechanical checks run first; then, when the risk (the
+// highest impact class of the requested grants) and the publisher's carried
+// record call for it, management judges on its desk (choir.InstallPacket and
+// choir.InstallVerdict, docs/design/desk-install-review-2026-11-08.md). The
+// desk's answer is a precommitment record (a typed prediction that later
+// evidence settles), and the pipeline's verdict is a record sealed by the
+// computer's guest-core signer. The install gate honours only a sealed
+// verdict for exactly the release, tree, manifest and behaviour surface being
+// installed.
 //
-// Nothing here calls a model directly: a seat is a Seat, and the provider
-// seat calls through provideriface.ToolLoopProvider (the gateway), so no
-// provider key lives in this package.
+// Nothing here calls a model: the judgment is management's, made in a cell,
+// and the runtime seals it.
 package installreview
 
 import (
@@ -47,8 +48,11 @@ const (
 	// WindowDays is how long a reviewer's predictions run before they settle.
 	WindowDays = 30
 
-	SeatDevin    = "devin"
-	SeatDeepSeek = "deepseek"
+	// SeatDesk names the one seat in a plan: the desk the registry says holds
+	// the install review (the runtime names that desk on the seat record; no
+	// desk name is hard-coded here). Its seat record's precommitment is the
+	// desk's own prediction.
+	SeatDesk = "desk"
 
 	VerdictAccept = "accept"
 	VerdictReject = "reject"
@@ -182,37 +186,38 @@ type Plan struct {
 	Risk    types.ImpactClass `json:"risk"`
 	Strong  bool              `json:"publisher_strong"`
 	Added   []string          `json:"added,omitempty"`
-	// Seats run in this order; empty means mechanical checks only.
+	// Seats names who judges: management, or nobody (mechanical checks only).
 	Seats []string `json:"seats,omitempty"`
 	// Refusal is set when no review can admit the release.
 	Refusal string `json:"refusal,omitempty"`
 }
 
-// PlanFor sizes the review by the risk table of trust draft 7.2:
+// NeedsReview reports whether management's verdict is owed.
+func (p Plan) NeedsReview() bool { return len(p.Seats) > 0 && p.Refusal == "" }
+
+// PlanFor sizes the review by the risk table of trust draft 7.2, amended by
+// docs/design/desk-install-review-2026-11-08.md to one desk verdict at every
+// reviewable level:
 //
 //	risk \ publisher record   strong          thin or new
-//	I0 to I1                  mechanical      one seat
-//	I2                        one seat        one seat
-//	I3                        one seat        two seats (Devin, DeepSeek)
+//	I0 to I1                  mechanical      management's verdict
+//	I2                        management's verdict (both)
+//	I3                        management's verdict (both)
 //	I4                        first-party only: refused for a Library release
 //
-// One seat is Devin (the repo's default reviewer); two are Devin and DeepSeek.
+// The second model family a thin publisher at I3 used to get is gone, a
+// deliberate reduction: management's chain already fails over across
+// families, and the publisher's trust row still gates the act.
 func PlanFor(s Subject, strong bool) Plan {
 	p := Plan{Widened: s.Widened(), Risk: Risk(s.Manifest), Strong: strong, Added: s.Added()}
-	one, two := []string{SeatDevin}, []string{SeatDevin, SeatDeepSeek}
+	one := []string{SeatDesk}
 	switch p.Risk {
 	case types.ImpactI0, types.ImpactI1:
 		if !strong {
 			p.Seats = one
 		}
-	case types.ImpactI2:
+	case types.ImpactI2, types.ImpactI3:
 		p.Seats = one
-	case types.ImpactI3:
-		if strong {
-			p.Seats = one
-		} else {
-			p.Seats = two
-		}
 	default:
 		p.Refusal = "an I4 grant is first-party only; a Library release cannot be reviewed into one"
 	}
@@ -344,21 +349,26 @@ type Prediction struct {
 
 // SeatVerdict is a seat's typed answer.
 type SeatVerdict struct {
+	// Reason is management's stated reason (required on a rejection).
+	Reason      string       `json:"reason,omitempty"`
 	Accept      bool         `json:"accept"`
 	Blocking    bool         `json:"blocking"`
 	Findings    []string     `json:"findings"`
 	Predictions []Prediction `json:"predictions"`
 }
 
-// ErrSeatUnavailable: the seat has no provider wired. It never yields a
-// verdict.
-var ErrSeatUnavailable = errors.New("install review: seat unavailable")
+// SubjectDigest is the digest of what a review is of: the release, tree
+// patch, manifest and behaviour surface. A pending install and its owed record
+// are keyed on it, and it is computable from the request's bytes before any
+// build.
+func SubjectDigest(releaseID, patchSHA256, manifestSHA256, behaviourSurface string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{"install-review-subject", releaseID, patchSHA256, manifestSHA256, behaviourSurface}, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
 
-// Seat is one review seat.
-type Seat interface {
-	Name() string
-	Model() string
-	Review(ctx context.Context, p Packet) (SeatVerdict, error)
+// Digest is the subject's digest.
+func (s Subject) Digest() string {
+	return SubjectDigest(s.ReleaseID, s.PatchSHA256, s.ManifestSHA256, s.BehaviourSurface)
 }
 
 // recordID derives a review record's id from its parts.
@@ -372,6 +382,24 @@ func baseRefs(s Subject, plan Plan) map[string]string {
 		RefRelease: s.ReleaseID, RefPatch: s.PatchSHA256, RefManifest: s.ManifestSHA256, RefSurface: s.BehaviourSurface,
 		RefPackage: s.Package, RefPublisher: s.Publisher, RefRisk: string(plan.Risk), RefAdded: strings.Join(plan.Added, " "),
 	}
+}
+
+// SeatHypothesis is the text of a seat record's hypothesis: its verdict, its
+// findings and its reason. A replay of a verdict is matched on it, so it is a
+// function of the content only (not of the record id, which embeds a time).
+func SeatHypothesis(seat string, v SeatVerdict) string {
+	verdict := VerdictReject
+	if v.Accept {
+		verdict = VerdictAccept
+	}
+	hyp := "install review seat " + seat + ": " + verdict
+	if len(v.Findings) > 0 {
+		hyp += "; findings: " + strings.Join(v.Findings, "; ")
+	}
+	if strings.TrimSpace(v.Reason) != "" {
+		hyp += "; reason: " + strings.TrimSpace(v.Reason)
+	}
+	return hyp
 }
 
 // SeatRecord is one seat's answer as an open precommitment: the envelope
@@ -400,10 +428,7 @@ func SeatRecord(s Subject, plan Plan, seat, model string, v SeatVerdict, compute
 	if weight <= 0 {
 		weight = 0.01
 	}
-	hyp := "install review seat " + seat + ": " + refs[RefVerdict]
-	if len(v.Findings) > 0 {
-		hyp += "; findings: " + strings.Join(v.Findings, "; ")
-	}
+	hyp := SeatHypothesis(seat, v)
 	return types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID("seat", s.ReleaseID, s.PatchSHA256, seat, stamp),
 		Kind: types.CommitmentKindPrecommit, Discrepancy: types.DiscrepancyUnresolved,
@@ -419,6 +444,12 @@ func SeatRecord(s Subject, plan Plan, seat, model string, v SeatVerdict, compute
 // VerdictRecord is the pipeline's verdict over the mechanical checks and the
 // seat records. It is sealed (Seal) before it is written.
 func VerdictRecord(s Subject, plan Plan, checks []Check, seats []types.CommitmentRecord, accept bool, computerID string, at time.Time) types.CommitmentRecord {
+	return VerdictRecordWithReason(s, plan, checks, seats, accept, "", computerID, at)
+}
+
+// VerdictRecordWithReason is VerdictRecord carrying management's reason in
+// its hypothesis, which is what a refusal shows the owner.
+func VerdictRecordWithReason(s Subject, plan Plan, checks []Check, seats []types.CommitmentRecord, accept bool, reason, computerID string, at time.Time) types.CommitmentRecord {
 	stamp := at.UTC().Format(time.RFC3339Nano)
 	refs := baseRefs(s, plan)
 	refs[RefRole] = RoleVerdict
@@ -440,6 +471,9 @@ func VerdictRecord(s Subject, plan Plan, checks []Check, seats []types.Commitmen
 	hyp := "install review verdict: " + refs[RefVerdict]
 	if len(findings) > 0 {
 		hyp += "; " + strings.Join(findings, "; ")
+	}
+	if strings.TrimSpace(reason) != "" {
+		hyp += "; management: " + strings.TrimSpace(reason)
 	}
 	return types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID("verdict", s.ReleaseID, s.PatchSHA256, stamp),

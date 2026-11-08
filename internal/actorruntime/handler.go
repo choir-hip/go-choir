@@ -223,6 +223,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleSelfDevelopmentMaterializationRetry(ctx, u, memory)
 	case "verify_owed":
 		return h.handleVerifyOwed(ctx, u, memory)
+	case "install_review_due":
+		return h.handleInstallReviewDue(ctx, u, memory)
 	case "source_poll_due":
 		return h.handleSourcePollDue(ctx, u, memory)
 	case "inbox_record":
@@ -308,6 +310,21 @@ func (h *actorHandler) handleVerifyOwed(ctx context.Context, u actor.Update, mem
 	}
 	if err := h.rt.HandleVerifyOwed(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("%w: actorruntime: verify owed: %v", actor.ErrDeferUnprocessed, err)
+	}
+	return memory, nil
+}
+
+// handleInstallReviewDue re-enters an owed install review: a notice to
+// management when due, the close at the deadline
+// (agentcore.HandleInstallReviewDue). The runtime re-reads the pending row, so
+// a stale or replayed wake does nothing; a wake that arrives early is deferred.
+func (h *actorHandler) handleInstallReviewDue(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve install_review_due scope: %w", err)
+	}
+	if err := h.rt.HandleInstallReviewDue(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: install review due: %v", actor.ErrDeferUnprocessed, err)
 	}
 	return memory, nil
 }

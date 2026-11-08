@@ -596,6 +596,30 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 			return nil, err
 		}
 		return []objectgraph.Object{outbox}, nil
+	case ogKindCommitmentRecord:
+		// An install-path install-review-owed record or notice owes its own
+		// re-entry wakes (the review's clock), minted in the record's
+		// transaction so a record never waits without one
+		// (docs/design/desk-install-review-2026-11-08.md 7.2).
+		rec, err := decodeLifecycleObject[types.CommitmentRecord](obj)
+		if err != nil {
+			return nil, err
+		}
+		dues, notBefore := types.InstallReviewDueWakes(rec, obj.CreatedAt)
+		var wakes []objectgraph.Object
+		for i, due := range dues {
+			content, err := json.Marshal(due)
+			if err != nil {
+				return nil, err
+			}
+			sourceID := "install-review:" + rec.RecordID + ":" + due.Stage
+			_, outbox, err := actorWakeOutbox(obj, sourceID, rec.Inbox, "", "", types.InstallReviewDueWakeKind, string(content), notBefore[i], "wake:"+obj.CanonicalID+":"+sourceID)
+			if err != nil || outbox.CanonicalID == "" {
+				return nil, err
+			}
+			wakes = append(wakes, outbox)
+		}
+		return wakes, nil
 	case ogKindWorkItem:
 		work, err := decodeLifecycleObject[types.WorkItemRecord](obj)
 		if err != nil {

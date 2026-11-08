@@ -5,15 +5,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -28,12 +25,10 @@ import (
 //	R3  a verdict for a different digest (another release, another tree, the
 //	    same release with another manifest) is honoured;
 //	R4  a rejected verdict is overridden by an older accept;
-//	R5  a seat is sized by taste rather than by the risk table, a seat runs on
-//	    a model the roster does not name, or the roster names a model outside
-//	    Devin and DeepSeek;
-//	R6  an unavailable seat (no provider wired) yields a verdict anyway;
-//	R7  a seat's answer that is not the typed verdict is read as an accept;
-//	R8  a default-level fresh install is made to wait on a model review.
+//	R5  the review is sized by taste rather than by the risk table (one desk verdict at every reviewable level);
+//	R8  a default-level fresh install is made to wait on a review.
+//
+// R6 and R7 (an unavailable or untyped seat) died with the seats.
 
 func manifestWith(t *testing.T, caps string, desks string) apppackage.Manifest {
 	t.Helper()
@@ -83,7 +78,7 @@ func TestWidenedCeiling(t *testing.T) {
 	}
 }
 
-func TestPlanSizesSeatsByTheRiskTable(t *testing.T) {
+func TestPlanIsOneDeskVerdictAtEveryReviewableLevel(t *testing.T) {
 	cases := []struct {
 		name   string
 		caps   string
@@ -91,10 +86,10 @@ func TestPlanSizesSeatsByTheRiskTable(t *testing.T) {
 		seats  []string
 		risk   types.ImpactClass
 	}{
-		{"I1 thin", `{"grant":"ui.read.kind","args":["notes"]}`, false, []string{SeatDevin}, types.ImpactI1},
+		{"I1 thin", `{"grant":"ui.read.kind","args":["notes"]}`, false, []string{SeatDesk}, types.ImpactI1},
 		{"I1 strong", `{"grant":"ui.read.kind","args":["notes"]}`, true, nil, types.ImpactI1},
-		{"I3 thin", `{"grant":"ui.net.egress","args":["api.example.com"]}`, false, []string{SeatDevin, SeatDeepSeek}, types.ImpactI3},
-		{"I3 strong", `{"grant":"ui.net.egress","args":["api.example.com"]}`, true, []string{SeatDevin}, types.ImpactI3},
+		{"I3 thin", `{"grant":"ui.net.egress","args":["api.example.com"]}`, false, []string{SeatDesk}, types.ImpactI3},
+		{"I3 strong", `{"grant":"ui.net.egress","args":["api.example.com"]}`, true, []string{SeatDesk}, types.ImpactI3},
 	}
 	for _, c := range cases {
 		p := PlanFor(subjectOf(manifestWith(t, c.caps, "")), c.strong)
@@ -111,64 +106,6 @@ func TestPlanSizesSeatsByTheRiskTable(t *testing.T) {
 	p = PlanFor(subjectOf(manifestWith(t, `{"grant":"ui.mystery"}`, "")), true)
 	if p.Risk != types.ImpactI4 || p.Refusal == "" {
 		t.Fatalf("an unknown grant is not I4: %+v", p)
-	}
-}
-
-func TestRosterIsDevinAndDeepSeekOnly(t *testing.T) {
-	roster := Roster(nil)
-	if len(roster) != 2 || roster[SeatDevin] == nil || roster[SeatDeepSeek] == nil {
-		t.Fatalf("R5: roster %v", roster)
-	}
-	ds := roster[SeatDeepSeek].(*ProviderSeat)
-	if !strings.Contains(strings.ToLower(ds.Model()), "deepseek") || ds.Provider() == "openrouter" {
-		t.Fatalf("R5: the DeepSeek seat runs %s on %s", ds.Model(), ds.Provider())
-	}
-	if _, ok := modelcatalog.Lookup(ds.Provider(), ds.Model()); !ok {
-		t.Fatalf("R5: the DeepSeek seat's model %s/%s is not in the catalog", ds.Provider(), ds.Model())
-	}
-	// R6: no Devin provider is wired: the seat says so and gives no verdict.
-	_, err := roster[SeatDevin].Review(context.Background(), Packet{})
-	if !errors.Is(err, ErrSeatUnavailable) {
-		t.Fatalf("R6: the Devin seat answered %v", err)
-	}
-	// R6: a seat with no caller is unavailable, never an accept.
-	if _, err := ds.Review(context.Background(), Packet{}); !errors.Is(err, ErrSeatUnavailable) {
-		t.Fatalf("R6: the DeepSeek seat with no provider answered %v", err)
-	}
-}
-
-type fakeCaller struct {
-	text string
-	req  provideriface.ToolLoopRequest
-}
-
-func (f *fakeCaller) CallWithTools(_ context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	f.req = req
-	return &provideriface.ToolLoopResponse{Text: f.text, Model: req.Model}, nil
-}
-
-func TestProviderSeatReadsOnlyTheTypedVerdict(t *testing.T) {
-	packet := Packet{Subject: subjectOf(manifestWith(t, `{"grant":"ui.read.kind","args":["notes"]}`, "")), Risk: types.ImpactI1}
-	good := `{"accept":true,"findings":[],"blocking":false,"predictions":[{"question":"` + StandardQuestions[0] + `","p_yes":0.9},{"question":"` + StandardQuestions[1] + `","p_yes":0.85}]}`
-	caller := &fakeCaller{text: "```json\n" + good + "\n```"}
-	seat := NewProviderSeat(SeatDeepSeek, DeepSeekProvider, DeepSeekModel, caller)
-	v, err := seat.Review(context.Background(), packet)
-	if err != nil || !v.Accept || len(v.Predictions) != 2 {
-		t.Fatalf("typed verdict: %+v %v", v, err)
-	}
-	if caller.req.Provider != DeepSeekProvider || caller.req.Model != DeepSeekModel {
-		t.Fatalf("R5: the seat called %s/%s", caller.req.Provider, caller.req.Model)
-	}
-	for _, bad := range []string{
-		"Looks fine to me, accept.",
-		`{"accept":true}`, // no predictions
-		`{"accept":true,"predictions":[{"question":"` + StandardQuestions[0] + `","p_yes":1.4},{"question":"` + StandardQuestions[1] + `","p_yes":0.5}]}`,
-		`{"accept":true,"blocking":true,"predictions":[{"question":"` + StandardQuestions[0] + `","p_yes":0.9},{"question":"` + StandardQuestions[1] + `","p_yes":0.9}]}`,
-	} {
-		caller.text = bad
-		if v, err := seat.Review(context.Background(), packet); err == nil {
-			t.Fatalf("R7: %q read as %+v", bad, v)
-		}
 	}
 }
 
@@ -196,8 +133,8 @@ func (s *testSigner) SignReceipt(_ context.Context, kind, issuer string, fields 
 func sealedVerdict(t *testing.T, signer *testSigner, s Subject, accept bool, at time.Time) types.CommitmentRecord {
 	t.Helper()
 	plan := PlanFor(s, false)
-	seatV := SeatVerdict{Accept: accept, Predictions: []Prediction{{StandardQuestions[0], 0.9}, {StandardQuestions[1], 0.8}}}
-	seat := SeatRecord(s, plan, SeatDevin, "devin", seatV, "computer-1", at)
+	seatV := SeatVerdict{Accept: accept, Predictions: []Prediction{{StandardQuestions[1], 0.8}}}
+	seat := SeatRecord(s, plan, SeatDesk, "model-x", seatV, "computer-1", at)
 	rec := VerdictRecord(s, plan, nil, []types.CommitmentRecord{seat}, accept, "computer-1", at)
 	sealed, err := Seal(context.Background(), signer, rec, "computer-1", at)
 	if err != nil {
@@ -273,10 +210,10 @@ func TestVerdictRecordsArePrecommitments(t *testing.T) {
 	s := subjectOf(manifestWith(t, `{"grant":"ui.net.egress","args":["api.example.com"]}`, ""))
 	plan := PlanFor(s, false)
 	at := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
-	seat := SeatRecord(s, plan, SeatDeepSeek, DeepSeekModel, SeatVerdict{Accept: true, Predictions: []Prediction{{StandardQuestions[0], 0.9}, {StandardQuestions[1], 0.7}}}, "c", at)
+	seat := SeatRecord(s, plan, SeatDesk, "model-x", SeatVerdict{Accept: true, Predictions: []Prediction{{StandardQuestions[1], 0.7}}}, "c", at)
 	if seat.Kind != types.CommitmentKindPrecommit || seat.Precommit == nil || seat.Precommit.Distribution["yes"] != 0.7 ||
-		seat.Precommit.ImpactClass != types.ImpactI3 || len(seat.Prediction.Questions) != 2 || seat.Provenance.ModelID != DeepSeekModel ||
-		seat.SubjectRefs[RefRole] != RoleSeat || seat.SubjectRefs[RefSeat] != SeatDeepSeek || seat.Provenance.ResolvedAt != "" {
+		seat.Precommit.ImpactClass != types.ImpactI3 || len(seat.Prediction.Questions) != 1 || seat.Provenance.ModelID != "model-x" ||
+		seat.SubjectRefs[RefRole] != RoleSeat || seat.SubjectRefs[RefSeat] != SeatDesk || seat.Provenance.ResolvedAt != "" {
 		t.Fatalf("seat record is not an open precommitment: %+v", seat)
 	}
 	if !strings.HasPrefix(seat.Provenance.AgentID, "system:") || seat.SubjectRefs[RefResolvesBy] == "" || seat.Precommit.Weight == nil {

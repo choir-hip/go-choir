@@ -153,7 +153,7 @@ func (rt *Runtime) decideUpdate(ctx context.Context, ownerID, computerID string,
 			change.forced = true
 			view.State, view.ReleaseID, view.Seq, view.Detail = pkgrelease.UpdateStatePlatformForce, forced, offer.Forced.Release.Seq, installed.StateReason
 			if refusal := rt.installCandidate(ctx, ownerID, computerID, *offer.Forced, change); refusal != nil {
-				view.Error = refusal.Error()
+				rt.noteUpdateRefusal(&view, refusal)
 			}
 			return view
 		}
@@ -215,7 +215,7 @@ func (rt *Runtime) decideUpdate(ctx context.Context, ownerID, computerID string,
 		return view
 	}
 	if refusal := rt.installCandidate(ctx, ownerID, computerID, *offer.Soaked, installChange{trigger: store.PackageInstallTriggerAutomatic}); refusal != nil {
-		view.Error = refusal.Error()
+		rt.noteUpdateRefusal(&view, refusal)
 		return view
 	}
 	view.State, view.ReleaseID, view.Seq, view.Change, view.Soaked = pkgrelease.UpdateStateUpdated, offer.Soaked.Release.ReleaseID, offer.Soaked.Release.Seq, &soaked, true
@@ -224,6 +224,16 @@ func (rt *Runtime) decideUpdate(ctx context.Context, ownerID, computerID string,
 		view.Detail = "updated to the newest soaked release; a newer one is still soaking"
 	}
 	return view
+}
+
+// noteUpdateRefusal records an update's refusal on its view: an install that
+// waits on management's review is state pending_review, not an error.
+func (rt *Runtime) noteUpdateRefusal(view *PackageUpdateView, refusal *installRefusal) {
+	if refusal.reason == reasonInstallReviewOwed {
+		view.State, view.Detail = pkgrelease.UpdateStatePendingReview, refusal.detail
+		return
+	}
+	view.Error = refusal.Error()
 }
 
 // installCandidate installs an offered release through the one install

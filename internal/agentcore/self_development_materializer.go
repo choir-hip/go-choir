@@ -519,6 +519,12 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			// A package operation has no updater journal, no host build and no
 			// route: its own branch (package_operation.go).
 			if packageErr := rt.reconcilePackageOperation(ctx, operation); packageErr != nil {
+				if errors.Is(packageErr, errInstallReviewPending) {
+					// Waiting on management's verdict: the 60 s retry is the
+					// operation path's clock.
+					rt.armSelfDevelopmentRetry(operation.OperationID)
+					continue
+				}
 				log.Printf("selfdev materializer: package operation %s in %s: %v", operation.OperationID, operation.State, packageErr)
 				rt.armSelfDevelopmentRetry(operation.OperationID)
 			}

@@ -64,6 +64,10 @@ type packageInstallRequest struct {
 	// change is what made an update sync's install or uninstall (F1). It is
 	// never read from a request body: the owner's own press has none.
 	change installChange
+	// baseline is set on the re-run of a pending install: the install of the
+	// package in force when the row was written. A package that has changed
+	// since means the re-run installs nothing.
+	baseline *pendingBaseline
 }
 
 // installChange records why an update sync changed an install: the owner's
@@ -93,6 +97,11 @@ func (c installChange) apply(record *store.PackageInstall) {
 // PackageInstallView is an install record and where it stands now.
 type PackageInstallView struct {
 	store.PackageInstall
+	// Reason and LastError are a pending review's closing reason and last
+	// refusal (states pending_review, review_rejected, review_timed_out,
+	// review_interrupted, superseded, install_failed).
+	Reason    string `json:"reason,omitempty"`
+	LastError string `json:"last_error,omitempty"`
 	// State: installed (this record is the package's current install),
 	// replaced (a later install or uninstall of the package superseded it),
 	// or uninstalled (this uninstall is the package's latest record). A
@@ -112,6 +121,8 @@ type installRefusal struct {
 	status int
 	reason string
 	detail string
+	// owed is the install-review-owed record a 202 waits on.
+	owed string
 }
 
 func (r *installRefusal) Error() string { return r.reason + ": " + r.detail }
@@ -178,6 +189,9 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
 	current := currentPackageInstalls(prior)[rec.Package.Name]
+	if request.baseline != nil && !request.baseline.matches(current) {
+		return PackageInstallView{}, false, refuseInstall(http.StatusConflict, "install_superseded", "package %s changed while its install review ran", rec.Package.Name)
+	}
 
 	// 3. Already installed, with its module in the store: nothing to do.
 	if current != nil && current.ReleaseID == releaseID {
@@ -188,6 +202,12 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	}
 	if len(request.TreePatch) == 0 {
 		return PackageInstallView{}, false, refuseInstall(http.StatusConflict, "patch_unavailable", "the install carries no release tree; an install reaches this computer through the Library")
+	}
+	// A request whose subject already waits on its review answers the same 202
+	// before any build (the digest is computed from the request's bytes).
+	subjectDigest := requestSubjectDigest(releaseID, rec, request.TreePatch)
+	if refusal := rt.pendingInstallDedupe(ctx, ownerID, computerID, subjectDigest); refusal != nil {
+		return PackageInstallView{}, false, refusal
 	}
 	// The record is named before the build, so a refused attempt costs no build.
 	record, refusal := rt.newPackageInstallRecord(ctx, ownerID, computerID, releaseID, packageActionInstall, prior)
@@ -200,7 +220,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	record.ReleaseBaseCommit, record.ReleaseTreeHash = rec.Source.BuiltOn, rec.Source.Tree
 
 	// 4. Verify and build, check the uses and the install review.
-	module, pack, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, current, request.change.deferReview)
+	module, pack, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, releaseID, rec, request.TreePatch, current, installReviewCtx{deferReview: request.change.deferReview, request: &request})
 	if refusal != nil {
 		return PackageInstallView{}, false, refusal
 	}
@@ -228,6 +248,9 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if err := rt.store.PutPackageInstall(ctx, record); err != nil {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
+	// A newer install of the package supersedes the reviews still waiting on
+	// older releases of it.
+	rt.supersedePendingInstalls(ctx, ownerID, computerID, rec.Package.Name, subjectDigest)
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
 }
 
@@ -235,7 +258,7 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 // the verified build of the release's bytes into a module (or a pack), the
 // install-time uses check, and the install review gate. A package operation
 // runs it before its release is published, so a refusal publishes nothing.
-func (rt *Runtime) buildCheckedModule(ctx context.Context, ownerID, computerID, releaseID string, rec pkgrelease.Record, treePatch []byte, current *store.PackageInstall, deferReview bool) (pkgruntime.Module, bool, *installRefusal) {
+func (rt *Runtime) buildCheckedModule(ctx context.Context, ownerID, computerID, releaseID string, rec pkgrelease.Record, treePatch []byte, current *store.PackageInstall, rv installReviewCtx) (pkgruntime.Module, bool, *installRefusal) {
 	if rt.packageBuilder == nil {
 		return pkgruntime.Module{}, false, refuseInstall(http.StatusServiceUnavailable, "install_unavailable", "this computer has no package builder")
 	}
@@ -269,7 +292,7 @@ func (rt *Runtime) buildCheckedModule(ctx context.Context, ownerID, computerID, 
 	// The install review gate (MA7.5): a widened ceiling stores its module
 	// and records only with a sealed accepting verdict for exactly these
 	// bytes.
-	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, treePatch, module, current, deferReview); refusal != nil {
+	if refusal := rt.installReviewGate(ctx, ownerID, computerID, releaseID, rec, treePatch, module, current, rv); refusal != nil {
 		return pkgruntime.Module{}, false, refusal
 	}
 	return module, pack, nil

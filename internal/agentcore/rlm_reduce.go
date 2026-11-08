@@ -182,6 +182,16 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.TargetRef) == "" {
 				return fmt.Errorf("reduce: shot verdict %s names no operation", in.LocalID)
 			}
+		case yaegikernel.IntentInstallVerdict:
+			if !holdsInstallReviewGrant(fromDesk) {
+				return fmt.Errorf("reduce: install verdict %s: the install verdict is management's", in.LocalID)
+			}
+			if in.Decision != "accept" && in.Decision != "reject" {
+				return fmt.Errorf("reduce: install verdict %s decision %q invalid", in.LocalID, in.Decision)
+			}
+			if strings.TrimSpace(in.TargetRef) == "" {
+				return fmt.Errorf("reduce: install verdict %s names no release", in.LocalID)
+			}
 		case yaegikernel.IntentTextureTurn:
 			// A Texture cell's turn (Cut 2 2a): the commit arm runs
 			// ApplyTextureTurn via the bound owner. Doc bodies bind by the
@@ -1217,6 +1227,12 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		case yaegikernel.IntentShotVerdict:
 			var out map[string]any
 			out, err = r.commitShotVerdictIntent(ctx, in)
+			if err == nil {
+				r.verifyResult = out
+			}
+		case yaegikernel.IntentInstallVerdict:
+			var out map[string]any
+			out, err = r.commitInstallVerdictIntent(ctx, in)
 			if err == nil {
 				r.verifyResult = out
 			}

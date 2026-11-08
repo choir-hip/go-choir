@@ -605,10 +605,17 @@ type Runtime struct {
 	packageUpdateViews  map[string]PackageUpdateView
 	packageUpdateProbes map[string]pkgrelease.UpdateSurface
 	// The install review gate (MA7.5, install_review.go): the guest-core
-	// signer that seals verdicts, and the seats (nil: the Devin and DeepSeek
-	// roster on the gateway provider).
+	// signer that seals verdicts. The judgment is management's, on its desk
+	// (install_review_desk.go).
 	installReviewSigner installreview.Signer
-	installReviewSeats  map[string]installreview.Seat
+	// installReviewNow replaces the review clock in tests; nil is time.Now.
+	installReviewNow func() time.Time
+	// installReviewBeforeOwed, in tests, runs after the gate's first read of
+	// the ledger and before the owed commit re-reads it (FM9).
+	installReviewBeforeOwed func()
+	// installReviewRerun tracks the detached re-runs of accepted pending
+	// installs (tests wait on it).
+	installReviewRerun sync.WaitGroup
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex

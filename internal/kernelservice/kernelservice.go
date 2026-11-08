@@ -85,7 +85,7 @@ var builtin = []Manifest{
 		"choir.co_super_capability_claim", "choir.co_super_capsule_claim", "choir.co_super_run_claim",
 		"choir.rebase_notice_claim",
 		// Install records and worker updates.
-		"choir.package_install", "choir.release_adoption", "choir.worker_update",
+		"choir.package_install", "choir.package_install_pending", "choir.release_adoption", "choir.worker_update",
 		// The desk package event log (MA4.4).
 		"choir.desk_package_event",
 	}},

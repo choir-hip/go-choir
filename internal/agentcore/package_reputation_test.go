@@ -38,12 +38,8 @@ func reputationOf(t *testing.T, e *installEnv, publisher string) (reputationResp
 }
 
 func TestReputationIsSentencesWithN(t *testing.T) {
-	e := newInstallEnv(t)
-	signer := newReviewSigner(t)
-	e.rt.installReviewSigner = signer
-	manifest := extendedManifest(`{"grant":"ui.read.kind","args":["notes"]}`)
-	e.rt.packageBuilder = &manifestBuilder{manifest: manifest}
-	e.rt.installReviewSeats = map[string]installreview.Seat{installreview.SeatDevin: &stubSeat{name: installreview.SeatDevin, accept: true}}
+	f := newNotesReviewFixture(t)
+	e, signer := f.e, f.signer
 
 	// L2: nothing settled.
 	body, raw := reputationOf(t, e, "publisher-x")
@@ -60,13 +56,12 @@ func TestReputationIsSentencesWithN(t *testing.T) {
 		t.Fatalf("L3: a forged verdict counted: %s", raw)
 	}
 
-	// A reviewed, accepted install of the publisher's release.
-	_, id, relRaw, tree := publishedPackage(t, e.repo, e.base, "publisher-x", map[string]string{
-		"choir-package.json": manifest, "App.svelte": "<p>demo</p>\n",
-	})
-	if code, _, reason := e.post(t, installBody(t, id, relRaw, tree, "")); code != http.StatusCreated {
+	// A reviewed, accepted install of the publisher's release: management owes
+	// the verdict, judges it, and the stored request installs.
+	if code, _, reason := f.post(t); code != http.StatusAccepted {
 		t.Fatalf("install = %d %s", code, reason)
 	}
+	f.judge(t, true)
 	body, raw = reputationOf(t, e, "publisher-x")
 	if body.N != 1 || len(body.Sentences) != 1 || body.Sentences[0].N != 1 || body.Sentences[0].Text != "Reviewed: 1 of 1 accepted." {
 		t.Fatalf("reviewed: %s", raw)

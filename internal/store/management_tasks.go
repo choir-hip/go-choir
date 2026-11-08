@@ -111,6 +111,13 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 	if types.IsShotsOwedRecord(rec) {
 		return true
 	}
+	// An install-review-owed record or notice asks management to judge a
+	// widened-ceiling install (desk install review design 2.1). The runtime
+	// commits the record once and the notices from its live continuation,
+	// never at a boot.
+	if types.IsInstallReviewOwedRecord(rec) {
+		return true
+	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {
 		return true
 	}
