@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -504,7 +505,7 @@ func TestContentImportFileCreatesExtractedPPTXContentItem(t *testing.T) {
 	if len(selectors) != 2 || selectors[0].ID != "slide-1" || selectors[1].ID != "slide-2" {
 		t.Fatalf("selectors = %#v", selectors)
 	}
-	stored, err := rt.GetContentItem(context.Background(), "user-content", item.ContentID)
+	stored, err := rt.GetContentItem(objectgraph.WithReader(context.Background(), objectgraph.WriterOwner), "user-content", item.ContentID)
 	if err != nil {
 		t.Fatalf("load stored content item: %v", err)
 	}

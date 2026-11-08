@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph/gatefixture"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -99,6 +100,7 @@ func TestObjectGraphStore_ListObjects(t *testing.T) {
 }
 
 func TestObjectGraphStore_PutAndListEdges(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ctx := context.Background()
@@ -166,6 +168,7 @@ func TestObjectGraphStore_PutAndListEdges(t *testing.T) {
 }
 
 func TestObjectGraphStore_IdempotentEdgeUpsert(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ctx := context.Background()
@@ -230,6 +233,7 @@ func TestObjectGraphStore_IdempotentEdgeUpsert(t *testing.T) {
 }
 
 func TestObjectGraphStore_IdempotentObjectUpsert(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ctx := context.Background()
@@ -268,6 +272,7 @@ func TestObjectGraphStore_GetObjectNotFound(t *testing.T) {
 }
 
 func TestObjectGraphHandler_CreateAndGet(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
@@ -308,6 +313,7 @@ func TestObjectGraphHandler_CreateAndGet(t *testing.T) {
 }
 
 func TestObjectGraphHandler_ListObjects(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
@@ -358,6 +364,7 @@ func TestObjectGraphHandler_RequireInternalCaller(t *testing.T) {
 }
 
 func TestObjectGraphHandler_CreateEdge(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph/gatefixture"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -91,6 +92,7 @@ func captureObject(t *testing.T, c fixtureCapture, now time.Time) objectgraph.Ob
 }
 
 func TestCorpusSearchOverAllHistory(t *testing.T) {
+	gatefixture.Observe(t) // F6: this test drives the gates in observe
 	ctx := context.Background()
 	owner, computer := "owner-paper", "computer-paper"
 	pstore := openEmbeddedPlatformStore(t)

@@ -23,6 +23,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -149,6 +150,7 @@ func (s *Service) HandleContentRouter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleContentItem(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -176,6 +178,7 @@ func (s *Service) HandleContentItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleContentCreate(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -202,6 +205,7 @@ func (s *Service) HandleContentCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleContentImportURL(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1936,4 +1940,16 @@ func hostPathTitle(raw string) string {
 		return parsed.Hostname()
 	}
 	return base
+}
+
+// asOwnerRoute declares the owner as the reader of a request an owner route
+// serves (E1: every owner-authenticated HTTP read stays), so the object graph's
+// reader gate admits it at enforce. A request that already names a reader keeps
+// it (a desk's in-process ProductAPI call).
+func asOwnerRoute(r *http.Request) *http.Request {
+	ctx := objectgraph.WithReaderIfAbsent(r.Context(), objectgraph.WriterOwner)
+	if ctx == r.Context() {
+		return r
+	}
+	return r.WithContext(ctx)
 }
