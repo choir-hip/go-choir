@@ -646,3 +646,34 @@ Sections 13.3 and 13.4 stand, amended below.
 - a residual re-delegated by a tainted management run, with no ask at publication;
 - two captures of one event, which open one story;
 - a host-started task closed `run_passivated`, whose residual re-delegates.
+
+### 13.6 r2 (Devin r1 SEND BACK)
+
+1. **Mint scope.** The host mints a task only for arrival records a task can fully dispose of:
+   plain poll arrivals, corroborated, unresolved and released records. An `event-aged:` record
+   (reason `official_single_outlet`, committed unheld at event_wakes.go:202) mints nothing and
+   keeps waking management's main run. A task cannot ask research (store/management_tasks.go:333,
+   inbox_records.go:532). Management asks research, then re-delegates with the clean stamp, or
+   declines. `Held` records mint nothing, as in r1.
+2. **No model text on a Delegate Cast.** Dropping the objective is not enough. The Delegate Cast
+   also drops the cell's request payload: `in.Req.Questions` must not reach
+   `cast.Prediction.Questions` through `applySubCallPrecommitment` (subcall_record.go:94-113) or
+   `StampRequest` (request_record.go:358). `cast.SubCall` stays with weight zero, which
+   `ValidateSubCallCast` accepts (subcall.go:226). The `firstNonEmpty(objective, spec.Objective,
+   in.Objective)` fallback in `typeDelegateCast` (management_tasks.go:557) becomes the constant.
+   The verb's surface text (yaegikernel/surface.go:64) drops the ignored `objective` and `req`
+   arguments. With the questions gone, `buildSubCallSelfScore` emits nothing for a Delegate
+   cast. That is named, beside item 4 of 13.5.
+3. **Mechanics the build states.**
+   - An arrival that minted a task carries a durable marker on the record, and
+     `RecordWakesReader` reads that marker to skip the main run, because the predicate reads the
+     record only.
+   - A poll arrival over `MaxTaskCaptures` (polls reach 100 items) is chunked into tasks of at
+     most `MaxTaskCaptures`, all in the same batch.
+   - The minted `TaskID` is deterministic from the arrival's command id, and its provenance
+     names the host (Origin, AgentID, RunID empty or host).
+4. **Named in 13.3**, correcting r1's stale reference. The id-selection channel on a Delegate is
+   which host-supplied capture ids management delegates, and how it groups them: a few bits among
+   uniformly labelled records. Backlog: arrival records committed before the deploy mint nothing,
+   and they dispose through the main run's Delegate, unchanged. A crash-closed task's residuals do
+   not wake the parent, which is a pre-existing behaviour.
