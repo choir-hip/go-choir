@@ -302,6 +302,31 @@ closes. The comments at `self_development_materializer.go:109` and
   (the row's terminal note says so). The restored base is the booted image's
   release, not a platform update's release when the two differ.
 
+**R3.1 amendment (2026-11-08): the prior is the release X replaced.** The
+pass proof on d@e applied a platform candidate that could not be reverted
+(mission ledger, 2026-11-08). The chain's platform prior was a November 2
+operation with no checkpoint, and no deploy had left a platform-update
+checkpoint after it: deploys reach a computer by vmctl refresh, which writes
+no event. So the rule above, which reads the prior only from the chain, misses
+the common case it was written for, "the first apply after every deploy".
+The evidence that does exist is X's own materialization receipt: the updater
+signs `prior_release_digest`, the release X's swap replaced. The amended order:
+
+1. The chain prior (after skipping package events) is an applied or
+   rolled-back operation with full evidence: the existing rollback to it.
+2. Otherwise, X's signed materialization receipt names a prior release equal
+   to the booted base manifest's content digest: a base restore. This is
+   exactly the state before X, whatever stale operation the chain names.
+3. Otherwise, the genesis, earlier base restore or platform-update checkpoint
+   rule above: a base restore.
+4. Otherwise refused 409, and the refusal names the prior release X replaced.
+
+Step 2 never restores past live state: if the release X replaced was an
+overlay (a full-evidence operation, or anything not the booted base), step 2
+does not apply. The base restore keeps its open-time check that the booted
+base has not changed since the revert opened. Tier 2 (revert is a red
+surface). Rollback: revert the commit; the route refuses as before.
+
 ### 3.6 Harm, and what bounds it
 
 | failure | answer |
