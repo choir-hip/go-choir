@@ -235,27 +235,22 @@ boundaries:
 now:
   status: working
   slice: >-
-    (Rewritten 2026-11-08 03:15Z; owner 2026-11-08: "Then finish up the
-    mission".) Phases 1 to 3 closed; Phases 4 to 7 landed except as listed.
-    Done: F1 (R3.1 f0bfc5144; selfdev-91ae7229 reverted to the booted base
-    on d@e in 12 s; the mid-stack projection fix b22cb0e6a); F3 partial
-    (MA4.11 eadeb1cc5, accepted on d@e; names gate 930 to 502, residue
-    Texture and the conductor); F4 (MA5.2 af5b02cea and 4b067e8de, MA5.3);
-    F7 (MA8.0 ed5b893ae); b@c cleaned to base (owner).
-    F2 done: install review on management's desk (4b63780ad, epoch 101,
-    protocol 15.0.0; reviews readable 49a502288); d@e proof accepted two
-    packages and rejected a planted notes-to-sink flow with management's
-    sealed reason.
-    Left, in order: F5 the deployed drills (P4 Mail lease and router, P5
-    fresh-account Library drill, P6 hostile iframe, P7 replay, strong lease
-    and planted-bad gate), which the install review proof's fixtures
-    unblock; F6 the built-in kinds' enforce flip after its prerequisites
-    (ledger 2026-11-05T17:30Z, 2026-11-06T01:50Z); F8 Phase 8 rounds.
-    Follow-ups: fullEvidenceOperationForRelease misses a re-minted rollback
-    release (409, fails closed). Owner decisions open: the Library
-    republish route (proposed), rotating the QA owner passkey.
-  source_ref: origin/main 6eb19408e
-  deploy_identity: staging 6eb19408e (security epoch 101, desk protocol 15.0.0)
+    (Rewritten 2026-11-08 21:50Z; owner 2026-11-08: "I want to finish this
+    mission first".) Done: F1, F2, F4, F7; F3 partial (residue Texture and
+    the conductor). Since 03:15Z: the paper publishes again (slot heal
+    ff071c344, newest-first 80f84616c, no owner ask on publish-auto work
+    e59ef0187, about 13 stories in 5 minutes after it deployed); deferred
+    item 2, the installed-head seed (6ef382e75, Ring-Expedite), deployed;
+    a Mail Note update round on d@e (assignment-fdc5de07, 21:28Z) is its
+    live proof. Left, in order: F5 (P4 Mail lease and router once the round
+    drafts, which also needs check-packages.mjs to admit contributes.desks
+    for published packages; P5; P7 strong lease and planted-bad gate);
+    F6 the built-in kinds' enforce flip; F8 Phase 8 rounds (updates to the
+    installed Files and context-menu packages, now unblocked by the seed).
+    After the mission, the owner's queue (ACTIVE.md): approvals audit on
+    ordinary computers, ordinary-operation regressions, UX, then Autopaper.
+  source_ref: origin/main 6ef382e75
+  deploy_identity: staging 6ef382e75 (security epoch 107, desk protocol 17.0.0)
   candidate:
     id: none
     state: none
@@ -333,8 +328,10 @@ now:
     DeepSeek review seat unavailable (402); a Claude Opus seat stands in.
     The paper key expires 2026-11-12.
   next_action: >-
-    Review and land MA6.6 (tier 2); design the M3 corpusd authority; write
-    the checkpoint letter for the owner.
+    Read the d@e Mail Note round's draft: a release whose parent is release
+    37d32662 proves the seed; a package_seed_missing or
+    package_parent_unpublished refusal is the next defect. Then P4's Mail
+    lease (package desks in check-packages.mjs) and the F8 rounds.
 
 receipts:
   - id: P0_plan_review
