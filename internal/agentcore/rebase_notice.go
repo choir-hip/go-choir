@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"os"
 	"strings"
@@ -480,7 +481,7 @@ func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computer
 // or by anyone, is done.
 func (rt *Runtime) continueRebaseDocument(ctx context.Context, ownerID, computerID string, addr rebaseAddressee, noticeID string) error {
 	settledID := strings.TrimSpace(addr.TrajectoryID)
-	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, addr.DocID)
+	doc, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), ownerID, computerID, addr.DocID)
 	if err != nil {
 		return fmt.Errorf("document %s: %w", addr.DocID, err)
 	}
@@ -506,7 +507,7 @@ func (rt *Runtime) continueRebaseDocument(ctx context.Context, ownerID, computer
 	// behalf): an exception to revisit in MA3.6.
 	_, continueErr := rt.store.ContinueLifecycleDocument(withKindCustodian(ctx, "choir.texture_document"), req)
 	// A lost race (the owner's revise, another attempt) has moved it too.
-	current, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, addr.DocID)
+	current, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), ownerID, computerID, addr.DocID)
 	if err != nil {
 		return fmt.Errorf("document %s: %w", addr.DocID, err)
 	}
@@ -574,9 +575,10 @@ func (rt *Runtime) rebaseTextureTakesRun(ctx context.Context, ownerID, computerI
 // and document, and whether it can take a root run now (its trajectory is
 // live, has no cancellation intent, and its standing item is open).
 func (rt *Runtime) rebaseRoot(ctx context.Context, ownerID, computerID string) (inbox, docID string, live bool, err error) {
-	// MA3.7c: the root marker and its document are Texture's; the host
-	// resolves them on its behalf.
-	ctx = withKindReader(ctx, "choir.texture_root")
+	// The root marker and its document are Texture's; the host resolves them
+	// on its behalf. The reader is forced: the fallback is also asked from a
+	// management or Texture run's context (enforce flip section 6.7).
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_root")
 	marker, err := rt.store.GetTextureRoot(ctx, ownerID, computerID)
 	if errors.Is(err, store.ErrNotFound) {
 		return "", "", false, nil

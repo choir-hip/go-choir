@@ -378,6 +378,16 @@ func (s *Store) releaseEngineeringSlotGraph(ctx context.Context, ownerID, trajec
 	if s.og == nil || s.ogStore == nil {
 		return nil
 	}
+	// The release runs on a host context (a failed spawn's cleanup, the boot
+	// reconciliation) that declares no actor. It is the slot custodian's own
+	// bookkeeping, so it reads as the custodian and, where the caller named no
+	// writer, writes as it (enforce flip section 6.7).
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.co_super_slot")
+	if _, declared := objectgraph.WriterFrom(ctx); !declared {
+		if w, ok := objectgraph.CustodianOf("choir.co_super_slot"); ok {
+			ctx = objectgraph.WithWriter(ctx, w)
+		}
+	}
 	prior, current, found, err := s.engineeringSlotGraphObject(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return fmt.Errorf("release co-super slot claim: %w", err)

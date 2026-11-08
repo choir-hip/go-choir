@@ -1023,7 +1023,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		ObjectGraphReaderGate: &writerGateObservability{
 			Mode: objectgraph.CurrentReaderGateMode().String(), Counts: objectgraph.ReaderGateCounts(), Sites: objectgraph.ReaderGateSites(),
 		},
-		RouteAppGate: &writerGateObservability{Mode: "observe", Counts: routekinds.Counts()},
+		RouteAppGate: &writerGateObservability{Mode: "enforce package routes, observe built-in", Counts: routekinds.Counts()},
 		DisclosureGate: &writerGateObservability{
 			Mode: disclosure.CurrentMode().String(), Counts: disclosure.Counts(), Sites: disclosure.Sites(),
 		},

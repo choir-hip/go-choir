@@ -123,3 +123,38 @@ func TestR5LineageNoticeDeclaresItsReader(t *testing.T) {
 	}
 	requireNoReaderCrossings(t, "buildLineageNotice")
 }
+
+// Section 6.7: the sub-call settler's citation check runs on a context derived
+// from Background and reads research's evidence; the rebase fallback's root
+// resolution can be asked from a management run's context.
+func TestBackgroundContextSitesDeclareTheirReader(t *testing.T) {
+	rt, _ := testRuntime(t)
+	stop := objectgraph.TrackUndeclaredReadsFromProduct()
+	defer stop()
+	objectgraph.ResetUndeclaredReads()
+	objectgraph.ResetReaderGateCounts()
+	if err := rt.store.CreateEvidence(objectgraph.WithWriter(context.Background(), objectgraph.WriterResearch), types.EvidenceRecord{
+		EvidenceID: "ev-bg", OwnerID: "owner-bg", AgentID: "research:doc-bg", Kind: "web_page",
+		SourceURI: "https://example.com/bg", Title: "Harbor", Content: "the harbor reopened",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	objectgraph.ResetReaderGateCounts()
+	resolved, checked := rt.resolveCitation(context.Background(), "owner-bg", "evidence:ev-bg")
+	if !resolved || !checked {
+		t.Fatalf("resolveCitation = %v %v", resolved, checked)
+	}
+	if got := objectgraph.UndeclaredReads(); len(got) != 0 {
+		t.Errorf("resolveCitation read with no declared reader: %v", got)
+	}
+	requireNoReaderCrossings(t, "resolveCitation on a Background context")
+
+	// The rebase root, asked under management's run context.
+	f := newRebaseFixture(t)
+	objectgraph.ResetReaderGateCounts()
+	ctx := withDeskReader(context.Background(), agentprofile.Management)
+	if _, _, _, err := f.rt.rebaseRoot(ctx, f.owner, f.computer); err != nil {
+		t.Fatal(err)
+	}
+	requireNoReaderCrossings(t, "rebaseRoot under the management context")
+}

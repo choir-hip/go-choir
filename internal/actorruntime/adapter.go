@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"os"
 	"path/filepath"
@@ -308,12 +309,15 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 	// Lookup failures are transient — they retry on the next sweep; only a
 	// resolved miss means the canonical occurrence is gone for good.
 	docID := strings.TrimPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":")
-	doc, docErr := a.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	// The legacy fallback resolves Texture's document and revision on the
+	// dispatcher's context, which declares no reader: it reads as their
+	// custodian (enforce flip section 6.7).
+	doc, docErr := a.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), ownerID, computerID, docID)
 	if docErr != nil && !errors.Is(docErr, store.ErrNotFound) {
 		return "", "", "", fmt.Errorf("actorruntime: resolve Texture owner document %s: %w", docID, docErr)
 	}
 	if docErr == nil && strings.TrimSpace(doc.TrajectoryID) != "" {
-		revision, revErr := a.store.GetLifecycleRevision(ctx, ownerID, computerID, strings.TrimSpace(content))
+		revision, revErr := a.store.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, "choir.texture_revision"), ownerID, computerID, strings.TrimSpace(content))
 		if revErr != nil && !errors.Is(revErr, store.ErrNotFound) {
 			return "", "", "", fmt.Errorf("actorruntime: resolve Texture owner revision: %w", revErr)
 		}

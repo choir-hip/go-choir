@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"os"
 	"strings"
@@ -394,7 +395,10 @@ func (rt *Runtime) resolveCitation(ctx context.Context, owner, ref string) (reso
 	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if id, ok := strings.CutPrefix(ref, "evidence:"); ok {
-		_, err := rt.store.GetEvidence(callCtx, strings.TrimSpace(id), owner)
+		// The settler runs on a context derived from Background: the host
+		// checks that the cited evidence exists, so it reads as the evidence
+		// custodian for this one read (enforce flip section 6.7).
+		_, err := rt.store.GetEvidence(objectgraph.WithCustodianReader(callCtx, "choir.agent_evidence"), strings.TrimSpace(id), owner)
 		switch {
 		case err == nil:
 			return true, true
