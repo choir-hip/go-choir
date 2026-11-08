@@ -68,10 +68,6 @@ type Config struct {
 	MemoryFloorBytes   uint64
 	MaxMemorySomeAvg60 float64
 
-	// MaxBuildsPerComputerPerDay bounds the jobs one computer records in a
-	// rolling 24 hours (H21); each done build keeps a closure in the blob
-	// store.
-	MaxBuildsPerComputerPerDay int
 	// FailedRetention and DoneRetention are how long terminal job records
 	// stay; MaxJobRecords bounds the records kept at all (H22).
 	FailedRetention time.Duration
@@ -92,11 +88,9 @@ const (
 	defaultAdmitPoll          = 15 * time.Second
 	defaultMemoryFloorBytes   = 6 << 30
 	defaultMaxMemorySomeAvg60 = 10
-	defaultMaxBuildsPerDay    = 8
 	defaultFailedRetention    = 24 * time.Hour
 	defaultDoneRetention      = 7 * 24 * time.Hour
 	defaultMaxJobRecords      = 512
-	quotaWindow               = 24 * time.Hour
 	maxDetailBytes            = 2048
 )
 
@@ -138,9 +132,6 @@ func New(cfg Config) (*Service, error) {
 	}
 	if cfg.MaxMemorySomeAvg60 <= 0 {
 		cfg.MaxMemorySomeAvg60 = defaultMaxMemorySomeAvg60
-	}
-	if cfg.MaxBuildsPerComputerPerDay <= 0 {
-		cfg.MaxBuildsPerComputerPerDay = defaultMaxBuildsPerDay
 	}
 	if cfg.FailedRetention <= 0 {
 		cfg.FailedRetention = defaultFailedRetention
@@ -304,13 +295,6 @@ func (s *Service) Submit(req Request) (Job, error) {
 		s.mu.Unlock()
 		return job, nil
 	}
-	// H21: one computer records a bounded number of jobs a day, refused ones
-	// included; checked before the patch is read (and again under the lock
-	// that records the job). The refusal records nothing.
-	if err := s.quotaRefusal(req.ComputerID, s.cfg.Now()); err != nil {
-		s.mu.Unlock()
-		return Job{}, err
-	}
 	s.mu.Unlock()
 
 	patch, err := base64.StdEncoding.DecodeString(req.PatchBase64)
@@ -339,9 +323,6 @@ func (s *Service) Submit(req Request) (Job, error) {
 		return *existing, nil
 	}
 	s.prune(now)
-	if err := s.quotaRefusal(req.ComputerID, now); err != nil {
-		return Job{}, err
-	}
 	// H20: a full queue or a busy computer is transient. Nothing is recorded
 	// under the deterministic job id, so the retry of this request builds.
 	if !job.Terminal() {
@@ -482,20 +463,6 @@ func (s *Service) baseRefusal(bootedBase, baseCommit string) (buildBase, string,
 		return buildBase{}, ReasonBaseCommitMismatch, "the patch was authored against " + baseCommit + "; the booted image was built from " + commit
 	}
 	return base, "", ""
-}
-
-// quotaRefusal is H21's bound; the caller holds s.mu.
-func (s *Service) quotaRefusal(computerID string, now time.Time) error {
-	recent := 0
-	for _, other := range s.jobs {
-		if other.ComputerID == computerID && now.Sub(other.CreatedAt) < quotaWindow {
-			recent++
-		}
-	}
-	if recent >= s.cfg.MaxBuildsPerComputerPerDay {
-		return &RefusalError{Reason: ReasonBuildQuotaExhausted, Detail: fmt.Sprintf("this computer recorded %d host builds in the last 24 hours; the bound is %d", recent, s.cfg.MaxBuildsPerComputerPerDay)}
-	}
-	return nil
 }
 
 func (s *Service) worker(ctx context.Context) {

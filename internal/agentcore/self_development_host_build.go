@@ -155,8 +155,6 @@ func (rt *Runtime) selfDevelopmentHostBuild(ctx context.Context, operation selfd
 		switch {
 		case status == http.StatusServiceUnavailable && strings.Contains(err.Error(), hostbuild.ReasonHostBuilderUnconfigured):
 			return hostBuiltRelease{}, hostBuildFailure{Reason: hostbuild.ReasonHostBuilderUnconfigured, Detail: "the host has no build service configured"}
-		case status == http.StatusTooManyRequests && strings.Contains(err.Error(), hostbuild.ReasonBuildQuotaExhausted):
-			return hostBuiltRelease{}, hostBuildFailure{Reason: hostbuild.ReasonBuildQuotaExhausted, Detail: err.Error()}
 		case status == http.StatusTooManyRequests:
 			// queue_full / computer_busy: the host recorded nothing; stay
 			// accepted and submit again on the next pass (H20).

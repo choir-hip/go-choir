@@ -200,8 +200,6 @@ func (f *fakeHostBuilder) Submit(_ context.Context, req hostbuild.Request) (host
 	switch f.mode {
 	case "busy":
 		return hostbuild.Job{}, http.StatusTooManyRequests, errors.New("computer event client: corpusd returned 429: computer_busy: this computer already has host build x queued")
-	case "quota":
-		return hostbuild.Job{}, http.StatusTooManyRequests, errors.New("computer event client: corpusd returned 429: build_quota_exhausted: this computer recorded 8 host builds in the last 24 hours")
 	}
 	f.lastPatch = patch
 	id, _ := req.JobID()
@@ -412,7 +410,6 @@ func TestSelfDevGoChangeHostBuildFailureFailsCleanly(t *testing.T) {
 		"failed":       "host build failed (build_failed)",
 		"forged":       "host build failed (receipt_refused)",
 		"unconfigured": "host build failed (host_builder_unconfigured)",
-		"quota":        "host build failed (build_quota_exhausted)",
 	} {
 		t.Run(mode, func(t *testing.T) {
 			fx, _ := newHostBuildFixture(t, "computer-p5-"+mode, mode)

@@ -46,7 +46,6 @@ const (
 	ReasonPatchUnreadable         = "patch_unreadable"
 	ReasonRecipeChangeRefused     = "recipe_change_refused"
 	ReasonPatchTreeRefused        = "patch_tree_refused"
-	ReasonBuildQuotaExhausted     = "build_quota_exhausted"
 	ReasonStoreEpochRefused       = "store_epoch_change_refused"
 	ReasonBaseMoved               = "base_moved"
 	ReasonBaseCommitMismatch      = "base_commit_mismatch"

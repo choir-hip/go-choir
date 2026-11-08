@@ -110,8 +110,8 @@ func (h *Handler) HandleHostBuilds(w http.ResponseWriter, r *http.Request) {
 		var refusal *hostbuild.RefusalError
 		switch {
 		case errors.As(err, &refusal):
-			// queue_full / computer_busy (retry) and build_quota_exhausted
-			// record no job; the reason code leads the error.
+			// queue_full / computer_busy (retry) record no job; the reason
+			// code leads the error.
 			writeJSON(w, http.StatusTooManyRequests, apiError{Error: refusal.Error()})
 			return
 		case err != nil:

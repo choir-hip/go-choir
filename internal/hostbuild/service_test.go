@@ -588,43 +588,6 @@ func TestBaseMovedWhileQueuedOrBuilding(t *testing.T) {
 	}
 }
 
-// H21: one computer's builds are bounded per day; a refused request records
-// no job.
-func TestBuildsPerComputerAreBounded(t *testing.T) {
-	h := newHarness(t)
-	h.cfg.MaxBuildsPerComputerPerDay = 2
-	svc := h.service()
-	for i := 0; i < 2; i++ {
-		req := h.request("computer-a", goPatch)
-		req.OperationID = fmt.Sprintf("selfdev-op-%d", i)
-		job, err := svc.Submit(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		waitTerminal(t, svc, "computer-a", job.JobID)
-	}
-	over := h.request("computer-a", goPatch)
-	over.OperationID = "selfdev-op-over"
-	_, err := svc.Submit(over)
-	var refusal *RefusalError
-	if !errors.As(err, &refusal) || refusal.Reason != ReasonBuildQuotaExhausted || refusal.Retry {
-		t.Fatalf("over quota = %v", err)
-	}
-	if id, _ := over.JobID(); func() bool { _, ok := svc.Get("computer-a", id); return ok }() {
-		t.Fatal("an over-quota request recorded a job")
-	}
-	// Another computer is not bounded by this one's builds.
-	if job, err := svc.Submit(h.request("computer-b", goPatch)); err != nil || job.Terminal() && job.State != StateDone {
-		t.Fatalf("other computer = %+v %v", job, err)
-	}
-	// A retry of a request already recorded still answers its job.
-	again := h.request("computer-a", goPatch)
-	again.OperationID = "selfdev-op-0"
-	if _, err := svc.Submit(again); err != nil {
-		t.Fatalf("retry of a recorded job = %v", err)
-	}
-}
-
 // H22: terminal job records leave after their retention, on disk and in
 // memory, and the record count is bounded.
 func TestJobRecordsArePruned(t *testing.T) {
@@ -633,7 +596,6 @@ func TestJobRecordsArePruned(t *testing.T) {
 	var clock atomic.Value
 	clock.Store(now)
 	h.cfg.Now = func() time.Time { return clock.Load().(time.Time) }
-	h.cfg.MaxBuildsPerComputerPerDay = 100
 	svc := h.service()
 	refused, _ := svc.Submit(h.request("computer-a", "--- a/flake.nix\n+++ b/flake.nix\n@@ -1 +1 @@\n-a\n+b\n"))
 	if refused.Reason != ReasonRecipeChangeRefused {
@@ -663,7 +625,6 @@ func TestJobRecordsArePruned(t *testing.T) {
 	// The record count is bounded: the oldest terminal records leave first.
 	h2 := newHarness(t)
 	h2.cfg.MaxJobRecords = 3
-	h2.cfg.MaxBuildsPerComputerPerDay = 100
 	svc2 := h2.service()
 	var ids []string
 	for i := 0; i < 5; i++ {
