@@ -30,6 +30,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
 func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *http.Request, ownerID, computerID, operationID string) {
@@ -113,6 +114,31 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "the state before operation " + operationID + " is not recorded on the tape: " + skipErr.Error()})
 		return
 	}
+	// R3.1 (design 3.5): P, the release X's swap replaced, read from X's signed
+	// receipt, decides every branch; the chain prior is only a diagnostic. Only
+	// "no receipt", "no applied event for a legacy apply" and "a verified
+	// receipt with no prior release" mean no P and keep the chain order below;
+	// every other failure refuses and chooses no target.
+	chainPriorHead := priorHead
+	replacedIsBase := false
+	priorRelease, pStatus, pErr := rt.replacedReleaseDigest(ctx, reverted)
+	if pErr != nil {
+		writeAPIJSON(w, pStatus, apiError{Error: "the state before operation " + operationID + " cannot be decided: " + pErr.Error()})
+		return
+	}
+	if priorRelease != "" {
+		if target, ok := h.fullEvidenceOperationForRelease(ctx, computerID, priorRelease, reverted.OperationID); ok {
+			prior, priorErr, priorHead = target, nil, target.EffectiveHead
+		} else if pureBase, status, err := rt.releaseIsPureBaseImport(computerID, priorRelease); err != nil {
+			writeAPIJSON(w, status, apiError{Error: "the state before operation " + operationID + " cannot be decided: " + err.Error()})
+			return
+		} else if pureBase {
+			replacedIsBase = true
+		} else {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "the state before operation " + operationID + " is not a restorable checkpoint: the release it replaced was " + priorRelease + " (neither a base import nor an applied operation with full evidence); the chain's prior state is " + chainPriorHead})
+			return
+		}
+	}
 	// The latest landed operation already restored this state and nothing has
 	// landed since: a second tap after the revert settled.
 	if latest != nil && latest.State == selfdev.StateRolledBack && latest.BaseHead == priorHead {
@@ -161,7 +187,7 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	// Open through a buffer: a tap that loses a race to the same act gets that
 	// act's row, not a 409.
 	buf := &revertBuffer{header: http.Header{}}
-	if priorErr == nil && revertTargetHasEvidence(prior) {
+	if !replacedIsBase && priorErr == nil && revertTargetHasEvidence(prior) {
 		if generation == 0 {
 			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "rollback route authority unavailable"})
 			return
@@ -174,8 +200,10 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	} else {
 		// No evidence to roll back to: only a genesis row, an earlier base
 		// restore, or a checkpoint event with no row is restored as the base.
-		restorable := false
-		if priorErr == nil {
+		restorable := replacedIsBase
+		if restorable {
+			// The receipt-bound base restore (R3.1 step 2).
+		} else if priorErr == nil {
 			restorable = strings.HasPrefix(prior.OperationID, "genesis-") || selfdev.IsBaseRestore(prior)
 		} else {
 			priorEvent, ok, err := rt.store.EventByDigest(ctx, computerID, priorHead)
@@ -205,6 +233,111 @@ func (h *APIHandler) revertSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		}
 	}
 	buf.flushTo(w)
+}
+
+// replacedReleaseDigest is P, the release digest X's swap replaced, read from
+// X's signed MaterializationReceipt. The receipt rides in the payload of X's
+// materialization_applied event (the updater's ApplyResult); it is trusted only
+// after its signature verifies under the updater key, its digest equals the
+// receipt digest X's row recorded, and it binds this computer and X's
+// resulting release. The operation row's own copy is never used.
+//
+// "" with a nil error means there is no P: X has no receipt or decision event
+// (a legacy row), its applied event is absent (a legacy apply), or the
+// verified receipt names no prior release. Every other failure returns the
+// HTTP status to refuse with: 503 for a read that may succeed on retry, 409 for
+// a receipt that fails verification or does not bind X.
+func (rt *Runtime) replacedReleaseDigest(ctx context.Context, operation selfdev.Operation) (string, int, error) {
+	if operation.DecisionEvent == "" || operation.MaterializationReceipt == "" {
+		return "", 0, nil
+	}
+	if rt.store == nil || rt.eventPayloadReader == nil || rt.selfdevUpdater == nil {
+		return "", http.StatusServiceUnavailable, errors.New("the receipt readers are unavailable; retry")
+	}
+	event, found, err := rt.store.EventByIdempotency(ctx, operation.ComputerID, "selfdev-"+string(computerevent.EventMaterializationApplied)+"-"+operation.DecisionEvent)
+	if err != nil {
+		return "", http.StatusServiceUnavailable, errors.New("the applied event could not be read; retry")
+	}
+	if !found {
+		return "", 0, nil
+	}
+	raw, err := rt.eventPayloadReader.FetchPayload(ctx, operation.ComputerID, event.PayloadCommitment)
+	if err != nil {
+		return "", http.StatusServiceUnavailable, errors.New("the applied event's payload could not be read; retry")
+	}
+	var result updater.ApplyResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", http.StatusConflict, errors.New("the applied event's payload is not a materialization result")
+	}
+	ref, publicKey, err := rt.selfdevUpdater.PublicKey(ctx)
+	if err != nil {
+		return "", http.StatusServiceUnavailable, errors.New("the updater key could not be read; retry")
+	}
+	receipt := result.MaterializationReceipt
+	if err := receipt.Verify(updaterReceiptKeyResolver{ref: ref, key: publicKey}); err != nil {
+		return "", http.StatusConflict, errors.New("the operation's materialization receipt fails verification")
+	}
+	receiptBytes, err := receipt.CanonicalBytes()
+	if err != nil || computerevent.DigestBytes(receiptBytes) != operation.MaterializationReceipt {
+		return "", http.StatusConflict, errors.New("the applied event's receipt is not the receipt the operation recorded")
+	}
+	computer, _ := receipt.KindFields["computer_id"].(string)
+	resulting, _ := receipt.KindFields["resulting_release_digest"].(string)
+	prior, _ := receipt.KindFields["prior_release_digest"].(string)
+	if receipt.ReceiptKind != "MaterializationReceipt" || computer != operation.ComputerID || resulting != operation.ReleaseDigest {
+		return "", http.StatusConflict, errors.New("the operation's materialization receipt does not bind the operation")
+	}
+	if prior != "" && !computerevent.IsSHA256(prior) {
+		return "", http.StatusConflict, errors.New("the receipt's prior release digest is malformed")
+	}
+	return prior, 0, nil
+}
+
+// releaseIsPureBaseImport reports whether P is a base import: a release the
+// baseline import minted (BuildBaselineManifest: marker "genesis-baseline",
+// the zero accepted head, no layering entrypoint) for this computer. A
+// selfdev release carries marker "selfdev-<bundle>". There is no file
+// comparison: every deploy rebuilds the baseline root (the binary and
+// build.json are stamped with the commit and build time), so P's files never
+// equal the booted base's after a deploy. Reverting X that replaced a pure base
+// means the booted base with no overlay, whatever was deployed since.
+func (rt *Runtime) releaseIsPureBaseImport(computerID, release string) (bool, int, error) {
+	if strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return false, http.StatusServiceUnavailable, errors.New("the release store is unavailable; retry")
+	}
+	manifest, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, release)
+	if err != nil {
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, updater.ErrPinnedReleaseUnavailable) || errors.Is(err, updater.ErrPinnedReleaseCorrupt) {
+			status = http.StatusConflict
+		}
+		return false, status, errors.New("the manifest of the release it replaced (" + release + ") is unreadable")
+	}
+	return manifest.Marker == "genesis-baseline" && manifest.AcceptedEventHead == computerevent.ZeroHead &&
+		manifest.LayeringEntrypoint == "" && manifest.ComputerID == computerID, 0, nil
+}
+
+// fullEvidenceOperationForRelease finds the newest applied or rolled-back
+// platform operation (never X, a rollback or a base restore) with full
+// evidence whose release is P: the target of the existing rollback.
+func (h *APIHandler) fullEvidenceOperationForRelease(ctx context.Context, computerID, release, exclude string) (selfdev.Operation, bool) {
+	rows, err := h.rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateApplied, selfdev.StateRolledBack)
+	if err != nil {
+		return selfdev.Operation{}, false
+	}
+	var best selfdev.Operation
+	var bestAt time.Time
+	found := false
+	for _, row := range rows {
+		if row.IsPackage() || row.OperationID == exclude || strings.HasPrefix(row.OperationID, "rollback-") || row.ReleaseDigest != release || !revertTargetHasEvidence(row) {
+			continue
+		}
+		at := parseOperationTime(row.CreatedAt)
+		if !found || at.After(bestAt) {
+			best, bestAt, found = row, at, true
+		}
+	}
+	return best, found
 }
 
 // packagePriorHops bounds how many package events a platform revert skips.

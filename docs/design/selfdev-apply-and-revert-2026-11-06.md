@@ -318,15 +318,25 @@ is only a diagnostic.
 1. Read P from X's `materialization_applied` event
    (`selfdev-materialization_applied-<X.DecisionEvent>`), from the signed
    MaterializationReceipt in its payload, verified with the updater receipt
-   key resolver as at apply time. An unsigned or unverifiable copy is not P.
-   No P (applies from before the field, or a first-ever apply): today's chain
-   order, unchanged.
-2. P names the booted base release: base restore. The comparison is
-   independent of route labels, because `servingBaselineManifest` stamps the
-   route's current code and artifact refs into the digest and X's apply moved
-   the route. Read the pinned manifest P and compare its marker and file set
-   with the booted baseline's (`BuildBaselineManifest` over the baseline
-   root), not the digests.
+   key resolver as at apply time; an unsigned copy is not P. Only three
+   things mean no P, and today's chain order runs unchanged: X has no
+   receipt or decision event (a legacy row); X's applied event is absent (a
+   legacy apply); the receipt verifies, binds X, and names no prior release.
+   Every other failure refuses and chooses no target: a store, payload or
+   updater-key read error is a retryable 503; a receipt that fails
+   verification or does not bind X is a 409 saying why.
+2. P is a base import: base restore, against the booted base as it is now.
+   A base import is a release whose pinned manifest has marker
+   `genesis-baseline`, the zero accepted head, no layering entrypoint and this
+   computer's id (`BuildBaselineManifest`); a selfdev release's marker is
+   `selfdev-<bundle>`. There is no file comparison and no digest comparison:
+   every deploy rebuilds the baseline root (the binary and `build.json` are
+   stamped with the commit and build time), so after any deploy since X
+   applied, P's files never equal the booted base's, and
+   `servingBaselineManifest` stamps the route's current refs into its digest.
+   Reverting X that replaced a base means the booted base with no overlay,
+   whatever was deployed since. If P's pinned manifest cannot be read the
+   refusal says so (409 if gone or corrupt, 503 otherwise).
 3. P is the `ReleaseDigest` of an applied or rolled-back platform operation
    with full evidence: the existing rollback to that operation (not
    necessarily the chain prior).
