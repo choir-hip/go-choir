@@ -40,6 +40,10 @@ func (f *delegationFixture) arrive(source string, items ...types.CaptureArrival)
 	for i, it := range items {
 		ids[i] = it.CaptureID
 	}
+	// F6 S3: the arrival commit is the product's path (the host mints the task
+	// with the arrival under the management_task custodian), so it runs with the
+	// gates enforcing.
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
 	if err := f.rt.appendCaptureArrival(context.Background(), f.owner, f.computer, source, items, false); err != nil {
 		f.t.Fatalf("arrival %s: %v", source, err)
 	}
