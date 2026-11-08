@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 
 	"github.com/yusefmosiah/go-choir/internal/actgate"
+	"github.com/yusefmosiah/go-choir/internal/appdesk"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/committer"
@@ -33,6 +34,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/lease"
+	"github.com/yusefmosiah/go-choir/internal/maildesk"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
@@ -83,6 +85,9 @@ type Runtime struct {
 	// leases is the lease service (leases.go, MA3.4): custodian-issued,
 	// per-task grants the reader gate and the capture frame handler consult.
 	leases *lease.Service
+	// mailbox is the owner's mail as maild serves it to this computer; nil
+	// without RUNTIME_MAILD_URL (maildesk, drill P4).
+	mailbox maildesk.Mailbox
 	// leaseTrustMu serialises the lease policy's trust feed (leases.go,
 	// MA7.4); leaseTrustFed is when it last pushed a view, per owner.
 	leaseTrustMu  sync.Mutex
@@ -108,6 +113,10 @@ type Runtime struct {
 	// deskReconciler brings the desk registry to the tape's installed set at
 	// boot (deskreconcile.go); nil on a computer with no package desks.
 	deskReconciler func(ctx context.Context) error
+	// deskLog is the desk-package event log a package install appends to
+	// (desk_install.go); deskLogOwner is its owner key.
+	deskLog      appdesk.Log
+	deskLogOwner string
 	// bootTally collects the obligations the crash boot's one pass closes.
 	bootTally *bootClosureTally
 	// runLabels holds each running run's provenance label accumulator
@@ -683,6 +692,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	}
 	for _, opt := range opts {
 		opt(rt)
+	}
+	if rt.mailbox == nil && strings.TrimSpace(cfg.MaildURL) != "" {
+		rt.mailbox = maildesk.NewHTTPMailbox(cfg.MaildURL)
 	}
 	if s != nil {
 		rt.leases = lease.New(s.Leases())

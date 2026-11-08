@@ -27,6 +27,15 @@ func (rt *Runtime) reconcileDesksAtBoot(ctx context.Context) {
 	if rt.deskReconciler == nil {
 		return
 	}
+	// The installs' desks join the log first (desk_install.go), so a computer
+	// that installed a desk package registers it again after a restart.
+	if rt.deskLog != nil {
+		if err := rt.syncInstalledDesks(ctx, rt.deskLogOwner, rt.cfg.ComputerID); err == nil {
+			return
+		} else {
+			log.Printf("runtime: boot desk sync from installs: %v", err)
+		}
+	}
 	if err := rt.deskReconciler(ctx); err != nil {
 		log.Printf("runtime: boot desk reconcile: %v", err)
 	}

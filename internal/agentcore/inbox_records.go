@@ -977,13 +977,23 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 		return rt.startQueuedManagementTasks(ctx, ownerID, computerID)
 	}
 	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")
-	if _, ok := recordsInboxPromptFor(profile); !ok {
+	// A package desk is a records desk too (doctrine I26): the registry, not a
+	// profile list, says which inboxes wake a run (desk_app_wake.go).
+	appDesk, isApp := rt.appInboxDesk(ownerID, deskAgentID)
+	if isApp {
+		profile = appDesk.Name
+	} else if _, ok := recordsInboxPromptFor(profile); !ok {
 		return nil, nil
 	}
 	prompt := rt.recordsInboxPrompt(ctx, ownerID, computerID, deskAgentID)
+	if isApp {
+		prompt, _ = appDeskPrompt(appDesk)
+	}
 	var agent types.AgentRecord
 	var err error
-	if deskmanifest.AdmitsAssignments(profile) {
+	if isApp {
+		agent, err = rt.ensureAppDeskAgent(ctx, ownerID, computerID, deskAgentID, appDesk)
+	} else if deskmanifest.AdmitsAssignments(profile) {
 		if deskAgentID != persistentManagementAgentID(ownerID) {
 			return nil, nil
 		}
@@ -1071,14 +1081,20 @@ const (
 // A cell that acts still marks what the run was shown with its acts. A
 // crash-closed run is never completed and marks nothing.
 func (rt *Runtime) markTurnRecordsRead(ctx context.Context, rec *types.RunRecord) {
-	if rt == nil || rt.store == nil || rec == nil || !deskmanifest.AdmitsAssignments(agentProfileForRun(rec)) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	// A package desk is a records desk too: without its cursor moving, every
+	// later wake would see the old records unread and start the run again.
+	_, app := deskmanifest.AppInboxDesk(rec.AgentID)
+	if !app && !deskmanifest.AdmitsAssignments(agentProfileForRun(rec)) {
 		return
 	}
 	if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
 		return
 	}
 	inbox := strings.TrimSpace(rec.AgentID)
-	if !deskmanifest.IsAdmitterInbox(inbox) {
+	if !app && !deskmanifest.IsAdmitterInbox(inbox) {
 		return
 	}
 	shown := rt.recordsShownMark(rec.RunID)

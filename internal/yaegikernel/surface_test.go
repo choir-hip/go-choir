@@ -41,6 +41,15 @@ func registerSurfaceProbeApp() {
 	if err := deskmanifest.RegisterApp(d); err != nil {
 		panic(err)
 	}
+	// ReadMail is a first-party desk's: the Mail reader drill's.
+	m, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: "app:mail-reader-drill", Verbs: []string{"RequestLease", "ReadMail", "Done"},
+		Taint: deskmanifest.TaintUntrustedInput, UID: 62951, WorkerMaxBytes: 64 << 20, FirstParty: true})
+	if err != nil {
+		panic(err)
+	}
+	if err := deskmanifest.RegisterApp(m); err != nil {
+		panic(err)
+	}
 }
 
 func allSurfaceScopes() []*ChoirScope {

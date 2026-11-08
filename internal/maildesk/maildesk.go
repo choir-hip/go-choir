@@ -127,7 +127,7 @@ func (s *Service) RequestRead(ctx context.Context, req ReadRequest) (lease.Recor
 		OwnerID: req.OwnerID, ComputerID: req.ComputerID, Desk: req.Desk, RunID: req.RunID,
 		// A desk's run asks: the origin is stamped here, never supplied.
 		AgentID: req.AgentID, ModelID: req.ModelID, Origin: types.OriginDeskRun,
-		Scope:   lease.Scope{Grants: []string{lease.GrantMailRead}, Refs: req.Refs},
+		Scope:   lease.Scope{Grants: []string{lease.GrantMailRead}, Refs: refs},
 		Purpose: req.Purpose, Fields: req.Fields,
 	}, rule)
 }

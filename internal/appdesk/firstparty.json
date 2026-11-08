@@ -9,5 +9,16 @@
       "read, find or summarize the owner's email",
       "draft, reply to or send an email"
     ]
+  }},
+  {"package": "mail-reader-drill", "version": "1.0.0", "manifest": {
+    "package": "mail-reader-drill",
+    "verbs": ["RequestLease", "ReadMail", "Done"],
+    "taint_class": "untrusted_input",
+    "worker_max_bytes": 134217728,
+    "owned_object_kinds": [],
+    "lease_grants": ["mail.read"],
+    "accepts": [
+      "summarize the one email the owner names by its ref, for the Mail drill"
+    ]
   }}
 ]}

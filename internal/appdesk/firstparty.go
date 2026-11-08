@@ -2,6 +2,7 @@ package appdesk
 
 import (
 	"bytes"
+	"embed"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -58,4 +59,22 @@ func FirstPartyDesk(pkg string) (Required, bool) {
 func firstParty(m Manifest) bool {
 	r, ok := firstPartyDesks[m.Package]
 	return ok && Digest(r.Manifest) == Digest(m)
+}
+
+//go:embed firstparty_prompts/*.md
+var firstPartyPrompts embed.FS
+
+// FirstPartyPrompt is the prompt of an in-tree first-party package's desk,
+// shipped with the image beside its manifest. A desk's prompt is behaviour, so
+// a first-party desk runs on this text and never on a release's own prompt
+// file (the package's prompt.md is a copy for the Library, not the source).
+func FirstPartyPrompt(pkg string) (string, bool) {
+	if _, ok := firstPartyDesks[pkg]; !ok {
+		return "", false
+	}
+	raw, err := firstPartyPrompts.ReadFile("firstparty_prompts/" + pkg + ".md")
+	if err != nil {
+		return "", false
+	}
+	return string(raw), true
 }

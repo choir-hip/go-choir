@@ -55,7 +55,7 @@ var allActions = []BrokerAction{
 	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionSearchStart, ActionRead, ActionPollSource,
 	ActionSourceAPI, ActionReadCapture, ActionSearchWireCorpus, ActionResearch, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories,
-	ActionRelate, ActionRequestLease, ActionTextureSearch, ActionObjectGet, ActionObjectList,
+	ActionRelate, ActionRequestLease, ActionTextureSearch, ActionObjectGet, ActionObjectList, ActionReadMail,
 }
 
 func seedRequests(f *testing.F) {

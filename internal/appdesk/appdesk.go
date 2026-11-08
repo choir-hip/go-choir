@@ -144,6 +144,10 @@ type Event struct {
 	// Version is the package version an install, update or candidate event
 	// binds (MAJOR.MINOR.PATCH); the required set compares against it.
 	Version string
+	// Reapproved marks an install the owner asked for again after the
+	// package was disabled: the owner's install of a package is the
+	// re-approval a disabled name needs.
+	Reapproved bool
 }
 
 // App desk uid range: 62000 and up (deskmanifest.NewAppDesk), one per
@@ -244,7 +248,7 @@ func validate(m Manifest, candidate bool) []Refusal {
 		seen[k] = true
 	}
 	for _, v := range m.Verbs {
-		if !appVerb(v) {
+		if !appVerb(v) && !(deskmanifest.FirstPartyOnlyVerb(v) && firstParty(m)) {
 			refuse(CodeVerbNotApp, "verb %q is not available to app desks", v)
 		}
 	}
@@ -409,6 +413,9 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 		}
 		switch ev.Action {
 		case ActionInstall:
+			if ev.Reapproved && ev.Manifest != nil {
+				delete(retiredPkgs, ev.Manifest.Package)
+			}
 			if ev.Manifest == nil || ev.Manifest.Package != ev.Package || Digest(*ev.Manifest) != ev.ManifestDigest {
 				refuse(CodeDigestMismatch, "the desk manifest is not the one the install event binds")
 				continue
@@ -425,7 +432,7 @@ func DeriveRequired(events []Event, required []Required) (Set, []Refusal) {
 				refuse(CodeNameTaken, "package %s is installed", m.Package)
 				continue
 			}
-			if retiredPkgs[m.Package] {
+			if retiredPkgs[m.Package] && !ev.Reapproved {
 				refuse(CodeNameRetired, "package %s was disabled; reinstall needs re-approval", m.Package)
 				continue
 			}

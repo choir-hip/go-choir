@@ -298,7 +298,7 @@ func Run() {
 	if err != nil {
 		boot.fatalf("autoputer: the image's required desk set is malformed: %v", err)
 	}
-	coreOpts = append(coreOpts, deskReconcile)
+	coreOpts = append(coreOpts, deskReconcile, deskLogOption(db, os.Getenv("CHOIR_OWNER_ID")))
 	capsuleExecutor, capsuleConfigured, err := configuredCapsuleExecutor(db)
 	if err != nil {
 		boot.fatalf("autoputer: configure production capsule executor: %v", err)

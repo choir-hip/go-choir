@@ -90,6 +90,8 @@ var catalogue = map[string]grantSpec{
 	"act.disagree":      {Verbs: []string{"Disagreement"}},
 	"captures.read":     {Verbs: []string{"ReadCapture"}},
 	"lease.request":     {Verbs: []string{"RequestLease"}},
+	// The Mail custodian's read of the one email a mail.read lease names.
+	"mail.read": {Verbs: []string{"ReadMail"}},
 	// A package desk's own objects (MA3.8): the four verbs are one grant, and
 	// reach only the desk's own package kinds.
 	"objects.own":         {Verbs: []string{"Put", "Get", "List", "Retract"}},
@@ -597,3 +599,19 @@ func ParentOf(role string) (Desk, bool) {
 	}
 	return p, true
 }
+
+// AppInboxDesk reports the registered package desk an inbox address belongs to
+// (app:<package>:<instance>), so a record landing in it wakes that desk like
+// any records desk. It reports false for an address no registered app desk
+// owns.
+func AppInboxDesk(inbox string) (Desk, bool) {
+	parts := strings.SplitN(strings.TrimSpace(inbox), ":", 3)
+	if len(parts) < 3 || parts[0] != "app" {
+		return Desk{}, false
+	}
+	d, ok := Lookup("app:" + parts[1])
+	return d, ok && d.Kind == KindApp
+}
+
+// IsAppInbox reports whether the address is a registered package desk inbox.
+func IsAppInbox(inbox string) bool { _, ok := AppInboxDesk(inbox); return ok }

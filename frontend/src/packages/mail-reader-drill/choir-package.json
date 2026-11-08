@@ -1,0 +1,44 @@
+{
+  "schema": "choir.package/v2",
+  "name": "mail-reader-drill",
+  "version": "1.0.0",
+  "display": {
+    "title": "Mail reader drill",
+    "icon": "📨",
+    "description": "A first-party fixture desk that asks Mail for one email by ref"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "requires_sdk": "^2.0",
+    "aliases": [],
+    "launcher": {
+      "menu": false,
+      "desktopIcon": false,
+      "order": 90
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false
+    },
+    "auth": {
+      "preview": "private"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-mail-reader-drill-window",
+      "contentClass": "mail-reader-drill-content"
+    }
+  },
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": [
+      {
+        "name": "mail-reader-drill",
+        "prompt": "prompt.md"
+      }
+    ]
+  },
+  "capabilities": []
+}

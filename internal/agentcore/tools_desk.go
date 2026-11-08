@@ -1421,6 +1421,9 @@ func (rt *Runtime) deskEgressRead(egrCtx context.Context, deskRole string, cellE
 	if action == yaegikernel.ActionRequestLease {
 		return rt.requestLeaseEgress(egrCtx, deskRole, cellExec, payload)
 	}
+	if action == yaegikernel.ActionReadMail {
+		return rt.readMailEgress(egrCtx, deskRole, cellExec, payload)
+	}
 	if action == yaegikernel.ActionObjectGet {
 		return rt.objectGetEgress(egrCtx, deskRole, cellExec, payload)
 	}

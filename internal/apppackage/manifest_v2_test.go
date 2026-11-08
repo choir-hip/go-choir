@@ -754,7 +754,7 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 			if m.Level() != LevelPrivileged {
 				t.Errorf("%s: provider at level %s", p, m.Level())
 			}
-		} else if m.Class() != ClassApp || (m.Level() != LevelDefault && !(privilegedOK && m.Level() == LevelPrivileged)) {
+		} else if deskPkg := deskmanifest.FirstPartyAppSlug(m.Name) && m.Class() == ClassAppDesk && len(m.Contributes.Desks) == 1; !deskPkg && (m.Class() != ClassApp || (m.Level() != LevelDefault && !(privilegedOK && m.Level() == LevelPrivileged))) {
 			t.Errorf("%s: class %s level %s", p, m.Class(), m.Level())
 		}
 		if _, err := m.BehaviourSurface(DirSource(filepath.Dir(p))); err != nil {

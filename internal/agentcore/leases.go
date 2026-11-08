@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/lease"
+	"github.com/yusefmosiah/go-choir/internal/maildesk"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trust"
@@ -178,9 +179,15 @@ func (rt *Runtime) requestLeaseEgress(ctx context.Context, deskRole string, exec
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("choir.RequestLease: the cell was aborted: %w", err)
 	}
-	granted, err := rt.RequestLease(ctx, &held,
-		lease.Scope{Kinds: req.Kinds, CaptureIDs: req.CaptureIDs, CaptureLabels: req.CaptureLabels},
-		req.Purpose, time.Duration(req.DurationSeconds)*time.Second, req.Req)
+	var granted lease.Record
+	var err error
+	if len(req.Grants) > 0 || len(req.Refs) > 0 {
+		granted, err = rt.requestMailLease(ctx, &held, req)
+	} else {
+		granted, err = rt.RequestLease(ctx, &held,
+			lease.Scope{Kinds: req.Kinds, CaptureIDs: req.CaptureIDs, CaptureLabels: req.CaptureLabels},
+			req.Purpose, time.Duration(req.DurationSeconds)*time.Second, req.Req)
+	}
 	if err == nil && ctx.Err() != nil {
 		_ = rt.leases.Revoke(context.WithoutCancel(ctx), granted.LeaseID, "the cell that asked was aborted")
 		return nil, fmt.Errorf("choir.RequestLease: the cell was aborted: %w", ctx.Err())
@@ -192,4 +199,62 @@ func (rt *Runtime) requestLeaseEgress(ctx context.Context, deskRole string, exec
 		return nil, err
 	}
 	return json.Marshal(granted)
+}
+
+// requestMailLease routes a cell's mail.read ask to the Mail custodian service
+// (internal/maildesk), the only grant a cell may name. Mail decides by its own
+// rule (one email, by ref, in the owner's mailbox, one per task); the request
+// is recorded as a scored precommitment addressed to the Mail desk whatever
+// the answer. The cell's grant list is checked against mail.read here so a
+// desk cannot ask for a grant the host issues itself (texture.search).
+func (rt *Runtime) requestMailLease(ctx context.Context, rec *types.RunRecord, req yaegikernel.RequestLeasePayload) (lease.Record, error) {
+	if len(req.Grants) != 1 || req.Grants[0] != lease.GrantMailRead {
+		return lease.Record{}, fmt.Errorf("%w: a cell may ask for the grant %q only, not %v", lease.ErrRefused, lease.GrantMailRead, req.Grants)
+	}
+	if len(req.Kinds) > 0 || len(req.CaptureIDs) > 0 || len(req.CaptureLabels) > 0 || req.DurationSeconds != 0 {
+		return lease.Record{}, fmt.Errorf("%w: a mail.read request names only its one ref", lease.ErrRefused)
+	}
+	mail := rt.mailService()
+	if mail == nil {
+		return lease.Record{}, fmt.Errorf("%w: this computer has no mailbox", lease.ErrRefused)
+	}
+	rt.feedLeaseTrust(rec.OwnerID, rec.ComputerID)
+	return mail.RequestRead(ctx, maildesk.ReadRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, Desk: rec.AgentProfile, RunID: rec.RunID,
+		AgentID: rec.AgentID, ModelID: recordModelID(ctx, rec), Refs: req.Refs, Purpose: req.Purpose, Fields: req.Req,
+	})
+}
+
+// mailService is the Mail custodian over this computer's mailbox, or nil when
+// the computer has none (no RUNTIME_MAILD_URL).
+func (rt *Runtime) mailService() *maildesk.Service {
+	if rt == nil || rt.mailbox == nil || rt.leases == nil {
+		return nil
+	}
+	return maildesk.New(rt.mailbox, rt.leases)
+}
+
+// readMailEgress serves choir.ReadMail: the email the session's run holds a
+// mail.read lease for. The holder is the session's desk and the run is the
+// cell's, both from trusted code; the cell supplies only the ref, and Mail
+// serves it only when the lease the run holds names that ref.
+func (rt *Runtime) readMailEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
+	mail := rt.mailService()
+	if mail == nil {
+		return nil, fmt.Errorf("choir.ReadMail: this computer has no mailbox")
+	}
+	var req yaegikernel.ReadMailPayload
+	if err := decodeStrict(payload, &req); err != nil {
+		return nil, fmt.Errorf("choir.ReadMail: decode the call: %w", err)
+	}
+	holder, ok := objectgraph.DeskWriter(deskRole)
+	if !ok {
+		return nil, fmt.Errorf("choir.ReadMail: %q is not a registered desk", deskRole)
+	}
+	readCtx := objectgraph.WithLeases(objectgraph.WithReader(ctx, holder), rt.leaseAuthority(), exec.RunID)
+	msg, err := mail.Read(readCtx, exec.OwnerID, req.Ref)
+	if err != nil {
+		return nil, fmt.Errorf("choir.ReadMail: %w", err)
+	}
+	return json.Marshal(msg)
 }

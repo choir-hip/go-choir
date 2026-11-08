@@ -182,6 +182,9 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if apppackage.IsBuiltinPackage(rec.Package.Name) && rec.Track != ownerID {
 		return PackageInstallView{}, false, refuseInstall(http.StatusForbidden, "builtin_name_not_yours", "package %s is a built-in app; only its owner's own track may replace it", rec.Package.Name)
 	}
+	if refusal := refuseDeskInstall(ownerID, rec); refusal != nil {
+		return PackageInstallView{}, false, refusal
+	}
 	rt.packageInstallMu.Lock()
 	defer rt.packageInstallMu.Unlock()
 	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
@@ -266,6 +269,8 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if row, err := rt.store.LatestPackageInstallPending(ctx, ownerID, computerID, subjectDigest); err == nil && row.State == store.PackageInstallPendingAccepted {
 		_, _ = rt.store.ClosePackageInstallPending(ctx, ownerID, computerID, subjectDigest, row.Attempt, store.PackageInstallPendingAccepted, store.PackageInstallPendingInstalled, "")
 	}
+	// The desks the manifest contributes join the computer's desk set.
+	rt.syncInstalledDesksAfterInstall(ctx, ownerID, computerID)
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
 }
 
@@ -392,6 +397,8 @@ func (rt *Runtime) uninstallPackageWith(ctx context.Context, ownerID, computerID
 	if err := rt.store.PutPackageInstall(ctx, record); err != nil {
 		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
+	// An uninstall removes the desks the package contributed.
+	rt.syncInstalledDesksAfterInstall(ctx, ownerID, computerID)
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
 }
 

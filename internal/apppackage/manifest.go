@@ -366,7 +366,7 @@ func (m Manifest) ValidateOn(p Platform) error {
 				return fmt.Errorf("%w: %s", ErrPrivilegedGrant, c.Grant)
 			}
 		}
-		if len(m.Contributes.Desks) > 0 && !p.AdmitsDesksFrom(m.Origin) {
+		if len(m.Contributes.Desks) > 0 && !p.AdmitsDesksOf(m.Origin, m.Name) {
 			return fmt.Errorf("%w: %d desk(s) in package %q", ErrDeskNeedsSandbox, len(m.Contributes.Desks), m.Name)
 		}
 		// opens and aliases have no consumer for an installed package yet

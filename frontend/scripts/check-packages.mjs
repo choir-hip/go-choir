@@ -309,6 +309,27 @@ function checkMenus(contributes, owner, commandIds, where) {
 }
 const ids = (c) => new Set((Array.isArray(c.commands) ? c.commands : []).map((x) => x && x.id));
 
+// First-party desks: a package may contribute a desk only when the image ships
+// that desk's manifest (internal/appdesk/firstparty.json), and the desk is the
+// package's own, with its prompt file in the package. Any other desk waits for
+// the sandbox (R24, apppackage.AdmitsDesksOf).
+let FIRST_PARTY_DESKS = new Set();
+try {
+  FIRST_PARTY_DESKS = new Set(JSON.parse(readFileSync(join(frontendRoot, '..', 'internal/appdesk/firstparty.json'), 'utf8')).packages.map((p) => p.package));
+} catch {
+  // a fixture tree (--root) has no image beside it: no first-party desks
+}
+function checkDesks(desks, name, pkgDir, where) {
+  if (!Array.isArray(desks)) return fail(where, 'desks must be an array');
+  if (desks.length === 0) return;
+  if (!FIRST_PARTY_DESKS.has(name)) return fail(where, 'desks must be an empty list: only a first-party package the image ships a desk for may contribute one (R24)');
+  if (desks.length !== 1) return fail(where, 'a first-party package contributes exactly one desk');
+  const d = desks[0];
+  if (!strictKeys(d, `${where} desks[0]`, ['name', 'prompt'], [])) return;
+  if (d.name !== name) fail(`${where} desks[0]`, `the desk must be named ${name}`);
+  if (typeof d.prompt !== 'string' || !d.prompt.endsWith('.md') || !existsSync(join(pkgDir, d.prompt))) fail(`${where} desks[0]`, 'prompt must name a .md file in the package');
+}
+
 function checkCommands(contributes, owner, where) {
   const ids = new Set();
   if (contributes.commands !== undefined && !Array.isArray(contributes.commands)) fail(where, 'commands must be an array');
@@ -445,7 +466,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
   // Desks arrive first-party in MA4.5 (contributes.desks is decoded by the Go validator now).
   if (manifest.contributes !== undefined && strictKeys(manifest.contributes, `${where} contributes`, [], ['desks', 'commands', 'keybindings', 'themes', 'links', 'settings', 'menus', 'opens'])) {
     const c = manifest.contributes;
-    if (c.desks !== undefined && (!Array.isArray(c.desks) || c.desks.length > 0)) fail(`${where} contributes`, 'desks must be an empty list until first-party desks register (MA4.5)');
+    if (c.desks !== undefined) checkDesks(c.desks, manifest.name, pkgDir, `${where} contributes`);
     checkCommands(c, manifest.name, `${where} contributes`);
     checkThemes(c, pkgDir, `${where} contributes`);
     checkLinks(c, manifest.name, `${where} contributes`);

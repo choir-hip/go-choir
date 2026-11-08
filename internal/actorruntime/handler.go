@@ -585,7 +585,7 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 				}
 			}
 		}
-	case deskmanifest.IsResearchInbox(agentID), deskmanifest.IsAdmitterInbox(agentID),
+	case deskmanifest.IsResearchInbox(agentID), deskmanifest.IsAdmitterInbox(agentID), deskmanifest.IsAppInbox(agentID),
 		// A management task's inbox wake is its durable start (S2a, R2-6).
 		strings.HasPrefix(agentID, types.ManagementTaskDesk+":"), strings.HasPrefix(agentID, agentprofile.ManagementTask+":"):
 		if _, err := h.rt.WakeRecordsInbox(ctx, ownerID, computerID, agentID); err != nil {

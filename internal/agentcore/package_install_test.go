@@ -64,6 +64,11 @@ func installManifest(title string) string {
 // a publisher makes one.
 func publishedPackage(t *testing.T, repo, base, track string, files map[string]string) (pkgrelease.Record, string, json.RawMessage, []byte) {
 	t.Helper()
+	return publishedPackageNamed(t, installName, repo, base, track, files)
+}
+
+func publishedPackageNamed(t *testing.T, installName, repo, base, track string, files map[string]string) (pkgrelease.Record, string, json.RawMessage, []byte) {
+	t.Helper()
 	ctx := context.Background()
 	root := pkgrelease.Root(installName)
 	full := map[string]string{}

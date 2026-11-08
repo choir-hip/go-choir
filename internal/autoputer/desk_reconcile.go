@@ -63,3 +63,13 @@ func deskReconcileOption(st *store.Store, ownerID string) (agentcore.RuntimeOpti
 		return err
 	}), nil
 }
+
+// deskLogOption binds the same desk-package log to the runtime, so a package
+// install appends the desks it contributes (agentcore desk_install.go) with the
+// writer the boot reconcile uses.
+func deskLogOption(st *store.Store, ownerID string) agentcore.RuntimeOption {
+	if strings.TrimSpace(ownerID) == "" {
+		ownerID = "local"
+	}
+	return agentcore.WithDeskLog(deskLog{st: st, owner: ownerID}, ownerID)
+}

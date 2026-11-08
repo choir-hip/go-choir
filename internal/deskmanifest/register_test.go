@@ -2,6 +2,7 @@ package deskmanifest
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,8 +73,13 @@ func TestRegistryFlagsEqualTheClosedLists(t *testing.T) {
 	ident := map[string]Identity{Management: IdentityOwner, Conductor: IdentityOwner, Texture: IdentitySubject}
 	for _, name := range Names() {
 		d, _ := Lookup(name)
-		if d.Identity != ident[name] {
-			t.Errorf("%s identity = %q, want %q", name, d.Identity, ident[name])
+		wantIdentity := ident[name]
+		if d.Kind == KindApp && !strings.HasSuffix(name, "-candidate") {
+			// A package desk's records inbox is per owner, so its identity is the owner's.
+			wantIdentity = IdentityOwner
+		}
+		if d.Identity != wantIdentity {
+			t.Errorf("%s identity = %q, want %q", name, d.Identity, wantIdentity)
 		}
 		if d.OwnChannel != (name == Management) {
 			t.Errorf("%s OwnChannel = %v", name, d.OwnChannel)
@@ -137,7 +143,7 @@ func TestRegisterAppRefusesAuthorityBeyondAnApp(t *testing.T) {
 		"capsule verbs":    func(d *Desk) { d.CapsuleVerbs = []string{"exec"} },
 		"modules":          func(d *Desk) { d.Modules = []string{ModuleUpdatesRead} },
 		"prompt":           func(d *Desk) { d.Prompt = true },
-		"identity":         func(d *Desk) { d.Identity = IdentityOwner },
+		"identity":         func(d *Desk) { d.Identity = IdentitySubject },
 		"own channel":      func(d *Desk) { d.OwnChannel = true },
 		"cell deadline":    func(d *Desk) { d.CellDeadline = time.Second },
 		"profile off":      func(d *Desk) { d.Profile = false },

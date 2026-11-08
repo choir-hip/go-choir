@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/maildesk"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -238,6 +239,10 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 		}
 		_ = json.Unmarshal(result, &obj)
 		return types.NewLabelSet(types.OwnerPrivateLabel("evidence")).Union(types.LabelsFromMetadata(obj.Metadata)), true
+	case yaegikernel.ActionReadMail:
+		// The owner's mail, from outside senders: private to the owner and
+		// untrusted text.
+		return types.NewLabelSet(maildesk.MailLabel, types.LabelWorldUntrusted), true
 	case yaegikernel.ActionObjectGet, yaegikernel.ActionObjectList:
 		return objectReadLabels(result), true
 	case yaegikernel.ActionListEvidence:

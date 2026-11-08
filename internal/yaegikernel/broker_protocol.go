@@ -73,6 +73,10 @@ const (
 	// the session, never from the cell.
 	ActionObjectGet  BrokerAction = "object_get"
 	ActionObjectList BrokerAction = "object_list"
+	// ActionReadMail reads the one email a mail.read lease names: choir.ReadMail
+	// (modular architecture drill P4). The host takes the reading desk and run
+	// from the session and serves the ref only when the run holds the lease.
+	ActionReadMail BrokerAction = "read_mail"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -395,13 +399,25 @@ type SourceAPIPayload struct {
 // the request fields (p_success, weight, settlement) that make the ask a
 // scored precommitment. The holder desk and run are not here: the host takes
 // them from the session.
+//
+// Grants and Refs ask a first-party custodian's guarded service instead of a
+// kind or a capture: Grants names the grant (mail.read) and Refs the one ref
+// it is asked for.
 type RequestLeasePayload struct {
+	Grants          []string             `json:"grants,omitempty"`
+	Refs            []string             `json:"refs,omitempty"`
 	Kinds           []string             `json:"kinds,omitempty"`
 	CaptureIDs      []string             `json:"capture_ids,omitempty"`
 	CaptureLabels   []string             `json:"capture_labels,omitempty"`
 	Purpose         string               `json:"purpose"`
 	DurationSeconds int                  `json:"duration_seconds,omitempty"`
 	Req             *types.RequestFields `json:"req"`
+}
+
+// ReadMailPayload defines ActionReadMail: the ref of the one email the run's
+// mail.read lease names.
+type ReadMailPayload struct {
+	Ref string `json:"ref"`
 }
 
 // ObjectGetPayload defines ActionObjectGet: one object of the desk's package
@@ -484,7 +500,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList, ActionReadMail:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

@@ -91,6 +91,9 @@ func parseVersion(v string) ([3]int, bool) {
 }
 
 // versionLess reports whether a is an older version than b.
+// VersionLess reports whether a is an older version than b.
+func VersionLess(a, b string) bool { return versionLess(a, b) }
+
 func versionLess(a, b string) bool {
 	av, aok := parseVersion(a)
 	bv, bok := parseVersion(b)
@@ -183,7 +186,8 @@ func EncodeEvent(ev Event) (json.RawMessage, error) {
 		ManifestDigest string    `json:"manifest_digest,omitempty"`
 		Manifest       *Manifest `json:"manifest,omitempty"`
 		Version        string    `json:"version,omitempty"`
-	}{ev.Action, ev.Package, ev.ManifestDigest, ev.Manifest, ev.Version})
+		Reapproved     bool      `json:"reapproved,omitempty"`
+	}{ev.Action, ev.Package, ev.ManifestDigest, ev.Manifest, ev.Version, ev.Reapproved})
 }
 
 // DecodeEvent reads a log body back at its sequence. Unknown fields are
@@ -195,11 +199,12 @@ func DecodeEvent(seq uint64, body json.RawMessage) (Event, error) {
 		ManifestDigest string    `json:"manifest_digest"`
 		Manifest       *Manifest `json:"manifest"`
 		Version        string    `json:"version"`
+		Reapproved     bool      `json:"reapproved"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&in); err != nil {
 		return Event{}, fmt.Errorf("appdesk: decode event %d: %w", seq, err)
 	}
-	return Event{Seq: seq, Action: in.Action, Package: in.Package, ManifestDigest: in.ManifestDigest, Manifest: in.Manifest, Version: in.Version}, nil
+	return Event{Seq: seq, Action: in.Action, Package: in.Package, ManifestDigest: in.ManifestDigest, Manifest: in.Manifest, Version: in.Version, Reapproved: in.Reapproved}, nil
 }

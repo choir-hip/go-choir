@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/promptroute"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -398,9 +399,18 @@ func (rt *Runtime) DeliverOwnerRequest(ctx context.Context, ownerID, runID, desk
 		},
 		Prediction:  types.CommitmentPrediction{Hypothesis: "the owner's request to " + desk, CommittedAt: now},
 		EmitterKind: types.CommitmentEmitterOwner, ComputerID: rt.cfg.ComputerID, SubjectRefs: subject,
-		Inbox: inbox, Addressee: inbox, RelatedIDs: related,
+		Inbox: inbox, SenderInbox: "owner:" + ownerID, Addressee: inbox, RelatedIDs: related,
 	}
-	if _, err := rt.store.AppendCommitmentRecord(context.WithoutCancel(ctx), ownerID, rt.cfg.ComputerID, rec); err != nil {
+	// The hand-off is committed into the desk's inbox, not only stored: the
+	// inbox head moves and the wake row every desk gets is minted, so the
+	// desk's run starts (WakeRecordsInbox, a package desk included).
+	req := types.CommitInboxRecordsRequest{OwnerID: ownerID, ComputerID: rt.cfg.ComputerID, CommandID: rec.RecordID, Records: []types.CommitmentRecord{rec}}
+	digest, err := store.ComputeCommitInboxRecordsDigest(req)
+	if err != nil {
+		return "", fmt.Errorf("owner request to %s: %w", desk, err)
+	}
+	req.CommandDigest = digest
+	if _, err := rt.store.CommitInboxRecords(context.WithoutCancel(ctx), req); err != nil {
 		return "", fmt.Errorf("owner request to %s: %w", desk, err)
 	}
 	return rec.RecordID, nil

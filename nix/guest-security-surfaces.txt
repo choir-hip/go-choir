@@ -53,3 +53,6 @@ internal/selfdevprotocol/
 # guest egress
 internal/hostfetch/
 internal/gatewayruntime/
+
+# the Mail custodian: the guest path to owner-private mail
+internal/maildesk/

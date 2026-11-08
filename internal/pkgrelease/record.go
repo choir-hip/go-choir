@@ -302,7 +302,7 @@ func (r Record) validate(legacyParentOK bool) error {
 		if !computerevent.IsSHA256(r.Manifest.SHA256) {
 			return fail("manifest names a sha256")
 		}
-	} else if err := r.Manifest.validate(); err != nil {
+	} else if err := r.Manifest.validate(r.Package.Name); err != nil {
 		return err
 	}
 	if strings.TrimSpace(r.Operation.OperationID) == "" || !computerevent.IsSHA256(r.Operation.BundleDigest) || strings.TrimSpace(r.Operation.DecisionEvent) == "" {
@@ -410,7 +410,7 @@ func VerifyBlob(blob Blob, raw []byte) error {
 // isLegacyV1 reports a summary written before manifest v2.
 func (m Manifest) isLegacyV1() bool { return m.Schema == "" && m.BehaviourSurface == "" }
 
-func (m Manifest) validate() error {
+func (m Manifest) validate(pkg string) error {
 	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, format, args...) }
 	// A record published before manifest v2 summarized a v1 manifest and
 	// carried no schema or behaviour surface. The v1 reader is deleted with no
@@ -448,7 +448,7 @@ func (m Manifest) validate() error {
 	default:
 		return fail("manifest level %q is not a level", m.Level)
 	}
-	if m.DesksCount > 0 && !apppackage.CurrentPlatform().AdmitsDesksFrom(apppackage.OriginPublished) {
+	if m.DesksCount > 0 && !apppackage.CurrentPlatform().AdmitsDesksOf(apppackage.OriginPublished, pkg) {
 		return refuse(ReasonDeskNeedsSandbox, "a desk-bearing release from a publisher waits for the Phase 6 sandbox (R24)")
 	}
 	return nil

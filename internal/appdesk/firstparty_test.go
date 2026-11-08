@@ -84,3 +84,41 @@ func TestOnlyTheImagesManifestTakesTheMailSlug(t *testing.T) {
 		t.Error("(2) app:mail registered without the first-party mark")
 	}
 }
+
+// Drill P4 (Mail half): the mail-reader-drill package is a first-party fixture
+// desk whose ceiling names mail.read and whose verbs are RequestLease, ReadMail
+// and Done. Failure modes: the image's manifest is refused, so the drill cannot
+// run; a third party's manifest of the same name, or the image's with one more
+// verb, takes the reserved slug; the ceiling is wider than mail.read.
+func TestMailReaderDrillIsAFirstPartyDeskWithAMailReadCeiling(t *testing.T) {
+	fp, ok := FirstPartyDesk("mail-reader-drill")
+	if !ok {
+		t.Fatal("the image ships no mail-reader-drill manifest")
+	}
+	if rs := Validate(fp.Manifest); len(rs) != 0 {
+		t.Fatalf("the manifest is refused: %+v", rs)
+	}
+	set, rs := Derive([]Event{install(1, fp.Manifest)})
+	if len(rs) != 0 || len(set.Desks) != 1 {
+		t.Fatalf("installing it: desks %d, refusals %+v", len(set.Desks), rs)
+	}
+	d := set.Desks[0]
+	if d.Name != "app:mail-reader-drill" || !d.FirstParty || len(d.LeaseGrants) != 1 || d.LeaseGrants[0] != "mail.read" || !d.HasVerb("ReadMail") || !d.HasVerb("RequestLease") {
+		t.Fatalf("the desk row: %+v", d)
+	}
+	wider := fp.Manifest
+	wider.Verbs = append(append([]string{}, wider.Verbs...), "Cast")
+	for name, m := range map[string]Manifest{"third party": goodManifest("mail-reader-drill"), "wider verbs": wider} {
+		if rs := Validate(m); !hasCode(rs, CodeReservedName) {
+			t.Errorf("%s: Validate = %+v, want reserved_name", name, rs)
+		}
+	}
+	// A third party naming the ceiling and the verb under its own name is not a
+	// first-party desk: it cannot hold ReadMail.
+	thief := goodManifest("notes-thief")
+	thief.Verbs = append(thief.Verbs, "ReadMail")
+	thief.LeaseGrants = []string{"mail.read"}
+	if set, _ := Derive([]Event{install(1, thief)}); len(set.Desks) != 0 {
+		t.Errorf("a non-first-party desk registered with ReadMail: %+v", set.Desks)
+	}
+}

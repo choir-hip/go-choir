@@ -1,0 +1,9 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "The drill package renders its one line; the desk it contributes has no window.",
+  "ready": "[data-mail-reader-drill-app]",
+  "api": [],
+  "expect": [
+    { "selector": "[data-mail-reader-drill-app]", "text": "Mail reader drill" }
+  ]
+}

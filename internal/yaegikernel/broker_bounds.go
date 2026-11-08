@@ -70,6 +70,7 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 	ActionShotWait:          {"job_id": strMax(128), "max_seconds": numRange(0, 240)},
 	ActionProductAPI:        {"method": strMax(16), "path": strMax(4096)},
 	ActionRequestLease:      {"purpose": strMax(4096), "duration_seconds": numRange(0, maxLeaseDuration)},
+	ActionReadMail:          {"ref": strMax(256)},
 	ActionObjectGet:         {"kind": strMax(128), "id": strMax(128)},
 	ActionObjectList:        {"kind": strMax(128), "limit": numRange(0, 200)},
 	ActionReadFile:          {"path": strMax(4096)},
@@ -82,6 +83,8 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 // and the length of each string element.
 var payloadListBounds = map[BrokerAction]map[string]struct{ n, elemLen int }{
 	ActionRequestLease: {
+		"grants":         {maxLeaseListItems, 128},
+		"refs":           {maxLeaseListItems, 256},
 		"kinds":          {maxLeaseListItems, 128},
 		"capture_ids":    {maxLeaseListItems, 256},
 		"capture_labels": {maxLeaseListItems, 256},

@@ -318,6 +318,7 @@ var verbDispatch = map[string]dispatch{
 	"RelateStories":    {"relate_stories", false},
 	"Relate":           {"relate", false},
 	"RequestLease":     {"request_lease", false},
+	"ReadMail":         {"read_mail", false},
 	"Get":              {"object_get", false},
 	"List":             {"object_list", false},
 }
@@ -771,7 +772,7 @@ func validateStructure(d Desk) error {
 var reservedAppSlugs = map[string]bool{
 	"audio": true, "autopaper": true, "browser": true, "calendar": true, "compute-monitor": true,
 	"conductor": true, "content": true, "desk": true, "desktop": true, "email": true, "engineering": true,
-	"epub": true, "mail": true,
+	"epub": true, "mail": true, "mail-reader-drill": true,
 	"management": true, "management-task": true, "management_task": true, "owner": true, "pdf": true,
 	"podcast": true, "prompt": true, "pulse": true, "research": true,
 	"research-child": true, "research_child": true, "research-web": true, "research_web": true,
@@ -797,7 +798,7 @@ func Renamed(name string) (string, bool) {
 // carries its own desk under (MA4.7): the slug stays reserved for every other
 // package, and only a spec marked FirstParty, which internal/appdesk sets
 // solely for the manifest the image ships for that package, may take it.
-var firstPartyAppSlugs = map[string]bool{"mail": true}
+var firstPartyAppSlugs = map[string]bool{"mail": true, "mail-reader-drill": true}
 
 // CarriedByPackage reports whether name is a registered desk that the
 // in-tree first-party package of the same name carries (Desk.Packaged): that
@@ -835,9 +836,13 @@ var leaseGrantName = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
 var appDeskVerbs = map[string]bool{
 	"Cast": true, "Ask": true, "Reply": true, "CancelAct": true, "Escalate": true,
 	"Precommit": true, "Report": true, "ReportPacket": true, "Resolve": true, "Disagreement": true,
-	"ReadCapture": true, "RequestLease": true, "Done": true,
+	"ReadCapture": true, "RequestLease": true, "ReadMail": true, "Done": true,
 	"Put": true, "Get": true, "List": true, "Retract": true,
 }
+
+// FirstPartyOnlyVerb reports whether verb is an app-desk verb that only a
+// first-party desk (AppDeskSpec.FirstParty) may hold.
+func FirstPartyOnlyVerb(verb string) bool { return verb == "ReadMail" }
 
 // AppDeskSpec is what an app package's desk manifest declares (ARCH-03).
 type AppDeskSpec struct {
@@ -888,6 +893,12 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		if !appDeskVerbs[v] {
 			return Desk{}, fmt.Errorf("app desk %s: verb %s is not available to app desks", spec.Name, v)
 		}
+		// ReadMail reaches the owner's mailbox through Mail's lease: only a
+		// first-party desk holds it while non-first-party desks stay out
+		// (R24, plan section 12.1).
+		if FirstPartyOnlyVerb(v) && !spec.FirstParty {
+			return Desk{}, fmt.Errorf("app desk %s: verb ReadMail is a first-party desk's", spec.Name)
+		}
 	}
 	for _, k := range spec.LeaseKinds {
 		if len(k) <= len("choir.") || k[:len("choir.")] != "choir." || k == "choir.lease" {
@@ -917,6 +928,13 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 	}
 	if len(d.Accepts) == 0 {
 		d.Accepts = nil
+	}
+	// A package desk has a records inbox per owner (app:<pkg>:<owner>), like
+	// every desk that is woken by records (doctrine I26). A candidate (the
+	// "-candidate" shadow of an installed package, objectgraph.CandidateSuffix)
+	// has no inbox: it is never woken.
+	if !strings.HasSuffix(spec.Name, "-candidate") {
+		d.Instance = InstancePerOwner
 	}
 	grants, err := GrantsForVerbs(spec.Verbs)
 	if err != nil {
