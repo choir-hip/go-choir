@@ -200,7 +200,7 @@ type runMemoryOverflowRetrievalProvider struct {
 
 func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	atomic.AddInt32(&p.calls, 1)
-	if strings.Contains(req.System, "runtime run-memory compactor") {
+	if isRunMemoryCompactionRequestForTest(req) {
 		return &provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       runMemoryCheckpointJSONForTest("recover from overflow", []string{"raw sentinel compacted"}, []string{"call get_run_memory_entry for the compacted entry id"}),
@@ -310,7 +310,7 @@ type runtimeOverflowProvider struct {
 
 func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	atomic.AddInt32(&p.calls, 1)
-	if strings.Contains(req.System, "runtime run-memory compactor") {
+	if isRunMemoryCompactionRequestForTest(req) {
 		return &provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       runMemoryCheckpointJSONForTest("recover from overflow", []string{"provider overflow compacted"}, []string{"continue the run"}),
@@ -366,4 +366,13 @@ func waitForRunState(t *testing.T, rt *Runtime, runID, ownerID string, state typ
 	}
 	t.Fatalf("timeout waiting for run %s state %s (got %s)", runID[:8], state, rec.State)
 	return types.RunRecord{}
+}
+
+// isRunMemoryCompactionRequestForTest reports whether req is the thread's
+// own request plus the compaction instruction as its last user message.
+func isRunMemoryCompactionRequestForTest(req provideriface.ToolLoopRequest) bool {
+	if len(req.Messages) == 0 {
+		return false
+	}
+	return strings.Contains(string(req.Messages[len(req.Messages)-1]), "typed checkpoint of this conversation")
 }

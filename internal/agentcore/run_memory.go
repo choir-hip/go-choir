@@ -48,12 +48,14 @@ const (
 )
 
 type runMemoryManager struct {
-	store                     *runtimestore.Store
-	rec                       *types.RunRecord
-	cfg                       provideriface.Config
-	emit                      provideriface.EventEmitFunc
-	provider                  provideriface.ToolLoopProvider
-	llmConfig                 provideriface.LLMSelection
+	store *runtimestore.Store
+	rec   *types.RunRecord
+	cfg   provideriface.Config
+	emit  provideriface.EventEmitFunc
+	// contextModel only sizes the context window for the compaction
+	// threshold. No model call is made from it: a compaction asks the
+	// thread (toolregistry.ThreadCall).
+	contextModel              string
 	promptOverheadTokens      int
 	overflowRecoveryAttempted bool
 	compactionInProgress      bool
@@ -73,9 +75,8 @@ func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg pr
 	}
 }
 
-func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvider, llmConfig provideriface.LLMSelection, promptOverheadTokens int) *runMemoryManager {
-	m.provider = provider
-	m.llmConfig = llmConfig
+func (m *runMemoryManager) withPromptBudget(contextModel string, promptOverheadTokens int) *runMemoryManager {
+	m.contextModel = contextModel
 	m.promptOverheadTokens = promptOverheadTokens
 	return m
 }
@@ -524,7 +525,7 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 	})
 	m.emit(types.EventRunCompactionStarted, "run_memory", startPayload)
 
-	compaction, err := m.generateLLMCompaction(ctx, plan)
+	compaction, err := m.askThreadForCompaction(ctx, plan)
 	if err != nil {
 		failedPayload, _ := json.Marshal(map[string]any{
 			"reason":         reason,
@@ -545,7 +546,7 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		FirstKeptEntryID: plan.FirstKeptEntryID,
 		TokensBefore:     plan.TokensBefore,
 		Reason:           reason,
-		Model:            strings.TrimSpace(m.llmConfig.Model),
+		Model:            strings.TrimSpace(compaction.Model),
 		Details: map[string]any{
 			"compacted_messages":        plan.CompactedMessages,
 			"kept_messages":             plan.KeptMessages,
@@ -795,7 +796,7 @@ func (m *runMemoryManager) effectiveContextThresholdTokens() int {
 	if m.cfg.RunMemoryContextThresholdTokens > 0 {
 		return m.cfg.RunMemoryContextThresholdTokens
 	}
-	window := modelcatalog.ContextWindowTokensForModel(m.llmConfig.Model)
+	window := modelcatalog.ContextWindowTokensForModel(m.contextModel)
 	if window <= 0 {
 		window = modelcatalog.DefaultContextWindowTokens
 	}
@@ -812,47 +813,29 @@ func (m *runMemoryManager) estimatePromptPressureTokens(entries []types.RunMemor
 		provideriface.DefaultRunMemoryPromptReserveTokens
 }
 
-func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMemoryCompactionPlan) (runMemoryLLMCompaction, error) {
-	if m.provider == nil {
-		return runMemoryLLMCompaction{}, fmt.Errorf("llm compactor provider is not configured")
-	}
-	if strings.TrimSpace(m.llmConfig.Provider) == "" || strings.TrimSpace(m.llmConfig.Model) == "" {
-		return runMemoryLLMCompaction{}, fmt.Errorf("llm compactor model selection is incomplete")
+// askThreadForCompaction asks the thread for the checkpoint as its own next
+// message (owner, 2026-11-08: "Compaction shouldn't be pinned to a model, it
+// should use the same model as the thread for caching"; "There shouldn't be a
+// 'compactor'"). The loop's hooks offer the call; outside a loop there is none
+// and the caller falls to the deterministic summary.
+func (m *runMemoryManager) askThreadForCompaction(ctx context.Context, plan runMemoryCompactionPlan) (runMemoryLLMCompaction, error) {
+	ask, ok := toolregistry.ThreadCall(ctx)
+	if !ok {
+		return runMemoryLLMCompaction{}, fmt.Errorf("no thread call: compaction outside the tool loop")
 	}
 	retrieval := runMemoryRetrievalVerb(m.rec)
-	preserveHandles := "Preserve exact entry_id handles."
-	if retrieval != "" {
-		preserveHandles = "Preserve exact entry_id handles so the future agent can call " + retrieval + "(entry_id) when details are needed."
-	}
-	system := strings.Join([]string{
-		"You are Choir's runtime run-memory compactor.",
-		"Convert durable run memory into a concise typed checkpoint for the same agent run.",
-		"Return only one JSON object matching the requested schema.",
-		"Do not continue the conversation. Do not expose hidden reasoning.",
-		preserveHandles,
-	}, "\n")
-	userText := buildRunMemoryCompactionPrompt(m.rec, plan)
-	msg, _ := json.Marshal(map[string]any{
-		"role": "user",
-		"content": []any{
-			map[string]string{"type": "text", "text": userText},
-		},
-	})
-	resp, err := m.provider.CallWithTools(ctx, provideriface.ToolLoopRequest{
-		Provider:        m.llmConfig.Provider,
-		Model:           m.llmConfig.Model,
-		ReasoningEffort: m.llmConfig.ReasoningEffort,
-		ConversationID:  m.rec.RunID,
-
-		System:    system,
-		Messages:  []json.RawMessage{msg},
-		MaxTokens: provideriface.MaxInteractiveOutputTokensForSelection(m.llmConfig, agentProfileForRun(m.rec)),
-	})
+	resp, err := ask(ctx, buildRunMemoryCompactionPrompt(m.rec, plan))
 	if err != nil {
 		return runMemoryLLMCompaction{}, err
 	}
+	if resp == nil {
+		return runMemoryLLMCompaction{}, fmt.Errorf("thread call returned no response")
+	}
 	checkpoint, err := parseRunMemoryCheckpoint(resp.Text)
 	if err != nil {
+		if len(resp.ToolCalls) > 0 {
+			return runMemoryLLMCompaction{}, fmt.Errorf("thread answered the checkpoint request with a tool call: %w", err)
+		}
 		return runMemoryLLMCompaction{}, err
 	}
 	summary := renderRunMemoryCheckpointSummary(checkpoint, plan, retrieval)
@@ -862,18 +845,19 @@ func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMe
 	details["llm_input_tokens"] = resp.Usage.InputTokens
 	details["llm_output_tokens"] = resp.Usage.OutputTokens
 	details["reasoning_content_present"] = strings.TrimSpace(resp.ReasoningContent) != ""
+	am, _ := toolregistry.ActiveModelFrom(ctx)
 	return runMemoryLLMCompaction{
 		Summary:  summary,
 		Details:  details,
 		Status:   "llm_checkpoint",
-		Provider: m.llmConfig.Provider,
-		Model:    m.llmConfig.Model,
+		Provider: am.Provider,
+		Model:    firstNonEmpty(resp.Model, am.Model),
 	}, nil
 }
 
 func buildRunMemoryCompactionPrompt(rec *types.RunRecord, plan runMemoryCompactionPlan) string {
 	var b strings.Builder
-	b.WriteString("Create a typed checkpoint for this Choir run. Return only JSON with these fields:\n")
+	b.WriteString("Stop here. Do not continue the work and do not call any tool. Write a typed checkpoint of this conversation so far, for the same agent run to continue from. Reply with only one JSON object, no other text and no hidden reasoning, with these fields:\n")
 	b.WriteString(`{"current_objective":"","active_task":"","user_hard_constraints":[],"completed_work":[],"key_decisions":[],"open_obligations":[],"failed_attempts":[],"source_evidence_handles":[],"raw_entry_handles":[],"raw_tool_result_handles":[],"files_docs_resources":[],"blockers_uncertainties":[],"next_actions":[],"retrieval_instructions":[],"continuation_checkpoint":""}`)
 	b.WriteString("\n\nRules:\n")
 	b.WriteString("- Preserve user hard constraints, current objective, tool obligations, failed attempts, source/evidence handles, and next actions.\n")
@@ -904,13 +888,12 @@ func buildRunMemoryCompactionPrompt(rec *types.RunRecord, plan runMemoryCompacti
 	fmt.Fprintf(&b, "- first_kept_entry_id=%s\n", plan.FirstKeptEntryID)
 	fmt.Fprintf(&b, "- raw_entry_ids=%s\n", strings.Join(plan.RawEntryIDs, ","))
 	fmt.Fprintf(&b, "- raw_tool_result_entry_ids=%s\n", strings.Join(plan.RawToolResultEntryIDs, ","))
-	b.WriteString("\nCompacted messages:\n")
+	b.WriteString("\nThe messages above are the conversation. These are the entries being compacted, by entry_id:\n")
 	for _, entry := range plan.SummarizedEntries {
-		fmt.Fprintf(&b, "- entry_id=%s role=%s seq=%d content=%s\n",
+		fmt.Fprintf(&b, "- entry_id=%s role=%s seq=%d\n",
 			entry.EntryID,
 			firstNonEmpty(entry.Role, runMemoryMessageRole(entry.Message)),
 			entry.Seq,
-			describeRunMemoryMessageForLLM(entry.Message),
 		)
 	}
 	return b.String()

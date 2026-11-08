@@ -4076,7 +4076,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		renderedSystemPrompt = toolregistry.BuildSystemPrompt(systemPrompt, registry)
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
-		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt)).
+		withPromptBudget(llmConfig.Model, estimateTextTokens(renderedSystemPrompt)).
 		withRunContext(
 			func() json.RawMessage { return runContextMessage(time.Now(), "") },
 			func() json.RawMessage { return runContextMessage(time.Now(), runFacts) },

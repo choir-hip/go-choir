@@ -817,9 +817,30 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			emit(types.EventRunRetry, reason, payload)
 		}
 	}
+	// withThread offers the memory hooks a call on this thread: the request
+	// the next turn would send for msgs, with one user message appended.
+	// It reads the active member, conversation id and cache key when called,
+	// so after a failover it asks the member that now answers.
+	withThread := func(hookCtx context.Context, msgs []json.RawMessage) context.Context {
+		snapshot := append([]json.RawMessage(nil), msgs...)
+		return withThreadCall(hookCtx, func(callCtx context.Context, instruction string) (*provideriface.ToolLoopResponse, error) {
+			return provider.CallWithTools(callCtx, provideriface.ToolLoopRequest{
+				Provider:        activeLLMConfig.Provider,
+				Model:           activeLLMConfig.Model,
+				ReasoningEffort: activeLLMConfig.ReasoningEffort,
+				ConversationID:  options.conversationID,
+				CacheKey:        cacheKey,
+
+				System:          systemPrompt,
+				Messages:        append(snapshot[:len(snapshot):len(snapshot)], threadInstructionMessage(instruction)),
+				ToolDefinitions: toolDefs,
+				MaxTokens:       maxTokens,
+			})
+		})
+	}
 	for i := 0; ; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
-			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
+			rebuilt, err := options.memoryHooks.BeforeProviderCall(withThread(ctx, messages), messages)
 			if err != nil {
 				return "", totalUsage, fmt.Errorf("tool loop memory before iteration %d: %w", i, err)
 			}
@@ -962,7 +983,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				continue
 			}
 			if options.memoryHooks.OnProviderError != nil {
-				rebuilt, retry, hookErr := options.memoryHooks.OnProviderError(ctx, messages, err)
+				rebuilt, retry, hookErr := options.memoryHooks.OnProviderError(withThread(ctx, messages), messages, err)
 				if hookErr != nil {
 					return "", totalUsage, hookErr
 				}
