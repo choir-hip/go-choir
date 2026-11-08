@@ -303,6 +303,32 @@ func (rt *Runtime) appliedOperationForRelease(ctx context.Context, releaseDigest
 			return operations[i], true
 		}
 	}
+	return rt.rollbackTargetForRelease(ctx, releaseDigest, operations)
+}
+
+// rollbackTargetForRelease resolves a release that a rollback installed. A
+// rollback to an earlier operation re-mints that operation's manifest
+// (rollbackApplyManifest), so the served digest is the rollback row's own
+// release_digest and no applied row carries it; the row ends rolled_back with
+// the target's bundle. The release is then the target's stack: the applied
+// operation that froze that bundle. A base restore serves the booted base
+// manifest, which is not a selfdev- release and never comes here.
+func (rt *Runtime) rollbackTargetForRelease(ctx context.Context, releaseDigest string, applied []selfdev.Operation) (selfdev.Operation, bool) {
+	rolledBack, err := rt.selfdevOperations.ListByStates(ctx, rt.cfg.ComputerID, selfdev.StateRolledBack)
+	if err != nil {
+		return selfdev.Operation{}, false
+	}
+	for i := len(rolledBack) - 1; i >= 0; i-- {
+		row := rolledBack[i]
+		if !strings.HasPrefix(row.OperationID, "rollback-") || selfdev.IsBaseRestore(row) || row.ReleaseDigest != releaseDigest || row.BundleDigest == "" {
+			continue
+		}
+		for j := len(applied) - 1; j >= 0; j-- {
+			if !applied[j].IsPackage() && applied[j].BundleDigest == row.BundleDigest && !strings.HasPrefix(applied[j].OperationID, "rollback-") {
+				return applied[j], true
+			}
+		}
+	}
 	return selfdev.Operation{}, false
 }
 

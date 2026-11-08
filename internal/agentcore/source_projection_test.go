@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
 // U1 wiring (docs/design/computer-update-architecture-rnd-2026-10-24.md,
@@ -525,5 +526,64 @@ func TestAnOwnerEditIsSavedOnTheTapeBeforeTheReset(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(filepath.Join(repo, "frontend", "public", "index.txt")); string(raw) != "a second edit\n" {
 		t.Fatalf("5: the edit was reset without its record: %q", raw)
+	}
+}
+
+// The b@c shape (rollback-6b427100, 2026-11-08): three applied platform
+// operations, the middle one reverted. The rollback re-mints the target's
+// manifest (a new content digest), so the served release is owned by no
+// applied row: only the rolled_back rollback row carries its digest and the
+// target's bundle. The projection must settle on the target's stack, not read
+// pending forever.
+func TestRevertOfAMidStackOperationSettlesTheProjectionOnTheTargetStack(t *testing.T) {
+	const computerID = "computer-midrevert"
+	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
+	ctx := context.Background()
+
+	patchA, treeA := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	patchB, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n", "frontend/public/b.txt": "B\n"})
+	patchC, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n", "frontend/public/b.txt": "B\n", "frontend/public/c.txt": "C\n"})
+	bundleA := releaseFrozenBundle(t, updaterRoot, computerID, "op-a", base, patchA)
+	releaseA := writeCurrentRelease(t, updaterRoot, computerID, "selfdev-op-a", nil)
+	insertReleaseOperation(t, rt.store, releaseOpRow{operationID: "op-a", computerID: computerID, state: selfdev.StateApplied, bundleDigest: bundleA, releaseDigest: releaseA})
+	applyOperation(t, rt, updaterRoot, computerID, "op-b", base, patchB)
+	applyOperation(t, rt, updaterRoot, computerID, "op-c", base, patchC)
+
+	// Revert op-b: the rollback to op-a installs a re-minted copy of op-a's release.
+	reminted := writeCurrentRelease(t, updaterRoot, computerID, "selfdev-op-a", func(m *updater.ReleaseManifest) { m.AcceptedEventHead = strings.Repeat("f", 64) })
+	if reminted == releaseA {
+		t.Fatal("the rollback must serve a new digest")
+	}
+	insertReleaseOperation(t, rt.store, releaseOpRow{operationID: "rollback-mid", computerID: computerID, state: selfdev.StateRolledBack, bundleDigest: bundleA, releaseDigest: reminted})
+
+	result, err := rt.ReconcileSourceProjection(ctx, "rollback")
+	if err != nil || result.State != sourceproj.StateProjected || result.OperationID != "op-a" {
+		t.Fatalf("after the mid-stack revert = %+v, %v (want projected on op-a)", result, err)
+	}
+	if got := releaseGit(t, repo, "rev-parse", "HEAD^{tree}"); got != treeA {
+		t.Fatalf("tree %s, want the target's %s", got, treeA)
+	}
+	if err := rt.sourceProjectionCastGate(ctx); err != nil {
+		t.Fatalf("the gate must open after the revert settles: %v", err)
+	}
+}
+
+// A base restore serves the booted base manifest (marker genesis-baseline) and
+// settles to base with the repository back on the booted base.
+func TestBaseRestoreRollbackSettlesTheProjectionToBase(t *testing.T) {
+	const computerID = "computer-baserestore"
+	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
+	ctx := context.Background()
+
+	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
+	if r, err := rt.ReconcileSourceProjection(ctx, "apply"); err != nil || r.State != sourceproj.StateProjected {
+		t.Fatalf("apply = %+v, %v", r, err)
+	}
+	baseRelease := writeCurrentRelease(t, updaterRoot, computerID, "genesis-baseline", nil)
+	insertReleaseOperation(t, rt.store, releaseOpRow{operationID: "rollback-base", computerID: computerID, state: selfdev.StateRolledBack, releaseDigest: baseRelease})
+	result, err := rt.ReconcileSourceProjection(ctx, "rollback")
+	if err != nil || result.State != sourceproj.StateBase || gitHead(t, repo) != base {
+		t.Fatalf("base restore = %+v, %v", result, err)
 	}
 }
