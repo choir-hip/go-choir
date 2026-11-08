@@ -124,9 +124,11 @@ choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","
 	if len(auth.seen) != 1 {
 		t.Fatalf("the Texture cell's turn was not committed (calls %d): %s", len(auth.seen), out)
 	}
-	// 7a: the folded Cast reached the disclosure gate, counted and not blocked.
-	if n := disclosure.Counts()["desk_message|owner_private|ask|observed"]; n == 0 {
-		t.Errorf("the folded Cast to research was not gated: disclosure counts %v", disclosure.Counts())
+	// 7a: the folded Cast reached the disclosure gate and was allowed: Texture
+	// to research is on the owner's delegation chain (enforce flip D1), so it
+	// is a counted allow, not an ask.
+	if n := disclosure.Counts()["desk_message|-|allow|allowed"]; n == 0 {
+		t.Errorf("the folded Cast to research was not gated and allowed: disclosure counts %v", disclosure.Counts())
 	}
 
 	// Research reads the Cast on its records and reports to Texture; it also
@@ -212,6 +214,16 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 		}
 		if !justified {
 			t.Errorf("crossing on a built-in kind: %s", c)
+		}
+	}
+	// Enforce flip S1: the day leaves no disclosure ask site (the intake
+	// delegation to the task role included).
+	for site, n := range disclosure.Sites() {
+		t.Errorf("disclosure ask site remains: %s x%d", site, n)
+	}
+	for key, n := range disclosure.Counts() {
+		if strings.Contains(key, "|ask|") {
+			t.Errorf("disclosure ask remains: %s x%d", key, n)
 		}
 	}
 }

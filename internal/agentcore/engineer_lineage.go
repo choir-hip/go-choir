@@ -3,7 +3,6 @@ package agentcore
 import (
 	"context"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"path/filepath"
 	"sort"
@@ -11,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )

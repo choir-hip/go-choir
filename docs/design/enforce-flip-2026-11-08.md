@@ -412,18 +412,46 @@ ProductAPI call reaches HandleSourceSchedules with the owner's id in X-Authentic
 route alone cannot evidence an owner act.
 
 The substrate fact that separates them already exists. An in-process ProductAPI call carries an
-empty RemoteAddr: the guest's in-process marker, `server.GuestHostCaller`
-(tools_product_api.go:76-80). An owner request arrives through the proxy with a real remote
-address.
+empty RemoteAddr: the guest's in-process marker (tools_product_api.go:76-80), read by
+`server.InProcessCaller`. An owner request arrives through the proxy with a real remote address.
+(`server.GuestHostCaller` is not the test: it also admits the host peer the proxied owner request
+comes from, so it is true for the owner as well.)
 
 Replaces §8.1's stamp rule:
-- The schedule route writes `created_by_owner_act` only when the request is not a guest host
-  caller. A desk-created schedule carries no stamp, and polls and desk updates never add one.
+- The schedule route writes `created_by_owner_act` only when the request is not an in-process
+  caller (`server.InProcessCaller`: empty RemoteAddr). A desk-created schedule carries no stamp, and polls and desk updates never add one.
 - The publish-auto walk requires the stamp. A desk-created schedule, and a schedule created before
   S1, are not owner provenance. Their stories' publishes ask.
-- S1 adds an owner act, `POST /api/autopaper/sources/schedules/<id>/affirm`. It also refuses a
-  guest host caller. It stamps an existing schedule, so the owner can affirm a pre-S1 schedule
+- S1 adds an owner act, `POST /api/autopaper/sources/schedules/<id>/affirm`. It also refuses an
+  in-process caller. It stamps an existing schedule, so the owner can affirm a pre-S1 schedule
   once. The paper's schedules need that affirmation before S3 reaches the paper's ring, and the
   report names it.
 - FM11: a desk ProductAPI create or affirm of a schedule writes no stamp, and a story opened on it
   does not admit a publish-auto publish.
+
+## 10. S1 build record: deviations from §1 to §9
+
+- The stamp and the affirm refusal use `server.InProcessCaller` (empty RemoteAddr), not
+  `!GuestHostCaller`: the proxied owner request is a host-peer caller, so the §9 wording as first
+  written would never stamp an owner act. §9 is corrected above.
+- The owner_private/publication table cell is `{Unadmitted: Ask, Admitted: Allow}`, so a host
+  admission can lift it. No other cell changed.
+- The store refuses any Cast to `texture:new` that is not from the admitter, so the walk's
+  sender check is defence in depth, pinned by a direct test.
+- R1 at `openDelegatedCastAssignment` reads inside the store's admission
+  (`requireEngineeringRecordsAdmission`); the custodian is forced on that one
+  `GetLifecycleDocument` call, and the outer `withKindReader` stays (it declares only when no
+  actor is named).
+- FM8 remaps `evidence` only. `story`, `run_memory`, `app_object`, `mail` and the product-API
+  atoms map to no custodian and so still ask; a test pins that.
+- `ReleaseEngineeringSlotClaim` is fixed inside `store.releaseEngineeringSlotGraph` (read as the
+  slot custodian; write as it where no writer is declared), which also covers the boot
+  reconciliation.
+- The walk accepts an owner-emitted opening Cast as the origin, and resolves captures through the
+  Cast's `RelatedIDs`, else by scanning the admitter inbox (2000 records), because a task's
+  outward Cast carries no `RelatedIDs`.
+- The pair check folds `-` to `_` after `canonicalDeskName`: the Delegate path addresses
+  `management-task:<id>`, while the manifest role is `management_task`. The fold resolves only to
+  registered roles.
+- Seven existing tests asserted an ask or a count that the owner flow or the new readers remove;
+  they were updated, not deleted.

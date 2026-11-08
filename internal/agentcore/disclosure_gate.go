@@ -310,7 +310,15 @@ func (r ownerFlowRoles) pair(from, to string) bool {
 // management and its task role. The registry names every end, so no desk name
 // is keyed here, and a package desk is never an end.
 func ownerDeskPair(from, to string) bool {
-	return currentOwnerFlowRoles().pair(canonicalDeskName(strings.TrimSpace(from)), canonicalDeskName(strings.TrimSpace(to)))
+	// The Delegate path spells the task's inbox management-task:<id> while the
+	// manifest's role is management_task, and agentprofile.Canonical folds the
+	// hyphen only for the verifier role. The registry spells every desk and
+	// role with underscores, so the fold here is narrow: a hyphenated name
+	// that is no registered role still resolves to nothing.
+	fold := func(name string) string {
+		return strings.ReplaceAll(canonicalDeskName(strings.TrimSpace(name)), "-", "_")
+	}
+	return currentOwnerFlowRoles().pair(fold(from), fold(to))
 }
 
 // disclosureFacts computes the admission facts of a sink attempt.
