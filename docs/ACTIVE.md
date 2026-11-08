@@ -29,6 +29,18 @@ Station 2026-11-08: finishing (F1 to F8 in the goal's now card). F1, F4 and F7
 are done, F3 is partial (names gate at 502), and the install review for F2 is
 on management's desk (4b63780ad). Left: F5 drills, F6 enforce flip, F8 Phase 8.
 
+Station 2026-11-08 evening: F2 done; F6 closed with named gaps (ledger
+2026-11-08, S3 deployed proof). Left: F5 drills (P4 Mail lease and router,
+P5 partial, P7 strong lease and planted-bad) and F8 Phase 8. The paper's
+publishing stall was fixed on the way (task slots ff071c344, newest-first
+80f84616c, the paper never asks the owner e59ef0187).
+
+**Queued after this mission (owner, 2026-11-08: "I want to finish this
+mission first"), in order:** audit owner approvals (disclosure asks) on
+ordinary, non-Autopaper computers; regressions in ordinary operation (for
+example a prompt-bar prompt reaching research); UX issues; then the next
+mission, Autopaper improvements.
+
 ## Complete (2026-11-04): progressive delivery, built
 
 Closed on the owner's word, 2026-11-04: "Yes, close pd. It works." Leftovers carry into the modular-architecture goal.
