@@ -228,7 +228,7 @@ const (
 	GrantInstallReview = "assignment.install_review"
 )
 
-var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true, GrantResearchSpawn: true, GrantInstallReview: true}
+var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true, GrantResearchSpawn: true, GrantInstallReview: true, GrantCommitRevision: true}
 
 // GrantHolder is the one registered desk that holds a sole-holder grant
 // (admit.assignment, platform.update). It reports false for any other grant
@@ -544,8 +544,14 @@ func SpawnsResearch(name string) bool { return Holds(name, GrantResearchSpawn) }
 const unregistered = "unregistered-holder"
 
 func holderName(grant string) string {
-	if d, ok := GrantHolder(grant); ok {
-		return d.Name
+	if soleHolderGrants[grant] {
+		mu.RLock()
+		defer mu.RUnlock()
+		for n, d := range registry {
+			if d.HasGrant(grant) {
+				return n
+			}
+		}
 	}
 	return unregistered + ":" + grant
 }
