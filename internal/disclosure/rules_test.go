@@ -24,7 +24,7 @@ import (
 func TestTableCellsPinned(t *testing.T) {
 	want := map[Class]map[Sink]Cell{
 		ClassOwnerPrivate: {
-			SinkPublication:    {Ask, Ask},
+			SinkPublication:    {Ask, Allow},
 			SinkMailSend:       {Ask, Allow},
 			SinkEgress:         {Allow, Allow},
 			SinkDeskMessage:    {Ask, Allow},
@@ -62,7 +62,7 @@ func TestEverySinkForEveryLabelClassGetsTheTablesDecision(t *testing.T) {
 		{types.LabelPlatform, SinkLibraryRelease, false, Allow},
 		{types.PublisherLabel("example-news"), SinkPublication, false, Allow},
 		{types.OwnerPrivateLabel("document"), SinkPublication, false, Ask},
-		{types.OwnerPrivateLabel("document"), SinkPublication, true, Ask},
+		{types.OwnerPrivateLabel("document"), SinkPublication, true, Allow},
 		{types.OwnerPrivateLabel("document"), SinkEgress, false, Allow},
 		{types.OwnerPrivateLabel("document"), SinkLibraryRelease, false, Ask},
 		{types.OwnerPrivateLabel("document"), SinkDeskMessage, false, Ask},

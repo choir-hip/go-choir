@@ -130,7 +130,10 @@ var Table = map[Class]map[Sink]Cell{
 	// asking, and anywhere else on an ask. Nothing is denied outright by default: a deny is reserved for
 	// the owner's own future rules, and Decide supports it.
 	ClassOwnerPrivate: {
-		SinkPublication: same(Ask),
+		// Publication asks, except where the host admits the sink for a label:
+		// the document custodian's publish of a publish-auto story that traces
+		// to the owner (enforce flip D4, agentcore publish_auto_admission.go).
+		SinkPublication: {Unadmitted: Ask, Admitted: Allow},
 		SinkMailSend:    {Unadmitted: Ask, Admitted: Allow},
 		// A run that read the owner's data still searches and fetches
 		// freely (owner, 2026-11-05: "No, no asking before each search").

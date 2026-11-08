@@ -314,7 +314,7 @@ func ownerDeskPair(from, to string) bool {
 }
 
 // disclosureFacts computes the admission facts of a sink attempt.
-func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
+func (rt *Runtime) disclosureFacts(ctx context.Context, call disclosureCall) disclosure.Facts {
 	switch call.sink {
 	case disclosure.SinkDeskMessage:
 		owner, runID := strings.TrimSpace(call.exec.OwnerID), strings.TrimSpace(call.exec.RunID)
@@ -322,6 +322,10 @@ func (rt *Runtime) disclosureFacts(call disclosureCall) disclosure.Facts {
 			AdmittedFor: func(label string) bool { return rt.messageAdmitted(owner, runID, call.target, label) },
 			OwnerDesks:  ownerDeskPair(canonicalDeskName(strings.TrimSpace(call.deskRole)), messageTargetDesk(call)),
 		}
+	case disclosure.SinkPublication:
+		// The document custodian's publish of a publish-auto story whose spec
+		// traces to the owner (publish_auto_admission.go).
+		return disclosure.Facts{AdmittedFor: rt.publishAutoAdmission(ctx, call)}
 	case disclosure.SinkMailSend:
 		// Only the mail custodian replying in the owner's own thread is
 		// admitted; any other mail leaves the owner's mailbox on an ask.
@@ -371,7 +375,7 @@ func (rt *Runtime) gateDisclosure(ctx context.Context, call disclosureCall) erro
 			disclosure.NoteUnreadable(call.sink, "observed")
 		}
 	}
-	verdict := disclosure.Decide(labels, call.sink, rt.disclosureFacts(call))
+	verdict := disclosure.Decide(labels, call.sink, rt.disclosureFacts(ctx, call))
 	if verdict.Decision == disclosure.Allow {
 		disclosure.Note(verdict, "allowed")
 		return nil

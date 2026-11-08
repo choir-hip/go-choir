@@ -359,10 +359,10 @@ func TestMailSendIsAdmittedOnlyForTheCustodianRepliesInTheOwnersThread(t *testin
 	f := newDisclosureFixture(t, "mailer", 62828)
 	labels := types.NewLabelSet(types.OwnerPrivateLabel("mail"))
 	reply := disclosureCall{deskRole: "mail", sink: disclosure.SinkMailSend, mailReply: true}
-	if v := disclosure.Decide(labels, disclosure.SinkMailSend, f.rt.disclosureFacts(reply)); v.Decision != disclosure.Allow {
+	if v := disclosure.Decide(labels, disclosure.SinkMailSend, f.rt.disclosureFacts(context.Background(), reply)); v.Decision != disclosure.Allow {
 		t.Fatalf("the mail custodian replying in the thread = %s", v.Decision)
 	}
-	if v := disclosure.Decide(labels, disclosure.SinkMailSend, f.rt.disclosureFacts(disclosureCall{deskRole: "mail", sink: disclosure.SinkMailSend})); v.Decision != disclosure.Ask {
+	if v := disclosure.Decide(labels, disclosure.SinkMailSend, f.rt.disclosureFacts(context.Background(), disclosureCall{deskRole: "mail", sink: disclosure.SinkMailSend})); v.Decision != disclosure.Ask {
 		t.Errorf("mail in a new thread = %s, want ask", v.Decision)
 	}
 }
