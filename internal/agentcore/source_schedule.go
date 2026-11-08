@@ -11,8 +11,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -88,6 +91,14 @@ func (rt *Runtime) StartSourceSchedule(ctx context.Context, ownerID, computerID,
 // set, so test data never becomes a standing schedule by accident (L2a
 // R2-7).
 func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computerID, sourceID string, interval time.Duration, maxItems int, fixtureRun bool) (store.SourceSchedule, error) {
+	return rt.startSourceSchedule(ctx, ownerID, computerID, sourceID, interval, maxItems, fixtureRun, "")
+}
+
+// startSourceSchedule is StartSourceScheduleRun with the owner-act stamp: a
+// non-empty ownerAct is the id of the owner's own request, and is written
+// when the schedule has no stamp yet. An empty one (a desk, a test, a host
+// loop) writes none and keeps the stamp the schedule already has.
+func (rt *Runtime) startSourceSchedule(ctx context.Context, ownerID, computerID, sourceID string, interval time.Duration, maxItems int, fixtureRun bool, ownerAct string) (store.SourceSchedule, error) {
 	if rt == nil || rt.store == nil {
 		return store.SourceSchedule{}, fmt.Errorf("source schedule: store unavailable")
 	}
@@ -129,6 +140,9 @@ func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computer
 	sched.Generation++
 	sched.NextDue, sched.ConsecutiveFailures, sched.UpdatedAt = now, 0, now
 	sched.CrashesWithPollInFlight = 0
+	if ownerAct != "" && sched.CreatedByOwnerAct == "" {
+		sched.CreatedByOwnerAct, sched.CreatedByOwnerActAt = ownerAct, now
+	}
 	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
 		return store.SourceSchedule{}, err
 	}
@@ -138,6 +152,44 @@ func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computer
 		return sched, err
 	}
 	return sched, nil
+}
+
+// AffirmSourceSchedule stamps an existing schedule with the owner's act
+// (enforce flip r4): the owner affirms a schedule made before the stamp or by
+// a desk, once. A schedule that has a stamp keeps it. It changes nothing else.
+func (rt *Runtime) AffirmSourceSchedule(ctx context.Context, ownerID, sourceID, ownerAct string) (store.SourceSchedule, error) {
+	if rt == nil || rt.store == nil {
+		return store.SourceSchedule{}, fmt.Errorf("source schedule: store unavailable")
+	}
+	if strings.TrimSpace(ownerAct) == "" {
+		return store.SourceSchedule{}, fmt.Errorf("source schedule: an affirmation needs the owner's request id")
+	}
+	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
+	sourceScheduleMu.Lock()
+	defer sourceScheduleMu.Unlock()
+	sched, err := rt.store.GetSourceSchedule(scheduleCustodian(ctx), ownerID, strings.TrimSpace(sourceID))
+	if err != nil {
+		return store.SourceSchedule{}, err
+	}
+	if sched.CreatedByOwnerAct != "" {
+		return sched, nil
+	}
+	now := time.Now().UTC()
+	sched.CreatedByOwnerAct, sched.CreatedByOwnerActAt, sched.UpdatedAt = ownerAct, now, now
+	return sched, rt.store.PutSourceSchedule(ctx, sched)
+}
+
+// ownerActID is the id an owner request's stamp carries: the request's own id
+// header when the proxy set one, else a fresh id. It is empty for an
+// in-process call, which is a desk's and never an owner act.
+func ownerActID(r *http.Request) string {
+	if server.InProcessCaller(r) {
+		return ""
+	}
+	if id := strings.TrimSpace(r.Header.Get("X-Request-Id")); id != "" {
+		return id
+	}
+	return "owner-act-" + uuid.NewString()
 }
 
 // StopSourceSchedule stops sourceID's schedule; its pending wake goes stale.
@@ -665,13 +717,34 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{"schedules": views})
 	case http.MethodPost:
+		if id, ok := affirmSourceID(r); ok {
+			// The owner's affirmation: an owner act no desk reaches (the
+			// in-process caller is refused, and the ProductAPI allowlist
+			// does not name the route).
+			act := ownerActID(r)
+			if act == "" {
+				writeAPIJSON(w, http.StatusForbidden, apiError{Error: "affirming a schedule is an owner act"})
+				return
+			}
+			sched, err := rt.AffirmSourceSchedule(r.Context(), ownerID, id, act)
+			if errors.Is(err, store.ErrNotFound) {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "no schedule for that source"})
+				return
+			}
+			if err != nil {
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+				return
+			}
+			writeAPIJSON(w, http.StatusOK, map[string]any{"schedule": sched})
+			return
+		}
 		var req sourceScheduleRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid JSON body"})
 			return
 		}
-		sched, err := rt.StartSourceScheduleRun(r.Context(), ownerID, rt.TextureComputerID(), req.SourceID,
-			time.Duration(req.IntervalMinutes)*time.Minute, req.MaxItems, req.FixtureRun)
+		sched, err := rt.startSourceSchedule(r.Context(), ownerID, rt.TextureComputerID(), req.SourceID,
+			time.Duration(req.IntervalMinutes)*time.Minute, req.MaxItems, req.FixtureRun, ownerActID(r))
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
@@ -691,6 +764,18 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// affirmSourceID reads the source id of POST /api/autopaper/sources/schedules/
+// <id>/affirm.
+func affirmSourceID(r *http.Request) (string, bool) {
+	rest, ok := strings.CutPrefix(r.URL.Path, "/api/autopaper/sources/schedules/")
+	if !ok {
+		return "", false
+	}
+	id, ok := strings.CutSuffix(rest, "/affirm")
+	id = strings.TrimSpace(id)
+	return id, ok && id != ""
 }
 
 // scheduleCustodian declares the source schedules' custodian (management,

@@ -106,6 +106,14 @@ type SourceSchedule struct {
 	// tick crashes the computer (the crash-loop bound).
 	PollInFlightSince       time.Time `json:"poll_in_flight_since,omitempty"`
 	CrashesWithPollInFlight int       `json:"crashes_with_poll_in_flight,omitempty"`
+	// CreatedByOwnerAct is the owner-act stamp (enforce flip r4, section 9):
+	// the id of the owner's request that created or affirmed the schedule,
+	// written only for a request that is not an in-process desk call. It is
+	// the terminal fact of the publish-auto provenance walk. Polls and desk
+	// updates carry it forward unchanged and never add one; a schedule made
+	// before the stamp, or by a desk, has none.
+	CreatedByOwnerAct   string    `json:"created_by_owner_act,omitempty"`
+	CreatedByOwnerActAt time.Time `json:"created_by_owner_act_at,omitempty"`
 }
 
 // sourcePollErrorLimit bounds a poll's saved error text: the schedule keeps

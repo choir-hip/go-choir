@@ -34,6 +34,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/podcast/subscriptions", routekinds.Gate("/api/podcast/subscriptions", h.HandlePodcastSubscriptions))
 	s.HandleFunc("/api/podcast/search", routekinds.Gate("/api/podcast/search", h.HandlePodcastSearch))
 	s.HandleFunc("/api/autopaper/sources/schedules", routekinds.Gate("/api/autopaper/sources/schedules", h.HandleSourceSchedules))
+	s.HandleFunc("/api/autopaper/sources/schedules/", routekinds.Gate("/api/autopaper/sources/schedules/", h.HandleSourceSchedules))
 	s.HandleFunc("/api/autopaper/events", routekinds.Gate("/api/autopaper/events", h.HandleWorldEvents))
 	s.HandleFunc("/api/computer-settings", h.HandleComputerSettings)
 	s.HandleFunc("/api/calibration", h.HandleCalibration)

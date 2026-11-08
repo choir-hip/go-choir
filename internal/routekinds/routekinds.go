@@ -90,7 +90,7 @@ var Table = []Route{
 		Custodians: []objectgraph.Writer{objectgraph.WriterShell},
 	},
 	{
-		Patterns:   []string{"/api/autopaper/sources/schedules", "/api/autopaper/events"},
+		Patterns:   []string{"/api/autopaper/sources/schedules", "/api/autopaper/sources/schedules/", "/api/autopaper/events"},
 		Owner:      "autopaper",
 		Kinds:      []objectgraph.ObjectKind{"choir.source_schedule", "choir.world_event"},
 		Custodians: []objectgraph.Writer{objectgraph.WriterManagement},

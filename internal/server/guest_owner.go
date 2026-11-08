@@ -66,6 +66,15 @@ func GuestHostCaller(r *http.Request) bool {
 	return gateway != nil && remote == *gateway
 }
 
+// InProcessCaller reports whether the request is an in-process call: an empty
+// RemoteAddr, which net/http never produces for a connection. A desk's
+// choir.ProductAPI call is served this way. It is not GuestHostCaller, which
+// also admits the host peer the owner's proxied requests arrive from, so an
+// owner act is a request that is host-sourced and not in-process.
+func InProcessCaller(r *http.Request) bool {
+	return r != nil && strings.TrimSpace(r.RemoteAddr) == ""
+}
+
 func guestTrustsLoopback() bool {
 	return strings.TrimSpace(os.Getenv(EnvGuestTrustLoopback)) == "1"
 }
