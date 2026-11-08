@@ -84,7 +84,9 @@ func (f *publishAutoFixture) asks(t *testing.T, doc, desk string, labels ...stri
 	f.n++
 	exec := f.run(t, fmt.Sprintf("run-pa-%d", f.n), desk, "x", labels...)
 	err := f.rt.GateDisclosure(context.Background(), *exec.RunRecord, disclosure.SinkPublication, doc, "publish a revision")
-	if err != nil && !strings.Contains(err.Error(), "waits on the owner") {
+	// A publish-auto story never waits on the owner (owner, 2026-11-08): a
+	// label the admission does not take is refused with no owner ask.
+	if err != nil && !strings.Contains(err.Error(), "waits on the owner") && !strings.Contains(err.Error(), "never asks the owner") {
 		t.Fatalf("unexpected refusal: %v", err)
 	}
 	return err != nil

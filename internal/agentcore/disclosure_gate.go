@@ -501,12 +501,54 @@ func (rt *Runtime) disclosureAsk(ctx context.Context, call disclosureCall, owner
 		}
 		return nil
 	}
+	if rt.publishAutoWork(ctx, call, owner, computer) {
+		// The paper never asks the owner (owner, 2026-11-08: "Never should
+		// it ask for human approval"): an unclear disclosure on publish-auto
+		// work is refused and recorded, a defect to fix at its labels, and
+		// no owner tap is minted.
+		payload.Rule = string(disclosure.Deny)
+		if _, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhaseRefused, payload); err != nil {
+			log.Printf("disclosure: record the refusal of %s on run %s: %v", call.sink, call.exec.RunID, err)
+		}
+		log.Printf("disclosure: publish-auto work refused without an owner ask: %s on run %s: %s", call.sink, call.exec.RunID, payload.Reason)
+		return fmt.Errorf("disclosure refused: %s; System 1's answer does not clear the rule, and publish-auto work never asks the owner, so this attempt is refused", payload.Reason)
+	}
 	id, err := rt.appendDisclosure(ctx, call.exec, owner, computer, disclosurePhasePending, payload)
 	if err != nil {
 		return fmt.Errorf("disclosure refused: the owner tap could not be recorded (%v), so the sink stays closed", err)
 	}
 	return fmt.Errorf("disclosure refused: %s; System 1's answer does not clear the rule (P(yes) >= %.1f and P(no) <= %.1f), so this waits on the owner (%s); the owner answers it at /api/disclosures/%s/approve or /deny, and the same attempt then passes once",
 		payload.Reason, disclosure.MinYes, disclosure.MaxNo, id, id)
+}
+
+// publishAutoWork reports whether a sink attempt is the paper's work, the
+// publish-auto pipeline: an intake task's run, a run on a publish-auto
+// story's trajectory, or the publication of a publish-auto story.
+func (rt *Runtime) publishAutoWork(ctx context.Context, call disclosureCall, owner, computer string) bool {
+	rec := call.exec.RunRecord
+	if rec != nil && isManagementTaskRun(rec) {
+		return true
+	}
+	if rt.store == nil {
+		return false
+	}
+	ctx = withKernelReader(ctx)
+	publishesAuto := func(trajectoryID string) bool {
+		if trajectoryID = strings.TrimSpace(trajectoryID); trajectoryID == "" {
+			return false
+		}
+		trajectory, err := rt.store.GetLifecycleTrajectory(ctx, owner, computer, trajectoryID)
+		return err == nil && types.StoryPublishesAuto(trajectory)
+	}
+	if rec != nil && publishesAuto(rec.TrajectoryID) {
+		return true
+	}
+	if call.sink == disclosure.SinkPublication {
+		if doc, err := rt.store.GetLifecycleDocument(ctx, owner, computer, strings.TrimSpace(call.target)); err == nil {
+			return publishesAuto(doc.TrajectoryID)
+		}
+	}
+	return false
 }
 
 // disclosureJudge asks System 1 the typed question and returns the full

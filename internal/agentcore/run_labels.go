@@ -273,6 +273,15 @@ func productAPIReadLabels(method, path string) types.LabelSet {
 		return types.NewLabelSet(types.OwnerPrivateLabel("story"))
 	case "/api/autopaper/events":
 		return captureReadLabels
+	case "/api/autopaper/sources/schedules":
+		// The polling schedules are the computer's source configuration,
+		// not owner content; labelling them owner_private:autopaper made
+		// every intake task's story Cast ask (the paper, 2026-11-08). Its
+		// pending arrivals are web-derived titles and URLs.
+		return types.NewLabelSet(types.LabelWorldUntrusted)
+	}
+	if strings.HasPrefix(route, "/api/autopaper/sources/schedules/") {
+		return types.NewLabelSet(types.LabelWorldUntrusted)
 	}
 	return types.NewLabelSet(types.OwnerPrivateLabel(productAPIObjectKind(path)))
 }

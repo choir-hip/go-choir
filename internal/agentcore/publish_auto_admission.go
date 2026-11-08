@@ -48,8 +48,8 @@ var publishAutoLabels = map[string]bool{
 }
 
 // publishAutoCaptureScan bounds the admitter-inbox scan that resolves a capture
-// the Cast's related ids did not name.
-const publishAutoCaptureScan = 2000
+// neither the Cast's related ids nor its acting task's delegated records name.
+var publishAutoCaptureScan = 2000
 
 // publishAutoAdmission returns the publication sink's admission for one
 // attempt: a label is admitted when the actor is the document custodian, the
@@ -180,6 +180,19 @@ func (rt *Runtime) castCaptureSources(ctx context.Context, ownerID, computerID s
 	for _, id := range cast.RelatedIDs {
 		if rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, id); err == nil {
 			take(rec)
+		}
+	}
+	// A task's Cast relates nothing; its captures come from the arrival
+	// records the host delegated to the task, read by id. The bounded scan
+	// below missed an older story's arrival on the paper (2026-11-08: the
+	// newest 2000 admitter records spanned only hours).
+	if acting := strings.TrimSpace(cast.Provenance.ActingTask); len(found) < len(want) && acting != "" {
+		if task, err := rt.store.GetManagementTask(taskCustodianReads(ctx), ownerID, computerID, acting); err == nil {
+			for _, id := range task.DelegatedRecordIDs {
+				if rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, id); err == nil {
+					take(rec)
+				}
+			}
 		}
 	}
 	if len(found) < len(want) {
