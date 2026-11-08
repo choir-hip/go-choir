@@ -302,30 +302,42 @@ closes. The comments at `self_development_materializer.go:109` and
   (the row's terminal note says so). The restored base is the booted image's
   release, not a platform update's release when the two differ.
 
-**R3.1 amendment (2026-11-08): the prior is the release X replaced.** The
-pass proof on d@e applied a platform candidate that could not be reverted
-(mission ledger, 2026-11-08). The chain's platform prior was a November 2
-operation with no checkpoint, and no deploy had left a platform-update
-checkpoint after it: deploys reach a computer by vmctl refresh, which writes
-no event. So the rule above, which reads the prior only from the chain, misses
-the common case it was written for, "the first apply after every deploy".
-The evidence that does exist is X's own materialization receipt: the updater
-signs `prior_release_digest`, the release X's swap replaced. The amended order:
+**R3.1 amendment (2026-11-08, r1 after Devin's send-back): the prior is the
+release X replaced.** The pass proof on d@e applied a platform candidate that
+could not be reverted (mission ledger, 2026-11-08). The chain's platform prior
+was a November 2 operation with no checkpoint, and no deploy had left a
+platform-update checkpoint after it: deploys reach a computer by vmctl
+refresh, which writes no event. So a rule that reads the prior from the chain
+misses "the first apply after every deploy", and worse, when the chain prior
+does carry full evidence, a silent deploy since then makes the rollback
+reinstall a dead overlay over the new base. The evidence that does exist is
+X's own materialization result: the updater signs `prior_release_digest`, the
+release X's swap replaced. Call it P. P decides every branch; the chain prior
+is only a diagnostic.
 
-1. The chain prior (after skipping package events) is an applied or
-   rolled-back operation with full evidence: the existing rollback to it.
-2. Otherwise, X's signed materialization receipt names a prior release equal
-   to the booted base manifest's content digest: a base restore. This is
-   exactly the state before X, whatever stale operation the chain names.
-3. Otherwise, the genesis, earlier base restore or platform-update checkpoint
-   rule above: a base restore.
-4. Otherwise refused 409, and the refusal names the prior release X replaced.
+1. Read P from X's `materialization_applied` event
+   (`selfdev-materialization_applied-<X.DecisionEvent>`), from the signed
+   MaterializationReceipt in its payload, verified with the updater receipt
+   key resolver as at apply time. An unsigned or unverifiable copy is not P.
+   No P (applies from before the field, or a first-ever apply): today's chain
+   order, unchanged.
+2. P names the booted base release: base restore. The comparison is
+   independent of route labels, because `servingBaselineManifest` stamps the
+   route's current code and artifact refs into the digest and X's apply moved
+   the route. Read the pinned manifest P and compare its marker and file set
+   with the booted baseline's (`BuildBaselineManifest` over the baseline
+   root), not the digests.
+3. P is the `ReleaseDigest` of an applied or rolled-back platform operation
+   with full evidence: the existing rollback to that operation (not
+   necessarily the chain prior).
+4. Otherwise refused 409, naming P and the chain prior.
 
-Step 2 never restores past live state: if the release X replaced was an
-overlay (a full-evidence operation, or anything not the booted base), step 2
-does not apply. The base restore keeps its open-time check that the booted
-base has not changed since the revert opened. Tier 2 (revert is a red
-surface). Rollback: revert the commit; the route refuses as before.
+The base restore keeps its open-time binding and its run-time check that the
+booted base has not changed; a deploy mid-revert reboots and the crash boot
+settles it. Named residual: restoring exactly P by `RestagePinnedRelease`
+when `releases/P` still verifies would cover step 4 too; not built now.
+Tier 2 (revert is a red surface). Rollback: revert the commit; the route
+refuses as before.
 
 ### 3.6 Harm, and what bounds it
 
