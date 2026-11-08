@@ -109,18 +109,9 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 	}
 	busy := 0
 	for _, task := range running {
-		if task.RunID == "" {
-			busy++ // claimed, its run starting
-			continue
-		}
-		run, err := rt.getRunForComputer(ctx, ownerID, task.RunID)
-		if err != nil || !(run.State.Terminal() || run.State == types.RunPassivated) {
+		if rt.managementTaskHoldsSlot(ctx, ownerID, task) {
 			busy++
-			continue
 		}
-		// The run ended and its closure has not landed: close it now, so
-		// the slot frees (the closure is idempotent).
-		rt.closeManagementTaskOfEndedRun(ctx, &run)
 	}
 	if busy >= slots {
 		return nil, nil
@@ -148,6 +139,48 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 		}
 	}
 	return first, nil
+}
+
+// managementTaskClaimGrace bounds a claim with no bound run: claim, run
+// creation and bind take milliseconds, so an older claim is from a process
+// that died between them.
+const managementTaskClaimGrace = 2 * time.Minute
+
+// managementTaskHoldsSlot reports whether a running task row holds a slot:
+// only while its run is live, or its claim is fresh. A row with no live run
+// is closed here so the slot frees: a claim whose run never started, a
+// bound run with no record, a run that ended without its closure landing,
+// and a run a crash closed (the paper, 2026-11-08: four such rows held
+// every slot for two days while 1759 tasks queued). Closing starts
+// nothing; it never resumes the task.
+func (rt *Runtime) managementTaskHoldsSlot(ctx context.Context, ownerID string, task types.ManagementTask) bool {
+	if task.RunID == "" {
+		// Claim, run creation and bind all happen in startManagementTask
+		// under managementTaskStartMu, which the caller holds, and one
+		// process serves a computer's store: an unbound claim seen here is
+		// not mid-bind, so closing it cannot orphan a live run.
+		if task.StartedAt != nil && time.Since(*task.StartedAt) < managementTaskClaimGrace {
+			return true // claimed, its run starting
+		}
+		rt.closeManagementTask(ctx, task, types.TaskClosureCancelled, "", "the task's run never started", "")
+		return false
+	}
+	run, err := rt.getRunForComputer(ctx, ownerID, task.RunID)
+	if errors.Is(err, store.ErrNotFound) {
+		rt.closeManagementTask(ctx, task, types.TaskClosureCancelled, "", "the task's run has no record", task.RunID)
+		return false
+	}
+	if err != nil || !(run.State.Terminal() || run.State == types.RunPassivated) {
+		return true
+	}
+	if run.Error == runFateInterruptedByRestart {
+		rt.closeManagementTask(ctx, task, types.ClosureReasonInterruptedByRestart, "", "", run.RunID)
+		return false
+	}
+	// The run ended and its closure has not landed: close it now (the
+	// closure is idempotent).
+	rt.closeManagementTaskOfEndedRun(ctx, &run)
+	return false
 }
 
 // managementTaskObservability is the slot starter's state on
