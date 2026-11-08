@@ -2,7 +2,7 @@
 // context menu right click"). A node that binds use:contextMenu owns its own
 // menu and stops the event. This is the fallback for everything else: one
 // listener the desktop installs on the document, which turns an unclaimed
-// right-click (or Shift+F10 / the Menu key) into a menu with a target, so the
+// right-click (or the Menu key; Shift+F10 keeps the browser menu) into a menu with a target, so the
 // contextMenu.build pipeline and contributes.menus reach it like any other:
 //
 //   app      a launcher tile            Open
@@ -22,7 +22,7 @@ import { openContextMenu, type ContextMenuEntry, type ContextMenuTarget } from '
 import { toggleLauncher } from './shell-slots';
 import { openApp, showDesktop, showOverview, windowAction } from './shell-services';
 
-const FIELD = 'input, textarea, [contenteditable=""], [contenteditable="true"]';
+const FIELD = 'input:not([type]), input[type="text"], input[type="search"], input[type="url"], input[type="tel"], input[type="password"], textarea, [contenteditable=""], [contenteditable="true"]';
 
 type Built = { items: ContextMenuEntry[]; label: string; target: ContextMenuTarget };
 
