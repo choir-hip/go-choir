@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -332,6 +333,9 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	response, err := h.jevTransport.Decide(ctx, computerID, request)
 	if err != nil {
+		// The cause (an OpenRouter status, a transport error) carries no
+		// credential; without it a spent key read only as "unavailable".
+		log.Printf("gateway: Jev judgment for %s failed: %v", computerID, err)
 		if _, disabled := err.(jevTransportDisabledError); disabled {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
 			return

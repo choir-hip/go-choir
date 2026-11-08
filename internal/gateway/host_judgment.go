@@ -64,7 +64,7 @@ func (h *Handler) HandleHostJudgment(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	response, err := h.jevTransport.Decide(ctx, label, request)
 	if err != nil {
-		log.Printf("gateway: host judgment from %s failed (questions=%d)", label, len(request.Questions))
+		log.Printf("gateway: host judgment from %s failed (questions=%d): %v", label, len(request.Questions), err)
 		if _, disabled := err.(jevTransportDisabledError); disabled {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
 			return
