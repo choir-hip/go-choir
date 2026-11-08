@@ -1,6 +1,6 @@
 # The enforce flip for the built-in kinds (F6), 2026-11-08
 
-Status: r2 (r0 sent back by Devin and a Sonnet seat, r1 by Devin; §6 and §7 amend it and govern where they differ). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
+Status: r3 (r0 sent back by Devin and a Sonnet seat, r1 and r2 by Devin; §6, §7 and §8 amend it and govern where they differ). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
 Inputs: the prerequisite map (scratchpad f6-prereqs, 2026-11-08), ledger 2026-11-05T17:30Z and
 2026-11-06T01:50Z, and a fresh read of `GET /api/runtime/observability` on d@e at 6eb19408e
 after a day of drills (two accepted package installs, one rejected, four engineering rounds).
@@ -378,3 +378,29 @@ on the proof round blocks S3.
 - FM9: a built-in desk outside §7.2's set reads an owner-private capture. It is counted in S1 and
   S2, and refused in S3.
 - FM10: product code calls SetModeForTest. The lint refuses it, and at runtime it panics.
+
+## 8. r3 amendments (Devin r2 SEND BACK)
+
+### 8.1 The provenance walk's terminal fact (replaces §7.4 step 3)
+
+An object does not persist its writer, and the custodian rewrites a schedule on every poll. So
+"its writer must be the owner" names no fact on the tape.
+
+The terminal fact is this. A source schedule exists under the owner's canonical id, and a schedule
+can be created only through the owner-authenticated schedule route (HandleSourceSchedules). Its
+existence under that id is the owner-act evidence.
+
+S1 hardens this. At creation the route stamps `created_by_owner_act: <request id>` and its time
+into the schedule's metadata. Polls carry the stamp forward unchanged, and the walk requires it.
+A schedule created before S1 carries no stamp. It is admitted by existence under the owner id
+alone, the existing fact, and the report names that.
+
+### 8.2 The Parent field joins the desk protocol lock
+
+Parent decides an OwnerFlow pair, so it bears authority. It joins `deskprotocol.DeskRow` and its
+Equal set. S1 writes lock 16.0.0. The lock bump is part of S1's scope and its review.
+
+### 8.3 Staleness
+
+§6.4's `WithCustodianReader` already exists (objectgraph/custody.go:154) with the always-sets
+semantics. S1 uses it rather than adding a helper.
