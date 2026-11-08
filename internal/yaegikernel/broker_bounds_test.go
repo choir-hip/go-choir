@@ -205,7 +205,7 @@ var actionPayloads = map[BrokerAction]any{
 	ActionSourceAPI: SourceAPIPayload{}, ActionReadCapture: ReadCapturePayload{}, ActionSearchWireCorpus: SearchWireCorpusPayload{},
 	ActionTextureSearch: TextureSearchPayload{}, ActionResearch: ResearchPayload{}, ActionSaveEvidence: SaveEvidencePayload{},
 	ActionReadEvidence: ReadEvidencePayload{}, ActionListEvidence: ListEvidencePayload{},
-	ActionGetRunMemoryEntry: GetRunMemoryEntryPayload{}, ActionProductAPI: ProductAPIPayload{}, ActionStories: StoriesPayload{}, ActionShotStart: ShotStartPayload{}, ActionShotWait: ShotWaitPayload{}, ActionScreens: ScreensPayload{},
+	ActionGetRunMemoryEntry: GetRunMemoryEntryPayload{}, ActionProductAPI: ProductAPIPayload{}, ActionStories: StoriesPayload{}, ActionShotStart: ShotStartPayload{}, ActionShotWait: ShotWaitPayload{}, ActionScreens: ScreensPayload{}, ActionInstallPacket: InstallPacketPayload{},
 	ActionSystem1: System1Payload{}, ActionRelateStories: RelateStoriesPayload{}, ActionRelate: RelatePayload{},
 	ActionRequestLease: RequestLeasePayload{}, ActionObjectGet: ObjectGetPayload{}, ActionObjectList: ObjectListPayload{},
 }

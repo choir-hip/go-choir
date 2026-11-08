@@ -446,6 +446,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"VerifyFindings":   func() reflect.Value { return reflect.ValueOf(s.VerifyFindings) },
 		"ShotWait":         func() reflect.Value { return reflect.ValueOf(s.ShotWait) },
 		"ShotVerdict":      func() reflect.Value { return reflect.ValueOf(s.ShotVerdict) },
+		"InstallPacket":    func() reflect.Value { return reflect.ValueOf(s.InstallPacket) },
+		"InstallVerdict":   func() reflect.Value { return reflect.ValueOf(s.InstallVerdict) },
 		"Delegate":         func() reflect.Value { return reflect.ValueOf(s.Delegate) },
 		"CancelTask":       func() reflect.Value { return reflect.ValueOf(s.CancelTask) },
 		"Calibration":      func() reflect.Value { return reflect.ValueOf(s.Calibration) },
@@ -1253,6 +1255,82 @@ func (s *ChoirScope) ShotVerdict(operationID, verdict string, findings []map[str
 		return fmt.Errorf("choir: shot verdict requires a bound cell")
 	}
 	return t.ShotVerdict(operationID, verdict, parsed, reason)
+}
+
+// InstallPacket returns the packet of the install review management owes on a
+// release: subject, risk, added ceiling entries, flow sentences, mechanical
+// checks, manifest and source. Refused when no review is owed for the release.
+// Management only (desk-install-review-2026-11-08 2.3).
+func (s *ChoirScope) InstallPacket(releaseID string) (InstallPacketResult, error) {
+	if !s.deskModule("InstallPacket") {
+		return InstallPacketResult{}, fmt.Errorf("choir: install review verbs are management's")
+	}
+	var out InstallPacketResult
+	if err := s.call(ActionInstallPacket, InstallPacketPayload{ReleaseID: strings.TrimSpace(releaseID)}, &out); err != nil {
+		return InstallPacketResult{}, err
+	}
+	return out, nil
+}
+
+// InstallVerdict stages management's verdict on a widened-ceiling install:
+// pWithinCeiling is its probability that the package stays inside its
+// ceiling, accept its decision, findings plain maps with keys concern,
+// evidence and blocking (a blocking finding makes the verdict a rejection),
+// reason required on a reject. At most one per cell. Management only.
+func (s *ChoirScope) InstallVerdict(releaseID string, pWithinCeiling float64, accept bool, findings []map[string]any, reason string) error {
+	if err := s.mutateDenied("InstallVerdict"); err != nil {
+		return err
+	}
+	parsed, err := installFindingsFromMaps(findings)
+	if err != nil {
+		return err
+	}
+	if !s.deskModule("InstallVerdict") {
+		return fmt.Errorf("choir: install review verbs are management's")
+	}
+	t := s.tray.Load()
+	if t == nil {
+		return fmt.Errorf("choir: install verdict requires a bound cell")
+	}
+	return t.InstallVerdict(releaseID, pWithinCeiling, accept, parsed, reason)
+}
+
+// installFindingsFromMaps reads the findings a cell passes as plain maps (a
+// cell cannot construct a host struct): keys concern, evidence (strings) and
+// blocking (a bool), in lower case or capitalized. An unknown key or a value
+// of the wrong type is refused by name.
+func installFindingsFromMaps(raw []map[string]any) ([]InstallFinding, error) {
+	out := make([]InstallFinding, 0, len(raw))
+	for i, m := range raw {
+		var f InstallFinding
+		for k, v := range m {
+			switch strings.ToLower(k) {
+			case "concern", "evidence":
+				str, ok := v.(string)
+				if !ok {
+					return nil, fmt.Errorf("choir: install finding %d: %s must be a string", i, k)
+				}
+				if strings.ToLower(k) == "concern" {
+					f.Concern = str
+				} else {
+					f.Evidence = str
+				}
+			case "blocking":
+				b, ok := v.(bool)
+				if !ok {
+					return nil, fmt.Errorf("choir: install finding %d: %s must be a bool", i, k)
+				}
+				f.Blocking = b
+			default:
+				return nil, fmt.Errorf("choir: install finding %d: unknown key %q (keys: concern, evidence, blocking)", i, k)
+			}
+		}
+		if strings.TrimSpace(f.Concern) == "" {
+			return nil, fmt.Errorf("choir: install finding %d: concern is required", i)
+		}
+		out = append(out, f)
+	}
+	return out, nil
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development

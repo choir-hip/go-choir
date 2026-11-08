@@ -49,6 +49,9 @@ const (
 	// choir.ShotStart and choir.ShotWait (desk-shots-and-review §3.3).
 	ActionShotStart BrokerAction = "shot_start"
 	ActionShotWait  BrokerAction = "shot_wait"
+	// ActionInstallPacket reads the packet of an install review management
+	// owes: choir.InstallPacket (desk-install-review-2026-11-08 2.3).
+	ActionInstallPacket BrokerAction = "install_packet"
 	// ActionScreens queues a frozen bundle's screens for management's model:
 	// choir.Screens.
 	ActionScreens BrokerAction = "screens"
@@ -277,6 +280,42 @@ type ShotFinding struct {
 	Note         string            `json:"note,omitempty"`
 }
 
+// InstallPacketPayload defines ActionInstallPacket: the release whose install
+// review management owes.
+type InstallPacketPayload struct {
+	ReleaseID string `json:"release_id"`
+}
+
+// InstallPacketResult is what management reads to judge a widened-ceiling
+// install: the subject, the risk, the ceiling entries the install adds, the
+// flow sentences the ceiling opens, the mechanical checks, the manifest and the
+// built module's source (truncated at 120 KiB, Truncated says so).
+type InstallPacketResult struct {
+	ReleaseID    string   `json:"release_id"`
+	Package      string   `json:"package"`
+	Publisher    string   `json:"publisher"`
+	Path         string   `json:"path"`
+	PatchSHA256  string   `json:"patch_sha256"`
+	ManifestSHA  string   `json:"manifest_sha256"`
+	Surface      string   `json:"behaviour_surface"`
+	Risk         string   `json:"risk"`
+	Strong       bool     `json:"publisher_strong"`
+	Added        []string `json:"added,omitempty"`
+	Flow         []string `json:"flow,omitempty"`
+	Checks       []string `json:"checks,omitempty"`
+	ManifestJSON string   `json:"manifest_json"`
+	Source       string   `json:"source"`
+	Truncated    bool     `json:"truncated,omitempty"`
+}
+
+// InstallFinding is one concern of management's install review. A cell passes
+// findings as plain maps (keys concern, evidence, blocking), never this type.
+type InstallFinding struct {
+	Concern  string `json:"concern"`
+	Evidence string `json:"evidence,omitempty"`
+	Blocking bool   `json:"blocking,omitempty"`
+}
+
 // StoriesPayload defines ActionStories: a page of at most Limit stories
 // updated before Before (RFC 3339; empty for the newest).
 type StoriesPayload struct {
@@ -441,7 +480,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

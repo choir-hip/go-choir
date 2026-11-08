@@ -110,6 +110,9 @@ var catalogue = map[string]grantSpec{
 	"delegate.task":     {Verbs: []string{"Delegate", "CancelTask"}, Privileged: true},
 	"assignment.verify": {Verbs: []string{"Verify", "VerifyFindings"}, Privileged: true},
 	"assignment.shots":  {Verbs: []string{"ShotStart", "ShotWait", "ShotVerdict", "Screens"}, Privileged: true},
+	// The install review (desk-install-review-2026-11-08): the sole holder
+	// reads the packet of a widened-ceiling install and seals the verdict.
+	"assignment.install_review": {Verbs: []string{"InstallPacket", "InstallVerdict"}, Privileged: true},
 	// The admission ledger (plan MA4.9, D9): the holder admits engineering
 	// work, receives the requests other desks aim at an assignment desk, and
 	// is the custodian every request kind's materiality names. It carries no
@@ -218,9 +221,12 @@ const (
 	// GrantResearchSpawn is the research parent's grant (MA4.11): the one desk
 	// that starts research children, so the registry names it.
 	GrantResearchSpawn = "research.spawn"
+	// GrantInstallReview is the judge of widened-ceiling installs: one
+	// holder, so "who reviews an install" has one answer.
+	GrantInstallReview = "assignment.install_review"
 )
 
-var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true, GrantResearchSpawn: true}
+var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true, GrantResearchSpawn: true, GrantInstallReview: true}
 
 // GrantHolder is the one registered desk that holds a sole-holder grant
 // (admit.assignment, platform.update). It reports false for any other grant

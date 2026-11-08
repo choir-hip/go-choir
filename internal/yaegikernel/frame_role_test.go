@@ -20,7 +20,7 @@ import (
 // is written out here on purpose, independent of internal/deskmanifest: a
 // manifest edit that widens a desk changes this table too, in review.
 var pinnedFrameActions = map[string][]BrokerAction{
-	"management": {ActionProductAPI, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens},
+	"management": {ActionProductAPI, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket},
 	"texture":    {ActionReadCapture},
 	"research": {ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence,
 		ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
@@ -36,7 +36,7 @@ var allBrokerActions = []BrokerAction{
 	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
-	ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList,
+	ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList,
 	ActionTextureSearch,
 }
 

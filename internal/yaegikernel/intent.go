@@ -32,6 +32,9 @@ const (
 	// IntentShotVerdict stages management's verdict on an operation's
 	// before/after shot pair (desk-shots-and-review §3.3).
 	IntentShotVerdict = "shot_verdict"
+	// IntentInstallVerdict stages management's verdict on a widened-ceiling
+	// install's review (desk-install-review-2026-11-08 2.3).
+	IntentInstallVerdict = "install_verdict"
 )
 
 // Semantic-act intent kinds (commitment-ledger carrier, mission R2). These
@@ -359,6 +362,11 @@ type StagedIntent struct {
 	// ShotFindings (IntentShotVerdict): one finding per screen pair. TargetRef
 	// is the operation, Decision the verdict (pass or fail).
 	ShotFindings []ShotFinding `json:"shot_findings,omitempty"`
+	// InstallFindings, PWithinCeiling (IntentInstallVerdict): management's
+	// concerns, and its probability that the package stays inside its
+	// ceiling. TargetRef is the release, Decision accept or reject.
+	InstallFindings []InstallFinding `json:"install_findings,omitempty"`
+	PWithinCeiling  float64          `json:"p_within_ceiling,omitempty"`
 	// Semantic-act fields (mission R2 commitment-ledger intents). TargetRef
 	// binds a Resolve/Reply/Cancel to the act it closes. Claim is a Report's
 	// typed claim text; ResolverID names the desk that accepts a Report.
@@ -562,6 +570,36 @@ func (t *Tray) ShotVerdict(operationID, verdict string, findings []ShotFinding, 
 		}
 	}
 	_, err := t.stage(StagedIntent{Kind: IntentShotVerdict, TargetRef: operationID, Decision: verdict, ShotFindings: findings, Reason: reason})
+	return err
+}
+
+// InstallVerdict stages management's verdict on an install review. At most
+// one per cell. release rides TargetRef, accept or reject Decision; the
+// reason is normalized like a Verify reason and required on a reject.
+func (t *Tray) InstallVerdict(release string, pWithinCeiling float64, accept bool, findings []InstallFinding, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	release = strings.TrimSpace(release)
+	if release == "" {
+		return fmt.Errorf("tray: install verdict names the release it judges")
+	}
+	if !(pWithinCeiling >= 0 && pWithinCeiling <= 1) {
+		return fmt.Errorf("tray: pWithinCeiling %v is not a probability", pWithinCeiling)
+	}
+	reason = NormalizeVerifyReason(reason)
+	decision := "accept"
+	if !accept {
+		decision = "reject"
+		if reason == "" {
+			return fmt.Errorf("tray: a rejecting install verdict needs a reason")
+		}
+	}
+	for _, in := range t.intents {
+		if in.Kind == IntentInstallVerdict {
+			return fmt.Errorf("tray: at most one install verdict per cell")
+		}
+	}
+	_, err := t.stage(StagedIntent{Kind: IntentInstallVerdict, TargetRef: release, Decision: decision, InstallFindings: findings, PWithinCeiling: pWithinCeiling, Reason: reason})
 	return err
 }
 

@@ -66,6 +66,7 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 	ActionStories:           {"limit": numRange(0, 500), "before": strMax(64)},
 	ActionShotStart:         {"operation_id": strMax(128)},
 	ActionScreens:           {"operation_id": strMax(128)},
+	ActionInstallPacket:     {"release_id": strMax(128)},
 	ActionShotWait:          {"job_id": strMax(128), "max_seconds": numRange(0, 240)},
 	ActionProductAPI:        {"method": strMax(16), "path": strMax(4096)},
 	ActionRequestLease:      {"purpose": strMax(4096), "duration_seconds": numRange(0, maxLeaseDuration)},

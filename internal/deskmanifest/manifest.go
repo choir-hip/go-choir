@@ -304,6 +304,7 @@ var verbDispatch = map[string]dispatch{
 	"ShotStart":        {"shot_start", false},
 	"ShotWait":         {"shot_wait", false},
 	"Screens":          {"screens", false},
+	"InstallPacket":    {"install_packet", false},
 	"Research":         {"research", false},
 	"SearchTexture":    {"texture_search", false},
 	"System1":          {"system1", false},
@@ -336,7 +337,7 @@ var system = []Desk{
 		// never fetches the world.
 		Grants: []Grant{G("act.cast"), G("act.ask"), G("act.reply"), G("act.cancel"), G("cancel.assignment"),
 			G("act.escalate"), G("act.precommit"), G("act.report"), G("act.report_packet"), G("act.resolve"), G("act.disagree"),
-			G("product.api"), G("captures.read"), G("intake.read"), G("intake.dispose"), G("assignment.verify"), G("assignment.shots"),
+			G("product.api"), G("captures.read"), G("intake.read"), G("intake.dispose"), G("assignment.verify"), G("assignment.shots"), G("assignment.install_review"),
 			G("delegate.task"), G("calibration.read"), G("calibration.restate"),
 			G("updates.read"), G("cell.deadline", "5m0s"),
 			// The admission ledger and the platform update (MA4.9): one
@@ -374,7 +375,7 @@ var system = []Desk{
 		},
 		ModelRole: Texture, Restart: RestartContract,
 		Packaged: true,
-		Profile: true, Prompt: true, Identity: IdentitySubject,
+		Profile:  true, Prompt: true, Identity: IdentitySubject,
 	},
 	{
 		Name: Research, Kind: KindSystem, Carrier: CarrierDeskWorker,
