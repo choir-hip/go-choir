@@ -242,9 +242,10 @@ now:
     (MA4.11 eadeb1cc5, accepted on d@e; names gate 930 to 502, residue
     Texture and the conductor); F4 (MA5.2 af5b02cea and 4b067e8de, MA5.3);
     F7 (MA8.0 ed5b893ae); b@c cleaned to base (owner).
-    In flight: F2 install review on management's desk landed 4b63780ad
-    (epoch 101, protocol 15.0.0); its d@e proof (accept, planted-flow
-    reject) is running.
+    F2 done: install review on management's desk (4b63780ad, epoch 101,
+    protocol 15.0.0; reviews readable 49a502288); d@e proof accepted two
+    packages and rejected a planted notes-to-sink flow with management's
+    sealed reason.
     Left, in order: F5 the deployed drills (P4 Mail lease and router, P5
     fresh-account Library drill, P6 hostile iframe, P7 replay, strong lease
     and planted-bad gate), which the install review proof's fixtures
@@ -253,8 +254,8 @@ now:
     Follow-ups: fullEvidenceOperationForRelease misses a re-minted rollback
     release (409, fails closed). Owner decisions open: the Library
     republish route (proposed), rotating the QA owner passkey.
-  source_ref: origin/main 4b63780ad
-  deploy_identity: staging 4b63780ad (security epoch 101, desk protocol 15.0.0)
+  source_ref: origin/main 6eb19408e
+  deploy_identity: staging 6eb19408e (security epoch 101, desk protocol 15.0.0)
   candidate:
     id: none
     state: none
