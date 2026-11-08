@@ -13,8 +13,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Enforce flip 13.5 (F6 S2a): intake runs clean by construction. The failure
@@ -624,7 +624,7 @@ func TestDelegateCastDropsObjectiveAndRequestQuestions(t *testing.T) {
 	in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1", Objective: marker + " objective",
 		Req: &types.RequestFields{PSuccess: fp(0.8), Weight: fp(0.5), Settlement: types.SettlementRecipient,
 			Questions: []types.TypedQuestion{{Question: marker + " question", Answers: []string{"yes", "no"}, Probabilities: map[string]float64{"yes": 0.6, "no": 0.4}, Weight: 0.5}}}}
-	if err := r.typeDelegateCast(&cast, in, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&cast, in, "t1"); err != nil {
 		t.Fatal(err)
 	}
 	if err := types.ValidateSubCallCast(cast); err != nil || cast.PSuccess != nil || cast.Weight != nil || cast.Settlement != "" {

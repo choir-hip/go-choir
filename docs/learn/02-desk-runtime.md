@@ -915,8 +915,10 @@ intake), and **tokens** (one transcript grows over 58 calls).
 ### 6.3 How Choir does it now (S2a)
 
 S2a, on `origin/main` (commits a2d3d1f81, 1e218156e and neighbours),
-gives management a verb, `choir.Delegate("intake", objective, refs,
-grouping)` (`internal/yaegikernel/choir.go`). It hands captures records
+gives management a verb, `choir.Delegate("intake", refs, grouping)`
+(`internal/yaegikernel/choir.go`; the objective and request arguments were
+removed by the enforce flip, section 13.6, and the platform also starts an
+intake task itself when a captures record arrives). It hands captures records
 to **management tasks** and "returns at once: nothing waits on a task."
 
 A management task (`internal/agentcore/management_tasks.go`, header):
@@ -1198,7 +1200,7 @@ the code paths above; the record ids are illustrative.
    and the dispatcher activates management's actor. `WakeRecordsInbox`
    finds no active management run and unread records, so it starts one.
 3. Management's first cell calls `choir.Records()`, sees the captures
-   record, and calls `choir.Delegate("intake", "", ids, "per_record")`.
+   record, and calls `choir.Delegate("intake", ids, "per_record")`.
    The tray holds one delegation intent; the cell ends.
 4. The reducer commits, in one batch: a Cast from `management:<owner>`
    to `management-task:<id>` opening a round, the task row (queued), the

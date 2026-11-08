@@ -258,9 +258,10 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 	}
 	closing := types.NewTaskClosingReport(current, reason, note, errText, runID, time.Now().UTC().Format(time.RFC3339Nano))
 	closing.ComputerID = current.ComputerID
-	// The Report that reaches the parent carries what the task read and
-	// what the delegating run read (MA3.5), both from their records: the
-	// caches of an ended run are gone.
+	// The Report that reaches the parent carries what the task read and its
+	// opening Cast's stamp (MA3.5, enforce flip 13.7), from their records: the
+	// caches of an ended run are gone. The delegating run's labels are not
+	// folded in; the Cast carries no text that run wrote.
 	closing.Provenance.Labels = rt.taskReportLabels(ctx, current, runID).Strings()
 	req := types.CommitInboxRecordsRequest{OwnerID: current.OwnerID, ComputerID: current.ComputerID, CommandID: "task-closure:" + closing.RecordID, Records: []types.CommitmentRecord{closing}}
 	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
@@ -431,9 +432,9 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		cast.EmitterKind, cast.ComputerID = types.CommitmentEmitterAgent, r.scope.ComputerID
 		cast.Cast = &types.CommitmentCast{Captures: leased}
 		cast.RelatedIDs = delegated
-		// The Cast is a sub-call (MA1.5): it carries the delegator's own typed
-		// questions and probabilities when its cell stated them, and is marked
-		// weight zero when not. The host states no probability for it.
+		// The Cast is a sub-call (MA1.5) marked weight zero: the cell's request
+		// is cleared, so it carries no questions or probabilities the
+		// delegator wrote (enforce flip 13.6).
 		stampRequestRecord(r.scope, cleanIn, &cast)
 		// The stamp is the union of the delegated records' own labels, never
 		// the delegating run's: a management session only grows, and the
@@ -444,7 +445,7 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 			return nil, nil, fmt.Errorf("delegate %s: %w", in.LocalID, err)
 		}
 		cast.Provenance.Labels = stamp.Strings()
-		if err := r.typeDelegateCast(&cast, cleanIn, i, taskID); err != nil {
+		if err := r.typeDelegateCast(&cast, cleanIn, taskID); err != nil {
 			return nil, nil, fmt.Errorf("delegate %s: %w", in.LocalID, err)
 		}
 		casts = append(casts, cast)
@@ -581,7 +582,7 @@ func (rt *Runtime) storyLibraryShownMark(runID string) int64 {
 // questions, p_success or weight, so it is marked weight zero (enforce flip
 // 13.6). The task's closing Report is the observation the settler scores
 // (closeManagementTask).
-func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yaegikernel.StagedIntent, group int, taskID string) error {
+func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yaegikernel.StagedIntent, taskID string) error {
 	role, _, _ := strings.Cut(cast.Addressee, ":")
 	// The objective is the constant: neither the Cast's, the Delegate's nor
 	// the cell's text is used (enforce flip 13.5).

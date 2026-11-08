@@ -796,7 +796,7 @@ func TestSubCallDelegateCastIsTypedOrWeightZero(t *testing.T) {
 	stated := base()
 	in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1", Req: &types.RequestFields{
 		PSuccess: fp(0.8), Weight: fp(0.5), Settlement: types.SettlementRecipient, Questions: []types.TypedQuestion{subCallYesNo(0.8)}}}
-	if err := r.typeDelegateCast(&stated, in, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&stated, in, "t1"); err != nil {
 		t.Fatal(err)
 	}
 	// Enforce flip 13.6: the cell's request payload is not carried, so even a
@@ -806,7 +806,7 @@ func TestSubCallDelegateCastIsTypedOrWeightZero(t *testing.T) {
 		t.Fatalf("stated: %+v", stated)
 	}
 	bare := base()
-	if err := r.typeDelegateCast(&bare, yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1"}, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&bare, yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1"}, "t1"); err != nil {
 		t.Fatal(err)
 	}
 	if bare.IsTyped() || !bare.IsWeightZero() || bare.PSuccess != nil || bare.Weight != nil {
@@ -815,7 +815,7 @@ func TestSubCallDelegateCastIsTypedOrWeightZero(t *testing.T) {
 	low := base()
 	inLow := yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1", Req: &types.RequestFields{
 		PSuccess: fp(0.8), Weight: fp(0.01), Settlement: types.SettlementRecipient}}
-	if err := r.typeDelegateCast(&low, inLow, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&low, inLow, "t1"); err != nil {
 		t.Fatal(err)
 	}
 	if low.PSuccess != nil || !low.IsWeightZero() {
