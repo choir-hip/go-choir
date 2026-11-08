@@ -37,3 +37,18 @@ func TestOwnerFlowCoversTheAdmittersDeclineToASourceInbox(t *testing.T) {
 		t.Error("management to an unregistered name is on the chain")
 	}
 }
+
+// Devin S1 run 2 note: the source inbox is the only registered class the
+// admitter qualifies for today, so OwnerFlow toward an inbox class is exactly
+// the decline path. A new qualifying class must be added here on purpose.
+func TestOwnerFlowSourceInboxIsTheOnlyQualifyingClass(t *testing.T) {
+	var got []string
+	for _, c := range InboxClasses() {
+		if admitterSendsToInboxClass(c.Name) {
+			got = append(got, c.Name)
+		}
+	}
+	if len(got) != 1 || got[0] != captureSourceDesk {
+		t.Fatalf("qualifying inbox classes = %v, want [%s]", got, captureSourceDesk)
+	}
+}
