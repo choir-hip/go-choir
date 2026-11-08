@@ -1,6 +1,6 @@
 # The enforce flip for the built-in kinds (F6), 2026-11-08
 
-Status: r3 (r0 sent back by Devin and a Sonnet seat, r1 and r2 by Devin; §6, §7 and §8 amend it and govern where they differ). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
+Status: r4 (r0 sent back by Devin and a Sonnet seat, r1 to r3 by Devin; §6 to §9 amend it and govern where they differ). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
 Inputs: the prerequisite map (scratchpad f6-prereqs, 2026-11-08), ledger 2026-11-05T17:30Z and
 2026-11-06T01:50Z, and a fresh read of `GET /api/runtime/observability` on d@e at 6eb19408e
 after a day of drills (two accepted package installs, one rejected, four engineering rounds).
@@ -404,3 +404,26 @@ Equal set. S1 writes lock 16.0.0. The lock bump is part of S1's scope and its re
 
 §6.4's `WithCustodianReader` already exists (objectgraph/custody.go:154) with the always-sets
 semantics. S1 uses it rather than adding a helper.
+
+## 9. r4 amendment (Devin r3 SEND BACK): an owner act is told apart from a desk's product call
+
+Management holds `product.api` and is the custodian of `choir.source_schedule`. A desk's
+ProductAPI call reaches HandleSourceSchedules with the owner's id in X-Authenticated-User. So the
+route alone cannot evidence an owner act.
+
+The substrate fact that separates them already exists. An in-process ProductAPI call carries an
+empty RemoteAddr: the guest's in-process marker, `server.GuestHostCaller`
+(tools_product_api.go:76-80). An owner request arrives through the proxy with a real remote
+address.
+
+Replaces §8.1's stamp rule:
+- The schedule route writes `created_by_owner_act` only when the request is not a guest host
+  caller. A desk-created schedule carries no stamp, and polls and desk updates never add one.
+- The publish-auto walk requires the stamp. A desk-created schedule, and a schedule created before
+  S1, are not owner provenance. Their stories' publishes ask.
+- S1 adds an owner act, `POST /api/autopaper/sources/schedules/<id>/affirm`. It also refuses a
+  guest host caller. It stamps an existing schedule, so the owner can affirm a pre-S1 schedule
+  once. The paper's schedules need that affirmation before S3 reaches the paper's ring, and the
+  report names it.
+- FM11: a desk ProductAPI create or affirm of a schedule writes no stamp, and a story opened on it
+  does not admit a publish-auto publish.
