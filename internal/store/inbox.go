@@ -795,12 +795,28 @@ func (s *Store) inboxCommandWriter(ctx context.Context) objectgraph.Writer {
 	return w
 }
 
+// kernelSettledKinds are the kinds a kernel-declared inbox batch may write under
+// their custodian: the crash closure of a management task's round settles the
+// task row and the capture dispositions it leased.
+var kernelSettledKinds = map[objectgraph.ObjectKind]bool{
+	"choir.management_task":     true,
+	"choir.capture_disposition": true,
+}
+
 // inboxCommandParts splits the management part of an inbox command by the
 // writer it is checked under. A caller that declares a desk writes the whole
 // part as that desk. The kernel's own acts (the crash-boot round closure) have
 // no desk, but their batch can settle a management task and its dispositions;
-// each object is then written under its kind's custodian, in one atomic batch,
-// and a commons kind stays with the kernel (F6 enforce flip, S3 review B1).
+// the kinds the crash closure settles are written under their custodian, in
+// one atomic batch, and every other kind stays under the kernel (F6 enforce
+// flip, S3 review B1).
+//
+// The allowlist is closed on purpose. A kernel-declared batch is the platform's
+// own bookkeeping; if it re-attributed every kind to its custodian, a kernel
+// act that wrote any desk's kind would pass the writer gate by construction and
+// the gate would stop seeing it. Only the two kinds a management task's
+// conversation settles at a crash boot are named; a third kind in such a batch
+// is refused by the gate until someone adds it here, on purpose and in review.
 func (s *Store) inboxCommandParts(ctx context.Context, objects []objectgraph.Object) []objectgraph.WriterBatch {
 	declared := s.inboxCommandWriter(ctx)
 	if declared != objectgraph.WriterKernel {
@@ -810,8 +826,10 @@ func (s *Store) inboxCommandParts(ctx context.Context, objects []objectgraph.Obj
 	byWriter := map[objectgraph.Writer][]objectgraph.Object{}
 	for _, obj := range objects {
 		w := declared
-		if custodian, ok := objectgraph.CustodianOf(obj.ObjectKind); ok && custodian != objectgraph.WriterKernel {
-			w = custodian
+		if kernelSettledKinds[obj.ObjectKind] {
+			if custodian, ok := objectgraph.CustodianOf(obj.ObjectKind); ok && custodian != objectgraph.WriterKernel {
+				w = custodian
+			}
 		}
 		if _, seen := byWriter[w]; !seen {
 			order = append(order, w)
