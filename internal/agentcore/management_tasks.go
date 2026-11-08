@@ -88,7 +88,8 @@ func managementTaskID(cellID, localID string, group int) string {
 }
 
 // startQueuedManagementTasks is the slot starter (R2-6): while fewer than K
-// tasks run, it claims the oldest queued task and starts its run. A queued
+// tasks run, it claims queued tasks newest delegation first
+// (store.NewestQueuedFirst) and starts their runs. A queued
 // task is an open task round with no run; its start is the inbox_record
 // wake of its opening Cast, or the start wake a task's closure mints for
 // the next one. Both are restart work kinds: a crash boot interrupts them
@@ -121,7 +122,7 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 		return nil, fmt.Errorf("management tasks: list queued: %w", err)
 	}
 	var first *types.RunRecord
-	for _, task := range queued {
+	for _, task := range store.NewestQueuedFirst(queued) {
 		if busy >= slots {
 			break
 		}

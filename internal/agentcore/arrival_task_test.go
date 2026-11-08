@@ -363,6 +363,9 @@ func TestTwoCapturesOfOneEventOpenOneStory(t *testing.T) {
 		t.Fatalf("grouped records started %+v", got)
 	}
 
+	// A free slot takes the newest task (store.NewestQueuedFirst): close
+	// the later one so the first task, holding both captures, runs.
+	f.rt.closeManagementTask(ctx, queued[1], types.TaskClosureCancelled, "", "cancelled by the test", "")
 	headBefore, _ := f.s.StoryLibraryHeadOf(ctx, f.owner, f.computer)
 	f.runTask(queued[0], openStoryTaskCell)
 	if head, _ := f.s.StoryLibraryHeadOf(ctx, f.owner, f.computer); head != headBefore+1 {

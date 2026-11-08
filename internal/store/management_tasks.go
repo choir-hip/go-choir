@@ -545,7 +545,8 @@ func (p *taskPlan) closeTask(taskID string, rec types.CommitmentRecord) (types.C
 	return rec, nil
 }
 
-// startNextQueued mints the durable start of the oldest queued task (R2-6):
+// startNextQueued mints the durable start of the next queued task in
+// NewestQueuedFirst order (R2-6):
 // an inbox_record wake to its inbox, in the commit that freed a slot. A
 // crash boot's closures start nothing.
 func (p *taskPlan) startNextQueued(closedTask, closingRecordID string) error {
@@ -553,7 +554,7 @@ func (p *taskPlan) startNextQueued(closedTask, closingRecordID string) error {
 	if err != nil {
 		return err
 	}
-	for _, next := range queued {
+	for _, next := range NewestQueuedFirst(queued) {
 		if next.TaskID == closedTask || p.dirtyRows[next.TaskID] {
 			continue
 		}
@@ -727,6 +728,45 @@ func (s *Store) ListManagementTasks(ctx context.Context, ownerID, computerID str
 		return out[i].TaskID < out[j].TaskID
 	})
 	return out, nil
+}
+
+// NewestQueuedFirst orders queued tasks for a free slot: the newest
+// delegation first, and the tasks of one delegation (one cell's delegate
+// call, named by the opening record id before ":delegate:") in their listed
+// order. News is published as soon as possible; the paper's queue outran
+// its slots on 2026-11-08 and oldest-first served only two-day-old
+// captures. tasks is ListManagementTasks' oldest-first listing; it is not
+// modified.
+func NewestQueuedFirst(tasks []types.ManagementTask) []types.ManagementTask {
+	group := func(t types.ManagementTask) string {
+		if cell, _, found := strings.Cut(t.OpeningRecordID, ":delegate:"); found && cell != "" {
+			return cell
+		}
+		return "task:" + t.TaskID
+	}
+	newest := map[string]time.Time{}
+	first := map[string]int{}
+	for i, t := range tasks {
+		g := group(t)
+		if _, seen := first[g]; !seen {
+			first[g] = i
+		}
+		if t.CreatedAt.After(newest[g]) {
+			newest[g] = t.CreatedAt
+		}
+	}
+	out := append([]types.ManagementTask(nil), tasks...)
+	sort.SliceStable(out, func(i, j int) bool {
+		gi, gj := group(out[i]), group(out[j])
+		if gi == gj {
+			return false
+		}
+		if !newest[gi].Equal(newest[gj]) {
+			return newest[gi].After(newest[gj])
+		}
+		return first[gi] > first[gj]
+	})
+	return out
 }
 
 // CaptureDispositionOf returns a capture's disposition index, if any.
