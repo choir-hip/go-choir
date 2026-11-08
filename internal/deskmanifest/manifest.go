@@ -248,6 +248,13 @@ type Desk struct {
 	// EndsRun marks a role whose run ends with its own Done: it receives the
 	// lifecycle grant its parent lacks (plan section 6 B1).
 	EndsRun bool
+	// Parent names the sole-holder grant whose holder is a role's parent desk
+	// (enforce flip, section 7.3): a management task names admit.assignment,
+	// a research child names research.spawn. Parentage is resolved by grant
+	// holder (ParentOf), never by a name prefix. Only a role carries one. It
+	// bears authority (it decides which desk messages the owner flow covers),
+	// so Equal compares it and the desk protocol lock carries it.
+	Parent string
 }
 
 // Identity is how a desk's agent id is minted (desks design F6).
@@ -422,7 +429,7 @@ var system = []Desk{
 		Profile: true, Prompt: true,
 	},
 	{
-		Name: ManagementTask, Kind: KindRole, Carrier: CarrierDeskWorker,
+		Name: ManagementTask, Kind: KindRole, Carrier: CarrierDeskWorker, Parent: GrantAdmitAssignment,
 		// A management task disposes of the captures its lease names. It
 		// has no filesystem, assignment, message, product API or ledger
 		// authority: one level of delegation.
@@ -436,7 +443,7 @@ var system = []Desk{
 		Profile: true,
 	},
 	{
-		Name: ResearchWeb, Kind: KindRole, Carrier: CarrierDeskWorker,
+		Name: ResearchWeb, Kind: KindRole, Carrier: CarrierDeskWorker, Parent: GrantResearchSpawn,
 		// The research desk's web child (plan 8.6) reads the world and
 		// returns its findings to the parent as a Report. It holds no lease,
 		// so no owner-private Texture text reaches it, and it cannot message,
@@ -448,7 +455,7 @@ var system = []Desk{
 		ModelRole: ResearchWeb, Restart: RestartContract,
 	},
 	{
-		Name: ResearchTexture, Kind: KindRole, Carrier: CarrierDeskWorker,
+		Name: ResearchTexture, Kind: KindRole, Carrier: CarrierDeskWorker, Parent: GrantResearchSpawn,
 		// The research desk's Texture child (plan 8.6) searches the owner's
 		// Texture corpus through the custodian's guarded search, under the
 		// texture.search lease the Texture custodian issues it for the call.
@@ -720,6 +727,14 @@ func validateStructure(d Desk) error {
 	}
 	if d.Kind == KindRole && d.Instance != InstanceNone {
 		return fmt.Errorf("desk %s: a role has no inbox of its own", d.Name)
+	}
+	if d.Parent != "" {
+		if d.Kind != KindRole {
+			return fmt.Errorf("desk %s: only a role names a parent grant", d.Name)
+		}
+		if !soleHolderGrants[d.Parent] {
+			return fmt.Errorf("desk %s: parent grant %q is not a sole-holder grant, so it names no one desk", d.Name, d.Parent)
+		}
 	}
 	for _, v := range d.Verbs {
 		if v == "" {
@@ -1061,5 +1076,5 @@ func (d Desk) Equal(o Desk) bool {
 		same(d.OwnedKinds, o.OwnedKinds) && same(d.LeaseKinds, o.LeaseKinds) && d.LeaseCaptures == o.LeaseCaptures && same(d.LeaseGrants, o.LeaseGrants) && d.FirstParty == o.FirstParty && d.ModelRole == o.ModelRole && d.Restart == o.Restart &&
 		d.Profile == o.Profile && d.Prompt == o.Prompt && d.Identity == o.Identity && d.OwnChannel == o.OwnChannel &&
 		d.CellDeadline == o.CellDeadline && same(d.Modules, o.Modules) &&
-		sameGrants(d.Grants, o.Grants) && d.EndsRun == o.EndsRun
+		sameGrants(d.Grants, o.Grants) && d.EndsRun == o.EndsRun && d.Parent == o.Parent
 }

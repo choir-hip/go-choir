@@ -581,3 +581,19 @@ func PerformerName() string { return holderName(GrantPerformAssignment) }
 // AssignmentInbox but never failing: with no performer it is an address no
 // stored record carries.
 func PerformerInbox(assignmentID string) string { return PerformerName() + ":" + assignmentID }
+
+// ParentOf is the desk a role belongs to: the sole holder of the grant the
+// role's Parent field names (enforce flip, section 7.3). It reports false for
+// a desk that is no role, a role with no parent and a parent grant nobody
+// holds: unknown is deny. It never reads a name prefix.
+func ParentOf(role string) (Desk, bool) {
+	d, ok := Lookup(role)
+	if !ok || d.Kind != KindRole || d.Parent == "" {
+		return Desk{}, false
+	}
+	p, ok := GrantHolder(d.Parent)
+	if !ok || p.Kind != KindSystem {
+		return Desk{}, false
+	}
+	return p, true
+}

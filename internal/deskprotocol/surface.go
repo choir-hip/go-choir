@@ -121,6 +121,10 @@ type DeskRow struct {
 	// EndsRun marks a role that holds the lifecycle grant its parent lacks.
 	Grants  []string `json:"grants,omitempty"`
 	EndsRun bool     `json:"ends_run,omitempty"`
+	// Parent is the sole-holder grant whose holder is a role's parent desk
+	// (enforce flip, section 8.2); omitted when empty. It decides which desk
+	// messages the owner flow covers, so a change to it is a major change.
+	Parent string `json:"parent,omitempty"`
 }
 
 // Canonical returns the surface as compact JSON with the hash field blank.
