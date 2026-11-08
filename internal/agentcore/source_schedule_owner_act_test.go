@@ -12,15 +12,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
-// Enforce flip r4 (section 9), FM11, written first. The owner-act stamp on a
-// source schedule is the terminal fact of the publish-auto provenance walk, so
-// it must separate the owner's request from a desk's in-process ProductAPI
-// call:
+// Enforce flip r4 (section 9). The owner-act stamp on a source schedule records
+// provenance: it separates the owner's request from a desk's in-process
+// ProductAPI call. Publication no longer reads it (enforce flip section 14):
 //   - a schedule created through the owner route carries created_by_owner_act;
 //   - a schedule a desk creates through ProductAPI (empty RemoteAddr) carries
-//     none, and neither does a poll or a desk update add one;
-//   - the affirm route stamps an existing schedule for the owner, and refuses
-//     the in-process caller.
+//     none, and neither does a poll or a desk update add one.
 
 func ownerScheduleRequest(method, target, body string) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body)) // httptest's remote address is a real one
@@ -60,7 +57,7 @@ func TestOwnerRouteStampsAScheduleAndPollsCarryItForward(t *testing.T) {
 	}
 }
 
-func TestFM11DeskProductAPICreateAndAffirmWriteNoStamp(t *testing.T) {
+func TestDeskProductAPICreateWritesNoStamp(t *testing.T) {
 	rt, _, _, _ := sourceScheduleFixture(t, "rss:stamp-b", nil)
 	h := &APIHandler{rt: rt}
 	mux := http.NewServeMux()
@@ -81,38 +78,5 @@ func TestFM11DeskProductAPICreateAndAffirmWriteNoStamp(t *testing.T) {
 	}
 	if s := getStoredSchedule(t, rt, "rss:stamp-b"); s.CreatedByOwnerAct != "" {
 		t.Fatal("a desk update added the owner stamp")
-	}
-	// A desk affirm, by ProductAPI or by an in-process request, stamps nothing.
-	_, _ = rt.productAPIRequest(ctx, "owner-stamp", "", "POST", "/api/autopaper/sources/schedules/rss:stamp-b/affirm", nil)
-	req := ownerScheduleRequest(http.MethodPost, "/api/autopaper/sources/schedules/rss:stamp-b/affirm", "")
-	req.RemoteAddr = ""
-	rec := httptest.NewRecorder()
-	h.HandleSourceSchedules(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("an in-process affirm = %d, want 403", rec.Code)
-	}
-	if s := getStoredSchedule(t, rt, "rss:stamp-b"); s.CreatedByOwnerAct != "" {
-		t.Fatal("a desk affirm wrote the owner stamp")
-	}
-	// The owner's affirm stamps it, once.
-	rec = httptest.NewRecorder()
-	h.HandleSourceSchedules(rec, ownerScheduleRequest(http.MethodPost, "/api/autopaper/sources/schedules/rss:stamp-b/affirm", ""))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("owner affirm = %d %s", rec.Code, rec.Body)
-	}
-	first := getStoredSchedule(t, rt, "rss:stamp-b").CreatedByOwnerAct
-	if first == "" {
-		t.Fatal("the owner's affirm wrote no stamp")
-	}
-	rec = httptest.NewRecorder()
-	h.HandleSourceSchedules(rec, ownerScheduleRequest(http.MethodPost, "/api/autopaper/sources/schedules/rss:stamp-b/affirm", ""))
-	if got := getStoredSchedule(t, rt, "rss:stamp-b").CreatedByOwnerAct; got != first {
-		t.Fatalf("a second affirm replaced the stamp %q -> %q", first, got)
-	}
-	// An unknown schedule is not found.
-	rec = httptest.NewRecorder()
-	h.HandleSourceSchedules(rec, ownerScheduleRequest(http.MethodPost, "/api/autopaper/sources/schedules/rss:none/affirm", ""))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("affirm of an unknown schedule = %d", rec.Code)
 	}
 }

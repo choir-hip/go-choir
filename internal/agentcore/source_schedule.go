@@ -154,31 +154,6 @@ func (rt *Runtime) startSourceSchedule(ctx context.Context, ownerID, computerID,
 	return sched, nil
 }
 
-// AffirmSourceSchedule stamps an existing schedule with the owner's act
-// (enforce flip r4): the owner affirms a schedule made before the stamp or by
-// a desk, once. A schedule that has a stamp keeps it. It changes nothing else.
-func (rt *Runtime) AffirmSourceSchedule(ctx context.Context, ownerID, sourceID, ownerAct string) (store.SourceSchedule, error) {
-	if rt == nil || rt.store == nil {
-		return store.SourceSchedule{}, fmt.Errorf("source schedule: store unavailable")
-	}
-	if strings.TrimSpace(ownerAct) == "" {
-		return store.SourceSchedule{}, fmt.Errorf("source schedule: an affirmation needs the owner's request id")
-	}
-	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
-	sourceScheduleMu.Lock()
-	defer sourceScheduleMu.Unlock()
-	sched, err := rt.store.GetSourceSchedule(scheduleCustodian(ctx), ownerID, strings.TrimSpace(sourceID))
-	if err != nil {
-		return store.SourceSchedule{}, err
-	}
-	if sched.CreatedByOwnerAct != "" {
-		return sched, nil
-	}
-	now := time.Now().UTC()
-	sched.CreatedByOwnerAct, sched.CreatedByOwnerActAt, sched.UpdatedAt = ownerAct, now, now
-	return sched, rt.store.PutSourceSchedule(ctx, sched)
-}
-
 // ownerActID is the id an owner request's stamp carries: the request's own id
 // header when the proxy set one, else a fresh id. It is empty for an
 // in-process call, which is a desk's and never an owner act.
@@ -717,27 +692,6 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{"schedules": views})
 	case http.MethodPost:
-		if id, ok := affirmSourceID(r); ok {
-			// The owner's affirmation: an owner act no desk reaches (the
-			// in-process caller is refused, and the ProductAPI allowlist
-			// does not name the route).
-			act := ownerActID(r)
-			if act == "" {
-				writeAPIJSON(w, http.StatusForbidden, apiError{Error: "affirming a schedule is an owner act"})
-				return
-			}
-			sched, err := rt.AffirmSourceSchedule(r.Context(), ownerID, id, act)
-			if errors.Is(err, store.ErrNotFound) {
-				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "no schedule for that source"})
-				return
-			}
-			if err != nil {
-				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
-				return
-			}
-			writeAPIJSON(w, http.StatusOK, map[string]any{"schedule": sched})
-			return
-		}
 		var req sourceScheduleRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid JSON body"})
@@ -764,18 +718,6 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
-}
-
-// affirmSourceID reads the source id of POST /api/autopaper/sources/schedules/
-// <id>/affirm.
-func affirmSourceID(r *http.Request) (string, bool) {
-	rest, ok := strings.CutPrefix(r.URL.Path, "/api/autopaper/sources/schedules/")
-	if !ok {
-		return "", false
-	}
-	id, ok := strings.CutSuffix(rest, "/affirm")
-	id = strings.TrimSpace(id)
-	return id, ok && id != ""
 }
 
 // scheduleCustodian declares the source schedules' custodian (management,

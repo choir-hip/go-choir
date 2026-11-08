@@ -733,3 +733,20 @@ Built per 13.5 and 13.6. Deviations and findings, each with its reason:
     planning error (a store read) already falls back to the plain arrival with a log line
     (`commitCapturesRecord`); a refusal at the store's commit still fails the commit, which the
     next poll retries.
+
+## 14. The schedule stamp leaves publication (owner, 2026-11-08)
+
+Owner, on the request to affirm the paper's schedules before S3 reached it: "What is this
+complication? The point of the paper is to publish sourced stories asap."
+
+The publish-auto walk's last step, that every source has a schedule carrying the owner-act stamp,
+is deleted, along with the affirm route. The stamp answered who set up the polling. The leak the
+gate exists for is owner-private data in a public story, and the labels already guard that: the
+subset admits only capture, document, evidence, story and world labels. Since S2a, an intake
+task's labels are its captures' own, so nothing else management read can ride into a story. The
+walk now ends at the captures: every capture the opening Cast names must resolve through the
+arrival records to a source, so the story is sourced. An unsourced capture still asks.
+
+The stamp is still written on an owner-route create as a provenance fact. Nothing reads it for
+admission. The change ships with Ring-Expedite, so it reaches the paper before S3's own ring walk
+does.

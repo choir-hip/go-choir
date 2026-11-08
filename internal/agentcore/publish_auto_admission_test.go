@@ -18,13 +18,11 @@ import (
 // The publication sink admits the document custodian's publish of a
 // publish-auto story when the story's spec traces to an owner-authorized
 // origin on the tape, for the capture, document and evidence labels only. The
-// walk: the story's trajectory, the opening Cast (sent by the admitter), the
-// captures it names, their source, and a source schedule that carries the
-// owner-act stamp. Any break asks as before.
+// walk: the story's trajectory, the opening Cast (sent by the admitter), and
+// the captures it names, each resolved to its source. Any break asks as before.
 //
 //	FM5  D4 admits a publish that is not publish-auto, a label outside the
 //	     subset, a caster that is not the admitter, or a different actor.
-//	FM11 a story opened on a schedule a desk created (no stamp) does not admit.
 
 type publishAutoFixture struct {
 	*disclosureFixture
@@ -173,9 +171,11 @@ func TestFM5APublishThatIsNotPublishAutoOrNotFromTheAdmitterIsNotAdmitted(t *tes
 	}
 }
 
-// FM11 (story half): a schedule with no stamp, created by a desk's ProductAPI
-// call or before the stamp existed, is not owner provenance.
-func TestFM11AStoryOnAnUnstampedScheduleIsNotAdmitted(t *testing.T) {
+// The owner, 2026-11-08: "The point of the paper is to publish sourced stories
+// asap." A story is admitted when every capture it names resolves to a
+// source; the schedule that polled the source, its stamp, or its absence is
+// not checked. A capture that resolves to no source still asks.
+func TestASourcedStoryIsAdmittedWhateverItsSchedule(t *testing.T) {
 	f := newPublishAutoFixture(t, "pa3", 62863)
 	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	capture := types.OwnerPrivateLabel("capture")
@@ -183,28 +183,17 @@ func TestFM11AStoryOnAnUnstampedScheduleIsNotAdmitted(t *testing.T) {
 	f.putSchedule(t, "rss:pa-desk", "")
 	f.arrival(t, "rss:pa-desk", "cap-pc-1")
 	doc := f.openStory(t, manager, types.CastPublishAuto, []string{"cap-pc-1"}, nil, types.CommitmentEmitterAgent)
-	if !f.asks(t, doc, agentprofile.Texture, capture) {
-		t.Fatal("FM11: a story on an unstamped schedule was admitted")
+	if f.asks(t, doc, agentprofile.Texture, capture) {
+		t.Fatal("a story on an unstamped schedule asked")
 	}
-	// A schedule that does not exist at all (a source that was never
-	// scheduled) is no provenance either.
 	f.arrival(t, "rss:pa-never", "cap-pc-2")
 	doc2 := f.openStory(t, manager, types.CastPublishAuto, []string{"cap-pc-2"}, nil, types.CommitmentEmitterAgent)
-	if !f.asks(t, doc2, agentprofile.Texture, capture) {
-		t.Fatal("FM11: a story on a source with no schedule was admitted")
+	if f.asks(t, doc2, agentprofile.Texture, capture) {
+		t.Fatal("a story on a source with no schedule asked")
 	}
-	// The owner's affirmation turns the first into provenance.
-	if _, err := f.rt.AffirmSourceSchedule(context.Background(), f.owner, "rss:pa-desk", "req-affirm-1"); err != nil {
-		t.Fatal(err)
-	}
-	if f.asks(t, doc, agentprofile.Texture, capture) {
-		t.Error("an affirmed schedule's story still asks")
-	}
-	// One unstamped source among the story's captures breaks the walk.
-	f.putSchedule(t, "rss:pa-ok", "req-owner-3")
-	f.arrival(t, "rss:pa-ok", "cap-pc-3")
-	mixed := f.openStory(t, manager, types.CastPublishAuto, []string{"cap-pc-3", "cap-pc-2"}, nil, types.CommitmentEmitterAgent)
-	if !f.asks(t, mixed, agentprofile.Texture, capture) {
-		t.Error("a story with one unscheduled source among its captures was admitted")
+	// A capture no arrival record names is unsourced, and the publish asks.
+	unsourced := f.openStory(t, manager, types.CastPublishAuto, []string{"cap-pc-1", "cap-pc-nowhere"}, nil, types.CommitmentEmitterAgent)
+	if !f.asks(t, unsourced, agentprofile.Texture, capture) {
+		t.Error("a story with an unsourced capture was admitted")
 	}
 }

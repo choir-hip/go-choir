@@ -2,14 +2,12 @@ package agentcore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -27,15 +25,14 @@ import (
 //  2. its opening Cast record was sent by the admitter's inbox (a task's
 //     outward Cast is stamped with the admitter, outwardSender), or by the
 //     owner;
-//  3. the captures the Cast names resolve, through the arrival records, to
-//     their sources;
-//  4. every one of those sources has a schedule under the owner's id that
-//     carries the owner-act stamp (created_by_owner_act), which only the owner
-//     route writes for a request that is not an in-process desk call.
+//  3. every capture the Cast names resolves, through the arrival records, to
+//     its source: the story is sourced.
 //
 // Any break in the walk refuses the admission, and the publish asks as before.
-// A schedule created before the stamp, or by a desk, is not owner provenance
-// until the owner affirms it.
+// The schedule that polled a source is not checked (owner, 2026-11-08: "The
+// point of the paper is to publish sourced stories asap"): the labels are the
+// guard, and since S2a an intake task's labels are its captures' own, so
+// nothing else management read rides into a publish-auto story.
 
 // publishAutoLabels are the labels a publish-auto Texture run carries by
 // construction: its frame shows the story document, its evidence derives from
@@ -140,21 +137,8 @@ func (rt *Runtime) publishAutoProvenance(ctx context.Context, ownerID, computerI
 		// An owner act that sets publish-auto directly is the origin itself.
 		return true, ""
 	}
-	sources, err := rt.castCaptureSources(ctx, ownerID, computerID, *cast)
-	if err != nil {
+	if _, err := rt.castCaptureSources(ctx, ownerID, computerID, *cast); err != nil {
 		return false, err.Error()
-	}
-	for source := range sources {
-		sched, err := rt.store.GetSourceSchedule(scheduleCustodian(ctx), ownerID, source)
-		if errors.Is(err, store.ErrNotFound) {
-			return false, "source " + source + " has no schedule"
-		}
-		if err != nil {
-			return false, "source " + source + ": " + err.Error()
-		}
-		if strings.TrimSpace(sched.CreatedByOwnerAct) == "" {
-			return false, "the schedule of source " + source + " carries no owner-act stamp"
-		}
 	}
 	return true, ""
 }
