@@ -136,10 +136,6 @@ func DefaultRegistry() *Registry {
 		// by the boot reconcile (the kernel), keyed by sequence.
 		{Kind: "choir.desk_package_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.DeskPackageEvent"},
 		{Kind: "choir.lease", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "lease.Record"},
-		// The anchored sample and the sampler's seed (MA7.10): a trust-service
-		// record no desk reads and no lease opens.
-		{Kind: "choir.trust_anchor", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "trust.AnchorItem"},
-		{Kind: "choir.trust_seed", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.trustSeed"},
 		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file

@@ -24,8 +24,6 @@ var capsuleWithheld = map[string]bool{
 	"choir.texture_document": true,
 	"choir.texture_revision": true,
 	"choir.lease":            true,
-	"choir.trust_anchor":     true,
-	"choir.trust_seed":       true,
 }
 
 // CapsuleStoreKinds is the default kind set of a capsule's store lease: every

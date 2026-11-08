@@ -377,7 +377,7 @@
       "id": "P4",
       "name": "H-A2: flip-rate relevance predicts reverts",
       "status": "unresolved",
-      "reason": "no data source: the flip-rate sampler is built (MA7.10) but no pass runs it on live actions yet, so no relevance is recorded per action",
+      "reason": "no data source: the flip-rate sampler (MA7.10) is not built",
       "min_n": "300 actions with sampled relevance and 40 reverts",
       "n": {
         "units": 0
@@ -400,10 +400,10 @@
       "id": "P6",
       "name": "H-B3: spot-checks beat peer agreement",
       "status": "unresolved",
-      "reason": "the computer's build did not serve an anchored sample",
-      "min_n": "4 scorers with 100 anchored answers each, 200 anchored items, 2 question types",
+      "reason": "no data source: the anchor sample (MA7.10) is not built",
+      "min_n": "4 scorers, 200 anchored items, 2 question types",
       "n": {
-        "anchored_items": 0
+        "units": 0
       },
       "sealed": true
     },
@@ -411,10 +411,10 @@
       "id": "P7",
       "name": "H-B4: PPI covers, saves under 2x for strong agents",
       "status": "unresolved",
-      "reason": "the computer's build did not serve an anchored sample",
+      "reason": "no data source: the anchor sample (MA7.10) is not built",
       "min_n": "2 agents with a 300-item anchored pool",
       "n": {
-        "anchored_items": 0
+        "units": 0
       },
       "sealed": true
     },

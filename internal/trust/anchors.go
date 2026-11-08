@@ -85,22 +85,6 @@ type SpotDecision struct {
 	Rate     float64   `json:"rate"`
 	SeedID   string    `json:"seed_id"`
 	At       time.Time `json:"at"`
-	// The corpus cell of the item (MA7.10 wiring): the agent, the question
-	// type and the two answers the cheap label compares. They ride the log
-	// because the log keeps every decided item for as long as the anchors are
-	// kept, so P7's cheap labels cover the same items as its anchors. Ids,
-	// names and answers only; never the item's text.
-	Agent        string `json:"agent,omitempty"`
-	QuestionType string `json:"question_type,omitempty"`
-	AgentAnswer  string `json:"agent_answer,omitempty"`
-	JudgeAnswer  string `json:"judge_answer,omitempty"`
-	// Deferral, when positive, makes the entry a deferral record rather than
-	// a decision: the nth time the judge could not answer for this item. The
-	// item is still undecided. GaveUp marks the decision of an item whose
-	// deferrals reached the bound: it stays unknown, counted as unsettled
-	// after retries.
-	Deferral int  `json:"deferral,omitempty"`
-	GaveUp   bool `json:"gave_up,omitempty"`
 }
 
 // Decide draws for a record. at is when the host drew (logged, and not part

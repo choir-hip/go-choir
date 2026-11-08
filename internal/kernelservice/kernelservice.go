@@ -42,11 +42,6 @@ const (
 	// that let a desk read a kind or capture it does not keep. Its records are
 	// readable by the owner and the service only.
 	Lease = "lease"
-	// Trust is the trust service (MA7.10): the anchored sample and the
-	// sampler's seed. Its records are readable by the owner and the service
-	// only, and no lease opens them: a desk that could read the seed or the
-	// sample could tell which records are checked.
-	Trust = "trust"
 	// Autoradio is the radio's media kinds; reserved, no code writes them.
 	Autoradio = "autoradio"
 )
@@ -112,7 +107,6 @@ var builtin = []Manifest{
 		"choir.desktop_session", "choir.desktop_app_instance",
 	}},
 	{Name: Lease, OwnedKinds: []string{"choir.lease"}},
-	{Name: Trust, OwnedKinds: []string{"choir.trust_anchor", "choir.trust_seed"}},
 	{Name: Autoradio, OwnedKinds: []string{
 		"choir.media_item", "choir.audio_recording", "choir.transcript", "choir.autoradio_run_sheet",
 	}},

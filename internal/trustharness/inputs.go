@@ -60,9 +60,6 @@ type Inputs struct {
 	GateReplay  *trust.GateReport    `json:"gate_replay,omitempty"`
 	PreregUnits *trust.PreregUnitSet `json:"prereg_units,omitempty"`
 	GatedActs   []GatedAct           `json:"gated_acts,omitempty"`
-	// AnchorSample is the spot-check anchors and corpus rows (MA7.10), the
-	// input of P6 and P7.
-	AnchorSample *trust.AnchorSample `json:"anchor_sample,omitempty"`
 
 	// From GET /api/subcalls: the inert rates (MA1.6) and the settlement
 	// counts by plane and class.

@@ -476,8 +476,8 @@ func (s *Service) decide(req Request) (string, objectgraph.Writer, []string, err
 	seen := map[string]bool{}
 	var custodians []string
 	for _, k := range req.Scope.Kinds {
-		if k == "choir.lease" || k == "choir.trust_anchor" || k == "choir.trust_seed" {
-			return "", "", nil, refuse("a lease does not open the lease or trust kinds")
+		if k == "choir.lease" {
+			return "", "", nil, refuse("a lease does not open the lease kind")
 		}
 		c, known := objectgraph.CustodianOf(objectgraph.ObjectKind(k))
 		if !known {

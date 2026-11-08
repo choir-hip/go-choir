@@ -52,10 +52,6 @@ type trustResponse struct {
 	// GatedActs are the act gate's taps as measured on the disclosure tape:
 	// when each was asked and how and when the owner answered (MA7.9 c).
 	GatedActs []gatedActObservation `json:"gated_acts,omitempty"`
-	// AnchorSample is the spot-check anchors and the corpus rows the cheap
-	// labels cover (MA7.10), the harness input of P6 and P7. It carries ids,
-	// names, answers and truths, no text and no seed.
-	AnchorSample *trust.AnchorSample `json:"anchor_sample,omitempty"`
 }
 
 // gatedActObservation is one gated act on the disclosure tape, without its
@@ -219,13 +215,6 @@ func (h *APIHandler) HandleTrust(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp.GatedActs = gated
-		sample, err := rt.anchorSample(ctx, ownerID, computerID)
-		if err != nil {
-			log.Printf("runtime api: trust: anchor sample: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read the anchored sample"})
-			return
-		}
-		resp.AnchorSample = &sample
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }

@@ -374,7 +374,7 @@ var system = []Desk{
 		},
 		ModelRole: Texture, Restart: RestartContract,
 		Packaged: true,
-		Profile:  true, Prompt: true, Identity: IdentitySubject,
+		Profile: true, Prompt: true, Identity: IdentitySubject,
 	},
 	{
 		Name: Research, Kind: KindSystem, Carrier: CarrierDeskWorker,
@@ -874,7 +874,7 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		}
 	}
 	for _, k := range spec.LeaseKinds {
-		if len(k) <= len("choir.") || k[:len("choir.")] != "choir." || k == "choir.lease" || k == "choir.trust_anchor" || k == "choir.trust_seed" {
+		if len(k) <= len("choir.") || k[:len("choir.")] != "choir." || k == "choir.lease" {
 			return Desk{}, fmt.Errorf("app desk %s: lease ceiling kind %q is not a leasable object kind", spec.Name, k)
 		}
 	}

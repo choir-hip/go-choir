@@ -55,7 +55,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/trust"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -217,17 +216,6 @@ type Runtime struct {
 	productAPISrv        http.Handler
 	productAPIComputerID string
 	wg                   sync.WaitGroup
-	// The live anchor sampler (anchor_sampler.go). The func fields are test
-	// seams; nil means the real roster, owner and timings.
-	anchorMu           sync.Mutex
-	anchorLogMu        sync.Mutex
-	anchorIdleOnce     sync.Once
-	anchorStartOnce    sync.Once
-	anchorJudges       func() []trust.Judge
-	anchorOwner        func() string
-	anchorPassHook     func()
-	anchorTick         time.Duration
-	anchorInitialDelay time.Duration
 	// bgStop closes when Stop begins, so background helpers that are not runs
 	// (the effective release report) end with the runtime.
 	bgStopInit   sync.Once
@@ -1275,9 +1263,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// Snapshots: a computer with no snapshot takes one once boot has settled,
 	// then one per interval (snapshot_producer.go). Same rule: nothing at boot.
 	rt.startSnapshotProducer(ctx)
-	// The anchor sampler: a standing intent whose passes are new work at each
-	// tick (anchor_sampler.go).
-	rt.startAnchorSampler(ctx)
 	// U1: the guest source repository follows the effective release. Spawned,
 	// because git on a large repository is seconds; the cast gate reconciles
 	// again before it uses the repository. On every computer (S4).
