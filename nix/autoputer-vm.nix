@@ -662,7 +662,10 @@ EOF
   systemd.tmpfiles.rules = [
     # the tool exec log's once-a-minute stamps (any uid runs a tool)
     "d /run/choir-tool-exec 1777 root root -"
-    "d /mnt/persistent/choir-updater 0700 root root -"
+    # 0711: traverse only, so the document-tool sandbox uid can exec a
+    # self-development release's binary under store/ (0755, objects 0555);
+    # releases, operations and incoming stay 0700 and no secret is reachable.
+    "d /mnt/persistent/choir-updater 0711 root root -"
     "d /mnt/persistent/choir-credentials 0700 root root -"
     "d /run/choir-updater-control 0700 root root -"
     "d /run/choir-runtime-handoff 0700 root root -"
