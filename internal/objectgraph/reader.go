@@ -194,6 +194,13 @@ var supplementalKindReaders = map[ObjectKind][]Writer{
 	"choir.world_event":      {WriterResearch, WriterTexture},
 	"choir.event_membership": {WriterResearch, WriterTexture},
 	"choir.capture_label":    {WriterResearch, WriterTexture},
+	// Enforce flip D3: the source cards Texture renders resolve refs a
+	// desk's record carries. A content_item is the shell custodian's text,
+	// which Texture already renders; an agent_evidence record is research's,
+	// and the owner's 2026-11-06 ruling expects Texture to use it. Both are
+	// admitted to Texture alone.
+	"choir.content_item":   {WriterTexture},
+	"choir.agent_evidence": {WriterTexture},
 }
 
 // readerAdmits reports whether a read declared as (declared, ok) may read a

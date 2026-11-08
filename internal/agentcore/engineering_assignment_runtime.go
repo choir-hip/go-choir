@@ -296,9 +296,11 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		return engineeringCastPlan{}, err
 	}
 	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
-	// MA3.7c: the cast's sender is Texture; the reducer reads its document on
-	// Texture's behalf, where the call carries no reader.
-	document, err := rt.store.GetLifecycleDocument(withKindReader(ctx, "choir.texture_document"), ownerID, computerID, docID)
+	// The cast's sender is Texture and the cast names this document: the
+	// planner reads it as the document's custodian. The reader is forced for
+	// this one read (enforce flip section 6.4), because the context carries
+	// management's, which withKindReader would leave in place.
+	document, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), ownerID, computerID, docID)
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: document %s: %w", docID, err)
 	}

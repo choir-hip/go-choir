@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"path/filepath"
 	"sort"
@@ -204,6 +205,10 @@ func (rt *Runtime) lineageNoticeForRun(rec *types.RunRecord) string {
 func (rt *Runtime) buildLineageNotice(rec *types.RunRecord) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// The notice is built on a host goroutine that carries no reader. The
+	// lineage kind is engineering's own: the read declares its custodian
+	// (enforce flip section 6.4, R5).
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.engineering_lineage")
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	apps, err := rt.store.ListEngineeringLineageApps(ctx, rec.OwnerID, rec.ComputerID)
 	if err != nil || len(apps) == 0 {

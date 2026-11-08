@@ -882,15 +882,10 @@ func TestTextureHostReadsOfSettingsCrossNothingAndContentItemsAreCounted(t *test
 		t.Errorf("reader gate counted a settings read: %s x%d", key, n)
 	}
 	_ = sourceEntityFromEvidenceRef(ctx, rh.h, rootOwner, "content_item:no-such-item")
-	const want = "choir.content_item|desk:texture|wrong_reader"
-	counts := objectgraph.ReaderGateCounts()
-	if counts[want] == 0 {
-		t.Errorf("the content-item ref read was not counted as %s: %v", want, counts)
-	}
-	for key, n := range counts {
-		if key != want {
-			t.Errorf("reader gate counted: %s x%d", key, n)
-		}
+	// Enforce flip D3: Texture is a supplemental reader of content_item, so the
+	// ref read is declared, not a crossing.
+	for key, n := range objectgraph.ReaderGateCounts() {
+		t.Errorf("reader gate counted: %s x%d", key, n)
 	}
 }
 
@@ -926,8 +921,10 @@ func TestEvidenceRefCarriedByItsCustodianIsUncountedAndOtherwiseCounted(t *testi
 			ctx = withCarrierDesk(base, carrier)
 		}
 		_ = sourceEntityFromEvidenceRef(ctx, rh.h, rootOwner, "evidence_id:ev-ma37c")
-		if counts := objectgraph.ReaderGateCounts(); counts[crossing] == 0 {
-			t.Errorf("carrier %q: another desk's evidence ref was not counted as %s: %v", carrier, crossing, counts)
+		// Enforce flip D3: Texture is a supplemental reader of agent_evidence,
+		// whichever record carried the ref.
+		if counts := objectgraph.ReaderGateCounts(); counts[crossing] != 0 {
+			t.Errorf("carrier %q: an evidence ref Texture may read was counted as %s: %v", carrier, crossing, counts)
 		}
 	}
 }
@@ -972,8 +969,9 @@ func TestEvidenceRefsOfPendingRecordsUseTheStampedProvenanceDesk(t *testing.T) {
 	commit("rec-by-management", "management")
 	objectgraph.ResetReaderGateCounts()
 	_, _ = rh.h.evidenceSourceEntitiesFromCommitmentRecords(ctx, rootOwner, rootComputer, "texture:doc-2", 20)
-	// Both records carry the ref: the management-stamped one is counted.
-	if n := objectgraph.ReaderGateCounts()[crossing]; n == 0 {
-		t.Errorf("a management-stamped carrier was not counted: %v", objectgraph.ReaderGateCounts())
+	// Both records carry the ref: Texture is admitted to agent_evidence, so
+	// the management-stamped one is not a crossing either (enforce flip D3).
+	if n := objectgraph.ReaderGateCounts()[crossing]; n != 0 {
+		t.Errorf("a management-stamped carrier was counted: %v", objectgraph.ReaderGateCounts())
 	}
 }

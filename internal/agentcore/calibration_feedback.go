@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"sort"
 	"strconv"
@@ -513,13 +514,17 @@ func (rt *Runtime) calibrationSnapshotFor(ctx context.Context, ownerID, computer
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list records: %w", err)
 	}
-	// MA3.7c: the calibration snapshot is host bookkeeping over Texture's
-	// citation checks and support verdicts, read as their custodian.
-	checks, err := rt.store.ListCitationChecks(withKindReader(ctx, "choir.citation_check"), ownerID, computerID, calibrationListLimit)
+	// The calibration snapshot is host bookkeeping over Texture's citation
+	// checks and support verdicts, read as their custodian. The reader is
+	// forced for each read: management and engineering both hold
+	// calibration.read and the snapshot is cached per computer, so whichever
+	// desk builds it first would otherwise be the one counted (enforce flip
+	// section 6.4, R4).
+	checks, err := rt.store.ListCitationChecks(objectgraph.WithCustodianReader(ctx, "choir.citation_check"), ownerID, computerID, calibrationListLimit)
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list citation checks: %w", err)
 	}
-	verdicts, err := rt.store.ListSupportVerdicts(withKindReader(ctx, "choir.support_verdict"), ownerID, computerID, calibrationListLimit)
+	verdicts, err := rt.store.ListSupportVerdicts(objectgraph.WithCustodianReader(ctx, "choir.support_verdict"), ownerID, computerID, calibrationListLimit)
 	if err != nil {
 		return nil, fmt.Errorf("calibration: list support verdicts: %w", err)
 	}

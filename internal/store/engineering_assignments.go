@@ -809,7 +809,11 @@ func (s *Store) requireEngineeringRecordsAdmission(ctx context.Context, assignme
 		return objectgraph.Object{}, refuse("round %d of %s is not open", binding.ParentRound, binding.ParentConversationID)
 	}
 	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
-	document, err := s.GetLifecycleDocument(ctx, binding.OwnerID, binding.ComputerID, docID)
+	// The one document the parent Cast names, read on its custodian's behalf
+	// (enforce flip section 6.4): the admission is the platform checking the
+	// cast's own packet, not the admitting desk reading Texture. The forced
+	// reader covers this call alone.
+	document, err := s.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), binding.OwnerID, binding.ComputerID, docID)
 	if err != nil {
 		return objectgraph.Object{}, refuse("document %s: %v", docID, err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"strings"
 
@@ -54,7 +55,10 @@ func (rt *Runtime) operationDocument(ctx context.Context, ownerID, computerID st
 	if docID == "" {
 		return types.Document{}, "its trajectory " + strings.TrimSpace(operation.TrajectoryID) + " names no document", nil
 	}
-	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	// The owner act names the operation and the operation names this
+	// document: the read is the document custodian's (enforce flip 6.4), for
+	// this one read.
+	doc, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), ownerID, computerID, docID)
 	if errors.Is(err, store.ErrNotFound) {
 		return types.Document{}, "its document " + docID + " is not on the tape", nil
 	}

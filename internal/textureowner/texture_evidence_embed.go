@@ -141,7 +141,12 @@ func checkEvidenceListing(listing agentcore.ScreensListing, operationID string) 
 // commitEvidenceEmbeds writes one revision on the current head. retry is
 // true when the head moved under it.
 func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID, docID string, listing agentcore.ScreensListing) (string, bool, error) {
-	ctx = asTextureReader(ctx)
+	// This is Texture's own handler, run on its behalf from the settlement
+	// path: the caller's context may name engineering, and asTextureReader
+	// declares only where none is named. The reader is forced to the
+	// document's custodian for the handler's own reads (enforce flip section
+	// 6.4, R3); the caller's context is untouched.
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_document")
 	doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if err != nil {
 		return "", false, fmt.Errorf("texture evidence: document %s: %w", docID, err)

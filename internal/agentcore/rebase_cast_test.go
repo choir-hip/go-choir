@@ -110,12 +110,18 @@ func (f *rebaseCastFixture) plan(t *testing.T, spec, objective string) (engineer
 // planRaw plans a Cast with the spec exactly as given.
 func (f *rebaseCastFixture) planRaw(t *testing.T, spec, objective string) (engineeringCastPlan, error) {
 	t.Helper()
+	return f.planRawCtx(t, context.Background(), spec, objective)
+}
+
+// planRawCtx plans a Cast under ctx, which may declare the caster's desk.
+func (f *rebaseCastFixture) planRawCtx(t *testing.T, ctx context.Context, spec, objective string) (engineeringCastPlan, error) {
+	t.Helper()
 	scope := ReductionScope{
 		FromAgentID: f.management, DeskAgentID: f.management, FromRole: agentprofile.Management, ChannelID: f.management,
 		RunID: "run-management", OwnerID: f.owner, ComputerID: f.computer, CellID: "cell-" + strings.ReplaceAll(t.Name(), "/", "-"),
 	}
 	in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Req: testRequest(), LocalID: "e1", ToDesk: "engineering", Objective: objective, Statement: spec}
-	return f.rt.planEngineeringCast(context.Background(), scope, &types.RunRecord{RunID: "run-management"}, in)
+	return f.rt.planEngineeringCast(ctx, scope, &types.RunRecord{RunID: "run-management"}, in)
 }
 
 func (f *rebaseCastFixture) rebaseObjective() string {
