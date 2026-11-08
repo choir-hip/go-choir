@@ -109,6 +109,11 @@ type isolationSelfTestResponse struct {
 	// Gvisor is the gVisor check (MA6.4): the spawner's gVisor state and the
 	// sandboxes read back while the desk_cells workers were live.
 	Gvisor *yaegikernel.GvisorStatus `json:"gvisor,omitempty"`
+	// DeskSandbox is the capability reading this run set: ready only when
+	// desk workers are gVisor-confined in required mode and this run passed.
+	// It is what apppackage.CurrentPlatform answers from, so a non-first-party
+	// desk installs on this computer only while it is ready.
+	DeskSandbox *yaegikernel.DeskSandboxStatus `json:"desk_sandbox,omitempty"`
 	// DocumentTool is the document-tool sandbox's probe (SEC-15).
 	DocumentTool doctool.SelfTestReceipt `json:"document_tool"`
 	// RuntimeCapabilities is the daemon's own capability state (SEC-15's
@@ -148,6 +153,8 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
 	}
 	resp.Gvisor = resp.DeskCells.Gvisor
+	deskSandbox := yaegikernel.RecordDeskSandboxSelfTest(resp.DeskCells, "api")
+	resp.DeskSandbox = &deskSandbox
 	resp.FrameBoundary = yaegikernel.FrameBoundarySelfTest()
 	for _, r := range resp.FrameBoundary.Roles {
 		if r.Error != "" {

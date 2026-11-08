@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/frontimportance"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
@@ -21,6 +22,9 @@ import (
 const storeOpenTimeout = 60 * time.Second
 
 func main() {
+	// Host side: a release is admitted by the shipped isolation; the installing
+	// guest checks its own (apppackage.CurrentPlatform).
+	apppackage.SetPlatformSource(apppackage.ShippedPlatform)
 	// `corpusd front-importance` is the host timer's scoring pass
 	// (internal/frontimportance); it never starts the platform service.
 	if len(os.Args) > 1 && os.Args[1] == "front-importance" {

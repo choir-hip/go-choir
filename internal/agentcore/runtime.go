@@ -1235,6 +1235,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
 	}
+	go rt.runDeskSandboxBootSelfTest(ctx)
 	bootPhase := func(name string, fn func()) {
 		started := time.Now()
 		log.Printf("runtime: boot phase begin %s", name)

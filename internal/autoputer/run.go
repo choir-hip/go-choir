@@ -170,6 +170,9 @@ func (g *replayHealthGate) tick() {
 // Run starts the autoputer service.
 func Run() {
 	bootMark("process_main_entry")
+	// The guest decides for itself whether a non-first-party desk may install:
+	// from its own worker-sandbox selftest (agentcore.GuestPlatform).
+	apppackage.SetPlatformSource(agentcore.GuestPlatform)
 	// The daemon's soft Go memory limit, derived from guest RAM
 	// (docs/archive/reports/lr-guest-memory-return-2026-10-14.md).
 	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon())

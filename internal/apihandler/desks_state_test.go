@@ -40,6 +40,11 @@ func TestDesksStateListsTheDerivedSet(t *testing.T) {
 	if !has(got.AppDesks, "app:statelist@12") || !has(got.Desks, "management") || got.Required == nil {
 		t.Fatalf("state = %+v", got)
 	}
+	// No platform source and no selftest in a test: the reading is closed and
+	// says why.
+	if got.DeskSandbox.Admits || got.DeskSandbox.Worker.Ready || got.DeskSandbox.Worker.Reason == "" || !got.DeskSandbox.IframeSandbox {
+		t.Fatalf("desk_sandbox = %+v", got.DeskSandbox)
+	}
 	for _, c := range []struct {
 		method, owner string
 		want          int

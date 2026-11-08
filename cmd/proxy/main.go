@@ -3,11 +3,15 @@ package main
 import (
 	"log"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/proxy"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 func main() {
+	// Host side: a release is admitted by the shipped isolation; the installing
+	// guest checks its own (apppackage.CurrentPlatform).
+	apppackage.SetPlatformSource(apppackage.ShippedPlatform)
 	cfg, err := proxy.LoadConfig()
 	if err != nil {
 		log.Fatalf("proxy config: %v", err)

@@ -1,21 +1,62 @@
 package apppackage
 
-import "github.com/yusefmosiah/go-choir/internal/deskmanifest"
+import (
+	"sync/atomic"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+)
 
 // Platform reports what isolation the running platform has. A validator rule
 // that depends on it is a capability check, not a switch: the platform either
 // has the isolation or lacks it.
 type Platform struct {
-	// DeskSandbox is true when Phase 6 has landed: the iframe sandbox for the
-	// UI, the audited and fuzzed broker, and the worker sandbox (gVisor) wrap
+	// DeskSandbox is true when Phase 6 is in force where the question is
+	// asked: the iframe sandbox for the UI, the audited and fuzzed broker, and
+	// the worker sandbox (gVisor, required mode, boot selftest passed) wrap
 	// every non-first-party desk (R24, R39, R40).
 	DeskSandbox bool
 }
 
-// CurrentPlatform is the isolation this build has. MA6.1 to MA6.5 replace this
-// body with detection of the sandbox; until then no desk from another
-// publisher is published or installed.
-func CurrentPlatform() Platform { return Platform{DeskSandbox: false} }
+// IframeSandboxShipped is the UI half of the isolation. The iframe sandbox
+// (MA6.1) is the only front-end path for a non-first-party app, so this is a
+// build property, not a runtime state: true since MA6.1 landed.
+const IframeSandboxShipped = true
+
+// ShippedPlatform is the isolation this build ships. The worker sandbox is in
+// the build (MA6.4) and the iframe sandbox is a build property, so the shipped
+// platform has DeskSandbox. It is what a HOST-side process answers with
+// (corpusd and the proxy validate a release at publish and listing; they run
+// no desk worker and cannot see a guest's sandbox). It admits a release to the
+// Library; it does not install anything. A guest decides for itself at install
+// (CurrentPlatform).
+func ShippedPlatform() Platform { return Platform{DeskSandbox: IframeSandboxShipped} }
+
+var platformSource atomic.Pointer[func() Platform]
+
+// SetPlatformSource names where this process reads its platform from. A guest
+// runtime sets a source that reads that computer's own worker-sandbox state
+// (required mode and a passed boot selftest); a host binary sets
+// ShippedPlatform. This is wiring done once at process start by the binary's
+// main, not a setting: there is no environment variable or configuration
+// that selects it.
+func SetPlatformSource(f func() Platform) {
+	if f == nil {
+		platformSource.Store(nil)
+		return
+	}
+	platformSource.Store(&f)
+}
+
+// CurrentPlatform is the isolation the running process has. A process that
+// has not named a source (a test, a tool) has none, so a desk from another
+// publisher is refused. The validator, the release record and the runtime
+// package builder all read this one answer.
+func CurrentPlatform() Platform {
+	if f := platformSource.Load(); f != nil {
+		return (*f)()
+	}
+	return Platform{}
+}
 
 // AdmitsDesksFrom is the one answer to "may a desk from this origin be published
 // or installed here": a first-party desk always; any other origin's only when
