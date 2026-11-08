@@ -799,8 +799,8 @@ func (s *Store) inboxCommandWriter(ctx context.Context) objectgraph.Writer {
 // their custodian: the crash closure of a management task's round settles the
 // task row and the capture dispositions it leased.
 var kernelSettledKinds = map[objectgraph.ObjectKind]bool{
-	"choir.management_task":     true,
-	"choir.capture_disposition": true,
+	ogKindManagementTask:     true,
+	ogKindCaptureDisposition: true,
 }
 
 // inboxCommandParts splits the management part of an inbox command by the

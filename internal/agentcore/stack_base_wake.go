@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -169,7 +170,11 @@ func (rt *Runtime) wakeStackBaseWaiter(ctx context.Context, w stackBaseWaiter, r
 	if rt.store == nil {
 		return true, nil
 	}
-	doc, err := rt.store.GetLifecycleDocument(ctx, w.OwnerID, w.ComputerID, w.DocID)
+	// The host checks the waiting document still lives, on whatever context
+	// the admitting reconcile carries (a background one from a rebase notice):
+	// a host read of Texture's kind, made as its custodian (enforce flip S3,
+	// Devin r2 note).
+	doc, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), w.OwnerID, w.ComputerID, w.DocID)
 	if errors.Is(err, store.ErrNotFound) {
 		return true, nil
 	}
