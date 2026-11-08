@@ -2336,7 +2336,8 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		return nil, fmt.Errorf("capsule freeze: %s is for a platform source change; this candidate is %s", ShotPlanFile, describeCandidateLayer(patchSHA, layer))
 	}
 	// Screens: the engineer's own screenshots, beside release/.
-	screens, err := e.stageScreens(ctx, rootFD, changes, temporary, plan != nil)
+	screenChanges := dropRestoredToBase(changes, caps.MergedDir, filepath.Join(caps.MergedDir, "..", "source-lower"))
+	screens, err := e.stageScreens(ctx, rootFD, screenChanges, temporary, plan != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2346,7 +2347,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		_, isDir, err := readSourceBeneath(lowerRoot, platformSourcePrefix+"/"+rel)
 		return err == nil && isDir
 	}
-	if err := requireScreensOrPlan(changes, screens, baseHasDir, plan); err != nil {
+	if err := requireScreensOrPlan(screenChanges, screens, baseHasDir, plan); err != nil {
 		return nil, err
 	}
 	video, err := e.stageVideo(ctx, rootFD, changes, temporary)
