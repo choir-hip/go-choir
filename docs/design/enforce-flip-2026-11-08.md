@@ -677,3 +677,46 @@ Sections 13.3 and 13.4 stand, amended below.
    uniformly labelled records. Backlog: arrival records committed before the deploy mint nothing,
    and they dispose through the main run's Delegate, unchanged. A crash-closed task's residuals do
    not wake the parent, which is a pre-existing behaviour.
+
+### 13.7 S2a build record
+
+Built per 13.5 and 13.6. Deviations and findings, each with its reason:
+
+1. **`choir.Delegate` signature.** The verb is now `Delegate(kind, refs, grouping)`. The surface
+   lists exactly those arguments, and `TestSurfaceDocsMatchExportsAndSource` requires the doc args
+   to equal the Go parameters, so the ignored `objective` and `req` could not be dropped from the
+   text alone. The old 4/5-argument cells no longer compile in the cell. The host-side
+   `DelegateSpec.Objective` and `StagedIntent.Req` remain for crafted intents and are ignored by
+   `planDelegation`; `TestDelegateCastDropsObjectiveAndRequestQuestions` covers that path, so the
+   cell-level test "a cell passed req and an objective" is a staged-intent test.
+2. **Weight zero, no stamp.** A Delegate Cast takes no `PSuccess`, `Weight`, `Settlement` or
+   questions: `planDelegation` clears `Req` before `stampRequestRecord`, and `typeDelegateCast`
+   reads none. `buildSubCallSelfScore` emits nothing for it; the judge still scores "did the
+   Report answer the constant objective". Two subcall tests were rewritten to that contract.
+3. **Marker.** `CommitmentCaptures.StartedTasks` is a distinct field (never `Held`), and
+   `RecordWakesReader` returns `!Held && len(StartedTasks) == 0`. The sweep of held captures
+   (`sweepHeldCaptures`) is unaffected.
+4. **Mint scope.** Tasks are minted for plain poll arrivals and for corroborated, unresolved and
+   released records. `official_single_outlet` (event-aged) and held records mint nothing. A
+   `TaskID` derives from the arrival's command id (`managementTaskID("arrival:"+commandID,
+   "intake", chunk)`); the Cast's provenance is `Origin: system`, `AgentID`/`Desk` the management
+   inbox, `RunID` empty, no `SubCall`, no prediction.
+5. **Grouping across commits (design finding).** 13.5 says records of one `EventID` go to one
+   task "as Delegate does". Each captures record is its own commit, so records of one event that
+   arrive in different flushes (a corroboration record, then a held growth record that management
+   delegates later) become two tasks. Grouping applies only inside one commit. One story per event
+   now rests on the growth record's `Covered`/`Declined` fields and the story-library head, which
+   refuses a stale open. `TestRecordsOfOneEventAreDelegatedToOneTask` now expects two tasks. If
+   the owner wants one task per event across commits, a task would have to accept leases while
+   open, which the store does not allow.
+6. **Residual labels.** `taskReportLabels` no longer folds the delegating run's labels (the
+   Cast's `Provenance.RunID`) into the Report. Without that the Report of a Delegate task would
+   carry management's taint back into the next delegation. The Cast stamp already carries the
+   delegated records' labels.
+7. **Existing tests moved.** Tests that assumed an arrival wakes management (`living_stories`,
+   `event_wakes`, `capture_arrival_pending`) now assert the host start (`startsOrWakes`), and
+   those that feed or decline minted captures cancel the minted tasks first
+   (`cancelMintedTasks`).
+8. **Not proved in process.** The deployed proof is the S2 re-run on d@e. The in-process
+   "no ask" assertion is the publication sink's admission of every owner-private label of the
+   story Cast (`publishAutoAdmission`), not a judge call.
