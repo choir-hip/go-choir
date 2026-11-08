@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -255,10 +254,5 @@ func (rt *Runtime) dropCalibrationSnapshot(ownerID, computerID string) {
 
 // sortedPushDesks lists the desks whose digest-arm runs read their digest.
 func sortedPushDesks() []string {
-	out := make([]string, 0, len(calibrationPushDesks))
-	for desk := range calibrationPushDesks {
-		out = append(out, desk)
-	}
-	sort.Strings(out)
-	return out
+	return []string{deskmanifest.PerformerName()}
 }

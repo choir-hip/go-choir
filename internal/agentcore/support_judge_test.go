@@ -374,7 +374,7 @@ func TestJudgeWithoutJevLeavesPairsPending(t *testing.T) {
 }
 
 func TestManagementRecordsWakePromptNamesNoSupportJudgement(t *testing.T) {
-	prompt := recordsInboxPrompts[agentprofile.Management]
+	prompt, _ := recordsInboxPromptFor(agentprofile.Management)
 	for _, absent := range []string{"support_pairs", "choir.Judge"} {
 		if strings.Contains(prompt, absent) {
 			t.Errorf("management's records-wake prompt still says %q", absent)

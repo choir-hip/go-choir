@@ -58,6 +58,9 @@ type InboxClass struct {
 	// requests the class accepts, the owning service's own admission rule;
 	// empty means any desk.
 	Senders []string
+	// AdmitterSends accepts the desk holding admit.assignment, resolved at
+	// each send so a desk registered after init is seen.
+	AdmitterSends bool
 }
 
 var (
@@ -99,7 +102,10 @@ func inboxClassOf(to, toName string) (InboxClass, bool) {
 }
 
 func (c InboxClass) accepts(fromDesk string) bool {
-	if len(c.Senders) == 0 {
+	if len(c.Senders) == 0 && !c.AdmitterSends {
+		return true
+	}
+	if c.AdmitterSends && deskmanifest.AdmitsAssignments(fromDesk) {
 		return true
 	}
 	for _, s := range c.Senders {
@@ -111,6 +117,14 @@ func (c InboxClass) accepts(fromDesk string) bool {
 		}
 	}
 	return false
+}
+
+// senderNames is the class's senders with the admitter resolved now.
+func (c InboxClass) senderNames() []string {
+	if !c.AdmitterSends {
+		return c.Senders
+	}
+	return append([]string{deskmanifest.AdmitterName()}, c.Senders...)
 }
 
 // InboxClasses lists the registered classes, sorted by name.
@@ -140,13 +154,13 @@ func init() {
 	// rewrites it to the new story's texture:<doc> at commit. Management
 	// (and its tasks) open stories; the store refuses any other sender.
 	RegisterInboxClass(InboxClass{Name: types.StoryOpenInbox, Fixed: true, Addressable: true,
-		Senders: []string{deskmanifest.AdmitterName(), types.ManagementTaskDesk}})
+		AdmitterSends: true, Senders: []string{types.ManagementTaskDesk}})
 	// A source's inbox takes management's decline of its captures, from
 	// management or from a task sending as management (Cut 2 2b); the
 	// source writes its capture arrivals to management the other way, as a
 	// system record.
 	RegisterInboxClass(InboxClass{Name: captureSourceDesk, Addressable: true,
-		Senders: []string{deskmanifest.AdmitterName(), types.ManagementTaskDesk}})
+		AdmitterSends: true, Senders: []string{types.ManagementTaskDesk}})
 	// A job's inbox is the sender of its end record; no desk writes to it.
 	RegisterInboxClass(InboxClass{Name: jobInboxClass, Addressable: false})
 }
@@ -200,7 +214,7 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 			}
 		}
 		if !isTask {
-			return Route{}, fmt.Errorf("%q does not take requests from %s (it names its senders: %s)", to, fromDesk, strings.Join(class.Senders, ", "))
+			return Route{}, fmt.Errorf("%q does not take requests from %s (it names its senders: %s)", to, fromDesk, strings.Join(class.senderNames(), ", "))
 		}
 	}
 

@@ -63,10 +63,12 @@ type calibrationCache struct {
 	salts      map[string][]byte
 }
 
-// calibrationPushDesks are the desks whose digest-arm runs read their digest
+// calibrationPushDesk reports whether a desk is one whose digest-arm runs read their digest
 // (docs/design/calibration-seed-2026-11-03.md, "The sequence": engineering
 // first; another desk joins when engineering's experiment has read out).
-var calibrationPushDesks = map[string]bool{deskmanifest.PerformerName(): true}
+func calibrationPushDesk(desk string) bool {
+	return deskmanifest.Holds(desk, deskmanifest.GrantPerformAssignment)
+}
 
 // calibrationArmRef is the subject-ref key of a round record's arm.
 const calibrationArmRef = "calibration_arm"
@@ -568,7 +570,7 @@ func (rt *Runtime) calibrationArmOfThread(ctx context.Context, computerID, threa
 // the digest (calibration_e1.go).
 func (rt *Runtime) calibrationPushedToRun(ctx context.Context, rec *types.RunRecord) bool {
 	desk := calibrationDeskOfRun(rec)
-	if desk == "" || !calibrationPushDesks[desk] || rt.calibrationArmOfRun(ctx, rec) != calibration.ArmDigest {
+	if desk == "" || !calibrationPushDesk(desk) || rt.calibrationArmOfRun(ctx, rec) != calibration.ArmDigest {
 		return false
 	}
 	return !deskmanifest.IsAssignmentPerformer(desk) || rt.calibrationDeliveryOfRun(ctx, rec) == calibrationDeliveryPush

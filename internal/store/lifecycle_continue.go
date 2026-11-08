@@ -68,7 +68,9 @@ func ComputeContinueLifecycleDocumentDigest(req types.ContinueLifecycleDocumentR
 
 // continuedDeskProfiles are the desks whose lifecycle subject is the
 // document (agent id <profile>:<doc_id>) and so move with it.
-var continuedDeskProfiles = []string{agentprofile.Texture, deskmanifest.ResearcherName()}
+func continuedDeskProfiles() []string {
+	return []string{agentprofile.Texture, deskmanifest.ResearcherName()}
+}
 
 // ContinueLifecycleDocument starts the next live trajectory on a document
 // whose trajectory settled. Refusals: the predecessor is live or cancelled,
@@ -163,7 +165,7 @@ func (s *Store) ContinueLifecycleDocument(ctx context.Context, req types.Continu
 	}
 	var objects []objectgraph.Object
 	var textureDesk *types.AgentRecord
-	for _, profile := range continuedDeskProfiles {
+	for _, profile := range continuedDeskProfiles() {
 		agentID := profile + ":" + req.DocID
 		agentObj, getErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, agentID)
 		if errors.Is(getErr, ErrNotFound) {

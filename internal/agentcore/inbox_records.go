@@ -919,11 +919,22 @@ func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, d
 	return rt.WakeRecordsInbox(ctx, ownerID, computerID, deskAgentID)
 }
 
-// recordsInboxPrompts is the first user turn of a run a records desk starts
-// for its inbox.
-var recordsInboxPrompts = map[string]string{
-	deskmanifest.ResearcherName(): "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round. Send an interim packet (no work_disposition) as soon as you have read one new source you can cite, and another each time you have read more; the final Report comes last.",
-	deskmanifest.AdmitterName():   "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec, req) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline it to its source.",
+// researchInboxPrompt and admitterInboxPrompt are the first user turn of a
+// run a records desk starts for its inbox.
+const researchInboxPrompt = "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round. Send an interim packet (no work_disposition) as soon as you have read one new source you can cite, and another each time you have read more; the final Report comes last."
+
+const admitterInboxPrompt = "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec, req) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline it to its source."
+
+// recordsInboxPromptFor is a records desk's inbox prompt, by the grant its
+// desk holds now; ok is false for a desk that is not a records desk.
+func recordsInboxPromptFor(profile string) (string, bool) {
+	switch {
+	case deskmanifest.SpawnsResearch(profile):
+		return researchInboxPrompt, true
+	case deskmanifest.AdmitsAssignments(profile):
+		return admitterInboxPrompt, true
+	}
+	return "", false
 }
 
 // researchStoryEntitiesPrompt is what a story's research desk is asked when
@@ -935,7 +946,7 @@ const researchStoryEntitiesPrompt = "Before your final Report, record what this 
 // ask to record the story's entities.
 func (rt *Runtime) recordsInboxPrompt(ctx context.Context, ownerID, computerID, deskAgentID string) string {
 	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")
-	prompt := recordsInboxPrompts[profile]
+	prompt, _ := recordsInboxPromptFor(profile)
 	if !deskmanifest.SpawnsResearch(profile) || prompt == "" || rt == nil || rt.store == nil {
 		return prompt
 	}
@@ -964,7 +975,7 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 		return rt.startQueuedManagementTasks(ctx, ownerID, computerID)
 	}
 	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")
-	if _, ok := recordsInboxPrompts[profile]; !ok {
+	if _, ok := recordsInboxPromptFor(profile); !ok {
 		return nil, nil
 	}
 	prompt := rt.recordsInboxPrompt(ctx, ownerID, computerID, deskAgentID)
