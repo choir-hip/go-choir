@@ -18,6 +18,8 @@ are summarized in section 5: the
 and the
 [historical back-testing research](research/historical-precommitment-backtesting-2026-10-14.md).
 
+**Split (MA8.0, 2026-11-08).** The theory continues in [psa-theory-2026-11-08.md](psa-theory-2026-11-08.md) and the engineering as built in [precommitment-records-practice-2026-11-08.md](precommitment-records-practice-2026-11-08.md). Where they differ from this document, they follow the build.
+
 Labels: *built* means in the code; *decided* means an owner decision the code
 does not yet fully implement; *hypothesis* means untested. PSA is a research
 program, not a demonstrated guarantee of alignment, honesty or safety.
