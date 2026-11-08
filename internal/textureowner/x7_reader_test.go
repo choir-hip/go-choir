@@ -22,7 +22,7 @@ func TestManagementProductAPIListOfTextureRoutesCrossesNothing(t *testing.T) {
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", create.Code, create.Body.String())
 	}
-	defer objectgraph.SetReaderGateMode(objectgraph.WriterGateObserve)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateObserve)()
 	objectgraph.ResetReaderGateCounts()
 
 	list := func(reader objectgraph.Writer) (int, int) {

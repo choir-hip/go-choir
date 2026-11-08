@@ -171,8 +171,7 @@ func (h *appPackageObjects) read(w http.ResponseWriter, r *http.Request, kind ob
 }
 
 func (h *appPackageObjects) write(w http.ResponseWriter, r *http.Request, kind objectgraph.ObjectKind, reg objectgraph.KindRegistration, ownerID, id string) {
-	// The gate observes by default, so the route holds the owner-edit rule
-	// itself: a kind that does not admit the owner is read-only here.
+	// The route holds the owner-edit rule itself, ahead of the gate: a kind that does not admit the owner is read-only here.
 	if !reg.OwnerEdits {
 		writePackageJSON(w, http.StatusForbidden, map[string]string{"error": "this kind is written by its package's desk, not by the owner"})
 		return

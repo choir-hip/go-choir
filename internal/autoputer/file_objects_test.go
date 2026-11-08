@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph/gatefixture"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +50,7 @@ type fileObjectFixture struct {
 
 func newFileObjectFixture(t *testing.T) *fileObjectFixture {
 	t.Helper()
+	gatefixture.Observe(t) // F6: this fixture opens a store whose writes declare no writer
 	db, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
 		t.Fatal(err)

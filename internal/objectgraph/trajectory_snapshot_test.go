@@ -37,6 +37,7 @@ func TestTrajectorySnapshotSeeksTheTrajectoryIndex(t *testing.T) {
 }
 
 func TestTrajectorySnapshotKeepsOneTrajectoryAndFollows(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	db := openTestDB(t)
 	store := NewSQLStore(db)
 	ctx := context.Background()

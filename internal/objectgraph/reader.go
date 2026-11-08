@@ -36,10 +36,9 @@ import (
 //   - a package kind (choir.app.<pkg>.*): its package desk and the owner, no
 //     one else, not even the kernel (a lease, MA3.4, is the only way in).
 //
-// Rollout. As the writer gate: a package kind is enforced now (a wrong or
-// undeclared reader is refused), a built-in kind only observes. A violation is
-// counted under "kind|declared reader (or undeclared)|outcome" and logged
-// once per cause, and the read goes on. The cross reads of section 8.4
+// Rollout. As the writer gate: every kind is enforced (a wrong or undeclared
+// reader is refused). A violation is counted under "kind|declared reader (or undeclared)|outcome" and logged
+// once per cause. The cross reads of section 8.4
 // therefore show up as reader|wrong_reader keys: X1 as
 // choir.texture_document|desk:research|wrong_reader. MA3.7 resolves them and
 // flips the built-ins to enforce in code, never by a setting.
@@ -84,19 +83,13 @@ func ReaderFrom(ctx context.Context) (Writer, bool) {
 	return WriterFrom(ctx)
 }
 
+// readerGateMode is unexported and starts at enforce; see writerGateMode.
 var readerGateMode atomic.Int32
 
-func init() { readerGateMode.Store(int32(WriterGateObserve)) }
+func init() { readerGateMode.Store(int32(WriterGateEnforce)) }
 
 // CurrentReaderGateMode is the mode in force (read by the observability route).
 func CurrentReaderGateMode() WriterGateMode { return WriterGateMode(readerGateMode.Load()) }
-
-// SetReaderGateMode sets the mode and returns the function that restores the
-// previous one. The test injection seam: production runs the default.
-func SetReaderGateMode(m WriterGateMode) (restore func()) {
-	previous := readerGateMode.Swap(int32(m))
-	return func() { readerGateMode.Store(previous) }
-}
 
 var (
 	readerGateMu     sync.Mutex
@@ -234,10 +227,9 @@ func readerAdmits(reg KindRegistration, declared Writer, ok bool) bool {
 	return false
 }
 
-// CheckReadAs checks a read of kind against its declared reader. A package
-// kind's violation is refused; a built-in kind's is, in observe mode, counted
-// and allowed. In off mode nothing is checked, and an unregistered kind has no
-// custodian to cross.
+// CheckReadAs checks a read of kind against its declared reader. A violation is
+// refused (a test may set observe or off through SetModeForTest). An
+// unregistered kind has no custodian to cross.
 func CheckReadAs(ctx context.Context, kind ObjectKind) error {
 	return checkReadKind(ctx, kind)
 }
@@ -346,11 +338,15 @@ func recordUndeclaredRead(kind ObjectKind) {
 
 // NoteWrongReader counts a read the kind check cannot see: the frame handler
 // of a by-id read whose record carries the label that decides it (a capture
-// with an owner-private label, MA3.3). The read goes on in observe mode, as
-// every built-in kind's does. Production-only; the outcome is wrong_reader.
-func NoteWrongReader(kind ObjectKind, reader Writer, ok bool) {
-	if WriterGateMode(readerGateMode.Load()) == WriterGateOff {
-		return
+// with an owner-private label, MA3.3). It returns true when the gate enforces,
+// and the caller then refuses the read (FM9); a test in observe or off mode
+// gets false and the read goes on. The outcome is wrong_reader.
+func NoteWrongReader(kind ObjectKind, reader Writer, ok bool) (refused bool) {
+	global := WriterGateMode(readerGateMode.Load())
+	if global == WriterGateOff {
+		return false
 	}
-	recordReaderViolation(kind, reader, ok, "wrong_reader", modeForKind(kind, WriterGateMode(readerGateMode.Load())))
+	mode := modeForKind(kind, global)
+	recordReaderViolation(kind, reader, ok, "wrong_reader", mode)
+	return mode == WriterGateEnforce
 }

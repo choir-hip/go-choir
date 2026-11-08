@@ -928,8 +928,7 @@ type guestObservabilityResponse struct {
 	MemoryDetail *guestmem.Detail `json:"memory_detail,omitempty"`
 	// ObjectGraphWriterGate is the object graph writer gate's mode and the
 	// violations it has seen since boot, keyed "kind|declared writer|reason"
-	// (ARCH-04): the oracle for the observe-to-enforce flip, read here
-	// instead of over SSH. This process's counts only (corpusd keeps its own).
+	// (ARCH-04): the gate's refusals, read here instead of over SSH. This process's counts only (corpusd keeps its own).
 	ObjectGraphWriterGate *writerGateObservability `json:"objectgraph_writer_gate,omitempty"`
 	// ObjectGraphReaderGate is the reader gate's mode and the violations it
 	// has seen since boot, keyed "kind|declared reader|reason" (MA3.3): the
@@ -940,8 +939,7 @@ type guestObservabilityResponse struct {
 	RouteAppGate *writerGateObservability `json:"route_app_gate,omitempty"`
 	// DisclosureGate is the disclosure path's mode for built-in desks and the
 	// decisions it has made since boot, keyed "sink|class|decision|outcome"
-	// (MA3.6): a built-in desk's ask or deny shows as outcome observed, a
-	// package desk's as enforced.
+	// (MA3.6): every desk's ask or deny shows as outcome enforced.
 	DisclosureGate *writerGateObservability `json:"disclosure_gate,omitempty"`
 	// ActGate is the act gate's decisions since boot (MA7.8), keyed
 	// "decision|impact|enforcement" (enforced for a package desk, observed

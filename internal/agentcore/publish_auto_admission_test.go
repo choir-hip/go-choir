@@ -94,7 +94,7 @@ func (f *publishAutoFixture) asks(t *testing.T, doc, desk string, labels ...stri
 
 func TestPublishAutoOnAnOwnerStampedScheduleIsAdmittedForTheStoryLabels(t *testing.T) {
 	f := newPublishAutoFixture(t, "pa1", 62861)
-	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	capture, document, evidence, story := types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("document"), types.OwnerPrivateLabel("evidence"), types.OwnerPrivateLabel("story")
 	f.putSchedule(t, "rss:pa-owner", "req-owner-1")
 	f.arrival(t, "rss:pa-owner", "cap-pa-1")
@@ -133,7 +133,7 @@ func TestPublishAutoOnAnOwnerStampedScheduleIsAdmittedForTheStoryLabels(t *testi
 
 func TestFM5APublishThatIsNotPublishAutoOrNotFromTheAdmitterIsNotAdmitted(t *testing.T) {
 	f := newPublishAutoFixture(t, "pa2", 62862)
-	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	capture := types.OwnerPrivateLabel("capture")
 	f.putSchedule(t, "rss:pa-owner2", "req-owner-2")
 	f.arrival(t, "rss:pa-owner2", "cap-pb-1")
@@ -177,7 +177,7 @@ func TestFM5APublishThatIsNotPublishAutoOrNotFromTheAdmitterIsNotAdmitted(t *tes
 // call or before the stamp existed, is not owner provenance.
 func TestFM11AStoryOnAnUnstampedScheduleIsNotAdmitted(t *testing.T) {
 	f := newPublishAutoFixture(t, "pa3", 62863)
-	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	capture := types.OwnerPrivateLabel("capture")
 	manager := agentprofile.Management + ":" + f.owner
 	f.putSchedule(t, "rss:pa-desk", "")

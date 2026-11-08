@@ -45,7 +45,7 @@ func managementOpeningCommand(t *testing.T, commandID, castID string) types.Comm
 
 func TestManagementStoryOpeningCrossesNoCustodian(t *testing.T) {
 	s := openTestStore(t)
-	defer objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
 	objectgraph.ResetWriterGateCounts()
 	ctx := objectgraph.WithWriter(context.Background(), objectgraph.WriterManagement)
 
@@ -96,7 +96,7 @@ func TestManagementStoryOpeningCrossesNoCustodian(t *testing.T) {
 // document.
 func TestStoryOpeningIsAtomicAcrossTheTwoCustodians(t *testing.T) {
 	s := openTestStore(t)
-	defer objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
 	ctx := objectgraph.WithWriter(context.Background(), objectgraph.WriterManagement)
 	req, err := normalizeInboxCommand(managementOpeningCommand(t, "x19-atomic", "x19:cast:a"))
 	if err != nil {
@@ -243,7 +243,7 @@ func TestSupportVerdictCommandAsTextureCustodianCrossesNothing(t *testing.T) {
 	a := supportPair("x19-rev-1", "p-1", "The merger may proceed.", "merger may proceed")
 	supportRevisionTurn(t, s, start, caller, "x19-rev-1", "The merger may proceed.", a)
 
-	defer objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
 	objectgraph.ResetWriterGateCounts()
 	req := types.CommitInboxRecordsRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "x19-verdict",
 		Judge: system, Verdicts: []types.SupportVerdict{{Key: a.Key, Verdict: types.SupportSupported, Judge: "jev:typesafe/jev-1.13", PSupportedBP: 9100}}}

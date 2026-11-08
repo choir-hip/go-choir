@@ -40,6 +40,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -351,16 +352,15 @@ func FromDistribution(dist map[string]float64) Outcome {
 	return OutcomeEscalate
 }
 
-// Gate mode. Mirrors the writer and reader gates (objectgraph.WriterGateMode):
-// a built-in desk's decision is recorded and counted, and a deny or an ask
-// does not block yet (MA3.7 flips it, in code). An installed package desk is
-// enforced now. It is not a setting.
+// Gate mode. The mode is unexported and starts at enforce: a built-in desk's
+// deny is refused and its ask parked, like a package desk's. It is not a
+// setting; only a test moves it, through SetModeForTest.
 type Mode int32
 
 const (
-	// ModeObserve counts a built-in desk's deny or ask and lets it pass.
+	// ModeObserve counts a deny or ask and lets it pass. Tests only.
 	ModeObserve Mode = iota
-	// ModeEnforce refuses a built-in desk's deny and parks its ask too.
+	// ModeEnforce refuses a deny and parks an ask. The product mode.
 	ModeEnforce
 )
 
@@ -373,13 +373,17 @@ func (m Mode) String() string {
 
 var gateMode atomic.Int32
 
-// CurrentMode is the mode in force for built-in desks (read by the
-// observability route).
+func init() { gateMode.Store(int32(ModeEnforce)) }
+
+// CurrentMode is the mode in force (read by the observability route).
 func CurrentMode() Mode { return Mode(gateMode.Load()) }
 
-// SetMode sets the mode and returns the function that restores the previous
-// one. The test injection seam: production runs the default.
-func SetMode(m Mode) (restore func()) {
+// SetModeForTest sets the mode and returns the function that restores the
+// previous one. It panics outside a test binary (FM10).
+func SetModeForTest(m Mode) (restore func()) {
+	if !testing.Testing() {
+		panic("disclosure: SetModeForTest called outside a test")
+	}
 	previous := gateMode.Swap(int32(m))
 	return func() { gateMode.Store(previous) }
 }

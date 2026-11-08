@@ -42,14 +42,42 @@ import (
 var counterZeroJustified = map[string]string{}
 
 func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
+	// The package runs its fixtures in observe (TestMain); the counters are
+	// the oracle of what enforce would refuse.
+	runRepresentativeDay(t, false)
+}
+
+// F6: the same day with every gate enforcing. The fixtures' own seeding
+// (documents, runs, inbox records written from test code with no declared
+// writer) runs in observe, because a fixture is not a product call site; the
+// product's calls between the seeds run in enforce and must cross nothing, so
+// the day completes with zero refusals.
+func TestRepresentativeDayPassesUnderEnforceWithZeroRefusals(t *testing.T) {
+	runRepresentativeDay(t, true)
+}
+
+func runRepresentativeDay(t *testing.T, enforce bool) {
 	f := newDelegationFixture(t, "owner-counter-zero")
 	ctx := context.Background()
 	rt, s := f.rt, f.s
 	auth := &stubCellAuthorizer{}
 	bindTextureCommitter(t, rt, auth)
+	// seed runs a fixture write: observe around it when the day enforces.
+	seed := func(fn func()) {
+		t.Helper()
+		if !enforce {
+			fn()
+			return
+		}
+		restoreSeed := objectgraph.SetModeForTest(objectgraph.WriterGateObserve)
+		defer restoreSeed()
+		fn()
+	}
 
-	seedArrival(t, s, f.owner, f.computer, "rss:cz", []types.CaptureArrival{
-		{CaptureID: "cap-cz1", Title: "Harbor reopens", URL: "https://cz.example/1"},
+	seed(func() {
+		seedArrival(t, s, f.owner, f.computer, "rss:cz", []types.CaptureArrival{
+			{CaptureID: "cap-cz1", Title: "Harbor reopens", URL: "https://cz.example/1"},
+		})
 	})
 	objectgraph.ResetWriterGateCounts()
 	objectgraph.ResetReaderGateCounts()
@@ -63,6 +91,10 @@ func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
 	t.Cleanup(stopReads)
 	disclosure.ResetCounts()
 	t.Cleanup(disclosure.ResetCounts)
+	if enforce {
+		t.Cleanup(objectgraph.SetModeForTest(objectgraph.WriterGateEnforce))
+		t.Cleanup(disclosure.SetModeForTest(disclosure.ModeEnforce))
+	}
 
 	// Management intake: the story is open (the fixture opened one), the
 	// parent delegates the arrival.
@@ -85,19 +117,23 @@ func TestRepresentativeDayCountsNoCrossingOnBuiltInKinds(t *testing.T) {
 	// Texture's cell Casts to research; the cast folds into the turn.
 	owner, doc := "owner-cz-texture", "doc-cz"
 	now := time.Now().UTC()
-	if err := s.CreateDocument(ctx, types.Document{DocID: doc, OwnerID: owner, Title: "Chips", CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.CreateRevision(ctx, types.Revision{RevisionID: "rev-cz-1", DocID: doc, OwnerID: owner, AuthorKind: types.AuthorUser,
-		Content: "# Chips\n\nWhat shipped this week?", Citations: json.RawMessage("[]"), CreatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
+	seed(func() {
+		if err := s.CreateDocument(ctx, types.Document{DocID: doc, OwnerID: owner, Title: "Chips", CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.CreateRevision(ctx, types.Revision{RevisionID: "rev-cz-1", DocID: doc, OwnerID: owner, AuthorKind: types.AuthorUser,
+			Content: "# Chips\n\nWhat shipped this week?", Citations: json.RawMessage("[]"), CreatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	})
 	trec := types.RunRecord{RunID: "run-cz-texture", AgentID: "texture:" + doc, OwnerID: owner, ComputerID: f.computer,
 		ChannelID: doc, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, State: types.RunRunning,
 		Metadata: map[string]any{"doc_id": doc}}
-	if err := s.CreateRun(ctx, trec); err != nil {
-		t.Fatal(err)
-	}
+	seed(func() {
+		if err := s.CreateRun(ctx, trec); err != nil {
+			t.Fatal(err)
+		}
+	})
 	// The Texture run read the owner's document: its label rides the run.
 	rt.taintRun(trec.RunID, types.NewLabelSet(types.OwnerPrivateLabel("document")))
 	if _, err := rt.flushRunLabels(ctx, owner, f.computer, trec.RunID); err != nil {
@@ -143,14 +179,18 @@ choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","
 		Provenance: types.CommitmentProvenance{AgentID: texture},
 	}}}
 	cast.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(cast)
-	if _, err := s.CommitInboxRecords(ctx, cast); err != nil {
-		t.Fatal(err)
-	}
+	seed(func() {
+		if _, err := s.CommitInboxRecords(ctx, cast); err != nil {
+			t.Fatal(err)
+		}
+	})
 	rrec := types.RunRecord{RunID: "run-cz-research", AgentID: research, OwnerID: owner, ComputerID: f.computer,
 		ChannelID: doc, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: types.RunRunning}
-	if err := s.CreateRun(ctx, rrec); err != nil {
-		t.Fatal(err)
-	}
+	seed(func() {
+		if err := s.CreateRun(ctx, rrec); err != nil {
+			t.Fatal(err)
+		}
+	})
 	rexec := toolregistry.ExecutionContext{RunID: rrec.RunID, AgentID: rrec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: f.computer,
 		Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rrec}
 	rtool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
@@ -226,9 +266,11 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	// capture, computers and story labels the day showed asking (d@e e27a0522c).
 	mgmtRec := types.RunRecord{RunID: "run-cz-task-report", AgentID: "agent-task-report", OwnerID: f.owner, ComputerID: f.computer, ChannelID: "ch-task-report",
 		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning, Prompt: "report"}
-	if err := s.CreateRun(ctx, mgmtRec); err != nil {
-		t.Fatal(err)
-	}
+	seed(func() {
+		if err := s.CreateRun(ctx, mgmtRec); err != nil {
+			t.Fatal(err)
+		}
+	})
 	rt.taintRun(mgmtRec.RunID, types.NewLabelSet(types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("computers"), types.OwnerPrivateLabel("story")))
 	if _, err := rt.flushRunLabels(ctx, f.owner, f.computer, mgmtRec.RunID); err != nil {
 		t.Fatal(err)

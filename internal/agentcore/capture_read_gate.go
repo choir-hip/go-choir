@@ -118,7 +118,8 @@ func captureRecordID(result json.RawMessage) string {
 // lease that names the capture by id or by one of its labels (MA3.4); the
 // lease and the run it is for come from the run's context, never the cell. A
 // reader that is an installed package desk and holds no such lease is refused
-// (enforce, as its kinds are); a built-in desk only observes until MA3.7.
+// (enforce, as its kinds are); a built-in desk without capture authority is
+// refused too (F6, FM9).
 func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessage) error {
 	reader, ok := objectgraph.DeskWriter(canonicalDeskName(strings.TrimSpace(deskRole)))
 	if !ok {
@@ -139,7 +140,9 @@ func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessag
 	if captureAuthority(deskRole) {
 		return nil
 	}
-	objectgraph.NoteWrongReader(objectgraph.WebCaptureObjectKind, reader, ok)
+	if objectgraph.NoteWrongReader(objectgraph.WebCaptureObjectKind, reader, ok) {
+		return fmt.Errorf("read_capture: capture %q is owner-private and desk %q holds no capture authority or lease for it; ask its custodian for a lease", captureRecordID(result), deskRole)
+	}
 	return nil
 }
 

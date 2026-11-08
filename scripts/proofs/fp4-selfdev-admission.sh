@@ -8,7 +8,7 @@
 #   test computer while A is live; read after boot: B still open, log "planned
 #   boot: queued engineering request B kept and resumed"; (4) A finishes or is
 #   cancelled; B binds within seconds; (5) observability objectgraph_writer_gate
-#   {mode: observe, counts}. Crash half: on a throwaway computer, kill the guest
+#   {mode: enforce, counts}. Crash half: on a throwaway computer, kill the guest
 #   with B queued; after boot B is cancelled interrupted_by_restart.
 #
 # The Casts are model turns on the test computer (management casts engineering):
@@ -191,7 +191,7 @@ fp4_b_is_waiting() { # B: open, capsule unbound, never bound
 	[ "$(fp4_rowf '.disposition')" = open ] && [ "$(fp4_rowf '.capsule_disposition')" = unbound ] && fp4_unbound_events
 }
 
-step_def 1 ro "ARCH-04: observability objectgraph_writer_gate reports mode observe and counts"
+step_def 1 ro "ARCH-04: observability objectgraph_writer_gate reports mode enforce and counts"
 step_def 2 ro-after "ARCH-10: Cast A then Cast B; rows: A bound and live, B open and never bound"
 step_def 3 mut "ARCH-10: a planned refresh of the test computer while A is live"
 step_def 4 ro-after "ARCH-10: after boot B's row is still open and never bound"
@@ -205,7 +205,7 @@ step_1() {
 	obs=$(guest_get /api/runtime/observability)
 	[ "$PROOF_DRY" = 1 ] && return 0
 	printf '%s' "$obs" | jq -c '.objectgraph_writer_gate // null' | while IFS= read -r l; do info "writer gate $l"; done
-	printf '%s' "$obs" | jq -e '.objectgraph_writer_gate.mode == "observe"' >/dev/null && pass "objectgraph_writer_gate.mode is observe" || fail "objectgraph_writer_gate missing or not observe"
+	printf '%s' "$obs" | jq -e '.objectgraph_writer_gate.mode == "enforce"' >/dev/null && pass "objectgraph_writer_gate.mode is enforce" || fail "objectgraph_writer_gate missing or not enforce"
 	printf '%s' "$obs" | jq -e '.objectgraph_writer_gate | has("counts")' >/dev/null 2>&1 && pass "counts are reported" || fail "no counts reported"
 	printf '%s' "$obs" | jq -r '.recent_log[]? | select(test("writer gate|writer_gate"))' | tail -n 5 | while IFS= read -r l; do info "log $l"; done
 }

@@ -153,16 +153,16 @@ func TestCountersKeyDecisionsBySinkClassAndOutcome(t *testing.T) {
 	}
 }
 
-func TestModeDefaultsToObserveAndRestores(t *testing.T) {
-	if CurrentMode() != ModeObserve || CurrentMode().String() != "observe" {
+func TestModeDefaultsToEnforceAndRestores(t *testing.T) {
+	if CurrentMode() != ModeEnforce || CurrentMode().String() != "enforce" {
 		t.Fatalf("default mode = %s", CurrentMode())
 	}
-	restore := SetMode(ModeEnforce)
-	if CurrentMode().String() != "enforce" {
+	restore := SetModeForTest(ModeObserve)
+	if CurrentMode().String() != "observe" {
 		t.Fatal("mode did not change")
 	}
 	restore()
-	if CurrentMode() != ModeObserve {
+	if CurrentMode() != ModeEnforce {
 		t.Fatal("mode did not restore")
 	}
 }

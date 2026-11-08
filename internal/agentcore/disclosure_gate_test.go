@@ -139,7 +139,7 @@ func TestABuiltInDeskIsCountedAndNotBlocked(t *testing.T) {
 		t.Fatalf("counts = %v", counts)
 	}
 	// Enforce mode, the MA3.7 flip, would park it.
-	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	f.escalating()
 	if err := f.gate(exec, agentprofile.Texture, disclosure.SinkPublication, "doc-1", "publish"); err == nil {
 		t.Fatal("enforce mode let a built-in desk's ask pass")
@@ -557,7 +557,7 @@ func TestAnUnreadableLabelSetFailsAPackageDeskClosed(t *testing.T) {
 func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 	f := newDisclosureFixture(t, "briefs", 62851)
 	f.escalating()
-	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	ctx := context.Background()
 	reduction := func(exec toolregistry.ExecutionContext) *rlmCallReduction {
 		return &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
@@ -642,7 +642,7 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 func TestAResearchAnswerCarryingTextureLabelsIsAdmittedByTheCustodian(t *testing.T) {
 	f := newDisclosureFixture(t, "answers", 62852)
 	f.escalating()
-	defer disclosure.SetMode(disclosure.ModeEnforce)()
+	defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 	res := f.run(t, "run-res-a", agentprofile.Research, "research", types.OwnerPrivateLabel("texture"), types.OwnerPrivateLabel("document"))
 	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Texture, "Report findings"); err != nil {
 		t.Fatalf("research's answer to the custodian = %v", err)
@@ -702,7 +702,7 @@ func TestOwnerCapturesFlowBetweenTextureAndResearchWithoutAnAsk(t *testing.T) {
 	tex := f.run(t, "run-of-tex", agentprofile.Texture, "x", capture, evidence)
 	for _, enforce := range []bool{false, true} {
 		if enforce {
-			defer disclosure.SetMode(disclosure.ModeEnforce)()
+			defer disclosure.SetModeForTest(disclosure.ModeEnforce)()
 		}
 		if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Texture+":doc-1", "report"); err != nil {
 			t.Fatalf("enforce=%v research->texture = %v", enforce, err)

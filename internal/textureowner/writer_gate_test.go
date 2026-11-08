@@ -13,6 +13,12 @@ import (
 // undeclared-write oracle, so a desk or service kind written from this
 // package's product code with no writer fails it.
 func TestMain(m *testing.M) {
+	// F6: product behaviour is enforce. This package's fixtures seed and read
+	// through the store with no declared writer or reader, so the package runs
+	// its fixtures in observe, as it did before the flip; the tests of the gates
+	// themselves set enforce explicitly. TestMain has no t, so it cannot use
+	// gatefixture.Observe.
+	_ = objectgraph.SetModeForTest(objectgraph.WriterGateObserve)
 	stop := objectgraph.TrackUndeclaredWrites()
 	stopReads := objectgraph.TrackUndeclaredReads()
 	code := m.Run()

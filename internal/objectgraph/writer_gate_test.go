@@ -16,7 +16,7 @@ import (
 
 func writerMode(t *testing.T, mode WriterGateMode) {
 	t.Helper()
-	t.Cleanup(SetWriterGateMode(mode))
+	t.Cleanup(SetModeForTest(mode))
 }
 
 // Every registered kind names exactly one writer, and a writer is a known one.
@@ -168,9 +168,18 @@ func TestCheckWriteAsOffIgnoresWriters(t *testing.T) {
 	}
 }
 
-func TestWriterGateDefaultsToObserve(t *testing.T) {
-	if got := CurrentWriterGateMode(); got != WriterGateObserve {
-		t.Fatalf("default mode = %v, want observe", got)
+// F6: product behaviour is enforce for both gates, with no setting.
+func TestGatesDefaultToEnforceAndTheSeamRestores(t *testing.T) {
+	if CurrentWriterGateMode() != WriterGateEnforce || CurrentReaderGateMode() != WriterGateEnforce {
+		t.Fatalf("default modes = %v/%v, want enforce", CurrentWriterGateMode(), CurrentReaderGateMode())
+	}
+	restore := SetModeForTest(WriterGateObserve)
+	if CurrentWriterGateMode() != WriterGateObserve || CurrentReaderGateMode() != WriterGateObserve {
+		t.Fatal("the seam did not move both gates")
+	}
+	restore()
+	if CurrentWriterGateMode() != WriterGateEnforce || CurrentReaderGateMode() != WriterGateEnforce {
+		t.Fatal("the seam did not restore enforce")
 	}
 }
 

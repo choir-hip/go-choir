@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 )
 
 // One writer per object kind (SDC ARCH-04;
@@ -44,11 +45,9 @@ import (
 //
 // Rollout. The classification of the VM store's own kinds into per-desk
 // writers is the desk manifest's "owned object kinds" field (SDC ARCH-02).
-// The mode applies per kind class. A package kind (choir.app.<pkg>.*) is
-// enforced now: any writer but its package desk is refused. A built-in kind
-// only observes: a wrong or undeclared writer is counted, logged once per
-// cause and allowed. Built-in enforcement waits on X19 (MA3.7), where the
-// counts must read zero; it then flips in code, not by a setting.
+// Every kind is enforced (F6): any writer but the kind's own is refused,
+// a package kind (choir.app.<pkg>.*) included. There is no setting; only a test
+// moves the mode, through SetModeForTest.
 
 // Writer names who writes a kind, or who is writing.
 type Writer string
@@ -137,7 +136,7 @@ const (
 	// WriterGateOff does not check writers.
 	WriterGateOff WriterGateMode = iota
 	// WriterGateObserve counts and logs a violation once per cause and allows
-	// the write. The default for built-in kinds. A package kind is enforced
+	// the write. Tests only (SetModeForTest). A package kind is enforced
 	// whatever the mode (modeForKind).
 	WriterGateObserve
 	// WriterGateEnforce refuses a violation.
@@ -155,19 +154,30 @@ func (m WriterGateMode) String() string {
 	}
 }
 
+// writerGateMode and readerGateMode are unexported and start at enforce:
+// product behaviour is enforce for every kind, with no setting and no default
+// to change. Only a test moves them, through SetModeForTest.
 var writerGateMode atomic.Int32
 
-func init() { writerGateMode.Store(int32(WriterGateObserve)) }
+func init() { writerGateMode.Store(int32(WriterGateEnforce)) }
 
 // CurrentWriterGateMode is the mode in force (read by the observability route).
 func CurrentWriterGateMode() WriterGateMode { return WriterGateMode(writerGateMode.Load()) }
 
-// SetWriterGateMode sets the mode and returns the function that restores the
-// previous one. It is the test injection seam: production runs the default,
-// and built-in kinds flip to enforce in code (MA3.7), never by a setting.
-func SetWriterGateMode(m WriterGateMode) (restore func()) {
-	previous := writerGateMode.Swap(int32(m))
-	return func() { writerGateMode.Store(previous) }
+// SetModeForTest sets the mode of both object-graph gates (writer and reader)
+// and returns the function that restores the previous modes. It is the
+// package's only seam, and it panics outside a test binary, so a product
+// binary that calls it dies at the call (FM10).
+func SetModeForTest(m WriterGateMode) (restore func()) {
+	if !testing.Testing() {
+		panic("objectgraph: SetModeForTest called outside a test")
+	}
+	pw := writerGateMode.Swap(int32(m))
+	pr := readerGateMode.Swap(int32(m))
+	return func() {
+		writerGateMode.Store(pw)
+		readerGateMode.Store(pr)
+	}
 }
 
 var (
@@ -327,9 +337,8 @@ func writerAdmits(reg KindRegistration, declared Writer, ok bool) bool {
 
 // CheckWriteAs is CheckWrite plus the writer check: the kinds must be
 // registered, and the declared writer must be the kind's writer. Tombstones
-// pass, as in CheckWrite. Edges carry no writer. A package kind's violation
-// is refused; a built-in kind's is, in observe mode, counted and allowed. In
-// off mode nothing is checked.
+// pass, as in CheckWrite. Edges carry no writer. A violation is refused.
+// (A test may set observe or off through SetModeForTest.)
 func CheckWriteAs(ctx context.Context, objects []Object, edges []Edge) error {
 	if err := CheckWrite(objects, edges); err != nil {
 		return err

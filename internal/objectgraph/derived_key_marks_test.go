@@ -59,6 +59,7 @@ func seedEveryFamily(t *testing.T, store *SQLStore, n int, body func(kind Object
 // a page, so a crash in the pass leaves no mark, and stamps it when it
 // publishes.
 func TestPassDeletesTheMarkWhenItStartsAndStampsWhenItPublishes(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	head := "head-1"
@@ -92,6 +93,7 @@ func TestPassDeletesTheMarkWhenItStartsAndStampsWhenItPublishes(t *testing.T) {
 // Case 10: the mark is never an answer, and this binary's pass never treats
 // it as a stray.
 func TestMarkIsNeverAReadAnswerOrAStray(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	head := "head-1"
@@ -139,6 +141,7 @@ func TestMarkIsNeverAReadAnswerOrAStray(t *testing.T) {
 // rollback; its stray phase, which has no canonical_id ” exclusion, finds
 // the mark and drops it as an orphan. This is G1's query text and reconcile.
 func TestOlderPassDropsTheMarkAsAnOrphan(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	head := "head-1"
@@ -199,6 +202,7 @@ func overflowPages(t *testing.T, db *sql.DB) []int64 {
 // small bodies (their family derives from the body). With the header/body
 // split every header column reads with the bodies' overflow zeroed.
 func TestMetadataFamiliesValidateWithoutReadingBodyOverflow(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	big := `{"text":"` + strings.Repeat("z", 20000) + `"}`
@@ -244,6 +248,7 @@ func TestMetadataFamiliesValidateWithoutReadingBodyOverflow(t *testing.T) {
 // more (it is not part of that answer, and the validator no longer compares
 // it, so a trip would loop), and still trips the ordered addressee family.
 func TestTripwireComparesUpdatedAtOnlyForTheOrderedFamily(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	seedEveryFamily(t, store, 2, func(kind ObjectKind, i int) string {
@@ -285,6 +290,7 @@ func TestTripwireComparesUpdatedAtOnlyForTheOrderedFamily(t *testing.T) {
 // Case 15 (the probe's half): the open's malformed-row probe reads the
 // partial index of malformed rows only, whatever the family's size.
 func TestBadRowProbeUsesThePartialIndex(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	db, store := openDerivedStore(t)
 	seedEveryFamily(t, store, 50, func(ObjectKind, int) string { return `{"addressee":"a"}` })
 	plan := explainPlan(t, db, derivedKeyBadProbeSQL, KeyRunAgentID)

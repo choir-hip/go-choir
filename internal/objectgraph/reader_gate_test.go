@@ -16,7 +16,7 @@ import (
 
 func readerMode(t *testing.T, mode WriterGateMode) {
 	t.Helper()
-	t.Cleanup(SetReaderGateMode(mode))
+	t.Cleanup(SetModeForTest(mode))
 }
 
 func TestCheckReadAsAdmitsTheCustodianTheOwnerAndTheCommons(t *testing.T) {
@@ -272,5 +272,38 @@ func TestReaderGateRecordsCallSite(t *testing.T) {
 	}
 	if got := ReaderGateSites(); len(got) > maxGateSites+1 || got[gateSitesOverflowKey] == 0 {
 		t.Errorf("map unbounded or no overflow: %d keys", len(got))
+	}
+}
+
+// F6: the product default is enforce, so a planted cross-read by an installed
+// package desk is refused with no seam called: the desk cannot read a built-in
+// kind, nor another package's kind, and it reads its own.
+func TestPlantedCrossReadByAPackageDeskIsRefusedByDefault(t *testing.T) {
+	if CurrentReaderGateMode() != WriterGateEnforce {
+		t.Fatalf("reader gate mode = %v, want the product default enforce", CurrentReaderGateMode())
+	}
+	pkg, other := "f6crossa", "f6crossb"
+	own, foreign := pkgKind(pkg, "note"), pkgKind(other, "note")
+	if err := RegisterPackageKind(pkg, own); err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterPackageKind(other, foreign); err != nil {
+		t.Fatal(err)
+	}
+	ResetReaderGateCounts()
+	ctx := WithReader(context.Background(), Writer("desk:"+pkg))
+	for _, kind := range []ObjectKind{"choir.texture_document", "choir.texture_revision", "choir.capture_label", foreign.Kind} {
+		if err := CheckReadAs(ctx, kind); !errors.Is(err, ErrWrongReader) {
+			t.Errorf("package desk read of %s: err = %v, want ErrWrongReader", kind, err)
+		}
+	}
+	if err := CheckReadAs(ctx, own.Kind); err != nil {
+		t.Errorf("package desk read of its own kind: %v", err)
+	}
+	if err := CheckReadAs(context.Background(), "choir.texture_document"); !errors.Is(err, ErrUndeclaredReader) {
+		t.Errorf("undeclared read of a built-in kind: err = %v, want ErrUndeclaredReader", err)
+	}
+	if n := ReaderGateCounts()["choir.texture_document|desk:"+pkg+"|wrong_reader"]; n != 1 {
+		t.Errorf("the refusal was not counted: %v", ReaderGateCounts())
 	}
 }

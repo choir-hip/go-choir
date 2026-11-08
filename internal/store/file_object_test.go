@@ -58,9 +58,10 @@ func TestFileObjectKeepsItsIDThroughWriteMoveAndDelete(t *testing.T) {
 	enableFileObjects(t, s, fileObjComputer)
 	// The setting write above declares no writer (the shell's kind; MA3.2
 	// declares it at the call site), so the gate is enforced after it.
-	restore := objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)
+	restore := objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)
 	defer restore()
-	ctx := context.Background()
+	// The reads declare the owner as reader: the seam moves both gates.
+	ctx := objectgraph.WithReader(context.Background(), objectgraph.WriterOwner)
 
 	res := applyOne(t, s, FileChange{Op: FileOpWrite, Record: fileRecord("docs/a.txt", "sha256:aa", 3), RecordedBy: "files_api"})
 	if res.Created != 1 || len(res.FileIDs) != 1 {

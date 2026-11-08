@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Gate-fixture import lint (docs/design/enforce-flip-2026-11-08.md, sections
+# 7.1 and 7.6 FM10). Product behaviour of the three custody gates is enforce,
+# with no setting. Tests reach observe through one seam per gate package,
+# SetModeForTest, and through internal/objectgraph/gatefixture, which wraps
+# them. This gate refuses, in any Go file that is not a _test.go file:
+#   - an import of internal/objectgraph/gatefixture;
+#   - a call to SetModeForTest (the definitions are not calls).
+# The gatefixture package itself and the seams' own packages' definitions are
+# the only exempt files. The seams also panic outside a test binary.
+#
+# Usage: scripts/check-gatefixture-imports [ROOT]   (ROOT defaults to the repo)
+set -euo pipefail
+
+ROOT="${1:-$(git rev-parse --show-toplevel)}"
+cd "$ROOT"
+
+fail=0
+while IFS= read -r f; do
+  case "$f" in
+    internal/objectgraph/gatefixture/gatefixture.go) continue ;;
+  esac
+  # Drop whole-line comments, then look for the import or a call.
+  hits=$(grep -nE 'internal/objectgraph/gatefixture"|SetModeForTest[[:space:]]*\(' "$f" \
+    | grep -vE '^[0-9]+:[[:space:]]*//' \
+    | grep -vE '^[0-9]+:[[:space:]]*func[[:space:]]+SetModeForTest[[:space:]]*\(' || true)
+  if [ -n "$hits" ]; then
+    while IFS= read -r h; do
+      echo "check-gatefixture-imports: $f:$h" >&2
+    done <<<"$hits"
+    fail=1
+  fi
+done < <(find . -name '*.go' ! -name '*_test.go' -not -path './.git/*' -not -path './.claude/*' -not -path './node_modules/*' -not -path '*/testdata/*' | sed 's#^\./##' | sort)
+
+if [ "$fail" -ne 0 ]; then
+  echo "check-gatefixture-imports: product code reaches a gate mode seam (FM10); only _test.go files may" >&2
+  exit 1
+fi
+echo "check-gatefixture-imports: ok"

@@ -247,6 +247,7 @@ func edgeValues() []any {
 }
 
 func TestDerivedKeyReadsMatchJSONReads(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	rng := rand.New(rand.NewSource(7))
@@ -446,6 +447,7 @@ func TestOpenDoesNotTouchOgObjects(t *testing.T) {
 }
 
 func TestEveryObjectWriterMaintainsDerivedKeys(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
@@ -506,6 +508,7 @@ func TestEveryObjectWriterMaintainsDerivedKeys(t *testing.T) {
 }
 
 func TestRollbackThenForwardRepairsTheTable(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)

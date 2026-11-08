@@ -23,7 +23,7 @@ func TestAssignmentLifecycleBatchesPassTheEnforcedWriterGateAsEachDesk(t *testin
 	open := a.open
 	// The fixture's own setup wrote without declaring a writer; the gate is
 	// enforced only for the lifecycle's commands.
-	defer objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
 	objectgraph.ResetWriterGateCounts()
 	as := func(w objectgraph.Writer) context.Context { return objectgraph.WithWriter(context.Background(), w) }
 

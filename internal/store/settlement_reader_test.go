@@ -25,7 +25,7 @@ func TestTerminalRunSettlementDeclaresStoreReader(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	settleInitialLifecycleWork(t, s, start, "command-work-before-settlement-reader")
-	restore := objectgraph.SetReaderGateMode(objectgraph.WriterGateObserve)
+	restore := objectgraph.SetModeForTest(objectgraph.WriterGateObserve)
 	defer restore()
 	objectgraph.ResetReaderGateCounts()
 	defer objectgraph.ResetReaderGateCounts()

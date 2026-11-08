@@ -18,7 +18,7 @@ import (
 // named, so a reader cannot tell observe counts from an off gate's silence;
 // the route mutates or resets the counts.
 func TestGuestObservabilityServesWriterGateCounts(t *testing.T) {
-	restore := objectgraph.SetWriterGateMode(objectgraph.WriterGateObserve)
+	restore := objectgraph.SetModeForTest(objectgraph.WriterGateObserve)
 	defer restore()
 	objectgraph.ResetWriterGateCounts()
 	defer objectgraph.ResetWriterGateCounts()

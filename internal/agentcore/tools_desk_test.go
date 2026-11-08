@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
+	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -53,6 +54,13 @@ var (
 // holds a ~170 MB autoputer, and without cleanup every agentcore test run
 // left one in the temp dir (283 of them, ~48 GB, on 2026-10-14).
 func TestMain(m *testing.M) {
+	// F6: product behaviour is enforce. This package's fixtures seed and read
+	// through the store with no declared writer or reader, so the package runs
+	// its fixtures in observe, as it did before the flip; the tests of the gates
+	// themselves set enforce explicitly. TestMain has no t, so it cannot use
+	// gatefixture.Observe.
+	_ = objectgraph.SetModeForTest(objectgraph.WriterGateObserve)
+	_ = disclosure.SetModeForTest(disclosure.ModeObserve)
 	stopTracking := objectgraph.TrackUndeclaredWrites()
 	stopReads := objectgraph.TrackUndeclaredReads()
 	code := dbxtest.Main(m)

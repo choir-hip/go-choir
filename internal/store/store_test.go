@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 
 	_ "modernc.org/sqlite"
@@ -39,6 +40,15 @@ func storeTestDir() string {
 // TestMain removes this process's (by then empty) store test directory, so
 // a long-lived runner does not collect one per run.
 func TestMain(m *testing.M) {
+	// F6: product behaviour is enforce. This package's fixtures drive store
+	// mechanics (lifecycle rows, leases, slot claims, settings) straight
+	// through the store with no declared writer or reader, so the package runs
+	// in observe, as it did before the flip. The gate's own behaviour is
+	// asserted in tests that set enforce explicitly (custody_batches_test.go,
+	// texture_writer_gate_test.go, x19_writer_test.go and the others that call
+	// SetModeForTest(WriterGateEnforce)). It cannot use gatefixture.Observe(t):
+	// there is no t in TestMain.
+	_ = objectgraph.SetModeForTest(objectgraph.WriterGateObserve)
 	code := m.Run()
 	_ = os.RemoveAll(storeTestDir())
 	os.Exit(code)

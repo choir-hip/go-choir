@@ -20,7 +20,7 @@ func TestResearchCorpusSearchCountsAsResearchReadingTexturesDocuments(t *testing
 	s := openTestStore(t)
 	receipt := mustCommitInbox(t, s, "cell-records:x1-1", nil, openingCast("x1-1:cast:c1"))
 	docID := strings.TrimPrefix(receipt.Records[0].Inbox, "texture:")
-	defer objectgraph.SetReaderGateMode(objectgraph.WriterGateObserve)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateObserve)()
 	objectgraph.ResetReaderGateCounts()
 
 	key := "choir.texture_document|" + string(objectgraph.WriterResearch) + "|wrong_reader"

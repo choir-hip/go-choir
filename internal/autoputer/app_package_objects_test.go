@@ -327,7 +327,7 @@ func TestRouteWorksUnderTheEnforcingWriterGate(t *testing.T) {
 	f := newRouteFixture(t)
 	// The setting write above declares the shell as its writer in the store
 	// (MA3.2); the gate is enforced after it for the object write.
-	t.Cleanup(objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce))
+	t.Cleanup(objectgraph.SetModeForTest(objectgraph.WriterGateEnforce))
 	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusOK {
 		t.Fatalf("owner write under enforce: %d %s", w.Code, w.Body.String())
 	}

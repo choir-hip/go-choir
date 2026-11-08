@@ -67,6 +67,7 @@ func TestCitationRelationEdgeKindsAreRegistered(t *testing.T) {
 }
 
 func TestSQLStoreGatesEveryWriteBeforeTheInterceptor(t *testing.T) {
+	t.Cleanup(SetModeForTest(WriterGateObserve)) // F6: storage mechanics with undeclared writers
 	ctx := context.Background()
 	store := NewSQLStore(openTestDB(t))
 	if err := store.EnsureSchema(ctx); err != nil {

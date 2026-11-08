@@ -34,7 +34,7 @@ func TestTextureTurnCommitsUnderTheEnforcedWriterGate(t *testing.T) {
 
 	// The fixture's own setup wrote documents without declaring a writer;
 	// the gate is enforced only for the turn.
-	defer objectgraph.SetWriterGateMode(objectgraph.WriterGateEnforce)()
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
 	objectgraph.ResetWriterGateCounts()
 
 	result, err := s.ApplyTextureTurn(ctx, req)
