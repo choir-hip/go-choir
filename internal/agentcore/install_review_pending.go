@@ -111,6 +111,12 @@ func (rt *Runtime) healPendingInstall(ctx context.Context, ownerID, computerID s
 		return refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
 	}
 	if existing != nil {
+		// A record that belongs to another path (a package operation's review)
+		// is never this row's clock: refuse instead of waiting on a review no
+		// wake will ever time out (build review r1, item 1).
+		if existing.SubjectRefs["path"] != types.InstallReviewPathInstall {
+			return refuseInstall(http.StatusConflict, "install_store", "the owed record %s belongs to another review path", row.OwedRecordID)
+		}
 		return nil
 	}
 	rec, err := pkgrelease.Decode(row.Record)
@@ -193,6 +199,11 @@ func (rt *Runtime) launchPendingInstall(row store.PackageInstallPending) {
 // row; the route's owner check is not repeated. It takes packageInstallMu
 // itself, through installPackage.
 func (rt *Runtime) completePendingInstall(ctx context.Context, row store.PackageInstallPending) {
+	// The re-run has two executors (the detached goroutine and the durable
+	// install_review_rerun wake); only a row still accepted is run.
+	if cur, err := rt.store.GetPackageInstallPending(ctx, row.OwnerID, row.ComputerID, row.SubjectDigest, row.Attempt); err != nil || cur.State != store.PackageInstallPendingAccepted {
+		return
+	}
 	request := packageInstallRequest{
 		ReleaseID: row.ReleaseID, Record: row.Record, TreePatch: row.TreePatch, Action: row.Action,
 		change: decodePendingChange(row.Change),
@@ -209,7 +220,7 @@ func (rt *Runtime) completePendingInstall(ctx context.Context, row store.Package
 	if ok, err := rt.store.ClosePackageInstallPending(ctx, row.OwnerID, row.ComputerID, row.SubjectDigest, row.Attempt, store.PackageInstallPendingAccepted, to, reason); err != nil {
 		log.Printf("install review: close pending install %s: %v", row.ReleaseID, err)
 	} else if !ok {
-		log.Printf("install review: pending install %s was closed before its re-run finished", row.ReleaseID)
+		log.Printf("install review: pending install %s was closed by another executor", row.ReleaseID)
 	}
 	if refusal != nil {
 		_ = rt.store.SetPackageInstallPendingError(ctx, row.OwnerID, row.ComputerID, row.SubjectDigest, row.Attempt, refusal.Error())
@@ -268,11 +279,17 @@ func (rt *Runtime) HandleInstallReviewDue(ctx context.Context, ownerID, computer
 		return err
 	}
 	now := rt.reviewNow()
-	committed := now
-	if owed != nil {
-		if at, perr := time.Parse(time.RFC3339Nano, owed.Provenance.CommittedAt); perr == nil {
-			committed = at
+	if owed == nil {
+		// No record, no clock: close the row instead of deferring a deadline
+		// wake forever (build review r1, item 7).
+		if _, err := rt.store.ClosePackageInstallPending(ctx, ownerID, computerID, row.SubjectDigest, row.Attempt, store.PackageInstallPendingOpen, store.PackageInstallPendingInterrupted, "its owed record is missing"); err != nil {
+			return err
 		}
+		return nil
+	}
+	committed := now
+	if at, perr := time.Parse(time.RFC3339Nano, owed.Provenance.CommittedAt); perr == nil {
+		committed = at
 	}
 	if now.Sub(committed) >= types.InstallReviewOwedDeadline {
 		if ok, err := rt.store.ClosePackageInstallPending(ctx, ownerID, computerID, row.SubjectDigest, row.Attempt, store.PackageInstallPendingOpen, store.PackageInstallPendingTimedOut, installReviewNotJudged); err != nil {
@@ -285,7 +302,7 @@ func (rt *Runtime) HandleInstallReviewDue(ctx context.Context, ownerID, computer
 	if wake.Stage == types.InstallReviewStageDeadline {
 		return errInstallReviewNotYet
 	}
-	n, last := rt.installReviewNotices(ctx, ownerID, computerID, row.ReleaseID, row.SubjectDigest, row.Attempt)
+	n, last := rt.installReviewNotices(ctx, ownerID, computerID, row.ReleaseID, row.SubjectDigest, "", row.Attempt)
 	if wake.Notice != n || n >= types.InstallReviewOwedMaxNotices {
 		return nil // a later notice has its own tick, or the cap is spent and the deadline closes it
 	}
@@ -297,13 +314,15 @@ func (rt *Runtime) HandleInstallReviewDue(ctx context.Context, ownerID, computer
 		return errInstallReviewNotYet
 	}
 	// Only when management is idle: a working run's guard and its end ask for
-	// the verdict.
+	// the verdict. A busy management defers this tick, so a later one fires
+	// and the notice chain is not ended by a busy moment (build review r1,
+	// item 5).
 	active, found, err := rt.activeRunByAgent(ctx, ownerID, agentID)
 	if err != nil {
 		return err
 	}
 	if found && !rt.runHasNoLiveLoop(active, rt.assignmentWaitNow()) {
-		return nil
+		return errInstallReviewNotYet
 	}
 	facts := types.InstallReviewOwedFacts{ReleaseID: row.ReleaseID, SubjectDigest: row.SubjectDigest, Package: row.Package, Path: types.InstallReviewPathInstall,
 		Attempt: row.Attempt, Notice: n + 1}
@@ -315,13 +334,41 @@ func (rt *Runtime) HandleInstallReviewDue(ctx context.Context, ownerID, computer
 	return rt.commitInstallReviewRecord(ctx, ownerID, computerID, notice)
 }
 
+// HandleInstallReviewRerun is the durable re-run of an accepted pending
+// install, minted in the transaction that closed the row open -> accepted. A
+// planned restart (marker present) keeps the accepted row and delivers this
+// wake, which runs the stored request; a crash boot has closed the row
+// "interrupted by a restart", so a pre-boot wake finds nothing to run.
+func (rt *Runtime) HandleInstallReviewRerun(ctx context.Context, ownerID, computerID, agentID, content string) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("install review rerun: store unavailable")
+	}
+	var wake types.InstallReviewRerunWake
+	if err := json.Unmarshal([]byte(content), &wake); err != nil || wake.SubjectDigest == "" || wake.Attempt < 1 {
+		log.Printf("runtime: install review rerun: unreadable continuation %q", content)
+		return nil
+	}
+	row, err := rt.store.GetPackageInstallPending(ctx, ownerID, computerID, wake.SubjectDigest, wake.Attempt)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if row.State != store.PackageInstallPendingAccepted {
+		return nil
+	}
+	rt.completePendingInstall(ctx, row)
+	return nil
+}
+
 // installReviewNotices counts the notices already committed for one review and
 // when the last was.
-func (rt *Runtime) installReviewNotices(ctx context.Context, ownerID, computerID, releaseID, subjectDigest string, attempt int) (int, time.Time) {
+func (rt *Runtime) installReviewNotices(ctx context.Context, ownerID, computerID, releaseID, subjectDigest, operationID string, attempt int) (int, time.Time) {
 	var last time.Time
 	n := 0
 	for i := 1; i <= types.InstallReviewOwedMaxNotices; i++ {
-		rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, types.InstallReviewOwedNoticeID(releaseID, subjectDigest, attempt, i))
+		rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, types.InstallReviewOwedNoticeID(releaseID, subjectDigest, operationID, attempt, i))
 		if err != nil || rec == nil {
 			break
 		}

@@ -225,3 +225,48 @@ clock.
   the record id, which embeds a timestamp.
 - `pWithinCeiling` answers the envelope question only; the private-data to
   sink question gets no prediction from the desk. Named, accepted.
+
+## 8. Build review r1 (2026-11-08, tier 2: Devin and Sonnet, SEND BACK, fixed)
+
+Built as r2; the review of the build sent it back with three blockers and six
+notes, all adopted.
+
+Blockers:
+
+1. **The owed record id is scoped by path.** An owner review and a package
+   operation's review of the same release and subject both used attempt 1
+   under one id, so the owner's commit was refused "already committed", the
+   request 500ed, and the row sat open with no clock. The operation's id now
+   carries `:op:<operation id>`; heal refuses a record that belongs to another
+   path. Both reviews can be open at once. Test:
+   `TestOwnerAndOperationReviewsOfOneReleaseDoNotCollide`.
+2. **A verdict echoes its packet.** `InstallPacket` returns `owed_record`;
+   `choir.InstallVerdict(release, packetRef, pWithinCeiling, accept, findings,
+   reason)` carries it back and the reducer judges exactly that review, and
+   refuses a ref that names no review of the release (a newer install opened
+   another). The verb signature changed (desk protocol 15.0.0, lock rewritten,
+   kernel verb test updated). Test: `TestInstallVerdictRefusesAPacketThatDrifted`.
+3. **The accepted row's re-run is durable.** The close open to accepted mints
+   an `install_review_rerun` wake in the same batch. A planned restart (marker
+   present) keeps accepted rows and delivers it; a crash boot still closes the
+   row interrupted, and a pre-boot wake then finds nothing to run. An owner
+   retry that installs the same subject closes the accepted row. Test:
+   `TestPlannedRestartResumesAnAcceptedRowAndAnOwnerRetryClosesIt`.
+
+Notes: 4. a pass over an owed operation review reads the owed record and the
+ledger and keeps the clock without the verified build
+(`TestOperationPassDoesNotRebuildWhileTheReviewIsOwed`); 5. a tick that finds
+management busy is deferred, not spent (`TestABusyManagementDefersTheTick...`);
+6. the dead `install_review_seat_*` cases left `catalog.js`; 7. a due wake whose
+owed record is missing closes the row (`TestADueWakeWithNoOwedRecord...`);
+8. the stale "security epoch 100" subject was reworded and the trailers sit in
+the final block (the epoch stays 101); 9. the CLI needed no change: its client
+treats every 2xx as success and the 202 body now says `state: pending_review`
+(`cmd/choir TestInstallAnsweringAReviewWaitIsNotAnError`).
+
+Recorded deviations of the build from r2: the pending row is an object-graph
+object (a SQL table fell outside the replay schema boundary); the owed record
+is found by subject ref, not the sender inbox listing; the review seat is named
+by the registry's grant holder; "closing the owed record" is derived state; the
+`InstallPacket` egress takes no echo (the packet names the review, the verdict
+echoes it).

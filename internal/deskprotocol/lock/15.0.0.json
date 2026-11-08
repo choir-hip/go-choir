@@ -1,7 +1,7 @@
 {
   "schema": "choir.desk-protocol-surface/v1",
   "version": "15.0.0",
-  "sha256": "f9b490d080bd0973d2c8d9cdf03e77d4d815c83831dce6781fbec710fd652b75",
+  "sha256": "543b20c97b35aa72a30ce507c559f6832f181366bfa0f38c8c5f17363117d5ff",
   "names": {
     "release.Precommitment": {
       "kind": "struct",
@@ -5725,6 +5725,10 @@
           "type": "string",
           "json": "manifest_sha256"
         },
+        "OwedRecord": {
+          "type": "string",
+          "json": "owed_record"
+        },
         "Package": {
           "type": "string",
           "json": "package"
@@ -6904,6 +6908,11 @@
           "json": "packet",
           "optional": true
         },
+        "PacketRef": {
+          "type": "string",
+          "json": "packet_ref",
+          "optional": true
+        },
         "Precommit": {
           "type": "string",
           "json": "precommit",
@@ -7637,6 +7646,7 @@
       "sig": {
         "params": [
           "string",
+          "string",
           "float64",
           "bool",
           "[]map[string]any",
@@ -7644,6 +7654,7 @@
         ],
         "names": [
           "releaseID",
+          "packetRef",
           "pWithinCeiling",
           "accept",
           "findings",

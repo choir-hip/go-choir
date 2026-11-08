@@ -177,13 +177,26 @@ func (f *reviewFixture) reduction(profile string) *rlmCallReduction {
 	}}
 }
 
+// packetRef is the owed record of the review the desk would read now.
+func (f *reviewFixture) packetRef() string {
+	owed, found, err := f.e.rt.installReviewOwedOn(context.Background(), f.e.owner, f.e.computer, f.id)
+	if err != nil || !found {
+		return "no-review"
+	}
+	return owed.Record.RecordID
+}
+
 func (f *reviewFixture) verdict(accept bool, p float64, findings []yaegikernel.InstallFinding, reason string) (map[string]any, error) {
+	return f.verdictRef(f.packetRef(), accept, p, findings, reason)
+}
+
+func (f *reviewFixture) verdictRef(ref string, accept bool, p float64, findings []yaegikernel.InstallFinding, reason string) (map[string]any, error) {
 	decision := "accept"
 	if !accept {
 		decision = "reject"
 	}
 	return f.reduction(agentprofile.Management).commitInstallVerdictIntent(context.Background(), yaegikernel.StagedIntent{
-		LocalID: "v1", Kind: yaegikernel.IntentInstallVerdict, TargetRef: f.id, Decision: decision, PWithinCeiling: p, InstallFindings: findings, Reason: reason,
+		LocalID: "v1", Kind: yaegikernel.IntentInstallVerdict, TargetRef: f.id, PacketRef: ref, Decision: decision, PWithinCeiling: p, InstallFindings: findings, Reason: reason,
 	})
 }
 
@@ -313,7 +326,7 @@ func TestInstallReviewOwedPendsAndAnAcceptingVerdictInstallsWithoutASecondOwnerA
 	if !row.Open() || row.Attempt != 1 || string(row.Record) != string(f.raw) || computerevent.DigestBytes(row.TreePatch) != computerevent.DigestBytes(f.tree) || row.ReleaseID != f.id {
 		t.Fatalf("row = %+v", row)
 	}
-	owed, err := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), 1))
+	owed, err := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), "", 1))
 	if err != nil || owed == nil || owed.Inbox != persistentManagementAgentID(e.owner) || owed.SubjectRefs["subject_digest"] != f.subjectDigest() || owed.SubjectRefs["path"] != types.InstallReviewPathInstall {
 		t.Fatalf("owed record = %+v, %v", owed, err)
 	}
@@ -434,7 +447,7 @@ func TestInstallReviewDedupeAnswersTheSame202AndHeals(t *testing.T) {
 	g := newReviewFixture(t, `{"grant":"ui.read.kind","args":["mail"]}`)
 	row := store.PackageInstallPending{
 		OwnerID: g.e.owner, ComputerID: g.e.computer, SubjectDigest: g.subjectDigest(), Attempt: 1, ReleaseID: g.id, Package: installName, Action: packageActionInstall,
-		Record: g.raw, TreePatch: g.tree, Change: encodePendingChange(installChange{}), OwedRecordID: types.InstallReviewOwedRecordID(g.id, g.subjectDigest(), 1),
+		Record: g.raw, TreePatch: g.tree, Change: encodePendingChange(installChange{}), OwedRecordID: types.InstallReviewOwedRecordID(g.id, g.subjectDigest(), "", 1),
 	}
 	if err := g.e.rt.store.PutPackageInstallPending(context.Background(), row); err != nil {
 		t.Fatal(err)
@@ -474,11 +487,11 @@ func TestInstallReviewTimeoutSealsNothingAndANewAttemptOpens(t *testing.T) {
 			t.Fatalf("tick %d: %v", want, err)
 		}
 	}
-	notices, _ := e.rt.installReviewNotices(context.Background(), e.owner, e.computer, f.id, f.subjectDigest(), 1)
+	notices, _ := e.rt.installReviewNotices(context.Background(), e.owner, e.computer, f.id, f.subjectDigest(), "", 1)
 	if notices != types.InstallReviewOwedMaxNotices {
 		t.Fatalf("notices = %d, want exactly the cap %d", notices, types.InstallReviewOwedMaxNotices)
 	}
-	if extra, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedNoticeID(f.id, f.subjectDigest(), 1, types.InstallReviewOwedMaxNotices+1)); extra != nil {
+	if extra, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedNoticeID(f.id, f.subjectDigest(), "", 1, types.InstallReviewOwedMaxNotices+1)); extra != nil {
 		t.Fatal("a notice past the cap was committed")
 	}
 	// Each notice minted the next tick; the cap-th minted none.
@@ -509,7 +522,7 @@ func TestInstallReviewTimeoutSealsNothingAndANewAttemptOpens(t *testing.T) {
 	if row := f.pendingRow(t); row.Attempt != 2 || !row.Open() {
 		t.Fatalf("second row = %+v", row)
 	}
-	if rec, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), 2)); rec == nil {
+	if rec, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), "", 2)); rec == nil {
 		t.Fatal("the second attempt has no owed record of its own")
 	}
 	// And it can be judged: the verdict lands on the new attempt.
@@ -526,7 +539,7 @@ func TestInstallVerbsRefuseOtherDesks(t *testing.T) {
 	}
 	for _, profile := range []string{agentprofile.Research, agentprofile.Texture, agentprofile.Engineering} {
 		_, err := f.reduction(profile).commitInstallVerdictIntent(context.Background(), yaegikernel.StagedIntent{
-			LocalID: "v", Kind: yaegikernel.IntentInstallVerdict, TargetRef: f.id, Decision: "accept", PWithinCeiling: 0.9,
+			LocalID: "v", Kind: yaegikernel.IntentInstallVerdict, TargetRef: f.id, PacketRef: f.packetRef(), Decision: "accept", PWithinCeiling: 0.9,
 		})
 		if err == nil || !strings.Contains(err.Error(), "management's") {
 			t.Fatalf("%s verdict = %v", profile, err)
@@ -628,7 +641,7 @@ func TestInstallReviewMechanicalFailureSealsAtOnce(t *testing.T) {
 	if code != http.StatusForbidden || reason != installreview.ReasonRejected {
 		t.Fatalf("mechanical failure = %d %s", code, reason)
 	}
-	if rec, _ := f.e.rt.store.GetCommitmentRecord(context.Background(), f.e.owner, f.e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), 1)); rec != nil {
+	if rec, _ := f.e.rt.store.GetCommitmentRecord(context.Background(), f.e.owner, f.e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), "", 1)); rec != nil {
 		t.Fatal("management was asked to review a release the checks refused")
 	}
 	if rows, _ := f.e.rt.store.ListPackageInstallPending(context.Background(), f.e.owner, f.e.computer, false); len(rows) != 0 {
@@ -776,7 +789,7 @@ func TestInstallReviewOwedCommitRereadsTheGate(t *testing.T) {
 	if rows, _ := e.rt.store.ListPackageInstallPending(context.Background(), e.owner, e.computer, false); len(rows) != 0 {
 		t.Fatalf("pending rows = %d, want none", len(rows))
 	}
-	if rec, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), 1)); rec != nil {
+	if rec, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), "", 1)); rec != nil {
 		t.Fatal("an owed record was committed for a review a verdict already answers")
 	}
 }
@@ -794,7 +807,7 @@ func TestInstallReviewDeferredNeverOpensAReview(t *testing.T) {
 	if rows, _ := e.rt.store.ListPackageInstallPending(context.Background(), e.owner, e.computer, false); len(rows) != 0 {
 		t.Fatalf("the migration opened %d pending row(s)", len(rows))
 	}
-	if rec, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), 1)); rec != nil {
+	if rec, _ := e.rt.store.GetCommitmentRecord(context.Background(), e.owner, e.computer, types.InstallReviewOwedRecordID(f.id, f.subjectDigest(), "", 1)); rec != nil {
 		t.Fatal("the migration committed an owed record")
 	}
 }

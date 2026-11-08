@@ -366,6 +366,8 @@ type StagedIntent struct {
 	// concerns, and its probability that the package stays inside its
 	// ceiling. TargetRef is the release, Decision accept or reject.
 	InstallFindings []InstallFinding `json:"install_findings,omitempty"`
+	// PacketRef is the owed record id the verdict's packet carried.
+	PacketRef string `json:"packet_ref,omitempty"`
 	PWithinCeiling  float64          `json:"p_within_ceiling,omitempty"`
 	// Semantic-act fields (mission R2 commitment-ledger intents). TargetRef
 	// binds a Resolve/Reply/Cancel to the act it closes. Claim is a Report's
@@ -576,12 +578,16 @@ func (t *Tray) ShotVerdict(operationID, verdict string, findings []ShotFinding, 
 // InstallVerdict stages management's verdict on an install review. At most
 // one per cell. release rides TargetRef, accept or reject Decision; the
 // reason is normalized like a Verify reason and required on a reject.
-func (t *Tray) InstallVerdict(release string, pWithinCeiling float64, accept bool, findings []InstallFinding, reason string) error {
+func (t *Tray) InstallVerdict(release, packetRef string, pWithinCeiling float64, accept bool, findings []InstallFinding, reason string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	release = strings.TrimSpace(release)
 	if release == "" {
 		return fmt.Errorf("tray: install verdict names the release it judges")
+	}
+	packetRef = strings.TrimSpace(packetRef)
+	if packetRef == "" {
+		return fmt.Errorf("tray: install verdict needs the packet's owed_record (choir.InstallPacket returns it)")
 	}
 	if !(pWithinCeiling >= 0 && pWithinCeiling <= 1) {
 		return fmt.Errorf("tray: pWithinCeiling %v is not a probability", pWithinCeiling)
@@ -599,7 +605,7 @@ func (t *Tray) InstallVerdict(release string, pWithinCeiling float64, accept boo
 			return fmt.Errorf("tray: at most one install verdict per cell")
 		}
 	}
-	_, err := t.stage(StagedIntent{Kind: IntentInstallVerdict, TargetRef: release, Decision: decision, InstallFindings: findings, PWithinCeiling: pWithinCeiling, Reason: reason})
+	_, err := t.stage(StagedIntent{Kind: IntentInstallVerdict, TargetRef: release, Decision: decision, InstallFindings: findings, PWithinCeiling: pWithinCeiling, PacketRef: packetRef, Reason: reason})
 	return err
 }
 

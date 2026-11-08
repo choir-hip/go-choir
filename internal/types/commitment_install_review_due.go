@@ -58,3 +58,16 @@ func InstallReviewDueWakes(rec CommitmentRecord, committedAt time.Time) ([]Insta
 	}
 	return wakes, at
 }
+
+// InstallReviewRerunWakeKind is the durable re-run of an accepted pending
+// install: minted in the same transaction that closes the row open -> accepted,
+// so a planned restart (which keeps accepted rows) resumes the install, and a
+// crash boot closes the row instead.
+const InstallReviewRerunWakeKind = "install_review_rerun"
+
+// InstallReviewRerunWake is an install_review_rerun wake's content.
+type InstallReviewRerunWake struct {
+	ReleaseID     string `json:"release_id"`
+	SubjectDigest string `json:"subject_digest"`
+	Attempt       int    `json:"attempt"`
+}

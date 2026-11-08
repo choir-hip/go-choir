@@ -41,8 +41,16 @@ func InstallReviewOwedSenderInbox(releaseID string) string {
 // InstallReviewOwedRecordID is the id of the owed record of one review: the
 // release, the subject digest, and the attempt (the first attempt carries no
 // suffix; a review opened again after a timeout is attempt 2, and so on).
-func InstallReviewOwedRecordID(releaseID, subjectDigest string, attempt int) string {
+//
+// The id is scoped by path: an owner or update review (operationID "") and a
+// package self-development operation's review of the same release and subject
+// are different reviews with different clocks, so the operation's id carries
+// ":op:<operation id>" and the two can never collide (build review r1, item 1).
+func InstallReviewOwedRecordID(releaseID, subjectDigest, operationID string, attempt int) string {
 	id := fmt.Sprintf("%s%s:%s", installReviewOwedPrefix, strings.TrimSpace(releaseID), strings.TrimSpace(subjectDigest))
+	if op := strings.TrimSpace(operationID); op != "" {
+		id += ":op:" + op
+	}
 	if attempt > 1 {
 		id += fmt.Sprintf(":a%d", attempt)
 	}
@@ -50,8 +58,8 @@ func InstallReviewOwedRecordID(releaseID, subjectDigest string, attempt int) str
 }
 
 // InstallReviewOwedNoticeID is the id of the nth notice of an owed review.
-func InstallReviewOwedNoticeID(releaseID, subjectDigest string, attempt, n int) string {
-	return fmt.Sprintf("%s%s%d", InstallReviewOwedRecordID(releaseID, subjectDigest, attempt), installReviewOwedNoticeMid, n)
+func InstallReviewOwedNoticeID(releaseID, subjectDigest, operationID string, attempt, n int) string {
+	return fmt.Sprintf("%s%s%d", InstallReviewOwedRecordID(releaseID, subjectDigest, operationID, attempt), installReviewOwedNoticeMid, n)
 }
 
 // IsInstallReviewOwedRecord reports whether rec is an install-review-owed
@@ -102,12 +110,12 @@ func newInstallReviewOwedRecord(id, managementInbox, computerID string, f Instal
 // NewInstallReviewOwedRecord builds the record committed once per review.
 func NewInstallReviewOwedRecord(managementInbox, computerID string, f InstallReviewOwedFacts, body string) CommitmentRecord {
 	f.Notice = 0
-	return newInstallReviewOwedRecord(InstallReviewOwedRecordID(f.ReleaseID, f.SubjectDigest, f.Attempt), managementInbox, computerID, f, body)
+	return newInstallReviewOwedRecord(InstallReviewOwedRecordID(f.ReleaseID, f.SubjectDigest, f.OperationID, f.Attempt), managementInbox, computerID, f, body)
 }
 
 // NewInstallReviewOwedNotice builds the nth notice (f.Notice = n). Its id is
 // deterministic, so a retried commit replays, and differs from the record's,
 // so it is a fresh wake.
 func NewInstallReviewOwedNotice(managementInbox, computerID string, f InstallReviewOwedFacts, body string) CommitmentRecord {
-	return newInstallReviewOwedRecord(InstallReviewOwedNoticeID(f.ReleaseID, f.SubjectDigest, f.Attempt, f.Notice), managementInbox, computerID, f, body)
+	return newInstallReviewOwedRecord(InstallReviewOwedNoticeID(f.ReleaseID, f.SubjectDigest, f.OperationID, f.Attempt, f.Notice), managementInbox, computerID, f, body)
 }

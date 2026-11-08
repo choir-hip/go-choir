@@ -22,10 +22,10 @@ func TestInstallVerbsAreManagementOnly(t *testing.T) {
 func TestInstallVerdictStagesOneIntent(t *testing.T) {
 	findings := []InstallFinding{{Concern: "reads notes", Evidence: "App.svelte:12"}}
 	var tray Tray
-	if err := tray.InstallVerdict("rel-1", 0.9, true, findings, ""); err != nil {
+	if err := tray.InstallVerdict("rel-1", "rec-1", 0.9, true, findings, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := tray.InstallVerdict("rel-1", 0.9, true, findings, ""); err == nil {
+	if err := tray.InstallVerdict("rel-1", "rec-1", 0.9, true, findings, ""); err == nil {
 		t.Error("a second install verdict in one cell must be refused")
 	}
 	got := tray.Drain()
@@ -33,17 +33,20 @@ func TestInstallVerdictStagesOneIntent(t *testing.T) {
 		t.Fatalf("staged = %+v", got)
 	}
 	var bad Tray
-	if err := bad.InstallVerdict("rel-1", 1.5, true, nil, ""); err == nil {
+	if err := bad.InstallVerdict("rel-1", "rec-1", 1.5, true, nil, ""); err == nil {
 		t.Error("a probability over 1 must be refused")
 	}
-	if err := bad.InstallVerdict("rel-1", -0.1, true, nil, ""); err == nil {
+	if err := bad.InstallVerdict("rel-1", "rec-1", -0.1, true, nil, ""); err == nil {
 		t.Error("a negative probability must be refused")
 	}
-	if err := bad.InstallVerdict("rel-1", 0.2, false, nil, "  "); err == nil {
+	if err := bad.InstallVerdict("rel-1", "rec-1", 0.2, false, nil, "  "); err == nil {
 		t.Error("a reject needs a reason")
 	}
-	if err := bad.InstallVerdict("", 0.2, true, nil, ""); err == nil {
+	if err := bad.InstallVerdict("", "rec-1", 0.2, true, nil, ""); err == nil {
 		t.Error("a release is required")
+	}
+	if err := bad.InstallVerdict("rel-1", "  ", 0.2, true, nil, ""); err == nil {
+		t.Error("the packet's owed_record is required (a verdict echoes the packet it read)")
 	}
 }
 
@@ -51,7 +54,7 @@ func TestInstallVerdictStagesOneIntent(t *testing.T) {
 // in a cell): a cell passes install findings as plain maps, and a typo is
 // refused by name.
 func TestCellBuildsInstallFindingsAsMaps(t *testing.T) {
-	out, staged := managementVerifyCell(t, `fmt.Println(choir.InstallVerdict("rel-1", 0.8, false, []map[string]any{
+	out, staged := managementVerifyCell(t, `fmt.Println(choir.InstallVerdict("rel-1", "rec-1", 0.8, false, []map[string]any{
 	{"concern": "posts notes to api.example.com", "evidence": "App.svelte line 12", "blocking": true},
 	{"Concern": "reads settings"},
 }, "the notes reach a publisher sink"))`)
@@ -59,14 +62,14 @@ func TestCellBuildsInstallFindingsAsMaps(t *testing.T) {
 		t.Fatalf("error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
 	}
 	f := staged[0].InstallFindings[0]
-	if f.Concern == "" || f.Evidence != "App.svelte line 12" || !f.Blocking || staged[0].Decision != "reject" || staged[0].PWithinCeiling != 0.8 {
+	if f.Concern == "" || f.Evidence != "App.svelte line 12" || !f.Blocking || staged[0].Decision != "reject" || staged[0].PWithinCeiling != 0.8 || staged[0].PacketRef != "rec-1" {
 		t.Fatalf("finding = %+v, intent %+v", f, staged[0])
 	}
-	out, staged = managementVerifyCell(t, `fmt.Println(choir.InstallVerdict("rel-1", 0.8, true, []map[string]any{{"concern": "x", "block": true}}, ""))`)
+	out, staged = managementVerifyCell(t, `fmt.Println(choir.InstallVerdict("rel-1", "rec-1", 0.8, true, []map[string]any{{"concern": "x", "block": true}}, ""))`)
 	if len(staged) != 0 || !strings.Contains(out.Stdout, `unknown key "block"`) {
 		t.Fatalf("typo: error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
 	}
-	out, staged = managementVerifyCell(t, `fmt.Println(choir.InstallVerdict("rel-1", 0.8, true, []map[string]any{{"concern": "x", "blocking": "yes"}}, ""))`)
+	out, staged = managementVerifyCell(t, `fmt.Println(choir.InstallVerdict("rel-1", "rec-1", 0.8, true, []map[string]any{{"concern": "x", "blocking": "yes"}}, ""))`)
 	if len(staged) != 0 || !strings.Contains(out.Stdout, "must be a bool") {
 		t.Fatalf("type: error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
 	}

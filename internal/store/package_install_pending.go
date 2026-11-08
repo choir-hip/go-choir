@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // ogKindPackageInstallPending is one pending install: an object-graph object
@@ -211,7 +213,28 @@ func (s *Store) casPending(ctx context.Context, old objectgraph.Object, p Packag
 	if err != nil {
 		return false, err
 	}
-	err = s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{{CanonicalID: old.CanonicalID, Exists: true, ExpectedContentHash: old.ContentHash}}, objectgraph.Batch{Objects: []objectgraph.Object{next}})
+	conds := []objectgraph.ObjectCondition{{CanonicalID: old.CanonicalID, Exists: true, ExpectedContentHash: old.ContentHash}}
+	objs := []objectgraph.Object{next}
+	// The close open -> accepted mints the durable re-run in the same batch,
+	// so a planned restart resumes the install (build review r1, item 3).
+	var prev PackageInstallPending
+	if decoded, derr := decodePending(old); derr == nil {
+		prev = decoded
+	}
+	if p.State == PackageInstallPendingAccepted && prev.State == PackageInstallPendingOpen {
+		content, err := json.Marshal(types.InstallReviewRerunWake{ReleaseID: p.ReleaseID, SubjectDigest: p.SubjectDigest, Attempt: p.Attempt})
+		if err != nil {
+			return false, err
+		}
+		sourceID := "install-review-rerun:" + pendingKey(p.SubjectDigest, p.Attempt)
+		_, wake, err := actorWakeOutbox(next, sourceID, "management:"+p.OwnerID, "", "", types.InstallReviewRerunWakeKind, string(content), time.Time{}, "wake:"+next.CanonicalID+":rerun")
+		if err != nil {
+			return false, err
+		}
+		objs = append(objs, wake)
+		conds = append(conds, objectgraph.ObjectCondition{CanonicalID: wake.CanonicalID})
+	}
+	err = s.ogStore.PutBatchConditional(ctx, conds, objectgraph.Batch{Objects: objs})
 	if errors.Is(err, objectgraph.ErrConflict) {
 		return false, nil
 	}

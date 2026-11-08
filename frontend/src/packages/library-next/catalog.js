@@ -46,11 +46,8 @@ export function plainReason(reason, status = 0) {
     case 'install_review_owed':
       return 'Management is reviewing this app; it installs when management accepts. Nothing changed on this computer yet.';
     case 'install_review_required':
-    case 'install_review_seat_unavailable':
     case 'install_review_unavailable':
       return 'This app asks for more than the basic permissions, so it installs only after a review, and the review could not run on this computer yet. Nothing changed on this computer.';
-    case 'install_review_seat_failed':
-      return 'The review this app needs did not finish. Nothing changed on this computer. Try again in a moment.';
     case 'install_review_rejected':
       return 'The review of this app found a problem with what it asks for, so it was not installed. Nothing changed on this computer.';
     case 'install_review_refused':

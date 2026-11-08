@@ -1272,12 +1272,14 @@ func (s *ChoirScope) InstallPacket(releaseID string) (InstallPacketResult, error
 	return out, nil
 }
 
-// InstallVerdict stages management's verdict on a widened-ceiling install:
-// pWithinCeiling is its probability that the package stays inside its
+// InstallVerdict stages management's verdict on a widened-ceiling install.
+// packetRef is the owed_record the packet carried: the verdict is refused when
+// the release's review has since changed, so it never judges bytes the desk did
+// not see. pWithinCeiling is its probability that the package stays inside its
 // ceiling, accept its decision, findings plain maps with keys concern,
 // evidence and blocking (a blocking finding makes the verdict a rejection),
 // reason required on a reject. At most one per cell. Management only.
-func (s *ChoirScope) InstallVerdict(releaseID string, pWithinCeiling float64, accept bool, findings []map[string]any, reason string) error {
+func (s *ChoirScope) InstallVerdict(releaseID, packetRef string, pWithinCeiling float64, accept bool, findings []map[string]any, reason string) error {
 	if err := s.mutateDenied("InstallVerdict"); err != nil {
 		return err
 	}
@@ -1292,7 +1294,7 @@ func (s *ChoirScope) InstallVerdict(releaseID string, pWithinCeiling float64, ac
 	if t == nil {
 		return fmt.Errorf("choir: install verdict requires a bound cell")
 	}
-	return t.InstallVerdict(releaseID, pWithinCeiling, accept, parsed, reason)
+	return t.InstallVerdict(releaseID, packetRef, pWithinCeiling, accept, parsed, reason)
 }
 
 // installFindingsFromMaps reads the findings a cell passes as plain maps (a

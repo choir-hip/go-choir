@@ -280,11 +280,7 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 	if err := pkgrelease.VerifyID(rec, draft.ReleaseID); err != nil {
 		return fail("the persisted release record does not hash to its id: %v", err)
 	}
-	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
-	if err != nil {
-		return fail("the installs cannot be read: %v", err)
-	}
-	if _, _, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, draft.ReleaseID, rec, draft.TreePatch, currentPackageInstalls(prior)[draft.Package], installReviewCtx{operation: &operation}); refusal != nil {
+	reviewRefusal := func(refusal *installRefusal) error {
 		switch refusal.reason {
 		case reasonInstallReviewOwed:
 			return fmt.Errorf("%w: operation %s release %s", errInstallReviewPending, operation.OperationID, draft.ReleaseID)
@@ -294,6 +290,18 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 			return fail("install review rejected: %s", refusal.detail)
 		}
 		return fail("refused before publish: %s", refusal.Error())
+	}
+	// A pass over a review already owed reads the owed record and the ledger and
+	// keeps the clock; it does not rebuild the release every 60 seconds.
+	if refusal := rt.operationReviewPending(ctx, ownerID, computerID, operation, draft.ReleaseID); refusal != nil {
+		return reviewRefusal(refusal)
+	}
+	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
+	if err != nil {
+		return fail("the installs cannot be read: %v", err)
+	}
+	if _, _, refusal := rt.buildCheckedModule(ctx, ownerID, computerID, draft.ReleaseID, rec, draft.TreePatch, currentPackageInstalls(prior)[draft.Package], installReviewCtx{operation: &operation}); refusal != nil {
+		return reviewRefusal(refusal)
 	}
 	if operation, err = rt.startSelfDevelopmentMaterialization(ctx, operation); err != nil {
 		return err

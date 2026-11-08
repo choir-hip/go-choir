@@ -88,8 +88,12 @@ func (w *opReviewWorld) judge(t *testing.T, release string, accept bool, reason 
 	if accept {
 		decision = "accept"
 	}
+	ref := "no-review"
+	if owed, found, err := w.fx.rt.installReviewOwedOn(context.Background(), w.owner(), w.fx.computerID, release); err == nil && found {
+		ref = owed.Record.RecordID
+	}
 	return reduce.commitInstallVerdictIntent(context.Background(), yaegikernel.StagedIntent{
-		LocalID: "v1", Kind: yaegikernel.IntentInstallVerdict, TargetRef: release, Decision: decision, PWithinCeiling: 0.85, Reason: reason,
+		LocalID: "v1", Kind: yaegikernel.IntentInstallVerdict, TargetRef: release, PacketRef: ref, Decision: decision, PWithinCeiling: 0.85, Reason: reason,
 	})
 }
 

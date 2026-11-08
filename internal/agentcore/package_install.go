@@ -251,6 +251,11 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	// A newer install of the package supersedes the reviews still waiting on
 	// older releases of it.
 	rt.supersedePendingInstalls(ctx, ownerID, computerID, rec.Package.Name, subjectDigest)
+	// The same subject installed by this request (an owner retry while its
+	// accepted row waited on a re-run) closes that row.
+	if row, err := rt.store.LatestPackageInstallPending(ctx, ownerID, computerID, subjectDigest); err == nil && row.State == store.PackageInstallPendingAccepted {
+		_, _ = rt.store.ClosePackageInstallPending(ctx, ownerID, computerID, subjectDigest, row.Attempt, store.PackageInstallPendingAccepted, store.PackageInstallPendingInstalled, "")
+	}
 	return rt.installView(record, append([]store.PackageInstall{record}, prior...)), true, nil
 }
 

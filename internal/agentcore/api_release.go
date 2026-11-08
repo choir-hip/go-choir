@@ -21,6 +21,8 @@ type releaseAPIError struct {
 	Reason string `json:"reason,omitempty"`
 	// OwedRecord is the install-review-owed record a 202 install waits on.
 	OwedRecord string `json:"owed_record,omitempty"`
+	// State is pending_review on the 202 an owed review answers.
+	State string `json:"state,omitempty"`
 }
 
 // releasePrecommitments reads engineering's rule-settled precommitments for
@@ -96,7 +98,7 @@ func (h *APIHandler) handlePackageInstalls(w http.ResponseWriter, r *http.Reques
 		}
 		view, created, refusal := h.rt.installPackage(r.Context(), ownerID, computerID, request)
 		if refusal != nil {
-			writeAPIJSON(w, refusal.status, releaseAPIError{Error: refusal.detail, Reason: refusal.reason, OwedRecord: refusal.owed})
+			writeAPIJSON(w, refusal.status, releaseAPIError{Error: refusal.detail, Reason: refusal.reason, OwedRecord: refusal.owed, State: pendingStateOf(refusal)})
 			return
 		}
 		status := http.StatusOK
@@ -141,4 +143,11 @@ func (h *APIHandler) handlePackageInstalls(w http.ResponseWriter, r *http.Reques
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, releaseAPIError{Error: "method not allowed"})
 	}
+}
+
+func pendingStateOf(r *installRefusal) string {
+	if r != nil && r.reason == reasonInstallReviewOwed {
+		return installStatePendingReview
+	}
+	return ""
 }

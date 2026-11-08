@@ -225,6 +225,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleVerifyOwed(ctx, u, memory)
 	case "install_review_due":
 		return h.handleInstallReviewDue(ctx, u, memory)
+	case "install_review_rerun":
+		return h.handleInstallReviewRerun(ctx, u, memory)
 	case "source_poll_due":
 		return h.handleSourcePollDue(ctx, u, memory)
 	case "inbox_record":
@@ -325,6 +327,19 @@ func (h *actorHandler) handleInstallReviewDue(ctx context.Context, u actor.Updat
 	}
 	if err := h.rt.HandleInstallReviewDue(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("%w: actorruntime: install review due: %v", actor.ErrDeferUnprocessed, err)
+	}
+	return memory, nil
+}
+
+// handleInstallReviewRerun re-runs an accepted pending install whose detached
+// run a planned restart cut short (agentcore.HandleInstallReviewRerun).
+func (h *actorHandler) handleInstallReviewRerun(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve install_review_rerun scope: %w", err)
+	}
+	if err := h.rt.HandleInstallReviewRerun(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: install review rerun: %v", actor.ErrDeferUnprocessed, err)
 	}
 	return memory, nil
 }

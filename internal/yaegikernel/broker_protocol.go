@@ -291,6 +291,10 @@ type InstallPacketPayload struct {
 // flow sentences the ceiling opens, the mechanical checks, the manifest and the
 // built module's source (truncated at 120 KiB, Truncated says so).
 type InstallPacketResult struct {
+	// OwedRecord is the id of the owed review this packet is of. A cell echoes
+	// it to InstallVerdict, which refuses a verdict whose review has since
+	// changed (a newer install of the release opened another).
+	OwedRecord   string   `json:"owed_record"`
 	ReleaseID    string   `json:"release_id"`
 	Package      string   `json:"package"`
 	Publisher    string   `json:"publisher"`

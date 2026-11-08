@@ -71,51 +71,77 @@ func factsOfOwedRecord(rec types.CommitmentRecord) types.InstallReviewOwedFacts 
 	return f
 }
 
-// installReviewOwedOn finds the newest review owed on a release, through the
-// owed records about it (the sender inbox listing of the shots-owed pattern,
-// by subject ref). found is false when no review was ever owed on it.
-func (rt *Runtime) installReviewOwedOn(ctx context.Context, ownerID, computerID, releaseID string) (installReviewOwed, bool, error) {
+// installReviewOwedList lists every review ever owed on a release, open ones
+// first and then newest first, found through the owed records about it (the
+// sender inbox listing of the shots-owed pattern, by subject ref). Owner and
+// operation reviews of one release are distinct records (the id is scoped by
+// path), so both can be open at once.
+func (rt *Runtime) installReviewOwedList(ctx context.Context, ownerID, computerID, releaseID string) ([]installReviewOwed, error) {
 	records, err := rt.store.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computerID, "release_id", releaseID, 200)
+	if err != nil {
+		return nil, err
+	}
+	var out []installReviewOwed
+	for _, rec := range records {
+		if !types.IsInstallReviewOwedRecord(rec) || rec.SubjectRefs["notice"] != "" {
+			continue
+		}
+		o := installReviewOwed{Record: rec, Facts: factsOfOwedRecord(rec)}
+		switch o.Facts.Path {
+		case types.InstallReviewPathInstall:
+			row, err := rt.store.GetPackageInstallPending(ctx, ownerID, computerID, o.Facts.SubjectDigest, o.Facts.Attempt)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+			if err == nil {
+				o.Row, o.Open = &row, row.Open() && row.OwedRecordID == rec.RecordID
+			}
+		case types.InstallReviewPathOperation:
+			if rt.selfdevOperations == nil {
+				break
+			}
+			op, err := rt.selfdevOperations.Get(ctx, computerID, o.Facts.OperationID)
+			if err == nil {
+				o.Operation, o.Open = &op, op.State == selfdev.StateAccepted
+			}
+		}
+		out = append(out, o)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Open != out[j].Open {
+			return out[i].Open
+		}
+		if out[i].Facts.Attempt != out[j].Facts.Attempt {
+			return out[i].Facts.Attempt > out[j].Facts.Attempt
+		}
+		return out[i].Record.RecordID > out[j].Record.RecordID
+	})
+	return out, nil
+}
+
+// installReviewOwedOn finds the review owed on a release: an open one before a
+// closed one, then the newest. found is false when none was ever owed.
+func (rt *Runtime) installReviewOwedOn(ctx context.Context, ownerID, computerID, releaseID string) (installReviewOwed, bool, error) {
+	list, err := rt.installReviewOwedList(ctx, ownerID, computerID, releaseID)
+	if err != nil || len(list) == 0 {
+		return installReviewOwed{}, false, err
+	}
+	return list[0], true, nil
+}
+
+// installReviewOwedByRef finds the review whose owed record is ref, the one a
+// packet carried. It is false when the release has no such review.
+func (rt *Runtime) installReviewOwedByRef(ctx context.Context, ownerID, computerID, releaseID, ref string) (installReviewOwed, bool, error) {
+	list, err := rt.installReviewOwedList(ctx, ownerID, computerID, releaseID)
 	if err != nil {
 		return installReviewOwed{}, false, err
 	}
-	var owed []types.CommitmentRecord
-	for _, rec := range records {
-		if types.IsInstallReviewOwedRecord(rec) && rec.SubjectRefs["notice"] == "" {
-			owed = append(owed, rec)
+	for _, o := range list {
+		if o.Record.RecordID == strings.TrimSpace(ref) {
+			return o, true, nil
 		}
 	}
-	if len(owed) == 0 {
-		return installReviewOwed{}, false, nil
-	}
-	sort.Slice(owed, func(i, j int) bool {
-		fi, fj := factsOfOwedRecord(owed[i]), factsOfOwedRecord(owed[j])
-		if fi.Attempt != fj.Attempt {
-			return fi.Attempt > fj.Attempt
-		}
-		return owed[i].RecordID > owed[j].RecordID
-	})
-	rec := owed[0]
-	out := installReviewOwed{Record: rec, Facts: factsOfOwedRecord(rec)}
-	switch out.Facts.Path {
-	case types.InstallReviewPathInstall:
-		row, err := rt.store.GetPackageInstallPending(ctx, ownerID, computerID, out.Facts.SubjectDigest, out.Facts.Attempt)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return installReviewOwed{}, false, err
-		}
-		if err == nil {
-			out.Row, out.Open = &row, row.Open()
-		}
-	case types.InstallReviewPathOperation:
-		if rt.selfdevOperations == nil {
-			break
-		}
-		op, err := rt.selfdevOperations.Get(ctx, computerID, out.Facts.OperationID)
-		if err == nil {
-			out.Operation, out.Open = &op, op.State == selfdev.StateAccepted
-		}
-	}
-	return out, true, nil
+	return installReviewOwed{}, false, nil
 }
 
 // installReviewRequestOf is the release record and tree patch an owed review
@@ -232,7 +258,7 @@ func (rt *Runtime) installPacketEgress(ctx context.Context, deskRole string, exe
 		source, truncated = source[:installReviewSourceBytes]+installPacketSourceNote, true
 	}
 	return json.Marshal(yaegikernel.InstallPacketResult{
-		ReleaseID: releaseID, Package: info.Subject.Package, Publisher: info.Subject.Publisher, Path: owed.Facts.Path,
+		OwedRecord: owed.Record.RecordID, ReleaseID: releaseID, Package: info.Subject.Package, Publisher: info.Subject.Publisher, Path: owed.Facts.Path,
 		PatchSHA256: info.Subject.PatchSHA256, ManifestSHA: info.Subject.ManifestSHA256, Surface: info.Subject.BehaviourSurface,
 		Risk: string(info.Plan.Risk), Strong: info.Plan.Strong, Added: info.Plan.Added, Flow: installreview.Flow(info.Subject.Manifest),
 		Checks: installCheckLines(info.Checks), ManifestJSON: string(info.Module.Manifest), Source: source, Truncated: truncated,
@@ -255,7 +281,7 @@ func (r *rlmCallReduction) commitInstallVerdictIntent(ctx context.Context, in ya
 				reason = reason[:500]
 			}
 			release := strings.ToLower(strings.TrimSpace(in.TargetRef))
-			if owed, found, ferr := rt.installReviewOwedOn(writeCtx, r.scope.OwnerID, r.scope.ComputerID, release); ferr == nil && found {
+			if owed, found, ferr := rt.installReviewOwedByRef(writeCtx, r.scope.OwnerID, r.scope.ComputerID, release, in.PacketRef); ferr == nil && found {
 				switch {
 				case owed.Row != nil:
 					_ = rt.store.SetPackageInstallPendingError(writeCtx, owed.Row.OwnerID, owed.Row.ComputerID, owed.Row.SubjectDigest, owed.Row.Attempt, reason)
@@ -339,12 +365,16 @@ func (r *rlmCallReduction) reduceInstallVerdict(ctx context.Context, in yaegiker
 		return nil, fmt.Errorf("reduce: install verdict %s: a reject needs its reason", in.LocalID)
 	}
 	lines, blocking := installFindingLines(in.InstallFindings)
-	owed, found, err := rt.installReviewOwedOn(ctx, ownerID, computerID, release)
+	// The verdict judges the review whose packet the desk read (build review
+	// r1, item 2). A newer install of the release can open another review; a
+	// verdict naming the old packet never seals the new bytes, and a packet
+	// ref that names no review of this release is refused.
+	owed, found, err := rt.installReviewOwedByRef(ctx, ownerID, computerID, release, in.PacketRef)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		return nil, fmt.Errorf("reduce: install verdict %s: no install review is owed on release %s", in.LocalID, release)
+		return nil, fmt.Errorf("reduce: install verdict %s: no review %q is owed on release %s (it may have been replaced by a newer one); call choir.InstallPacket again and judge that", in.LocalID, strings.TrimSpace(in.PacketRef), release)
 	}
 	if !owed.Open {
 		// A replay of the verdict already sealed is success; a different one
@@ -443,7 +473,7 @@ func failedCheckLines(checks []installreview.Check) []string {
 func (rt *Runtime) openOperationReview(ctx context.Context, ownerID, computerID string, operation selfdev.Operation, facts types.InstallReviewOwedFacts, plan installreview.Plan) *installRefusal {
 	facts.Path, facts.OperationID, facts.Attempt = types.InstallReviewPathOperation, operation.OperationID, 1
 	management := persistentManagementAgentID(ownerID)
-	recordID := types.InstallReviewOwedRecordID(facts.ReleaseID, facts.SubjectDigest, 1)
+	recordID := types.InstallReviewOwedRecordID(facts.ReleaseID, facts.SubjectDigest, facts.OperationID, 1)
 	rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, recordID)
 	if err != nil {
 		return refuseInstall(http.StatusInternalServerError, "install_store", "%v", err)
@@ -455,12 +485,46 @@ func (rt *Runtime) openOperationReview(ctx context.Context, ownerID, computerID 
 		}
 		return installReviewOwed202(recordID, installReviewOwedDetail)
 	}
+	return rt.operationReviewClock(ctx, ownerID, computerID, facts, *rec)
+}
+
+// operationReviewPending is the cheap read of a pass over an operation whose
+// review is already owed: it reads the owed record and the ledger and keeps the
+// clock, without the verified build (design 7.1; build review r1, item 4). It
+// returns nil when no review is owed on the operation or a verdict is sealed,
+// and the pass then builds and gates as usual.
+func (rt *Runtime) operationReviewPending(ctx context.Context, ownerID, computerID string, operation selfdev.Operation, releaseID string) *installRefusal {
+	list, err := rt.installReviewOwedList(ctx, ownerID, computerID, releaseID)
+	if err != nil {
+		return nil
+	}
+	var owed installReviewOwed
+	found := false
+	for _, o := range list {
+		if o.Open && o.Facts.Path == types.InstallReviewPathOperation && o.Facts.OperationID == operation.OperationID {
+			owed, found = o, true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	if _, _, sealed, err := rt.sealedInstallVerdictFor(ctx, ownerID, computerID, owed.Facts); err != nil || sealed {
+		return nil
+	}
+	return rt.operationReviewClock(ctx, ownerID, computerID, owed.Facts, owed.Record)
+}
+
+// operationReviewClock keeps the clock of an operation's committed review.
+func (rt *Runtime) operationReviewClock(ctx context.Context, ownerID, computerID string, facts types.InstallReviewOwedFacts, rec types.CommitmentRecord) *installRefusal {
+	management := persistentManagementAgentID(ownerID)
+	recordID := rec.RecordID
 	now := rt.reviewNow()
 	committed := now
 	if at, perr := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt); perr == nil {
 		committed = at
 	}
-	n, last := rt.installReviewNotices(ctx, ownerID, computerID, facts.ReleaseID, facts.SubjectDigest, 1)
+	n, last := rt.installReviewNotices(ctx, ownerID, computerID, facts.ReleaseID, facts.SubjectDigest, facts.OperationID, 1)
 	since := committed
 	if !last.IsZero() {
 		since = last
