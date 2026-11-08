@@ -215,9 +215,12 @@ const (
 	// GrantPerformAssignment is the performer of admitted assignments
 	// (MA4.10): one holder, the other half of the assignment ledger.
 	GrantPerformAssignment = "perform.assignment"
+	// GrantResearchSpawn is the research parent's grant (MA4.11): the one desk
+	// that starts research children, so the registry names it.
+	GrantResearchSpawn = "research.spawn"
 )
 
-var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true}
+var soleHolderGrants = map[string]bool{GrantAdmitAssignment: true, GrantPlatformUpdate: true, GrantPerformAssignment: true, GrantResearchSpawn: true}
 
 // GrantHolder is the one registered desk that holds a sole-holder grant
 // (admit.assignment, platform.update). It reports false for any other grant
@@ -518,3 +521,57 @@ func MutatesCapsule(name string) bool { return Holds(name, "capsule.mutate") }
 // ReadsCapsules reports whether the named desk may inspect capsules
 // (capsule.read).
 func ReadsCapsules(name string) bool { return Holds(name, "capsule.read") }
+
+// AdmitsAssignments reports whether the named desk holds the admission ledger
+// (admit.assignment, MA4.9): the desk that admits engineering work. Code that
+// once compared a profile to the management name asks this.
+func AdmitsAssignments(name string) bool { return Holds(name, GrantAdmitAssignment) }
+
+// SpawnsResearch reports whether the named desk may start research children
+// (research.spawn): the research parent, never a child role.
+func SpawnsResearch(name string) bool { return Holds(name, GrantResearchSpawn) }
+
+// unregistered is what a holder lookup yields with no holder: a name that is
+// no desk and matches no stored address, so a comparison fails closed.
+const unregistered = "unregistered-holder"
+
+func holderName(grant string) string {
+	if d, ok := GrantHolder(grant); ok {
+		return d.Name
+	}
+	return unregistered + ":" + grant
+}
+
+// AdmitterName is the registered name of the desk that holds the admission
+// ledger (admit.assignment). Event actors, run profiles and inboxes that were
+// spelled with the management name ask this. With no holder it is a name no
+// desk and no address matches.
+func AdmitterName() string { return holderName(GrantAdmitAssignment) }
+
+// ResearcherName is the registered name of the research parent
+// (research.spawn), with the same fail-closed fallback.
+func ResearcherName() string { return holderName(GrantResearchSpawn) }
+
+// AdmitterInbox is the admitter's persistent inbox for one owner:
+// <admitter>:<ownerID>.
+func AdmitterInbox(ownerID string) string { return AdmitterName() + ":" + ownerID }
+
+// IsAdmitterInbox reports whether the address is an admitter inbox of any
+// owner (the admitter's name, a colon, then anything).
+func IsAdmitterInbox(inbox string) bool { return strings.HasPrefix(inbox, AdmitterName()+":") }
+
+// ResearchInbox is the research parent's inbox for one document:
+// <researcher>:<docID>.
+func ResearchInbox(docID string) string { return ResearcherName() + ":" + docID }
+
+// IsResearchInbox reports whether the address is a research parent inbox.
+func IsResearchInbox(inbox string) bool { return strings.HasPrefix(inbox, ResearcherName()+":") }
+
+// PerformerName is the registered name of the desk that performs admitted
+// assignments (perform.assignment), with the fail-closed fallback.
+func PerformerName() string { return holderName(GrantPerformAssignment) }
+
+// PerformerInbox is the performer's inbox for one assignment, like
+// AssignmentInbox but never failing: with no performer it is an address no
+// stored record carries.
+func PerformerInbox(assignmentID string) string { return PerformerName() + ":" + assignmentID }
