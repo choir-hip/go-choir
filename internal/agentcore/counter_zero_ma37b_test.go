@@ -224,12 +224,13 @@ func countStr(n uint64) string {
 // MA3.7b 7b: Resolve, Disagreement and Cancel are addressed non-envelope acts;
 // when they name a desk (or, for a retract, the desk the retracted act
 // addressed) a built-in desk's run carrying owner-private labels is counted at
-// the desk-message sink and not blocked. The addressee is management: Texture's
-// messages to research are admitted by the texture.brief lease
-// (TestATextureBriefToResearchIsAdmittedByTheCustodianLease).
+// the desk-message sink and not blocked. The addressee is management and the
+// sender research: Texture's messages to research are admitted by the
+// texture.brief lease, and its messages to management are on the owner flow's
+// delegation chain (enforce flip D1), so neither is an ask.
 func TestResolveDisagreementAndCancelAreGatedAndCounted(t *testing.T) {
 	f := newDisclosureFixture(t, "unusedgate7b", 62841)
-	exec := f.run(t, "run-7b", agentprofile.Texture, "write", types.OwnerPrivateLabel("document"))
+	exec := f.run(t, "run-7b", agentprofile.Research, "write", types.OwnerPrivateLabel("document"))
 	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
 	for i, in := range []yaegikernel.StagedIntent{
 		{LocalID: "r1", Kind: yaegikernel.IntentResolve, ToDesk: agentprofile.Management, TargetRef: "rec-1", Resolve: `{"verdict":"confirmed"}`},

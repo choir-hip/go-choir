@@ -662,7 +662,9 @@ func TestTheGateTalliesTheSiteOfAnObservedAsk(t *testing.T) {
 	f := newDisclosureFixture(t, "sites", 62840)
 	// A system desk is decided in observe mode; a package desk is always
 	// enforced, so the fixture's app desk would block.
-	exec := f.run(t, "run-sites", agentprofile.Texture, "x", types.OwnerPrivateLabel("document"))
+	// Research to management is no pair on the owner's delegation chain, so a
+	// document label asks (Texture to management would not).
+	exec := f.run(t, "run-sites", agentprofile.Research, "x", types.OwnerPrivateLabel("document"))
 	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
 	in := yaegikernel.StagedIntent{LocalID: "s1", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Management + ":inst-secret-1", Statement: "private body text"}
 	if err := r.gateMessageDisclosure(context.Background(), in); err != nil {
