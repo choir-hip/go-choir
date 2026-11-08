@@ -9,7 +9,7 @@ import (
 )
 
 // StackBase reads the stack base a projection commit records. ok is false for
-// a commit the projection did not write (the base itself, a seed commit).
+// a commit the projection did not write (the base itself).
 func StackBase(ctx context.Context, repo, commit string) (string, bool) {
 	if !commitID.MatchString(strings.ToLower(strings.TrimSpace(commit))) {
 		return "", false

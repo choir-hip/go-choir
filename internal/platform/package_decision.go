@@ -394,9 +394,21 @@ func (h *Handler) derivePackageDraft(ctx context.Context, in packageDraftInput) 
 	if err != nil {
 		return packageDraft{}, err
 	}
+	// An update was built in a capsule seeded with the head's tree; this host
+	// holds no seed commit, so it rebuilds the seed from the head's tree patch.
+	var seed []byte
+	if headID != "" {
+		_, headRecord, err := h.readPackageParent(ctx, in.OwnerID, headID)
+		if err != nil {
+			return packageDraft{}, fmt.Errorf("the track head's record is unreadable: %w", err)
+		}
+		if seed, err = h.readPackageBlob(headRecord.Source.TreePatch); err != nil {
+			return packageDraft{}, fmt.Errorf("the track head's tree is unreadable: %w", err)
+		}
+	}
 	source, err := pkgrelease.DraftPackage(ctx, pkgrelease.DraftInput{
 		Repo: h.packageBaseDir, Name: in.Name, Base: in.ClaimedBase, Patch: in.Patch, PlatformBase: in.ClaimedBase,
-		HeadReleaseID: headID, HeadTree: headTree,
+		HeadReleaseID: headID, HeadTree: headTree, SeedPatch: seed,
 	})
 	if err != nil {
 		return packageDraft{}, err

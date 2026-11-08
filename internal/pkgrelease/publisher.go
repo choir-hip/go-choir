@@ -284,6 +284,11 @@ type DraftInput struct {
 	// track has one (corpusd's answer, through the proxy).
 	HeadReleaseID string
 	HeadTree      string
+	// SeedPatch is the head release's tree patch, for a host that holds no
+	// seed commit: the draft's base is then Base with the package replaced by
+	// the head's tree, the commit a package operation's capsule was seeded
+	// with (sourceproj.SeedCommit). Empty means Base as it is.
+	SeedPatch []byte
 }
 
 // DraftSource is the package part of a release the publisher drafts.
@@ -324,6 +329,13 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		return DraftSource{}, err
 	}
 	defer s.close()
+	if len(in.SeedPatch) > 0 {
+		seeded, err := s.seeded(ctx, in.Base, root, in.SeedPatch)
+		if err != nil {
+			return DraftSource{}, refuse(ReasonParentUnverifiable, "the track head's tree does not seed base %s: %v", in.Base, err)
+		}
+		in.Base = seeded
+	}
 	after, err := s.apply(ctx, in.Base, in.Patch)
 	if err != nil {
 		return DraftSource{}, refuse(ReasonPatchInapplicable, "the operation's patch does not apply to its base %s: %v", in.Base, err)

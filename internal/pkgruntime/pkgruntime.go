@@ -311,6 +311,45 @@ func (s Store) PutFile(raw []byte) (string, error) {
 	return sha, writeOnce(s.filePath(sha), ".file-", raw)
 }
 
+func (s Store) patchPath(sha string) string { return filepath.Join(s.Dir, "patches", sha+".patch") }
+
+// MaxPatchBytes caps an installed release's tree patch (a release blob's cap).
+const MaxPatchBytes = 2 << 20
+
+// PutPatch keeps an installed release's tree patch by its digest, so the
+// installed tree can be rebuilt as a capsule's seed.
+func (s Store) PutPatch(raw []byte) (string, error) {
+	if strings.TrimSpace(s.Dir) == "" {
+		return "", errors.New("pkgruntime: no store directory")
+	}
+	if len(raw) == 0 || len(raw) > MaxPatchBytes {
+		return "", fmt.Errorf("pkgruntime: a patch of %d bytes", len(raw))
+	}
+	sha := digest(raw)
+	if _, err := s.ReadPatch(sha); err == nil {
+		return sha, nil
+	}
+	return sha, writeOnce(s.patchPath(sha), ".patch-", raw)
+}
+
+// ReadPatch returns a kept tree patch, refusing any whose digest is not its name.
+func (s Store) ReadPatch(sha string) ([]byte, error) {
+	if !sha256Hex.MatchString(sha) || strings.TrimSpace(s.Dir) == "" {
+		return nil, ErrNotFound
+	}
+	raw, err := os.ReadFile(s.patchPath(sha))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if digest(raw) != sha {
+		return nil, fmt.Errorf("pkgruntime: patch %s does not match its digest", sha)
+	}
+	return raw, nil
+}
+
 // ReadFile returns a data file's bytes, refusing any whose digest is not its name.
 func (s Store) ReadFile(sha string) ([]byte, error) {
 	if !sha256Hex.MatchString(sha) || strings.TrimSpace(s.Dir) == "" {

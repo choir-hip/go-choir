@@ -150,6 +150,29 @@ func (s *scratch) apply(ctx context.Context, tree string, patch []byte) (string,
 	return out, nil
 }
 
+// seeded is base's tree with the package at root replaced by the tree the
+// full-path patch builds from nothing.
+func (s *scratch) seeded(ctx context.Context, base, root string, patch []byte) (string, error) {
+	env := s.index()
+	if _, err := s.git(ctx, env, nil, "read-tree", base); err != nil {
+		return "", err
+	}
+	if _, err := s.git(ctx, env, nil, "rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch", "--", root); err != nil {
+		return "", err
+	}
+	if _, err := s.git(ctx, env, patch, "apply", "--cached", "--whitespace=nowarn", "-"); err != nil {
+		return "", err
+	}
+	out, err := s.git(ctx, env, nil, "write-tree")
+	if err != nil {
+		return "", err
+	}
+	if !gitObjectID.MatchString(out) {
+		return "", fmt.Errorf("git wrote a malformed tree id %q", out)
+	}
+	return out, nil
+}
+
 // prefixed is the full-path tree that holds only sub at root.
 func (s *scratch) prefixed(ctx context.Context, root, sub string) (string, error) {
 	if sub == EmptyTree {

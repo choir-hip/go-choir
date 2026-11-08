@@ -196,6 +196,11 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	// 3. Already installed, with its module in the store: nothing to do.
 	if current != nil && current.ReleaseID == releaseID {
 		if rt.installBytesPresent(*current) {
+			// An install from before its tree patch was kept heals when its
+			// release is sent again.
+			if len(request.TreePatch) > 0 && computerevent.DigestBytes(request.TreePatch) == current.PatchSHA256 {
+				_, _ = rt.packageModules.PutPatch(request.TreePatch)
+			}
 			return rt.installView(*current, prior), false, nil
 		}
 		// The module is gone (a restore onto a fresh store): rebuild it below.
@@ -235,6 +240,11 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 			return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "module_store", "%v", err)
 		}
 		record.Files = append(record.Files, store.PackageInstallFile{Path: f.Path, SHA256: f.SHA256})
+	}
+	// The tree patch stays beside the module: a package operation's capsule is
+	// seeded with the installed tree (packageSeedCommit).
+	if _, err := rt.packageModules.PutPatch(request.TreePatch); err != nil {
+		return PackageInstallView{}, false, refuseInstall(http.StatusInternalServerError, "module_store", "%v", err)
 	}
 	// 5. Record it. The record is the install: it is written after the
 	// module is stored, so a crash before it leaves only an unreferenced

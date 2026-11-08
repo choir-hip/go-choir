@@ -191,6 +191,10 @@ type engineeringCastSpec struct {
 	RebaseNotice string `json:"rebase_notice,omitempty"`
 	RebaseOf     string `json:"rebase_of,omitempty"`
 	Base         string `json:"base,omitempty"`
+	// Package names the package a package operation changes: its capsule is
+	// cast from the source seeded with the installed version of that package
+	// (a package operation is declared at Cast, not discovered at Freeze).
+	Package string `json:"package,omitempty"`
 	// Predictions is the round's mandatory predictions block
 	// (types.RoundPredictions): stated before the capsule starts, settled
 	// by the runtime (engineering_round_predictions.go).
@@ -335,6 +339,9 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		preflight, err = rt.sourcePreflighter().PreflightSourceCommit(ctx, rebaseBase)
 	} else {
 		preflight, err = rt.sourcePreflighter().PreflightSourceSnapshot(ctx, "")
+		if err == nil && strings.TrimSpace(spec.Package) != "" {
+			preflight, err = rt.seedPackagePreflight(ctx, ownerID, computerID, spec.Package, preflight)
+		}
 	}
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: preflight capsule source: %w", err)
@@ -616,7 +623,7 @@ func (rt *Runtime) takesSourceAtBind(ctx context.Context, assignment types.Engin
 	}
 	if body := strings.TrimSpace(cast.Directive.Body); body != "" && body != "null" {
 		var spec engineeringCastSpec
-		if json.Unmarshal([]byte(body), &spec) != nil || strings.TrimSpace(spec.RebaseNotice) != "" || types.CastRebaseNotice(body) != "" {
+		if json.Unmarshal([]byte(body), &spec) != nil || strings.TrimSpace(spec.RebaseNotice) != "" || strings.TrimSpace(spec.Package) != "" || types.CastRebaseNotice(body) != "" {
 			return false
 		}
 	}
