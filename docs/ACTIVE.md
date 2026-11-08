@@ -25,6 +25,10 @@ throughline." Supersedes the 2026-11-03 overnight metamission
 superseded). Self-development is paused until the architecture has landed
 (wave W8 resumes it).
 
+Station 2026-11-08: finishing (F1 to F8 in the goal's now card). F1, F4 and F7
+are done, F3 is partial (names gate at 502), and the install review for F2 is
+on management's desk (4b63780ad). Left: F5 drills, F6 enforce flip, F8 Phase 8.
+
 ## Complete (2026-11-04): progressive delivery, built
 
 Closed on the owner's word, 2026-11-04: "Yes, close pd. It works." Leftovers carry into the modular-architecture goal.

@@ -235,27 +235,26 @@ boundaries:
 now:
   status: working
   slice: >-
-    (Rewritten 2026-11-08 01:30Z; owner 2026-11-08: "Then finish up the
-    mission".) Phases 1 to 3 closed; Phases 4 to 7 landed except as listed;
-    the pass proof applied on d@e through the packaged engineering desk
-    (apply-proof-5d). The finish, in order of dependency:
-    F1 revert in reach: R3.1 (the release X replaced decides the revert),
-    then revert selfdev-91ae7229 on d@e.
-    F2 no LLM outside a desk: anchor sampler reverted (94ba9b725); install
-    review onto management's desk (docs/design/desk-install-review-2026-11-08.md).
-    F3 MA4.11: desk-name switches deleted, names gate at its residue.
-    F4 MA5.2 context-menu sweep and MA5.3 window-manager service, or a
-    recorded supersedure.
-    F5 the unrecorded deployed drills: P4 Mail per-task lease and router
-    distribution; P5 fresh-account Library drill on choir.news; P6 hostile
-    iframe fixture; P7 replay, strong-record lease and planted-bad gate.
-    F6 the built-in kinds' enforce flip, after its prerequisites (ledger
-    2026-11-05T17:30Z, 2026-11-06T01:50Z).
-    F7 MA8.0 theory and practice docs.
-    F8 Phase 8: a Files and a context-menu round as in-place updates.
-    Owner decisions open: the Library catalog republish, b@c's stack.
-  source_ref: origin/main 94ba9b725
-  deploy_identity: staging cc9c64279 (security epoch 97); 94ba9b725 (epoch 98) deploying
+    (Rewritten 2026-11-08 03:15Z; owner 2026-11-08: "Then finish up the
+    mission".) Phases 1 to 3 closed; Phases 4 to 7 landed except as listed.
+    Done: F1 (R3.1 f0bfc5144; selfdev-91ae7229 reverted to the booted base
+    on d@e in 12 s; the mid-stack projection fix b22cb0e6a); F3 partial
+    (MA4.11 eadeb1cc5, accepted on d@e; names gate 930 to 502, residue
+    Texture and the conductor); F4 (MA5.2 af5b02cea and 4b067e8de, MA5.3);
+    F7 (MA8.0 ed5b893ae); b@c cleaned to base (owner).
+    In flight: F2 install review on management's desk landed 4b63780ad
+    (epoch 101, protocol 15.0.0); its d@e proof (accept, planted-flow
+    reject) is running.
+    Left, in order: F5 the deployed drills (P4 Mail lease and router, P5
+    fresh-account Library drill, P6 hostile iframe, P7 replay, strong lease
+    and planted-bad gate), which the install review proof's fixtures
+    unblock; F6 the built-in kinds' enforce flip after its prerequisites
+    (ledger 2026-11-05T17:30Z, 2026-11-06T01:50Z); F8 Phase 8 rounds.
+    Follow-ups: fullEvidenceOperationForRelease misses a re-minted rollback
+    release (409, fails closed). Owner decisions open: the Library
+    republish route (proposed), rotating the QA owner passkey.
+  source_ref: origin/main 4b63780ad
+  deploy_identity: staging 4b63780ad (security epoch 101, desk protocol 15.0.0)
   candidate:
     id: none
     state: none
