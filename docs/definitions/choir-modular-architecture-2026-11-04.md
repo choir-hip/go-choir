@@ -235,20 +235,27 @@ boundaries:
 now:
   status: working
   slice: >-
-    (Rewritten 2026-11-06 13:00Z; the 2026-11-05 card was stale.) Phases 1 to
-    3 closed. Phase 4 landed through MA4.9; MA4.10 (engineering as a package)
-    waits for a week of MA4.6 to MA4.9 staging runs, MA4.11 after it. Phase 5
-    landed through MA5.T1 (Texture app and desk as one package, e23eeee24);
-    the M3 remainder (automated decision, candidate overlay, boot migration)
-    is open and needs a corpusd authority design. Phase 6: MA6.1 to MA6.5 on
-    main and accepted on d@e (gVisor desk workers ad180ea7d; yaegi Go modules
-    5c83a08ff); MA6.6 code mode is building in worktree ma66; MA6.7 (capsule
-    pilot) needs Phase 8 rounds. Phase 7: MA7.1 to MA7.9 landed, the trust
-    view has rows on d@e (e3162eccd), the harness outcome tests are sealed
-    below their minimum n; MA7.10 (anchor sample, flip-rate sampler) not
-    built. Phase 8 not started.
-  source_ref: origin/main 4e63947a6
-  deploy_identity: staging 5c83a08ffdd478679efaf3e604538fe9093db04f (security epoch 86)
+    (Rewritten 2026-11-08 01:30Z; owner 2026-11-08: "Then finish up the
+    mission".) Phases 1 to 3 closed; Phases 4 to 7 landed except as listed;
+    the pass proof applied on d@e through the packaged engineering desk
+    (apply-proof-5d). The finish, in order of dependency:
+    F1 revert in reach: R3.1 (the release X replaced decides the revert),
+    then revert selfdev-91ae7229 on d@e.
+    F2 no LLM outside a desk: anchor sampler reverted (94ba9b725); install
+    review onto management's desk (docs/design/desk-install-review-2026-11-08.md).
+    F3 MA4.11: desk-name switches deleted, names gate at its residue.
+    F4 MA5.2 context-menu sweep and MA5.3 window-manager service, or a
+    recorded supersedure.
+    F5 the unrecorded deployed drills: P4 Mail per-task lease and router
+    distribution; P5 fresh-account Library drill on choir.news; P6 hostile
+    iframe fixture; P7 replay, strong-record lease and planted-bad gate.
+    F6 the built-in kinds' enforce flip, after its prerequisites (ledger
+    2026-11-05T17:30Z, 2026-11-06T01:50Z).
+    F7 MA8.0 theory and practice docs.
+    F8 Phase 8: a Files and a context-menu round as in-place updates.
+    Owner decisions open: the Library catalog republish, b@c's stack.
+  source_ref: origin/main 94ba9b725
+  deploy_identity: staging cc9c64279 (security epoch 97); 94ba9b725 (epoch 98) deploying
   candidate:
     id: none
     state: none
