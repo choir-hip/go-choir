@@ -635,3 +635,63 @@ func TestDelegateCastDropsObjectiveAndRequestQuestions(t *testing.T) {
 		t.Fatalf("the Delegate Cast carries the cell's text or a stated weight: %s", raw)
 	}
 }
+
+// 13.7: a held growth record starts its own task. A corroboration followed by
+// a growth record ends with the growth captures fed to the story, and
+// management's main run is woken by neither.
+func TestGrowthRecordStartsATaskThatFeedsTheStory(t *testing.T) {
+	f := newDelegationFixture(t, "owner-arrival-growth")
+	ctx := context.Background()
+	event := &types.CaptureEvent{EventID: "ev-growth", Reason: types.CaptureEventCorroborated, Headline: "Harbor strike begins", Origins: []string{"a.example", "b.example"}}
+	items := []types.CaptureArrival{{CaptureID: "cap-gr1", Title: "Harbor strike begins", URL: "https://a.example/1", SourceID: "rss:a"}, {CaptureID: "cap-gr2", Title: "Dockers walk out", URL: "https://b.example/1", SourceID: "rss:b"}}
+	req, _ := capturesRecordRequest(f.owner, f.computer, "event:ev-growth", "event-corroborated:ev-growth", false, event, items)
+	if err := f.rt.commitCapturesRecord(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	f.runTask(f.tasks(types.ManagementTaskQueued)[0], openStoryTaskCell)
+	story, _ := f.storyOpening("cap-gr1")
+
+	grew := *event
+	grew.Reason = types.CaptureEventGrew
+	greq, _ := capturesRecordRequest(f.owner, f.computer, "event:ev-growth", "event-grew:ev-growth:p2", true, &grew,
+		[]types.CaptureArrival{{CaptureID: "cap-gr3", Title: "Harbor strike enters day two", URL: "https://c.example/1", SourceID: "rss:c"}})
+	if err := f.rt.commitCapturesRecord(ctx, greq); err != nil {
+		t.Fatal(err)
+	}
+	rec := f.record("event-grew:ev-growth:p2")
+	queued := f.tasks(types.ManagementTaskQueued)
+	if rec == nil || !rec.Captures.Held || len(rec.Captures.StartedTasks) != 1 || len(queued) != 1 || queued[0].LeasedCaptures[0] != "cap-gr3" {
+		t.Fatalf("growth record %+v, queued %+v", rec, queued)
+	}
+	if store.RecordWakesReader(*rec) || f.outboxWakes(f.management(), "event-grew:ev-growth:p2") != 0 {
+		t.Fatal("a growth record woke management's main run")
+	}
+	f.runTask(queued[0], `choir.Feed("`+story+`", []string{"cap-gr3"}, "the same strike, day two", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+choir.Done("fed the strike story")`)
+	if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, "cap-gr3"); d.Kind != types.DispositionFeed || d.Inbox != story {
+		t.Fatalf("the growth capture = %+v, want fed to %s", d, story)
+	}
+}
+
+// 13.7: two groups in one command mint distinct task ids (the chunk counter
+// runs across groups).
+func TestTwoGroupsInOneCommandMintDistinctTaskIDs(t *testing.T) {
+	f := newDelegationFixture(t, "owner-arrival-ids")
+	ev := func(id string) *types.CaptureEvent {
+		return &types.CaptureEvent{EventID: id, Reason: types.CaptureEventCorroborated, Origins: []string{"a", "b"}}
+	}
+	r1, _ := capturesRecordRequest(f.owner, f.computer, "event:e1", "event-corroborated:e1", false, ev("e1"), []types.CaptureArrival{{CaptureID: "cap-id1", Title: "one", URL: "https://x.example/1"}})
+	r2, _ := capturesRecordRequest(f.owner, f.computer, "event:e2", "event-corroborated:e2", false, ev("e2"), []types.CaptureArrival{{CaptureID: "cap-id2", Title: "two", URL: "https://x.example/2"}})
+	both := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "two-groups", Records: append(r1.Records, r2.Records...)}
+	both.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(both)
+	planned, started, err := f.rt.withIntakeTask(context.Background(), both)
+	if err != nil || !started || len(planned.Tasks) != 2 || planned.Tasks[0].TaskID == planned.Tasks[1].TaskID {
+		t.Fatalf("planned %+v, started %v, %v", planned.Tasks, started, err)
+	}
+	if err := f.rt.commitCapturesRecord(context.Background(), both); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(f.tasks(types.ManagementTaskQueued)); n != 2 {
+		t.Fatalf("tasks = %d", n)
+	}
+}

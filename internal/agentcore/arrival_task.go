@@ -67,7 +67,13 @@ func intakeTaskCastBody(records, captures, titles []string) string {
 // which asks research, then re-delegates with the clean stamp or declines.
 func hostStartsIntake(rec types.CommitmentRecord) bool {
 	c := rec.Captures
-	if c == nil || len(c.Items) == 0 || c.Held {
+	if c == nil || len(c.Items) == 0 {
+		return false
+	}
+	// A growth page is held so it wakes no one, but the corroboration that
+	// would have carried it to management now starts a task and wakes no one
+	// either, so a growth page starts its own task (13.7).
+	if c.Held && !(c.Event != nil && c.Event.Reason == types.CaptureEventGrew) {
 		return false
 	}
 	if c.Event != nil {
@@ -118,6 +124,7 @@ func (rt *Runtime) withIntakeTask(ctx context.Context, req types.CommitInboxReco
 	var tasks []types.ManagementTask
 	var casts []types.CommitmentRecord
 	started := map[int][]string{}
+	taskSeq := 0 // runs across groups, so two groups never mint one id
 	for _, g := range groups {
 		var free []arrivalItem
 		var sources []int
@@ -144,7 +151,8 @@ func (rt *Runtime) withIntakeTask(ctx context.Context, req types.CommitInboxReco
 				sources = append(sources, i)
 			}
 		}
-		for chunk := 0; len(free) > 0; chunk++ {
+		for ; len(free) > 0; taskSeq++ {
+			chunk := taskSeq
 			n := min(yaegikernel.MaxTaskCaptures, len(free))
 			part := free[:n]
 			free = free[n:]

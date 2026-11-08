@@ -720,3 +720,16 @@ Built per 13.5 and 13.6. Deviations and findings, each with its reason:
 8. **Not proved in process.** The deployed proof is the S2 re-run on d@e. The in-process
    "no ask" assertion is the publication sink's admission of every owner-private label of the
    story Cast (`publishAutoAdmission`), not a judge call.
+9. **Growth pages start their own task (Sonnet seat note 1).** A `grew` page is held and wakes
+   no one, and the sweep skips any record with an `Event`. Before this build the corroboration
+   record woke management, whose cursor then picked up the growth pages; now corroboration starts
+   a task and wakes no one, so a growth page would wait for an unrelated wake. `hostStartsIntake`
+   therefore also mints for a held record whose reason is `grew`. The record stays held (the
+   `StartedTasks` marker, not `Held`, is what skips the main run), so the sweep is unchanged. The
+   task feeds the story named in the page's `Covered`, or opens one, with the library-head check
+   as the backstop. No research need, so it is inside the r2 mint scope.
+10. **Task ids across groups (Sonnet seat note 2).** The chunk index restarted at 0 per group, so
+    a command with two groups minted one id twice. A running counter now spans the groups. A
+    planning error (a store read) already falls back to the plain arrival with a log line
+    (`commitCapturesRecord`); a refusal at the store's commit still fails the commit, which the
+    next poll retries.

@@ -652,16 +652,14 @@ func TestRecordsOfOneEventAreDelegatedToOneTask(t *testing.T) {
 	// opens a second task. One story per event now rests on the growth
 	// record's Covered list and the story-library head, not on grouping across
 	// commits (named in the S2a build record, 13.7).
-	cell := managementCell(t, rt, owner, computer, "run-event-delegate")
-	if out := cell(delegateAllCell); !strings.Contains(out, "rlm:delegate:") {
-		t.Fatalf("delegate: %s", out)
-	}
+	// Enforce flip 13.7: the held growth record starts its own task too, so no
+	// Delegate is needed to open the second.
 	tasks, err := rt.store.ListManagementTasks(ctx, owner, computer, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(tasks) != 2 {
-		t.Fatalf("the corroboration record and the delegated growth record made %d tasks, want two", len(tasks))
+		t.Fatalf("the corroboration record and the growth record made %d tasks, want two", len(tasks))
 	}
 }
 
