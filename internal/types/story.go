@@ -59,6 +59,10 @@ type CommitmentCaptures struct {
 	Held     bool             `json:"held,omitempty"`
 	Event    *CaptureEvent    `json:"event,omitempty"`
 	Items    []CaptureArrival `json:"items"`
+	// StartedTasks names the management tasks the host minted in the same
+	// commit as this record (enforce flip 13.5, host start on arrival). A
+	// record that started a task wakes no one: its captures are leased.
+	StartedTasks []string `json:"started_tasks,omitempty"`
 }
 
 // Why an event's captures record woke management.

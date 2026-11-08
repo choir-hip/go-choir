@@ -788,7 +788,6 @@ func TestSubCallRecordsStayOutOfDeskPacksAndLegacyRecordsDecode(t *testing.T) {
 // zero without them; the host states no probability.
 func TestSubCallDelegateCastIsTypedOrWeightZero(t *testing.T) {
 	r := &rlmCallReduction{scope: ReductionScope{CellID: "cell-1", RunID: "run-m", ComputerID: "c1", OwnerID: "o1"}}
-	spec := yaegikernel.DelegateSpec{Kind: "intake", Objective: "Dispose of these captures."}
 	base := func() types.CommitmentRecord {
 		return types.CommitmentRecord{RecordID: "cell-1:delegate:L1:0", Kind: types.CommitmentKindDirective,
 			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast}, Cast: &types.CommitmentCast{},
@@ -797,18 +796,17 @@ func TestSubCallDelegateCastIsTypedOrWeightZero(t *testing.T) {
 	stated := base()
 	in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1", Req: &types.RequestFields{
 		PSuccess: fp(0.8), Weight: fp(0.5), Settlement: types.SettlementRecipient, Questions: []types.TypedQuestion{subCallYesNo(0.8)}}}
-	if err := r.typeDelegateCast(&stated, in, spec, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&stated, in, 0, "t1"); err != nil {
 		t.Fatal(err)
 	}
-	if !stated.IsTyped() || stated.IsWeightZero() || stated.PSuccess == nil || *stated.PSuccess != 0.8 || stated.SubCall.Role != "management_task" ||
+	// Enforce flip 13.6: the cell's request payload is not carried, so even a
+	// stated precommitment leaves the Cast weight zero with no question.
+	if stated.IsTyped() || !stated.IsWeightZero() || stated.PSuccess != nil || len(stated.Prediction.Questions) != 0 || stated.SubCall.Role != "management_task" ||
 		stated.SubCall.FanOutID != delegateFanOutID("cell-1", "L1") {
 		t.Fatalf("stated: %+v", stated)
 	}
-	if hasFlag(stated.InertFlags, types.InertWeightBelowFloor) {
-		t.Fatalf("a 0.5 weight is flagged inert: %v", stated.InertFlags)
-	}
 	bare := base()
-	if err := r.typeDelegateCast(&bare, yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1"}, spec, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&bare, yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1"}, 0, "t1"); err != nil {
 		t.Fatal(err)
 	}
 	if bare.IsTyped() || !bare.IsWeightZero() || bare.PSuccess != nil || bare.Weight != nil {
@@ -817,11 +815,11 @@ func TestSubCallDelegateCastIsTypedOrWeightZero(t *testing.T) {
 	low := base()
 	inLow := yaegikernel.StagedIntent{Kind: yaegikernel.IntentDelegate, LocalID: "L1", Req: &types.RequestFields{
 		PSuccess: fp(0.8), Weight: fp(0.01), Settlement: types.SettlementRecipient}}
-	if err := r.typeDelegateCast(&low, inLow, spec, 0, "t1"); err != nil {
+	if err := r.typeDelegateCast(&low, inLow, 0, "t1"); err != nil {
 		t.Fatal(err)
 	}
-	if !hasFlag(low.InertFlags, types.InertWeightBelowFloor) || low.PSuccess == nil {
-		t.Fatalf("a weight under the grants' floor is not flagged (and must not be refused): %+v", low)
+	if low.PSuccess != nil || !low.IsWeightZero() {
+		t.Fatalf("a stated weight reached the Delegate Cast: %+v", low)
 	}
 }
 
@@ -849,8 +847,7 @@ func TestSubCallDelegateTaskReportIsScoredEndToEnd(t *testing.T) {
 	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
 	f.model.parentCell = `var ids []string
 for _, r := range choir.Records() { if r.Captures != nil { ids = append(ids, r.RecordID) } }
-choir.Delegate("intake", "", ids, "per_record", map[string]any{"p_success": 0.8, "weight": 0.4, "settlement": "recipient",
-	"questions": []map[string]any{{"question": "Will the task dispose of every capture?", "answers": []string{"yes", "no"}, "probabilities": map[string]float64{"yes": 0.8, "no": 0.2}, "weight": 0.5}}})`
+choir.Delegate("intake", ids, "per_record")`
 	seedArrival(t, f.s, f.owner, f.computer, "rss:a", []types.CaptureArrival{
 		{CaptureID: "cap-a1", Title: "Pope recovers", URL: "https://a.example/1"},
 		{CaptureID: "cap-a2", Title: "Newsletter", URL: "https://a.example/2"},
@@ -866,9 +863,9 @@ choir.Delegate("intake", "", ids, "per_record", map[string]any{"p_success": 0.8,
 	if err != nil || cast == nil {
 		t.Fatalf("cast: %v %v", cast, err)
 	}
-	if !cast.IsTyped() || cast.IsWeightZero() || cast.PSuccess == nil || *cast.PSuccess != 0.8 || cast.Weight == nil || *cast.Weight != 0.4 ||
+	if cast.IsTyped() || !cast.IsWeightZero() || cast.PSuccess != nil || len(cast.Prediction.Questions) != 0 ||
 		cast.SubCall == nil || cast.SubCall.Kind != types.SubCallCast || cast.Provenance.Origin != types.OriginDeskRun || cast.Provenance.Desk == "" {
-		t.Fatalf("the Delegate Cast is not typed and stamped: %+v", cast)
+		t.Fatalf("the Delegate Cast is not weight zero and stamped: %+v", cast)
 	}
 	// The task runs to its Done; its closing Report is scored.
 	run, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, task.TaskInbox)
@@ -896,8 +893,8 @@ choir.Delegate("intake", "", ids, "per_record", map[string]any{"p_success": 0.8,
 	if cast.ParentID == "" || cast.Prediction.Hypothesis == "" {
 		t.Fatalf("the delegate Cast has no parent edge or objective: %+v", cast.ParentID)
 	}
-	if _, ok := judge.asked[0]["c0.q0"]; !ok {
-		t.Fatalf("the Delegate's typed question was not put to the judge: %v", judge.asked[0])
+	if _, ok := judge.asked[0]["c0.q0"]; ok {
+		t.Fatalf("a model-written question was put to the judge: %v", judge.asked[0])
 	}
 }
 

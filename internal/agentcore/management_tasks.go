@@ -418,8 +418,14 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		}
 		taskID := managementTaskID(r.scope.CellID, in.LocalID, i)
 		inbox := types.ManagementTaskInbox(taskID)
-		body, _ := json.Marshal(map[string]any{"kind": spec.Kind, "records": delegated, "captures": leased, "titles": titles})
-		cast := commitmentRecordForIntent(r.scope, yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, ToDesk: inbox, Objective: spec.Objective, Statement: string(body)})
+		// The Cast carries no text the delegating model wrote: the objective is
+		// a constant, the body is host-supplied ids and capture titles, and
+		// the request fields lose their free-text questions (enforce flip
+		// 13.5). Its labels are those of the records delegated, below.
+		cleanIn := in
+		cleanIn.Req = nil
+		cast := commitmentRecordForIntent(r.scope, yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, ToDesk: inbox, Objective: managementIntakeObjective,
+			Statement: intakeTaskCastBody(delegated, leased, titles), Req: cleanIn.Req})
 		cast.RecordID = fmt.Sprintf("%s:delegate:%s:%d", r.scope.CellID, in.LocalID, i)
 		cast.Inbox, cast.SenderInbox, cast.Addressee = inbox, parent, inbox
 		cast.EmitterKind, cast.ComputerID = types.CommitmentEmitterAgent, r.scope.ComputerID
@@ -428,14 +434,23 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		// The Cast is a sub-call (MA1.5): it carries the delegator's own typed
 		// questions and probabilities when its cell stated them, and is marked
 		// weight zero when not. The host states no probability for it.
-		stampRequestRecord(r.scope, in, &cast)
-		if err := r.typeDelegateCast(&cast, in, spec, i, taskID); err != nil {
+		stampRequestRecord(r.scope, cleanIn, &cast)
+		// The stamp is the union of the delegated records' own labels, never
+		// the delegating run's: a management session only grows, and the
+		// objective that once carried its taint is now a constant (enforce
+		// flip 13.5).
+		stamp, err := rt.delegatedRecordLabels(ctx, r.scope.OwnerID, r.scope.ComputerID, delegated)
+		if err != nil {
+			return nil, nil, fmt.Errorf("delegate %s: %w", in.LocalID, err)
+		}
+		cast.Provenance.Labels = stamp.Strings()
+		if err := r.typeDelegateCast(&cast, cleanIn, i, taskID); err != nil {
 			return nil, nil, fmt.Errorf("delegate %s: %w", in.LocalID, err)
 		}
 		casts = append(casts, cast)
 		tasks = append(tasks, types.ManagementTask{
 			TaskID: taskID, OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID, Kind: types.ManagementTaskIntake,
-			Objective: spec.Objective, ParentInbox: parent, ParentRunID: r.scope.RunID, TaskInbox: inbox,
+			Objective: managementIntakeObjective, ParentInbox: parent, ParentRunID: r.scope.RunID, TaskInbox: inbox,
 			ConversationID: types.InboxConversationID(parent, inbox), OpeningRecordID: cast.RecordID,
 			DelegatedRecordIDs: delegated, LeasedCaptures: leased, DeadlineSeconds: int(managementTaskDeadline / time.Second),
 			State: types.ManagementTaskQueued, CreatedAt: now, UpdatedAt: now,
@@ -451,6 +466,24 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 // not closed after two crashes, and not leased to an open task round. The
 // store checks the same under the commit lock; this only leaves out what
 // is already settled, so one disposed capture does not refuse its record.
+// delegatedRecordLabels is the union of labelsOfRecord over the stored
+// records a delegation works from. A record that cannot be read refuses the
+// delegation: the stamp fails closed rather than going out short.
+func (rt *Runtime) delegatedRecordLabels(ctx context.Context, ownerID, computerID string, ids []string) (types.LabelSet, error) {
+	var set types.LabelSet
+	for _, id := range ids {
+		rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, id)
+		if err != nil {
+			return nil, fmt.Errorf("record %s: %w", id, err)
+		}
+		if rec == nil {
+			return nil, fmt.Errorf("record %s is not on the tape", id)
+		}
+		set = set.Union(labelsOfRecord(*rec))
+	}
+	return set, nil
+}
+
 func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, captureID string) (bool, error) {
 	d, found, err := rt.store.CaptureDispositionOf(objectgraph.WithCustodianReader(ctx, "choir.capture_disposition"), ownerID, computerID, captureID)
 	if err != nil || !found {
@@ -544,17 +577,15 @@ func (rt *Runtime) storyLibraryShownMark(runID string) int64 {
 }
 
 // typeDelegateCast makes a Delegate's task Cast a sub-call Cast: its
-// fan-out is the Delegate (the tasks one call opened), its typed questions
-// and p_success and weight are the delegating cell's own (in.Req), and
-// without them it is marked weight zero. The task's closing Report is the
-// observation the settler scores (closeManagementTask).
-func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yaegikernel.StagedIntent, spec yaegikernel.DelegateSpec, group int, taskID string) error {
+// fan-out is the Delegate (the tasks one call opened). The Cast states no
+// questions, p_success or weight, so it is marked weight zero (enforce flip
+// 13.6). The task's closing Report is the observation the settler scores
+// (closeManagementTask).
+func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yaegikernel.StagedIntent, group int, taskID string) error {
 	role, _, _ := strings.Cut(cast.Addressee, ":")
-	objective := ""
-	if cast.Directive != nil {
-		objective = cast.Directive.Objective
-	}
-	objective = strings.TrimSpace(firstNonEmpty(objective, spec.Objective, in.Objective))
+	// The objective is the constant: neither the Cast's, the Delegate's nor
+	// the cell's text is used (enforce flip 13.5).
+	objective := managementIntakeObjective
 	// The judge is asked whether the Report answers the objective, so the
 	// objective rides on the Cast's prediction as it does for a research
 	// child (a Cast with none is never sent to the judge).
@@ -577,9 +608,8 @@ func (r *rlmCallReduction) typeDelegateCast(cast *types.CommitmentRecord, in yae
 		ParentAgent: parent, ParentRunID: r.scope.RunID, ParentModel: cast.Provenance.ModelID,
 		ComputerID: strings.TrimSpace(r.scope.ComputerID), Now: now,
 	}
-	if in.Req != nil {
-		p.Questions, p.PSuccess, p.Weight, p.Settlement = in.Req.Questions, in.Req.PSuccess, in.Req.Weight, in.Req.Settlement
-	}
+	// The cell's request payload is not carried (enforce flip 13.6): the
+	// Cast is marked weight zero, with no question text a model wrote.
 	cast.ChildIDs = nil
 	cast.SubCall = &types.CommitmentSubCall{Kind: types.SubCallCast, FanOutID: p.FanOutID, Role: p.ChildRole,
 		ParentRunID: p.ParentRunID, ParentAgent: p.ParentAgent, ChildKey: taskID}
@@ -649,12 +679,15 @@ func taskErrText(rec *types.CommitmentRecord) string {
 }
 
 // taskReportLabels is the label set of a management task's closing Report:
-// the task run's labels and the delegating run's, each read from its run
-// record (and the opening Cast's stamp), whatever the caches still hold.
+// the task run's labels and its opening Cast's stamp, each read from its
+// record, whatever the caches still hold.
 func (rt *Runtime) taskReportLabels(ctx context.Context, task types.ManagementTask, runID string) types.LabelSet {
 	set := rt.runLabelsOf(ctx, task.OwnerID, task.ComputerID, firstNonEmpty(runID, task.RunID))
 	if cast, err := rt.store.GetCommitmentRecord(ctx, task.OwnerID, task.ComputerID, task.OpeningRecordID); err == nil && cast != nil {
-		set = set.Union(types.NewLabelSet(cast.Provenance.Labels...), rt.runLabelsOf(ctx, task.OwnerID, task.ComputerID, cast.Provenance.RunID))
+		// The opening Cast's stamp is the delegated records' labels, so a
+		// delegating management run's own taint is not carried through the
+		// Report to the next delegation (enforce flip 13.5).
+		set = set.Union(types.NewLabelSet(cast.Provenance.Labels...))
 	}
 	return set
 }

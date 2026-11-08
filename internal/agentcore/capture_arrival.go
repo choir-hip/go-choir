@@ -105,6 +105,15 @@ func (rt *Runtime) commitCapturesRecord(ctx context.Context, req types.CommitInb
 			return err
 		}
 	}
+	// Host start on arrival (enforce flip 13.5): the intake task and its
+	// opening Cast commit in the arrival's own batch. A failure to plan the
+	// task commits the plain arrival, which wakes management as before.
+	if minted, started, err := rt.withIntakeTask(ctx, req); err != nil {
+		log.Printf("capture arrival %s: no intake task minted, management is woken instead: %v", req.CommandID, err)
+	} else if started {
+		req = minted
+		ctx = withKindCustodian(ctx, "choir.management_task")
+	}
 	if err := commit(ctx, req); err != nil {
 		return fmt.Errorf("capture arrival %s: %w", req.CommandID, err)
 	}

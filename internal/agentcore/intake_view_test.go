@@ -195,13 +195,13 @@ func TestManagementSurfaceListsIntakeFunctionsOnlyWhenOn(t *testing.T) {
 			t.Fatalf("management's prompt omits choir.%s with intake.labels on", verb)
 		}
 	}
-	for _, text := range []string{"r.Labels[id]", "Feed a capture into the story Jev names unless you read otherwise", "One story per event across languages", "state why in the reason"} {
+	for _, text := range []string{"r.Labels[id]", "Captures arrive already delegated", "state why in the reason"} {
 		if !strings.Contains(on, text) {
 			t.Fatalf("management's prompt lacks %q with intake.labels on", text)
 		}
 	}
 	// The block renders as one bullet of the Living stories list.
-	if !strings.Contains(on, "Management never writes a Texture.\n- Intake labels:") {
+	if !strings.Contains(on, "its publication asks the owner.\n- Intake labels:") {
 		t.Fatalf("the intake bullet is not rendered in the surface list:\n%s", on)
 	}
 }

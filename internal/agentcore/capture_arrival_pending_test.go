@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -207,7 +208,10 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, items, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, stored.PendingArrivals, false); err != nil {
+	// With the host-started task (enforce flip 13.5) the replay finds the
+	// captures leased and conflicts on the digest, which announceCaptures
+	// reads as announced; without a task it replays its receipt.
+	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, stored.PendingArrivals, false); err != nil && !errors.Is(err, store.ErrLifecycleCommandConflict) {
 		t.Fatalf("replaying the same arrival was refused: %v", err)
 	}
 	if records, _ := s.ListInboxRecords(ctx, owner, computer, management, 0, 0); len(records) != 1 {

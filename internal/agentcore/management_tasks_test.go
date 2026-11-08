@@ -50,6 +50,10 @@ type delegationModel struct {
 	taskModels []string
 	calls      int
 	outputs    []string
+	// onParent, when set, runs on each of the management main run's model
+	// calls with that run's id (the request's conversation id), so a test can
+	// taint the run as its own reads would.
+	onParent func(runID string)
 }
 
 func (m *delegationModel) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -63,7 +67,11 @@ func (m *delegationModel) CallWithTools(ctx context.Context, req provideriface.T
 	}
 	m.calls++
 	callID := fmt.Sprintf("call-%s-%d", who, m.calls)
+	onParent := m.onParent
 	m.mu.Unlock()
+	if !task && onParent != nil {
+		onParent(req.ConversationID)
+	}
 	if task && gate != nil {
 		select {
 		case <-gate:
@@ -100,7 +108,7 @@ func (m *delegationModel) lastOutput() string {
 
 const delegateAllCell = `var ids []string
 for _, r := range choir.Records() { if r.Captures != nil { ids = append(ids, r.RecordID) } }
-choir.Delegate("intake", "", ids, "per_record")`
+choir.Delegate("intake", ids, "per_record")`
 
 // taskCellFor disposes by title: a "Pope" capture feeds the pope story, a
 // "leave" capture is left for management, the rest are declined.
@@ -498,7 +506,7 @@ func TestManagementTaskDeadlineAndCancelReturnResiduals(t *testing.T) {
 	next := managementCell(t, f.rt, f.owner, f.computer, "run-redelegate")
 	out := next(`var reports []string
 for _, r := range choir.Records() { if r.TaskOutcome != nil { fmt.Println(r.Kind, len(r.TaskOutcome.Residuals)); reports = append(reports, r.RecordID) } }
-choir.Delegate("intake", "", reports, []any{reports})`)
+choir.Delegate("intake", reports, []any{reports})`)
 	if strings.Count(out, "task_report 1") != 2 || strings.Count(out, "rlm:delegate:") != 1 {
 		t.Fatalf("re-delegation: %s", out)
 	}

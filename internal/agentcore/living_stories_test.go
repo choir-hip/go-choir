@@ -123,8 +123,10 @@ func TestPollWithNewCapturesAppendsOneArrivalRecordAndWakesManagement(t *testing
 			woke++
 		}
 	}
-	if woke != 1 {
-		t.Fatalf("management wakes = %d (%+v); want the arrival's one wake", woke, pending)
+	// Enforce flip 13.5: the host starts the arrival's intake task, so the
+	// wake is the task's and management's main run is not woken.
+	if woke != 0 || len(arrival.Captures.StartedTasks) != 1 {
+		t.Fatalf("management wakes = %d, started tasks %v (%+v); want the task's wake only", woke, arrival.Captures.StartedTasks, pending)
 	}
 
 	// The next poll writes nothing new: no record, no wake.

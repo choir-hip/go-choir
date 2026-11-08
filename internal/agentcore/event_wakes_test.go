@@ -101,7 +101,7 @@ func TestCorroboratedEventWakesManagementOnceAndGrowthIsHeld(t *testing.T) {
 		t.Fatalf("records after corroboration = %d (%d corroborated), want exactly one", len(recs), len(woke))
 	}
 	rec := woke[0]
-	if !store.RecordWakesReader(rec) || rec.Captures.Held || rec.Captures.Event == nil || rec.Captures.Event.Reason != types.CaptureEventCorroborated ||
+	if !startsOrWakes(rec) || rec.Captures.Held || rec.Captures.Event == nil || rec.Captures.Event.Reason != types.CaptureEventCorroborated ||
 		len(rec.Captures.Event.Origins) != 2 || itemIDs(rec) != "c1,c2" {
 		t.Fatalf("corroboration record = %+v / %+v", rec.Captures, rec.Captures.Event)
 	}
@@ -197,7 +197,7 @@ func TestAJevOutageSendsTheCapturesToManagementUnresolved(t *testing.T) {
 	}
 	rt.mintEventWakes(ctx, owner, computer, inputs, eventResolveReport{}, errors.New("jev: 503"))
 	got := recordsWithPrefix(managementRecords(t, rt, owner, computer), "event-unresolved:")
-	if len(got) != 1 || !store.RecordWakesReader(got[0]) || itemIDs(got[0]) != "c1,c2" || got[0].Captures.Event.Reason != types.CaptureEventUnresolved ||
+	if len(got) != 1 || !startsOrWakes(got[0]) || itemIDs(got[0]) != "c1,c2" || got[0].Captures.Event.Reason != types.CaptureEventUnresolved ||
 		got[0].Captures.Items[1].SourceID != "src-c2" {
 		t.Fatalf("E10: unresolved record = %+v", got)
 	}
@@ -281,7 +281,7 @@ func TestTheSweepReleasesStrandedHeldCapturesOnceAndDrainsOnRollback(t *testing.
 	}
 	rt.sweepHeldCaptures(ctx, owner, computer, now.Add(eventSweepEvery+eventHeldGrace))
 	released := recordsWithPrefix(managementRecords(t, rt, owner, computer), "event-unresolved:")
-	if len(released) != 1 || itemIDs(released[0]) != "c9" || released[0].Captures.Items[0].SourceID != "rss:b" || !store.RecordWakesReader(released[0]) {
+	if len(released) != 1 || itemIDs(released[0]) != "c9" || released[0].Captures.Items[0].SourceID != "rss:b" || !startsOrWakes(released[0]) {
 		t.Fatalf("E16: released = %+v", released)
 	}
 	calls := 0
@@ -317,6 +317,7 @@ func TestDeclineRoutesAnEventRecordsCapturesToTheirOwnSources(t *testing.T) {
 	}
 	report, _ := rt.resolveEvents(ctx, owner, computer, inputs)
 	rt.mintEventWakes(ctx, owner, computer, inputs, report, nil)
+	cancelMintedTasks(t, rt, owner, computer)
 	cell := managementCell(t, rt, owner, computer, "run-event-decline")
 	out := cell(`choir.Decline([]string{"c1", "c2"}, "a terminal accident with no follow-up", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if strings.Count(out, "rlm:decline:") < 2 {
@@ -589,6 +590,7 @@ func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
 	}
 	report, _ := rt.resolveEvents(ctx, owner, computer, inputs)
 	rt.mintEventWakes(ctx, owner, computer, inputs, report, nil)
+	cancelMintedTasks(t, rt, owner, computer)
 	cell := managementCell(t, rt, owner, computer, "run-event-cover")
 	if out := cell(`choir.Feed("` + story + `", []string{"c1", "c2"}, "the collision story", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "rlm:feed:") {
 		t.Fatalf("feed: %s", out)
@@ -608,6 +610,7 @@ func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
 	plex := []eventInput{capItem("p1", "Plex sells movie tickets", "https://arstechnica.com/p1", ""), capItem("p2", "Plex adds ticketing", "https://www.theverge.com/p2", "")}
 	r2, _ := rt.resolveEvents(ctx, owner, computer, plex)
 	rt.mintEventWakes(ctx, owner, computer, plex, r2, nil)
+	cancelMintedTasks(t, rt, owner, computer)
 	cell = managementCell(t, rt, owner, computer, "run-event-decline-2")
 	if out := cell(`choir.Decline([]string{"p1", "p2"}, "a product launch, not news", map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`); !strings.Contains(out, "rlm:decline:") {
 		t.Fatalf("decline: %s", out)
@@ -644,6 +647,11 @@ func TestRecordsOfOneEventAreDelegatedToOneTask(t *testing.T) {
 	third := []eventInput{capItem("c4", "Eurotunnel crash injures 19", "https://www.euronews.com/4", "")}
 	again, _ := rt.resolveEvents(ctx, owner, computer, third)
 	rt.mintEventWakes(ctx, owner, computer, third, again, nil)
+	// Enforce flip 13.5: the corroboration record started its own task when
+	// it arrived; the held growth record is delegated by management later and
+	// opens a second task. One story per event now rests on the growth
+	// record's Covered list and the story-library head, not on grouping across
+	// commits (named in the S2a build record, 13.7).
 	cell := managementCell(t, rt, owner, computer, "run-event-delegate")
 	if out := cell(delegateAllCell); !strings.Contains(out, "rlm:delegate:") {
 		t.Fatalf("delegate: %s", out)
@@ -652,7 +660,27 @@ func TestRecordsOfOneEventAreDelegatedToOneTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tasks) != 1 {
-		t.Fatalf("two records of one event made %d tasks, want one", len(tasks))
+	if len(tasks) != 2 {
+		t.Fatalf("the corroboration record and the delegated growth record made %d tasks, want two", len(tasks))
+	}
+}
+
+// startsOrWakes reports that a captures record reaches a reader: it wakes
+// management, or the host started its intake task (enforce flip 13.5).
+func startsOrWakes(rec types.CommitmentRecord) bool {
+	return store.RecordWakesReader(rec) || (rec.Captures != nil && len(rec.Captures.StartedTasks) > 0)
+}
+
+// cancelMintedTasks closes the intake tasks the host started, so a test of
+// management's own Feed or Decline of the same captures can run.
+func cancelMintedTasks(t *testing.T, rt *Runtime, owner, computer string) {
+	t.Helper()
+	ctx := context.Background()
+	tasks, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), owner, computer, types.ManagementTaskQueued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range tasks {
+		rt.closeManagementTask(ctx, task, types.TaskClosureCancelled, "", "cancelled by the test", "")
 	}
 }

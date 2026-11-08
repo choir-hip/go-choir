@@ -65,7 +65,9 @@ const (
 //   - a stack rebase notice (the runtime's live timer asking the root
 //     Texture RLM for a rebase; U4);
 //   - a support failure;
-//   - a capture arrival that is not held for its events (event layer §15);
+//   - a capture arrival that is not held for its events (event layer §15)
+//     and started no task (the host starts the intake task in the arrival's
+//     own commit, enforce flip 13.5);
 //   - a management task's final Report that is not clean and was not
 //     written by a crash boot.
 //
@@ -122,7 +124,7 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 		return true
 	}
 	if rec.Captures != nil && len(rec.Captures.Items) > 0 {
-		return !rec.Captures.Held
+		return !rec.Captures.Held && len(rec.Captures.StartedTasks) == 0
 	}
 	if _, fromTask := types.ManagementTaskIDOfInbox(rec.SenderInbox); fromTask && rec.Final && rec.TaskOutcome != nil {
 		stop := ""

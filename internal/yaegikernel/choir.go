@@ -940,11 +940,10 @@ func (s *ChoirScope) Decline(captureIDs any, reason string, req ...any) (string,
 // task. Each task's outcome comes back later as a record from
 // management-task:<id>.
 //
-// req, when given, is your precommitment about the tasks' results (MA1.5):
-// {"p_success", "weight", "settlement", "questions": [{"question",
-// "answers", "probabilities", "weight"}]}. Without it each task's Cast is
-// marked weight zero: no probability is invented for you.
-func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any, req ...any) (string, error) {
+// There is no objective or request argument (enforce flip 13.6): each
+// task's objective is a constant and its Cast is marked weight zero, so no
+// text a model wrote reaches the task.
+func (s *ChoirScope) Delegate(kind string, refs any, grouping any) (string, error) {
 	t, err := s.boundTray("delegate")
 	if err != nil {
 		return "", err
@@ -1058,17 +1057,8 @@ func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any, re
 		out = append(out, []string{id})
 		size = append(size, captures[id])
 	}
-	if strings.TrimSpace(objective) == "" {
-		objective = "Open, feed or decline every capture these records name."
-	}
-	var fields *types.RequestFields
-	// No argument, or an explicit nil, is "no request": the Cast is weight zero.
-	if len(req) > 0 && !(len(req) == 1 && req[0] == nil) {
-		if fields, err = requestArg("Delegate", req); err != nil {
-			return "", err
-		}
-	}
-	return t.DelegateWithRequest(DelegateSpec{Kind: kind, Objective: strings.TrimSpace(objective), Groups: out}, fields)
+	objective := "Open, feed or decline every capture these records name."
+	return t.DelegateWithRequest(DelegateSpec{Kind: kind, Objective: objective, Groups: out}, nil)
 }
 
 // CancelTask cancels a management task (R2-20): a running task's run is
