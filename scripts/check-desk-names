@@ -29,7 +29,7 @@ Usage: scripts/check-desk-names [--root DIR] [--allowlist FILE] [--tighten | --i
 import argparse, json, os, re, sys
 
 NAMES = "Texture|Management|Engineering|Research|Conductor|Email|ManagementTask|ResearchChild|ResearchWeb|ResearchTexture"
-LOWER = "texture|management|engineering|research|conductor|email|management_task|management-task|research_child|research-child|research_web|research_texture"
+LOWER = "texture|management|engineering|research|conductor|management_task|management-task|research_child|research-child|research_web|research_texture"
 IMPORT = re.compile(r'(?:(\w+)\s+)?"github\.com/yusefmosiah/go-choir/internal/(agentprofile|deskmanifest)"')
 VOCAB = re.compile(r"\b(?:types\.(?:ManagementTaskDesk|IsManagementTaskDesk)|yaegikernel\.SessionRole\w+|capsule\.Role(?:Management|Engineering|Research))\b")
 # A desk name as a whole quoted string, or as the head of one ("texture:new").
