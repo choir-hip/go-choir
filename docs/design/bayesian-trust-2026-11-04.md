@@ -457,10 +457,17 @@ every install and update, whoever wrote the code:
 
    | Risk \ publisher record | strong in these classes | thin or new |
    |---|---|---|
-   | I0 to I1 | mechanical only | one seat |
-   | I2 | one seat | one seat |
-   | I3 | one seat | two seats (Devin, DeepSeek) |
-   | I4 (first-party only) | two seats | two seats, plus owner |
+   | I0 to I1 | mechanical only | management's verdict |
+   | I2 | management's verdict | management's verdict |
+   | I3 | management's verdict | management's verdict |
+   | I4 (first-party only) | refused for a Library release | refused for a Library release |
+
+   *Amended 2026-11-08 (desk-install-review-2026-11-08.md):* one desk verdict
+   at every reviewable level. The review seats (Devin, DeepSeek) are deleted:
+   the judgment is management's, made on its desk with choir.InstallPacket and
+   choir.InstallVerdict, and the second model family a thin publisher at I3
+   used to get is a deliberate reduction (management's chain fails over across
+   families; the publisher's trust row still gates the act).
 
 3. **The verdict is a precommitment.** A reviewer's accept states typed
    predictions ("no owner-private data reaches a publisher-reachable sink",
