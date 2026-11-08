@@ -169,10 +169,11 @@ func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref 
 		}
 		// A content item is the shell's kind (section 8.2). The ref comes
 		// from a commitment record a desk wrote, and the card carries the
-		// item's text into Texture's prompt, so the read stays Texture's
-		// and is counted (MA3.7b review): declaring the custodian here would
-		// launder any desk's ref into an uncounted read. A content lease
-		// replaces it before the enforce flip.
+		// item's text into Texture's prompt, so the read stays Texture's:
+		// declaring the custodian here would launder any desk's ref into
+		// the shell's read. Texture is a supplemental reader of content_item
+		// (objectgraph.supplementalKindReaders, enforce flip D3), so the read
+		// is admitted as Texture's.
 		item, err := rt.Store.GetContentItem(ctx, ownerID, value)
 		if err != nil {
 			return textureSourceEntity{}
@@ -184,8 +185,9 @@ func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref 
 		}
 		// Plan 8.1 rule (b): research evidence carried to Texture in a record
 		// the evidence's own custodian stamped is carried data, read as that
-		// custodian and not counted. Any other carrier's ref (a record some
-		// other desk wrote) stays Texture's read and is counted.
+		// custodian. Any other carrier's ref (a record some other desk wrote)
+		// stays Texture's read, which is admitted: Texture is a supplemental
+		// reader of agent_evidence (enforce flip D3).
 		if carrierIsCustodian(ctx, "choir.agent_evidence") {
 			ctx = objectgraph.WithCustodianReader(ctx, "choir.agent_evidence")
 		}
