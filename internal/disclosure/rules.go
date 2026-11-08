@@ -41,6 +41,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -184,7 +185,10 @@ type Facts struct {
 // section 6.2). The last three are the product-API path segments a
 // management run reads (productAPIObjectKind). Every other atom, a future one
 // included, still follows the table.
-var ownerFlowAtoms = []string{"capture", "evidence", "document", "texture", "model-policy", "computers", "prompt-bar"}
+//
+// "texture" is the custodian's own label atom (store.textureSearchLabel), so it
+// is read from the registry's writer and not spelled here.
+var ownerFlowAtoms = []string{"capture", "evidence", "document", strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"), "model-policy", "computers", "prompt-bar"}
 
 // OwnerFlowAtoms returns the atoms OwnerFlow carries, for tests and the
 // report.
