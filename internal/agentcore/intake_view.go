@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -43,10 +42,10 @@ func (rt *Runtime) captureLabelViews(ctx context.Context, ownerID, computerID st
 func captureLabelView(l store.CaptureLabel) yaegikernel.CaptureLabelView {
 	v := yaegikernel.CaptureLabelView{Version: l.Version, Event: l.Event, Headline: l.EventHeadline, SameEventAs: l.EventCaptureID, P: l.EventP, TopicHeadline: l.TopicHeadline}
 	if l.EventDocID != "" {
-		v.Story = agentprofile.Texture + ":" + l.EventDocID
+		v.Story = deskmanifest.DocumentInbox(l.EventDocID)
 	}
 	if l.TopicDocID != "" {
-		v.TopicStory = agentprofile.Texture + ":" + l.TopicDocID
+		v.TopicStory = deskmanifest.DocumentInbox(l.TopicDocID)
 	}
 	switch {
 	case l.Model == intakeNoCandidatesModel:
@@ -127,7 +126,7 @@ func (rt *Runtime) storiesEgress(ctx context.Context, deskRole string, exec tool
 		sums = sums[:limit]
 	}
 	for _, sum := range sums {
-		page.Stories = append(page.Stories, yaegikernel.StoryEntry{DocID: sum.DocID, Inbox: agentprofile.Texture + ":" + sum.DocID,
+		page.Stories = append(page.Stories, yaegikernel.StoryEntry{DocID: sum.DocID, Inbox: deskmanifest.DocumentInbox(sum.DocID),
 			Headline: sum.Headline, Lede: sum.Lede, UpdatedAt: sum.UpdatedAt.UTC().Format(time.RFC3339Nano), Version: sum.Version})
 	}
 	if more && len(sums) > 0 {

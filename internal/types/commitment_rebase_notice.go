@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"strconv"
 	"strings"
 	"time"
@@ -156,7 +157,7 @@ func IsStackRebaseNotice(rec CommitmentRecord) bool {
 	}
 	refs := rec.SubjectRefs
 	return rec.EmitterKind == CommitmentEmitterSystem && !rec.Final && rec.Round == 0 &&
-		strings.HasPrefix(strings.TrimSpace(rec.Inbox), "texture:") && strings.TrimSpace(rec.Inbox) != "texture:" &&
+		deskmanifest.IsDocumentInbox(strings.TrimSpace(rec.Inbox)) && strings.TrimSpace(rec.Inbox) != deskmanifest.DocumentInbox("") &&
 		strings.TrimSpace(rec.SenderInbox) == StackRebaseSenderInbox(operationID) &&
 		strings.TrimSpace(refs["operation_id"]) == operationID &&
 		strings.TrimSpace(refs["booted_base"]) == base &&
@@ -187,7 +188,7 @@ type StackRebaseNotice struct {
 func NewStackRebaseNotice(n StackRebaseNotice) (CommitmentRecord, bool) {
 	inbox := strings.TrimSpace(n.TextureInbox)
 	op, booted, stack := strings.TrimSpace(n.OperationID), strings.TrimSpace(n.BootedBase), strings.TrimSpace(n.StackBase)
-	if !strings.HasPrefix(inbox, "texture:") || inbox == "texture:" || op == "" || strings.Contains(op, ":") || booted == "" || strings.Contains(booted, ":") || stack == "" ||
+	if !deskmanifest.IsDocumentInbox(inbox) || inbox == deskmanifest.DocumentInbox("") || op == "" || strings.Contains(op, ":") || booted == "" || strings.Contains(booted, ":") || stack == "" ||
 		n.Attempt < 1 || (n.Attempt > RebaseNoticeMaxAttempts) != n.OwnerRetry {
 		return CommitmentRecord{}, false
 	}

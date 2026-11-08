@@ -836,7 +836,7 @@ func (e *traceExporter) exportInboxRecords(bundle *traceBundle, docIDs map[strin
 	}
 	var inboxIDs []string
 	for _, docID := range sortedKeys(docIDs) {
-		inboxIDs = append(inboxIDs, "texture:"+docID, deskmanifest.ResearchInbox(docID))
+		inboxIDs = append(inboxIDs, deskmanifest.DocumentInbox(docID), deskmanifest.ResearchInbox(docID))
 	}
 	for _, ownerID := range sortedKeys(owners) {
 		inboxIDs = append(inboxIDs, deskmanifest.AdmitterInbox(ownerID))

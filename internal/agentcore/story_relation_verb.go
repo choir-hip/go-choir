@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"log"
 	"strings"
 	"time"
@@ -69,7 +70,7 @@ type relateStoriesResult struct {
 }
 
 func (rt *Runtime) relateStoriesEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
-	if deskRole != yaegikernel.SessionRoleResearch {
+	if !deskmanifest.SpawnsResearch(deskRole) {
 		return nil, fmt.Errorf("choir.RelateStories belongs to the research desk; this session is %q", deskRole)
 	}
 	if rt == nil || rt.store == nil {

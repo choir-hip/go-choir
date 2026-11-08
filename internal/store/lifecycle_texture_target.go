@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -98,10 +97,10 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 	if err != nil {
 		return LifecycleTextureControlTargetBinding{}, fmt.Errorf("validate lifecycle Texture control target: lookup caller run: %w", err)
 	}
-	expectedTextureAgentID := agentprofile.Texture + ":" + req.DocumentID
+	expectedTextureAgentID := deskmanifest.DocumentInbox(req.DocumentID)
 	if callerRun.RunID != req.CallerRunID || callerRun.OwnerID != ownerID || callerRun.ComputerID != computerID ||
 		callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentID != req.CallerAgentID || req.CallerAgentID != expectedTextureAgentID ||
-		strings.TrimSpace(callerRun.AgentProfile) != agentprofile.Texture || strings.TrimSpace(callerRun.AgentRole) != agentprofile.Texture ||
+		strings.TrimSpace(callerRun.AgentProfile) != deskmanifest.DocumentCustodianName() || strings.TrimSpace(callerRun.AgentRole) != deskmanifest.DocumentCustodianName() ||
 		strings.TrimSpace(callerRun.ChannelID) != req.DocumentID || !callerRun.State.Active() {
 		return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("caller run is not the active lifecycle Texture for the document")
 	}
@@ -111,7 +110,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		return LifecycleTextureControlTargetBinding{}, fmt.Errorf("validate lifecycle Texture control target: lookup caller agent: %w", err)
 	}
 	if callerAgent.AgentID != req.CallerAgentID || callerAgent.OwnerID != ownerID || callerAgent.ComputerID != computerID ||
-		strings.TrimSpace(callerAgent.Profile) != agentprofile.Texture || strings.TrimSpace(callerAgent.Role) != agentprofile.Texture ||
+		strings.TrimSpace(callerAgent.Profile) != deskmanifest.DocumentCustodianName() || strings.TrimSpace(callerAgent.Role) != deskmanifest.DocumentCustodianName() ||
 		strings.TrimSpace(callerAgent.ChannelID) != req.DocumentID || callerAgent.LifecycleVersion <= 0 ||
 		strings.TrimSpace(callerAgent.ActiveRunID) != req.CallerRunID {
 		return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("caller agent does not own the current lifecycle Texture activation")
@@ -221,7 +220,7 @@ func lifecycleTargetWorkMismatch(work types.WorkItemRecord, req LifecycleTexture
 // trajectory, so a shared channel alone is not provenance.
 func lifecycleTargetWorkOpenedByTexture(ctx context.Context, reader lifecycleTextureControlTargetReader, work types.WorkItemRecord, req LifecycleTextureControlTargetRequest) bool {
 	openerRunID := strings.TrimSpace(work.CreatedByRunID)
-	if openerRunID == "" || workDetailString(work.Details, "requested_by_profile") != agentprofile.Texture ||
+	if openerRunID == "" || workDetailString(work.Details, "requested_by_profile") != deskmanifest.DocumentCustodianName() ||
 		workDetailString(work.Details, "requested_by_agent_id") != req.CallerAgentID ||
 		workDetailString(work.Details, "requested_by_run_id") != openerRunID {
 		return false
@@ -231,7 +230,7 @@ func lifecycleTargetWorkOpenedByTexture(ctx context.Context, reader lifecycleTex
 	}
 	opener, err := reader.GetLifecycleRun(ctx, req.OwnerID, req.ComputerID, openerRunID)
 	return err == nil && opener.RunID == openerRunID && opener.AgentID == req.CallerAgentID &&
-		opener.TrajectoryID == req.TrajectoryID && strings.TrimSpace(opener.AgentProfile) == agentprofile.Texture
+		opener.TrajectoryID == req.TrajectoryID && strings.TrimSpace(opener.AgentProfile) == deskmanifest.DocumentCustodianName()
 }
 
 func workDetailString(details map[string]any, key string) string {

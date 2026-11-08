@@ -899,7 +899,7 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
-	if runHasProfile(rec, agentprofile.Texture) || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
+	if runHasProfile(rec, deskmanifest.DocumentCustodianName()) || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
 		if err := rt.store.UpdateRunWithEvent(ctx, *rec, event); err != nil {
 			return err
 		}
@@ -1630,7 +1630,7 @@ func (rt *Runtime) bindLifecycleDirectivesToRun(ctx context.Context, rec *types.
 
 func persistentManagementSenderAuthorized(update types.CoagentSourcePacket) bool {
 	role, _ := agentprofile.Canonical(update.Role)
-	return role == agentprofile.Texture &&
+	return role == deskmanifest.DocumentCustodianName() &&
 		update.Direction == types.LifecyclePacketDirectionControl
 }
 
@@ -2006,7 +2006,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, nil
 	}
 	first := updates[0]
-	if profile == "" || profile == agentprofile.Mail || profile == agentprofile.Conductor || deskmanifest.AdmitsAssignments(profile) {
+	if profile == "" || profile == agentprofile.Mail || profile == deskmanifest.FrontDoorName() || deskmanifest.AdmitsAssignments(profile) {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -2300,7 +2300,7 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 // revision into the Texture run's context. The owner revision is the desk's
 // input: the run consumes it by committing a texture turn against that head.
 func (rt *Runtime) lifecycleOwnerRevisionTurnForRun(ctx context.Context, rec *types.RunRecord, phase string, seen map[string]bool) ([]json.RawMessage, []string, error) {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != deskmanifest.DocumentCustodianName() {
 		return nil, nil, nil
 	}
 	ownerID, computerID, trajectoryID, agentID := strings.TrimSpace(rec.OwnerID), strings.TrimSpace(rec.ComputerID), strings.TrimSpace(rec.TrajectoryID), strings.TrimSpace(rec.AgentID)
@@ -2527,7 +2527,7 @@ func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
 	if requestSource == "lifecycle_texture_control" {
 		return true
 	}
-	if agentProfileForRun(rec) != agentprofile.Texture {
+	if agentProfileForRun(rec) != deskmanifest.DocumentCustodianName() {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_intent") == "apply_owner_revision" {
@@ -2666,7 +2666,7 @@ func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
 		return false
 	}
 	switch agentProfileForRun(rec) {
-	case deskmanifest.AdmitterName(), deskmanifest.PerformerName(), deskmanifest.ResearcherName(), agentprofile.Texture:
+	case deskmanifest.AdmitterName(), deskmanifest.PerformerName(), deskmanifest.ResearcherName(), deskmanifest.DocumentCustodianName():
 		return strings.TrimSpace(rec.AgentID) != ""
 	default:
 		return false
@@ -2724,7 +2724,7 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if agentProfileForRun(rec) == agentprofile.Texture {
+	if agentProfileForRun(rec) == deskmanifest.DocumentCustodianName() {
 		return false
 	}
 	requestSource := metadataStringValue(rec.Metadata, "request_source")

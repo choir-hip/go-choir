@@ -49,7 +49,7 @@ func (rt *Runtime) skillContextForProfile(profile string) string {
 func profileReceivesSkillContext(profile string) bool {
 	canonicalProfile, _ := agentprofile.Canonical(profile)
 	switch canonicalProfile {
-	case agentprofile.Conductor, agentprofile.Texture, deskmanifest.AdmitterName(), deskmanifest.PerformerName():
+	case deskmanifest.FrontDoorName(), deskmanifest.DocumentCustodianName(), deskmanifest.AdmitterName(), deskmanifest.PerformerName():
 		return true
 	default:
 		return false

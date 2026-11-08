@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -247,7 +246,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		if work.Details == nil {
 			work.Details = map[string]any{}
 		}
-		work.Details["requested_by_profile"] = agentprofile.Texture
+		work.Details["requested_by_profile"] = deskmanifest.DocumentCustodianName()
 		work.Details["requested_by_agent_id"] = a.callerAgentID
 		work.Details["requested_by_run_id"] = a.callerRunID
 		workCanonicalID, err := lifecycleCanonicalID(ogKindWorkItem, a.ownerID, a.computerID, work.WorkItemID)
@@ -308,7 +307,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		UpdateID:       control.ControlID, ProducerUpdateID: control.ControlID, OwnerID: a.ownerID, ComputerID: a.computerID,
 		AgentID: a.callerAgentID, TargetAgentID: control.TargetAgentID, ChannelID: a.documentID,
 		MessageSeq: *a.seq, TrajectoryID: a.trajectoryID, Direction: types.LifecyclePacketDirectionControl,
-		TargetWorkItemID: control.TargetWorkItemID, Role: agentprofile.Texture, SourceRunID: a.callerRunID,
+		TargetWorkItemID: control.TargetWorkItemID, Role: deskmanifest.DocumentCustodianName(), SourceRunID: a.callerRunID,
 		PayloadDigest: control.PayloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: *a.seq,
 		Packet: control.Packet, Content: control.Content, CreatedAt: a.now,
 	}
@@ -445,7 +444,7 @@ func (s *Store) IssueLifecycleControl(ctx context.Context, req types.IssueLifecy
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if trajectory.Status != types.TrajectoryLive || trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID || trajectory.TrajectoryID != req.TrajectoryID || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion || strings.TrimSpace(trajectory.SubjectRefs["doc_id"]) != req.DocumentID || document.DocID != req.DocumentID || document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID || document.ArchivedAt != nil || callerAgent.AgentID != req.CallerAgentID || callerAgent.OwnerID != ownerID || callerAgent.ComputerID != computerID || callerAgent.Profile != agentprofile.Texture || callerAgent.Role != agentprofile.Texture || callerAgent.ChannelID != req.DocumentID || callerAgent.ActiveRunID != req.CallerRunID || callerAgent.LifecycleVersion != req.ExpectedCallerLifecycleVersion || callerRun.RunID != req.CallerRunID || callerRun.AgentID != req.CallerAgentID || callerRun.OwnerID != ownerID || callerRun.ComputerID != computerID || callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentProfile != agentprofile.Texture || callerRun.AgentRole != agentprofile.Texture || callerRun.ChannelID != req.DocumentID || !callerRun.State.Active() {
+	if trajectory.Status != types.TrajectoryLive || trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID || trajectory.TrajectoryID != req.TrajectoryID || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion || strings.TrimSpace(trajectory.SubjectRefs["doc_id"]) != req.DocumentID || document.DocID != req.DocumentID || document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID || document.ArchivedAt != nil || callerAgent.AgentID != req.CallerAgentID || callerAgent.OwnerID != ownerID || callerAgent.ComputerID != computerID || callerAgent.Profile != deskmanifest.DocumentCustodianName() || callerAgent.Role != deskmanifest.DocumentCustodianName() || callerAgent.ChannelID != req.DocumentID || callerAgent.ActiveRunID != req.CallerRunID || callerAgent.LifecycleVersion != req.ExpectedCallerLifecycleVersion || callerRun.RunID != req.CallerRunID || callerRun.AgentID != req.CallerAgentID || callerRun.OwnerID != ownerID || callerRun.ComputerID != computerID || callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentProfile != deskmanifest.DocumentCustodianName() || callerRun.AgentRole != deskmanifest.DocumentCustodianName() || callerRun.ChannelID != req.DocumentID || !callerRun.State.Active() {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
 

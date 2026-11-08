@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -127,7 +127,7 @@ func (h *Handler) existingReconcilerTextureHandoff(ctx context.Context, parentRe
 	}
 	for _, run := range runs {
 		routeRunProfile := agentProfileForRun(&run)
-		if routeRunProfile != agentprofile.Texture ||
+		if routeRunProfile != deskmanifest.DocumentCustodianName() ||
 			strings.TrimSpace(run.RequestedByRunID) != strings.TrimSpace(parentRec.RunID) ||
 			metadataStringValue(run.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
@@ -216,16 +216,16 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: lifecycleKey,
 		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindTask,
-		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + doc.DocID},
+		SubjectRefs:    map[string]string{"artifact": deskmanifest.DocumentArtifactPrefix() + doc.DocID},
 		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: firstNonEmpty(strings.TrimSpace(req.Objective), "Produce the requested Texture artifact."),
-			AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,
+			AssignedAgentID: agentID, AuthorityProfile: deskmanifest.DocumentCustodianName(),
 		},
 		InitialDocument: doc, InitialRevision: seedRev,
 		Agent: types.AgentRecord{
 			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
-			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,
+			Profile: deskmanifest.DocumentCustodianName(), Role: deskmanifest.DocumentCustodianName(), ChannelID: doc.DocID,
 			CreatedAt: now, UpdatedAt: now,
 		},
 	}

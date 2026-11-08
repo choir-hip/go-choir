@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"strings"
 	"time"
 
@@ -478,7 +479,7 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 	channelID := strings.TrimSpace(spec.ChannelID)
 	if documentID == "" || channelID != documentID ||
 		(strings.TrimSpace(spec.TrajectoryID) != "" && strings.TrimSpace(spec.TrajectoryID) != req.TrajectoryID) ||
-		strings.TrimSpace(spec.TargetAgentID) != "texture:"+documentID {
+		strings.TrimSpace(spec.TargetAgentID) != deskmanifest.DocumentInbox(documentID) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
@@ -497,7 +498,7 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 		return types.LifecycleResult{}, err
 	}
 	if targetAgent.AgentID != spec.TargetAgentID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
-		targetAgent.LifecycleVersion <= 0 || targetAgent.Profile != "texture" || targetAgent.Role != "texture" || targetAgent.ChannelID != documentID {
+		targetAgent.LifecycleVersion <= 0 || targetAgent.Profile != deskmanifest.DocumentCustodianName() || targetAgent.Role != deskmanifest.DocumentCustodianName() || targetAgent.ChannelID != documentID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	callerAgentObj, callerAgent, err := s.textureTurnAgentObject(ctx, ownerID, computerID, req.CallerAgentID)

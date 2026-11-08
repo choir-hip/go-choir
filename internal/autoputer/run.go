@@ -20,7 +20,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/committer"
@@ -712,10 +711,10 @@ func Run() {
 	// computer routes require it; docs/archive/problems/surface-broken-calls-2026-10-14.md).
 	rt.Runtime.SetProductAPIHandler(s, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")))
 	log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
-		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
+		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(deskmanifest.FrontDoorName())),
 		rt.Runtime.ToolRegistryForProfile(deskmanifest.AdmitterName()).Size(),
 		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(deskmanifest.ResearcherName())),
-		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
+		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(deskmanifest.DocumentCustodianName())),
 	)
 
 	RegisterComputerSurface(s, NewComputerSurfaceFromEnv())

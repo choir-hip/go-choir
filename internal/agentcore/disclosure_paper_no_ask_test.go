@@ -41,7 +41,7 @@ func TestPublishAutoWorkNeverWaitsOnTheOwner(t *testing.T) {
 
 	// A task run is its task inbox's agent in the task role.
 	task := seed("run-intake-task", agentprofile.ManagementTask)
-	task.RunRecord.AgentID = types.ManagementTaskDesk + ":mt-paper"
+	task.RunRecord.AgentID = types.TaskInboxDesk + ":mt-paper"
 	task.AgentID = task.RunRecord.AgentID
 	err := f.gate(task, agentprofile.Management, disclosure.SinkDeskMessage, "texture:new", "cast {\"publish\":\"auto\"}")
 	if err == nil || strings.Contains(err.Error(), "waits on the owner") || !strings.Contains(err.Error(), "never asks the owner") {

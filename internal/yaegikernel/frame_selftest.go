@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"sync/atomic"
 	"time"
 )
@@ -24,7 +25,7 @@ import (
 // script holds the expected table itself.
 
 // FrameBoundaryRoles are the desk roles the probe covers.
-var FrameBoundaryRoles = []string{"management", "texture", "research", SessionRoleResearchWeb, SessionRoleResearchTexture, SessionRoleManagementTask}
+var FrameBoundaryRoles = append(deskmanifest.CellDeskNames(), deskmanifest.CellRoleNames()...)
 
 // FrameBoundaryActions are every action a frame can name.
 var FrameBoundaryActions = []BrokerAction{

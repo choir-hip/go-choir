@@ -153,8 +153,8 @@ func deferTextureOccurrence(err error) error {
 func textureRunRecord(rec types.RunRecord) bool {
 	recordProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 	recordRole, _ := agentprofile.Canonical(rec.AgentRole)
-	if recordProfile == agentprofile.Texture ||
-		recordRole == agentprofile.Texture {
+	if recordProfile == deskmanifest.DocumentCustodianName() ||
+		recordRole == deskmanifest.DocumentCustodianName() {
 		return true
 	}
 	if rec.Metadata == nil {
@@ -163,7 +163,7 @@ func textureRunRecord(rec types.RunRecord) bool {
 	for _, key := range []string{"agent_profile", "agent_role"} {
 		if value, ok := rec.Metadata[key].(string); ok {
 			metaProfile, _ := agentprofile.Canonical(value)
-			if metaProfile == agentprofile.Texture {
+			if metaProfile == deskmanifest.DocumentCustodianName() {
 				return true
 			}
 		}
@@ -497,7 +497,7 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 	if err != nil {
 		return nil, fmt.Errorf("%w: actorruntime: load owner revision: %v", actor.ErrDeferUnprocessed, err)
 	}
-	profile := agentprofile.Texture
+	profile := deskmanifest.DocumentCustodianName()
 	if deskmanifest.IsAssignmentInbox(agentID) {
 		profile = deskmanifest.PerformerName()
 	}
@@ -541,14 +541,14 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 		return nil, fmt.Errorf("actorruntime: resolve inbox record scope: %w", err)
 	}
 	switch {
-	case strings.HasPrefix(agentID, agentprofile.Texture+":"):
+	case deskmanifest.IsDocumentInbox(agentID):
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
 		}
 		// A desk report to a document is a change the Texture root renders
 		// (PD3 S1): noted after the record's commit, off this wake's path.
-		h.textureOwner.NoteTextureRootChange(ctx, ownerID, computerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
-		rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
+		h.textureOwner.NoteTextureRootChange(ctx, ownerID, computerID, strings.TrimPrefix(agentID, deskmanifest.DocumentCustodianName()+":"))
+		rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, deskmanifest.DocumentCustodianName()+":"))
 		if err != nil {
 			return nil, fmt.Errorf("%w: actorruntime: Texture inbox wake: %v", actor.ErrDeferUnprocessed, err)
 		}
@@ -587,7 +587,7 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 		}
 	case deskmanifest.IsResearchInbox(agentID), deskmanifest.IsAdmitterInbox(agentID), deskmanifest.IsAppInbox(agentID),
 		// A management task's inbox wake is its durable start (S2a, R2-6).
-		strings.HasPrefix(agentID, types.ManagementTaskDesk+":"), strings.HasPrefix(agentID, agentprofile.ManagementTask+":"):
+		strings.HasPrefix(agentID, types.TaskInboxDesk+":"), strings.HasPrefix(agentID, deskmanifest.TaskRoleName()+":"):
 		if _, err := h.rt.WakeRecordsInbox(ctx, ownerID, computerID, agentID); err != nil {
 			return nil, fmt.Errorf("%w: actorruntime: inbox wake for %s: %v", actor.ErrDeferUnprocessed, agentID, err)
 		}
@@ -604,7 +604,7 @@ func (h *actorHandler) handleChannelMessage(ctx context.Context, u actor.Update,
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: resolve channel_message scope: %w", err)
 	}
-	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
+	if deskmanifest.IsDocumentInbox(agentID) {
 		return memory, nil
 	}
 	rs, err := decodeResumeState(memory)
@@ -667,7 +667,7 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 	}
 	restartParked := rec.State == types.RunPassivated &&
 		strings.TrimSpace(metadataString(rec.Metadata, "passivated_reason")) == "runtime_restarted"
-	if restartParked && (strings.HasPrefix(rec.AgentID, agentprofile.Texture+":") || textureRunRecord(rec)) {
+	if restartParked && (deskmanifest.IsDocumentInbox(rec.AgentID) || textureRunRecord(rec)) {
 		return h.resumeRestartParkedTexture(ctx, u)
 	}
 	if restartParked {
@@ -697,7 +697,7 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 	if scopeErr != nil {
 		return nil, fmt.Errorf("actorruntime: resolve initial_dispatch scope: %w", scopeErr)
 	}
-	if strings.HasPrefix(agentID, agentprofile.Texture+":") || textureRunRecord(rec) {
+	if deskmanifest.IsDocumentInbox(agentID) || textureRunRecord(rec) {
 		if h.textureOwner == nil {
 			return nil, fmt.Errorf("actorruntime: Texture owner is not bound")
 		}
@@ -730,7 +730,7 @@ func (h *actorHandler) resumeRestartParkedTexture(ctx context.Context, u actor.U
 	if h.textureOwner == nil {
 		return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
 	}
-	rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
+	rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, deskmanifest.DocumentCustodianName()+":"))
 	if err != nil {
 		return nil, fmt.Errorf("%w: actorruntime: resume restart-parked Texture turn: %v", actor.ErrDeferUnprocessed, err)
 	}
@@ -859,7 +859,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 			return nil, nil
 		}
 	}
-	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
+	if deskmanifest.IsDocumentInbox(agentID) {
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
 		}
@@ -1160,7 +1160,7 @@ func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Up
 	if err != nil {
 		return nil, err
 	}
-	prefix := agentprofile.Texture + ":"
+	prefix := deskmanifest.DocumentCustodianName() + ":"
 	if strings.HasPrefix(agentID, prefix) {
 		if h.textureOwner == nil {
 			return nil, fmt.Errorf("Texture owner is not bound")
@@ -1179,8 +1179,8 @@ func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Up
 	}
 	wakeAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 	wakeAgentRole, _ := agentprofile.Canonical(agent.Role)
-	if wakeAgentProfile == agentprofile.Texture ||
-		wakeAgentRole == agentprofile.Texture {
+	if wakeAgentProfile == deskmanifest.DocumentCustodianName() ||
+		wakeAgentRole == deskmanifest.DocumentCustodianName() {
 		return nil, fmt.Errorf("Texture subject has noncanonical agent identity")
 	}
 	return h.rt.ReconcileCoagentWake(ctx, ownerID, agentID)

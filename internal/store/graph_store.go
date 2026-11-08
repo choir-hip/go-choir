@@ -362,7 +362,7 @@ func (s *Store) UpsertAgentOG(ctx context.Context, rec types.AgentRecord) error 
 	if rec.OwnerID == "" || rec.ComputerID == "" || rec.AgentID == "" {
 		return fmt.Errorf("store: upsert agent requires owner_id, computer_id, and agent_id")
 	}
-	if strings.HasPrefix(rec.AgentID, "texture:") || rec.LifecycleVersion > 0 || strings.TrimSpace(rec.ActiveRunID) != "" {
+	if deskmanifest.IsDocumentInbox(rec.AgentID) || rec.LifecycleVersion > 0 || strings.TrimSpace(rec.ActiveRunID) != "" {
 		return ErrLifecycleAuthorityRequired
 	}
 	if s.ogStore == nil {

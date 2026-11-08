@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -63,7 +62,7 @@ func openTextureRequest(snapshot types.LifecycleSnapshot, agentID string) (types
 	}
 	agentID = strings.TrimSpace(agentID)
 	for _, work := range snapshot.WorkItems {
-		if work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID && strings.TrimSpace(work.AuthorityProfile) == agentprofile.Texture {
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID && strings.TrimSpace(work.AuthorityProfile) == deskmanifest.DocumentCustodianName() {
 			return work, true
 		}
 	}
@@ -218,11 +217,11 @@ func textureRequestUnattendedWait(snapshot types.LifecycleSnapshot, docID string
 }
 
 func latestTextureWork(snapshot types.LifecycleSnapshot, docID string) (types.WorkItemRecord, bool) {
-	textureAgentID := agentprofile.Texture + ":" + docID
+	textureAgentID := deskmanifest.DocumentInbox(docID)
 	var latest *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
 		work := &snapshot.WorkItems[i]
-		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != agentprofile.Texture {
+		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != deskmanifest.DocumentCustodianName() {
 			continue
 		}
 		if latest == nil || work.UpdatedAt.After(latest.UpdatedAt) {

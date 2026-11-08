@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
@@ -181,7 +180,7 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 		return metadata
 	}
 	if strings.TrimSpace(role) == "" {
-		role = agentprofile.Conductor
+		role = deskmanifest.FrontDoorName()
 	}
 	policy, err := m.loadWithOverlay(ctx, ownerID, metadataString(metadata, MetadataPolicyOverlayID))
 	if err != nil {
@@ -318,7 +317,7 @@ func joinPolicyErrors(metadata map[string]any, text string) string {
 // Texture run (a document keeps one model), otherwise the trajectory. A run
 // with neither gets a fresh random key.
 func ThreadKey(metadata map[string]any) string {
-	if agentID := metadataString(metadata, "agent_id"); strings.HasPrefix(agentID, "texture:") {
+	if agentID := metadataString(metadata, "agent_id"); deskmanifest.IsDocumentInbox(agentID) {
 		return agentID
 	}
 	if trajectory := metadataString(metadata, "trajectory_id"); trajectory != "" {
@@ -445,7 +444,7 @@ func fnv32(key string) uint32 {
 // fine using a pool for management too. i want to spread the load, and also
 // to see which models fail at this". This deletes the R2-9 pin to one
 // non-free, non-preview model (management delegation design round 2, O5).
-const ManagementTaskRole = agentprofile.ManagementTask
+var ManagementTaskRole = deskmanifest.TaskRoleName()
 
 // Resolve returns the effective selection for role.
 func (p Policy) Resolve(role string) provideriface.LLMSelection {
@@ -664,13 +663,13 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 	return Policy{
 		Defaults: pool("low"),
 		Roles: map[string]provideriface.LLMSelection{
-			agentprofile.Conductor:        pool("low"),
-			deskmanifest.AdmitterName():   pool("high"),
-			deskmanifest.PerformerName():  pool(""),
-			deskmanifest.ResearcherName(): pool("low"),
-			agentprofile.Texture:          pool("low"),
-			VerifierRole:                  pool(""),
-			MultimodalVerifierRole:        pool(""),
+			deskmanifest.FrontDoorName():         pool("low"),
+			deskmanifest.AdmitterName():          pool("high"),
+			deskmanifest.PerformerName():         pool(""),
+			deskmanifest.ResearcherName():        pool("low"),
+			deskmanifest.DocumentCustodianName(): pool("low"),
+			VerifierRole:                         pool(""),
+			MultimodalVerifierRole:               pool(""),
 		},
 		Source: "platform_fallback",
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -77,13 +78,13 @@ func settingsPreviewRun(ownerID, role string) *types.RunRecord {
 		},
 	}
 	switch role {
-	case agentprofile.Conductor:
+	case deskmanifest.FrontDoorName():
 		rec.Metadata["requested_app"] = "<requested_app>"
 		rec.Metadata["seed_prompt"] = "<seed_prompt>"
-	case agentprofile.Texture:
-		rec.AgentID = "texture:<doc_id>"
+	case deskmanifest.DocumentCustodianName():
+		rec.AgentID = deskmanifest.DocumentInbox("<doc_id>")
 		rec.ChannelID = "<doc_id>"
-		rec.Metadata[runMetadataAgentID] = "texture:<doc_id>"
+		rec.Metadata[runMetadataAgentID] = deskmanifest.DocumentInbox("<doc_id>")
 		rec.Metadata[runMetadataChannelID] = "<doc_id>"
 		rec.Metadata["doc_id"] = "<doc_id>"
 	}

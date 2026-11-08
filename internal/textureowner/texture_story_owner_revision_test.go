@@ -48,7 +48,7 @@ func openOwnerStory(t *testing.T, h *Handler, suffix string) (owner string, doc 
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-open-" + suffix + ":cast:c1", Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Harbor reopens " + suffix},
 		Cast:      &types.CommitmentCast{Captures: []string{"cap-court"}, Publish: types.CastPublishAuto},
-		Inbox:     types.StoryOpenInbox, SenderInbox: management, Addressee: types.StoryOpenInbox,
+		Inbox:     types.StoryOpenInbox(), SenderInbox: management, Addressee: types.StoryOpenInbox(),
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{AgentID: management},
 	}

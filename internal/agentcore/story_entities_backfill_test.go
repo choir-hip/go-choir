@@ -61,7 +61,7 @@ func openStory(t *testing.T, s *store.Store, owner, computer, id, headline strin
 	rec := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance:  types.CommitmentProvenance{AgentID: management, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano)},
-		EmitterKind: types.CommitmentEmitterAgent, Inbox: types.StoryOpenInbox, SenderInbox: management,
+		EmitterKind: types.CommitmentEmitterAgent, Inbox: types.StoryOpenInbox(), SenderInbox: management,
 		Kind:      types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: headline},
 		Cast: &types.CommitmentCast{

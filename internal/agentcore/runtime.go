@@ -1029,8 +1029,8 @@ func resolveRunIdentity(ownerID, computerID string, metadata map[string]any, par
 	if profile == frozenProcessorProfile || profile == frozenReconcilerProfile {
 		return types.AgentRecord{}, nil, fmt.Errorf("resolve run identity: retired profile %q cannot start a new run", profile)
 	}
-	if strings.EqualFold(strings.TrimSpace(rawProfile), agentprofile.Texture) {
-		profile = agentprofile.Texture
+	if strings.EqualFold(strings.TrimSpace(rawProfile), deskmanifest.DocumentCustodianName()) {
+		profile = deskmanifest.DocumentCustodianName()
 	}
 	rawRole := metadataStringValue(metadata, runMetadataAgentRole)
 	role := rawRole
@@ -1043,8 +1043,8 @@ func resolveRunIdentity(ownerID, computerID string, metadata map[string]any, par
 		}
 		role = resolvedRole
 	}
-	if strings.EqualFold(strings.TrimSpace(rawRole), agentprofile.Texture) {
-		role = agentprofile.Texture
+	if strings.EqualFold(strings.TrimSpace(rawRole), deskmanifest.DocumentCustodianName()) {
+		role = deskmanifest.DocumentCustodianName()
 	}
 	if profile == "" {
 		return types.AgentRecord{}, nil, fmt.Errorf("resolve run identity: empty profile for owner %s", ownerID)
@@ -1387,7 +1387,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 		return false
 	}
 	profile := agentProfileForRun(rec)
-	if profile == frozenProcessorProfile || profile == agentprofile.Texture || deskmanifest.SpawnsResearch(profile) || deskmanifest.IsAssignmentPerformer(profile) {
+	if profile == frozenProcessorProfile || profile == deskmanifest.DocumentCustodianName() || deskmanifest.SpawnsResearch(profile) || deskmanifest.IsAssignmentPerformer(profile) {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
 		}
@@ -1444,7 +1444,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		return nil, err
 	}
 	agentRecProfile := agentRec.Profile
-	if agentRecProfile == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
+	if agentRecProfile == deskmanifest.FrontDoorName() && metadataStringValue(metadata, "lifecycle_command_id") == "" {
 		metadata["lifecycle_command_id"] = uuid.NewString()
 	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
@@ -1531,7 +1531,7 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 		return nil, err
 	}
 	agentRecProfile := agentRec.Profile
-	if agentRecProfile == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
+	if agentRecProfile == deskmanifest.FrontDoorName() && metadataStringValue(metadata, "lifecycle_command_id") == "" {
 		metadata["lifecycle_command_id"] = uuid.NewString()
 	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
@@ -1947,12 +1947,12 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 
 func inheritTextureRequesterMetadata(metadata map[string]any, requesterRun *types.RunRecord) map[string]any {
 	requesterTexture := agentProfileForRun(requesterRun)
-	if requesterRun == nil || requesterTexture != agentprofile.Texture {
+	if requesterRun == nil || requesterTexture != deskmanifest.DocumentCustodianName() {
 		return metadata
 	}
 	metadata = cloneMetadata(metadata)
 	if metadataStringValue(metadata, "requested_by_profile") == "" {
-		metadata["requested_by_profile"] = agentprofile.Texture
+		metadata["requested_by_profile"] = deskmanifest.DocumentCustodianName()
 	}
 	if metadataStringValue(metadata, "requested_by_agent_id") == "" {
 		metadata["requested_by_agent_id"] = agentIDForRun(requesterRun)
@@ -2103,7 +2103,7 @@ func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.Run
 	if rt == nil || rt.store == nil || rec == nil {
 		return
 	}
-	if !runHasProfile(rec, agentprofile.Texture) {
+	if !runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		return
 	}
 	mutation := agentMutationForRun(rec)
@@ -3003,7 +3003,7 @@ func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
 			log.Printf("runtime: crash boot close: run %s: %v", rec.RunID, err)
 			return false
 		}
-		if runHasProfile(rec, agentprofile.Texture) {
+		if runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 			if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
 				log.Printf("runtime: crash boot close: stale mutation %s: %v", rec.RunID, err)
 			}
@@ -3056,7 +3056,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
 			return false
 		}
-		if runHasProfile(rec, agentprofile.Texture) {
+		if runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 			if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
 				log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
 			}
@@ -3441,7 +3441,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		// Texture reconstruction belongs to textureowner.ReconcileAgentWake,
 		// which derives revision authority from the canonical document head.
 		// A generic assigned-work run cannot safely synthesize that authority.
-	case agentprofile.Texture:
+	case deskmanifest.DocumentCustodianName():
 		return nil, nil
 	default:
 		return nil, nil
@@ -3746,7 +3746,7 @@ func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec 
 		sourceTextureProfile, _ := agentprofile.Canonical(sourceAgent.Profile)
 		sourceTextureRole, _ := agentprofile.Canonical(sourceAgent.Role)
 		if sourceAgent.OwnerID != ownerID || sourceAgent.ComputerID != computerID || sourceAgent.LifecycleVersion <= 0 ||
-			sourceTextureProfile != agentprofile.Texture || sourceTextureRole != agentprofile.Texture ||
+			sourceTextureProfile != deskmanifest.DocumentCustodianName() || sourceTextureRole != deskmanifest.DocumentCustodianName() ||
 			sourceAgent.ChannelID == "" || sourceAgent.ChannelID != control.ChannelID || control.ChannelID != snapshot.Document.DocID ||
 			control.AgentID != sourceAgent.AgentID || snapshot.Document.TrajectoryID != trajectoryID {
 			return deny("lifecycle control source is not the exact document-bound lifecycle Texture")
@@ -3941,7 +3941,7 @@ func (rt *Runtime) runEventEmitter(ctx context.Context, rec *types.RunRecord) pr
 		if kind == types.EventRunProgress {
 			payload = payloadWithPhase(payload, phase)
 		}
-		if runHasProfile(rec, agentprofile.Texture) && kind == types.EventRunProgress {
+		if runHasProfile(rec, deskmanifest.DocumentCustodianName()) && kind == types.EventRunProgress {
 			if docID := metadataStringValue(rec.Metadata, "doc_id"); docID != "" {
 				progressPayload, _ := json.Marshal(map[string]string{
 					"doc_id":  docID,
@@ -4224,7 +4224,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			}),
 			toolregistry.WithToolLoopProviderCallTimeout(managementTaskCallTimeout))
 	}
-	if runHasProfile(rec, agentprofile.Texture) {
+	if runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		// Texture's durable transition is a committed texture_turn cell intent
 		// (choir.Write, Done, Wait, Reject, or a dispatch committed as a Wait),
 		// committed by the bound authorizer inside ApplyTextureTurn.
@@ -4348,7 +4348,7 @@ func retryableLifecycleRuntimeInjectionFailure(rec *types.RunRecord, err error) 
 	}
 	profile, _ := agentprofile.Canonical(rec.AgentProfile)
 	role, _ := agentprofile.Canonical(rec.AgentRole)
-	if profile != role || (!deskmanifest.SpawnsResearch(profile) && profile != agentprofile.Texture && !deskmanifest.AdmitsAssignments(profile)) {
+	if profile != role || (!deskmanifest.SpawnsResearch(profile) && profile != deskmanifest.DocumentCustodianName() && !deskmanifest.AdmitsAssignments(profile)) {
 		return false
 	}
 	if deskmanifest.AdmitsAssignments(profile) && rec.AgentID != persistentManagementAgentID(rec.OwnerID) {
@@ -4404,7 +4404,7 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	if errors.As(passivationErr, &passivatedErr) && strings.TrimSpace(passivatedErr.Reason) != "" {
 		reason = strings.TrimSpace(passivatedErr.Reason)
 	}
-	if runHasProfile(rec, agentprofile.Texture) {
+	if runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		if err := rt.sleepTextureMutationAfterIdle(ctx, rec); err != nil {
 			rt.handleExecutionError(ctx, rec, err)
 			return
@@ -4433,7 +4433,7 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 		"output_tokens":       usage.OutputTokens,
 		"cached_input_tokens": usage.CachedInputTokens,
 	}
-	if runHasProfile(rec, agentprofile.Texture) {
+	if runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		if docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID)); docID != "" {
 			payload["doc_id"] = docID
 		}
@@ -4587,7 +4587,7 @@ func (rt *Runtime) normalizeCompletedRunResult(rec *types.RunRecord) {
 	if rec == nil {
 		return
 	}
-	if agentProfileForRun(rec) != agentprofile.Conductor {
+	if agentProfileForRun(rec) != deskmanifest.FrontDoorName() {
 		return
 	}
 	rec.Result = normalizeConductorDecision(rec)
@@ -4619,22 +4619,22 @@ type conductorDecision struct {
 
 func conductorRequestedApp(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Texture
+		return deskmanifest.DocumentCustodianName()
 	}
 	requestedApp, _ := rec.Metadata["requested_app"].(string)
 	if strings.TrimSpace(requestedApp) == "" {
-		requestedApp = agentprofile.Texture
+		requestedApp = deskmanifest.DocumentCustodianName()
 	}
 	requestedApp = strings.TrimSpace(requestedApp)
 	if isTextureDecisionApp(requestedApp) {
-		return agentprofile.Texture
+		return deskmanifest.DocumentCustodianName()
 	}
 	return requestedApp
 }
 
 func isTextureDecisionApp(app string) bool {
 	switch strings.ToLower(strings.TrimSpace(app)) {
-	case agentprofile.Texture:
+	case deskmanifest.DocumentCustodianName():
 		return true
 	default:
 		return false
@@ -4675,7 +4675,7 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 			decision.SeedPrompt = seedPrompt
 		}
 		if isTextureDecisionApp(decision.App) {
-			decision.App = agentprofile.Texture
+			decision.App = deskmanifest.DocumentCustodianName()
 			decision.CreateInitialVersion = ptrBool(false)
 			decision.InitialContent = ""
 		}
@@ -4720,7 +4720,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 	if rec == nil {
 		out, err := json.Marshal(defaultDecision)
 		if err != nil {
-			return `{"action":"open_app","app":"texture","title":"Texture","seed_prompt":"","create_initial_version":false}`
+			return defaultOpenTextureDecision()
 		}
 		return string(out)
 	}
@@ -4733,7 +4733,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 				parsed = fillConductorDecisionFromRun(rec, parsed)
 				if metadataStringValue(rec.Metadata, "doc_id") != "" && isTextureDecisionApp(metadataStringValue(rec.Metadata, "requested_app")) {
 					parsed.Action = "open_app"
-					parsed.App = agentprofile.Texture
+					parsed.App = deskmanifest.DocumentCustodianName()
 					parsed = fillConductorDecisionFromRun(rec, parsed)
 				}
 			case "open_app":
@@ -4752,7 +4752,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 
 	out, err := json.Marshal(defaultDecision)
 	if err != nil {
-		return `{"action":"open_app","app":"texture","title":"Texture","seed_prompt":"","create_initial_version":false}`
+		return defaultOpenTextureDecision()
 	}
 	return string(out)
 }
@@ -4967,11 +4967,11 @@ func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
 // completes successfully. Texture document writes are intentionally not handled
 // here: canonical appagent revisions are created only by Texture write tools.
 func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord) error {
-	if agentProfileForRun(rec) == agentprofile.Conductor {
+	if agentProfileForRun(rec) == deskmanifest.FrontDoorName() {
 		return nil
 	}
 
-	if !runHasProfile(rec, agentprofile.Texture) {
+	if !runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		return nil
 	}
 
@@ -5037,7 +5037,7 @@ func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Cont
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
-	if !runHasProfile(rec, agentprofile.Texture) ||
+	if !runHasProfile(rec, deskmanifest.DocumentCustodianName()) ||
 		!metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
 		return nil
 	}
@@ -5210,7 +5210,7 @@ func (rt *Runtime) afterRunFailed(persistCtx context.Context, rec *types.RunReco
 	// reconcile pass. A no-write failure must not immediately requeue the same
 	// undelivered packet forever; a failure after a successful write should still
 	// close the mutation on the latest stored revision.
-	if runHasProfile(rec, agentprofile.Texture) {
+	if runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		if mutation, mutationErr := rt.store.GetAgentMutationByRun(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); mutationErr != nil {
 			log.Printf("runtime: texture agent revision run %s: get mutation after failure: %v", rec.RunID, mutationErr)
 		} else if mutation != nil {
@@ -5441,4 +5441,10 @@ func (rt *Runtime) runMemoryLossErr(rec *types.RunRecord) error {
 		return nil
 	}
 	return fmt.Errorf("run %s: %w", rec.RunID, store.ErrRunMemoryLost)
+}
+
+// defaultOpenTextureDecision is the conductor's fallback decision when the
+// default one cannot be encoded: open the document custodian's app.
+func defaultOpenTextureDecision() string {
+	return `{"action":"open_app","app":"` + deskmanifest.DocumentCustodianName() + `","title":"Texture","seed_prompt":"","create_initial_version":false}`
 }

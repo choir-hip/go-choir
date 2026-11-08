@@ -1,12 +1,12 @@
 package textureowner
 
 import (
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func initialTextureToolChoice(rec *types.RunRecord) string {
-	if rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
+	if rec == nil || agentProfileForRun(rec) != deskmanifest.DocumentCustodianName() {
 		return ""
 	}
 	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {

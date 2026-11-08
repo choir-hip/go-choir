@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -504,7 +503,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// desk than its profile is not on a records route. A management task
 	// reads management-task:<id> on profile management (R2-1).
 	deskOfAgent, _, _ := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":")
-	task := isManagementTaskRun(r.rec) && types.IsManagementTaskDesk(deskOfAgent)
+	task := isManagementTaskRun(r.rec) && types.IsTaskInboxDesk(deskOfAgent)
 	if deskOfAgent != strings.TrimSpace(r.rec.AgentProfile) && !task {
 		return intents, nil
 	}
@@ -610,7 +609,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			tasks = append(tasks, rows...)
 			continue
 		}
-		if strings.TrimSpace(in.ToDesk) == types.StoryOpenInbox && in.Kind == yaegikernel.IntentCast {
+		if strings.TrimSpace(in.ToDesk) == types.StoryOpenInbox() && in.Kind == yaegikernel.IntentCast {
 			opensStory = true
 		}
 		if parent && engineeringCastIntent(in) {
@@ -664,12 +663,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		if err != nil {
 			return nil, err
 		}
-		if rec.Final && deskmanifest.AdmitsAssignments(deskProfile) && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
+		if rec.Final && deskmanifest.AdmitsAssignments(deskProfile) && deskmanifest.IsDocumentInbox(toInbox) {
 			if err := r.requireChildOutcomesRead(ctx, conversation); err != nil {
 				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
 			}
 		}
-		if rec.Final && deskmanifest.SpawnsResearch(deskProfile) && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
+		if rec.Final && deskmanifest.SpawnsResearch(deskProfile) && deskmanifest.IsDocumentInbox(toInbox) {
 			if err := r.requireStoryEntitiesRecorded(ctx); err != nil {
 				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
 			}
@@ -900,7 +899,7 @@ const inboxRecordRequestSource = "inbox_record"
 
 // inboxUnread reports whether a desk's inbox head is past its cursor.
 func (rt *Runtime) inboxUnread(ctx context.Context, ownerID, computerID, deskAgentID string) (bool, error) {
-	if strings.HasPrefix(deskAgentID, agentprofile.Texture+":") {
+	if deskmanifest.IsDocumentInbox(deskAgentID) {
 		// A backfill round's quiet Reports are not Texture's work (slice d, D5).
 		return rt.store.TextureWorkUnread(ctx, ownerID, computerID, deskAgentID)
 	}
@@ -1374,7 +1373,7 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 			log.Printf("runtime: round %d of %s stays open after %s: its Cast arrived after that run began and is unread", round.Round, round.ConversationID, rec.RunID)
 			continue
 		}
-		if deskmanifest.AdmitsAssignments(profile) && strings.HasPrefix(round.CasterInbox, agentprofile.Texture+":") && rt.childAssignmentsHoldRound(ctx, rec, round) {
+		if deskmanifest.AdmitsAssignments(profile) && deskmanifest.IsDocumentInbox(round.CasterInbox) && rt.childAssignmentsHoldRound(ctx, rec, round) {
 			log.Printf("runtime: round %d of %s stays open after %s: an assignment it opened has an outcome management has not read", round.Round, round.ConversationID, rec.RunID)
 			continue
 		}

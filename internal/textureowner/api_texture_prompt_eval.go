@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 )
@@ -73,11 +73,11 @@ func (h *Handler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Request
 
 	title := provider.InitialTextureTitle(text, strings.TrimSpace(req.Title))
 	metadata := map[string]any{
-		"agent_profile":                     agentprofile.Conductor,
-		"agent_role":                        agentprofile.Conductor,
+		"agent_profile":                     deskmanifest.FrontDoorName(),
+		"agent_role":                        deskmanifest.FrontDoorName(),
 		modelpolicy.MetadataPolicyOverlayID: overlayID,
 		"input_source":                      "prompt_bar",
-		"requested_app":                     agentprofile.Texture,
+		"requested_app":                     deskmanifest.DocumentCustodianName(),
 		"seed_prompt":                       text,
 		"initial_document_title":            title,
 		"submission_surface":                "prompt_bar",
@@ -94,9 +94,9 @@ func (h *Handler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Request
 	// Resolve the overlay against the Texture role up front so an unknown,
 	// expired, or invalid arm fails the request instead of silently falling back.
 	resolveMeta := clonePromptEvalMetadata(metadata)
-	resolveMeta["agent_profile"] = agentprofile.Texture
-	resolveMeta["agent_role"] = agentprofile.Texture
-	resolved := h.ModelPolicy.EnrichMetadata(r.Context(), ownerID, agentprofile.Texture, resolveMeta)
+	resolveMeta["agent_profile"] = deskmanifest.DocumentCustodianName()
+	resolveMeta["agent_role"] = deskmanifest.DocumentCustodianName()
+	resolved := h.ModelPolicy.EnrichMetadata(r.Context(), ownerID, deskmanifest.DocumentCustodianName(), resolveMeta)
 	if errText := promptEvalMetadataString(resolved, modelpolicy.MetadataPolicyError); errText != "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "model policy overlay did not resolve: " + errText})
 		return
@@ -108,7 +108,7 @@ func (h *Handler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Request
 
 	rec, err := h.Core.CompletePromptBarDecision(r.Context(), text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
 		Action: "open_app",
-		App:    agentprofile.Texture,
+		App:    deskmanifest.DocumentCustodianName(),
 		Title:  title,
 	})
 	if err != nil {
@@ -122,7 +122,7 @@ func (h *Handler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Request
 	}
 	handoff, err := h.EnsureTextureHandoff(r.Context(), rec, HandoffRequest{
 		Kind:          HandoffKindUserPrompt,
-		CallerProfile: agentprofile.Conductor,
+		CallerProfile: deskmanifest.FrontDoorName(),
 		Objective:     text,
 		Title:         title,
 	})

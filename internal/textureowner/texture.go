@@ -31,8 +31,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -1219,7 +1219,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		targetAgentID := currentTextureAgentID(doc.DocID)
 		targetWorkItemID := ""
 		for _, work := range snapshot.WorkItems {
-			if work.Status == types.WorkItemOpen && work.AssignedAgentID == targetAgentID && work.AuthorityProfile == agentprofile.Texture {
+			if work.Status == types.WorkItemOpen && work.AssignedAgentID == targetAgentID && work.AuthorityProfile == deskmanifest.DocumentCustodianName() {
 				if targetWorkItemID != "" {
 					writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open Texture target work items"})
 					return

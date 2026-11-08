@@ -56,7 +56,7 @@ func IsEngineeringProgressRelay(rec CommitmentRecord) bool {
 func NewEngineeringProgressRelay(source CommitmentRecord, textureInbox string) (CommitmentRecord, bool) {
 	textureInbox = strings.TrimSpace(textureInbox)
 	body := strings.TrimSpace(source.Prediction.Hypothesis)
-	if body == "" || !strings.HasPrefix(textureInbox, "texture:") || strings.TrimSpace(source.RecordID) == "" ||
+	if body == "" || !deskmanifest.IsDocumentInbox(textureInbox) || strings.TrimSpace(source.RecordID) == "" ||
 		!deskmanifest.IsAssignmentInbox(strings.TrimSpace(source.SenderInbox)) {
 		return CommitmentRecord{}, false
 	}

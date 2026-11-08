@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -80,11 +80,11 @@ func (rt *Runtime) recordLabelOverrides(ctx context.Context, ownerID, computerID
 		case rec.Disposition != nil:
 			disposition, captures, reason = rec.Disposition.Kind, rec.Disposition.Captures, rec.Disposition.Reason
 			if disposition == types.DispositionFeed {
-				docID = strings.TrimPrefix(firstNonEmpty(inboxOf[rec.RecordID], rec.Inbox), agentprofile.Texture+":")
+				docID = strings.TrimPrefix(firstNonEmpty(inboxOf[rec.RecordID], rec.Inbox), deskmanifest.DocumentCustodianName()+":")
 			}
-		case rec.IsCast() && rec.Cast != nil && len(rec.Cast.Captures) > 0 && strings.TrimSpace(rec.Inbox) == types.StoryOpenInbox:
+		case rec.IsCast() && rec.Cast != nil && len(rec.Cast.Captures) > 0 && strings.TrimSpace(rec.Inbox) == types.StoryOpenInbox():
 			disposition, captures = captureDispositionOpen, rec.Cast.Captures
-			docID = strings.TrimPrefix(inboxOf[rec.RecordID], agentprofile.Texture+":")
+			docID = strings.TrimPrefix(inboxOf[rec.RecordID], deskmanifest.DocumentCustodianName()+":")
 			// An opening carries no reason of its own; its headline says
 			// what management judged the event to be.
 			if rec.Directive != nil {

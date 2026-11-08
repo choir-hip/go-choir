@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -21,7 +22,7 @@ func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
 	switch profile {
 	case frozenProcessorProfile:
 		return types.TrajectoryKindPublication
-	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Mail:
+	case deskmanifest.FrontDoorName(), deskmanifest.DocumentCustodianName(), agentprofile.Mail:
 		return types.TrajectoryKindDocument
 	default:
 		return types.TrajectoryKindTask

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -72,17 +71,17 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelIDForRun(rec),
 	})))
-	if profile == agentprofile.Conductor {
+	if profile == deskmanifest.FrontDoorName() {
 		requestedApp := metadataStringValue(rec.Metadata, "requested_app")
 		if requestedApp == "" {
-			requestedApp = agentprofile.Texture
+			requestedApp = deskmanifest.DocumentCustodianName()
 		}
 		b.WriteString("\nRequested default app: " + requestedApp + ".")
 		if seedPrompt := metadataStringValue(rec.Metadata, "seed_prompt"); seedPrompt != "" {
 			b.WriteString("\nSeed prompt: " + seedPrompt + ".")
 		}
 	}
-	if profile == agentprofile.Texture {
+	if profile == deskmanifest.DocumentCustodianName() {
 		if operationID, state := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" {
 			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ", now in state " + state + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the host builds it and consensus decides it, and the update applies; the owner reverts what they do not want. Do not ask to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, call choir.Wait(why) instead of writing.")
 			b.WriteString(" An owner revision with new direction (request intent apply_owner_revision) is a new round to Cast once this operation settles, not a re-run, so do not Wait it away.")
@@ -211,7 +210,7 @@ func promptCacheScope(rec *types.RunRecord) (label, scope string) {
 	}
 	label = agentProfileForRun(rec)
 	if isManagementTaskRun(rec) {
-		label = agentprofile.ManagementTask
+		label = deskmanifest.TaskRoleName()
 	}
 	thread := agentIDForRun(rec)
 	if thread == "" {

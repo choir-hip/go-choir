@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -285,7 +284,7 @@ func (h *Handler) continueSettledDocumentForOwner(ctx context.Context, ownerID s
 		ExpectedHeadRevisionID: settled.Document.CurrentRevisionID,
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: textureOwnerReopenObjective,
-			AssignedAgentID: agentprofile.Texture + ":" + doc.DocID, AuthorityProfile: agentprofile.Texture,
+			AssignedAgentID: deskmanifest.DocumentInbox(doc.DocID), AuthorityProfile: deskmanifest.DocumentCustodianName(),
 		},
 	}
 	digest, err := store.ComputeContinueLifecycleDocumentDigest(req)
@@ -326,7 +325,7 @@ func ownerRevisionTarget(snapshot types.LifecycleSnapshot, docID string) (profil
 			continue
 		}
 		p := strings.TrimSpace(work.AuthorityProfile)
-		if p != agentprofile.Texture {
+		if p != deskmanifest.DocumentCustodianName() {
 			continue
 		}
 		if work.AssignedAgentID != p+":"+docID {
@@ -349,7 +348,7 @@ func storyTextureDeskLive(snapshot types.LifecycleSnapshot, docID string) bool {
 	if trajectory.Status != types.TrajectoryLive || trajectory.Kind != types.TrajectoryKindStory || trajectory.SubjectRefs["doc_id"] != docID {
 		return false
 	}
-	textureAgentID := agentprofile.Texture + ":" + docID
+	textureAgentID := deskmanifest.DocumentInbox(docID)
 	deskLive := false
 	for _, agent := range snapshot.Agents {
 		if agent.AgentID == deskmanifest.PerformerInbox(docID) && agent.LifecycleVersion > 0 {
@@ -373,7 +372,7 @@ func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bo
 	if snapshot.Trajectory.Status != types.TrajectoryLive {
 		return false
 	}
-	textureAgentID := agentprofile.Texture + ":" + docID
+	textureAgentID := deskmanifest.DocumentInbox(docID)
 	agentLive := false
 	for _, agent := range snapshot.Agents {
 		if agent.AgentID == deskmanifest.PerformerInbox(docID) && agent.LifecycleVersion > 0 {
@@ -389,7 +388,7 @@ func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bo
 	var latest *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
 		work := &snapshot.WorkItems[i]
-		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != agentprofile.Texture {
+		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != deskmanifest.DocumentCustodianName() {
 			continue
 		}
 		if latest == nil || work.UpdatedAt.After(latest.UpdatedAt) {
@@ -412,7 +411,7 @@ func (h *Handler) reopenTextureWorkForOwner(ctx context.Context, ownerID string,
 		TrajectoryID: doc.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: workID, Objective: textureOwnerReopenObjective,
-			AssignedAgentID: agentprofile.Texture + ":" + doc.DocID, AuthorityProfile: agentprofile.Texture,
+			AssignedAgentID: deskmanifest.DocumentInbox(doc.DocID), AuthorityProfile: deskmanifest.DocumentCustodianName(),
 		},
 	}
 	digest, err := store.ComputeOpenLifecycleWorkDigest(req)
@@ -642,8 +641,8 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// so they survive into appagent revision metadata.
 	runMetadata := map[string]any{
 		"type":                 textureAgentRevisionTaskType,
-		"agent_profile":        agentprofile.Texture,
-		"agent_role":           agentprofile.Texture,
+		"agent_profile":        deskmanifest.DocumentCustodianName(),
+		"agent_role":           deskmanifest.DocumentCustodianName(),
 		"agent_id":             currentTextureAgentID(doc.DocID),
 		"channel_id":           doc.DocID,
 		"doc_id":               doc.DocID,

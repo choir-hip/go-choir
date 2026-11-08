@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -544,7 +543,7 @@ func (r *rlmCallReduction) attachTextureOwnerDirections(ctx context.Context, int
 	// read is declared as the custodian and is no crossing.
 	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_revision")
 	scope := ownerRevisionScope{OwnerID: strings.TrimSpace(r.scope.OwnerID), ComputerID: strings.TrimSpace(r.scope.ComputerID)}
-	if desk, subject, ok := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":"); ok && desk == agentprofile.Texture {
+	if desk, subject, ok := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":"); ok && desk == deskmanifest.DocumentCustodianName() {
 		scope.DocID = strings.TrimSpace(subject)
 	}
 	if r.rec != nil {

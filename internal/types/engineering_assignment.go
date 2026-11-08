@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
@@ -166,7 +165,7 @@ func (b EngineeringAssignmentBinding) Validate() error {
 			return fmt.Errorf("co-super assignment: assigned conversation must be management:<owner>|engineering:<assignment>")
 		}
 		other, ok := conversationCounterpart(b.ParentConversationID, management)
-		if !ok || !strings.HasPrefix(other, agentprofile.Texture+":") || b.ParentRound <= 0 {
+		if !ok || !deskmanifest.IsDocumentInbox(other) || b.ParentRound <= 0 {
 			return fmt.Errorf("co-super assignment: records parent must be an open round of management's conversation with a Texture")
 		}
 		if b.ParentWorkItemID != "" || b.AssignedWorkItemID != "" {

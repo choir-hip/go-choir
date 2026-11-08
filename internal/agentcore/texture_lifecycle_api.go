@@ -448,7 +448,7 @@ func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID 
 	}
 	if (revision.AuthorKind != types.AuthorUser && revision.AuthorKind != types.AuthorAppAgent) || o.HeadRevisionID == "" ||
 		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" ||
-		(deskProfile != agentprofile.Texture && !deskmanifest.IsAssignmentPerformer(deskProfile)) {
+		(deskProfile != deskmanifest.DocumentCustodianName() && !deskmanifest.IsAssignmentPerformer(deskProfile)) {
 		return TextureActorOccurrence{}, fmt.Errorf("document revision occurrence: incomplete canonical owner revision")
 	}
 	return o, nil
@@ -457,7 +457,7 @@ func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID 
 // TextureDocumentRevisionOccurrence is the texture-desk variant of
 // DocumentRevisionOccurrence.
 func TextureDocumentRevisionOccurrence(revision types.Revision, requestID string, reducerSeq int64) (TextureActorOccurrence, error) {
-	return DocumentRevisionOccurrence(revision, agentprofile.Texture, requestID, reducerSeq)
+	return DocumentRevisionOccurrence(revision, deskmanifest.DocumentCustodianName(), requestID, reducerSeq)
 }
 
 // TextureRecoveryOccurrence advances actor-log identity using only canonical

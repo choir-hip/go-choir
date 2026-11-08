@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/promptroute"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -165,7 +165,7 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 // focus naming any other desk (a system desk, a role, a candidate, a package
 // the owner has not installed) is refused.
 func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID string, focus promptBarFocus, text, commandID string) {
-	defaultDesk := agentprofile.Texture
+	defaultDesk := deskmanifest.DocumentCustodianName()
 	app := strings.TrimSpace(focus.AppAgentID)
 	ref := strings.TrimSpace(focus.ObjectRef)
 	// An in-process caller is refused before any registry answer, so the
@@ -294,7 +294,7 @@ func promptBarSubmitFailure(err error) (int, string) {
 // (a release adoption, P8) is always Texture's. Every route is a route record,
 // and the default route (Texture) is the fallback of every router failure.
 func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text, commandID string, classify, route bool) (*types.RunRecord, HandoffDecision, error) {
-	defaultDesk := agentprofile.Texture
+	defaultDesk := deskmanifest.DocumentCustodianName()
 	requestedApp := defaultDesk
 	var sourceURL, mediaType, appHint string
 	var routed *agentcore.PromptRoute
@@ -344,7 +344,7 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 	})
 	if err == nil && requestedApp == defaultDesk {
 		handoff, err = h.EnsureTextureHandoff(ctx, rec, HandoffRequest{
-			Kind: HandoffKindUserPrompt, CallerProfile: agentprofile.Conductor,
+			Kind: HandoffKindUserPrompt, CallerProfile: deskmanifest.FrontDoorName(),
 			Objective: text, Title: title,
 		})
 	}
@@ -354,8 +354,8 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 // promptBarMetadata is a prompt-bar decision run's metadata.
 func promptBarMetadata(text, commandID, ownerEmail, requestedApp string) map[string]any {
 	metadata := map[string]any{
-		"agent_profile":          agentprofile.Conductor,
-		"agent_role":             agentprofile.Conductor,
+		"agent_profile":          deskmanifest.FrontDoorName(),
+		"agent_role":             deskmanifest.FrontDoorName(),
 		"input_source":           "prompt_bar",
 		"requested_app":          requestedApp,
 		"seed_prompt":            text,
@@ -388,7 +388,7 @@ func (h *Handler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	rec, err := h.Core.GetRun(r.Context(), submissionID, ownerID)
-	if err != nil || agentProfileForRun(rec) != agentprofile.Conductor || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
+	if err != nil || agentProfileForRun(rec) != deskmanifest.FrontDoorName() || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
 		return
 	}

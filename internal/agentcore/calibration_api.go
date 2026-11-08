@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -74,7 +73,7 @@ func (h *APIHandler) HandleCalibration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	digests := map[string]types.CalibrationDigest{}
-	for _, desk := range []string{deskmanifest.AdmitterName(), agentprofile.Texture, deskmanifest.ResearcherName(), deskmanifest.PerformerName()} {
+	for _, desk := range []string{deskmanifest.AdmitterName(), deskmanifest.DocumentCustodianName(), deskmanifest.ResearcherName(), deskmanifest.PerformerName()} {
 		d := calibration.Compute(desk, snap.Observations, snap.digestOptions(desk, ""))
 		d.ComputedAt = snap.At.Format(time.RFC3339)
 		digests[desk] = d

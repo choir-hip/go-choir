@@ -248,7 +248,7 @@ func (rt *Runtime) annotateCoverage(ctx context.Context, ownerID, computerID str
 		case types.DispositionDecline:
 			declined++
 		case types.DispositionOpen, types.DispositionFeed:
-			if strings.HasPrefix(d.Inbox, "texture:") {
+			if deskmanifest.IsDocumentInbox(d.Inbox) {
 				covered[d.Inbox] = true
 			}
 		}

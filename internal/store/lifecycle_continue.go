@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -69,7 +68,7 @@ func ComputeContinueLifecycleDocumentDigest(req types.ContinueLifecycleDocumentR
 // continuedDeskProfiles are the desks whose lifecycle subject is the
 // document (agent id <profile>:<doc_id>) and so move with it.
 func continuedDeskProfiles() []string {
-	return []string{agentprofile.Texture, deskmanifest.ResearcherName()}
+	return []string{deskmanifest.DocumentCustodianName(), deskmanifest.ResearcherName()}
 }
 
 // ContinueLifecycleDocument starts the next live trajectory on a document
@@ -98,11 +97,11 @@ func (s *Store) ContinueLifecycleDocument(ctx context.Context, req types.Continu
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.LifecycleResult{}, err
 	}
-	deskAgentID := agentprofile.Texture + ":" + req.DocID
+	deskAgentID := deskmanifest.DocumentInbox(req.DocID)
 	if assigned := strings.TrimSpace(req.InitialWork.AssignedAgentID); assigned != "" && assigned != deskAgentID {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle continue: initial work must target %s: %w", deskAgentID, ErrLifecycleInvalidTransition)
 	}
-	if profile := strings.TrimSpace(req.InitialWork.AuthorityProfile); profile != "" && profile != agentprofile.Texture {
+	if profile := strings.TrimSpace(req.InitialWork.AuthorityProfile); profile != "" && profile != deskmanifest.DocumentCustodianName() {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle continue: initial work authority must be texture: %w", ErrLifecycleInvalidTransition)
 	}
 
@@ -209,7 +208,7 @@ func (s *Store) ContinueLifecycleDocument(ctx context.Context, req types.Continu
 			agent.ActiveRunID = ""
 		}
 		if agent.LifecycleVersion <= 0 {
-			if profile == agentprofile.Texture {
+			if profile == deskmanifest.DocumentCustodianName() {
 				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 			}
 			continue
@@ -223,7 +222,7 @@ func (s *Store) ContinueLifecycleDocument(ctx context.Context, req types.Continu
 			return types.LifecycleResult{}, buildErr
 		}
 		objects = append(objects, agentUpdated)
-		if profile == agentprofile.Texture {
+		if profile == deskmanifest.DocumentCustodianName() {
 			desk := agent
 			textureDesk = &desk
 		}
@@ -254,7 +253,7 @@ func (s *Store) ContinueLifecycleDocument(ctx context.Context, req types.Continu
 		trajectory.Kind = types.TrajectoryKindTask
 	}
 	workInput := req.InitialWork
-	workInput.AssignedAgentID, workInput.AuthorityProfile = deskAgentID, agentprofile.Texture
+	workInput.AssignedAgentID, workInput.AuthorityProfile = deskAgentID, deskmanifest.DocumentCustodianName()
 	work, err := normalizeLifecycleWork(workInput, ownerID, computerID, req.TrajectoryID, now)
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle continue: initial work: %w", err)

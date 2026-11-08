@@ -31,7 +31,7 @@ const storyOwner, storyComputer = inboxTestOwner, inboxTestComputer
 func storyManagement() string { return "management:" + storyOwner }
 
 func openingCast(id string) types.CommitmentRecord {
-	rec := inboxCast(id, storyManagement(), types.StoryOpenInbox, types.CommitmentCast{
+	rec := inboxCast(id, storyManagement(), types.StoryOpenInbox(), types.CommitmentCast{
 		Hypotheses: []types.CastHypothesis{hyp("the harbor reopens Monday", 0.7)},
 		Captures:   []string{"capture-a", "capture-b"},
 		Publish:    types.CastPublishAuto,
@@ -125,8 +125,8 @@ func TestOpeningCastCreatesOneStoryWithNoOwnerRevisionOrWork(t *testing.T) {
 		len(records[0].Cast.Captures) != 2 || records[0].Addressee != row.Inbox {
 		t.Fatalf("story inbox = %+v, %v", records, err)
 	}
-	if n, _ := s.InboxHead(ctx, storyOwner, storyComputer, types.StoryOpenInbox); n != 0 {
-		t.Fatalf("a record was stored under %s", types.StoryOpenInbox)
+	if n, _ := s.InboxHead(ctx, storyOwner, storyComputer, types.StoryOpenInbox()); n != 0 {
+		t.Fatalf("a record was stored under %s", types.StoryOpenInbox())
 	}
 
 	// A retried opening replays: no second story.
@@ -165,11 +165,11 @@ func TestOpeningCastCreatesOneStoryWithNoOwnerRevisionOrWork(t *testing.T) {
 
 func TestOnlyAManagementCastOpensAStory(t *testing.T) {
 	s := openTestStore(t)
-	note := inboxNote("note-new", storyManagement(), types.StoryOpenInbox)
+	note := inboxNote("note-new", storyManagement(), types.StoryOpenInbox())
 	mustRefuseInbox(t, s, "cmd-note-new", note)
-	texture := inboxCast("texture-new", "texture:doc-1", types.StoryOpenInbox, types.CommitmentCast{})
+	texture := inboxCast("texture-new", "texture:doc-1", types.StoryOpenInbox(), types.CommitmentCast{})
 	mustRefuseInbox(t, s, "cmd-texture-new", texture)
-	other := inboxCast("other-owner-new", "management:someone-else", types.StoryOpenInbox, types.CommitmentCast{})
+	other := inboxCast("other-owner-new", "management:someone-else", types.StoryOpenInbox(), types.CommitmentCast{})
 	mustRefuseInbox(t, s, "cmd-other-new", other)
 	if wakes := storyWakes(t, s); len(wakes) != 0 {
 		t.Fatalf("refused openings minted wakes: %+v", wakes)

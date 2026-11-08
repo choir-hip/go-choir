@@ -2,6 +2,7 @@ package modelcatalog
 
 import (
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"strings"
 )
 
@@ -146,7 +147,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "zai",
 			MaxOutputTokens:     131072,
 			ContextWindowTokens: 1_000_000,
-			RecommendedFor:      []string{"management", "engineering", "verifier"},
+			RecommendedFor:      []string{deskmanifest.AdmitterName(), deskmanifest.PerformerName(), "verifier"},
 		},
 		{
 			ID:              "glm-5.1",
@@ -166,7 +167,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			RecommendedFor:      []string{"engineering", "verifier"},
+			RecommendedFor:      []string{deskmanifest.PerformerName(), "verifier"},
 		},
 		{
 			ID:                  "glm-5.3-flash",
@@ -174,7 +175,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			RecommendedFor:      []string{"engineering", "verifier"},
+			RecommendedFor:      []string{deskmanifest.PerformerName(), "verifier"},
 		},
 		{
 			ID:                  "muse-spark-1.3-contributor",
@@ -182,7 +183,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			RecommendedFor:      []string{"engineering", "verifier"},
+			RecommendedFor:      []string{deskmanifest.PerformerName(), "verifier"},
 		},
 		{
 			ID:                  "muse-spark-1.3-contributor-free",
@@ -190,7 +191,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-zen",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			RecommendedFor:      []string{"engineering", "verifier"},
+			RecommendedFor:      []string{deskmanifest.PerformerName(), "verifier"},
 		},
 		{
 			ID:                  "hy3",
@@ -198,7 +199,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			RecommendedFor:      []string{"engineering"},
+			RecommendedFor:      []string{deskmanifest.PerformerName()},
 		},
 		{
 			ID:                  "qwen3.7-max",
@@ -206,7 +207,7 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			RecommendedFor:      []string{"engineering", "verifier"},
+			RecommendedFor:      []string{deskmanifest.PerformerName(), "verifier"},
 		},
 		// Free opencode-go models (owner 2026-10-13: "add these to our pool,
 		// and see how much usage we can get out of them"). Chat completions,

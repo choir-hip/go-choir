@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -114,7 +116,7 @@ func textureAgentIDMatchesDoc(agentID, docID string) bool {
 }
 
 func docIDFromTextureAgentID(agentID string) string {
-	const prefix = "texture:"
+	prefix := deskmanifest.DocumentCustodianName() + ":"
 	agentID = strings.TrimSpace(agentID)
 	if !strings.HasPrefix(agentID, prefix) {
 		return ""

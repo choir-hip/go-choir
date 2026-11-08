@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -65,7 +66,7 @@ const (
 )
 
 // DeskCellSelfTestRoles are the desks whose cells run in session workers.
-var DeskCellSelfTestRoles = []string{"management", "texture", "research"}
+var DeskCellSelfTestRoles = deskmanifest.CellDeskNames()
 
 // DeskCellSelfTestProbes is the worker-side report: probe name to "" when the
 // operation succeeded, else "ERRNO: message".

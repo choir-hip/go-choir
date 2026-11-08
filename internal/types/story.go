@@ -3,6 +3,7 @@ package types
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"sort"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ import (
 // StoryOpenInbox is the address a management Cast names to open a story.
 // The store rewrites it to the new story's texture:<doc> at commit; no
 // record is ever stored under it.
-const StoryOpenInbox = "texture:new"
+func StoryOpenInbox() string { return deskmanifest.DocumentInbox("new") }
 
 // TrajectoryKindStory is a living story's trajectory. It has no work
 // items, so it never settles because its work drained: a story stays live

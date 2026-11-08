@@ -135,7 +135,7 @@ func TestDeskCastJudgeNothingForUnscorableRoundsAndTasks(t *testing.T) {
 	if types.IsDeskCastScorable(rule) {
 		t.Fatal("a rule-settled Cast is scorable")
 	}
-	task := scorableCast("task", "management:o", types.ManagementTaskDesk+":t1", 0.5)
+	task := scorableCast("task", "management:o", types.TaskInboxDesk+":t1", 0.5)
 	if types.IsDeskCastScorable(task) {
 		t.Fatal("a management task's Cast is judged on the desk plane")
 	}

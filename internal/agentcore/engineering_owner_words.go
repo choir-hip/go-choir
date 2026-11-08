@@ -10,7 +10,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -164,7 +163,7 @@ func (rt *Runtime) assignmentCastScope(ctx context.Context, ownerID, computerID 
 		return nil, ownerRevisionScope{}, time.Time{}, false
 	}
 	scope := ownerRevisionScope{OwnerID: ownerID, ComputerID: computerID,
-		DocID:        strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":"),
+		DocID:        strings.TrimPrefix(parent.SenderInbox, deskmanifest.DocumentCustodianName()+":"),
 		TrajectoryID: strings.TrimSpace(binding.TrajectoryID)}
 	castAt, _ := time.Parse(time.RFC3339Nano, strings.TrimSpace(parent.Provenance.CommittedAt))
 	return parent, scope, castAt, true

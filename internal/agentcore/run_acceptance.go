@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -205,7 +204,7 @@ func chooseAcceptanceRootRun(runs []types.RunRecord, runID string) types.RunReco
 		}
 	}
 	for _, run := range runs {
-		if traceRunProfile(run) == agentprofile.Conductor && metadataStringValue(run.Metadata, "input_source") == "prompt_bar" {
+		if traceRunProfile(run) == deskmanifest.FrontDoorName() && metadataStringValue(run.Metadata, "input_source") == "prompt_bar" {
 			return run
 		}
 	}

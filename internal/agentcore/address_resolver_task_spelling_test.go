@@ -9,7 +9,7 @@ import (
 
 // A sender spelled management_task is the same sender as management-task.
 func TestInboxClassAcceptsEitherTaskSpelling(t *testing.T) {
-	c := InboxClass{Senders: []string{agentprofile.Management, types.ManagementTaskDesk}}
+	c := InboxClass{Senders: []string{agentprofile.Management, types.TaskInboxDesk}}
 	for _, from := range []string{"management", "management-task", "management_task"} {
 		if !c.accepts(from) {
 			t.Errorf("accepts(%q) = false", from)

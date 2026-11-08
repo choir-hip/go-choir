@@ -234,7 +234,7 @@ var errTextureRecoveryBaseNotProcessed = errors.New("actorruntime: Texture recov
 // exists only at this boundary: the durable actor row always receives the new
 // exact identity and authenticated envelope.
 func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) (string, string, string, error) {
-	if strings.TrimSpace(kind) != "coagent_result" || !strings.HasPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":") {
+	if strings.TrimSpace(kind) != "coagent_result" || !deskmanifest.IsDocumentInbox(strings.TrimSpace(toAgentID)) {
 		return content, trajectoryID, fromAgentID, nil
 	}
 	if occurrence, err := agentcore.DecodeTextureActorOccurrence(content); err == nil {
@@ -308,7 +308,7 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 	// trajectory/source. Resolve the exact document-bound owner revision.
 	// Lookup failures are transient — they retry on the next sweep; only a
 	// resolved miss means the canonical occurrence is gone for good.
-	docID := strings.TrimPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":")
+	docID := strings.TrimPrefix(strings.TrimSpace(toAgentID), deskmanifest.DocumentCustodianName()+":")
 	// The legacy fallback resolves Texture's document and revision on the
 	// dispatcher's context, which declares no reader: it reads as their
 	// custodian (enforce flip section 6.7).
@@ -616,9 +616,9 @@ func (a *Adapter) Start(ctx context.Context) error {
 		for _, subject := range subjects {
 			subjectProfile, _ := agentprofile.Canonical(subject.Profile)
 			subjectRole, _ := agentprofile.Canonical(subject.Role)
-			if subjectProfile == agentprofile.Texture ||
-				subjectRole == agentprofile.Texture ||
-				strings.HasPrefix(strings.TrimSpace(subject.AgentID), agentprofile.Texture+":") {
+			if subjectProfile == deskmanifest.DocumentCustodianName() ||
+				subjectRole == deskmanifest.DocumentCustodianName() ||
+				deskmanifest.IsDocumentInbox(strings.TrimSpace(subject.AgentID)) {
 				return fmt.Errorf("actorruntime: Texture owner is not bound for durable subject %s", subject.AgentID)
 			}
 		}

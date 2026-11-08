@@ -154,7 +154,7 @@ func TestStoryOpenWithMalformedForecastIsWhollyRefused(t *testing.T) {
 	bad := forecastHyp("x", time.Now().Add(time.Hour))
 	bad.ResolvesBy = ""
 	open := func(cmd string, h types.CastHypothesis) error {
-		rec := inboxCast(cmd, "management:"+inboxTestOwner, types.StoryOpenInbox, types.CommitmentCast{
+		rec := inboxCast(cmd, "management:"+inboxTestOwner, types.StoryOpenInbox(), types.CommitmentCast{
 			Hypotheses: []types.CastHypothesis{h}, Captures: []string{"capture-k"}, Publish: types.CastPublishAuto})
 		rec.Directive.Objective = "Rates decision " + cmd
 		_, err := commitInbox(t, s, cmd, nil, rec)

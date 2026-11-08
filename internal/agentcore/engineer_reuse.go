@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"log"
 	"strings"
 	"time"
@@ -267,7 +268,7 @@ func (rt *Runtime) noteReviewVerdict(ctx context.Context, assignment types.Engin
 		return
 	}
 	textureInbox, ok := types.ConversationCounterpart(assignment.Binding.ParentConversationID, assignment.Binding.ParentAgentID)
-	if !ok || !strings.HasPrefix(textureInbox, "texture:") {
+	if !ok || !deskmanifest.IsDocumentInbox(textureInbox) {
 		return
 	}
 	reason = strings.Join(strings.Fields(reason), " ")

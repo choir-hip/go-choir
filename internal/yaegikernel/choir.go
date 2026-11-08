@@ -201,11 +201,11 @@ func (s *ChoirScope) HandleRef() string { return *s.handleRef.Load() }
 // role, which fails closed to observation only (R2-2). desk is
 // normalizeDeskRole(role).
 func scopeReadOnly(role, desk string) bool {
-	if desk == "" || desk == SessionRoleManagementTask {
+	if desk == "" || deskmanifest.IsTaskRole(desk) {
 		// A task stages acts the host reduces and touches no filesystem.
 		return true
 	}
-	return role == SessionRoleResearch || role == SessionRoleResearchWeb || role == SessionRoleResearchTexture
+	return deskmanifest.InResearchFamily(role)
 }
 
 func normalizeDeskRole(role string) string {
@@ -768,7 +768,7 @@ func (s *ChoirScope) List(kind string, limit int) (JSON, error) {
 // On Texture, captureID may also be a frame source handle (r1.c1): it reads
 // the capture that source names.
 func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSON, error) {
-	if s.desk == "texture" {
+	if deskmanifest.IsDocumentCustodian(s.desk) {
 		id, err := s.frameCaptureID(captureID)
 		if err != nil {
 			return nil, err
@@ -879,9 +879,9 @@ func (s *ChoirScope) Feed(doc string, captureIDs any, reason string, req ...any)
 	if err != nil {
 		return "", err
 	}
-	doc = strings.TrimPrefix(strings.TrimSpace(doc), "texture:")
+	doc = strings.TrimPrefix(strings.TrimSpace(doc), deskmanifest.DocumentCustodianName()+":")
 	if doc == "" || doc == "new" {
-		return "", fmt.Errorf("choir: Feed needs an existing story's doc id or inbox (texture:<doc>); open a new story with choir.Cast(\"texture:new\", headline, spec, req)")
+		return "", fmt.Errorf("choir: Feed needs an existing story's doc id or inbox (%[1]s:<doc>); open a new story with choir.Cast(\"%[1]s:new\", headline, spec, req)", deskmanifest.DocumentCustodianName())
 	}
 	ids, err := captureIDsArg(captureIDs)
 	if err != nil {
@@ -891,7 +891,7 @@ func (s *ChoirScope) Feed(doc string, captureIDs any, reason string, req ...any)
 	if err != nil {
 		return "", err
 	}
-	return t.Dispose("texture:"+doc, DispositionFeed, ids, reason, fields)
+	return t.Dispose(deskmanifest.DocumentInbox(doc), DispositionFeed, ids, reason, fields)
 }
 
 // Decline declines captures that open no story and feed none (L2a R2-5):
@@ -1548,7 +1548,7 @@ func (s *ChoirScope) stageWrite(t *Tray, edits, why string, pSupported []float64
 // capture became and, with why as their reason, the captures left
 // undisposed.
 func (s *ChoirScope) Done(why string) (string, error) {
-	if s != nil && s.desk == SessionRoleManagementTask {
+	if s != nil && deskmanifest.IsTaskRole(s.desk) {
 		t, err := s.boundTray("done")
 		if err != nil {
 			return "", err

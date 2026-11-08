@@ -165,12 +165,12 @@ func currentTextureAgentID(docID string) string {
 	if docID == "" {
 		return ""
 	}
-	return agentprofile.Texture + ":" + docID
+	return deskmanifest.DocumentInbox(docID)
 }
 
 func isTextureAgentID(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
-	return strings.HasPrefix(agentID, agentprofile.Texture+":")
+	return deskmanifest.IsDocumentInbox(agentID)
 }
 
 // systemPromptForRun is a desk's stable prefix: the core, the role prompt,
@@ -213,7 +213,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\n")
 		b.WriteString(skillContext)
 	}
-	if profile == agentprofile.Conductor {
+	if profile == deskmanifest.FrontDoorName() {
 		// The requested app and seed prompt are per run (runContextForRun).
 		b.WriteString(runtimeprompts.ConductorRunOverlay(runtimeprompts.ConductorRunOptions{}))
 	}
@@ -407,7 +407,7 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	if rt.toolProfiles == nil {
 		rt.toolProfiles = make(map[string]*toolregistry.ToolRegistry)
 	}
-	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
+	rt.toolProfiles[deskmanifest.FrontDoorName()] = conductorRegistry
 	rt.toolProfiles[deskmanifest.PerformerName()] = engineeringRegistry
 	// Install the sealed desk-cell registry for every promoted desk profile.
 	for deskProfile, deskReg := range deskCellRegistries {
@@ -427,7 +427,7 @@ func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *toolregistry.ToolRe
 		// A task's desk_go_eval binds the task role's module set, not
 		// management's (R2-2). With no task registry it gets no tools.
 		if rt.toolProfiles != nil {
-			return rt.toolProfiles[agentprofile.ManagementTask]
+			return rt.toolProfiles[deskmanifest.TaskRoleName()]
 		}
 		return nil
 	}
@@ -465,7 +465,7 @@ func (rt *Runtime) managementTaskSystemPrompt(_ *types.RunRecord) string {
 		Deadline: managementTaskDeadline.String(),
 	}))
 	b.WriteString("\n\n")
-	b.WriteString(yaegikernel.DeskSurface(agentprofile.ManagementTask, "", true))
+	b.WriteString(yaegikernel.DeskSurface(deskmanifest.TaskRoleName(), "", true))
 	return b.String()
 }
 
@@ -475,7 +475,7 @@ func (rt *Runtime) managementTaskSystemPrompt(_ *types.RunRecord) string {
 // computer's intake.labels setting is off).
 func deskSurfacePrompt(profile string, rec *types.RunRecord, hidden ...string) string {
 	switch profile {
-	case agentprofile.Texture, deskmanifest.AdmitterName():
+	case deskmanifest.DocumentCustodianName(), deskmanifest.AdmitterName():
 		return yaegikernel.DeskSurface(profile, "", false, hidden...)
 	case deskmanifest.ResearcherName():
 		return yaegikernel.DeskSurface(profile, "", true)

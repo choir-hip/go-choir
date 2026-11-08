@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -68,7 +67,7 @@ func isManagementTaskRun(rec *types.RunRecord) bool {
 		return false
 	}
 	_, ok := types.ManagementTaskIDOfInbox(rec.AgentID)
-	return ok && agentRoleForRun(rec) == agentprofile.ManagementTask
+	return ok && agentRoleForRun(rec) == deskmanifest.TaskRoleName()
 }
 
 // managementTaskIDOfRun returns the task a run serves.
@@ -239,7 +238,7 @@ func (rt *Runtime) startManagementTask(ctx context.Context, task types.Managemen
 	// outcome delivery to a requester) would hang the task on the parent.
 	metadata := map[string]any{
 		runMetadataAgentProfile:          deskmanifest.AdmitterName(),
-		runMetadataAgentRole:             agentprofile.ManagementTask,
+		runMetadataAgentRole:             deskmanifest.TaskRoleName(),
 		runMetadataAgentID:               claimed.TaskInbox,
 		runMetadataChannelID:             claimed.TaskInbox,
 		"request_source":                 inboxRecordRequestSource,
@@ -380,7 +379,7 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 		if view.Captures != nil && len(view.Captures.Items) > 0 {
 			byID[view.RecordID] = view
 		}
-		if view.TaskOutcome != nil && len(view.TaskOutcome.Residuals) > 0 && strings.HasPrefix(types.NormalizeManagementTaskRef(view.From), types.ManagementTaskDesk+":") {
+		if view.TaskOutcome != nil && len(view.TaskOutcome.Residuals) > 0 && strings.HasPrefix(types.NormalizeManagementTaskRef(view.From), types.TaskInboxDesk+":") {
 			byID[view.RecordID] = view
 		}
 	}

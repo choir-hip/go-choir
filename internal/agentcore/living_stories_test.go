@@ -335,7 +335,7 @@ func TestStoryVerdictsPublishOnlyForPublishAutoStories(t *testing.T) {
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-v:cast:c1", Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Harbor"},
 		Cast:      &types.CommitmentCast{Publish: types.CastPublishAuto},
-		Inbox:     types.StoryOpenInbox, SenderInbox: management, EmitterKind: types.CommitmentEmitterAgent,
+		Inbox:     types.StoryOpenInbox(), SenderInbox: management, EmitterKind: types.CommitmentEmitterAgent,
 		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: management},
 	}
 	req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "cell-records:v", Records: []types.CommitmentRecord{cast}}

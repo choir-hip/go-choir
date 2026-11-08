@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -17,7 +16,7 @@ import (
 )
 
 // Opening a story (Cut 2 2b; pre-flight review A6). A management Cast
-// addressed to types.StoryOpenInbox creates, in its own commit, the story's
+// addressed to types.StoryOpenInbox() creates, in its own commit, the story's
 // document and trajectory and delivers the Cast to the new texture:<doc>:
 //
 //   - desk origin management, recorded on the trajectory with the opening
@@ -90,18 +89,18 @@ func (s *Store) planStoryOpenings(ownerID, computerID, commandID string, records
 	out := records
 	copied := false
 	for i, rec := range records {
-		if strings.TrimSpace(rec.Inbox) != types.StoryOpenInbox {
+		if strings.TrimSpace(rec.Inbox) != types.StoryOpenInbox() {
 			continue
 		}
 		management := deskmanifest.AdmitterInbox(ownerID)
 		if !rec.IsCast() || strings.TrimSpace(rec.SenderInbox) != management {
-			return nil, nil, nil, inboxRefused("record %s: only a Cast from %s opens a story at %s", rec.RecordID, management, types.StoryOpenInbox)
+			return nil, nil, nil, inboxRefused("record %s: only a Cast from %s opens a story at %s", rec.RecordID, management, types.StoryOpenInbox())
 		}
 		if strings.TrimSpace(rec.RecordID) == "" {
 			return nil, nil, nil, inboxRefused("an opening Cast needs a record id")
 		}
 		docID, trajectoryID, seedID := storyOpeningIDs(ownerID, computerID, commandID, strings.TrimSpace(rec.RecordID))
-		textureInbox := agentprofile.Texture + ":" + docID
+		textureInbox := deskmanifest.DocumentInbox(docID)
 		if !copied {
 			out = append([]types.CommitmentRecord(nil), records...)
 			copied = true
@@ -191,10 +190,10 @@ func (s *Store) planStoryOpenBatch(ctx context.Context, openings []storyOpening,
 // planStoryObjects builds one story's trajectory, document, seed revision,
 // Texture desk, start event and command receipt, each conditioned absent.
 func planStoryObjects(ownerID, computerID, docID, trajectoryID, seedID string, cast types.CommitmentRecord, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, objectgraph.Edge, error) {
-	textureAgentID := agentprofile.Texture + ":" + docID
+	textureAgentID := deskmanifest.DocumentInbox(docID)
 	commandID := "story-open:" + strings.TrimSpace(cast.RecordID)
 	subjectRefs := map[string]string{
-		"artifact":                  "texture://documents/" + docID,
+		"artifact":                  deskmanifest.DocumentArtifactPrefix() + docID,
 		"doc_id":                    docID,
 		types.StoryRefOriginDesk:    deskmanifest.AdmitterName(),
 		types.StoryRefOpeningRecord: strings.TrimSpace(cast.RecordID),
@@ -242,7 +241,7 @@ func planStoryObjects(ownerID, computerID, docID, trajectoryID, seedID string, c
 	seed.RevisionHash = types.ComputeStructuredRevisionHash("", seed.Content, seed.BodyDoc, seed.SourceEntities, seed.Provenance)
 	agent := types.AgentRecord{
 		AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID,
-		Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID,
+		Profile: deskmanifest.DocumentCustodianName(), Role: deskmanifest.DocumentCustodianName(), ChannelID: docID,
 		LifecycleVersion: 1, LastReducerSeq: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	event := types.LifecycleEvent{

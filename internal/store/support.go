@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -198,7 +198,7 @@ func (s *Store) planSupportVerdicts(ctx context.Context, ownerID, computerID, ju
 	sort.Strings(docs)
 	var records []types.CommitmentRecord
 	for _, doc := range docs {
-		texture := agentprofile.Texture + ":" + doc
+		texture := deskmanifest.DocumentInbox(doc)
 		records = append(records, types.CommitmentRecord{
 			SchemaID: types.CommitmentRecordSchemaV1, RecordID: commandID + ":support:" + doc, Kind: types.CommitmentKindReport,
 			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: judge},

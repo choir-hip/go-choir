@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -80,7 +79,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if conductor.OwnerID != ownerID {
 		return report, fmt.Errorf("prompt submission owner = %q, want %q", conductor.OwnerID, ownerID)
 	}
-	if agentProfileForRun(&conductor) != agentprofile.Conductor || agentRoleForRun(&conductor) != agentprofile.Conductor {
+	if agentProfileForRun(&conductor) != deskmanifest.FrontDoorName() || agentRoleForRun(&conductor) != deskmanifest.FrontDoorName() {
 		return report, fmt.Errorf("prompt submission is %q/%q, want conductor/conductor", agentProfileForRun(&conductor), agentRoleForRun(&conductor))
 	}
 	if metadataStringValue(conductor.Metadata, "input_source") != "prompt_bar" {
@@ -117,7 +116,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	textureRunIDs := map[string]bool{}
 	for _, run := range trajectoryRuns {
 		runByID[run.RunID] = run
-		if agentProfileForRun(&run) == agentprofile.Texture {
+		if agentProfileForRun(&run) == deskmanifest.DocumentCustodianName() {
 			textureRunIDs[run.RunID] = true
 		}
 	}
@@ -247,7 +246,7 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		if !ok {
 			continue
 		}
-		if agentProfileForRun(&parent) == agentprofile.Texture {
+		if agentProfileForRun(&parent) == deskmanifest.DocumentCustodianName() {
 			switch agentProfileForRun(&run) {
 			case deskmanifest.ResearcherName():
 			default:
@@ -270,7 +269,7 @@ func verifyPersistentManagementPath(ownerID string, runs []types.RunRecord) erro
 		if metadataStringValue(run.Metadata, "request_source") != "update_coagent" {
 			return fmt.Errorf("super run %s request_source = %q, want update_coagent", run.RunID, metadataStringValue(run.Metadata, "request_source"))
 		}
-		if metadataStringValue(run.Metadata, "requested_by_profile") == agentprofile.Texture {
+		if metadataStringValue(run.Metadata, "requested_by_profile") == deskmanifest.DocumentCustodianName() {
 			return nil
 		}
 	}
@@ -316,11 +315,11 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		parentProfile := agentProfileForRun(&parent)
 		childProfile := agentProfileForRun(&run)
 		switch {
-		case childProfile == agentprofile.Texture:
+		case childProfile == deskmanifest.DocumentCustodianName():
 			if !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 				return fmt.Errorf("child Texture run %s is not a Texture agent revision", run.RunID)
 			}
-		case parentProfile == agentprofile.Texture && deskmanifest.SpawnsResearch(childProfile):
+		case parentProfile == deskmanifest.DocumentCustodianName() && deskmanifest.SpawnsResearch(childProfile):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("researcher run %s lacks parent texture spawn_agent result", run.RunID)
 			}
@@ -328,7 +327,7 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent super spawn_agent result", childProfile, run.RunID)
 			}
-		case parentProfile == agentprofile.Conductor && childProfile == agentprofile.Texture:
+		case parentProfile == deskmanifest.FrontDoorName() && childProfile == deskmanifest.DocumentCustodianName():
 			// Initial texture setup is product orchestration, not worker delegation.
 		default:
 			return fmt.Errorf("run %s (%s) has unsupported parent %s (%s)", run.RunID, childProfile, parent.RunID, parentProfile)

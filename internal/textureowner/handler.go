@@ -355,7 +355,7 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
-		return agentprofile.Texture
+		return deskmanifest.DocumentCustodianName()
 	}
 	return ""
 }
@@ -382,7 +382,7 @@ func currentTextureAgentID(docID string) string {
 	if docID == "" {
 		return ""
 	}
-	return agentprofile.Texture + ":" + docID
+	return deskmanifest.DocumentInbox(docID)
 }
 
 func agentProfileForRun(rec *types.RunRecord) string {
@@ -400,7 +400,7 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); taskType == textureAgentRevisionTaskType {
-		return agentprofile.Texture
+		return deskmanifest.DocumentCustodianName()
 	}
 	return deskmanifest.AdmitterName()
 }

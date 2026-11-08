@@ -56,7 +56,7 @@ func (f *publishAutoFixture) openStory(t *testing.T, sender, publish string, cap
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Harbor reopens"},
 		Cast:      &types.CommitmentCast{Publish: publish, Captures: captures}, RelatedIDs: related,
-		Inbox: types.StoryOpenInbox, SenderInbox: sender, EmitterKind: emitter,
+		Inbox: types.StoryOpenInbox(), SenderInbox: sender, EmitterKind: emitter,
 		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: sender},
 	}
 	req := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "cell-records:" + id, Records: []types.CommitmentRecord{cast}}

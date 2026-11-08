@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -76,7 +77,7 @@ func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunI
 	// at reduce/cast time instead of silently dead-lettering. Covers both the
 	// agent-scoped form (texture:doc) and the bare profile name (texture).
 	// Unaddressed broadcasts (ToAgentID empty) are unaffected.
-	if to := message.ToAgentID; to == agentprofile.Texture || strings.HasPrefix(to, agentprofile.Texture+":") {
+	if to := message.ToAgentID; to == deskmanifest.DocumentCustodianName() || deskmanifest.IsDocumentInbox(to) {
 		return 0, fmt.Errorf("channel cast: %q is not reachable by channel mail; use the lifecycle packet path (choir.ReportPacket)", to)
 	}
 	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID

@@ -736,7 +736,7 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		if revision.AuthorKind != types.AuthorUser || strings.TrimSpace(revision.DocID) == "" || strings.TrimSpace(revision.TrajectoryID) == "" {
 			return nil, nil
 		}
-		profile := agentprofile.Texture
+		profile := deskmanifest.DocumentCustodianName()
 		for _, candidate := range objects {
 			if candidate.ObjectKind != ogKindAgent {
 				continue
@@ -746,7 +746,7 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 				continue
 			}
 			if candidateProfile, canonical := agentprofile.Canonical(agent.Profile); canonical == nil &&
-				(candidateProfile == agentprofile.Texture || deskmanifest.IsAssignmentPerformer(candidateProfile)) {
+				(candidateProfile == deskmanifest.DocumentCustodianName() || deskmanifest.IsAssignmentPerformer(candidateProfile)) {
 				profile = candidateProfile
 				break
 			}
@@ -855,7 +855,7 @@ func (s *Store) actorWakeResolverObjects(ctx context.Context, obj objectgraph.Ob
 	// minted by the assignment commit). Owner revisions are cast directives —
 	// they must reach the engineering desk occurrence consumer, never the
 	// supervision agent that shares the document channel.
-	for _, profile := range []string{deskmanifest.PerformerName(), agentprofile.Texture} {
+	for _, profile := range []string{deskmanifest.PerformerName(), deskmanifest.DocumentCustodianName()} {
 		agent, getErr := s.lifecycleGetObject(ctx, ogKindAgent, revision.OwnerID, revision.ComputerID, profile+":"+revision.DocID)
 		if getErr == nil {
 			return append(append([]objectgraph.Object{}, objects...), agent)
@@ -1389,7 +1389,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	}
 	docID := strings.TrimSpace(req.InitialDocument.DocID)
 	deskProfile := strings.TrimSpace(req.Agent.Profile)
-	if deskProfile != "texture" && !deskmanifest.IsAssignmentPerformer(deskProfile) {
+	if deskProfile != deskmanifest.DocumentCustodianName() && !deskmanifest.IsAssignmentPerformer(deskProfile) {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: durable subject profile must be texture or engineering: %w", ErrLifecycleInvalidTransition)
 	}
 	expectedAgentID := deskProfile + ":" + docID
@@ -1454,7 +1454,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	// "processor" and "reconciler" are frozen-history recognition for replay,
 	// not live agent profiles.
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
+	case deskmanifest.DocumentCustodianName(), deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
 	default:
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: effects-capable agent profile is not admissible: %w", ErrLifecycleInvalidTransition)
 	}
@@ -2861,7 +2861,7 @@ func (s *Store) lifecycleSettlementReady(ctx context.Context, trajectory types.T
 	// trajectory is not ready while its Texture has unread records or one of
 	// its conversations has an open round.
 	if docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"]); docID != "" {
-		inbox := "texture:" + docID
+		inbox := deskmanifest.DocumentInbox(docID)
 		head, err := s.InboxHead(ctx, trajectory.OwnerID, trajectory.ComputerID, inbox)
 		if err != nil {
 			return false, err
@@ -2950,14 +2950,14 @@ func (s *Store) requireLifecycleAssignedAgent(ctx context.Context, ownerID, comp
 	// "processor" and "reconciler" are frozen-history recognition for replay,
 	// not live agent profiles.
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
+	case deskmanifest.DocumentCustodianName(), deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
 	default:
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(agent.Role) != strings.TrimSpace(agent.Profile) {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
-	if (strings.HasPrefix(agentID, "texture:") || deskmanifest.IsAssignmentInbox(agentID)) && agent.LifecycleVersion <= 0 {
+	if (deskmanifest.IsDocumentInbox(agentID) || deskmanifest.IsAssignmentInbox(agentID)) && agent.LifecycleVersion <= 0 {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	return agent, nil
@@ -3017,7 +3017,7 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 		default:
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent profile: %w", ErrLifecycleInvalidTransition)
 		}
-		if strings.HasPrefix(work.AssignedAgentID, "texture:") || deskmanifest.IsAssignmentInbox(work.AssignedAgentID) {
+		if deskmanifest.IsDocumentInbox(work.AssignedAgentID) || deskmanifest.IsAssignmentInbox(work.AssignedAgentID) {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", ErrLifecycleInvalidTransition)
 		}
 	} else if agentErr != nil {
@@ -3325,7 +3325,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID ||
 		strings.TrimSpace(agent.Profile) != strings.TrimSpace(run.AgentProfile) ||
 		strings.TrimSpace(agent.Role) != strings.TrimSpace(run.AgentRole) ||
-		(agent.Profile == "texture" && agent.LifecycleVersion <= 0) {
+		(agent.Profile == deskmanifest.DocumentCustodianName() && agent.LifecycleVersion <= 0) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	conditions = append(conditions, objectgraph.ObjectCondition{
@@ -3789,7 +3789,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
 	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 	if documentID == "" || strings.TrimSpace(req.ChannelID) != documentID ||
-		(req.TargetAgentID != "texture:"+documentID && req.TargetAgentID != deskmanifest.PerformerInbox(documentID)) {
+		(req.TargetAgentID != deskmanifest.DocumentInbox(documentID) && req.TargetAgentID != deskmanifest.PerformerInbox(documentID)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
@@ -3829,7 +3829,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	}
 	if agent.AgentID != req.TargetAgentID || agent.OwnerID != ownerID || agent.ComputerID != computerID ||
 		agent.LifecycleVersion <= 0 || agent.Profile != agent.Role || strings.TrimSpace(agent.ChannelID) != documentID ||
-		(agent.Profile != "texture" && !deskmanifest.IsAssignmentPerformer(agent.Profile)) {
+		(agent.Profile != deskmanifest.DocumentCustodianName() && !deskmanifest.IsAssignmentPerformer(agent.Profile)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var producerRunObj objectgraph.Object
@@ -3901,9 +3901,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 				(targetRun.State.Terminal() || targetRun.State == types.RunPassivated)
 		}
 		if targetRun.RunID != control.SourceRunID || targetRun.AgentID != req.TargetAgentID || targetRun.TrajectoryID != req.TrajectoryID ||
-			targetRun.AgentProfile != "texture" || targetRun.AgentRole != "texture" || !targetAuthorityStateAllowed ||
+			targetRun.AgentProfile != deskmanifest.DocumentCustodianName() || targetRun.AgentRole != deskmanifest.DocumentCustodianName() || !targetAuthorityStateAllowed ||
 			!lifecycleRunBindsWork(targetRun, req.TargetWorkItemID) ||
-			targetWork.TrajectoryID != req.TrajectoryID || targetWork.AssignedAgentID != req.TargetAgentID || targetWork.AuthorityProfile != "texture" {
+			targetWork.TrajectoryID != req.TrajectoryID || targetWork.AssignedAgentID != req.TargetAgentID || targetWork.AuthorityProfile != deskmanifest.DocumentCustodianName() {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		producerAuthorityConditions = append(producerAuthorityConditions,

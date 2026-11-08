@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"log"
 	"strings"
 
@@ -92,8 +93,8 @@ func (rt *Runtime) operationDocumentID(ctx context.Context, ownerID, computerID 
 	}
 	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 	if docID == "" {
-		if artifact := strings.TrimSpace(trajectory.SubjectRefs["artifact"]); strings.HasPrefix(artifact, "texture://documents/") {
-			docID = strings.TrimSpace(strings.TrimPrefix(artifact, "texture://documents/"))
+		if artifact := strings.TrimSpace(trajectory.SubjectRefs["artifact"]); strings.HasPrefix(artifact, deskmanifest.DocumentArtifactPrefix()) {
+			docID = strings.TrimSpace(strings.TrimPrefix(artifact, deskmanifest.DocumentArtifactPrefix()))
 		}
 	}
 	return docID, nil

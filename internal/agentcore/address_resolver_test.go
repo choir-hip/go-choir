@@ -90,11 +90,11 @@ func TestResolveAddressKeepsTheRoutesRecordsRouteHad(t *testing.T) {
 		{"engineering:a1", "management:" + contractOwner, "management:" + contractOwner},
 		// Non-manifest rules: the open-subject address, a source both ways,
 		// and a management task's outward routes.
-		{"management:" + contractOwner, types.StoryOpenInbox, types.StoryOpenInbox},
+		{"management:" + contractOwner, types.StoryOpenInbox(), types.StoryOpenInbox()},
 		{"management:" + contractOwner, "source:s1", "source:s1"},
 		{"management-task:t1", "source:s1", "source:s1"},
 		{"management-task:t1", "texture:d3", "texture:d3"},
-		{"management-task:t1", types.StoryOpenInbox, types.StoryOpenInbox},
+		{"management-task:t1", types.StoryOpenInbox(), types.StoryOpenInbox()},
 	} {
 		r := contractRoute(t, c.from, contractOwner, c.to)
 		if !r.OnRoute || r.Inbox != c.want || r.Forwarded {
@@ -145,7 +145,7 @@ func TestResolveAddressRefusals(t *testing.T) {
 // sender at commit).
 func TestResolveAddressRegisteredClassesNameTheirSenders(t *testing.T) {
 	for _, from := range []string{"texture:d1", "research:d1", "engineering:a1"} {
-		for _, to := range []string{"source:s1", types.StoryOpenInbox} {
+		for _, to := range []string{"source:s1", types.StoryOpenInbox()} {
 			if r, err := ResolveAddress(from, contractOwner, to); err == nil {
 				t.Errorf("%s -> %s resolved to %+v, want a refusal", from, to, r)
 			}
@@ -155,7 +155,7 @@ func TestResolveAddressRegisteredClassesNameTheirSenders(t *testing.T) {
 	for _, c := range InboxClasses() {
 		got[c.Name] = c.Addressable
 	}
-	want := map[string]bool{types.StoryOpenInbox: true, captureSourceDesk: true, jobInboxClass: false}
+	want := map[string]bool{types.StoryOpenInbox(): true, captureSourceDesk: true, jobInboxClass: false}
 	for name, addressable := range want {
 		if v, ok := got[name]; !ok || v != addressable {
 			t.Errorf("inbox class %q = (%v, registered %v), want addressable %v", name, v, ok, addressable)

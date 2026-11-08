@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -88,7 +88,7 @@ func (rt *Handler) buildAppagentRevisionMetadata(_ context.Context, rec *types.R
 }
 
 func promptOnlyInitialModelPriorTextureRevision(rec *types.RunRecord, meta map[string]any) bool {
-	if rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
+	if rec == nil || agentProfileForRun(rec) != deskmanifest.DocumentCustodianName() {
 		return false
 	}
 	inputOrigin := firstNonEmpty(
@@ -104,7 +104,6 @@ func promptOnlyInitialModelPriorTextureRevision(rec *types.RunRecord, meta map[s
 	}
 	return false
 }
-
 
 // isWireArticleRevisionRun reports whether a Texture run came from the
 // retired wire article handoff (universal_wire_* intents, or a Texture agent

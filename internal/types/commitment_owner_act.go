@@ -1,6 +1,10 @@
 package types
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+)
 
 // An owner-act record tells a Texture that the self-development candidate
 // its document supervises was approved, applied, rejected, abandoned, or
@@ -87,7 +91,7 @@ func NewSelfDevelopmentOwnerAct(act SelfDevelopmentOwnerAct) (CommitmentRecord, 
 	operationID := strings.TrimSpace(act.OperationID)
 	kind := strings.TrimSpace(act.Act)
 	body := strings.TrimSpace(act.Body)
-	if !strings.HasPrefix(inbox, "texture:") || inbox == "texture:" || operationID == "" || !IsOwnerAct(kind) || body == "" {
+	if !deskmanifest.IsDocumentInbox(inbox) || inbox == deskmanifest.DocumentInbox("") || operationID == "" || !IsOwnerAct(kind) || body == "" {
 		return CommitmentRecord{}, false
 	}
 	refs := map[string]string{"operation_id": operationID, "owner_act": kind}

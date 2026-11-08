@@ -29,7 +29,7 @@ func truncateRunes(value string, maxRunes int) string {
 }
 
 func isTextureAgentID(agentID string) bool {
-	return strings.HasPrefix(strings.TrimSpace(agentID), "texture:")
+	return deskmanifest.IsDocumentInbox(strings.TrimSpace(agentID))
 }
 
 func copyStringAnyMap(input map[string]any) map[string]any {

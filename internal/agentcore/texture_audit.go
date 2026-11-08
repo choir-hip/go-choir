@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"strings"
 	"time"
 
@@ -82,8 +83,8 @@ func (rt *Runtime) RecordTextureAudit(ctx context.Context, entry TextureAuditEnt
 		OccurredAt:     time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: idempotencyKey,
 		TrajectoryID:   entry.TrajectoryID,
-		ActorProfile:   "texture",
-		AuthorityRef:   "texture:context",
+		ActorProfile:   deskmanifest.DocumentCustodianName(),
+		AuthorityRef:   deskmanifest.DocumentInbox("context"),
 		DecisionRef:    payloadDigest,
 		PrivacyClass:   "private",
 		ReducerVersion: computerevent.ReducerVersionV1,

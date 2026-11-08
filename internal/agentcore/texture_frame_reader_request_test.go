@@ -22,7 +22,7 @@ func TestTextureFrameCarriesAPendingReaderRequest(t *testing.T) {
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-open-ask:cast:c1", Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Harbor reopens"},
 		Cast:      &types.CommitmentCast{Captures: []string{"cap-court"}, Publish: types.CastPublishAuto},
-		Inbox:     types.StoryOpenInbox, SenderInbox: management, Addressee: types.StoryOpenInbox,
+		Inbox:     types.StoryOpenInbox(), SenderInbox: management, Addressee: types.StoryOpenInbox(),
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{AgentID: management},
 	}

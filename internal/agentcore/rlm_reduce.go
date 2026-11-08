@@ -131,7 +131,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		}
 		// Engineering reaches Texture only through management (Cut 1
 		// routing, invariant 6).
-		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); deskmanifest.IsAssignmentPerformer(fromDesk) && canonicalDeskName(toDesk) == agentprofile.Texture {
+		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); deskmanifest.IsAssignmentPerformer(fromDesk) && canonicalDeskName(toDesk) == deskmanifest.DocumentCustodianName() {
 			return fmt.Errorf("reduce: %s %s: engineering reaches Texture only through management; address management", in.Kind, in.LocalID)
 		}
 		// Engineering's Precommits are rule-settled; no other desk's may
@@ -220,7 +220,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		case yaegikernel.IntentDelegate, yaegikernel.IntentCancelTask, yaegikernel.IntentTaskDone:
 			// Management delegation (S2a): the records route reduces them;
 			// a desk off that route has no arm for them.
-			if !deskmanifest.AdmitsAssignments(fromDesk) && fromDesk != agentprofile.ManagementTask {
+			if !deskmanifest.AdmitsAssignments(fromDesk) && fromDesk != deskmanifest.TaskRoleName() {
 				return fmt.Errorf("reduce: %s %s is management's", in.Kind, in.LocalID)
 			}
 			if in.Kind == yaegikernel.IntentDelegate && strings.TrimSpace(in.Body) == "" {
@@ -822,7 +822,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 		role = agentProfileForRun(execCtx.RunRecord)
 	}
 	var records cellRecords
-	if isRecordsDesk(role) || role == agentprofile.ManagementTask {
+	if isRecordsDesk(role) || role == deskmanifest.TaskRoleName() {
 		runID := ""
 		if !deskCommits(role, TextureRevisionKind) {
 			// Texture's frame decides what its cells see (Cut 2 2a).
@@ -1418,7 +1418,7 @@ func (r *rlmCallReduction) commitTextureAuthorIntent(ctx context.Context, in yae
 	if rt == nil {
 		return 0, fmt.Errorf("reduce: texture_turn intent without a runtime")
 	}
-	revisionIdentity := intentIdempotencyKey(r.scope, in.LocalID, "texture", in.Body)
+	revisionIdentity := intentIdempotencyKey(r.scope, in.LocalID, deskmanifest.DocumentCustodianName(), in.Body)
 	receipt, err := rt.commitDeskTurn(ctx, r.scope.FromRole, TextureRevisionKind, r.rec, in.Body, revisionIdentity)
 	if err != nil {
 		return 0, err
@@ -2511,7 +2511,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 		switch profile {
 		case deskmanifest.AdmitterName():
 			targetHint = persistentManagementAgentID(strings.TrimSpace(execution.OwnerID))
-		case agentprofile.Texture:
+		case deskmanifest.DocumentCustodianName():
 			callerRun, runErr := rt.store.GetLifecycleRun(toolCallCtx, strings.TrimSpace(execution.OwnerID), strings.TrimSpace(execution.ComputerID), strings.TrimSpace(execution.RunID))
 			if runErr != nil {
 				if errors.Is(runErr, store.ErrNotFound) {

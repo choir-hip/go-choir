@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"log"
 	"strings"
 	"time"
@@ -117,7 +118,7 @@ type StoryEntityPublisher interface {
 }
 
 func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
-	if deskRole != yaegikernel.SessionRoleResearch {
+	if !deskmanifest.SpawnsResearch(deskRole) {
 		return nil, fmt.Errorf("choir.Relate belongs to the research desk; this session is %q", deskRole)
 	}
 	if rt == nil || rt.store == nil {
@@ -319,7 +320,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 // deskDocOf is the doc named by a research desk's agent id, normalised as
 // researchDeskDoc does, so the analysis memo key matches.
 func deskDocOf(agentID string) string {
-	doc, _ := strings.CutPrefix(strings.TrimSpace(agentID), yaegikernel.SessionRoleResearch+":")
+	doc, _ := strings.CutPrefix(strings.TrimSpace(agentID), deskmanifest.ResearcherName()+":")
 	return strings.TrimSpace(doc)
 }
 
@@ -332,7 +333,7 @@ func (rt *Runtime) researchDeskDoc(ctx context.Context, agentID, owner, computer
 	// document, read as its custodian even on the research desk's context
 	// (S3 review B3, texture_document|desk:research).
 	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_document")
-	doc, ok := strings.CutPrefix(strings.TrimSpace(agentID), yaegikernel.SessionRoleResearch+":")
+	doc, ok := strings.CutPrefix(strings.TrimSpace(agentID), deskmanifest.ResearcherName()+":")
 	doc = strings.TrimSpace(doc)
 	if !ok || doc == "" {
 		return "", fmt.Errorf("choir.Relate: this research desk is bound to no story, so it has no own story to name; name the story's publication_id")

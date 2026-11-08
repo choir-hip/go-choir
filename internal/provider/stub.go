@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -81,13 +80,13 @@ done:
 		return p.FailErr
 	}
 	result := p.Result
-	if stubAgentProfile(task) == agentprofile.Conductor &&
-		stubRequestedApp(task) == agentprofile.Texture &&
+	if stubAgentProfile(task) == deskmanifest.FrontDoorName() &&
+		stubRequestedApp(task) == deskmanifest.DocumentCustodianName() &&
 		result == defaultStubResult {
 		seedPrompt := ConductorSeedPrompt(task)
 		decision, _ := json.Marshal(map[string]any{
 			"action":                 "open_app",
-			"app":                    agentprofile.Texture,
+			"app":                    deskmanifest.DocumentCustodianName(),
 			"title":                  InitialTextureTitle(seedPrompt, ""),
 			"seed_prompt":            seedPrompt,
 			"create_initial_version": false,

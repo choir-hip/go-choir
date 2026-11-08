@@ -109,7 +109,7 @@ func (c InboxClass) accepts(fromDesk string) bool {
 		return true
 	}
 	for _, s := range c.Senders {
-		if types.IsManagementTaskDesk(s) && types.IsManagementTaskDesk(fromDesk) {
+		if types.IsTaskInboxDesk(s) && types.IsTaskInboxDesk(fromDesk) {
 			return true
 		}
 		if s == fromDesk {
@@ -153,14 +153,14 @@ func init() {
 	// The open-subject address: a Cast to it opens a story, and the store
 	// rewrites it to the new story's texture:<doc> at commit. Management
 	// (and its tasks) open stories; the store refuses any other sender.
-	RegisterInboxClass(InboxClass{Name: types.StoryOpenInbox, Fixed: true, Addressable: true,
-		AdmitterSends: true, Senders: []string{types.ManagementTaskDesk}})
+	RegisterInboxClass(InboxClass{Name: types.StoryOpenInbox(), Fixed: true, Addressable: true,
+		AdmitterSends: true, Senders: []string{types.TaskInboxDesk}})
 	// A source's inbox takes management's decline of its captures, from
 	// management or from a task sending as management (Cut 2 2b); the
 	// source writes its capture arrivals to management the other way, as a
 	// system record.
 	RegisterInboxClass(InboxClass{Name: captureSourceDesk, Addressable: true,
-		AdmitterSends: true, Senders: []string{types.ManagementTaskDesk}})
+		AdmitterSends: true, Senders: []string{types.TaskInboxDesk}})
 	// A job's inbox is the sender of its end record; no desk writes to it.
 	RegisterInboxClass(InboxClass{Name: jobInboxClass, Addressable: false})
 }
@@ -188,7 +188,7 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	}
 	named := hasSubject && toSubject != ""
 	owner := strings.TrimSpace(ownerID)
-	isTask := types.IsManagementTaskDesk(fromDesk)
+	isTask := types.IsTaskInboxDesk(fromDesk)
 
 	if isTask && fromSubject == "" {
 		return Route{}, fmt.Errorf("a management task's agent id %q names no task", fromAgentID)
@@ -222,11 +222,11 @@ func ResolveAddress(fromAgentID, ownerID, toDesk string) (Route, error) {
 	// source only; its sender is set by the reducer. Engineering, management
 	// and the computer are the parent's.
 	if isTask {
-		if toName == agentprofile.Texture {
+		if toName == deskmanifest.DocumentCustodianName() {
 			if !named {
 				return Route{}, fmt.Errorf("a task addresses a story by its inbox (texture:<doc>), or opens one at texture:new")
 			}
-			return Route{Inbox: agentprofile.Texture + ":" + toSubject, OnRoute: true}, nil
+			return Route{Inbox: deskmanifest.DocumentInbox(toSubject), OnRoute: true}, nil
 		}
 		return Route{}, fmt.Errorf("a management task sends only to stories (texture:<doc>, texture:new) and to sources; %q is management's to address", to)
 	}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -389,18 +388,18 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	callerWorkMismatch := hasCallerWork && (callerWork.WorkItemID != req.CallerWorkItemID ||
 		callerWork.OwnerID != ownerID || callerWork.ComputerID != computerID || callerWork.TrajectoryID != req.TrajectoryID ||
 		callerWork.Status != types.WorkItemOpen || strings.TrimSpace(callerWork.AssignedAgentID) != req.CallerAgentID ||
-		callerWork.AuthorityProfile != agentprofile.Texture)
+		callerWork.AuthorityProfile != deskmanifest.DocumentCustodianName())
 	if trajectory.Status != types.TrajectoryLive || trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID ||
 		trajectory.TrajectoryID != req.TrajectoryID || trajectory.LifecycleVersion != req.ExpectedLifecycleVersion ||
 		strings.TrimSpace(trajectory.SubjectRefs["doc_id"]) != req.DocumentID || document.DocID != req.DocumentID ||
 		document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID ||
 		document.ArchivedAt != nil || document.CurrentRevisionID != req.ExpectedHeadRevisionID || head.RevisionID != req.ExpectedHeadRevisionID ||
 		head.DocID != req.DocumentID || head.OwnerID != ownerID || head.ComputerID != computerID || callerAgent.AgentID != req.CallerAgentID ||
-		callerAgent.OwnerID != ownerID || callerAgent.ComputerID != computerID || callerAgent.Profile != agentprofile.Texture ||
-		callerAgent.Role != agentprofile.Texture || callerAgent.ChannelID != req.DocumentID || callerAgent.ActiveRunID != req.CallerRunID ||
+		callerAgent.OwnerID != ownerID || callerAgent.ComputerID != computerID || callerAgent.Profile != deskmanifest.DocumentCustodianName() ||
+		callerAgent.Role != deskmanifest.DocumentCustodianName() || callerAgent.ChannelID != req.DocumentID || callerAgent.ActiveRunID != req.CallerRunID ||
 		callerAgent.LifecycleVersion != req.ExpectedCallerLifecycleVersion || callerRun.RunID != req.CallerRunID ||
 		callerRun.AgentID != req.CallerAgentID || callerRun.OwnerID != ownerID || callerRun.ComputerID != computerID ||
-		callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentProfile != agentprofile.Texture || callerRun.AgentRole != agentprofile.Texture ||
+		callerRun.TrajectoryID != req.TrajectoryID || callerRun.AgentProfile != deskmanifest.DocumentCustodianName() || callerRun.AgentRole != deskmanifest.DocumentCustodianName() ||
 		callerRun.ChannelID != req.DocumentID || !callerRun.State.Active() || callerWorkMismatch {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}

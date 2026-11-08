@@ -33,7 +33,7 @@ const (
 // wait's start time as well as its ordinal, so a tracker that a planned
 // restart reset never reuses an id already committed with another body.
 func WaitRelayRecordID(engineeringInbox string, attempt uint64, episode, phase string) string {
-	assignment := strings.TrimPrefix(strings.TrimSpace(engineeringInbox), "engineering:")
+	assignment := strings.TrimPrefix(strings.TrimSpace(engineeringInbox), deskmanifest.PerformerName()+":")
 	return fmt.Sprintf("%swait:%s:%d:%s:%s", progressRecordPrefix, assignment, attempt, strings.TrimSpace(episode), phase)
 }
 
@@ -44,7 +44,7 @@ func WaitRelayRecordID(engineeringInbox string, attempt uint64, episode, phase s
 func NewEngineeringWaitRelay(engineeringInbox, textureInbox, computerID string, attempt uint64, episode, phase, body string,
 	at time.Time, refs map[string]string) (CommitmentRecord, bool) {
 	engineeringInbox, textureInbox, body = strings.TrimSpace(engineeringInbox), strings.TrimSpace(textureInbox), strings.TrimSpace(body)
-	if body == "" || !strings.HasPrefix(textureInbox, "texture:") || !deskmanifest.IsAssignmentInbox(engineeringInbox) || strings.TrimSpace(episode) == "" || (phase != WaitRelayStart && phase != WaitRelayEnd) {
+	if body == "" || !deskmanifest.IsDocumentInbox(textureInbox) || !deskmanifest.IsAssignmentInbox(engineeringInbox) || strings.TrimSpace(episode) == "" || (phase != WaitRelayStart && phase != WaitRelayEnd) {
 		return CommitmentRecord{}, false
 	}
 	subject := map[string]string{

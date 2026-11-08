@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -91,7 +91,7 @@ func (h *Handler) EnsureTextureHandoff(ctx context.Context, parentRec *types.Run
 	}
 	switch req.Kind {
 	case HandoffKindUserPrompt:
-		if parentRec == nil || agentProfileForRun(parentRec) != agentprofile.Conductor {
+		if parentRec == nil || agentProfileForRun(parentRec) != deskmanifest.FrontDoorName() {
 			return HandoffDecision{}, fmt.Errorf("user_prompt handoff requires a conductor run")
 		}
 		decision, err := h.ensureConductorTextureRoute(ctx, parentRec, req.Objective, req.InitialContent)
@@ -113,8 +113,8 @@ func (h *Handler) EnsureTextureHandoff(ctx context.Context, parentRec *types.Run
 		}
 		decision, err := h.ensureCoagentTextureRevisionRoute(ctx, parentRec, coagentTextureRouteRequest{
 			CallerProfile:  req.CallerProfile,
-			Role:           agentprofile.Texture,
-			Profile:        agentprofile.Texture,
+			Role:           deskmanifest.DocumentCustodianName(),
+			Profile:        deskmanifest.DocumentCustodianName(),
 			Objective:      req.Objective,
 			Title:          req.Title,
 			ChannelID:      req.ChannelID,
@@ -141,7 +141,7 @@ func (h *Handler) EnsureTextureHandoff(ctx context.Context, parentRec *types.Run
 func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.RunRecord, objective, initialContent string) (ConductorDecision, error) {
 	// The conductor route is the owner's prompt becoming a Texture document.
 	ctx = asOwner(ctx)
-	if rec == nil || agentProfileForRun(rec) != agentprofile.Conductor {
+	if rec == nil || agentProfileForRun(rec) != deskmanifest.FrontDoorName() {
 		return ConductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
 	}
 	if h.Store == nil || h.Core == nil {
@@ -239,16 +239,16 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		OwnerID: rec.OwnerID, ComputerID: computerID,
 		CommandID: commandID, TrajectoryID: trajectoryID,
 		Kind:           types.TrajectoryKindTask,
-		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + doc.DocID},
+		SubjectRefs:    map[string]string{"artifact": deskmanifest.DocumentArtifactPrefix() + doc.DocID},
 		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: initialPrompt, AssignedAgentID: agentID,
-			AuthorityProfile: agentprofile.Texture,
+			AuthorityProfile: deskmanifest.DocumentCustodianName(),
 		},
 		InitialDocument: doc, InitialRevision: userRev,
 		Agent: types.AgentRecord{
 			AgentID: agentID, OwnerID: rec.OwnerID, ComputerID: computerID,
-			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,
+			Profile: deskmanifest.DocumentCustodianName(), Role: deskmanifest.DocumentCustodianName(), ChannelID: doc.DocID,
 			CreatedAt: now, UpdatedAt: now,
 		},
 	}
@@ -331,20 +331,20 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 
 func conductorRequestedApp(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Texture
+		return deskmanifest.DocumentCustodianName()
 	}
 	requestedApp := metadataStringValue(rec.Metadata, "requested_app")
 	if strings.TrimSpace(requestedApp) == "" {
-		requestedApp = agentprofile.Texture
+		requestedApp = deskmanifest.DocumentCustodianName()
 	}
 	if isTextureDecisionApp(requestedApp) {
-		return agentprofile.Texture
+		return deskmanifest.DocumentCustodianName()
 	}
 	return strings.TrimSpace(requestedApp)
 }
 
 func isTextureDecisionApp(app string) bool {
-	return strings.EqualFold(strings.TrimSpace(app), agentprofile.Texture)
+	return strings.EqualFold(strings.TrimSpace(app), deskmanifest.DocumentCustodianName())
 }
 
 func conductorWindowTitle(rec *types.RunRecord, seedPrompt string) string {
@@ -381,7 +381,7 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision ConductorDecisi
 			decision.SeedPrompt = seedPrompt
 		}
 		if isTextureDecisionApp(decision.App) {
-			decision.App = agentprofile.Texture
+			decision.App = deskmanifest.DocumentCustodianName()
 			decision.CreateInitialVersion = boolPointer(false)
 			decision.InitialContent = ""
 		}

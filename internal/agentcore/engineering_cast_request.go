@@ -7,7 +7,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -45,7 +44,7 @@ const (
 // the management desk: the only kind of record an engineering Cast serves.
 func isTextureCastTo(rec *types.CommitmentRecord, management string) bool {
 	return rec != nil && rec.InboxSeq > 0 && rec.Inbox == management && rec.IsCast() &&
-		strings.HasPrefix(rec.SenderInbox, agentprofile.Texture+":")
+		deskmanifest.IsDocumentInbox(rec.SenderInbox)
 }
 
 // parentRequestDigest is the content digest of a Texture Cast's request: its

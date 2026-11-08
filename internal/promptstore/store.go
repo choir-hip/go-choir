@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/promptspec"
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
@@ -172,7 +171,7 @@ func (ps *Store) ensureDefaults() error {
 	for _, name := range promptDefaultFiles() {
 		path := ps.defaultPromptPath(name)
 		var content []byte
-		if name == agentprofile.Texture {
+		if name == deskmanifest.DocumentCustodianName() {
 			content = []byte(textureprompts.DefaultSystemPrompt() + "\n")
 		} else {
 			raw, readErr := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("defaults", name+".yaml")))

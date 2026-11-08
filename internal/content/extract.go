@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/doctool"
 )
 
@@ -130,7 +130,7 @@ func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) Extr
 
 func extractDOCXDocument(ctx context.Context, sourceName string, raw []byte) Extraction {
 	extraction := Extraction{MediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		AppHint:  agentprofile.Texture,
+		AppHint:  deskmanifest.DocumentCustodianName(),
 		Adapter:  "docx_pandoc_markdown",
 		Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	text, warnings := runDocumentToolOnTempFile(ctx, "pandoc", []string{"-f", "docx", "-t", "markdown"}, ".docx", raw, nil)

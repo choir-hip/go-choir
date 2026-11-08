@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -794,7 +793,7 @@ func (s *Store) requireEngineeringRecordsAdmission(ctx context.Context, assignme
 		return objectgraph.Object{}, err
 	}
 	if parent == nil || parent.InboxSeq <= 0 || parent.Inbox != binding.ParentAgentID || !parent.IsCast() ||
-		!strings.HasPrefix(parent.SenderInbox, agentprofile.Texture+":") || parent.ConversationID != binding.ParentConversationID || parent.Round != binding.ParentRound {
+		!deskmanifest.IsDocumentInbox(parent.SenderInbox) || parent.ConversationID != binding.ParentConversationID || parent.Round != binding.ParentRound {
 		return objectgraph.Object{}, refuse("parent %q is not a Texture's Cast into %s round %d of %s", cast.ParentID, binding.ParentAgentID, binding.ParentRound, binding.ParentConversationID)
 	}
 	headObj, err := s.lifecycleGetObject(ctx, ogKindConversationHead, binding.OwnerID, binding.ComputerID, binding.ParentConversationID)
@@ -808,7 +807,7 @@ func (s *Store) requireEngineeringRecordsAdmission(ctx context.Context, assignme
 	if !head.Open || head.Round != binding.ParentRound || head.CasterInbox != parent.SenderInbox || head.RecipientInbox != binding.ParentAgentID {
 		return objectgraph.Object{}, refuse("round %d of %s is not open", binding.ParentRound, binding.ParentConversationID)
 	}
-	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
+	docID := strings.TrimPrefix(parent.SenderInbox, deskmanifest.DocumentCustodianName()+":")
 	// The one document the parent Cast names, read on its custodian's behalf
 	// (enforce flip section 6.4): the admission is the platform checking the
 	// cast's own packet, not the admitting desk reading Texture. The forced

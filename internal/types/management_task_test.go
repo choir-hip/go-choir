@@ -20,8 +20,8 @@ func TestManagementTaskSpellingsResolveToOne(t *testing.T) {
 	if got := NormalizeManagementTaskRef("management:o1"); got != "management:o1" {
 		t.Errorf("unrelated ref changed: %q", got)
 	}
-	if !IsManagementTaskDesk("management_task") || !IsManagementTaskDesk("management-task") || IsManagementTaskDesk("management") {
-		t.Error("IsManagementTaskDesk")
+	if !IsTaskInboxDesk("management_task") || !IsTaskInboxDesk("management-task") || IsTaskInboxDesk("management") {
+		t.Error("IsTaskInboxDesk")
 	}
 }
 

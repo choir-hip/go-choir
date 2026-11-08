@@ -224,7 +224,7 @@ func recordDisposition(rec types.CommitmentRecord, opened map[string]bool) (stri
 	switch {
 	case rec.Disposition != nil && len(rec.Disposition.Captures) > 0:
 		return rec.Disposition.Kind, rec.Disposition.Captures
-	case rec.IsCast() && rec.Cast != nil && len(rec.Cast.Captures) > 0 && strings.HasPrefix(rec.Inbox, "texture:"):
+	case rec.IsCast() && rec.Cast != nil && len(rec.Cast.Captures) > 0 && deskmanifest.IsDocumentInbox(rec.Inbox):
 		if opened[rec.RecordID] {
 			return types.DispositionOpen, rec.Cast.Captures
 		}
@@ -332,7 +332,7 @@ func (p *taskPlan) checkTaskScope(rec types.CommitmentRecord, management string)
 	if strings.TrimSpace(rec.SenderInbox) != management {
 		return inboxRefused("record %s: task %s sends as %s", rec.RecordID, task, management)
 	}
-	if !strings.HasPrefix(rec.Inbox, "texture:") && !strings.HasPrefix(rec.Inbox, "source:") {
+	if !deskmanifest.IsDocumentInbox(rec.Inbox) && !strings.HasPrefix(rec.Inbox, "source:") {
 		return inboxRefused("record %s: task %s sends only to a story or a source, not %s", rec.RecordID, task, rec.Inbox)
 	}
 	row, err := p.row(task)

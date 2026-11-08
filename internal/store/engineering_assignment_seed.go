@@ -56,7 +56,7 @@ func SeedEngineeringAssignmentAuthorityWithCastBody(s *Store, ownerID, computerI
 	ownerID, computerID, key = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(key)
 	f := EngineeringAssignmentSeed{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: "trajectory-" + key,
-		DocID: "document-" + key, TextureInbox: "texture:document-" + key,
+		DocID: "document-" + key, TextureInbox: deskmanifest.DocumentInbox("document-" + key),
 		ParentAgentID: deskmanifest.AdmitterInbox(ownerID), ParentRunID: "run-management-assignment",
 		ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-"+key)),
 		TextureCastID:    "texture-cell:Cast:" + key,

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -166,7 +165,7 @@ func (s *Store) CommitStoryResearchRequest(ctx context.Context, req StoryResearc
 	if doc.CurrentRevisionID != strings.TrimSpace(req.ExpectedHeadRevisionID) {
 		return StoryResearchReceipt{}, ErrStoryResearchChanged
 	}
-	texture, research := agentprofile.Texture+":"+docID, deskmanifest.ResearchInbox(docID)
+	texture, research := deskmanifest.DocumentInbox(docID), deskmanifest.ResearchInbox(docID)
 	conversation, err := s.ConversationState(ctx, ownerID, computerID, types.InboxConversationID(texture, research))
 	if err != nil {
 		return StoryResearchReceipt{}, err
@@ -318,7 +317,7 @@ func (s *Store) StoryResearchRequestState(ctx context.Context, ownerID, computer
 // Texture has not yet read the Report that closed it.
 func (s *Store) PendingStoryResearchRequest(ctx context.Context, ownerID, computerID, docID string) (string, bool, error) {
 	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
-	texture, research := agentprofile.Texture+":"+docID, deskmanifest.ResearchInbox(docID)
+	texture, research := deskmanifest.DocumentInbox(docID), deskmanifest.ResearchInbox(docID)
 	conversationID := types.InboxConversationID(texture, research)
 	head, err := s.ConversationState(ctx, ownerID, computerID, conversationID)
 	if err != nil || head.Round == 0 {
@@ -395,7 +394,7 @@ func (s *Store) storyEntitiesQuietReport(ctx context.Context, ownerID, computerI
 	if rec.RecordKind() != types.CommitmentKindReport || rec.Round <= 0 || !reportCarriesNothing(rec) {
 		return false, nil
 	}
-	doc, ok := strings.CutPrefix(rec.Inbox, agentprofile.Texture+":")
+	doc, ok := strings.CutPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":")
 	if !ok || doc == "" || rec.SenderInbox != deskmanifest.ResearchInbox(doc) {
 		return false, nil
 	}

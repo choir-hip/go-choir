@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -428,7 +427,7 @@ func verifyOwedWait(o verifyOwed, now time.Time) *types.WaitState {
 func (rt *Runtime) mintVerifyOwedRelay(ctx context.Context, o verifyOwed, n int, w *types.WaitState, now time.Time) {
 	binding := o.Assignment.Binding
 	textureInbox, ok := types.ConversationCounterpart(binding.ParentConversationID, binding.ParentAgentID)
-	if !ok || !strings.HasPrefix(textureInbox, agentprofile.Texture+":") {
+	if !ok || !deskmanifest.IsDocumentInbox(textureInbox) {
 		return
 	}
 	body := fmt.Sprintf("%s: candidate %s is frozen and not yet verified, and management was woken to Verify it (notice %d of %d)",

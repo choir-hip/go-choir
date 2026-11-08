@@ -185,7 +185,7 @@ func openTestStory(t *testing.T, s *store.Store, owner, computer, headline strin
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: headline},
 		Cast:      &types.CommitmentCast{Publish: types.CastPublishAuto},
-		Inbox:     types.StoryOpenInbox, SenderInbox: management, EmitterKind: types.CommitmentEmitterAgent,
+		Inbox:     types.StoryOpenInbox(), SenderInbox: management, EmitterKind: types.CommitmentEmitterAgent,
 		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: management},
 	}
 	req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "cell-records:" + id, Records: []types.CommitmentRecord{cast}}

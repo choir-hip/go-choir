@@ -189,12 +189,12 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 	if rec.Captures != nil && (rec.EmitterKind != types.CommitmentEmitterSystem || strings.TrimSpace(rec.Captures.SourceID) == "" || len(rec.Captures.Items) == 0) {
 		return inboxRefused("capture arrival %s must be a system record naming its source and at least one capture", rec.RecordID)
 	}
-	if rec.Inbox == types.StoryOpenInbox {
-		return inboxRefused("record %s is addressed to %s; only a management Cast committed through CommitInboxRecords opens a story", rec.RecordID, types.StoryOpenInbox)
+	if rec.Inbox == types.StoryOpenInbox() {
+		return inboxRefused("record %s is addressed to %s; only a management Cast committed through CommitInboxRecords opens a story", rec.RecordID, types.StoryOpenInbox())
 	}
 	if d := rec.Disposition; d != nil {
 		isDispose := kind == types.CommitmentKindDirective && rec.Directive != nil && string(rec.Directive.Subtype) == d.Kind
-		toStory, toSource := strings.HasPrefix(rec.Inbox, "texture:"), strings.HasPrefix(rec.Inbox, "source:")
+		toStory, toSource := deskmanifest.IsDocumentInbox(rec.Inbox), strings.HasPrefix(rec.Inbox, "source:")
 		if !isDispose || len(d.Captures) == 0 || !deskmanifest.IsAdmitterInbox(rec.SenderInbox) ||
 			(d.Kind == types.DispositionFeed && !toStory) || (d.Kind == types.DispositionDecline && !toSource) ||
 			(d.Kind != types.DispositionFeed && d.Kind != types.DispositionDecline) {
@@ -751,7 +751,7 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 	// The library row Texture publishes must exist before management's stale
 	// check reads it (a tape from before the projection has the head only).
 	for _, rec := range req.Records {
-		if strings.TrimSpace(rec.Inbox) == types.StoryOpenInbox {
+		if strings.TrimSpace(rec.Inbox) == types.StoryOpenInbox() {
 			if err := s.reconcileStoryIndex(textureCustodianCtx(ctx), ownerID, computerID, false); err != nil {
 				return types.InboxCommitReceipt{}, err
 			}

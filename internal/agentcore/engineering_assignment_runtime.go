@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -299,7 +298,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if err := rt.refuseCastOntoOpenAssignment(ctx, ownerID, computerID, parent.ConversationID, parent.Round, recordID, caster.RunID); err != nil {
 		return engineeringCastPlan{}, err
 	}
-	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
+	docID := strings.TrimPrefix(parent.SenderInbox, deskmanifest.DocumentCustodianName()+":")
 	// The cast's sender is Texture and the cast names this document: the
 	// planner reads it as the document's custodian. The reader is forced for
 	// this one read (enforce flip section 6.4), because the context carries

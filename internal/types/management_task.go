@@ -16,40 +16,40 @@ import (
 // Casts name while the round is open, and closed by one final Report the
 // host mints from the task inbox to management:<owner>.
 
-// ManagementTaskDesk is the desk part of a task's inbox. It must never be
+// TaskInboxDesk is the desk part of a task's inbox. It must never be
 // spelled management:<anything>: WakeRecordsInbox wakes only the persistent
 // management inbox under that desk.
 //
 // Two spellings exist in the code: this one, "management-task", is the
 // inbox desk part that is written to the tape and to records; the run role
 // (agentprofile.ManagementTask, deskmanifest.ManagementTask) is spelled
-// "management_task". Writers use ManagementTaskDesk only. Readers accept
-// both through IsManagementTaskDesk and NormalizeManagementTaskRef, so an id
+// "management_task". Writers use TaskInboxDesk only. Readers accept
+// both through IsTaskInboxDesk and NormalizeManagementTaskRef, so an id
 // minted with either spelling resolves; nothing on the tape is rewritten.
-const ManagementTaskDesk = "management-task"
+const TaskInboxDesk = "management-task"
 
 // managementTaskRoleDesk is the other spelling, the role name.
-const managementTaskRoleDesk = "management_task"
+func managementTaskRoleDesk() string { return deskmanifest.TaskRoleName() }
 
-// IsManagementTaskDesk reports whether desk names the management task desk
+// IsTaskInboxDesk reports whether desk names the management task desk
 // in either spelling.
-func IsManagementTaskDesk(desk string) bool {
+func IsTaskInboxDesk(desk string) bool {
 	desk = strings.TrimSpace(desk)
-	return desk == ManagementTaskDesk || desk == managementTaskRoleDesk
+	return desk == TaskInboxDesk || desk == managementTaskRoleDesk()
 }
 
 // NormalizeManagementTaskRef rewrites a ref or agent id whose desk part is the
 // role spelling to the written one; any other string is returned unchanged.
 func NormalizeManagementTaskRef(ref string) string {
-	if rest, ok := strings.CutPrefix(strings.TrimSpace(ref), managementTaskRoleDesk+":"); ok {
-		return ManagementTaskDesk + ":" + rest
+	if rest, ok := strings.CutPrefix(strings.TrimSpace(ref), managementTaskRoleDesk()+":"); ok {
+		return TaskInboxDesk + ":" + rest
 	}
 	return ref
 }
 
 // ManagementTaskInbox is the reader inbox of one task.
 func ManagementTaskInbox(taskID string) string {
-	return ManagementTaskDesk + ":" + strings.TrimSpace(taskID)
+	return TaskInboxDesk + ":" + strings.TrimSpace(taskID)
 }
 
 // ManagementTaskIDOfRef returns the task id a cell-supplied ref names: the
@@ -58,14 +58,14 @@ func ManagementTaskInbox(taskID string) string {
 // can be minted from a ref.
 func ManagementTaskIDOfRef(ref string) string {
 	ref = NormalizeManagementTaskRef(strings.TrimSpace(ref))
-	return strings.TrimSpace(strings.TrimPrefix(ref, ManagementTaskDesk+":"))
+	return strings.TrimSpace(strings.TrimPrefix(ref, TaskInboxDesk+":"))
 }
 
 // ManagementTaskIDOfInbox returns the task id an inbox names, if it is a
 // task inbox.
 func ManagementTaskIDOfInbox(inbox string) (string, bool) {
 	desk, id, ok := strings.Cut(strings.TrimSpace(inbox), ":")
-	if !ok || !IsManagementTaskDesk(desk) || strings.TrimSpace(id) == "" {
+	if !ok || !IsTaskInboxDesk(desk) || strings.TrimSpace(id) == "" {
 		return "", false
 	}
 	return strings.TrimSpace(id), true

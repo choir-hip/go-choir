@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"log"
 	"strings"
 	"time"
@@ -109,7 +110,7 @@ type system1Context struct {
 }
 
 func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
-	if deskRole != yaegikernel.SessionRoleResearch {
+	if !deskmanifest.SpawnsResearch(deskRole) {
 		return nil, fmt.Errorf("choir.System1 belongs to the research desk; this session is %q", deskRole)
 	}
 	if rt == nil || rt.store == nil {
@@ -327,7 +328,7 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 		log.Printf("system1: record the answer of %s on run %s: %v", requestID, runID, err)
 		return nil, fmt.Errorf("choir.System1: the answer could not be recorded on the tape, so it is not returned: %w", err)
 	}
-	rt.recordJevCostFor(ctx, owner, runID, firstNonEmpty(exec.AgentID, agentProfileResearchID), "system1", model, distribution.Provider, distribution.Usage, len(questions))
+	rt.recordJevCostFor(ctx, owner, runID, firstNonEmpty(exec.AgentID, agentProfileResearchID()), "system1", model, distribution.Provider, distribution.Usage, len(questions))
 	return resultRaw, nil
 }
 
@@ -373,7 +374,7 @@ func (rt *Runtime) system1CrossRunReplay(ctx context.Context, exec toolregistry.
 }
 
 // agentProfileResearchID books a System1 cost when the run names no agent.
-const agentProfileResearchID = "research"
+func agentProfileResearchID() string { return deskmanifest.ResearcherName() }
 
 // system1Replay returns a recorded result, flagged replayed.
 func system1Replay(recorded json.RawMessage) (json.RawMessage, error) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
@@ -495,7 +495,7 @@ func (rt *Runtime) continueRebaseDocument(ctx context.Context, ownerID, computer
 		ExpectedHeadRevisionID: doc.CurrentRevisionID,
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: "Answer the platform's rebase notice " + noticeID + " with the one Cast to management it gives.",
-			AssignedAgentID: addr.Inbox, AuthorityProfile: agentprofile.Texture,
+			AssignedAgentID: addr.Inbox, AuthorityProfile: deskmanifest.DocumentCustodianName(),
 		},
 	}
 	digest, err := store.ComputeContinueLifecycleDocumentDigest(req)

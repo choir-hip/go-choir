@@ -75,9 +75,9 @@ func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, 
 	// Texture is the only document desk: the engineering-bound document
 	// (path B) is deleted (C1e step 3).
 	for _, work := range snapshot.WorkItems {
-		if work.Status == types.WorkItemOpen && strings.TrimSpace(work.AuthorityProfile) == agentprofile.Texture &&
-			work.AssignedAgentID == agentprofile.Texture+":"+doc.DocID {
-			return agentprofile.Texture
+		if work.Status == types.WorkItemOpen && strings.TrimSpace(work.AuthorityProfile) == deskmanifest.DocumentCustodianName() &&
+			work.AssignedAgentID == deskmanifest.DocumentInbox(doc.DocID) {
+			return deskmanifest.DocumentCustodianName()
 		}
 	}
 	return ""
@@ -348,7 +348,7 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 	agent, err := rt.Store.GetAgentByScope(ctx, ownerID, computerID, agentID)
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if err != nil || agentProfile != agentprofile.Texture || agentRole != agentprofile.Texture ||
+	if err != nil || agentProfile != deskmanifest.DocumentCustodianName() || agentRole != deskmanifest.DocumentCustodianName() ||
 		agent.ChannelID != docID || agent.LifecycleVersion <= 0 {
 		if err != nil {
 			return fmt.Errorf("validate Texture activation subject: %w", err)
@@ -360,7 +360,7 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 	if workID := strings.TrimSpace(metadataStringValue(run.Metadata, "lifecycle_work_item_id")); workID != "" || !metadataBoolValue(run.Metadata, textureRecordsRouteMetadata) {
 		work, err := rt.Store.GetLifecycleWorkItem(ctx, ownerID, computerID, workID)
 		workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
-		workOpen := err == nil && work.Status == types.WorkItemOpen && work.TrajectoryID == doc.TrajectoryID && work.AssignedAgentID == agentID && workAuthorityProfile == agentprofile.Texture
+		workOpen := err == nil && work.Status == types.WorkItemOpen && work.TrajectoryID == doc.TrajectoryID && work.AssignedAgentID == agentID && workAuthorityProfile == deskmanifest.DocumentCustodianName()
 		if !workOpen && !(err == nil && metadataBoolValue(run.Metadata, textureRecordsRouteMetadata)) {
 			if err != nil {
 				return fmt.Errorf("validate Texture activation work: %w", err)
@@ -1154,7 +1154,7 @@ func (rt *Handler) latestEligibleWorkerMessage(ctx context.Context, ownerID, cha
 }
 
 func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, ownerID, docID string, message types.ChannelMessage, cache map[string]bool) (bool, error) {
-	if strings.TrimSpace(message.ToAgentID) != "texture:"+strings.TrimSpace(docID) {
+	if strings.TrimSpace(message.ToAgentID) != deskmanifest.DocumentInbox(strings.TrimSpace(docID)) {
 		return false, nil
 	}
 	runID := strings.TrimSpace(message.FromRunID)
@@ -1425,7 +1425,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 	agent, err := rt.Store.GetAgentByScope(ctx, o.OwnerID, o.ComputerID, o.TargetAgentID)
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if err != nil || agentProfile != agentprofile.Texture || agentRole != agentprofile.Texture || agent.ChannelID != o.DocumentID || agent.LifecycleVersion <= 0 {
+	if err != nil || agentProfile != deskmanifest.DocumentCustodianName() || agentRole != deskmanifest.DocumentCustodianName() || agent.ChannelID != o.DocumentID || agent.LifecycleVersion <= 0 {
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return zero, "", invalidTextureOccurrence("Texture occurrence subject is missing")
@@ -1454,7 +1454,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		// ambiguous scope is not mailbox authority.
 		for _, candidate := range snapshot.WorkItems {
 			candidateAuthorityProfile, _ := agentprofile.Canonical(candidate.AuthorityProfile)
-			if candidate.Status != types.WorkItemOpen || candidate.AssignedAgentID != o.TargetAgentID || candidateAuthorityProfile != agentprofile.Texture {
+			if candidate.Status != types.WorkItemOpen || candidate.AssignedAgentID != o.TargetAgentID || candidateAuthorityProfile != deskmanifest.DocumentCustodianName() {
 				continue
 			}
 			if workID != "" {
@@ -1468,7 +1468,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 	}
 	work, err := rt.Store.GetLifecycleWorkItem(ctx, o.OwnerID, o.ComputerID, workID)
 	workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
-	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != o.TrajectoryID || work.AssignedAgentID != o.TargetAgentID || workAuthorityProfile != agentprofile.Texture {
+	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != o.TrajectoryID || work.AssignedAgentID != o.TargetAgentID || workAuthorityProfile != deskmanifest.DocumentCustodianName() {
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return zero, "", invalidTextureOccurrence("Texture occurrence open work is missing")

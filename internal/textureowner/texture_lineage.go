@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -506,7 +506,7 @@ func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version 
 		OwnerID:     ownerID,
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     agentprofile.Texture,
+		AppHint:     deskmanifest.DocumentCustodianName(),
 		Title:       fmt.Sprintf("%s %s", title, label),
 		FilePath:    fmt.Sprintf("%s#%s", sourcePath, label),
 		TextContent: content,

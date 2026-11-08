@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -84,7 +84,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 	}
 	computerID := strings.TrimSpace(h.Core.TextureComputerID())
 	deskProfile := strings.TrimSpace(input.Desk)
-	if deskProfile != "" && deskProfile != agentprofile.Texture {
+	if deskProfile != "" && deskProfile != deskmanifest.DocumentCustodianName() {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture"})
 		return
 	}
@@ -124,12 +124,12 @@ func textureCreateIdentity(ownerID, computerID, clientRequestID string) (request
 // and the one initial work item that desk holds. It wakes nothing.
 func (h *Handler) startLifecycleTextureDocument(ctx context.Context, ownerID, computerID, clientRequestID, title, initialContent string) (textureLifecycleCreateResponse, error) {
 	requestID, occurrenceID, docID, revisionID, workID, trajectoryID := textureCreateIdentity(ownerID, computerID, clientRequestID)
-	deskProfile := agentprofile.Texture
+	deskProfile := deskmanifest.DocumentCustodianName()
 	agentID := deskProfile + ":" + docID
 	now := time.Now().UTC()
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:" + occurrenceID, TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
-		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SubjectRefs:     map[string]string{"artifact": deskmanifest.DocumentArtifactPrefix() + docID, "doc_id": docID},
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: initialContent, AssignedAgentID: agentID, AuthorityProfile: deskProfile},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: title, CreatedAt: now, UpdatedAt: now},

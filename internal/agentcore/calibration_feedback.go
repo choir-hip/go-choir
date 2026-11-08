@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -231,13 +230,13 @@ type CalibrationPending struct {
 // desk whose track record it adds to; "" for a desk with no digest.
 func calibrationDeskOfThread(thread string) string {
 	desk, _, _ := strings.Cut(strings.TrimSpace(thread), ":")
-	if types.IsManagementTaskDesk(desk) {
+	if types.IsTaskInboxDesk(desk) {
 		return deskmanifest.AdmitterName()
 	}
 	switch desk {
 	case deskmanifest.AdmitterName():
 		return deskmanifest.AdmitterName()
-	case agentprofile.Texture, deskmanifest.ResearcherName(), deskmanifest.PerformerName():
+	case deskmanifest.DocumentCustodianName(), deskmanifest.ResearcherName(), deskmanifest.PerformerName():
 		return desk
 	}
 	return ""
@@ -257,7 +256,7 @@ func calibrationThreadOfRecord(rec types.CommitmentRecord) string {
 		}
 	}
 	if task := strings.TrimSpace(rec.Provenance.ActingTask); task != "" {
-		return types.ManagementTaskDesk + ":" + task
+		return types.TaskInboxDesk + ":" + task
 	}
 	if sender := strings.TrimSpace(rec.SenderInbox); sender != "" {
 		return sender
@@ -489,8 +488,8 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 		if !judged {
 			continue // Jev has not judged it: pending in the guest, settled by its own job
 		}
-		thread := agentprofile.Texture + ":" + check.Pair.DocID
-		obs = append(obs, calibration.Observation{Desk: agentprofile.Texture, ClaimType: types.CalibrationClaimCitationSupport, Thread: thread, Story: thread,
+		thread := deskmanifest.DocumentInbox(check.Pair.DocID)
+		obs = append(obs, calibration.Observation{Desk: deskmanifest.DocumentCustodianName(), ClaimType: types.CalibrationClaimCitationSupport, Thread: thread, Story: thread,
 			ModelID: check.ModelID, RecordID: check.Pair.RevisionID, Key: check.Pair.Key, P: *check.SelfP, Y: y,
 			Scorers: []string{firstNonEmptyString(v.Judge, types.SupportSystemAgentID)}, CommittedAt: c.At.UTC().Format(time.RFC3339Nano),
 			HeldOut: calibration.HeldOut(salt, check.Pair.Key)})

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
@@ -173,7 +173,7 @@ func (rt *Runtime) currentTextureFrame(ctx context.Context, rec *types.RunRecord
 // call whenever its revision or its records changed since the last frame
 // the run saw.
 func (rt *Runtime) textureFrameInjector(rec *types.RunRecord) toolregistry.InjectUserTurnsFunc {
-	if rt == nil || rt.store == nil || rec == nil || !runHasProfile(rec, agentprofile.Texture) {
+	if rt == nil || rt.store == nil || rec == nil || !runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		return nil
 	}
 	return func(bool) ([]json.RawMessage, error) {

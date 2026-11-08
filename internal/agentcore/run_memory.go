@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
@@ -140,7 +139,7 @@ func (m *runMemoryManager) carryTexturePriorConversation(ctx context.Context) er
 	if ownerID == "" || computerID == "" || agentID == "" || runID == "" {
 		return nil
 	}
-	if metadataBoolValue(m.rec.Metadata, runMetadataCarryActorConversation) && agentProfileForRun(m.rec) == agentprofile.Texture {
+	if metadataBoolValue(m.rec.Metadata, runMetadataCarryActorConversation) && agentProfileForRun(m.rec) == deskmanifest.DocumentCustodianName() {
 		return m.carryActorConversation(ctx, ownerID, computerID, agentID, runID)
 	}
 	return nil

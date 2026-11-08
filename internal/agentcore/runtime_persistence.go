@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -178,7 +178,7 @@ func agentMutationComputerID(rec *types.RunRecord) string {
 }
 
 func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {
-	if rec == nil || !runHasProfile(rec, agentprofile.Texture) {
+	if rec == nil || !runHasProfile(rec, deskmanifest.DocumentCustodianName()) {
 		return nil
 	}
 	docID := metadataStringValue(rec.Metadata, "doc_id")

@@ -202,7 +202,7 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	default:
 		return fmt.Errorf("update_coagent lifecycle producer profile %s is not allowed", authority.callerProfile)
 	}
-	if authority.targetProfile != agentprofile.Texture || authority.target.LifecycleVersion <= 0 {
+	if authority.targetProfile != deskmanifest.DocumentCustodianName() || authority.target.LifecycleVersion <= 0 {
 		return fmt.Errorf("update_coagent lifecycle report requires a lifecycle Texture target")
 	}
 	trajectoryID := strings.TrimSpace(authority.trajectoryID)
@@ -241,7 +241,7 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(work.Details, "requested_by_profile"))
 	if metadataStringValue(work.Details, "requested_by_agent_id") != authority.target.AgentID ||
 		metadataStringValue(work.Details, "requested_by_run_id") != parent.RunID ||
-		requesterProfile != agentprofile.Texture {
+		requesterProfile != deskmanifest.DocumentCustodianName() {
 		return fmt.Errorf("update_coagent lifecycle work lacks exact requesting Texture provenance")
 	}
 	authority.workItemID = workItemID
@@ -321,7 +321,7 @@ func loadLifecycleRequesterRun(ctx context.Context, authorityStore coagentUpdate
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	if requesterAgentID != target.AgentID || requesterProfile != agentprofile.Texture {
+	if requesterAgentID != target.AgentID || requesterProfile != deskmanifest.DocumentCustodianName() {
 		return types.RunRecord{}, fmt.Errorf("update_coagent lifecycle caller was not requested by the target Texture")
 	}
 	parent, err := authorityStore.GetLifecycleRun(ctx, caller.OwnerID, caller.ComputerID, requesterRunID)
@@ -330,8 +330,8 @@ func loadLifecycleRequesterRun(ctx context.Context, authorityStore coagentUpdate
 	}
 	parentProfile := configuredAgentProfileForRun(&parent)
 	parentRole := agentRoleForRun(&parent)
-	if parent.AgentID != target.AgentID || parentProfile != agentprofile.Texture ||
-		parentRole != agentprofile.Texture || strings.TrimSpace(trajectoryIDForRun(&parent)) != strings.TrimSpace(trajectoryIDForRun(&caller)) {
+	if parent.AgentID != target.AgentID || parentProfile != deskmanifest.DocumentCustodianName() ||
+		parentRole != deskmanifest.DocumentCustodianName() || strings.TrimSpace(trajectoryIDForRun(&parent)) != strings.TrimSpace(trajectoryIDForRun(&caller)) {
 		return types.RunRecord{}, fmt.Errorf("update_coagent requesting lifecycle Texture run binding mismatch")
 	}
 	return parent, nil
@@ -411,7 +411,7 @@ func validatePreCutoverCoagentUpdateAuthority(ctx context.Context, authorityStor
 	if requester, err := loadLegacyRequesterRun(ctx, authorityStore, authority.callerRun, authority.target); err == nil {
 		if deskmanifest.IsAssignmentPerformer(authority.callerProfile) {
 			switch authority.targetProfile {
-			case agentprofile.Texture:
+			case deskmanifest.DocumentCustodianName():
 				return validateEngineeringTextureResultPath(ctx, authorityStore, *authority)
 			case deskmanifest.AdmitterName():
 				return validateEngineeringOwningManagement(ctx, authorityStore, *authority, requester)
@@ -422,7 +422,7 @@ func validatePreCutoverCoagentUpdateAuthority(ctx context.Context, authorityStor
 	if deskmanifest.AdmitsAssignments(authority.callerProfile) && (deskmanifest.SpawnsResearch(authority.targetProfile) || deskmanifest.IsAssignmentPerformer(authority.targetProfile)) {
 		return validateLegacyOwnedChild(ctx, authorityStore, *authority)
 	}
-	if deskmanifest.IsAssignmentPerformer(authority.callerProfile) && authority.targetProfile == agentprofile.Texture {
+	if deskmanifest.IsAssignmentPerformer(authority.callerProfile) && authority.targetProfile == deskmanifest.DocumentCustodianName() {
 		return validateEngineeringTextureResultPath(ctx, authorityStore, *authority)
 	}
 	return fmt.Errorf("update_coagent target is neither the exact requester nor an assigned child")
@@ -563,7 +563,7 @@ func validateEngineeringOwningManagement(ctx context.Context, authorityStore coa
 }
 
 func validateEngineeringTextureResultPath(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority) error {
-	if !deskmanifest.IsAssignmentPerformer(authority.callerProfile) || authority.targetProfile != agentprofile.Texture || authority.trajectoryID == "" {
+	if !deskmanifest.IsAssignmentPerformer(authority.callerProfile) || authority.targetProfile != deskmanifest.DocumentCustodianName() || authority.trajectoryID == "" {
 		return fmt.Errorf("update_coagent co-super result path is not applicable")
 	}
 	slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.callerRun.AgentID)
