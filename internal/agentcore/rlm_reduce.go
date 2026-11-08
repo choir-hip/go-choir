@@ -1830,7 +1830,22 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 				in.LocalID, assignmentID, operation.OperationID)
 		}
 	}
+	// Verify is a verdict on a frozen candidate. A candidate past frozen was
+	// already verified and decided (an install-reviewed or applied package
+	// operation, whose engineer's final report arrives after the verdict), so
+	// a Verify on it is refused here, in words that say so, rather than as a
+	// digest mismatch from the finalize step. awaiting_approval stays: it is
+	// the replay of a Verify that landed (recordSelfDevelopmentVerdict).
+	if operation.State != selfdev.StateFrozen && operation.State != selfdev.StateAwaitingApproval {
+		return nil, fmt.Errorf("reduce: verify %s: operation %s is %s; its candidate was already verified and decided, a final report after it needs no Verify",
+			in.LocalID, operation.OperationID, operation.State)
+	}
 	stamp := func(reason string) {
+		// A refusal is stamped only on a frozen candidate, where it is the
+		// blocker; on any later state it would be a stale false alarm.
+		if reason != "" && operation.State != selfdev.StateFrozen {
+			return
+		}
 		writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := rt.selfdevOperations.RecordIntentError(writeCtx, r.scope.ComputerID, operation.OperationID, reason); err != nil {

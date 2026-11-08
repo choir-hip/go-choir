@@ -621,6 +621,9 @@ func (s *Store) transition(ctx context.Context, computerID, operationID, expecte
 			}
 		}
 		operation.State = nextState
+		if nextState == StateApplied {
+			operation.LastIntentError = ""
+		}
 		operation.UpdatedAt = s.now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
 		if err := s.appendOperationProjection(ctx, operation, expectedState); err != nil {
 			return Operation{}, err
@@ -646,6 +649,9 @@ func (s *Store) transition(ctx context.Context, computerID, operationID, expecte
 		}
 	}
 	operation.State = nextState
+	if nextState == StateApplied {
+		operation.LastIntentError = ""
+	}
 	now := s.now().UTC().Truncate(time.Microsecond)
 	operation.UpdatedAt = now.Format(time.RFC3339Nano)
 	verifiers, err := json.Marshal(operation.VerifierRefs)
