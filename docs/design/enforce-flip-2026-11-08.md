@@ -502,3 +502,85 @@ Run 2 passed on the story atom and the same-desk report. Two kinds of site remai
 The representative day gained the decline and the slot starter, and keeps its no-ask and
 no-reader-site assertions.
 
+
+## 13. S2a: intake runs clean by construction (S2 on d@e 672efd180, not clean)
+
+### 13.1 What S2 found
+
+The S2 round asked twice at the publication sink on `owner_private:computers`, on the
+publish-auto story c1042c39. The provenance walk admitted every other label, so the walk works.
+The label came from the substrate, not from a record:
+
+- A desk session's label set only grows. A run is seeded with its session's union
+  (tools_desk.go:785), each cell folds back into it (:729), and the session ends only on a restart, a failed
+  cell or 30 idle minutes. Management's session key is `agent:management:<owner>`. On a busy
+  computer the session never ends, so management's main run carries every label any of its runs
+  ever touched. That includes `computers`, which comes from its own product reads of `/api/computers/...`
+  for self-development, from Texture directives, and from engineering reports.
+- A record carries its sending run's whole set (rlm_reduce.go:1588). A story Texture run reads its
+  opening Cast, so it inherits management's accumulated set, and the publication sink reads the
+  run's set.
+- `choir.Delegate` does not help today. The task's opening Cast carries a model-written objective
+  and is stamped with the parent's set. That stamp is correct: the objective is a channel.
+
+On the paper, which is always busy and runs self-development, every publish-auto story would ask
+at enforce. S3 would stop the paper. Widening the publish-auto subset to `computers` would admit
+whatever management ever read into a public story. That makes the gate decorative on exactly the
+computer it exists for, so it is rejected.
+
+### 13.2 Decision
+
+Capture intake does not run in management's main session. The host starts it from the captures
+record alone.
+
+1. **Host-started intake task.** When a `system:captures` record is committed to the admitter's
+   inbox, the host starts one management task (role management_task) per captures record. The
+   slot starter and the K queue are unchanged. No main management run is woken for a captures
+   record.
+2. **Host-composed opening.** The task's opening Cast has a constant objective, a fixed string in
+   code. It also has `Captures` = the record's captures and a reference to the captures record. It carries no
+   text a model wrote. Its provenance labels are `labelsOfRecord(captures record)`: the record's
+   provenance labels, plus the capture floor, plus world labels for an external origin. It does
+   not carry the labels of whatever run is current. Because no run wrote it, nothing can smuggle
+   through it.
+3. **Fresh session.** The task's desk session key is its own agent id, never
+   `agent:management:<owner>`. The build verifies this and tests it. The task's run labels
+   start empty. They then grow only by what the task reads: the captures, the story index
+   (`story`), and story documents it feeds (`document`). Those are all inside the publish-auto subset.
+4. **Delete the model's intake path.** Management's prompt and overlay no longer tell the main
+   run to open, feed or decline captures. If intake is the only kind `choir.Delegate("intake")`
+   serves, the intake kind is deleted from the verb, with a desk protocol bump. A captures record
+   is still shown to the main run's `choir.Records()` as a fact, so management can see intake
+   happen. The store's lease keeps the main run from disposing of a capture it does not hold.
+   If the build finds the main run can still cast `texture:new` with `publish: auto`, that
+   cast is not admitted at publication unless its labels fit the subset. That is the S1 rule,
+   unchanged. It asks, correctly.
+5. **Texture story sessions.** A story Texture run's session key is per document. The build
+   verifies that a story's session is not shared with the owner's other Textures. If it is shared,
+   the same creep reaches publication through Texture, and the fix is the same: a story
+   document's session is its own.
+
+### 13.3 What this does not cover (named)
+
+- A host-started task that does a product read of `/api/computers` itself picks up
+  `computers`, and its stories ask. That is correct.
+- An owner directive into a publish-auto story carries the owner's run labels. If those are
+  outside the subset, the publish asks. That is correct, and it is the owner's tap.
+- Management's main session still creeps. Every other sink it reaches is covered by
+  OwnerFlow, and desk messages among the built-in chain carry `computers` as an OwnerFlow atom.
+  Per-run scoping of session labels would change the MA3.5 monotone rule, so it is out of F6.
+- **The restart rule.** The host starter fires on commit of the captures record, not at boot. A
+  crash closes an open task with "interrupted by a restart" and the capture is not re-dispatched.
+  The schedule's next tick is new work. A planned restart may resume an open task, as for any
+  task today. No boot-time resumer is added.
+
+### 13.4 Proof
+
+- **Representative day.** It gains a management session pre-tainted with `computers` before the
+  captures arrive. The intake task's casts, the story Texture run, and its publication must show no ask.
+- **FM11.** A management main run tainted with `computers` that casts a publish-auto story
+  itself asks at publication. The test proves it.
+- **S2 re-run on d@e.** It uses the same round, with a self-development step that leaves
+  management's session tainted first. It is clean when the publication sink shows no ask.
+
+Tier 2: this is red, touching the disclosure surface and intake routing. Rollback: revert.
