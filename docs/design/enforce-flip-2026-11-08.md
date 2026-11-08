@@ -584,3 +584,65 @@ record alone.
   management's session tainted first. It is clean when the publication sink shows no ask.
 
 Tier 2: this is red, touching the disclosure surface and intake routing. Rollback: revert.
+
+### 13.5 r1 (Devin r0 and the Sonnet seat r0, both SEND BACK)
+
+Both seats confirmed the substrate claims in 13.1. Both found that 13.2 item 4 deleted the only
+re-dispatch path for a task's residuals. The Sonnet seat also found that host-start lost event
+grouping, that no transaction or backlog rule was stated, and that a cheaper stamp-only option
+exists. Devin found that 13.3 misstates restarts: a passivated run closes its task
+`run_passivated` (types/management_task.go:168), and tasks are never resumed. On the paper,
+which refreshes while busy, residuals are routine. Section 13.2 is replaced by the following.
+Sections 13.3 and 13.4 stand, amended below.
+
+1. **Both paths stay, and both are clean.**
+   - **Host start on arrival** (Devin: it removes a model turn per arrival and cannot fail to
+     fire). The task row and its opening Cast are minted in the same `CommitInboxRecords` batch
+     that commits the `system:captures` arrival. The arrival request id is deterministic, so a
+     replay collapses to a command conflict. There is no window between the record and the lease,
+     and no boot-time resumer.
+     - Records of one `EventID` go to one task, mirroring Delegate's grouping
+       (choir.go:1026-1059).
+     - `Held` arrivals mint nothing.
+     - The task mints only captures that are not already disposed or leased, and at most
+       `MaxTaskCaptures` per task, mirroring planDelegation (management_tasks.go:386-417).
+     - The minted Cast keeps a non-system emitter, or the start wake is minted directly as
+       `startNextQueued` does, so the task always starts.
+     - A captures arrival that minted a task no longer wakes management's main run. In
+       `RecordWakesReader`, the main run is not woken for it.
+   - **`choir.Delegate` stays, with a clean stamp** (the Sonnet seat's B4). Management keeps its
+     residual, `official_single_outlet`, `unresolved` and crash-closed paths: ask research, then
+     re-delegate, or decline. `planDelegation` stamps the task Cast with the union of
+     `labelsOfRecord` over the delegated records only, never `r.scope.Labels`. The Cast's
+     objective becomes a constant: the model's objective text is dropped from the Cast, the
+     prediction and the task row.
+     - The remaining model channel is which host-supplied ids to delegate, and how to group them.
+       Those are a few bits among uniformly labelled records. This is named in 13.3.
+2. **Management never opens or feeds a story itself for a capture.** The prompt and overlay say
+   that management disposes of a capture by Delegate or Decline. A main-run Cast to `texture:new`
+   or Feed with publish auto still works, but its labels come from management's session, so the
+   publication asks (FM11). It is the owner's tap, and correctly so.
+3. **Owner settings.** `intakeSurfacesEnabled`, which reads `intake.labels` and
+   `intake.event_wakes`, is honored by the host starter exactly as by planDelegation. With intake
+   off, the arrival wakes management as today. These are pre-existing owner settings, not
+   platform flags; their removal is outside F6 and is named.
+4. **Sub-call scoring.** A host-minted Cast carries no `CommitmentSubCall`, so `scoreClosedTask`
+   does nothing for it, and the judge observation for host-started intake is lost. A Delegate
+   cast keeps its tag. Named.
+
+**13.3 amended.**
+- Strike "A planned restart may resume an open task, as for any task today." Tasks are never
+  resumed: a planned restart closes an in-flight task `run_passivated`, and its residuals return
+  to management, which re-delegates them with the clean stamp. A crash closes the task and counts
+  against the capture's crash budget.
+- **New named edge: the crash budget moves earlier.** The lease is now taken at arrival, so a
+  crash between the arrival and the slot start spends one of the capture's two crashes
+  (store/management_tasks.go:508-516).
+- 13.2 item 3 already holds today (task session `agent:management-task:<id>`). Item 5 holds
+  (`agent:texture:<doc>`). The task role has no `doc.read`, so `document` does not reach it.
+  The S1 subset in code includes `story` (publish_auto_admission.go:44), which §6.3 omits.
+
+**13.4 amended.** The representative day adds three cases:
+- a residual re-delegated by a tainted management run, with no ask at publication;
+- two captures of one event, which open one story;
+- a host-started task closed `run_passivated`, whose residual re-delegates.
