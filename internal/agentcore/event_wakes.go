@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -234,7 +235,7 @@ func (rt *Runtime) annotateCoverage(ctx context.Context, ownerID, computerID str
 		if m.Tentative || naming[m.CaptureID] {
 			continue
 		}
-		d, ok, err := rt.store.CaptureDispositionOf(ctx, ownerID, computerID, m.CaptureID)
+		d, ok, err := rt.store.CaptureDispositionOf(objectgraph.WithCustodianReader(ctx, "choir.capture_disposition"), ownerID, computerID, m.CaptureID)
 		if err != nil {
 			log.Printf("event layer: disposition of %s: %v", m.CaptureID, err)
 			return

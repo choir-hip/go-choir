@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -102,7 +103,7 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 	rt.managementTaskStartMu.Lock()
 	defer rt.managementTaskStartMu.Unlock()
 	slots := rt.managementTaskSlots(ctx, ownerID, computerID)
-	running, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskRunning)
+	running, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskRunning)
 	if err != nil {
 		return nil, fmt.Errorf("management tasks: list running: %w", err)
 	}
@@ -124,7 +125,7 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 	if busy >= slots {
 		return nil, nil
 	}
-	queued, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskQueued)
+	queued, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskQueued)
 	if err != nil {
 		return nil, fmt.Errorf("management tasks: list queued: %w", err)
 	}
@@ -170,12 +171,12 @@ func (rt *Runtime) managementTaskObservability(ctx context.Context, ownerID, com
 		ConfiguredSlots: provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots),
 		SerialTasks:     rt.computerSettingOn(ctx, ownerID, computerID, store.SettingManagementSerialTasks),
 	}
-	running, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskRunning)
+	running, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskRunning)
 	if err != nil {
 		out.Error = err.Error()
 		return out
 	}
-	queued, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskQueued)
+	queued, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskQueued)
 	if err != nil {
 		out.Error = err.Error()
 		return out
@@ -244,7 +245,7 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 		return
 	}
 	ctx = withKindCustodian(context.WithoutCancel(ctx), "choir.management_task")
-	current, err := rt.store.GetManagementTask(ctx, task.OwnerID, task.ComputerID, task.TaskID)
+	current, err := rt.store.GetManagementTask(taskCustodianReads(ctx), task.OwnerID, task.ComputerID, task.TaskID)
 	if err != nil {
 		log.Printf("runtime: close management task %s: %v", task.TaskID, err)
 		return
@@ -289,7 +290,7 @@ func (rt *Runtime) closeManagementTaskOfEndedRun(ctx context.Context, rec *types
 		return
 	}
 	rt.deskSessionWorkers().release("agent:" + strings.TrimSpace(rec.AgentID))
-	task, err := rt.store.GetManagementTask(ctx, rec.OwnerID, rec.ComputerID, managementTaskIDOfRun(rec))
+	task, err := rt.store.GetManagementTask(taskCustodianReads(ctx), rec.OwnerID, rec.ComputerID, managementTaskIDOfRun(rec))
 	if err != nil {
 		log.Printf("runtime: task of ended run %s: %v", rec.RunID, err)
 		return
@@ -314,7 +315,7 @@ func (rt *Runtime) closeManagementTaskOfEndedRun(ctx context.Context, rec *types
 // managementTaskOfScope loads the running task a task-scope cell serves.
 func (r *rlmCallReduction) managementTaskOfScope(ctx context.Context) (types.ManagementTask, error) {
 	taskID := managementTaskIDOfRun(r.rec)
-	task, err := r.rt().store.GetManagementTask(ctx, r.scope.OwnerID, r.scope.ComputerID, taskID)
+	task, err := r.rt().store.GetManagementTask(taskCustodianReads(ctx), r.scope.OwnerID, r.scope.ComputerID, taskID)
 	if err != nil {
 		return types.ManagementTask{}, fmt.Errorf("management task %s: %w", taskID, err)
 	}
@@ -376,7 +377,7 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 				}
 				// The new task is shown the captures records the old one
 				// was given, cut to what it leases.
-				prior, err := rt.store.GetManagementTask(ctx, r.scope.OwnerID, r.scope.ComputerID, view.TaskOutcome.TaskID)
+				prior, err := rt.store.GetManagementTask(taskCustodianReads(ctx), r.scope.OwnerID, r.scope.ComputerID, view.TaskOutcome.TaskID)
 				if err != nil {
 					return nil, nil, fmt.Errorf("delegate %s: task %s: %w", in.LocalID, view.TaskOutcome.TaskID, err)
 				}
@@ -451,7 +452,7 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 // store checks the same under the commit lock; this only leaves out what
 // is already settled, so one disposed capture does not refuse its record.
 func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, captureID string) (bool, error) {
-	d, found, err := rt.store.CaptureDispositionOf(ctx, ownerID, computerID, captureID)
+	d, found, err := rt.store.CaptureDispositionOf(objectgraph.WithCustodianReader(ctx, "choir.capture_disposition"), ownerID, computerID, captureID)
 	if err != nil || !found {
 		return err == nil, err
 	}
@@ -461,7 +462,7 @@ func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, ca
 	if d.LeaseTask == "" {
 		return true, nil
 	}
-	task, err := rt.store.GetManagementTask(ctx, ownerID, computerID, d.LeaseTask)
+	task, err := rt.store.GetManagementTask(taskCustodianReads(ctx), ownerID, computerID, d.LeaseTask)
 	if errors.Is(err, store.ErrNotFound) {
 		return true, nil
 	}
@@ -478,7 +479,7 @@ func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, ca
 func (r *rlmCallReduction) cancelManagementTask(ctx context.Context, in yaegikernel.StagedIntent) error {
 	rt := r.rt()
 	taskID := types.ManagementTaskIDOfRef(in.TargetRef)
-	task, err := rt.store.GetManagementTask(ctx, r.scope.OwnerID, r.scope.ComputerID, taskID)
+	task, err := rt.store.GetManagementTask(taskCustodianReads(ctx), r.scope.OwnerID, r.scope.ComputerID, taskID)
 	if errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("cancel_task %s: no task %s", in.LocalID, taskID)
 	}
@@ -656,4 +657,13 @@ func (rt *Runtime) taskReportLabels(ctx context.Context, task types.ManagementTa
 		set = set.Union(types.NewLabelSet(cast.Provenance.Labels...), rt.runLabelsOf(ctx, task.OwnerID, task.ComputerID, cast.Provenance.RunID))
 	}
 	return set
+}
+
+// taskCustodianReads is the context for a host read of the management task
+// kind. The kind is management's; the host's bookkeeping (the slot starter,
+// the closure of an ended run, the reducer's task lookups) reads it as its
+// custodian, whichever desk, or none, the context carries (enforce flip
+// section 12; d@e 847ad2417 counted these as undeclared reads).
+func taskCustodianReads(ctx context.Context) context.Context {
+	return objectgraph.WithCustodianReader(ctx, "choir.management_task")
 }

@@ -326,7 +326,23 @@ func ownerDeskPair(from, to string) bool {
 	fold := func(name string) string {
 		return strings.ReplaceAll(canonicalDeskName(strings.TrimSpace(name)), "-", "_")
 	}
-	return currentOwnerFlowRoles().pair(fold(from), fold(to))
+	roles := currentOwnerFlowRoles()
+	f, t := fold(from), fold(to)
+	if roles.pair(f, t) {
+		return true
+	}
+	// The admitter's decline of a capture goes to the capture's source inbox,
+	// a registered class no desk reads (enforce flip section 12).
+	return roles.admitter != "" && f == roles.admitter && admitterSendsToInboxClass(t)
+}
+
+// admitterSendsToInboxClass reports whether name is a registered, addressable,
+// prefixed inbox class the admitter may send to (the source inbox). A fixed
+// address resolves to its desk elsewhere, and a class with no senders (the job
+// inbox) is not addressable.
+func admitterSendsToInboxClass(name string) bool {
+	c, ok := inboxClassOf("", name)
+	return ok && !c.Fixed && c.Addressable && c.AdmitterSends
 }
 
 // disclosureFacts computes the admission facts of a sink attempt.

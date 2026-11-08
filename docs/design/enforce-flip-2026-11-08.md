@@ -476,3 +476,29 @@ The reader, writer and act gates were clean. The disclosure gate still asked in 
   never pair. The representative day gained the task's report to its parent and keeps its
   no-ask assertion.
 
+## 12. Two more sites the S1 deployed proof found (d@e 847ad2417, run 2)
+
+Run 2 passed on the story atom and the same-desk report. Two kinds of site remained.
+
+- **Undeclared reads of `choir.management_task`.** `startQueuedManagementTasks`
+  (management_tasks.go:105, :127) and `closeManagementTaskOfEndedRun` (:292) read the task kind on
+  a host context with no reader. The §6.7 audit missed management_tasks.go. Fix: every host read
+  of the kind in that file (`ListManagementTasks`, `GetManagementTask`) forces the custodian
+  through `taskCustodianReads`, whichever desk or none the context carries; the two
+  `CaptureDispositionOf` reads (management's kind) are forced the same way. Re-audit of the intake
+  files (inbox_records.go, source_schedule.go, capture_arrival.go, event_layer.go,
+  event_wakes.go, intake_*.go): the other non-commons reads already declare the custodian
+  (`scheduleCustodian`, `withKindReader` on a poll's background context, which declares because
+  none is named) or run under management's own run context (story index, where management is a
+  supplemental reader; engineering assignments, likewise). `choir.agent` is a commons kind.
+- **Management's decline to a source inbox.** The decline goes to `source:<id>`, an inbox class
+  (address_resolver.go) that no desk reads; the host's source schedule and the capture's own
+  path own it. Fix: a message from the admitter to a registered, addressable, prefixed inbox class
+  the admitter may send to (`AdmitterSends`) counts as owner flow, for the OwnerFlow atoms only.
+  The class is resolved from the registry of inbox classes, not by a name. The job class is not
+  addressable and has no senders, and a fixed address (texture:new) resolves to its desk, so
+  neither is touched. The source inbox is never a sender in the pair.
+
+The representative day gained the decline and the slot starter, and keeps its no-ask and
+no-reader-site assertions.
+

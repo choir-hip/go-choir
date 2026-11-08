@@ -178,6 +178,11 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	if _, err := rt.calibrationSnapshotFor(host, owner, f.computer, 0); err != nil {
 		t.Fatalf("calibration snapshot: %v", err)
 	}
+	// The slot starter reads the management task kind on a bare context
+	// (d@e 847ad2417 counted it undeclared).
+	if _, err := rt.startQueuedManagementTasks(host, f.owner, f.computer); err != nil {
+		t.Fatalf("start queued tasks: %v", err)
+	}
 	for _, method := range []string{http.MethodGet} {
 		req := httptest.NewRequest(method, "/api/computer-settings", nil)
 		req.Header.Set("X-Authenticated-User", owner)
@@ -231,6 +236,11 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	taskRun := toolregistry.ExecutionContext{RunID: mgmtRec.RunID, AgentID: mgmtRec.AgentID, OwnerID: f.owner, ComputerID: f.computer, RunRecord: &mgmtRec}
 	if err := rt.gateDisclosure(ctx, disclosureCall{exec: taskRun, deskRole: agentprofile.Management, sink: disclosure.SinkDeskMessage, target: agentprofile.Management + ":" + f.owner, kind: "report"}); err != nil {
 		t.Errorf("the task's report to its parent was refused: %v", err)
+	}
+	// Management declines a capture to its source's inbox (d@e 847ad2417 asked
+	// on management->source|decline with the capture and story labels).
+	if err := rt.gateDisclosure(ctx, disclosureCall{exec: taskRun, deskRole: agentprofile.Management, sink: disclosure.SinkDeskMessage, target: captureSourceDesk + ":rss:cz", kind: "decline"}); err != nil {
+		t.Errorf("management's decline to the source inbox was refused: %v", err)
 	}
 	// Enforce flip S1: the day leaves no disclosure ask site (the intake
 	// delegation to the task role included).
