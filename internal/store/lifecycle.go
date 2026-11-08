@@ -1129,7 +1129,14 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 	minted := 0
 	expired := 0
 	for _, kind := range kinds {
-		objects, err := s.ogListAllObjectsByKind(ctx, kind)
+		// The host lists each kind on its custodian's behalf (a Texture
+		// revision is kept by Texture); read undeclared, the reader gate
+		// refuses the list at enforce and the pass aborts every boot.
+		listCtx := ctx
+		if _, ok := objectgraph.CustodianOf(kind); ok {
+			listCtx = objectgraph.WithCustodianReader(ctx, kind)
+		}
+		objects, err := s.ogListAllObjectsByKind(listCtx, kind)
 		if err != nil {
 			return minted, fmt.Errorf("migrate actor wake outbox: list %s: %w", kind, err)
 		}
