@@ -359,3 +359,8 @@ Sixteen platform sites outside the desk pattern: A1 to A3 on the apply path
 mode row), B1 to B11 host-judge and System1 consumers, C1 install-review
 seats, C2 the anchor sampler. Only `choir.System1` (research only, text
 only) is a desk-callable judge. No desk had a shot or view verb.
+
+Owner ruling, 2026-11-08: "System1 models outside desks are fine, but not
+llms." The B sites call the System 1 judgment client and stand. C1 (install
+review seats) and C2 (anchor sampler) call an LLM from the computer runtime
+outside any desk; they are the two sites left to move onto a desk.
