@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -578,7 +579,12 @@ func TestManagementTasksAtACrashBootAndAPlannedBoot(t *testing.T) {
 			if planned {
 				WithBootRestart(PlannedRestart{Reason: "platform_update", Target: "t"}, true)(boot)
 			}
+			// F6: the boot is the product's own path, so it runs with the gates
+			// enforcing (the fixture's seeding above ran in observe). A refused
+			// write would leave the task row, round and disposition open.
+			restoreGates := objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)
 			boot.Start(ctx)
+			restoreGates()
 			for i, task := range queued[:2] {
 				after, _ := f.s.GetRunByOwner(ctx, f.owner, runs[i])
 				if after.State == types.RunPassivated || after.State.Active() {

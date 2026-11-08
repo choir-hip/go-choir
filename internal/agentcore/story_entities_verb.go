@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -327,7 +328,10 @@ func deskDocOf(agentID string) string {
 // document of the owner on this computer. A desk bound to no doc has no own
 // story to name.
 func (rt *Runtime) researchDeskDoc(ctx context.Context, agentID, owner, computer string) (string, error) {
-	ctx = withKernelReader(ctx)
+	// An existence check the host makes on the desk's behalf: Texture's
+	// document, read as its custodian even on the research desk's context
+	// (S3 review B3, texture_document|desk:research).
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_document")
 	doc, ok := strings.CutPrefix(strings.TrimSpace(agentID), yaegikernel.SessionRoleResearch+":")
 	doc = strings.TrimSpace(doc)
 	if !ok || doc == "" {

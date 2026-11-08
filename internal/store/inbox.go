@@ -763,7 +763,7 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
-	parts := []objectgraph.WriterBatch{{Writer: s.inboxCommandWriter(ctx), Batch: objectgraph.Batch{Objects: objects}}}
+	parts := s.inboxCommandParts(ctx, objects)
 	signalled := objects
 	if len(openings) > 0 {
 		storyObjects, storyConditions, storyEdges, err := s.planStoryOpenBatch(ctx, openings, now)
@@ -793,6 +793,36 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 func (s *Store) inboxCommandWriter(ctx context.Context) objectgraph.Writer {
 	w, _ := objectgraph.WriterFrom(ctx)
 	return w
+}
+
+// inboxCommandParts splits the management part of an inbox command by the
+// writer it is checked under. A caller that declares a desk writes the whole
+// part as that desk. The kernel's own acts (the crash-boot round closure) have
+// no desk, but their batch can settle a management task and its dispositions;
+// each object is then written under its kind's custodian, in one atomic batch,
+// and a commons kind stays with the kernel (F6 enforce flip, S3 review B1).
+func (s *Store) inboxCommandParts(ctx context.Context, objects []objectgraph.Object) []objectgraph.WriterBatch {
+	declared := s.inboxCommandWriter(ctx)
+	if declared != objectgraph.WriterKernel {
+		return []objectgraph.WriterBatch{{Writer: declared, Batch: objectgraph.Batch{Objects: objects}}}
+	}
+	var order []objectgraph.Writer
+	byWriter := map[objectgraph.Writer][]objectgraph.Object{}
+	for _, obj := range objects {
+		w := declared
+		if custodian, ok := objectgraph.CustodianOf(obj.ObjectKind); ok && custodian != objectgraph.WriterKernel {
+			w = custodian
+		}
+		if _, seen := byWriter[w]; !seen {
+			order = append(order, w)
+		}
+		byWriter[w] = append(byWriter[w], obj)
+	}
+	parts := make([]objectgraph.WriterBatch, 0, len(order))
+	for _, w := range order {
+		parts = append(parts, objectgraph.WriterBatch{Writer: w, Batch: objectgraph.Batch{Objects: byWriter[w]}})
+	}
+	return parts
 }
 
 // planInboxCommand plans the management side of one inbox command's batch:

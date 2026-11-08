@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -202,7 +203,14 @@ func TestResearchCellFinishRuleThroughACell(t *testing.T) { // F2, F4
 		calls++
 		execCtx.ToolCallID = fmt.Sprintf("call-%d", calls)
 		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
-		out, err := tool.Func(toolregistry.WithExecutionContext(ctx, execCtx), payload)
+		// F6: the cell is the product's call path, so it runs with the gates
+		// enforcing; its reads of the story analysis must declare a reader the
+		// custody table admits.
+		defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
+		// The run's execution context carries its desk as the reader and writer
+		// (runtime.go); an in-process cell must do as the run does.
+		cellCtx := withDeskReader(withDeskWriter(ctx, execCtx.Profile), execCtx.Profile)
+		out, err := tool.Func(toolregistry.WithExecutionContext(cellCtx, execCtx), payload)
 		if err != nil {
 			return "ERR " + err.Error() + " " + out
 		}

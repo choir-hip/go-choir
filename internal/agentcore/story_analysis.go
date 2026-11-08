@@ -205,7 +205,10 @@ func (rt *Runtime) markAnalysisUnanswered(ctx context.Context, exec toolregistry
 
 func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, docID string) *yaegikernel.StoryAnalysis {
 	a := &yaegikernel.StoryAnalysis{Story: yaegikernel.StoryAnalysisStory{PublicationID: types.StoryPublicationID(owner, docID), DocID: docID}, Candidates: []yaegikernel.StoryAnalysisCandidate{}}
-	doc, err := rt.store.GetLifecycleDocument(ctx, owner, computer, docID)
+	// The host builds the analysis from the story's document and head on the
+	// research desk's behalf: Texture's kinds, read as their custodian (a forced
+	// custodian read; S3 review B3, texture_document|desk:research).
+	doc, err := rt.store.GetLifecycleDocument(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), owner, computer, docID)
 	if err != nil {
 		a.Error = "the story could not be read: " + err.Error()
 		return a
@@ -215,7 +218,7 @@ func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.Exe
 		a.Error = "the story has no revision yet"
 		return a
 	}
-	rev, err := rt.store.GetLifecycleRevision(ctx, owner, computer, doc.CurrentRevisionID)
+	rev, err := rt.store.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, "choir.texture_revision"), owner, computer, doc.CurrentRevisionID)
 	if err != nil {
 		a.Error = "the story's head could not be read: " + err.Error()
 		return a

@@ -54,3 +54,24 @@ func TestFM9TheCaptureReadRuleIsBoundToCaptureAuthority(t *testing.T) {
 		t.Errorf("a world capture was counted or refused: %v %v", err, objectgraph.ReaderGateCounts())
 	}
 }
+
+// F6 S3 (FM9): at enforce a built-in desk with no capture authority is refused
+// an owner-private capture, and the desks that hold authority are served. The
+// observe test above is the S1 counting rule; this is its S3 refusal.
+func TestFM9EnforceRefusesACaptureReadWithoutAuthority(t *testing.T) {
+	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
+	private := json.RawMessage(`{"capture_id":"cap-private","labels":["owner_private:capture","world_untrusted"]}`)
+	for _, role := range []string{
+		deskmanifest.Texture, deskmanifest.ResearcherName(), deskmanifest.ResearchWeb, deskmanifest.ResearchTexture,
+		deskmanifest.AdmitterName(), deskmanifest.ManagementTask,
+	} {
+		if err := gateCaptureRead(context.Background(), role, private); err != nil {
+			t.Errorf("%s holds capture authority and was refused: %v", role, err)
+		}
+	}
+	for _, role := range []string{deskmanifest.PerformerName(), deskmanifest.Conductor} {
+		if err := gateCaptureRead(context.Background(), role, private); err == nil {
+			t.Errorf("%s holds no capture authority and was served (FM9)", role)
+		}
+	}
+}
