@@ -1,4 +1,4 @@
-# Install review as a desk act (r1, 2026-11-08)
+# Install review as a desk act (r2, 2026-11-08)
 
 Owner ruling, 2026-11-08: "System1 models outside desks are fine, but not
 llms." The install review seats (MA7.5) are the last LLM call the computer
@@ -165,3 +165,63 @@ available) until the seats return.
   the re-run detached from the cell, forced updates named, the grant made
   sole-holder, supersession on a newer install, owner-visible states, the 202
   contract's consumers named, the 7.2 table amended.
+- r1, Devin, SEND BACK, two blockers, adopted in r2 (section 7): the
+  self-development pend lives in `accepted`, before the materializing
+  transition; the owner path's clock is minted inside the owed record's
+  commit and a dedupe hit heals a row with no owed record. Non-blocking notes
+  adopted in 7.3.
+
+## 7. r2 amendments
+
+### 7.1 The self-development pend lives in `accepted`
+
+`materializePackageOperation` transitions to `materializing` before it builds
+the checked module, and a materializing package operation is settled from
+facts on the next pass, never driven again. So the review cannot pend there.
+r2 reorders the package branch on the shots precedent
+(`candidateShotGate`, `errCandidateShotPending`): while the operation is still
+`accepted`, the pass drafts and persists the release, builds the checked
+module and runs the install review gate. A needed review returns a new typed
+`errInstallReviewPending`, which keeps the operation `accepted` and, like the
+shot pending error, re-arms the 60 second retry wake. Only a passed gate moves
+the operation to `materializing`, and from there publish, install and
+`recordPackageApplied` run as today. The subject and plan are stored on the
+owed record, so a pending pass reads the gate's records and the clock without
+rebuilding the module. When the operation fails or a crash boot closes it,
+its owed record closes with it, so management cannot judge a release that
+will never install.
+
+### 7.2 The owner path's clock is atomic
+
+The owed record's commit mints its own re-entry wake through
+`actorWakeOutboxFromObject` (store/lifecycle.go), the precedent the delegated
+spawn deadline uses, so the record and its clock land in one transaction; no
+separate `scheduleContinuation` arm is relied on. Order under
+`packageInstallMu`: the pending row, then the owed record with its wake. A
+request that finds a pending row for its subject checks the owed record: if
+it is missing (a failed commit), the request commits it with its wake before
+answering 202. A row therefore never waits without an owed record and a
+clock.
+
+### 7.3 Non-blocking notes adopted
+
+- The sealed verdict is an accept only if management accepts and
+  `installreview.Passed(checks)` holds; a failed mechanical check makes an
+  `InstallVerdict(accept)` seal a rejection with the check named.
+- A refused `InstallVerdict` on the owner path stamps the pending row's
+  `last_error` (shown in the installs API); on the self-development path it
+  stamps the operation (`RecordIntentError`).
+- The dedupe runs before the build: the subject digest is computed from the
+  request bytes (patch digest, the record's manifest digest, behaviour
+  surface), so a repeat request answers 202 without building.
+- `InstallPacket` finds an owed review by release through the owed records'
+  sender inbox listing (the `ShotsOwedSenderInbox` pattern), on both paths.
+- A pending platform act in the update view is state `pending_review`, not
+  `Error`.
+- The pending row records the in-force install of the package at pend time
+  (its release id and `RequestedAt`) as the supersession baseline, and the
+  full `installChange` including `platformReason` and `deferReview`.
+- A verdict replay compares content (subject, accept, findings, reason), not
+  the record id, which embeds a timestamp.
+- `pWithinCeiling` answers the envelope question only; the private-data to
+  sink question gets no prediction from the desk. Named, accepted.
