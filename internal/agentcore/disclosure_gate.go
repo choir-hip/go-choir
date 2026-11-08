@@ -139,21 +139,7 @@ func packageDesk(deskRole string) bool {
 // labelObjectKinds are the object kinds a label's kind names, for custody and
 // lease lookups. A label's kind is the product's word (document, story,
 // capture); the registry's is the object kind.
-func labelObjectKinds(kind string) []objectgraph.ObjectKind {
-	// owner_private:texture labels the Texture custodian's own search
-	// snippets (store.textureSearchLabel): its kind is the custodian's name,
-	// so it names the documents Texture keeps.
-	if kind == strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:") {
-		kind = "document"
-	}
-	switch kind {
-	case "document":
-		return []objectgraph.ObjectKind{"choir.texture_document", "choir.texture_revision"}
-	case "capture":
-		return []objectgraph.ObjectKind{objectgraph.WebCaptureObjectKind}
-	}
-	return []objectgraph.ObjectKind{objectgraph.ObjectKind("choir." + kind)}
-}
+func labelObjectKinds(kind string) []objectgraph.ObjectKind { return objectgraph.LabelKinds(kind) }
 
 // messageAdmitted reports whether the desk a message goes to is admitted for a
 // label: the custodian of the label's kind, a holder of a live lease that
@@ -178,16 +164,12 @@ func (rt *Runtime) messageAdmitted(owner, runID, toDesk, label string) bool {
 		if rt.leases.AdmitsMessageLabel(writer, runID, label) {
 			return true
 		}
-		for _, rec := range rt.leases.Live(owner) {
-			if holder, found := objectgraph.DeskWriter(rec.Holder); !found || holder != writer {
-				continue
-			}
-			for _, leased := range rec.Scope.Kinds {
-				for _, k := range labelObjectKinds(kind) {
-					if leased == string(k) {
-						return true
-					}
-				}
+		// The lease is held by the recipient's run, not the sender's, so it is
+		// matched on the recipient desk, the owner, the expiry and the
+		// run-or-durable rule (enforce flip section 6.5).
+		for _, k := range labelObjectKinds(kind) {
+			if rt.leases.AdmitsKindForRecipient(owner, writer, k) {
+				return true
 			}
 		}
 	}
@@ -249,20 +231,86 @@ func messageTargetDesk(call disclosureCall) string {
 	return canonicalDeskName(head)
 }
 
-// ownerDeskPair reports whether a desk message runs between the custodian of
-// the owner's documents (Texture) and the custodian of agent evidence
-// (research), in either direction (owner ruling 2026-11-06,
-// disclosure.OwnerFlow). The registry names both, so no desk name is keyed
-// here, and a package desk never holds either custody.
-func ownerDeskPair(from, to string) bool {
-	docs, okD := objectgraph.CustodianOf("choir.texture_document")
-	evid, okE := objectgraph.CustodianOf("choir.agent_evidence")
-	f, okF := objectgraph.DeskWriter(from)
-	t, okT := objectgraph.DeskWriter(to)
-	if !okD || !okE || !okF || !okT || docs == evid {
+// ownerFlowRoles are the built-in desks the owner flow pairs along the owner's
+// delegation chain (owner ruling 2026-11-06, extended by the enforce flip,
+// section 6.2): the owner asks Texture, Texture casts management, management
+// casts engineering and its own task role, and the reports come back. Every
+// end is resolved through the registry, never by a literal name: Texture by
+// the custodian of the owner's documents, the others by their sole-holder
+// grants, a task role by its manifest Parent. An end that is not a system desk
+// (a grant moved to a package desk) resolves to nothing, and a pair with an
+// empty end is never covered.
+type ownerFlowRoles struct {
+	texture, research, admitter, performer string
+	// parentOf names the parent desk of a role (deskmanifest.ParentOf); nil
+	// covers no role.
+	parentOf func(role string) (string, bool)
+}
+
+// ownerFlowRolesFrom builds the roles from a sole-holder lookup. A holder
+// that is not a persistent system desk is dropped.
+func ownerFlowRolesFrom(holder func(grant string) (deskmanifest.Desk, bool), texture string) ownerFlowRoles {
+	system := func(grant string) string {
+		if d, ok := holder(grant); ok && d.Kind == deskmanifest.KindSystem {
+			return d.Name
+		}
+		return ""
+	}
+	return ownerFlowRoles{
+		texture:   texture,
+		research:  system(deskmanifest.GrantResearchSpawn),
+		admitter:  system(deskmanifest.GrantAdmitAssignment),
+		performer: system(deskmanifest.GrantPerformAssignment),
+	}
+}
+
+// currentOwnerFlowRoles reads the registry now.
+func currentOwnerFlowRoles() ownerFlowRoles {
+	texture := ""
+	if w, ok := objectgraph.CustodianOf("choir.texture_document"); ok {
+		if d, found := deskmanifest.Lookup(strings.TrimPrefix(string(w), "desk:")); found && d.Kind == deskmanifest.KindSystem {
+			texture = d.Name
+		}
+	}
+	r := ownerFlowRolesFrom(deskmanifest.GrantHolder, texture)
+	r.parentOf = func(role string) (string, bool) {
+		p, ok := deskmanifest.ParentOf(role)
+		return p.Name, ok
+	}
+	return r
+}
+
+// pair reports whether a message from one desk to another is on the chain.
+func (r ownerFlowRoles) pair(from, to string) bool {
+	if from == "" || to == "" || from == to {
 		return false
 	}
-	return (f == docs && t == evid) || (f == evid && t == docs)
+	on := func(a, b string) bool {
+		switch {
+		case a == "" || b == "":
+			return false
+		case a == r.texture && (b == r.research || b == r.admitter):
+			return true
+		case a == r.admitter && b == r.performer:
+			return true
+		case a == r.admitter && r.parentOf != nil:
+			// management to its own task role: the role's parent is the
+			// admitter, by the manifest's grant holder.
+			p, ok := r.parentOf(b)
+			return ok && p == r.admitter
+		}
+		return false
+	}
+	return on(from, to) || on(to, from)
+}
+
+// ownerDeskPair reports whether a desk message runs between two built-in desks
+// on the owner's delegation chain, in either direction (disclosure.OwnerFlow):
+// Texture and research, Texture and management, management and engineering,
+// management and its task role. The registry names every end, so no desk name
+// is keyed here, and a package desk is never an end.
+func ownerDeskPair(from, to string) bool {
+	return currentOwnerFlowRoles().pair(canonicalDeskName(strings.TrimSpace(from)), canonicalDeskName(strings.TrimSpace(to)))
 }
 
 // disclosureFacts computes the admission facts of a sink attempt.

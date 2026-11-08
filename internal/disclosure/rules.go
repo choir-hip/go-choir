@@ -169,23 +169,36 @@ type Facts struct {
 	// AdmittedFor reports whether the destination is admitted for a label.
 	// nil admits nothing.
 	AdmittedFor func(label string) bool
-	// OwnerDesks is set by the host when a desk message runs between the
-	// owner's built-in Texture and research desks (either direction). It feeds
-	// OwnerFlow only; a package desk or any other pair never sets it.
+	// OwnerDesks is set by the host when a desk message runs between two of
+	// the owner's built-in desks along the owner's delegation chain (the
+	// pairs the host resolves from the registry, enforce flip section 6.2).
+	// It feeds OwnerFlow only; a package desk or any other pair never sets it.
 	OwnerDesks bool
 }
+
+// ownerFlowAtoms are the owner_private atoms OwnerFlow carries: the counted
+// atoms of the delegation chain plus the two the owner ruled on (enforce flip
+// section 6.2). The last three are the product-API path segments a
+// management run reads (productAPIObjectKind). Every other atom, a future one
+// included, still follows the table.
+var ownerFlowAtoms = []string{"capture", "evidence", "document", "texture", "model-policy", "computers", "prompt-bar"}
+
+// OwnerFlowAtoms returns the atoms OwnerFlow carries, for tests and the
+// report.
+func OwnerFlowAtoms() []string { return append([]string(nil), ownerFlowAtoms...) }
 
 // OwnerFlow is the owner-internal flow rule (owner ruling, 2026-11-06: "On
 // private captures, don't worry about that. It's expected that private
 // captures will be used by texture, no approval required or even no need to
-// notify users. Just keep the provenance."). A desk message between the
-// owner's own built-in Texture and research desks, in either direction, that
-// carries owner_private:capture or owner_private:evidence (evidence is the
-// research custodian's record derived from captures and other reads) is
+// notify users. Just keep the provenance."), extended along the owner's
+// delegation chain (enforce flip section 6.2). A desk message between two of
+// the owner's own built-in desks the host resolved as a pair (Texture and
+// research, Texture and management, management and engineering, management
+// and its task role, each direction) that carries one of ownerFlowAtoms is
 // allowed without an ask. Only the verdict changes: the labels stay on the
 // message, the record and the run exactly as before. It covers the desk
-// message sink alone; publication, mail, library release and any desk outside
-// the pair still follow the table.
+// message sink alone and lifts an Ask, never a Deny; publication, mail,
+// library release and any desk outside the pairs still follow the table.
 func OwnerFlow(label string, sink Sink, ownerDesks bool) bool {
 	if !ownerDesks {
 		return false
@@ -193,10 +206,12 @@ func OwnerFlow(label string, sink Sink, ownerDesks bool) bool {
 	if sink != SinkDeskMessage {
 		return false
 	}
-	if label != types.OwnerPrivateLabel("capture") && label != types.OwnerPrivateLabel("evidence") {
-		return false
+	for _, atom := range ownerFlowAtoms {
+		if label == types.OwnerPrivateLabel(atom) {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
 // Hit is the table's decision for one label.

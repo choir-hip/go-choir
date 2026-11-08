@@ -118,6 +118,32 @@ func DeskWriter(desk string) (Writer, bool) {
 	return Writer("desk:" + strings.TrimPrefix(d.Name, "app:")), true
 }
 
+// LabelKinds are the object kinds an owner_private label's atom names, for
+// custody and lease lookups: the one label-to-kind mapping the disclosure
+// gate and the capture read gate share. A label's atom is the product's word
+// (document, capture, evidence); the registry's is the object kind. An atom
+// that names no registered kind (a product API path segment, mail, story)
+// maps to a spelling with no custodian, so a lookup finds none and the
+// table's ask stands.
+func LabelKinds(atom string) []ObjectKind {
+	// owner_private:texture labels the Texture custodian's own search
+	// snippets (store.textureSearchLabel): its atom is the custodian's name,
+	// so it names the documents Texture keeps.
+	if atom == strings.TrimPrefix(string(WriterTexture), "desk:") {
+		atom = "document"
+	}
+	switch atom {
+	case "document":
+		return []ObjectKind{"choir.texture_document", "choir.texture_revision"}
+	case "capture":
+		return []ObjectKind{WebCaptureObjectKind}
+	case "evidence":
+		// The research custodian's record derived from captures and reads.
+		return []ObjectKind{"choir.agent_evidence"}
+	}
+	return []ObjectKind{ObjectKind("choir." + atom)}
+}
+
 // CustodianOf is the writer the registry holds for kind: the desk or service
 // whose manifest claims it. A host loop that writes a custodian's kind on its
 // behalf (the intake loops writing management's labels and events, the

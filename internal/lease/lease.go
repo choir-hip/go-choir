@@ -640,6 +640,48 @@ func (s *Service) AdmitsKind(holder objectgraph.Writer, runID string, kind objec
 	return false
 }
 
+// AdmitsKindForRecipient reports whether a lease held by the recipient desk
+// holder, for ownerID, covers kind: the check a message sent to a package desk
+// makes. The lease belongs to the recipient's run (or is durable and attached
+// to runs), never to the sender's, so it is found by holder and owner and then
+// judged like any use: inside its window, inside the desk's ceiling, held by a
+// live run (a per-task lease ends with its run; a durable one is renewed or
+// ended). An admitting check counts a use.
+func (s *Service) AdmitsKindForRecipient(ownerID string, holder objectgraph.Writer, kind objectgraph.ObjectKind) bool {
+	runs := map[string]bool{}
+	s.mu.Lock()
+	for _, r := range s.live {
+		if r.OwnerID != ownerID || r.HolderWriter != string(holder) {
+			continue
+		}
+		if r.Durable {
+			for _, id := range r.Runs {
+				runs[id] = true
+			}
+		} else if r.HolderRunID != "" {
+			runs[r.HolderRunID] = true
+		}
+	}
+	s.mu.Unlock()
+	for runID := range runs {
+		for _, r := range s.liveFor(holder, runID) {
+			if r.OwnerID != ownerID {
+				continue
+			}
+			desk, ok := deskOf(r)
+			if !ok {
+				continue
+			}
+			for _, k := range r.Scope.Kinds {
+				if k == string(kind) && withinCeiling(desk, Scope{Kinds: []string{k}}) == nil && s.noteUse(r.LeaseID) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // AdmitsCapture implements objectgraph.LeaseAuthority.
 func (s *Service) AdmitsCapture(holder objectgraph.Writer, runID, captureID string, labels []string) bool {
 	for _, r := range s.liveFor(holder, runID) {

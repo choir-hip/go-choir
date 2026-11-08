@@ -188,10 +188,15 @@ func TestReadCaptureResolvesLabelsFromTheCaptureRecord(t *testing.T) {
 	if n := crossing(agentprofile.Texture, private); n != 0 {
 		t.Errorf("the custodian of the label's kind was counted: %d", n)
 	}
+	// Capture authority (enforce flip section 7.2) reads by rule, uncounted;
+	// a desk without it is still counted until the flip.
 	for _, desk := range []string{agentprofile.Research, agentprofile.Management} {
-		if n := crossing(desk, private); n == 0 {
-			t.Errorf("%s: an owner-private capture was not counted", desk)
+		if n := crossing(desk, private); n != 0 {
+			t.Errorf("%s: a desk with capture authority was counted: %d", desk, n)
 		}
+	}
+	if n := crossing(agentprofile.Engineering, private); n == 0 {
+		t.Error("engineering: an owner-private capture was not counted")
 	}
 	// The owner and the kernel are admitted.
 	if !captureServedTo(objectgraph.WriterOwner, true, captureRecordLabels(private)) || !captureServedTo(objectgraph.WriterKernel, true, captureRecordLabels(private)) {

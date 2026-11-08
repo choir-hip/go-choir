@@ -587,9 +587,12 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 
 	// T2: another Texture run's message is not admitted by run A's lease (the
 	// gate is consulted directly, so nothing is minted for run B).
-	texB := f.run(t, "run-tex-b", agentprofile.Texture, "draft", doc)
-	if err := f.gate(texB, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "Cast other"); !asks(err) {
-		t.Fatalf("T2: another run's message under run A's lease = %v", err)
+	_ = f.run(t, "run-tex-b", agentprofile.Texture, "draft", doc)
+	// (The owner flow now carries document and texture labels between Texture
+	// and research without an ask, so admission is asked of the lease check
+	// itself.)
+	if f.rt.messageAdmitted(f.owner, "run-tex-b", agentprofile.Research, doc) {
+		t.Fatal("T2: another run's message under run A's lease was admitted")
 	}
 	// A label outside Texture's custody still asks, lease or not.
 	texC := f.run(t, "run-tex-c", agentprofile.Texture, "draft", doc, types.OwnerPrivateLabel("mail"))
@@ -605,7 +608,9 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 		t.Fatalf("T3: management's message to research = %v", err)
 	}
 	texD := f.run(t, "run-tex-d", agentprofile.Texture, "draft", doc)
-	if err := reduction(texD).gateMessageDisclosure(ctx, cast("c4", agentprofile.Management)); !asks(err) {
+	// Texture to management is on the owner's delegation chain: no ask, and
+	// no lease minted for it.
+	if err := reduction(texD).gateMessageDisclosure(ctx, cast("c4", agentprofile.Management)); err != nil {
 		t.Fatalf("T3: Texture's message to management = %v", err)
 	}
 	if n := len(f.rt.leases.Live(f.owner)); n != before {
@@ -614,8 +619,8 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 
 	// T4: the lease ends with its run.
 	f.rt.endRunLeases(ctx, "run-tex-a", "run ended")
-	if err := f.gate(texA, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "Cast after the run"); !asks(err) {
-		t.Fatalf("T4: the lease outlived its run = %v", err)
+	if f.rt.messageAdmitted(f.owner, "run-tex-a", agentprofile.Research, doc) {
+		t.Fatal("T4: the lease outlived its run")
 	}
 	// And at its expiry.
 	texE := f.run(t, "run-tex-e", agentprofile.Texture, "draft", doc)
@@ -624,8 +629,8 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 	}
 	later := time.Now().UTC().Add(2 * lease.MaxDuration)
 	f.rt.leases.SetClock(func() time.Time { return later })
-	if err := f.gate(texE, agentprofile.Texture, disclosure.SinkDeskMessage, agentprofile.Research, "Cast after expiry"); !asks(err) {
-		t.Fatalf("T4: the lease outlived its expiry = %v", err)
+	if f.rt.messageAdmitted(f.owner, "run-tex-e", agentprofile.Research, doc) {
+		t.Fatal("T4: the lease outlived its expiry")
 	}
 }
 

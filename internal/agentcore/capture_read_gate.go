@@ -26,11 +26,14 @@ import (
 //     the custodian of that label's kind, to the owner and to the kernel
 //     (against a lease once MA3.4 lands).
 //
-// Built-in desks only observe in this slice: a capture the reader may not read
-// is counted (choir.web_capture|reader|wrong_reader on the reader gate's
-// counters) and served. MA3.7 flips it, in code. An installed package desk is
-// enforced now (MA3.4): it is served an owner-private capture only against a
-// lease that names it.
+// A built-in desk reads an owner-private capture by rule, not by observation
+// (enforce flip section 7.2, owner ruling 2026-11-06: "it's expected that
+// private captures will be used by texture, no approval required ... just keep
+// the provenance"): the desks with capture authority (captureAuthority) read
+// it without a count. Any other built-in desk is still served in S1 and S2 but
+// counted (choir.web_capture|reader|wrong_reader), and refused at S3. An
+// installed package desk is enforced now (MA3.4): it is served an
+// owner-private capture only against a lease that names it.
 
 // captureRecordLabels is the label set of the capture a ReadCapture result
 // describes, as the capture record carries it.
@@ -58,12 +61,43 @@ func captureServedTo(reader objectgraph.Writer, ok bool, labels types.LabelSet) 
 		if !strings.HasPrefix(l, types.LabelOwnerPrivatePrefix) {
 			continue
 		}
-		custodian, found := objectgraph.CustodianOf(objectgraph.ObjectKind("choir." + strings.TrimPrefix(l, types.LabelOwnerPrivatePrefix)))
-		if !found || !ok || custodian != reader {
+		// The shared label-to-kind mapping: owner_private:capture names
+		// choir.web_capture, and owner_private:evidence names
+		// choir.agent_evidence, never "choir.<atom>".
+		served := false
+		for _, k := range objectgraph.LabelKinds(strings.TrimPrefix(l, types.LabelOwnerPrivatePrefix)) {
+			if custodian, found := objectgraph.CustodianOf(k); found && ok && custodian == reader {
+				served = true
+			}
+		}
+		if !served {
 			return false
 		}
 	}
 	return true
+}
+
+// captureAuthority reports whether a built-in desk holds the authority to read
+// an owner-private capture (enforce flip section 7.2): the custodian of the
+// owner's documents (Texture), the research parent and its child roles (the
+// exchange the owner's ruling covers), and any system desk or role that holds
+// captures.read or a lease ceiling for captures (a management task is one).
+// Parentage is read from the manifest, never from a name prefix.
+func captureAuthority(deskRole string) bool {
+	d, ok := deskmanifest.Lookup(canonicalDeskName(strings.TrimSpace(deskRole)))
+	if !ok || d.Kind == deskmanifest.KindApp {
+		return false
+	}
+	if w, found := objectgraph.CustodianOf("choir.texture_document"); found && w == objectgraph.Writer("desk:"+d.Name) {
+		return true
+	}
+	if d.Name == deskmanifest.ResearcherName() {
+		return true
+	}
+	if p, found := deskmanifest.ParentOf(d.Name); found && p.Name == deskmanifest.ResearcherName() {
+		return true
+	}
+	return d.HasGrant("captures.read") || d.LeaseCaptures
 }
 
 // captureRecordID is the id the capture record carries.
@@ -101,6 +135,9 @@ func gateCaptureRead(ctx context.Context, deskRole string, result json.RawMessag
 	if d, found := deskmanifest.Lookup(canonicalDeskName(strings.TrimSpace(deskRole))); found && d.Kind == deskmanifest.KindApp {
 		objectgraph.NoteWrongReader(objectgraph.WebCaptureObjectKind, reader, ok)
 		return fmt.Errorf("read_capture: capture %q is owner-private and desk %q holds no lease for it; ask its custodian for a lease", captureRecordID(result), deskRole)
+	}
+	if captureAuthority(deskRole) {
+		return nil
 	}
 	objectgraph.NoteWrongReader(objectgraph.WebCaptureObjectKind, reader, ok)
 	return nil
