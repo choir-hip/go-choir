@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
