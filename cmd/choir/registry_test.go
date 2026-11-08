@@ -522,6 +522,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"package_installs":                 {cli: []string{"package", "installs", "--computer", "c1", "--install", "install-1"}, mcp: `{"computer":"c1","install":"install-1"}`},
+		"package_reviews":                  {cli: []string{"package", "reviews", "--release", testPackageID(t)}, mcp: `{"release":"` + testPackageID(t) + `"}`},
 		"package_search":                   {cli: []string{"package", "search", "--query", "read"}, mcp: `{"query":"read"}`},
 		"package_history":                  {cli: []string{"package", "history", "--package", "reader"}, mcp: `{"package":"reader"}`},
 		"package_show":                     {cli: []string{"package", "show", "--release", testPackageID(t)}, mcp: `{"release":"` + testPackageID(t) + `"}`, reply: testPackageReply(t)},

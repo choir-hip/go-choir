@@ -117,6 +117,8 @@ func (h *APIHandler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	current := currentPackageInstalls(records)
 
 	switch {
+	case r.URL.Path == packagesReviewsPath:
+		h.servePackageReviews(w, r, ownerID, computerID)
 	case r.URL.Path == packagesReputationPath:
 		h.servePackageReputation(w, r, ownerID, computerID)
 	case r.URL.Path == packagesInstalledPath:

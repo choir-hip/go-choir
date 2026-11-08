@@ -162,6 +162,14 @@ func packageCommands() []*command {
 				return getRaw(x, installsPath(x.str("computer"), ""))
 			},
 		},
+		{
+			path: []string{"package", "reviews"}, summary: "Read an install review: the sealed verdict (seal checked), management's seat record (served model, pWithinCeiling, findings, reason) and the review's records",
+			params: []param{pStr("release", "Package release id (sha256)").req()},
+			usage:  "--release is required", scopes: readRuntime, readOnly: true,
+			handler: func(x *call) (any, error) {
+				return getRaw(x, "/api/packages/reviews?release="+url.QueryEscape(strings.ToLower(x.trim("release"))))
+			},
+		},
 		packageInstallAct("install", "Install a published package release on your computer: the computer builds it into a module and records the install (owner act)"),
 		packageInstallAct("uninstall", "Uninstall a package release the Library installed on your computer, removing its module from the launcher (owner act)"),
 		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: nobody else sees it any more; it stays in your own history (owner act)"),
