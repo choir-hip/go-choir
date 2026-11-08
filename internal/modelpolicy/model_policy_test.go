@@ -326,7 +326,7 @@ func TestManagerRewritesUnversionedPlatformPolicy(t *testing.T) {
 	if !strings.Contains(string(raw), policyVersionLine) || strings.Contains(string(raw), "gpt-5.6") {
 		t.Fatalf("policy file not rewritten:\n%s", raw)
 	}
-	if got := policy.Resolve(agentprofile.Texture); got.Model != "pool:default" || got.ReasoningEffort != "high" {
+	if got := policy.Resolve(agentprofile.Texture); got.Model != "pool:default" || got.ReasoningEffort != "low" {
 		t.Fatalf("texture = %+v", got)
 	}
 }

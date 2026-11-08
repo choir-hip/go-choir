@@ -48,7 +48,7 @@ const (
 	// policyVersionLine marks a policy file written from the current
 	// platform default. A file without it is rewritten at load; a file
 	// carrying ownerEditedLine is the owner's and is kept.
-	policyVersionLine = "# platform-policy-version: 2"
+	policyVersionLine = "# platform-policy-version: 3"
 	ownerEditedLine   = "# owner-edited"
 )
 
@@ -629,7 +629,7 @@ reasoning = "low"
 
 [roles.texture]
 model = "pool:default"
-reasoning = "high"
+reasoning = "low"
 
 [roles.management]
 model = "pool:default"
@@ -656,7 +656,8 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 	// Owner 2026-10-12: every role runs on the default pool, assigned per
 	// thread (since 2026-10-28 Synthetic DeepSeek 1017 and gpt-6-luna at 1:1,
 	// each failing over to the other; modelcatalog.Pools). Texture
-	// and management keep high effort; opencode-go ignores the setting.
+	// runs at low effort (owner, 2026-11-08: "research and texture can use low
+	// reasoning") and management keeps high; opencode-go ignores the setting.
 	pool := func(effort string) provideriface.LLMSelection {
 		return provideriface.LLMSelection{Model: defaultPoolSpec, ReasoningEffort: effort, Source: "platform_fallback"}
 	}
@@ -667,7 +668,7 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			deskmanifest.AdmitterName():   pool("high"),
 			deskmanifest.PerformerName():  pool(""),
 			deskmanifest.ResearcherName(): pool("low"),
-			agentprofile.Texture:          pool("high"),
+			agentprofile.Texture:          pool("low"),
 			VerifierRole:                  pool(""),
 			MultimodalVerifierRole:        pool(""),
 		},
