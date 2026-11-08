@@ -126,8 +126,19 @@ export async function buildBaseModule({ name, dir, manifest }, { frontendRoot = 
     }
     const bytes = fs.readFileSync(out);
     if (cacheFile) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-      fs.writeFileSync(cacheFile, bytes);
+      // The cache is best-effort: in a capsule, node_modules is a link to the
+      // read-only locked dependency tree, and an unwritable cache must not
+      // fail the build (every capsule shot failed on it, 2026-11-08).
+      // The rename is atomic, so a failed write never leaves a partial file
+      // under the input-keyed name (Devin r1).
+      const tmpFile = `${cacheFile}.tmp-${process.pid}`;
+      try {
+        fs.mkdirSync(cacheDir, { recursive: true });
+        fs.writeFileSync(tmpFile, bytes);
+        fs.renameSync(tmpFile, cacheFile);
+      } catch {
+        fs.rmSync(tmpFile, { force: true });
+      }
     }
     return { name, requires_sdk: requiresSdk, sha256: sha256(bytes), bytes };
   } finally {

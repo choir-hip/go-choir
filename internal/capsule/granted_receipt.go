@@ -101,7 +101,7 @@ func bindGrantedReceipts(open func(ref string) (ExecutionReceipt, error), refs [
 	// latest cited receipt: earlier receipts legitimately recorded earlier
 	// post-evaluation tree states.
 	if out.LatestWorktreeDigest != frozenDigest {
-		return boundGrantedReceipts{}, fmt.Errorf("%w: latest receipt observed %s, frozen subject is %s", ErrFinalSubjectNotCertified, out.LatestWorktreeDigest, frozenDigest)
+		return boundGrantedReceipts{}, fmt.Errorf("%w: latest receipt observed %s, frozen subject is %s; a write after your last build or test cell changed the tree (a revert counts), so run the build and test cells again after your last write and cite those receipts", ErrFinalSubjectNotCertified, out.LatestWorktreeDigest, frozenDigest)
 	}
 	return out, nil
 }
