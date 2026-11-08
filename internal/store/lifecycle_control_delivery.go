@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -334,7 +335,7 @@ func (s *Store) ResolveLifecycleControlActivation(ctx context.Context, ownerID, 
 	}
 	deliverAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 	deliverAgentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || deliverAgentProfile != agentprofile.Research || deliverAgentRole != agentprofile.Research || agent.LifecycleVersion <= 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || !deskmanifest.SpawnsResearch(deliverAgentProfile) || !deskmanifest.SpawnsResearch(deliverAgentRole) || agent.LifecycleVersion <= 0 {
 		return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
 	}
 	result := LifecycleControlActivationReplay{}
@@ -451,12 +452,12 @@ func (s *Store) bindLifecycleControlDeliveryOnce(ctx context.Context, req types.
 	}
 	profile, _ := agentprofile.Canonical(agent.Profile)
 	admitRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile || (profile != agentprofile.Research && !(profile == agentprofile.Management && agent.AgentID == agentprofile.Management+":"+ownerID && agent.LifecycleVersion == 0)) {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile || (!deskmanifest.SpawnsResearch(profile) && !(deskmanifest.AdmitsAssignments(profile) && agent.AgentID == deskmanifest.AdmitterInbox(ownerID) && agent.LifecycleVersion == 0)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var runObj objectgraph.Object
 	var run types.RunRecord
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		runObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.TargetRunID)
 		if err == nil {
 			err = ogDecode(runObj, &run)
@@ -471,7 +472,7 @@ func (s *Store) bindLifecycleControlDeliveryOnce(ctx context.Context, req types.
 	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || deliverTargetProfile != profile || !run.State.Active() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != req.TrajectoryID {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
@@ -566,7 +567,7 @@ func (s *Store) bindLifecycleControlDeliveryOnce(ctx context.Context, req types.
 		}
 	}
 	if req.ActivationRefresh != nil {
-		if profile != agentprofile.Research || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {
+		if !deskmanifest.SpawnsResearch(profile) || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		for index := range controlWorkIDs {
@@ -703,11 +704,11 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	profile, _ := agentprofile.Canonical(agent.Profile)
 	admitRole, _ := agentprofile.Canonical(agent.Role)
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile ||
-		(profile != agentprofile.Research && !(profile == agentprofile.Management && targetAgentID == agentprofile.Management+":"+ownerID && agent.LifecycleVersion == 0)) {
+		(!deskmanifest.SpawnsResearch(profile) && !(deskmanifest.AdmitsAssignments(profile) && targetAgentID == deskmanifest.AdmitterInbox(ownerID) && agent.LifecycleVersion == 0)) {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	var run types.RunRecord
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		run, err = s.GetRunByOwner(ctx, ownerID, targetRunID)
 		if err == ErrNotFound {
 			run, err = s.GetRun(ctx, targetRunID)
@@ -722,7 +723,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID || deliverPageProfile != profile {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID {
 			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
@@ -777,7 +778,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		case types.LifecyclePacketDirectionProducerReport:
-			if profile != agentprofile.Management || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
+			if !deskmanifest.AdmitsAssignments(profile) || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
 				!lifecycleRunBindsWork(run, targetWorkID) {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
@@ -785,7 +786,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 			if workErr != nil {
 				return LifecycleDeliveredPacketPage{}, workErr
 			}
-			if producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.Engineering {
+			if producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || !deskmanifest.IsAssignmentPerformer(producerWork.AuthorityProfile) {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 			// A report with no source run is one the runtime wrote for an
@@ -805,7 +806,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 					return LifecycleDeliveredPacketPage{}, runErr
 				}
 				if producerRun.RunID != sourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
-					producerRun.AgentProfile != agentprofile.Engineering || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) {
+					!deskmanifest.IsAssignmentPerformer(producerRun.AgentProfile) || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) {
 					return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 				}
 			}
@@ -871,7 +872,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		return nil, err
 	}
 	trajectoryID, targetAgentID, targetRunID = strings.TrimSpace(trajectoryID), strings.TrimSpace(targetAgentID), strings.TrimSpace(targetRunID)
-	if trajectoryID == "" || targetAgentID != agentprofile.Management+":"+ownerID || targetRunID == "" {
+	if trajectoryID == "" || targetAgentID != deskmanifest.AdmitterInbox(ownerID) || targetRunID == "" {
 		return nil, ErrLifecycleInvalidTransition
 	}
 	trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
@@ -885,8 +886,8 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.Profile != agentprofile.Management ||
-		agent.Role != agentprofile.Management || agent.LifecycleVersion != 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || !deskmanifest.AdmitsAssignments(agent.Profile) ||
+		!deskmanifest.AdmitsAssignments(agent.Role) || agent.LifecycleVersion != 0 {
 		return nil, ErrLifecycleInvalidTransition
 	}
 	run, err := s.GetRunByOwner(ctx, ownerID, targetRunID)
@@ -894,7 +895,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		return nil, err
 	}
 	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID ||
-		run.AgentProfile != agentprofile.Management || run.AgentRole != agentprofile.Management || run.TrajectoryID != "" ||
+		!deskmanifest.AdmitsAssignments(run.AgentProfile) || !deskmanifest.AdmitsAssignments(run.AgentRole) || run.TrajectoryID != "" ||
 		metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID ||
 		!persistentManagementHistoricalReportRunStateAllowed(run.State) {
 		return nil, ErrLifecycleInvalidTransition
@@ -928,7 +929,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 			return nil, workErr
 		}
 		if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID ||
-			work.AssignedAgentID != targetAgentID || work.AuthorityProfile != agentprofile.Management || !workItemTerminal(work.Status) {
+			work.AssignedAgentID != targetAgentID || !deskmanifest.AdmitsAssignments(work.AuthorityProfile) || !workItemTerminal(work.Status) {
 			return nil, ErrLifecycleInvalidTransition
 		}
 		controls = append(controls, control)

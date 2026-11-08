@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/deskprotocol"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -621,7 +622,7 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		if strings.TrimSpace(intent.TrajectoryID) == "" || strings.TrimSpace(intent.OwnerID) == "" {
 			return nil, ErrLifecycleInvalidTransition
 		}
-		_, outbox, err := actorWakeOutbox(obj, "cancel:"+intent.CommandID, "management:"+intent.OwnerID, intent.TrajectoryID, "",
+		_, outbox, err := actorWakeOutbox(obj, "cancel:"+intent.CommandID, deskmanifest.AdmitterInbox(intent.OwnerID), intent.TrajectoryID, "",
 			"lifecycle_cancellation", intent.TrajectoryID, time.Time{}, "wake:"+obj.CanonicalID+":"+intent.CommandID)
 		if err != nil || outbox.CanonicalID == "" {
 			return nil, err
@@ -721,7 +722,7 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 				continue
 			}
 			if candidateProfile, canonical := agentprofile.Canonical(agent.Profile); canonical == nil &&
-				(candidateProfile == agentprofile.Texture || candidateProfile == agentprofile.Engineering) {
+				(candidateProfile == agentprofile.Texture || deskmanifest.IsAssignmentPerformer(candidateProfile)) {
 				profile = candidateProfile
 				break
 			}
@@ -830,7 +831,7 @@ func (s *Store) actorWakeResolverObjects(ctx context.Context, obj objectgraph.Ob
 	// minted by the assignment commit). Owner revisions are cast directives —
 	// they must reach the engineering desk occurrence consumer, never the
 	// supervision agent that shares the document channel.
-	for _, profile := range []string{agentprofile.Engineering, agentprofile.Texture} {
+	for _, profile := range []string{deskmanifest.PerformerName(), agentprofile.Texture} {
 		agent, getErr := s.lifecycleGetObject(ctx, ogKindAgent, revision.OwnerID, revision.ComputerID, profile+":"+revision.DocID)
 		if getErr == nil {
 			return append(append([]objectgraph.Object{}, objects...), agent)
@@ -1357,7 +1358,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	}
 	docID := strings.TrimSpace(req.InitialDocument.DocID)
 	deskProfile := strings.TrimSpace(req.Agent.Profile)
-	if deskProfile != "texture" && deskProfile != agentprofile.Engineering {
+	if deskProfile != "texture" && !deskmanifest.IsAssignmentPerformer(deskProfile) {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: durable subject profile must be texture or engineering: %w", ErrLifecycleInvalidTransition)
 	}
 	expectedAgentID := deskProfile + ":" + docID
@@ -1422,7 +1423,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	// "processor" and "reconciler" are frozen-history recognition for replay,
 	// not live agent profiles.
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
+	case "texture", deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
 	default:
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: effects-capable agent profile is not admissible: %w", ErrLifecycleInvalidTransition)
 	}
@@ -2918,14 +2919,14 @@ func (s *Store) requireLifecycleAssignedAgent(ctx context.Context, ownerID, comp
 	// "processor" and "reconciler" are frozen-history recognition for replay,
 	// not live agent profiles.
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
+	case "texture", deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
 	default:
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(agent.Role) != strings.TrimSpace(agent.Profile) {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
-	if (strings.HasPrefix(agentID, "texture:") || strings.HasPrefix(agentID, agentprofile.Engineering+":")) && agent.LifecycleVersion <= 0 {
+	if (strings.HasPrefix(agentID, "texture:") || deskmanifest.IsAssignmentInbox(agentID)) && agent.LifecycleVersion <= 0 {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	return agent, nil
@@ -2981,11 +2982,11 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 		// "processor" and "reconciler" are frozen-history recognition for replay,
 		// not live agent profiles.
 		switch strings.TrimSpace(work.AuthorityProfile) {
-		case agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
+		case deskmanifest.PerformerName(), deskmanifest.ResearcherName(), "processor", "reconciler":
 		default:
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent profile: %w", ErrLifecycleInvalidTransition)
 		}
-		if strings.HasPrefix(work.AssignedAgentID, "texture:") || strings.HasPrefix(work.AssignedAgentID, agentprofile.Engineering+":") {
+		if strings.HasPrefix(work.AssignedAgentID, "texture:") || deskmanifest.IsAssignmentInbox(work.AssignedAgentID) {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", ErrLifecycleInvalidTransition)
 		}
 	} else if agentErr != nil {
@@ -3340,7 +3341,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	// The first valid work-bound Research activation is the cutover from a
 	// generic durable agent record to lifecycle identity. Projection does not
 	// advance the trajectory reducer, so it adopts the current reducer sequence.
-	if agent.Profile == agentprofile.Research && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
+	if deskmanifest.SpawnsResearch(agent.Profile) && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
 		agent.LifecycleVersion = 1
 		agent.LastReducerSeq = trajectory.ReducerSeq
 	}
@@ -3757,7 +3758,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
 	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 	if documentID == "" || strings.TrimSpace(req.ChannelID) != documentID ||
-		(req.TargetAgentID != "texture:"+documentID && req.TargetAgentID != agentprofile.Engineering+":"+documentID) {
+		(req.TargetAgentID != "texture:"+documentID && req.TargetAgentID != deskmanifest.PerformerInbox(documentID)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
@@ -3797,7 +3798,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	}
 	if agent.AgentID != req.TargetAgentID || agent.OwnerID != ownerID || agent.ComputerID != computerID ||
 		agent.LifecycleVersion <= 0 || agent.Profile != agent.Role || strings.TrimSpace(agent.ChannelID) != documentID ||
-		(agent.Profile != "texture" && agent.Profile != agentprofile.Engineering) {
+		(agent.Profile != "texture" && !deskmanifest.IsAssignmentPerformer(agent.Profile)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var producerRunObj objectgraph.Object
@@ -3809,9 +3810,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		key    string
 	}
 	var deliveredPacketConsumptions []deliveredPacketConsumption
-	persistentManagementProducer := req.ProducerAgentID == agentprofile.Management+":"+ownerID
+	persistentManagementProducer := req.ProducerAgentID == deskmanifest.AdmitterInbox(ownerID)
 	if persistentManagementProducer {
-		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != agentprofile.Management {
+		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || !deskmanifest.AdmitsAssignments(req.Role) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		producerRunObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.SourceRunID)
@@ -3838,7 +3839,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			persistentManagementControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID)
 		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
 			producerRun.ComputerID != computerID || producerRun.AgentID != req.ProducerAgentID ||
-			producerRun.AgentProfile != agentprofile.Management || producerRun.AgentRole != agentprofile.Management || !producerRunStateAllowed ||
+			!deskmanifest.AdmitsAssignments(producerRun.AgentProfile) || !deskmanifest.AdmitsAssignments(producerRun.AgentRole) || !producerRunStateAllowed ||
 			producerRun.ChannelID != req.ChannelID ||
 			(!drainCarrier && !runBound) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
@@ -5996,7 +5997,7 @@ func (s *Store) ListPendingProducerReports(ctx context.Context, ownerID, compute
 	if err != nil {
 		return nil, err
 	}
-	targetAgentID := agentprofile.Management + ":" + ownerID
+	targetAgentID := deskmanifest.AdmitterInbox(ownerID)
 	updates, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID)
 	if err != nil {
 		return nil, err
@@ -6029,7 +6030,7 @@ func (s *Store) ListDeliveredPendingProducerReports(ctx context.Context, ownerID
 	if err != nil {
 		return nil, err
 	}
-	targetAgentID := agentprofile.Management + ":" + ownerID
+	targetAgentID := deskmanifest.AdmitterInbox(ownerID)
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore

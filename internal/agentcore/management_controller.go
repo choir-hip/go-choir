@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -354,8 +355,8 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 		requestSource = "lifecycle_texture_control"
 	}
 	metadata := map[string]any{
-		runMetadataAgentProfile: agentprofile.Management,
-		runMetadataAgentRole:    agentprofile.Management,
+		runMetadataAgentProfile: deskmanifest.AdmitterName(),
+		runMetadataAgentRole:    deskmanifest.AdmitterName(),
 		runMetadataAgentID:      agentID,
 		"request_source":        requestSource,
 		"requested_by_agent_id": first.AgentID,
@@ -981,7 +982,7 @@ func isPersistentManagementAgentRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if agentProfileForRun(rec) != agentprofile.Management {
+	if !deskmanifest.AdmitsAssignments(agentProfileForRun(rec)) {
 		return false
 	}
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.AgentID) == "" {
@@ -1466,7 +1467,7 @@ func (rt *Runtime) listPendingPersistentManagementLifecycleControls(ctx context.
 	}
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if agentProfile != agentprofile.Management || agentRole != agentprofile.Management || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
+	if !deskmanifest.AdmitsAssignments(agentProfile) || !deskmanifest.AdmitsAssignments(agentRole) || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
 		return nil, fmt.Errorf("persistent Management lifecycle control target has invalid authority")
 	}
 	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
@@ -1635,7 +1636,7 @@ func persistentManagementSenderAuthorized(update types.CoagentSourcePacket) bool
 
 func persistentManagementAdmissibleReport(update types.CoagentSourcePacket) bool {
 	role, _ := agentprofile.Canonical(update.Role)
-	if role != agentprofile.Engineering ||
+	if !deskmanifest.IsAssignmentPerformer(role) ||
 		update.Direction != types.LifecyclePacketDirectionProducerReport {
 		return false
 	}
@@ -1758,7 +1759,7 @@ func (rt *Runtime) hydrateLifecycleControlWorkItems(ctx context.Context, ownerID
 
 func lifecycleControlActivationPromptForProfile(profile string, workItems []types.WorkItemRecord) string {
 	prompt := "Continue assigned actor work. Process the coagent update packets in context."
-	if workPrompt := buildAssignedWorkItemPromptForCarrier(workItems, profile == agentprofile.Management || profile == agentprofile.Research); workPrompt != "" {
+	if workPrompt := buildAssignedWorkItemPromptForCarrier(workItems, deskmanifest.AdmitsAssignments(profile) || deskmanifest.SpawnsResearch(profile)); workPrompt != "" {
 		prompt += "\n\n" + workPrompt
 	}
 	return prompt
@@ -1888,7 +1889,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
 	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
-	lifecycleAgent := profile == agentprofile.Research && agent.LifecycleVersion > 0
+	lifecycleAgent := deskmanifest.SpawnsResearch(profile) && agent.LifecycleVersion > 0
 	if residentFound && !lifecycleAgent {
 		return &resident, nil
 	}
@@ -2005,7 +2006,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, nil
 	}
 	first := updates[0]
-	if profile == "" || profile == agentprofile.Mail || profile == agentprofile.Conductor || profile == agentprofile.Management {
+	if profile == "" || profile == agentprofile.Mail || profile == agentprofile.Conductor || deskmanifest.AdmitsAssignments(profile) {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -2273,7 +2274,7 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 		if computerID == "" {
 			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
 		}
-		if agentProfileForRun(rec) == agentprofile.Research {
+		if deskmanifest.SpawnsResearch(agentProfileForRun(rec)) {
 			return rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 		}
 		updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
@@ -2665,7 +2666,7 @@ func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
 		return false
 	}
 	switch agentProfileForRun(rec) {
-	case agentprofile.Management, agentprofile.Engineering, agentprofile.Research, agentprofile.Texture:
+	case deskmanifest.AdmitterName(), deskmanifest.PerformerName(), deskmanifest.ResearcherName(), agentprofile.Texture:
 		return strings.TrimSpace(rec.AgentID) != ""
 	default:
 		return false
@@ -2730,7 +2731,7 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	if requestSource == "update_coagent" || requestSource == "lifecycle_texture_control" {
 		return true
 	}
-	if agentProfileForRun(rec) == agentprofile.Research && len(lifecycleControlWorkIDsForRun(rec)) > 0 {
+	if deskmanifest.SpawnsResearch(agentProfileForRun(rec)) && len(lifecycleControlWorkIDsForRun(rec)) > 0 {
 		return true
 	}
 	return len(coagentUpdateIDsForRun(rec)) > 0
@@ -2769,7 +2770,7 @@ func (rt *Runtime) parkedLifecycleControlCandidate(ctx context.Context, ownerID,
 		scanProfile, _ := agentprofile.Canonical(run.AgentProfile)
 		scanRole, _ := agentprofile.Canonical(run.AgentRole)
 		if strings.TrimSpace(run.AgentID) != agentID || (run.State != types.RunPassivated && run.State != types.RunBlocked) ||
-			scanProfile != agentprofile.Research || scanRole != agentprofile.Research ||
+			!deskmanifest.SpawnsResearch(scanProfile) || !deskmanifest.SpawnsResearch(scanRole) ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
 			metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(run.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 			continue
@@ -2868,7 +2869,7 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 	}
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentProfile != agentprofile.Research || agentRole != agentprofile.Research || agent.LifecycleVersion <= 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || !deskmanifest.SpawnsResearch(agentProfile) || !deskmanifest.SpawnsResearch(agentRole) || agent.LifecycleVersion <= 0 {
 		return nil, store.ErrLifecycleInvalidTransition
 	}
 	rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
@@ -2877,7 +2878,7 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 	}
 	runProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 	runRole, _ := agentprofile.Canonical(rec.AgentRole)
-	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || runProfile != agentprofile.Research || runRole != agentprofile.Research ||
+	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || !deskmanifest.SpawnsResearch(runProfile) || !deskmanifest.SpawnsResearch(runRole) ||
 		(rec.State != types.RunPassivated && !rec.State.Active()) || metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
 		metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 		return nil, store.ErrLifecycleInvalidTransition
@@ -3220,7 +3221,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 		} else if found {
 			updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, update.OwnerID, update.ComputerID, target)
 			if listErr == nil {
-				updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, update.OwnerID, update.ComputerID, target, updates, agentProfileForRun(&resident) == agentprofile.Management)
+				updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, update.OwnerID, update.ComputerID, target, updates, deskmanifest.AdmitsAssignments(agentProfileForRun(&resident)))
 			}
 			updates = selectLifecycleControlActivation(updates, resident.TrajectoryID, lifecycleControlWorkIDsForRun(&resident))
 			if listErr != nil || len(updates) == 0 {

@@ -48,8 +48,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
@@ -350,7 +350,7 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 		EventKind:      computerevent.EventSnapshotRecorded,
 		OccurredAt:     now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: "snapshot:" + manifest.Root,
-		ActorProfile:   agentprofile.Management,
+		ActorProfile:   deskmanifest.AdmitterName(),
 		AuthorityRef:   authorityRef,
 		PrivacyClass:   "private",
 		ReducerVersion: computerevent.ReducerVersionV1,

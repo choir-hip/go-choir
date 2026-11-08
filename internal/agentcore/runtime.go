@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/installreview"
-	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
-	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +16,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/installreview"
+	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 
 	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -976,8 +977,8 @@ func (rt *Runtime) EnsurePersistentManagementAgent(ctx context.Context, ownerID 
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: rt.cfg.ComputerID,
-		Profile:    agentprofile.Management,
-		Role:       agentprofile.Management,
+		Profile:    deskmanifest.AdmitterName(),
+		Role:       deskmanifest.AdmitterName(),
 		ChannelID:  agentID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -1367,7 +1368,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 		return false
 	}
 	profile := agentProfileForRun(rec)
-	if profile == frozenProcessorProfile || profile == agentprofile.Texture || profile == agentprofile.Research || profile == agentprofile.Engineering {
+	if profile == frozenProcessorProfile || profile == agentprofile.Texture || deskmanifest.SpawnsResearch(profile) || deskmanifest.IsAssignmentPerformer(profile) {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
 		}
@@ -1648,7 +1649,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		}
 		targetProfile = resolved
 	}
-	if targetProfile == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(targetProfile) {
 		return nil, fmt.Errorf("generic StartCoagentRun refuses all Engineering activation; use the authenticated persistent-Management assignment runtime")
 	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
@@ -1672,13 +1673,13 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			}
 		}
 		slot := normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot))
-		if strings.TrimSpace(metadataStringValue(metadata, runMetadataEngineeringSlot)) != "" && slot == "" && coagentProfile == agentprofile.Engineering {
+		if strings.TrimSpace(metadataStringValue(metadata, runMetadataEngineeringSlot)) != "" && slot == "" && deskmanifest.IsAssignmentPerformer(coagentProfile) {
 			return nil, fmt.Errorf("super co-super run requires co_super_slot to be implementation or verifier")
 		}
-		if coagentProfile == agentprofile.Engineering && slot == "" {
+		if deskmanifest.IsAssignmentPerformer(coagentProfile) && slot == "" {
 			return nil, fmt.Errorf("super co-super run requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
 		}
-		if slot != "" && coagentProfile == agentprofile.Engineering {
+		if slot != "" && deskmanifest.IsAssignmentPerformer(coagentProfile) {
 			existing, found, err := rt.activeEngineeringSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
 				return nil, err
@@ -1692,7 +1693,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		if err := rt.enforceEngineeringSlotBudget(ctx, &requesterRec); err != nil {
 			return nil, err
 		}
-		if slot == "verifier" && coagentProfile == agentprofile.Engineering {
+		if slot == "verifier" && deskmanifest.IsAssignmentPerformer(coagentProfile) {
 			if err := rt.enforceManagementVerifierSequencing(ctx, &requesterRec); err != nil {
 				return nil, err
 			}
@@ -1709,7 +1710,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 	if requesterAgent, lookupErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.ComputerID, requesterRec.AgentID); lookupErr == nil && requesterAgent.LifecycleVersion > 0 {
 		switch agentRec.Profile {
-		case agentprofile.Management, agentprofile.Engineering:
+		case deskmanifest.AdmitterName(), deskmanifest.PerformerName():
 			return nil, fmt.Errorf("durable-work lifecycle refuses effects-capable %s activation", agentRec.Profile)
 		}
 	}
@@ -1721,7 +1722,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	claimedEngineeringSlotName := ""
 	slotAgentProfile := agentRec.Profile
 	if slot := normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot)); slot != "" &&
-		slotAgentProfile == agentprofile.Engineering &&
+		deskmanifest.IsAssignmentPerformer(slotAgentProfile) &&
 		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
 		existing, claimed, err := rt.store.ClaimEngineeringSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
@@ -1753,7 +1754,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		return cause
 	}
 	grantAgentProfile := agentRec.Profile
-	if grantAgentProfile == agentprofile.Engineering &&
+	if deskmanifest.IsAssignmentPerformer(grantAgentProfile) &&
 		normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot)) == "implementation" {
 		controlHandle := strings.TrimSpace(metadataStringValue(metadata, "capsule_control_handle"))
 		if rt.capsuleExecutor == nil || controlHandle == "" {
@@ -1995,7 +1996,7 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 func spawnedCoagentWorkItemProfile(profile string) bool {
 	workItemProfile, _ := agentprofile.Canonical(profile)
 	switch workItemProfile {
-	case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
+	case deskmanifest.ResearcherName(), deskmanifest.AdmitterName(), deskmanifest.PerformerName():
 		return true
 	default:
 		return false
@@ -2031,7 +2032,7 @@ func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool
 		return false
 	}
 	budgetProfile := agentProfileForRun(requesterRec)
-	return budgetProfile == agentprofile.Management
+	return deskmanifest.AdmitsAssignments(budgetProfile)
 }
 
 func (rt *Runtime) enforceEngineeringSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
@@ -3298,9 +3299,9 @@ func (rt *Runtime) ReconcileLifecycleWorkAssignment(ctx context.Context, ownerID
 	}
 	profile, _ := agentprofile.Canonical(work.AuthorityProfile)
 	switch profile {
-	case agentprofile.Engineering:
+	case deskmanifest.PerformerName():
 		return rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, work.OwnerID, work.ComputerID, work.TrajectoryID)
-	case agentprofile.Research:
+	case deskmanifest.ResearcherName():
 		updates, updateErr := rt.store.ListAllPendingLifecycleUpdates(ctx, work.OwnerID, work.ComputerID, work.AssignedAgentID)
 		if updateErr != nil {
 			return updateErr
@@ -3410,14 +3411,14 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
 	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
-	if profile == agentprofile.Research && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {
+	if deskmanifest.SpawnsResearch(profile) && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {
 		// Lifecycle Research are activated only by the exact Texture-control
 		// fingerprint reconciler. Generic assigned-work recovery preserves the
 		// open obligation without creating or dispatching a run.
 		return nil, nil
 	}
 	switch profile {
-	case agentprofile.Research, frozenProcessorProfile, frozenReconcilerProfile:
+	case deskmanifest.ResearcherName(), frozenProcessorProfile, frozenReconcilerProfile:
 		// Texture reconstruction belongs to textureowner.ReconcileAgentWake,
 		// which derives revision authority from the canonical document head.
 		// A generic assigned-work run cannot safely synthesize that authority.
@@ -3453,11 +3454,11 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		metadata[runMetadataChannelID] = channelID
 	}
 	metadata = inheritRequesterMetadataFromWorkItem(ctx, rt.store, ownerID, metadata, first)
-	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPromptForCarrier(workItems, profile == agentprofile.Management || profile == agentprofile.Research), ownerID, metadata)
+	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPromptForCarrier(workItems, deskmanifest.AdmitsAssignments(profile) || deskmanifest.SpawnsResearch(profile)), ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
-	if profile == agentprofile.Research {
+	if deskmanifest.SpawnsResearch(profile) {
 		updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 		if listErr != nil {
 			return nil, listErr
@@ -3540,7 +3541,7 @@ func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec 
 	}
 	profile, _ := agentprofile.Canonical(rec.AgentProfile)
 	role, _ := agentprofile.Canonical(rec.AgentRole)
-	if profile != agentprofile.Research && role != agentprofile.Research {
+	if !deskmanifest.SpawnsResearch(profile) && !deskmanifest.SpawnsResearch(role) {
 		return false, true, "", nil
 	}
 	ownerID := strings.TrimSpace(rec.OwnerID)
@@ -3592,7 +3593,7 @@ func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec 
 	if ctx.Err() != nil {
 		return deny("activation context is cancelled")
 	}
-	if profile != agentprofile.Research || role != agentprofile.Research ||
+	if !deskmanifest.SpawnsResearch(profile) || !deskmanifest.SpawnsResearch(role) ||
 		trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID || trajectory.TrajectoryID != trajectoryID ||
 		trajectory.Status != types.TrajectoryLive {
 		return deny("lifecycle Research scope is not exact and live")
@@ -3612,7 +3613,7 @@ func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec 
 	if stored.RunID != strings.TrimSpace(rec.RunID) || stored.OwnerID != ownerID || stored.ComputerID != computerID ||
 		stored.TrajectoryID != trajectoryID || stored.AgentID != agentID || stored.State != rec.State ||
 		(stored.State != types.RunPending && stored.State != types.RunRunning) ||
-		storedProfile != agentprofile.Research || storedRole != agentprofile.Research {
+		!deskmanifest.SpawnsResearch(storedProfile) || !deskmanifest.SpawnsResearch(storedRole) {
 		return deny("run projection is stale or outside the exact lifecycle Research scope")
 	}
 	agent, loadErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
@@ -3622,7 +3623,7 @@ func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec 
 	scopeAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 	scopeAgentRole, _ := agentprofile.Canonical(agent.Role)
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agent.LifecycleVersion <= 0 ||
-		scopeAgentProfile != agentprofile.Research || scopeAgentRole != agentprofile.Research ||
+		!deskmanifest.SpawnsResearch(scopeAgentProfile) || !deskmanifest.SpawnsResearch(scopeAgentRole) ||
 		strings.TrimSpace(agent.ActiveRunID) != stored.RunID {
 		return deny("Research agent does not own the exact live run")
 	}
@@ -3885,7 +3886,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 
 	registry := rt.toolRegistryForRun(rec)
 	overlayProfile := agentProfileForRun(rec)
-	if overlayProfile == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(overlayProfile) {
 		var bindErr error
 		registry, _, bindErr = rt.assignedEngineeringToolOverlay(ctx, rec, registry)
 		if bindErr != nil {
@@ -4022,12 +4023,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	assignedEngineeringOverlay := false
 	if rt.capsuleExecutor != nil && !isManagementTaskRun(rec) {
 		switch agentProfileForRun(rec) {
-		case agentprofile.Management:
+		case deskmanifest.AdmitterName():
 			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
 				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.AdmitterRole(),
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 			})
-		case agentprofile.Engineering:
+		case deskmanifest.PerformerName():
 			overlay, handle, overlayErr := rt.assignedEngineeringToolOverlay(ctx, rec, registry)
 			if overlayErr != nil {
 				rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned Engineering tool overlay: %w", overlayErr))
@@ -4328,10 +4329,10 @@ func retryableLifecycleRuntimeInjectionFailure(rec *types.RunRecord, err error) 
 	}
 	profile, _ := agentprofile.Canonical(rec.AgentProfile)
 	role, _ := agentprofile.Canonical(rec.AgentRole)
-	if profile != role || (profile != agentprofile.Research && profile != agentprofile.Texture && profile != agentprofile.Management) {
+	if profile != role || (!deskmanifest.SpawnsResearch(profile) && profile != agentprofile.Texture && !deskmanifest.AdmitsAssignments(profile)) {
 		return false
 	}
-	if profile == agentprofile.Management && rec.AgentID != persistentManagementAgentID(rec.OwnerID) {
+	if deskmanifest.AdmitsAssignments(profile) && rec.AgentID != persistentManagementAgentID(rec.OwnerID) {
 		return false
 	}
 	return metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&

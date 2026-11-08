@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -194,7 +195,7 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 	if d := rec.Disposition; d != nil {
 		isDispose := kind == types.CommitmentKindDirective && rec.Directive != nil && string(rec.Directive.Subtype) == d.Kind
 		toStory, toSource := strings.HasPrefix(rec.Inbox, "texture:"), strings.HasPrefix(rec.Inbox, "source:")
-		if !isDispose || len(d.Captures) == 0 || !strings.HasPrefix(rec.SenderInbox, "management:") ||
+		if !isDispose || len(d.Captures) == 0 || !deskmanifest.IsAdmitterInbox(rec.SenderInbox) ||
 			(d.Kind == types.DispositionFeed && !toStory) || (d.Kind == types.DispositionDecline && !toSource) ||
 			(d.Kind != types.DispositionFeed && d.Kind != types.DispositionDecline) {
 			return inboxRefused("disposition %s must be management's Feed or Decline: feeding captures to texture:<doc> or declining them to source:<id>", rec.RecordID)
@@ -277,7 +278,7 @@ func inboxRecordWakes(rec types.CommitmentRecord) bool {
 	return RecordWakesReader(rec)
 }
 
-func isEngineeringInbox(inbox string) bool { return strings.HasPrefix(inbox, "engineering:") }
+func isEngineeringInbox(inbox string) bool { return deskmanifest.IsAssignmentInbox(inbox) }
 
 // stepConversation validates rec against its conversation head, stamps its
 // round and new hypothesis ids, and advances the head. It is the only

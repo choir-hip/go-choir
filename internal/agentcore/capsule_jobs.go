@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -62,7 +62,7 @@ const jobWaitSlack = time.Minute
 // validateJobIntent checks a staged job start or stop at the reducer's
 // trust boundary.
 func validateJobIntent(fromDesk string, in yaegikernel.StagedIntent) error {
-	if fromDesk != agentprofile.Engineering {
+	if !deskmanifest.IsAssignmentPerformer(fromDesk) {
 		return fmt.Errorf("reduce: job %s: capsule jobs are engineering's", in.LocalID)
 	}
 	if !capsulejob.ValidID(in.JobID) {
@@ -203,7 +203,7 @@ func (rt *Runtime) handleCapsuleJobDone(c capsule.JobCompletion) {
 	}
 	ownerID, computerID := c.Notify[jobNotifyOwner], c.Notify[jobNotifyComputer]
 	inbox, runID := c.Notify[jobNotifyInbox], c.Notify[jobNotifyRun]
-	if rt.store != nil && ownerID != "" && computerID != "" && strings.HasPrefix(inbox, agentprofile.Engineering+":") {
+	if rt.store != nil && ownerID != "" && computerID != "" && deskmanifest.IsAssignmentInbox(inbox) {
 		req, err := jobEndRecordRequest(ownerID, computerID, inbox, c)
 		if err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

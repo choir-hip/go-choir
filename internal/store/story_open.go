@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -92,7 +93,7 @@ func (s *Store) planStoryOpenings(ownerID, computerID, commandID string, records
 		if strings.TrimSpace(rec.Inbox) != types.StoryOpenInbox {
 			continue
 		}
-		management := agentprofile.Management + ":" + ownerID
+		management := deskmanifest.AdmitterInbox(ownerID)
 		if !rec.IsCast() || strings.TrimSpace(rec.SenderInbox) != management {
 			return nil, nil, nil, inboxRefused("record %s: only a Cast from %s opens a story at %s", rec.RecordID, management, types.StoryOpenInbox)
 		}
@@ -195,7 +196,7 @@ func planStoryObjects(ownerID, computerID, docID, trajectoryID, seedID string, c
 	subjectRefs := map[string]string{
 		"artifact":                  "texture://documents/" + docID,
 		"doc_id":                    docID,
-		types.StoryRefOriginDesk:    agentprofile.Management,
+		types.StoryRefOriginDesk:    deskmanifest.AdmitterName(),
 		types.StoryRefOpeningRecord: strings.TrimSpace(cast.RecordID),
 	}
 	if cast.Cast != nil && cast.Cast.Publish == types.CastPublishAuto {
@@ -219,7 +220,7 @@ func planStoryObjects(ownerID, computerID, docID, trajectoryID, seedID string, c
 		Title: storyTitle(objective), CurrentRevisionID: seedID, CreatedAt: now, UpdatedAt: now,
 	}
 	seedMeta, err := json.Marshal(map[string]any{
-		"revision_role": types.StorySeedRole, "origin_desk": agentprofile.Management,
+		"revision_role": types.StorySeedRole, "origin_desk": deskmanifest.AdmitterName(),
 		"opening_record": strings.TrimSpace(cast.RecordID), "trajectory_id": trajectoryID,
 	})
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	selfdevprotocol "github.com/yusefmosiah/go-choir/internal/verifierprotocol"
 )
 
@@ -154,7 +155,7 @@ const (
 func guestBallotSeatAllowed(fields map[string]any) bool {
 	seat, _ := fields["seat"].(string)
 	desk, _ := fields["desk"].(string)
-	return seat == "independent-reviewer" && desk == "management"
+	return seat == "independent-reviewer" && desk == deskmanifest.AdmitterName()
 }
 
 func (h *Handler) signVerifierCertificate(w http.ResponseWriter, r *http.Request) {

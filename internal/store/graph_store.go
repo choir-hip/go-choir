@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -1045,7 +1045,7 @@ func (s *Store) ListPassivatedPersistentManagementControlRunsByOwner(ctx context
 			return headerAgentID == agentID, nil
 		}
 		profile := strings.ToLower(ogMetadataText(meta, "agent_profile"))
-		return profile == agentprofile.Management || strings.HasPrefix(headerAgentID, agentprofile.Management+":"), nil
+		return deskmanifest.AdmitsAssignments(profile) || deskmanifest.IsAdmitterInbox(headerAgentID), nil
 	})
 	if err != nil {
 		return nil, err

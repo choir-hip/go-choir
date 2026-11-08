@@ -32,6 +32,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -571,8 +572,8 @@ func (a *Adapter) recoverParkedLifecycleMailboxSnapshots(ctx context.Context) er
 		snapProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 		snapRole, _ := agentprofile.Canonical(rec.AgentRole)
 		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID ||
-			snapProfile != agentprofile.Research ||
-			snapRole != agentprofile.Research ||
+			!deskmanifest.SpawnsResearch(snapProfile) ||
+			!deskmanifest.SpawnsResearch(snapRole) ||
 			strings.TrimSpace(metadataString(rec.Metadata, "request_source")) != "lifecycle_texture_control" ||
 			(rec.State != types.RunPassivated && rec.State != types.RunBlocked) {
 			continue

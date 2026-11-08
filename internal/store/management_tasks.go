@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -127,7 +128,7 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 }
 
 func taskConversation(ownerID, taskID string) string {
-	return types.InboxConversationID("management:"+ownerID, types.ManagementTaskInbox(taskID))
+	return types.InboxConversationID(deskmanifest.AdmitterInbox(ownerID), types.ManagementTaskInbox(taskID))
 }
 
 // taskPlan carries one inbox command's task objects: rows, capture
@@ -230,7 +231,7 @@ func (s *Store) planManagementTasks(ctx context.Context, ownerID, computerID str
 	p := &taskPlan{s: s, ctx: ctx, ownerID: ownerID, computer: computerID, now: now,
 		rows: map[string]*inboxCached[types.ManagementTask]{}, indexes: map[string]*inboxCached[types.CaptureDisposition]{},
 		heads: map[string]*inboxCached[types.ConversationHead]{}, dirtyRows: map[string]bool{}, dirtyIx: map[string]bool{}, newTasks: map[string]bool{}}
-	management := "management:" + ownerID
+	management := deskmanifest.AdmitterInbox(ownerID)
 	newRows := map[string]types.ManagementTask{}
 	for i, task := range tasks {
 		if task.OwnerID != ownerID || task.ComputerID != computerID {

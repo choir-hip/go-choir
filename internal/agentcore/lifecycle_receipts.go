@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
@@ -43,7 +43,7 @@ func ReconcilePendingLifecycleReceipts(appender *computerevent.ComputerEventAppe
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: "lifecycle-observed:" + lifecycleReceipt.ReceiptID,
-			ActorProfile:   agentprofile.Management, AuthorityRef: authorityRef,
+			ActorProfile:   deskmanifest.AdmitterName(), AuthorityRef: authorityRef,
 			PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, _, appendErr := appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.lifecycle-receipt+json", "public"); appendErr != nil {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -20,8 +21,8 @@ const (
 	// failed or blocked report: the receipt is bound to the run, handle and
 	// capsule, and WorktreeDigest is the tree the command itself observed, not
 	// a certification of FinalSubjectDigest. Empty means certified.
-	EngineeringSubjectBindingObserved = "observed"
-	EngineeringCapsuleFateStepSchemaV1                         = "choir.co_super_capsule_fate_step/v1"
+	EngineeringSubjectBindingObserved  = "observed"
+	EngineeringCapsuleFateStepSchemaV1 = "choir.co_super_capsule_fate_step/v1"
 )
 
 // EngineeringCapsuleNetworkEcosystemProxy (L2) gives an implementation
@@ -154,11 +155,11 @@ func (b EngineeringAssignmentBinding) Validate() error {
 		// C1e D1/D4: one conversation per assignment, serving one open round
 		// of management's conversation with a Texture. Attempts above 1 and
 		// verification assignments do not exist on records.
-		management := agentprofile.Management + ":" + b.OwnerID
+		management := deskmanifest.AdmitterInbox(b.OwnerID)
 		if b.ParentAgentID != management {
 			return fmt.Errorf("co-super assignment: records parent_agent_id must be exact management:<owner>")
 		}
-		if !strings.HasPrefix(b.AssignedAgentID, agentprofile.Engineering+":") {
+		if !deskmanifest.IsAssignmentInbox(b.AssignedAgentID) {
 			return fmt.Errorf("co-super assignment: records assigned agent must be engineering:<assignment>")
 		}
 		if b.AssignedConversationID != InboxConversationID(b.ParentAgentID, b.AssignedAgentID) {
@@ -178,10 +179,10 @@ func (b EngineeringAssignmentBinding) Validate() error {
 		// Document-parent binding: the owner-authored revision on the bound
 		// document is the parent authority; there is no parent run. The parent
 		// agent is the engineering desk agent bound to that document.
-		if !strings.HasPrefix(b.ParentAgentID, agentprofile.Engineering+":") {
+		if !deskmanifest.IsAssignmentInbox(b.ParentAgentID) {
 			return fmt.Errorf("co-super assignment: document-parent binding requires an engineering desk parent agent")
 		}
-	} else if b.ParentAgentID != agentprofile.Management+":"+b.OwnerID {
+	} else if b.ParentAgentID != deskmanifest.AdmitterInbox(b.OwnerID) {
 		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent management:<owner>")
 	}
 	if b.AssignedAgentID == b.ParentAgentID || (!b.Records() && b.AssignedWorkItemID == b.ParentWorkItemID) {

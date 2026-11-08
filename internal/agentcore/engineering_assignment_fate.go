@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -89,7 +89,7 @@ func assignedEngineeringRun(rec *types.RunRecord) bool {
 		return false
 	}
 	profile := agentProfileForRun(rec)
-	return profile == agentprofile.Engineering &&
+	return deskmanifest.IsAssignmentPerformer(profile) &&
 		metadataStringValue(rec.Metadata, "assignment_id") != ""
 }
 

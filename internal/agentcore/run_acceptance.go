@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -391,7 +392,7 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 	var implRun, verifyRun *types.RunRecord
 	for i := range runs {
 		run := runs[i]
-		if traceRunProfile(run) != agentprofile.Engineering || run.State != types.RunCompleted {
+		if !deskmanifest.IsAssignmentPerformer(traceRunProfile(run)) || run.State != types.RunCompleted {
 			continue
 		}
 		completedRefs = append(completedRefs, builder.addRunEvidence(run, "durable Engineering run completed"))
@@ -404,7 +405,7 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 	}
 	if len(completedRefs) > 0 {
 		builder.addCheckpoint("durable_agent_completed", "passed", time.Time{}, 0, completedRefs, map[string]any{
-			"role": agentprofile.Engineering, "run_count": len(completedRefs),
+			"role": deskmanifest.PerformerName(), "run_count": len(completedRefs),
 		})
 	}
 	// Freeze/verify evidence is canonical operation state, not tool names:

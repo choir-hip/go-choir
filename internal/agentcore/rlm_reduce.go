@@ -131,7 +131,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		}
 		// Engineering reaches Texture only through management (Cut 1
 		// routing, invariant 6).
-		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); fromDesk == agentprofile.Engineering && canonicalDeskName(toDesk) == agentprofile.Texture {
+		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); deskmanifest.IsAssignmentPerformer(fromDesk) && canonicalDeskName(toDesk) == agentprofile.Texture {
 			return fmt.Errorf("reduce: %s %s: engineering reaches Texture only through management; address management", in.Kind, in.LocalID)
 		}
 		// Engineering's Precommits are rule-settled; no other desk's may
@@ -190,7 +190,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 				return fmt.Errorf("reduce: texture_turn %s missing its body", in.LocalID)
 			}
 		case yaegikernel.IntentRestate:
-			if fromDesk != agentprofile.Management && fromDesk != agentprofile.Engineering {
+			if !deskmanifest.AdmitsAssignments(fromDesk) && !deskmanifest.IsAssignmentPerformer(fromDesk) {
 				return fmt.Errorf("reduce: restate %s: only management and engineering restate", in.LocalID)
 			}
 			if strings.TrimSpace(in.TargetRef) == "" || strings.TrimSpace(in.Body) == "" {
@@ -210,7 +210,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		case yaegikernel.IntentDelegate, yaegikernel.IntentCancelTask, yaegikernel.IntentTaskDone:
 			// Management delegation (S2a): the records route reduces them;
 			// a desk off that route has no arm for them.
-			if fromDesk != agentprofile.Management && fromDesk != agentprofile.ManagementTask {
+			if !deskmanifest.AdmitsAssignments(fromDesk) && fromDesk != agentprofile.ManagementTask {
 				return fmt.Errorf("reduce: %s %s is management's", in.Kind, in.LocalID)
 			}
 			if in.Kind == yaegikernel.IntentDelegate && strings.TrimSpace(in.Body) == "" {
@@ -743,7 +743,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 	// Engineering converses with management on records (C1e B1): the cell
 	// reads its inbox (engineering:<assignment>) in (cursor, head].
 	var records cellRecords
-	if string(toolCtx.Role) == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(string(toolCtx.Role)) {
 		if records, err = rt.loadCellRecords(ctx, execCtx.OwnerID, execCtx.ComputerID, deskAgentForCursor(execCtx), execCtx.RunID); err != nil {
 			return inert
 		}
@@ -1159,7 +1159,7 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	// Research's and management's conversations with Texture are on records
 	// (Cut 1 L3a, L3b): their acts to Texture and their cursor advance commit
 	// as one transaction.
-	if r.rec != nil && (strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research || strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management ||
+	if r.rec != nil && (deskmanifest.SpawnsResearch(strings.TrimSpace(r.rec.AgentProfile)) || deskmanifest.AdmitsAssignments(strings.TrimSpace(r.rec.AgentProfile)) ||
 		deskmanifest.IsAssignmentPerformer(r.rec.AgentProfile)) {
 		var err error
 		if intents, err = r.commitRecordsRoute(ctx, intents, &receipt); err != nil {
@@ -1225,7 +1225,7 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		case yaegikernel.IntentPrecommit:
 			// Engineering's precommits are rule-settled and ledger-only;
 			// every other desk's take the semantic-act path.
-			if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Engineering {
+			if r.rec != nil && deskmanifest.IsAssignmentPerformer(strings.TrimSpace(r.rec.AgentProfile)) {
 				seq, err = r.commitEngineeringPrecommit(ctx, in)
 			} else {
 				seq, err = r.commitActIntent(ctx, in)
@@ -1771,7 +1771,7 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if r.rec == nil || rt == nil || rt.store == nil || rt.selfdevOperations == nil {
 		return nil, fmt.Errorf("reduce: verify intent without verification authority")
 	}
-	if strings.TrimSpace(r.rec.AgentProfile) != agentprofile.Management {
+	if !deskmanifest.AdmitsAssignments(strings.TrimSpace(r.rec.AgentProfile)) {
 		return nil, fmt.Errorf("reduce: verify %s: verification is management's", in.LocalID)
 	}
 	assignmentID := strings.TrimSpace(in.TargetRef)
@@ -1959,7 +1959,7 @@ func (r *rlmCallReduction) commitAddressedPacketIntent(ctx context.Context, in y
 		Role: authority.callerProfile, SourceRunID: authority.callerRun.RunID,
 		Packet: packet, CreatedAt: time.Now().UTC(),
 	}
-	if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Management {
+	if deskmanifest.IsAssignmentPerformer(authority.callerProfile) && deskmanifest.AdmitsAssignments(authority.targetProfile) {
 		update.Direction = types.LifecyclePacketDirectionProducerReport
 	}
 	// Lifecycle callers carry runtime-derived producer identity and re-keyed
@@ -2478,7 +2478,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 			return 0, fmt.Errorf("reduce: report addressee %q is not a known desk: %w", toDesk, profileErr)
 		}
 		switch profile {
-		case agentprofile.Management:
+		case deskmanifest.AdmitterName():
 			targetHint = persistentManagementAgentID(strings.TrimSpace(execution.OwnerID))
 		case agentprofile.Texture:
 			callerRun, runErr := rt.store.GetLifecycleRun(toolCallCtx, strings.TrimSpace(execution.OwnerID), strings.TrimSpace(execution.ComputerID), strings.TrimSpace(execution.RunID))

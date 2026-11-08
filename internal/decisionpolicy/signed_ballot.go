@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -219,7 +220,7 @@ func VerifyBallot(receipt computerevent.Receipt, resolver computerevent.KeyResol
 	case ballot.IndependenceDomain != "verification":
 		return VerifiedBallot{}, fmt.Errorf("%w: independence domain", ErrBallotBinding)
 	}
-	if want.Seat == SeatIndependentReviewer && ballot.Desk != DeskManagement {
+	if want.Seat == SeatIndependentReviewer && ballot.Desk != deskmanifest.AdmitterName() {
 		return VerifiedBallot{}, fmt.Errorf("%w: reviewer ballot must name desk %s", ErrBallotBinding, DeskManagement)
 	}
 	switch ballot.Vote {

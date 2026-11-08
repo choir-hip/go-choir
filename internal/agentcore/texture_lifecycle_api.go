@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -207,7 +208,7 @@ func (rt *Runtime) TextureChannelHasGroundedHistory(ctx context.Context, ownerID
 			continue
 		}
 		switch agentProfileForRun(&run) {
-		case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
+		case deskmanifest.ResearcherName(), deskmanifest.AdmitterName(), deskmanifest.PerformerName():
 			groundedRunIDs[run.RunID] = struct{}{}
 		}
 	}
@@ -447,7 +448,7 @@ func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID 
 	}
 	if (revision.AuthorKind != types.AuthorUser && revision.AuthorKind != types.AuthorAppAgent) || o.HeadRevisionID == "" ||
 		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" ||
-		(deskProfile != agentprofile.Texture && deskProfile != agentprofile.Engineering) {
+		(deskProfile != agentprofile.Texture && !deskmanifest.IsAssignmentPerformer(deskProfile)) {
 		return TextureActorOccurrence{}, fmt.Errorf("document revision occurrence: incomplete canonical owner revision")
 	}
 	return o, nil
@@ -589,21 +590,21 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 	}
 	profile, _ := agentprofile.Canonical(run.AgentProfile)
 	trajectoryBound := run.TrajectoryID == report.TrajectoryID
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		trajectoryBound = run.TrajectoryID == "" && metadataStringValue(run.Metadata, "assignment_trajectory_id") == report.TrajectoryID
 	}
 	runChannelBound := run.ChannelID == report.ChannelID ||
-		(profile == agentprofile.Engineering && run.ChannelID == run.AgentID) ||
-		(profile == agentprofile.Management && run.ChannelID == run.AgentID)
+		(deskmanifest.IsAssignmentPerformer(profile) && run.ChannelID == run.AgentID) ||
+		(deskmanifest.AdmitsAssignments(profile) && run.ChannelID == run.AgentID)
 	if run.RunID != report.SourceRunID || run.OwnerID != report.OwnerID || run.ComputerID != report.ComputerID || run.AgentID != report.AgentID || !trajectoryBound || !runChannelBound || !lifecycleControlWorkIDsForRun(run)[report.ProducerWorkItemID] {
 		return invalidLifecycleProducerReportAuthority("producer report source run authority mismatch")
 	}
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		if run.AgentID != persistentManagementAgentID(report.OwnerID) || report.ControlBindingID == "" || report.TargetWorkItemID == "" {
 			return invalidLifecycleProducerReportAuthority("persistent Management report lacks exact control binding authority")
 		}
 	}
-	if profile == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(profile) {
 		assignmentID := metadataStringValue(run.Metadata, "assignment_id")
 		attempt := uint64(metadataIntValue(run.Metadata, "assignment_attempt"))
 		assignment, assignmentErr := rt.store.GetEngineeringAssignment(ctx, report.OwnerID, report.ComputerID, assignmentID, attempt)
@@ -624,7 +625,7 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 			return invalidLifecycleProducerReportAuthority("Engineering report source assignment authority mismatch")
 		}
 	}
-	if profile == agentprofile.Research {
+	if deskmanifest.SpawnsResearch(profile) {
 		if metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" {
 			return invalidLifecycleProducerReportAuthority("producer report source run has no lifecycle Texture-control fingerprint")
 		}

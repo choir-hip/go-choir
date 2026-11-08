@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -96,7 +96,7 @@ func (rt *Runtime) providerQuotaIncidentHookFor(ownerID, computerID, runID, agen
 	}
 	assignmentID := ""
 	attempt := uint64(0)
-	if rec != nil && agentProfileForRun(rec) == agentprofile.Engineering {
+	if rec != nil && deskmanifest.IsAssignmentPerformer(agentProfileForRun(rec)) {
 		assignmentID = metadataStringValue(rec.Metadata, "assignment_id")
 		attempt = uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
 	}

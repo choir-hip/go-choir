@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -27,7 +27,7 @@ func (r *rlmCallReduction) resolveTextureRebaseNotices(ctx context.Context, inte
 	desk := strings.TrimSpace(r.scope.DeskAgentID)
 	var out []yaegikernel.StagedIntent
 	for i, in := range intents {
-		if in.Kind != yaegikernel.IntentCast || strings.TrimSpace(in.ToDesk) != agentprofile.Management {
+		if in.Kind != yaegikernel.IntentCast || !deskmanifest.AdmitsAssignments(strings.TrimSpace(in.ToDesk)) {
 			continue
 		}
 		packet, ok := castPacketObject(in.Statement)

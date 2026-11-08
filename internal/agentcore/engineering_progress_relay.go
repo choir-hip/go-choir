@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -28,14 +28,14 @@ import (
 // leaves the cell's own records exactly as they were.
 func (r *rlmCallReduction) engineeringProgressRelays(ctx context.Context, records []types.CommitmentRecord) []types.CommitmentRecord {
 	rt := r.rt()
-	if rt == nil || rt.store == nil || r.rec == nil || strings.TrimSpace(r.rec.AgentProfile) != agentprofile.Engineering {
+	if rt == nil || rt.store == nil || r.rec == nil || !deskmanifest.IsAssignmentPerformer(strings.TrimSpace(r.rec.AgentProfile)) {
 		return nil
 	}
 	var relays []types.CommitmentRecord
 	switchOn, switchRead := false, false
 	for _, rec := range records {
 		if rec.Report == nil || rec.Final || rec.EmitterKind != types.CommitmentEmitterAgent ||
-			!strings.HasPrefix(rec.SenderInbox, agentprofile.Engineering+":") || !strings.HasPrefix(rec.Inbox, agentprofile.Management+":") {
+			!deskmanifest.IsAssignmentInbox(rec.SenderInbox) || !deskmanifest.IsAdmitterInbox(rec.Inbox) {
 			continue
 		}
 		if !switchRead {

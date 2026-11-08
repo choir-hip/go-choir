@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -84,7 +84,7 @@ func (h *Handler) postStoryResearch(w http.ResponseWriter, r *http.Request, owne
 	// A committed request replays before any current-state refusal; only a
 	// new one is refused while research is still running.
 	if _, err := h.Store.StoryResearchRequestState(ctx, ownerID, computerID, docID, body.ClientRequestID); errors.Is(err, store.ErrNotFound) {
-		if _, active, err := h.Core.TextureActiveRunByAgent(ctx, ownerID, computerID, agentprofile.Research+":"+docID); err != nil || active {
+		if _, active, err := h.Core.TextureActiveRunByAgent(ctx, ownerID, computerID, deskmanifest.ResearchInbox(docID)); err != nil || active {
 			writeAPIJSON(w, http.StatusConflict, storyResearchRefusal{Error: "the story's research desk is busy", Reason: "busy"})
 			return
 		}

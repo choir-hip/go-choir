@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -804,7 +804,7 @@ func recordSelfDevelopmentVerdict(ctx context.Context, toolCtx *CapsuleToolCtx, 
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
 			EventKind: computerevent.EventVerificationRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: eventIdempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Engineering, AuthorityRef: "guest-core:self-development-verifier",
+			ActorProfile: deskmanifest.PerformerName(), AuthorityRef: "guest-core:self-development-verifier",
 			PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, _, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.self-development-verification+json", "public"); appendErr != nil {
@@ -947,7 +947,7 @@ func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx,
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
 			EventKind: computerevent.EventEffectProposed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: eventIdempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Engineering, AuthorityRef: "guest-core:verified-bundle-finalizer",
+			ActorProfile: deskmanifest.PerformerName(), AuthorityRef: "guest-core:verified-bundle-finalizer",
 			PrivacyClass: "public", VerifierRefs: []string{verifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, pinnedDigest, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, finalBytes, "application/vnd.choir.capsule-effect+json", "public"); appendErr != nil || pinnedDigest != finalDigest {

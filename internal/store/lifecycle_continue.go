@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -67,7 +68,7 @@ func ComputeContinueLifecycleDocumentDigest(req types.ContinueLifecycleDocumentR
 
 // continuedDeskProfiles are the desks whose lifecycle subject is the
 // document (agent id <profile>:<doc_id>) and so move with it.
-var continuedDeskProfiles = []string{agentprofile.Texture, agentprofile.Research}
+var continuedDeskProfiles = []string{agentprofile.Texture, deskmanifest.ResearcherName()}
 
 // ContinueLifecycleDocument starts the next live trajectory on a document
 // whose trajectory settled. Refusals: the predecessor is live or cancelled,
@@ -146,7 +147,7 @@ func (s *Store) ContinueLifecycleDocument(ctx context.Context, req types.Continu
 	}
 	// The engineering-bound document (path B) is deleted (C1e step 3); one
 	// that survives keeps refusing rather than gaining a Texture desk.
-	if engObj, engErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, agentprofile.Engineering+":"+req.DocID); engErr == nil {
+	if engObj, engErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, deskmanifest.PerformerInbox(req.DocID)); engErr == nil {
 		if lifecycleObjectTrajectoryID(engObj) == predecessor.TrajectoryID {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}

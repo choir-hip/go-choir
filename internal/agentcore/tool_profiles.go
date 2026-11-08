@@ -74,7 +74,7 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 
 func agentProfileForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
 		profile, _ := agentprofile.Canonical(rec.AgentProfile)
@@ -86,7 +86,7 @@ func agentProfileForRun(rec *types.RunRecord) string {
 			return canonicalProfile
 		}
 	}
-	return agentprofile.Management
+	return deskmanifest.AdmitterName()
 }
 
 func runHasProfile(rec *types.RunRecord, profile string) bool {
@@ -100,7 +100,7 @@ func runHasProfile(rec *types.RunRecord, profile string) bool {
 
 func agentRoleForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
 		role, _ := agentprofile.Canonical(rec.AgentRole)
@@ -224,12 +224,12 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	// The computer's intake.labels setting adds management's intake text
 	// and functions (L2a A6); off, the prompt is as before. A computer
 	// setting, so stable across runs.
-	intakeLabels := profile == agentprofile.Management && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
-	eventWakes := profile == agentprofile.Management && rec != nil && rt.computerSettingOn(context.Background(), rec.OwnerID, rec.ComputerID, store.SettingIntakeEventWakes)
-	if profile == agentprofile.Management {
+	intakeLabels := deskmanifest.AdmitsAssignments(profile) && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
+	eventWakes := deskmanifest.AdmitsAssignments(profile) && rec != nil && rt.computerSettingOn(context.Background(), rec.OwnerID, rec.ComputerID, store.SettingIntakeEventWakes)
+	if deskmanifest.AdmitsAssignments(profile) {
 		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels, EventWakes: eventWakes}))
 	}
-	if profile == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(profile) {
 		// The two flags pick one of four fixed overlay variants; the exact
 		// assignment is per run (runContextForRun).
 		hasSelfDevelopmentOperation := false
@@ -250,13 +250,13 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			ClaudeDelegate: rec != nil && metadataStringValue(rec.Metadata, "capsule_network_mode") == types.EngineeringCapsuleNetworkClaude,
 		}))
 	}
-	if profile == agentprofile.Research {
+	if deskmanifest.SpawnsResearch(profile) {
 		// SR: the research desk is always on the cell carrier — the legacy
 		// tool-loop overlay branch is dead and removed with the typed surface.
 		b.WriteString(runtimeprompts.RLMResearchOverlay())
 	}
 	var hidden []string
-	if profile == agentprofile.Management && !intakeLabels {
+	if deskmanifest.AdmitsAssignments(profile) && !intakeLabels {
 		hidden = yaegikernel.IntakeVerbs
 	}
 	if surface := deskSurfacePrompt(profile, rec, hidden...); surface != "" {
@@ -264,7 +264,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(surface)
 	}
 	b.WriteString(runtimeprompts.PeerCoordination(runtimeprompts.PeerCoordinationOptions{
-		InCellCarrier: deskCarrierLive(profile) || profile == agentprofile.Engineering,
+		InCellCarrier: deskCarrierLive(profile) || deskmanifest.IsAssignmentPerformer(profile),
 	}))
 	return b.String(), nil
 }
@@ -333,7 +333,7 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {
 		return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
 	}
-	if deskRole == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(deskRole) {
 		// SMG (2026-10-06, owner directive): management is a full RLM —
 		// exactly one tool, desk_go_eval. report_to_texture and
 		// cancel_co_super_assignment are deleted, not dual-listed: bound
@@ -342,7 +342,7 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 		// rides choir.CancelAssignment. The validations moved host-side onto
 		// those verb paths.
 	}
-	if deskRole == agentprofile.Research {
+	if deskmanifest.SpawnsResearch(deskRole) {
 		// SR (2026-10-05, owner-ratified): the research desk is a full RLM —
 		// exactly one tool, desk_go_eval. The typed research surface
 		// (researchtools.Register: 9 network/content tools) and the typed
@@ -408,7 +408,7 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 		rt.toolProfiles = make(map[string]*toolregistry.ToolRegistry)
 	}
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
-	rt.toolProfiles[agentprofile.Engineering] = engineeringRegistry
+	rt.toolProfiles[deskmanifest.PerformerName()] = engineeringRegistry
 	// Install the sealed desk-cell registry for every promoted desk profile.
 	for deskProfile, deskReg := range deskCellRegistries {
 		rt.toolProfiles[deskProfile] = deskReg
@@ -475,11 +475,11 @@ func (rt *Runtime) managementTaskSystemPrompt(_ *types.RunRecord) string {
 // computer's intake.labels setting is off).
 func deskSurfacePrompt(profile string, rec *types.RunRecord, hidden ...string) string {
 	switch profile {
-	case agentprofile.Texture, agentprofile.Management:
+	case agentprofile.Texture, deskmanifest.AdmitterName():
 		return yaegikernel.DeskSurface(profile, "", false, hidden...)
-	case agentprofile.Research:
+	case deskmanifest.ResearcherName():
 		return yaegikernel.DeskSurface(profile, "", true)
-	case agentprofile.Engineering:
+	case deskmanifest.PerformerName():
 		slot := ""
 		if rec != nil {
 			slot = metadataStringValue(rec.Metadata, runMetadataEngineeringSlot)

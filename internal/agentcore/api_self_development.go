@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
@@ -527,7 +527,7 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 			RequestCommitment: computerevent.ZeroHead, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
 			ParentEventID: operation.OperationID,
 			PreviousHead:  expectedCanonicalHead,
-			ActorProfile:  agentprofile.Management, AuthorityRef: selfDevelopmentDecisionAuthority(ownerID, consensusAuthority), PrivacyClass: "owner",
+			ActorProfile:  deskmanifest.AdmitterName(), AuthorityRef: selfDevelopmentDecisionAuthority(ownerID, consensusAuthority), PrivacyClass: "owner",
 			ExpectedDesiredEventHead: request.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: request.ExpectedEffectiveEventHead,
 			ExpectedPendingTransitionRef:     expectedPendingTransitionRef,
 			ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
@@ -727,7 +727,7 @@ func rollbackRequestedEvent(computerID, ownerID, idempotencyKey, commitment, tra
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 		EventKind: computerevent.EventRollbackRequested, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: idempotencyKey, TrajectoryID: trajectoryID, CapsuleID: capsuleID,
-		ActorProfile: agentprofile.Management, AuthorityRef: "owner:" + ownerID, RequestCommitment: commitment,
+		ActorProfile: deskmanifest.AdmitterName(), AuthorityRef: "owner:" + ownerID, RequestCommitment: commitment,
 		PayloadCommitment: commitment, PrivacyClass: "owner", ProposedEffectRef: proposedEffectRef,
 		DecisionRef: decisionRef, ReducerVersion: computerevent.ReducerVersionV1,
 	}, nil

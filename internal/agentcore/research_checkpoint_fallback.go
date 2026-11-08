@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -49,7 +50,7 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" ||
 		len(metadataStringSlice(rec.Metadata["work_item_ids"])) > 0
 	if hasLifecycleMarker && rec.State.Terminal() && strings.TrimSpace(rec.ComputerID) != "" &&
-		(agentProfileForRun(rec) == agentprofile.Research || agentProfileForRun(rec) == agentprofile.Management) {
+		(deskmanifest.SpawnsResearch(agentProfileForRun(rec)) || deskmanifest.AdmitsAssignments(agentProfileForRun(rec))) {
 		freed, unbindErr := rt.unbindStrandedLifecycleControls(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, true)
 		if unbindErr != nil {
 			log.Printf("runtime: unbind stranded controls on terminalize run %s: %v", rec.RunID, unbindErr)

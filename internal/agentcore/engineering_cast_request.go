@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -104,7 +105,7 @@ func boundRequestText(field, text string, max int, parentRecordID string) (strin
 // process-local: the view is derived from the tape at every read.
 func (rt *Runtime) engineeringRequestView(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord, view *yaegikernel.InboxRecord) {
 	inbox := strings.TrimSpace(rec.Inbox)
-	if !strings.HasPrefix(inbox, agentprofile.Engineering+":") || !rec.IsCast() || strings.TrimSpace(rec.ParentID) == "" {
+	if !deskmanifest.IsAssignmentInbox(inbox) || !rec.IsCast() || strings.TrimSpace(rec.ParentID) == "" {
 		return
 	}
 	assignment, err := rt.store.EngineeringAssignmentForInbox(ctx, ownerID, computerID, inbox)

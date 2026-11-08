@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -175,7 +176,7 @@ func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunReco
 	if owner := strings.TrimSpace(rec.OwnerID); owner != "" {
 		wait := unattendedRequestWait(work, reason, time.Now())
 		body := fmt.Sprintf("No one is working on the owner's request on document %s (Texture work %s, %q): %s. Wait record: %s.", doc.DocID, work.WorkItemID, work.Objective, reason, wait.Sentence)
-		notice := types.NewUnattendedRequestNotice(agentprofile.Management+":"+owner, doc.ComputerID, doc.DocID, doc.TrajectoryID, work.WorkItemID, runID, body)
+		notice := types.NewUnattendedRequestNotice(deskmanifest.AdmitterInbox(owner), doc.ComputerID, doc.DocID, doc.TrajectoryID, work.WorkItemID, runID, body)
 		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: doc.ComputerID, CommandID: "unattended-notice:" + key, Records: []types.CommitmentRecord{notice}}
 		if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
 			return err

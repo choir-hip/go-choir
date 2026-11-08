@@ -663,13 +663,13 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 	return Policy{
 		Defaults: pool("low"),
 		Roles: map[string]provideriface.LLMSelection{
-			agentprofile.Conductor:   pool("low"),
-			agentprofile.Management:  pool("high"),
-			agentprofile.Engineering: pool(""),
-			agentprofile.Research:    pool("low"),
-			agentprofile.Texture:     pool("high"),
-			VerifierRole:             pool(""),
-			MultimodalVerifierRole:   pool(""),
+			agentprofile.Conductor:        pool("low"),
+			deskmanifest.AdmitterName():   pool("high"),
+			deskmanifest.PerformerName():  pool(""),
+			deskmanifest.ResearcherName(): pool("low"),
+			agentprofile.Texture:          pool("high"),
+			VerifierRole:                  pool(""),
+			MultimodalVerifierRole:        pool(""),
 		},
 		Source: "platform_fallback",
 	}

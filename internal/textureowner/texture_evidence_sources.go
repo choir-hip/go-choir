@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -117,7 +117,7 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 	}
 	if entity.Provenance.CreatedBy == "" {
 		entity.Provenance = textureSourceEntityProvenance{
-			CreatedBy:           firstNonEmpty(strings.TrimSpace(rec.AgentID), agentprofile.Engineering),
+			CreatedBy:           firstNonEmpty(strings.TrimSpace(rec.AgentID), deskmanifest.PerformerName()),
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		}
@@ -195,7 +195,7 @@ func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref 
 		}
 		return evidenceRecordToSourceEntity(rec)
 	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact", "operation", "receipt", "event_head":
-		return executionEvidenceSourceEntity(key, value, value, agentprofile.Engineering)
+		return executionEvidenceSourceEntity(key, value, value, deskmanifest.PerformerName())
 	default:
 		return textureSourceEntity{}
 	}
@@ -222,7 +222,7 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Handler, owner
 				},
 				Evidence: textureSourceEntityEvidence{State: sourcecontract.EvidenceStateAvailable, ResearchState: "represented"},
 				Provenance: textureSourceEntityProvenance{
-					CreatedBy:           firstNonEmpty(strings.TrimSpace(update.AgentID), agentprofile.Engineering),
+					CreatedBy:           firstNonEmpty(strings.TrimSpace(update.AgentID), deskmanifest.PerformerName()),
 					RightsScope:         "private_user_source",
 					UntrustedSourceText: true,
 				},
@@ -654,7 +654,7 @@ func executionEvidenceSourceEntity(kind, identity, label, createdBy string) text
 		},
 		Evidence: textureSourceEntityEvidence{State: sourcecontract.EvidenceStateAvailable, ResearchState: "represented"},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           firstNonEmpty(strings.TrimSpace(createdBy), agentprofile.Engineering),
+			CreatedBy:           firstNonEmpty(strings.TrimSpace(createdBy), deskmanifest.PerformerName()),
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		},

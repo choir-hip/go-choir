@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -285,7 +286,7 @@ func validateTextureTurnControls(documentID string, controls []types.TextureTurn
 			if control.OpenWork.WorkItemID != control.TargetWorkItemID || control.Packet.Kind == "" {
 				return fmt.Errorf("%s: opener requires exact work and first typed control packet", operation)
 			}
-			if control.OpenAgent == nil && control.OpenWork.AuthorityProfile == agentprofile.Research {
+			if control.OpenAgent == nil && deskmanifest.SpawnsResearch(control.OpenWork.AuthorityProfile) {
 				// New work on the document's existing research desk (PD1); the
 				// store validates the desk against this document.
 				if control.OpenWork.AssignedAgentID != control.TargetAgentID {
@@ -296,7 +297,7 @@ func validateTextureTurnControls(documentID string, controls []types.TextureTurn
 				if control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0 {
 					return fmt.Errorf("%s: persistent-Management opener requires execution_request actions", operation)
 				}
-			} else if control.OpenAgent.AgentID != control.TargetAgentID || control.OpenAgent.Profile != agentprofile.Research || control.OpenAgent.Role != agentprofile.Research || control.OpenAgent.ChannelID != documentID || control.OpenWork.AssignedAgentID != control.TargetAgentID || control.OpenWork.AuthorityProfile != agentprofile.Research {
+			} else if control.OpenAgent.AgentID != control.TargetAgentID || !deskmanifest.SpawnsResearch(control.OpenAgent.Profile) || !deskmanifest.SpawnsResearch(control.OpenAgent.Role) || control.OpenAgent.ChannelID != documentID || control.OpenWork.AssignedAgentID != control.TargetAgentID || !deskmanifest.SpawnsResearch(control.OpenWork.AuthorityProfile) {
 				return fmt.Errorf("%s: Research opener requires exact runtime-derived agent and work binding", operation)
 			}
 		}
@@ -643,7 +644,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	mintedDesks := map[string]bool{}
 	for _, rec := range req.InboxRecords {
 		inbox := strings.TrimSpace(rec.Inbox)
-		if inbox != agentprofile.Research+":"+req.DocumentID || mintedDesks[inbox] {
+		if inbox != deskmanifest.ResearchInbox(req.DocumentID) || mintedDesks[inbox] {
 			continue
 		}
 		mintedDesks[inbox] = true
@@ -658,7 +659,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		}
 		desk := types.AgentRecord{
 			AgentID: inbox, OwnerID: ownerID, ComputerID: computerID,
-			Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: req.DocumentID,
+			Profile: deskmanifest.ResearcherName(), Role: deskmanifest.ResearcherName(), ChannelID: req.DocumentID,
 			LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
 		}
 		deskMeta := lifecycleMetadata("agent_id", inbox, computerID, req.TrajectoryID, seq)

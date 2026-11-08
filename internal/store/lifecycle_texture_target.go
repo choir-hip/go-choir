@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -124,16 +125,16 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		Trajectory: trajectory, Document: document, CallerRun: callerRun, CallerAgent: callerAgent, TargetAgent: targetAgent,
 	}
 
-	exactPersistentManagementID := agentprofile.Management + ":" + ownerID
+	exactPersistentManagementID := deskmanifest.AdmitterInbox(ownerID)
 	switch {
 	case req.TargetAgentID == exactPersistentManagementID:
 		if targetAgent.AgentID != exactPersistentManagementID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
-			strings.TrimSpace(targetAgent.Profile) != agentprofile.Management || strings.TrimSpace(targetAgent.Role) != agentprofile.Management ||
+			!deskmanifest.AdmitsAssignments(strings.TrimSpace(targetAgent.Profile)) || !deskmanifest.AdmitsAssignments(strings.TrimSpace(targetAgent.Role)) ||
 			targetAgent.LifecycleVersion != 0 {
 			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("persistent Management target binding mismatch")
 		}
-		binding.TargetProfile = agentprofile.Management
-	case strings.TrimSpace(targetAgent.Profile) == agentprofile.Research && strings.TrimSpace(targetAgent.Role) == agentprofile.Research:
+		binding.TargetProfile = deskmanifest.AdmitterName()
+	case deskmanifest.SpawnsResearch(strings.TrimSpace(targetAgent.Profile)) && deskmanifest.SpawnsResearch(strings.TrimSpace(targetAgent.Role)):
 		// The document's research desk (PD1): bound to this document's
 		// channel, so only this document's Texture directs it.
 		if targetAgent.AgentID != req.TargetAgentID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
@@ -141,7 +142,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 			(req.TargetWorkItemID == "") != req.OpeningWork {
 			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("Research target must be this document's research desk, with an existing target work item or opening new work")
 		}
-		binding.TargetProfile = agentprofile.Research
+		binding.TargetProfile = deskmanifest.ResearcherName()
 	default:
 		return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("target must be a bound Research or the exact persistent Management")
 	}
@@ -160,7 +161,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 	// A busy desk queues the control: the target's serialized actor takes it
 	// when the active run ends. TargetRun is bound only when the active run
 	// already holds the target work.
-	if binding.TargetProfile == agentprofile.Research && req.TargetWorkItemID != "" {
+	if deskmanifest.SpawnsResearch(binding.TargetProfile) && req.TargetWorkItemID != "" {
 		activeRunID := strings.TrimSpace(targetAgent.ActiveRunID)
 		if activeRunID != "" {
 			targetRun, err := reader.GetLifecycleRun(ctx, ownerID, computerID, activeRunID)
@@ -170,7 +171,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 			workItemIDs, bindingErr := lifecycleActivationWorkItemIDs(targetRun.Metadata)
 			if bindingErr != nil || targetRun.RunID != activeRunID || targetRun.OwnerID != ownerID || targetRun.ComputerID != computerID ||
 				targetRun.TrajectoryID != req.TrajectoryID || targetRun.AgentID != req.TargetAgentID ||
-				strings.TrimSpace(targetRun.AgentProfile) != agentprofile.Research || strings.TrimSpace(targetRun.AgentRole) != agentprofile.Research ||
+				!deskmanifest.SpawnsResearch(strings.TrimSpace(targetRun.AgentProfile)) || !deskmanifest.SpawnsResearch(strings.TrimSpace(targetRun.AgentRole)) ||
 				!targetRun.State.Active() {
 				return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("active Research run is not this desk's run on this trajectory")
 			}

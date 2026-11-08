@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -174,7 +175,7 @@ func (rt *Runtime) verifyOwedBy(ctx context.Context, ownerID, computerID, deskAg
 // isPersistentManagementRun reports whether rec is a run of the owner's
 // persistent management desk, the only desk that casts engineering.
 func isPersistentManagementRun(rec *types.RunRecord) bool {
-	return rec != nil && strings.TrimSpace(rec.OwnerID) != "" && agentProfileForRun(rec) == agentprofile.Management &&
+	return rec != nil && strings.TrimSpace(rec.OwnerID) != "" && deskmanifest.AdmitsAssignments(agentProfileForRun(rec)) &&
 		strings.TrimSpace(rec.AgentID) == persistentManagementAgentID(rec.OwnerID)
 }
 
@@ -407,7 +408,7 @@ func verifyOwedWait(o verifyOwed, now time.Time) *types.WaitState {
 		Subject:  "assignment " + o.Assignment.AssignmentID,
 		Resource: "management's Verify of frozen candidate " + o.Operation.OperationID,
 		Need:     fmt.Sprintf("choir.Verify(%q, pass|fail, verifierRefs, %q, reason)", o.Assignment.AssignmentID, o.Operation.BundleDigest),
-		Holders:  []types.WaitHolder{{Who: "management", What: "Verify"}},
+		Holders:  []types.WaitHolder{{Who: deskmanifest.AdmitterName(), What: "Verify"}},
 		Since:    since.UTC(),
 		Detail:   strings.TrimSuffix(o.Line(), "."),
 	}

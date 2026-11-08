@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -106,7 +107,7 @@ done:
 
 func stubAgentProfile(task *types.RunRecord) string {
 	if task == nil {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	profile := strings.TrimSpace(task.AgentProfile)
 	if profile == "" && task.Metadata != nil {
@@ -114,7 +115,7 @@ func stubAgentProfile(task *types.RunRecord) string {
 	}
 	profile = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(profile), "_", "-"))
 	if profile == "" {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	return profile
 }

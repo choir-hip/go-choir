@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -63,7 +62,7 @@ func capsuleSourcePaths(changes []capsule.FileChange) []string {
 func validateEngineeringPrecommit(fromDesk string, in yaegikernel.StagedIntent, intents []yaegikernel.StagedIntent) error {
 	var precommit types.CommitmentPrecommit
 	if err := json.Unmarshal([]byte(in.Precommit), &precommit); err != nil {
-		return fmt.Errorf("reduce: precommit %s: invalid typed body: %w%s", in.LocalID, err, types.PrecommitShapeHint(fromDesk == agentprofile.Engineering))
+		return fmt.Errorf("reduce: precommit %s: invalid typed body: %w%s", in.LocalID, err, types.PrecommitShapeHint(deskmanifest.IsAssignmentPerformer(fromDesk)))
 	}
 	// The precommit.rule grant decides (MA4.1): a holder's Precommits are
 	// rule-settled over the grant's closed kinds; no other desk's may carry

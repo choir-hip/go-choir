@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +14,9 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
@@ -711,8 +713,8 @@ func Run() {
 	rt.Runtime.SetProductAPIHandler(s, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")))
 	log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
-		rt.Runtime.ToolRegistryForProfile(agentprofile.Management).Size(),
-		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Research)),
+		rt.Runtime.ToolRegistryForProfile(deskmanifest.AdmitterName()).Size(),
+		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(deskmanifest.ResearcherName())),
 		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
 	)
 

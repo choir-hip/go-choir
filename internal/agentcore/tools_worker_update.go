@@ -114,7 +114,7 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	authority.trajectoryID = strings.TrimSpace(trajectoryIDForRun(&authority.callerRun))
 
 	if authority.lifecycle {
-		if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Management {
+		if deskmanifest.IsAssignmentPerformer(authority.callerProfile) && deskmanifest.AdmitsAssignments(authority.targetProfile) {
 			if err := validateAssignedEngineeringPersistentManagementReport(ctx, authorityStore, &authority); err != nil {
 				return authority, err
 			}
@@ -194,11 +194,11 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	// (engineering's upward report under the management:* contract) has its
 	// own caller/target contract — check it before the texture-producer
 	// profile gate, which exists for producer reports into a document.
-	if authority.targetProfile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(authority.targetProfile) {
 		return validateLifecycleManagementReportAuthority(ctx, authorityStore, authority, requestedWorkItemID)
 	}
 	switch authority.callerProfile {
-	case agentprofile.Research:
+	case deskmanifest.ResearcherName():
 	default:
 		return fmt.Errorf("update_coagent lifecycle producer profile %s is not allowed", authority.callerProfile)
 	}
@@ -259,7 +259,7 @@ func validateLifecycleManagementReportAuthority(ctx context.Context, authoritySt
 	if authority == nil {
 		return fmt.Errorf("update_coagent lifecycle management-report authority is missing")
 	}
-	if authority.callerProfile != agentprofile.Engineering {
+	if !deskmanifest.IsAssignmentPerformer(authority.callerProfile) {
 		return fmt.Errorf("update_coagent lifecycle management report requires an Engineering caller")
 	}
 	if authority.target.AgentID != persistentManagementAgentID(authority.callerRun.OwnerID) {
@@ -267,7 +267,7 @@ func validateLifecycleManagementReportAuthority(ctx context.Context, authoritySt
 	}
 	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile"))
 	if metadataStringValue(authority.callerRun.Metadata, "requested_by_agent_id") != authority.target.AgentID ||
-		requesterProfile != agentprofile.Management {
+		!deskmanifest.AdmitsAssignments(requesterProfile) {
 		return fmt.Errorf("update_coagent lifecycle Engineering run was not requested by the target Management")
 	}
 	requesterRunID, err := exactRequesterRunID(authority.callerRun)
@@ -288,7 +288,7 @@ func validateLifecycleManagementReportAuthority(ctx context.Context, authoritySt
 	}
 	parentProfile := configuredAgentProfileForRun(&parent)
 	parentRole := agentRoleForRun(&parent)
-	if parent.AgentID != authority.target.AgentID || parentProfile != agentprofile.Management || parentRole != agentprofile.Management {
+	if parent.AgentID != authority.target.AgentID || !deskmanifest.AdmitsAssignments(parentProfile) || !deskmanifest.AdmitsAssignments(parentRole) {
 		return fmt.Errorf("update_coagent lifecycle owning Management run binding mismatch")
 	}
 	workItemID, err := lifecycleAssignedWorkItemID(authority.callerRun, requestedWorkItemID)
@@ -307,7 +307,7 @@ func validateLifecycleManagementReportAuthority(ctx context.Context, authoritySt
 	}
 	workRequesterProfile, _ := agentprofile.Canonical(metadataStringValue(work.Details, "requested_by_profile"))
 	if metadataStringValue(work.Details, "requested_by_agent_id") != authority.target.AgentID ||
-		workRequesterProfile != agentprofile.Management {
+		!deskmanifest.AdmitsAssignments(workRequesterProfile) {
 		return fmt.Errorf("update_coagent lifecycle work lacks exact requesting Management provenance")
 	}
 	authority.workItemID = workItemID
@@ -409,20 +409,20 @@ func validatePreCutoverCoagentUpdateAuthority(ctx context.Context, authorityStor
 	}
 
 	if requester, err := loadLegacyRequesterRun(ctx, authorityStore, authority.callerRun, authority.target); err == nil {
-		if authority.callerProfile == agentprofile.Engineering {
+		if deskmanifest.IsAssignmentPerformer(authority.callerProfile) {
 			switch authority.targetProfile {
 			case agentprofile.Texture:
 				return validateEngineeringTextureResultPath(ctx, authorityStore, *authority)
-			case agentprofile.Management:
+			case deskmanifest.AdmitterName():
 				return validateEngineeringOwningManagement(ctx, authorityStore, *authority, requester)
 			}
 		}
 		return nil
 	}
-	if authority.callerProfile == agentprofile.Management && (authority.targetProfile == agentprofile.Research || authority.targetProfile == agentprofile.Engineering) {
+	if deskmanifest.AdmitsAssignments(authority.callerProfile) && (deskmanifest.SpawnsResearch(authority.targetProfile) || deskmanifest.IsAssignmentPerformer(authority.targetProfile)) {
 		return validateLegacyOwnedChild(ctx, authorityStore, *authority)
 	}
-	if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Texture {
+	if deskmanifest.IsAssignmentPerformer(authority.callerProfile) && authority.targetProfile == agentprofile.Texture {
 		return validateEngineeringTextureResultPath(ctx, authorityStore, *authority)
 	}
 	return fmt.Errorf("update_coagent target is neither the exact requester nor an assigned child")
@@ -476,7 +476,7 @@ func validateLegacyOwnedChild(ctx context.Context, authorityStore coagentUpdateA
 		strings.TrimSpace(trajectoryIDForRun(&child)) != authority.trajectoryID {
 		return fmt.Errorf("update_coagent child run is not owned by the calling super")
 	}
-	if authority.targetProfile == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(authority.targetProfile) {
 		slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.target.AgentID)
 		if err != nil {
 			return fmt.Errorf("lookup assigned co-super slot: %w", err)
@@ -505,7 +505,7 @@ func validateAssignedEngineeringPersistentManagementReport(ctx context.Context, 
 	if authority == nil {
 		return fmt.Errorf("update_coagent assigned Engineering Management report authority is missing")
 	}
-	if authority.callerProfile != agentprofile.Engineering || authority.targetProfile != agentprofile.Management {
+	if !deskmanifest.IsAssignmentPerformer(authority.callerProfile) || !deskmanifest.AdmitsAssignments(authority.targetProfile) {
 		return fmt.Errorf("update_coagent assigned Engineering report requires a persistent Management target")
 	}
 	if authority.target.LifecycleVersion > 0 {
@@ -519,7 +519,7 @@ func validateAssignedEngineeringPersistentManagementReport(ctx context.Context, 
 	}
 	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile"))
 	if metadataStringValue(authority.callerRun.Metadata, "requested_by_agent_id") != authority.target.AgentID ||
-		requesterProfile != agentprofile.Management {
+		!deskmanifest.AdmitsAssignments(requesterProfile) {
 		return fmt.Errorf("update_coagent calling Engineering was not requested by the target Management")
 	}
 	requesterRunID, err := exactRequesterRunID(authority.callerRun)
@@ -533,8 +533,8 @@ func validateAssignedEngineeringPersistentManagementReport(ctx context.Context, 
 	parentProfile := configuredAgentProfileForRun(&parent)
 	parentRole := agentRoleForRun(&parent)
 	if parent.AgentID != authority.target.AgentID ||
-		parentProfile != agentprofile.Management ||
-		parentRole != agentprofile.Management ||
+		!deskmanifest.AdmitsAssignments(parentProfile) ||
+		!deskmanifest.AdmitsAssignments(parentRole) ||
 		parent.TrajectoryID != "" {
 		return fmt.Errorf("update_coagent owning Management run binding mismatch")
 	}
@@ -563,7 +563,7 @@ func validateEngineeringOwningManagement(ctx context.Context, authorityStore coa
 }
 
 func validateEngineeringTextureResultPath(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority) error {
-	if authority.callerProfile != agentprofile.Engineering || authority.targetProfile != agentprofile.Texture || authority.trajectoryID == "" {
+	if !deskmanifest.IsAssignmentPerformer(authority.callerProfile) || authority.targetProfile != agentprofile.Texture || authority.trajectoryID == "" {
 		return fmt.Errorf("update_coagent co-super result path is not applicable")
 	}
 	slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.callerRun.AgentID)
@@ -578,7 +578,7 @@ func validateEngineeringTextureResultPath(ctx context.Context, authorityStore co
 		return fmt.Errorf("resolve owning super run: %w", err)
 	}
 	owningManagementProfile := configuredAgentProfileForRun(&owningManagement)
-	if owningManagementProfile != agentprofile.Management {
+	if !deskmanifest.AdmitsAssignments(owningManagementProfile) {
 		return fmt.Errorf("update_coagent co-super assignment owner is not Management")
 	}
 	if _, err := loadLegacyRequesterRun(ctx, authorityStore, owningManagement, authority.target); err != nil {

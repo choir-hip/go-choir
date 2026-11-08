@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -288,7 +288,7 @@ func unresolvedRequests(ownerID, computerID, reason string, inputs []eventInput)
 // eventLedgerOf reads an event's records from its conversation with
 // management.
 func (rt *Runtime) eventLedgerOf(ctx context.Context, ownerID, computerID, eventID string) (eventLedger, error) {
-	management := agentprofile.Management + ":" + strings.TrimSpace(ownerID)
+	management := deskmanifest.AdmitterInbox(strings.TrimSpace(ownerID))
 	conversation := types.InboxConversationID(management, types.CaptureArrivalSenderInbox(eventCapturesSource(eventID)))
 	recs, err := rt.store.ConversationRecords(ctx, ownerID, computerID, conversation)
 	if err != nil {
@@ -438,7 +438,7 @@ func (rt *Runtime) sweepHeldCaptures(ctx context.Context, ownerID, computerID st
 	}
 	rt.events.mu.Unlock()
 
-	management := agentprofile.Management + ":" + strings.TrimSpace(ownerID)
+	management := deskmanifest.AdmitterInbox(strings.TrimSpace(ownerID))
 	head, err := rt.store.InboxHead(ctx, ownerID, computerID, management)
 	if err != nil {
 		log.Printf("event layer: sweep: head of %s: %v", management, err)

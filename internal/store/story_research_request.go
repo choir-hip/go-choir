@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -165,7 +166,7 @@ func (s *Store) CommitStoryResearchRequest(ctx context.Context, req StoryResearc
 	if doc.CurrentRevisionID != strings.TrimSpace(req.ExpectedHeadRevisionID) {
 		return StoryResearchReceipt{}, ErrStoryResearchChanged
 	}
-	texture, research := agentprofile.Texture+":"+docID, agentprofile.Research+":"+docID
+	texture, research := agentprofile.Texture+":"+docID, deskmanifest.ResearchInbox(docID)
 	conversation, err := s.ConversationState(ctx, ownerID, computerID, types.InboxConversationID(texture, research))
 	if err != nil {
 		return StoryResearchReceipt{}, err
@@ -254,7 +255,7 @@ func (s *Store) replayStoryResearch(ctx context.Context, ownerID, computerID, re
 // planResearchDeskMint mints research:<doc> when the story has no research
 // desk yet, as ApplyTextureTurn does on Texture's first Cast to research.
 func (s *Store) planResearchDeskMint(ctx context.Context, ownerID, computerID, docID, trajectoryID string, seq int64, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, error) {
-	inbox := agentprofile.Research + ":" + docID
+	inbox := deskmanifest.ResearchInbox(docID)
 	canonicalID, err := lifecycleCanonicalID(ogKindAgent, ownerID, computerID, inbox)
 	if err != nil {
 		return nil, nil, err
@@ -266,7 +267,7 @@ func (s *Store) planResearchDeskMint(ctx context.Context, ownerID, computerID, d
 	}
 	desk := types.AgentRecord{
 		AgentID: inbox, OwnerID: ownerID, ComputerID: computerID,
-		Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: docID,
+		Profile: deskmanifest.ResearcherName(), Role: deskmanifest.ResearcherName(), ChannelID: docID,
 		LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
 	}
 	meta := lifecycleMetadata("agent_id", inbox, computerID, trajectoryID, seq)
@@ -284,7 +285,7 @@ func (s *Store) StoryResearchRequestState(ctx context.Context, ownerID, computer
 	if err != nil {
 		return StoryResearchState{}, err
 	}
-	if rec == nil || rec.Inbox != agentprofile.Research+":"+strings.TrimSpace(docID) {
+	if rec == nil || rec.Inbox != deskmanifest.ResearchInbox(strings.TrimSpace(docID)) {
 		return StoryResearchState{}, ErrNotFound
 	}
 	state := StoryResearchState{RecordID: rec.RecordID, CommittedAt: rec.Provenance.CommittedAt, Round: rec.Round}
@@ -317,7 +318,7 @@ func (s *Store) StoryResearchRequestState(ctx context.Context, ownerID, computer
 // Texture has not yet read the Report that closed it.
 func (s *Store) PendingStoryResearchRequest(ctx context.Context, ownerID, computerID, docID string) (string, bool, error) {
 	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
-	texture, research := agentprofile.Texture+":"+docID, agentprofile.Research+":"+docID
+	texture, research := agentprofile.Texture+":"+docID, deskmanifest.ResearchInbox(docID)
 	conversationID := types.InboxConversationID(texture, research)
 	head, err := s.ConversationState(ctx, ownerID, computerID, conversationID)
 	if err != nil || head.Round == 0 {
@@ -395,7 +396,7 @@ func (s *Store) storyEntitiesQuietReport(ctx context.Context, ownerID, computerI
 		return false, nil
 	}
 	doc, ok := strings.CutPrefix(rec.Inbox, agentprofile.Texture+":")
-	if !ok || doc == "" || rec.SenderInbox != agentprofile.Research+":"+doc {
+	if !ok || doc == "" || rec.SenderInbox != deskmanifest.ResearchInbox(doc) {
 		return false, nil
 	}
 	records, err := s.ConversationRecords(ctx, ownerID, computerID, rec.ConversationID)

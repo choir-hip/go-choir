@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -141,7 +142,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		targetAgent.OwnerID, targetAgent.ComputerID, targetAgent.ComputerID = a.ownerID, a.computerID, a.computerID
 		targetAgent.LifecycleVersion, targetAgent.LastReducerSeq = 1, *a.seq+1
 		targetAgent.CreatedAt, targetAgent.UpdatedAt = a.now, a.now
-		if targetAgent.AgentID != control.TargetAgentID || targetAgent.Profile != agentprofile.Research || targetAgent.Role != agentprofile.Research || targetAgent.ChannelID != a.documentID || targetAgent.ActiveRunID != "" {
+		if targetAgent.AgentID != control.TargetAgentID || !deskmanifest.SpawnsResearch(targetAgent.Profile) || !deskmanifest.SpawnsResearch(targetAgent.Role) || targetAgent.ChannelID != a.documentID || targetAgent.ActiveRunID != "" {
 			return ErrLifecycleInvalidTransition
 		}
 		targetCanonicalID, err := lifecycleCanonicalID(ogKindAgent, a.ownerID, a.computerID, targetAgent.AgentID)
@@ -161,7 +162,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		}
 		a.addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID})
 		*a.objects = append(*a.objects, targetAgentObj)
-		binding = LifecycleTextureControlTargetBinding{TargetAgent: targetAgent, TargetProfile: agentprofile.Research}
+		binding = LifecycleTextureControlTargetBinding{TargetAgent: targetAgent, TargetProfile: deskmanifest.ResearcherName()}
 	} else {
 		validatorWorkID := control.TargetWorkItemID
 		if control.OpenWork != nil {
@@ -186,7 +187,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		}
 		a.addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID, Exists: true, ExpectedContentHash: targetAgentObj.ContentHash})
 	}
-	if binding.TargetProfile == agentprofile.Management && (control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0) {
+	if deskmanifest.AdmitsAssignments(binding.TargetProfile) && (control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0) {
 		return fmt.Errorf("%s: persistent-Management control requires execution_request actions", a.operation)
 	}
 	if binding.TargetRun != nil {
@@ -220,11 +221,11 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 	} else {
 		openerProfile := binding.TargetProfile
 		switch openerProfile {
-		case agentprofile.Management:
-			if control.OpenAgent != nil || binding.TargetAgent.AgentID != agentprofile.Management+":"+a.ownerID {
+		case deskmanifest.AdmitterName():
+			if control.OpenAgent != nil || binding.TargetAgent.AgentID != deskmanifest.AdmitterInbox(a.ownerID) {
 				return ErrLifecycleInvalidTransition
 			}
-		case agentprofile.Research:
+		case deskmanifest.ResearcherName():
 			// A new desk (OpenAgent) or new work on the document's existing
 			// desk (PD1), validated above.
 			if binding.TargetAgent.AgentID != control.TargetAgentID {
@@ -311,7 +312,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		PayloadDigest: control.PayloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: *a.seq,
 		Packet: control.Packet, Content: control.Content, CreatedAt: a.now,
 	}
-	if packet.Packet.Kind == "execution_request" && control.TargetAgentID == agentprofile.Management+":"+a.ownerID {
+	if packet.Packet.Kind == "execution_request" && control.TargetAgentID == deskmanifest.AdmitterInbox(a.ownerID) {
 		ordinal, ordinalErr := a.store.nextArrivalOrdinal(a.ctx, a.ownerID, a.computerID)
 		if ordinalErr != nil {
 			return fmt.Errorf("%s: allocate arrival ordinal: %w", a.operation, ordinalErr)

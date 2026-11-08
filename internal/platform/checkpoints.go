@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -266,7 +266,7 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 	// never raw equality against the live constant.
 	normalizedProfile, profileKnown := vocabmigrate.NormalizeHistoricProfile(event.ActorProfile)
 	if uerr != nil || event.EventKind != computerevent.EventVerificationRecorded ||
-		!profileKnown || normalizedProfile != agentprofile.Engineering || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
+		!profileKnown || !deskmanifest.IsAssignmentPerformer(normalizedProfile) || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
 		return fmt.Errorf("checkpoint authority: verifier event authority mismatch")
 	}
 	payloadRef, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])

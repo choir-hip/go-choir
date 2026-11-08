@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -361,7 +362,7 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 
 func agentRoleForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
 		configuredRole, _ := agentprofile.Canonical(rec.AgentRole)
@@ -386,7 +387,7 @@ func currentTextureAgentID(docID string) string {
 
 func agentProfileForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
 		configuredProfile, _ := agentprofile.Canonical(rec.AgentProfile)
@@ -401,5 +402,5 @@ func agentProfileForRun(rec *types.RunRecord) string {
 	if taskType, _ := rec.Metadata["type"].(string); taskType == textureAgentRevisionTaskType {
 		return agentprofile.Texture
 	}
-	return agentprofile.Management
+	return deskmanifest.AdmitterName()
 }

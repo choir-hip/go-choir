@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -75,7 +75,7 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 	// are legal history. Join through the single normalization point,
 	// never raw equality against the live constant.
 	normalizedProfile, profileKnown := vocabmigrate.NormalizeHistoricProfile(event.ActorProfile)
-	if event.SchemaVersion != computerevent.SchemaVersionV1 || !profileKnown || normalizedProfile != agentprofile.Management ||
+	if event.SchemaVersion != computerevent.SchemaVersionV1 || !profileKnown || !deskmanifest.AdmitsAssignments(normalizedProfile) ||
 		event.PrivacyClass != "owner" || event.ReducerVersion != computerevent.ReducerVersionV1 ||
 		!computerevent.IsSHA256(event.RequestCommitment) || !computerevent.IsSHA256(event.DecisionRef) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: event authority contract mismatch")

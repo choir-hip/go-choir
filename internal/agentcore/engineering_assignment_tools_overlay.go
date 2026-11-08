@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
+
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -19,7 +20,7 @@ func (rt *Runtime) assignedEngineeringToolOverlay(ctx context.Context, rec *type
 		return base, "", nil
 	}
 	profile := agentProfileForRun(rec)
-	if profile != agentprofile.Engineering {
+	if !deskmanifest.IsAssignmentPerformer(profile) {
 		return base, "", nil
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")

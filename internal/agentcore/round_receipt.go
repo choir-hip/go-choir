@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -83,7 +83,7 @@ func (rt *Runtime) recordRoundReceipt(ctx context.Context, ownerID string, opera
 	if existing, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, recordID); err == nil && existing != nil {
 		return existing
 	}
-	inbox := agentprofile.Engineering + ":" + assignmentID
+	inbox := deskmanifest.PerformerInbox(assignmentID)
 	assignment, err := rt.store.EngineeringAssignmentForInbox(ctx, ownerID, computerID, inbox)
 	if err != nil {
 		log.Printf("selfdev round receipt: %s: assignment %s: %v", operation.OperationID, assignmentID, err)

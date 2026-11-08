@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -202,7 +203,7 @@ func (rt *Runtime) startManagementTask(ctx context.Context, task types.Managemen
 	// key, not requested_by_run_id, whose child-run machinery (terminal
 	// outcome delivery to a requester) would hang the task on the parent.
 	metadata := map[string]any{
-		runMetadataAgentProfile:          agentprofile.Management,
+		runMetadataAgentProfile:          deskmanifest.AdmitterName(),
 		runMetadataAgentRole:             agentprofile.ManagementTask,
 		runMetadataAgentID:               claimed.TaskInbox,
 		runMetadataChannelID:             claimed.TaskInbox,

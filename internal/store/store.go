@@ -31,6 +31,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -139,7 +140,7 @@ type Store struct {
 	// deskCastOutcomes is told, after commit, of each round outcome a batch
 	// wrote (desk_cast_judge.go): the judge settles its Casts.
 	deskCastOutcomes atomic.Pointer[DeskCastOutcomeNotifier]
-	workerUpdateMu sync.Mutex
+	workerUpdateMu   sync.Mutex
 	// runMemoryMu serialises run-memory appends per run (striped by run id):
 	// one run's seq and parent come from its previous entry, and different
 	// runs' entries may share a grouped tape event (tape_group_commit.go).
@@ -2237,8 +2238,8 @@ func workerMailboxAllowsAssignedEngineeringManagementReport(update types.Coagent
 	}
 	reportRole, _ := agentprofile.Canonical(update.Role)
 	return update.Direction == types.LifecyclePacketDirectionProducerReport &&
-		reportRole == agentprofile.Engineering &&
-		strings.TrimSpace(update.TargetAgentID) == agentprofile.Management+":"+ownerID
+		deskmanifest.IsAssignmentPerformer(reportRole) &&
+		strings.TrimSpace(update.TargetAgentID) == deskmanifest.AdmitterInbox(ownerID)
 }
 
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {

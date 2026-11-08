@@ -1,6 +1,10 @@
 package types
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+)
 
 // An engineering progress relay is the platform telling a Texture what
 // engineering reported (docs/problems/engineering-reports-never-reach-texture-2026-10-24.md).
@@ -53,7 +57,7 @@ func NewEngineeringProgressRelay(source CommitmentRecord, textureInbox string) (
 	textureInbox = strings.TrimSpace(textureInbox)
 	body := strings.TrimSpace(source.Prediction.Hypothesis)
 	if body == "" || !strings.HasPrefix(textureInbox, "texture:") || strings.TrimSpace(source.RecordID) == "" ||
-		!strings.HasPrefix(strings.TrimSpace(source.SenderInbox), "engineering:") {
+		!deskmanifest.IsAssignmentInbox(strings.TrimSpace(source.SenderInbox)) {
 		return CommitmentRecord{}, false
 	}
 	return CommitmentRecord{

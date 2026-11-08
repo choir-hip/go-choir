@@ -14,6 +14,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -579,7 +580,7 @@ func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Do
 	// owner head must not arm a Texture revision cell here.
 	supervisionOnly := false
 	for _, agent := range snapshot.Agents {
-		if agent.AgentID == agentprofile.Engineering+":"+docID && agent.LifecycleVersion > 0 {
+		if agent.AgentID == deskmanifest.PerformerInbox(docID) && agent.LifecycleVersion > 0 {
 			supervisionOnly = true
 			break
 		}
@@ -1172,7 +1173,7 @@ func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, ownerID, docID s
 		return false, err
 	}
 	switch agentProfileForRun(run) {
-	case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
+	case deskmanifest.ResearcherName(), deskmanifest.AdmitterName(), deskmanifest.PerformerName():
 		cache[runID] = true
 		return true, nil
 	default:
@@ -1304,11 +1305,11 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		// producers (Engineering assignments, persistent Management) carry
 		// their own agent id — the channel is the scope, not the document.
 		producerChannelMatches := producerAgent.ChannelID == o.DocumentID ||
-			(producerProfile != agentprofile.Research && producerAgent.ChannelID == producerAgent.AgentID)
+			(!deskmanifest.SpawnsResearch(producerProfile) && producerAgent.ChannelID == producerAgent.AgentID)
 		if producerAgent.OwnerID != o.OwnerID || producerAgent.ComputerID != o.ComputerID || !producerChannelMatches ||
-			(producerProfile != agentprofile.Research && producerProfile != agentprofile.Management && producerProfile != agentprofile.Engineering) ||
-			(producerProfile == agentprofile.Management && producerAgent.AgentID != persistentManagementAgentID(o.OwnerID)) ||
-			(producerProfile != agentprofile.Management && producerAgent.LifecycleVersion <= 0) {
+			(!deskmanifest.SpawnsResearch(producerProfile) && !deskmanifest.AdmitsAssignments(producerProfile) && !deskmanifest.IsAssignmentPerformer(producerProfile)) ||
+			(deskmanifest.AdmitsAssignments(producerProfile) && producerAgent.AgentID != persistentManagementAgentID(o.OwnerID)) ||
+			(!deskmanifest.AdmitsAssignments(producerProfile) && producerAgent.LifecycleVersion <= 0) {
 			return zero, "", invalidTextureOccurrence("Texture producer agent authority mismatch")
 		}
 		producerWork, producerWorkErr := rt.Store.GetLifecycleWorkItem(ctx, o.OwnerID, o.ComputerID, o.ProducerWorkID)
@@ -1330,7 +1331,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			return zero, "", producerRunErr
 		}
 		trajectoryBound := producerRun.TrajectoryID == o.TrajectoryID
-		if producerProfile == agentprofile.Management {
+		if deskmanifest.AdmitsAssignments(producerProfile) {
 			trajectoryBound = producerRun.TrajectoryID == "" && metadataStringValue(producerRun.Metadata, "assignment_trajectory_id") == o.TrajectoryID
 		}
 		producerRunProfile, _ := agentprofile.Canonical(producerRun.AgentProfile)
@@ -1339,8 +1340,8 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		// assignment runs are self-channeled (ChannelID == AgentID) and
 		// Management runs carry the persistent agent's channel.
 		runChannelMatches := producerRun.ChannelID == o.DocumentID ||
-			(producerProfile == agentprofile.Engineering && producerRun.ChannelID == producerRun.AgentID) ||
-			(producerProfile == agentprofile.Management && producerRun.ChannelID == producerAgent.ChannelID)
+			(deskmanifest.IsAssignmentPerformer(producerProfile) && producerRun.ChannelID == producerRun.AgentID) ||
+			(deskmanifest.AdmitsAssignments(producerProfile) && producerRun.ChannelID == producerAgent.ChannelID)
 		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || !runChannelMatches || producerRunProfile != producerProfile || producerRunRole != producerProfile {
 			return zero, "", invalidTextureOccurrence("Texture producer source run authority mismatch")
 		}
@@ -1351,7 +1352,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			return zero, "", fmt.Errorf("validate Texture producer control/run authority: %w", authorityErr)
 		}
 		producerBindingID = strings.TrimSpace(canonical.ControlBindingID)
-		producerAssignmentBound = producerProfile == agentprofile.Engineering
+		producerAssignmentBound = deskmanifest.IsAssignmentPerformer(producerProfile)
 		pending = canonical.Disposition == types.UpdatePending
 	case agentcore.TextureActorOccurrenceDocumentRevision:
 		canonical, getErr := rt.Store.GetLifecycleRevision(ctx, o.OwnerID, o.ComputerID, o.HeadRevisionID)
@@ -1415,7 +1416,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		// occurrences minted before the wake resolver learned the executor
 		// first rule terminalize here so they cannot arm a Texture apply.
 		for _, agent := range snapshot.Agents {
-			if agent.AgentID == agentprofile.Engineering+":"+doc.DocID && agent.LifecycleVersion > 0 {
+			if agent.AgentID == deskmanifest.PerformerInbox(doc.DocID) && agent.LifecycleVersion > 0 {
 				return o, TextureActorOccurrenceTerminal, nil
 			}
 		}

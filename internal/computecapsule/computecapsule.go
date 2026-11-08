@@ -20,6 +20,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -77,7 +79,6 @@ func refuse(code Code, format string, args ...any) error {
 
 // systemDesks may not open a compute capsule: engineering has its own
 // capsule, research is read-only, management mutates nothing.
-var systemDesks = map[string]bool{"management": true, "engineering": true, "research": true}
 
 // forbiddenTools are interpreters a recipe may not name as argv[0]: a
 // recipe runs one declared tool, never a shell (I19).
@@ -143,7 +144,7 @@ func Validate(req Request, recipe Recipe) (Plan, error) {
 		return Plan{}, refuse(CodeRequestInvalid, "request id %q is invalid", req.ID)
 	}
 	desk := strings.ToLower(strings.TrimSpace(req.Desk))
-	if desk == "" || systemDesks[desk] {
+	if desk == "" || isSystemDesk(desk) {
 		return Plan{}, refuse(CodeDeskNotApp, "desk %q is not an app desk", req.Desk)
 	}
 	if req.Package == "" || req.Package != recipe.Package || req.Recipe != recipe.Name {
@@ -469,4 +470,11 @@ func isHex64(s string) bool {
 		}
 	}
 	return true
+}
+
+// isSystemDesk reports the desks that may not open a compute capsule: the
+// performer has its own capsule, research is read-only and the admitter
+// mutates nothing (grants, not names; MA4.11).
+func isSystemDesk(desk string) bool {
+	return deskmanifest.AdmitsAssignments(desk) || deskmanifest.IsAssignmentPerformer(desk) || deskmanifest.SpawnsResearch(desk)
 }

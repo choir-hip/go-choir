@@ -140,13 +140,13 @@ func init() {
 	// rewrites it to the new story's texture:<doc> at commit. Management
 	// (and its tasks) open stories; the store refuses any other sender.
 	RegisterInboxClass(InboxClass{Name: types.StoryOpenInbox, Fixed: true, Addressable: true,
-		Senders: []string{agentprofile.Management, types.ManagementTaskDesk}})
+		Senders: []string{deskmanifest.AdmitterName(), types.ManagementTaskDesk}})
 	// A source's inbox takes management's decline of its captures, from
 	// management or from a task sending as management (Cut 2 2b); the
 	// source writes its capture arrivals to management the other way, as a
 	// system record.
 	RegisterInboxClass(InboxClass{Name: captureSourceDesk, Addressable: true,
-		Senders: []string{agentprofile.Management, types.ManagementTaskDesk}})
+		Senders: []string{deskmanifest.AdmitterName(), types.ManagementTaskDesk}})
 	// A job's inbox is the sender of its end record; no desk writes to it.
 	RegisterInboxClass(InboxClass{Name: jobInboxClass, Addressable: false})
 }

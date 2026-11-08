@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -185,7 +185,7 @@ func (rt *Runtime) storyEntitiesBackfillFrom(ctx context.Context, owner, compute
 			}
 			// As the reader's route does: a research run still working
 			// is busy even after its round closed.
-			if _, active, err := rt.TextureActiveRunByAgent(ctx, owner, computer, agentprofile.Research+":"+doc.DocID); err != nil || active {
+			if _, active, err := rt.TextureActiveRunByAgent(ctx, owner, computer, deskmanifest.ResearchInbox(doc.DocID)); err != nil || active {
 				out.Busy++
 				continue
 			}

@@ -121,7 +121,7 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 				view.Labels = rt.captureLabelViews(ctx, ownerID, computerID, rec.Captures.Items)
 			}
 		}
-		if sender := strings.TrimSpace(rec.SenderInbox); strings.HasPrefix(sender, agentprofile.Engineering+":") {
+		if sender := strings.TrimSpace(rec.SenderInbox); deskmanifest.IsAssignmentInbox(sender) {
 			// An engineering record names the Texture request its
 			// assignment serves (C1e D9), from the binding.
 			binding, seen := parents[sender]
@@ -357,7 +357,7 @@ func buildInboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		rec.Cast = cast
 	case yaegikernel.IntentReport:
 		report, final := reportBodyFromPacket(in.Packet, in.Claim)
-		if strings.HasPrefix(rec.SenderInbox, agentprofile.Engineering+":") {
+		if deskmanifest.IsAssignmentInbox(rec.SenderInbox) {
 			// Engineering's staged Reports are progress (C1e D3): only its
 			// Complete, or its cancellation, mints the final Report, in the
 			// same transaction as the assignment row.
@@ -662,12 +662,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		if err != nil {
 			return nil, err
 		}
-		if rec.Final && deskProfile == agentprofile.Management && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
+		if rec.Final && deskmanifest.AdmitsAssignments(deskProfile) && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
 			if err := r.requireChildOutcomesRead(ctx, conversation); err != nil {
 				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
 			}
 		}
-		if rec.Final && deskProfile == agentprofile.Research && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
+		if rec.Final && deskmanifest.SpawnsResearch(deskProfile) && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
 			if err := r.requireStoryEntitiesRecorded(ctx); err != nil {
 				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
 			}
@@ -684,7 +684,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// the cell's own records so each localIDs index still names its record.
 	records = append(records, r.engineeringProgressRelays(ctx, records)...)
 	cursor := r.records.cursorAdvance()
-	if len(records) == 0 && deskProfile == agentprofile.Management {
+	if len(records) == 0 && deskmanifest.AdmitsAssignments(deskProfile) {
 		// A management cell that only read marks nothing; its turn's end
 		// does (markTurnRecordsRead). A turn that read captures and then
 		// failed left them marked read and never disposed
@@ -708,7 +708,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID,
 		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor, Tasks: tasks,
 	}
-	if opensStory && deskProfile == agentprofile.Management && rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+	if opensStory && deskmanifest.AdmitsAssignments(deskProfile) && rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
 		// The story-library head this run last read (R2-5); a run that
 		// never read choir.Stories() has seen head 0. With intake.labels
 		// off, choir.Stories() is off too, and nothing is checked.
@@ -803,7 +803,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// Management's dispositions are compared with Jev's labels; a mismatch
 	// is recorded as an override on the label (L2a A3 / R2-5). Best effort:
 	// the records are committed.
-	if strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(strings.TrimSpace(r.rec.AgentProfile)) {
 		rt.recordLabelOverrides(ctx, r.scope.OwnerID, r.scope.ComputerID, records, committed.Records)
 	}
 	return rest, nil
@@ -849,7 +849,7 @@ func (r *rlmCallReduction) requireChildOutcomesRead(ctx context.Context, convers
 // ends without its final Report has its round closed at run end.
 func (r *rlmCallReduction) requireStoryEntitiesRecorded(ctx context.Context) error {
 	rt := r.rt()
-	if rt == nil || rt.store == nil || r.rec == nil || strings.TrimSpace(r.rec.AgentProfile) != agentprofile.Research {
+	if rt == nil || rt.store == nil || r.rec == nil || !deskmanifest.SpawnsResearch(strings.TrimSpace(r.rec.AgentProfile)) {
 		return nil
 	}
 	owner, computer, runID := r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID
@@ -922,8 +922,8 @@ func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, d
 // recordsInboxPrompts is the first user turn of a run a records desk starts
 // for its inbox.
 var recordsInboxPrompts = map[string]string{
-	agentprofile.Research:   "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round. Send an interim packet (no work_disposition) as soon as you have read one new source you can cite, and another each time you have read more; the final Report comes last.",
-	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec, req) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline it to its source.",
+	deskmanifest.ResearcherName(): "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round. Send an interim packet (no work_disposition) as soon as you have read one new source you can cite, and another each time you have read more; the final Report comes last.",
+	deskmanifest.AdmitterName():   "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec, req) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline it to its source.",
 }
 
 // researchStoryEntitiesPrompt is what a story's research desk is asked when
@@ -936,7 +936,7 @@ const researchStoryEntitiesPrompt = "Before your final Report, record what this 
 func (rt *Runtime) recordsInboxPrompt(ctx context.Context, ownerID, computerID, deskAgentID string) string {
 	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")
 	prompt := recordsInboxPrompts[profile]
-	if profile != agentprofile.Research || prompt == "" || rt == nil || rt.store == nil {
+	if !deskmanifest.SpawnsResearch(profile) || prompt == "" || rt == nil || rt.store == nil {
 		return prompt
 	}
 	if !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingResearchRelatedStory) {
@@ -970,7 +970,7 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 	prompt := rt.recordsInboxPrompt(ctx, ownerID, computerID, deskAgentID)
 	var agent types.AgentRecord
 	var err error
-	if profile == agentprofile.Management {
+	if deskmanifest.AdmitsAssignments(profile) {
 		if deskAgentID != persistentManagementAgentID(ownerID) {
 			return nil, nil
 		}
@@ -1012,7 +1012,7 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 		runMetadataChannelID:    agent.ChannelID,
 		"request_source":        inboxRecordRequestSource,
 	}
-	if profile == agentprofile.Research {
+	if deskmanifest.SpawnsResearch(profile) {
 		// Wake routing, platform bookkeeping: the host reads the document only
 		// for its trajectory id, as the kernel, not as the research desk.
 		doc, err := rt.store.GetLifecycleDocument(withKernelReader(ctx), ownerID, computerID, agent.ChannelID)
@@ -1058,14 +1058,14 @@ const (
 // A cell that acts still marks what the run was shown with its acts. A
 // crash-closed run is never completed and marks nothing.
 func (rt *Runtime) markTurnRecordsRead(ctx context.Context, rec *types.RunRecord) {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Management {
+	if rt == nil || rt.store == nil || rec == nil || !deskmanifest.AdmitsAssignments(agentProfileForRun(rec)) {
 		return
 	}
 	if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
 		return
 	}
 	inbox := strings.TrimSpace(rec.AgentID)
-	if !strings.HasPrefix(inbox, agentprofile.Management+":") {
+	if !deskmanifest.IsAdmitterInbox(inbox) {
 		return
 	}
 	shown := rt.recordsShownMark(rec.RunID)
@@ -1098,7 +1098,7 @@ func (rt *Runtime) markTurnRecordsRead(ctx context.Context, rec *types.RunRecord
 // it. It returns the count after this turn, or 0 for a turn that is not a
 // management failure.
 func (rt *Runtime) failedRecordsTurns(rec *types.RunRecord) int {
-	if agentProfileForRun(rec) != agentprofile.Management {
+	if !deskmanifest.AdmitsAssignments(agentProfileForRun(rec)) {
 		return 0
 	}
 	inbox := strings.TrimSpace(rec.AgentID)
@@ -1293,11 +1293,11 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 	}
 	profile := agentProfileForRun(rec)
 	switch profile {
-	case agentprofile.Research, agentprofile.Management:
+	case deskmanifest.ResearcherName(), deskmanifest.AdmitterName():
 		if !rec.State.Terminal() && rec.State != types.RunPassivated {
 			return
 		}
-	case agentprofile.Engineering:
+	case deskmanifest.PerformerName():
 		// C1e D7: only an ended run settles; a parked (passivated) one
 		// keeps its round. A live engineering run that ends without
 		// Complete settles its assignment: the cancel turns the row
@@ -1314,7 +1314,7 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 		return
 	}
 	inbox := strings.TrimSpace(rec.AgentID)
-	deskReadsItsInbox := profile != agentprofile.Engineering
+	deskReadsItsInbox := !deskmanifest.IsAssignmentPerformer(profile)
 	if deskReadsItsInbox {
 		// A Cast this run was started by or could read, whose round a final
 		// Report had already closed, can no longer be answered.
@@ -1345,7 +1345,7 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 			log.Printf("runtime: round %d of %s stays open after %s: its Cast arrived after that run began and is unread", round.Round, round.ConversationID, rec.RunID)
 			continue
 		}
-		if profile == agentprofile.Management && strings.HasPrefix(round.CasterInbox, agentprofile.Texture+":") && rt.childAssignmentsHoldRound(ctx, rec, round) {
+		if deskmanifest.AdmitsAssignments(profile) && strings.HasPrefix(round.CasterInbox, agentprofile.Texture+":") && rt.childAssignmentsHoldRound(ctx, rec, round) {
 			log.Printf("runtime: round %d of %s stays open after %s: an assignment it opened has an outcome management has not read", round.Round, round.ConversationID, rec.RunID)
 			continue
 		}

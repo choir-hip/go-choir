@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
@@ -525,7 +525,7 @@ func (rt *Runtime) acceptCleanRebase(ctx context.Context, op selfdev.Operation, 
 				EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: idempotency,
 				RequestCommitment: computerevent.ZeroHead, TrajectoryID: op.TrajectoryID, CapsuleID: op.CapsuleID,
 				ParentEventID: op.OperationID, PreviousHead: head.CanonicalEventHead,
-				ActorProfile: agentprofile.Management, AuthorityRef: selfdevprotocol.CleanRebaseAuthority(receiptDigest), PrivacyClass: "owner",
+				ActorProfile: deskmanifest.AdmitterName(), AuthorityRef: selfdevprotocol.CleanRebaseAuthority(receiptDigest), PrivacyClass: "owner",
 				ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
 				ExpectedPendingTransitionRef: head.PendingTransitionRef, ExpectedDesiredStateCommitment: head.DesiredStateCommitment,
 				ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment, RequireExpectedHead: true,

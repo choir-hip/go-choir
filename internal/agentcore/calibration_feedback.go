@@ -14,6 +14,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -65,7 +66,7 @@ type calibrationCache struct {
 // calibrationPushDesks are the desks whose digest-arm runs read their digest
 // (docs/design/calibration-seed-2026-11-03.md, "The sequence": engineering
 // first; another desk joins when engineering's experiment has read out).
-var calibrationPushDesks = map[string]bool{agentprofile.Engineering: true}
+var calibrationPushDesks = map[string]bool{deskmanifest.PerformerName(): true}
 
 // calibrationArmRef is the subject-ref key of a round record's arm.
 const calibrationArmRef = "calibration_arm"
@@ -228,12 +229,12 @@ type CalibrationPending struct {
 func calibrationDeskOfThread(thread string) string {
 	desk, _, _ := strings.Cut(strings.TrimSpace(thread), ":")
 	if types.IsManagementTaskDesk(desk) {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
 	switch desk {
-	case agentprofile.Management:
-		return agentprofile.Management
-	case agentprofile.Texture, agentprofile.Research, agentprofile.Engineering:
+	case deskmanifest.AdmitterName():
+		return deskmanifest.AdmitterName()
+	case agentprofile.Texture, deskmanifest.ResearcherName(), deskmanifest.PerformerName():
 		return desk
 	}
 	return ""
@@ -249,7 +250,7 @@ func calibrationDeskOfThread(thread string) string {
 func calibrationThreadOfRecord(rec types.CommitmentRecord) string {
 	if rec.Precommit != nil && rec.Precommit.Rule != nil {
 		if assignment := strings.TrimSpace(rec.Precommit.Rule.AssignmentID); assignment != "" {
-			return agentprofile.Engineering + ":" + assignment
+			return deskmanifest.PerformerInbox(assignment)
 		}
 	}
 	if task := strings.TrimSpace(rec.Provenance.ActingTask); task != "" {
@@ -384,7 +385,7 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 		model := strings.TrimSpace(rec.Provenance.ModelID)
 		committed := strings.TrimSpace(rec.Provenance.CommittedAt)
 		if rec.Precommit != nil && rec.Precommit.Rule != nil && rec.Resolve == nil {
-			if desk != agentprofile.Engineering || types.LateRulePrecommit(rec) || calibrationRestatement(rec) {
+			if !deskmanifest.IsAssignmentPerformer(desk) || types.LateRulePrecommit(rec) || calibrationRestatement(rec) {
 				continue // R20: a late claim is never scored; E1 F1: a restatement is no second claim
 			}
 			p := rec.Precommit.YesProbability()
@@ -448,7 +449,7 @@ func collectCalibration(salt []byte, records []types.CommitmentRecord, checks []
 			}
 			continue
 		}
-		if desk == agentprofile.Research && rec.Report != nil && rec.Final && strings.TrimSpace(rec.Report.StopReason) == string(types.WorkItemCompleted) {
+		if deskmanifest.SpawnsResearch(desk) && rec.Report != nil && rec.Final && strings.TrimSpace(rec.Report.StopReason) == string(types.WorkItemCompleted) {
 			p := reportSelfP(rec)
 			settled := doneSettled[rec.RecordID]
 			if settled == nil {
@@ -570,7 +571,7 @@ func (rt *Runtime) calibrationPushedToRun(ctx context.Context, rec *types.RunRec
 	if desk == "" || !calibrationPushDesks[desk] || rt.calibrationArmOfRun(ctx, rec) != calibration.ArmDigest {
 		return false
 	}
-	return desk != agentprofile.Engineering || rt.calibrationDeliveryOfRun(ctx, rec) == calibrationDeliveryPush
+	return !deskmanifest.IsAssignmentPerformer(desk) || rt.calibrationDeliveryOfRun(ctx, rec) == calibrationDeliveryPush
 }
 
 // calibrationDigestForRun returns the digest a run reads, or nil: the run's

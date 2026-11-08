@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -62,7 +63,7 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 	profile := agentProfileForRun(rec)
 	requesterAgentID := metadataStringValue(rec.Metadata, "requested_by_agent_id")
 	textureDeliveryAgentID := ""
-	if profile == agentprofile.Research && isTextureAgentID(requesterAgentID) {
+	if deskmanifest.SpawnsResearch(profile) && isTextureAgentID(requesterAgentID) {
 		textureDeliveryAgentID = requesterAgentID
 	}
 	b.WriteString(strings.TrimSpace(runtimeprompts.RunContextOverlay(runtimeprompts.RunContextOptions{
@@ -87,7 +88,7 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 			b.WriteString(" An owner revision with new direction (request intent apply_owner_revision) is a new round to Cast once this operation settles, not a re-run, so do not Wait it away.")
 		}
 	}
-	if profile == agentprofile.Engineering {
+	if deskmanifest.IsAssignmentPerformer(profile) {
 		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
 			kind := metadataStringValue(rec.Metadata, "assignment_kind")
 			b.WriteString("\n\nExact authenticated assignment: assignment_id=")

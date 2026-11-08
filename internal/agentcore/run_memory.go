@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
@@ -1004,7 +1005,7 @@ func checkpointStringListField(raw map[string]any, key string) []string {
 // research module set exports choir.RunMemoryEntry; the typed
 // get_run_memory_entry tool is on no live registry.
 func runMemoryRetrievalVerb(rec *types.RunRecord) string {
-	if rec != nil && agentProfileForRun(rec) == agentprofile.Research {
+	if rec != nil && deskmanifest.SpawnsResearch(agentProfileForRun(rec)) {
 		return "choir.RunMemoryEntry"
 	}
 	return ""

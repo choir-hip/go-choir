@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -583,7 +583,7 @@ func (rt *Runtime) armSelfDevelopmentRetry(operationID string) {
 		return
 	}
 	if err := rt.scheduleActor(context.Background(), rt.selfdevRouteOwnerID, rt.selfdevComputerID,
-		"management:"+rt.selfdevRouteOwnerID, selfdevMaterializationRetryKind,
+		deskmanifest.AdmitterInbox(rt.selfdevRouteOwnerID), selfdevMaterializationRetryKind,
 		operationID, "", "", time.Now().UTC().Add(60*time.Second)); err != nil {
 		log.Printf("selfdev materializer: retry wake for %s: %v", operationID, err)
 	}
@@ -885,7 +885,7 @@ func (rt *Runtime) startSelfDevelopmentMaterialization(ctx context.Context, oper
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 			EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, RequestCommitment: computerevent.ZeroHead,
-			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, ActorProfile: agentprofile.Management,
+			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, ActorProfile: deskmanifest.AdmitterName(),
 			AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
 		}
@@ -1177,7 +1177,7 @@ func (rt *Runtime) appendMaterializationAppliedEvent(ctx context.Context, operat
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 		EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-		ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
+		ActorProfile: deskmanifest.AdmitterName(), AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
 		ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
 		ResultingEffectiveCommitment: head.DesiredStateCommitment,
 		ReducerVersion:               computerevent.ReducerVersionV1,
@@ -1307,7 +1307,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			EventKind: computerevent.EventCheckpointPublished, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: checkpointEventIdempotency, RequestCommitment: computerevent.ZeroHead,
 			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "platform-control:checkpoint",
+			ActorProfile: deskmanifest.AdmitterName(), AuthorityRef: "platform-control:checkpoint",
 			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
 			ProposedEffectRef: checkpoint.Checkpoint.Digest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
 		}
@@ -1441,7 +1441,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			EventKind: computerevent.EventRouteProjectionUpdated, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: routeEventIdempotency, RequestCommitment: computerevent.ZeroHead,
 			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "vmctl:route-cas",
+			ActorProfile: deskmanifest.AdmitterName(), AuthorityRef: "vmctl:route-cas",
 			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
 			ProposedEffectRef: routeCertificateDigest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
 		}
@@ -1580,7 +1580,7 @@ func (rt *Runtime) appendMaterializationFailedEvent(ctx context.Context, operati
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 			EventKind: computerevent.EventMaterializationFailed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
+			ActorProfile: deskmanifest.AdmitterName(), AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
 			ReducerVersion: computerevent.ReducerVersionV1,
 		}

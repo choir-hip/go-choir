@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -249,7 +249,7 @@ func sourceServiceItemRefToSourceEntity(itemID, contextText string) textureSourc
 			ResearchState: "represented",
 		},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           agentprofile.Research,
+			CreatedBy:           deskmanifest.ResearcherName(),
 			RightsScope:         "source_service_projection",
 			UntrustedSourceText: true,
 		},
@@ -287,7 +287,7 @@ func contentItemRefToSourceEntity(item types.ContentItem) textureSourceEntity {
 			ResearchState: "represented",
 		},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           agentprofile.Research,
+			CreatedBy:           deskmanifest.ResearcherName(),
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		},

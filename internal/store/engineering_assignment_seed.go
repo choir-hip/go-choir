@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -56,7 +57,7 @@ func SeedEngineeringAssignmentAuthorityWithCastBody(s *Store, ownerID, computerI
 	f := EngineeringAssignmentSeed{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: "trajectory-" + key,
 		DocID: "document-" + key, TextureInbox: "texture:document-" + key,
-		ParentAgentID: "management:" + ownerID, ParentRunID: "run-management-assignment",
+		ParentAgentID: deskmanifest.AdmitterInbox(ownerID), ParentRunID: "run-management-assignment",
 		ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-"+key)),
 		TextureCastID:    "texture-cell:Cast:" + key,
 	}
@@ -72,12 +73,12 @@ func SeedEngineeringAssignmentAuthorityWithCastBody(s *Store, ownerID, computerI
 	revision := types.Revision{RevisionID: "revision-assignment", DocID: document.DocID, OwnerID: f.OwnerID, ComputerID: f.ComputerID, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "assignment authority", CreatedAt: now}
 	parentAgent := types.AgentRecord{
 		AgentID: f.ParentAgentID, OwnerID: f.OwnerID, ComputerID: f.ComputerID,
-		Profile: "management", Role: "management", ChannelID: f.ParentAgentID, ActiveRunID: f.ParentRunID,
+		Profile: deskmanifest.AdmitterName(), Role: deskmanifest.AdmitterName(), ChannelID: f.ParentAgentID, ActiveRunID: f.ParentRunID,
 		LifecycleVersion: 0, CreatedAt: now, UpdatedAt: now,
 	}
 	parentRun := types.RunRecord{
 		RunID: f.ParentRunID, AgentID: f.ParentAgentID, ChannelID: f.ParentAgentID,
-		AgentProfile: "management", AgentRole: "management", OwnerID: f.OwnerID, ComputerID: f.ComputerID,
+		AgentProfile: deskmanifest.AdmitterName(), AgentRole: deskmanifest.AdmitterName(), OwnerID: f.OwnerID, ComputerID: f.ComputerID,
 		State: types.RunRunning, Prompt: "coordinate", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{"request_source": "inbox_record"},
 	}
@@ -133,7 +134,7 @@ func SeedEngineeringAssignmentAuthorityWithCastBody(s *Store, ownerID, computerI
 	for i := 0; i < count; i++ {
 		id := fmt.Sprintf("%s%02d", prefix, i)
 		f.AssignmentIDs = append(f.AssignmentIDs, id)
-		f.AssignedAgentIDs = append(f.AssignedAgentIDs, "engineering:"+id)
+		f.AssignedAgentIDs = append(f.AssignedAgentIDs, deskmanifest.PerformerInbox(id))
 		f.AssignedRunIDs = append(f.AssignedRunIDs, "run:"+id)
 	}
 	return f, nil
@@ -155,7 +156,7 @@ func TextureCastRecord(recordID, textureInbox, managementInbox, objective string
 // engineering conversation (C1e D4): addressed to engineering:<assignment>,
 // naming the Texture's Cast it serves as its parent.
 func EngineeringCastRecord(recordID, managementInbox, assignmentID, parentRecordID, objective string) types.CommitmentRecord {
-	inbox := "engineering:" + assignmentID
+	inbox := deskmanifest.PerformerInbox(assignmentID)
 	return types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID, Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: objective},
@@ -206,10 +207,10 @@ func SeedEngineeringRun(open types.OpenEngineeringAssignmentRequest, runID strin
 	return types.RunRecord{
 		RunID: runID, AgentID: b.AssignedAgentID, ChannelID: b.AssignedAgentID,
 		RequestedByRunID: b.ParentRunID, TrajectoryID: b.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: b.OwnerID, ComputerID: b.ComputerID,
+		AgentProfile: deskmanifest.PerformerName(), AgentRole: deskmanifest.PerformerName(), OwnerID: b.OwnerID, ComputerID: b.ComputerID,
 		State: types.RunPending, Prompt: "bounded delegated assignment",
 		Metadata: map[string]any{
-			"requested_by_agent_id": b.ParentAgentID, "requested_by_profile": "management",
+			"requested_by_agent_id": b.ParentAgentID, "requested_by_profile": deskmanifest.AdmitterName(),
 			"assignment_id": open.AssignmentID, "assignment_attempt": b.Attempt, "assignment_kind": string(b.Kind),
 			"assigned_conversation_id": b.AssignedConversationID, "parent_conversation_id": b.ParentConversationID, "parent_round": b.ParentRound,
 			"parent_decision_id": b.ParentDecisionID, "parent_control_id": b.ParentControlID,

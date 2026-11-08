@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/entitytext"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -124,7 +124,7 @@ func (m *analysisMemo) entry(key string) *analysisEntry {
 // the desk is a story's research desk on a computer with
 // research.related_story on.
 func (rt *Runtime) storyAnalysisFor(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext) *yaegikernel.StoryAnalysis {
-	if rt == nil || rt.store == nil || deskRole != agentprofile.Research {
+	if rt == nil || rt.store == nil || !deskmanifest.SpawnsResearch(deskRole) {
 		return nil
 	}
 	owner, computer, runID := strings.TrimSpace(exec.OwnerID), strings.TrimSpace(exec.ComputerID), strings.TrimSpace(exec.RunID)

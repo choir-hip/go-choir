@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -196,7 +196,7 @@ func (rt *Runtime) ensureRoundPredictionsFor(ctx context.Context, ownerID, compu
 	if rt == nil || rt.store == nil || strings.TrimSpace(assignmentID) == "" {
 		return
 	}
-	assignment, err := rt.store.EngineeringAssignmentForInbox(ctx, ownerID, computerID, agentprofile.Engineering+":"+strings.TrimSpace(assignmentID))
+	assignment, err := rt.store.EngineeringAssignmentForInbox(ctx, ownerID, computerID, deskmanifest.PerformerInbox(strings.TrimSpace(assignmentID)))
 	if err != nil {
 		log.Printf("runtime: assignment %s round predictions: %v", assignmentID, err)
 		return

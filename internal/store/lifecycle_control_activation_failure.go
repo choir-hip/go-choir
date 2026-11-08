@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -143,7 +144,7 @@ func (s *Store) failLifecycleControlActivationOnce(ctx context.Context, req type
 	}
 	failAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 	failAgentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID || failAgentProfile != agentprofile.Research || failAgentRole != agentprofile.Research || agent.LifecycleVersion <= 0 || strings.TrimSpace(agent.ActiveRunID) != req.RunID {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID || !deskmanifest.SpawnsResearch(failAgentProfile) || !deskmanifest.SpawnsResearch(failAgentRole) || agent.LifecycleVersion <= 0 || strings.TrimSpace(agent.ActiveRunID) != req.RunID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	runObj, run, err := s.textureTurnRunObject(ctx, ownerID, computerID, req.RunID)
@@ -152,7 +153,7 @@ func (s *Store) failLifecycleControlActivationOnce(ctx context.Context, req type
 	}
 	failRunProfile, _ := agentprofile.Canonical(run.AgentProfile)
 	failRunRole, _ := agentprofile.Canonical(run.AgentRole)
-	if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || failRunProfile != agentprofile.Research || failRunRole != agentprofile.Research || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") != req.LogicalActivationKey || metadataStringValueStore(run.Metadata, "lifecycle_failed_attempt_key") != req.FailedAttemptKey || !lifecycleControlBindingsEmpty(run.Metadata) {
+	if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || !deskmanifest.SpawnsResearch(failRunProfile) || !deskmanifest.SpawnsResearch(failRunRole) || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") != req.LogicalActivationKey || metadataStringValueStore(run.Metadata, "lifecycle_failed_attempt_key") != req.FailedAttemptKey || !lifecycleControlBindingsEmpty(run.Metadata) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(run.Prompt) != req.ActivationRefresh.Prompt || metadataStringValueStore(run.Metadata, "lifecycle_activation_build_commit") != req.ActivationRefresh.BuildCommit {

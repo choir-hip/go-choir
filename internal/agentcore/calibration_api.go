@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -74,7 +75,7 @@ func (h *APIHandler) HandleCalibration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	digests := map[string]types.CalibrationDigest{}
-	for _, desk := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research, agentprofile.Engineering} {
+	for _, desk := range []string{deskmanifest.AdmitterName(), agentprofile.Texture, deskmanifest.ResearcherName(), deskmanifest.PerformerName()} {
 		d := calibration.Compute(desk, snap.Observations, snap.digestOptions(desk, ""))
 		d.ComputedAt = snap.At.Format(time.RFC3339)
 		digests[desk] = d
@@ -176,7 +177,7 @@ func (h *APIHandler) HandleCalibrationSettlements(w http.ResponseWriter, r *http
 			score.Answers = s.Answers
 		case types.CalibrationClaimCompleted:
 			if rec.Report == nil || !rec.Final || strings.TrimSpace(rec.Report.StopReason) != string(types.WorkItemCompleted) ||
-				calibrationDeskOfThread(calibrationThreadOfRecord(*rec)) != agentprofile.Research {
+				calibrationDeskOfThread(calibrationThreadOfRecord(*rec)) != deskmanifest.ResearcherName() {
 				refuse("a completed settlement targets a final completed research Report")
 				continue
 			}

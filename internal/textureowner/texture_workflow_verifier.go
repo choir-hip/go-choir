@@ -9,6 +9,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -174,7 +175,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if opts.RequireResearchUpdates {
 		researchUpdateCount := 0
 		for _, update := range updates {
-			if update.Role != agentprofile.Research {
+			if !deskmanifest.SpawnsResearch(update.Role) {
 				continue
 			}
 			researchUpdateCount++
@@ -193,7 +194,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if opts.RequireWorkerUpdates {
 		workerUpdateCount := 0
 		for _, update := range updates {
-			if update.Role == agentprofile.Research {
+			if deskmanifest.SpawnsResearch(update.Role) {
 				continue
 			}
 			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
@@ -248,7 +249,7 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		}
 		if agentProfileForRun(&parent) == agentprofile.Texture {
 			switch agentProfileForRun(&run) {
-			case agentprofile.Research:
+			case deskmanifest.ResearcherName():
 			default:
 				return fmt.Errorf("texture run %s directly delegated to disallowed %s run %s", parent.RunID, agentProfileForRun(&run), run.RunID)
 			}
@@ -260,7 +261,7 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 func verifyPersistentManagementPath(ownerID string, runs []types.RunRecord) error {
 	wantAgentID := persistentManagementAgentID(ownerID)
 	for _, run := range runs {
-		if agentProfileForRun(&run) != agentprofile.Management {
+		if !deskmanifest.AdmitsAssignments(agentProfileForRun(&run)) {
 			continue
 		}
 		if run.AgentID != wantAgentID {
@@ -283,13 +284,13 @@ func verifyEngineeringParents(runs []types.RunRecord) error {
 		runByID[run.RunID] = run
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) != agentprofile.Engineering {
+		if !deskmanifest.IsAssignmentPerformer(agentProfileForRun(&run)) {
 			continue
 		}
 		engineeringCount++
 		parent, ok := runByID[run.RequestedByRunID]
 		parentProfile := agentProfileForRun(&parent)
-		if !ok || parentProfile != agentprofile.Management {
+		if !ok || !deskmanifest.AdmitsAssignments(parentProfile) {
 			return fmt.Errorf("co-super run %s parent profile = %q, want super", run.RunID, parentProfile)
 		}
 	}
@@ -319,11 +320,11 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 			if !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 				return fmt.Errorf("child Texture run %s is not a Texture agent revision", run.RunID)
 			}
-		case parentProfile == agentprofile.Texture && childProfile == agentprofile.Research:
+		case parentProfile == agentprofile.Texture && deskmanifest.SpawnsResearch(childProfile):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("researcher run %s lacks parent texture spawn_agent result", run.RunID)
 			}
-		case parentProfile == agentprofile.Management && (childProfile == agentprofile.Engineering || childProfile == agentprofile.Research):
+		case deskmanifest.AdmitsAssignments(parentProfile) && (deskmanifest.IsAssignmentPerformer(childProfile) || deskmanifest.SpawnsResearch(childProfile)):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent super spawn_agent result", childProfile, run.RunID)
 			}

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -153,7 +153,7 @@ func (m *Manager) runVerify(ctx context.Context, input verifyModelCapabilityArgs
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	role := NormalizeRole(firstNonEmpty(input.Role, execution.Role))
 	if role == "" {
-		role = agentprofile.Management
+		role = deskmanifest.AdmitterName()
 	}
 	normalized, err := normalizeVerifyImageInput(input)
 	if err != nil {

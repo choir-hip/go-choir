@@ -1,10 +1,12 @@
 package agentcore
 
 import (
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const maxSkillPromptExtractBytes = 1200
@@ -47,7 +49,7 @@ func (rt *Runtime) skillContextForProfile(profile string) string {
 func profileReceivesSkillContext(profile string) bool {
 	canonicalProfile, _ := agentprofile.Canonical(profile)
 	switch canonicalProfile {
-	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Management, agentprofile.Engineering:
+	case agentprofile.Conductor, agentprofile.Texture, deskmanifest.AdmitterName(), deskmanifest.PerformerName():
 		return true
 	default:
 		return false

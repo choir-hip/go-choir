@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -89,7 +89,7 @@ func (rt *Runtime) calibrationDeliveryFor(ctx context.Context, ownerID, computer
 // calibrationDeliveryOfRun is an engineering run's delivery; "" for any
 // other desk.
 func (rt *Runtime) calibrationDeliveryOfRun(ctx context.Context, rec *types.RunRecord) string {
-	if calibrationDeskOfRun(rec) != agentprofile.Engineering {
+	if !deskmanifest.IsAssignmentPerformer(calibrationDeskOfRun(rec)) {
 		return ""
 	}
 	return rt.calibrationDeliveryFor(ctx, rec.OwnerID, rec.ComputerID)
@@ -239,7 +239,7 @@ func (rt *Runtime) calibrationKindRecord(ctx context.Context, ownerID, computerI
 		log.Printf("calibration: kind record on %s: %v", computerID, err)
 		return "(the record could not be read)"
 	}
-	return calibration.KindRecord(snap.Observations, agentprofile.Engineering, statedBy, kinds, calibration.DefaultOptions.MinBin)
+	return calibration.KindRecord(snap.Observations, deskmanifest.PerformerName(), statedBy, kinds, calibration.DefaultOptions.MinBin)
 }
 
 // --- the restatement ---
@@ -260,9 +260,9 @@ func (r *rlmCallReduction) commitRestateIntent(ctx context.Context, in yaegikern
 	}
 	var err error
 	switch strings.TrimSpace(r.rec.AgentProfile) {
-	case agentprofile.Management:
+	case deskmanifest.AdmitterName():
 		err = r.commitCastRestatement(ctx, rt, in)
-	case agentprofile.Engineering:
+	case deskmanifest.PerformerName():
 		err = r.commitEngineerRestatement(ctx, rt, in)
 	default:
 		return 0, fmt.Errorf("reduce: restate %s: only management and engineering restate", in.LocalID)

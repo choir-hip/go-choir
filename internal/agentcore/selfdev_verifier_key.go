@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -336,7 +336,7 @@ func (rt *Runtime) recordVerifierRepin(ctx context.Context, computerID string, r
 	event := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 		EventKind: computerevent.EventKeyRotated, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: idempotency, ActorProfile: agentprofile.Management,
+		IdempotencyKey: idempotency, ActorProfile: deskmanifest.AdmitterName(),
 		AuthorityRef: "platform-control:verifier-repin", PrivacyClass: "owner", ReducerVersion: computerevent.ReducerVersionV1,
 	}
 	appended, _, err := rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.verifier-key-pinned+json", "owner")

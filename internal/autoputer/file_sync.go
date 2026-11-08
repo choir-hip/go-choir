@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 )
@@ -750,7 +750,7 @@ func (s *fileSync) appendRootCommitted(ctx context.Context, root string, manifes
 		EventKind:          computerevent.EventFileRootCommitted,
 		OccurredAt:         time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey:     "file-root:" + root,
-		ActorProfile:       agentprofile.Management,
+		ActorProfile:       deskmanifest.AdmitterName(),
 		AuthorityRef:       "authority:guest-file-sync",
 		PrivacyClass:       "owner",
 		ReducerVersion:     computerevent.ReducerVersionV1,

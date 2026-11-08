@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // Management tasks (management delegation S2a,
@@ -129,7 +131,7 @@ func (t ManagementTask) Validate() error {
 		return fmt.Errorf("management task needs a task, owner and computer id")
 	case t.Kind != ManagementTaskIntake:
 		return fmt.Errorf("management task %s: kind %q is not open (S2a opens intake tasks)", t.TaskID, t.Kind)
-	case t.ParentInbox != "management:"+t.OwnerID:
+	case t.ParentInbox != deskmanifest.AdmitterInbox(t.OwnerID):
 		return fmt.Errorf("management task %s: parent inbox %q is not management:%s", t.TaskID, t.ParentInbox, t.OwnerID)
 	case t.TaskInbox != ManagementTaskInbox(t.TaskID):
 		return fmt.Errorf("management task %s: inbox %q is not %s", t.TaskID, t.TaskInbox, ManagementTaskInbox(t.TaskID))

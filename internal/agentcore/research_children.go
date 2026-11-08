@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"log"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -198,7 +199,7 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	start := time.Now()
-	fan := researchFanOut{id: "research:" + firstNonEmpty(parent.RunID, "norun") + ":" + uuid.NewString()[:8]}
+	fan := researchFanOut{id: deskmanifest.ResearchInbox(firstNonEmpty(parent.RunID, "norun")) + ":" + uuid.NewString()[:8]}
 	results := make([]yaegikernel.ResearchChildResult, len(req.Children))
 	sem := make(chan struct{}, researchChildConcurrency)
 	var wg sync.WaitGroup
@@ -307,7 +308,7 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	childExec.RunRecord = nil
 	childExec.ChannelID = ""
 	childExec.ToolCallID = ""
-	childExec.Profile = agentprofile.Research
+	childExec.Profile = deskmanifest.ResearcherName()
 	childExec.Role = role
 	share := researchChildDeadline(ctx)
 	ctx, cancel := context.WithDeadline(ctx, share)
@@ -351,7 +352,7 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.subRLMCallSpacer()}
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{runContextMessage(time.Now(), researchChildTime(share)), userMsg}, systemPrompt,
-		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),
+		provideriface.MaxInteractiveOutputTokensForSelection(selection, deskmanifest.ResearcherName()),
 		childEmit, nil, toolregistry.WithToolLoopLLMConfig(selection),
 		toolregistry.WithToolLoopFallbackLLMConfigs(fallbacks),
 		// OpenCode refuses a call without a conversation id; each child is
@@ -426,7 +427,7 @@ func (rt *Runtime) researchChildSystemPrompt(ownerID, role string) (string, erro
 	if !ok {
 		return "", fmt.Errorf("choir.Research: no child role %q", role)
 	}
-	rolePrompt, err := rt.systemPromptForRun(&types.RunRecord{OwnerID: ownerID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research})
+	rolePrompt, err := rt.systemPromptForRun(&types.RunRecord{OwnerID: ownerID, AgentProfile: deskmanifest.ResearcherName(), AgentRole: deskmanifest.ResearcherName()})
 	if err != nil {
 		return "", err
 	}
@@ -487,7 +488,7 @@ func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchL
 		}
 		ids = append(ids, info.Provider+"/"+info.ID)
 	}
-	return inherited, lineage.fallbacks, fmt.Errorf("research: model %q is not in the catalog; use a role name such as %q, %q, or one of: %s", model, agentprofile.Research, modelcatalog.PoolSpecPrefix+modelcatalog.DefaultPool, strings.Join(ids, ", "))
+	return inherited, lineage.fallbacks, fmt.Errorf("research: model %q is not in the catalog; use a role name such as %q, %q, or one of: %s", model, deskmanifest.ResearcherName(), modelcatalog.PoolSpecPrefix+modelcatalog.DefaultPool, strings.Join(ids, ", "))
 }
 
 // researchChildReadContext is the reading identity of a research child: the

@@ -19,7 +19,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/actgate"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -1198,7 +1197,7 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	pack.Calibration = rt.calibrationDigestForRun(ctx, execCtx.RunRecord)
 	// Management sees each engineering assignment's typed wait and its
 	// minutes waited by kind (engineering_waits.go).
-	if agentID == agentprofile.Management || strings.HasPrefix(agentID, agentprofile.Management+":") {
+	if deskmanifest.AdmitsAssignments(agentID) || deskmanifest.IsAdmitterInbox(agentID) {
 		pack.Waits = rt.assignmentWaitViews(ownerID, computerID)
 		// And each frozen candidate's wait for its decision, from durable
 		// state (retained_candidate.go).
@@ -1206,10 +1205,10 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 		// And each Verify it owes (verify_owed.go), and each shot verdict.
 		pack.Waits = append(pack.Waits, rt.verifyOwedWaitViews(ctx, ownerID, computerID, agentID)...)
 		pack.Waits = append(pack.Waits, rt.shotsOwedWaitViews(ctx, ownerID, computerID)...)
-	} else if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
+	} else if deskmanifest.IsAssignmentInbox(agentID) {
 		// An engineer sees its own assignment's wait, the deferred deploy
 		// refresh included (engineering_refresh_wait.go).
-		pack.Waits = rt.engineerWaitViews(ownerID, computerID, strings.TrimPrefix(agentID, agentprofile.Engineering+":"))
+		pack.Waits = rt.engineerWaitViews(ownerID, computerID, strings.TrimPrefix(agentID, deskmanifest.PerformerName()+":"))
 	}
 	// Every desk sees the computer's runs in an every-model quota incident
 	// (provider_quota_incident.go).

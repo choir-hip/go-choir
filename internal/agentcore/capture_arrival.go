@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -65,7 +65,7 @@ func captureArrivalRequest(ownerID, computerID, sourceID string, items []types.C
 // poll's arrival, or an event's record (event_wakes.go).
 func capturesRecordRequest(ownerID, computerID, sourceID, recordID string, held bool, event *types.CaptureEvent, items []types.CaptureArrival) (types.CommitInboxRecordsRequest, error) {
 	ownerID, computerID, sourceID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(sourceID)
-	management := agentprofile.Management + ":" + ownerID
+	management := deskmanifest.AdmitterInbox(ownerID)
 	rec := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID,
 		Kind: types.CommitmentKindReport, Discrepancy: types.DiscrepancyUnresolved,

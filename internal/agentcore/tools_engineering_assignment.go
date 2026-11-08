@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -24,7 +24,7 @@ import (
 // non-lifecycle persistent Management run (SMG). Kept as the shared gate for
 // the verb carriers; the typed-tool registration is deleted.
 func requirePersistentManagementRunRecord(rec *types.RunRecord) error {
-	if rec == nil || rec.AgentID != persistentManagementAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Management || rec.AgentRole != agentprofile.Management || rec.TrajectoryID != "" {
+	if rec == nil || rec.AgentID != persistentManagementAgentID(rec.OwnerID) || !deskmanifest.AdmitsAssignments(rec.AgentProfile) || !deskmanifest.AdmitsAssignments(rec.AgentRole) || rec.TrajectoryID != "" {
 		return fmt.Errorf("assigned Engineering verbs require the exact non-lifecycle persistent Management")
 	}
 	return nil
@@ -266,7 +266,7 @@ func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent t
 		ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
 		ConsumedDeliveryUpdateIDs: consumedForReport,
 		ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
-		ChannelID: control.ChannelID, Role: agentprofile.Management, SourceRunID: parent.RunID,
+		ChannelID: control.ChannelID, Role: deskmanifest.AdmitterName(), SourceRunID: parent.RunID,
 		Packet: packet, Content: content, WorkDisposition: workDisposition,
 		WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,
 	}

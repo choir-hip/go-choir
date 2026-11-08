@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -312,7 +312,7 @@ func candidateDecisionWait(rec retainedCandidate, now time.Time) *types.WaitStat
 		Kind: types.WaitKindCandidateDecision, Class: types.WaitClassPolicy,
 		Subject:  "operation " + rec.OperationID,
 		Resource: "management's Verify of frozen candidate " + rec.OperationID,
-		Holders:  []types.WaitHolder{{Who: "management", What: "Verify"}},
+		Holders:  []types.WaitHolder{{Who: deskmanifest.AdmitterName(), What: "Verify"}},
 		Since:    since, Until: since.Add(candidateDecisionBudget),
 		Detail: fmt.Sprintf("assignment %s ended by its build budget after its Freeze; the candidate (bundle %s) is retained frozen for Verify",
 			rec.AssignmentID, rec.BundleDigest),
@@ -330,7 +330,7 @@ func (rt *Runtime) mintCandidateDecisionRelay(ctx context.Context, rec retainedC
 	if rec.TextureInbox == "" {
 		return
 	}
-	relay, ok := types.NewEngineeringWaitRelay(agentprofile.Engineering+":"+rec.AssignmentID, rec.TextureInbox, rec.ComputerID, rec.Attempt,
+	relay, ok := types.NewEngineeringWaitRelay(deskmanifest.PerformerInbox(rec.AssignmentID), rec.TextureInbox, rec.ComputerID, rec.Attempt,
 		candidateDecisionEpisode, phase, body, now, map[string]string{"wait_kind": string(types.WaitKindCandidateDecision), "operation_id": rec.OperationID})
 	if !ok {
 		return

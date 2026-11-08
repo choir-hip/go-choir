@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -834,10 +836,10 @@ func (e *traceExporter) exportInboxRecords(bundle *traceBundle, docIDs map[strin
 	}
 	var inboxIDs []string
 	for _, docID := range sortedKeys(docIDs) {
-		inboxIDs = append(inboxIDs, "texture:"+docID, "research:"+docID)
+		inboxIDs = append(inboxIDs, "texture:"+docID, deskmanifest.ResearchInbox(docID))
 	}
 	for _, ownerID := range sortedKeys(owners) {
-		inboxIDs = append(inboxIDs, "management:"+ownerID)
+		inboxIDs = append(inboxIDs, deskmanifest.AdmitterInbox(ownerID))
 	}
 	for _, inbox := range inboxIDs {
 		after := int64(0)

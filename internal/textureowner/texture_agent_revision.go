@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -351,7 +352,7 @@ func storyTextureDeskLive(snapshot types.LifecycleSnapshot, docID string) bool {
 	textureAgentID := agentprofile.Texture + ":" + docID
 	deskLive := false
 	for _, agent := range snapshot.Agents {
-		if agent.AgentID == agentprofile.Engineering+":"+docID && agent.LifecycleVersion > 0 {
+		if agent.AgentID == deskmanifest.PerformerInbox(docID) && agent.LifecycleVersion > 0 {
 			return false
 		}
 		if agent.AgentID == textureAgentID && agent.LifecycleVersion > 0 {
@@ -375,7 +376,7 @@ func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bo
 	textureAgentID := agentprofile.Texture + ":" + docID
 	agentLive := false
 	for _, agent := range snapshot.Agents {
-		if agent.AgentID == agentprofile.Engineering+":"+docID && agent.LifecycleVersion > 0 {
+		if agent.AgentID == deskmanifest.PerformerInbox(docID) && agent.LifecycleVersion > 0 {
 			return false
 		}
 		if agent.AgentID == textureAgentID && agent.LifecycleVersion > 0 {

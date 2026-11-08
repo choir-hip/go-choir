@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 )
 
@@ -83,7 +83,7 @@ func (rt *Runtime) recordSourceProjectionSaved(ctx context.Context, saved []sour
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: computerevent.EventRecoveryRecorded, OccurredAt: now,
 			IdempotencyKey: key,
-			ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:source-projection",
+			ActorProfile:   deskmanifest.AdmitterName(), AuthorityRef: "guest-core:source-projection",
 			PrivacyClass:      "owner",
 			ProposedEffectRef: s.Commit,
 			ReducerVersion:    computerevent.ReducerVersionV1,

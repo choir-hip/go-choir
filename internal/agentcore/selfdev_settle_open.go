@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
@@ -415,7 +415,7 @@ func (rt *Runtime) appendSettlementEvent(ctx context.Context, operation selfdev.
 		EventKind: computerevent.EventRecoveryRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
 		ParentEventID: operation.OperationID,
-		ActorProfile:  agentprofile.Management, AuthorityRef: spec.Authority, PrivacyClass: "owner",
+		ActorProfile:  deskmanifest.AdmitterName(), AuthorityRef: spec.Authority, PrivacyClass: "owner",
 		ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
 		ReducerVersion: computerevent.ReducerVersionV1,
 	}

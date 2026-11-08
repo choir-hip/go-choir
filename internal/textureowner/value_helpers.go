@@ -3,7 +3,7 @@ package textureowner
 import (
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 func cloneMetadata(metadata map[string]any) map[string]any {
@@ -53,7 +53,7 @@ func minInt(left, right int) int {
 func persistentManagementAgentID(ownerID string) string {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
-		return agentprofile.Management
+		return deskmanifest.AdmitterName()
 	}
-	return agentprofile.Management + ":" + ownerID
+	return deskmanifest.AdmitterInbox(ownerID)
 }

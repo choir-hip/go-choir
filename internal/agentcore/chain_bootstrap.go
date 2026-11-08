@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -162,7 +162,7 @@ func mintGenesisImported(ctx context.Context, st *store.Store, appender *compute
 		EventKind:                    computerevent.EventGenesisImported,
 		OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey:               idempotencyKey,
-		ActorProfile:                 agentprofile.Management,
+		ActorProfile:                 deskmanifest.AdmitterName(),
 		AuthorityRef:                 authorityRef,
 		PrivacyClass:                 "owner",
 		PayloadCommitment:            commitment,

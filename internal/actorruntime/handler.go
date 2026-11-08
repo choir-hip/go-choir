@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
@@ -465,8 +466,8 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 		return nil, fmt.Errorf("%w: actorruntime: load owner revision: %v", actor.ErrDeferUnprocessed, err)
 	}
 	profile := agentprofile.Texture
-	if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
-		profile = agentprofile.Engineering
+	if deskmanifest.IsAssignmentInbox(agentID) {
+		profile = deskmanifest.PerformerName()
 	}
 	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, profile, content.RequestID, content.ReducerSeq)
 	if err != nil || occurrence.TargetAgentID != agentID || occurrence.TrajectoryID != u.TrajectoryID {
@@ -552,7 +553,7 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 				}
 			}
 		}
-	case strings.HasPrefix(agentID, agentprofile.Research+":"), strings.HasPrefix(agentID, agentprofile.Management+":"),
+	case deskmanifest.IsResearchInbox(agentID), deskmanifest.IsAdmitterInbox(agentID),
 		// A management task's inbox wake is its durable start (S2a, R2-6).
 		strings.HasPrefix(agentID, types.ManagementTaskDesk+":"), strings.HasPrefix(agentID, agentprofile.ManagementTask+":"):
 		if _, err := h.rt.WakeRecordsInbox(ctx, ownerID, computerID, agentID); err != nil {
@@ -784,7 +785,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		return h.memoryFromRunState(rec)
 	}
-	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == agentprofile.Management+":"+ownerID {
+	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == deskmanifest.AdmitterInbox(ownerID) {
 		log.Printf("actorruntime: persistent Management live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
 		rec, terminal, liveErr := h.rt.ResolvePersistentManagementLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if liveErr != nil {
@@ -815,7 +816,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		log.Printf("actorruntime: persistent Management live occurrence bound run=%s", rec.RunID)
 		return nil, nil
 	}
-	if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
+	if deskmanifest.IsAssignmentInbox(agentID) {
 		// The engineering desk of an engineering-bound document (path B) is
 		// deleted (C1e step 3): an assignment opens only from management's
 		// Cast. A document-revision occurrence still addressed to such a desk
@@ -982,8 +983,8 @@ resumeGeneric:
 		wakeProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 		wakeRole, _ := agentprofile.Canonical(rec.AgentRole)
 		lifecycleControlResearch :=
-			(wakeProfile == agentprofile.Research ||
-				wakeRole == agentprofile.Research) &&
+			(deskmanifest.SpawnsResearch(wakeProfile) ||
+				deskmanifest.SpawnsResearch(wakeRole)) &&
 				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control"
 		// A persistent Management control turn parked on its own delegated
 		// cast resumes as the same control turn: its lifecycle reports are
@@ -991,8 +992,8 @@ resumeGeneric:
 		// source to update_coagent would hide the very result that woke it
 		// (engineering-result-strands-on-the-completed-casting-turn-2026-10-10).
 		keepControlSource := lifecycleControlResearch ||
-			(wakeProfile == agentprofile.Management && wakeRole == agentprofile.Management &&
-				rec.AgentID == agentprofile.Management+":"+rec.OwnerID &&
+			(deskmanifest.AdmitsAssignments(wakeProfile) && deskmanifest.AdmitsAssignments(wakeRole) &&
+				rec.AgentID == deskmanifest.AdmitterInbox(rec.OwnerID) &&
 				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control")
 		if lifecycleControlResearch {
 			if strings.TrimSpace(u.TrajectoryID) == "" || strings.TrimSpace(u.TrajectoryID) != strings.TrimSpace(rec.TrajectoryID) {
