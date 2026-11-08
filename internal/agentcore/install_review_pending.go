@@ -157,7 +157,7 @@ func (rt *Runtime) openPendingInstall(ctx context.Context, ownerID, computerID s
 		OwnerID: ownerID, ComputerID: computerID, SubjectDigest: facts.SubjectDigest, Attempt: attempt,
 		ReleaseID: facts.ReleaseID, Package: facts.Package, Action: packageActionInstall,
 		Record: request.Record, TreePatch: request.TreePatch, Change: encodePendingChange(request.change),
-		RequestedAt: time.Now().UTC(), OwedRecordID: owed.RecordID, State: store.PackageInstallPendingOpen,
+		RequestedAt: time.Now().UTC(), OwedRecordID: owed.RecordID, Inbox: owed.Inbox, State: store.PackageInstallPendingOpen,
 	}
 	if current != nil {
 		row.BaselineRelease, row.BaselineAt = current.ReleaseID, current.RequestedAt

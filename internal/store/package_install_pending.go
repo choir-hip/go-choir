@@ -58,10 +58,13 @@ type PackageInstallPending struct {
 	BaselineRelease string    `json:"baseline_release,omitempty"`
 	BaselineAt      time.Time `json:"baseline_at,omitempty"`
 	OwedRecordID    string    `json:"owed_record_id"`
-	State           string    `json:"state"`
-	Reason          string    `json:"reason,omitempty"`
-	LastError       string    `json:"last_error,omitempty"`
-	ClosedAt        time.Time `json:"closed_at,omitempty"`
+	// Inbox is the management inbox the review was asked of; the re-run wake
+	// goes to it.
+	Inbox     string    `json:"inbox"`
+	State     string    `json:"state"`
+	Reason    string    `json:"reason,omitempty"`
+	LastError string    `json:"last_error,omitempty"`
+	ClosedAt  time.Time `json:"closed_at,omitempty"`
 }
 
 // Open reports whether the row still waits on a verdict.
@@ -227,7 +230,7 @@ func (s *Store) casPending(ctx context.Context, old objectgraph.Object, p Packag
 			return false, err
 		}
 		sourceID := "install-review-rerun:" + pendingKey(p.SubjectDigest, p.Attempt)
-		_, wake, err := actorWakeOutbox(next, sourceID, "management:"+p.OwnerID, "", "", types.InstallReviewRerunWakeKind, string(content), time.Time{}, "wake:"+next.CanonicalID+":rerun")
+		_, wake, err := actorWakeOutbox(next, sourceID, p.Inbox, "", "", types.InstallReviewRerunWakeKind, string(content), time.Time{}, "wake:"+next.CanonicalID+":rerun")
 		if err != nil {
 			return false, err
 		}

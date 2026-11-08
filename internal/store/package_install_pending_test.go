@@ -14,7 +14,7 @@ import (
 func pendingRow(subject string, attempt int) PackageInstallPending {
 	return PackageInstallPending{
 		OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, SubjectDigest: subject, Attempt: attempt, ReleaseID: strings.Repeat("a", 64),
-		Package: "demo", Action: "install", Record: []byte(`{"r":1}`), TreePatch: []byte("patch"), Change: []byte(`{}`), OwedRecordID: "owed-" + subject,
+		Package: "demo", Action: "install", Record: []byte(`{"r":1}`), TreePatch: []byte("patch"), Change: []byte(`{}`), OwedRecordID: "owed-" + subject, Inbox: "management:" + inboxTestOwner,
 	}
 }
 
