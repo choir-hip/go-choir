@@ -236,29 +236,20 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	}
 
 	final := `choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","summary":"done","claims":[]interface{}{map[string]interface{}{"text":"done"}},"work_disposition":"completed"}, "")`
+	// B4: no Relate in the desk's cells, and the final Report goes through:
+	// the host records the story's entities from System 1's top answers.
 	out = cell(`import "choir"
+_ = choir.Records()
 ` + final)
-	if !strings.Contains(out, "choir.Relate") {
-		t.Fatalf("a final Report with no record was not refused naming choir.Relate: %s", out)
+	if strings.Contains(out, "choir.Relate") || strings.Contains(out, "ERR") {
+		t.Fatalf("the final Report was refused although the host records the entities: %s", out)
 	}
-	if got := textureRecords(); len(got) != 1 {
-		t.Fatalf("the refused final Report reached Texture: %+v", got)
-	}
-
-	out = cell(`import "choir"
-func() {
-	_ = choir.Records()
-	c := choir.StoryAnalysis().Candidates[0]
-	r, err := choir.Relate("", []map[string]any{{"entity_id": c.EntityID, "role": "central", "judgment_ref": c.Role.ReceiptRef, "question_id": c.Role.QuestionID}})
-	fmt.Println("relate", err == nil, string(r))
-}()
-` + final)
-	if !strings.Contains(out, "relate true ") || !strings.Contains(out, types.StoryPublicationID(f.owner, doc)) {
-		t.Fatalf("the cell's Relate(\"\") did not record its own story: %s", out)
+	if recs := f.entityEvents(t); len(recs) == 0 {
+		t.Fatal("the final Report passed but no story.entities record is on the tape")
 	}
 	got := textureRecords()
 	if len(got) != 2 || !got[1].Final {
-		t.Fatalf("after Relate, Texture inbox = %+v, want the final Report", got)
+		t.Fatalf("after the default record, Texture inbox = %+v, want the final Report", got)
 	}
 }
 
@@ -309,18 +300,18 @@ func TestFinishRuleIsSatisfiableWhenTheAnalysisHasNoAnswers(t *testing.T) {
 		if a == nil || len(a.Candidates) != 0 || a.Error != "" || f.judgeCalls() != 0 {
 			t.Fatalf("analysis = %+v, judge calls %d", a, f.judgeCalls())
 		}
-		if err := f.finishGate(t, "run-none", "research:doc-story", agentprofile.Research); err == nil {
-			t.Fatal("the Report passed before the story was recorded")
+		// B4: the host records the empty list itself at the final Report.
+		if err := f.finishGate(t, "run-none", "research:doc-story", agentprofile.Research); err != nil {
+			t.Fatalf("the Report was held although the host can record the empty list: %v", err)
 		}
-		got, err := relateEmpty(f, "run-none")
-		if err != nil || !got.Exported {
-			t.Fatalf("Relate(\"\", nil) with no candidates = %+v, %v", got, err)
+		if got, err := relateEmpty(f, "run-none"); err != nil || !got.Exported {
+			t.Fatalf("a desk's own Relate(\"\", nil) after the default = %+v, %v", got, err)
 		}
 		recs := f.records(t)
-		if len(recs) != 1 || len(recs[0].Attachments) != 0 || recs[0].Review == nil || recs[0].Review.Counts.Candidates != 0 {
-			t.Fatalf("records = %+v, want one review with nothing attached", recs)
+		if len(recs) == 0 || len(recs[0].Attachments) != 0 || recs[0].Review == nil || recs[0].Review.Counts.Candidates != 0 {
+			t.Fatalf("records = %+v, want a review with nothing attached", recs)
 		}
-		if exports := f.epub.entityCalls(); len(exports) != 1 || exports[0].Review == nil || len(exports[0].Entities) != 0 {
+		if exports := f.epub.entityCalls(); len(exports) == 0 || exports[0].Review == nil || len(exports[0].Entities) != 0 {
 			t.Fatalf("exports = %+v", exports)
 		}
 		if err := f.finishGate(t, "run-none", "research:doc-story", agentprofile.Research); err != nil {
@@ -365,5 +356,116 @@ func TestFinishRuleIsSatisfiableWhenTheAnalysisHasNoAnswers(t *testing.T) {
 				t.Fatal("another run's failed analysis freed this run's Report")
 			}
 		})
+	}
+}
+
+// B4: the host applies the analysis's top answers when the desk recorded
+// nothing. Ways it can fail, written first:
+//
+//	D1 The Report is refused although the analysis holds answers; the default
+//	   attaches an entity System 1 ranked not_about, a phrase it judged not an
+//	   entity, or something the analysis never listed; or it records twice.
+//	D2 The default hides a refusal: the platform 4xx must still hold the
+//	   Report, with the cause in the error.
+//	D3 The desk's own Relate before the final Report is overridden by the
+//	   default (the default must find the record and do nothing).
+func TestFinishRuleRecordsTheAnalysisTopAnswersByDefault(t *testing.T) { // D1
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	a := f.analyse(t, agentprofile.Research, "run-d1", "doc-story")
+	if a == nil || len(a.Candidates) == 0 {
+		t.Fatalf("analysis = %+v", a)
+	}
+	want, answered := defaultStoryEntities(a)
+	if !answered {
+		t.Fatalf("the analysis has no answers: %+v", a)
+	}
+	for _, e := range want {
+		if e.Role != types.EntityRoleCentral && e.Role != types.EntityRoleIncidental {
+			t.Fatalf("the default attaches role %q: %+v", e.Role, e)
+		}
+	}
+	if err := f.finishGate(t, "run-d1", "research:doc-story", agentprofile.Research); err != nil {
+		t.Fatalf("the Report was held although the analysis holds answers: %v", err)
+	}
+	recs := f.records(t)
+	if len(recs) != 1 || len(recs[0].Attachments) != len(want) {
+		t.Fatalf("records = %+v, want one record with the %d default attachments", recs, len(want))
+	}
+	for i, att := range recs[0].Attachments {
+		if att.Role != want[i].Role || att.JudgmentRef != want[i].JudgmentRef || att.QuestionID != want[i].QuestionID {
+			t.Errorf("attachment %d = %+v, want the analysis's top answer %+v", i, att, want[i])
+		}
+	}
+	// A second final Report finds the record and records nothing more.
+	if err := f.finishGate(t, "run-d1", "research:doc-story", agentprofile.Research); err != nil {
+		t.Fatalf("second check: %v", err)
+	}
+	if again := f.records(t); len(again) != 1 {
+		t.Fatalf("the default recorded twice: %+v", again)
+	}
+}
+
+func TestDefaultStoryEntitiesLeavesOutWhatNeedsTheDesksJudgment(t *testing.T) { // D1
+	ans := func(top string) *yaegikernel.StoryAnalysisAnswer {
+		return &yaegikernel.StoryAnalysisAnswer{ReceiptRef: "system1:j1", QuestionID: "q-" + top, Top: top}
+	}
+	cand := func(entityID, phrase string, role, kind *yaegikernel.StoryAnalysisAnswer) yaegikernel.StoryAnalysisCandidate {
+		c := yaegikernel.StoryAnalysisCandidate{Role: role, Kind: kind}
+		c.EntityID, c.Phrase = entityID, phrase
+		return c
+	}
+	a := &yaegikernel.StoryAnalysis{Candidates: []yaegikernel.StoryAnalysisCandidate{
+		cand("wd:Q1", "Known", ans("central"), nil),
+		cand("wd:Q2", "Passing", ans("incidental"), nil),
+		cand("wd:Q3", "NotAbout", ans("not_about"), nil),
+		cand("", "Newco", ans("central"), ans("organization")),
+		cand("", "Vague", ans("central"), ans("not an entity")),
+		cand("", "NoKind", ans("central"), nil),
+		cand("wd:Q1", "Known again", ans("central"), nil),
+		{}, // past the budget: no answers
+	}}
+	got, answered := defaultStoryEntities(a)
+	if !answered {
+		t.Fatal("answers present but not reported")
+	}
+	var ids []string
+	for _, e := range got {
+		ids = append(ids, e.ResolvedID()+":"+e.Role)
+	}
+	want := []string{"wd:Q1:central", "wd:Q2:incidental", types.MintedEntityID("Newco") + ":central"}
+	if strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Fatalf("default = %v, want %v", ids, want)
+	}
+	if _, answered := defaultStoryEntities(&yaegikernel.StoryAnalysis{Candidates: []yaegikernel.StoryAnalysisCandidate{{}}, Error: "System 1 off"}); answered {
+		t.Fatal("an analysis with no answers must not default")
+	}
+	if _, answered := defaultStoryEntities(nil); answered {
+		t.Fatal("no analysis must not default")
+	}
+}
+
+func TestFinishRuleDefaultKeepsAPlatformRefusalAndTheDesksOwnRecord(t *testing.T) { // D2, D3
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	f.analyse(t, agentprofile.Research, "run-d2", "doc-story")
+	f.epub.checkErr = &platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusUnprocessableEntity, Body: "entity 1 matches the existing entity wd:Q1"}
+	err := f.finishGate(t, "run-d2", "research:doc-story", agentprofile.Research)
+	if err == nil || !strings.Contains(err.Error(), "choir.Relate") || !strings.Contains(err.Error(), "entity 1 matches") {
+		t.Fatalf("a platform refusal must hold the Report and say why: %v", err)
+	}
+	if n := len(f.entityEvents(t)); n != 0 {
+		t.Fatalf("a refused default recorded %d attachments", n)
+	}
+	f.epub.checkErr = nil
+	if err := f.relateOwn(t, "run-d2"); err != nil {
+		t.Fatalf("the desk's own Relate: %v", err)
+	}
+	before := len(f.entityEvents(t))
+	if err := f.finishGate(t, "run-d2", "research:doc-story", agentprofile.Research); err != nil {
+		t.Fatalf("after the desk's own record: %v", err)
+	}
+	if after := len(f.entityEvents(t)); after != before {
+		t.Fatalf("the default recorded over the desk's own record: %d to %d", before, after)
 	}
 }
