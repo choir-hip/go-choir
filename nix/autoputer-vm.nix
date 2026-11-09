@@ -659,6 +659,29 @@ EOF
     group = "choir-doctool";
   };
 
+  # A tool holds guest memory only while used (docs/design/guest-tools-live-load-2026-11-09.md,
+  # phase 1): every 5 minutes drop the page cache of each tool layer that no
+  # process maps and that the exec log has not seen in 10 minutes. On the single
+  # image there are no /nix/.ro-tool-* mounts and the helper exits 0.
+  systemd.services.choir-tool-evict-idle = {
+    description = "Drop the page cache of idle guest tool layers";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${goChoirPackages.choirTool}/bin/choir-tool evict-idle";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      RuntimeDirectory = "choir-tool-evict";
+      RuntimeDirectoryPreserve = "yes";
+    };
+  };
+  systemd.timers.choir-tool-evict-idle = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5min";
+      OnUnitInactiveSec = "5min";
+    };
+  };
+
   systemd.tmpfiles.rules = [
     # the tool exec log's once-a-minute stamps (any uid runs a tool)
     "d /run/choir-tool-exec 1777 root root -"

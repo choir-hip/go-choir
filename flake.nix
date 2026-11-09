@@ -327,6 +327,8 @@
         "cmd/pkgmirror"
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md)
         "cmd/choir-delegate"
+        # guest tool layer page-cache eviction (docs/design/guest-tools-live-load-2026-11-09.md)
+        "cmd/choir-tool"
         # the desk-session worker without Dolt (RES-17)
         "cmd/desk-worker"
         # operator tools of station FP9 (escrow key sealing; the copy-only
@@ -454,6 +456,11 @@
         choirDelegate = mkGoService {
           pname = "choir-delegate";
           subPackage = "cmd/choir-delegate";
+        };
+        # evicts an idle tool layer's pages (guest timer, nix/autoputer-vm.nix)
+        choirTool = mkGoService {
+          pname = "choir-tool";
+          subPackage = "cmd/choir-tool";
         };
         autoputer = mkGoService {
           pname = "autoputer";
