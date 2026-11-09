@@ -26,6 +26,11 @@ func logRejectedRequest(providerName string, resp *http.Response) string {
 		return ""
 	}
 	reason := rejectedReason(body)
+	// AWS carries the error type in a header, not the body (Bedrock bodies are
+	// {"message": ...}); it is a short class name such as ValidationException.
+	if t := strings.TrimSpace(resp.Header.Get("X-Amzn-Errortype")); t != "" && len(t) <= 80 {
+		reason = rejectedReasonSecrets.ReplaceAllString(t, "[redacted]") + " " + reason
+	}
 	log.Printf("provider: %s rejected request status=%d reason=%q", providerName, resp.StatusCode, reason)
 	return reason
 }
@@ -57,8 +62,8 @@ func rejectedReason(body []byte) string {
 		reason = "unparsed body"
 	}
 	reason = rejectedReasonSecrets.ReplaceAllString(reason, "[redacted]")
-	if len(reason) > 240 {
-		reason = reason[:240] + "…"
+	if len(reason) > 300 {
+		reason = reason[:300] + "…"
 	}
 	return reason
 }

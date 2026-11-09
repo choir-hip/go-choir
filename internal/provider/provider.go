@@ -2282,9 +2282,9 @@ func newJSONRequest(ctx context.Context, method, url string, body interface{}) (
 
 func parseBedrockResponse(resp *http.Response, modelID string) (*LLMResponse, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Drain and discard the body to allow connection reuse, but do not
-		// include it in the error (may contain provider details or credentials).
-		_, _ = io.ReadAll(resp.Body)
+		// The caller's error stays sanitized; the provider's own validation
+		// message (type + message, redacted, truncated) goes to the journal.
+		logRejectedRequest("bedrock", resp)
 		return nil, fmt.Errorf("bedrock: status %s (sanitized)", resp.Status)
 	}
 
