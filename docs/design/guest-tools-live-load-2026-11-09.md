@@ -1,7 +1,8 @@
 # Guest tools that load and unload live (2026-11-09)
 
-Status: design, for review (tier 2: it designs a red change to vmctl, the
-guest boot path and Firecracker drive handling). Station L3.5 of
+Status: design, revision 2 after the tier 2 review (Devin ACCEPT_WITH_CHANGES,
+Sonnet SEND_BACK on revision 1; both named the same cheaper route). Revision
+1's mechanism, a Firecracker drive swap per load, is kept only as phase 3. Station L3.5 of
 [the ordinary prompt path](../definitions/choir-ordinary-prompt-path-2026-11-09.md).
 
 Owner, 2026-11-09: "a computer could be running without a particular tool.
@@ -50,142 +51,115 @@ tool cannot come or go without a cold boot.
   change). So the slots stay fixed and only what is behind them moves. Slots
   are bounded (`maxToolLayers` 8).
 
-## 3. The design
+## 3. Review of revision 1, and what changed
 
-### 3.1 Store paths that point outside the overlay
+Revision 1 swapped each slot's backing file through Firecracker's drive
+`PATCH` on every load, with a symlink farm in the base pointing tool store
+paths at `/nix/.tool/<layer>`. Both seats found the same gate:
 
-The base layer carries, for every store path of every tool layer, a
-**symlink** `/nix/store/<hash>-<name>` → `/nix/.tool/<layer>/store/<hash>-<name>`
-instead of the path itself. The layer builder writes this farm at image
-build time from the same closure lists it already computes
-(nix/guest-tools.nix). The tool layers stop being store overlay lowers.
+- **Mount namespaces.** The autoputer runs in a private mount namespace
+  (`unshare -m --propagation private`, nix/autoputer-vm.nix:266-268), and
+  tools run inside capsule chroots that bind only `/nix/store`
+  (internal/capsule/executor.go:2666, 2713-2719). A mount made later in the
+  root namespace reaches neither, so a loaded tool would still be absent for
+  every real consumer, and an unmount in one namespace frees nothing while
+  another holds the mount.
+- **Shared paths.** office and browser share 208 store paths (633 MB); a
+  symlink has one target, so loading one layer alone could dangle the
+  other's libraries.
+- **Snapshots.** `expectedLaunchConfig` recomputes tool disks from the
+  profile and refuses a wake whose launch hash differs
+  (manager.go:2030, snapshot.go:639-641); a live drive swap breaks every
+  wake unless the slot table is persisted, replayed and retained.
+- **Cheaper route.** Both seats: the owner's memory outcome needs no drive
+  swap. An attached layer nobody reads costs no page cache, and the page
+  cache a tool used can be dropped without a restart.
 
-Each slot's erofs mounts at `/nix/.tool/<layer>` (read-only, nodev,
-nosuid). Unloaded, the symlinks dangle: exec fails with ENOENT, which the
-exec wrapper (nix/guest-tool-exec-wrapper.sh) already turns into a clear
-message, and which it now turns into a load request (3.3). Loaded, every
-path resolves; ELF interpreters and RPATHs follow symlinks, so the binaries
-run unchanged.
+So the design splits by what each phase buys.
 
-Rejected: bind-mounting each store path onto a stub directory (hundreds of
-mounts per tool); a per-tool overlay (still a lower of nothing the store
-sees); fetching into the data volume (per-computer bytes, no shared page
-cache).
+## 4. Phase 1: memory only while used (this build)
 
-### 3.2 Who decides: vmctl, host side
+Keep the proven layout: tool layers are store overlay lowers, attached at
+boot (L3). Add **residency control**:
 
-The guest can only **ask**. vmctl owns the slot table per VM:
-`slot → {layer, file, digest, state: empty | loaded}`.
+- **Load** is the first page fault, as today. Nothing to build.
+- **Unload** is eviction. A guest helper, `choir-tool evict <layer>`, walks
+  the layer's own erofs mount (`/nix/.ro-tool-<layer>`, root namespace) and
+  calls `posix_fadvise(POSIX_FADV_DONTNEED)` on each file. Page cache
+  belongs to the erofs superblock, which every mount namespace and capsule
+  bind shares, so one walk evicts the layer's pages for all of them. Pages a
+  live process has mapped stay (the kernel keeps them); the rest go.
+- **When.** The helper runs when no process has an executable or mapping
+  under the layer's store paths (a `/proc/*/maps` scan; psmisc is not in
+  the guest), after an idle grace measured from the tool exec log, and at
+  once at the balloon's reclaim threshold.
+- **Security.** Nothing changes: eviction drops only clean read-only pages;
+  the delegate's spend authority stays the gateway grant.
+- **Proof on d@e.** Cold boot, record `Cached` and the layer's resident
+  pages (`fincore` or a `mincore` walk, the helper prints it). Run a
+  Playwright page (browser layer resident rises by about 150 to 300 MB),
+  let it exit, evict: resident pages for the layer fall to near zero and
+  `Cached` falls by the same amount. Same for a Claude delegate round. A
+  tool exec after eviction runs (pages fault back in).
 
-- **Load** (guest asks for layer L): vmctl checks L is in this release's
-  `layers.json` and in the computer's tool profile, resolves the layer file
-  in the jail's `.shared` (pre-linked at boot for every layer of the
-  release, so a load creates no file), verifies its digest once per
-  release, and PATCHes the slot from the placeholder to the layer. It
-  answers `loaded` with the slot's device; the guest mounts it.
-- **Unload** (guest asks, or a lease ends, or idle): the guest stops the
-  tool's processes (only those whose executable or mapped files are under
-  `/nix/.tool/L`; `fuser -m`), unmounts, flushes the block device's
-  buffers, and reports `unmounted`; vmctl then PATCHes the placeholder back.
-  vmctl never swaps a slot the guest still has mounted: a swap under a live
-  mount would hand the kernel different bytes for cached blocks. If the
-  guest does not report, the slot stays loaded (safe: memory, not
-  correctness).
-- **Refusals**, each typed and visible: a layer outside the profile; a
-  layer not in the release; a digest mismatch; no free slot.
+Cost: one small guest helper and a timer. No vmctl, no snapshot change, no
+new channel. Rollback: revert.
 
-The channel is the guest's existing authenticated host route (the same
-bearer and pin the gateway checks), a new endpoint on vmctl's guest-facing
-API. A load request names a layer, never a path.
+## 5. Phase 2: the tool is absent until loaded
 
-### 3.3 Triggers
+For the owner's "running without a particular tool": the tool's store paths
+do not resolve until it is loaded.
 
-- The exec wrapper, on a missing tool: request the load, wait (bounded,
-  2 s), then exec. A tool call never hangs: on timeout it exits 127 with
-  the reason.
-- Callers that run a tool by absolute path (the capsule broker for Claude
-  Code, `CHOIR_BROWSER` for Playwright) call a guest helper
-  `choir-tool load <layer>` first.
-- Unload: after the tool's last process exits plus an idle grace (10
-  minutes, measured, not a switch), and at once when memory pressure
-  reaches the balloon's reclaim threshold.
+- Drive set stays static at boot (each profile-allowed layer's real file
+  behind its slot), so snapshots, launch hashes and retention are unchanged.
+- Tool layers leave the store overlay; the base carries a symlink farm for
+  their store paths pointing at `/nix/.tool/<layer>/<hash>-<name>` (the
+  image root is the store directory, flake.nix:622-627), excluding paths the
+  base or app already carry. Each shared path has one owner layer, and
+  `layers.json` records each layer's `needs`, so `load(L)` mounts the
+  owners' closure (or the desktop-libs layer is built).
+- Load and unload are guest-side mounts, performed in the namespaces that
+  consume them: the autoputer mounts in its own namespace;
+  `prepareCapsuleRoot` binds `/nix/.tool` recursively (read-only, nosuid,
+  nodev) with slave propagation so a load reaches live capsules; the root
+  namespace mounts for the operator shell. Unload unmounts everywhere and
+  requires no consumer (a `/proc/*/maps` scan; killing a consumer capsule
+  is explicit and visible). `blockdev --flushbufs` before each mount.
+- System PATH entries for tools (autoputer-vm.nix:1074-1085, 1192, 1204)
+  go through the exec wrapper, which loads on a missing tool and waits a
+  bounded 2 s. The base's `neededForBoot` tool mounts become non-blocking.
+- Proof adds the capsule case: Playwright inside a capsule job sees the
+  loaded browser; after unload the browser's store paths do not resolve.
 
-### 3.4 Hibernate, wake, restarts
+## 6. Phase 3: tools from the Library (live attach)
 
-- A snapshot records the slot table. vmctl restores the drive set as it
-  stood (loaded layers behind their slots), so a woken computer finds its
-  mounts intact. `snapshotBoundPaths` already includes tool disks.
-- A cold boot starts with every slot empty: the loaded set is memory, not
-  durable state (restart rules: a crash closes work, it does not resume
-  it).
-- A deploy that moves a layer's digest moves its symlink farm too; the
-  computer gets the new layer at its next cold boot, as today.
+A Library tool is not in the release, so its file is not behind any slot at
+boot. Only here is the drive swap needed:
 
-### 3.5 Security
+- Generic slots boot on placeholders; vmctl swaps one to a tool package's
+  layer through `PATCH /drives/{id}` (Firecracker 1.17 supports it on a
+  running VM) after checking the package is installed on this computer and
+  its digest matches.
+- The guest asks through the existing tap-source-bound guest endpoint
+  pattern (handlers.go:1433-1444, route_authority.go:377), naming a package,
+  never a path; vmctl resolves names against the launch record; accepted
+  swaps are rate-limited.
+- Each layer file is hard-linked into the jail root at boot or at install
+  (confinement.go:473-491), and `blockdev --flushbufs` runs after each swap
+  and before mount.
+- Snapshot plumbing: a durable per-VM slot table, captured into the
+  snapshot meta, replayed by `expectedLaunchConfig` instead of recomputed
+  from the profile, bound by `snapshotBoundPaths`, kept by retention, and
+  rebuilt on reattach. PATCH is serialized against snapshot capture.
+- Desks name tools in their manifest, install review judges them, a desk
+  takes a tool by lease and the lease's end unloads it, and the profile
+  comes from installed packages. A Library tool's symlink farm ships in its
+  own small farm layer or is written at load into the overlay's upper.
+- No GPU in Firecracker: Blender renders and video encodes on CPU.
 
-- The guest names a layer; vmctl decides from the release and the
-  computer's profile. No guest input becomes a host path.
-- Layers are read-only erofs from the signed release, digest-checked;
-  mounted nodev, nosuid; the guest cannot write or substitute one.
-- Spend authority is unchanged: the Claude delegate's grant is the gateway
-  relay's list. Loading Claude Code grants nothing.
-- Unload kills only processes executing from the tool's mount.
-- Rate: one load or unload in flight per slot; repeated refusals are logged
-  once per minute.
+## 7. Order
 
-## 4. Desks and Library packages
-
-The same mechanism generalizes, in the next station (not this build):
-
-- **A tool is a package.** Host-built from a Nix derivation, published as a
-  signed, content-addressed erofs layer with its store path list. Stored
-  once per host however many computers adopt it.
-- **A desk names its tools** in its manifest (`tools: [blender]`).
-  Installing the desk passes them through install review; a tool from
-  outside first-party gets the stricter tier, and runs only inside the
-  non-first-party desk sandbox.
-- **Leases.** A desk takes a tool by lease (the custodian lease pattern
-  Mail uses); the lease's end unloads it. Grants flow through leases, as
-  doctrine says.
-- **Generic slots.** A computer has a fixed number of slots, assigned at
-  load. The symlink farm for a Library tool cannot live in the base (the
-  base is built per platform release); it lives in the tool's own small
-  "farm" layer or is created at load in a private store directory the
-  overlay already has as its upper. Open question for that station.
-- **The profile comes from installed packages**, replacing the node-b.nix
-  list.
-- **No GPU** in Firecracker: Blender renders and video encodes on CPU.
-  Modelling, CAD, editing and modest renders fit; heavy rendering would
-  need a host render service later.
-
-## 5. Proof on d@e
-
-1. Cold boot: no tool mount, `free` and `/proc/meminfo` recorded.
-2. `choir-tool load browser`: loaded under 2 s; Playwright runs a page.
-3. Unload: no process left under the mount; guest page cache drops back to
-   within 10 MB of step 1.
-4. Claude Code: a delegate round loads, runs and unloads it.
-5. A load of a layer outside the profile is refused with its reason.
-6. Hibernate with the browser loaded, wake, run a page.
-7. A tool exec with the layer unloaded loads it on demand and runs.
-
-## 6. Build order (red; Ring-Expedite under the current tempo)
-
-1. Nix: symlink farm in the base; tool layers mounted at `/nix/.tool/*`,
-   out of the store overlay. Every slot still boots loaded (no behaviour
-   change yet). Proved: d@e runs every tool through the farm.
-2. vmctl: slot table, load and unload endpoint, PATCH, snapshot record.
-3. Guest: `choir-tool`, wrapper trigger, idle unload.
-4. Boot every slot empty; the proof above.
-
-Rollback: revert; a cold boot returns to slots loaded at boot.
-
-## 7. Risks to probe first
-
-- The guest block layer after a backing-file swap: confirm the virtio-blk
-  config change invalidates the device's buffer cache (step 2 flushes
-  explicitly; the probe confirms no stale block survives).
-- Nix tooling inside the guest that refuses a symlinked store path (the
-  capsule's own `nix` use, if any).
-- Firecracker's PATCH on a jailed drive path (the path must exist inside
-  the jail; pre-linking covers it).
+Phase 1 now (station L3.5). Phase 2 when the owner wants absence, not just
+eviction. Phase 3 with the first Library tool package (a video or CAD
+desk). Each phase is red, lands with its own proof on d@e, and rolls back
+by revert.
