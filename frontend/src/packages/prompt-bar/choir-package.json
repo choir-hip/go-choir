@@ -5,7 +5,7 @@
   "display": {
     "title": "Prompt bar",
     "icon": "⌘",
-    "description": "The command field, its focus chip, the window tray and the desk button"
+    "description": "The command field, its target pill, the window buttons, the window list and the desk mark"
   },
   "kinds": [],
   "uses_kinds": [],

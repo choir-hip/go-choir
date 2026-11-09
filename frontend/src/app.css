@@ -324,7 +324,7 @@ body {
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button),
-:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .voice-button) {
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], [data-window-overflow], [data-window-switcher-button], .voice-button) {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
@@ -332,8 +332,8 @@ body {
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button):hover,
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button):focus-visible,
-:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .voice-button):hover,
-:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .voice-button):focus-visible {
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], [data-window-overflow], [data-window-switcher-button], .voice-button):hover,
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], [data-window-overflow], [data-window-switcher-button], .voice-button):focus-visible {
   background: var(--choir-state-hover) !important;
 }
 
@@ -689,7 +689,7 @@ body {
   backdrop-filter: blur(var(--choir-blur));
 }
 
-:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-prompt-surface] [data-window-tray-item] {
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-prompt-surface] :is([data-window-tray-item], [data-window-overflow], [data-window-switcher-button]) {
   background: var(--choir-chrome-tray-bg);
   border: 1px solid var(--choir-chrome-border);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 40%, transparent);

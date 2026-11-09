@@ -382,26 +382,35 @@ test('desktop and mobile app switchers carry neither Trace nor the removed Engin
   await expect(mobile.locator('[data-prompt-surface]')).toBeVisible();
   const promptBox = await mobile.locator('[data-prompt-surface]').boundingBox();
   expect(promptBox.height).toBeLessThanOrEqual(64);
+  // The windows button opens the one window list; its icons are centred.
+  await mobile.locator('[data-window-switcher-button]').click();
+  await expect(mobile.locator('[data-window-switcher]')).toBeVisible();
+  await expect(mobile.locator('[data-window-switcher-item]')).not.toHaveCount(0);
+  const switcherAlignment = await mobile.evaluate(() => [...document.querySelectorAll('[data-window-switcher-item]')].map((button) => {
+    const buttonRect = button.getBoundingClientRect();
+    const iconRect = button.querySelector('.window-tray-icon').getBoundingClientRect();
+    return {
+      y: Math.abs((buttonRect.top + buttonRect.height / 2) - (iconRect.top + iconRect.height / 2)),
+      insideX: iconRect.left >= buttonRect.left && iconRect.right <= buttonRect.right,
+    };
+  }));
+  expect(switcherAlignment.length).toBeGreaterThan(0);
+  for (const delta of switcherAlignment) {
+    expect(delta.y).toBeLessThanOrEqual(1);
+    expect(delta.insideX).toBe(true);
+  }
+  // The desk mark opens the Desk sheet only; the input stays and there is no
+  // in-field switcher (prompt bar redesign, 2026-11-09).
   await mobile.locator('[data-desk-menu-button]').click();
   await expect(mobile.locator('[data-desk-sheet]')).toBeVisible();
-  await expect(mobile.locator('[data-mobile-app-switcher]')).toBeVisible();
-  await expect(mobile.locator('[data-mobile-switcher-open="true"] [data-prompt-input]')).toHaveCount(0);
-  await expect(mobile.locator('[data-mobile-app-switcher] button')).not.toHaveCount(0);
+  await expect(mobile.locator('[data-window-switcher]')).toHaveCount(0);
+  await expect(mobile.locator('[data-prompt-input]')).toBeVisible();
+  await expect(mobile.locator('[data-mobile-app-switcher]')).toHaveCount(0);
   const mobileIconAlignment = await mobile.evaluate(() => {
     const promptSurface = document.querySelector('[data-prompt-surface]').getBoundingClientRect();
     const promptCenterY = promptSurface.top + promptSurface.height / 2;
     const deskButton = document.querySelector('[data-desk-menu-button]').getBoundingClientRect();
     const commandField = document.querySelector('[data-command-field]').getBoundingClientRect();
-    const centerDelta = (button) => {
-      const icon = button.querySelector('span');
-      const buttonRect = button.getBoundingClientRect();
-      const iconRect = icon.getBoundingClientRect();
-      return {
-        x: Math.abs((buttonRect.left + buttonRect.width / 2) - (iconRect.left + iconRect.width / 2)),
-        y: Math.abs((buttonRect.top + buttonRect.height / 2) - (iconRect.top + iconRect.height / 2)),
-        rowY: Math.abs(promptCenterY - (buttonRect.top + buttonRect.height / 2)),
-      };
-    };
     const cardAlignment = (button) => {
       const icon = button.querySelector('span');
       const label = button.querySelector('strong');
@@ -420,20 +429,13 @@ test('desktop and mobile app switchers carry neither Trace nor the removed Engin
     return {
       deskButtonRowY: Math.abs(promptCenterY - (deskButton.top + deskButton.height / 2)),
       commandFieldRowY: Math.abs(promptCenterY - (commandField.top + commandField.height / 2)),
-      switcher: [...document.querySelectorAll('[data-mobile-app-switcher] button')].map(centerDelta),
       deskCards: [...document.querySelectorAll('[data-desk-sheet-app]')].slice(0, 6).map(cardAlignment),
       overview: cardAlignment(document.querySelector('[data-desk-overview]')),
     };
   });
   expect(mobileIconAlignment.deskButtonRowY).toBeLessThanOrEqual(1);
   expect(mobileIconAlignment.commandFieldRowY).toBeLessThanOrEqual(1);
-  expect(mobileIconAlignment.switcher.length).toBeGreaterThan(0);
   expect(mobileIconAlignment.deskCards.length).toBeGreaterThan(3);
-  for (const delta of mobileIconAlignment.switcher) {
-    expect(delta.x).toBeLessThanOrEqual(1);
-    expect(delta.y).toBeLessThanOrEqual(1);
-    expect(delta.rowY).toBeLessThanOrEqual(1);
-  }
   expect(mobileIconAlignment.overview.iconLabelY).toBeLessThanOrEqual(1);
   expect(mobileIconAlignment.overview.iconTopInside).toBe(true);
   expect(mobileIconAlignment.overview.labelBottomInside).toBe(true);

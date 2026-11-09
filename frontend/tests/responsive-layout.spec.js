@@ -234,11 +234,14 @@ test.describe('Mobile breakpoint (<768px)', () => {
 
     await expect(windowEl).not.toBeVisible();
 
-    const indicator = page.locator('[data-window-tray-item]');
-    await expect(indicator).toHaveCount(1);
-    await expect(indicator.first()).toBeVisible();
-
-    await indicator.first().click();
+    // A phone has no window strip: the windows button opens the window list.
+    await expect(page.locator('[data-window-tray-item]')).toHaveCount(0);
+    const windowsButton = page.locator('[data-window-switcher-button]');
+    await expect(windowsButton).toBeVisible();
+    await windowsButton.click();
+    const row = page.locator('[data-window-switcher-item]');
+    await expect(row).toHaveCount(1);
+    await row.first().click();
     await page.waitForTimeout(200);
     await expect(windowEl).toBeVisible();
   });

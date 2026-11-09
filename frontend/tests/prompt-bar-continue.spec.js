@@ -180,7 +180,7 @@ test('C1 C2 C3: the chip defaults to continuing the document in view', async ({ 
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
   await expect(chip).toHaveAttribute('data-prompt-target-agent', 'texture');
   await expect(chip).toContainText('Texture');
-  await expect(chip).toContainText('Tide notes');
+  await expect(chip).toHaveAttribute('title', /Tide notes/);
 
   const typed = 'add a section on `neap tides` [1] and café';
   await send(page, typed);
@@ -219,7 +219,7 @@ test('C4 H3: one tap clears the focus to the conductor, and the override does no
 
   // The new document is now in view; the chip defaults to it, not to the conductor.
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
-  await expect(chip).toContainText(DOCS['doc-new'].title);
+  await expect(chip).toHaveAttribute('title', new RegExp(DOCS['doc-new'].title));
 });
 
 test('C5 H3: with nothing focused the chip says the conductor routes, and no focus is sent', async ({ page }) => {
@@ -228,6 +228,7 @@ test('C5 H3: with nothing focused the chip says the conductor routes, and no foc
   const chip = page.locator('[data-command-field] [data-prompt-target]');
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor', { timeout: 10_000 });
   await expect(chip).toContainText('Conductor');
+  await expect(chip).toBeDisabled();
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
   expect(submits[0].focus).toBeUndefined();
@@ -254,7 +255,7 @@ test('H1: a package window\'s focus goes to its app agent and the chip names the
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
   await expect(chip).toHaveAttribute('data-prompt-target-agent', 'app:files');
   await expect(chip).toContainText('Files');
-  await expect(chip).toContainText('Field notes');
+  await expect(chip).toHaveAttribute('title', /Field notes/);
   await send(page, 'list what changed this week');
   await expect.poll(() => submits.length).toBe(1);
   expect(submits[0].focus).toEqual({ app_agent_id: 'app:files', object_ref: 'obj:choir.app.files.folder:owner-1:field-notes' });
@@ -279,7 +280,8 @@ for (const [name, focus] of [
     await openDesktop(page);
     const chip = page.locator('[data-command-field] [data-prompt-target]');
     await expect(chip).toHaveAttribute('data-prompt-target-mode', 'hint', { timeout: 10_000 });
-    await expect(chip).toContainText('Files');
+    await expect(chip).toContainText('Conductor');
+    await expect(chip).toBeDisabled();
     await send(page, 'list what changed this week');
     await expect.poll(() => submits.length).toBe(1);
     expect(submits[0].focus).toBeUndefined();
@@ -361,7 +363,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
 
   release();
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });
-  await expect(chip).toContainText(DOCS['doc-new'].title);
+  await expect(chip).toHaveAttribute('title', new RegExp(DOCS['doc-new'].title));
   await input.press('ControlOrMeta+Enter');
   await expect.poll(() => submits.length).toBe(2);
   expect(submits[1].focus?.object_ref).toBe('doc-new');

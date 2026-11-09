@@ -156,7 +156,8 @@ for (const vp of VIEWPORTS) {
       const input = await openDesktop(page);
       const chip = page.locator('[data-command-field] [data-prompt-target]');
       const send = page.locator('[data-prompt-submit]');
-      await expect(chip).toContainText("What's latest in ai", { timeout: 10_000 });
+      // The pill names the desk only; the object's name stays in its label.
+      await expect(chip).toHaveAttribute('title', /What's latest in ai/, { timeout: 10_000 });
       await shot(page, `after-${vp.name}-empty`);
 
       await input.fill('skakkaka');
