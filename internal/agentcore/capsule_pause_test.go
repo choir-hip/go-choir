@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -232,6 +233,7 @@ type pauseFixture struct {
 	assignment types.EngineeringAssignment
 	capsuleID  string
 	handler    *APIHandler
+	syncs      *atomic.Int32
 }
 
 // secondSeed seeds a second document's authority (its own trajectory and
@@ -250,6 +252,14 @@ func newPauseFixture(t *testing.T) *pauseFixture {
 	rt, s := testRuntime(t)
 	t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
 	_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+	// The mark's durability flush is sync(2) on Linux: it writes back every
+	// filesystem on the host, so beside parallel test shards it takes seconds
+	// (CI saw 1.25 s and 5.01 s). The flush is product behavior the other mark
+	// fixtures stub (planned_restart_fence_test.go); count it instead.
+	prevSync := syncFilesystems
+	var syncs atomic.Int32
+	syncFilesystems = func() { syncs.Add(1) }
+	t.Cleanup(func() { syncFilesystems = prevSync })
 	ctx := context.Background()
 	fake := newFakePause()
 	rt.assignmentRuntime = fake
@@ -270,7 +280,7 @@ func newPauseFixture(t *testing.T) *pauseFixture {
 		t.Fatal(err)
 	}
 	fake.has[assignment.Binding.CapsuleID] = true
-	return &pauseFixture{rt: rt, s: s, fake: fake, assignment: assignment, capsuleID: assignment.Binding.CapsuleID, handler: &APIHandler{rt: rt}}
+	return &pauseFixture{rt: rt, s: s, fake: fake, assignment: assignment, capsuleID: assignment.Binding.CapsuleID, handler: &APIHandler{rt: rt}, syncs: &syncs}
 }
 
 func (f *pauseFixture) mark(t *testing.T, query string) (int, string) {
@@ -347,6 +357,9 @@ func TestPauseMarkPhaseOneThenPhaseTwoAcks(t *testing.T) {
 	}
 	if !f.markerExists() {
 		t.Fatal("phase 2 answered 200 without a durable marker")
+	}
+	if f.syncs.Load() != 1 {
+		t.Fatalf("phase 2 flushed filesystems %d times, want once before the ack", f.syncs.Load())
 	}
 	if l := f.fake.LookupPause(f.capsuleID); !l.Record.Acked {
 		t.Fatalf("the record was not acked: %+v", l)
