@@ -27,7 +27,7 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash", MaxTokens: 32768}, "management"); got != 32768 {
 		t.Fatalf("explicit OpenCode Go interactive tokens = %d, want 32768", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, "management"); got != 8192 {
-		t.Fatalf("low-limit model interactive tokens = %d, want 8192", got)
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, "management"); got != 64000 {
+		t.Fatalf("Haiku 4.5 interactive tokens = %d, want 64000", got)
 	}
 }

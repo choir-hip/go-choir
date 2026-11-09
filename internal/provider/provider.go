@@ -512,7 +512,7 @@ func bedrockEffort(effort string) string {
 
 func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 	ar := anthropicRequest{
-		MaxTokens:        defaultMaxTokens(req.MaxTokens),
+		MaxTokens:        defaultMaxTokens(req.MaxTokens, effectiveModel(req.Model, p.modelID)),
 		AnthropicVersion: p.anthropicV,
 	}
 	if bedrockAdaptiveEffort(effectiveModel(req.Model, p.modelID)) {
@@ -813,7 +813,7 @@ func (p *ZAIProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(S
 func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropicRequest {
 	ar := anthropicRequest{
 		Model:            modelID,
-		MaxTokens:        defaultMaxTokens(req.MaxTokens),
+		MaxTokens:        defaultMaxTokens(req.MaxTokens, modelID),
 		AnthropicVersion: "2023-06-01",
 		Stream:           false,
 	}
@@ -1673,7 +1673,7 @@ func (p *OpenCodeProvider) buildResponsesRequestBody(req LLMRequest, modelID str
 func (p *OpenCodeProvider) buildMessagesRequestBody(req LLMRequest, modelID string) anthropicRequest {
 	return anthropicRequest{
 		Model:      modelID,
-		MaxTokens:  defaultMaxTokens(req.MaxTokens),
+		MaxTokens:  defaultMaxTokens(req.MaxTokens, modelID),
 		Stream:     req.Stream,
 		Messages:   convertMessages(req.Messages),
 		Tools:      convertToolDefs(req.Tools),
@@ -2392,9 +2392,15 @@ func convertToolDefs(tools []ToolDef) []anthropicTool {
 	return out
 }
 
-func defaultMaxTokens(n int) int {
-	if n <= 0 {
-		return 4096
+// defaultMaxTokens is the output budget for a protocol that requires one
+// (Anthropic messages). There is no cap below the model's own maximum (owner
+// 2026-11-09): a call that names no budget gets the catalog maximum, and a
+// budget above it (set for the model the run fell back from) is brought down
+// to it, since the provider refuses a larger one.
+func defaultMaxTokens(n int, modelID string) int {
+	limit := maxOutputTokensForModel(modelID)
+	if n <= 0 || n > limit {
+		return limit
 	}
 	return n
 }

@@ -123,11 +123,14 @@ func withModalities(models []ModelInfo) []ModelInfo {
 // text-only model out in TextOnlyModels.
 func SupportedModels() []ModelInfo {
 	return withModalities([]ModelInfo{
+		// The Bedrock output maximums are the ones Bedrock names when asked
+		// for more (probed 2026-11-09): 64,000 for Haiku 4.5, 128,000 for the
+		// rest.
 		{
 			ID:              "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 			DisplayName:     "Claude Haiku 4.5",
 			Provider:        "bedrock",
-			MaxOutputTokens: 8192,
+			MaxOutputTokens: 64000,
 		},
 		// Claude Haiku 5.5 on Bedrock (owner 2026-11-09): the paper's last
 		// fallback, $0.10/M in and $0.50/M out. Adaptive thinking; the effort
@@ -136,20 +139,20 @@ func SupportedModels() []ModelInfo {
 			ID:                  "us.anthropic.claude-haiku-5-5",
 			DisplayName:         "Claude Haiku 5.5",
 			Provider:            "bedrock",
-			MaxOutputTokens:     65536,
+			MaxOutputTokens:     128000,
 			ContextWindowTokens: 1_000_000,
 		},
 		{
 			ID:              "us.anthropic.claude-sonnet-4-6",
 			DisplayName:     "Claude Sonnet 4.6",
 			Provider:        "bedrock",
-			MaxOutputTokens: 65536,
+			MaxOutputTokens: 128000,
 		},
 		{
 			ID:              "us.anthropic.claude-opus-4-6-v1",
 			DisplayName:     "Claude Opus 4.6",
 			Provider:        "bedrock",
-			MaxOutputTokens: 32768,
+			MaxOutputTokens: 128000,
 		},
 		{
 			ID:                  "glm-5.2",

@@ -1181,3 +1181,30 @@ func TestOpenCodeProviderRejectsUnknownModelBeforeHTTP(t *testing.T) {
 		t.Fatalf("upstream calls = %d, want 0", calls.Load())
 	}
 }
+
+// The output budget of a protocol that requires one is the model's maximum,
+// never a fixed small number. Failure modes: a call with no budget gets a
+// small default and stops at max_tokens with no text (Texture run 1382de39,
+// 2026-11-09, on its Bedrock fallback); a budget set for the model the run
+// fell back from exceeds this model's maximum and the provider refuses it.
+func TestRequiredOutputBudgetIsTheModelsMaximum(t *testing.T) {
+	p, err := NewBedrockProvider(BedrockConfig{Region: "us-east-1", ModelID: "us.anthropic.claude-haiku-5-5", AuthToken: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.buildRequestBody(LLMRequest{}).MaxTokens; got != 128000 {
+		t.Errorf("no budget on Haiku 5.5: max_tokens = %d, want 128000", got)
+	}
+	if got := p.buildRequestBody(LLMRequest{MaxTokens: 131072}).MaxTokens; got != 128000 {
+		t.Errorf("a larger budget on Haiku 5.5: max_tokens = %d, want 128000", got)
+	}
+	if got := p.buildRequestBody(LLMRequest{MaxTokens: 2000}).MaxTokens; got != 2000 {
+		t.Errorf("an explicit smaller budget: max_tokens = %d, want 2000", got)
+	}
+	if got := p.buildRequestBody(LLMRequest{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}).MaxTokens; got != 64000 {
+		t.Errorf("no budget on Haiku 4.5: max_tokens = %d, want 64000", got)
+	}
+	if got := defaultMaxTokens(0, "glm-5.2"); got != 131072 {
+		t.Errorf("no budget on glm-5.2: %d, want 131072", got)
+	}
+}
