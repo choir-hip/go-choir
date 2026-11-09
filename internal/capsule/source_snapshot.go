@@ -54,6 +54,12 @@ func digestCanonicalSubjectTree(ctx context.Context, root string) (string, error
 		if err != nil {
 			return err
 		}
+		if generatedSourcePath(filepath.ToSlash(relative)) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		item := canonicalTreeEntry{Path: filepath.ToSlash(relative)}
 		switch {
 		case info.IsDir():
@@ -136,6 +142,12 @@ func copyCanonicalSubjectTree(ctx context.Context, source, target string) error 
 		}
 		if relative == "." {
 			return os.MkdirAll(target, 0o755)
+		}
+		if generatedSourcePath(filepath.ToSlash(relative)) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		destination := filepath.Join(target, relative)
 		info, err := os.Lstat(path)
@@ -460,8 +472,16 @@ func canonicalImmutableCommitDigest(ctx context.Context, source, commit string) 
 	directories := map[string]bool{}
 	entries := make([]canonicalTreeEntry, 0, len(tracked)*2)
 	err = readCommitBlobs(ctx, source, tracked, func(file immutableGitFile, blob io.Reader) error {
+		// The same exclusion as digestCanonicalSubjectTree: a tracked
+		// generated file is copied but uncounted, and a directory only it
+		// would have made is not counted either.
 		for dir := filepath.Dir(file.path); dir != "."; dir = filepath.Dir(dir) {
-			directories[filepath.ToSlash(dir)] = true
+			if !generatedSourcePath(filepath.ToSlash(dir)) {
+				directories[filepath.ToSlash(dir)] = true
+			}
+		}
+		if generatedSourcePath(filepath.ToSlash(file.path)) {
+			return nil
 		}
 		item := canonicalTreeEntry{Path: filepath.ToSlash(file.path)}
 		if file.mode == "120000" {
@@ -626,4 +646,39 @@ func requireFrozenComputerSurfaceSource(root string) error {
 		return fmt.Errorf("capsule freeze: computer-surface frontend source is underivable")
 	}
 	return nil
+}
+
+// generatedSourcePath reports whether a slash path under the source tree is
+// interpreter-generated residue, never source: Python bytecode and its
+// cache directory, and pytest's cache. A path is generated when ANY of
+// its components is one (a directory named foo.pyc included), which is the
+// walk's SkipDir semantics: the one predicate shared by the walk, the commit
+// inventory and the diff filter. A capsule that runs a script from
+// inside /workspace/platform writes these as a side effect; they must not
+// make a report-only assignment look like a source change (d@e 2026-11-09,
+// the .pyc candidate rejection). The subject digest, the persisted
+// candidate copy and Capsule.Diff all apply it, so the three agree.
+func generatedSourcePath(rel string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if part == "__pycache__" || part == ".pytest_cache" || strings.HasSuffix(part, ".pyc") || strings.HasSuffix(part, ".pyo") {
+			return true
+		}
+	}
+	return false
+}
+
+// dropGeneratedSourceChanges removes generated-residue additions and edits
+// under /workspace/platform from a change set. Deletions stay: removing a
+// tracked file is a real change whatever its name.
+func dropGeneratedSourceChanges(changes []FileChange) []FileChange {
+	const prefix = "workspace/platform/"
+	kept := changes[:0:0]
+	for _, change := range changes {
+		path := strings.TrimPrefix(change.Path, "/")
+		if strings.HasPrefix(path, prefix) && change.Kind != ChangeDeleted && generatedSourcePath(strings.TrimPrefix(path, prefix)) {
+			continue
+		}
+		kept = append(kept, change)
+	}
+	return kept
 }

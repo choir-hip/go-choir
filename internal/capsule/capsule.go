@@ -243,7 +243,7 @@ func (c *Capsule) Diff(ctx context.Context) ([]FileChange, error) {
 			return nil, fmt.Errorf("failed to expand overlay deletions: %w", err)
 		}
 	}
-	return changes, nil
+	return dropGeneratedSourceChanges(changes), nil
 }
 
 // CommitManifest records the current upperdir state as the new committed

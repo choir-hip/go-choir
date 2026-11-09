@@ -473,7 +473,11 @@ func (e *Executor) PreflightSourceCommit(ctx context.Context, commit string) (So
 // canonicalImmutableCommitDigest and digestCanonicalSubjectTree. Change it
 // with any change to what they hash, so no cached digest outlives its
 // algorithm.
-const canonicalTreeDigestVersion = 1
+//
+// Version 2: generated residue (generatedSourcePath) is excluded from both.
+// The version keys only the per-process commitDigests cache; nothing
+// persisted carries it.
+const canonicalTreeDigestVersion = 2
 
 // commitDigestCacheLimit bounds commitDigests: a process sees one source
 // commit per deploy plus the few its assignments pin.
