@@ -44,6 +44,9 @@ func TestTextureMediaImportsAFilesImageAndRefusesTheRest(t *testing.T) {
 	must(os.WriteFile(filepath.Join(root, "Reports", "summary.pdf"), []byte("%PDF-1.4"), 0o644))
 	must(os.WriteFile(filepath.Join(outside, "secret.png"), buf.Bytes(), 0o644))
 	must(os.Symlink(outside, filepath.Join(root, "Reports", "link")))
+	must(os.MkdirAll(filepath.Join(root, "mail", "cur"), 0o700))
+	must(os.WriteFile(filepath.Join(root, "mail", "cur", "1.png"), buf.Bytes(), 0o600))
+	must(os.Symlink(filepath.Join(root, "mail"), filepath.Join(root, "Reports", "inbox")))
 
 	m := &textureMedia{images: imageblob.New(filepath.Join(t.TempDir(), "blobs")), filesRoot: root}
 	ctx := context.Background()
@@ -62,6 +65,8 @@ func TestTextureMediaImportsAFilesImageAndRefusesTheRest(t *testing.T) {
 		"Reports/missing.png":     "not in Files",
 		"Reports":                 "not a file",
 		"Reports/link/secret.png": "outside Files",
+		"mail/cur/1.png":          "mailbox",
+		"Reports/inbox/cur/1.png": "mailbox",
 		"../x.png":                "inside Files",
 		"/etc/hosts":              "relative",
 	} {
@@ -73,7 +78,7 @@ func TestTextureMediaImportsAFilesImageAndRefusesTheRest(t *testing.T) {
 	if err != nil || mime != "application/pdf" {
 		t.Fatalf("FileInfo = %q, %v", mime, err)
 	}
-	for _, path := range []string{"Reports", "Reports/gone.pdf", "Reports/link/secret.png", "../x.pdf"} {
+	for _, path := range []string{"Reports", "Reports/gone.pdf", "Reports/link/secret.png", "../x.pdf", "mail/cur/1.png", "Reports/inbox/cur/1.png"} {
 		if _, err := m.FileInfo(ctx, path); err == nil {
 			t.Errorf("FileInfo(%q) accepted", path)
 		}

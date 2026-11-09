@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 )
 
 // The embed block (docs/design/texture-evidence-embeds-te-2026-10-25.md
@@ -380,6 +382,11 @@ func ValidFilesPath(p string) error {
 		if r < 0x20 || r == 0x7f {
 			return fmt.Errorf("must not hold control characters")
 		}
+	}
+	if first, _, _ := strings.Cut(p, "/"); first == ownerfiles.MailDir {
+		// The mailbox is Mail-agent custody, not a file of the Files app
+		// (internal/autoputer/files.go refuses it the same way).
+		return fmt.Errorf("must not name the mailbox (%s/): it is not a file of the Files app", ownerfiles.MailDir)
 	}
 	for _, part := range strings.Split(p, "/") {
 		switch {

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -58,6 +59,10 @@ func (m *textureMedia) resolve(filesPath string) (string, os.FileInfo, error) {
 	}
 	if abs != root && !strings.HasPrefix(abs, root+string(filepath.Separator)) {
 		return "", nil, fmt.Errorf("%s resolves outside Files", filesPath)
+	}
+	if rel, err := filepath.Rel(root, abs); err != nil || rel == ownerfiles.MailDir || strings.HasPrefix(rel, ownerfiles.MailDir+string(filepath.Separator)) {
+		// A link elsewhere in Files must not reach the mailbox either.
+		return "", nil, fmt.Errorf("%s resolves into the mailbox, which is not a file of the Files app", filesPath)
 	}
 	info, err := os.Stat(abs)
 	if err != nil || !info.Mode().IsRegular() {

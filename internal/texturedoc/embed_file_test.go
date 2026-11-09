@@ -3,6 +3,7 @@ package texturedoc
 // The file card (station L8): an embed of kind file names a file in the
 // owner's Files and opens it in Reader. Ways it could fail, written before
 // the code:
+//   - the path names the mailbox (mail/), which is Mail-agent custody;
 //   - the path is absolute, climbs out with "..", is empty, has an empty or
 //     dot component, a backslash or a control byte (a card to a file outside
 //     the owner's Files);
@@ -50,6 +51,7 @@ func TestAFileCardRefusals(t *testing.T) {
 		"absolute":    {func(_, t map[string]any) { t["path"] = "/etc/passwd" }, "relative"},
 		"climbing":    {func(_, t map[string]any) { t["path"] = "Reports/../../secret.pdf" }, "inside Files"},
 		"leading dot": {func(_, t map[string]any) { t["path"] = "../x.pdf" }, "inside Files"},
+		"mailbox":     {func(_, t map[string]any) { t["path"] = "mail/cur/1.png" }, "mailbox"},
 		"empty part":  {func(_, t map[string]any) { t["path"] = "Reports//x.pdf" }, "inside Files"},
 		"backslash":   {func(_, t map[string]any) { t["path"] = `Reports\x.pdf` }, "separators"},
 		"control":     {func(_, t map[string]any) { t["path"] = "Reports/x\n.pdf" }, "control"},
