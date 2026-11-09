@@ -31,9 +31,9 @@ func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 func TestPaidSpendCostMath(t *testing.T) {
 	clk := &spendClock{time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)}
 	s := newTestSpend(t, "", clk)
-	// River: 1M input of which 500k cached, 100k output at 0.60/0.03/1.20.
+	// River: 1M input of which 500k cached, 100k output at River's 0.12/0.0024/0.48.
 	got := s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 1_000_000, CachedInputTokens: 500_000, OutputTokens: 100_000})
-	want := 0.5*0.60 + 0.5*0.03 + 0.1*1.20
+	want := 0.5*0.12 + 0.5*0.0024 + 0.1*0.48
 	if !near(got, want) {
 		t.Fatalf("cost %v want %v", got, want)
 	}
@@ -57,7 +57,7 @@ func TestPaidSpendCostMath(t *testing.T) {
 func TestPaidSpendResetsAtUTCMidnight(t *testing.T) {
 	clk := &spendClock{time.Date(2026, 11, 9, 23, 59, 0, 0, time.UTC)}
 	s := newTestSpend(t, "", clk)
-	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 2_000_000})
+	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10_000_000})
 	if s.Refusal("river", riverModel) == nil {
 		t.Fatal("river should be spent at $1.20")
 	}
@@ -78,7 +78,7 @@ func TestPaidSpendPersistsAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "spend.json")
 	clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
 	s := newTestSpend(t, path, clk)
-	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 2_000_000})
+	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10_000_000})
 	s2 := newTestSpend(t, path, clk)
 	if s2.Refusal("river", riverModel) == nil {
 		t.Fatal("restart forgot the day's spend")
@@ -171,7 +171,7 @@ func (p *spendStub) IsReal() bool { return true }
 func TestPaidSpendProviderWrapsCountsAndRefuses(t *testing.T) {
 	clk := &spendClock{time.Date(2026, 11, 9, 15, 30, 0, 0, time.UTC)}
 	s := newTestSpend(t, "", clk)
-	inner := &spendStub{name: "river", usage: provider.Usage{InputTokens: 2_000_000}}
+	inner := &spendStub{name: "river", usage: provider.Usage{InputTokens: 10_000_000}}
 	w := &paidSpendProvider{inner: inner, spend: s}
 	ctx := provider.WithImageDecodeCaller(context.Background(), "vm-z")
 	if _, err := w.Call(ctx, provider.LLMRequest{Model: riverModel}); err != nil {
@@ -210,7 +210,26 @@ func TestPaidSpendInfiniteBudgetIsTheDefault(t *testing.T) {
 // TestPaidSpendPricesGlobalBedrockProfiles (Devin r1): a global. profile
 // prices at its model's rate, not the unpriced rate.
 func TestPaidSpendPricesGlobalBedrockProfiles(t *testing.T) {
-	if _, priced := paidCallCost("global.anthropic.claude-haiku-5-5", provider.Usage{InputTokens: 1000}, true); !priced {
+	if _, priced := paidCallCost("bedrock", "global.anthropic.claude-haiku-5-5", provider.Usage{InputTokens: 1000}, true); !priced {
 		t.Fatal("global.anthropic.claude-haiku-5-5 is unpriced")
+	}
+}
+
+// TestPaidSpendPricesRiverAtRiversRate (owner, 2026-11-09): River serves the
+// same DeepSeek snapshot as Synthetic at a fifth of the price, so the River
+// budget must count River's rate, not Synthetic's.
+func TestPaidSpendPricesRiverAtRiversRate(t *testing.T) {
+	usd, priced := paidCallCost("river", "deepseek-ai/DeepSeek-V4.1-Flash-1017", provider.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}, true)
+	if !priced || usd < 0.599 || usd > 0.601 {
+		t.Fatalf("river 1M in + 1M out = $%.4f (priced %v), want $0.60", usd, priced)
+	}
+	usd, _ = paidCallCost("synthetic", "deepseek-v4.1-flash-1017", provider.Usage{InputTokens: 1_000_000}, false)
+	if usd < 0.599 || usd > 0.601 {
+		t.Fatalf("synthetic 1M in = $%.4f, want $0.60", usd)
+	}
+	// Haiku 5.5 cache reads price at the cached rate.
+	usd, _ = paidCallCost("bedrock", "us.anthropic.claude-haiku-5-5", provider.Usage{InputTokens: 1_000_000, CachedInputTokens: 1_000_000}, true)
+	if usd > 0.02 {
+		t.Fatalf("1M cached Haiku tokens = $%.4f, want the cached rate", usd)
 	}
 }

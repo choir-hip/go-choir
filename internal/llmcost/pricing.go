@@ -92,17 +92,22 @@ var pricingTable = []ModelPricing{
 	// docs/problems/synthetic-provider-onboarding-2026-10-22.md). Exact, or
 	// the prefix match below prices it at DeepSeek's own rate.
 	{Provider: "synthetic", Model: "deepseek-v4.1-flash-1017", InputPerMillion: 0.60, CachedInputPerMillion: 0.03, OutputPerMillion: 1.20},
-	// Claude Haiku 5.5 on Bedrock (2026-11-09): $0.10/M in, $0.50/M out.
-	{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
-	{Provider: "bedrock", Model: "global.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
-	// River serves the same DeepSeek V4.1 Flash 1017 snapshot; its price is
-	// not published, so the Synthetic entry above stands as an estimate
-	// (model "deepseek-ai/DeepSeek-V4.1-Flash-1017" resolves to it).
+	// Claude Haiku 5.5 on Bedrock (2026-11-09): $0.10/M in, $0.50/M out. The
+	// cached rate is an estimate at Anthropic's usual tenth of input; caching
+	// is confirmed live (a 12k system prefix written, then read back whole).
+	{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
+	{Provider: "bedrock", Model: "global.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
+	// River's published rate for the same DeepSeek snapshots, $0.12 in,
+	// $0.0024 cached, $0.48 out per million (console.river.ai/api/public/pricing,
+	// 2026-11-09, "preview rates, subject to change"). Matched by provider
+	// through LookupProviderPricing, so Synthetic keeps its own entry.
+	{Provider: "river", Model: "deepseek-v4.1-flash-1017", InputPerMillion: 0.12, CachedInputPerMillion: 0.0024, OutputPerMillion: 0.48},
+	{Provider: "river", Model: "deepseek-v4.1-flash", InputPerMillion: 0.12, CachedInputPerMillion: 0.0024, OutputPerMillion: 0.48},
 	//
 	// Bedrock (the gateway's daily budget counts these,
 	// internal/gateway/paid_budget.go): Haiku 5.5 at the owner's rate, and
 	// the Claude 4.x ids the catalog serves at list rates (estimates).
-	{Provider: "bedrock", Model: "claude-haiku-5.5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
+	{Provider: "bedrock", Model: "claude-haiku-5.5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
 	{Provider: "bedrock", Model: "claude-haiku-4.5", InputPerMillion: 1.0, OutputPerMillion: 5.0},
 	{Provider: "bedrock", Model: "claude-sonnet-4.6", InputPerMillion: 3.0, OutputPerMillion: 15.0},
 	{Provider: "bedrock", Model: "claude-opus-4.6", InputPerMillion: 5.0, OutputPerMillion: 25.0},
@@ -132,6 +137,28 @@ var pricingTable = []ModelPricing{
 // (e.g. "gpt-4o-2024-08-06", "claude-3-5-sonnet-20240620") resolve to their
 // base pricing entry. Returns the entry and true when a match is found.
 func LookupPricing(model string) (ModelPricing, bool) {
+	return lookupIn(pricingTable, model)
+}
+
+// LookupProviderPricing prefers the entry the named provider charges for
+// the model: the same model can cost different amounts on different routes
+// (DeepSeek V4.1 Flash 1017 on River is a fifth of Synthetic's rate). With
+// no entry for that provider it falls back to LookupPricing.
+func LookupProviderPricing(providerName, model string) (ModelPricing, bool) {
+	providerName = strings.ToLower(strings.TrimSpace(providerName))
+	var own []ModelPricing
+	for _, entry := range pricingTable {
+		if strings.ToLower(entry.Provider) == providerName {
+			own = append(own, entry)
+		}
+	}
+	if entry, ok := lookupIn(own, model); ok {
+		return entry, true
+	}
+	return LookupPricing(model)
+}
+
+func lookupIn(table []ModelPricing, model string) (ModelPricing, bool) {
 	model = strings.ToLower(strings.TrimSpace(model))
 	// A provider-qualified id ("typesafe/jev-1.13") prices as its model.
 	if i := strings.LastIndex(model, "/"); i >= 0 {
@@ -141,15 +168,15 @@ func LookupPricing(model string) (ModelPricing, bool) {
 		return ModelPricing{}, false
 	}
 	// First try an exact match.
-	for _, entry := range pricingTable {
+	for _, entry := range table {
 		if strings.ToLower(entry.Model) == model {
 			return entry, true
 		}
 	}
 	// Then try prefix matching so dated variants resolve to the base entry.
 	// Iterate longest-first so "claude-3.5-sonnet" wins over "claude-3".
-	sorted := make([]ModelPricing, len(pricingTable))
-	copy(sorted, pricingTable)
+	sorted := make([]ModelPricing, len(table))
+	copy(sorted, table)
 	// Simple insertion sort by descending model length.
 	for i := 1; i < len(sorted); i++ {
 		for j := i; j > 0 && len(sorted[j].Model) > len(sorted[j-1].Model); j-- {

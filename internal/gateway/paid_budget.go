@@ -163,11 +163,11 @@ func nextUTCMidnight(t time.Time) time.Time {
 
 // paidCallCost prices a call. priced=false says the model had no table entry
 // (the call then counts at the unpriced rate on a capped provider, else $0).
-func paidCallCost(model string, u provider.Usage, capped bool) (usd float64, priced bool) {
+func paidCallCost(providerName, model string, u provider.Usage, capped bool) (usd float64, priced bool) {
 	for _, prefix := range []string{"global.anthropic.", "us.anthropic.", "eu.anthropic.", "anthropic."} {
 		model = strings.TrimPrefix(model, prefix)
 	}
-	c := llmcost.EstimateCallWithCache(model, u.InputTokens, u.CachedInputTokens, u.OutputTokens)
+	c := llmcost.EstimateProviderCallWithCache(providerName, model, u.InputTokens, u.CachedInputTokens, u.OutputTokens)
 	if c.Found {
 		return c.USD, true
 	}
@@ -189,7 +189,7 @@ func (s *PaidSpend) Record(providerName, computerID, model string, u provider.Us
 	defer s.mu.Unlock()
 	s.rollLocked()
 	_, capped := s.budgets[providerName]
-	usd, priced := paidCallCost(model, u, capped)
+	usd, priced := paidCallCost(providerName, model, u, capped)
 	d := s.rec.Today[providerName]
 	if d == nil {
 		d = &providerDay{}

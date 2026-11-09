@@ -49,13 +49,23 @@ func EstimateCall(model string, inputTokens, outputTokens int) Cost {
 // cachedInputTokens (clamped to inputTokens) is priced at the model's cached
 // rate and the rest at the input rate.
 func EstimateCallWithCache(model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
+	return estimateWith(LookupPricing, model, inputTokens, cachedInputTokens, outputTokens)
+}
+
+// EstimateProviderCallWithCache is EstimateCallWithCache at the named
+// provider's rate when the table has one (LookupProviderPricing).
+func EstimateProviderCallWithCache(providerName, model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
+	return estimateWith(func(m string) (ModelPricing, bool) { return LookupProviderPricing(providerName, m) }, model, inputTokens, cachedInputTokens, outputTokens)
+}
+
+func estimateWith(lookup func(string) (ModelPricing, bool), model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
 	if cachedInputTokens < 0 {
 		cachedInputTokens = 0
 	}
 	if cachedInputTokens > inputTokens {
 		cachedInputTokens = inputTokens
 	}
-	entry, ok := LookupPricing(model)
+	entry, ok := lookup(model)
 	if !ok {
 		return Cost{
 			InputTokens:       inputTokens,
