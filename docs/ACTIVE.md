@@ -11,6 +11,28 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## Live station (2026-11-09): Autopaper improvement
+
+**Goal:** [`definitions/choir-autopaper-improvement-2026-11-09.md`](definitions/choir-autopaper-improvement-2026-11-09.md)
+(`readiness: drafted`; promoted after one Devin review of the file, on the
+owner's order). Run it with
+`/goal docs/definitions/choir-autopaper-improvement-2026-11-09.md`.
+
+Owner, 2026-11-09: "Okay, one more key feature before we go into the auto
+paper improvements", so the ordinary prompt path and its added features came
+first and Autopaper is next, then Autoradio. The draft's "Decisions for the
+owner" run on their recommended defaults until answered (No Blocking Asks).
+S1, the source audit, is read-only and starts first; the paper's /health
+contention and its stale queue (D13) are S1 items.
+
+## Complete (2026-11-09): the ordinary prompt path
+
+**Goal:** [`definitions/choir-ordinary-prompt-path-2026-11-09.md`](definitions/choir-ordinary-prompt-path-2026-11-09.md)
+(`status: complete`). An ordinary research prompt reached a cited v2 in 78 s
+on d@e (baseline 202 s). The owner's added features landed and were proved on
+staging: appearance flow, account switcher, restart to update, and sandbox
+pause and resume (drill passed on d@e at 1f2493123).
+
 ## Active goal (2026-11-04): the modular architecture
 
 **Goal:** [`definitions/choir-modular-architecture-2026-11-04.md`](definitions/choir-modular-architecture-2026-11-04.md)

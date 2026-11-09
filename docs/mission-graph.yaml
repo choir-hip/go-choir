@@ -1179,6 +1179,28 @@ nodes:
       Owner 2026-11-03: "a metamission that runs progressive delivery then
       the self-dev mission overnight. and with any concurrency possible";
       "calibration in particular is the bridge between the 2 missions".
+  - id: choir-ordinary-prompt-path-2026-11-09
+    title: The ordinary prompt path — a basic research prompt reaches a cited answer in about a minute; the owner's account switcher, restart to update and sandbox pause
+    path: docs/definitions/choir-ordinary-prompt-path-2026-11-09.md
+    ledger: docs/definitions/choir-ordinary-prompt-path-2026-11-09.ledger.md
+    status: complete  # 2026-11-09; successor choir-autopaper-improvement-2026-11-09
+    kind: mission
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: [choir-autopaper-improvement-2026-11-09]
+  - id: choir-autopaper-improvement-2026-11-09
+    title: Autopaper improvement — prove the paper uses its sources well, then images that add information
+    path: docs/definitions/choir-autopaper-improvement-2026-11-09.md
+    status: working
+    kind: mission
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-ordinary-prompt-path-2026-11-09]
+    enables: []
+    note: >-
+      Owner 2026-11-09: "one more key feature before we go into the auto
+      paper improvements". Autoradio follows.
   - id: choir-modular-architecture-2026-11-04
     title: Modular architecture — every app and desk a package, small kernels, a locked desk protocol, the Library for every package kind; then self-development restarts
     path: docs/definitions/choir-modular-architecture-2026-11-04.md
