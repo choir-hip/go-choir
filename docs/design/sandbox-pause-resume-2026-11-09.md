@@ -1,4 +1,4 @@
-# Pause and resume a live engineering sandbox across a planned restart (2026-11-09, r1)
+# Pause and resume a live engineering sandbox across a planned restart (2026-11-09, r2)
 
 Owner, 2026-11-09: "We should be able to pause and resume a live sandbox. I
 guess we need to investigate the mechanics to make that safe." Context: a live
@@ -42,6 +42,21 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
    the window a pause opens. One helper, `capsulePauseState(assignment)`, reads
    the record; the restart gate (plannedRestartLiveCapsule), boot reconcile and
    the deadline/fate wakes consult it. Nothing else changes meaning.
+   `capsulePauseState` fails closed: an IO or parse error reads as live, not
+   paused. The restart gate is the only count that changes: `/health`
+   `live_capsules` and the host's idle, crash-loop and busy fallbacks keep
+   counting a paused capsule as live.
+
+   **The gate's two halves (r2 F1).** `unsafe()` is `SelfdevActive > 0 ||
+   LiveCapsules > 0 || SnapshotInFlight`, and a bound implementation
+   assignment is itself a self-development operation in `executing` for the
+   whole round (`assignmentOperation`, by freeze key). For the deploy-refresh
+   mark only, both halves exclude an assignment whose capsule carries a
+   committed, unexpired pause record: its capsule leaves `LiveCapsules` and
+   its executing operation leaves `SelfdevActive`. Started-but-uncommitted
+   pauses still refuse, as do executing operations without a record.
+   Hibernate, snapshot and restore keep today's count (a paused capsule
+   refuses them): out of scope.
 2. **Two-phase, asynchronous pause.** The host's mark request has a 20 s
    timeout (vmctl/deploy_refresh.go:85,161) and cells run for minutes, so no
    drain happens inside the request. Phase 1: a mark request (allow_busy, or
@@ -55,7 +70,11 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
    or capsule op is admitted ("pausing for a platform update; this cell will
    run after the restart"); the pause waits for the run's in-flight cell and
    the capsule's inflightOps to reach zero (bounded, default 10 min; on expiry
-   the pause is abandoned and the capsule thawed). The hibernate fence is not
+   the pause is abandoned and the capsule thawed). A pause starts only when
+   the assignment's disposition is `active` and no fate saga is in flight
+   (`assignedEngineeringFatePending`, engineering_assignment_fate.go:774);
+   otherwise the mark refuses as today. Pause is single-flight per capsule: a
+   second phase-1 mark joins the pause in progress. The hibernate fence is not
    reused (it is shared and stays open while a mark is in flight,
    hibernate.go:68-160).
 4. **One commit point: the durable pause record.** Order: admission block ->
@@ -66,11 +85,17 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
    rename + fsync dir). The record's presence is the commit. Before it: a crash
    or abandon leaves an ordinary live capsule. Running jobs are not touched:
    closeInterruptedJobs already closes them at every boot (jobs.go:828).
-5. **Unpause on every path that is not a restart.** A pause not followed by a
-   restart within its TTL (default 10 min after commit), the host clearing its
-   marker after a failed refresh, the DELETE of a mark, or a handler error:
-   thaw, remove pause.json, lift the admission block; the run continues. A
-   repeat mark request over an already-paused capsule is idempotent.
+5. **Unpause on every path that is not a restart.** Before the phase-2 ack:
+   a pause not acked within its TTL (default 10 min after commit), or a
+   handler error, unpauses: thaw, remove pause.json, lift the admission
+   block; the run continues. After the ack (marker written) the TTL no
+   longer applies, since an unpause then would consume the record just
+   before the host's kill and turn a planned restart into a crash close;
+   only the host clearing its marker (the DELETE of a mark after a failed
+   refresh, `marker.clear`) unpauses. A record past its TTL is not paused
+   for phase 2: phase 2 refuses and the TTL path unpauses it. A repeat mark
+   over an already-paused capsule is idempotent. The host's kill lands
+   within the marker's 15-minute freshness, or the boot reads as a crash.
 6. **The dir does not move while mounted.** pause.json stays in
    `boot-<old>/<id>/`. At boot, BootScopedStateDir (which runs before the
    marker is consumed, autoputer/run.go:304 vs :621) uses the non-consuming
@@ -79,7 +104,17 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
    the new boot dir; otherwise it sweeps as today. The crash-vs-planned
    decision is made after consumption, at reconcile (Decision 7), and a spared
    dir whose boot turns out to be a crash is deleted there.
-7. **Reconcile decides, before anything else engineering.** At boot, after the
+7. **Reconcile decides, before anything else engineering.** Every entry to
+   `reconcileEngineeringAssignmentsForTrajectory` checks the pause record
+   first, not only the boot sweep (r2 F2): it also runs on lifecycle
+   work-item wakes (`ReconcileLifecycleWorkAssignment`,
+   actorruntime/handler.go:458) and after an engineering run ends
+   (`kickEngineeringReconcileAfterPersist`, runtime.go:2355), where a paused
+   capsule would otherwise fail `assignedEngineeringCapsuleUsable` (state
+   frozen, not active) and be revoked. Two cases: the capsule is in the
+   executor's memory (a live pause on this process) - keep the assignment
+   and arm nothing, the unpause machinery owns it; the capsule is absent
+   (boot) - the branches below. At boot, after the
    marker is consumed and before queued admissions
    (resumeQueuedEngineeringRequestsAtPlannedBoot) and before bound-deadline
    re-arm, each assignment with a spared pause dir is resolved:
@@ -95,11 +130,23 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
    (engineering_assignment_runtime.go:529) binds and activates, which would
    cancel a bound assignment. The resume path does only: admission (host build
    reservation), validate pause.json against the binding (assignment id,
-   attempt, capsule id, subject digest, upper digest and counts), adopt the dir
+   attempt, capsule id, subject digest, upper digest and counts), clear live residue first (r2 F3: a
+   process-only restart under `Restart=on-failure` keeps the kernel boot id,
+   so the merged mount may still be mounted and the cgroup still frozen with
+   tasks): thaw and kill the cgroup, unmount, using the
+   `cleanupOrphanedCapsuleCgroup` primitives; frozen tasks cannot have
+   written the upper, so the digest still validates; a teardown failure
+   closes the assignment as interrupted. Then adopt the dir
    (Spawn accepts an existing dir only with a valid record), mount the
    preserved source-lower verbatim (no re-staging of inputs or carried patch),
-   a fresh shared source cache from the durable subject, a fresh computer
-   files layer, and MintCapabilityHandle from the same deterministic opaque
+   a fresh shared source cache from the durable subject with
+   `source-lower-ref` rewritten to the rebuilt cache path and verified before
+   the mount (r2 F4b: the old ref names a swept cache, and Diff and the
+   source patch resolve their base through it), re-establish the
+   `selfdev/{bundle,carried}` bind mounts with their read-only remount when
+   the preserved source-lower carries them (r2 F4a: without them a resumed
+   capsule could copy up over the verifier bundle), a fresh computer files
+   layer, and MintCapabilityHandle from the same deterministic opaque
    with its TTL capped at the assignment's remaining deadline. It then renames
    pause.json to pause.consumed.json (one resume within a boot) and only then
    releases the run.
@@ -122,6 +169,11 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
 **Not paused (refusals stay):** a self-development apply in flight, a frozen
 or awaiting-decision candidate, a snapshot in flight, a verifier-slot capsule
 (implementation slot only), a capsule that cannot drain within its bound.
+
+**Restore markers.** Only a planned-restart marker whose reason is a
+platform update spares pause dirs; a self-development restore marker
+(`PlannedRestartSelfDevelopmentRestore`) does not, and the boot sweeps them
+as today.
 
 ## Failure modes (tests first)
 
@@ -148,11 +200,36 @@ or awaiting-decision candidate, a snapshot in flight, a verifier-slot capsule
     restart refused as today.
 14. Code rollback mid-pause: the older binary sees `active`; its boot path
     revokes and cancels as today; pause.json is ignored and swept.
+15. Every capsule paused: phase 2 acks (`LiveCapsules` and `SelfdevActive`
+    both exclude the paused assignment); with one capsule still pausing, or
+    an executing operation without a record, phase 2 refuses.
+16. A lifecycle work-item wake or a run end during the pause runs reconcile;
+    the paused capsule is kept, nothing is revoked or armed.
+17. Pending marker plus a process-only restart (same boot id) with the
+    merged mount live and the cgroup frozen: the resume tears down the
+    residue, then resumes; a teardown failure closes as interrupted.
+18. After resume: `source-lower-ref` names the rebuilt cache, Diff produces
+    the same patch as before the pause, and a write to /selfdev/bundle from
+    the capsule fails (read-only).
+19. After the phase-2 ack the TTL expires before the kill: no unpause; the
+    planned boot resumes.
+20. A restore-reason marker does not spare pause dirs.
 
 ## Measures to record at first use
 
 Upper/tmp bytes and file counts at pause; drain, freeze, digest and record
 durations; resume duration (validate, mount, first cell).
+
+## Adjudicated review findings, r2 (Devin SEND_BACK F1-F4)
+
+| Finding | Outcome |
+|---|---|
+| F1 the executing self-development op still refuses the gate | Adopted: both halves exclude a committed, unexpired record, deploy-refresh mark only (Decision 1) |
+| F2 runtime reconciles revoke a paused capsule | Adopted: the record guards every reconcile entry; in-memory vs absent cases (Decision 7) |
+| F3 pending marker plus a same-boot-id process restart | Adopted: residue teardown before adoption (Decision 8) |
+| F4 adoption drops the bundle bind mounts and leaves a stale source-lower-ref | Adopted: both named adoption steps (Decision 8) |
+| Notes: health keeps counting paused as live; TTL pre-ack only and expired is not paused; refuse unless active and no fate saga; single-flight; fail closed; hibernate and snapshot out of scope; restore markers do not spare; kill within 15 min | Adopted (Decisions 1, 3, 5, restore paragraph) |
+| Sonnet N3 deferral confirmed | Unchanged |
 
 ## Adjudicated review findings (r0: Devin SEND_BACK B1-B8; Sonnet SEND_BACK B1-B6)
 
