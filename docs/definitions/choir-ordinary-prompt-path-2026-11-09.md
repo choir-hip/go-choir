@@ -109,7 +109,7 @@ boundaries:
   not_in_scope: "the wait-time redesign (docs/problems/activation-wait-times-2026-11-09.md options 1-5 await the owner's choice); the Autopaper source audit and images (the next mission)"
 
 now:
-  status: working
+  status: checkpoint_incomplete
   slice: >
     Stations in order (each lands through the landing loop; parallel where
     independent):
@@ -129,10 +129,10 @@ now:
     edge: "missing_oracle: the owner's computer cannot be read; d@e may differ in pool state"
     delta_o: "per-desk call and token counts and per-hop timings, recorded with each deployed proof"
     scope: "d@e and b@c"
-  believed_state: "Texture and research work but slowly; research under-uses sources; routing now skips known-dead members (deploying); the fleet is still single-image except d@e; the delegate is proven on b@c only before the sandbox change"
-  main_uncertainty: "whether the layered image holds memory and boot on the paper-sized computers (the S3 memory gate was never measured on a matched peer); whether research picks better sources once its reads are visible"
-  next_observation: "L3 review verdicts; L1 and L2 deploys; d@e delegate status after L3 deploys"
-  next_action: "land L2 and L3 through review; write the L3.5 design (load and unload live) while they deploy, then build it; then L4 benchmark and L6 stop rule on d@e"
+  believed_state: "Stations L1-L9 landed and deployed (L3.5 phase 1 eviction; tool packages are its next station). The conjecture test passed on d@e at eaf66a1aa: \"What's latest in ai?\" reached a cited v2 in 78 s (baseline 202 s) and its last revision in 126 s (L4 crouton 296 s), 24 cite marks. The owner's added features landed: appearance flow, account switcher (deployed proof passed), restart to update (accepted on b@c: current, owner-act refusal), sandbox pause (deployed; live drill pending)."
+  main_uncertainty: "whether a paused capsule resumes across a real release change on d@e (the drill missed its window once; the test VM cannot mount); whether the speedup holds across prompt kinds (one run, one prompt)"
+  next_observation: "the sandbox pause drill at the next code release: d@e defers on a live capsule, the owner update answers pausing then refreshed, the capsule resumes once with its patch intact"
+  next_action: "run the pause drill at the next code release (a long engineering capsule started just before the push); then this mission completes, and the Autopaper improvements mission starts (paper /health contention, the 1628 queued management tasks), then Autoradio"
   ledger: docs/definitions/choir-ordinary-prompt-path-2026-11-09.ledger.md
 ---
 
