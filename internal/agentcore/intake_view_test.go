@@ -191,7 +191,7 @@ func TestManagementSurfaceListsIntakeFunctionsOnlyWhenOn(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, verb := range yaegikernel.IntakeVerbs {
-		if !strings.Contains(on, "choir."+verb+"(") {
+		if !blockNamesVerb(on, "choir."+verb+"(") {
 			t.Fatalf("management's prompt omits choir.%s with intake.labels on", verb)
 		}
 	}

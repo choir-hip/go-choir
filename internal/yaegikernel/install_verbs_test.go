@@ -11,7 +11,7 @@ func TestInstallVerbsAreManagementOnly(t *testing.T) {
 	for _, role := range []string{"management", "research", "texture", SessionRoleManagementTask, SessionRoleResearchWeb, SessionRoleResearchTexture, "engineering"} {
 		surface := DeskSurface(role, "", false)
 		for _, v := range []string{"InstallPacket", "InstallVerdict"} {
-			has := strings.Contains(surface, "choir."+v+"(")
+			has := surfaceMentions(surface, v)
 			if want := role == "management"; has != want {
 				t.Errorf("role %s: choir.%s on surface = %v, want %v", role, v, has, want)
 			}

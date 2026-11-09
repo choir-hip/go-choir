@@ -991,6 +991,9 @@ type CellHooks struct {
 	JobsAwaited func() []string
 	// CalibrationRead reports a choir.Calibration() call in the cell (C6).
 	CalibrationRead func() bool
+	// HelpTexts returns the texts choir.Help returned during the cell: host
+	// documentation the host shows unwrapped by the untrusted-data frame.
+	HelpTexts func() []string
 	// KeepOutput takes a successful cell's printed output and returns what
 	// the result shows: a print over the bound is stored whole for
 	// choir.CellOut and shown cut (LR lever 6, cell_output.go). Nil means no

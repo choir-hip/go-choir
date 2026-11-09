@@ -97,6 +97,10 @@ type ChoirScope struct {
 	// a bare call (problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md).
 	refusalMu sync.Mutex
 	refusals  []verbRefusal
+	// helpTexts are the texts choir.Help returned in the bound cell: host
+	// documentation, which the cell result does not wrap as untrusted data.
+	helpMu    sync.Mutex
+	helpTexts []string
 	// searches is this session's async search store (search_store.go): the
 	// worker's reader loop writes it, cells read it through choir.Searches,
 	// and a cell's end does not clear it. searchTold is how many of each
@@ -265,6 +269,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 		RecordsShown:    s.recordsShown.Load,
 		JobsAwaited:     s.takeAwaited,
 		CalibrationRead: s.calibrationRead.Load,
+		HelpTexts:       s.takeHelpTexts,
 	}
 }
 

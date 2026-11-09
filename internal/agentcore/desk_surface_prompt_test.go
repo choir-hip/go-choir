@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -24,18 +25,42 @@ func TestEveryDeskPromptCarriesItsSurface(t *testing.T) {
 	}
 	for _, tc := range cases {
 		block := deskSurfacePrompt(tc.profile, &types.RunRecord{Metadata: tc.meta})
-		if !strings.Contains(block, "choir.Help()") {
+		if !strings.Contains(block, "choir.Help(") {
 			t.Errorf("%s surface does not say how to get more: %q", tc.profile, block)
 		}
 		for _, want := range tc.want {
-			if !strings.Contains(block, want) {
+			if !blockNamesVerb(block, want) {
 				t.Errorf("%s surface missing %q", tc.profile, want)
 			}
 		}
 		for _, absent := range tc.absent {
-			if strings.Contains(block, absent) {
+			if blockNamesVerb(block, absent) {
 				t.Errorf("%s surface lists %q, which it cannot call", tc.profile, absent)
 			}
 		}
 	}
+}
+
+// blockNamesVerb reports whether the prompt block names the verb in a card
+// (choir.Name(...)) or in its cold-verb line. want is "choir.Name(" or
+// "choir.Name()"-style text from the table above.
+func blockNamesVerb(block, want string) bool {
+	if strings.Contains(block, want) {
+		return true
+	}
+	m := regexp.MustCompile(`choir\.(\w+)`).FindStringSubmatch(want)
+	if m == nil {
+		return false
+	}
+	for _, line := range strings.Split(block, "\n") {
+		if rest, ok := strings.CutPrefix(line, "Also available, by name: "); ok {
+			names, _, _ := strings.Cut(rest, ". Call choir.Help")
+			for _, n := range strings.Split(names, ", ") {
+				if n == m[1] {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

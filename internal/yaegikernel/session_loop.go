@@ -141,6 +141,10 @@ type SessionResult struct {
 	// CalibrationRead says a choir.Calibration() call in the cell read the
 	// desk's record: the host writes the read mark (C6).
 	CalibrationRead bool `json:"calibration_read,omitempty"`
+	// HelpTexts are the texts choir.Help returned in the cell. They are the
+	// host's own documentation: the host leaves them out of the untrusted
+	// data frame it puts round a cell's printed output.
+	HelpTexts []string `json:"help_texts,omitempty"`
 	// SlotToken is set on the worker's ready handshake only (ARCH-07): the
 	// per-spawn token the host generated, proving the process on the socket
 	// is the one it started.
@@ -208,6 +212,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	}
 	if hooks != nil && hooks.CalibrationRead != nil {
 		out.CalibrationRead = hooks.CalibrationRead()
+	}
+	if hooks != nil && hooks.HelpTexts != nil {
+		out.HelpTexts = hooks.HelpTexts()
 	}
 	var staged []StagedIntent
 	if hooks != nil && hooks.End != nil {

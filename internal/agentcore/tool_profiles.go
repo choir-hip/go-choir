@@ -265,6 +265,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	b.WriteString(runtimeprompts.PeerCoordination(runtimeprompts.PeerCoordinationOptions{
 		InCellCarrier: deskCarrierLive(profile) || deskmanifest.IsAssignmentPerformer(profile),
+		Verbs:         peerActVerbs(profile, rec, hidden...),
 	}))
 	return b.String(), nil
 }
@@ -543,4 +544,31 @@ func (rt *Runtime) lateDeskCellRegistry(profile string) *toolregistry.ToolRegist
 	}
 	rt.toolProfiles[profile] = registry
 	return registry
+}
+
+// peerActVerbs names, from the desk's own surface, the addressed acts it can
+// call, so the peer-coordination trailer never names a verb the desk lacks
+// (the Texture trailer named choir.ReportPacket, which Texture cannot call).
+func peerActVerbs(profile string, rec *types.RunRecord, hidden ...string) string {
+	var slot string
+	readOnly := false
+	switch profile {
+	case deskmanifest.ResearcherName():
+		readOnly = true
+	case deskmanifest.PerformerName():
+		if rec != nil {
+			slot = metadataStringValue(rec.Metadata, runMetadataEngineeringSlot)
+		}
+	}
+	have := map[string]bool{}
+	for _, n := range yaegikernel.SurfaceNames(profile, slot, readOnly, hidden...) {
+		have[n] = true
+	}
+	var out []string
+	for _, n := range []string{"ReportPacket", "Cast", "Ask"} {
+		if have[n] {
+			out = append(out, "choir."+n)
+		}
+	}
+	return strings.Join(out, ", ")
 }

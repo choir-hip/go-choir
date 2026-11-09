@@ -906,7 +906,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// instructions (run_context.go frameLabelled).
 			stdout := result.Stdout
 			if rt.runUntrustedReads(execCtx.RunID) != untrustedBefore {
-				stdout = frameLabelled(rt.runLabelSet(execCtx.RunID), stdout)
+				stdout = frameLabelledExcept(rt.runLabelSet(execCtx.RunID), stdout, result.HelpTexts)
 			}
 			cell := map[string]any{
 				"stdout":   stdout,

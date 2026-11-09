@@ -286,7 +286,9 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 		}
 	}
 	for _, verb := range []string{"Start", "Poll", "Stop"} {
-		if !strings.Contains(yaegikernel.DeskSurface("engineering", "implementation", false), "choir."+verb+"(") {
+		// A verb is documented by a card or named in the cold-verb line.
+		block := yaegikernel.DeskSurface("engineering", "implementation", false)
+		if !strings.Contains(block, "choir."+verb+"(") && !regexp.MustCompile(`by name: (?:[A-Za-z]+, )*`+verb+`[,.]`).MatchString(block) {
 			t.Errorf("J6: the kernel documents no choir.%s", verb)
 		}
 	}

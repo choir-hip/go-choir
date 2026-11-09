@@ -43,7 +43,7 @@ func TestRelateStoriesIsExportedToTheResearchDeskOnly(t *testing.T) {
 			t.Errorf("role %q slot %q exports RelateStories = %v, want %v", tc.role, tc.slot, got, tc.want)
 		}
 		surface := DeskSurface(tc.role, tc.slot, scope.readOnly)
-		if strings.Contains(surface, "choir.RelateStories(") != tc.want {
+		if surfaceMentions(surface, "RelateStories") != tc.want {
 			t.Errorf("role %q prompt surface lists RelateStories = %v, want %v", tc.role, !tc.want, tc.want)
 		}
 	}

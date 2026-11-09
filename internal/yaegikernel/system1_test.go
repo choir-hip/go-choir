@@ -44,7 +44,7 @@ func TestSystem1IsExportedToTheResearchDeskOnly(t *testing.T) {
 			t.Errorf("role %q slot %q exports System1 = %v, want %v", tc.role, tc.slot, got, tc.want)
 		}
 		surface := DeskSurface(tc.role, tc.slot, scope.readOnly)
-		if strings.Contains(surface, "choir.System1(") != tc.want {
+		if surfaceMentions(surface, "System1") != tc.want {
 			t.Errorf("role %q prompt surface lists System1 = %v, want %v", tc.role, !tc.want, tc.want)
 		}
 		if tc.want {

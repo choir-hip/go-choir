@@ -41,6 +41,10 @@ type PeerCoordinationOptions struct {
 	// peer coordination is a semantic act (choir.ReportPacket,
 	// choir.Cast, choir.Ask), not a JSON tool.
 	InCellCarrier bool
+	// Verbs names the peer acts this desk can call, as "choir.Cast, choir.Ask":
+	// the trailer names only verbs on the desk's surface (a Texture has no
+	// choir.ReportPacket).
+	Verbs string
 }
 
 func TemporalContext(opts TemporalContextOptions) string {

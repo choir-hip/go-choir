@@ -267,56 +267,98 @@ func renderSurface(names []string) string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(`Call choir.Help() for this list at any time, and choir.Help("Name") for one function's arguments, return fields and an example.`)
+	b.WriteString(`Call choir.Help() for the list of names and signatures at any time, and choir.Help("Name") for one function's arguments, return fields, an example and the usual mistake.`)
 	return b.String()
 }
 
 // Help is the in-REPL surface: with no name it lists the desk's callable
-// functions; with a name it details that function. It stages nothing.
+// functions, one signature per line; with names it details each (signature,
+// result fields, an example, the usual mistake); Help("*") is the whole
+// surface in full prose. It stages nothing. Its text is host text, not world
+// data: the cell result does not wrap it as untrusted (HelpTexts).
 func (s *ChoirScope) Help(name ...string) string {
-	names := s.surfaceNames()
-	if len(name) == 0 || strings.TrimSpace(name[0]) == "" {
-		return "Your choir functions (always call them with the choir. prefix):\n" + renderSurface(names)
+	out, hostOnly := s.helpText(name)
+	if hostOnly {
+		s.noteHelp(out)
 	}
-	wanted := strings.TrimPrefix(strings.TrimSpace(name[0]), "choir.")
-	wanted = strings.TrimSuffix(wanted, "()")
-	for _, n := range names {
-		if n != wanted {
-			continue
-		}
-		doc := choirFunctionDocs[n]
-		var b strings.Builder
-		b.WriteString(choirSignature(n) + "\n" + doc.Summary + "\n")
-		if fields := returnFields(n); fields != "" {
-			b.WriteString(fields + "\n")
-		}
-		if doc.Example != "" {
-			b.WriteString("Example: " + doc.Example + "\n")
-		}
-		return b.String()
-	}
-	msg := fmt.Sprintf("There is no choir.%s for this desk.", wanted)
-	if closest := closestName(wanted, names); closest != "" {
-		msg += " Closest: " + choirSignature(closest) + "."
-	}
-	return msg + "\n" + renderSurface(names)
+	return out
 }
 
-// DeskSurface is the generated prompt block naming a desk's exact surface.
-// Hidden names are left out of the block (a setting that is off).
-func DeskSurface(desk, slot string, readOnly bool, hidden ...string) string {
-	scope := &ChoirScope{desk: desk, slot: slot, readOnly: readOnly}
-	skip := map[string]bool{}
-	for _, name := range hidden {
-		skip[name] = true
-	}
-	var names []string
-	for _, name := range scope.surfaceNames() {
-		if !skip[name] {
-			names = append(names, name)
+// helpText renders Help's answer. hostOnly reports that every byte of it is
+// the host's own: an answer that names what the caller asked for (an unknown
+// name) is not, so it stays inside the untrusted frame of a labelled run.
+func (s *ChoirScope) helpText(name []string) (string, bool) {
+	names := s.surfaceNames()
+	var wanted []string
+	for _, n := range name {
+		if n = cleanHelpName(n); n != "" {
+			wanted = append(wanted, n)
 		}
 	}
-	return "Your REPL interaction surface. The package choir is predeclared; always call its functions with the choir. prefix. These are the only choir functions this desk can call:\n" + renderSurface(names)
+	if len(wanted) == 0 {
+		return s.renderIndex(names), true
+	}
+	if len(wanted) == 1 && wanted[0] == "*" {
+		return "Your choir functions (always call them with the choir. prefix):\n" + renderSurface(names), true
+	}
+	have := make(map[string]bool, len(names))
+	for _, n := range names {
+		have[n] = true
+	}
+	var parts []string
+	hostOnly := true
+	for _, w := range wanted {
+		if have[w] {
+			parts = append(parts, helpDetail(w))
+			continue
+		}
+		hostOnly = false
+		msg := "There is no choir function of that name for this desk."
+		if helpNameIsIdentifier(w) {
+			msg = fmt.Sprintf("There is no choir.%s for this desk.", w)
+		}
+		if closest := closestName(w, names); closest != "" {
+			msg += " Closest: " + choirSignature(closest) + "."
+		}
+		parts = append(parts, msg+" "+`choir.Help() lists what exists.`+"\n")
+	}
+	return strings.Join(parts, "\n"), hostOnly
+}
+
+// helpNameIsIdentifier reports whether a name Help was asked for is safe to
+// repeat: letters, digits and underscores, at most 64 bytes.
+func helpNameIsIdentifier(name string) bool {
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		if !(r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// noteHelp records the text Help returned in this cell, so the host can show
+// it to the desk unwrapped.
+func (s *ChoirScope) noteHelp(text string) {
+	if s == nil || text == "" {
+		return
+	}
+	s.helpMu.Lock()
+	if len(s.helpTexts) < 32 {
+		s.helpTexts = append(s.helpTexts, text)
+	}
+	s.helpMu.Unlock()
+}
+
+// takeHelpTexts returns and clears the Help texts returned since the last call.
+func (s *ChoirScope) takeHelpTexts() []string {
+	s.helpMu.Lock()
+	defer s.helpMu.Unlock()
+	out := s.helpTexts
+	s.helpTexts = nil
+	return out
 }
 
 var (
@@ -372,11 +414,23 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	if len(bare) > 0 {
 		return "Call choir functions with the choir. prefix: did you mean " + strings.Join(bare, ", ") + "?"
 	}
+	if hint := resultCountHint(surface, src, msg); hint != "" {
+		return hint
+	}
+	if hint := argumentTypeHint(surface, src, msg); hint != "" {
+		return hint
+	}
 	if jsonResultMisuse(src, msg) {
 		return jsonResultHint
 	}
 	if m := undefinedFieldRE.FindStringSubmatch(msg); m != nil {
+		if hint := trackedFieldHint(surface, src, m[1]); hint != "" {
+			return hint
+		}
 		return resultFieldHint(m[1])
+	}
+	if sliceBoundsRE.MatchString(msg) {
+		return sliceBoundsHint
 	}
 	if topLevelDefineRE.MatchString(msg) {
 		if corrected, line, ok := topLevelDefineCorrection(cell); ok && len(corrected) <= maxTopLevelDefineCorrection {
