@@ -376,6 +376,15 @@ capsule, apply and skew refusals; the health guards and automatic rollback;
 R0 and the paper held until each is seen healthy. Ordinary releases walk
 the rings. Name every expedite in the next report.
 
+**Expedite everything until Autoradio is solid** (owner, 2026-11-09: "we're
+going to be on expedite mode for everything until we do the auto paper
+improvements mission. And then ... the initial auto radio mission ... once
+we get auto radio really solid, only then do we really start slowing down
+with the progressive delivery, because that's the point where we're going
+to be launching to real users and stability will become more important").
+Until the owner says Autoradio is solid, every landing commit carries
+`Ring-Expedite`, with the expedite's guards unchanged.
+
 **Agent models** (owner, 2026-10-22; widened 2026-11-06: "don't use opus
 for review. Opus for open ended design only, and sonnet for investigations,
 linear implementation, optimizing metrics, code review, etc"): Opus for
