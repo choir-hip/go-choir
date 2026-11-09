@@ -1,4 +1,4 @@
-import { scopedKey } from './accounts.js';
+import { scopedKey } from './user-scope.js';
 // Autopaper: the public front list of living stories, and the routes that
 // name a story. Everything here reads public platform routes served from
 // Store B; nothing calls a computer, so Autopaper stays up while the paper

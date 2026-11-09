@@ -8,11 +8,9 @@
  * Cookie-backed and same-origin: no token ever reaches script.
  */
 
-import { prepareAccountSwitch } from './shell-services';
 
 const CHANNEL_NAME = 'choir-accounts';
 const SWITCHED_STORAGE_KEY = 'choir.accounts.switched';
-const LAST_USER_KEY = 'choir.auth.lastUserId';
 const RECONCILE_KEY = 'choir.accounts.reconcile';
 const RECONCILE_WINDOW_MS = 15000;
 
@@ -23,32 +21,17 @@ const TAB_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)
 // Per-user storage keys
 // ---------------------------------------------------------------------------
 
-/** The user id the last successful session check saw, or ''. */
-export function lastUserId() {
-  try {
-    return window.localStorage?.getItem(LAST_USER_KEY) || '';
-  } catch (_err) {
-    return '';
-  }
-}
+// Per-user keys live in user-scope.js, which imports nothing, so modules
+// that run outside the browser shell (autopaper.ts under node) can use them.
+export { lastUserId, setLastUserId, scopedKey } from './user-scope.js';
+import { lastUserId, setLastUserId, scopedKey } from './user-scope.js';
 
-/** Written at every successful session check and at every switch. */
-export function setLastUserId(userId) {
-  try {
-    if (userId) window.localStorage?.setItem(LAST_USER_KEY, userId);
-  } catch (_err) {
-    // Storage blocked: per-user keys fall back to the unscoped name.
-  }
-}
-
-/**
- * A global browser-storage key made per-user: `<base>:<userId>` once a user is
- * known, `<base>` before. Before the session is known the pointer picks the
- * right account's cache.
- */
-export function scopedKey(base) {
-  const id = lastUserId();
-  return id ? `${base}:${id}` : base;
+// auth.js imports this module, and much imports auth.js; a static import of
+// shell-services here would pull the package registry into every one of them
+// (it broke the settings contract tests), so the shell is loaded on use.
+async function prepareAccountSwitch() {
+  const shell = await import('./shell-services');
+  await shell.prepareAccountSwitch();
 }
 
 const RETURNING_KEY = 'choir.auth.returning';
