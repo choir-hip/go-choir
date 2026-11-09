@@ -101,6 +101,20 @@ Follow-on notes from the same evening:
 - Research passes on a minority of the sources it retrieves. It should be selective, but it is not choosing well.
 - The pool should route by availability, so a turn goes straight to the member that works.
 
+Self-development acceptance prompts (owner, 2026-11-09): new themes, built
+by self-development with the Sonnet (Claude) delegate inside the round:
+- **Vector Heart.** The Designers Republic-derived aesthetic Evan Collins named. It means the visual style, not literal vectors and hearts. The existing "vectorheart" preset with hearts stays as is, the "cute" one.
+- **Neo Vector Heart.** The Designers Republic take on it.
+- **Metal Heart.** The related aesthetic.
+- **Utopian Scholastic.**
+- **OLED Black.** As black as possible while staying readable and usable, to minimise power on OLED screens.
+- **Hybrids.** Mixes of these with Frutiger Aero and Liquid Metal, "in a cool way".
+
+Themes must be separate from the desktop background. The background is an
+image or a graphic design that the owner uploads or picks from Files. A theme
+does not set it. Whether this separation landed in an earlier mission is
+unverified: check it first.
+
 The Autopaper improvement mission
 (choir-autopaper-improvement-2026-11-09.md) follows this one and shares its
 Texture media work.
