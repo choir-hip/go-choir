@@ -583,6 +583,11 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if _, exists := e.capsules[spec.CapsuleID]; exists {
 		return nil, fmt.Errorf("capsule %s already exists", spec.CapsuleID)
 	}
+	// A paused capsule's resume does its teardown, digest and moves outside
+	// e.mu under the resuming guard; a same-id Spawn must not overlap it.
+	if e.resumingIDs[spec.CapsuleID] {
+		return nil, fmt.Errorf("capsule %s is being resumed", spec.CapsuleID)
+	}
 	memory, err := planCapsuleMemory(e.memoryPolicy, spec)
 	if err != nil {
 		return nil, err
@@ -2681,6 +2686,10 @@ func capsuleIdentityEtcFiles() map[string]string {
 	}
 }
 
+// prepareCapsuleRoot's names, and every mount target Spawn adds under the
+// merged view, must also be in seededTopLevelNames and seededNestedNames
+// (pause_linux.go): a resumed capsule's seeded upper is sanitized against
+// symlinks at exactly those names before any of this runs.
 func prepareCapsuleRoot(root, upperDir string) error {
 	for _, path := range []string{"run", "tmp", "home", "root", "etc", "mnt", "var", "dev", "proc", "sys", "nix/store"} {
 		if err := os.MkdirAll(filepath.Join(root, path), 0o755); err != nil {
