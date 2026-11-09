@@ -1,10 +1,12 @@
 package apihandler
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/kernel"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -14,6 +16,7 @@ import (
 type Handler struct {
 	store  *store.Store
 	kernel *kernel.Kernel
+	slots  func(ctx context.Context, ownerID string) []agentcore.InstalledSlot
 }
 
 // NewHandler creates a Handler backed by the given store.

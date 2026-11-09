@@ -191,6 +191,14 @@ export type InstalledPackageRecord = {
 /** A pack contributes data (themes, commands, keybindings) and has no app or module. */
 export const isPack = (record: Pick<InstalledPackageRecord, 'manifest'>): boolean => !isObject(record.manifest?.app);
 
+/**
+ * A package that provides shell surfaces (manifest `provides`, no app) and has
+ * a built module: installed-surfaces.ts mounts it into its slots, in the
+ * shell's realm, only for a release whose isolation is "shell".
+ */
+export const isSurfacePackage = (record: Pick<InstalledPackageRecord, 'manifest' | 'module'>): boolean =>
+  !isObject(record.manifest?.app) && Array.isArray((record.manifest as any)?.provides) && (record.manifest as any).provides.length > 0 && Boolean(record.module?.sha256);
+
 /** The computer's installed packages; empty until read, or signed out. */
 export const installedPackages = writable<InstalledPackageRecord[]>([]);
 

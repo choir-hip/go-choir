@@ -32,7 +32,12 @@ if (!frontendRoot || !/^[a-z][a-z0-9-]{1,39}$/.test(name || '') || !outFile || !
 const root = realpathSync(path.resolve(frontendRoot));
 const pkgDir = path.join(root, 'src/packages', name);
 const manifest = JSON.parse(readFileSync(path.join(pkgDir, 'choir-package.json'), 'utf8'));
-const entry = path.join(pkgDir, manifest.app.entry);
+// A shell-surface package (manifest `provides`, no app) builds the same
+// module/v1 path: its module exports `surfaces` (service -> Svelte component)
+// and `surface(service, ctx)`, which binds the SDK and adds the CSS once; the
+// shell mounts the component into the slot (shell-slots.ts). It draws no window.
+const provides = !manifest.app && Array.isArray(manifest.provides) ? manifest.provides : null;
+const entry = provides ? '' : path.join(pkgDir, manifest.app.entry);
 const sdkFile = path.join(root, 'src/lib/app-sdk.js');
 
 mkdirSync(path.dirname(sdkFile), { recursive: true });
@@ -87,6 +92,30 @@ function choirModule() {
     },
     load(id) {
       if (id !== ENTRY_ID) return null;
+      if (provides) {
+        const imports = provides.map((p, i) => `import S${i} from ${JSON.stringify(path.join(pkgDir, p.entry))};`).join('\n');
+        const table = provides.map((p, i) => `${JSON.stringify(String(p.service))}: S${i}`).join(', ');
+        return `${imports}
+import { bindSdk } from ${JSON.stringify(sdkFile)};
+export const abi = 'choir.app-frontend/module/v1';
+export const requires_sdk = ${JSON.stringify(requiresSdk)};
+export const sdk_imports = "__CHOIR_SDK_IMPORTS__";
+const STYLE = "__CHOIR_CSS__";
+export const surfaces = { ${table} };
+let style = null;
+export function surface(service, ctx) {
+  bindSdk(ctx && ctx.sdk);
+  if (STYLE && !style) {
+    style = document.createElement('style');
+    style.setAttribute('data-choir-package-style', (ctx && ctx.package) || '');
+    style.textContent = STYLE;
+    document.head.appendChild(style);
+  }
+  return surfaces[service] || null;
+}
+export function release() { if (style) { style.remove(); style = null; } }
+`;
+      }
       return `import App from ${JSON.stringify(entry)};
 import { bindSdk } from ${JSON.stringify(sdkFile)};
 export const abi = 'choir.app-frontend/module/v1';

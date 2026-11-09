@@ -54,6 +54,7 @@
   import { promptTargetFor } from './prompt-focus';
   import { dismissNotification, notifications, postNotification } from './services/notifications';
   import './menu-host';
+  import './installed-surfaces';
   import './services/windows';
   import { installContextCoverage } from './context-coverage';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';

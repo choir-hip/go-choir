@@ -68,7 +68,8 @@ function registerRendererSurface(s: InTreeSurface, scope: Scope): void {
     id: name,
     tier: 'core',
     priority: s.priority,
-    isDefault: true,
+    // An installed renderer is not the base image's default: the menu offers "Use default menu" while it renders.
+    isDefault: !s.installed,
     impl: {
       render(request) {
         if (!mountRenderer(name, component as ComponentType, packageIdentityContext(name))) return false;

@@ -164,7 +164,8 @@ export async function removeSurfacePackage(name: string): Promise<void> {
   if (scope) await scope.dispose();
 }
 
-export type InTreeSurface = ReturnType<typeof inTreeSurfaces>[number];
+/** A surface of a package: the in-tree set, or an installed release that displaces it (installed-surfaces.ts). */
+export type InTreeSurface = ReturnType<typeof inTreeSurfaces>[number] & { installed?: boolean };
 type Registrar = (surface: InTreeSurface, scope: Scope) => void;
 
 // A slot surface of the in-tree set, registered as the slot's base-image default.
@@ -175,7 +176,7 @@ function registerSlotSurface(s: InTreeSurface, scope: Scope): void {
     return;
   }
   try {
-    registerSurface(scope, s.slot, { id: s.name, component: s.component as ComponentType, priority: s.priority, base: true });
+    registerSurface(scope, s.slot, { id: s.name, component: s.component as ComponentType, priority: s.priority, base: !s.installed });
   } catch (err) {
     console.warn(`[shell] ${s.name}: ${(err as Error).message}`);
   }
@@ -189,6 +190,16 @@ export function addSurfaceRegistrar(fn: Registrar): void {
 
 // S6: the recovery boot registers none; the recovery surface's "Use default" still can.
 if (!recoveryBoot) for (const s of inTreeSurfaces()) registerSlotSurface(s, surfaceScope(s.name));
+
+/** An installed release's surface, registered through every slot's registrar like an in-tree one (installed-surfaces.ts). */
+export function registerSurfaceOf(s: InTreeSurface, scope: Scope): void {
+  for (const register of registrars) register(s, scope);
+}
+
+/** Whether the base image ships a surface package of this name (an installed release of it displaces it). */
+export function hasInTreeSurface(name: string): boolean {
+  return inTreeSurfaces().some((s) => s.name === name);
+}
 
 /**
  * The recovery surface's "use default": the in-tree package's surfaces are

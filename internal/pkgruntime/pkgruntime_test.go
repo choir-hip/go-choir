@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/pkgruntime/runtimetest"
 )
@@ -221,5 +222,72 @@ func TestBuildRefusesURLImportsAndSDKExportStar(t *testing.T) {
 	})
 	if _, err := b.Build(context.Background(), rec, patch); !errors.Is(err, ErrBuild) || !strings.Contains(err.Error(), "export *") {
 		t.Fatalf("export * build = %v", err)
+	}
+}
+
+// MA5 surface mount: a package whose manifest has `provides` and no app builds
+// a module/v1 module on the same path, exporting its surfaces by service. Build
+// is not admission: a foreign track's surface is refused at install admission
+// and mounts only from a release whose isolation is "shell".
+const surfaceManifest = `{
+  "schema": "choir.package/v2",
+  "name": "menu-default",
+  "version": "1.1.0",
+  "display": {"title": "Menu", "icon": "M", "description": "A context-menu renderer"},
+  "kinds": [], "uses_kinds": [], "contributes": {"desks": []},
+  "capabilities": [{"grant": "ui.shell"}],
+  "provides": [{"service": "contextMenu.renderer", "abi": "choir.service/contextMenu.renderer/v1", "entry": "Menu.surface.svelte", "requires_sdk": "^2.0", "priority": 10}]
+}
+`
+
+// surfaceTree lays a release tree out by hand: Build's Materialize refuses a T2
+// release (ui.shell) until the own-track admission lands, and this test is about
+// the module the build makes, not the admission.
+func surfaceTree(t *testing.T, manifest, surface string) (tmp, tree, root string) {
+	t.Helper()
+	tmp = t.TempDir()
+	tree = filepath.Join(tmp, "tree")
+	root = pkgrelease.Root("menu-default")
+	dir := filepath.Join(tree, filepath.FromSlash(root))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"choir-package.json": manifest, "Menu.surface.svelte": surface} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return tmp, tree, root
+}
+
+func TestBuildMakesAModuleForAShellSurface(t *testing.T) {
+	b := builder(t)
+	tmp, tree, root := surfaceTree(t, surfaceManifest, "<script>\n  import { closeContextMenu } from '../../lib/app-sdk';\n  export let request = null;\n</script>\n{#if request}<div data-installed-menu on:click={closeContextMenu}>Installed menu</div>{/if}\n")
+	mod, err := b.buildTree(context.Background(), tmp, tree, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := string(mod.Bytes)
+	for _, want := range []string{`"choir.app-frontend/module/v1"`, `as surfaces`, `as surface`, `contextMenu.renderer`, `Installed menu`} {
+		if !strings.Contains(code, want) {
+			t.Errorf("surface module lacks %s", want)
+		}
+	}
+	if mod.RequiresSDK != "^2.0" || len(mod.Bytes) == 0 || mod.SHA256 != digest(mod.Bytes) {
+		t.Fatalf("module = requires %q, %d bytes", mod.RequiresSDK, len(mod.Bytes))
+	}
+	if len(mod.Uses) != 1 || mod.Uses[0] != "closeContextMenu" {
+		t.Fatalf("uses = %v, want [closeContextMenu]", mod.Uses)
+	}
+}
+
+// Build admits only the ui.shell grant of a provides-only package: any other
+// privileged grant stays refused.
+func TestBuildRefusesOtherPrivilegedGrantsOnASurface(t *testing.T) {
+	b := builder(t)
+	bad := strings.Replace(surfaceManifest, `{"grant": "ui.shell"}`, `{"grant": "ui.shell"}, {"grant": "desk.world.read"}`, 1)
+	tmp, tree, root := surfaceTree(t, bad, "<p>x</p>\n")
+	if _, err := b.buildTree(context.Background(), tmp, tree, root, true); !errors.Is(err, apppackage.ErrInvalidManifest) {
+		t.Fatalf("a surface with another privileged grant: build = %v", err)
 	}
 }

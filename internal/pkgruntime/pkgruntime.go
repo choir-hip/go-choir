@@ -143,19 +143,25 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if err := pkgrelease.Materialize(ctx, rec, treePatch, tree); err != nil {
 		return Module{}, err
 	}
-	manifestRaw, err := os.ReadFile(filepath.Join(tree, filepath.FromSlash(rec.Source.Root), apppackage.ManifestFile))
+	return b.buildTree(ctx, tmp, tree, rec.Source.Root, rec.OwnShellUpdate())
+}
+
+// buildTree builds the module of a verified, materialized release tree
+// (Build's second half; the surface-mount test lays a tree out by hand).
+func (b Builder) buildTree(ctx context.Context, tmp, tree, root string, ownShell bool) (Module, error) {
+	manifestRaw, err := os.ReadFile(filepath.Join(tree, filepath.FromSlash(root), apppackage.ManifestFile))
 	if err != nil {
 		return Module{}, fmt.Errorf("pkgruntime: read the manifest: %w", err)
 	}
-	manifest, err := apppackage.ParseManifestOwnShell(manifestRaw, apppackage.OriginPublished, apppackage.CurrentPlatform(), rec.OwnShellUpdate())
+	manifest, err := apppackage.ParseManifestOwnShell(manifestRaw, apppackage.OriginPublished, apppackage.CurrentPlatform(), ownShell)
 	if err != nil {
 		return Module{}, err
 	}
-	files, err := readThemeFiles(manifest, filepath.Join(tree, filepath.FromSlash(rec.Source.Root)))
+	files, err := readThemeFiles(manifest, filepath.Join(tree, filepath.FromSlash(root)))
 	if err != nil {
 		return Module{}, err
 	}
-	prompts, err := readDeskPrompts(manifest, filepath.Join(tree, filepath.FromSlash(rec.Source.Root)))
+	prompts, err := readDeskPrompts(manifest, filepath.Join(tree, filepath.FromSlash(root)))
 	if err != nil {
 		return Module{}, err
 	}
@@ -167,7 +173,7 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 		// sandbox, never in this build.
 		return Module{RequiresSDK: apppackage.DefaultRequiresSDK, Manifest: json.RawMessage(manifestRaw), Files: files}, nil
 	}
-	if manifest.App == nil {
+	if manifest.App == nil && len(manifest.Provides) == 0 {
 		// A pack contributes data (themes, commands, keybindings) and has no
 		// code to build. A desk or a kind with no app is not a pack.
 		if len(manifest.Contributes.Desks) > 0 || len(manifest.Kinds) > 0 {
@@ -178,9 +184,17 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if err := b.Available(); err != nil {
 		return Module{}, err
 	}
-	requires := manifest.App.RequiresSDK
-	if requires == "" {
-		requires = apppackage.DefaultRequiresSDK
+	requires := apppackage.DefaultRequiresSDK
+	if manifest.App != nil && manifest.App.RequiresSDK != "" {
+		requires = manifest.App.RequiresSDK
+	}
+	// A surface package's module needs the highest SDK range its surfaces ask.
+	if manifest.App == nil {
+		for _, p := range manifest.Provides {
+			if p.RequiresSDK != "" && sdkRange.MatchString(p.RequiresSDK) && sdkRangeLess(requires, p.RequiresSDK) {
+				requires = p.RequiresSDK
+			}
+		}
 	}
 	if !sdkRange.MatchString(requires) {
 		return Module{}, fmt.Errorf("pkgruntime: requires_sdk %q is not ^MAJOR.MINOR", requires)
@@ -231,6 +245,14 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 		return Module{}, err
 	}
 	return Module{SHA256: digest(raw), Size: len(raw), ABI: ModuleABI, RequiresSDK: requires, Manifest: json.RawMessage(manifestRaw), Bytes: raw, Files: files, Uses: uses}, nil
+}
+
+// sdkRangeLess reports whether ^a.b is below ^c.d (both already match sdkRange).
+func sdkRangeLess(a, b string) bool {
+	var am, an, bm, bn int
+	fmt.Sscanf(strings.TrimPrefix(a, "^"), "%d.%d", &am, &an)
+	fmt.Sscanf(strings.TrimPrefix(b, "^"), "%d.%d", &bm, &bn)
+	return am < bm || (am == bm && an < bn)
 }
 
 // readUses reads the SDK names the build extracted (the module's own
