@@ -7,8 +7,8 @@ to get the updates. And you can click on that if you want to. Updates
 available."
 
 Class: red (vmctl deploy refresh, deploy routing, the proxy lifecycle route).
-Revision r1 closes Devin's review (SEND_BACK, four blocking findings; see
-"Adjudicated review findings").
+Revision r2 closes Devin's two reviews (r1 SEND_BACK, four blocking findings;
+r2 SEND_BACK, three; see "Adjudicated review findings").
 
 Naming: **owner update** is the new planned, marker-backed act in this doc.
 It is not the existing `refresh` lifecycle action, which goes to
@@ -32,7 +32,9 @@ critical_protected and public_platform computers refresh while busy
 ## Design: reuse the deploy refresh; add an owner door and a visible signal
 
 1. **vmctl owner update.** The deploy-refresh request takes an optional
-   `owner_busy: true`, honoured only from the proxy's owner-update route (the
+   `owner_busy: true`, sent only by the proxy's owner-update route (a
+   convention on an `isInternalCaller` endpoint that already takes a
+   caller-chosen target, not an enforcement boundary) (the
    sweep and deploys keep the class policy, `deployRefreshAllowsBusy`,
    deploy_refresh.go:248). This is a deliberate policy extension: today only
    `critical_protected` and `public_platform` computers refresh while busy;
@@ -47,21 +49,29 @@ critical_protected and public_platform computers refresh while busy
    path resolves the target as the sweep's enroll does: `guestReleaseFor(
    computerID)` (ring_walk_handler.go:86), the release a boot of this
    computer launches now, never `currentGuestRelease()`
-   (deploy_refresh_retry.go:185) and never caller-chosen. For a ring-held
-   computer that is the held release, so the target equals what it serves
-   and the already-current step below answers "up to date"; for a computer
-   whose ring has not opened, `ringGate` (deploy_refresh.go:455,
-   ring_walk_handler.go:102) answers 409 "ring waits". Either way an owner
-   click never restarts onto the release the computer already serves, and
-   never releases a ring that has not opened. `restart.target` and the marker
-   record the release actually intended.
+   (deploy_refresh_retry.go:185) and never caller-chosen. The resolver is
+   pin-aware (`currentReleaseFor` -> `pinnedRelease` -> `pinFor`,
+   release_pin.go:47-69, ring_walk.go:487-502): for a computer whose ring has
+   not opened, or was rolled back, it names the held release (`w.From`), so
+   it structurally cannot name the walking release. Outcomes:
+   - serving the held release: the already-current step answers `current`;
+   - behind the held release (serving something older): `ringGate` admits
+     the held release (target == from), and the click is a planned restart
+     onto the held release, a catch-up, not a ring release;
+   - a resolved target ahead of the pin (only when the pinned release fails
+     to load and `currentReleaseFor` falls back to current,
+     release_pin.go:61-68): `ringGate` (deploy_refresh.go:455) refuses,
+     `skipped` "ring waits". This stays as defense.
+   An owner click never releases a ring that has not opened.
+   `restart.target` and the marker record the release actually intended.
 3. **Already current: a no-op at the top of the owner path.** Before the
    gate, the marker or any pending bookkeeping, the owner path reads the
    served commit (`servedCommit`, deploy_refresh_retry.go:572, the guest
    /health `build.commit` the sweep uses at :519-524). `deployRefreshWith`
    has no such check (the sweep's is outside it), so this is new work.
    Served == target returns `{outcome: current}` with 200, no marker, no
-   restart, no pending entry created, and forgets any stale one. A served
+   restart, no pending entry created, and forgets any stale one (`forget`,
+   deploy_refresh_retry.go:369). A served
    commit that cannot be read is not "current": the path continues.
 4. **Guest refusals stay exactly as they are** (correctness, not switches):
    a self-development apply, a live engineering capsule, a snapshot in
@@ -93,35 +103,54 @@ critical_protected and public_platform computers refresh while busy
    update receipt is never returned by `PendingLifecycleControls`.
 6. **Authz: `authorizeOwnerAct`** (proxy/owner_acts.go:25), as restore and
    rematerialize use (computer_lifecycle.go:350-353), not the siblings'
-   `computer:lifecycle` scope. The act restarts the owner's computer while
+   `computer:lifecycle` scope. `update` is exempted from the shared api-key
+   scope check (`admin` or `computer:lifecycle`, computer_lifecycle.go:92):
+   for `update` the only api-key gate is `owner_acts`. The act restarts the owner's computer while
    runs are in flight; agent-minted keys can hold `computer:lifecycle` but
    never `owner_acts`, so an agent cannot restart its own computer under
    itself. The owner's browser session passes; `admin` alone does not.
-7. **Response contract.** Like the siblings: durable intent, then 201 with the
-   lifecycle receipt (computer_lifecycle.go:218), whose body carries
-   `outcome`: `refreshed`, `current` (already up to date), or `deferred` with
-   `reason` and counts, which the proxy returns as 409 `{outcome: deferred,
-   reason, live_capsules, ...}`. Refusals and no-ops write no restart. The
-   vmctl client gains a deploy-refresh method that returns the structured
-   body on 409 rather than an error. As with restart, a proxy timeout
+7. **Response contract.** Durable intent first, as the siblings. Then by
+   outcome:
+   - `refreshed`: verify and complete as the siblings do; 201 with the
+     lifecycle receipt (computer_lifecycle.go:218) carrying `outcome:
+     refreshed`. Only this outcome advances the epoch and writes a receipt
+     (`RecordLifecycleControl` rejects an unadvanced epoch,
+     lifecycle_control.go:109).
+   - `current`: 200 `{outcome: current, target}`; no receipt.
+   - `deferred` (the guest refused as busy): 409 `{outcome: deferred, reason,
+     detail}`. vmctl today flattens the guest refusal into `Reason = "busy: "
+     + detail` (deploy_refresh.go:485); the owner path instead carries the
+     guest's structured refusal (reason code and counts,
+     planned_restart.go:771-780) as a `refusal` object, and the proxy passes
+     `reason` (the code) and `detail` (that object, unparsed) through.
+   - `skipped` (held, not active, divergent, ring waits; deploy_refresh.go:
+     455-467): 409 `{outcome: skipped, reason}`.
+   Early outcomes leave the pending intent row as sibling failures do, and
+   write no restart. The vmctl client gains a deploy-refresh method that
+   returns the structured body on 409 rather than an error. As with restart, a proxy timeout
    (`vmctlOpContext`, 60 s) does not cancel the vmctl act; the frontend treats
    a timeout as "Restarting..." and reads the outcome from the build commit.
 8. **Second click.** The same idempotency key dedupes a retry. A different
    key while the first is in flight gets 409 `{outcome: deferred, reason:
-   "refresh in flight"}` (`deployRefreshInFlightReason`): one restart; the
-   chip shows "Restarting..." and stays disabled.
+   "a deploy refresh of this computer is already in flight"}`
+   (`deployRefreshInFlightReason`); a same-key retry during the flight gets
+   the same 409 (dedup returns the receipt only after completion). One
+   restart either way; the chip shows "Restarting..." and stays disabled.
 9. **Signal: host-side, from vmctl's pending tracker.** `update_available:
    {target, since}` is read by the proxy from vmctl, not from the guest. The
    tracker (`deployRefreshTracker.pending`, persisted by `saveLocked`,
    deploy_refresh_retry.go:398) holds exactly the computers a deploy or
    sweep deferred. A vmctl read (user, desktop) returns available when the
-   computer has a pending entry, `ringGate` answers "" for its target, and
-   the served commit differs from the target; `target` is the ring-intended
+   computer is `active`, has a pending entry, `ringGate` answers "" for its
+   target, and the served commit differs from the target; `target` is the ring-intended
    release, `since` is `FirstDeferredAt`. A ring-held computer shows no
    notice; a ring rollback makes `target` an older commit, and the chip
-   reads "Update available" with the target shown, not "newer". The signal
-   rides the obligations surface (`restart{kind,reason,target}`,
-   obligations_surface.go:20-34, owner-authed) or the live channel push, not
+   reads "Update available" with the target shown, not "newer". Carrier: a
+   new proxy route `GET /api/computers/{id}/update` (owner session or an
+   api key with `read:runtime`), composed host-side from the vmctl read; the
+   guest-served `/api/runtime/obligations` is not the carrier (its
+   `restart{kind,reason,target}` is the boot-marker datum). The frontend
+   reads it at load, on live-channel reconnect and every 5 minutes, not
    observability polling. The target is the release commit, already exposed
    by `restart.target`, not a secret. The guest-side refresh hold
    (`noteRefreshAsked`, refresh_hold.go:74) is rejected as the source: it is
@@ -153,9 +182,11 @@ critical_protected and public_platform computers refresh while busy
    interrupted.
 4. A non-owner (another user's session, an API key without `owner_acts`,
    including one with `computer:lifecycle`) cannot trigger it.
-5. The ring gate holds: a click on a computer whose ring has not opened gets
-   409 "ring waits", and one on a ring-held computer is `current`; neither
-   restarts it.
+5. The ring gate holds: a click on a computer whose ring has not opened (or
+   was rolled back) and serves its held release is `current`; one serving
+   older than its held release restarts onto the held release, never the
+   walking one; a resolved target ahead of the pin is 409 `skipped` "ring
+   waits". No click releases an unopened ring.
 6. Two clicks: same key, one receipt; different key while in flight, 409
    "refresh in flight"; one restart either way.
 7. The notice appears only when vmctl has a pending entry for this computer
@@ -169,7 +200,26 @@ critical_protected and public_platform computers refresh while busy
 10. A crash after the marker is consumed boots markerless and closes work (no
     resume loop); the owner route adds no boot-time resumer.
 
-## Adjudicated review findings (Devin, SEND_BACK)
+## Adjudicated review findings, r2 (Devin, SEND_BACK)
+
+- B1 "ring waits" unreachable under the pin-aware resolver: adopted, item 2
+  and failure mode 5 restated (current, catch-up onto the pin, ring waits as
+  defense only); the walking release is never resolved.
+- B2 response contract: adopted, item 7 (only `refreshed` writes a receipt
+  and returns 201; `current` 200; `deferred` and `skipped` 409; the guest's
+  structured refusal passed through as `detail`).
+- B3 api-key scope: adopted, item 6 (`update` exempt from the shared scope
+  check; `owner_acts` alone).
+- Non-blocking, adopted: the in-flight literal and same-key retry (item 8);
+  `active` required for the signal (item 9); the carrier is a new proxy
+  route, not the guest obligations surface (item 9); `owner_busy` is
+  convention (item 1).
+- Non-blocking, noted: the owner path inherits `realDeploy` side effects
+  (`GrantDeployRetry`, rescue eligibility for protected-class stopped
+  computers); unreachable for an active owner computer, which the route
+  requires.
+
+## Adjudicated review findings, r1 (Devin, SEND_BACK)
 
 - B1 registration sites (parser, isOwnerVMLifecycleAction, AdvancesEpoch;
   guest-visible receipt is boot-fatal): adopted, item 5, host-side audit only.
