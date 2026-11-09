@@ -517,6 +517,11 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 	}
 	if bedrockAdaptiveEffort(effectiveModel(req.Model, p.modelID)) {
 		ar.OutputConfig = &anthropicOutputConfig{Effort: bedrockEffort(req.ReasoningEffort)}
+		// Thinking is always on, adaptive (owner 2026-11-09). Explicit
+		// adaptive reads the same prompt cache as omitting the field;
+		// enabled+budget_tokens is a 400 and disabled drops the cache, so
+		// neither is ever sent.
+		ar.Thinking = &anthropicThinking{Type: "adaptive"}
 	}
 
 	// Bedrock: system prompt with cache_control for prompt caching.
@@ -908,7 +913,7 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 		Tools:           tools,
 		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
 		Stream:          false,
-		ReasoningEffort: effectiveReasoning(req.ReasoningEffort, p.reasoning),
+		ReasoningEffort: fireworksReasoningEffort(effectiveReasoning(req.ReasoningEffort, p.reasoning)),
 	}
 	if req.MaxTokens > 0 {
 		maxTokens := req.MaxTokens
@@ -1086,10 +1091,12 @@ func (p *SyntheticProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 // disable spellings Choir uses elsewhere become none.
 func syntheticReasoningEffort(effort string) string {
 	switch e := strings.ToLower(strings.TrimSpace(effort)); e {
-	case "none", "low", "high", "xhigh", "max":
+	case "low", "high", "xhigh", "max":
 		return e
-	case "minimal", "off", "disabled", "false":
-		return "none"
+	case "none", "minimal", "off", "disabled", "false":
+		// Thinking is never off (owner 2026-11-09); none and low run the
+		// non-thinking template there, so the lowest thinking-on value is high.
+		return "high"
 	case "medium":
 		return "high"
 	default:
@@ -1304,7 +1311,7 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 		// thread's key, or the run's conversation id when there is none.
 		PromptCacheKey: cacheRoutingKey(req),
 	}
-	if effort := effectiveReasoning(req.ReasoningEffort, p.reasoning); effort != "" && effort != "none" && effort != "off" {
+	if effort := chatGPTReasoningEffort(effectiveReasoning(req.ReasoningEffort, p.reasoning)); effort != "" {
 		payload.Reasoning = &openAIReasoning{Effort: effort}
 	}
 	return payload
@@ -1629,6 +1636,23 @@ func openCodeWireShapeForModel(modelID string) (openCodeWireShape, error) {
 	default:
 		return 0, fmt.Errorf("opencode provider: unsupported model %q", modelID)
 	}
+}
+
+// fireworksReasoningEffort floors the off spellings at low: thinking is never
+// turned off (owner 2026-11-09). Empty stays omitted (model default).
+func fireworksReasoningEffort(effort string) string {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "none", "minimal", "off", "disabled", "false":
+		return "low"
+	default:
+		return strings.TrimSpace(effort)
+	}
+}
+
+// chatGPTReasoningEffort is the Responses reasoning effort: the off spellings
+// become low (they used to omit the field), empty stays omitted.
+func chatGPTReasoningEffort(effort string) string {
+	return fireworksReasoningEffort(effort)
 }
 
 func effectiveReasoning(requested, fallback string) string {

@@ -56,7 +56,7 @@ func TestBedrockHaiku55ForeignTranscriptBody(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.MaxTokens <= 0 || got.Thinking != nil || got.Version != "bedrock-2023-05-31" || got.OutputConfig.Effort != "high" {
+	if got.MaxTokens <= 0 || got.Thinking == nil || got.Version != "bedrock-2023-05-31" || got.OutputConfig.Effort != "high" {
 		t.Fatalf("bad envelope: %s", raw)
 	}
 	if strings.Count(string(raw), `"cache_control"`) > 4 {

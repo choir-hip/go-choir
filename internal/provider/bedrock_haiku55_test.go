@@ -21,15 +21,19 @@ func TestBedrockHaiku55RequestBody(t *testing.T) {
 		if !strings.Contains(s, `"output_config":{"effort":"`+want+`"}`) {
 			t.Fatalf("effort %q: body %s lacks effort %s", effort, s, want)
 		}
-		for _, banned := range []string{"budget_tokens", "temperature", "top_p", "top_k", `"thinking"`} {
+		for _, banned := range []string{"budget_tokens", "temperature", "top_p", "top_k", `"disabled"`, `"enabled"`} {
 			if strings.Contains(s, banned) {
 				t.Fatalf("body carries %s: %s", banned, s)
 			}
 		}
 	}
+	raw, _ := json.Marshal(p.buildRequestBody(LLMRequest{Model: "us.anthropic.claude-haiku-5-5"}))
+	if !strings.Contains(string(raw), `"thinking":{"type":"adaptive"}`) {
+		t.Fatalf("body lacks explicit adaptive thinking: %s", raw)
+	}
 	old, _ := NewBedrockProvider(BedrockConfig{Region: "us-east-1", ModelID: "us.anthropic.claude-sonnet-4-6", AuthToken: "tok"})
-	raw, _ := json.Marshal(old.buildRequestBody(LLMRequest{ReasoningEffort: "low"}))
-	if strings.Contains(string(raw), "output_config") {
+	raw, _ = json.Marshal(old.buildRequestBody(LLMRequest{ReasoningEffort: "low"}))
+	if strings.Contains(string(raw), "output_config") || strings.Contains(string(raw), `"thinking"`) {
 		t.Fatalf("older model got output_config: %s", raw)
 	}
 }

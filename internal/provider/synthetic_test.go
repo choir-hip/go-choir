@@ -83,17 +83,17 @@ func TestSyntheticProviderRequestShape(t *testing.T) {
 func TestSyntheticReasoningEffortNeverSendsAnInvalidValue(t *testing.T) {
 	for in, want := range map[string]string{
 		"":         "",
-		"none":     "none",
-		"minimal":  "none",
+		"none":     "high",
+		"minimal":  "high",
 		"low":      "low",
 		"medium":   "high",
 		"high":     "high",
 		" High ":   "high",
 		"xhigh":    "xhigh",
 		"max":      "max",
-		"off":      "none",
-		"disabled": "none",
-		"false":    "none",
+		"off":      "high",
+		"disabled": "high",
+		"false":    "high",
 		"turbo":    "",
 		"ultra":    "",
 	} {

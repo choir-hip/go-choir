@@ -113,9 +113,9 @@ func TestOpenRouterReasoningEffortDeepSeekSendsOnlyAdvertisedValues(t *testing.T
 	const model = "deepseek/deepseek-v4.1-flash-1017"
 	for in, want := range map[string]string{
 		"":        "",
-		"none":    "none",
-		"off":     "none",
-		"minimal": "none",
+		"none":    "low",
+		"off":     "low",
+		"minimal": "low",
 		"low":     "low",
 		"medium":  "high",
 		"high":    "high",

@@ -168,10 +168,11 @@ func openRouterReasoningEffort(model, effort string) string {
 	e := strings.ToLower(strings.TrimSpace(effort))
 	if strings.HasPrefix(strings.ToLower(model), "deepseek/") {
 		switch e {
-		case "none", "low", "high", "max":
+		case "low", "high", "max":
 			return e
-		case "minimal", "off", "disabled", "false":
-			return "none"
+		case "none", "minimal", "off", "disabled", "false":
+			// Thinking is never off (owner 2026-11-09): floor is low.
+			return "low"
 		case "medium":
 			return "high"
 		case "xhigh":
