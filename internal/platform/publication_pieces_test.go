@@ -13,10 +13,14 @@ package platform
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 func pieceTitles(res *PublishedPieceSearch) []string {
@@ -147,3 +151,58 @@ func TestSearchPublishedPiecesReadURLIsPlainText(t *testing.T) {
 }
 
 func timeNowMinusDay() time.Time { return time.Now().UTC().Truncate(time.Second).Add(-24 * time.Hour) }
+
+// The published search is a read of public pieces that research in a guest
+// calls directly on corpusd. Ways the admission can be wrong: a bound guest
+// on its tap address is refused (the defect: every guest call was 403); a tap
+// address vmctl binds to no computer is admitted; a caller with no guest
+// binding configured is admitted; a host-internal caller stops working.
+func TestPublishedSearchAdmitsABoundGuestAndRefusesAStranger(t *testing.T) {
+	f := newFrontFixture(t)
+	get := func(h *Handler, from string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/internal/platform/published/search?q=harbor&limit=5", nil)
+		req.RemoteAddr = from + ":40000"
+		rec := httptest.NewRecorder()
+		h.HandleInternalPublishedSearch(rec, req)
+		return rec
+	}
+
+	unbound := NewHandler(f.svc)
+	if rec := get(unbound, "10.200.1.2"); rec.Code != http.StatusForbidden {
+		t.Fatalf("no guest binding configured, tap caller admitted: %d %s", rec.Code, rec.Body)
+	}
+
+	h := NewHandler(f.svc)
+	reader := &vmctl.GuestOwnership{Found: true, UserID: "reader-owner", ComputerID: "computer-reader"}
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": reader}); err != nil {
+		t.Fatal(err)
+	}
+	rec := get(h, "10.200.1.2")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bound guest refused: %d %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "Harbor reopens") {
+		t.Fatalf("bound guest got no published piece: %s", rec.Body)
+	}
+	if rec := get(h, "10.200.5.5"); rec.Code != http.StatusForbidden {
+		t.Fatalf("unbound tap address admitted: %d %s", rec.Code, rec.Body)
+	}
+	if rec := get(h, "203.0.113.7"); rec.Code != http.StatusForbidden {
+		t.Fatalf("outside address admitted: %d %s", rec.Code, rec.Body)
+	}
+	marked := func(from string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/internal/platform/published/search?q=harbor&limit=5", nil)
+		req.RemoteAddr = from + ":40000"
+		req.Header.Set("X-Internal-Caller", "true")
+		rec := httptest.NewRecorder()
+		h.HandleInternalPublishedSearch(rec, req)
+		return rec
+	}
+	if rec := marked("127.0.0.1"); rec.Code != http.StatusOK {
+		t.Fatalf("host-internal caller refused: %d %s", rec.Code, rec.Body)
+	}
+	if rec := marked("203.0.113.7"); rec.Code != http.StatusForbidden {
+		t.Fatalf("outside caller claiming to be internal admitted: %d %s", rec.Code, rec.Body)
+	}
+}

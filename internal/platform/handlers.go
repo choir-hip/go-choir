@@ -340,16 +340,21 @@ func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.R
 
 // HandleInternalPublishedSearch serves GET /internal/platform/published/search
 // ?q=&limit=: the published Autopaper stories and opinion pieces whose words
-// match, for research (a bound guest reaches it through the proxy's read-only
-// carve-out). It reads Store B alone.
+// match, for research. Research calls corpusd directly from its guest, so the
+// route admits a host-internal caller or any guest vmctl binds to a live
+// computer: the pieces are public, and the read names no owner
+// (docs/problems/published-search-refuses-every-guest-2026-11-09.md). It reads
+// Store B alone.
 func (h *Handler) HandleInternalPublishedSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
 	if !trustedInternalCaller(r) {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
+		if _, err := bindTapCaller(r.Context(), h.guestLookup, r); err != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+			return
+		}
 	}
 	limit := 0
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
