@@ -64,6 +64,8 @@ type EmbedFields = {
   path: string;
   mime: string;
   title: string;
+  videoID: string;
+  url: string;
 };
 
 export function embedFields(node: EmbedNode): EmbedFields {
@@ -85,6 +87,8 @@ export function embedFields(node: EmbedNode): EmbedFields {
     path: str(target.path),
     mime: str(target.mime),
     title: str(attrs.title),
+    videoID: str(target.video_id),
+    url: str(target.url),
   };
 }
 
@@ -94,6 +98,8 @@ export function embedProjectionText(node: EmbedNode): string {
   if (e.kind === 'capsule_evidence') return `[evidence: ${e.caption}]`;
   if (e.kind === 'image') return `[image: ${e.caption || e.alt}]`;
   if (e.kind === 'file') return `[file: ${e.title}]`;
+  if (e.kind === 'video') return `[video: ${e.caption || e.alt}]`;
+  if (e.kind === 'audio') return `[audio: ${e.title}]`;
   return '[embed]';
 }
 
@@ -111,7 +117,7 @@ export function allBlankOperations(blocks: EmbedNode[] = []): Set<string> {
 
 function figureAttrs(e: EmbedFields, extra: Record<string, string> = {}): string {
   const attrs: Record<string, string> = {
-    class: `texture-embed texture-embed-${e.kind === 'capsule_evidence' || e.kind === 'image' || e.kind === 'file' ? e.kind.replace('_', '-') : 'unknown'}`,
+    class: `texture-embed texture-embed-${e.kind === 'capsule_evidence' || e.kind === 'image' || e.kind === 'file' || e.kind === 'video' || e.kind === 'audio' ? e.kind.replace('_', '-') : 'unknown'}`,
     contenteditable: 'false',
     'data-texture-embed': '',
     'data-texture-embed-id': e.id,
@@ -176,6 +182,65 @@ export function fileCardTarget(target: any): { path: string; mime: string; title
   return { path, mime: String(card.getAttribute('data-embed-mime') || ''), title: String(card.getAttribute('data-embed-title') || '') };
 }
 
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+/** A YouTube video id: the only thing a video embed may put in a frame URL. */
+export function isVideoID(id: string): boolean {
+  return VIDEO_ID_RE.test(id);
+}
+
+/** An audio source the player may load: https, no credentials, bounded. */
+export function isAudioURL(raw: string): boolean {
+  if (!raw || raw.length > 2048 || /[\u0000- \u007f]/.test(raw)) return false;
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' && !u.username && !u.password && !!u.hostname;
+  } catch {
+    return false;
+  }
+}
+
+/** The privacy-respecting embed URL for a video id (no cookies, no autoplay). */
+export function videoEmbedURL(id: string): string {
+  return `https://www.youtube-nocookie.com/embed/${id}?rel=0`;
+}
+
+/**
+ * A video embed: a sandboxed, lazy youtube-nocookie.com frame at 16:9 with a
+ * caption. Only the validated 11-character id reaches the frame URL; the
+ * sandbox grants scripts, the frame's own origin and presentation, nothing
+ * else, and the allow list names only fullscreen and picture-in-picture.
+ * No autoplay.
+ */
+function videoHTML(e: EmbedFields): string {
+  const ok = isVideoID(e.videoID);
+  const caption = e.caption || e.alt;
+  const frame = ok
+    ? `<iframe class="texture-embed-video-frame" src="${videoEmbedURL(e.videoID)}" title="${escapeHTML(caption || 'YouTube video')}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" allow="fullscreen; picture-in-picture" allowfullscreen data-texture-embed-media></iframe>`
+    : '<div class="texture-embed-unresolvable">This video cannot be shown (malformed video id)</div>';
+  const link = ok ? ` <a class="texture-embed-source" href="https://www.youtube.com/watch?v=${e.videoID}" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>` : '';
+  return `<figure${figureAttrs(e, { 'data-embed-state': ok ? 'ready' : 'unresolvable', 'data-embed-video-id': ok ? e.videoID : '-' })}>`
+    + `<div class="texture-embed-video">${frame}</div>`
+    + `<figcaption>${caption ? `<span class="texture-embed-caption">${escapeHTML(caption)}</span>` : ''}${link}</figcaption></figure>`;
+}
+
+/**
+ * An audio embed: a native player (controls, preload none, never autoplay),
+ * the title and a link to the source. A source that is not https is not
+ * loaded.
+ */
+function audioHTML(e: EmbedFields): string {
+  const ok = isAudioURL(e.url);
+  const title = e.title || e.url;
+  const player = ok
+    ? `<audio class="texture-embed-audio-player" controls preload="none" src="${escapeHTML(e.url)}" aria-label="${escapeHTML(title)}" data-texture-embed-media></audio>`
+    : '<div class="texture-embed-unresolvable">This audio cannot be played (not an https URL)</div>';
+  const link = ok ? ` <a class="texture-embed-source" href="${escapeHTML(e.url)}" target="_blank" rel="noopener noreferrer">Source</a>` : '';
+  return `<figure${figureAttrs(e, { 'data-embed-state': ok ? 'ready' : 'unresolvable' })}>`
+    + `<span class="texture-embed-caption">${escapeHTML(title)}</span>${player}`
+    + `<figcaption>${link}</figcaption></figure>`;
+}
+
 /** One embed block as HTML. */
 export function renderEmbedBlockHTML(node: EmbedNode, options: { allBlank?: Set<string> } = {}): string {
   const e = embedFields(node);
@@ -207,6 +272,8 @@ export function renderEmbedBlockHTML(node: EmbedNode, options: { allBlank?: Set<
       + '</figure>';
   }
   if (e.kind === 'file') return fileCardHTML(e);
+  if (e.kind === 'video') return videoHTML(e);
+  if (e.kind === 'audio') return audioHTML(e);
   const digest = validDigest ? ` · sha256:${shortDigest(e.digest)}` : '';
   return `<figure${figureAttrs(e)}><figcaption>Embedded ${escapeHTML(e.kind || 'item')}${escapeHTML(digest)} (this version of Texture does not show it)</figcaption></figure>`;
 }

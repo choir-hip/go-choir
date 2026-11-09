@@ -265,7 +265,7 @@ func parseToken(s string, line int) (*Token, string, *LineError) {
 	tok := &Token{Kind: strings.ToLower(s[:kindEnd]), Line: line}
 	switch tok.Kind {
 	case TokenCite, TokenRef:
-	case TokenImage, TokenFile:
+	case TokenImage, TokenFile, TokenVideo, TokenAudio:
 		return nil, "", mediaTokenInline(tok.Kind, line)
 	case tokenEmbedRetired:
 		return nil, "", &LineError{Line: line, Msg: `{{embed}} is gone: a story does not reprint its sources. Cite the passage that supports the sentence with {{cite <handle> "exact words"}}`}

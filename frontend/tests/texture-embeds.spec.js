@@ -14,7 +14,10 @@
 //   - the editor's projection differs from the server's;
 //   - a file card (station L8) renders its title or path unescaped, is
 //     clickable for a path outside Files (absolute, ".."), or has an inline
-//     handler instead of the editor's delegated open.
+//     handler instead of the editor's delegated open;
+//   - a video embed (station L8) puts anything but the 11-character id in the
+//     frame URL, drops the sandbox or lazy loading, or autoplays; an audio
+//     embed plays a non-https source, autoplays, or preloads the file.
 import { test, expect } from '@playwright/test';
 import {
   allBlankOperations,
@@ -25,7 +28,9 @@ import {
   evidenceIdentityText,
   evidenceListingPath,
   fileCardTarget,
+  isAudioURL,
   isFilesPath,
+  isVideoID,
   handleRevertClick,
   isRevertable,
   laterAppliesAfter,
@@ -107,9 +112,9 @@ test('an unresolvable image switches its figure to a clear state', () => {
 });
 
 test('an unknown kind renders as a plain card and image renders its alt', () => {
-  const unknown = renderEmbedBlockHTML({ type: 'embed', attrs: { id: 'e9', kind: 'video', target: { digest: DIGEST } } });
+  const unknown = renderEmbedBlockHTML({ type: 'embed', attrs: { id: 'e9', kind: 'hologram', target: { digest: DIGEST } } });
   expect(unknown).toContain('texture-embed-unknown');
-  expect(unknown).toContain('video');
+  expect(unknown).toContain('hologram');
   expect(unknown).not.toContain('<img');
   expect(unknown).not.toContain('<video');
   const image = renderEmbedBlockHTML({ type: 'embed', attrs: { id: 'e8', kind: 'image', target: { digest: DIGEST }, alt: 'A diagram' } });
@@ -139,7 +144,7 @@ test('the projection matches the server and the identity line reads the live lis
   expect(embedProjectionText(evidence())).toBe('[evidence: Screenshot of /reader from candidate selfdev-op-1 (1280x800)]');
   expect(embedProjectionText({ type: 'embed', attrs: { kind: 'image', alt: 'A diagram' } })).toBe('[image: A diagram]');
   expect(embedProjectionText({ type: 'embed', attrs: { kind: 'image', alt: 'A', caption: 'Cap' } })).toBe('[image: Cap]');
-  expect(embedProjectionText({ type: 'embed', attrs: { kind: 'video' } })).toBe('[embed]');
+  expect(embedProjectionText({ type: 'embed', attrs: { kind: 'hologram' } })).toBe('[embed]');
   const line = evidenceIdentityText('selfdev-op-1', { status: 200, listing: { bundle_digest: 'b'.repeat(64), state: 'awaiting_approval' } });
   expect(line).toContain('selfdev-op-1');
   expect(line).toContain('bundle bbbbbbbbbbbb');
@@ -263,4 +268,41 @@ test('a file card shows its title and path escaped and opens only a Files path',
   expect(fileCardTarget({ closest: () => null })).toBeNull();
   const forged = { getAttribute: () => '../../secret' };
   expect(fileCardTarget({ closest: () => forged })).toBeNull();
+});
+
+test('a video embed is a sandboxed lazy youtube-nocookie frame built from the id alone', () => {
+  const node = (id, caption = 'The <talk>') => ({ type: 'embed', attrs: { id: 'embed-v', kind: 'video', alt: caption, caption, target: { video_id: id } } });
+  const html = renderEmbedBlockHTML(node('dQw4w9WgXcQ'));
+  expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0"');
+  expect(html).toContain('loading="lazy"');
+  expect(html).toContain('sandbox="allow-scripts allow-same-origin allow-presentation"');
+  expect(html).toContain('allow="fullscreen; picture-in-picture"');
+  expect(html).toContain('The &lt;talk&gt;');
+  expect(html).not.toMatch(/autoplay/i);
+  expect(html).not.toMatch(/ on[a-z]+=/);
+  expect(embedProjectionText(node('dQw4w9WgXcQ', 'Talk'))).toBe('[video: Talk]');
+  for (const bad of ['', 'short', 'dQw4w9WgXc"', 'https://evil.example/x', 'dQw4w9WgXcQ"onload="x']) {
+    expect(isVideoID(bad)).toBe(false);
+    const out = renderEmbedBlockHTML(node(bad));
+    expect(out).not.toContain('<iframe');
+    expect(out).toContain('unresolvable');
+  }
+});
+
+test('an audio embed is a native no-autoplay player for an https source only', () => {
+  const node = (url, title = 'Episode <42>') => ({ type: 'embed', attrs: { id: 'embed-a', kind: 'audio', title, target: { url } } });
+  const html = renderEmbedBlockHTML(node('https://example.org/ep/42.mp3?a=1&b="2"'));
+  expect(html).toContain('<audio');
+  expect(html).toContain(' controls');
+  expect(html).toContain('preload="none"');
+  expect(html).toContain('src="https://example.org/ep/42.mp3?a=1&amp;b=&quot;2&quot;"');
+  expect(html).toContain('Episode &lt;42&gt;');
+  expect(html).toContain('rel="noopener noreferrer"');
+  expect(html).not.toMatch(/autoplay/i);
+  expect(html).not.toMatch(/ on[a-z]+=/);
+  expect(embedProjectionText(node('https://example.org/x.mp3', 'Ep'))).toBe('[audio: Ep]');
+  for (const bad of ['', 'http://example.org/x.mp3', 'javascript:alert(1)', 'data:audio/mp3;base64,AAAA', 'https://u:p@example.org/x.mp3', 'https://example.org/a b.mp3', '//example.org/x.mp3']) {
+    expect(isAudioURL(bad)).toBe(false);
+    expect(renderEmbedBlockHTML(node(bad))).not.toContain('<audio');
+  }
 });

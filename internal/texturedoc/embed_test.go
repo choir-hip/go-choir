@@ -102,7 +102,7 @@ func TestEmbedBlockRefusals(t *testing.T) {
 		"text":              docOf(func() Node { n := evidenceNode(nil); n.Text = "x"; return n }()),
 		"marks":             docOf(func() Node { n := evidenceNode(nil); n.Marks = []Mark{{Type: "strong"}}; return n }()),
 		"privacy written":   docOf(evidenceNode(func(a, _ map[string]any) { a["privacy"] = "public" })),
-		"unknown kind":      docOf(evidenceNode(func(a, _ map[string]any) { a["kind"] = "video" })),
+		"unknown kind":      docOf(evidenceNode(func(a, _ map[string]any) { a["kind"] = "hologram" })),
 		"no kind":           docOf(evidenceNode(func(a, _ map[string]any) { delete(a, "kind") })),
 		"unknown attr":      docOf(evidenceNode(func(a, _ map[string]any) { a["style"] = "x" })),
 		"reserved selector": docOf(evidenceNode(func(a, _ map[string]any) { a["selector"] = map[string]any{} })),

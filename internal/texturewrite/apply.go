@@ -940,7 +940,7 @@ func keepEmbedBlocks(base []Block, content []texturedoc.Node, line int) error {
 		}
 		// The desk wrote image and file blocks with their own tokens; it
 		// may change or remove them. Only evidence stays as written.
-		if e, _ := texturedoc.EmbedOf(b.Node); e.Kind == texturedoc.EmbedKindImage || e.Kind == texturedoc.EmbedKindFile {
+		if e, _ := texturedoc.EmbedOf(b.Node); e.Kind == texturedoc.EmbedKindImage || e.Kind == texturedoc.EmbedKindFile || e.Kind == texturedoc.EmbedKindVideo || e.Kind == texturedoc.EmbedKindAudio {
 			continue
 		}
 		raw, _ := json.Marshal(b.Node)

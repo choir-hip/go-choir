@@ -126,3 +126,33 @@
   font-size: 0.82em;
   color: var(--choir-text-muted, var(--choir-text-primary));
 }
+
+/* Video and audio embeds (station L8): a 16:9 youtube-nocookie frame, and a
+   native audio player with its title and a source link. */
+.rendered-doc .texture-embed-video {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--choir-surface-muted, rgba(127, 127, 127, 0.12));
+  border-radius: 0.35rem;
+  overflow: hidden;
+}
+
+.rendered-doc .texture-embed-video-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.rendered-doc .texture-embed-audio-player {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.rendered-doc .texture-embed-source {
+  font-size: 0.82em;
+  color: var(--choir-text-muted, var(--choir-text-primary));
+}

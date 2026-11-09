@@ -37,6 +37,13 @@ const (
 	// the app that opens it (a PDF opens in Reader). The bytes stay in Files;
 	// the card holds only the path.
 	EmbedKindFile = "file"
+	// EmbedKindVideo is a YouTube video the desk cites: the canonical
+	// 11-character video id only, never an arbitrary URL. It plays through
+	// youtube-nocookie.com in a sandboxed frame.
+	EmbedKindVideo = "video"
+	// EmbedKindAudio is an audio file or podcast episode the desk cites: an
+	// https URL (target.url) and a title. It plays in a native audio element.
+	EmbedKindAudio = "audio"
 
 	EmbedPrivacyPrivate = "private"
 	EmbedPrivacyPublic  = "public"
@@ -68,6 +75,9 @@ type Embed struct {
 	Path  string
 	Mime  string
 	Title string
+	// VideoID is the video kind's YouTube id; URL is the audio kind's source.
+	VideoID string
+	URL     string
 }
 
 // Privacy is derived from the kind: every kind is private today.
@@ -114,6 +124,7 @@ func EmbedOf(n Node) (Embed, bool) {
 		Route: str(target, "route"), File: str(target, "file"), Width: num("width"), Height: num("height"), Blank: blank,
 		Caption: str(n.Attrs, "caption"), Alt: str(n.Attrs, "alt"),
 		Path: str(target, "path"), Mime: str(target, "mime"), Title: str(n.Attrs, "title"),
+		VideoID: str(target, "video_id"), URL: str(target, "url"),
 	}, true
 }
 
@@ -177,6 +188,13 @@ func EmbedProjectionText(n Node) string {
 		return "[evidence: " + e.Caption + "]"
 	case EmbedKindFile:
 		return "[file: " + e.Title + "]"
+	case EmbedKindVideo:
+		if e.Caption != "" {
+			return "[video: " + e.Caption + "]"
+		}
+		return "[video: " + e.Alt + "]"
+	case EmbedKindAudio:
+		return "[audio: " + e.Title + "]"
 	case EmbedKindImage:
 		if e.Caption != "" {
 			return "[image: " + e.Caption + "]"
@@ -194,6 +212,8 @@ var (
 		EmbedKindCapsuleEvidence: {"digest": true, "operation_id": true, "computer_id": true, "route": true, "file": true, "width": true, "height": true, "blank": true},
 		EmbedKindImage:           {"digest": true, "width": true, "height": true},
 		EmbedKindFile:            {"path": true, "mime": true},
+		EmbedKindVideo:           {"video_id": true},
+		EmbedKindAudio:           {"url": true},
 	}
 	topLevelBlockPath = regexp.MustCompile(`^doc\.content(\[\d+\])?$`)
 	embedDigest       = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -254,14 +274,14 @@ func (v *Validator) validateEmbed(node Node, path string) error {
 			return fmt.Errorf("%s.embed target.%s is not a %s target field", path, key, kind)
 		}
 	}
-	if kind != EmbedKindFile {
+	if kind == EmbedKindImage || kind == EmbedKindCapsuleEvidence {
 		if digest, _ := target["digest"].(string); !embedDigest.MatchString(digest) {
 			return fmt.Errorf("%s.embed target.digest must be 64 lowercase hex characters", path)
 		}
 	}
 	e, _ := EmbedOf(node)
-	if _, hasTitle := node.Attrs["title"]; hasTitle && kind != EmbedKindFile {
-		return fmt.Errorf("%s.embed attrs.title belongs to the file kind", path)
+	if _, hasTitle := node.Attrs["title"]; hasTitle && kind != EmbedKindFile && kind != EmbedKindAudio {
+		return fmt.Errorf("%s.embed attrs.title belongs to the file and audio kinds", path)
 	}
 	switch kind {
 	case EmbedKindCapsuleEvidence:
@@ -296,6 +316,23 @@ func (v *Validator) validateEmbed(node Node, path string) error {
 		if err := embedDimensions(target, path, false); err != nil {
 			return err
 		}
+	case EmbedKindVideo:
+		if !VideoIDRE.MatchString(e.VideoID) {
+			return fmt.Errorf("%s.embed target.video_id must be a YouTube video id (11 letters, digits, - or _)", path)
+		}
+	case EmbedKindAudio:
+		if err := ValidAudioURL(e.URL); err != nil {
+			return fmt.Errorf("%s.embed target.url %v", path, err)
+		}
+		if e.Title == "" {
+			return fmt.Errorf("%s.embed attrs.title is required for audio", path)
+		}
+		if utf8.RuneCountInString(e.Title) > MaxEmbedCaptionRunes {
+			return fmt.Errorf("%s.embed attrs.title is longer than %d characters", path, MaxEmbedCaptionRunes)
+		}
+		if err := v.validateText(e.Title, path+".embed attrs.title"); err != nil {
+			return err
+		}
 	case EmbedKindFile:
 		if err := ValidFilesPath(e.Path); err != nil {
 			return fmt.Errorf("%s.embed target.path %v", path, err)
@@ -313,7 +350,7 @@ func (v *Validator) validateEmbed(node Node, path string) error {
 			return err
 		}
 	}
-	if kind != EmbedKindFile && e.Alt == "" {
+	if kind != EmbedKindFile && kind != EmbedKindAudio && e.Alt == "" {
 		return fmt.Errorf("%s.embed attrs.alt is required", path)
 	}
 	for field, limit := range map[string]int{"caption": MaxEmbedCaptionRunes, "alt": MaxEmbedAltRunes} {

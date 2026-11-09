@@ -2,9 +2,11 @@ package texturewrite
 
 import (
 	"context"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 )
@@ -14,6 +16,13 @@ import (
 //
 //	{{image <digest-or-Files-path> "caption" "alt"}}   an image block (embed kind image)
 //	{{file <Files-path> "title"}}                      a file card (embed kind file)
+//	{{video <youtube-url> "caption"}}                  a YouTube video (embed kind video)
+//	{{audio <https-audio-url> "title"}}                an audio file or podcast episode (embed kind audio)
+//
+// A video token takes a youtube.com/watch?v=, youtu.be/ or youtube.com/shorts/
+// URL and stores only the canonical video id. An audio token takes an https
+// URL of an mp3, m4a, ogg, opus or wav file, or of a known podcast-episode
+// enclosure host.
 //
 // An image is named by its sha256 digest in the computer's asset store, or by
 // a PNG, JPEG or GIF the engineer saved in Files (Reports/chart.png): the
@@ -26,12 +35,14 @@ import (
 const (
 	TokenImage = "image"
 	TokenFile  = "file"
+	TokenVideo = "video"
+	TokenAudio = "audio"
 )
 
 // EmbedSpec is a parsed media token. Digest, Width, Height and Mime are
 // filled when Apply resolves it.
 type EmbedSpec struct {
-	Kind    string // TokenImage or TokenFile
+	Kind    string // TokenImage, TokenFile, TokenVideo or TokenAudio
 	Ref     string // a digest or a Files path as written
 	Caption string
 	Alt     string
@@ -42,6 +53,8 @@ type EmbedSpec struct {
 	Width  int
 	Height int
 	Mime   string
+
+	VideoID string // the video token's canonical YouTube id
 }
 
 // Media is what Write needs from the computer to place an image or a file:
@@ -59,11 +72,11 @@ type Media interface {
 }
 
 var (
-	mediaTokenRE = regexp.MustCompile(`(?i)^\{\{(image|file)(?:[ \t}]|$)`)
+	mediaTokenRE = regexp.MustCompile(`(?i)^\{\{(image|file|video|audio)(?:[ \t}]|$)`)
 	digestRefRE  = regexp.MustCompile(`^(?:artifact:)?(?:sha256:)?([0-9a-f]{64})$`)
 )
 
-const mediaUsage = `a media token is {{image <digest or Files path> "caption" "alt"}} or {{file <Files path> "title"}}, alone on its line`
+const mediaUsage = `a media token is {{image <digest or Files path> "caption" "alt"}} or {{file <Files path> "title"}}, or {{video <YouTube URL> "caption"}}, or {{audio <https audio URL> "title"}}, alone on its line`
 
 // parseMediaLine reads a line that is exactly one media token. ok is false
 // when the line does not start with one.
@@ -100,6 +113,52 @@ func parseMediaLine(trimmed string, line int, errs *Errors) (*EmbedSpec, bool) {
 		return nil, true
 	}
 	switch kind {
+	case TokenVideo:
+		if len(quotes) > 1 {
+			errs.add(line, `{{video}} takes one caption: {{video <YouTube URL> "caption"}}`)
+			return nil, true
+		}
+		if len(quotes) == 1 {
+			spec.Caption = quotes[0]
+		}
+		if utf8.RuneCountInString(spec.Caption) > texturedoc.MaxEmbedCaptionRunes {
+			errs.add(line, "{{video}} caption is longer than %d characters", texturedoc.MaxEmbedCaptionRunes)
+			return nil, true
+		}
+		id, err := texturedoc.ParseYouTubeURL(spec.Ref)
+		if err != nil {
+			errs.add(line, "{{video %s}}: the URL %v", clipRef(spec.Ref), err)
+			return nil, true
+		}
+		spec.VideoID = id
+		spec.Alt = spec.Caption
+		if spec.Alt == "" {
+			spec.Alt = "YouTube video"
+		}
+	case TokenAudio:
+		if len(quotes) > 1 {
+			errs.add(line, `{{audio}} takes one title: {{audio <https audio URL> "title"}}`)
+			return nil, true
+		}
+		if len(quotes) == 1 {
+			spec.Title = quotes[0]
+		}
+		if err := texturedoc.ValidAudioURL(spec.Ref); err != nil {
+			errs.add(line, "{{audio %s}}: the URL %v", clipRef(spec.Ref), err)
+			return nil, true
+		}
+		if spec.Title == "" {
+			u, _ := url.Parse(spec.Ref)
+			spec.Title = path.Base(u.Path)
+			if spec.Title == "" || spec.Title == "." || spec.Title == "/" {
+				errs.add(line, `{{audio %s}} needs a title: {{audio <https audio URL> "title"}}`, clipRef(spec.Ref))
+				return nil, true
+			}
+		}
+		if utf8.RuneCountInString(spec.Title) > texturedoc.MaxEmbedCaptionRunes {
+			errs.add(line, "{{audio}} title is longer than %d characters", texturedoc.MaxEmbedCaptionRunes)
+			return nil, true
+		}
 	case TokenImage:
 		if len(quotes) > 2 {
 			errs.add(line, `{{image}} takes at most a caption and an alt text: {{image <ref> "caption" "alt"}}`)
@@ -144,10 +203,23 @@ func parseMediaLine(trimmed string, line int, errs *Errors) (*EmbedSpec, bool) {
 }
 
 func refName(kind string) string {
-	if kind == TokenImage {
+	switch kind {
+	case TokenImage:
 		return "digest or Files path"
+	case TokenVideo:
+		return "YouTube URL"
+	case TokenAudio:
+		return "https audio URL"
 	}
 	return "Files path"
+}
+
+// clipRef bounds a user string quoted in a refusal.
+func clipRef(s string) string {
+	if r := []rune(s); len(r) > 60 {
+		return string(r[:60]) + "..."
+	}
+	return s
 }
 
 // mediaTokenInline is the refusal for an image or file token inside text.
@@ -161,6 +233,12 @@ func (s EmbedSpec) text() string {
 	ref := s.Ref
 	if s.Digest != "" {
 		ref = s.Digest
+	}
+	switch s.Kind {
+	case TokenVideo:
+		return "{{video https://www.youtube.com/watch?v=" + s.VideoID + " " + quoteToken(s.Caption) + "}}"
+	case TokenAudio:
+		return "{{audio " + s.Ref + " " + quoteToken(s.Title) + "}}"
 	}
 	if s.Kind == TokenFile {
 		return "{{file " + ref + " " + quoteToken(s.Title) + "}}"
@@ -216,7 +294,18 @@ func resolveEmbeds(ctx context.Context, ops []Op, media Media, errs *Errors) {
 func (w *writer) embedNode(spec *EmbedSpec, id string) texturedoc.Node {
 	attrs := map[string]any{"id": w.newID("embed", id)}
 	target := map[string]any{}
-	if spec.Kind == TokenFile {
+	if spec.Kind == TokenVideo {
+		attrs["kind"] = texturedoc.EmbedKindVideo
+		attrs["alt"] = spec.Alt
+		if spec.Caption != "" {
+			attrs["caption"] = spec.Caption
+		}
+		target["video_id"] = spec.VideoID
+	} else if spec.Kind == TokenAudio {
+		attrs["kind"] = texturedoc.EmbedKindAudio
+		attrs["title"] = spec.Title
+		target["url"] = spec.Ref
+	} else if spec.Kind == TokenFile {
 		attrs["kind"] = texturedoc.EmbedKindFile
 		attrs["title"] = spec.Title
 		target["path"] = spec.Ref
@@ -244,6 +333,10 @@ func embedFrameText(e texturedoc.Embed) (string, bool) {
 	switch e.Kind {
 	case texturedoc.EmbedKindImage:
 		return EmbedSpec{Kind: TokenImage, Digest: e.Digest, Caption: e.Caption, Alt: e.Alt}.text(), true
+	case texturedoc.EmbedKindVideo:
+		return EmbedSpec{Kind: TokenVideo, VideoID: e.VideoID, Caption: e.Caption}.text(), true
+	case texturedoc.EmbedKindAudio:
+		return EmbedSpec{Kind: TokenAudio, Ref: e.URL, Title: e.Title}.text(), true
 	case texturedoc.EmbedKindFile:
 		return EmbedSpec{Kind: TokenFile, Ref: e.Path, Title: e.Title}.text(), true
 	}

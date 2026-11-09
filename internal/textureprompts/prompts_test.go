@@ -94,9 +94,10 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// next actor (texture-write-leaves-owner-request-unattended-2026-11-04).
 	// 6.6k once a Cast or Ask had to state its p_success, weight and
 	// settlement (modular architecture MA1.3). 6.8k once Write could place
-	// engineering's image and file (station L8).
-	if n := len(prompt); n > 6800 {
-		t.Errorf("prompt core is %d characters; the budget is about 6.8k", n)
+	// engineering's image and file (station L8). 7k once it could embed a
+	// cited YouTube video and audio episode.
+	if n := len(prompt); n > 7000 {
+		t.Errorf("prompt core is %d characters; the budget is about 7k", n)
 	}
 }
 
