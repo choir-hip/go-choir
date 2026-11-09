@@ -169,7 +169,7 @@
               disabled={accountsBusy}
               on:click={() => switchTo(account)}
             >
-              <span class="account-email">{account.email}</span>
+              <strong class="account-email">{account.email}</strong>
               {#if account.active}
                 <small data-desk-account-active>Active</small>
               {:else if !account.signed_in}
@@ -192,6 +192,7 @@
     </section>
   {/if}
 
+  {#if !(authenticated && accounts.length > 0)}
   <footer>
     {#if authenticated}
       <span data-prompt-surface-user>{currentUser?.email || 'signed in'}</span>
@@ -201,6 +202,7 @@
       <button type="button" data-prompt-surface-login on:click={() => { close(false); requireAuth({ kind: 'sign_in' }); }}>Sign in</button>
     {/if}
   </footer>
+  {/if}
 </section>
 
 <style>
@@ -383,32 +385,53 @@
     justify-self: start;
   }
 
+  .desk-section {
+    display: grid;
+    gap: 0.38rem;
+  }
+
   .account-list {
     display: grid;
-    gap: 0.3rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 19rem));
+    gap: 0.38rem;
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
+  /* An account row is a tile: the same radius, border (control shadow), height
+     and type scale as an app tile, with its Sign out beside the address. */
   .account-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     gap: 0.3rem;
+    height: 2.58rem;
+    padding: 0 0.36rem 0 0.48rem;
+    border: 1px solid transparent;
+    border-radius: var(--choir-radius-control-sm);
+    background: var(--choir-control-bg);
+    box-shadow: var(--choir-control-shadow);
+  }
+
+  .account-row[data-active='true'] {
+    outline: 2px solid color-mix(in srgb, var(--choir-accent) 60%, transparent);
+    outline-offset: -1px;
+  }
+
+  .account-row button {
+    box-shadow: none;
   }
 
   .account-switch {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
+    display: grid;
+    align-content: center;
+    gap: 0.04rem;
     min-width: 0;
-    padding: 0.48rem 0.64rem;
+    min-height: 1.9rem;
+    padding: 0;
+    background: transparent;
     text-align: left;
-  }
-
-  .account-row[data-active='true'] .account-switch {
-    outline: 2px solid color-mix(in srgb, var(--choir-accent) 60%, transparent);
   }
 
   .account-email {
@@ -416,16 +439,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1.05;
   }
 
   .account-switch small {
     color: var(--choir-muted);
+    font-size: 0.66rem;
     font-weight: 800;
+    line-height: 1.05;
     text-transform: uppercase;
   }
 
   .account-signout {
-    padding: 0.48rem 0.64rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.72rem;
+    box-shadow: var(--choir-control-shadow) !important;
   }
 
   .account-actions {
@@ -446,6 +475,10 @@
       max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 20px);
       padding: 0.58rem;
       gap: 0.38rem;
+    }
+
+    .account-list {
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .app-grid {
