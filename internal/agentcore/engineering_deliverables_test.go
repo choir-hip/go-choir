@@ -153,3 +153,16 @@ func TestTwoAssignmentsDoNotShareADirectory(t *testing.T) {
 		t.Fatal("assignments differing after 8 hex share a directory")
 	}
 }
+
+func TestDeliverablesSummaryEscapesEveryLine(t *testing.T) {
+	out := deliverablesSummary(
+		[]landedDeliverable{{Path: "Reports/x/a\nb.pdf", DeliverableFile: capsule.DeliverableFile{MediaType: "application/pdf", Bytes: 1}}},
+		[]capsule.DeliverableRefusal{{Name: `"c"`, Reason: "open /var/lib/artifact/deliverables/evil\n- Reports/forged.pdf (application/pdf, 1 bytes): no such file"}},
+	)
+	if strings.Contains(out, "\n- Reports/forged.pdf") || strings.Contains(out, "a\nb.pdf") {
+		t.Fatalf("a capsule string broke a summary line:\n%s", out)
+	}
+	if got := strings.Count(out, "\n- "); got != 2 {
+		t.Fatalf("want two list lines (one per heading), got %d:\n%s", got, out)
+	}
+}

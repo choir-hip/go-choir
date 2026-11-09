@@ -128,7 +128,7 @@ func deliverablesSummary(landed []landedDeliverable, refused []capsule.Deliverab
 	if len(landed) > 0 {
 		b.WriteString("Deliverables in the owner's Files (embed or link these paths):\n")
 		for _, f := range landed {
-			fmt.Fprintf(&b, "- %s (%s, %d bytes)\n", f.Path, f.MediaType, f.Bytes)
+			fmt.Fprintf(&b, "- %s (%s, %d bytes)\n", summaryLine(f.Path), summaryLine(f.MediaType), f.Bytes)
 		}
 	}
 	if len(refused) > 0 {
@@ -138,10 +138,19 @@ func deliverablesSummary(landed []landedDeliverable, refused []capsule.Deliverab
 				fmt.Fprintf(&b, "- and %d more\n", len(refused)-i)
 				break
 			}
-			fmt.Fprintf(&b, "- %s: %s\n", r.Name, r.Reason)
+			fmt.Fprintf(&b, "- %s: %s\n", r.Name, summaryLine(r.Reason))
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// A refusal Name is %q-quoted where it is made. summaryLine escapes control characters and other non-printables, so no
+// capsule-derived text (a file name, an error that quotes one) can break a
+// summary line or forge another; this is the one sink every line goes
+// through (deliverables review r3: patching each source did not converge).
+func summaryLine(s string) string {
+	q := strconv.Quote(s)
+	return q[1 : len(q)-1]
 }
 
 // withDeliverablesSummary returns summary with the deliverables text after it.
