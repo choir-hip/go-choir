@@ -9,3 +9,4 @@ Append-only. One line per move; newest last.
 - 2026-11-09 Promoted to executable by the owner; tempo: expedite everything until Autoradio is solid (CLAUDE.md updated).
 - 2026-11-09 L3.5 added by the owner: tools attach on demand, not at boot. Physics: an attached but unread layer already costs no page cache and its bytes are stored once on the host, so L3.5 buys modularity (no tool in a computer's store until it is used, adding a tool without a cold boot), not memory. Design next.
 - 2026-11-09 L3.5 widened by the owner to load and unload live, secure: a tool enters memory only when loaded and leaves it on unload, without a restart. Moved up: design now, build after L2 and L3 land.
+- 2026-11-09 L3.5 design scope widened by the owner: desks and Library packages that need heavy tools (video, Blender, CAD). Tools become packages, desks lease them, slots are generic.
