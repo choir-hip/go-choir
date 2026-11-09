@@ -160,6 +160,7 @@ test.describe('check-packages.mjs data-only packages', () => {
     ['a pack that contributes nothing', (m) => { m.contributes = {}; }, /contributes nothing/],
     ['a pack command with a handler', (m) => { m.contributes.commands[0].run = { handler: true }; }, /needs an app/],
     ['a pack that opens files', (m) => { m.contributes.opens = [{ media_type: 'x/y', extensions: ['zzq'] }]; }, /needs an app/],
+    ['a pack link', (m) => { m.contributes.links = [{ app: m.name, params: [] }]; }, /package has none/],
     ['a manifest with neither app nor contributes', (m) => { delete m.contributes; }, /missing field "app"/],
   ];
   for (const [label, mutate, pattern] of packBad) {

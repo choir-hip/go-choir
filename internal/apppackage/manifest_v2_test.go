@@ -750,7 +750,13 @@ func TestInTreeManifestsParseAndHash(t *testing.T) {
 		// Only the two apps that call shell functions hold ui.shell, a privileged
 		// grant; a shell-surface provider holds it by definition (H1 to H4).
 		privilegedOK := m.Name == "settings" || m.Name == "compute-monitor"
-		if m.Class() == ClassProvider {
+		if m.Class() == ClassData {
+			// A data-only pack (themes, commands, keybindings): no app, no code,
+			// and real contributes (ParseManifest refuses an empty one, X7).
+			if m.CodeBearing() || m.App != nil || len(m.Provides) > 0 || len(m.Contributes.Themes)+len(m.Contributes.Commands)+len(m.Contributes.Keybindings) == 0 {
+				t.Errorf("%s: a data-only pack must be code-free and contribute a theme, command or keybinding", p)
+			}
+		} else if m.Class() == ClassProvider {
 			if m.Level() != LevelPrivileged {
 				t.Errorf("%s: provider at level %s", p, m.Level())
 			}
