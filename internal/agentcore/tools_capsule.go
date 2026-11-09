@@ -1033,7 +1033,19 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				req.Inbox = reduction.inbox
 				// RLM prompt-as-variable: pending update_coagent records ride
 				// the request so choir.Updates() exposes them in the cell.
-				req.Updates = pendingCellUpdates(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
+				// The window is a prefix of the pending updates; the run
+				// consumes only the ids shown (update_window.go). The capsule
+				// broker's frame carries no Backlog marker yet, so an engineer
+				// is not told how many are past the window.
+				var updatesRemaining int
+				req.Updates, updatesRemaining = pendingCellUpdatesWindow(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
+				if updatesRemaining > 0 {
+					shownIDs := make([]string, 0, len(req.Updates))
+					for _, u := range req.Updates {
+						shownIDs = append(shownIDs, u.UpdateID)
+					}
+					rt.noteUpdatesShown(toolregistry.ExecutionContextFrom(ctx).RunID, shownIDs, true)
+				}
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
 			timedOut := false

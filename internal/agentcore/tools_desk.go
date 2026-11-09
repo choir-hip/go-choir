@@ -793,8 +793,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration,
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining)})
 			// The host consumes only the updates the cell was shown whole.
-			sentUpdates := w.LastUpdatesSent()
-			rt.noteUpdatesShown(execCtx.RunID, sentUpdates, updatesRemaining > 0 || len(sentUpdates) < len(updates))
+			// A cell that failed consumes nothing.
+			if evalErr == nil {
+				sentUpdates := w.LastUpdatesSent()
+				rt.noteUpdatesShown(execCtx.RunID, sentUpdates, updatesRemaining > 0 || len(sentUpdates) < len(updates))
+			}
 			if res.CalibrationRead {
 				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, delivery)
 			}

@@ -900,6 +900,13 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
+	if rec.State == types.RunCompleted && len(updateIDs) > 0 {
+		// A run whose frames left updates out delivers only what its cells
+		// were shown (as the Texture turn does); one no cell recorded for
+		// delivers only the first window. The window applies at a final
+		// checkpoint too: it drains the oldest window.
+		updateIDs = rt.consumableUpdateIDs(ctx, rec, updateIDs)
+	}
 	if runHasProfile(rec, deskmanifest.DocumentCustodianName()) || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
 		if err := rt.store.UpdateRunWithEvent(ctx, *rec, event); err != nil {
 			return err
@@ -2013,7 +2020,14 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
 	channelID := strings.TrimSpace(firstNonEmpty(agent.ChannelID, first.ChannelID))
 	updateIDs := make([]string, 0, len(updates))
-	for _, update := range updates {
+	// A mailbox-authority run is delivered the ids stamped here when it
+	// completes, so stamp only the window its wake and frame show; the rest
+	// stay pending for the next activation (update_window.go).
+	stamped := updates
+	if !lifecycleControls {
+		stamped, _ = windowUpdatePackets(updates)
+	}
+	for _, update := range stamped {
 		if id := strings.TrimSpace(update.UpdateID); id != "" {
 			updateIDs = append(updateIDs, id)
 		}

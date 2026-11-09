@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -85,8 +86,7 @@ func textureDispositionIneligibleReason(snapshot types.LifecycleSnapshot, caller
 func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunRecord, decisions []textureUpdateDisposition, resultRef string, shown map[string]bool, restricted bool) ([]types.TextureTurnInboundDisposition, error) {
 	callerAgentID := strings.TrimSpace(rec.AgentID)
 	scheduledSeq := int64(metadataIntValue(rec.Metadata, "scheduled_message_seq"))
-	pending := make(map[string]types.CoagentSourcePacket)
-	eligibleOrder := make([]string, 0, len(snapshot.Updates))
+	eligible := make([]types.CoagentSourcePacket, 0, len(snapshot.Updates))
 	for _, update := range snapshot.Updates {
 		if update.Disposition != types.UpdatePending || update.Direction != types.LifecyclePacketDirectionProducerReport || strings.TrimSpace(update.TargetAgentID) != callerAgentID {
 			continue
@@ -98,6 +98,16 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 		if !update.WithinTextureTurnBoundary(rec.RunID, scheduledSeq) {
 			continue
 		}
+		eligible = append(eligible, update)
+	}
+	if !restricted {
+		// No cell recorded what the run was shown (a commit with no cell, a
+		// resumed run): never deliver more than the first window.
+		shown, restricted = agentcore.FirstUpdateWindow(eligible)
+	}
+	pending := make(map[string]types.CoagentSourcePacket)
+	eligibleOrder := make([]string, 0, len(eligible))
+	for _, update := range eligible {
 		if restricted && !shown[strings.TrimSpace(update.UpdateID)] {
 			continue
 		}

@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -47,17 +48,16 @@ func windowUpdatePackets(packets []types.CoagentSourcePacket) (shown []types.Coa
 }
 
 // wakeWindowIDs is the ids of the deliverable updates a cell's frame would
-// show, so a wake turn names no update the desk cannot read in its cell. A
-// cell's frame shows a subset of the deliverable updates (cellUpdateVisible
-// adds the Texture turn boundary), so a budget prefix of this list is never
-// longer than the frame's.
+// show, so a wake turn names no update the desk cannot read in its cell: it
+// uses the frame's own predicate (cellUpdateVisible, which adds the Texture
+// turn boundary to the wake's deliverable rule).
 // updates is the desk's pending list in the store's order, before the seen
 // filter: an update an earlier wake named still holds its place in the
 // window until a report consumes it.
 func wakeWindowIDs(rec *types.RunRecord, updates []types.CoagentSourcePacket) map[string]bool {
 	deliverable := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, u := range updates {
-		if strings.TrimSpace(u.UpdateID) == "" || !coagentUpdateDeliverableForRun(rec, u) {
+		if strings.TrimSpace(u.UpdateID) == "" || !cellUpdateVisible(rec, u) {
 			continue
 		}
 		deliverable = append(deliverable, u)
@@ -107,7 +107,9 @@ func (rt *Runtime) noteUpdatesShown(runID string, ids []string, cut bool) {
 
 // UpdatesShownRestriction reports, for a run whose frames left pending updates
 // out, the ids its cells were shown whole. restricted is false when every
-// frame carried every pending update: the run consumes as it always did.
+// frame carried every pending update: the run consumes as it always did. It
+// reports only what cells recorded; a run with no record is bounded by
+// FirstUpdateWindow.
 func (rt *Runtime) UpdatesShownRestriction(runID string) (shown map[string]bool, restricted bool) {
 	if rt == nil {
 		return nil, false
@@ -127,4 +129,53 @@ func (rt *Runtime) UpdatesShownRestriction(runID string) (shown map[string]bool,
 		out[id] = true
 	}
 	return out, true
+}
+
+// FirstUpdateWindow is the fail-safe for a run no cell recorded for (a commit
+// with no cell, a run resumed after a planned restart, a parked run whose
+// record was dropped): when its pending updates are more than one window, it
+// consumes only the first window, the oldest within the frame's budget, never
+// everything. restricted is false when they all fit one window.
+func FirstUpdateWindow(pending []types.CoagentSourcePacket) (shown map[string]bool, restricted bool) {
+	window, remaining := windowUpdatePackets(pending)
+	if remaining == 0 {
+		return nil, false
+	}
+	shown = make(map[string]bool, len(window))
+	for _, u := range window {
+		shown[strings.TrimSpace(u.UpdateID)] = true
+	}
+	return shown, true
+}
+
+// consumableUpdateIDs cuts ids (a run's pending updates, from the store) to
+// what the run may consume: what its cells were shown, or, when no cell
+// recorded, the first window.
+func (rt *Runtime) consumableUpdateIDs(ctx context.Context, rec *types.RunRecord, ids []string) []string {
+	shown, restricted := rt.UpdatesShownRestriction(rec.RunID)
+	if !restricted && len(ids) > 1 {
+		packets := make([]types.CoagentSourcePacket, 0, len(ids))
+		for _, id := range ids {
+			p, err := rt.store.GetWorkerUpdate(ctx, rec.OwnerID, strings.TrimSpace(id))
+			if err != nil {
+				// Unreadable: it is not consumed, and stays pending.
+				continue
+			}
+			packets = append(packets, p)
+		}
+		shown, restricted = FirstUpdateWindow(packets)
+		if !restricted {
+			return ids
+		}
+	}
+	if !restricted {
+		return ids
+	}
+	kept := ids[:0:0]
+	for _, id := range ids {
+		if shown[strings.TrimSpace(id)] {
+			kept = append(kept, id)
+		}
+	}
+	return kept
 }

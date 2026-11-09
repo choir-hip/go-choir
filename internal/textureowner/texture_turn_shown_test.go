@@ -2,6 +2,7 @@ package textureowner
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -71,5 +72,30 @@ func TestTextureTurnDeliversOnlyTheReportsItsCellsWereShown(t *testing.T) {
 	second, err := textureTurnPendingInbound(snapshot, rec, nil, "", nextShown, true)
 	if err != nil || len(ids(second)) != 10 || !ids(second)["u010"] || ids(second)["u020"] {
 		t.Fatalf("the next turn delivered %v, %v", ids(second), err)
+	}
+}
+
+// Fail safe: a commit no cell recorded for (a resumed run, a commit with no
+// cell) over a backlog larger than one window delivers the first window, not
+// everything.
+func TestTextureTurnWithNoRecordedCellDeliversOnlyTheFirstWindow(t *testing.T) {
+	rec := &types.RunRecord{RunID: "run-resumed", AgentID: "texture-desk", Metadata: map[string]any{"scheduled_message_seq": 100}}
+	snapshot := types.LifecycleSnapshot{}
+	for i := 0; i < 40; i++ {
+		snapshot.Updates = append(snapshot.Updates, types.CoagentSourcePacket{
+			UpdateID: fmt.Sprintf("u%03d", i), Disposition: types.UpdatePending,
+			Direction: types.LifecyclePacketDirectionProducerReport, TargetAgentID: "texture-desk",
+			MessageSeq: int64(i + 1), ProducerWorkItemID: "work-1", Content: strings.Repeat("c", 100<<10),
+		})
+	}
+	got, err := textureTurnPendingInbound(snapshot, rec, nil, "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || len(got) >= 40 {
+		t.Fatalf("delivered %d of 40 with no recorded cell, want the first window only", len(got))
+	}
+	if got[0].UpdateID != "u000" {
+		t.Fatalf("the first window must start at the oldest: %s", got[0].UpdateID)
 	}
 }

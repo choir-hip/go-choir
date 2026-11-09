@@ -1,10 +1,13 @@
 package agentcore
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -121,5 +124,92 @@ func TestUpdatesShownRestrictionOnlyAppliesToACutRun(t *testing.T) {
 	shown, restricted := rt.UpdatesShownRestriction("run-cut")
 	if !restricted || len(shown) != 3 || !shown["a"] || !shown["c"] || shown["d"] {
 		t.Fatalf("shown = %v restricted = %v", shown, restricted)
+	}
+}
+
+// A mailbox-authority run is delivered the ids stamped on it when it
+// completes. When its backlog was over the frame's window, only the updates its
+// cells were shown are delivered; the tail stays pending for the next window.
+func TestMailboxRunDeliversOnlyTheUpdatesItsCellsWereShown(t *testing.T) {
+	mailboxWindowCase(t, true)
+}
+
+// Fail safe: the same run with no cell recorded (resumed after a planned
+// restart, or its record dropped at park) delivers the first window, not the
+// whole stamped backlog.
+func TestMailboxRunWithNoRecordedCellDeliversOnlyTheFirstWindow(t *testing.T) {
+	mailboxWindowCase(t, false)
+}
+
+func mailboxWindowCase(t *testing.T, record bool) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID, targetAgentID := "user-alice", "coagent:window"
+	now := time.Now().UTC()
+	content := strings.Repeat("c", 100<<10)
+	var ids []string
+	for i := 0; i < 30; i++ {
+		id := fmt.Sprintf("update-window-%02d", i)
+		ids = append(ids, id)
+		update := types.CoagentSourcePacket{
+			UpdateID: id, OwnerID: ownerID, AgentID: "engineering:impl", TargetAgentID: targetAgentID,
+			ChannelID: "chan-window", TrajectoryID: "traj-window", Role: agentprofile.Engineering,
+			Packet: testCoagentUpdatePacket("evidence_update", id), Content: content, CreatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+		message := types.ChannelMessage{ChannelID: update.ChannelID, FromAgentID: update.AgentID, ToAgentID: targetAgentID,
+			TrajectoryID: update.TrajectoryID, Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt}
+		if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+			t.Fatalf("dispatch %s: %v", id, err)
+		}
+	}
+	rec := types.RunRecord{
+		RunID: "run-window-mailbox", AgentID: targetAgentID, ChannelID: "chan-window", TrajectoryID: "traj-window",
+		AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, OwnerID: ownerID, ComputerID: "autoputer-test",
+		State: types.RunRunning, Prompt: "process updates", CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering,
+			runMetadataAgentID: targetAgentID, runMetadataChannelID: "chan-window", runMetadataTrajectoryID: "traj-window",
+			"request_source": "update_coagent",
+			// stamped at mint from the unwindowed backlog, as before the fix
+			"worker_update_ids": ids,
+		},
+	}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 100)
+	if err != nil || len(pending) != 30 {
+		t.Fatalf("pending = %d, %v", len(pending), err)
+	}
+	shown, remaining := windowUpdatePackets(pending)
+	if remaining == 0 {
+		t.Fatalf("the backlog must exceed the window for this test: %d shown", len(shown))
+	}
+	shownIDs := make([]string, 0, len(shown))
+	for _, u := range shown {
+		shownIDs = append(shownIDs, u.UpdateID)
+	}
+	if record {
+		rt.noteUpdatesShown(rec.RunID, shownIDs, remaining > 0)
+	}
+
+	finished := now.Add(time.Minute)
+	rec.State, rec.UpdatedAt, rec.FinishedAt, rec.Result = types.RunCompleted, finished, &finished, "processed"
+	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx, &rec); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	left, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != remaining {
+		t.Fatalf("%d updates still pending, want the %d past the window (delivered the unshown tail?)", len(left), remaining)
+	}
+	for _, u := range left {
+		for _, id := range shownIDs {
+			if u.UpdateID == id {
+				t.Fatalf("shown update %s was not delivered", id)
+			}
+		}
 	}
 }

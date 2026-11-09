@@ -486,13 +486,15 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 	if err != nil {
 		return SessionResult{}, err
 	}
-	for _, u := range sent.Updates {
-		w.lastUpdatesSent = append(w.lastUpdatesSent, u.UpdateID)
-	}
 	if err := w.framed.WriteFrame(StreamCell, raw); err != nil {
 		w.dead = true
 		w.transportLost = true
 		return SessionResult{}, fmt.Errorf("desk eval write: %w", err)
+	}
+	// Recorded only once the frame is on the wire: the host consumes what a
+	// cell was shown, and a frame that was never written showed nothing.
+	for _, u := range sent.Updates {
+		w.lastUpdatesSent = append(w.lastUpdatesSent, u.UpdateID)
 	}
 	type result struct {
 		res SessionResult

@@ -157,3 +157,46 @@ fmt.Println(len(rs), rs[0].ID, choir.Context()["backlog_truncated"], choir.Conte
 		t.Fatalf("the cell must see the oldest record and the truncation marker: %q", res.Stdout)
 	}
 }
+
+// A seq's records are shown whole or not at all. A Cast and the captures
+// records it delegated share one seq; the cell marks that seq shown, so the
+// cursor passes every record of it. Cutting inside the seq passed the dropped
+// siblings unread.
+func TestFitFrameNeverSplitsASeq(t *testing.T) {
+	body := strings.Repeat("g", 200<<10)
+	group := func(seq int64, n int) []InboxRecord {
+		var out []InboxRecord
+		for i := 0; i < n; i++ {
+			out = append(out, InboxRecord{Seq: seq, RecordID: fmt.Sprintf("s%d-%d", seq, i), Kind: "captures", Body: body})
+		}
+		return out
+	}
+	perSeq := func(recs []InboxRecord) map[int64]int {
+		m := map[int64]int{}
+		for _, r := range recs {
+			m[r.Seq]++
+		}
+		return m
+	}
+
+	// seq 5 (6 x 200 KiB) fits whole; seq 6 (20 x 200 KiB) cannot be added.
+	frame := SessionFrame{ID: "f", Records: append(group(5, 6), group(6, 20)...)}
+	_, sent, err := fitFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := perSeq(sent.Records); m[5] != 6 || m[6] != 0 {
+		t.Fatalf("seqs must be whole or absent: %v", m)
+	}
+
+	// One seq alone over the frame (25 x 200 KiB = 5 MB): it is not shown at
+	// all, so the cursor does not pass any of it, and the frame says it was cut.
+	frame = SessionFrame{ID: "g", Records: group(5, 25)}
+	_, sent, err = fitFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sent.Records) != 0 || sent.Backlog == nil || !sent.Backlog.Truncated || sent.Backlog.RecordsRemaining != 25 {
+		t.Fatalf("an over-frame seq must be left out whole and counted: %d records, %+v", len(sent.Records), sent.Backlog)
+	}
+}

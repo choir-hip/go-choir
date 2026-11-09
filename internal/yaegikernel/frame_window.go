@@ -47,6 +47,17 @@ type FrameBacklog struct {
 	Truncated bool `json:"truncated,omitempty"`
 }
 
+// distinctSeqs counts the sequence numbers in records (in seq order).
+func distinctSeqs(recs []InboxRecord) int {
+	n := 0
+	for i, r := range recs {
+		if i == 0 || r.Seq != recs[i-1].Seq {
+			n++
+		}
+	}
+	return n
+}
+
 // RecordSize is a record's size on the wire.
 func RecordSize(r InboxRecord) int {
 	b, err := json.Marshal(r)
@@ -75,7 +86,11 @@ func clipText(s string) string {
 	return s[:cut]
 }
 
-// stubRecord keeps a record's identity and marks the rest cut.
+// stubRecord keeps a record's identity and marks the rest cut. A stub is
+// deliberately past the cursor: the desk is told the body was cut (and how
+// large it was), and the cursor moves past it with the rest of its window, so
+// one record too large for a frame cannot hold the desk's inbox. The full
+// record stays on the tape.
 func stubRecord(r InboxRecord, size int) InboxRecord {
 	return InboxRecord{
 		Seq: r.Seq, RecordID: r.RecordID, Kind: r.Kind, From: r.From,
@@ -202,7 +217,7 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 			return nil, frame, err
 		}
 	}
-	for len(raw) > limit && (len(frame.Records) > 1 || len(frame.Updates) > 1) {
+	for len(raw) > limit && (distinctSeqs(frame.Records) > 1 || len(frame.Updates) > 1) {
 		// Halve the larger part by bytes; the cursor follows what is kept.
 		recBytes, updBytes := 0, 0
 		for _, r := range frame.Records {
@@ -211,11 +226,11 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 		for _, u := range frame.Updates {
 			updBytes += updateSize(u)
 		}
-		if len(frame.Records) > 1 && (recBytes >= updBytes || len(frame.Updates) <= 1) {
+		if distinctSeqs(frame.Records) > 1 && (recBytes >= updBytes || len(frame.Updates) <= 1) {
+			// Whole seqs only: the cursor passes a seq once it is shown, so
+			// a seq's records (a Cast and the captures records it delegated
+			// share one) are all shown or none are.
 			kept, _ := WindowRecords(frame.Records, recBytes/2)
-			if len(kept) == len(frame.Records) {
-				kept = kept[:1]
-			}
 			backlog.RecordsRemaining += int64(len(frame.Records) - len(kept))
 			frame.Records = kept
 		} else {
@@ -230,8 +245,11 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 			return nil, frame, err
 		}
 	}
-	// Last resort: a single update, then a single record, too large for the
-	// frame stay pending unshown.
+	// Last resort: a single update, or a single seq of records, too large for
+	// the frame stays unshown and pending. The cursor does not pass it (the
+	// cell shows no record past it, so recordsShown does not move), and
+	// Backlog says the frame was cut, so the desk is held there visibly
+	// rather than passed over a record it never read.
 	if len(raw) > limit && len(frame.Updates) > 0 {
 		backlog.UpdatesRemaining += len(frame.Updates)
 		frame.Updates = nil
