@@ -87,3 +87,14 @@ a spawn copies no store by default (an ordinary assignment such as a PDF
 report names no store kinds); an assignment that does need state gets a
 copy built from only the named kinds' rows, so the copy and its secret
 scan cost what the capsule uses. The launch keeps its own deadline.
+
+Owner, same night: "There's no secrets in the computers. We have a gateway,
+and soon we will have a general purpose vault ... for all user secrets
+outside of essential api keys for models and search." So secret scans over
+computer-held data (the store copy's text-column scan, a scan of each
+engineering deliverable) guard against a threat the architecture already
+excludes: model and search keys stay in the host gateway, and user secrets
+go to the vault (docs/design/secrets-vault-design-2026-10-28.md, accepted,
+not built). The kind filter that remains is custody (Texture bodies, the
+mailbox), not secrecy. The deliverables channel drops its secret scan; a
+false positive would only refuse a legitimate report.
