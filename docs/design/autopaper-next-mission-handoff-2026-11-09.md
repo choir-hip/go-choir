@@ -612,6 +612,18 @@ Both are on branch `integrate-1109` and need a repair before they land.
   Crouton's free window ends about 2026-11-10, and every web search provider
   answered `quota_limited`.
 
+### Reported by the owner at the stopping point
+
+- The account switcher adds a second account but offers no way back to the
+  first. Cause in code: a session from before the switcher is never added to
+  the browser's account set
+  ([problem](../problems/account-switcher-no-switch-back-2026-11-09.md)).
+  Not fixed; the fix is auth code and needs two review seats.
+- b@c looked to be on old code. Its computer reported the deployed build
+  at 22:40 UTC, so what looked old is not yet identified.
+- The theme rounds on b@c: the `tidepool` round was closed as stuck after
+  an hour with no activity.
+
 ### Owner rulings from this session that the next one inherits
 
 - The host never sends research material straight to Texture; desks keep
