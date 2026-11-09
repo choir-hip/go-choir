@@ -541,8 +541,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 6: Return the successful response.
-	log.Printf("gateway: inference succeeded for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d)",
-		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CachedInputTokens, len(resp.Text))
+	log.Print("gateway: " + inferenceSuccessLine("inference succeeded", computerID, resp))
 
 	writeGatewayJSON(w, http.StatusOK, ProviderResponse{
 		ID:               resp.ID,
@@ -616,8 +615,7 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 		flusher.Flush()
 	}
 
-	log.Printf("gateway: streaming inference succeeded for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d)",
-		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CachedInputTokens, len(resp.Text))
+	log.Print("gateway: " + inferenceSuccessLine("streaming inference succeeded", computerID, resp))
 }
 
 // resolveProvider selects the appropriate provider for the given request.
@@ -1305,4 +1303,15 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/spend", h.HandlePaidSpend)
 	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)
 	s.HandleFunc("/provider/v1/breakers/reset", h.HandleProviderBreakerReset)
+}
+
+// inferenceSuccessLine formats the per-call success log line. The prefix
+// through text_len is parsed by scripts and must stay byte-identical; new
+// fields are appended after it. InputTokens is the whole prompt, so
+// cache_write (5m + 1h) is a subset of tokens=IN-cached, not an addition.
+func inferenceSuccessLine(what, computerID string, resp *provider.LLMResponse) string {
+	u := resp.Usage
+	return fmt.Sprintf("%s for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d cache_write=%d cache_write_1h=%d model=%s)",
+		what, computerID, resp.ProviderName, u.InputTokens, u.OutputTokens, u.CachedInputTokens, len(resp.Text),
+		u.CacheWrite5mTokens+u.CacheWrite1hTokens, u.CacheWrite1hTokens, resp.Model)
 }
