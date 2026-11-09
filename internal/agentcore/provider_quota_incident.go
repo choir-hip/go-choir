@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"log"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -214,4 +215,19 @@ func shortWaitDuration(d time.Duration) string {
 		return d.Round(time.Second).String()
 	}
 	return strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
+}
+
+// quotaLedgerPath is the ledger's state file, beside the store the way the
+// store names its other siblings (state.db -> state.provider-availability.json);
+// empty when there is no store path.
+func quotaLedgerPath(storePath string) string {
+	storePath = strings.TrimSpace(storePath)
+	if storePath == "" {
+		return ""
+	}
+	trimmed := strings.TrimSuffix(storePath, filepath.Ext(storePath))
+	if trimmed == "" {
+		trimmed = storePath
+	}
+	return trimmed + ".provider-availability.json"
 }

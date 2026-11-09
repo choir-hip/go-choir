@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -83,5 +84,21 @@ func TestObservabilityShowsTheQuotaLedgerHolds(t *testing.T) {
 	if len(obs.QuotaLedger) != 1 || obs.QuotaLedger[0].Member != "synthetic/hf:deepseek-ai/deepseek-v4.1-flash-1017" ||
 		obs.QuotaLedger[0].Source != "estimated" || !obs.QuotaLedger[0].Until.After(time.Now()) {
 		t.Fatalf("quota_ledger = %+v, want the held member, its end and that it is estimated", obs.QuotaLedger)
+	}
+}
+
+// A restart keeps what the computer knew about providers being down: the
+// restarted runtime's ledger, and the observability field, show the holds.
+func TestQuotaLedgerHoldsSurviveARuntimeRestart(t *testing.T) {
+	cfg := provideriface.Config{StorePath: filepath.Join(t.TempDir(), "state.db")}
+	member := provideriface.LLMSelection{Provider: "synthetic", Model: "m1"}
+	first := New(cfg, nil, nil, nil)
+	first.quotaLedger.Mark(member, time.Now().Add(time.Hour))
+	first.quotaLedger.DemoteHard(provideriface.LLMSelection{Provider: "zai", Model: "glm"}, time.Now())
+
+	second := New(cfg, nil, nil, nil)
+	holds := second.quotaLedger.Holds(time.Now())
+	if len(holds) != 2 || holds[0].Member != "synthetic/m1" || holds[1].Source != "hard_failure" {
+		t.Fatalf("holds after a restart = %+v, want both restored", holds)
 	}
 }

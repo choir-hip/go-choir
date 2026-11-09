@@ -59,6 +59,9 @@ type CircuitBreakingProvider struct {
 	// quotaCooldown is the open duration for an exhausted quota's trips-th
 	// open in a row.
 	quotaCooldown func(trips int) time.Duration
+	// hardCooldown is the open duration for a hard failure's trips-th open
+	// in a row: 15 minutes doubling to 6 hours.
+	hardCooldown func(trips int) time.Duration
 
 	mu     sync.Mutex
 	models map[string]*health.CircuitBreaker
@@ -135,6 +138,7 @@ func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *
 		cfg:               cfg,
 		breaker:           health.NewCircuitBreaker(cfg),
 		quotaCooldown:     doublingCooldown(qBase, qMax),
+		hardCooldown:      doublingCooldown(upstreamHardBase, upstreamHardCap),
 		models:            make(map[string]*health.CircuitBreaker),
 		concurrencyStreak: make(map[string]int),
 		quotaHolds:        make(map[string]quotaHold),
@@ -406,6 +410,16 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 			snap := b.Snapshot()
 			log.Printf("gateway: model %s/%s cooling down (%d concurrency 429s in a row, trip %d, until %s)",
 				c.inner.Name(), modelLabel(model), streak, snap.Trips, formatUntil(snap.OpenUntil))
+		}
+	case isHardUpstreamError(err) && ctx.Err() == nil:
+		// A refused key or a model that is gone: a short probe schedule
+		// would ask it every half minute for nothing. Held at once for
+		// hardCooldown, doubling per failed probe up to six hours. A probe
+		// that succeeds closes the breaker and ends the doubling.
+		if b.Trip(c.hardCooldown) {
+			snap := b.Snapshot()
+			log.Printf("gateway: model %s/%s refused as a hard failure (%v; trip %d, half-opens at %s)",
+				c.inner.Name(), modelLabel(model), err, snap.Trips, formatUntil(snap.OpenUntil))
 		}
 	case providerFailureCounts(ctx, err):
 		// The model now fails for another reason. The breaker is no longer

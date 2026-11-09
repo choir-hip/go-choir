@@ -58,6 +58,13 @@ type JevTransport struct {
 	apiKey     string
 	httpClient *http.Client
 	receipts   *jevReceiptWriter
+	// url is the upstream; a test points it at a stub.
+	url string
+	// now is the hold's clock.
+	now func() time.Time
+	// hold is the memory of the upstream failing: no call goes out while
+	// it holds (upstream_hold.go).
+	hold upstreamHold
 }
 
 func NewJevTransportFromEnv(enabled bool) *JevTransport {
@@ -66,6 +73,8 @@ func NewJevTransportFromEnv(enabled bool) *JevTransport {
 		apiKey:     strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")),
 		httpClient: &http.Client{Timeout: jevTransportTimeout},
 		receipts:   newJevReceiptWriter(strings.TrimSpace(os.Getenv("GATEWAY_JEV_RECEIPT_PATH"))),
+		url:        openRouterDecisionsURL,
+		now:        time.Now,
 	}
 }
 
@@ -85,6 +94,10 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 	if err := validateJudgmentRequest(request); err != nil {
 		return nil, err
 	}
+	// An upstream that just failed is not asked again until its hold ends.
+	if until := t.hold.heldUntil(t.clock()); !until.IsZero() {
+		return nil, &upstreamHeldError{name: "Jev judgment provider", until: until}
+	}
 
 	upstreamRequest, err := json.Marshal(struct {
 		Model     string                     `json:"model"`
@@ -99,7 +112,7 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		return nil, fmt.Errorf("encode Jev request: %w", err)
 	}
 
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, openRouterDecisionsURL, bytes.NewReader(upstreamRequest))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, t.upstreamURL(), bytes.NewReader(upstreamRequest))
 	if err != nil {
 		return nil, fmt.Errorf("create OpenRouter request: %w", err)
 	}
@@ -109,6 +122,9 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 
 	response, err := t.httpClient.Do(httpRequest)
 	if err != nil {
+		if ctx.Err() == nil {
+			t.hold.fail(t.clock(), false)
+		}
 		return nil, fmt.Errorf("call OpenRouter: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
@@ -120,8 +136,15 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		return nil, fmt.Errorf("OpenRouter response exceeds transport limit")
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		switch code := response.StatusCode; {
+		case isHardUpstreamStatus(code):
+			t.hold.fail(t.clock(), true)
+		case code >= 500 || code == http.StatusTooManyRequests || code == http.StatusRequestTimeout:
+			t.hold.fail(t.clock(), false)
+		}
 		return nil, fmt.Errorf("OpenRouter returned %s", response.Status)
 	}
+	t.hold.succeed()
 	if !json.Valid(body) {
 		return nil, fmt.Errorf("OpenRouter returned invalid JSON")
 	}
@@ -340,6 +363,11 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
 			return
 		}
+		if held, ok := err.(*upstreamHeldError); ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", held.retryAfterSeconds(time.Now())))
+			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgment provider unavailable (held after repeated failures)"})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: "Jev judgment provider unavailable"})
 		return
 	}
@@ -350,4 +378,18 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		// safely retry its idempotent transport request if it lost the response.
 		return
 	}
+}
+
+func (t *JevTransport) clock() time.Time {
+	if t.now != nil {
+		return t.now()
+	}
+	return time.Now()
+}
+
+func (t *JevTransport) upstreamURL() string {
+	if t.url != "" {
+		return t.url
+	}
+	return openRouterDecisionsURL
 }

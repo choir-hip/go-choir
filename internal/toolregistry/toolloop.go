@@ -441,6 +441,11 @@ type QuotaLedger struct {
 	mu      sync.Mutex
 	until   map[string]time.Time
 	strikes map[string]int
+	// hard counts consecutive hard failures (a refused key, a model gone).
+	hard map[string]int
+	// path is the state file the ledger persists to (quota_ledger_state.go);
+	// empty: memory only.
+	path string
 	// source is why a member is held: a provider's own reset, an estimate
 	// (no reset named), or a failure demotion.
 	source map[string]string
@@ -498,12 +503,7 @@ func (l *QuotaLedger) Demote(sel provideriface.LLMSelection, now time.Time) time
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.until == nil {
-		l.until = map[string]time.Time{}
-	}
-	if l.strikes == nil {
-		l.strikes = map[string]int{}
-	}
+	l.initLocked()
 	id := servingSelectionID(sel)
 	hold := failureHoldBase
 	for n := l.strikes[id]; n > 0 && hold < failureHoldCap; n-- {
@@ -520,6 +520,7 @@ func (l *QuotaLedger) Demote(sel provideriface.LLMSelection, now time.Time) time
 		l.setSourceLocked(id, QuotaHoldFailure)
 	}
 	l.until[id] = until
+	l.saveLocked()
 	return until
 }
 
@@ -530,9 +531,16 @@ func (l *QuotaLedger) Succeed(sel provideriface.LLMSelection) {
 	}
 	l.mu.Lock()
 	id := servingSelectionID(sel)
+	_, held := l.until[id]
+	_, struck := l.strikes[id]
+	_, hardStruck := l.hard[id]
 	delete(l.until, id)
 	delete(l.strikes, id)
+	delete(l.hard, id)
 	delete(l.source, id)
+	if held || struck || hardStruck {
+		l.saveLocked()
+	}
 	l.mu.Unlock()
 }
 
@@ -563,6 +571,7 @@ func (l *QuotaLedger) MarkSourced(sel provideriface.LLMSelection, until time.Tim
 	} else {
 		l.setSourceLocked(id, QuotaHoldProviderReset)
 	}
+	l.saveLocked()
 }
 
 func (l *QuotaLedger) setSourceLocked(id, source string) {
@@ -601,6 +610,7 @@ func (l *QuotaLedger) Forget(sel provideriface.LLMSelection) {
 	l.mu.Lock()
 	delete(l.until, servingSelectionID(sel))
 	delete(l.source, servingSelectionID(sel))
+	l.saveLocked()
 	l.mu.Unlock()
 }
 
@@ -1234,9 +1244,13 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				if sleepErr := providerQuotaSleep(ctx, delay); sleepErr != nil {
 					return "", totalUsage, fmt.Errorf("tool loop iteration %d: every model is out of quota: %w", i, sleepErr)
 				}
-				// The retry round asks the gateway again, the whole chain.
+				// The retry round asks the gateway again, but only the members
+				// whose hold has ended: Until drops an expired hold, and a member
+				// whose reset is still ahead stays held and is not asked
+				// (owner, 2026-11-09: do not keep retrying a provider known down).
+				after := providerQuotaNow()
 				for _, sel := range order {
-					ledger.Forget(sel)
+					ledger.Until(sel, after)
 				}
 				switchOnQuota("provider_quota_retry", nil)
 				continue
@@ -1250,6 +1264,12 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			// cat-jam behind the same open circuit while luna was healthy
 			// (docs/problems/free-model-429-opens-provider-circuit-stub-
 			// stories-2026-10-14.md). Never on our own cancellation.
+			hardFailure := ctx.Err() == nil && IsHardProviderFailure(err)
+			if hardFailure {
+				// A refused key or a model that is gone is held long; a wait
+				// does not cure it (quota_ledger_state.go).
+				ledger.DemoteHard(activeLLMConfig, providerQuotaNow())
+			}
 			if nextFallback < len(options.fallbackLLMConfigs) && ctx.Err() == nil && IsModelFailoverError(err) {
 				idx := nextFallback
 				if messagesCarryImage(messages) {
@@ -1264,7 +1284,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				// goes to the first later member the ledger does not hold;
 				// all held, the next in order.
 				now := providerQuotaNow()
-				ledger.Demote(activeLLMConfig, now)
+				if !hardFailure {
+					ledger.Demote(activeLLMConfig, now)
+				}
 				for k := idx; k < len(options.fallbackLLMConfigs); k++ {
 					if messagesCarryImage(messages) && !modelcatalog.SupportsImage(options.fallbackLLMConfigs[k].Model) {
 						continue

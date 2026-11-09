@@ -711,6 +711,11 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	for _, opt := range opts {
 		opt(rt)
 	}
+	// The computer's memory of providers that are down survives a restart:
+	// remembering a provider is down is not resuming work.
+	if path := quotaLedgerPath(cfg.StorePath); path != "" {
+		_ = rt.quotaLedger.Persist(path, time.Now())
+	}
 	if rt.mailbox == nil && strings.TrimSpace(cfg.MaildURL) != "" {
 		rt.mailbox = maildesk.NewHTTPMailbox(cfg.MaildURL)
 	}
