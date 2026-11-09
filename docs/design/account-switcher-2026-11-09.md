@@ -73,12 +73,22 @@ account's refresh cookie) therefore gets a clean "account switched" result and
 cannot flip the cookie jar back. The frontend never bare-reloads on that
 reason (a jar that still holds a live non-active member's pair would loop):
 it reconciles first, POSTing `switch` to the named `active_user_id`, which
-sets the active pair, and then reloads. The access JWT path (a valid,
-unexpired `choir_access`, at most 5 minutes) also checks membership when the
-request carries the set cookie: a JWT for a member that is not
-`active_user_id` gets 401 `account_switched` at the proxy and the auth
-service, so the divergence window after a lost switch response is closed at
-the first request, not after the JWT expires. Sibling tabs are told at once: the switching tab posts
+sets the active pair, and then reloads. Every switch, including one to the
+member that is already active, rotates that member's session through
+`RotateRefreshSession` and writes the fresh pair: the server stores only
+token hashes, so there is no raw token to re-send without rotating (r3 N4).
+"No-op" means only that `active_user_id` is unchanged. The access JWT path
+is not membership-checked (r3 N5): `choir_accounts` is scoped to Path=/auth
+and never reaches the proxy, and widening it to every route couples the
+proxy to the set store for a window of at most 5 minutes (the access JWT's
+lifetime). Residual, accepted: after a lost switch response a tab may keep
+calling under the previous member until its access JWT expires or it next
+renews; that member is one the same person signed in to, the broadcast
+reaches sibling tabs at once, and the first renewal reconciles.
+`/auth/accounts/*` authenticate on the set handle alone (the cookie
+resolves the set; the body names the member), so a diverged jar's
+still-valid access JWT can never refuse the reconcile switch itself (r3
+N6). Sibling tabs are told at once: the switching tab posts
 `{type:"account-switched", user_id}` on a `BroadcastChannel("choir-accounts")`
 and writes a `choir.accounts.switched` localStorage key as the fallback (the
 `storage` event fires in the other tabs). Each receiving tab flushes desktop
@@ -202,8 +212,11 @@ per-account notifications from inactive accounts.
 12a. A jar that diverged (it holds member A's pair while `active_user_id` is
     B): the first request gets `account_switched`, the frontend POSTs
     `switch` to B (which sets B's pair) and reloads once; no reload loop.
-12b. A valid access JWT for a non-active member is refused at the proxy
-    with `account_switched` when the set cookie is present.
+12b. The reconcile `switch` succeeds while the jar still carries the
+    previous member's valid access JWT (`/auth/accounts/*` authenticate on
+    the set handle alone).
+12c. A switch to the already-active member rotates its session and writes
+    a fresh pair; a following `/auth/session` resolves that member.
 12. A sibling tab receives the switch broadcast, flushes and reloads, and its
     next call runs under B; with the broadcast dropped, the `account_switched`
     result does the same.
@@ -215,7 +228,7 @@ per-account notifications from inactive accounts.
     member it empties the set and clears the cookie; for a non-member it is 403.
 15. A new POST without a JSON content type is refused.
 16. A `HandleDesktopRedeem` session creates no set. Switch to the
-    already-active user is a no-op. The hygiene sweep removes dead members and
+    already-active user leaves `active_user_id` unchanged and rotates. The hygiene sweep removes dead members and
     empty or 30-day-idle sets.
 
 ## Adjudicated review findings (Devin, r0)
@@ -230,7 +243,7 @@ per-account notifications from inactive accounts.
 | no cookie lifetime / GC | adopted | 30-day persistent cookie, sweep |
 | `display_name` does not exist | adopted | dropped; email only |
 | hook at four sign-in endpoints | adopted | not the shared issuer |
-| idempotent set create and no-op switch | adopted | one transaction |
+| idempotent set create and same-member switch | adopted | one transaction |
 | `requireJSONContentType` on new POSTs | adopted | CSRF posture section |
 | localStorage enumeration incomplete | adopted | keys listed, `choir.auth.lastUserId` pointer |
 | grace TTL comment (30s) and dead `rotationGraceDuration` | deferred | pre-existing, not part of this change; live default is `AUTH_ROTATION_GRACE_TTL` 15s |
@@ -238,3 +251,9 @@ per-account notifications from inactive accounts.
 | r1 N1 reload loop on a diverged jar | adopted | reconcile by `switch` to `active_user_id` before reload; the no-op switch still sets the pair; the JWT path checks membership |
 | r1 N2 gate wording (store and grace) | adopted | gate text covers both |
 | r1 N3 grace revocation in logout-all; signout grace wording | adopted | per-member `revokeRotatedGraceForUser`; grace keyed by rotated token |
+| r3 N4 the no-op switch has no raw token to write | adopted | every switch rotates; "no-op" is `active_user_id` unchanged |
+| r3 N5 `Path=/auth` never reaches the proxy | adopted, second fix | the JWT-path check is dropped; the at-most-5-minute residual is stated and accepted |
+| r3 N6 the JWT refusal could block the reconcile switch | adopted | `/auth/accounts/*` authenticate on the set handle alone |
+
+Third round on this mechanism: per the repo rule the fixes go to the build
+without a fourth design round; the build carries its own tier 2 review.
