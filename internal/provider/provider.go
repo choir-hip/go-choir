@@ -524,7 +524,7 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 		ar.System = []anthropicSystemBlock{{
 			Type:         "text",
 			Text:         req.System,
-			CacheControl: map[string]string{"type": "ephemeral"},
+			CacheControl: bedrockCacheControl(),
 		}}
 	}
 
@@ -2051,6 +2051,16 @@ type anthropicContent struct {
 	CacheControl map[string]string `json:"cache_control,omitempty"`
 }
 
+// bedrockCacheControl is the one-hour breakpoint. Desks wake minutes apart
+// (the paper's Texture gap is p50 628 s), so the 5-minute default expires
+// between wakes. AWS lists Claude Haiku 5.5 with TTLs "5 minutes, 1 hour" for
+// InvokeModel (docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html),
+// with no beta header. Both breakpoints use the same TTL, which satisfies the
+// rule that a longer-TTL entry must come before any shorter one.
+func bedrockCacheControl() map[string]string {
+	return map[string]string{"type": "ephemeral", "ttl": "1h"}
+}
+
 // markHistoryCacheBreakpoint puts an ephemeral cache breakpoint on the last
 // cacheable block of the last message, so an Anthropic-native endpoint
 // caches the conversation so far and the next call of the append-only loop
@@ -2066,7 +2076,7 @@ func markHistoryCacheBreakpoint(messages []anthropicMessage) {
 		case "thinking", "redacted_thinking":
 			continue
 		}
-		content[i].CacheControl = map[string]string{"type": "ephemeral"}
+		content[i].CacheControl = bedrockCacheControl()
 		return
 	}
 }

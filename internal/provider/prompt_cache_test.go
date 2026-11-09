@@ -107,7 +107,7 @@ func TestBedrockMarksHistoryCacheBreakpoint(t *testing.T) {
 		t.Fatalf("cache_control breakpoints = %d, want 2 (system, last message): %s", got, raw)
 	}
 	last := body.Messages[len(body.Messages)-1].Content
-	if last[len(last)-1].CacheControl["type"] != "ephemeral" {
+	if last[len(last)-1].CacheControl["type"] != "ephemeral" || last[len(last)-1].CacheControl["ttl"] != "1h" {
 		t.Fatalf("last block has no ephemeral breakpoint: %+v", last)
 	}
 	for _, msg := range body.Messages[:len(body.Messages)-1] {
