@@ -653,8 +653,8 @@ requires = ["image", "tool_use"]
 
 func fallbackPolicy(_ provideriface.Config) Policy {
 	// Owner 2026-10-12: every role runs on the default pool, assigned per
-	// thread (since 2026-10-28 Synthetic DeepSeek 1017 and gpt-6-luna at 1:1,
-	// each failing over to the other; modelcatalog.Pools). Texture
+	// thread (modelcatalog.Pools: crouton-alpha first, free members and
+	// gpt-6-luna behind it; no Synthetic since 2026-11-09). Texture
 	// runs at low effort (owner, 2026-11-08: "research and texture can use low
 	// reasoning") and management keeps high; opencode-go ignores the setting.
 	pool := func(effort string) provideriface.LLMSelection {

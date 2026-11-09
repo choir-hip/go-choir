@@ -407,10 +407,18 @@ func (m PoolMember) SlotWeight() int {
 // Synthetic DeepSeek ... seldomly, or save it for getting the timing of
 // things" (a benchmark). The default pool leads with crouton-alpha, the only
 // member assigned threads; iceman, beam, flint, nemotron and luna stay behind
-// it as fallback-only members and Synthetic stays last. The tool loop skips a
-// member the computer's availability record holds (quota or a recent failure)
-// until its hold ends (docs/problems/pool-routing-walks-known-dead-members-
-// 2026-11-09.md).
+// it as fallback-only members. The tool loop skips a member the computer's
+// availability record holds (quota or a recent failure) until its hold ends
+// (docs/problems/pool-routing-walks-known-dead-members-2026-11-09.md).
+// Owner 2026-11-09: "I didn't realize we were going to run out of synthetic
+// DeepSeek usage. I guess that means we ended up using it for auto paper,
+// which I didn't really want". Evidence: 8,315 Synthetic calls from the
+// paper's VM since 2026-11-08 versus 1,099 from d@e, ~50/h rising to 400-760/h
+// after ead8873b6 made the loop skip held members and a crouton outage fell
+// through to Synthetic, the default pool's last member. The default pool has
+// no Synthetic member now; a crouton outage waits (the quota incident waits up
+// to 18 min for the earliest reset). Synthetic stays in the catalog and in the
+// named pools below, for a computer or benchmark that names it.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
@@ -420,7 +428,6 @@ func Pools() map[string][]PoolMember {
 			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
 			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
-			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 		SyntheticLunaPool: {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
