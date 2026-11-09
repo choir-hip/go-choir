@@ -66,7 +66,7 @@ func TestFitFrameCutsBacklogAndErrorsOnlyWhenTheRestCannotFit(t *testing.T) {
 	for i := 0; i < 400; i++ {
 		frame.Updates = append(frame.Updates, PendingUpdate{UpdateID: fmt.Sprintf("u%03d", i), HumanProjection: strings.Repeat("u", 20<<10)})
 	}
-	raw, err := fitFrame(frame)
+	raw, _, err := fitFrame(frame)
 	if err != nil {
 		t.Fatalf("fitFrame: %v", err)
 	}
@@ -93,8 +93,38 @@ func TestFitFrameCutsBacklogAndErrorsOnlyWhenTheRestCannotFit(t *testing.T) {
 	// A doc alone over the bound is not backlog: it is an error, and nothing
 	// was written.
 	big := SessionFrame{ID: "g", Doc: &DocSnapshot{Content: strings.Repeat("d", MaxFramePayload+1)}, Records: bigRecords(3, 1000)}
-	if _, err := fitFrame(big); err == nil {
+	if _, _, err := fitFrame(big); err == nil {
 		t.Fatal("a frame whose document alone exceeds the bound must be refused")
+	}
+}
+
+// The cut keeps a record past the cursor: dropping the context the run
+// already read first, so the cursor can still advance. An update is never cut
+// short, only left out whole, and the frame says which it sent.
+func TestFitFrameKeepsAnUnreadRecordAndWholeUpdates(t *testing.T) {
+	frame := SessionFrame{ID: "f", Source: "1", RecordsAfter: 30, Records: bigRecords(100, 100<<10)}
+	for i := 0; i < 5; i++ {
+		frame.Updates = append(frame.Updates, PendingUpdate{UpdateID: fmt.Sprintf("u%d", i), HumanProjection: strings.Repeat("u", 900<<10)})
+	}
+	raw, sent, err := fitFrame(frame)
+	if err != nil || len(raw) > MaxFramePayload {
+		t.Fatalf("fitFrame: %d bytes, %v", len(raw), err)
+	}
+	if len(sent.Records) == 0 || sent.Records[len(sent.Records)-1].Seq <= 30 {
+		t.Fatalf("no record past the cursor survived the cut: %d records", len(sent.Records))
+	}
+	for _, r := range sent.Records {
+		if r.Seq <= 30 {
+			t.Fatalf("context at or below the cursor survived while the cut was needed: seq %d", r.Seq)
+		}
+	}
+	for _, u := range sent.Updates {
+		if len(u.HumanProjection) != 900<<10 {
+			t.Fatalf("update %s was cut to %d bytes", u.UpdateID, len(u.HumanProjection))
+		}
+	}
+	if len(sent.Updates) == 0 || len(sent.Updates) == 5 {
+		t.Fatalf("expected some, not all, of the updates: %d", len(sent.Updates))
 	}
 }
 
@@ -111,14 +141,19 @@ func TestDeskSessionWorkerStartsCellOnOversizedBacklog(t *testing.T) {
 	}
 	defer w.Close()
 	res, err := w.EvalFrame(context.Background(), SessionFrame{Source: `rs := choir.Records()
-fmt.Println(len(rs), rs[0].ID, choir.Context()["backlog_truncated"], choir.Context()["records_remaining"] != "")`, Records: bigRecords(100, 100<<10)})
+fmt.Println(len(rs), rs[0].ID, choir.Context()["backlog_truncated"], choir.Context()["records_remaining"] != "", len(choir.Updates()))`, Records: bigRecords(100, 100<<10),
+		Updates: []PendingUpdate{{UpdateID: "u0", HumanProjection: "small"}}})
 	if err != nil || res.Error != "" {
 		t.Fatalf("the cell did not start on an oversized backlog: err=%v res=%+v", err, res)
 	}
+
 	if w.Dead() {
 		t.Fatal("the worker was marked dead")
 	}
-	if !strings.Contains(res.Stdout, " r000 true true") {
+	if sent := w.LastUpdatesSent(); len(sent) != 1 || sent[0] != "u0" {
+		t.Fatalf("LastUpdatesSent = %v, want [u0]", sent)
+	}
+	if !strings.Contains(res.Stdout, " r000 true true 1") {
 		t.Fatalf("the cell must see the oldest record and the truncation marker: %q", res.Stdout)
 	}
 }

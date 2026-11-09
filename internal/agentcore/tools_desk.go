@@ -790,8 +790,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration,
+				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration,
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining)})
+			// The host consumes only the updates the cell was shown whole.
+			sentUpdates := w.LastUpdatesSent()
+			rt.noteUpdatesShown(execCtx.RunID, sentUpdates, updatesRemaining > 0 || len(sentUpdates) < len(updates))
 			if res.CalibrationRead {
 				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, delivery)
 			}
@@ -948,13 +951,33 @@ func frameBacklog(records int64, updates int) *yaegikernel.FrameBacklog {
 // pendingCellUpdatesWindow is pendingCellUpdates cut to the frame's updates
 // budget, oldest first (the store lists them in arrival order), with the
 // count left out. The Autopaper's management desk had 1000 pending updates;
-// shown whole they overflowed the 4 MiB frame.
+// shown whole they overflowed the 4 MiB frame. The host consumes only the
+// updates a cell was shown (noteUpdatesShown, wakeWindowIDs), so an update
+// past the window stays pending for a later window.
 func pendingCellUpdatesWindow(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) ([]yaegikernel.PendingUpdate, int) {
-	all := pendingCellUpdatesAll(ctx, rt, execCtx)
-	return yaegikernel.WindowUpdates(all, yaegikernel.FrameUpdatesBudget)
+	shown, remaining := windowUpdatePackets(pendingCellPackets(ctx, rt, execCtx))
+	out := make([]yaegikernel.PendingUpdate, 0, len(shown))
+	for _, u := range shown {
+		out = append(out, pendingUpdateView(u))
+	}
+	return out, remaining
 }
 
-func pendingCellUpdatesAll(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingUpdate {
+// pendingUpdateView is the update as the cell reads it.
+func pendingUpdateView(u types.CoagentSourcePacket) yaegikernel.PendingUpdate {
+	return yaegikernel.PendingUpdate{
+		UpdateID:        strings.TrimSpace(u.UpdateID),
+		FromAgentID:     strings.TrimSpace(u.AgentID),
+		FromRole:        strings.TrimSpace(u.Role),
+		ChannelID:       strings.TrimSpace(u.ChannelID),
+		MessageSeq:      u.MessageSeq,
+		WorkItemID:      strings.TrimSpace(u.WorkItemID),
+		Packet:          u.Packet,
+		HumanProjection: strings.TrimSpace(u.Content),
+	}
+}
+
+func pendingCellPackets(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []types.CoagentSourcePacket {
 	if rt == nil || rt.store == nil || execCtx.RunRecord == nil {
 		return nil
 	}
@@ -971,29 +994,16 @@ func pendingCellUpdatesAll(ctx context.Context, rt *Runtime, execCtx toolregistr
 		log.Printf("desk cell: pending updates for %s run %s unavailable: %v", agentID, rec.RunID, err)
 		return nil
 	}
-	if len(updates) == 0 {
-		return nil
-	}
 	// The cell variable exposes the desk's pending backlog — every
 	// deliverable update not yet disposed by a terminal write — regardless
 	// of whether a chat wake turn already named it. Seen-ness exists to
 	// dedupe chat injection, not to hide the payload from the cell.
-	out := make([]yaegikernel.PendingUpdate, 0, len(updates))
+	out := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, u := range updates {
-		id := strings.TrimSpace(u.UpdateID)
-		if id == "" || !cellUpdateVisible(rec, u) {
+		if strings.TrimSpace(u.UpdateID) == "" || !cellUpdateVisible(rec, u) {
 			continue
 		}
-		out = append(out, yaegikernel.PendingUpdate{
-			UpdateID:        id,
-			FromAgentID:     strings.TrimSpace(u.AgentID),
-			FromRole:        strings.TrimSpace(u.Role),
-			ChannelID:       strings.TrimSpace(u.ChannelID),
-			MessageSeq:      u.MessageSeq,
-			WorkItemID:      strings.TrimSpace(u.WorkItemID),
-			Packet:          u.Packet,
-			HumanProjection: strings.TrimSpace(u.Content),
-		})
+		out = append(out, u)
 	}
 	return out
 }

@@ -52,6 +52,10 @@ type SessionFrame struct {
 	// is bounded however long the desk's backlog), read through
 	// choir.Context().
 	Backlog *FrameBacklog `json:"backlog,omitempty"`
+	// RecordsAfter is the desk's cursor at cell start: Records at or below it
+	// are context the run already read, the rest are the unread window. Only
+	// the host's frame-fitting guard reads it (it drops context first).
+	RecordsAfter int64 `json:"records_after,omitempty"`
 	// Jobs carries this run's capsule jobs at cell start, read through
 	// choir.Poll (jobs.go).
 	Jobs []JobView `json:"jobs,omitempty"`

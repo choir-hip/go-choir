@@ -108,6 +108,8 @@ type DeskSessionWorker struct {
 	pid        int
 	dead       bool
 	cfg        DeskSessionWorkerConfig
+	// lastUpdatesSent is set by EvalFrame under mu (LastUpdatesSent).
+	lastUpdatesSent []string
 	// stderr carries only crash diagnostics; it is read once the process
 	// is reaped, when the copy into it has finished.
 	stderr *lockedBuffer
@@ -459,6 +461,15 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 	return w.EvalFrame(ctx, SessionFrame{Source: source, Inbox: inbox, Doc: doc, Pack: pack, Updates: updates, Records: records})
 }
 
+// LastUpdatesSent is the ids of the update packets the last EvalFrame put in
+// the cell's frame, after the frame was fitted to the transport bound. The
+// host consumes only what a cell was shown.
+func (w *DeskSessionWorker) LastUpdatesSent() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]string(nil), w.lastUpdatesSent...)
+}
+
 // EvalFrame runs one cell with a frame the caller filled; the worker gives
 // it its id.
 func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (SessionResult, error) {
@@ -468,11 +479,15 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 		return SessionResult{}, fmt.Errorf("desk session worker dead")
 	}
 	frame.ID = nextDeskSessionFrameID()
+	w.lastUpdatesSent = nil
 	// fitFrame cuts the backlog parts to the transport bound, so a desk's
 	// backlog can never make its cells fail to start.
-	raw, err := fitFrame(frame)
+	raw, sent, err := fitFrame(frame)
 	if err != nil {
 		return SessionResult{}, err
+	}
+	for _, u := range sent.Updates {
+		w.lastUpdatesSent = append(w.lastUpdatesSent, u.UpdateID)
 	}
 	if err := w.framed.WriteFrame(StreamCell, raw); err != nil {
 		w.dead = true

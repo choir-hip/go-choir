@@ -77,7 +77,12 @@ func textureDispositionIneligibleReason(snapshot types.LifecycleSnapshot, caller
 // Iterate snapshot order so the synthesized inbound set is deterministic: the
 // command digest covers req.Inbound, so identical cells produce identical
 // requests (devin's digest-determinism point in the respawn-loop receipt).
-func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunRecord, decisions []textureUpdateDisposition, resultRef string) ([]types.TextureTurnInboundDisposition, error) {
+//
+// A run whose cells were shown a window of its pending reports (the frame is
+// bounded, yaegikernel.WindowUpdates) delivers only the reports it was shown:
+// shown is that set, and restricted says it applies. A report past the window
+// stays pending for the next window instead of being delivered unread.
+func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunRecord, decisions []textureUpdateDisposition, resultRef string, shown map[string]bool, restricted bool) ([]types.TextureTurnInboundDisposition, error) {
 	callerAgentID := strings.TrimSpace(rec.AgentID)
 	scheduledSeq := int64(metadataIntValue(rec.Metadata, "scheduled_message_seq"))
 	pending := make(map[string]types.CoagentSourcePacket)
@@ -91,6 +96,9 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 		// bound to another live run is left pending; reconcile re-binds
 		// stranded claims on dead runs before dispatch.
 		if !update.WithinTextureTurnBoundary(rec.RunID, scheduledSeq) {
+			continue
+		}
+		if restricted && !shown[strings.TrimSpace(update.UpdateID)] {
 			continue
 		}
 		pending[strings.TrimSpace(update.UpdateID)] = update
@@ -176,7 +184,12 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if resultRef == "" {
 		resultRef = strings.TrimSpace(doc.CurrentRevisionID)
 	}
-	inbound, err := textureTurnPendingInbound(snapshot, rec, in.UpdateDispositions, resultRef)
+	var shownUpdates map[string]bool
+	restricted := false
+	if h.Core != nil {
+		shownUpdates, restricted = h.Core.UpdatesShownRestriction(rec.RunID)
+	}
+	inbound, err := textureTurnPendingInbound(snapshot, rec, in.UpdateDispositions, resultRef, shownUpdates, restricted)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}

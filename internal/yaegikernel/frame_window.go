@@ -3,8 +3,6 @@ package yaegikernel
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // A desk cell's frame is one transport frame (MaxFramePayload), and two of
@@ -136,25 +134,19 @@ func TailRecords(recs []InboxRecord, budget int) []InboxRecord {
 }
 
 // WindowUpdates returns the oldest updates, in order, that fit budget bytes,
-// and how many were left out. The first update is always returned (a stub
-// when over FrameItemBudget).
+// and how many were left out. The first update is always returned, whole
+// however large: an update is never shown cut, because the host consumes what
+// the cell was shown (a Texture turn delivers the reports its cell saw, a
+// Management report consumes the ids its wake turn named), and a cut update
+// would be consumed unread. An update too large for the frame is therefore
+// not shown at all (fitFrame) and stays pending.
+//
+// The oldest window repeats until its updates are disposed: a desk that
+// leaves them pending is shown the same ones again, not the ones past them.
 func WindowUpdates(updates []PendingUpdate, budget int) (kept []PendingUpdate, remaining int) {
 	total := 0
 	for i, u := range updates {
 		size := updateSize(u)
-		if size > FrameItemBudget {
-			u = PendingUpdate{
-				UpdateID: u.UpdateID, FromAgentID: u.FromAgentID, FromRole: u.FromRole, ChannelID: u.ChannelID,
-				MessageSeq: u.MessageSeq, WorkItemID: u.WorkItemID,
-				Packet: types.SourcePacket{
-					SchemaVersion: u.Packet.SchemaVersion, Kind: u.Packet.Kind,
-					Summary: clipText(u.Packet.Summary),
-					Notes:   []string{fmt.Sprintf("[update cut: %d bytes is over the %d-byte bound of one update in a cell frame]", size, FrameItemBudget)},
-				},
-				HumanProjection: clipText(u.HumanProjection),
-			}
-			size = updateSize(u)
-		}
 		if len(kept) > 0 && total+size > budget {
 			return kept, len(updates) - i
 		}
@@ -166,18 +158,21 @@ func WindowUpdates(updates []PendingUpdate, budget int) (kept []PendingUpdate, r
 
 // fitFrame marshals the frame, and when it is over the transport bound cuts
 // the backlog parts, records and updates, until it fits, saying so in
-// Backlog. The host windows both parts already, so this is the last guard:
-// a frame still over the bound has a doc, pack or analysis that alone does
-// not fit. It then returns an error having written nothing, so the worker is
-// not poisoned by the failed write.
-func fitFrame(frame SessionFrame) ([]byte, error) {
+// Backlog. The host windows both parts already, so this is the last guard.
+// It returns the frame it marshalled, because the host consumes what the cell
+// was shown and must know which updates that was. The cut keeps at least one
+// record past the cursor (RecordsAfter), so the cursor can still advance. A
+// frame still over the bound has a doc, pack or analysis that alone does not
+// fit: it returns an error having written nothing, so the worker is not
+// poisoned by the failed write.
+func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 	limit := MaxFramePayload - frameHeadroom
 	raw, err := json.Marshal(frame)
 	if err != nil {
-		return nil, fmt.Errorf("desk eval marshal: %w", err)
+		return nil, frame, fmt.Errorf("desk eval marshal: %w", err)
 	}
 	if len(raw) <= limit {
-		return raw, nil
+		return raw, frame, nil
 	}
 	backlog := FrameBacklog{}
 	if frame.Backlog != nil {
@@ -185,6 +180,28 @@ func fitFrame(frame SessionFrame) ([]byte, error) {
 	}
 	backlog.Truncated = true
 	frame.Backlog = &backlog
+	remarshal := func() error {
+		var merr error
+		raw, merr = json.Marshal(frame)
+		if merr != nil {
+			return fmt.Errorf("desk eval marshal: %w", merr)
+		}
+		return nil
+	}
+	// Records the run already read (at or below the cursor) are context:
+	// they go first, and are not backlog.
+	if frame.RecordsAfter > 0 {
+		unread := frame.Records[:0:0]
+		for _, r := range frame.Records {
+			if r.Seq > frame.RecordsAfter {
+				unread = append(unread, r)
+			}
+		}
+		frame.Records = unread
+		if err := remarshal(); err != nil {
+			return nil, frame, err
+		}
+	}
 	for len(raw) > limit && (len(frame.Records) > 1 || len(frame.Updates) > 1) {
 		// Halve the larger part by bytes; the cursor follows what is kept.
 		recBytes, updBytes := 0, 0
@@ -209,20 +226,28 @@ func fitFrame(frame SessionFrame) ([]byte, error) {
 			backlog.UpdatesRemaining += len(frame.Updates) - len(kept)
 			frame.Updates = kept
 		}
-		if raw, err = json.Marshal(frame); err != nil {
-			return nil, fmt.Errorf("desk eval marshal: %w", err)
+		if err := remarshal(); err != nil {
+			return nil, frame, err
 		}
 	}
-	if len(raw) > limit && (len(frame.Records) > 0 || len(frame.Updates) > 0) {
-		backlog.RecordsRemaining += int64(len(frame.Records))
+	// Last resort: a single update, then a single record, too large for the
+	// frame stay pending unshown.
+	if len(raw) > limit && len(frame.Updates) > 0 {
 		backlog.UpdatesRemaining += len(frame.Updates)
-		frame.Records, frame.Updates = nil, nil
-		if raw, err = json.Marshal(frame); err != nil {
-			return nil, fmt.Errorf("desk eval marshal: %w", err)
+		frame.Updates = nil
+		if err := remarshal(); err != nil {
+			return nil, frame, err
+		}
+	}
+	if len(raw) > limit && len(frame.Records) > 0 {
+		backlog.RecordsRemaining += int64(len(frame.Records))
+		frame.Records = nil
+		if err := remarshal(); err != nil {
+			return nil, frame, err
 		}
 	}
 	if len(raw) > MaxFramePayload {
-		return nil, fmt.Errorf("desk eval frame is %d bytes with no backlog, over the %d bound: the document, pack or analysis alone does not fit", len(raw), MaxFramePayload)
+		return nil, frame, fmt.Errorf("desk eval frame is %d bytes with no backlog, over the %d bound: the document, pack or analysis alone does not fit", len(raw), MaxFramePayload)
 	}
-	return raw, nil
+	return raw, frame, nil
 }

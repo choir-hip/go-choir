@@ -2551,9 +2551,10 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithDelivered(rec *types.RunRecord, 
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
 		}
 		fresh := make([]types.CoagentSourcePacket, 0, len(updates))
+		windowed := wakeWindowIDs(rec, updates) // the wake names only what the cell's frame shows
 		for _, update := range updates {
 			id := strings.TrimSpace(update.UpdateID)
-			if id == "" || seenUpdates[id] || !coagentUpdateDeliverableForRun(rec, update) {
+			if id == "" || seenUpdates[id] || !windowed[id] || !coagentUpdateDeliverableForRun(rec, update) {
 				continue
 			}
 			fresh = append(fresh, update)
@@ -2757,9 +2758,10 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 		return messages, fmt.Errorf("list pending coagent updates for cold delivery: %w", err)
 	}
 	fresh := make([]types.CoagentSourcePacket, 0, len(updates))
+	windowed := wakeWindowIDs(rec, updates) // the wake names only what the cell's frame shows
 	for _, update := range updates {
 		id := strings.TrimSpace(update.UpdateID)
-		if id == "" || seen[id] {
+		if id == "" || seen[id] || !windowed[id] {
 			continue
 		}
 		if !coagentUpdateDeliverableForRun(rec, update) {

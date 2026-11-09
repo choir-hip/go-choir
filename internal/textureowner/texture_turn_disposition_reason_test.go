@@ -40,7 +40,7 @@ func TestTextureDispositionRefusalNamesReason(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := types.LifecycleSnapshot{Updates: []types.CoagentSourcePacket{tc.update}}
-			_, err := textureTurnPendingInbound(snapshot, rec, []textureUpdateDisposition{{UpdateID: "assignment-report:report:sha256:abc", Disposition: "delivered"}}, "")
+			_, err := textureTurnPendingInbound(snapshot, rec, []textureUpdateDisposition{{UpdateID: "assignment-report:report:sha256:abc", Disposition: "delivered"}}, "", nil, false)
 			if err == nil {
 				t.Fatal("expected a refusal")
 			}

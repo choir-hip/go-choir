@@ -1235,6 +1235,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	parked := rec != nil && rec.State == types.RunPassivated
 	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
 		rt.recordsRunStart.Delete(rec.RunID)
+		rt.updatesRunShown.Delete(rec.RunID)
 		rt.releaseRunDeskEpochs(rec.RunID)
 		rt.recordsRunShown.Delete(rec.RunID)
 	}

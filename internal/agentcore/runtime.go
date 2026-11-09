@@ -107,6 +107,10 @@ type Runtime struct {
 	// in each running desk run returned (run id -> int64): a cell's commit
 	// marks read only through it.
 	recordsRunShown sync.Map
+	// updatesRunShown holds, for each running desk run whose frame left
+	// pending updates out, the ids its cells were shown whole (run id ->
+	// *updatesShown): the host consumes nothing else (update_window.go).
+	updatesRunShown sync.Map
 	// runDeskEpoch holds each running run's pin on the desk row it started
 	// under (run id|desk -> *runDeskHold, tools_desk.go).
 	runDeskEpoch sync.Map
