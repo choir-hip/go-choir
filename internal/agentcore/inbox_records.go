@@ -986,7 +986,7 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 	}
 	prompt := rt.recordsInboxPrompt(ctx, ownerID, computerID, deskAgentID)
 	if isApp {
-		prompt, _ = appDeskPrompt(appDesk)
+		prompt, _ = rt.appDeskPrompt(appDesk)
 	}
 	var agent types.AgentRecord
 	var err error

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/appdesk"
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -20,20 +21,34 @@ import (
 // tool and import set come from its registered row, as for every desk.
 
 // appInboxDesk is the registered, runnable package desk an inbox belongs to:
-// an inbox of this owner, of a first-party desk (R24: another publisher's desk
-// does not run while the sandbox is absent), with a prompt the image ships.
+// an inbox of this owner, of a first-party desk with a prompt the image ships,
+// or of another publisher's desk with its release's own prompt while this
+// computer's worker sandbox is ready (R24: it does not run otherwise).
 func (rt *Runtime) appInboxDesk(ownerID, inbox string) (deskmanifest.Desk, bool) {
 	d, ok := deskmanifest.AppInboxDesk(inbox)
-	if !ok || !d.FirstParty {
+	if !ok {
 		return deskmanifest.Desk{}, false
 	}
 	if inbox != d.Name+":"+strings.TrimSpace(ownerID) {
 		return deskmanifest.Desk{}, false
 	}
-	if _, ok := appDeskPrompt(d); !ok {
+	if !d.FirstParty && !apppackage.CurrentPlatform().DeskSandbox {
+		return deskmanifest.Desk{}, false
+	}
+	if _, ok := rt.appDeskPrompt(d); !ok {
 		return deskmanifest.Desk{}, false
 	}
 	return d, true
+}
+
+// appDeskPrompt is the first user turn of a package desk's run: the image's
+// prompt for a first-party desk; for another publisher's desk the prompt of
+// its release, as the install sync registered it.
+func (rt *Runtime) appDeskPrompt(d deskmanifest.Desk) (string, bool) {
+	if !d.FirstParty {
+		return rt.releaseDeskPrompts.get(strings.TrimPrefix(d.Name, "app:"))
+	}
+	return appDeskPrompt(d)
 }
 
 // appDeskPrompt is the first user turn of a package desk's run: the prompt the

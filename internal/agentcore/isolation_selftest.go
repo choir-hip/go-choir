@@ -48,8 +48,12 @@ import (
 // Owner route: server.AuthenticatedOwner admits the host peer carrying
 // X-Authenticated-User, which the proxy injects for any owner session or API
 // key with write:runtime. Not on the ProductAPI allowlist, so no desk can call
-// it. It changes no state: the workers and their tmp dirs are gone when it
-// answers. A leg query here is refused (and the proxy refuses it first).
+// it. It leaves no workers or tmp dirs behind, but it is not read-only: it
+// records the computer's desk sandbox reading (yaegikernel.DeskSandboxStatus,
+// the answer behind apppackage.CurrentPlatform) and, when that reading
+// changed, re-syncs the installed desks, so a passing run admits another
+// publisher's installed desks and a failing run retires them. A leg query here
+// is refused (and the proxy refuses it first).
 //
 // POST /internal/runtime/isolation-selftest?leg=oom|seccomp: the two legs
 // that load the guest on purpose, for the host's internal caller only
@@ -153,8 +157,12 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
 	}
 	resp.Gvisor = resp.DeskCells.Gvisor
+	wasReady := yaegikernel.DeskSandboxReady()
 	deskSandbox := yaegikernel.RecordDeskSandboxSelfTest(resp.DeskCells, "api")
 	resp.DeskSandbox = &deskSandbox
+	if deskSandbox.Ready != wasReady {
+		h.rt.syncDesksAfterSandboxChange(ctx)
+	}
 	resp.FrameBoundary = yaegikernel.FrameBoundarySelfTest()
 	for _, r := range resp.FrameBoundary.Roles {
 		if r.Error != "" {

@@ -63,6 +63,14 @@ func classifyDesk(role string) (deskSandboxClass, bool) {
 	return deskSandboxClass{Class: TrustClassFirstPartyCustodian, Key: string(TrustClassFirstPartyCustodian), FirstParty: true}, true
 }
 
+// DeskTrustClassOf is the trust class a desk's workers run in: "a", "b" or "c"
+// (a non-first-party package desk). ok is false for a role that is no
+// desk-worker desk.
+func DeskTrustClassOf(role string) (DeskTrustClass, bool) {
+	cls, ok := classifyDesk(role)
+	return cls.Class, ok
+}
+
 // publisherSandboxKey is a container-id-safe key for a class C desk: the
 // slug's readable form (lower-case letters, digits and dashes, at most 40
 // bytes) and a hash of the exact name, so two names that read alike never

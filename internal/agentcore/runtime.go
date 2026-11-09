@@ -117,6 +117,9 @@ type Runtime struct {
 	// (desk_install.go); deskLogOwner is its owner key.
 	deskLog      appdesk.Log
 	deskLogOwner string
+	// releaseDeskPrompts are the prompts of the non-first-party package desks
+	// the install sync registered (desk_release.go).
+	releaseDeskPrompts releaseDeskPrompts
 	// bootTally collects the obligations the crash boot's one pass closes.
 	bootTally *bootClosureTally
 	// runLabels holds each running run's provenance label accumulator

@@ -11,6 +11,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // A package install registers the desks its manifest contributes (modular
@@ -49,6 +51,16 @@ func refuseDeskInstall(ownerID string, rec pkgrelease.Record) *installRefusal {
 	if !apppackage.CurrentPlatform().AdmitsDesksOf(apppackage.OriginPublished, pkg) {
 		return refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonDeskNeedsSandbox, "package %s carries a desk; a desk from another publisher waits for the sandbox (R24)", pkg)
 	}
+	if !deskmanifest.FirstPartyAppSlug(pkg) {
+		// Another publisher's desk, on a computer whose worker sandbox is
+		// ready (AdmitsDesksOf said so): one desk, under a name no built-in or
+		// first-party desk holds. Its row is the release's own, capped by the
+		// install review's ceiling (desk_release.go).
+		if rec.Manifest.DesksCount != 1 || deskmanifest.IsReservedAppSlug(pkg) {
+			return refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonDeskNeedsSandbox, "package %s: a release carries exactly one desk under a name that no built-in or first-party desk holds", pkg)
+		}
+		return nil
+	}
 	if _, ok := appdesk.FirstPartyDesk(pkg); !ok || rec.Manifest.DesksCount != 1 {
 		return refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonDeskNeedsSandbox, "package %s has no first-party desk in this image", pkg)
 	}
@@ -58,8 +70,29 @@ func refuseDeskInstall(ownerID string, rec pkgrelease.Record) *installRefusal {
 	return nil
 }
 
-// installedDeskPackages is the first-party desk packages the computer's
-// installs put in force: package -> the image's desk manifest for it.
+// releaseDeskPromptOf reads a release desk's prompt from the install's data
+// files in the module store (digest-checked on read).
+func (rt *Runtime) releaseDeskPromptOf(item store.PackageInstall, path string) (string, error) {
+	for _, f := range item.Files {
+		if f.Path != path {
+			continue
+		}
+		raw, err := rt.packageModules.ReadFile(f.SHA256)
+		if err != nil {
+			return "", fmt.Errorf("the desk prompt %s is not in the module store: %w", path, err)
+		}
+		if strings.TrimSpace(string(raw)) == "" {
+			return "", fmt.Errorf("the desk prompt %s is empty", path)
+		}
+		return string(raw), nil
+	}
+	return "", fmt.Errorf("the install carries no desk prompt %s", path)
+}
+
+// installedDeskPackages is the desk packages the computer's installs put in
+// force: package -> the desk manifest for it (the image's, for a first-party
+// package; the release's own, capped by its ceiling, for another publisher's
+// on a ready sandbox).
 func (rt *Runtime) installedDeskPackages(ctx context.Context, ownerID, computerID string) (map[string]appdesk.Required, error) {
 	prior, err := rt.packageInstalls(ctx, ownerID, computerID)
 	if err != nil {
@@ -67,16 +100,37 @@ func (rt *Runtime) installedDeskPackages(ctx context.Context, ownerID, computerI
 	}
 	out := map[string]appdesk.Required{}
 	for pkg, item := range currentPackageInstalls(prior) {
-		if len(item.Manifest) == 0 || item.PublisherTrack != ownerID {
+		if len(item.Manifest) == 0 {
 			continue
 		}
 		m, err := apppackage.ParseManifest(item.Manifest, apppackage.OriginPublished)
 		if err != nil || len(m.Contributes.Desks) != 1 || m.Contributes.Desks[0].Name != pkg {
 			continue
 		}
-		if fp, ok := appdesk.FirstPartyDesk(pkg); ok && deskmanifest.FirstPartyAppSlug(pkg) {
-			out[pkg] = fp
+		if deskmanifest.FirstPartyAppSlug(pkg) {
+			if fp, ok := appdesk.FirstPartyDesk(pkg); ok && item.PublisherTrack == ownerID {
+				out[pkg] = fp
+			}
+			continue
 		}
+		// Another publisher's desk: only while this computer's worker sandbox
+		// is ready, from the release's own manifest and prompt.
+		if !apppackage.CurrentPlatform().AdmitsDesksOf(apppackage.OriginPublished, pkg) {
+			rt.releaseDeskPrompts.drop(pkg)
+			continue
+		}
+		dm, err := releaseDeskManifest(m)
+		if err != nil {
+			log.Printf("runtime: desk sync: %v", err)
+			continue
+		}
+		prompt, err := rt.releaseDeskPromptOf(*item, m.Contributes.Desks[0].Prompt)
+		if err != nil {
+			log.Printf("runtime: desk sync: package %s: %v", pkg, err)
+			continue
+		}
+		rt.releaseDeskPrompts.set(pkg, prompt)
+		out[pkg] = appdesk.Required{Package: pkg, Version: m.Version, Manifest: dm}
 	}
 	return out, nil
 }
@@ -110,6 +164,17 @@ func (rt *Runtime) syncInstalledDesks(ctx context.Context, ownerID, computerID s
 			delete(retired, ev.Package)
 		}
 	}
+	// Desks registered from another publisher's release (not first-party).
+	releaseDesk := map[string]bool{}
+	for _, d := range set.Desks {
+		if appdesk.PackageOrigin(d) && !d.FirstParty && !strings.HasSuffix(d.Name, "-candidate") {
+			releaseDesk[strings.TrimPrefix(d.Name, "app:")] = true
+		}
+	}
+	// Until this process has run its sandbox selftest the platform's answer is
+	// "not checked", which proves nothing about a desk already registered:
+	// the sync only adds then (the wake still refuses on a not-ready platform).
+	sandboxUnchecked := yaegikernel.DeskSandboxStatusNow().Source == ""
 	isRequired := map[string]bool{}
 	for _, r := range required {
 		isRequired[r.Package] = true
@@ -138,9 +203,13 @@ func (rt *Runtime) syncInstalledDesks(ctx context.Context, ownerID, computerID s
 		if rt.deskOwnerUnknown(ownerID) {
 			break
 		}
-		if _, ok := want[pkg]; ok || isRequired[pkg] || !deskmanifest.FirstPartyAppSlug(pkg) {
+		if _, ok := want[pkg]; ok || isRequired[pkg] {
 			continue
 		}
+		if !deskmanifest.FirstPartyAppSlug(pkg) && (!releaseDesk[pkg] || sandboxUnchecked) {
+			continue
+		}
+		rt.releaseDeskPrompts.drop(pkg)
 		if _, err := rt.deskLog.Append(ctx, appdesk.Event{Action: appdesk.ActionDisable, Package: pkg}); err != nil {
 			return fmt.Errorf("desk sync: append disable %s: %w", pkg, err)
 		}

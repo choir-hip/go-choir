@@ -36,13 +36,33 @@ func GuestPlatform() apppackage.Platform {
 // required mode it runs the desk selftest once and records the result; in any
 // other mode it records "not ready" and spawns nothing. A computer that
 // crashed and rebooted runs it again: the state is per process, never carried.
+//
+// It runs in its own goroutine, so it waits for the selftest lock (an owner
+// run in flight finishes first, then this one records its own result): it must
+// not skip on contention, or the computer could stay unready indefinitely.
 func (rt *Runtime) runDeskSandboxBootSelfTest(ctx context.Context) {
-	if !isolationSelfTestMu.TryLock() {
-		return // an owner run is in flight and records its own result
-	}
+	isolationSelfTestMu.Lock()
 	defer isolationSelfTestMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	if ctx.Err() != nil {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	st := yaegikernel.RunDeskSandboxBootSelfTest(ctx, deskCellSelfTestConfig(rt.cfg.ComputerID))
+	st := yaegikernel.RunDeskSandboxBootSelfTest(runCtx, deskCellSelfTestConfig(rt.cfg.ComputerID))
 	log.Printf("runtime: desk sandbox boot selftest ready=%t reason=%q", st.Ready, st.Reason)
+	rt.syncDesksAfterSandboxChange(ctx)
+}
+
+// syncDesksAfterSandboxChange brings the registered desks to what the installs
+// imply under the platform's new answer: another publisher's installed desks
+// register when the sandbox became ready and retire when it stopped being. The
+// boot desk sync runs before the boot selftest finishes, when the answer is
+// still "not checked", so this is what registers them after a restart.
+func (rt *Runtime) syncDesksAfterSandboxChange(ctx context.Context) {
+	if rt == nil || rt.deskLog == nil {
+		return
+	}
+	if err := rt.syncInstalledDesks(context.WithoutCancel(ctx), rt.deskLogOwner, rt.cfg.ComputerID); err != nil {
+		log.Printf("runtime: desk sync after the sandbox selftest: %v", err)
+	}
 }

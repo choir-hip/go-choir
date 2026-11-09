@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
@@ -154,6 +155,18 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if err != nil {
 		return Module{}, err
 	}
+	prompts, err := readDeskPrompts(manifest, filepath.Join(tree, filepath.FromSlash(rec.Source.Root)))
+	if err != nil {
+		return Module{}, err
+	}
+	files = append(files, prompts...)
+	if manifest.App == nil && len(manifest.Kinds) == 0 && len(manifest.Contributes.Desks) > 0 && len(manifest.Contributes.Desks) == len(prompts) {
+		// A desk-only package from another publisher (R24): no window and no
+		// code to build here. The desk's prompt rides as a data file, verified
+		// with the rest of the release's bytes; the desk runs in the worker
+		// sandbox, never in this build.
+		return Module{RequiresSDK: apppackage.DefaultRequiresSDK, Manifest: json.RawMessage(manifestRaw), Files: files}, nil
+	}
 	if manifest.App == nil {
 		// A pack contributes data (themes, commands, keybindings) and has no
 		// code to build. A desk or a kind with no app is not a pack.
@@ -267,6 +280,40 @@ func readThemeFiles(m apppackage.Manifest, root string) ([]File, error) {
 			return nil, fmt.Errorf("%w: theme file %q must be a schema 2 theme with id %q", ErrBuild, t.File, t.ID)
 		}
 		out = append(out, File{Path: t.File, SHA256: digest(raw), Bytes: raw})
+	}
+	return out, nil
+}
+
+// MaxDeskPromptBytes bounds one desk prompt file.
+const MaxDeskPromptBytes = 64 << 10
+
+// readDeskPrompts reads the prompt file of each desk a package from another
+// publisher contributes, from the verified tree: a regular file inside the
+// package (no symlink), non-empty, at most MaxDeskPromptBytes. A first-party
+// package's desk runs on the image's prompt (appdesk.FirstPartyPrompt), so its
+// prompt file is not read.
+func readDeskPrompts(m apppackage.Manifest, root string) ([]File, error) {
+	if deskmanifest.FirstPartyAppSlug(m.Name) {
+		return nil, nil
+	}
+	var out []File
+	for _, d := range m.Contributes.Desks {
+		if !filepath.IsLocal(filepath.FromSlash(d.Prompt)) {
+			return nil, fmt.Errorf("%w: prompt %q of desk %q is not inside the package", ErrBuild, d.Prompt, d.Name)
+		}
+		full := filepath.Join(root, filepath.FromSlash(d.Prompt))
+		fi, err := os.Lstat(full)
+		if err != nil || !fi.Mode().IsRegular() {
+			return nil, fmt.Errorf("%w: prompt %q of desk %q is not a file in the package", ErrBuild, d.Prompt, d.Name)
+		}
+		if fi.Size() == 0 || fi.Size() > MaxDeskPromptBytes {
+			return nil, fmt.Errorf("%w: prompt %q of desk %q must be 1 to %d bytes", ErrBuild, d.Prompt, d.Name, MaxDeskPromptBytes)
+		}
+		raw, err := os.ReadFile(full)
+		if err != nil {
+			return nil, fmt.Errorf("%w: prompt %q: %w", ErrBuild, d.Prompt, err)
+		}
+		out = append(out, File{Path: d.Prompt, SHA256: digest(raw), Bytes: raw})
 	}
 	return out, nil
 }
