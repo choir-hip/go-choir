@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -173,7 +172,9 @@ func (s *ChoirScope) readNoteLines() []string {
 	l.noted = len(l.reads)
 	lines = append(lines, l.warnings...)
 	l.warnings = nil
-	if s.desk == deskmanifest.Research && captured > 0 && !l.packetSent && !l.nudged {
+	// The nudge goes to a desk that both reads the web and reports packets
+	// (its manifest row says so), never by desk name.
+	if captured > 0 && !l.packetSent && !l.nudged && s.deskModule("ReportPacket") && s.deskModule("Read") {
 		l.nudged = true
 		lines = append(lines, fmt.Sprintf("you have %d captured sources and have sent no packet; send an interim packet now (choir.ReportPacket without work_disposition) so Texture can revise while you read on", captured))
 	}
