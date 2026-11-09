@@ -1091,13 +1091,12 @@ func (p *SyntheticProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 // disable spellings Choir uses elsewhere become none.
 func syntheticReasoningEffort(effort string) string {
 	switch e := strings.ToLower(strings.TrimSpace(effort)); e {
-	case "low", "high", "xhigh", "max":
+	case "high", "xhigh", "max":
 		return e
-	case "none", "minimal", "off", "disabled", "false":
+	case "none", "minimal", "off", "disabled", "false", "low", "medium":
 		// Thinking is never off (owner 2026-11-09); none and low run the
-		// non-thinking template there, so the lowest thinking-on value is high.
-		return "high"
-	case "medium":
+		// non-thinking template there, so the lowest thinking-on value is
+		// high, and Choir's low maps to it too.
 		return "high"
 	default:
 		return ""

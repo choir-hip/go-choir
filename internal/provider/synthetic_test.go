@@ -85,7 +85,7 @@ func TestSyntheticReasoningEffortNeverSendsAnInvalidValue(t *testing.T) {
 		"":         "",
 		"none":     "high",
 		"minimal":  "high",
-		"low":      "low",
+		"low":      "high",
 		"medium":   "high",
 		"high":     "high",
 		" High ":   "high",
