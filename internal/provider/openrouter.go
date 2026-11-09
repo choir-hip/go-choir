@@ -89,7 +89,7 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 		Model:           modelID,
 		Messages:        convertOpenAIChatMessages(req.System, req.Messages),
 		Tools:           convertOpenAIChatTools(req.Tools),
-		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
+		ToolChoice:      openRouterToolChoice(modelID, req.ToolChoice),
 		Stream:          req.Stream,
 		ReasoningEffort: openRouterReasoningEffort(modelID, req.ReasoningEffort),
 		SessionID:       openRouterSessionID(req),
@@ -105,6 +105,7 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
+	setOpenRouterAttribution(httpReq.Header)
 	if req.Stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	} else {
@@ -140,6 +141,39 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 		return parseOpenAIChatCompletionsResponse(resp, modelID, "openrouter")
 	}
 	return parseOpenAIChatCompletionsStream(resp.Body, modelID, "openrouter", onChunk)
+}
+
+// OpenRouter app attribution (https://openrouter.ai/docs/app-attribution, read
+// 2026-11-09): HTTP-Referer identifies the app, X-OpenRouter-Title names it
+// (X-Title is its older spelling, still supported) and
+// X-OpenRouter-Categories files it, at most two values from OpenRouter's
+// fixed list. Choir is a command-line agent platform at choir.news. Some free
+// models are served only to listed apps
+// (docs/problems/crouton-retired-inkling-gated-2026-11-09.md). Never another
+// app's name or referer.
+const (
+	openRouterAppReferer    = "https://choir.news"
+	openRouterAppTitle      = "Choir"
+	openRouterAppCategories = "cli-agent"
+)
+
+func setOpenRouterAttribution(h http.Header) {
+	h.Set("HTTP-Referer", openRouterAppReferer)
+	h.Set("X-OpenRouter-Title", openRouterAppTitle)
+	h.Set("X-Title", openRouterAppTitle)
+	h.Set("X-OpenRouter-Categories", openRouterAppCategories)
+}
+
+// openRouterToolChoice is the request's tool_choice for model. A model whose
+// OpenRouter listing does not support the tool_choice parameter
+// (thinkingmachines/inkling-2-small:free, 2026-11-09) is called without one:
+// the tools are still sent, and the tool loop's required-tool re-prompt
+// answers a turn that did not call the tool it was asked to.
+func openRouterToolChoice(model, choice string) any {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "thinkingmachines/inkling-") {
+		return nil
+	}
+	return openAIChatToolChoice(choice)
 }
 
 // openRouterRateLimitIsQuota reports whether an OpenRouter 429 is a spent

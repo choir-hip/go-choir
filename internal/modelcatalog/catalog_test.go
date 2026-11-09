@@ -1,6 +1,9 @@
 package modelcatalog
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // LongCat 2.5 Preview left the default pool on 2026-10-14: on the paper
 // computer its calls took 21.8 s at the median, 115 s at p90 and up to 932 s,
@@ -27,11 +30,11 @@ import "testing"
 // out moves to the other.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
-	// Owner 2026-11-09: crouton-alpha leads and takes every thread; the
-	// rest are fallback-only behind it; no Synthetic member.
+	// Owner 2026-11-09: crouton-alpha was retired that day; iceman leads
+	// and takes every thread, the rest are fallback-only behind it; no
+	// Synthetic member; inkling is in no pool while OpenRouter gates it.
 	want := []PoolMember{
-		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-		{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+		{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
 		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
@@ -144,7 +147,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 7 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
+	if d := Pools()[DefaultPool]; len(d) != 6 || d[4] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {
@@ -152,61 +155,38 @@ func TestLunaSyntheticPool(t *testing.T) {
 	}
 }
 
-// stealth/crouton-alpha on OpenRouter (owner 2026-11-03), from the public
-// models listing and a keyed probe that day: a 1048576-token window, tools,
-// image input answered correctly. In crouton-synthetic-luna and, from
-// 2026-11-05 (owner), the default pool.
-func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
-	info, ok := Lookup("openrouter", "stealth/crouton-alpha")
+// thinkingmachines/inkling-2-small:free on OpenRouter (owner 2026-11-09), from
+// the public models listing: a 1048576-token window, 131072 completion
+// tokens, image input. Catalogued so a policy can name it, and in no pool
+// while OpenRouter answers it 403; stealth/crouton-alpha, retired the same
+// day, is gone from the catalog and every pool.
+func TestOpenRouterInklingCataloguedAndCroutonGone(t *testing.T) {
+	info, ok := Lookup("openrouter", "thinkingmachines/inkling-2-small:free")
 	if !ok {
-		t.Fatal("openrouter/stealth/crouton-alpha not catalogued")
+		t.Fatal("inkling not catalogued")
 	}
-	if info.ContextWindowTokens != 1048576 || info.MaxOutputTokens != 65536 || info.DisplayName != "Crouton Alpha (OpenRouter stealth)" {
-		t.Fatalf("crouton = %+v", info)
+	if info.ContextWindowTokens != 1048576 || info.MaxOutputTokens != 131072 {
+		t.Fatalf("inkling = %+v", info)
 	}
-	if !SupportsImage("stealth/crouton-alpha") {
-		t.Fatal(ImageRefusal("stealth/crouton-alpha"))
+	if !SupportsImage(info.ID) {
+		t.Fatal(ImageRefusal(info.ID))
+	}
+	if _, ok := Lookup("openrouter", "stealth/crouton-alpha"); ok {
+		t.Fatal("retired crouton-alpha is still catalogued")
 	}
 	for name, members := range Pools() {
 		for _, m := range members {
+			if strings.Contains(m.Model, "crouton") || strings.Contains(m.Model, "inkling") {
+				t.Fatalf("pool %s carries %v", name, m)
+			}
 			free := m.Model == "recursive/flint-v1.0:free" || m.Model == "nvidia/nemotron-3.5-super-vl:free"
-			if m.Provider == "openrouter" && !(m.Model == "stealth/crouton-alpha" && (name == CroutonSyntheticLunaPool || name == SelfDevPool || name == DefaultPool)) && !(free && (name == DefaultPool || name == SelfDevPool)) {
+			if m.Provider == "openrouter" && !(free && (name == DefaultPool || name == SelfDevPool)) {
 				t.Fatalf("pool %s carries openrouter member %v", name, m)
 			}
 		}
 	}
-}
-
-// crouton-synthetic-luna is the owner's 2026-11-04 self-development pool.
-// Ways it could fail: crouton is not primary or shares slots with a
-// fallback; the fallback order is not Synthetic then luna; a member is not in
-// the catalog; the pool is NoFailover; it is not resolvable by name.
-func TestCroutonSyntheticLunaPool(t *testing.T) {
-	pool, ok := Pools()[CroutonSyntheticLunaPool]
-	if !ok || CroutonSyntheticLunaPool != "crouton-synthetic-luna" {
-		t.Fatalf("pool %q does not resolve", CroutonSyntheticLunaPool)
-	}
-	want := []PoolMember{
-		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
-		{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
-	}
-	if len(pool) != len(want) {
-		t.Fatalf("pool = %v, want %v", pool, want)
-	}
-	for i := range want {
-		if pool[i] != want[i] {
-			t.Fatalf("member %d = %v, want %v", i, pool[i], want[i])
-		}
-		if _, ok := Lookup(pool[i].Provider, pool[i].Model); !ok {
-			t.Fatalf("member %v is not in the catalog", pool[i])
-		}
-	}
-	if pool[0].SlotWeight() != 1 || pool[1].SlotWeight() != 0 || pool[2].SlotWeight() != 0 {
-		t.Fatal("crouton must hold every slot; fallbacks hold none")
-	}
-	if NoFailover(CroutonSyntheticLunaPool) {
-		t.Fatal("crouton-synthetic-luna must fail over")
+	if _, ok := Pools()["crouton-synthetic-luna"]; ok {
+		t.Fatal("the crouton-synthetic-luna pool was deleted with its only primary")
 	}
 }
 
@@ -218,8 +198,7 @@ func TestSelfDevPool(t *testing.T) {
 		t.Fatalf("SelfDevPool = %q", SelfDevPool)
 	}
 	want := []PoolMember{
-		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-		{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+		{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
 		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},

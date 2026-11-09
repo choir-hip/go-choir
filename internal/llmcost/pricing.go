@@ -146,11 +146,9 @@ var pricingTable = []ModelPricing{
 	// unknown; a 429 fails the thread over to the next pool member.
 	{Provider: "opencode-go", Model: "iceman-contributor-free", InputPerMillion: 0, OutputPerMillion: 0},
 	{Provider: "opencode-go", Model: "beam-free", InputPerMillion: 0, OutputPerMillion: 0},
-	// Crouton Alpha, OpenRouter's stealth model: free for one week from
-	// 2026-11-03 (models listing pricing 0/0; usage.cost 0 in the probe,
-	// docs/problems/openrouter-provider-crouton-alpha-2026-11-03.md).
-	// Revisit when the free window closes, about 2026-11-10.
-	{Provider: "openrouter", Model: "crouton-alpha", InputPerMillion: 0, OutputPerMillion: 0},
+	// Inkling 2 Small, OpenRouter's free model (owner 2026-11-09; listing
+	// price 0/0). Crouton Alpha, retired 2026-11-09, had the entry before it.
+	{Provider: "openrouter", Model: "inkling-2-small:free", InputPerMillion: 0, OutputPerMillion: 0},
 	// OpenRouter's free variants (owner 2026-11-05), probed that day at
 	// usage.cost 0. The paid nemotron endpoints do not match this entry.
 	{Provider: "openrouter", Model: "flint-v1.0:free", InputPerMillion: 0, OutputPerMillion: 0},

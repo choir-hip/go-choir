@@ -104,11 +104,15 @@ func TestSyntheticDeepSeek1017PricedAtSyntheticRate(t *testing.T) {
 	}
 }
 
-// stealth/crouton-alpha is free for a week from 2026-11-03: priced at zero,
-// found (not unpriced), by its provider-qualified id and its bare id.
-func TestLookupPricingCroutonAlphaIsFree(t *testing.T) {
+// thinkingmachines/inkling-2-small:free is free: priced at zero, found (not
+// unpriced), by its provider-qualified id and its bare id. Crouton Alpha was
+// retired 2026-11-09 and is unpriced.
+func TestLookupPricingInklingIsFree(t *testing.T) {
 	t.Parallel()
-	for _, q := range []string{"stealth/crouton-alpha", "crouton-alpha"} {
+	if _, ok := LookupPricing("stealth/crouton-alpha"); ok {
+		t.Fatal("retired crouton-alpha still priced")
+	}
+	for _, q := range []string{"thinkingmachines/inkling-2-small:free", "inkling-2-small:free"} {
 		entry, ok := LookupPricing(q)
 		if !ok || entry.Provider != "openrouter" || entry.InputPerMillion != 0 || entry.OutputPerMillion != 0 || entry.CachedInputPerMillion != 0 {
 			t.Fatalf("LookupPricing(%q) = %+v, %v", q, entry, ok)

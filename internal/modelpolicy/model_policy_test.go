@@ -140,7 +140,7 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
 	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, map[string]any{"trajectory_id": "traj-1"})
 	member := metadata[MetadataProvider].(string) + "/" + metadata[MetadataModel].(string)
-	// The default pool is iceman, beam, crouton, flint, nemotron and
+	// The default pool is iceman, beam, flint, nemotron and
 	// gpt-6-luna with Synthetic DeepSeek 1017 fallback-only (owner 2026-11-05); a
 	// thread's fallbacks are the other members in pool order after the
 	// assigned one, wrapping.
@@ -237,13 +237,13 @@ func TestAssignSyntheticLunaSplitsOneToOneAndNeverFailsOver(t *testing.T) {
 	if syn < 1800 || syn > 2200 || syn+luna != 4000 {
 		t.Fatalf("split = %v, want about 2000 each of 4000", seen)
 	}
-	// The default pool (owner 2026-11-09) leads with crouton-alpha, which
-	// takes every thread; the other five members are
-	// fallback-only, in pool order, so no thread starts on a member that is
-	// not the first and each has the other five as fallbacks.
+	// The default pool (owner 2026-11-09; crouton-alpha was retired that day)
+	// leads with iceman, which takes every thread; the other five members
+	// are fallback-only, in pool order, so no thread starts on a member that
+	// is not the first and each has the other five as fallbacks.
 	for i := 0; i < 600; i++ {
 		chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, fmt.Sprintf("thread-%d", i))
-		if chosen.Model != "stealth/crouton-alpha" || len(fallbacks) != 6 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[4].Provider != "chatgpt" {
+		if chosen.Model != "iceman-contributor-free" || len(fallbacks) != 5 || fallbacks[0].Model != "beam-free" || fallbacks[3].Provider != "chatgpt" {
 			t.Fatalf("default pool thread-%d: %+v with fallbacks %+v", i, chosen, fallbacks)
 		}
 	}
@@ -431,7 +431,7 @@ func TestAssignLunaSyntheticGivesLunaEveryThreadAndSyntheticAsFallback(t *testin
 	if _, fb, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "t"); len(fb) != 0 {
 		t.Fatalf("explicit synthetic pin has fallbacks %+v", fb)
 	}
-	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 6 || fb[0].Model == chosen.Model {
+	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 5 || fb[0].Model == chosen.Model {
 		t.Fatalf("default pool changed: %+v %+v", chosen, fb)
 	}
 	seen := map[string]int{}

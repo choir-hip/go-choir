@@ -277,7 +277,16 @@ func (m *Manager) stampResolved(policy Policy, role string, metadata map[string]
 	}
 	thread := ThreadKey(metadata)
 	spec := SpecOf(selection)
+	named := selection
 	selection, fallbacks, assignment := Assign(selection, thread)
+	if assignment == "retired_remapped" {
+		// A policy that names a model the catalog no longer lists (a retired
+		// one, such as stealth/crouton-alpha on 2026-11-09) runs on the
+		// default pool; say so where the owner can see it.
+		note := fmt.Sprintf("model policy names %s/%s, which the catalog no longer lists; using the default pool", strings.TrimSpace(named.Provider), strings.TrimSpace(named.Model))
+		metadata[MetadataPolicyError] = joinPolicyErrors(metadata, note)
+		m.logDiagnostic(note)
+	}
 	if assignment == AssignmentUnknownPool {
 		// Fail closed, visibly: never run the role on another pool's model.
 		metadata[MetadataPolicyError] = joinPolicyErrors(metadata, fmt.Sprintf("model policy names unknown pool %q", strings.TrimPrefix(strings.TrimSpace(selection.Model), modelcatalog.PoolSpecPrefix)))

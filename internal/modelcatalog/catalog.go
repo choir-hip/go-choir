@@ -296,20 +296,17 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 524288,
 		},
 
-		// OpenRouter's stealth/crouton-alpha (owner 2026-11-03: free for a
-		// week, a test arm runs every desk on it). Public models listing
-		// and a keyed probe that day: a 1048576-token window (943718 max
-		// completion advertised; the catalog keeps its 65536 ceiling),
-		// tools, mandatory reasoning, and an image named correctly through
-		// an image_url data URI (docs/problems/openrouter-provider-crouton-
-		// alpha-2026-11-03.md). In one pool only: crouton-synthetic-luna, the
-		// self-development pool (owner 2026-11-04); OpenRouter is for Jev and
-		// free models like this one.
+		// OpenRouter's thinkingmachines/inkling-2-small:free: the owner's
+		// intended default model (owner 2026-11-09). Listing that day:
+		// 1048576-token window, 131072 max completion tokens, text and image
+		// input, tools, reasoning and reasoning_effort, no tool_choice. In no
+		// pool yet: OpenRouter answers it 403 "only available on agentic
+		// harnesses" (docs/problems/crouton-retired-inkling-gated-2026-11-09.md).
 		{
-			ID:                  "stealth/crouton-alpha",
-			DisplayName:         "Crouton Alpha (OpenRouter stealth)",
+			ID:                  "thinkingmachines/inkling-2-small:free",
+			DisplayName:         "Inkling 2 Small (OpenRouter free)",
 			Provider:            "openrouter",
-			MaxOutputTokens:     65536,
+			MaxOutputTokens:     131072,
 			ContextWindowTokens: 1048576,
 		},
 		// OpenRouter free variants (owner 2026-11-05: "add these 2 models
@@ -453,11 +450,19 @@ func (m PoolMember) SlotWeight() int {
 // fallbacks, gpt-6-luna, then Bedrock Claude Haiku 5.5 last, with no
 // Synthetic and no River; the selfdev pool is crouton-alpha, the same free
 // fallbacks, then Synthetic, then River, with no Haiku.
+//
+// Owner 2026-11-09: stealth/crouton-alpha was retired by OpenRouter that day
+// and is gone from every pool; the members that followed it lead in their
+// existing order. The owner's intended lead is
+// thinkingmachines/inkling-2-small:free. It is catalogued but held out of
+// every pool only because OpenRouter answers it 403 ("only available on
+// agentic harnesses"); a dead lead is the bug being fixed. When the gate opens
+// it becomes the lead of the default and selfdev pools by a one-line change
+// (docs/problems/crouton-retired-inkling-gated-2026-11-09.md).
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-			{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
 			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
@@ -473,28 +478,15 @@ func Pools() map[string][]PoolMember {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 		SelfDevPool: {
-			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-			{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
 			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
-		CroutonSyntheticLunaPool: {
-			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
-			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
-		},
 	}
 }
-
-// CroutonSyntheticLunaPool names the self-development pool (owner
-// 2026-11-04): OpenRouter's free stealth/crouton-alpha is always primary,
-// Synthetic's DeepSeek V4.1 Flash 1017 is the first fallback and gpt-6-luna
-// the last. A pinned model never falls back; only a policy naming this pool
-// does.
-const CroutonSyntheticLunaPool = "crouton-synthetic-luna"
 
 // LunaSyntheticPool names the pool that runs every thread on gpt-6-luna and
 // falls back to Synthetic's DeepSeek V4.1 Flash 1017 only when luna fails.
@@ -506,7 +498,8 @@ const SyntheticLunaPool = "synthetic-luna"
 
 // SelfDevPool names the self-development pool (owner 2026-11-09): the same
 // free models as the default pool, then Synthetic's DeepSeek V4.1 Flash 1017,
-// then River's, all fallback-only after crouton-alpha. No Haiku.
+// then River's. No Haiku. The lead is the first free member (crouton-alpha
+// was retired 2026-11-09).
 const SelfDevPool = "selfdev"
 
 // NoFailover reports whether a pool's threads never move to another member

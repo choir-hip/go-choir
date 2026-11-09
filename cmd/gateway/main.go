@@ -185,7 +185,7 @@ func loadProviderConfig() provider.ProviderConfig {
 		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
 		SyntheticModels:   []string{"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"},
 		RiverModels:       []string{"deepseek-ai/DeepSeek-V4.1-Flash-1017"},
-		OpenRouterModels:  []string{"stealth/crouton-alpha", "recursive/flint-v1.0:free", "nvidia/nemotron-3.5-super-vl:free"},
+		OpenRouterModels:  []string{"recursive/flint-v1.0:free", "nvidia/nemotron-3.5-super-vl:free", "thinkingmachines/inkling-2-small:free"},
 	}
 
 	// Allow overrides for non-default setups.

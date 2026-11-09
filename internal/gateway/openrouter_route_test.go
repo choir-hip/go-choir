@@ -17,7 +17,7 @@ import (
 // gateway's key and its answer comes back; a model outside the catalog is
 // refused before any upstream call; a 402 reaches the caller sanitized.
 func TestOpenRouterRoutesThroughTheGateway(t *testing.T) {
-	const model = "stealth/crouton-alpha"
+	const model = "nvidia/nemotron-3.5-super-vl:free"
 	var upstream int
 	var gotAuth, gotPath string
 	status := http.StatusOK

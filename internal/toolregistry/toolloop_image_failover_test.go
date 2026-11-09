@@ -64,8 +64,8 @@ func TestImageTurnOnTextOnlyMemberMovesToFirstCapableBeforeCalling(t *testing.T)
 }
 
 func TestImageTurnFailoverSkipsTextOnlyMembers(t *testing.T) {
-	p := &modelFailingProvider{fail: map[string]error{"stealth/crouton-alpha": fmt.Errorf("status 503")}}
-	crouton := provideriface.LLMSelection{Provider: "openrouter", Model: "stealth/crouton-alpha"}
+	p := &modelFailingProvider{fail: map[string]error{"nvidia/nemotron-3.5-super-vl:free": fmt.Errorf("status 503")}}
+	crouton := provideriface.LLMSelection{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free"}
 	text, err, events := runImageLoop(p, imageMessages, crouton, textOnlyA, textOnlyB, visionOK)
 	if err != nil || text != "done by gpt-6-luna" {
 		t.Fatalf("text %q err %v", text, err)

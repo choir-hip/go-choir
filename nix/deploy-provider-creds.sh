@@ -157,9 +157,12 @@ done
 # retires this station-owned configuration and its rate-limit buckets.
 if [ -n "${OPENROUTER_API_KEY:-}" ] || has_env_key "OPENROUTER_API_KEY"; then
   ENVS+=("GATEWAY_JEV_JUDGMENTS_ENABLED=${GATEWAY_JEV_JUDGMENTS_ENABLED:-1}")
-  # The OpenRouter chat provider (owner 2026-11-03: a free week of
-  # stealth/crouton-alpha). The gateway defaults to the same list.
-  ENVS+=("GATEWAY_OPENROUTER_MODELS=${GATEWAY_OPENROUTER_MODELS:-stealth/crouton-alpha}")
+  # The OpenRouter chat provider (owner 2026-11-03). Crouton Alpha was retired
+  # 2026-11-09; the list is the free members the pools name plus inkling,
+  # which is routable but in no pool while OpenRouter gates it
+  # (docs/problems/crouton-retired-inkling-gated-2026-11-09.md). The gateway
+  # defaults to the same list.
+  ENVS+=("GATEWAY_OPENROUTER_MODELS=${GATEWAY_OPENROUTER_MODELS:-recursive/flint-v1.0:free,nvidia/nemotron-3.5-super-vl:free,thinkingmachines/inkling-2-small:free}")
 fi
 
 if [ -n "${ZAI_API_KEY:-}" ] || has_env_key "ZAI_API_KEY"; then

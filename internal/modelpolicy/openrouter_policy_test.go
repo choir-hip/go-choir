@@ -17,7 +17,7 @@ func TestOpenRouterCroutonArmPolicyPinsEveryRole(t *testing.T) {
 	const arm = `# owner-edited
 [defaults]
 provider = "openrouter"
-model = "stealth/crouton-alpha"
+model = "nvidia/nemotron-3.5-super-vl:free"
 reasoning = "low"
 `
 	roles := []string{
@@ -26,7 +26,7 @@ reasoning = "low"
 	}
 	text := arm
 	for _, role := range roles {
-		text += "\n[roles." + role + "]\nprovider = \"openrouter\"\nmodel = \"stealth/crouton-alpha\"\n"
+		text += "\n[roles." + role + "]\nprovider = \"openrouter\"\nmodel = \"nvidia/nemotron-3.5-super-vl:free\"\n"
 	}
 	p, err := parsePolicy(text, "/System/model-policy.toml")
 	if err != nil {
@@ -34,11 +34,11 @@ reasoning = "low"
 	}
 	for _, role := range append(roles, "") {
 		sel := p.Resolve(role)
-		if sel.Provider != "openrouter" || sel.Model != "stealth/crouton-alpha" {
+		if sel.Provider != "openrouter" || sel.Model != "nvidia/nemotron-3.5-super-vl:free" {
 			t.Fatalf("role %q resolves %s/%s", role, sel.Provider, sel.Model)
 		}
 		assigned, fallbacks, assignment := Assign(sel, "thread-1")
-		if assigned.Provider != "openrouter" || assigned.Model != "stealth/crouton-alpha" || len(fallbacks) != 0 || assignment != "explicit" {
+		if assigned.Provider != "openrouter" || assigned.Model != "nvidia/nemotron-3.5-super-vl:free" || len(fallbacks) != 0 || assignment != "explicit" {
 			t.Fatalf("role %q assigns %s/%s fallbacks %v (%s)", role, assigned.Provider, assigned.Model, fallbacks, assignment)
 		}
 	}

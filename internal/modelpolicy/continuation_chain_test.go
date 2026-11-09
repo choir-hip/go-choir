@@ -49,7 +49,7 @@ model = "retired-model-9"
 	}
 	m := NewManager(ManagerConfig{PolicyPath: path})
 	ids := chainIDs(m.ContinuationChain(context.Background(), "owner"))
-	want := []string{"zai/glm-5.2", "chatgpt/gpt-6-luna", "openrouter/stealth/crouton-alpha", "opencode-go/iceman-contributor-free", "opencode-go/beam-free", "openrouter/recursive/flint-v1.0:free", "openrouter/nvidia/nemotron-3.5-super-vl:free", "bedrock/us.anthropic.claude-haiku-5-5"}
+	want := []string{"zai/glm-5.2", "chatgpt/gpt-6-luna", "opencode-go/iceman-contributor-free", "opencode-go/beam-free", "openrouter/recursive/flint-v1.0:free", "openrouter/nvidia/nemotron-3.5-super-vl:free", "bedrock/us.anthropic.claude-haiku-5-5"}
 	if strings.Join(ids, ",") != strings.Join(want, ",") {
 		t.Fatalf("chain = %v, want %v: the policy's catalogued models, then the default pool, no repeats, no uncatalogued model", ids, want)
 	}

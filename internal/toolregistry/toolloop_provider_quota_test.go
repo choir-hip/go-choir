@@ -30,7 +30,7 @@ import (
 //   - a model failure (not a quota) switches or raises an incident.
 
 var (
-	routerMember = provideriface.LLMSelection{Provider: "openrouter", Model: "stealth/crouton-alpha"}
+	routerMember = provideriface.LLMSelection{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free"}
 	zaiMember    = provideriface.LLMSelection{Provider: "zai", Model: "glm-5.2"}
 )
 

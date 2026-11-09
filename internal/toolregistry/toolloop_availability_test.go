@@ -21,7 +21,7 @@ import (
 //  5. our own cancellation demotes a healthy model;
 //  6. every member held: the run is refused instead of trying the active one.
 
-var routerSel = provideriface.LLMSelection{Provider: "openrouter", Model: "stealth/crouton-alpha"}
+var routerSel = provideriface.LLMSelection{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free"}
 
 func circuitOpen(provider string) error {
 	return &gatewayLikeError{"gateway call failed: gateway client: provider " + provider + " model m: circuit open (model unhealthy)", true}

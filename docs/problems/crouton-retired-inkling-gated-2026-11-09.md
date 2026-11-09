@@ -82,3 +82,23 @@ sanitizes the body away, so the guest cannot tell it from a request-shaped 404.
    and `X-OpenRouter-Categories`, and nothing naming another app.
 6. Inkling is called without `tool_choice`.
 7. Pricing: the zero-price crouton entry goes.
+
+## Shipped (fix commit)
+
+- crouton-alpha removed from the catalog, the default and selfdev pools, the
+  gateway list, the nix default and the pricing table. `crouton-synthetic-luna`
+  and its constant are deleted: nothing but its own tests selected it. A stored
+  policy file naming `pool:crouton-synthetic-luna` would now be rejected by
+  `parsePolicy` ("names unknown pool", the manager falls back to the platform
+  policy with that error in `llm_policy_error`); none is known. Residual.
+- Pool order now: default = iceman, beam, flint, nemotron, gpt-6-luna, Haiku
+  5.5; selfdev = iceman, beam, flint, nemotron, Synthetic, River; synthetic-luna
+  and luna-synthetic unchanged.
+- A policy pinning `openrouter/stealth/crouton-alpha` (d@e's texture role)
+  parses; `Assign` remaps it to the default pool ("retired_remapped") and
+  `stampResolved` now adds a visible `llm_policy_error` note.
+- Inkling is catalogued, priced at zero, in the gateway list, in no pool, and
+  called without `tool_choice`. Attribution headers go on every OpenRouter call.
+- Not verified: any live OpenRouter call; whether the headers open the gate.
+  Promotion of inkling to the pool lead is a one-line change once a call
+  succeeds.

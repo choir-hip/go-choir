@@ -15,12 +15,12 @@ import (
 // Ways it could fail, written before the code: the key reaches the wrong
 // header or a log; the path misses /chat/completions under /api/v1;
 // reasoning_effort "none" is a 400 (reasoning is mandatory for
-// stealth/crouton-alpha) and an unknown value is a 400; tools are dropped;
+// nvidia/nemotron-3.5-super-vl:free) and an unknown value is a 400; tools are dropped;
 // the stream's usage, which arrives on a second finish_reason chunk, is
 // lost; a 402 (credits) or a quota 429 is not typed as quota; the provider
 // registers without a key or without models.
 
-const openRouterTestModel = "stealth/crouton-alpha"
+const openRouterTestModel = "nvidia/nemotron-3.5-super-vl:free"
 
 func newTestOpenRouter(t *testing.T, server *httptest.Server) *OpenRouterProvider {
 	t.Helper()
@@ -40,7 +40,7 @@ func TestOpenRouterProviderRequestShape(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"id":"gen-1","model":"stealth/crouton-alpha","provider":"Stealth","choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"","reasoning":null,"reasoning_details":[{"type":"reasoning.encrypted","data":"x"}],"tool_calls":[{"type":"function","index":0,"id":"call-1","function":{"name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}]}}],"usage":{"prompt_tokens":13,"completion_tokens":6,"total_tokens":19,"cost":0,"prompt_tokens_details":{"cached_tokens":0}}}`)
+		_, _ = fmt.Fprint(w, `{"id":"gen-1","model":"nvidia/nemotron-3.5-super-vl:free","provider":"Stealth","choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"","reasoning":null,"reasoning_details":[{"type":"reasoning.encrypted","data":"x"}],"tool_calls":[{"type":"function","index":0,"id":"call-1","function":{"name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}]}}],"usage":{"prompt_tokens":13,"completion_tokens":6,"total_tokens":19,"cost":0,"prompt_tokens_details":{"cached_tokens":0}}}`)
 	}))
 	defer server.Close()
 	p := newTestOpenRouter(t, server)
@@ -101,7 +101,7 @@ func TestOpenRouterReasoningEffortNeverSendsAnInvalidValue(t *testing.T) {
 		"max":      "max",
 		"turbo":    "",
 	} {
-		if got := openRouterReasoningEffort("stealth/crouton-alpha", in); got != want {
+		if got := openRouterReasoningEffort("nvidia/nemotron-3.5-super-vl:free", in); got != want {
 			t.Fatalf("openRouterReasoningEffort(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -140,11 +140,11 @@ func TestOpenRouterStreamKeepsUsageFromTheSecondFinishChunk(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = fmt.Fprint(w, ": OPENROUTER PROCESSING\n\n")
 		for _, line := range []string{
-			`{"id":"gen-1","model":"stealth/crouton-alpha","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null,"reasoning_details":[{"type":"reasoning.encrypted","data":"x"}]},"finish_reason":null}]}`,
-			`{"id":"gen-1","model":"stealth/crouton-alpha","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}]}`,
-			`{"id":"gen-1","model":"stealth/crouton-alpha","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"{\"city\":\"Paris\"}"}}]},"finish_reason":null}]}`,
-			`{"id":"gen-1","model":"stealth/crouton-alpha","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"tool_calls","native_finish_reason":"completed"}]}`,
-			`{"id":"gen-1","model":"stealth/crouton-alpha","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"completed"}],"usage":{"prompt_tokens":13,"completion_tokens":6,"total_tokens":19,"cost":0,"prompt_tokens_details":{"cached_tokens":4}}}`,
+			`{"id":"gen-1","model":"nvidia/nemotron-3.5-super-vl:free","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null,"reasoning_details":[{"type":"reasoning.encrypted","data":"x"}]},"finish_reason":null}]}`,
+			`{"id":"gen-1","model":"nvidia/nemotron-3.5-super-vl:free","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}]}`,
+			`{"id":"gen-1","model":"nvidia/nemotron-3.5-super-vl:free","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"{\"city\":\"Paris\"}"}}]},"finish_reason":null}]}`,
+			`{"id":"gen-1","model":"nvidia/nemotron-3.5-super-vl:free","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"tool_calls","native_finish_reason":"completed"}]}`,
+			`{"id":"gen-1","model":"nvidia/nemotron-3.5-super-vl:free","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"completed"}],"usage":{"prompt_tokens":13,"completion_tokens":6,"total_tokens":19,"cost":0,"prompt_tokens_details":{"cached_tokens":4}}}`,
 		} {
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", line)
 		}
@@ -320,5 +320,44 @@ func TestOpenRouterSendsSessionIDForStickyRouting(t *testing.T) {
 	}
 	if resp.Usage.CachedInputTokens != 8 {
 		t.Fatalf("cached %d, want 8", resp.Usage.CachedInputTokens)
+	}
+}
+
+// Every OpenRouter request carries Choir's own app attribution and nothing
+// naming another app; inkling, whose listing lacks tool_choice, is sent the
+// tools without one while a model that supports it keeps it
+// (docs/problems/crouton-retired-inkling-gated-2026-11-09.md).
+func TestOpenRouterAttributionAndInklingToolChoice(t *testing.T) {
+	var hdr http.Header
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hdr = r.Header.Clone()
+		raw = nil
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"id":"gen-1","model":"m","choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"hi"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`)
+	}))
+	defer server.Close()
+	p := newTestOpenRouter(t, server)
+	tools := []ToolDef{{Name: "t", Description: "d", InputSchema: map[string]any{"type": "object"}}}
+	for model, wantChoice := range map[string]bool{
+		"thinkingmachines/inkling-2-small:free": false,
+		"nvidia/nemotron-3.5-super-vl:free":     true,
+	} {
+		_, err := p.Call(context.Background(), LLMRequest{Model: model, Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "x"}}}}, Tools: tools, ToolChoice: "required"})
+		if err != nil {
+			t.Fatalf("%s: %v", model, err)
+		}
+		if _, has := raw["tool_choice"]; has != wantChoice {
+			t.Fatalf("%s: tool_choice present = %v, want %v", model, has, wantChoice)
+		}
+		if raw["tools"] == nil {
+			t.Fatalf("%s: tools dropped", model)
+		}
+		for k, want := range map[string]string{"Http-Referer": "https://choir.news", "X-Openrouter-Title": "Choir", "X-Title": "Choir", "X-Openrouter-Categories": "cli-agent"} {
+			if got := hdr.Get(k); got != want {
+				t.Fatalf("%s: header %s = %q, want %q", model, k, got, want)
+			}
+		}
 	}
 }

@@ -23,7 +23,7 @@ func TestNoBuilderEmitsThinkingOff(t *testing.T) {
 		if got := openRouterReasoningEffort("deepseek/deepseek-v4.1-flash-1017", e); got != "low" {
 			t.Errorf("openrouter deepseek %q -> %q, want low", e, got)
 		}
-		if got := openRouterReasoningEffort("stealth/crouton-alpha", e); got != "minimal" {
+		if got := openRouterReasoningEffort("nvidia/nemotron-3.5-super-vl:free", e); got != "minimal" {
 			t.Errorf("openrouter crouton %q -> %q, want minimal", e, got)
 		}
 		// Synthetic: none and low are the non-thinking template, so the
