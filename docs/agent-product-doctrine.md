@@ -324,6 +324,37 @@ semantics; per-computer policy selects among them. Provider request schemas
 must preserve modality; when an adapter cannot resolve a media artifact, record
 the blocker precisely.
 
+## Provider Availability Memory
+
+Owner, 2026-11-09: "the pools ... need to be intelligent enough that if a
+particular provider is not working, we don't keep retrying it. We should be
+doing exponential back off and having some kind of memory. This just needs to
+be like a system-wide policy to always be intelligent about not retrying."
+And: "We shouldn't have outages if we can handle it."
+
+Every outbound call to a model or API provider, on a computer or on the
+gateway, obeys one rule:
+
+- It consults a shared availability memory before it calls, and goes straight
+  to the first member of its pool that is not held. It never walks members
+  already known to be down.
+- A quota refusal holds the member until the provider's own reset; a transient
+  failure holds it with exponential backoff that one success clears; a hard
+  failure (a rejected credential, a model that no longer exists) holds it
+  longest.
+- The memory survives a process restart. Remembering that a provider is down
+  is not work, so restoring it at boot does not break the restart rules.
+- Nothing retries on a fixed beat regardless of the memory, and concurrent
+  runs do not retry in lockstep.
+- Pools are ordered so a failure falls through to a paid member that works
+  rather than to an outage: free models first, then the paid tail the
+  computer's role allows (Haiku 5.5 for the paper, Synthetic and River for
+  self-development, 2026-11-09).
+- The memory is visible in observability, so which members are held, until
+  when and why, is on the trace.
+
+Audit and fixes: docs/evidence/provider-retry-audit-2026-11-09.md.
+
 ## Product-Path Verification
 
 Browser or Playwright acceptance may use public authenticated product APIs:
