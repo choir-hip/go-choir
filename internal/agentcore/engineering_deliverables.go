@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -169,7 +170,7 @@ func (rt *Runtime) landAssignmentDeliverables(ctx context.Context, assignment ty
 	staged, err := rt.capsuleExecutor.StageGrantedDeliverables(ctx, runID, handle, stageRoot)
 	if err != nil {
 		log.Printf("agentcore: assignment %s deliverables staging failed: %v", assignment.AssignmentID, err)
-		report.Summary = withDeliverablesSummary(report.Summary, "Deliverables not delivered:\n- staging the output directory failed: "+err.Error())
+		report.Summary = withDeliverablesSummary(report.Summary, "Deliverables not delivered:\n- staging the output directory failed: "+strconv.Quote(err.Error()))
 		return report
 	}
 	defer staged.Remove()

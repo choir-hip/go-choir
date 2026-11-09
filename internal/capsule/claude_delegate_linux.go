@@ -54,10 +54,10 @@ func (e *Executor) refuseClaudeTokenInChanges(ctx context.Context, caps *Capsule
 		found, err := claudedelegate.ContainsSecret(file, secret)
 		_ = file.Close()
 		if err != nil {
-			return fmt.Errorf("scan %s for the delegate token: %w", change.Path, err)
+			return fmt.Errorf("scan %q for the delegate token: %w", change.Path, err)
 		}
 		if found {
-			return fmt.Errorf("capsule change %s contains the Claude delegate token; the candidate is refused", change.Path)
+			return fmt.Errorf("capsule change %q contains the Claude delegate token; the candidate is refused", change.Path)
 		}
 	}
 	return nil
