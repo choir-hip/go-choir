@@ -12,7 +12,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -525,12 +528,69 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 		}}
 	}
 
-	ar.Messages = convertMessages(req.Messages)
+	ar.Messages = bedrockSanitizeMessages(convertMessages(req.Messages))
 	// Bedrock caches only at explicit breakpoints: the system one above
 	// (tools + system) and this one (the history so far).
 	markHistoryCacheBreakpoint(ar.Messages)
 	ar.Tools = convertToolDefs(req.Tools)
+	for i := range ar.Tools {
+		if len(ar.Tools[i].InputSchema) == 0 {
+			// "tools.0.custom.input_schema: Field required" otherwise.
+			ar.Tools[i].InputSchema = map[string]any{"type": "object"}
+		}
+	}
 	return ar
+}
+
+var bedrockToolIDValid = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+var bedrockToolIDInvalidRun = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+
+// bedrockToolID maps a tool-call id into Anthropic's [a-zA-Z0-9_-] alphabet.
+// A conforming id is returned unchanged; otherwise invalid characters become
+// "_" and 12 hex digits of the original's SHA-256 are appended, so distinct
+// originals stay distinct and the same input always yields the same output
+// (the cached prefix stays byte-stable). tool_use.id and tool_result
+// tool_use_id both go through it.
+func bedrockToolID(id string) string {
+	if bedrockToolIDValid.MatchString(id) {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	return bedrockToolIDInvalidRun.ReplaceAllString(id, "_") + "_" + hex.EncodeToString(sum[:6])
+}
+
+// bedrockSanitizeMessages removes what Bedrock answers 400 to when a history
+// was written by another model: tool ids outside the allowed alphabet,
+// thinking blocks without a signature, empty text blocks, and messages left
+// with no content.
+func bedrockSanitizeMessages(msgs []anthropicMessage) []anthropicMessage {
+	out := make([]anthropicMessage, 0, len(msgs))
+	for _, m := range msgs {
+		kept := m.Content[:0:0]
+		for _, c := range m.Content {
+			switch c.Type {
+			case "text":
+				if strings.TrimSpace(c.Text) == "" {
+					continue
+				}
+			case "thinking", "redacted_thinking":
+				if c.Signature == "" && c.Type == "thinking" {
+					continue
+				}
+			case "tool_use":
+				c.ID = bedrockToolID(c.ID)
+			case "tool_result":
+				c.ToolUseID = bedrockToolID(c.ToolUseID)
+			}
+			kept = append(kept, c)
+		}
+		if len(kept) == 0 {
+			continue
+		}
+		m.Content = kept
+		out = append(out, m)
+	}
+	return out
 }
 
 // ZAIProvider implements the Provider interface for Z.AI using the
@@ -686,7 +746,7 @@ func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropic
 		}}
 	}
 
-	ar.Messages = convertMessages(req.Messages)
+	ar.Messages = bedrockSanitizeMessages(convertMessages(req.Messages))
 	ar.Tools = convertToolDefs(req.Tools)
 	return ar
 }
