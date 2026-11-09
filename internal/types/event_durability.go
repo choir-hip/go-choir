@@ -89,6 +89,9 @@ var eventDurability = map[EventKind]EventDurability{
 	// model.served: the record of which models served a run, a few per run
 	// and read as provenance for as long as the document lives.
 	EventModelServed: DurabilityAcknowledged,
+	// search.served: which search providers served a run, a few per run,
+	// read beside model.served.
+	EventSearchServed: DurabilityAcknowledged,
 
 	// Acknowledged: a story's entity attachments are the authority for public
 	// graph rows and edges, as a judged pair is.

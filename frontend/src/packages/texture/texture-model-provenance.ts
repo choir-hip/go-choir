@@ -35,7 +35,13 @@ export type ModelProvenance = {
   runs_served?: number;
   roles?: { role?: string; models?: ProvenanceModel[] }[];
   switches?: ProvenanceSwitch[];
+  /** Search providers that served the same runs (search.served), by desk role. */
+  search?: { roles?: { role?: string; providers?: SearchProvider[] }[] } | null;
 };
+
+export type SearchProvider = { provider?: string; calls?: number; answered?: number; results?: number };
+
+export type SearchRow = { role: string; label: string; providers: { key: string; name: string; detail: string }[] };
 
 export type ProvenanceRow = {
   role: string;
@@ -199,4 +205,34 @@ export function publishedModelProvenance(bundle: any): ModelProvenance | null {
   }
   const provenance = manifest?.model_provenance;
   return provenance && typeof provenance === 'object' ? provenance : null;
+}
+
+function searchProviderName(name: string): string {
+  const n = String(name || 'unknown');
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+
+/** Rows for the Search block: roles in desk order, each with the providers that served its searches. */
+export function searchProvenanceRows(provenance: ModelProvenance | null | undefined): SearchRow[] {
+  const roles = Array.isArray(provenance?.search?.roles) ? provenance!.search!.roles! : [];
+  const rows = roles
+    .map((r) => {
+      const role = String(r?.role || 'unknown');
+      const providers = (Array.isArray(r?.providers) ? r.providers : []).map((p) => {
+        const calls = count(p?.calls);
+        const results = count(p?.results);
+        const parts = [`${calls} call${calls === 1 ? '' : 's'}`, `${results} result${results === 1 ? '' : 's'}`];
+        const failed = calls - count(p?.answered);
+        if (failed > 0) parts.push(`${failed} unanswered`);
+        return { key: String(p?.provider || ''), name: searchProviderName(String(p?.provider || '')), detail: parts.join(' · ') };
+      });
+      return { role, label: roleLabel(role), providers };
+    })
+    .filter((row) => row.providers.length > 0);
+  const rank = (role: string) => {
+    const i = ROLE_ORDER.indexOf(role);
+    return i < 0 ? ROLE_ORDER.length : i;
+  };
+  rows.sort((a, b) => rank(a.role) - rank(b.role) || a.role.localeCompare(b.role));
+  return rows;
 }

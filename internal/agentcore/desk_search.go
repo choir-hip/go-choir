@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/search"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -100,6 +101,8 @@ type searchDone struct {
 	total    int
 	pending  []string
 	err      string
+	// providers is each provider that arrived: answered and results returned.
+	providers []types.SearchServedUsage
 }
 
 // startSearch serves choir.SearchStart for the session key's worker. It
@@ -193,6 +196,7 @@ func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, s
 			arrival.Results = append(arrival.Results, yaegikernel.SearchHit{Title: r.Title, URL: r.URL, Snippet: strings.TrimSpace(r.Snippet), PublishedAt: r.PublishedAt, Score: r.Score, Provider: r.Provider})
 		}
 		done.arrived++
+		done.providers = append(done.providers, types.SearchServedUsage{Provider: a.Provider, Calls: 1, Answered: boolInt(arrival.Answered()), Results: len(a.Results)})
 		if arrival.Answered() {
 			done.answered++
 		}
@@ -204,4 +208,11 @@ func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, s
 	}
 	finish(done)
 	_ = worker.PushSearch(yaegikernel.SearchFrame{ID: id, Kind: yaegikernel.SearchFrameDone, Pending: done.pending, Error: done.err})
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

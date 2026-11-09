@@ -122,18 +122,28 @@
     root.dataset.promptSurfacePlacement = normalizedPlacement;
   }
 
+  // The one submit path: Enter and the send button both come here. An empty
+  // field only takes the focus. With a target in view, one send at a time: a
+  // second send while the first routes would read a target the first is
+  // still changing, and the text stays in the field.
+  function submitPrompt() {
+    if (promptDisabled) return;
+    if (!promptValue.trim()) {
+      promptInputEl?.focus();
+      return;
+    }
+    if (promptRouting && target) return;
+    const focus = mode === 'focus' && target?.focus ? target.focus : null;
+    dispatch('promptsubmit', { text: promptValue.trim(), focus, windowId: focus ? target?.windowId || '' : '' });
+    promptValue = '';
+    tick().then(resizePromptInput);
+  }
+
   function handlePromptKeydown(event: KeyboardEvent) {
     if (promptDisabled) return;
-    if (event.key === 'Enter' && !event.shiftKey && promptValue.trim()) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && promptValue.trim()) {
       event.preventDefault();
-      // With a target in view, one send at a time: a second send while the
-      // first routes would read a target the first is still changing. The
-      // text stays in the field.
-      if (promptRouting && target) return;
-      const focus = mode === 'focus' && target?.focus ? target.focus : null;
-      dispatch('promptsubmit', { text: promptValue.trim(), focus, windowId: focus ? target?.windowId || '' : '' });
-      promptValue = '';
-      tick().then(resizePromptInput);
+      submitPrompt();
     } else if (event.key === 'Escape') {
       (event.currentTarget as HTMLTextAreaElement)?.blur();
     }
@@ -147,16 +157,19 @@
     promptInputEl?.focus();
   }
 
+  // The field grows with its text, up to a cap, then scrolls. The bar is
+  // anchored to its edge, so it grows away from it (upward at the bottom)
+  // and the surface metrics follow.
   function resizePromptInput() {
     if (!promptInputEl) return;
-    const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
     const compact = window.innerWidth <= 768;
-    const collapsedHeight = compact ? Math.max(54, Math.ceil(lineHeight + 24)) : Math.max(68, Math.ceil(lineHeight + 34));
-    const maxHeight = compact ? Math.min(108, Math.max(64, window.innerHeight * 0.18)) : Math.min(128, Math.max(72, window.innerHeight * 0.22));
-    promptInputEl.style.height = `${collapsedHeight}px`;
-    const nextHeight = promptValue.trim() ? Math.min(promptInputEl.scrollHeight, maxHeight) : collapsedHeight;
-    promptInputEl.style.height = `${Math.max(collapsedHeight, nextHeight)}px`;
-    promptInputEl.style.overflowY = promptInputEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
+    const minHeight = compact ? 43 : 49;
+    const maxHeight = Math.max(minHeight + lineHeight, Math.min(compact ? 168 : 200, window.innerHeight * 0.3));
+    promptInputEl.style.height = 'auto';
+    const wanted = promptValue ? promptInputEl.scrollHeight : minHeight;
+    promptInputEl.style.height = `${Math.max(minHeight, Math.min(wanted, maxHeight))}px`;
+    promptInputEl.style.overflowY = wanted > maxHeight ? 'auto' : 'hidden';
     tick().then(publishSurfaceMetrics);
   }
 
@@ -350,7 +363,7 @@
         {/each}
       </div>
     {:else if chyronTickerItems.length > 0 && !sheetOpen}
-      <div class:focused={promptFocused} class="agent-chyron" data-agent-chyron data-prompt-chyron aria-live="polite">
+      <div class:focused={promptFocused} class:typing={promptValue.length > 0} class="agent-chyron" data-agent-chyron data-prompt-chyron aria-live="polite">
         <div>{#each chyronTickerItems as item, index (`${item.id}-${index}`)}<span>{item.text}</span>{/each}</div>
       </div>
     {/if}
@@ -388,6 +401,7 @@
         aria-label="Command prompt"
         on:keydown={handlePromptKeydown}
         on:input={resizePromptInput}
+        enterkeyhint="send"
         on:focus={() => (promptFocused = true)}
         on:blur={() => (promptFocused = false)}
       />
@@ -402,7 +416,23 @@
       <line x1="8.5" y1="21" x2="15.5" y2="21" />
     </svg>
   </button>
-  <span class:online class="online-indicator" data-online-indicator data-live-status={liveStatus} aria-label={onlineLabel} title={onlineLabel}></span>
+  <button
+    class:online
+    class="prompt-submit"
+    type="button"
+    data-prompt-submit
+    data-online-indicator
+    data-live-status={liveStatus}
+    aria-label="Send prompt ({onlineLabel})"
+    title="Send ({onlineLabel})"
+    disabled={promptDisabled}
+    on:click={submitPrompt}
+  >
+    <svg class="submit-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 19V6" />
+      <path d="M6.5 11.5 12 6l5.5 5.5" />
+    </svg>
+  </button>
 </div>
 
 <style>
@@ -413,10 +443,11 @@
     z-index: 10000;
     display: grid;
     grid-template-columns: auto minmax(0, max-content) minmax(14rem, 1fr) auto auto;
-    align-items: center;
+    align-items: end;
     gap: 0.62rem;
     padding: 0.42rem 0.62rem;
-    border-radius: var(--choir-radius-pill);
+    box-sizing: border-box;
+    border-radius: min(var(--choir-radius-pill), 1.75rem);
     color: var(--choir-fg);
     background: var(--choir-prompt-surface-bg);
     box-shadow: var(--choir-shadow-floating), var(--choir-shadow-glow);
@@ -438,6 +469,7 @@
     place-items: center;
     width: 2.45rem;
     height: 2.45rem;
+    margin-bottom: 0.3rem;
     border: 0;
     border-radius: var(--choir-radius-control);
     background: var(--choir-control-bg);
@@ -547,12 +579,11 @@
     display: grid;
     align-items: end;
     overflow: hidden;
-    border-radius: var(--choir-radius-pill);
+    border-radius: min(var(--choir-radius-pill), 1.5rem);
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--choir-panel-soft) 50%, transparent), transparent 58%),
       var(--choir-input-bg);
     min-height: 3.05rem;
-    height: 3.05rem;
     box-shadow:
       inset 0 14px 28px color-mix(in srgb, var(--choir-shadow-color) 2%, transparent),
       0 12px 30px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
@@ -563,8 +594,9 @@
     z-index: 2;
     width: 100%;
     box-sizing: border-box;
+    min-width: 0;
     min-height: 3.05rem;
-    height: 100%;
+    display: block;
     border: 0;
     outline: 0;
     resize: none;
@@ -578,7 +610,7 @@
 
   .command-field.has-target {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: 100%;
+    grid-auto-rows: auto;
   }
 
   .command-field.has-target textarea {
@@ -591,9 +623,11 @@
   .prompt-target {
     position: relative;
     z-index: 3;
-    align-self: stretch;
+    align-self: end;
+    height: 3.05rem;
     display: inline-flex;
     align-items: center;
+    overflow: hidden;
     min-width: 0;
     max-width: min(14rem, 34vw);
     margin: 0 0 0 0.42rem;
@@ -613,6 +647,8 @@
     align-items: baseline;
     gap: 0.3rem;
     min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 0.3rem 0.62rem;
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-selected);
@@ -659,6 +695,7 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-app-switcher {
@@ -668,7 +705,7 @@
     align-items: center;
     gap: 0.45rem;
     box-sizing: border-box;
-    height: 100%;
+    height: 3.05rem;
     min-height: 0;
     overflow-x: auto;
     padding: 0.335rem 0.45rem;
@@ -712,10 +749,13 @@
   }
 
   .prompt-status {
-    position: absolute;
-    right: 1rem;
-    top: 0.2rem;
+    grid-column: 1 / -1;
+    position: relative;
     z-index: 3;
+    padding: 0.25rem 0.95rem 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--choir-accent-2);
     font-size: 0.72rem;
     font-weight: 800;
@@ -737,6 +777,10 @@
     opacity: 0.08;
   }
 
+  .agent-chyron.typing {
+    opacity: 0;
+  }
+
   .agent-chyron > div {
     display: inline-flex;
     gap: 2rem;
@@ -754,18 +798,45 @@
     to { transform: translateX(0); }
   }
 
-  .online-indicator {
-    align-self: center;
-    width: 0.78rem;
-    height: 0.78rem;
-    border-radius: var(--choir-radius-control-sm);
+  .prompt-submit {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    margin-bottom: 0.2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
     background: var(--choir-muted);
+    color: var(--choir-text-on-accent);
     box-shadow: 0 0 18px color-mix(in srgb, var(--choir-muted) 26%, transparent);
+    cursor: pointer;
   }
 
-  .online-indicator.online {
+  .prompt-submit.online {
     background: var(--choir-success);
     box-shadow: 0 0 18px color-mix(in srgb, var(--choir-success) 45%, transparent);
+  }
+
+  .prompt-submit:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .prompt-submit:focus-visible {
+    outline: 2px solid var(--choir-fg);
+    outline-offset: 2px;
+  }
+
+  .submit-glyph {
+    display: block;
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   @media (max-width: 768px) {
@@ -790,8 +861,20 @@
       min-height: 2.7rem;
     }
 
-    .command-field {
+    .prompt-target {
       height: 2.7rem;
+    }
+
+    .desk-mark-button {
+      margin-bottom: 0.125rem;
+    }
+
+    .mobile-app-switcher {
+      height: 2.7rem;
+    }
+
+    .prompt-submit {
+      margin-bottom: 0.05rem;
     }
 
     .mobile-app-switcher {

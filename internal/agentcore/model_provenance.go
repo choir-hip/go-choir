@@ -43,6 +43,7 @@ func (rt *Runtime) DocumentModelProvenance(ctx context.Context, ownerID, docID s
 		return types.ModelProvenance{}, err
 	}
 	var b types.ModelProvenanceBuilder
+	var sb types.SearchProvenanceBuilder
 	roleOf := map[string]string{}
 	for _, run := range runs {
 		role := modelProvenanceRole(&run)
@@ -51,6 +52,21 @@ func (rt *Runtime) DocumentModelProvenance(ctx context.Context, ownerID, docID s
 		evs, err := rt.store.ListRunEventsOfKind(ctx, ownerID, run.RunID, types.EventModelServed)
 		if err != nil {
 			return types.ModelProvenance{}, fmt.Errorf("model provenance: served lines of %s: %w", run.RunID, err)
+		}
+		searchEvs, err := rt.store.ListRunEventsOfKind(ctx, ownerID, run.RunID, types.EventSearchServed)
+		if err != nil {
+			return types.ModelProvenance{}, fmt.Errorf("model provenance: search lines of %s: %w", run.RunID, err)
+		}
+		for _, ev := range searchEvs {
+			var rec types.SearchServedRecord
+			if json.Unmarshal(ev.Payload, &rec) != nil || rec.Schema != types.SearchServedSchema {
+				continue
+			}
+			lineRole := role
+			if strings.TrimSpace(rec.Role) != "" {
+				lineRole = rec.Role
+			}
+			sb.AddServed(lineRole, rec)
 		}
 		recorded := false
 		for _, ev := range evs {
@@ -103,7 +119,9 @@ func (rt *Runtime) DocumentModelProvenance(ctx context.Context, ownerID, docID s
 			b.AddDelegate(report.RunID, role, firstNonEmpty(use.Model, types.ModelProviderClaudeDelegate), use.Calls)
 		}
 	}
-	return b.Build(docID), nil
+	out := b.Build(docID)
+	out.Search = sb.Build()
+	return out, nil
 }
 
 func modelProvenanceRunEnded(run *types.RunRecord) bool {

@@ -368,7 +368,7 @@
             class="secondary-action"
             data-texture-source-panel
             on:click={() => dispatch('sources')}
-            disabled={loading || submitting || agentPending || !hasCurrentDoc}
+            disabled={loading || !hasCurrentDoc}
           >
             <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
             <span class="label-compact">Sources</span>

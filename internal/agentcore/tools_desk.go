@@ -695,6 +695,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 								ev["error"] = done.err
 							}
 							rt.recordDeskEvent(context.WithoutCancel(egrCtx), cellExec, types.EventDeskEgress, ev)
+							if len(done.providers) > 0 {
+								rt.recordDeskEvent(context.WithoutCancel(egrCtx), cellExec, types.EventSearchServed, map[string]any{
+									"schema": types.SearchServedSchema, "role": cellExec.Role, "providers": done.providers,
+								})
+							}
 						})
 						if err == nil {
 							// An async search bypasses deskEgress; its read taints here.

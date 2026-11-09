@@ -7,7 +7,7 @@
     sourceEvidenceState,
     sourceEvidenceStateLabel,
   } from '../../lib/app-sdk';
-  import { modelProvenanceRows, modelSwitchLines } from './texture-model-provenance';
+  import { modelProvenanceRows, modelSwitchLines, searchProvenanceRows } from './texture-model-provenance';
 
   export let currentDoc = null;
   export let isPublishedReadOnly = false;
@@ -28,6 +28,7 @@
 
   $: modelRows = modelProvenanceRows(modelProvenance);
   $: modelSwitches = modelSwitchLines(modelProvenance);
+  $: searchRows = searchProvenanceRows(modelProvenance);
   $: modelRunsNote = modelProvenance
     ? `${Number(modelProvenance.runs_served) || 0} of ${Number(modelProvenance.runs) || 0} runs recorded`
     : '';
@@ -121,6 +122,30 @@
       {#if modelRunsNote}<p class="source-model-error">{modelRunsNote}</p>{/if}
     {:else}
       <p class="source-model-error" role="status">{modelProvenancePending ? 'Loading served models...' : 'No served models recorded for this document.'}</p>
+    {/if}
+  </div>
+
+  <div class="source-model-policy" data-texture-source-search-provenance>
+    <div class="source-artifact-heading">
+      <span class="evidence-label">Search</span>
+      <strong>{modelProvenancePending ? 'Reading runs' : 'Served this document'}</strong>
+    </div>
+    {#if searchRows.length}
+      <dl>
+        {#each searchRows as row}
+          <div data-texture-source-search-role={row.role}>
+            <dt>{row.label}</dt>
+            {#each row.providers as provider}
+              <dd data-texture-source-search-provider={provider.key}>
+                <span class="source-model-name">{provider.name}</span>
+                {#if provider.detail}<span class="source-model-detail">{provider.detail}</span>{/if}
+              </dd>
+            {/each}
+          </div>
+        {/each}
+      </dl>
+    {:else}
+      <p class="source-model-error" role="status">{modelProvenancePending ? 'Loading search providers...' : 'No search providers recorded for this document.'}</p>
     {/if}
   </div>
 

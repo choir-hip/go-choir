@@ -68,6 +68,7 @@ var eventStorage = map[EventKind]EventStorage{
 	// model.served: a few per run, read per run as a document's model
 	// provenance and never retired.
 	EventModelServed:   StorageObjectGraph,
+	EventSearchServed:  StorageObjectGraph,
 	EventStoryEntities: StorageObjectGraph,
 
 	// Object graph: owner acts and evidence.

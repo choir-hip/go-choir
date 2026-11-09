@@ -133,6 +133,9 @@ type ModelProvenance struct {
 	RunsServed int                     `json:"runs_served"`
 	Roles      []ModelProvenanceRole   `json:"roles"`
 	Switches   []ModelProvenanceSwitch `json:"switches,omitempty"`
+	// Search is the search providers that served the same runs
+	// (EventSearchServed), by desk role; absent when none were recorded.
+	Search *SearchProvenance `json:"search,omitempty"`
 }
 
 // ModelProvenanceSchema versions ModelProvenance.
