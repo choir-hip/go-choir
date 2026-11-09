@@ -752,7 +752,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// RLM prompt-as-variable: pending update_coagent records ride the
 			// frame so choir.Updates() exposes them inside the cell. The chat
 			// wake turn carries only ids.
-			updates := pendingCellUpdates(ctx, rt, execCtx)
+			updates, updatesRemaining := pendingCellUpdatesWindow(ctx, rt, execCtx)
 			// A story's research desk reads its story's entity analysis,
 			// built at the run's first cell (slice c0 §4).
 			analysis := rt.storyAnalysisFor(ctx, deskRole, execCtx)
@@ -790,7 +790,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
+				Updates: updates, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration,
+				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining)})
 			if res.CalibrationRead {
 				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, delivery)
 			}
@@ -932,6 +933,28 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 // this desk's agent and maps them into the cell-visible PendingUpdate shape
 // (RLM prompt-as-variable: the payload lives on the frame, not in chat).
 func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingUpdate {
+	out, _ := pendingCellUpdatesWindow(ctx, rt, execCtx)
+	return out
+}
+
+// frameBacklog is what a cell's window left out, or nil when it left nothing.
+func frameBacklog(records int64, updates int) *yaegikernel.FrameBacklog {
+	if records <= 0 && updates <= 0 {
+		return nil
+	}
+	return &yaegikernel.FrameBacklog{RecordsRemaining: records, UpdatesRemaining: updates}
+}
+
+// pendingCellUpdatesWindow is pendingCellUpdates cut to the frame's updates
+// budget, oldest first (the store lists them in arrival order), with the
+// count left out. The Autopaper's management desk had 1000 pending updates;
+// shown whole they overflowed the 4 MiB frame.
+func pendingCellUpdatesWindow(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) ([]yaegikernel.PendingUpdate, int) {
+	all := pendingCellUpdatesAll(ctx, rt, execCtx)
+	return yaegikernel.WindowUpdates(all, yaegikernel.FrameUpdatesBudget)
+}
+
+func pendingCellUpdatesAll(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingUpdate {
 	if rt == nil || rt.store == nil || execCtx.RunRecord == nil {
 		return nil
 	}

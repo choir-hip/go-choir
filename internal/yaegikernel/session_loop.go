@@ -48,6 +48,10 @@ type SessionFrame struct {
 	// Records carries the records addressed to this desk's inbox in
 	// (cursor, head] at cell start, read through choir.Records().
 	Records []InboxRecord `json:"records,omitempty"`
+	// Backlog says what the window of Records and Updates left out (the frame
+	// is bounded however long the desk's backlog), read through
+	// choir.Context().
+	Backlog *FrameBacklog `json:"backlog,omitempty"`
 	// Jobs carries this run's capsule jobs at cell start, read through
 	// choir.Poll (jobs.go).
 	Jobs []JobView `json:"jobs,omitempty"`

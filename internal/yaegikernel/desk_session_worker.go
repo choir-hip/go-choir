@@ -468,9 +468,11 @@ func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (
 		return SessionResult{}, fmt.Errorf("desk session worker dead")
 	}
 	frame.ID = nextDeskSessionFrameID()
-	raw, err := json.Marshal(frame)
+	// fitFrame cuts the backlog parts to the transport bound, so a desk's
+	// backlog can never make its cells fail to start.
+	raw, err := fitFrame(frame)
 	if err != nil {
-		return SessionResult{}, fmt.Errorf("desk eval marshal: %w", err)
+		return SessionResult{}, err
 	}
 	if err := w.framed.WriteFrame(StreamCell, raw); err != nil {
 		w.dead = true

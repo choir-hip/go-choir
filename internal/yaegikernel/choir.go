@@ -86,6 +86,8 @@ type ChoirScope struct {
 	// records is the cell-start snapshot of records addressed to this
 	// desk's inbox in (cursor, head], read via Records().
 	records []InboxRecord
+	// backlog is what the cell's window of records and updates left out.
+	backlog *FrameBacklog
 	// recordsShown is the highest record seq a Records() call in the bound
 	// cell returned, 0 when the cell never called it: the cell's commit
 	// marks read only what the desk was shown.
@@ -235,6 +237,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.clock, s.clockAt = frame.Clock, time.Now()
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.records = append([]InboxRecord(nil), frame.Records...)
+			s.backlog = frame.Backlog
 			s.jobs = append([]JobView(nil), frame.Jobs...)
 			s.recordsShown.Store(0)
 			s.takeAwaited()
@@ -253,6 +256,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.clock = nil
 			s.updates = nil
 			s.records = nil
+			s.backlog = nil
 			s.jobs = nil
 			return out
 		},
@@ -1451,6 +1455,20 @@ func (s *ChoirScope) Context() map[string]string {
 		"computer_id":   s.computerID,
 		"activation_id": s.activationID,
 		"co_super_slot": s.slot,
+	}
+	if b := s.backlog; b != nil {
+		// The frame carries a bounded window, oldest first. What is past it
+		// is reached by the next cell: the cursor moves through the records
+		// Records() returned.
+		if b.RecordsRemaining > 0 {
+			out["records_remaining"] = strconv.FormatInt(b.RecordsRemaining, 10)
+		}
+		if b.UpdatesRemaining > 0 {
+			out["updates_remaining"] = strconv.Itoa(b.UpdatesRemaining)
+		}
+		if b.Truncated {
+			out["backlog_truncated"] = "true"
+		}
 	}
 	if c := s.clock; c != nil && c.BudgetSec > 0 {
 		elapsed := c.ElapsedSec + int64(time.Since(s.clockAt)/time.Second)

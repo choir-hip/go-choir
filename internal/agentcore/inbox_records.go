@@ -46,6 +46,9 @@ type cellRecords struct {
 	after   int64
 	through int64
 	view    []yaegikernel.InboxRecord
+	// remaining counts the inbox sequence numbers past through, up to the
+	// head: the backlog the cell's window left for later cells.
+	remaining int64
 	// labels are the provenance labels of the records in view, host-side
 	// only (run_labels.go): the view the cell sees carries none.
 	labels []recordLabel
@@ -81,6 +84,17 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	if head <= after {
 		out.through = after
 	}
+	// The frame is one transport frame, so a cell reads a window of the
+	// backlog, oldest first: at most cellRecordsWindowSeqs sequence numbers
+	// past the cursor, and at most yaegikernel.FrameRecordsBudget bytes. The
+	// cursor advances only to the end of the window, so the next cell reads
+	// the next one and a backlog of any size drains in order. An unbounded
+	// range was a 5.5 MB frame on the Autopaper that no cell could start with
+	// (docs/evidence/paper-token-budget-2026-11-09.md section 1.3).
+	if out.through > after+cellRecordsWindowSeqs {
+		out.through = after + cellRecordsWindowSeqs
+	}
+	out.remaining = max(0, head-out.through)
 	if out.through <= from {
 		return out, nil
 	}
@@ -151,7 +165,36 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 			}
 		}
 	}
+	out.windowView()
+	out.remaining = max(0, head-out.through)
 	return out, nil
+}
+
+// cellRecordsWindowSeqs bounds how many inbox sequence numbers past the
+// cursor one cell's range spans, so a backlog is never loaded whole.
+const cellRecordsWindowSeqs = 256
+
+// windowView cuts the view to the frame's records budget. The records past
+// the cursor are the cell's to read: they are kept oldest first, whole seqs
+// only, and through moves back to the last seq kept. The records an earlier
+// cell of the run already read (seq at or below the cursor) fill what is left,
+// newest first.
+func (c *cellRecords) windowView() {
+	split := 0
+	for split < len(c.view) && c.view[split].Seq <= c.after {
+		split++
+	}
+	carry, unread := c.view[:split], c.view[split:]
+	kept, cut := yaegikernel.WindowRecords(unread, yaegikernel.FrameRecordsBudget)
+	if cut && len(kept) > 0 {
+		c.through = kept[len(kept)-1].Seq
+	}
+	used := 0
+	for _, r := range kept {
+		used += yaegikernel.RecordSize(r)
+	}
+	carry = yaegikernel.TailRecords(carry, max(0, yaegikernel.FrameRecordsBudget-used))
+	c.view = append(append([]yaegikernel.InboxRecord(nil), carry...), kept...)
 }
 
 // delegatedCaptureViews shows a task the captures records its opening Cast
