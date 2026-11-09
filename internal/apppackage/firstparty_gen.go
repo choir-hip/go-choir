@@ -5,7 +5,9 @@ package apppackage
 var firstPartyPackages = []firstPartyPackage{}
 
 // firstPartySettings is each in-tree package's contributes.settings, as canonical JSON.
-var firstPartySettings = map[string]string{}
+var firstPartySettings = map[string]string{
+	"settings": "[{\"fields\":[{\"default\":\"\",\"key\":\"background\",\"label\":\"Background image (a Files path; empty uses the theme colour)\",\"type\":\"string\"},{\"default\":\"cover\",\"enum\":[\"cover\",\"contain\",\"center\",\"tile\"],\"key\":\"background_fit\",\"label\":\"Background fit\",\"type\":\"string\"}],\"section\":\"Desktop background\"}]",
+}
 
 // builtinPackageNames are the in-tree first-party packages: an installed package of such a name replaces the built-in app, so only the owner's own track may install one.
 var builtinPackageNames = []string{

@@ -59,6 +59,8 @@
   import { installContextCoverage } from './context-coverage';
   import { bindShellHost, copyText as shellCopyText, openFile as shellOpenFile } from './shell-services';
   import { setTheme as setShellTheme } from './services/theme';
+  import { getSetting, onSetting, settingSections } from './services/settings';
+  import { BACKGROUND_FIT_KEY, BACKGROUND_KEY, BACKGROUND_SETTING_PKG, backgroundLayerStyle } from './desktop-background';
   import { bindCommandActions, commands, installKeyCapture } from './services/commands';
   import fileRoutes from './file-routes.json';
   import {
@@ -1590,6 +1592,20 @@
     unbindCommandActions();
   });
 
+  // The desktop background: its own setting, never the theme's (desktop-background.ts).
+  let backgroundPath = '';
+  let backgroundFit = 'cover';
+  $: backgroundStyle = backgroundLayerStyle(backgroundPath, backgroundFit);
+  async function loadBackground() {
+    backgroundPath = (await getSetting(BACKGROUND_KEY, BACKGROUND_SETTING_PKG)) ?? '';
+    backgroundFit = (await getSetting(BACKGROUND_FIT_KEY, BACKGROUND_SETTING_PKG)) ?? 'cover';
+  }
+  // Re-read when the declaration arrives (package load order) and when sign-in changes.
+  $: if ($settingSections || authenticated !== undefined) void loadBackground();
+  const stopBackgroundPath = onSetting(BACKGROUND_KEY, (v) => { backgroundPath = v; }, BACKGROUND_SETTING_PKG);
+  const stopBackgroundFit = onSetting(BACKGROUND_FIT_KEY, (v) => { backgroundFit = v; }, BACKGROUND_SETTING_PKG);
+  onDestroy(() => { stopBackgroundPath(); stopBackgroundFit(); });
+
   onMount(() => {
     mounted = true;
     currentSessionId();
@@ -1645,7 +1661,11 @@
   data-shell
   data-authenticated={authenticated}
   data-desktop-ready={desktopReady}
+  data-desktop-background={backgroundStyle ? 'image' : 'theme'}
 >
+  {#if backgroundStyle}
+    <div class="desktop-background" data-desktop-background-layer style={backgroundStyle} aria-hidden="true"></div>
+  {/if}
   <!-- Desktop surface (floating icons + windows, full viewport width) -->
   <div class="desktop-area {desktopReady ? 'state-loaded' : 'state-loading'}" data-desktop-windows>
     <!--
@@ -1870,6 +1890,20 @@
     min-height: 100dvh;
     background: var(--choir-bg);
     overflow: hidden;
+  }
+
+  .desktop {
+    position: relative;
+  }
+
+  /* The owner's background image: over the theme's bg (the letterbox colour and
+     fallback), under the icons and windows. See desktop-background.ts. */
+  .desktop-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-color: var(--choir-bg);
   }
 
   .desktop.desktop-loading {

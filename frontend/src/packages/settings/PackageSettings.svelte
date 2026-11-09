@@ -45,7 +45,7 @@
   onDestroy(() => { for (const off of watching.values()) off(); watching.clear(); });
 </script>
 
-{#each $settingSections as section (section.pkg + '/' + section.section)}
+{#each $settingSections.filter((sec) => sec.pkg !== 'settings') as section (section.pkg + '/' + section.section)}
   <div class="package-section" data-settings-package-section={section.pkg}>
     <h4>{section.section} <span class="package-name">{section.pkg}</span></h4>
     {#each section.fields as field (field.key)}

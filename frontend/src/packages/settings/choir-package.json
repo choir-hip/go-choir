@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "display": {
     "title": "Settings",
-    "icon": "⚙️",
+    "icon": "\u2699\ufe0f",
     "description": "Desktop settings"
   },
   "app": {
@@ -37,7 +37,36 @@
   "kinds": [],
   "uses_kinds": [],
   "contributes": {
-    "desks": []
+    "desks": [],
+    "settings": [
+      {
+        "section": "Desktop background",
+        "fields": [
+          {
+            "key": "background",
+            "type": "string",
+            "default": "",
+            "label": "Background image (a Files path; empty uses the theme colour)"
+          },
+          {
+            "key": "background_fit",
+            "type": "string",
+            "default": "cover",
+            "label": "Background fit",
+            "enum": [
+              "cover",
+              "contain",
+              "center",
+              "tile"
+            ]
+          }
+        ]
+      }
+    ]
   },
-  "capabilities": [{ "grant": "ui.shell" }]
+  "capabilities": [
+    {
+      "grant": "ui.shell"
+    }
+  ]
 }

@@ -5,7 +5,7 @@
   import { buildInfo, copyText, openApp, resetDesktop } from '../../lib/app-sdk';
   import { getTheme, onThemeChange, setTheme } from '../../lib/app-sdk';
   import { addLiveEventListener, liveEventKind } from '../../lib/app-sdk';
-  import { settingSections } from '../../lib/app-sdk';
+  import { settingSections, getSetting, setSetting, onSetting, pickFiles, uploadFiles, currentDeviceId } from '../../lib/app-sdk';
   import PackageSettings from './PackageSettings.svelte';
   import WhoProvides from './WhoProvides.svelte';
   import {
@@ -18,6 +18,91 @@
   } from '../../lib/app-sdk';
 
   export let currentUser = null;
+
+  // ---- Desktop background: its own setting, separate from the theme ----
+  // (lib/desktop-background.ts holds the rules; a package may import only the SDK,
+  // so the small image/mail filter is repeated here and the Desktop re-checks it.)
+  const BG_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+  const BG_FITS = ['cover', 'contain', 'center', 'tile'];
+  const BG_FOLDER = 'Pictures/Backgrounds';
+  let bgPath = '';
+  let bgFit = 'cover';
+  let bgBrowsing = false;
+  let bgDir = [];
+  let bgEntries = [];
+  let bgError = '';
+  let bgNotice = '';
+  let bgBusy = false;
+  const isBgImage = (name) => BG_EXT.includes(String(name).split('.').pop().toLowerCase());
+  const filesURL = (parts) => '/api/files' + (parts.length ? '/' + parts.map(encodeURIComponent).join('/') : '');
+  const removeBgListeners = [
+    onSetting('background', (v) => { bgPath = typeof v === 'string' ? v : ''; }, 'settings'),
+    onSetting('background_fit', (v) => { bgFit = BG_FITS.includes(v) ? v : 'cover'; }, 'settings'),
+  ];
+  onDestroy(() => removeBgListeners.forEach((off) => off()));
+  async function loadBgSettings() {
+    const p = await getSetting('background', 'settings');
+    const f = await getSetting('background_fit', 'settings');
+    bgPath = typeof p === 'string' ? p : '';
+    bgFit = BG_FITS.includes(f) ? f : 'cover';
+  }
+  $: if ($settingSections) void loadBgSettings();
+  async function saveBg(key, value) {
+    bgError = '';
+    const result = await setSetting(key, value, 'settings');
+    if (!result.ok) bgError = result.error || 'Could not save the background';
+    return result.ok;
+  }
+  async function useThemeColour() {
+    if (await saveBg('background', '')) { bgPath = ''; bgNotice = 'Using the theme colour'; }
+  }
+  async function chooseBgFile(path) {
+    if (await saveBg('background', path)) { bgPath = path; bgBrowsing = false; bgNotice = `Background set to ${path}`; }
+  }
+  async function chooseBgFit(fit) {
+    if (await saveBg('background_fit', fit)) bgFit = fit;
+  }
+  async function browseBg(dir = bgDir) {
+    bgError = '';
+    try {
+      const res = await fetchWithRenewal(filesURL(dir), { method: 'GET' });
+      if (!res.ok) { bgError = `Files answered ${res.status}`; return; }
+      const list = await res.json();
+      bgDir = dir;
+      bgBrowsing = true;
+      bgEntries = (Array.isArray(list) ? list : [])
+        // Mail is the Mail agent's custody: never offered.
+        .filter((e) => !(dir.length === 0 && String(e.name).toLowerCase() === 'mail'))
+        .filter((e) => e.type === 'directory' || isBgImage(e.name))
+        .sort((a, b) => (a.type === b.type ? String(a.name).localeCompare(String(b.name)) : a.type === 'directory' ? -1 : 1));
+    } catch (_err) {
+      bgError = 'Could not list Files';
+    }
+  }
+  async function ensureBgFolder() {
+    let parts = [];
+    for (const part of BG_FOLDER.split('/')) {
+      parts = [...parts, part];
+      // 409 means it exists already.
+      await fetchWithRenewal(filesURL(parts), { method: 'POST', headers: { 'X-Choir-Device': currentDeviceId() } }).catch(() => {});
+    }
+  }
+  async function uploadBg() {
+    bgError = '';
+    const picked = await pickFiles({ accept: BG_EXT, multiple: false });
+    if (!picked.length) return;
+    if (!isBgImage(picked[0].name)) { bgError = 'Choose a png, jpg, webp or gif image'; return; }
+    bgBusy = true;
+    try {
+      await ensureBgFolder();
+      const [stored] = await uploadFiles(picked, { folder: BG_FOLDER });
+      await chooseBgFile(stored);
+    } catch (err) {
+      bgError = err?.message || 'The upload failed';
+    } finally {
+      bgBusy = false;
+    }
+  }
   export let currentTheme = DEFAULT_THEME;
 
   let loading = true;
@@ -662,7 +747,47 @@
       <WhoProvides />
     </section>
 
-    {#if $settingSections.length > 0}
+    <section class="settings-card" data-settings-background>
+      <div>
+        <h3>Desktop background</h3>
+        <p class="muted">An image from Files. Themes never change it, and it never changes the theme.</p>
+      </div>
+      <p class="theme-status" data-settings-background-current>
+        {bgPath ? `Image: ${bgPath}` : 'Theme colour'}
+      </p>
+      <div class="theme-presets">
+        <button class="theme-preset" class:active={!bgPath} data-background-theme-colour on:click={useThemeColour}>Theme colour</button>
+        <button class="theme-preset" data-background-choose on:click={() => browseBg([])}>Choose from Files</button>
+        <button class="theme-preset" data-background-upload disabled={bgBusy} on:click={uploadBg}>{bgBusy ? 'Uploading...' : 'Upload'}</button>
+      </div>
+      <div class="theme-presets" data-background-fits>
+        {#each BG_FITS as fit}
+          <button class="theme-preset" class:active={bgFit === fit} data-background-fit={fit} on:click={() => chooseBgFit(fit)}>{fit}</button>
+        {/each}
+      </div>
+      {#if bgBrowsing}
+        <div class="bg-picker" data-background-picker>
+          <p class="muted">/{bgDir.join('/')}</p>
+          <div class="theme-presets">
+            {#if bgDir.length > 0}
+              <button class="theme-preset" data-background-up on:click={() => browseBg(bgDir.slice(0, -1))}>..</button>
+            {/if}
+            {#each bgEntries as entry (entry.name)}
+              {#if entry.type === 'directory'}
+                <button class="theme-preset" data-background-dir={entry.name} on:click={() => browseBg([...bgDir, entry.name])}>{entry.name}/</button>
+              {:else}
+                <button class="theme-preset" data-background-file={entry.name} on:click={() => chooseBgFile([...bgDir, entry.name].join('/'))}>{entry.name}</button>
+              {/if}
+            {/each}
+          </div>
+          {#if bgEntries.length === 0}<p class="muted">No images or folders here.</p>{/if}
+        </div>
+      {/if}
+      {#if bgNotice}<p class="theme-notice" data-background-notice>{bgNotice}</p>{/if}
+      {#if bgError}<p class="settings-error" role="alert" data-background-error>{bgError}</p>{/if}
+    </section>
+
+    {#if $settingSections.some((sec) => sec.pkg !== 'settings')}
       <section class="settings-card" data-settings-packages>
         <div>
           <h3>Packages</h3>
