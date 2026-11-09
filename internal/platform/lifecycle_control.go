@@ -44,7 +44,11 @@ func lifecycleControlCommitment(request LifecycleControlRequest) (string, error)
 
 func isOwnerVMLifecycleAction(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "start", "stop", "restart", "refresh", "recover":
+	case "start", "stop", "restart", "refresh", "recover", "update":
+		// "update" is the owner's planned restart onto the new release
+		// (docs/design/update-now-2026-11-09.md). Host-side audit only: it is
+		// NOT in PendingLifecycleControls, the CAS allowedActions or the guest
+		// allowlist (a receipt the guest refuses is boot-fatal).
 		return true
 	default:
 		return false
@@ -53,7 +57,7 @@ func isOwnerVMLifecycleAction(action string) bool {
 
 func OwnerVMLifecycleAdvancesEpoch(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "restart", "refresh":
+	case "restart", "refresh", "update":
 		return true
 	default:
 		return false

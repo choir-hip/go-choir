@@ -165,7 +165,10 @@ const (
 	deployRefreshRefreshed = "refreshed"
 	deployRefreshDeferred  = "deferred"
 	deployRefreshSkipped   = "skipped"
-	deployRefreshFailed    = "failed"
+	// deployRefreshCurrent: the owner update found the computer already on the
+	// release it would boot (owner_update.go); nothing was marked or restarted.
+	deployRefreshCurrent = "current"
+	deployRefreshFailed  = "failed"
 )
 
 type deployRefreshRequest struct {
@@ -174,12 +177,23 @@ type deployRefreshRequest struct {
 	// Target is the build the refresh moves the computer onto; it is recorded
 	// in the guest's planned-restart marker.
 	Target string `json:"target"`
+	// OwnerBusy marks the owner update (the proxy's owner-update route): the
+	// guest is asked with allow_busy, and vmctl resolves the target itself
+	// (guestReleaseFor), ignoring Target. A convention on an internal-caller
+	// endpoint, not an enforcement boundary (docs/design/update-now-2026-11-09.md).
+	OwnerBusy bool `json:"owner_busy,omitempty"`
 }
 
 type deployRefreshResponse struct {
-	Outcome        string `json:"outcome"`
-	Reason         string `json:"reason,omitempty"`
-	PlannedRestart bool   `json:"planned_restart"`
+	Outcome string `json:"outcome"`
+	Reason  string `json:"reason,omitempty"`
+	// Target is the release the owner update resolved (ring-intended).
+	Target string `json:"target,omitempty"`
+	// ReasonCode and Refusal carry the guest's structured busy refusal for the
+	// owner update: a short code and the guest's body, unparsed.
+	ReasonCode     string          `json:"reason_code,omitempty"`
+	Refusal        json.RawMessage `json:"refusal,omitempty"`
+	PlannedRestart bool            `json:"planned_restart"`
 	// BusyAllowed: vmctl asked the guest with allow_busy (an always-on
 	// platform computer), so running runs did not defer the refresh.
 	BusyAllowed bool `json:"busy_allowed,omitempty"`
@@ -386,13 +400,18 @@ func (h *Handler) HandleDeployRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	req.UserID = strings.TrimSpace(req.UserID)
 	req.Target = strings.TrimSpace(req.Target)
-	if req.UserID == "" || req.Target == "" {
+	if req.UserID == "" || (req.Target == "" && !req.OwnerBusy) {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id and target are required"})
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
 	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	if req.OwnerBusy {
+		resp, status := h.ownerUpdate(r.Context(), req)
+		writeVMCTLJSON(w, status, resp)
 		return
 	}
 	resp, status := h.trackedDeployRefresh(r.Context(), req, "deploy")
@@ -412,7 +431,7 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		return deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: "no computer", UserID: req.UserID, DesktopID: req.DesktopID}, http.StatusNotFound
 	}
 	own := *existing
-	allowBusy := deployRefreshAllowsBusy(h.registry.WarmnessClassForOwnership(&own))
+	allowBusy := deployRefreshAllowsBusy(h.registry.WarmnessClassForOwnership(&own)) || req.OwnerBusy
 	base := deployRefreshResponse{VMID: own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, ComputerURL: own.ComputerURL, State: string(own.State), BusyAllowed: allowBusy}
 	reply := func(outcome, reason string, status int) (deployRefreshResponse, int) {
 		base.Outcome, base.Reason = outcome, reason
@@ -482,6 +501,9 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		planned = true
 	case guestMarkBusy:
 		base.GuestHoldsNewWork = guestRefusalHoldsNewWork(detail)
+		if req.OwnerBusy {
+			base.ReasonCode, base.Refusal = guestRefusalCode(detail)
+		}
 		return reply(deployRefreshDeferred, "busy: "+detail, http.StatusConflict)
 	case guestMarkUnsupported:
 		// Offline maintenance (the store compaction) is never worth a crash

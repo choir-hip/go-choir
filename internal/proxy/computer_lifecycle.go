@@ -24,7 +24,7 @@ func parseComputerLifecyclePath(path string) (computerID, action string, ok bool
 		return "", "", false
 	}
 	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
-	if len(parts) != 3 || parts[1] != "lifecycle" || (parts[2] != "status" && parts[2] != "start" && parts[2] != "stop" && parts[2] != "restart" && parts[2] != "refresh" && parts[2] != "recover") {
+	if len(parts) != 3 || parts[1] != "lifecycle" || (parts[2] != "status" && parts[2] != "start" && parts[2] != "stop" && parts[2] != "restart" && parts[2] != "refresh" && parts[2] != "recover" && parts[2] != "update") {
 		return "", "", false
 	}
 	computerID, err := url.PathUnescape(parts[0])
@@ -89,7 +89,15 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	if authResult.AuthMethod == "api_key" && !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, "computer:lifecycle") {
+	if action == "update" {
+		// The owner update restarts the owner's computer while runs are in
+		// flight: an owner act. For update the only api-key gate is owner_acts
+		// (exempt from the shared computer:lifecycle check; admin does not
+		// grant it, and agent-minted keys never hold it).
+		if !authorizeOwnerAct(w, authResult, "computer update") {
+			return
+		}
+	} else if authResult.AuthMethod == "api_key" && !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, "computer:lifecycle") {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing exact computer:lifecycle scope"})
 		return
 	}
@@ -182,6 +190,31 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		}
 	case "refresh":
 		_, err = h.vmctlClient.RefreshDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
+	case "update":
+		// The deploy-refresh path (marker-backed planned restart), never
+		// /internal/vmctl/refresh. Only "refreshed" restarts and writes a
+		// receipt; every other outcome answers here and leaves the intent row
+		// as sibling failures do.
+		var updated *vmctl.OwnerUpdateResult
+		if updated, err = h.vmctlClient.OwnerUpdateContext(opCtx, ownership.UserID, ownership.DesktopID); err == nil {
+			switch updated.Outcome {
+			case "refreshed":
+			case "current":
+				writeJSON(w, http.StatusOK, map[string]any{"outcome": "current", "target": updated.Target})
+				return
+			default:
+				reason := updated.ReasonCode
+				if reason == "" {
+					reason = updated.Reason
+				}
+				body := map[string]any{"outcome": updated.Outcome, "reason": reason}
+				if len(updated.Refusal) > 0 {
+					body["detail"] = updated.Refusal
+				}
+				writeJSON(w, http.StatusConflict, body)
+				return
+			}
+		}
 	case "recover":
 		// Owner-directed recovery on the general product path (no per-user
 		// special-casing): clear the maintenance hold (authorised, idempotent

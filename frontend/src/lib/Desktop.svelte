@@ -46,6 +46,7 @@
     renewDriverLease,
   } from './live-events.js';
   import ChoirField from './ChoirField.svelte';
+  import UpdateChip from './UpdateChip.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
   import AppHost from './AppHost.svelte';
   import ShellSlot from './ShellSlot.svelte';
@@ -1922,6 +1923,9 @@
     />
   </ShellSlot>
   <ModalHost />
+  {#if authenticated && desktopReady && bootstrapData?.computer_id}
+    <UpdateChip computerId={bootstrapData.computer_id} liveStatus={$liveStatus} />
+  {/if}
 </div>
 
 <style>
