@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
+	"github.com/yusefmosiah/go-choir/internal/pkgruntime"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -66,6 +67,35 @@ func refuseDeskInstall(ownerID string, rec pkgrelease.Record) *installRefusal {
 	}
 	if rec.Track != ownerID {
 		return refuseInstall(http.StatusForbidden, "desk_track_not_yours", "package %s carries a first-party desk; only its owner's own track may install one", pkg)
+	}
+	return nil
+}
+
+// reasonDeskRowRefused names an install whose desk the sync could never
+// register: the manifest's desk is not the one row a release may carry.
+const reasonDeskRowRefused = "desk_row_refused"
+
+// checkDeskRow runs the sync's own registration test on the built module's
+// manifest, so an install never says yes (and the review never seals a verdict)
+// for a desk that would not exist: one desk, named for the package, and for
+// another publisher's package a row releaseDeskManifest accepts.
+func checkDeskRow(rec pkgrelease.Record, module pkgruntime.Module) *installRefusal {
+	if rec.Manifest.DesksCount == 0 {
+		return nil
+	}
+	pkg := rec.Package.Name
+	m, err := apppackage.ParseManifest(module.Manifest, apppackage.OriginPublished)
+	if err != nil {
+		return refuseInstall(http.StatusUnprocessableEntity, reasonDeskRowRefused, "package %s: the built manifest does not parse: %v", pkg, err)
+	}
+	if len(m.Contributes.Desks) != 1 || m.Contributes.Desks[0].Name != pkg {
+		return refuseInstall(http.StatusUnprocessableEntity, reasonDeskRowRefused, "package %s: a release carries exactly one desk, named for the package", pkg)
+	}
+	if deskmanifest.FirstPartyAppSlug(pkg) {
+		return nil
+	}
+	if _, err := releaseDeskManifest(m); err != nil {
+		return refuseInstall(http.StatusUnprocessableEntity, reasonDeskRowRefused, "%v", err)
 	}
 	return nil
 }

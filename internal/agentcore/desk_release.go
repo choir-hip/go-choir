@@ -39,12 +39,13 @@ import (
 const releaseDeskWorkerBytes = 128 << 20
 
 // releaseDeskVerbs maps a granted desk capability to the app verbs it opens.
-// Report and Done are every desk's (a run must be able to end).
+// Report and Done are every desk's (a run must be able to end). desk.request
+// opens no verb: a release's row carries no lease ceiling, so a RequestLease
+// could only die at the custodian.
 var releaseDeskVerbs = map[string][]string{
 	"desk.act":           {"Cast", "Ask", "Reply", "Escalate"},
 	"desk.act.cancel":    {"CancelAct"},
 	"desk.captures.read": {"ReadCapture"},
-	"desk.request":       {"RequestLease"},
 }
 
 // releaseDeskManifest is the desk manifest a release's package manifest

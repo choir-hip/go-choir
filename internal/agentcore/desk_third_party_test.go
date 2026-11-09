@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
@@ -29,7 +30,10 @@ import (
 //	    prompt;
 //	T4  a not-ready computer installs it, registers it, or wakes it;
 //	T5  a first-party or built-in name is taken by another publisher's desk;
-//	T6  a sandbox that stops being ready leaves the desk registered.
+//	T6  a sandbox that stops being ready leaves the desk registered;
+//	T7  the install admits (and the review seals) a desk whose row can never
+//	    register, such as one named "<pkg>-<suffix>": the install says yes
+//	    and the computer has no desk.
 const (
 	thirdPartyPkg    = "notes-desk"
 	thirdPartyPrompt = "You keep the owner's notes tidy. Use only your own records.\n"
@@ -47,12 +51,18 @@ const (
 
 // thirdPartyBuilder is the fake builder that, like the real one, keeps the
 // desk's prompt as a data file of the module.
-type thirdPartyBuilder struct{ fakeModuleBuilder }
+type thirdPartyBuilder struct {
+	fakeModuleBuilder
+	manifest string // the module's manifest; thirdPartyManif when empty
+}
 
 func (b *thirdPartyBuilder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []byte) (pkgruntime.Module, error) {
 	m, err := b.fakeModuleBuilder.Build(ctx, rec, treePatch)
 	sum := sha256.Sum256([]byte(thirdPartyPrompt))
 	m.Manifest = json.RawMessage(thirdPartyManif)
+	if b.manifest != "" {
+		m.Manifest = json.RawMessage(b.manifest)
+	}
 	m.Files = []pkgruntime.File{{Path: "prompt.md", SHA256: hex.EncodeToString(sum[:]), Bytes: []byte(thirdPartyPrompt)}}
 	return m, err
 }
@@ -159,5 +169,28 @@ func TestThirdPartyDeskNeverTakesAReservedName(t *testing.T) {
 	two := pkgrelease.Record{Package: pkgrelease.Package{Name: "two-desks"}, Track: "owner-x", Manifest: pkgrelease.Manifest{DesksCount: 2}}
 	if refusal := refuseDeskInstall("owner-1", two); refusal == nil {
 		t.Error("two desks in one release were admitted")
+	}
+}
+
+// T7: a desk the row cannot carry is refused at install, before the review
+// spends a verdict on it, and registers nothing.
+func TestThirdPartyDeskWhoseRowCannotRegisterIsRefusedAtInstall(t *testing.T) {
+	e := newDrillEnv(t)
+	suffixed := strings.Replace(thirdPartyManif, `"name": "notes-desk", "prompt"`, `"name": "notes-desk-plus", "prompt"`, 1)
+	if suffixed == thirdPartyManif {
+		t.Fatal("test setup: the desk name was not changed")
+	}
+	e.rt.packageBuilder = &thirdPartyBuilder{manifest: suffixed}
+	e.files = map[string]string{"choir-package.json": suffixed, "prompt.md": thirdPartyPrompt}
+	readySandbox(t)
+	_, id, raw, tree := publishedPackageNamed(t, thirdPartyPkg, e.repo, e.base, "owner-publisher", e.files)
+	code, _, reason := e.post(t, installBody(t, id, raw, tree, ""))
+	if code != http.StatusUnprocessableEntity || reason != reasonDeskRowRefused {
+		t.Fatalf("T7 = %d %s, want 422 %s", code, reason, reasonDeskRowRefused)
+	}
+	for _, name := range []string{"app:notes-desk", "app:notes-desk-plus"} {
+		if _, ok := deskmanifest.Lookup(name); ok {
+			t.Fatalf("T7: %s registered", name)
+		}
 	}
 }

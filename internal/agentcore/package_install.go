@@ -309,6 +309,11 @@ func (rt *Runtime) buildCheckedModule(ctx context.Context, ownerID, computerID, 
 	if err := pkgrelease.CheckUses(module.Manifest, module.Uses); err != nil {
 		return pkgruntime.Module{}, false, refuseInstall(http.StatusUnprocessableEntity, pkgrelease.ReasonUsesExceedGrants, "%v", err)
 	}
+	// A desk the sync could not register is refused before the review
+	// spends a verdict on it.
+	if refusal := checkDeskRow(rec, module); refusal != nil {
+		return pkgruntime.Module{}, false, refusal
+	}
 	// The install review gate (MA7.5): a widened ceiling stores its module
 	// and records only with a sealed accepting verdict for exactly these
 	// bytes.
