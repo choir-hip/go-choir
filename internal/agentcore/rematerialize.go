@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -553,7 +554,7 @@ func (rt *Runtime) EnsureComputerSurface(ctx context.Context) error {
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
 		return nil
 	}
-	_, err := rt.ensureServingBaseline(ctx, strings.TrimSpace(rt.cfg.ComputerID), trustedBaselineReleaseRoot())
+	_, err := rt.ensureServingBaselineAtBoot(ctx, strings.TrimSpace(rt.cfg.ComputerID), trustedBaselineReleaseRoot())
 	return err
 }
 
@@ -566,6 +567,20 @@ func (rt *Runtime) ensureCheckpointReleaseManifest(ctx context.Context, computer
 // caller can enforce the immutable /nix/store trust boundary before any
 // updater mutation is attempted.
 func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error) {
+	return rt.ensureServingBaselineWith(ctx, computerID, baselineRoot, false)
+}
+
+// ensureServingBaselineAtBoot is ensureServingBaseline plus the boot-only
+// follow step: a `current` that is a pure base import whose served frontend
+// differs from the booted baseline's is restaged from the baseline, so the
+// frontend follows the backend across deploys (docs/problems/
+// stale-frontend-after-base-restore-2026-11-09.md). It never runs on the
+// checkpoint path, where a release digest may already be bound.
+func (rt *Runtime) ensureServingBaselineAtBoot(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error) {
+	return rt.ensureServingBaselineWith(ctx, computerID, baselineRoot, true)
+}
+
+func (rt *Runtime) ensureServingBaselineWith(ctx context.Context, computerID, baselineRoot string, followBase bool) (updater.ReleaseManifest, error) {
 	var empty updater.ReleaseManifest
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
 		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
@@ -582,6 +597,9 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	if err == nil {
 		if strings.TrimSpace(manifest.ComputerID) != computerID {
 			return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable (current release is bound to another computer)")
+		}
+		if followBase {
+			manifest = rt.followBootedBase(ctx, computerID, baselineRoot, manifest)
 		}
 		rt.recordStartupManifest(manifest)
 		return manifest, nil
@@ -614,27 +632,118 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	return manifest, nil
 }
 
+// followBootedBase restages `current` from the booted baseline when it is a
+// pure base import (marker genesis-baseline, zero accepted head, no layering
+// entrypoint, this computer) whose served content, the frontend/ tree, differs
+// from the baseline's. Content equality, not release-digest equality: every
+// deploy stamps the binary and build.json, so whole-release digests always
+// differ, and an unchanged frontend needs no copy (the recorded release then
+// names an older build stamp than the running binary; EffectiveRelease reads
+// the source tree from the binary's commit for a base release, so nothing
+// compares the two). The caller holds currentReleaseMu. Any refusal or
+// failure keeps the verified `current` it was given: a computer that serves
+// an older frontend must still boot.
+func (rt *Runtime) followBootedBase(ctx context.Context, computerID, baselineRoot string, current updater.ReleaseManifest) updater.ReleaseManifest {
+	baselineRoot = strings.TrimSpace(baselineRoot)
+	if baselineRoot == "" || !isPureBaseImportManifest(current, computerID) {
+		return current
+	}
+	bootedFrontend := updater.FrontendDigestOfDir(filepath.Join(baselineRoot, "frontend"))
+	if bootedFrontend == "" || bootedFrontend == updater.FrontendDigestOfManifest(current) {
+		return current
+	}
+	if journal, unsettled := updater.UnsettledApply(rt.selfdevUpdaterRoot); unsettled {
+		log.Printf("runtime: base frontend follow deferred: apply journal %s is unsettled or unreadable", journal)
+		return current
+	}
+	target, err, routeErr := rt.servingBaselineManifestWithRoute(ctx, computerID, baselineRoot)
+	if err != nil {
+		log.Printf("runtime: base frontend follow skipped: the booted baseline manifest: %v", err)
+		return current
+	}
+	if routeErr != nil {
+		// The manifest would carry genesis refs instead of the route's.
+		log.Printf("runtime: base frontend follow skipped: the route cannot be read: %v", routeErr)
+		return current
+	}
+	floor := rt.storeFloorPath()
+	if err := updater.StageBaselineRelease(rt.selfdevUpdaterRoot, baselineRoot, target, floor); err != nil {
+		log.Printf("runtime: base frontend follow refused at stage: %v", err)
+		return current
+	}
+	if rt.followBaseAt != nil {
+		rt.followBaseAt()
+	}
+	// currentReleaseMu is in-process only. The updater daemon is another
+	// process: it can take an apply key and swap `current` while this staged
+	// (seconds). Re-check right before the swap; what remains is the window
+	// between this check and the rename (see the problem doc).
+	if journal, unsettled := updater.UnsettledApply(rt.selfdevUpdaterRoot); unsettled {
+		log.Printf("runtime: base frontend follow deferred before the swap: apply state %s (the staged release stays pinned)", journal)
+		return rt.liveCurrentOr(current)
+	}
+	if now, err := readCurrentManifestIdentity(rt.selfdevUpdaterRoot); err != nil || now.ContentDigest != current.ContentDigest {
+		log.Printf("runtime: base frontend follow not swapped: current moved from %s while the baseline was staged (%v)", shortDigest(current.ContentDigest), err)
+		return rt.liveCurrentOr(current)
+	}
+	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, target.ContentDigest, floor); err != nil {
+		log.Printf("runtime: base frontend follow refused at swap: %v", err)
+		return rt.liveCurrentOr(current)
+	}
+	log.Printf("runtime: base frontend follow: current restaged %s -> %s", shortDigest(current.ContentDigest), shortDigest(target.ContentDigest))
+	return target
+}
+
+// liveCurrentOr reads and verifies the `current` actually served, so the
+// startup record names it; fallback when it cannot be read.
+func (rt *Runtime) liveCurrentOr(fallback updater.ReleaseManifest) updater.ReleaseManifest {
+	if live, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot); err == nil {
+		return live
+	}
+	return fallback
+}
+
 // servingBaselineManifest is the baseline release manifest of baselineRoot as
 // this computer imports it: its code and artifact refs are the route's
 // current ones, or genesis when no route answers. The boot import and the
 // forced-modularity migration name the same release through it.
 func (rt *Runtime) servingBaselineManifest(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error) {
+	manifest, err, _ := rt.servingBaselineManifestWithRoute(ctx, computerID, baselineRoot)
+	return manifest, err
+}
+
+// servingBaselineManifestWithRoute also returns the route read's failure
+// (nil when no route is configured, the route answers, or it answers
+// "absent"). The manifest then carries genesis refs; a caller that must not
+// bind them on a vmctl hiccup (the boot follow) checks routeErr.
+func (rt *Runtime) servingBaselineManifestWithRoute(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error, error) {
 	codeRef := "code:genesis"
 	artifactRef := "artifact-program:genesis"
+	var routeErr error
 	if rt.selfdevRoute != nil {
 		slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
-		if err == nil {
-			if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err == nil && !resolution.RouteAbsent {
-				if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
-					codeRef = rCode
-				}
-				if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
-					artifactRef = rArt
-				}
+		if err != nil {
+			routeErr = err
+		} else if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err != nil {
+			routeErr = err
+		} else if !resolution.RouteAbsent {
+			if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
+				codeRef = rCode
+			}
+			if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
+				artifactRef = rArt
 			}
 		}
 	}
-	return updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
+	manifest, err := updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
+	return manifest, err, routeErr
+}
+
+// isPureBaseImportManifest is releaseIsPureBaseImport's test on a manifest
+// already in hand.
+func isPureBaseImportManifest(manifest updater.ReleaseManifest, computerID string) bool {
+	return manifest.Marker == "genesis-baseline" && manifest.AcceptedEventHead == computerevent.ZeroHead &&
+		manifest.LayeringEntrypoint == "" && strings.TrimSpace(manifest.ComputerID) == computerID
 }
 
 // startupManifestFacts is one consistent read of the startup-manifest fields.

@@ -1024,6 +1024,17 @@ func (rt *Runtime) rollbackPackageMigration(ctx context.Context, pair string) (*
 	if err != nil {
 		return rec, fmt.Errorf("%w: the served release cannot be read: %v", errPackageMigrationDrifted, err)
 	}
+	if current.ContentDigest != "" && current.ContentDigest != served && current.ContentDigest != alreadyRestored &&
+		served != "" && isPureBaseImportManifest(current, rt.cfg.ComputerID) {
+		// The boot follow restages a pure base import when the booted
+		// baseline's frontend changed, so a pure base `current` after a
+		// migration that served a pure base is the same base, not a later
+		// change. The restore below restages the pinned snapshot whatever
+		// `current` is, and the install undo does not read it.
+		if pure, _, err := rt.releaseIsPureBaseImport(rt.cfg.ComputerID, served); err == nil && pure {
+			served = current.ContentDigest
+		}
+	}
 	if current.ContentDigest == "" || (current.ContentDigest != served && current.ContentDigest != alreadyRestored) {
 		return rec, fmt.Errorf("%w: the computer serves %s, not the release %s the migration served (nor its snapshot %s); restoring the snapshot would undo a later change", errPackageMigrationDrifted, shortDigest(current.ContentDigest), shortDigest(served), shortDigest(alreadyRestored))
 	}

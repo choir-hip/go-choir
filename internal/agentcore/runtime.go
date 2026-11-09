@@ -628,6 +628,9 @@ type Runtime struct {
 	packageMigrationWait     *packageMigrationWaiting // PM33: why no attempt runs now; same mutex
 	packageMigrationBaseline string
 	packageMigrationAt       func(step string)
+	// followBaseAt is a test seam: called after the boot follow staged the
+	// baseline and before it re-checks and swaps.
+	followBaseAt func()
 	// packageMigrationWriteFault: tests inject a record write failure.
 	packageMigrationWriteFault func(rec *packageMigrationRecord) error
 	// Updates (F1, package_update.go): the last update sync's view per
