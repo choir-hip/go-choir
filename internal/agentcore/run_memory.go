@@ -806,7 +806,36 @@ func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens in
 	}, true
 }
 
+// Prompt-token ceilings on the compaction threshold (owner, 2026-11-09: "keep
+// every request within 100,000 prompt tokens; the engineering desk may go to
+// 200,000"). Bedrock bills a Haiku 5.5 request over 100k prompt tokens (cache
+// reads included) at 5x for the whole request, and that model's catalog window
+// is 1,000,000, so 70% of the window would be 700k. Each ceiling sits 10% under
+// its limit because the token estimate is approximate. They are constants, not
+// settings.
+const (
+	runMemoryPromptCeilingTokens            = 90_000
+	runMemoryEngineeringPromptCeilingTokens = 180_000
+)
+
+// promptCeilingTokens is the ceiling for this run's desk: the engineering
+// desk (the performer of admitted assignments) gets the higher one.
+func (m *runMemoryManager) promptCeilingTokens() int {
+	if m.rec != nil && agentProfileForRun(m.rec) == deskmanifest.PerformerName() {
+		return runMemoryEngineeringPromptCeilingTokens
+	}
+	return runMemoryPromptCeilingTokens
+}
+
 func (m *runMemoryManager) effectiveContextThresholdTokens() int {
+	threshold := m.uncappedContextThresholdTokens()
+	if ceiling := m.promptCeilingTokens(); threshold > ceiling {
+		return ceiling
+	}
+	return threshold
+}
+
+func (m *runMemoryManager) uncappedContextThresholdTokens() int {
 	if m.cfg.RunMemoryContextThresholdTokens > 0 {
 		return m.cfg.RunMemoryContextThresholdTokens
 	}
