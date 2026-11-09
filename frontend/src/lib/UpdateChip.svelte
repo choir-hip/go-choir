@@ -54,10 +54,11 @@
   }
 
   async function readSignal() {
-    if (!computerId || destroyed) return null;
+    // undefined: the read failed (unknown); null: no update is available.
+    if (!computerId || destroyed) return undefined;
     try {
       const res = await fetchWithRenewal(`${path}/update`, { headers: { Accept: 'application/json' } });
-      if (!res.ok) return null;
+      if (!res.ok) return undefined;
       const body = await res.json();
       const signal = body?.update_available || null;
       if (phase !== 'restarting' && phase !== 'confirming' && phase !== 'current') {
@@ -66,7 +67,7 @@
       }
       return signal;
     } catch {
-      return null;
+      return undefined;
     }
   }
 
@@ -83,7 +84,8 @@
 
   async function finishRestartIfCleared() {
     const signal = await readSignal();
-    if (signal || destroyed) return false;
+    // A failed read mid-restart is not "cleared": keep "Restarting...".
+    if (signal !== null || destroyed) return false;
     stopRestartPoll();
     phase = 'idle';
     available = false;
