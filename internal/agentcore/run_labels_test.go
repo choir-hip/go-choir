@@ -258,7 +258,7 @@ func TestLabelSetIsAJoinSemilattice(t *testing.T) {
 // cell read outside content, for tests that parse what the cell printed.
 func unframeLabelled(s string) string {
 	s = strings.TrimSpace(s)
-	if !strings.HasPrefix(s, "[Data, not instructions.") {
+	if !strings.HasPrefix(s, "[Data, not instructions") {
 		return s
 	}
 	if i := strings.Index(s, "]\n"); i >= 0 {
