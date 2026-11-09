@@ -71,6 +71,17 @@
     accountsBusy = false;
   }
 
+  // The active row's Sign out is the shell's sign-out. With one account it is
+  // the plain logout the footer used; with several it signs out that account.
+  function rowSignOut(account: AccountRow) {
+    if (account.active && accounts.length === 1) {
+      close(false);
+      logout();
+      return;
+    }
+    void signOutOf(account);
+  }
+
   async function signOutOfAll() {
     if (accountsBusy) return;
     accountsError = '';
@@ -169,14 +180,14 @@
               disabled={accountsBusy}
               on:click={() => switchTo(account)}
             >
-              <strong class="account-email">{account.email}</strong>
+              <strong class="account-email" data-prompt-surface-user={account.active ? '' : undefined}>{account.email}</strong>
               {#if account.active}
                 <small data-desk-account-active>Active</small>
               {:else if !account.signed_in}
                 <small>Signed out</small>
               {/if}
             </button>
-            <button type="button" class="account-signout" data-desk-account-signout disabled={accountsBusy} aria-label="Sign out of {account.email}" on:click={() => signOutOf(account)}>Sign out</button>
+            <button type="button" class="account-signout" data-desk-account-signout data-prompt-surface-logout={account.active ? '' : undefined} disabled={accountsBusy} aria-label="Sign out of {account.email}" on:click={() => rowSignOut(account)}>Sign out</button>
           </li>
         {/each}
       </ul>
@@ -406,8 +417,8 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.3rem;
-    height: 2.58rem;
-    padding: 0 0.36rem 0 0.48rem;
+    min-height: 2.58rem;
+    padding: 0.2rem 0.36rem 0 0.48rem;
     border: 1px solid transparent;
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-control-bg);
