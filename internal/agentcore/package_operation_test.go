@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type packageBundleSpec struct {
@@ -760,4 +762,144 @@ func TestAbandonOfAMaterializingPackageOperationUsesThePackageFacts(t *testing.T
 		t.Fatalf("terminal error = %q; want the owner's reason and the drafted release", settled.TerminalError)
 	}
 	w.pendingCleared(t)
+}
+
+// Failure modes (b@c 2026-11-09, Neo Vector Heart, trajectory 4b9398fc):
+//  1. A package operation applies after Texture's last turn. The consensus
+//     approve record promised "a separate record says when it is applied or
+//     fails", but the package success path minted none, so Texture waited for
+//     it forever and the work item stayed open.
+//  2. The apply record is minted twice (a replayed pass): it must commit once.
+//  3. A crash boot settles an interrupted package operation from facts: it
+//     must mint nothing, so a restart never starts a Texture turn (the settle
+//     path mints only for a live, unanswered publish).
+func TestPackageOperationApplyWakesTextureOnce(t *testing.T) {
+	w := newPackageOpWorld(t, "apply-wakes-texture")
+	_, inbox := seedOwnerActDocument(t, w.fx.store, "owner", w.fx.computerID, "doc-pkg-apply")
+	w.fx.trajectoryID = "trajectory-owner-act-doc-pkg-apply"
+	operation := w.propose(t, "op-pkg-apply-wake")
+	applied := w.fx.waitForState(t, operation.OperationID, selfdev.StateApplied)
+
+	applyRecords := func() []types.CommitmentRecord {
+		var out []types.CommitmentRecord
+		for _, rec := range ownerActRecords(t, w.fx.store, "owner", w.fx.computerID, inbox) {
+			if rec.SubjectRefs["owner_act"] == types.OwnerActApply {
+				out = append(out, rec)
+			}
+		}
+		return out
+	}
+	apply := applyRecords()
+	if len(apply) != 1 {
+		t.Fatalf("a live package apply must wake Texture once; apply records = %d", len(apply))
+	}
+	checkOwnerActRecord(t, apply[0], inbox, operation.OperationID, types.OwnerActApply)
+	if body := apply[0].Directive.Body; !strings.Contains(body, applied.PackageReleaseID) || !strings.Contains(body, applied.PackageInstallID) {
+		t.Fatalf("the apply record must name the release and install: %q", body)
+	}
+	// A replayed pass commits the same record, not a second one.
+	w.fx.rt.notifyTextureOfPackageApplied(context.Background(), applied, applied.PackageReleaseID, applied.PackageInstallID)
+	if n := len(applyRecords()); n != 1 {
+		t.Fatalf("a replayed apply minted %d records, want 1", n)
+	}
+}
+
+// Build review r1 (Devin): every live settle of a package operation (a retry
+// pass, a planned boot, an unanswered publish) tells the candidate's Texture
+// its fate, applied or failed; only a settle a crash boot marked mints
+// nothing, so a restart never starts a turn.
+func TestPackageOperationSettleMintsOwnerActOnlyWhenLive(t *testing.T) {
+	cases := []struct {
+		name      string
+		install   bool // the install landed before the answer was lost
+		crash     bool
+		wantState string
+		wantAct   string
+	}{
+		{"live retry pass applies and mints one apply record", true, false, selfdev.StateApplied, types.OwnerActApply},
+		{"crash-marked settle applies and mints no record", true, true, selfdev.StateApplied, ""},
+		{"live retry pass fails and mints one fail record", false, false, selfdev.StateFailed, types.OwnerActFail},
+		{"crash-marked settle fails and mints no record", false, true, selfdev.StateFailed, ""},
+	}
+	for i, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			w := newPackageOpWorld(t, "settle-live-"+strconv.Itoa(i))
+			docID := "doc-settle-live-" + strconv.Itoa(i)
+			_, inbox := seedOwnerActDocument(t, w.fx.store, "owner", w.fx.computerID, docID)
+			w.fx.trajectoryID = "trajectory-owner-act-" + docID
+			w.pub.publish = func(request platform.PackagePublishByDecisionRequest) (platform.PackageReleaseView, int, error) {
+				if tc.install {
+					if _, _, refusal := w.fx.rt.installPackage(context.Background(), "owner", w.fx.computerID, packageInstallRequest{
+						ReleaseID: request.ReleaseID, Record: request.Record, TreePatch: request.TreePatch, change: installChange{trigger: store.PackageInstallTriggerSelfdev},
+					}); refusal != nil {
+						t.Errorf("setup install: %v", refusal)
+					}
+				}
+				return platform.PackageReleaseView{}, 0, errors.New("connection reset by peer")
+			}
+			// The Library lookup is unreachable, so the operation stays
+			// materializing until the retry pass below.
+			var mu sync.Mutex
+			lookupOK := false
+			var operationID string
+			w.pub.list = func(string) ([]PackageReleaseRef, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				if !lookupOK {
+					return nil, errors.New("the Library is unreachable")
+				}
+				draft, found, err := w.fx.rt.loadPackageDraft(selfdev.Operation{OperationID: operationID, BundleDigest: w.bundleOf(t, operationID)})
+				if err != nil || !found {
+					return nil, errors.New("no draft")
+				}
+				return []PackageReleaseRef{{ReleaseID: draft.ReleaseID, OperationID: operationID}}, nil
+			}
+			operation := w.propose(t, "op-pkg-settle-live-"+strconv.Itoa(i))
+			mu.Lock()
+			operationID = operation.OperationID
+			mu.Unlock()
+			held := w.fx.waitForState(t, operation.OperationID, selfdev.StateMaterializing)
+			if tc.crash {
+				w.fx.rt.setSelfdevCrashMarks(map[string]bool{operationID: true})
+			}
+			mu.Lock()
+			lookupOK = true
+			mu.Unlock()
+			// The materializer's own observer may win the race to settle;
+			// either pass is a retry pass, so a loser's refusal is fine.
+			_ = w.fx.rt.reconcilePackageOperation(context.Background(), held)
+			w.fx.waitForState(t, operationID, tc.wantState)
+			count := func(act string) int {
+				n := 0
+				for _, rec := range ownerActRecords(t, w.fx.store, "owner", w.fx.computerID, inbox) {
+					if act == "" || rec.SubjectRefs["owner_act"] == act {
+						n++
+					}
+				}
+				return n
+			}
+			if tc.wantAct == "" {
+				time.Sleep(300 * time.Millisecond)
+				if n := count(""); n != 0 {
+					t.Fatalf("a crash-marked settle minted %d owner-act record(s), want none", n)
+				}
+				return
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for count(tc.wantAct) == 0 && time.Now().Before(deadline) {
+				time.Sleep(20 * time.Millisecond)
+			}
+			time.Sleep(200 * time.Millisecond)
+			if n := count(tc.wantAct); n != 1 {
+				t.Fatalf("a live settle minted %d %s record(s), want exactly 1", n, tc.wantAct)
+			}
+			if n := count(""); n != 1 {
+				t.Fatalf("a live settle minted %d owner-act record(s) in all, want 1", n)
+			}
+			for _, rec := range ownerActRecords(t, w.fx.store, "owner", w.fx.computerID, inbox) {
+				checkOwnerActRecord(t, rec, inbox, operationID, tc.wantAct)
+			}
+		})
+	}
 }

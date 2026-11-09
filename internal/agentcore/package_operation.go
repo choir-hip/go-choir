@@ -35,6 +35,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -339,8 +340,24 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 		return fail("published as %s; not installed here (%s); install it from the Library", draft.ReleaseID, refusal.Error())
 	}
 
-	// 6. Record.
-	return rt.recordPackageApplied(ctx, operation, draft, view.InstallID)
+	// 6. Record, then tell the candidate's Texture. The consensus approve
+	// record promised "a separate record says when it is applied or fails";
+	// without this one a package round that applies after Texture's last turn
+	// waits forever (b@c 2026-11-09, Neo Vector Heart). A live pass only: the
+	// settle path of a crash boot mints nothing.
+	if err := rt.recordPackageApplied(ctx, operation, draft, view.InstallID); err != nil {
+		return err
+	}
+	rt.notifyTextureOfPackageApplied(ctx, operation, draft.ReleaseID, view.InstallID)
+	return nil
+}
+
+// notifyTextureOfPackageApplied mints the apply owner-act record for a package
+// operation the live pass just applied (idempotent on the record id).
+func (rt *Runtime) notifyTextureOfPackageApplied(ctx context.Context, operation selfdev.Operation, releaseID, installID string) {
+	ctx = context.WithoutCancel(ctx)
+	operation.PackageReleaseID, operation.PackageInstallID = releaseID, installID
+	rt.notifyTextureOfOwnerAct(ctx, rt.selfdevRouteOwnerID, operation, types.OwnerActApply, "")
 }
 
 // packagePublishRequest assembles the publish request from the persisted
@@ -403,6 +420,14 @@ func (rt *Runtime) failPackageOperation(ctx context.Context, operation selfdev.O
 //   - a release is listed and there is no install: failed, naming the release,
 //     "install it from the Library".
 func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev.Operation, unanswered bool) error {
+	// A live settle (an unanswered publish, a retry pass, a planned boot)
+	// tells the candidate's Texture its fate, applied or failed; a settle a
+	// crash boot marked mints nothing, so a restart never starts a turn
+	// (build review r1, Devin).
+	live := !rt.selfdevCrashInterruptedOp(operation.OperationID)
+	if live {
+		defer rt.notifyTextureOfApplyFailure(ctx, operation)
+	}
 	draft, persisted, err := rt.loadPackageDraft(operation)
 	if err != nil {
 		return err
@@ -444,7 +469,13 @@ func (rt *Runtime) settlePackageOperation(ctx context.Context, operation selfdev
 	for _, item := range currentPackageInstalls(prior) {
 		if item.ReleaseID == listed {
 			draft.ReleaseID = listed
-			return rt.recordPackageApplied(ctx, operation, draft, item.InstallID)
+			if err := rt.recordPackageApplied(ctx, operation, draft, item.InstallID); err != nil {
+				return err
+			}
+			if live {
+				rt.notifyTextureOfPackageApplied(ctx, operation, listed, item.InstallID)
+			}
+			return nil
 		}
 	}
 	return rt.failPackageOperation(ctx, operation, "published as "+listed+"; not installed here; install it from the Library")

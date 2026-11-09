@@ -112,6 +112,11 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 	case types.OwnerActApprove:
 		return fmt.Sprintf("%s approved self-development candidate %s. It is accepted and the computer applies it; a separate record says when it is applied or fails.", who, id)
 	case types.OwnerActApply:
+		if operation.IsPackage() {
+			// A package operation changes no platform release: its apply is
+			// the Library publish and the install here.
+			return fmt.Sprintf("Self-development package candidate %s is applied: its release %s is published to the Library and installed on this computer (install %s).", id, strings.TrimSpace(operation.PackageReleaseID), strings.TrimSpace(operation.PackageInstallID))
+		}
 		if who != "The owner" {
 			// R3: a consensus apply has no owner approval to answer for it, so
 			// the record says what decided it and how the owner undoes it. The
