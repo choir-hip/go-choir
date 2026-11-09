@@ -87,6 +87,8 @@ const LAUNCHER_MANIFEST = {
   capabilities: [{ grant: 'ui.shell' }],
   provides: [{ service: 'launcher', abi: 'choir.service/launcher/v1', entry: 'Launcher.surface.svelte', requires_sdk: '^2.0' }],
 };
+// A module that loads but draws no surface.
+const NOSURFACE = Buffer.from("export const abi = 'choir.app-frontend/module/v1';\nexport const requires_sdk = '^2.0';\nexport const sdk_imports = [];\n");
 let good; let throws; let launcher;
 
 test.beforeAll(() => {
@@ -114,7 +116,7 @@ const record = (bytes, extra = {}) => ({
 
 async function openShell(page, query = '') {
   await page.route(/\/(auth|api)\//, (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthenticated"}' }));
-  for (const bytes of [good, throws, launcher]) {
+  for (const bytes of [good, throws, launcher, NOSURFACE]) {
     await page.route(`**/api/packages/modules/${sha256(bytes)}.js`, (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: bytes.toString('utf8') }));
   }
   await page.goto(BASE_URL + query);
@@ -291,4 +293,42 @@ test('B4: a provider the kernel sets aside inside reconcile (activate failed) gi
   expect((await surfaceState(page))[0].reason).toContain('activate failed');
   await expect.poll(async () => (await inShell(page, '/src/lib/shell-slots.ts', `(s) => s.describeRecovery().find((r) => r.slot === 'launcher').active`))).toBe('launcher');
   await expect(page.locator('[data-installed-launcher]')).toHaveCount(0);
+});
+
+test('R2-1: a module that loads but draws no surface is refused and shown, not retried as transient', async ({ page }) => {
+  let fetches = 0;
+  await openShell(page);
+  await page.route(`**/api/packages/modules/${sha256(NOSURFACE)}.js`, (route) => { fetches += 1; return route.fulfill({ status: 200, contentType: 'text/javascript', body: NOSURFACE.toString('utf8') }); });
+  const rec = record(NOSURFACE);
+  await install(page, [rec]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['refused']);
+  expect((await surfaceState(page))[0].reason).toContain('draws no surface');
+  await install(page, [rec]); // a refresh of the same release does not fetch it again
+  await page.waitForTimeout(300);
+  expect(fetches).toBe(1);
+  await page.locator('[data-desktop-icon][data-desktop-icon-id="files"]').click({ button: 'right' });
+  await expect(page.locator('[data-context-menu]').first()).toBeVisible();
+});
+
+test('R2-2: a trip that races a replace does not take the newer mount down', async ({ page }) => {
+  await openShell(page);
+  const first = record(good);
+  const second = record(good, { install_id: 'install-second' });
+  await install(page, [first]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['active']);
+  // In one task: the newer release arrives (its sync is queued), then the older one trips.
+  await page.evaluate(async ({ second }) => {
+    const resource = (file) => performance.getEntriesByType('resource').map((e) => e.name).find((n) => new URL(n).pathname === file) || file;
+    const pk = await import(/* @vite-ignore */ resource('/src/lib/apps/packages.ts'));
+    const sk = await import(/* @vite-ignore */ resource('/src/lib/shell-kernel.ts'));
+    pk.installedPackages.set([second]);
+    sk.shellKernel.services.trip('contextMenu.renderer', 'menu-default', 'raced');
+  }, { second });
+  await expect.poll(async () => (await surfaceState(page)).map((s) => `${s.state}`)).toContain('active');
+  await page.waitForTimeout(500);
+  const rows = await surfaceState(page);
+  expect(rows.filter((r) => r.state === 'active').length).toBe(1);
+  // The newer mount really serves: the installed menu opens, and the slot is not wedged.
+  await page.locator('[data-desktop-icon][data-desktop-icon-id="files"]').click({ button: 'right' });
+  await expect(page.locator('[data-installed-menu]')).toBeVisible();
 });

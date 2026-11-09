@@ -32,6 +32,7 @@ import { installedPackages, isSurfacePackage, loadPackageModule, type InstalledP
 import { sdkSatisfies } from './sdk-version';
 import { hasInTreeSurface, recoveryBoot, registerSurfaceOf, removeSurfacePackage, restoreSurfacePackage, surfaceScope } from './shell-slots';
 import { shellKernel } from './shell-kernel';
+import type { Scope } from './kernel';
 import { PackageLoadError } from './apps/packages';
 
 type SurfaceModule = PackageModule & { surface?: (service: string, ctx: { sdk: unknown; package: string }) => unknown; release?: () => void };
@@ -46,7 +47,7 @@ export type InstalledSurfaceState = {
   reason: string;
 };
 
-type Live = { fingerprint: string; record: InstalledPackageRecord; module: SurfaceModule };
+type Live = { fingerprint: string; record: InstalledPackageRecord; module: SurfaceModule; scope: Scope };
 const live = new Map<string, Live>();
 const setAside = new Map<string, { fingerprint: string; record: InstalledPackageRecord; reason: string }>();
 const refused = new Map<string, { fingerprint: string; record: InstalledPackageRecord; reason: string }>();
@@ -99,6 +100,13 @@ async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: (
   const components: { provide: Provide; component: ComponentType }[] = [];
   try {
     module = await load(record);
+  } catch (err) {
+    // A fetch that failed (the network, a 5xx) is tried again at the next sync; a module that
+    // does not verify or import is not.
+    const transient = !(err instanceof PackageLoadError) || err.state === 'unavailable';
+    return refuse((err as Error)?.message || String(err), transient);
+  }
+  try {
     if (typeof module.surface !== 'function') throw new Error('the module draws no surface');
     const ctx = { sdk: await sdk(), package: name };
     for (const provide of provides) {
@@ -107,9 +115,7 @@ async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: (
       components.push({ provide, component: component as ComponentType });
     }
   } catch (err) {
-    // A fetch that failed (the network, a 5xx) is tried again at the next sync; a bad module is not.
-    const transient = !(err instanceof PackageLoadError) || err.state === 'unavailable';
-    return refuse((err as Error)?.message || String(err), transient);
+    return refuse((err as Error)?.message || String(err));
   }
 
   // Displace the base image's package of the same name, then register the installed surfaces.
@@ -133,7 +139,7 @@ async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: (
   if (missing.length) return refuse(`${missing.map((m) => m.provide.service).join(', ')} did not register`);
   refused.delete(name);
   setAside.delete(name);
-  live.set(name, { fingerprint, record, module });
+  live.set(name, { fingerprint, record, module, scope });
 }
 
 async function unmount(name: string, restore: boolean): Promise<void> {
@@ -190,9 +196,13 @@ shellKernel.services.onTrip((slot, id, reason) => {
   if (!entry || !providesOf(entry.record).some((p) => p.service === slot)) return;
   live.delete(id);
   setAside.set(id, { fingerprint: entry.fingerprint, record: entry.record, reason });
+  // The scope is the one that tripped, captured now: a newer release may mount under the
+  // same name before this cleanup runs, and it must not be taken down with the old one.
+  const tripped = entry.scope;
   queue = queue.then(async () => {
-    await removeSurfacePackage(id);
+    await tripped.dispose();
     try { entry.module.release?.(); } catch { /* ignore */ }
+    if (live.has(id)) return; // a newer mount owns the name
     if (hasInTreeSurface(id) && !recoveryBoot) await restoreSurfacePackage(id);
   }).catch((err) => { console.warn('[shell] installed surface failover:', err); });
 });
