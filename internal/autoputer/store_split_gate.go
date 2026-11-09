@@ -48,6 +48,10 @@ type splitGate struct {
 	served    chan struct{}
 	stopTick  chan struct{}
 	stopOnce  sync.Once
+	// tickMu orders a tick against the stop: no tick lands after stopTicking
+	// returns (a select with both channels ready picks either).
+	tickMu  sync.Mutex
+	stopped bool
 }
 
 // startSplitGate binds addr and serves the gate on it.
@@ -87,7 +91,11 @@ func (g *splitGate) ticker() {
 		case <-g.stopTick:
 			return
 		case <-t.C:
-			g.tick.Add(1)
+			g.tickMu.Lock()
+			if !g.stopped {
+				g.tick.Add(1)
+			}
+			g.tickMu.Unlock()
 		}
 	}
 }
@@ -107,7 +115,14 @@ func (g *splitGate) progress() uint64 { return g.rows.Load() + g.tick.Load() }
 
 // stopTicking ends the liveness tick once the migration is over: the steps
 // after it are bounded by the host's stall window as before.
-func (g *splitGate) stopTicking() { g.stopOnce.Do(func() { close(g.stopTick) }) }
+func (g *splitGate) stopTicking() {
+	g.stopOnce.Do(func() {
+		g.tickMu.Lock()
+		g.stopped = true
+		g.tickMu.Unlock()
+		close(g.stopTick)
+	})
+}
 
 func (g *splitGate) serveHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
