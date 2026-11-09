@@ -21,6 +21,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import RecoveryRequestForm from './RecoveryRequestForm.svelte';
+  import { markReturning } from './accounts.js';
   import {
     beginRecoveryPasskey,
     createPasskeyFromOptions,
@@ -53,7 +54,7 @@
       creationOptions = null;
       token = '';
       try {
-        window.localStorage?.setItem('choir.auth.returning', 'true');
+        markReturning();
       } catch (_err) {
         // Storage can be unavailable (private mode); sign-in still worked.
       }

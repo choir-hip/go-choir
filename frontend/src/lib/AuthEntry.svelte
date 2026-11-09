@@ -22,9 +22,12 @@
   import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
   import RecoveryRequestForm from './RecoveryRequestForm.svelte';
   import EmailSignInForm from './EmailSignInForm.svelte';
+  import { isReturning } from './accounts.js';
 
   export let passkeyError = '';
   export let intentMessage = 'Open your private computer and keep working.';
+  /** Prefills the email (signing back in to an account the switcher lists as signed out). */
+  export let initialEmail = '';
 
   /** Whether a passkey ceremony is in progress (disables the form). */
   export let ceremonyInProgress = false;
@@ -65,9 +68,10 @@
   }
 
   onMount(() => {
-    if (window.localStorage?.getItem('choir.auth.returning') === 'true') {
+    if (isReturning() || initialEmail) {
       view = 'login';
     }
+    if (initialEmail && !email) email = initialEmail;
     tick().then(() => emailInputEl?.focus());
   });
 

@@ -113,6 +113,9 @@ export type {
 } from './shell-services';
 export { createContentItem } from './content-items.js';
 
+// Accounts: several signed-in accounts in one browser (the desk menu's switcher).
+export { AccountError, listAccounts, logoutAllAccounts, scopedKey, signoutAccount, switchAccount } from './accounts.js';
+
 // Renderers shared by Source, Web Lens and Texture. Web Lens uses the source
 // renderer and source-url; Source uses all three.
 export { renderMarkdownBlocks } from './texture-markdown-renderer';

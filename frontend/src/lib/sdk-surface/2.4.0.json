@@ -1,0 +1,1078 @@
+{
+  "schema": "choir.sdk-surface/v1",
+  "sdk_version": "2.4.0",
+  "typescript": "6.0.3",
+  "module_abi": "choir.app-frontend/module/v1",
+  "names": {
+    "AUTOPAPER_SECTIONS": {
+      "kind": "value",
+      "type": "{ id: string; label: string; }[]"
+    },
+    "AccountError": {
+      "kind": "class",
+      "type": "{ new (message: any, reason?: string, status?: number): import(\"./accounts\").AccountError; prototype: import(\"./accounts\").AccountError; } & { name: string; reason: string; status: number; message: string; stack?: string | undefined; cause?: unknown; }"
+    },
+    "AppContextChange": {
+      "kind": "type",
+      "type": "{ windowId: string; appContext?: Record<string, unknown> | undefined; title?: string | undefined; }"
+    },
+    "AuthRequest": {
+      "kind": "type",
+      "type": "{ kind?: string | undefined; appId?: string | undefined; appName?: string | undefined; email?: string | undefined; }"
+    },
+    "AuthRequiredError": {
+      "kind": "class",
+      "type": "{ new (message?: string): import(\"./auth\").AuthRequiredError; prototype: import(\"./auth\").AuthRequiredError; } & { name: string; message: string; stack?: string | undefined; cause?: unknown; }"
+    },
+    "ChoirTheme": {
+      "kind": "type",
+      "type": "{ schema_version: number; id: string; name: string; colors: Record<string, string>; radii: Record<string, string>; motion: Record<string, string>; layout: { promptSurfacePlacement: PromptSurfacePlacement; promptSurfaceMinHeight: string; deskSheetHeight: string; }; fonts: Record<string, string>; effects: Record<string, string>; }"
+    },
+    "CommandHandler": {
+      "kind": "type",
+      "type": "(context: Record<string, unknown>) => void | Promise<void>"
+    },
+    "CommandRun": {
+      "kind": "type",
+      "type": "import(\"./services/commands\").DeclarativeAction | { handler: true; }"
+    },
+    "CommandScope": {
+      "kind": "type",
+      "type": "\"global\" | \"app\" | `target:${string}`"
+    },
+    "CommandSpec": {
+      "kind": "type",
+      "type": "{ id: string; title: string; scope: import(\"./services/commands\").CommandScope; run: import(\"./services/commands\").CommandRun; when?: string | undefined; }"
+    },
+    "ContextMenuEntry": {
+      "kind": "type",
+      "type": "import(\"./context-menu-state\").ContextMenuItem | import(\"./context-menu-state\").ContextMenuSeparator"
+    },
+    "ContextMenuItem": {
+      "kind": "type",
+      "type": "{ id?: string | undefined; label: string; icon?: string | undefined; shortcut?: string | undefined; disabled?: boolean | undefined; danger?: boolean | undefined; onSelect?: (() => unknown) | undefined; items?: import(\"./context-menu-state\").ContextMenuEntry[] | undefined; command?: string | undefined; essential?: boolean | undefined; separator?: false | undefined; }"
+    },
+    "ContextMenuOptions": {
+      "kind": "type",
+      "type": "import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]) | { items: import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]); label?: string | undefined; longPress?: boolean | undefined; enabled?: boolean | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
+    },
+    "ContextMenuRequest": {
+      "kind": "type",
+      "type": "{ x: number; y: number; items: import(\"./context-menu-state\").ContextMenuEntry[]; label?: string | undefined; returnFocus?: HTMLElement | null | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
+    },
+    "ContextMenuTarget": {
+      "kind": "type",
+      "type": "{ kind: string; name?: string | undefined; ext?: string | undefined; data?: Record<string, unknown> | undefined; }"
+    },
+    "DEFAULT_THEME": {
+      "kind": "value",
+      "type": "import(\"./theme\").ChoirTheme"
+    },
+    "Disposer": {
+      "kind": "type",
+      "type": "() => void"
+    },
+    "DropZoneOptions": {
+      "kind": "type",
+      "type": "{ folder?: string | undefined; accept?: string | string[] | undefined; onUploaded?: ((paths: string[]) => void) | undefined; onError?: ((error: Error) => void) | undefined; onRejected?: ((files: File[]) => void) | undefined; enabled?: boolean | (() => boolean) | undefined; onDisabledDrop?: (() => void) | undefined; multiple?: boolean | undefined; }"
+    },
+    "FRONT_FIRST_PAGE_SIZE": {
+      "kind": "value",
+      "type": "60"
+    },
+    "FRONT_SECTION_ID": {
+      "kind": "value",
+      "type": "\"front\""
+    },
+    "FileEntry": {
+      "kind": "type",
+      "type": "{ name: string; type: string; size?: number | undefined; modified?: string | undefined; }"
+    },
+    "FileOpener": {
+      "kind": "type",
+      "type": "{ appId: string; name: string; icon: string; mediaType: string; isDefault: boolean; via: \"media\" | \"text\"; }"
+    },
+    "FrontStory": {
+      "kind": "type",
+      "type": "{ publication_id: string; title: string; dek: string; updated_at: string; version_count: number; latest_revision: number; route: { bare: string; permalink: string; }; importance?: number | undefined; promo?: boolean | undefined; source_count?: number | undefined; words?: number | undefined; section?: string | undefined; kind?: string | undefined; author?: string | undefined; }"
+    },
+    "LaunchFile": {
+      "kind": "type",
+      "type": "{ path: string; name: string; mediaType: string; url: string; sourceUrl: string; openedWith: \"default\" | \"choice\"; }"
+    },
+    "MEDIA_FILE_ROUTES": {
+      "kind": "value",
+      "type": "{ appId: never; mediaType: never; extensions: never; }[]"
+    },
+    "OpenAppContext": {
+      "kind": "type",
+      "type": "{ appName?: string | undefined; icon?: string | undefined; appContext?: Record<string, unknown> | undefined; } & Record<string, unknown>"
+    },
+    "OpenFileOptions": {
+      "kind": "type",
+      "type": "{ appId?: string | undefined; mediaType?: string | undefined; openedWith?: \"default\" | \"choice\" | undefined; asText?: boolean | undefined; importToTexture?: boolean | undefined; }"
+    },
+    "PackageSettingsSection": {
+      "kind": "type",
+      "type": "{ pkg: string; section: string; fields: import(\"./services/settings\").SettingField[]; }"
+    },
+    "PickFileOptions": {
+      "kind": "type",
+      "type": "{ title?: string | undefined; confirmLabel?: string | undefined; extensions?: string[] | undefined; filterLabel?: string | undefined; hideAtRoot?: string[] | undefined; startPath?: string | undefined; }"
+    },
+    "PromptFocus": {
+      "kind": "type",
+      "type": "{ app_agent_id: string; object_ref: string; selection?: string | undefined; }"
+    },
+    "PromptOptions": {
+      "kind": "type",
+      "type": "{ continueDocId?: string | undefined; continueWindowId?: string | undefined; focus?: import(\"./shell-services\").PromptFocus | null | undefined; }"
+    },
+    "ProviderRow": {
+      "kind": "type",
+      "type": "{ id: string; healthy: boolean; reason: string | null; isDefault: boolean; }"
+    },
+    "ProviderSlot": {
+      "kind": "type",
+      "type": "{ slot: string; active: string | null; selected: string | null; defaultPackage: string; lastResort: boolean; providers: import(\"./services/provider-selection\").ProviderRow[]; }"
+    },
+    "SDK_VERSION": {
+      "kind": "value",
+      "type": "string"
+    },
+    "SelectionResult": {
+      "kind": "type",
+      "type": "{ ok: boolean; error?: string | undefined; }"
+    },
+    "SettingField": {
+      "kind": "type",
+      "type": "{ key: string; type: import(\"./services/settings\").SettingType; default: unknown; label: string; enum?: string[] | undefined; }"
+    },
+    "SettingResult": {
+      "kind": "type",
+      "type": "{ ok: boolean; error?: string | undefined; }"
+    },
+    "SettingsSection": {
+      "kind": "type",
+      "type": "{ section: string; fields: import(\"./services/settings\").SettingField[]; }"
+    },
+    "TETRA_MARK_PATHS": {
+      "kind": "value",
+      "type": "string[]"
+    },
+    "TETRA_MARK_VIEWBOX": {
+      "kind": "value",
+      "type": "\"0 0 512 512\""
+    },
+    "ToastKind": {
+      "kind": "type",
+      "type": "\"error\" | \"info\""
+    },
+    "ToastOptions": {
+      "kind": "type",
+      "type": "{ kind?: import(\"./shell-services\").ToastKind | undefined; durationMs?: number | undefined; }"
+    },
+    "UploadError": {
+      "kind": "class",
+      "type": "{ new (paths: string[], failures: import(\"./file-upload\").UploadFailure[]): import(\"./file-upload\").UploadError; prototype: import(\"./file-upload\").UploadError; } & { paths: string[]; failures: import(\"./file-upload\").UploadFailure[]; authRequired: boolean; name: string; message: string; stack?: string | undefined; cause?: unknown; }"
+    },
+    "UploadFailure": {
+      "kind": "type",
+      "type": "{ name: string; status: number; error: string; }"
+    },
+    "UploadOptions": {
+      "kind": "type",
+      "type": "{ folder?: string | undefined; onProgress?: ((progress: { file: File; index: number; loaded: number; total: number; fraction: number; }) => void) | undefined; signal?: AbortSignal | undefined; }"
+    },
+    "WindowAction": {
+      "kind": "type",
+      "type": "\"focus\" | \"restore\" | \"minimize\" | \"maximize\" | \"close\""
+    },
+    "WindowEntry": {
+      "kind": "type",
+      "type": "{ windowId: string; appId: string; title: string; icon: string; mode: string; focused: boolean; restoreSuspended: boolean; }"
+    },
+    "WindowSummary": {
+      "kind": "type",
+      "type": "{ windowId: string; appId: string; title: string; mode: string; focused: boolean; }"
+    },
+    "acceptAttribute": {
+      "kind": "value",
+      "type": "(accept?: string | string[] | undefined) => string"
+    },
+    "addLiveEventListener": {
+      "kind": "value",
+      "type": "(handler: any) => () => void"
+    },
+    "apiFileURL": {
+      "kind": "value",
+      "type": "(path: any, inline?: boolean) => string"
+    },
+    "appTitle": {
+      "kind": "value",
+      "type": "(kind: any) => string"
+    },
+    "browserOpenableSourceURL": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "buildInfo": {
+      "kind": "value",
+      "type": "() => { service: string; version: string; commit: string; built_at: string; }"
+    },
+    "canOpenWith": {
+      "kind": "value",
+      "type": "(appId: string, fileName: string) => boolean"
+    },
+    "chooseDesktopBackground": {
+      "kind": "value",
+      "type": "() => Promise<{ path: string | null; result?: import(\"./services/settings\").SettingResult | undefined; }>"
+    },
+    "clampNumber": {
+      "kind": "value",
+      "type": "(value: any, min: any, max: any) => number"
+    },
+    "closeContextMenu": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "closeOtherWindows": {
+      "kind": "value",
+      "type": "(keepId?: string) => Promise<void>"
+    },
+    "contextMenu": {
+      "kind": "value",
+      "type": "(node: HTMLElement, options: import(\"./context-menu\").ContextMenuOptions) => { update(next: import(\"./context-menu\").ContextMenuOptions): void; destroy(): void; }"
+    },
+    "copyText": {
+      "kind": "value",
+      "type": "(text: string, label?: string) => Promise<boolean>"
+    },
+    "createContentItem": {
+      "kind": "value",
+      "type": "(payload?: {}) => Promise<any>"
+    },
+    "createDropZone": {
+      "kind": "value",
+      "type": "(node: HTMLElement, options?: import(\"./file-upload\").DropZoneOptions) => { update(next: import(\"./file-upload\").DropZoneOptions): void; destroy(): void; }"
+    },
+    "currentDeviceId": {
+      "kind": "value",
+      "type": "() => string"
+    },
+    "dropZone": {
+      "kind": "value",
+      "type": "(node: HTMLElement, options?: import(\"./file-upload\").DropZoneOptions) => { update(next: import(\"./file-upload\").DropZoneOptions): void; destroy(): void; }"
+    },
+    "editionTime": {
+      "kind": "value",
+      "type": "(stories: import(\"./autopaper\").FrontStory[]) => number"
+    },
+    "escapeHTML": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "extensionsOpenedBy": {
+      "kind": "value",
+      "type": "(appId: string, packageRoutes?: import(\"./apps/packages\").PackageMediaRoute[]) => string[]"
+    },
+    "fetchFrontPage": {
+      "kind": "value",
+      "type": "(cursor?: string, limit?: number, section?: string) => Promise<import(\"./autopaper\").FrontPage>"
+    },
+    "fetchOpinionPage": {
+      "kind": "value",
+      "type": "(limit?: number) => Promise<import(\"./autopaper\").FrontStory[]>"
+    },
+    "fetchWithRenewal": {
+      "kind": "value",
+      "type": "(url: string, options?: object | undefined) => Promise<Response>"
+    },
+    "fileExtension": {
+      "kind": "value",
+      "type": "(name: string) => string"
+    },
+    "fileIconFor": {
+      "kind": "value",
+      "type": "(entry: import(\"./files-listing\").FileEntry) => string"
+    },
+    "fileMatchesAccept": {
+      "kind": "value",
+      "type": "(file: { name?: string | undefined; type?: string | undefined; }, accept?: string | string[] | undefined) => boolean"
+    },
+    "focus": {
+      "kind": "value",
+      "type": "(windowId: any) => void"
+    },
+    "formatFileSize": {
+      "kind": "value",
+      "type": "(bytes: number) => string"
+    },
+    "formatTime": {
+      "kind": "value",
+      "type": "(seconds: any) => string"
+    },
+    "formatWhen": {
+      "kind": "value",
+      "type": "(iso: string) => string"
+    },
+    "getAppDefinition": {
+      "kind": "value",
+      "type": "(appId: string) => import(\"./apps/registry\").ChoirAppDefinition | null"
+    },
+    "getLaunchFile": {
+      "kind": "value",
+      "type": "(appContext?: any) => import(\"./launch-file\").LaunchFile | null"
+    },
+    "getSetting": {
+      "kind": "value",
+      "type": "(key: string, pkg?: string | undefined) => Promise<unknown>"
+    },
+    "getTheme": {
+      "kind": "value",
+      "type": "() => import(\"./theme\").ChoirTheme"
+    },
+    "isContextMenuOpen": {
+      "kind": "value",
+      "type": "() => boolean"
+    },
+    "isHeavyAppId": {
+      "kind": "value",
+      "type": "(appId: string) => boolean"
+    },
+    "isImageName": {
+      "kind": "value",
+      "type": "(name: unknown) => boolean"
+    },
+    "isOwnLiveEvent": {
+      "kind": "value",
+      "type": "(message: any) => boolean"
+    },
+    "isTextFileName": {
+      "kind": "value",
+      "type": "(name: string) => boolean"
+    },
+    "launchFileFromAppContext": {
+      "kind": "value",
+      "type": "(appContext: any) => import(\"./launch-file\").LaunchFile | null"
+    },
+    "launchFileStore": {
+      "kind": "value",
+      "type": "() => import(\"svelte/store\").Readable<import(\"./launch-file\").LaunchFile | null>"
+    },
+    "layoutFrontPage": {
+      "kind": "value",
+      "type": "(ranked: import(\"./autopaper\").FrontStory[]) => import(\"./autopaper\").FrontLayout"
+    },
+    "listAccounts": {
+      "kind": "value",
+      "type": "() => Promise<any[]>"
+    },
+    "listThemes": {
+      "kind": "value",
+      "type": "() => import(\"./theme\").ChoirTheme[]"
+    },
+    "listWindows": {
+      "kind": "value",
+      "type": "() => import(\"./shell-services\").WindowSummary[]"
+    },
+    "liveEventKind": {
+      "kind": "value",
+      "type": "(message: any) => string"
+    },
+    "liveEventPayload": {
+      "kind": "value",
+      "type": "(message: any) => any"
+    },
+    "loadContextContentItem": {
+      "kind": "value",
+      "type": "(appContext?: {}, currentItem?: null, fallbackLabel?: string) => Promise<{ item: null; skipped: boolean; authRequired?: undefined; error?: undefined; } | { authRequired: boolean; item?: undefined; skipped?: undefined; error?: undefined; } | { error: any; item?: undefined; skipped?: undefined; authRequired?: undefined; } | { item: any; skipped?: undefined; authRequired?: undefined; error?: undefined; }>"
+    },
+    "loadMediaPosition": {
+      "kind": "value",
+      "type": "(kind: any, source?: {}) => Promise<number>"
+    },
+    "loadMediaProgress": {
+      "kind": "value",
+      "type": "(kind: any, source?: {}) => Promise<{ currentTime: number; duration: number; playbackRate: number; updatedByDevice?: undefined; } | { currentTime: number; duration: number; playbackRate: number; updatedByDevice: any; }>"
+    },
+    "loadRecentMedia": {
+      "kind": "value",
+      "type": "(kind: any) => Promise<any>"
+    },
+    "loadSavedSection": {
+      "kind": "value",
+      "type": "(store?: StorageLike | null) => string"
+    },
+    "loadSectionVisits": {
+      "kind": "value",
+      "type": "(store?: StorageLike | null) => Record<string, number>"
+    },
+    "logout": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "logoutAllAccounts": {
+      "kind": "value",
+      "type": "() => Promise<void>"
+    },
+    "mediaRouteForFileName": {
+      "kind": "value",
+      "type": "(name: any) => { appId: string; mediaType: string; } | null"
+    },
+    "mediaSourceIdentity": {
+      "kind": "value",
+      "type": "(source?: {}) => any"
+    },
+    "normalizeSourceEvidenceState": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "normalizeThemeConfig": {
+      "kind": "value",
+      "type": "(theme?: unknown) => import(\"./theme\").ChoirTheme"
+    },
+    "notifyPackagesChanged": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "onDocumentEvent": {
+      "kind": "value",
+      "type": "(type: string, fn: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions | undefined) => import(\"./event-helpers\").Disposer"
+    },
+    "onSetting": {
+      "kind": "value",
+      "type": "(key: string, fn: (value: unknown) => void, pkg?: string | undefined) => () => void"
+    },
+    "onThemeChange": {
+      "kind": "value",
+      "type": "(fn: (theme: import(\"./theme\").ChoirTheme) => void) => () => void"
+    },
+    "onThemeRegistryChange": {
+      "kind": "value",
+      "type": "(fn: () => void) => () => void"
+    },
+    "onWindowEvent": {
+      "kind": "value",
+      "type": "(type: string, fn: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions | undefined) => import(\"./event-helpers\").Disposer"
+    },
+    "openApp": {
+      "kind": "value",
+      "type": "(appId: string, context?: import(\"./shell-services\").OpenAppContext) => void"
+    },
+    "openContextMenu": {
+      "kind": "value",
+      "type": "(request: import(\"./context-menu-state\").ContextMenuRequest) => boolean"
+    },
+    "openFile": {
+      "kind": "value",
+      "type": "(path: string, options?: import(\"./shell-services\").OpenFileOptions) => void"
+    },
+    "openersForFile": {
+      "kind": "value",
+      "type": "(fileName: string, options?: { packageRoutes?: import(\"./apps/packages\").PackageMediaRoute[] | undefined; mediaType?: string | undefined; }) => import(\"./open-with\").FileOpener[]"
+    },
+    "parsePublicationRoute": {
+      "kind": "value",
+      "type": "(route: string) => { slug: string; revision: number; }"
+    },
+    "parseTextureRelatedRef": {
+      "kind": "value",
+      "type": "(value: unknown) => { docID: string; revisionID: string; }"
+    },
+    "pickAndUploadFiles": {
+      "kind": "value",
+      "type": "(options?: { accept?: string | string[] | undefined; folder?: string | undefined; multiple?: boolean | undefined; } & Omit<import(\"./file-upload\").UploadOptions, \"folder\">) => Promise<string[]>"
+    },
+    "pickFile": {
+      "kind": "value",
+      "type": "(options?: import(\"./file-picker\").PickFileOptions) => Promise<string | null>"
+    },
+    "pickFiles": {
+      "kind": "value",
+      "type": "(options?: { accept?: string | string[] | undefined; multiple?: boolean | undefined; }) => Promise<File[]>"
+    },
+    "placeMenu": {
+      "kind": "value",
+      "type": "(point: { x: number; y: number; }, size: { width: number; height: number; }, viewport: { width: number; height: number; }, margin?: number) => { x: number; y: number; maxHeight: number; }"
+    },
+    "placeSubmenu": {
+      "kind": "value",
+      "type": "(parent: { left: number; right: number; top: number; }, size: { width: number; height: number; }, viewport: { width: number; height: number; }, margin?: number) => { x: number; y: number; maxHeight: number; }"
+    },
+    "providerSlots": {
+      "kind": "value",
+      "type": "() => Promise<import(\"./services/provider-selection\").ProviderSlot[]>"
+    },
+    "publicationBundleSourceEntities": {
+      "kind": "value",
+      "type": "(bundle?: any, routePath?: string, appContext?: any) => any[]"
+    },
+    "publicationRoute": {
+      "kind": "value",
+      "type": "(slug: string, revision?: number) => string"
+    },
+    "rankFrontStories": {
+      "kind": "value",
+      "type": "(stories: import(\"./autopaper\").FrontStory[], options?: import(\"./autopaper\").RankOptions) => import(\"./autopaper\").FrontStory[]"
+    },
+    "readerArtifactStateLabel": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "recentMediaAppContext": {
+      "kind": "value",
+      "type": "(entry?: {}) => { windowTitle: any; title: any; fileName: any; filePath: any; sourcePath: any; sourceUrl: any; mediaType: any; contentId: any; }"
+    },
+    "recordSectionVisit": {
+      "kind": "value",
+      "type": "(section: string, store?: StorageLike | null) => Record<string, number>"
+    },
+    "registerCommand": {
+      "kind": "value",
+      "type": "(spec: import(\"./services/commands\").CommandSpec, handler?: import(\"./services/commands\").CommandHandler | undefined) => () => void | Promise<void>"
+    },
+    "rememberRecentMedia": {
+      "kind": "value",
+      "type": "(kind: any, source?: {}) => Promise<boolean>"
+    },
+    "renderInlineMarkdown": {
+      "kind": "value",
+      "type": "(value: unknown, sourceEntities?: any[], relatedTextures?: any[], options?: InlineMarkdownOptions) => string"
+    },
+    "renderInlineSourceRef": {
+      "kind": "value",
+      "type": "(label: string, entityID: string, sourceEntities?: any[], displayMode?: string, options?: { quote?: string | undefined; }) => string"
+    },
+    "renderMarkdownBlocks": {
+      "kind": "value",
+      "type": "(value: unknown, sourceEntities?: any[], options?: RenderMarkdownOptions) => string"
+    },
+    "renderSourceEntityFacts": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "renderSourceTransclusionBody": {
+      "kind": "value",
+      "type": "(entity: any, { compact, quote }?: { compact?: boolean | undefined; quote?: string | undefined; }) => string"
+    },
+    "repeatEvery": {
+      "kind": "value",
+      "type": "(fn: () => void, ms: number) => import(\"./event-helpers\").Disposer"
+    },
+    "requireAuth": {
+      "kind": "value",
+      "type": "(request?: import(\"./shell-services\").AuthRequest) => void"
+    },
+    "resetDesktop": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "resolveMediaSource": {
+      "kind": "value",
+      "type": "(appContext?: {}, item?: null, fallbackKind?: string) => { sourceUrl: any; filePath: any; mediaType: any; contentId: any; title: any; displayUrl: any; }"
+    },
+    "restore": {
+      "kind": "value",
+      "type": "(windowId: any) => void"
+    },
+    "saveMediaPosition": {
+      "kind": "value",
+      "type": "(kind: any, source?: {}, currentTime?: number, duration?: number, options?: {}) => void"
+    },
+    "saveSection": {
+      "kind": "value",
+      "type": "(section: string, store?: StorageLike | null) => void"
+    },
+    "scopedKey": {
+      "kind": "value",
+      "type": "(base: any) => any"
+    },
+    "sdkSatisfies": {
+      "kind": "value",
+      "type": "(range: string, version?: string) => boolean"
+    },
+    "sectionShares": {
+      "kind": "value",
+      "type": "(visits: Record<string, number>) => Record<string, number> | null"
+    },
+    "selectProvider": {
+      "kind": "value",
+      "type": "(slot: string, pkg: string) => Promise<import(\"./services/provider-selection\").SelectionResult>"
+    },
+    "sessionExpired": {
+      "kind": "value",
+      "type": "(reason?: string | undefined) => void"
+    },
+    "setAppContext": {
+      "kind": "value",
+      "type": "(change: import(\"./shell-services\").AppContextChange) => void"
+    },
+    "setDesktopBackground": {
+      "kind": "value",
+      "type": "(path: string) => Promise<import(\"./services/settings\").SettingResult>"
+    },
+    "setSetting": {
+      "kind": "value",
+      "type": "(key: string, value: unknown, pkg?: string | undefined) => Promise<import(\"./services/settings\").SettingResult>"
+    },
+    "setTheme": {
+      "kind": "value",
+      "type": "(idOrConfig: string | Record<string, unknown>) => { ok: boolean; errors: string[]; }"
+    },
+    "settingSections": {
+      "kind": "value",
+      "type": "import(\"svelte/store\").Writable<import(\"./services/settings\").PackageSettingsSection[]>"
+    },
+    "showDesktop": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "showOverview": {
+      "kind": "value",
+      "type": "() => void"
+    },
+    "signoutAccount": {
+      "kind": "value",
+      "type": "(userId: any) => Promise<any>"
+    },
+    "sortEntries": {
+      "kind": "value",
+      "type": "<T extends FileEntry>(entries: T[]) => T[]"
+    },
+    "sourceEntityExcerptText": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntityID": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntityKindLabel": {
+      "kind": "value",
+      "type": "(kind: unknown) => string"
+    },
+    "sourceEntityOpenAppID": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntityOpenPlan": {
+      "kind": "value",
+      "type": "(entity: any) => any"
+    },
+    "sourceEntityReaderFallbackText": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntityReaderSnapshotStatus": {
+      "kind": "value",
+      "type": "(entity: any) => any"
+    },
+    "sourceEntityReaderSnapshotText": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntitySnapshotText": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntitySnapshotWarnings": {
+      "kind": "value",
+      "type": "(entity: any) => string[]"
+    },
+    "sourceEntityTargetURL": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEntityTitle": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEvidenceResearchLabel": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "sourceEvidenceState": {
+      "kind": "value",
+      "type": "(entity: any) => string"
+    },
+    "sourceEvidenceStateLabel": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "storedSnapshotApplies": {
+      "kind": "value",
+      "type": "(snapshotURL: string, target: string) => boolean"
+    },
+    "storyPath": {
+      "kind": "value",
+      "type": "(slug: string, revision?: number) => string"
+    },
+    "storyPathForRoute": {
+      "kind": "value",
+      "type": "(route: string) => string"
+    },
+    "storyTextureContext": {
+      "kind": "value",
+      "type": "(route: string, title?: string, opinion?: boolean) => Record<string, unknown>"
+    },
+    "submitPrompt": {
+      "kind": "value",
+      "type": "(text: string, options?: import(\"./shell-services\").PromptOptions) => Promise<void>"
+    },
+    "suspendBackgroundHeavyWindows": {
+      "kind": "value",
+      "type": "(activeId?: string) => number"
+    },
+    "switchAccount": {
+      "kind": "value",
+      "type": "(userId: any) => Promise<void>"
+    },
+    "textureEntityPinnedRevisionID": {
+      "kind": "value",
+      "type": "(entity: any, explicitRevisionID?: string) => string"
+    },
+    "themeCSSVariables": {
+      "kind": "value",
+      "type": "(theme?: unknown) => Record<string, string>"
+    },
+    "toast": {
+      "kind": "value",
+      "type": "(message: string, options?: import(\"./shell-services\").ToastOptions) => void"
+    },
+    "uploadFiles": {
+      "kind": "value",
+      "type": "(files: Iterable<File> | ArrayLike<File>, options?: import(\"./file-upload\").UploadOptions) => Promise<string[]>"
+    },
+    "uploadMediaFile": {
+      "kind": "value",
+      "type": "(file: any, options?: {}) => Promise<{ ok: boolean; path: string; status: number; error: string; }>"
+    },
+    "useDefaultProvider": {
+      "kind": "value",
+      "type": "(slot: string) => Promise<import(\"./services/provider-selection\").SelectionResult>"
+    },
+    "usesSections": {
+      "kind": "value",
+      "type": "(stories: import(\"./autopaper\").FrontStory[]) => boolean"
+    },
+    "validateThemeConfig": {
+      "kind": "value",
+      "type": "(theme: unknown) => { ok: boolean; errors: string[]; }"
+    },
+    "webLensAddress": {
+      "kind": "value",
+      "type": "(value: unknown) => string"
+    },
+    "windowAction": {
+      "kind": "value",
+      "type": "(windowId: string, action: import(\"./shell-services\").WindowAction) => void"
+    },
+    "windowList": {
+      "kind": "value",
+      "type": "import(\"svelte/store\").Readable<import(\"./window-list\").WindowEntry[]>"
+    },
+    "youtubeEmbedURL": {
+      "kind": "value",
+      "type": "(raw: any) => string"
+    }
+  },
+  "types": {
+    "import(\"./accounts\").AccountError": {
+      "kind": "class",
+      "type": "{ new (message: any, reason?: string, status?: number): import(\"./accounts\").AccountError; prototype: import(\"./accounts\").AccountError; } & { name: string; reason: string; status: number; message: string; stack?: string | undefined; cause?: unknown; }"
+    },
+    "import(\"./apps/packages\").PackageMediaRoute": {
+      "kind": "type",
+      "type": "{ appId: string; mediaType: string; extensions: string[]; default: boolean; }"
+    },
+    "import(\"./apps/registry\").AppPreviewPolicy": {
+      "kind": "type",
+      "type": "\"public-preview\" | \"public-readonly\" | \"private\""
+    },
+    "import(\"./apps/registry\").AppSurfaceKind": {
+      "kind": "type",
+      "type": "\"media\" | \"standard\" | \"document\""
+    },
+    "import(\"./apps/registry\").ChoirAppDefinition": {
+      "kind": "type",
+      "type": "{ id: string; name: string; icon: string; description: string; component: () => Promise<{ default: import(\"svelte\").ComponentType; }>; launcher: { menu: boolean; desktopIcon: boolean; order: number; }; window: { singleton: boolean; heavy: boolean; desktop?: import(\"./apps/registry\").WindowGeometry | undefined; compact?: import(\"./apps/registry\").WindowGeometry | undefined; }; auth: { preview: import(\"./apps/registry\").AppPreviewPolicy; }; theme: { surface: import(\"./apps/registry\").AppSurfaceKind; shellDataAttr: string; contentClass: string; }; }"
+    },
+    "import(\"./apps/registry\").WindowGeometry": {
+      "kind": "type",
+      "type": "{ width?: number | undefined; height?: number | undefined; minWidth?: number | undefined; minHeight?: number | undefined; }"
+    },
+    "import(\"./auth\").AuthRequiredError": {
+      "kind": "class",
+      "type": "{ new (message?: string): import(\"./auth\").AuthRequiredError; prototype: import(\"./auth\").AuthRequiredError; } & { name: string; message: string; stack?: string | undefined; cause?: unknown; }"
+    },
+    "import(\"./autopaper\").FrontLayout": {
+      "kind": "type",
+      "type": "{ lead: import(\"./autopaper\").FrontStory | null; top: import(\"./autopaper\").FrontStory[]; briefs: import(\"./autopaper\").FrontStory[]; more: import(\"./autopaper\").FrontStory[]; }"
+    },
+    "import(\"./autopaper\").FrontPage": {
+      "kind": "type",
+      "type": "{ stories: import(\"./autopaper\").FrontStory[]; next_cursor?: string | undefined; }"
+    },
+    "import(\"./autopaper\").FrontStory": {
+      "kind": "type",
+      "type": "{ publication_id: string; title: string; dek: string; updated_at: string; version_count: number; latest_revision: number; route: { bare: string; permalink: string; }; importance?: number | undefined; promo?: boolean | undefined; source_count?: number | undefined; words?: number | undefined; section?: string | undefined; kind?: string | undefined; author?: string | undefined; }"
+    },
+    "import(\"./autopaper\").RankOptions": {
+      "kind": "type",
+      "type": "{ sectionShares?: Record<string, number> | null | undefined; }"
+    },
+    "import(\"./context-menu\").ContextMenuOptions": {
+      "kind": "type",
+      "type": "import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]) | { items: import(\"./context-menu-state\").ContextMenuEntry[] | (() => import(\"./context-menu-state\").ContextMenuEntry[]); label?: string | undefined; longPress?: boolean | undefined; enabled?: boolean | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
+    },
+    "import(\"./context-menu-state\").ContextMenuEntry": {
+      "kind": "type",
+      "type": "import(\"./context-menu-state\").ContextMenuItem | import(\"./context-menu-state\").ContextMenuSeparator"
+    },
+    "import(\"./context-menu-state\").ContextMenuItem": {
+      "kind": "type",
+      "type": "{ id?: string | undefined; label: string; icon?: string | undefined; shortcut?: string | undefined; disabled?: boolean | undefined; danger?: boolean | undefined; onSelect?: (() => unknown) | undefined; items?: import(\"./context-menu-state\").ContextMenuEntry[] | undefined; command?: string | undefined; essential?: boolean | undefined; separator?: false | undefined; }"
+    },
+    "import(\"./context-menu-state\").ContextMenuRequest": {
+      "kind": "type",
+      "type": "{ x: number; y: number; items: import(\"./context-menu-state\").ContextMenuEntry[]; label?: string | undefined; returnFocus?: HTMLElement | null | undefined; target?: import(\"./context-menu-state\").ContextMenuTarget | undefined; }"
+    },
+    "import(\"./context-menu-state\").ContextMenuSeparator": {
+      "kind": "type",
+      "type": "{ separator: true; }"
+    },
+    "import(\"./context-menu-state\").ContextMenuTarget": {
+      "kind": "type",
+      "type": "{ kind: string; name?: string | undefined; ext?: string | undefined; data?: Record<string, unknown> | undefined; }"
+    },
+    "import(\"./event-helpers\").Disposer": {
+      "kind": "type",
+      "type": "() => void"
+    },
+    "import(\"./file-picker\").PickFileOptions": {
+      "kind": "type",
+      "type": "{ title?: string | undefined; confirmLabel?: string | undefined; extensions?: string[] | undefined; filterLabel?: string | undefined; hideAtRoot?: string[] | undefined; startPath?: string | undefined; }"
+    },
+    "import(\"./file-upload\").DropZoneOptions": {
+      "kind": "type",
+      "type": "{ folder?: string | undefined; accept?: string | string[] | undefined; onUploaded?: ((paths: string[]) => void) | undefined; onError?: ((error: Error) => void) | undefined; onRejected?: ((files: File[]) => void) | undefined; enabled?: boolean | (() => boolean) | undefined; onDisabledDrop?: (() => void) | undefined; multiple?: boolean | undefined; }"
+    },
+    "import(\"./file-upload\").UploadError": {
+      "kind": "class",
+      "type": "{ new (paths: string[], failures: import(\"./file-upload\").UploadFailure[]): import(\"./file-upload\").UploadError; prototype: import(\"./file-upload\").UploadError; } & { paths: string[]; failures: import(\"./file-upload\").UploadFailure[]; authRequired: boolean; name: string; message: string; stack?: string | undefined; cause?: unknown; }"
+    },
+    "import(\"./file-upload\").UploadFailure": {
+      "kind": "type",
+      "type": "{ name: string; status: number; error: string; }"
+    },
+    "import(\"./file-upload\").UploadOptions": {
+      "kind": "type",
+      "type": "{ folder?: string | undefined; onProgress?: ((progress: { file: File; index: number; loaded: number; total: number; fraction: number; }) => void) | undefined; signal?: AbortSignal | undefined; }"
+    },
+    "import(\"./files-listing\").FileEntry": {
+      "kind": "type",
+      "type": "{ name: string; type: string; size?: number | undefined; modified?: string | undefined; }"
+    },
+    "import(\"./launch-file\").LaunchFile": {
+      "kind": "type",
+      "type": "{ path: string; name: string; mediaType: string; url: string; sourceUrl: string; openedWith: \"default\" | \"choice\"; }"
+    },
+    "import(\"./open-with\").FileOpener": {
+      "kind": "type",
+      "type": "{ appId: string; name: string; icon: string; mediaType: string; isDefault: boolean; via: \"media\" | \"text\"; }"
+    },
+    "import(\"./services/commands\").CommandHandler": {
+      "kind": "type",
+      "type": "(context: Record<string, unknown>) => void | Promise<void>"
+    },
+    "import(\"./services/commands\").CommandRun": {
+      "kind": "type",
+      "type": "import(\"./services/commands\").DeclarativeAction | { handler: true; }"
+    },
+    "import(\"./services/commands\").CommandScope": {
+      "kind": "type",
+      "type": "\"global\" | \"app\" | `target:${string}`"
+    },
+    "import(\"./services/commands\").CommandSpec": {
+      "kind": "type",
+      "type": "{ id: string; title: string; scope: import(\"./services/commands\").CommandScope; run: import(\"./services/commands\").CommandRun; when?: string | undefined; }"
+    },
+    "import(\"./services/commands\").DeclarativeAction": {
+      "kind": "type",
+      "type": "{ action: \"openApp\"; app: string; } | { action: \"openFile\"; path: string; } | { action: \"copyText\"; text: string; label?: string | undefined; } | { action: \"setTheme\"; theme: string; } | { action: \"toast\"; message: string; }"
+    },
+    "import(\"./services/provider-selection\").ProviderRow": {
+      "kind": "type",
+      "type": "{ id: string; healthy: boolean; reason: string | null; isDefault: boolean; }"
+    },
+    "import(\"./services/provider-selection\").ProviderSlot": {
+      "kind": "type",
+      "type": "{ slot: string; active: string | null; selected: string | null; defaultPackage: string; lastResort: boolean; providers: import(\"./services/provider-selection\").ProviderRow[]; }"
+    },
+    "import(\"./services/provider-selection\").SelectionResult": {
+      "kind": "type",
+      "type": "{ ok: boolean; error?: string | undefined; }"
+    },
+    "import(\"./services/settings\").PackageSettingsSection": {
+      "kind": "type",
+      "type": "{ pkg: string; section: string; fields: import(\"./services/settings\").SettingField[]; }"
+    },
+    "import(\"./services/settings\").SettingField": {
+      "kind": "type",
+      "type": "{ key: string; type: import(\"./services/settings\").SettingType; default: unknown; label: string; enum?: string[] | undefined; }"
+    },
+    "import(\"./services/settings\").SettingResult": {
+      "kind": "type",
+      "type": "{ ok: boolean; error?: string | undefined; }"
+    },
+    "import(\"./services/settings\").SettingType": {
+      "kind": "type",
+      "type": "\"string\" | \"number\" | \"boolean\""
+    },
+    "import(\"./shell-services\").AppContextChange": {
+      "kind": "type",
+      "type": "{ windowId: string; appContext?: Record<string, unknown> | undefined; title?: string | undefined; }"
+    },
+    "import(\"./shell-services\").AuthRequest": {
+      "kind": "type",
+      "type": "{ kind?: string | undefined; appId?: string | undefined; appName?: string | undefined; email?: string | undefined; }"
+    },
+    "import(\"./shell-services\").OpenAppContext": {
+      "kind": "type",
+      "type": "{ appName?: string | undefined; icon?: string | undefined; appContext?: Record<string, unknown> | undefined; } & Record<string, unknown>"
+    },
+    "import(\"./shell-services\").OpenFileOptions": {
+      "kind": "type",
+      "type": "{ appId?: string | undefined; mediaType?: string | undefined; openedWith?: \"default\" | \"choice\" | undefined; asText?: boolean | undefined; importToTexture?: boolean | undefined; }"
+    },
+    "import(\"./shell-services\").PromptFocus": {
+      "kind": "type",
+      "type": "{ app_agent_id: string; object_ref: string; selection?: string | undefined; }"
+    },
+    "import(\"./shell-services\").PromptOptions": {
+      "kind": "type",
+      "type": "{ continueDocId?: string | undefined; continueWindowId?: string | undefined; focus?: import(\"./shell-services\").PromptFocus | null | undefined; }"
+    },
+    "import(\"./shell-services\").ToastKind": {
+      "kind": "type",
+      "type": "\"error\" | \"info\""
+    },
+    "import(\"./shell-services\").ToastOptions": {
+      "kind": "type",
+      "type": "{ kind?: import(\"./shell-services\").ToastKind | undefined; durationMs?: number | undefined; }"
+    },
+    "import(\"./shell-services\").WindowAction": {
+      "kind": "type",
+      "type": "\"focus\" | \"restore\" | \"minimize\" | \"maximize\" | \"close\""
+    },
+    "import(\"./shell-services\").WindowSummary": {
+      "kind": "type",
+      "type": "{ windowId: string; appId: string; title: string; mode: string; focused: boolean; }"
+    },
+    "import(\"./theme\").ChoirTheme": {
+      "kind": "type",
+      "type": "{ schema_version: number; id: string; name: string; colors: Record<string, string>; radii: Record<string, string>; motion: Record<string, string>; layout: { promptSurfacePlacement: PromptSurfacePlacement; promptSurfaceMinHeight: string; deskSheetHeight: string; }; fonts: Record<string, string>; effects: Record<string, string>; }"
+    },
+    "import(\"./window-list\").WindowEntry": {
+      "kind": "type",
+      "type": "{ windowId: string; appId: string; title: string; icon: string; mode: string; focused: boolean; restoreSuspended: boolean; }"
+    }
+  },
+  "sections": {
+    "pipelines": {
+      "commands.resolve": {
+        "payload": "{ commands: CommandEntry[]; context: Record<string, unknown> }"
+      },
+      "contextMenu.build": {
+        "payload": "{ items: ContextMenuEntry[]; target: { kind: string; ext?: string; name?: string } }"
+      },
+      "files.openWith": {
+        "payload": "{ openers: FileOpener[]; file: { name: string; ext: string; mediaType: string } }"
+      },
+      "notification.post": {
+        "payload": "{ notification: { title: string; body: string; kind: string } }"
+      }
+    },
+    "services": {
+      "contextMenu.renderer": {
+        "abi": "choir.service/contextMenu.renderer/v1"
+      },
+      "commands": {
+        "abi": "choir.service/commands/v1"
+      },
+      "links": {
+        "abi": "choir.service/links/v1"
+      },
+      "theme": {
+        "abi": "choir.service/theme/v1"
+      }
+    },
+    "contributes": {
+      "commands": {
+        "entry": "{ id: string; title: string; scope: 'global' | 'app' | `target:${string}`; run: { action: 'openApp' | 'openFile' | 'copyText' | 'setTheme' | 'toast' } | { handler: true }; when?: string }"
+      },
+      "desks": {
+        "entry": "reserved"
+      },
+      "keybindings": {
+        "entry": "{ key: string; command: string; when?: string }"
+      },
+      "links": {
+        "entry": "{ app: string; params: { name: string; required?: boolean; context?: string }[]; launch?: { windowTitle?: string; requireAny?: string[]; context?: Record<string, string | number | boolean> } }"
+      },
+      "menus": {
+        "entry": "{ target: string; command: string; group?: string; order?: number; when?: string }"
+      },
+      "opens": {
+        "entry": "{ media_type: string; extensions: string[]; default?: boolean }"
+      },
+      "settings": {
+        "entry": "{ section: string; fields: { key: string; type: 'boolean' | 'string' | 'number'; default: unknown; label: string; enum?: string[] }[] }"
+      },
+      "themes": {
+        "entry": "{ id: string; file: string }"
+      },
+      "when_keys": [
+        "overview.open",
+        "target.ext",
+        "target.kind",
+        "window.app"
+      ]
+    },
+    "ctx": [
+      "launchContext",
+      "package",
+      "props",
+      "release",
+      "sdk",
+      "windowId"
+    ],
+    "grants": {
+      "closeOtherWindows": "ui.shell",
+      "focus": "ui.shell",
+      "listWindows": "ui.shell",
+      "logout": "ui.shell",
+      "providerSlots": "ui.shell",
+      "resetDesktop": "ui.shell",
+      "restore": "ui.shell",
+      "selectProvider": "ui.shell",
+      "setTheme": "ui.shell",
+      "showDesktop": "ui.shell",
+      "showOverview": "ui.shell",
+      "submitPrompt": "ui.shell",
+      "suspendBackgroundHeavyWindows": "ui.shell",
+      "useDefaultProvider": "ui.shell",
+      "windowAction": "ui.shell",
+      "windowList": "ui.shell"
+    },
+    "props": {
+      "appContext": "Record<string, unknown>",
+      "authenticated": "boolean",
+      "currentTheme": "unknown",
+      "currentUser": "unknown",
+      "windowId": "string"
+    }
+  },
+  "digest": "sha256:3ea69b7c7c75421f9e68e181c0443ff68da96c7098e4dae2a4fbc47f4b0f20e3"
+}

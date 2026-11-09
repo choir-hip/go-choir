@@ -29,6 +29,8 @@
   import DeviceApproveRoute from './lib/DeviceApproveRoute.svelte';
   import { legacyAutopaperRedirect } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
+  import { announceSwitch, markReturning, onAccountSwitched, scopedKey, setLastUserId, switchAccount } from './lib/accounts.js';
+  import { prepareAccountSwitch } from './lib/shell-services';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
@@ -94,7 +96,9 @@
       if (data.authenticated && data.user) {
         authState = 'signed_in';
         currentUser = data.user;
-        window.localStorage?.setItem('choir.auth.returning', 'true');
+        // The per-user pointer comes first: the theme cache and the other per-user keys follow it.
+        setLastUserId(data.user.id);
+        markReturning(data.user.id);
         startAuthenticatedPrewarm();
         void loadServerTheme();
         return { authenticated: true, user: data.user };
@@ -131,6 +135,7 @@
   function getAuthIntentMessage(intent) {
     if (!intent) return 'Open your private computer and keep working.';
     if (intent.kind === 'sign_in') return 'Open your private computer and keep working.';
+    if (intent.kind === 'add_account') return 'Sign in to another account. Your current account stays signed in; switch between them from the Desk menu.';
     if (intent.kind === 'prompt') {
       return `Run your prompt after sign-in: “${summarizeIntentText(intent.text)}”`;
     }
@@ -258,7 +263,7 @@
       // the authenticated state.
       const session = await checkSession();
       if (session?.authenticated) {
-        window.localStorage?.setItem('choir.auth.returning', 'true');
+        markReturning(session.user?.id);
         authOverlayOpen = false;
         pendingAuthIntent = null;
 
@@ -275,7 +280,8 @@
     } catch (err) {
       // Ceremony failed or was cancelled — stay in signed-out
       // state and display a retryable error message.
-      authState = 'signed_out';
+      // (An add-account ceremony leaves the signed-in account as it is.)
+      if (!isAuthenticated) authState = 'signed_out';
       passkeyError = passkeyErrorMessage(err, type);
     } finally {
       ceremonyInProgress = false;
@@ -288,7 +294,7 @@
     startAuthenticatedPrewarm();
     const session = await checkSession();
     if (session?.authenticated) {
-      window.localStorage?.setItem('choir.auth.returning', 'true');
+      markReturning(session.user?.id);
       authOverlayOpen = false;
       pendingAuthIntent = null;
       await prewarmAuthenticatedComputer().catch(() => {});
@@ -308,10 +314,21 @@
     authOverlayOpen = false;
     pendingAuthIntent = null;
     try {
-      await fetch('/auth/logout', {
+      const res = await fetch('/auth/logout', {
         method: 'POST',
         credentials: 'include',
       });
+      // Another account of this browser is still signed in: hand over to it.
+      const body = await res.json().catch(() => ({}));
+      if (body?.next_user_id) {
+        try {
+          await switchAccount(body.next_user_id);
+          return;
+        } catch (_err) {
+          // The switch failed: stay signed out; the account stays in the menu.
+        }
+      }
+      announceSwitch('');
     } catch (_err) {
       // Logout request failed — still transition to signed-out
       // state locally so the user is not stuck in the shell.
@@ -351,7 +368,7 @@
 
   function loadThemeBootCache() {
     try {
-      const raw = window.localStorage?.getItem(THEME_BOOT_CACHE_KEY);
+      const raw = window.localStorage?.getItem(scopedKey(THEME_BOOT_CACHE_KEY));
       if (!raw) return DEFAULT_THEME;
       const parsed = JSON.parse(raw);
       const validation = validateThemeConfig(parsed);
@@ -363,7 +380,7 @@
 
   function saveThemeBootCache(theme) {
     try {
-      window.localStorage?.setItem(THEME_BOOT_CACHE_KEY, JSON.stringify(normalizeThemeConfig(theme)));
+      window.localStorage?.setItem(scopedKey(THEME_BOOT_CACHE_KEY), JSON.stringify(normalizeThemeConfig(theme)));
     } catch (_err) {
       // The server preference remains authoritative; the boot cache is only a first-paint hint.
     }
@@ -471,7 +488,17 @@
     }
     window.addEventListener('focus', handleFocus);
 
+    // Another tab switched or signed out accounts: this tab flushes and
+    // reloads, so none keeps account A's in-memory state while its calls run
+    // under B. (The account_switched session result is the backstop.)
+    const offAccountSwitched = onAccountSwitched(async () => {
+      sessionCheckSeq++;
+      try { await prepareAccountSwitch(); } catch (_err) { /* the reload follows */ }
+      window.location.reload();
+    });
+
     return () => {
+      offAccountSwitched();
       unbindThemeHost();
       removeLiveListener();
       window.removeEventListener('pageshow', handlePageShow);
@@ -508,7 +535,7 @@
       on:authexpired={handleAuthExpired}
       on:authrequired={handleAuthRequired}
     />
-    {#if authOverlayOpen && !isAuthenticated}
+    {#if authOverlayOpen && (!isAuthenticated || pendingAuthIntent?.kind === 'add_account')}
       <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
         <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to Choir">
           <button
@@ -524,6 +551,7 @@
             {passkeyError}
             {ceremonyInProgress}
             intentMessage={authIntentMessage}
+            initialEmail={pendingAuthIntent?.email || ''}
             on:authbegin={handleAuthBegin}
             on:emailsignedin={handleEmailSignedIn}
             on:clearpasskeyerror={handleClearPasskeyError}

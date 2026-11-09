@@ -1,4 +1,5 @@
 import { withDesktopSelector } from './desktop-selector.js';
+import { scopedKey } from './accounts.js';
 
 export const SURFACE_HANDOFF_STORAGE_KEY = 'choir.surface.asset-graph';
 
@@ -43,7 +44,7 @@ export function shouldReplaceDocument(currentGraph, computerGraph, alreadyHanded
 
 function readHandedOffGraph() {
   try {
-    return sessionStorage.getItem(SURFACE_HANDOFF_STORAGE_KEY) || '';
+    return sessionStorage.getItem(scopedKey(SURFACE_HANDOFF_STORAGE_KEY)) || '';
   } catch (_err) {
     return '';
   }
@@ -51,7 +52,7 @@ function readHandedOffGraph() {
 
 function writeHandedOffGraph(graph) {
   try {
-    sessionStorage.setItem(SURFACE_HANDOFF_STORAGE_KEY, graph);
+    sessionStorage.setItem(scopedKey(SURFACE_HANDOFF_STORAGE_KEY), graph);
   } catch (_err) {
     // sessionStorage may be unavailable; loop prevention is best-effort.
   }

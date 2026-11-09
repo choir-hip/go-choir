@@ -1548,6 +1548,11 @@
     showOverview: () => handleShowDesktopOverview(),
     showDesktop: () => handleShowDesktop(),
     logout: () => handleLogout(),
+    prepareAccountSwitch: async () => {
+      // The same flush a logout does, awaited: the switch reloads the page.
+      try { await flushDesktopState({ keepalive: true }); } catch (_err) { /* the reload follows regardless */ }
+      closeLiveChannel();
+    },
     submitPrompt: (text, options) => handlePromptSubmit({ detail: { text, ...options } }),
   });
   // Commands and shortcuts (services/commands.ts): the shell captures keydown once,

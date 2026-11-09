@@ -18,7 +18,7 @@
       "service": "launcher",
       "abi": "choir.service/launcher/v1",
       "entry": "Launcher.surface.svelte",
-      "requires_sdk": "^2.0"
+      "requires_sdk": "^2.4"
     }
   ]
 }

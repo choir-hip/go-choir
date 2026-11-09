@@ -450,6 +450,7 @@ func (h *Handler) StartDeviceSweeper(ctx context.Context, interval time.Duration
 			case <-ctx.Done():
 				return
 			case <-t.C:
+				h.sweepAccountSets()
 				if n, err := h.store.SweepDeviceAuthorizations(ctx, time.Now().UTC().Add(-DeviceAuthorizationRetention)); err != nil {
 					log.Printf("[auth] operation=device_sweep result=error error=%q", err)
 				} else if n > 0 {

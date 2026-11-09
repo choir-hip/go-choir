@@ -52,6 +52,9 @@ type Handler struct {
 	signer          ed25519.PrivateKey // loaded at startup for JWT signing
 	recentRotations map[string]rotatedGraceEntry
 	rotationsMu     sync.Mutex
+	// rotateMu serializes refresh rotations so a racing rotator finds the
+	// winner's grace entry instead of minting a second session.
+	rotateMu sync.Mutex
 
 	// recoveryMailer delivers recovery links (nil: not configured).
 	recoveryMailer RecoveryMailer
@@ -163,6 +166,14 @@ type sessionResponse struct {
 	Authenticated bool      `json:"authenticated"`
 	User          *userInfo `json:"user,omitempty"`
 	Error         string    `json:"error,omitempty"`
+	// Reason names a refusal a client can act on ("account_switched").
+	Reason string `json:"reason,omitempty"`
+	// ActiveUserID is the set's active account on an account_switched
+	// refusal, or the account a switch made active.
+	ActiveUserID string `json:"active_user_id,omitempty"`
+	// NextUserID names the account to switch to after a logout removed the
+	// active member of this browser's set.
+	NextUserID string `json:"next_user_id,omitempty"`
 }
 
 // userInfo contains non-secret user fields returned in session responses.
@@ -343,6 +354,13 @@ func (h *Handler) generateRefreshToken(user *User, deviceInfo, method string) (s
 }
 
 func (h *Handler) createRefreshSession(user *User, deviceInfo, method string, expiresAt *time.Time) (string, error) {
+	raw, _, err := h.createRefreshSessionRow(user, deviceInfo, method, expiresAt)
+	return raw, err
+}
+
+// buildRefreshSession makes a refresh session row and its raw token without
+// storing it.
+func (h *Handler) buildRefreshSession(user *User, deviceInfo, method string, expiresAt *time.Time) (string, *RefreshSession) {
 	raw := uuid.NewString()
 	hash := sha256.Sum256([]byte(raw))
 	hashHex := fmt.Sprintf("%x", hash)
@@ -367,11 +385,15 @@ func (h *Handler) createRefreshSession(user *User, deviceInfo, method string, ex
 		DeviceInfo: deviceInfo,
 		AuthMethod: method,
 	}
-	if err := h.store.CreateRefreshSession(rs); err != nil {
-		return "", fmt.Errorf("create refresh session: %w", err)
-	}
+	return raw, rs
+}
 
-	return raw, nil
+func (h *Handler) createRefreshSessionRow(user *User, deviceInfo, method string, expiresAt *time.Time) (string, *RefreshSession, error) {
+	raw, rs := h.buildRefreshSession(user, deviceInfo, method, expiresAt)
+	if err := h.store.CreateRefreshSession(rs); err != nil {
+		return "", nil, fmt.Errorf("create refresh session: %w", err)
+	}
+	return raw, rs, nil
 }
 
 // setAuthCookies sets the access JWT and refresh token cookies on the response.
@@ -414,16 +436,21 @@ func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *Use
 // issueSessionExpiring is issueSession for a session whose absolute expiry is
 // inherited (the desktop handoff of an email session).
 func (h *Handler) issueSessionExpiring(w http.ResponseWriter, r *http.Request, user *User, method string, expiresAt *time.Time) (*userInfo, error) {
+	info, _, err := h.issueSessionRow(w, r, user, method, expiresAt)
+	return info, err
+}
+
+func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *User, method string, expiresAt *time.Time) (*userInfo, *RefreshSession, error) {
 	method = normalizeAuthMethod(method)
 	accessToken, err := h.issueAccessJWT(user, method)
 	if err != nil {
-		return nil, fmt.Errorf("issue access JWT: %w", err)
+		return nil, nil, fmt.Errorf("issue access JWT: %w", err)
 	}
 
 	deviceInfo := r.UserAgent()
-	refreshToken, err := h.createRefreshSession(user, deviceInfo, method, expiresAt)
+	refreshToken, rs, err := h.createRefreshSessionRow(user, deviceInfo, method, expiresAt)
 	if err != nil {
-		return nil, fmt.Errorf("generate refresh token: %w", err)
+		return nil, nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
 	h.setAuthCookiesFor(w, accessToken, refreshToken, h.refreshCookieTTL(method, expiresAt))
@@ -432,7 +459,19 @@ func (h *Handler) issueSessionExpiring(w http.ResponseWriter, r *http.Request, u
 		ID:        user.ID,
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
-	}, nil
+	}, rs, nil
+}
+
+// signInSession is the sign-in endpoints' session issuer: issueSession plus
+// adding the account to this browser's set. HandleDesktopRedeem calls the
+// plain issuer instead, so a native handoff never mints an orphan set.
+func (h *Handler) signInSession(w http.ResponseWriter, r *http.Request, user *User, method string) (*userInfo, error) {
+	info, rs, err := h.issueSessionRow(w, r, user, method, nil)
+	if err != nil {
+		return nil, err
+	}
+	h.addToAccountSet(w, r, user, rs)
+	return info, nil
 }
 
 // validateRefreshCookie validates the refresh token from the request cookie
@@ -474,35 +513,49 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 // The old session is deleted to prevent reuse (refresh rotation). The device
 // info is carried over from the request for the new session.
 func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, oldSession *RefreshSession, user *User) error {
-	// Generate a new refresh token with device info from the request.
+	h.rotateMu.Lock()
+	defer h.rotateMu.Unlock()
+	// A racing rotator already did this one: hand out its session.
+	if grace, ok := h.getRotatedGrace(oldSession.TokenHash); ok {
+		h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
+		return nil
+	}
+	_, _, err := h.rotateLocked(w, r, oldSession, user, "")
+	return err
+}
+
+// rotateLocked replaces oldSession with a new one in one store transaction
+// (which also repoints an account-set member and, when activateSet is
+// non-empty, makes user the set's active member), records the rotation grace
+// and sets the cookie pair. The caller holds rotateMu.
+func (h *Handler) rotateLocked(w http.ResponseWriter, r *http.Request, oldSession *RefreshSession, user *User, activateSet string) (string, *RefreshSession, error) {
 	// The method is copied from the old row, and an email session keeps its
 	// original expiry: rotation never extends it.
 	deviceInfo := r.UserAgent()
 	method := normalizeAuthMethod(oldSession.AuthMethod)
 	oldExpiry := oldSession.ExpiresAt
-	newRefresh, err := h.createRefreshSession(user, deviceInfo, method, &oldExpiry)
-	if err != nil {
-		return fmt.Errorf("generate new refresh token: %w", err)
-	}
+	newRefresh, ns := h.buildRefreshSession(user, deviceInfo, method, &oldExpiry)
 
-	// Issue new access JWT.
 	accessJWT, err := h.issueAccessJWT(user, method)
 	if err != nil {
-		return fmt.Errorf("issue new access JWT: %w", err)
+		return "", nil, fmt.Errorf("issue new access JWT: %w", err)
 	}
 
-	// Record rotation in grace cache before deleting old session, allowing concurrent
-	// requests within the 30-second window to receive this valid session instead of
-	// failing with 401 unauthenticated.
+	if activateSet != "" {
+		err = h.store.RotateAndActivate(activateSet, user.ID, oldSession.ID, ns)
+	} else {
+		err = h.store.RotateRefreshSession(oldSession.ID, ns)
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("rotate refresh session: %w", err)
+	}
+
+	// Record the rotation in the grace cache so concurrent requests within
+	// the window receive this valid session instead of failing with 401.
 	h.recordRotatedGrace(oldSession.TokenHash, user, accessJWT, newRefresh)
 
-	// Delete the old session from the database.
-	if err := h.store.DeleteRefreshSessionByID(oldSession.ID); err != nil {
-		return fmt.Errorf("delete old refresh session: %w", err)
-	}
-
 	h.setAuthCookiesFor(w, accessJWT, newRefresh, h.refreshCookieTTL(method, &oldExpiry))
-	return nil
+	return newRefresh, ns, nil
 }
 
 // isValidEmail checks if the given string is a valid email address.
@@ -922,7 +975,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	h.nudgeNumberReconcile()
 
 	// Issue cookie-backed auth state.
-	userInfo, err := h.issueSession(w, r, user, AuthMethodPasskey)
+	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -1053,7 +1106,7 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Issue cookie-backed auth state.
-	userInfo, err := h.issueSession(w, r, user, AuthMethodPasskey)
+	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
 	if err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=error step=issue_session error=%q", user.ID, string(credential.ID), err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -1273,6 +1326,14 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	hash := sha256.Sum256([]byte(cookie.Value))
 	hashHex := fmt.Sprintf("%x", hash)
 
+	// The account gate runs before the grace lookup, so neither the store
+	// session nor a rotated-token grace hit can flip the cookie jar back to a
+	// member that is not the set's active account.
+	if refused, active := h.accountGateRefuses(r, hashHex); refused {
+		writeAccountSwitched(w, active)
+		return
+	}
+
 	// Check if this token was recently rotated within the grace window (e.g. concurrent request).
 	if grace, ok := h.getRotatedGrace(hashHex); ok {
 		log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_hit", grace.user.ID)
@@ -1311,6 +1372,10 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 
 	// Rotate the refresh session and issue new cookies.
 	if err := h.rotateRefreshSession(w, r, rs, user); err != nil {
+		if errors.Is(err, ErrRotationLost) {
+			writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+			return
+		}
 		log.Printf("[auth] operation=session_refresh user_id=%s result=error step=rotate_refresh error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to rotate session"})
 		return
@@ -1350,9 +1415,15 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	var loggedOutSession string
 	if allDevices {
 		if userID != "" {
 			h.revokeRotatedGraceForUser(userID)
+			if set := h.requestAccountSet(r); set != nil {
+				if m, merr := h.store.GetAccountMember(set.ID, userID); merr == nil {
+					loggedOutSession = m.RefreshSessionID
+				}
+			}
 			if err := h.store.DeleteRefreshSessionsByUserID(userID); err != nil {
 				log.Printf("[auth] operation=logout user_id=%s result=error step=delete_all_refresh_sessions error=%q", userID, err)
 			} else {
@@ -1364,6 +1435,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Single-device logout: delete only the presenting refresh session so other browsers stay logged in.
 		if rs, _, err := h.validateRefreshCookie(r); err == nil && rs != nil {
+			loggedOutSession = rs.ID
 			h.deleteRotatedGraceByTokenHash(rs.TokenHash)
 			if err := h.store.DeleteRefreshSessionByID(rs.ID); err != nil {
 				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=error step=delete_refresh_session error=%q", userID, rs.ID, err)
@@ -1375,6 +1447,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 			hashHex := fmt.Sprintf("%x", hash)
 			h.deleteRotatedGraceByTokenHash(hashHex)
 			if found, err := h.store.GetRefreshSessionByTokenHash(hashHex); err == nil && found != nil {
+				loggedOutSession = found.ID
 				_ = h.store.DeleteRefreshSessionByID(found.ID)
 				log.Printf("[auth] operation=logout user_id=%s session_id=%s result=success step=expired_refresh_session_deleted", userID, found.ID)
 			} else if userID != "" {
@@ -1389,27 +1462,16 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[auth] operation=logout result=success note=no_user_id_found_cookies_cleared")
 		}
 	}
+	// A signed-out member leaves the browser's set; another signed-in member
+	// is named so the frontend switches to it.
+	next := h.afterLogoutSession(w, r, loggedOutSession)
+	if allDevices && userID != "" {
+		_ = h.store.DeleteAccountMembersForUser(userID)
+	}
 	// Clear both auth cookies by setting MaxAge=-1 with empty values.
-	http.SetCookie(w, &http.Cookie{
-		Name:     AccessTokenCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		Secure:   h.config.CookieSecure,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     RefreshTokenCookieName,
-		Value:    "",
-		Path:     "/auth",
-		MaxAge:   -1,
-		Secure:   h.config.CookieSecure,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	h.clearAuthCookies(w)
 
-	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, NextUserID: next})
 }
 
 // extractUserIDFromAuthCookies attempts to extract a user ID from the access

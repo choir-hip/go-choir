@@ -74,6 +74,11 @@ func registerRoutes(s authRouteRegistrar, handler *auth.Handler, rateLimiter *au
 	s.HandleFunc("/auth/login/finish", limit(handler.HandleLoginFinish))
 	s.HandleFunc("/auth/session", limit(handler.HandleSession))
 	s.HandleFunc("/auth/logout", limit(handler.HandleLogout))
+	// Account switcher (docs/design/account-switcher-2026-11-09.md).
+	s.HandleFunc("/auth/accounts", limit(handler.HandleAccountsList))
+	s.HandleFunc("/auth/accounts/switch", limit(handler.HandleAccountSwitch))
+	s.HandleFunc("/auth/accounts/signout", limit(handler.HandleAccountSignout))
+	s.HandleFunc("/auth/accounts/logout-all", limit(handler.HandleAccountsLogoutAll))
 	s.HandleFunc("/auth/desktop/exchange-redirect", limit(handler.HandleDesktopExchangeRedirect))
 	s.HandleFunc("/auth/desktop/redeem", limit(handler.HandleDesktopRedeem))
 	s.HandleFunc("GET /api/auth/root/status", limit(handler.HandleRootStatus))

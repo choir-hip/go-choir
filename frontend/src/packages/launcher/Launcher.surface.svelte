@@ -9,7 +9,7 @@
 -->
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
-  import { logout, onWindowEvent, openApp, requireAuth, showDesktop, showOverview } from '../../lib/app-sdk';
+  import { AccountError, listAccounts, logout, logoutAllAccounts, onWindowEvent, openApp, requireAuth, showDesktop, showOverview, signoutAccount, switchAccount } from '../../lib/app-sdk';
 
   export let placement: 'top' | 'bottom' = 'bottom';
   export let apps: Array<{ id: string; name: string; icon: string; description: string }> = [];
@@ -19,6 +19,74 @@
   export let showDesktopActive = false;
 
   const dispatch = createEventDispatcher();
+
+  // The Accounts section: every account signed in on this browser.
+  type AccountRow = { user_id: string; email: string; active: boolean; signed_in: boolean };
+  let accounts: AccountRow[] = [];
+  let accountsError = '';
+  let accountsBusy = false;
+
+  async function loadAccounts() {
+    if (!authenticated) return;
+    try {
+      accounts = await listAccounts();
+    } catch (_err) {
+      accounts = [];
+    }
+  }
+
+  async function switchTo(account: AccountRow) {
+    if (accountsBusy) return;
+    accountsError = '';
+    if (account.active) return;
+    if (!account.signed_in) {
+      close(false);
+      requireAuth({ kind: 'add_account', email: account.email });
+      return;
+    }
+    accountsBusy = true;
+    try {
+      await switchAccount(account.user_id);
+    } catch (err) {
+      if (err instanceof AccountError && err.reason === 'member_signed_out') {
+        accountsError = `${account.email} is signed out. Sign in again to use it.`;
+        await loadAccounts();
+      } else {
+        accountsError = err instanceof Error ? err.message : 'Could not switch accounts.';
+      }
+      accountsBusy = false;
+    }
+  }
+
+  async function signOutOf(account: AccountRow) {
+    if (accountsBusy) return;
+    accountsError = '';
+    accountsBusy = true;
+    try {
+      await signoutAccount(account.user_id);
+      await loadAccounts();
+    } catch (err) {
+      accountsError = err instanceof Error ? err.message : 'Could not sign out.';
+    }
+    accountsBusy = false;
+  }
+
+  async function signOutOfAll() {
+    if (accountsBusy) return;
+    accountsError = '';
+    accountsBusy = true;
+    try {
+      await logoutAllAccounts();
+    } catch (err) {
+      accountsError = err instanceof Error ? err.message : 'Could not sign out.';
+      accountsBusy = false;
+    }
+  }
+
+  function addAccount() {
+    close(false);
+    requireAuth({ kind: 'add_account' });
+  }
   let closeButton: HTMLButtonElement | null = null;
 
   $: normalizedPlacement = placement === 'top' ? 'top' : 'bottom';
@@ -49,6 +117,7 @@
 
   onMount(() => {
     tick().then(() => closeButton?.focus());
+    void loadAccounts();
   });
 </script>
 
@@ -86,6 +155,43 @@
     {showDesktopActive ? 'Restore windows' : 'Show desktop'}
   </button>
 
+  {#if authenticated}
+    <section class="desk-section" data-desk-accounts aria-label="Accounts">
+      <h3>Accounts</h3>
+      <ul class="account-list">
+        {#each accounts as account (account.user_id)}
+          <li class="account-row" data-desk-account data-desk-account-id={account.user_id} data-active={account.active ? 'true' : 'false'}>
+            <button
+              type="button"
+              class="account-switch"
+              data-desk-account-switch
+              aria-current={account.active ? 'true' : undefined}
+              disabled={accountsBusy}
+              on:click={() => switchTo(account)}
+            >
+              <span class="account-email">{account.email}</span>
+              {#if account.active}
+                <small data-desk-account-active>Active</small>
+              {:else if !account.signed_in}
+                <small>Signed out</small>
+              {/if}
+            </button>
+            <button type="button" class="account-signout" data-desk-account-signout disabled={accountsBusy} aria-label="Sign out of {account.email}" on:click={() => signOutOf(account)}>Sign out</button>
+          </li>
+        {/each}
+      </ul>
+      {#if accountsError}
+        <p class="account-error" data-desk-accounts-error role="alert">{accountsError}</p>
+      {/if}
+      <div class="account-actions">
+        <button type="button" class="plain-row" data-desk-account-add on:click={addAccount}>Add another account</button>
+        {#if accounts.length > 1}
+          <button type="button" class="plain-row" data-desk-account-signout-all disabled={accountsBusy} on:click={signOutOfAll}>Sign out of all accounts</button>
+        {/if}
+      </div>
+    </section>
+  {/if}
+
   <footer>
     {#if authenticated}
       <span data-prompt-surface-user>{currentUser?.email || 'signed in'}</span>
@@ -113,7 +219,8 @@
     right: max(12px, env(safe-area-inset-right));
     z-index: 9999;
     display: grid;
-    grid-template-rows: auto auto auto auto auto;
+    grid-template-rows: none;
+    grid-auto-rows: auto;
     gap: 0.48rem;
     max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 28px);
     overflow: auto;
@@ -274,6 +381,62 @@
 
   .plain-row {
     justify-self: start;
+  }
+
+  .account-list {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .account-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.3rem;
+  }
+
+  .account-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    min-width: 0;
+    padding: 0.48rem 0.64rem;
+    text-align: left;
+  }
+
+  .account-row[data-active='true'] .account-switch {
+    outline: 2px solid color-mix(in srgb, var(--choir-accent) 60%, transparent);
+  }
+
+  .account-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-switch small {
+    color: var(--choir-muted);
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .account-signout {
+    padding: 0.48rem 0.64rem;
+  }
+
+  .account-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .account-error {
+    color: var(--choir-danger, #c0392b);
+    font-size: 0.8rem;
   }
 
   @media (max-width: 768px) {

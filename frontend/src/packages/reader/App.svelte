@@ -49,11 +49,13 @@
     MEASURE_STEPS,
     READER_THEMES,
     READER_THEME_NAMES,
+    READER_PREF_KEY,
     loadPrefs,
     normalizePrefs,
     savePrefs,
   } from './reader-prefs.js';
   import { modelFromPdfPages } from './pdf-text.js';
+  import { scopedKey } from '../../lib/app-sdk';
   import {
     READER_UPLOAD_ACCEPT,
     READER_UPLOAD_ACCEPT_TYPES,
@@ -615,7 +617,7 @@
 
   function changePrefs(next) {
     prefs = normalizePrefs({ ...prefs, ...next });
-    savePrefs(window.localStorage, prefs);
+    savePrefs(window.localStorage, prefs, scopedKey(READER_PREF_KEY));
   }
 
   function runSearch() {
@@ -908,7 +910,7 @@
   }
 
   onMount(() => {
-    prefs = loadPrefs(window.localStorage);
+    prefs = loadPrefs(window.localStorage, scopedKey(READER_PREF_KEY));
     // A page is drawn from the page area's measured width, and draw again when
     // that width changes (a window resize, the contents panel opening, a
     // phone turning): the observer is the one place that says "now measure".

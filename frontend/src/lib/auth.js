@@ -1,4 +1,5 @@
 import { withDesktopSelector } from './desktop-selector.js';
+import { reconcileActiveAccount } from './accounts.js';
 
 /**
  * WebAuthn ceremony helpers for the Svelte app.
@@ -495,9 +496,26 @@ async function requestSessionState() {
   throw new TransientAuthError(lastError?.message);
 }
 
+/**
+ * An account_switched result means this tab's jar diverged from the browser's
+ * active account. Reconcile (switch to the named active account, which sets
+ * its pair) and reload once; never a bare reload, which a jar still holding a
+ * live non-active pair would loop on.
+ */
+async function reconcileIfSwitched(data) {
+  if (!data || data.reason !== 'account_switched') return data;
+  const started = await reconcileActiveAccount(data.active_user_id);
+  if (started) {
+    // The page is reloading: hold this check so nothing flashes signed out.
+    return new Promise(() => {});
+  }
+  return { authenticated: false, reason: data.reason };
+}
+
 function serializedSessionRequest() {
   if (!sessionRequestPromise) {
     sessionRequestPromise = requestSessionState()
+      .then(reconcileIfSwitched)
       .finally(() => {
         sessionRequestPromise = null;
       });

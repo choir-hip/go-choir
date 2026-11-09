@@ -198,6 +198,27 @@ CREATE TABLE IF NOT EXISTS owner_root_key_wraps (
 	UNIQUE(owner_id, credential_id)
 );
 CREATE INDEX IF NOT EXISTS idx_owner_root_key_wraps_owner_id ON owner_root_key_wraps(owner_id);
+
+-- Account switcher (docs/design/account-switcher-2026-11-09.md): one browser's
+-- signed-in accounts. handle_hash is the SHA-256 of the opaque choir_accounts
+-- cookie value; the cookie itself is never stored.
+CREATE TABLE IF NOT EXISTS account_set (
+	id             TEXT PRIMARY KEY,
+	handle_hash    TEXT NOT NULL UNIQUE,
+	active_user_id TEXT NOT NULL DEFAULT '',
+	created_at     DATETIME NOT NULL,
+	last_used_at   DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS account_set_member (
+	set_id             TEXT NOT NULL REFERENCES account_set(id) ON DELETE CASCADE,
+	user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	refresh_session_id TEXT NOT NULL,
+	added_at           DATETIME NOT NULL,
+	UNIQUE(set_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_account_set_member_session ON account_set_member(refresh_session_id);
+CREATE INDEX IF NOT EXISTS idx_account_set_member_user ON account_set_member(user_id);
 `
 
 // schemaMigrations contains DDL statements that add columns to existing tables

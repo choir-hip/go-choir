@@ -28,7 +28,7 @@ import { BUILD_INFO } from './build-info.js';
 
 export type ToastKind = 'info' | 'error';
 export type ToastOptions = { kind?: ToastKind; durationMs?: number };
-export type AuthRequest = { kind?: string; appId?: string; appName?: string };
+export type AuthRequest = { kind?: string; appId?: string; appName?: string; email?: string };
 export type OpenAppContext = { appName?: string; icon?: string; appContext?: Record<string, unknown> } & Record<string, unknown>;
 export type WindowSummary = { windowId: string; appId: string; title: string; mode: string; focused: boolean };
 export type WindowAction = 'focus' | 'restore' | 'minimize' | 'maximize' | 'close';
@@ -57,6 +57,7 @@ export interface ShellHost {
   showOverview?(): void;
   showDesktop?(): void;
   logout?(): void;
+  prepareAccountSwitch?(): Promise<void> | void;
   submitPrompt?(text: string, options: PromptOptions): Promise<void> | void;
 }
 
@@ -80,7 +81,7 @@ export function toast(message: string, options: ToastOptions = {}): void {
 
 /** The preview-mode action-time prompt: ask a signed-out visitor to sign in for this action. */
 export function requireAuth(request: AuthRequest = {}): void {
-  host().requireAuth?.({ kind: request.kind, appId: request.appId, appName: request.appName });
+  host().requireAuth?.({ kind: request.kind, appId: request.appId, appName: request.appName, ...(request.email ? { email: request.email } : {}) });
 }
 
 /** The app's fetch failed with AuthRequiredError and the session cannot be renewed. */
@@ -191,6 +192,11 @@ export function showDesktop(): void {
 /** Sign out. */
 export function logout(): void {
   host().logout?.();
+}
+
+/** Before an account switch: the desktop saves its state and closes its live channel. */
+export async function prepareAccountSwitch(): Promise<void> {
+  await host().prepareAccountSwitch?.();
 }
 
 /** Send text through the prompt bar's door: the focused app agent takes it, or the conductor routes it. */

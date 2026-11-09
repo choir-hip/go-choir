@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { markReturning } from './accounts.js';
   import { emailTokenFromHash, verifyEmailToken } from './auth.js';
 
   type RouteState = 'ready' | 'working' | 'done' | 'invalid' | 'unavailable';
@@ -46,7 +47,7 @@
     try {
       await verifyEmailToken(presented);
       try {
-        window.localStorage?.setItem('choir.auth.returning', 'true');
+        markReturning();
       } catch (_err) {
         // Storage can be unavailable (private mode); sign-in still worked.
       }

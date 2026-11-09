@@ -1,3 +1,4 @@
+import { scopedKey } from './accounts.js';
 // Autopaper: the public front list of living stories, and the routes that
 // name a story. Everything here reads public platform routes served from
 // Store B; nothing calls a computer, so Autopaper stays up while the paper
@@ -382,7 +383,7 @@ function storage(): StorageLike | null {
 /** The section the reader last chose on this device, or the front page. */
 export function loadSavedSection(store: StorageLike | null = storage()): string {
   try {
-    const id = store?.getItem(SECTION_STORAGE_KEY) || '';
+    const id = store?.getItem(scopedKey(SECTION_STORAGE_KEY)) || '';
     return isSectionId(id) ? id : FRONT_SECTION_ID;
   } catch {
     return FRONT_SECTION_ID;
@@ -392,7 +393,7 @@ export function loadSavedSection(store: StorageLike | null = storage()): string 
 export function saveSection(section: string, store: StorageLike | null = storage()): void {
   if (!isSectionId(section)) return;
   try {
-    store?.setItem(SECTION_STORAGE_KEY, section);
+    store?.setItem(scopedKey(SECTION_STORAGE_KEY), section);
   } catch {
     // Storage blocked: the section is simply not remembered.
   }
@@ -402,7 +403,7 @@ export function saveSection(section: string, store: StorageLike | null = storage
 export function loadSectionVisits(store: StorageLike | null = storage()): Record<string, number> {
   const out: Record<string, number> = {};
   try {
-    const raw = JSON.parse(store?.getItem(SECTION_VISITS_STORAGE_KEY) || '{}');
+    const raw = JSON.parse(store?.getItem(scopedKey(SECTION_VISITS_STORAGE_KEY)) || '{}');
     for (const [id, n] of Object.entries(raw || {})) {
       const count = Number(n);
       if (isSectionId(id) && id !== FRONT_SECTION_ID && Number.isFinite(count) && count > 0) out[id] = Math.floor(count);
@@ -419,7 +420,7 @@ export function recordSectionVisit(section: string, store: StorageLike | null = 
   if (!isSectionId(section) || section === FRONT_SECTION_ID) return visits;
   visits[section] = (visits[section] || 0) + 1;
   try {
-    store?.setItem(SECTION_VISITS_STORAGE_KEY, JSON.stringify(visits));
+    store?.setItem(scopedKey(SECTION_VISITS_STORAGE_KEY), JSON.stringify(visits));
   } catch {
     // Storage blocked: the visit is not kept.
   }
