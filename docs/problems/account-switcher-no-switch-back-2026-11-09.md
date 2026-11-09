@@ -1,6 +1,6 @@
 # Account switcher: after adding an account there is no way back to the first
 
-Date: 2026-11-09. Status: open, not fixed. Reported by the owner on staging.
+Date: 2026-11-09. Status: explained. The owner confirmed on 2026-11-09 that the switcher works on a current frontend (two accounts listed, switch back offered); the report came from b@c's stale frontend. The auth hypothesis below is not supported. Open: row layout only. Reported by the owner on staging.
 
 ## What the owner saw
 
