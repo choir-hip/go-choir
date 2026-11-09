@@ -35,6 +35,29 @@ type ModelPricing struct {
 	// tokens then price at InputPerMillion (never at $0, which would
 	// understate cost).
 	CachedInputPerMillion float64
+
+	// CacheWrite5mPerMillion and CacheWrite1hPerMillion are the USD prices
+	// per 1M input tokens written to the prompt cache with a 5-minute and a
+	// 1-hour lifetime. Zero means the provider charges no write premium:
+	// written tokens then price at InputPerMillion. Claude: 1.25x and 2x.
+	CacheWrite5mPerMillion float64
+	CacheWrite1hPerMillion float64
+}
+
+// cacheWrite5mRate and cacheWrite1hRate are the per-1M prices a cache-write
+// token is billed at.
+func (p ModelPricing) cacheWrite5mRate() float64 {
+	if p.CacheWrite5mPerMillion > 0 {
+		return p.CacheWrite5mPerMillion
+	}
+	return p.InputPerMillion
+}
+
+func (p ModelPricing) cacheWrite1hRate() float64 {
+	if p.CacheWrite1hPerMillion > 0 {
+		return p.CacheWrite1hPerMillion
+	}
+	return p.InputPerMillion
 }
 
 // cachedRate is the per-1M price a cached input token is billed at.
@@ -95,8 +118,10 @@ var pricingTable = []ModelPricing{
 	// Claude Haiku 5.5 on Bedrock (2026-11-09): $0.10/M in, $0.50/M out. The
 	// cached rate is an estimate at Anthropic's usual tenth of input; caching
 	// is confirmed live (a 12k system prefix written, then read back whole).
-	{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
-	{Provider: "bedrock", Model: "global.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
+	// Cache writes bill at Anthropic's multiples of input: 1.25x for the
+	// 5-minute lifetime, 2x for the 1-hour one (reads 0.1x).
+	{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, CacheWrite5mPerMillion: 0.125, CacheWrite1hPerMillion: 0.20, OutputPerMillion: 0.50},
+	{Provider: "bedrock", Model: "global.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, CacheWrite5mPerMillion: 0.125, CacheWrite1hPerMillion: 0.20, OutputPerMillion: 0.50},
 	// River's published rate for the same DeepSeek snapshots, $0.12 in,
 	// $0.0024 cached, $0.48 out per million (console.river.ai/api/public/pricing,
 	// 2026-11-09, "preview rates, subject to change"). Matched by provider
@@ -107,10 +132,10 @@ var pricingTable = []ModelPricing{
 	// Bedrock (the gateway's daily budget counts these,
 	// internal/gateway/paid_budget.go): Haiku 5.5 at the owner's rate, and
 	// the Claude 4.x ids the catalog serves at list rates (estimates).
-	{Provider: "bedrock", Model: "claude-haiku-5.5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
-	{Provider: "bedrock", Model: "claude-haiku-4.5", InputPerMillion: 1.0, OutputPerMillion: 5.0},
-	{Provider: "bedrock", Model: "claude-sonnet-4.6", InputPerMillion: 3.0, OutputPerMillion: 15.0},
-	{Provider: "bedrock", Model: "claude-opus-4.6", InputPerMillion: 5.0, OutputPerMillion: 25.0},
+	{Provider: "bedrock", Model: "claude-haiku-5.5", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, CacheWrite5mPerMillion: 0.125, CacheWrite1hPerMillion: 0.20, OutputPerMillion: 0.50},
+	{Provider: "bedrock", Model: "claude-haiku-4.5", InputPerMillion: 1.0, CachedInputPerMillion: 0.10, CacheWrite5mPerMillion: 1.25, CacheWrite1hPerMillion: 2.0, OutputPerMillion: 5.0},
+	{Provider: "bedrock", Model: "claude-sonnet-4.6", InputPerMillion: 3.0, CachedInputPerMillion: 0.30, CacheWrite5mPerMillion: 3.75, CacheWrite1hPerMillion: 6.0, OutputPerMillion: 15.0},
+	{Provider: "bedrock", Model: "claude-opus-4.6", InputPerMillion: 5.0, CachedInputPerMillion: 0.50, CacheWrite5mPerMillion: 6.25, CacheWrite1hPerMillion: 10.0, OutputPerMillion: 25.0},
 	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
 	// limited time" with no end date; LongCat 2.5 Preview lists at about
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.

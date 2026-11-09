@@ -94,7 +94,7 @@ func TestOpenCodeSessionIsTheDeskCacheKeyAndBodiesCarryNoKey(t *testing.T) {
 func TestBedrockMarksHistoryCacheBreakpoint(t *testing.T) {
 	p := &BedrockProvider{anthropicV: "bedrock-2023-05-31"}
 	req := LLMRequest{
-		System: "system",
+		System: "system", CacheKey: "choir-texture-aaaaaaaaaaaa-bbbbbbbbbbbb", // a history-carrying desk
 		Messages: []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: "hello"}}},
 			{Role: "assistant", Content: []Block{{Type: "tool_use", ID: "t1", Name: "x", Input: json.RawMessage(`{}`)}}},
@@ -120,7 +120,7 @@ func TestBedrockMarksHistoryCacheBreakpoint(t *testing.T) {
 
 	// A breakpoint never lands on a thinking block.
 	messages := []anthropicMessage{{Role: "assistant", Content: []anthropicContent{{Type: "text", Text: "a"}, {Type: "thinking", Thinking: "t"}}}}
-	markHistoryCacheBreakpoint(messages)
+	markHistoryCacheBreakpoint(messages, true)
 	if messages[0].Content[1].CacheControl != nil || messages[0].Content[0].CacheControl == nil {
 		t.Fatalf("breakpoint placement = %+v", messages[0].Content)
 	}

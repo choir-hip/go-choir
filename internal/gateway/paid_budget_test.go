@@ -233,3 +233,19 @@ func TestPaidSpendPricesRiverAtRiversRate(t *testing.T) {
 		t.Fatalf("1M cached Haiku tokens = $%.4f, want the cached rate", usd)
 	}
 }
+
+// Cache writes count toward the day's spend at the 1.25x and 2x rates, so the
+// $20 Bedrock budget is not undercounted.
+func TestPaidSpendCountsCacheWrites(t *testing.T) {
+	clk := &spendClock{time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)}
+	s := newTestSpend(t, "", clk)
+	got := s.Record("bedrock", "vm-a", "global.anthropic.claude-haiku-5-5", provider.Usage{
+		InputTokens: 100_000, CachedInputTokens: 60_000, CacheWrite5mTokens: 10_000, CacheWrite1hTokens: 20_000, OutputTokens: 2_000,
+	})
+	if !near(got, 0.00785) {
+		t.Fatalf("cost %v want 0.00785", got)
+	}
+	if snap := s.Snapshot(); !near(snap.Providers["bedrock"].USD, 0.00785) {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+}

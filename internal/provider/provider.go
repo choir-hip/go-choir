@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 )
 
@@ -177,15 +178,39 @@ type Usage struct {
 	// CacheReported is true when the provider's usage carried a cache field
 	// at all, so "0 cached" (a miss) is distinguishable from "not reported".
 	CacheReported bool `json:"cache_reported,omitempty"`
+
+	// CacheWrite5mTokens and CacheWrite1hTokens are the parts of
+	// InputTokens the provider wrote to its prompt cache, by lifetime. A
+	// write is billed above the plain input rate (Claude: 1.25x for 5
+	// minutes, 2x for 1 hour). They are disjoint from CachedInputTokens
+	// (reads). A provider that reports only a write total (no split) has it
+	// counted at the 1-hour rate, the dearer one, so spend is never
+	// understated.
+	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 }
 
-// normalizeCache clamps CachedInputTokens to the prompt size.
+// normalizeCache clamps CachedInputTokens to the prompt size, and the cache
+// writes to what the prompt has left after the reads.
 func (u Usage) normalizeCache() Usage {
 	if u.CachedInputTokens < 0 {
 		u.CachedInputTokens = 0
 	}
 	if u.CachedInputTokens > u.InputTokens {
 		u.CachedInputTokens = u.InputTokens
+	}
+	if u.CacheWrite5mTokens < 0 {
+		u.CacheWrite5mTokens = 0
+	}
+	if u.CacheWrite1hTokens < 0 {
+		u.CacheWrite1hTokens = 0
+	}
+	room := u.InputTokens - u.CachedInputTokens
+	if u.CacheWrite5mTokens > room {
+		u.CacheWrite5mTokens = room
+	}
+	if u.CacheWrite1hTokens > room-u.CacheWrite5mTokens {
+		u.CacheWrite1hTokens = room - u.CacheWrite5mTokens
 	}
 	return u
 }
@@ -529,14 +554,14 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 		ar.System = []anthropicSystemBlock{{
 			Type:         "text",
 			Text:         req.System,
-			CacheControl: bedrockCacheControl(),
+			CacheControl: bedrockCacheControl(true),
 		}}
 	}
 
 	ar.Messages = bedrockPairToolResults(bedrockSanitizeMessages(convertMessages(req.Messages)))
 	// Bedrock caches only at explicit breakpoints: the system one above
 	// (tools + system) and this one (the history so far).
-	markHistoryCacheBreakpoint(ar.Messages)
+	markHistoryCacheBreakpoint(ar.Messages, bedrockCarriesHistory(req))
 	ar.Tools = convertToolDefs(req.Tools)
 	for i := range ar.Tools {
 		if len(ar.Tools[i].InputSchema) == 0 {
@@ -2151,14 +2176,82 @@ type anthropicContent struct {
 	CacheControl map[string]string `json:"cache_control,omitempty"`
 }
 
-// bedrockCacheControl is the one-hour breakpoint. Desks wake minutes apart
-// (the paper's Texture gap is p50 628 s), so the 5-minute default expires
-// between wakes. AWS lists Claude Haiku 5.5 with TTLs "5 minutes, 1 hour" for
-// InvokeModel (docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html),
-// with no beta header. Both breakpoints use the same TTL, which satisfies the
-// rule that a longer-TTL entry must come before any shorter one.
-func bedrockCacheControl() map[string]string {
-	return map[string]string{"type": "ephemeral", "ttl": "1h"}
+// bedrockCacheControl is a cache breakpoint: one hour when long, else the
+// 5-minute default (no ttl field). Desks wake minutes apart (the paper's
+// Texture gap is p50 628 s), so the 5-minute default expires between wakes.
+// AWS lists Claude Haiku 5.5 with TTLs "5 minutes, 1 hour" for InvokeModel
+// (docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html), with no
+// beta header. A longer-TTL entry must come before any shorter one (measured
+// 2026-11-09: 1h system then 5m tail is accepted, 5m then 1h is a 400). The
+// system breakpoint, which covers tools and system, is always 1h, so the tail
+// breakpoint can be either and the order always holds.
+func bedrockCacheControl(long bool) map[string]string {
+	if long {
+		return map[string]string{"type": "ephemeral", "ttl": "1h"}
+	}
+	return map[string]string{"type": "ephemeral"}
+}
+
+// Request signals that mark a run as one-shot, for the cache lifetime of its
+// message tail. A one-shot run's calls follow each other in seconds and its
+// transcript is never resumed, so the tail needs only the 5-minute lifetime;
+// its system and tools still write for an hour, since siblings and later runs
+// of the same desk share them.
+const (
+	researchChildConversationPrefix = "research-child:"
+	modelVerifyConversationPrefix   = "model-verify:"
+)
+
+// bedrockCarriesHistory reports whether the request belongs to a desk whose
+// run resumes a prior transcript across wakes, so the message tail must live
+// an hour. The signals, all on the request: a request with no CacheKey names
+// no desk thread (judge, model-verify and key-less API calls), so it is
+// one-shot; a ConversationID of a research child or a model-verify probe is
+// one-shot; a CacheKey whose label (the readable part of
+// toolregistry.PromptCacheKey, "choir-<label>-<scope>-<prompt>") is the
+// management task role is one-shot. Everything else (Texture, management,
+// engineering, research and the rest) carries history.
+func bedrockCarriesHistory(req LLMRequest) bool {
+	key := strings.TrimSpace(req.CacheKey)
+	if key == "" {
+		return false
+	}
+	conv := strings.TrimSpace(req.ConversationID)
+	if strings.HasPrefix(conv, researchChildConversationPrefix) || strings.HasPrefix(conv, modelVerifyConversationPrefix) {
+		return false
+	}
+	if label, ok := cacheKeyLabel(key); ok && label == cacheLabelForm(deskmanifest.TaskRoleName()) {
+		return false
+	}
+	return true
+}
+
+// cacheKeyLabel is the desk label of a toolregistry.PromptCacheKey.
+func cacheKeyLabel(key string) (string, bool) {
+	rest, ok := strings.CutPrefix(key, "choir-")
+	if !ok {
+		return "", false
+	}
+	label, _, _ := strings.Cut(rest, "-")
+	return label, label != ""
+}
+
+// cacheLabelForm is toolregistry's promptCacheLabel: lower case, anything
+// outside [a-z0-9] as "_", at most 24 characters.
+func cacheLabelForm(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+		if b.Len() >= 24 {
+			break
+		}
+	}
+	return b.String()
 }
 
 // markHistoryCacheBreakpoint puts an ephemeral cache breakpoint on the last
@@ -2166,7 +2259,7 @@ func bedrockCacheControl() map[string]string {
 // caches the conversation so far and the next call of the append-only loop
 // reads it back (the system breakpoint alone caches only tools and system).
 // Thinking blocks cannot carry one.
-func markHistoryCacheBreakpoint(messages []anthropicMessage) {
+func markHistoryCacheBreakpoint(messages []anthropicMessage, long bool) {
 	if len(messages) == 0 {
 		return
 	}
@@ -2176,7 +2269,7 @@ func markHistoryCacheBreakpoint(messages []anthropicMessage) {
 		case "thinking", "redacted_thinking":
 			continue
 		}
-		content[i].CacheControl = bedrockCacheControl()
+		content[i].CacheControl = bedrockCacheControl(long)
 		return
 	}
 }
@@ -2204,6 +2297,11 @@ type anthropicUsage struct {
 	OutputTokens             int  `json:"output_tokens"`
 	CacheReadInputTokens     *int `json:"cache_read_input_tokens,omitempty"`
 	CacheCreationInputTokens *int `json:"cache_creation_input_tokens,omitempty"`
+	// CacheCreation splits the write total by lifetime.
+	CacheCreation *struct {
+		Ephemeral5m int `json:"ephemeral_5m_input_tokens"`
+		Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
+	} `json:"cache_creation,omitempty"`
 }
 
 // usage maps an Anthropic usage object to Usage. Anthropic's input_tokens
@@ -2219,6 +2317,17 @@ func (u anthropicUsage) usage() Usage {
 	if u.CacheCreationInputTokens != nil {
 		out.CacheReported = true
 		out.InputTokens += *u.CacheCreationInputTokens
+		out.CacheWrite1hTokens = *u.CacheCreationInputTokens
+	}
+	if u.CacheCreation != nil {
+		out.CacheWrite5mTokens = u.CacheCreation.Ephemeral5m
+		out.CacheWrite1hTokens = u.CacheCreation.Ephemeral1h
+		if u.CacheCreationInputTokens == nil {
+			out.CacheReported = true
+			out.InputTokens += u.CacheCreation.Ephemeral5m + u.CacheCreation.Ephemeral1h
+		} else if rest := *u.CacheCreationInputTokens - u.CacheCreation.Ephemeral5m - u.CacheCreation.Ephemeral1h; rest > 0 {
+			out.CacheWrite1hTokens += rest // unsplit remainder, at the dearer rate
+		}
 	}
 	return out.normalizeCache()
 }
@@ -2976,6 +3085,8 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 				result.Usage.InputTokens = start.InputTokens
 				result.Usage.CachedInputTokens = start.CachedInputTokens
 				result.Usage.CacheReported = start.CacheReported
+				result.Usage.CacheWrite5mTokens = start.CacheWrite5mTokens
+				result.Usage.CacheWrite1hTokens = start.CacheWrite1hTokens
 			}
 			onChunk(StreamChunk{
 				Type:  "message_start",

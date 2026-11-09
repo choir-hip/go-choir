@@ -167,7 +167,7 @@ func paidCallCost(providerName, model string, u provider.Usage, capped bool) (us
 	for _, prefix := range []string{"global.anthropic.", "us.anthropic.", "eu.anthropic.", "anthropic."} {
 		model = strings.TrimPrefix(model, prefix)
 	}
-	c := llmcost.EstimateProviderCallWithCache(providerName, model, u.InputTokens, u.CachedInputTokens, u.OutputTokens)
+	c := llmcost.EstimateProviderCallWithCacheWrites(providerName, model, u.InputTokens, u.CachedInputTokens, u.CacheWrite5mTokens, u.CacheWrite1hTokens, u.OutputTokens)
 	if c.Found {
 		return c.USD, true
 	}

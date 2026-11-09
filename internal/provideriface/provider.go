@@ -158,6 +158,12 @@ type TokenUsage struct {
 	// CacheReported is true when the provider reported a cache count, so a
 	// reported miss (0) is distinguishable from no report.
 	CacheReported bool `json:"cache_reported,omitempty"`
+
+	// CacheWrite5mTokens and CacheWrite1hTokens are the parts of
+	// InputTokens written to the provider's prompt cache, by lifetime
+	// (billed above the plain input rate).
+	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 }
 
 // Add accumulates another call's usage. CacheReported stays true once any
@@ -166,6 +172,8 @@ func (u *TokenUsage) Add(other TokenUsage) {
 	u.InputTokens += other.InputTokens
 	u.OutputTokens += other.OutputTokens
 	u.CachedInputTokens += other.CachedInputTokens
+	u.CacheWrite5mTokens += other.CacheWrite5mTokens
+	u.CacheWrite1hTokens += other.CacheWrite1hTokens
 	u.CacheReported = u.CacheReported || other.CacheReported
 }
 

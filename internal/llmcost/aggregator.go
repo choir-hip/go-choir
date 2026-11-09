@@ -105,6 +105,8 @@ func extractFromToolLoopEvent(ev types.EventRecord, payload map[string]any) (Cos
 	inputTokens := payloadInt(payload, "input_tokens")
 	outputTokens := payloadInt(payload, "output_tokens")
 	cachedTokens := payloadInt(payload, "cached_input_tokens")
+	write5m := payloadInt(payload, "cache_write_5m_tokens")
+	write1h := payloadInt(payload, "cache_write_1h_tokens")
 	// Skip events that carry no token data — these are pre-cost-tracking
 	// events or non-LLM progress updates.
 	if inputTokens == 0 && outputTokens == 0 {
@@ -114,7 +116,7 @@ func extractFromToolLoopEvent(ev types.EventRecord, payload map[string]any) (Cos
 		return CostEntry{}, false
 	}
 	provider := payloadString(payload, "llm_provider")
-	cost := EstimateCallWithCache(model, inputTokens, cachedTokens, outputTokens)
+	cost := EstimateCallWithCacheWrites(model, inputTokens, cachedTokens, write5m, write1h, outputTokens)
 	if provider == "" {
 		provider = cost.Provider
 	}

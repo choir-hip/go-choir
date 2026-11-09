@@ -202,10 +202,12 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 		Text:             resp.Text,
 		ReasoningContent: resp.ReasoningContent,
 		Usage: provideriface.TokenUsage{
-			InputTokens:       resp.Usage.InputTokens,
-			OutputTokens:      resp.Usage.OutputTokens,
-			CachedInputTokens: resp.Usage.CachedInputTokens,
-			CacheReported:     resp.Usage.CacheReported,
+			InputTokens:        resp.Usage.InputTokens,
+			OutputTokens:       resp.Usage.OutputTokens,
+			CachedInputTokens:  resp.Usage.CachedInputTokens,
+			CacheReported:      resp.Usage.CacheReported,
+			CacheWrite5mTokens: resp.Usage.CacheWrite5mTokens,
+			CacheWrite1hTokens: resp.Usage.CacheWrite1hTokens,
 		},
 		Model: resp.Model,
 	}
@@ -655,6 +657,9 @@ type tokenUsage struct {
 	OutputTokens      int  `json:"output_tokens"`
 	CachedInputTokens int  `json:"cached_input_tokens,omitempty"`
 	CacheReported     bool `json:"cache_reported,omitempty"`
+	// Cache writes by lifetime (provider.Usage).
+	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 }
 
 type contentToolCall struct {

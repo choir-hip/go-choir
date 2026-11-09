@@ -1381,6 +1381,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			// it at all (llmcost prices and rates only reported calls).
 			"cached_input_tokens": resp.Usage.CachedInputTokens,
 			"cache_reported":      resp.Usage.CacheReported,
+			// Cache writes, by lifetime: billed above plain input.
+			"cache_write_5m_tokens": resp.Usage.CacheWrite5mTokens,
+			"cache_write_1h_tokens": resp.Usage.CacheWrite1hTokens,
 			// What the request-side line gave a reader of the pair: how long
 			// the call took (retries included), the request's shape, and the
 			// hashes that show the prompt prefix changed between turns.

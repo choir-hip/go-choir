@@ -19,6 +19,11 @@ type Cost struct {
 	// provider's prompt cache, priced at the cached-input rate.
 	CachedInputTokens int
 
+	// CacheWrite5mTokens and CacheWrite1hTokens are the parts of InputTokens
+	// written to the prompt cache, priced at the write rates.
+	CacheWrite5mTokens int
+	CacheWrite1hTokens int
+
 	// CacheSavingsUSD is what the cached tokens would have cost more at the
 	// uncached input rate.
 	CacheSavingsUSD float64
@@ -49,45 +54,70 @@ func EstimateCall(model string, inputTokens, outputTokens int) Cost {
 // cachedInputTokens (clamped to inputTokens) is priced at the model's cached
 // rate and the rest at the input rate.
 func EstimateCallWithCache(model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
-	return estimateWith(LookupPricing, model, inputTokens, cachedInputTokens, outputTokens)
+	return estimateWith(LookupPricing, model, inputTokens, cachedInputTokens, 0, 0, outputTokens)
 }
 
 // EstimateProviderCallWithCache is EstimateCallWithCache at the named
 // provider's rate when the table has one (LookupProviderPricing).
 func EstimateProviderCallWithCache(providerName, model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
-	return estimateWith(func(m string) (ModelPricing, bool) { return LookupProviderPricing(providerName, m) }, model, inputTokens, cachedInputTokens, outputTokens)
+	return EstimateProviderCallWithCacheWrites(providerName, model, inputTokens, cachedInputTokens, 0, 0, outputTokens)
 }
 
-func estimateWith(lookup func(string) (ModelPricing, bool), model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
+// EstimateProviderCallWithCacheWrites is EstimateProviderCallWithCache for a
+// call that also wrote to the prompt cache. inputTokens is the whole prompt:
+// cachedInputTokens were read (cached rate), write5m and write1h were written
+// (write rates), and the rest is plain input.
+func EstimateProviderCallWithCacheWrites(providerName, model string, inputTokens, cachedInputTokens, write5m, write1h, outputTokens int) Cost {
+	return estimateWith(func(m string) (ModelPricing, bool) { return LookupProviderPricing(providerName, m) }, model, inputTokens, cachedInputTokens, write5m, write1h, outputTokens)
+}
+
+// EstimateCallWithCacheWrites is EstimateProviderCallWithCacheWrites at the
+// model's rate whatever the provider (LookupPricing).
+func EstimateCallWithCacheWrites(model string, inputTokens, cachedInputTokens, write5m, write1h, outputTokens int) Cost {
+	return estimateWith(LookupPricing, model, inputTokens, cachedInputTokens, write5m, write1h, outputTokens)
+}
+
+func estimateWith(lookup func(string) (ModelPricing, bool), model string, inputTokens, cachedInputTokens, write5m, write1h, outputTokens int) Cost {
 	if cachedInputTokens < 0 {
 		cachedInputTokens = 0
 	}
 	if cachedInputTokens > inputTokens {
 		cachedInputTokens = inputTokens
 	}
+	write5m, write1h = max(write5m, 0), max(write1h, 0)
+	if room := inputTokens - cachedInputTokens; write5m+write1h > room {
+		write5m = min(write5m, room)
+		write1h = room - write5m
+	}
 	entry, ok := lookup(model)
 	if !ok {
 		return Cost{
-			InputTokens:       inputTokens,
-			OutputTokens:      outputTokens,
-			CachedInputTokens: cachedInputTokens,
-			Model:             model,
-			Found:             false,
+			InputTokens:        inputTokens,
+			OutputTokens:       outputTokens,
+			CachedInputTokens:  cachedInputTokens,
+			CacheWrite5mTokens: write5m,
+			CacheWrite1hTokens: write1h,
+			Model:              model,
+			Found:              false,
 		}
 	}
-	uncached := inputTokens - cachedInputTokens
+	uncached := inputTokens - cachedInputTokens - write5m - write1h
 	usd := float64(uncached)*entry.InputPerMillion/1_000_000 +
 		float64(cachedInputTokens)*entry.cachedRate()/1_000_000 +
+		float64(write5m)*entry.cacheWrite5mRate()/1_000_000 +
+		float64(write1h)*entry.cacheWrite1hRate()/1_000_000 +
 		float64(outputTokens)*entry.OutputPerMillion/1_000_000
 	return Cost{
-		USD:               usd,
-		InputTokens:       inputTokens,
-		OutputTokens:      outputTokens,
-		CachedInputTokens: cachedInputTokens,
-		CacheSavingsUSD:   float64(cachedInputTokens) * (entry.InputPerMillion - entry.cachedRate()) / 1_000_000,
-		Model:             model,
-		Provider:          entry.Provider,
-		Found:             true,
+		USD:                usd,
+		InputTokens:        inputTokens,
+		OutputTokens:       outputTokens,
+		CachedInputTokens:  cachedInputTokens,
+		CacheWrite5mTokens: write5m,
+		CacheWrite1hTokens: write1h,
+		CacheSavingsUSD:    float64(cachedInputTokens) * (entry.InputPerMillion - entry.cachedRate()) / 1_000_000,
+		Model:              model,
+		Provider:           entry.Provider,
+		Found:              true,
 	}
 }
 
@@ -100,6 +130,8 @@ func (c *Cost) Add(other Cost) {
 	c.InputTokens += other.InputTokens
 	c.OutputTokens += other.OutputTokens
 	c.CachedInputTokens += other.CachedInputTokens
+	c.CacheWrite5mTokens += other.CacheWrite5mTokens
+	c.CacheWrite1hTokens += other.CacheWrite1hTokens
 	c.CacheSavingsUSD += other.CacheSavingsUSD
 	if c.Model == "" {
 		c.Model = other.Model
