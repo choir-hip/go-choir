@@ -184,8 +184,22 @@ func checkManifest(name string, raw []byte, files apppackage.Source) (Manifest, 
 	return checkManifestOn(name, raw, files, apppackage.CurrentPlatform())
 }
 
+// CheckManifestOwnShell is CheckManifest for a record that is an owner's
+// own-track update of a base package (Record.OwnShellUpdate): T2 is not
+// refused. Callers hold the gate (publish by decision, install of the
+// owner's own track).
+func CheckManifestOwnShell(name string, raw []byte, files apppackage.Source) (Manifest, string, error) {
+	summary, version, _, err := checkManifestOpts(name, raw, files, apppackage.CurrentPlatform(), true)
+	return summary, version, err
+}
+
 // checkManifestOn is checkManifest on a stated platform.
 func checkManifestOn(name string, raw []byte, files apppackage.Source, platform apppackage.Platform) (Manifest, string, apppackage.Manifest, error) {
+	return checkManifestOpts(name, raw, files, platform, false)
+}
+
+// checkManifestOpts is checkManifestOn that admits T2 when ownShell.
+func checkManifestOpts(name string, raw []byte, files apppackage.Source, platform apppackage.Platform, ownShell bool) (Manifest, string, apppackage.Manifest, error) {
 	// Kinds first: a first-party package's kinds are generated into
 	// internal/apppackage/firstparty_gen.go, outside the package, so a
 	// release cannot carry them until runtime install (S12).
@@ -197,10 +211,10 @@ func checkManifestOn(name string, raw []byte, files apppackage.Source, platform 
 	}
 	// The tiered review (L3, review.go): a T2 release is refused with its
 	// own reason before the manifest checks would name its privileged grant.
-	if err := reviewPlatform(raw); err != nil {
+	if err := reviewPlatform(raw, ownShell); err != nil {
 		return Manifest{}, "", apppackage.Manifest{}, err
 	}
-	manifest, err := apppackage.ParseManifestOn(raw, apppackage.OriginPublished, platform)
+	manifest, err := apppackage.ParseManifestOwnShell(raw, apppackage.OriginPublished, platform, ownShell)
 	if err != nil {
 		switch {
 		case errors.Is(err, apppackage.ErrPublisherDeclared):
@@ -411,7 +425,9 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		return DraftSource{}, refuse(ReasonManifestInvalid, "%s/choir-package.json is missing or unreadable", root)
 	}
 	files := treeFiles(ctx, s.dir, s.env, full, root)
-	manifest, version, parsed, err := checkManifest(in.Name, raw, files)
+	// A draft is on the publisher's own track: a base package's T2 update is
+	// drafted here and admitted or refused by the host.
+	manifest, version, parsed, err := checkManifestOpts(in.Name, raw, files, apppackage.CurrentPlatform(), apppackage.IsBuiltinPackage(in.Name))
 	if err != nil {
 		return DraftSource{}, err
 	}

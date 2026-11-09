@@ -283,6 +283,9 @@ type MechanicalInput struct {
 	RecordSurface  string
 	ModuleBuilt    bool
 	SecretsRefused bool
+	// OwnShell: the record is an owner's own-track update of a base package
+	// (pkgrelease.Record.OwnShellUpdate), so ui.shell is not refused.
+	OwnShell bool
 }
 
 // Mechanical runs the checks of trust draft 7.1 the computer can run on the
@@ -298,7 +301,7 @@ func Mechanical(in MechanicalInput) ([]Check, apppackage.Manifest) {
 	}
 	digest := computerevent.DigestBytes(in.ManifestRaw)
 	add("manifest_is_the_records", digest == in.RecordSHA256, "the built tree's manifest hashes to "+digest)
-	m, err := apppackage.ParseManifest(in.ManifestRaw, apppackage.OriginPublished)
+	m, err := apppackage.ParseManifestOwnShell(in.ManifestRaw, apppackage.OriginPublished, apppackage.CurrentPlatform(), in.OwnShell)
 	if err != nil {
 		add("manifest_parses", false, err.Error())
 		return checks, apppackage.Manifest{}

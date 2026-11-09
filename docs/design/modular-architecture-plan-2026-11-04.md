@@ -1777,6 +1777,45 @@ gVisor pilot (R41, MA6.7). Open question 2 is settled.
   and file reads across the bridge; self-navigation of the frame is detected
   and stopped, not prevented (the CSP cannot close it).
 
+- **T2 own-track updates of base packages (decision of 2026-11-08, owner-only
+  variant).** Phase 8 (section 14) runs Files (T1) and the context-menu and
+  other shell-provider rounds (T2: menu-default and the rest) as in-place
+  updates through self-development on the owner's own computer, but the Library
+  refused every T2 release (R5, `package_platform_review_required`), and a
+  menu-default round on d@e froze, passed verify and was rejected at consensus
+  for exactly that. A two-seat decision panel (Devin, and a Sonnet seat)
+  adopted the narrow variant, with no owner ruling needed because it widens no
+  stranger's authority:
+  - *Publish.* corpusd admits a T2 release only on the by-decision route
+    (`publishByDecision`; the seat's own draft check passes the same flag),
+    only on the owner's own track, and only for a package the base image
+    provides (`apppackage.IsBuiltinPackage`; no brand-new T2 packages). The
+    owner-act publish route keeps the blanket refusal.
+  - *Listing.* Such a release is filed `owner_listed`: visible to its owner
+    only, never public or shared, never widened by a listing write (the owner
+    act's reinstate returns to `owner_listed`). It is head-eligible and offered
+    to the owner's own computers, so the next draft's parent is right; the
+    owner's withdraw is the existing owner act. A stranger's update read of it
+    answers as unavailable.
+  - *Install.* A T2 record (behavioral: it provides a shell surface or holds
+    ui.shell, never by name) installs only when `rec.Track` is the installing
+    owner, at every door (the proxy backstop and the guest's `installPackage`,
+    which the manual, sync, update, migration and self-development triggers
+    share). Records are only those corpusd filed (`VerifyID`).
+  - *Guest.* A package operation may now draft an update of a base package on
+    the owner's own track (parent: the base tree; a later update drafts on the
+    installed head).
+  - *Not built here.* The installed surface must mount in the shell, and a
+    failing installed renderer needs the L4 failover story (`?recovery=core`
+    survives in-tree) before Phase 8 is proven, not only admitted. Revert is
+    uninstall: the in-tree package returns.
+  Review seats: Devin (failure modes FM1 to FM8: foreign install, forged
+  record, public leak, state not threaded through updates, flag scope creep,
+  broken installed surface, revert semantics, withdraw) and the Sonnet seat
+  (admit only by decision, pin owner-only scope, gate install on the track,
+  relax the draftable-name refusal, narrow to updates of packages the base
+  image provides).
+
 ### 12.2 Security process (R27)
 
 1. Defence in depth, built in the order of this plan: per-user VMs, tape

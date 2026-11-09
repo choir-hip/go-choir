@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
@@ -243,9 +242,6 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 			return fail("the operation is not a package-only change")
 		}
 		name := split.Name()
-		if !apppackageDraftableName(name) {
-			return fail("package %s is a built-in app; change it through a platform release", name)
-		}
 		// An update follows the owner's track head, which the decision's
 		// package block names (the head corpusd drafted over); a draft with no
 		// head would be a new package and corpusd answers track_moved.
@@ -346,10 +342,6 @@ func (rt *Runtime) materializePackageOperation(ctx context.Context, operation se
 	// 6. Record.
 	return rt.recordPackageApplied(ctx, operation, draft, view.InstallID)
 }
-
-// apppackageDraftableName: a built-in app is changed by a platform release,
-// never published from a package operation.
-func apppackageDraftableName(name string) bool { return !apppackage.IsBuiltinPackage(name) }
 
 // packagePublishRequest assembles the publish request from the persisted
 // draft and the frozen bundle's media, which must be exactly the digests the

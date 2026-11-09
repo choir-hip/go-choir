@@ -678,7 +678,9 @@ func (h *Handler) publishVerifiedRecord(w http.ResponseWriter, r *http.Request, 
 	store := h.releaseStore()
 	record, releaseID, ownerID, computerID := p.record, p.releaseID, p.ownerID, p.computerID
 	var err error
-	in := pkgrelease.HostInput{Record: record, Base: h.packageBase}
+	// ByDecision admits a T2 own-track update of a base package; the
+	// owner-act route never sets it (pkgrelease/ownshell.go).
+	in := pkgrelease.HostInput{Record: record, Base: h.packageBase, ByDecision: p.byDecision}
 	if in.TreePatch, err = h.readPackageBlob(record.Source.TreePatch); err == nil {
 		in.ReviewPatch, err = h.readPackageBlob(record.Source.ReviewPatch)
 	}
@@ -843,10 +845,17 @@ func (h *Handler) publishVerifiedRecord(w http.ResponseWriter, r *http.Request, 
 			}
 		}
 	}
+	state, scopes := pkgrelease.StateListed, publishScopes
+	if record.IsShell() {
+		// A T2 release is the owner's alone: never public, never shared
+		// (pkgrelease/ownshell.go). VerifyHostFacts admitted it only by
+		// decision, on the owner's track, for a base package.
+		state, scopes = pkgrelease.StateOwnerListed, []string{pkgrelease.ScopeOwner}
+	}
 	listing := pkgrelease.Listing{
 		RecordKind: pkgrelease.RecordKindPackageRelease, RecordID: releaseID, Package: record.Package.Name,
-		Track: record.Track, Seq: maxSeq + 1, Scopes: publishScopes,
-		State: pkgrelease.StateListed, StateReason: "published", StateActor: p.actor, Version: 1,
+		Track: record.Track, Seq: maxSeq + 1, Scopes: scopes,
+		State: state, StateReason: "published", StateActor: p.actor, Version: 1,
 	}
 	listingObj, err := listingObject(ownerID, computerID, listing, now)
 	if err != nil {

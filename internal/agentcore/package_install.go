@@ -182,6 +182,11 @@ func (rt *Runtime) installPackage(ctx context.Context, ownerID, computerID strin
 	if apppackage.IsBuiltinPackage(rec.Package.Name) && rec.Track != ownerID {
 		return PackageInstallView{}, false, refuseInstall(http.StatusForbidden, "builtin_name_not_yours", "package %s is a built-in app; only its owner's own track may replace it", rec.Package.Name)
 	}
+	// Tier T2 installs only from the installing owner's own track, at every
+	// door (manual, sync installChange, migration, update): R5.
+	if err := pkgrelease.RequireOwnTrackShell(rec, ownerID); err != nil {
+		return PackageInstallView{}, false, refuseInstall(http.StatusForbidden, pkgrelease.ReasonShellNotYours, "%v", err)
+	}
 	if refusal := refuseDeskInstall(ownerID, rec); refusal != nil {
 		return PackageInstallView{}, false, refusal
 	}

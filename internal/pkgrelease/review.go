@@ -36,6 +36,9 @@ import (
 //	   issues one only to the base image's releases, which are built in its
 //	   own tree and never come through the Library, so every Library release
 //	   of tier T2 is refused, with its own reason, whatever its origin claims.
+//	   One exception (2026-11-08, plan 12.1): the by-decision publish of an
+//	   owner's own-track update of a package the base image provides
+//	   (ownshell.go), filed owner-only and installable only by that owner.
 //
 // Failure modes:
 //
@@ -51,7 +54,10 @@ import (
 //	   install is refused (package_uses_exceed_grants);
 //	R5 a T2 release reaches the Library by claiming an origin: the check
 //	   reads the provides and the grant, never the name or the origin
-//	   (package_platform_review_required).
+//	   (package_platform_review_required). The owner's own track is admitted
+//	   only by decision, never by the owner-act publish route, and its
+//	   release is visible to that owner alone (StateOwnerListed) and
+//	   installs only for that owner (package_shell_not_yours).
 
 // ContractFile is the contract fixture a window package carries beside its
 // manifest (frontend/scripts/package-contracts.mjs).
@@ -63,7 +69,11 @@ const ContractSchema = "choir.package-contract/v1"
 // reviewPlatform refuses a T2 release (R5): it provides a shell surface or
 // asks for ui.shell. It reads the raw manifest, before the manifest checks,
 // so the refusal names the tier rather than the privileged grant.
-func reviewPlatform(raw []byte) error {
+//
+// ownShell admits it: the release is an owner's own-track update of a base
+// package on the by-decision route (ownshell.go); every other caller passes
+// false.
+func reviewPlatform(raw []byte, ownShell bool) error {
 	var probe struct {
 		Provides     []json.RawMessage `json:"provides"`
 		Capabilities []struct {
@@ -79,7 +89,7 @@ func reviewPlatform(raw []byte) error {
 			shell = true
 		}
 	}
-	if shell {
+	if shell && !ownShell {
 		return refuse(ReasonPlatformReviewRequired, "the release is tier T2 (it draws part of Choir's own screen: ui.shell); T2 needs a platform review record bound to its digest, which the platform issues only to the base image's releases")
 	}
 	return nil

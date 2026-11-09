@@ -220,6 +220,15 @@ func ParseManifest(raw []byte, origin string) (Manifest, error) {
 // ParseManifestOn is ParseManifest on a stated platform (the publish path's
 // tests state the Phase 6 platform to reach the checks behind R24's gate).
 func ParseManifestOn(raw []byte, origin string, p Platform) (Manifest, error) {
+	return ParseManifestOwnShell(raw, origin, p, false)
+}
+
+// ParseManifestOwnShell is ParseManifestOn that, when ownShell, does not
+// refuse the ui.shell grant (the one privileged grant a shell surface needs)
+// for a published origin. Only the callers that hold the owner-track gate
+// pass true (pkgrelease/ownshell.go); every other privileged grant stays
+// refused.
+func ParseManifestOwnShell(raw []byte, origin string, p Platform, ownShell bool) (Manifest, error) {
 	if len(raw) > MaxManifestBytes {
 		return Manifest{}, invalid("manifest exceeds %d bytes", MaxManifestBytes)
 	}
@@ -240,7 +249,7 @@ func ParseManifestOn(raw []byte, origin string, p Platform) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("%w: trailing data after the JSON value", ErrInvalidManifest)
 	}
 	m.Origin = origin
-	if err := m.ValidateOn(p); err != nil {
+	if err := m.validateOn(p, ownShell); err != nil {
 		return Manifest{}, err
 	}
 	return m, nil
@@ -270,7 +279,9 @@ func IsBuiltinPackage(name string) bool {
 func ShellAppNames() []string { return append([]string{}, shellAppNames...) }
 
 // ValidateOn is Validate on a stated platform.
-func (m Manifest) ValidateOn(p Platform) error {
+func (m Manifest) ValidateOn(p Platform) error { return m.validateOn(p, false) }
+
+func (m Manifest) validateOn(p Platform, ownShell bool) error {
 	if m.Schema != ManifestSchemaV2 {
 		return invalid("schema %q is not %s", m.Schema, ManifestSchemaV2)
 	}
@@ -362,7 +373,7 @@ func (m Manifest) ValidateOn(p Platform) error {
 		// published or installed. This is a capability of the running
 		// platform, not a switch.
 		for _, c := range m.Capabilities {
-			if spec, _ := lookupGrant(c.Grant); spec.level == LevelPrivileged {
+			if spec, _ := lookupGrant(c.Grant); spec.level == LevelPrivileged && !(ownShell && c.Grant == GrantUIShell) {
 				return fmt.Errorf("%w: %s", ErrPrivilegedGrant, c.Grant)
 			}
 		}

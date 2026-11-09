@@ -302,7 +302,7 @@ func (r Record) validate(legacyParentOK bool) error {
 		if !computerevent.IsSHA256(r.Manifest.SHA256) {
 			return fail("manifest names a sha256")
 		}
-	} else if err := r.Manifest.validate(r.Package.Name); err != nil {
+	} else if err := r.Manifest.validate(r.Package.Name, r.OwnShellUpdate()); err != nil {
 		return err
 	}
 	if strings.TrimSpace(r.Operation.OperationID) == "" || !computerevent.IsSHA256(r.Operation.BundleDigest) || strings.TrimSpace(r.Operation.DecisionEvent) == "" {
@@ -410,7 +410,7 @@ func VerifyBlob(blob Blob, raw []byte) error {
 // isLegacyV1 reports a summary written before manifest v2.
 func (m Manifest) isLegacyV1() bool { return m.Schema == "" && m.BehaviourSurface == "" }
 
-func (m Manifest) validate(pkg string) error {
+func (m Manifest) validate(pkg string, ownShell bool) error {
 	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, format, args...) }
 	// A record published before manifest v2 summarized a v1 manifest and
 	// carried no schema or behaviour surface. The v1 reader is deleted with no
@@ -430,6 +430,10 @@ func (m Manifest) validate(pkg string) error {
 	}
 	switch apppackage.Class(m.Class) {
 	case apppackage.ClassData, apppackage.ClassApp, apppackage.ClassDesk, apppackage.ClassAppDesk:
+	case apppackage.ClassProvider:
+		if !ownShell {
+			return fail("manifest class %q is not inferred by the platform", m.Class)
+		}
 	default:
 		return fail("manifest class %q is not inferred by the platform", m.Class)
 	}
@@ -444,7 +448,9 @@ func (m Manifest) validate(pkg string) error {
 		// install review verdict on the installing computer (MA7.5,
 		// internal/installreview).
 	case apppackage.LevelPrivileged:
-		return refuse(ReasonPrivilegedGrant, "a privileged grant is first-party only; a Library release cannot carry one")
+		if !ownShell {
+			return refuse(ReasonPrivilegedGrant, "a privileged grant is first-party only; a Library release cannot carry one")
+		}
 	default:
 		return fail("manifest level %q is not a level", m.Level)
 	}

@@ -174,7 +174,7 @@ type TrackRelease struct {
 
 // Soaked reports whether the release has been listed for UpdateSoak at now.
 func (t TrackRelease) Soaked(now time.Time) bool {
-	return t.State == StateListed && !t.ListedAt.IsZero() && !now.Before(t.ListedAt.Add(UpdateSoak))
+	return (t.State == StateListed || t.State == StateOwnerListed) && !t.ListedAt.IsZero() && !now.Before(t.ListedAt.Add(UpdateSoak))
 }
 
 // PlatformAct is the platform's break-glass act on an installed release, if
@@ -194,7 +194,7 @@ func NewerReleases(installed TrackRelease, track []TrackRelease) []TrackRelease 
 		if r.Track != installed.Track || r.Package != installed.Package || r.ReleaseID == installed.ReleaseID {
 			continue
 		}
-		if r.State == StateListed && r.Seq > installed.Seq {
+		if (r.State == StateListed || r.State == StateOwnerListed) && r.Seq > installed.Seq {
 			out = append(out, r)
 		}
 	}

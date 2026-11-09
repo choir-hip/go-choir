@@ -338,3 +338,44 @@ func TestPackageInstallNeverLetsAStrangerShadowABuiltInApp(t *testing.T) {
 		t.Fatalf("stranger's notes-plus = %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// T2, the owner's own update of a base package (plan 12.1, 2026-11-08): the
+// owner_listed release installs for its owner; a stranger's T2 release never
+// reaches the computer, whatever the listing says.
+func TestPackageInstallAdmitsAShellReleaseOnlyOnTheOwnersTrack(t *testing.T) {
+	env := newInstallProxyEnv(t)
+	tree := []byte("diff --git a/frontend/src/packages/menu-default/Menu.surface.svelte b/frontend/src/packages/menu-default/Menu.surface.svelte\n")
+	owner := env.secret(t, "computer:self_development:approve", OwnerActsScope)
+	shell := func(publisher string) (string, []byte) {
+		rec, _, _ := installRecordNamed(t, tree, publisher, "menu-default")
+		rec.Manifest.Class, rec.Manifest.Level, rec.Manifest.ABI = "provider", "privileged", ""
+		id, err := rec.ReleaseID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := rec.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id, raw
+	}
+	serve := func(raw []byte, id, state string) {
+		env.view = func() (int, []byte) {
+			out, _ := json.Marshal(map[string]any{"release_id": id, "record": json.RawMessage(raw), "listing": map[string]any{"state": state}})
+			return http.StatusOK, out
+		}
+		env.blob = func() (int, []byte) { return http.StatusOK, tree }
+	}
+	strangerID, strangerRaw := shell("someone-else")
+	serve(strangerRaw, strangerID, pkgrelease.StateOwnerListed)
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+strangerID+`"}`, owner); rec.Code != http.StatusForbidden || env.guestIn != nil {
+		t.Fatalf("stranger's T2 = %d %s, guest got %q", rec.Code, rec.Body.String(), env.guestIn)
+	}
+	ownID, ownRaw := shell(env.user)
+	serve(ownRaw, ownID, pkgrelease.StateOwnerListed)
+	env.guestIn = nil
+	if rec := env.send(t, `{"release_id":"`+ownID+`"}`, owner); rec.Code != http.StatusCreated || env.guestIn == nil {
+		t.Fatalf("own-track T2 = %d %s", rec.Code, rec.Body.String())
+	}
+}

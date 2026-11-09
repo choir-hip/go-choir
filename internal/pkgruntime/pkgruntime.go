@@ -147,7 +147,7 @@ func (b Builder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []b
 	if err != nil {
 		return Module{}, fmt.Errorf("pkgruntime: read the manifest: %w", err)
 	}
-	manifest, err := apppackage.ParseManifest(manifestRaw, apppackage.OriginPublished)
+	manifest, err := apppackage.ParseManifestOwnShell(manifestRaw, apppackage.OriginPublished, apppackage.CurrentPlatform(), rec.OwnShellUpdate())
 	if err != nil {
 		return Module{}, err
 	}

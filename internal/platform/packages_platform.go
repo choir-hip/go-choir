@@ -423,7 +423,7 @@ func (h *Handler) packageUpdates(w http.ResponseWriter, r *http.Request) {
 		if !objectgraph.ValidPackageName(install.Package) || !pkgrelease.ValidTrack(install.Track) || !computerevent.IsSHA256(install.ReleaseID) {
 			continue
 		}
-		facts, err := h.updateFacts(ctx, install, now)
+		facts, err := h.updateFacts(ctx, req.OwnerID, install, now)
 		if err != nil {
 			writeListingsError(w, err)
 			return
@@ -433,7 +433,11 @@ func (h *Handler) packageUpdates(w http.ResponseWriter, r *http.Request) {
 	writePackageJSON(w, http.StatusOK, map[string]any{"updates": out, "soak_seconds": int(pkgrelease.UpdateSoak.Seconds())})
 }
 
-func (h *Handler) updateFacts(ctx context.Context, install PackageUpdateInstall, now time.Time) (PackageUpdateFacts, error) {
+// updateFacts is the update read for one install of reader's computer. An
+// owner_listed release (a T2 own-track update) is told and offered only to
+// its own track's owner; to anyone else it reads as unavailable and is never
+// offered.
+func (h *Handler) updateFacts(ctx context.Context, reader string, install PackageUpdateInstall, now time.Time) (PackageUpdateFacts, error) {
 	facts := PackageUpdateFacts{PackageUpdateInstall: install}
 	chains, times, _, err := h.trackChainsTimed(ctx, install.Track, install.Package)
 	if err != nil {
@@ -442,6 +446,9 @@ func (h *Handler) updateFacts(ctx context.Context, install PackageUpdateInstall,
 	all := []pkgrelease.TrackRelease{}
 	for id, chain := range chains {
 		last := chain[len(chain)-1]
+		if last.State == pkgrelease.StateOwnerListed && last.Track != reader {
+			continue
+		}
 		at := times[listedAtKey{id, last.Version}]
 		all = append(all, trackRelease(last, at))
 	}
@@ -457,7 +464,7 @@ func (h *Handler) updateFacts(ctx context.Context, install PackageUpdateInstall,
 		return facts, nil
 	}
 	told := *installed
-	if told.State != pkgrelease.StateListed && told.State != pkgrelease.StateYanked {
+	if told.State != pkgrelease.StateListed && told.State != pkgrelease.StateYanked && told.State != pkgrelease.StateOwnerListed {
 		told = pkgrelease.TrackRelease{ReleaseID: told.ReleaseID, Package: told.Package, Track: told.Track, Seq: told.Seq, State: "unavailable", Version: told.Version}
 	}
 	facts.Installed = &told

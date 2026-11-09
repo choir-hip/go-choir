@@ -123,7 +123,6 @@ func TestRecordRefusesWhatTheManifestSummaryMayNotClaim(t *testing.T) {
 		"no surface":         {func(m *Manifest) { m.BehaviourSurface = "" }, ReasonManifestV1},
 		"bad surface":        {func(m *Manifest) { m.BehaviourSurface = "xyz" }, ReasonInvalid},
 		"old schema":         {func(m *Manifest) { m.Schema = "choir.app-package/v1" }, ReasonManifestInvalid},
-		"privileged level":   {func(m *Manifest) { m.Level = "privileged" }, ReasonPrivilegedGrant},
 		"unknown level":      {func(m *Manifest) { m.Level = "root" }, ReasonInvalid},
 		"unknown class":      {func(m *Manifest) { m.Class = "binary" }, ReasonInvalid},
 		"app without abi":    {func(m *Manifest) { m.ABI = "" }, ReasonInvalid},
@@ -138,5 +137,23 @@ func TestRecordRefusesWhatTheManifestSummaryMayNotClaim(t *testing.T) {
 				t.Fatalf("reason = %q, want %q", got, c.reason)
 			}
 		})
+	}
+	// A privileged level is carried only by an owner's own-track update of a
+	// base package (ownshell.go); on a package the base does not provide, or
+	// on a track that is not the publisher's, it is refused.
+	own := mediaRecord()
+	own.Manifest.Level = "privileged"
+	if !own.OwnShellUpdate() {
+		t.Fatal("the fixture is not an own-track update of a base package")
+	}
+	if err := own.Validate(); err != nil {
+		t.Fatalf("own-track privileged level: %v", err)
+	}
+	foreign := own
+	foreign.Package.Name = "not-a-base-package"
+	foreign.Source.Root = Root("not-a-base-package")
+	foreign.Source.ChangedPaths = []string{Root("not-a-base-package") + "/App.svelte"}
+	if got := ReasonOf(foreign.Validate()); got != ReasonPrivilegedGrant {
+		t.Fatalf("foreign privileged level reason = %q", got)
 	}
 }

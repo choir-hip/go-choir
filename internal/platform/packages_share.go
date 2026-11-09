@@ -179,8 +179,14 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 	}
 	next := current.Normalize()
 	unchanged := false
+	// A T2 release (the owner's own update of a base package) is reinstated
+	// to owner_listed, never to listed: no listing act widens it (plan 12.1).
+	listedState := pkgrelease.StateListed
+	if record.IsShell() {
+		listedState = pkgrelease.StateOwnerListed
+	}
 	switch {
-	case current.State == change.State:
+	case current.State == change.State || (change.State == pkgrelease.StateListed && current.State == listedState):
 		unchanged = true
 	case change.State == pkgrelease.StateWithdrawn:
 		next.State, next.StateReason = pkgrelease.StateWithdrawn, reasonOr(change.Reason, "withdrawn")
@@ -189,9 +195,9 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 			writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackMoved, Detail: detail})
 			return
 		}
-		next.State, next.StateReason = pkgrelease.StateListed, reasonOr(change.Reason, "reinstated")
+		next.State, next.StateReason = listedState, reasonOr(change.Reason, "reinstated")
 	default: // suspended -> listed
-		next.State, next.StateReason = pkgrelease.StateListed, reasonOr(change.Reason, "reinstated")
+		next.State, next.StateReason = listedState, reasonOr(change.Reason, "reinstated")
 	}
 	if unchanged {
 		writePackageJSON(w, http.StatusOK, PackageListingResult{ReleaseID: releaseID, Listing: current})

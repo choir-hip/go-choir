@@ -91,7 +91,10 @@ func (h *Handler) packageInstallBody(ctx context.Context, ownerID string, raw []
 	}
 	// A withdrawn, suspended or yanked release is its publisher's to see,
 	// never to install.
-	if view.Listing.State != pkgrelease.StateListed {
+	// owner_listed is a T2 own-track release, visible to its owner alone (the
+	// read above answered 404 to anyone else); the shell gate below installs it
+	// only for that owner.
+	if view.Listing.State != pkgrelease.StateListed && view.Listing.State != pkgrelease.StateOwnerListed {
 		return nil, &installRefusal{http.StatusNotFound, "release_not_published", "release " + releaseID + " is " + view.Listing.State}
 	}
 	published, err := pkgrelease.Decode(view.Record)
@@ -107,6 +110,11 @@ func (h *Handler) packageInstallBody(ctx context.Context, ownerID string, raw []
 	// installs as before; an uninstall returned above and is never refused.
 	if apppackage.IsBuiltinPackage(published.Package.Name) && published.Track != ownerID {
 		return nil, &installRefusal{http.StatusForbidden, "builtin_name_not_yours", "package " + published.Package.Name + " is a built-in app; only its owner's own track may replace it, not another owner's release"}
+	}
+	// Tier T2 (it draws part of Choir's own screen) installs only from the
+	// installing owner's own track, whatever the listing says (R5; plan 12.1).
+	if err := pkgrelease.RequireOwnTrackShell(published, ownerID); err != nil {
+		return nil, &installRefusal{http.StatusForbidden, pkgrelease.ReasonShellNotYours, err.Error()}
 	}
 	if len(request.Record) > 0 {
 		supplied, err := pkgrelease.Decode(request.Record)

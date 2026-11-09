@@ -164,7 +164,7 @@ func (rt *Runtime) installReviewPlanFor(ctx context.Context, ownerID, computerID
 	built := len(module.Bytes) > 0 && module.ABI == pkgruntime.ModuleABI || len(module.Bytes) == 0 && module.ABI == ""
 	checks, parsed := installreview.Mechanical(installreview.MechanicalInput{
 		ManifestRaw: module.Manifest, RecordSHA256: rec.Manifest.SHA256, RecordLevel: rec.Manifest.Level,
-		RecordDesks: rec.Manifest.DesksCount, ModuleBuilt: built,
+		RecordDesks: rec.Manifest.DesksCount, ModuleBuilt: built, OwnShell: rec.OwnShellUpdate(),
 	})
 	if installreview.Passed(checks) {
 		subject.Manifest = parsed

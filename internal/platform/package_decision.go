@@ -432,7 +432,9 @@ func (h *Handler) derivePackageDraft(ctx context.Context, in packageDraftInput) 
 			// the shape check needs.
 			Operation: pkgrelease.Operation{OperationID: in.OperationID, BundleDigest: in.BundleDigest, DecisionEvent: "pending-package-decision"},
 		}
-		host := pkgrelease.HostInput{Record: record, TreePatch: source.Blobs.TreePatch, ReviewPatch: source.Blobs.ReviewPatch, Base: h.packageBase}
+		// The seat decides a package operation: the by-decision admission of
+		// an owner's own-track update of a base package (ownshell.go).
+		host := pkgrelease.HostInput{Record: record, TreePatch: source.Blobs.TreePatch, ReviewPatch: source.Blobs.ReviewPatch, Base: h.packageBase, ByDecision: true}
 		if source.Blobs.ParentPatch != nil {
 			parent := blobRef(source.Blobs.ParentPatch)
 			record.ParentPatch = &parent

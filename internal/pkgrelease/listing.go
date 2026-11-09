@@ -37,6 +37,13 @@ const (
 	StateWithdrawn = "withdrawn"
 	StateSuspended = "suspended"
 	StateYanked    = "yanked"
+	// StateOwnerListed: listed for the track's owner alone. A T2 release the
+	// by-decision route admitted (ownshell.go) is filed so: visible to its
+	// owner only, never public or shared, and never widened by a listing
+	// write (the owner act reinstates to this state, not to listed). It is
+	// head-eligible and offered to the owner's own computers like a listed
+	// release.
+	StateOwnerListed = "owner_listed"
 )
 
 // Listing is one version of a record's listing.
@@ -129,7 +136,7 @@ func (l Listing) Validate() error {
 		return err
 	}
 	switch l.State {
-	case StateListed, StateWithdrawn, StateSuspended, StateYanked:
+	case StateListed, StateWithdrawn, StateSuspended, StateYanked, StateOwnerListed:
 	default:
 		return fail("state %q is not a listing state", l.State)
 	}
@@ -205,5 +212,5 @@ func DecodeListing(raw []byte) (Listing, error) {
 // one, whose content the security authority set aside. A suspended release
 // stays on the track: its fix is published on top of it.
 func HeadEligible(state string) bool {
-	return state == StateListed || state == StateSuspended
+	return state == StateListed || state == StateSuspended || state == StateOwnerListed
 }

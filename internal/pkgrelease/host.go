@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/apppackage"
 	"os"
 	"strings"
 )
@@ -95,6 +96,11 @@ type HostInput struct {
 	// Base is the host's object store; nil refuses every base parent with
 	// package_parent_unverifiable.
 	Base BaseTrees
+	// ByDecision is set only by the by-decision publish route, from the
+	// authenticated decision: it admits a T2 release when the record is an
+	// owner's own-track update of a base package (Record.OwnShellUpdate). The
+	// owner-act route leaves it false and keeps the blanket T2 refusal.
+	ByDecision bool
 }
 
 // VerifyHost runs the host-verified checks of design 3.2 on the stored
@@ -187,7 +193,7 @@ func VerifyHostFacts(ctx context.Context, in HostInput) (Verified, error) {
 		return Verified{}, refuse(ReasonManifestInvalid, "the release holds no readable %s/choir-package.json", root)
 	}
 	files := treeFiles(ctx, s.dir, nil, full, root)
-	summary, version, manifest, err := checkManifest(rec.Package.Name, raw, files)
+	summary, version, manifest, err := checkManifestOpts(rec.Package.Name, raw, files, apppackage.CurrentPlatform(), in.ByDecision && rec.OwnShellUpdate())
 	if err != nil {
 		return Verified{}, err
 	}

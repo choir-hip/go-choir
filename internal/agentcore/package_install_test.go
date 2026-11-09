@@ -686,3 +686,50 @@ func TestPackageSettingsFollowTheInstallInForce(t *testing.T) {
 		t.Fatalf("after the uninstall: %+v", got)
 	}
 }
+
+// T2 (plan 12.1, 2026-11-08): the computer installs a release that draws the
+// shell only from the installing owner's own track, as an update of a base
+// package. A stranger's is refused at every door, whatever name it takes.
+func TestRuntimeInstallAdmitsAShellReleaseOnlyFromTheOwnersOwnTrack(t *testing.T) {
+	e := newInstallEnv(t)
+	record := func(track, name string) (string, json.RawMessage) {
+		blob := pkgrelease.Blob{SHA256: strings.Repeat("a", 64), Bytes: 10}
+		rec := pkgrelease.Record{
+			Schema: pkgrelease.Schema, Package: pkgrelease.Package{Name: name, ManifestVersion: "1.0.0"}, Track: track,
+			Parent: pkgrelease.Parent{Kind: pkgrelease.ParentBase, Commit: strings.Repeat("1", 40), Tree: pkgrelease.EmptyTree},
+			Source: pkgrelease.Source{Root: pkgrelease.Root(name), Tree: strings.Repeat("2", 40), TreePatch: blob, ReviewPatch: blob,
+				ChangedPaths: []string{pkgrelease.Root(name) + "/Menu.surface.svelte"}, BuiltOn: strings.Repeat("1", 40)},
+			Manifest:  pkgrelease.Manifest{SHA256: strings.Repeat("3", 64), Schema: "choir.package/v2", Class: "provider", Level: "privileged", BehaviourSurface: strings.Repeat("5", 64)},
+			Publisher: pkgrelease.Publisher{OwnerID: track, ComputerID: "computer-" + track},
+			Operation: pkgrelease.Operation{OperationID: "op-" + track, BundleDigest: strings.Repeat("b", 64), DecisionEvent: strings.Repeat("e", 64)},
+		}
+		id, err := rec.ReleaseID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := rec.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id, raw
+	}
+	// A stranger's menu renderer: of a base package's name, or of its own.
+	for _, name := range []string{"menu-default", "menu-mine"} {
+		id, raw := record("owner-x", name)
+		code, _, reason := e.post(t, installBody(t, id, raw, []byte("x"), ""))
+		if code < 400 || reason == "" {
+			t.Fatalf("stranger's T2 %s installed: %d %s", name, code, reason)
+		}
+	}
+	// The owner's own update of a base package is past the gates: it fails
+	// only later, on the bytes this fixture does not build.
+	id, raw := record(e.owner, "menu-default")
+	if _, _, reason := e.post(t, installBody(t, id, raw, []byte("x"), "")); reason == pkgrelease.ReasonShellNotYours || reason == "release_record_invalid" || reason == "builtin_name_not_yours" {
+		t.Fatalf("the owner's own T2 update was refused at the gate: %s", reason)
+	}
+	// An owner-track T2 release of a name no base provides cannot even decode.
+	id, raw = record(e.owner, "menu-mine")
+	if code, _, reason := e.post(t, installBody(t, id, raw, []byte("x"), "")); code < 400 || reason == "" {
+		t.Fatalf("own-track T2 of a non-base name installed: %d %s", code, reason)
+	}
+}
