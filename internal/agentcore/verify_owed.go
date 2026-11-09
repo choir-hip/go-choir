@@ -533,7 +533,7 @@ func shotsOwedWait(o shotsOwedInfo, now time.Time) *types.WaitState {
 		Need:     fmt.Sprintf("choir.ShotStart(%q), choir.ShotWait, then choir.ShotVerdict(%q, pass|fail, findings, reason)", o.Operation.OperationID, o.Operation.OperationID),
 		Holders:  []types.WaitHolder{{Who: shotJudgeDesk(), What: "ShotVerdict"}},
 		Since:    since.UTC(),
-		Detail:   strings.TrimSuffix(shotsOwedLine(o.Operation.OperationID), "."),
+		Detail:   strings.TrimSuffix(shotsOwedShortLine(o.Operation.OperationID), "."),
 	}
 	w.Stamp(now)
 	return w
