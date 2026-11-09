@@ -614,6 +614,13 @@ Both are on branch `integrate-1109` and need a repair before they land.
 
 ### Reported by the owner at the stopping point
 
+- First thing to look at: the paper's Bedrock spend. From 21:50 UTC it ran
+  at about $3.60 an hour by the spend script (flat prices, cache reads not
+  discounted), about $85 a day if it holds, against the $20 a day ruling.
+  Nothing was changed on the paper. The spend script should price cache
+  reads before the number is trusted.
+- `choir policy set` is proved on d@e without `--allow-unmarked`, with a
+  byte-identical rollback.
 - b@c serves an old frontend (old Settings, old dock). A base restore
   copies the frontend of that day into the computer's release store, and no
   deploy refreshes the copy; b@c's is from its 2026-11-08 restore. Its
