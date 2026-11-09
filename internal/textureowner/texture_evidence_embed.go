@@ -343,6 +343,9 @@ func normalizeNumbers(doc texturedoc.StructuredTextureDoc) texturedoc.Structured
 
 // pinEmbeddedAssets pins every digest the revision embeds to it.
 func (h *Handler) pinEmbeddedAssets(digests []string, docID, revisionID string) error {
+	if len(digests) == 0 {
+		return nil
+	}
 	if h.Core == nil {
 		return fmt.Errorf("texture evidence: no asset store to pin in")
 	}

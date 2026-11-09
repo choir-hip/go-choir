@@ -81,3 +81,48 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/* The file card (station L8): icon, title and Files path; a click opens the
+   file in the app that opens it (a PDF in Reader). */
+.rendered-doc .texture-embed-file-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.rendered-doc .texture-embed-file-card:hover,
+.rendered-doc .texture-embed-file-card:focus-visible {
+  background: var(--choir-state-hover);
+  outline: 1px solid var(--choir-border-strong);
+}
+
+.rendered-doc .texture-embed[data-embed-state="unresolvable"] .texture-embed-file-card {
+  cursor: default;
+}
+
+.rendered-doc .texture-embed-file-icon {
+  flex: none;
+  min-width: 2.6rem;
+  border: 1px solid var(--choir-border-strong);
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.4rem;
+  text-align: center;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.rendered-doc .texture-embed-file-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rendered-doc .texture-embed-file-path {
+  font-size: 0.82em;
+  color: var(--choir-text-muted, var(--choir-text-primary));
+}

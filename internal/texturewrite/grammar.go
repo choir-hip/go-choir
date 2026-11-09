@@ -15,6 +15,9 @@
 //	@section b2          rewrite the section headed by b2 with the text below
 //	@all                 rewrite the whole document with the text below
 //
+// An image or a file card is a block of its own: {{image <digest or Files
+// path> "caption" "alt"}} and {{file <Files path> "title"}}, alone on a line.
+//
 // Citations are inline tokens: {{cite <handle> "quote"}} cites the quoted
 // words of a captured source, and {{ref <source_entity_id>}} keeps a
 // citation the frame shows (one made before Write existed, or a stored
@@ -112,6 +115,8 @@ type BodyBlock struct {
 	// Lines holds the block's text lines: one per list item for lists, the
 	// paragraph or quote lines otherwise, the raw lines of a code block.
 	Lines []Line
+	// Embed is the media token of an "embed" block ({{image}}, {{file}}).
+	Embed *EmbedSpec
 }
 
 var (
@@ -283,6 +288,13 @@ func parseBody(lines []Line, errs *Errors) []BodyBlock {
 		trimmed := strings.TrimSpace(ln.Text)
 		if trimmed == "" {
 			flush()
+			continue
+		}
+		if spec, isMedia := parseMediaLine(trimmed, ln.N, errs); isMedia {
+			flush()
+			if spec != nil {
+				out = append(out, BodyBlock{Kind: "embed", Line: ln.N, Embed: spec})
+			}
 			continue
 		}
 		if m := fenceRE.FindStringSubmatch(trimmed); m != nil {

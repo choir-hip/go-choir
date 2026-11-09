@@ -61,6 +61,9 @@ type EmbedFields = {
   blank: boolean;
   caption: string;
   alt: string;
+  path: string;
+  mime: string;
+  title: string;
 };
 
 export function embedFields(node: EmbedNode): EmbedFields {
@@ -79,6 +82,9 @@ export function embedFields(node: EmbedNode): EmbedFields {
     blank: target.blank === true,
     caption: str(attrs.caption),
     alt: str(attrs.alt),
+    path: str(target.path),
+    mime: str(target.mime),
+    title: str(attrs.title),
   };
 }
 
@@ -87,6 +93,7 @@ export function embedProjectionText(node: EmbedNode): string {
   const e = embedFields(node);
   if (e.kind === 'capsule_evidence') return `[evidence: ${e.caption}]`;
   if (e.kind === 'image') return `[image: ${e.caption || e.alt}]`;
+  if (e.kind === 'file') return `[file: ${e.title}]`;
   return '[embed]';
 }
 
@@ -104,7 +111,7 @@ export function allBlankOperations(blocks: EmbedNode[] = []): Set<string> {
 
 function figureAttrs(e: EmbedFields, extra: Record<string, string> = {}): string {
   const attrs: Record<string, string> = {
-    class: `texture-embed texture-embed-${e.kind === 'capsule_evidence' || e.kind === 'image' ? e.kind.replace('_', '-') : 'unknown'}`,
+    class: `texture-embed texture-embed-${e.kind === 'capsule_evidence' || e.kind === 'image' || e.kind === 'file' ? e.kind.replace('_', '-') : 'unknown'}`,
     contenteditable: 'false',
     'data-texture-embed': '',
     'data-texture-embed-id': e.id,
@@ -124,6 +131,49 @@ function imageHTML(e: EmbedFields, alt: string): string {
 function unresolvableHTML(e: EmbedFields, hidden: boolean): string {
   const digest = DIGEST_RE.test(e.digest) ? `sha256:${shortDigest(e.digest)}` : 'a malformed digest';
   return `<div class="texture-embed-unresolvable" data-texture-embed-unresolvable${hidden ? ' hidden' : ''}>Evidence not retained or unreadable (${escapeHTML(digest)})</div>`;
+}
+
+/** A path the card may open: relative to Files, no climbing component. */
+export function isFilesPath(path: string): boolean {
+  if (!path || path.startsWith('/') || path.endsWith('/') || path.includes('\\')) return false;
+  return path.split('/').every((part) => part !== '' && part !== '.' && part !== '..' && !/[\u0000-\u001f\u007f]/.test(part));
+}
+
+function fileIcon(mime: string, path: string): string {
+  const ext = path.toLowerCase().split('.').pop() || '';
+  if (mime === 'application/pdf' || ext === 'pdf') return 'PDF';
+  if (mime === 'application/epub+zip' || ext === 'epub') return 'EPUB';
+  if (mime.startsWith('image/')) return 'IMG';
+  return 'FILE';
+}
+
+/**
+ * A file card (embed kind file): icon, title and path. Clicking it opens the
+ * file in the app that opens it (a PDF in Reader); the click is handled by
+ * the editor through [data-texture-embed-file-open], never by an inline
+ * handler. A card whose path is not a Files path is not clickable.
+ */
+function fileCardHTML(e: EmbedFields): string {
+  const openable = isFilesPath(e.path);
+  const title = e.title || e.path;
+  const open = openable ? ` role="button" tabindex="0" data-texture-embed-file-open data-embed-path="${escapeHTML(e.path)}" data-embed-mime="${escapeHTML(e.mime)}" data-embed-title="${escapeHTML(title)}" aria-label="Open ${escapeHTML(title)}"` : '';
+  return `<figure${figureAttrs(e, { 'data-embed-state': openable ? 'ready' : 'unresolvable' })}>`
+    + `<div class="texture-embed-file-card"${open}>`
+    + `<span class="texture-embed-file-icon" aria-hidden="true">${escapeHTML(fileIcon(e.mime, e.path))}</span>`
+    + `<span class="texture-embed-file-text"><span class="texture-embed-file-title">${escapeHTML(title)}</span>`
+    + `<code class="texture-embed-file-path" data-texture-embed-file>${escapeHTML(e.path)}</code></span></div></figure>`;
+}
+
+/**
+ * Click or Enter on a file card: the file to open, or null. The editor
+ * passes it to the shell's openFile (Reader for a PDF).
+ */
+export function fileCardTarget(target: any): { path: string; mime: string; title: string } | null {
+  const card = target?.closest?.('[data-texture-embed-file-open]');
+  if (!card) return null;
+  const path = String(card.getAttribute('data-embed-path') || '');
+  if (!isFilesPath(path)) return null;
+  return { path, mime: String(card.getAttribute('data-embed-mime') || ''), title: String(card.getAttribute('data-embed-title') || '') };
 }
 
 /** One embed block as HTML. */
@@ -156,6 +206,7 @@ export function renderEmbedBlockHTML(node: EmbedNode, options: { allBlank?: Set<
       + (caption ? `<figcaption><span class="texture-embed-caption">${escapeHTML(caption)}</span></figcaption>` : '')
       + '</figure>';
   }
+  if (e.kind === 'file') return fileCardHTML(e);
   const digest = validDigest ? ` · sha256:${shortDigest(e.digest)}` : '';
   return `<figure${figureAttrs(e)}><figcaption>Embedded ${escapeHTML(e.kind || 'item')}${escapeHTML(digest)} (this version of Texture does not show it)</figcaption></figure>`;
 }

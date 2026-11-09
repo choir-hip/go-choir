@@ -80,6 +80,9 @@ type Input struct {
 	// Handles are the frame's record sources (r2.c1 ...).
 	Handles  map[string]Source
 	Resolver CaptureSource
+	// Media places {{image}} and {{file}} blocks (media_tokens.go); nil
+	// accepts an image digest as written and refuses a Files path.
+	Media Media
 }
 
 // Result is the next document.
@@ -103,6 +106,10 @@ func Apply(ctx context.Context, in Input) (Result, error) {
 		}
 	}
 	checkOps(ops, len(base), headings, &errs)
+	if len(errs) > 0 {
+		return Result{}, errs.sorted()
+	}
+	resolveEmbeds(ctx, ops, in.Media, &errs)
 	if len(errs) > 0 {
 		return Result{}, errs.sorted()
 	}
@@ -421,6 +428,8 @@ func (w *writer) fresh(body []BodyBlock) []texturedoc.Node {
 
 func bodyText(b BodyBlock) string {
 	switch b.Kind {
+	case "embed":
+		return b.Embed.text()
 	case "heading":
 		return strings.Repeat("#", b.Level) + " " + joinLines(b.Lines)
 	case "bullet_list", "ordered_list":
@@ -475,6 +484,8 @@ func (w *writer) newID(prefix, preferred string) string {
 // node builds one block; id, when set, is the paired old block's id.
 func (w *writer) node(b BodyBlock, id string) texturedoc.Node {
 	switch b.Kind {
+	case "embed":
+		return w.embedNode(b.Embed, id)
 	case "heading":
 		return texturedoc.Node{Type: "heading", Attrs: map[string]any{"id": w.newID("h", id), "level": b.Level}, Content: w.inline(b.Lines)}
 	case "bullet_list", "ordered_list":
@@ -925,6 +936,11 @@ func keepEmbedBlocks(base []Block, content []texturedoc.Node, line int) error {
 	}
 	for _, b := range base {
 		if b.Kind != "embed" {
+			continue
+		}
+		// The desk wrote image and file blocks with their own tokens; it
+		// may change or remove them. Only evidence stays as written.
+		if e, _ := texturedoc.EmbedOf(b.Node); e.Kind == texturedoc.EmbedKindImage || e.Kind == texturedoc.EmbedKindFile {
 			continue
 		}
 		raw, _ := json.Marshal(b.Node)

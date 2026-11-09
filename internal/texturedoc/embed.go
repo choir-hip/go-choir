@@ -30,6 +30,11 @@ const (
 	EmbedKindCapsuleEvidence = "capsule_evidence"
 	// EmbedKindImage is an owned image in the computer's asset store.
 	EmbedKindImage = "image"
+	// EmbedKindFile is a card for a file in the owner's Files (a report the
+	// engineer saved): path, title and media type. The card opens the file in
+	// the app that opens it (a PDF opens in Reader). The bytes stay in Files;
+	// the card holds only the path.
+	EmbedKindFile = "file"
 
 	EmbedPrivacyPrivate = "private"
 	EmbedPrivacyPublic  = "public"
@@ -57,6 +62,10 @@ type Embed struct {
 	Blank       bool
 	Caption     string
 	Alt         string
+	// Path, Mime and Title are the file kind's fields.
+	Path  string
+	Mime  string
+	Title string
 }
 
 // Privacy is derived from the kind: every kind is private today.
@@ -102,6 +111,7 @@ func EmbedOf(n Node) (Embed, bool) {
 		Digest: str(target, "digest"), OperationID: str(target, "operation_id"), ComputerID: str(target, "computer_id"),
 		Route: str(target, "route"), File: str(target, "file"), Width: num("width"), Height: num("height"), Blank: blank,
 		Caption: str(n.Attrs, "caption"), Alt: str(n.Attrs, "alt"),
+		Path: str(target, "path"), Mime: str(target, "mime"), Title: str(n.Attrs, "title"),
 	}, true
 }
 
@@ -163,6 +173,8 @@ func EmbedProjectionText(n Node) string {
 	switch e.Kind {
 	case EmbedKindCapsuleEvidence:
 		return "[evidence: " + e.Caption + "]"
+	case EmbedKindFile:
+		return "[file: " + e.Title + "]"
 	case EmbedKindImage:
 		if e.Caption != "" {
 			return "[image: " + e.Caption + "]"
@@ -173,12 +185,13 @@ func EmbedProjectionText(n Node) string {
 }
 
 var (
-	embedAttrKeys = map[string]bool{"id": true, "kind": true, "target": true, "caption": true, "alt": true}
+	embedAttrKeys = map[string]bool{"id": true, "kind": true, "target": true, "caption": true, "alt": true, "title": true}
 	// Reserved for the later kinds (Texture media design section 3).
 	embedReservedKeys = map[string]bool{"selector": true, "poster": true, "transcript": true}
 	embedTargetKeys   = map[string]map[string]bool{
 		EmbedKindCapsuleEvidence: {"digest": true, "operation_id": true, "computer_id": true, "route": true, "file": true, "width": true, "height": true, "blank": true},
 		EmbedKindImage:           {"digest": true, "width": true, "height": true},
+		EmbedKindFile:            {"path": true, "mime": true},
 	}
 	topLevelBlockPath = regexp.MustCompile(`^doc\.content(\[\d+\])?$`)
 	embedDigest       = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -239,10 +252,15 @@ func (v *Validator) validateEmbed(node Node, path string) error {
 			return fmt.Errorf("%s.embed target.%s is not a %s target field", path, key, kind)
 		}
 	}
-	if digest, _ := target["digest"].(string); !embedDigest.MatchString(digest) {
-		return fmt.Errorf("%s.embed target.digest must be 64 lowercase hex characters", path)
+	if kind != EmbedKindFile {
+		if digest, _ := target["digest"].(string); !embedDigest.MatchString(digest) {
+			return fmt.Errorf("%s.embed target.digest must be 64 lowercase hex characters", path)
+		}
 	}
 	e, _ := EmbedOf(node)
+	if _, hasTitle := node.Attrs["title"]; hasTitle && kind != EmbedKindFile {
+		return fmt.Errorf("%s.embed attrs.title belongs to the file kind", path)
+	}
 	switch kind {
 	case EmbedKindCapsuleEvidence:
 		for field, value := range map[string]string{"operation_id": e.OperationID, "computer_id": e.ComputerID} {
@@ -276,8 +294,24 @@ func (v *Validator) validateEmbed(node Node, path string) error {
 		if err := embedDimensions(target, path, false); err != nil {
 			return err
 		}
+	case EmbedKindFile:
+		if err := ValidFilesPath(e.Path); err != nil {
+			return fmt.Errorf("%s.embed target.path %v", path, err)
+		}
+		if mime := e.Mime; mime != "" && (utf8.RuneCountInString(mime) > 127 || !strings.Contains(mime, "/") || strings.ContainsAny(mime, " \t\r\n;")) {
+			return fmt.Errorf("%s.embed target.mime must be a media type such as application/pdf", path)
+		}
+		if e.Title == "" {
+			return fmt.Errorf("%s.embed attrs.title is required for file", path)
+		}
+		if utf8.RuneCountInString(e.Title) > MaxEmbedCaptionRunes {
+			return fmt.Errorf("%s.embed attrs.title is longer than %d characters", path, MaxEmbedCaptionRunes)
+		}
+		if err := v.validateText(e.Title, path+".embed attrs.title"); err != nil {
+			return err
+		}
 	}
-	if e.Alt == "" {
+	if kind != EmbedKindFile && e.Alt == "" {
 		return fmt.Errorf("%s.embed attrs.alt is required", path)
 	}
 	for field, limit := range map[string]int{"caption": MaxEmbedCaptionRunes, "alt": MaxEmbedAltRunes} {
@@ -326,4 +360,34 @@ func embedDimensions(target map[string]any, path string, required bool) error {
 
 func embedIdent(s string) bool {
 	return s != "" && utf8.RuneCountInString(s) <= maxEmbedIdentRunes && !strings.ContainsAny(s, " \t\r\n/")
+}
+
+// ValidFilesPath says p is a path inside the owner's Files: relative, no
+// climbing or empty component, no backslash, control byte or blank name.
+// The file card's validator and Write's {{file}} token share it.
+func ValidFilesPath(p string) error {
+	switch {
+	case p == "":
+		return fmt.Errorf("is required (a Files path such as Reports/summary.pdf)")
+	case utf8.RuneCountInString(p) > maxEmbedRouteRunes:
+		return fmt.Errorf("is longer than %d characters", maxEmbedRouteRunes)
+	case strings.HasPrefix(p, "/") || strings.HasSuffix(p, "/"):
+		return fmt.Errorf("must be relative to Files, without a leading or trailing /")
+	case strings.Contains(p, "\\"):
+		return fmt.Errorf("must use / separators")
+	}
+	for _, r := range p {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("must not hold control characters")
+		}
+	}
+	for _, part := range strings.Split(p, "/") {
+		switch {
+		case part == "" || part == "." || part == "..":
+			return fmt.Errorf("must stay inside Files: no empty, . or .. component")
+		case strings.TrimSpace(part) == "":
+			return fmt.Errorf("must not hold a blank component")
+		}
+	}
+	return nil
 }

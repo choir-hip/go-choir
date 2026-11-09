@@ -11,7 +11,10 @@
 //   - an unknown kind renders nothing (it must be a plain card);
 //   - the editor's serializer builds an embed from the DOM (a forged
 //     attribute) or drops one on an owner save;
-//   - the editor's projection differs from the server's.
+//   - the editor's projection differs from the server's;
+//   - a file card (station L8) renders its title or path unescaped, is
+//     clickable for a path outside Files (absolute, ".."), or has an inline
+//     handler instead of the editor's delegated open.
 import { test, expect } from '@playwright/test';
 import {
   allBlankOperations,
@@ -21,6 +24,8 @@ import {
   embedProjectionText,
   evidenceIdentityText,
   evidenceListingPath,
+  fileCardTarget,
+  isFilesPath,
   handleRevertClick,
   isRevertable,
   laterAppliesAfter,
@@ -238,4 +243,24 @@ test('the Revert click confirms, then posts the owner revert once', async () => 
   expect(button.textContent).toBe('Reverting started');
   expect(await handleRevertClick(target, fetchFn, () => true)).toBe(true);
   expect(calls.filter(([, method]) => method === 'POST')).toHaveLength(1);
+});
+
+test('a file card shows its title and path escaped and opens only a Files path', () => {
+  const node = (path, title = 'Summary <report>') => ({ type: 'embed', attrs: { id: 'embed-f', kind: 'file', title, target: { path, mime: 'application/pdf' } } });
+  const html = renderEmbedBlockHTML(node('Reports/summary.pdf'));
+  expect(html).toContain('texture-embed-file');
+  expect(html).toContain('Summary &lt;report&gt;');
+  expect(html).toContain('data-embed-path="Reports/summary.pdf"');
+  expect(html).toContain('PDF');
+  expect(html).not.toMatch(/ on[a-z]+=/);
+  expect(embedProjectionText(node('Reports/summary.pdf', 'Summary'))).toBe('[file: Summary]');
+  for (const bad of ['/etc/passwd', '../x.pdf', 'Reports/../../x.pdf', 'Reports//x.pdf', '']) {
+    expect(isFilesPath(bad)).toBe(false);
+    expect(renderEmbedBlockHTML(node(bad))).not.toContain('data-texture-embed-file-open');
+  }
+  const card = { getAttribute: (k) => ({ 'data-embed-path': 'Reports/summary.pdf', 'data-embed-mime': 'application/pdf', 'data-embed-title': 'Summary' })[k] };
+  expect(fileCardTarget({ closest: () => card })).toEqual({ path: 'Reports/summary.pdf', mime: 'application/pdf', title: 'Summary' });
+  expect(fileCardTarget({ closest: () => null })).toBeNull();
+  const forged = { getAttribute: () => '../../secret' };
+  expect(fileCardTarget({ closest: () => forged })).toBeNull();
 });

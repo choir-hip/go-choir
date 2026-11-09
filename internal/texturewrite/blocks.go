@@ -89,6 +89,9 @@ func renderBlock(n texturedoc.Node) string {
 // the grammar reads as markup replaced, so the line is plain text.
 func EmbedFrameLine(n texturedoc.Node) string {
 	e, _ := texturedoc.EmbedOf(n)
+	if text, ok := embedFrameText(e); ok {
+		return text
+	}
 	parts := []string{"[embed", frameSafe(e.Kind)}
 	if e.Route != "" {
 		parts = append(parts, frameSafe(e.Route))

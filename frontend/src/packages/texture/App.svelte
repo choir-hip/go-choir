@@ -32,7 +32,7 @@
     submitPublicationProposal,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from '../../lib/app-sdk';
-  import { copyText, onWindowEvent, openApp, repeatEvery, requireAuth, sessionExpired, setAppContext, toast } from '../../lib/app-sdk';
+  import { copyText, onWindowEvent, openApp, openFile, repeatEvery, requireAuth, sessionExpired, setAppContext, toast } from '../../lib/app-sdk';
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
@@ -86,7 +86,7 @@
   import './texture-published-citations.css';
   import './texture-related-stories.css';
   import './texture-embeds.css';
-  import { handleRevertClick, hydrateApplyEntries, hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
+  import { fileCardTarget, handleRevertClick, hydrateApplyEntries, hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
   import { opinionLabelHTML, pieceDisclosureHTML } from './texture-ai-disclosure';
   import { publishedModelProvenance, renderModelProvenanceHTML } from './texture-model-provenance';
 
@@ -1743,6 +1743,13 @@
   }
 
   function handleEditorClick(event) {
+    const fileCard = fileCardTarget(event.target);
+    if (fileCard) {
+      event.preventDefault();
+      event.stopPropagation();
+      openFile(fileCard.path);
+      return;
+    }
     if (event.target?.closest?.('[data-texture-embed-revert]')) {
       event.preventDefault();
       event.stopPropagation();
@@ -1793,6 +1800,13 @@
   }
 
   function handleEditorKeydown(event) {
+    const fileCard = fileCardTarget(event.target);
+    if (fileCard && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      event.stopPropagation();
+      openFile(fileCard.path);
+      return;
+    }
     const relatedRef = event.target?.closest?.('[data-texture-related-ref]');
     if (relatedRef && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();

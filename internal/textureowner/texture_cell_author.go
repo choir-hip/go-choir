@@ -272,7 +272,7 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	result, err := texturewrite.Apply(ctx, texturewrite.Input{
 		OwnerID: rec.OwnerID, DocID: doc.DocID, Seed: baseRev.RevisionID,
 		Base: baseDoc, Entities: baseEntities, Script: turn.Write.Edits,
-		Handles: turn.Handles, Resolver: h.textureCaptures(),
+		Handles: turn.Handles, Resolver: h.textureCaptures(), Media: h.textureMedia(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("choir.Write refused, nothing committed: %w", err)
@@ -321,6 +321,10 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	}
 	meta["texture_write_directives"] = result.Ops
 	meta["texture_write_base_revision_id"] = baseRev.RevisionID
+	embeddedDigests := texturedoc.EmbeddedDigests(result.Doc)
+	if len(embeddedDigests) > 0 {
+		meta[textureEmbeddedAssetsMetadataKey] = embeddedDigests
+	}
 	if len(result.Dropped) > 0 {
 		meta[texturewrite.DroppedMetadataKey] = result.Dropped
 	}
@@ -375,6 +379,12 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 			return "", fmt.Errorf("build Texture source graph: %w", err)
 		}
 		_, args.Citations = texturewrite.Checks(result.Doc, doc.DocID, rev.RevisionID)
+		// Pin before the commit, as the evidence path does: a pin whose
+		// commit then fails is an extra hold; a revision without its pin
+		// could be orphaned.
+		if err := h.pinEmbeddedAssets(embeddedDigests, doc.DocID, rev.RevisionID); err != nil {
+			return "", fmt.Errorf("choir.Write refused, nothing committed: %w", err)
+		}
 		applied, applyErr := h.applyTextureLifecycleTurn(ctx, rec, doc, args, types.TextureTurnRevision, rev, graph, reason)
 		if applyErr != nil {
 			if errors.Is(applyErr, store.ErrConcurrentStateChange) || errors.Is(applyErr, store.ErrStaleDocumentHead) {
@@ -391,6 +401,8 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 		if h.Core != nil {
 			h.Core.JudgeRevisionSupport(rec.OwnerID, doc.ComputerID, rec.RunID, rev.RevisionID, args.Citations)
 		}
+	} else if err := h.pinEmbeddedAssets(embeddedDigests, doc.DocID, rev.RevisionID); err != nil {
+		return "", fmt.Errorf("choir.Write refused, nothing committed: %w", err)
 	} else if err := h.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
 		return "", fmt.Errorf("create Texture revision: %w", err)
 	}
