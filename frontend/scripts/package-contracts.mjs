@@ -359,6 +359,7 @@ export async function stubBackend(page, { installed = [], modules = new Map(), a
     }
     if (p === '/auth/session') return route.fulfill({ json: { authenticated: true, user: { id: STUB_USER, username: STUB_USER } } });
     if (p === '/auth/accounts') return route.fulfill({ json: [] });
+    if (p === `/api/computers/${STUB_COMPUTER_ID}/update` && req.method() === 'GET') return route.fulfill({ json: { update_available: null } }); // no update pending: the chip stays hidden
     if (p === '/api/shell/bootstrap') return route.fulfill({ json: { computer_id: STUB_COMPUTER_ID } });
     if (p === '/api/desktop/state') return route.fulfill({ json: req.method() === 'GET' ? (seedWindow ? { windows: [seedWindow], active_window_id: seedWindow.window_id } : { windows: [], active_window_id: '' }) : { ok: true } });
     if (p === '/api/packages/installed') return route.fulfill({ json: { packages: installed } });
