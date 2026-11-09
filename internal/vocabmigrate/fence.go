@@ -23,6 +23,8 @@ package vocabmigrate
 import (
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // V1 membership is decided by ForwardV1ToV2 itself (frozen map plus
@@ -98,13 +100,26 @@ func VerifyServingVocabulary(active string, fields ...Field) error {
 		if active == VocabularyV1 {
 			_, ok = ForwardV1ToV2(value)
 		} else {
-			ok = v2LiveSet[value]
+			ok = v2LiveSet[value] || registeredPackageDesk(value)
 		}
 		if !ok {
 			return fmt.Errorf("vocabfence: %s=%q not in %s vocabulary", f.Key, f.Value, active)
 		}
 	}
 	return nil
+}
+
+// registeredPackageDesk reports whether the value is a package desk's role
+// ("app:<pkg>") that the desk registry holds now. A package desk persists an
+// agent object like a built-in desk; its role is live exactly while its
+// package's desk is registered, so a retired or never-installed name is still
+// refused.
+func registeredPackageDesk(value string) bool {
+	if !strings.HasPrefix(value, "app:") || strings.Count(value, ":") != 1 {
+		return false
+	}
+	d, ok := deskmanifest.Lookup(value)
+	return ok && d.Kind == deskmanifest.KindApp
 }
 
 // EventActorFields projects an event's role-bearing envelope for the fence.

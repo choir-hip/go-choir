@@ -6,7 +6,11 @@ package vocabmigrate
 // refusing V1 aliases so no unmigrated row holds post-cutover authority;
 // unknown active vocabularies fail closed; empty values skip.
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+)
 
 func TestFenceV1PassesHistoricSuite(t *testing.T) {
 	v1tokens := []string{
@@ -67,5 +71,36 @@ func TestFenceRejectsUnknownVocabulary(t *testing.T) {
 	}
 	if err := VerifyServingVocabulary("", Field{Key: "k", Value: "super"}); err == nil {
 		t.Error("fence accepted empty active vocabulary")
+	}
+}
+
+// A registered package desk's role serves under v2, so its agent object can
+// persist; an unregistered app: name, or a retired one, is still refused
+// (docs/definitions/choir-modular-architecture-2026-11-04.ledger.md,
+// 2026-11-09).
+func TestServingFenceAdmitsRegisteredPackageDeskRoles(t *testing.T) {
+	const name = "app:fenceprobe"
+	field := Field{Key: "og:choir.agent:metadata.role", Value: name}
+	if err := VerifyServingVocabulary(VocabularyV2, field); err == nil {
+		t.Fatal("an unregistered package desk role passed the fence")
+	}
+	d, err := deskmanifest.NewAppDesk(deskmanifest.AppDeskSpec{Name: name, Verbs: []string{"Report", "Done"}, Taint: deskmanifest.TaintUntrustedInput, UID: 62950, WorkerMaxBytes: 64 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deskmanifest.RegisterApp(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyServingVocabulary(VocabularyV2, field); err != nil {
+		t.Fatalf("a registered package desk role was refused: %v", err)
+	}
+	if err := VerifyServingVocabulary(VocabularyV2, Field{Key: "role", Value: "app:fenceprobe:owner-1"}); err == nil {
+		t.Fatal("an inbox address passed as a role")
+	}
+	if err := deskmanifest.RetireApp(name); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyServingVocabulary(VocabularyV2, field); err == nil {
+		t.Fatal("a retired package desk role passed the fence")
 	}
 }
