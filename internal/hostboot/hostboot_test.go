@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -232,8 +231,12 @@ func TestPythonParity(t *testing.T) {
 	if err != nil {
 		t.Skip("python3 not on PATH")
 	}
-	_, self, _, _ := runtime.Caller(0)
-	script := filepath.Join(filepath.Dir(self), "..", "..", "scripts", "verify-host-hardening.py")
+	// Not runtime.Caller: under -trimpath it returns a module-relative path.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(wd, "..", "..", "scripts", "verify-host-hardening.py")
 	cases := map[string]func(*testing.T) *fixture{
 		"node-b-today": nodeBToday,
 		"not-nixos": func(t *testing.T) *fixture {

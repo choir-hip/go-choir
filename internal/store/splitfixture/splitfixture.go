@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	_ "modernc.org/sqlite"
 
@@ -65,8 +64,24 @@ func OpenRW(path string) (*sql.DB, error) {
 }
 
 func presplitSchema() (string, error) {
-	_, file, _, _ := runtime.Caller(0)
-	b, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "testdata", "presplit", "schema.sql"))
+	// Not runtime.Caller: under -trimpath it returns a module-relative path.
+	// Walk up from the working directory (a test's package directory) to
+	// the module root instead.
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("splitfixture: no go.mod above the working directory")
+		}
+		dir = parent
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "internal", "store", "testdata", "presplit", "schema.sql"))
 	return string(b), err
 }
 

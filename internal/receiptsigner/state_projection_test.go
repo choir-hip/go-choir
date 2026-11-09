@@ -6,17 +6,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
 func guestSignerProjectionScript(t *testing.T) string {
 	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("locate projection test source")
+	// Not runtime.Caller: under -trimpath it returns a module-relative path.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal("locate projection test source: ", err)
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "scripts", "guest-signer-state-project"))
+	return filepath.Clean(filepath.Join(wd, "..", "..", "scripts", "guest-signer-state-project"))
 }
 
 func TestGuestSignerStateProjectionClassifiesKeyShapeWithoutChangingBytes(t *testing.T) {

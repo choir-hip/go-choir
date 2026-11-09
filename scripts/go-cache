@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Inspect and bound the shared Go build cache (GOCACHE).
+#
+#   scripts/go-cache report [dir]            size, files, age and size profile
+#   scripts/go-cache trim   [dir]            bound the cache (see below)
+#   scripts/go-cache trim --dry-run [dir]    say what trim would delete
+#
+# Why: the cache is shared by every worktree and every agent, and Go's own
+# trim keeps an entry for five days after its last use. At the measured
+# 30-40 GB/day of new entries that is a steady state of about 180 GB
+# (docs/evidence/go-build-cache-growth-2026-11-09.md).
+#
+# trim is mtime-based and safe while builds run. Go marks an entry used by
+# touching its mtime (at most once an hour) and treats a missing entry as a
+# miss, so deleting an old entry costs only a rebuild. Entries newer than
+# MIN_AGE_MIN are never touched, which covers the one-hour touch granularity
+# plus any build in flight.
+#
+# trim deletes entries not used for MAX_AGE_HOURS. If the cache is still over
+# MAX_GB it deletes by shrinking the age window (halving it, never below
+# MIN_AGE_MIN) until the cache is at or under TARGET_GB or the floor is hit.
+#
+# Environment (defaults):
+#   GOCACHE        the cache dir (else `go env GOCACHE`)
+#   MAX_GB=30      trim only when the cache is larger than this
+#   TARGET_GB=20   a size-triggered trim aims for this
+#   MAX_AGE_HOURS=12   age window of the first pass
+#   MIN_AGE_MIN=150    never delete an entry used more recently than this
+set -euo pipefail
+
+cmd="${1:-report}"
+[[ $# -gt 0 ]] && shift || true
+dry=0
+if [[ "${1:-}" == "--dry-run" ]]; then dry=1; shift; fi
+dir="${1:-${GOCACHE:-$(go env GOCACHE)}}"
+max_gb="${MAX_GB:-30}"
+target_gb="${TARGET_GB:-20}"
+max_age_h="${MAX_AGE_HOURS:-12}"
+min_age_m="${MIN_AGE_MIN:-150}"
+
+[[ -d "$dir" ]] || { echo "go-cache: $dir is not a directory" >&2; exit 2; }
+
+size_mb() { du -sm "$dir" | cut -f1; }
+
+# Count and size (MB) of cache entries (names ending -a or -d) older than $1 minutes.
+older_than() {
+  find "$dir" -mindepth 2 \( -name '*-a' -o -name '*-d' \) -type f -mmin "+$1" -exec du -k {} + 2>/dev/null \
+    | awk '{n++; s+=$1} END {printf "%d files, %.1f GB\n", n, s/1048576}'
+}
+
+report() {
+  echo "cache: $dir"
+  echo "total: $(size_mb) MB, $(find "$dir" -type f | wc -l | tr -d ' ') files"
+  echo "unused for more than:"
+  for h in 1 6 12 24 48 96; do
+    printf '  %3sh  ' "$h"; older_than $((h * 60))
+  done
+  echo "largest entries:"
+  find "$dir" -mindepth 2 -type f -size +30M -exec du -k {} + 2>/dev/null \
+    | sort -rn | head -5 | awk '{printf "  %.0f MB  %s\n", $1/1024, $2}'
+  echo "entries over 30 MB: $(find "$dir" -mindepth 2 -type f -size +30M | wc -l | tr -d ' ')"
+}
+
+delete_older_than() {
+  local mins="$1"
+  if (( dry )); then
+    echo "  would delete (unused > ${mins} min): $(older_than "$mins")"
+    return
+  fi
+  # -d entries can be directories (cached executables); -a entries are files.
+  find "$dir" -mindepth 2 -name '*-d' -type d -mmin "+$mins" -prune -exec rm -rf {} + 2>/dev/null || true
+  find "$dir" -mindepth 2 \( -name '*-a' -o -name '*-d' \) -type f -mmin "+$mins" -delete 2>/dev/null || true
+}
+
+trim() {
+  local before; before="$(size_mb)"
+  echo "go-cache trim: $dir is ${before} MB (trim above ${max_gb} GB, age window ${max_age_h} h, floor ${min_age_m} min)"
+  if (( before < max_gb * 1024 )); then
+    echo "go-cache trim: under the limit; nothing to do"
+    return 0
+  fi
+  local mins=$(( max_age_h * 60 ))
+  (( mins < min_age_m )) && mins=$min_age_m
+  while :; do
+    echo "go-cache trim: pass at ${mins} min"
+    delete_older_than "$mins"
+    (( dry )) && break
+    local now; now="$(size_mb)"
+    echo "go-cache trim: now ${now} MB"
+    (( now <= target_gb * 1024 )) && break
+    (( mins <= min_age_m )) && { echo "go-cache trim: hit the floor (${min_age_m} min); still above target"; break; }
+    mins=$(( mins / 2 ))
+    (( mins < min_age_m )) && mins=$min_age_m
+  done
+  echo "go-cache trim: ${before} MB -> $(size_mb) MB"
+}
+
+case "$cmd" in
+  report) report ;;
+  trim) trim ;;
+  *) echo "usage: scripts/go-cache {report|trim [--dry-run]} [dir]" >&2; exit 2 ;;
+esac

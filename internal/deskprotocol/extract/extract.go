@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -36,6 +37,14 @@ func Surface(root string) (*deskprotocol.Surface, error) {
 	// A fixed build context: the surface must not depend on the machine.
 	ctxt := build.Default
 	ctxt.GOOS, ctxt.GOARCH, ctxt.CgoEnabled = "linux", "amd64", false
+	if ctxt.GOROOT == "" {
+		// A binary built with -trimpath (GOFLAGS in the dev shell) has no
+		// compiled-in GOROOT; ask the go tool, so the source importer can
+		// find the standard library.
+		if out, err := exec.Command("go", "env", "GOROOT").Output(); err == nil {
+			ctxt.GOROOT = strings.TrimSpace(string(out))
+		}
+	}
 	old := build.Default
 	build.Default = ctxt
 	defer func() { build.Default = old }()

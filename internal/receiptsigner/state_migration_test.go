@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -15,11 +14,13 @@ import (
 
 func guestSignerMigrationScript(t *testing.T) string {
 	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("locate migration test source")
+	// Not runtime.Caller: under -trimpath (GOFLAGS in the dev shell) it
+	// returns a module-relative path. A test runs in its package directory.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal("locate migration test source: ", err)
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "scripts", "guest-signer-state-migrate"))
+	return filepath.Clean(filepath.Join(wd, "..", "..", "scripts", "guest-signer-state-migrate"))
 }
 
 func currentUserAndGroup(t *testing.T) (string, string) {
