@@ -1313,7 +1313,9 @@ async function main() {
   const { server, base } = await serve(dist, useComputer, themeState, catalog, install, installState);
   const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
   fs.mkdirSync(o.out, { recursive: true });
-  const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  // No background networking: the capsule's egress broker refuses Google's
+  // sync, update and autofill hosts, and each refusal is log noise.
+  const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-default-apps', '--no-first-run', '--no-default-browser-check', '--metrics-recording-only'] });
   let failures = [];
   let skipped = 0;
   // A PNG from an earlier run is never left for a shot that fails or is not run (--fail-fast): Freeze would admit it.
