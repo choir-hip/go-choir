@@ -313,6 +313,9 @@ func readDeskPrompts(m apppackage.Manifest, root string) ([]File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: prompt %q: %w", ErrBuild, d.Prompt, err)
 		}
+		if strings.TrimSpace(string(raw)) == "" {
+			return nil, fmt.Errorf("%w: prompt %q of desk %q is blank", ErrBuild, d.Prompt, d.Name)
+		}
 		out = append(out, File{Path: d.Prompt, SHA256: digest(raw), Bytes: raw})
 	}
 	return out, nil

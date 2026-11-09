@@ -97,7 +97,15 @@ func checkDeskRow(rec pkgrelease.Record, module pkgruntime.Module) *installRefus
 	if _, err := releaseDeskManifest(m); err != nil {
 		return refuseInstall(http.StatusUnprocessableEntity, reasonDeskRowRefused, "%v", err)
 	}
-	return nil
+	// The sync wakes the desk on this prompt (releaseDeskPromptOf); a missing
+	// or blank one would leave it unregistered.
+	prompt := m.Contributes.Desks[0].Prompt
+	for _, f := range module.Files {
+		if f.Path == prompt && strings.TrimSpace(string(f.Bytes)) != "" {
+			return nil
+		}
+	}
+	return refuseInstall(http.StatusUnprocessableEntity, reasonDeskRowRefused, "package %s: the desk prompt %s is missing or blank", pkg, prompt)
 }
 
 // releaseDeskPromptOf reads a release desk's prompt from the install's data

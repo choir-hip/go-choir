@@ -33,7 +33,7 @@ import (
 //	T6  a sandbox that stops being ready leaves the desk registered;
 //	T7  the install admits (and the review seals) a desk whose row can never
 //	    register, such as one named "<pkg>-<suffix>": the install says yes
-//	    and the computer has no desk.
+//	    and the computer has no desk; or one whose prompt is blank.
 const (
 	thirdPartyPkg    = "notes-desk"
 	thirdPartyPrompt = "You keep the owner's notes tidy. Use only your own records.\n"
@@ -54,16 +54,21 @@ const (
 type thirdPartyBuilder struct {
 	fakeModuleBuilder
 	manifest string // the module's manifest; thirdPartyManif when empty
+	prompt   string // the desk prompt; thirdPartyPrompt when empty
 }
 
 func (b *thirdPartyBuilder) Build(ctx context.Context, rec pkgrelease.Record, treePatch []byte) (pkgruntime.Module, error) {
 	m, err := b.fakeModuleBuilder.Build(ctx, rec, treePatch)
-	sum := sha256.Sum256([]byte(thirdPartyPrompt))
+	prompt := thirdPartyPrompt
+	if b.prompt != "" {
+		prompt = b.prompt
+	}
+	sum := sha256.Sum256([]byte(prompt))
 	m.Manifest = json.RawMessage(thirdPartyManif)
 	if b.manifest != "" {
 		m.Manifest = json.RawMessage(b.manifest)
 	}
-	m.Files = []pkgruntime.File{{Path: "prompt.md", SHA256: hex.EncodeToString(sum[:]), Bytes: []byte(thirdPartyPrompt)}}
+	m.Files = []pkgruntime.File{{Path: "prompt.md", SHA256: hex.EncodeToString(sum[:]), Bytes: []byte(prompt)}}
 	return m, err
 }
 
@@ -192,5 +197,15 @@ func TestThirdPartyDeskWhoseRowCannotRegisterIsRefusedAtInstall(t *testing.T) {
 		if _, ok := deskmanifest.Lookup(name); ok {
 			t.Fatalf("T7: %s registered", name)
 		}
+	}
+	// A blank prompt is refused the same way.
+	e.rt.packageBuilder = &thirdPartyBuilder{prompt: " \n\t\n"}
+	e.files = map[string]string{"choir-package.json": thirdPartyManif, "prompt.md": " \n\t\n"}
+	_, id, raw, tree = publishedPackageNamed(t, thirdPartyPkg, e.repo, e.base, "owner-publisher", e.files)
+	if code, _, reason := e.post(t, installBody(t, id, raw, tree, "")); code != http.StatusUnprocessableEntity || reason != reasonDeskRowRefused {
+		t.Fatalf("T7 blank prompt = %d %s", code, reason)
+	}
+	if _, ok := deskmanifest.Lookup("app:notes-desk"); ok {
+		t.Fatal("T7: a desk with a blank prompt registered")
 	}
 }

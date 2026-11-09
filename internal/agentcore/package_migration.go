@@ -809,6 +809,7 @@ var packageMigrationPermanentRefusals = map[string]bool{
 	"builtin_name_not_yours":          true,
 	"install_attempts_exhausted":      true,
 	"install_review_refused":          true,
+	reasonDeskRowRefused:              true,
 	pkgrelease.ReasonUsesExceedGrants: true,
 	installreview.ReasonRejected:      true,
 }
