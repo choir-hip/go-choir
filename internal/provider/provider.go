@@ -2197,10 +2197,12 @@ func bedrockCacheControl(long bool) map[string]string {
 // transcript is never resumed, so the tail needs only the 5-minute lifetime;
 // its system and tools still write for an hour, since siblings and later runs
 // of the same desk share them.
-const (
-	researchChildConversationPrefix = "research-child:"
-	modelVerifyConversationPrefix   = "model-verify:"
-)
+const modelVerifyConversationPrefix = "model-verify:"
+
+// researchChildConversationPrefix is the head of a research child's provider
+// conversation id (agentcore's research children name each child's
+// conversation after the researcher).
+func researchChildConversationPrefix() string { return deskmanifest.ResearcherName() + "-child:" }
 
 // bedrockCarriesHistory reports whether the request belongs to a desk whose
 // run resumes a prior transcript across wakes, so the message tail must live
@@ -2217,7 +2219,7 @@ func bedrockCarriesHistory(req LLMRequest) bool {
 		return false
 	}
 	conv := strings.TrimSpace(req.ConversationID)
-	if strings.HasPrefix(conv, researchChildConversationPrefix) || strings.HasPrefix(conv, modelVerifyConversationPrefix) {
+	if strings.HasPrefix(conv, researchChildConversationPrefix()) || strings.HasPrefix(conv, modelVerifyConversationPrefix) {
 		return false
 	}
 	if label, ok := cacheKeyLabel(key); ok && label == cacheLabelForm(deskmanifest.TaskRoleName()) {

@@ -36,9 +36,8 @@
   "internal/vocabmigrate/migrate.go": 19,
   "internal/yaegikernel/broker_protocol.go": 2,
   "internal/yaegikernel/choir.go": 4,
-  "internal/yaegikernel/desk_cell_selftest.go": 3,
   "internal/yaegikernel/desk_oom_selftest.go": 1,
-  "internal/yaegikernel/frame_selftest.go": 6,
+  "internal/yaegikernel/frame_selftest.go": 3,
   "internal/yaegikernel/surface.go": 2,
   "scripts/kernelgate/main.go": 5
  }
