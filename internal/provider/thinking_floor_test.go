@@ -37,8 +37,8 @@ func TestNoBuilderEmitsThinkingOff(t *testing.T) {
 		if got := chatGPTReasoningEffort(e); got != "low" {
 			t.Errorf("chatgpt %q -> %q, want low", e, got)
 		}
-		if got := riverReasoningEffort(e); got != "" {
-			t.Errorf("river %q -> %q, want omitted", e, got)
+		if got := riverReasoningEffort(e); got != "low" {
+			t.Errorf("river %q -> %q, want low", e, got)
 		}
 	}
 	if got := fireworksReasoningEffort(""); got != "" {
@@ -68,6 +68,9 @@ func TestAnthropicWireBodiesNeverCarryThinkingOff(t *testing.T) {
 		}
 		for name, body := range bodies {
 			raw, _ := json.Marshal(body)
+			if name != "bedrock" && strings.Contains(string(raw), `"thinking"`) {
+				t.Errorf("%s effort %q gained a thinking field: %s", name, e, raw)
+			}
 			for _, banned := range []string{`"disabled"`, `"enabled"`, "budget_tokens"} {
 				if strings.Contains(string(raw), banned) {
 					t.Errorf("%s effort %q carries %s: %s", name, e, banned, raw)

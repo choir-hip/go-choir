@@ -139,10 +139,11 @@ func (p *RiverProvider) call(ctx context.Context, req LLMRequest, onChunk func(S
 // 2026-11-09 on deepseek-ai/DeepSeek-V4.1-Flash-1017: "low" and "high" work;
 // "medium" with tools is a 400 invalid_request; omitting the field works
 // with tools. So medium (and any unknown value) is omitted, which runs the
-// model default, and xhigh and max collapse to high.
+// model default, and xhigh and max collapse to high. Thinking is never off
+// (owner, 2026-11-09), so the off spellings ask for low.
 func riverReasoningEffort(effort string) string {
 	switch strings.ToLower(strings.TrimSpace(effort)) {
-	case "low":
+	case "low", "none", "minimal", "off", "disabled", "false":
 		return "low"
 	case "high", "xhigh", "max":
 		return "high"
