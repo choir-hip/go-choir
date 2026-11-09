@@ -83,7 +83,7 @@ async function submitBareReference(page, sourceUrl) {
     new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
   );
   await page.locator('[data-prompt-input]').fill(sourceUrl);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
   const response = await promptBarResponse;
   expect(response.status()).toBe(202);
   const body = await response.json();

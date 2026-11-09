@@ -384,7 +384,7 @@ test('prompt surface prompt input with placeholder', async ({ page, authenticato
 
   // Type text and submit with Enter
   await promptInput.fill('Hello world');
-  await promptInput.press('Enter');
+  await promptInput.press('ControlOrMeta+Enter');
 
   // Input should be cleared after submit
   await expect(promptInput).toHaveValue('');
@@ -402,7 +402,7 @@ test('prompt bar routes normal input through conductor and opens texture', async
   );
 
   await promptInput.fill(prompt);
-  await promptInput.press('Enter');
+  await promptInput.press('ControlOrMeta+Enter');
 
   const response = await responsePromise;
   expect(response.status()).toBe(202);
@@ -464,7 +464,7 @@ test('prompt-created texture gets a .texture shortcut and keeps state canonical 
 
   const promptInput = page.locator('[data-prompt-input]');
   await promptInput.fill('Ahaha');
-  await promptInput.press('Enter');
+  await promptInput.press('ControlOrMeta+Enter');
 
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow).toBeVisible({ timeout: 5000 });
@@ -542,7 +542,7 @@ test('prompt bar sends greetings through conductor instead of frontend pattern m
     response.url().includes('/api/prompt-bar') && response.request().method() === 'POST'
   );
   await promptInput.fill('hi');
-  await promptInput.press('Enter');
+  await promptInput.press('ControlOrMeta+Enter');
 
   const response = await responsePromise;
   expect(response.status()).toBe(202);

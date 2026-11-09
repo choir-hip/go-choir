@@ -122,7 +122,9 @@
     root.dataset.promptSurfacePlacement = normalizedPlacement;
   }
 
-  // The one submit path: Enter and the send button both come here. An empty
+  // The one submit path: the send button (and Ctrl/Cmd+Enter from a
+  // keyboard) comes here. Enter is a newline (owner, 2026-11-09: "the enter
+  // button on keyboard should be a newline, not submit"). An empty
   // field only takes the focus. With a target in view, one send at a time: a
   // second send while the first routes would read a target the first is
   // still changing, and the text stays in the field.
@@ -141,7 +143,7 @@
 
   function handlePromptKeydown(event: KeyboardEvent) {
     if (promptDisabled) return;
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && promptValue.trim()) {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing && promptValue.trim()) {
       event.preventDefault();
       submitPrompt();
     } else if (event.key === 'Escape') {
@@ -401,7 +403,7 @@
         aria-label="Command prompt"
         on:keydown={handlePromptKeydown}
         on:input={resizePromptInput}
-        enterkeyhint="send"
+        enterkeyhint="enter"
         on:focus={() => (promptFocused = true)}
         on:blur={() => (promptFocused = false)}
       />

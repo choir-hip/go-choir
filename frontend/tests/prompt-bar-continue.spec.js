@@ -168,7 +168,7 @@ async function openDesktop(page) {
 async function send(page, text) {
   const input = page.locator('[data-prompt-input]');
   await input.fill(text);
-  await input.press('Enter');
+  await input.press('ControlOrMeta+Enter');
 }
 
 test('C1 C2 C3: the chip defaults to continuing the document in view', async ({ page }) => {
@@ -326,7 +326,7 @@ test('C7: a single URL goes to the focused document, and a tap sends it to the c
 
   await input.fill('  https://example.com/tides/article  ');
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus');
-  await input.press('Enter');
+  await input.press('ControlOrMeta+Enter');
   await expect.poll(() => submits.length).toBe(1);
   expect(submits[0].focus?.object_ref).toBe('doc-tides');
 
@@ -335,7 +335,7 @@ test('C7: a single URL goes to the focused document, and a tap sends it to the c
   await input.fill('https://example.com/tides/article');
   await chip.click();
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
-  await input.press('Enter');
+  await input.press('ControlOrMeta+Enter');
   await expect.poll(() => submits.length).toBe(2);
   expect(submits[1].focus?.object_ref).toBeUndefined();
 });
@@ -353,7 +353,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
   expect(submits[0].focus?.object_ref).toBeUndefined();
 
   await input.fill('and add a map');
-  await input.press('Enter');
+  await input.press('ControlOrMeta+Enter');
   await page.waitForTimeout(400);
   expect(submits.length).toBe(1);
   await expect(input).toHaveValue('and add a map');
@@ -362,7 +362,7 @@ test('C8: no second send while the first is routing', async ({ page }) => {
   release();
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });
   await expect(chip).toContainText(DOCS['doc-new'].title);
-  await input.press('Enter');
+  await input.press('ControlOrMeta+Enter');
   await expect.poll(() => submits.length).toBe(2);
   expect(submits[1].focus?.object_ref).toBe('doc-new');
 });

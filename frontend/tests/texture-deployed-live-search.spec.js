@@ -202,7 +202,7 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
       new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
     );
     await page.locator('[data-prompt-input]').fill(prompt);
-    await page.locator('[data-prompt-input]').press('Enter');
+    await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
 
     const response = await promptBarResponse;
     const body = await response.json();

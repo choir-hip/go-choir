@@ -196,7 +196,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
       new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
     );
     await promptInput.fill(prompt);
-    await promptInput.press('Enter');
+    await promptInput.press('ControlOrMeta+Enter');
 
     const response = await promptBarResponse;
     const responseBody = await response.json().catch(() => null);

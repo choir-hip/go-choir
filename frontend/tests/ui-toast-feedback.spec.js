@@ -31,7 +31,7 @@ test('conductor feedback is announced and can be dismissed', async ({ page }) =>
   const prompt = page.locator('[data-prompt-input]');
   await expect(prompt).toBeEnabled({ timeout: 15_000 });
   await prompt.fill('Summarize the current work');
-  await prompt.press('Enter');
+  await prompt.press('ControlOrMeta+Enter');
 
   const toast = page.getByRole('status').filter({ hasText: 'Request acknowledged' });
   await expect(toast).toBeVisible();

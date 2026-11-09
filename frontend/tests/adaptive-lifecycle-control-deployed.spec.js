@@ -61,7 +61,7 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   }, { timeout: 300_000 });
 
   await page.locator('[data-prompt-input]').fill(prompt);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
   await expect(page.locator('[data-auth-overlay]')).toBeVisible({ timeout: 10_000 });
 
   const registerStart = Date.now();
@@ -86,14 +86,14 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
     return url.pathname === '/api/prompt-bar' && response.request().method() === 'POST';
   }, { timeout: 45_000 });
   await page.locator('[data-prompt-input]').fill(secondPrompt);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
   const promptRes = await secondPromptResponse;
   expect(promptRes.status()).toBe(202);
 
   await logout(page, BASE_URL);
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await page.locator('[data-prompt-input]').fill(`returning login ${Date.now()}`);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
   await expect(page.locator('[data-auth-overlay]')).toBeVisible({ timeout: 10_000 });
   await page.locator('[data-login-toggle]').click();
   await page.locator('[data-login-view] input[type="email"]').fill(email);

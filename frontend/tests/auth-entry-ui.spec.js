@@ -192,7 +192,7 @@ test('signed-out prompt intent opens auth overlay without prompt-bar mutation', 
   await page.goto(BASE_URL);
   await page.locator('[data-desktop]').waitFor({ state: 'visible' });
   await page.locator('[data-prompt-input]').fill('Draft a public desktop proof note');
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
 
   await expect(page.locator('[data-auth-overlay]')).toBeVisible();
   await expect(page.locator('[data-auth-intent]')).toContainText('Draft a public desktop proof note');
@@ -237,7 +237,7 @@ test('signed-out prompt survives registration and resumes through product prompt
   await page.goto(BASE_URL);
   await page.locator('[data-desktop]').waitFor({ state: 'visible' });
   await page.locator('[data-prompt-input]').fill(prompt);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
 
   await expect(page.locator('[data-auth-overlay]')).toBeVisible();
   await page.locator('[data-register-view] input[type="email"]').fill(email);

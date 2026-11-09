@@ -194,7 +194,7 @@ test('real texture workflow demo uses live LLM, search, generated artifact, and 
     response.url().includes('/api/prompt-bar') && response.request().method() === 'POST'
   );
   await page.locator('[data-prompt-input]').fill(prompt);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
 
   const conductorSubmitted = await (await conductorResponse).json();
   const conductorDecision = await waitForPromptDecision(page, conductorSubmitted.submission_id, 120_000);

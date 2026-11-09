@@ -28,7 +28,7 @@ test('prompt sign-in names the interrupted action without flooding the dialog', 
   const promptText = `Draft a briefing ${'with supporting context '.repeat(12)}`;
   const prompt = page.locator('[data-prompt-input]');
   await prompt.fill(promptText);
-  await prompt.press('Enter');
+  await prompt.press('ControlOrMeta+Enter');
 
   const intent = page.locator('[data-auth-intent]');
   await expect(intent).toContainText('Run your prompt after sign-in');

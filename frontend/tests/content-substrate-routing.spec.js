@@ -80,7 +80,7 @@ test('prompt bar routes bare content references and product APIs record extracti
     new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
   );
   await page.locator('[data-prompt-input]').fill(barePDF);
-  await page.locator('[data-prompt-input]').press('Enter');
+  await page.locator('[data-prompt-input]').press('ControlOrMeta+Enter');
 
   const response = await promptBarResponse;
   expect(response.status()).toBe(202);

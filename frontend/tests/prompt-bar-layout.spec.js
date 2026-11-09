@@ -11,10 +11,12 @@
  *   L1 The chip, the typed text and the send button overlap, or the text
  *      renders outside the bar (mobile 390x844 and desktop 1280x800).
  *   L2 The send button is missing, hidden, not clickable, has no accessible
- *      label, or does not submit; Enter still must.
+ *      label, or does not submit. Enter must NOT submit (owner, 2026-11-09:
+ *      "the enter button on keyboard should be a newline, not submit. Let the
+ *      submit button submit"); Ctrl/Cmd+Enter is the keyboard send.
  *   L3 Long text does not grow the input to several lines, grows without a
  *      cap, or grows downward over the bottom edge / the bar covers the
- *      window; Shift+Enter does not insert a newline.
+ *      window; Enter or Shift+Enter does not insert a newline.
  *   L4 The Sources button is disabled while Texture is revising, or the panel
  *      it opens lacks the Models and Search blocks.
  *
@@ -190,10 +192,15 @@ for (const vp of VIEWPORTS) {
       await page.waitForTimeout(200);
       expect(submits.length).toBe(1);
 
-      // Enter still submits.
+      // Enter is a newline, never a send; Ctrl/Cmd+Enter sends.
       await expect(page.locator('[data-prompt-surface]')).toHaveAttribute('data-routing', 'false', { timeout: 10_000 });
       await input.fill('second line of thought');
       await input.press('Enter');
+      await page.waitForTimeout(200);
+      expect(submits.length).toBe(1);
+      await expect(input).toHaveValue('second line of thought\n');
+      await input.fill('second line of thought');
+      await input.press('ControlOrMeta+Enter');
       await expect.poll(() => submits.length).toBe(2);
       expect(submits[1].text).toBe('second line of thought');
     });
@@ -213,7 +220,7 @@ for (const vp of VIEWPORTS) {
       expect(inputBox.width).toBeGreaterThan(80);
     });
 
-    test('L3: long text grows the input to several lines, caps, then scrolls; Shift+Enter is a newline', async ({ page }) => {
+    test('L3: long text grows the input to several lines, caps, then scrolls; Enter is a newline', async ({ page }) => {
       const submits = await mockComputer(page, { windows: [textureWindow()], activeWindowId: 'win-ai' });
       const input = await openDesktop(page);
       const surface = page.locator('[data-prompt-surface]');
@@ -250,15 +257,19 @@ for (const vp of VIEWPORTS) {
       const cleared = await input.boundingBox();
       expect(Math.abs(cleared.height - one.height)).toBeLessThanOrEqual(1);
 
-      // Shift+Enter inserts a newline and does not submit; Enter submits all of it.
+      // Enter and Shift+Enter insert newlines and do not submit; the send
+      // button submits all of it.
       await input.fill('first');
-      await input.press('Shift+Enter');
-      await input.pressSequentially('second');
-      await expect(input).toHaveValue('first\nsecond');
-      expect(submits.length).toBe(0);
       await input.press('Enter');
+      await input.pressSequentially('second');
+      await input.press('Shift+Enter');
+      await input.pressSequentially('third');
+      await expect(input).toHaveValue('first\nsecond\nthird');
+      await page.waitForTimeout(200);
+      expect(submits.length).toBe(0);
+      await page.locator('[data-prompt-submit]').click();
       await expect.poll(() => submits.length).toBe(1);
-      expect(submits[0].text).toBe('first\nsecond');
+      expect(submits[0].text).toBe('first\nsecond\nthird');
     });
 
     test('L4: Sources is pressable while Texture is revising, and shows models and search providers', async ({ page }) => {
@@ -266,7 +277,7 @@ for (const vp of VIEWPORTS) {
       const input = await openDesktop(page);
       await expect(page.locator('[data-prompt-target]')).toBeVisible({ timeout: 10_000 });
       await input.fill('add a section on agents');
-      await input.press('Enter');
+      await page.locator('[data-prompt-submit]').click();
       const texture = page.locator('[data-window][data-window-app-id="texture"]').first();
       await expect(texture.locator('[data-texture-save-status]').first()).toContainText(/Writing first draft|Revising/, { timeout: 10_000 });
 
