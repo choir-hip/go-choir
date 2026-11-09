@@ -1,0 +1,13 @@
+# Ledger: Autopaper improvement (2026-11-09)
+
+Append-only. One line per move; newest last.
+
+- 2026-11-09 Problem doc: docs/problems/paper-quota-incidents-2026-11-09.md (3bafcbf9e). The paper's queue held 1763 tasks, the oldest 70 h; quota incidents waited without a bound.
+- 2026-11-09 D13 queue expiry and the bounded quota incident landed (36534be53; Devin ACCEPT). Queued tasks older than 24 h close as expired_in_queue, 200 per sweep; an incident waits at most 18 min, with quota_ledger in observability. (orange; rollback: revert)
+- 2026-11-09 Synthetic overuse traced: the paper made 8315 Synthetic calls today against 1099 from d@e, about $52 of $57 at list rates, after the 2026-11-04 routing put Synthetic in the default pool. Synthetic removed from the default pool; River added as a provider (52d93ddb3, deployed 13:03). (orange; rollback: revert)
+- 2026-11-09 Provider availability memory written into doctrine at the owner's word (5ca86505a).
+- 2026-11-09 Bedrock had never resolved on Node B: no AWS_REGION. New key minted with the AWS CLI; the Haiku 5.5 agreement accepted. The agreement shows AUTHORIZED, but invoke still answers "not available for this account" for Haiku 5.5 while Haiku 4.5 and Sonnet 4.6 answer on the same key; propagation suspected.
+- 2026-11-09 Pool rework landed (afbf2c8f9; Devin ACCEPT, non-blocking: a selfdev computer that exhausts every self-dev member continues onto Haiku, bounded by the Bedrock cap). Default pool: free first, then Haiku 5.5. Selfdev pool: free, Synthetic, River. All roles low, the Sonnet delegate medium. (orange; rollback: revert)
+- 2026-11-09 Owner budgets: the paper at most $20 a day on Bedrock, about $200 of credit lasting through Thursday; self-dev at most $1 a day on River. Hourly spend notification set up for the owner.
+- 2026-11-09 Gateway paid budgets and provider retry memory landed together (Devin ACCEPT on each; audit docs/evidence/provider-retry-audit-2026-11-09.md). Bedrock is refused past $20 a UTC day and River past $1, with the pool failing over; spend shows at /provider/v1/spend and in an hourly journal line. r1 fixes: an infinite budget value is the default; global. Bedrock profiles price; a corrupt spend file is logged; a bare 403 or 404 no longer holds a shared model. Residuals: a stream that fails mid-way counts $0; the spend file is written on every call; Jev and the Anthropic relay are outside the paid ledger; Haiku cache writes price at the input rate. (orange; rollback: revert)
+- 2026-11-09 Risk: crouton-alpha's free week ends about 2026-11-10. If the paper's traffic falls to Haiku, last hour's 45.7M input tokens price at about $4.9 an hour, and $20 lasts about four hours.

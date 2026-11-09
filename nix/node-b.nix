@@ -2593,6 +2593,7 @@ in
         "GATEWAY_ANTHROPIC_RELAY_EXPIRES=${claudeDelegateExpires}"
         "GATEWAY_ANTHROPIC_RELAY_DAILY_TOKENS=50000000"
         "GATEWAY_ANTHROPIC_RELAY_SPEND_FILE=/var/lib/go-choir/anthropic-relay-spend.json"
+        "GATEWAY_PAID_SPEND_FILE=/var/lib/go-choir/paid-spend.json"
         "GATEWAY_ANTHROPIC_RELAY_MAX_INFLIGHT=4"
         # The delegate's one model (internal/claudedelegate Model).
         "GATEWAY_ANTHROPIC_RELAY_MODELS=claude-sonnet-5-5"

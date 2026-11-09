@@ -213,6 +213,9 @@ type Handler struct {
 	// bodyCaps bounds every request body the gateway decodes
 	// (body_caps.go, B7); nil means the code defaults, enforced.
 	bodyCaps *bodyCaps
+	// paidSpend counts every provider call in dollars and holds the paid
+	// providers to their daily budgets (paid_budget.go); may be nil.
+	paidSpend *PaidSpend
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -1231,10 +1234,10 @@ func (h *Handler) HandleProviderBreakers(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if h.breakers == nil {
-		writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": map[string]any{}})
+		writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": map[string]any{}, "paid_spend": h.paidSpend.Snapshot()})
 		return
 	}
-	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": h.breakers.Snapshot()})
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": h.breakers.Snapshot(), "paid_spend": h.paidSpend.Snapshot()})
 }
 
 // HandleProviderBreakerReset handles POST /provider/v1/breakers/reset. It
@@ -1299,6 +1302,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(hostfetch.Path, h.HandleHostFetch)
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
 	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
+	s.HandleFunc("/provider/v1/spend", h.HandlePaidSpend)
 	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)
 	s.HandleFunc("/provider/v1/breakers/reset", h.HandleProviderBreakerReset)
 }

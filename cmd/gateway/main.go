@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
@@ -77,6 +78,12 @@ func main() {
 	}
 
 	handler.SetBreakers(breakers)
+
+	// Every provider call is counted in dollars; Bedrock and River stop at
+	// the owner's daily budgets (internal/gateway/paid_budget.go).
+	paidSpend := gateway.NewPaidSpendFromEnv()
+	handler.SetPaidSpend(paidSpend)
+	go paidSpend.RunSummary(context.Background())
 
 	// SEC-05: bind each computer's bearer to its own address. Unset and
 	// unknown values enforce; nix sets observe while the rollout is watched

@@ -95,6 +95,17 @@ var pricingTable = []ModelPricing{
 	// Claude Haiku 5.5 on Bedrock (2026-11-09): $0.10/M in, $0.50/M out.
 	{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
 	{Provider: "bedrock", Model: "global.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
+	// River serves the same DeepSeek V4.1 Flash 1017 snapshot; its price is
+	// not published, so the Synthetic entry above stands as an estimate
+	// (model "deepseek-ai/DeepSeek-V4.1-Flash-1017" resolves to it).
+	//
+	// Bedrock (the gateway's daily budget counts these,
+	// internal/gateway/paid_budget.go): Haiku 5.5 at the owner's rate, and
+	// the Claude 4.x ids the catalog serves at list rates (estimates).
+	{Provider: "bedrock", Model: "claude-haiku-5.5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
+	{Provider: "bedrock", Model: "claude-haiku-4.5", InputPerMillion: 1.0, OutputPerMillion: 5.0},
+	{Provider: "bedrock", Model: "claude-sonnet-4.6", InputPerMillion: 3.0, OutputPerMillion: 15.0},
+	{Provider: "bedrock", Model: "claude-opus-4.6", InputPerMillion: 5.0, OutputPerMillion: 25.0},
 	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
 	// limited time" with no end date; LongCat 2.5 Preview lists at about
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.
