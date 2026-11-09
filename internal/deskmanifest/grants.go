@@ -137,7 +137,7 @@ var catalogue = map[string]grantSpec{
 	"texture.turn":            {Verbs: []string{"Wait", "Reject"}, Privileged: true},
 
 	// Research's world authority.
-	"world.read":     {Verbs: []string{"SearchStart", "Searches", "SearchWait", "Read", "Reads", "Captures", "SearchWireCorpus"}, Privileged: true},
+	"world.read":     {Verbs: []string{"SearchStart", "Search", "Searches", "SearchWait", "Read", "ReadAll", "Reads", "Captures", "Cut", "SearchWireCorpus"}, Privileged: true},
 	"source.poll":    {Verbs: []string{"PollSource", "SourceAPI"}, Privileged: true},
 	"evidence.write": {Verbs: []string{"SaveEvidence"}, Privileged: true},
 	"evidence.read":  {Verbs: []string{"ReadEvidence", "ListEvidence"}},

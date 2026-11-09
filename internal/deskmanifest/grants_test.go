@@ -33,9 +33,9 @@ func TestGrantUnionReproducesTodaysAuthority(t *testing.T) {
 		"management": {verbs: []string{"Ask", "Calibration", "CancelAct", "CancelAssignment", "CancelTask", "Cast", "Decline", "Delegate", "Disagreement", "Escalate", "Feed", "InstallPacket", "InstallVerdict", "Precommit", "ProductAPI", "ReadCapture", "Reply", "Report", "ReportPacket", "Resolve", "Restate", "Screens", "ShotStart", "ShotVerdict", "ShotWait", "Stories", "Verify", "VerifyFindings"},
 			modules: []string{"updates.read"}, cell: 300 * time.Second},
 		"management_task": {verbs: []string{"Cast", "Decline", "Done", "Feed", "ReadCapture", "Stories"}, cell: 300 * time.Second},
-		"research": {verbs: []string{"Ask", "CancelAct", "Captures", "Cast", "Disagreement", "Escalate", "ListEvidence", "PollSource", "Precommit", "Read", "ReadCapture", "ReadEvidence", "Reads", "Relate", "RelateStories", "Reply", "Report", "ReportPacket", "Research", "Resolve", "RunMemoryEntry", "SaveEvidence", "SearchStart", "SearchTexture", "SearchWait", "SearchWireCorpus", "Searches", "SourceAPI", "StoryAnalysis", "System1"},
+		"research": {verbs: []string{"Ask", "CancelAct", "Captures", "Cast", "Cut", "Disagreement", "Escalate", "ListEvidence", "PollSource", "Precommit", "Read", "ReadAll", "ReadCapture", "ReadEvidence", "Reads", "Relate", "RelateStories", "Reply", "Report", "ReportPacket", "Research", "Resolve", "RunMemoryEntry", "SaveEvidence", "Search", "SearchStart", "SearchTexture", "SearchWait", "SearchWireCorpus", "Searches", "SourceAPI", "StoryAnalysis", "System1"},
 			capsule: []string{"go_eval", "list_dir", "read_file", "stat"}},
-		"research_web":     {verbs: []string{"Captures", "ListEvidence", "Read", "ReadCapture", "ReadEvidence", "Reads", "SearchStart", "SearchWait", "SearchWireCorpus", "Searches"}},
+		"research_web":     {verbs: []string{"Captures", "Cut", "ListEvidence", "Read", "ReadAll", "ReadCapture", "ReadEvidence", "Reads", "Search", "SearchStart", "SearchWait", "SearchWireCorpus", "Searches"}},
 		"research_texture": {verbs: []string{"SearchTexture"}},
 		"texture":          {verbs: []string{"Ask", "Cast", "Done", "ReadCapture", "ReadDoc", "Reject", "Wait", "Write"}, modules: []string{"updates.read"}},
 	}

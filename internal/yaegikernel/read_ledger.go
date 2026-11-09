@@ -18,8 +18,10 @@ import (
 //   - choir.Reads() and choir.Captures(), the whole list;
 //   - ReportPacket's pack check, a warning (never a refusal) naming captured
 //     reads the packet leaves out;
-//   - the interim nudge: one line, once per run, after the first capture, if
-//     the research desk has not yet sent a packet.
+//   - the interim nudge: one line in the result of the cell that captured
+//     sources no sent packet carries, once per capture, so each new batch of
+//     reads is reported as it is read (a cell that reads and sends in the
+//     same cell is never nudged).
 
 // ReadEntry is one Read of this run.
 type ReadEntry struct {
@@ -43,8 +45,11 @@ type readLedger struct {
 	reads      []ReadEntry
 	noted      int  // reads already listed in a cell result
 	packetSent bool // a ReportPacket was staged this run
-	nudged     bool
-	warnings   []string
+	// packedID and packedURL are the captures and pages the packets of this
+	// run carry; nudged is the captures the desk was already told to report.
+	packedID, packedURL map[string]bool
+	nudged              map[string]bool
+	warnings            []string
 }
 
 // beginRun resets the ledger when a cell of a new run binds. An empty run id
@@ -59,7 +64,8 @@ func (l *readLedger) beginRun(runID string) {
 		return
 	}
 	l.runID = runID
-	l.reads, l.noted, l.packetSent, l.nudged, l.warnings = nil, 0, false, false, nil
+	l.reads, l.noted, l.packetSent, l.nudged, l.warnings = nil, 0, false, nil, nil
+	l.packedID, l.packedURL = nil, nil
 }
 
 // recordRead notes one Read's outcome. A re-read of an unchanged page returns
@@ -141,6 +147,15 @@ func (s *ChoirScope) notePacketSent(packetJSON string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.packetSent = true
+	if l.packedID == nil {
+		l.packedID, l.packedURL = map[string]bool{}, map[string]bool{}
+	}
+	for id := range packedID {
+		l.packedID[id] = true
+	}
+	for u := range packedURL {
+		l.packedURL[u] = true
+	}
 	if len(missing) > 0 {
 		total := len(missing)
 		if total > 10 {
@@ -173,10 +188,34 @@ func (s *ChoirScope) readNoteLines() []string {
 	lines = append(lines, l.warnings...)
 	l.warnings = nil
 	// The nudge goes to a desk that both reads the web and reports packets
-	// (its manifest row says so), never by desk name.
-	if captured > 0 && !l.packetSent && !l.nudged && s.deskModule("ReportPacket") && s.deskModule("Read") {
-		l.nudged = true
-		lines = append(lines, fmt.Sprintf("you have %d captured sources and have sent no packet; send an interim packet now (choir.ReportPacket without work_disposition) so Texture can revise while you read on", captured))
+	// (its manifest row says so), never by desk name. It names the captures
+	// no packet carries yet, once each: the first capture, and every later
+	// read, because a finding waits for the desk's next packet (B1,
+	// system-prompt-review 2026-11-09: the first packet came 3 to 16 cells
+	// after the nudge, and the nudge fired for the first capture only).
+	if captured > 0 && s.deskModule("ReportPacket") && s.deskModule("Read") {
+		var fresh, ids []string
+		for _, e := range l.reads {
+			if !e.OK || l.packedID[e.CaptureID] || l.packedURL[searchHitKey(e.URL)] || l.nudged[e.CaptureID] {
+				continue
+			}
+			if l.nudged == nil {
+				l.nudged = map[string]bool{}
+			}
+			l.nudged[e.CaptureID] = true
+			fresh = append(fresh, e.CaptureID)
+		}
+		if len(fresh) > 0 {
+			ids = fresh
+			if len(ids) > 5 {
+				ids = append(ids[:5:5], fmt.Sprintf("and %d more", len(fresh)-5))
+			}
+			if !l.packetSent {
+				lines = append(lines, fmt.Sprintf("you have %d captured sources and have sent no packet; send an interim packet now (choir.ReportPacket without work_disposition) so Texture can revise while you read on: %s", captured, strings.Join(ids, ", ")))
+			} else {
+				lines = append(lines, fmt.Sprintf("you have %d captured sources no packet carries yet: %s; send another interim packet now (choir.ReportPacket without work_disposition) so Texture can revise while you read on", len(fresh), strings.Join(ids, ", ")))
+			}
+		}
 	}
 	return lines
 }

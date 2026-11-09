@@ -157,14 +157,46 @@ func TestInterimNudgeFiresOnceAfterTheFirstCapture(t *testing.T) {
 			}
 		}
 	}
-	_, _ = scope.Read("https://c.example/3")
+	if count != 1 {
+		t.Fatalf("nudge fired %d times for the first captures, want once", count)
+	}
+	// Nothing new was read: no second nudge. A new capture is nudged once,
+	// naming only itself (B1: each finding is reported as it is read).
 	for _, l := range hooks.SearchCounts() {
 		if strings.Contains(l, "interim packet") {
-			count++
+			t.Fatalf("nudged again with nothing new read: %s", l)
 		}
 	}
-	if count != 1 {
-		t.Fatalf("nudge fired %d times, want once per run", count)
+	_, _ = scope.Read("https://c.example/3")
+	later := 0
+	for _, l := range hooks.SearchCounts() {
+		if strings.Contains(l, "interim packet") {
+			later++
+			if !strings.Contains(l, "cap-c.example/3") || strings.Contains(l, "cap-a.example/1") {
+				t.Errorf("the later nudge must name only the new capture: %s", l)
+			}
+		}
+	}
+	if later != 1 {
+		t.Fatalf("the third read was nudged %d times, want once", later)
+	}
+}
+
+func TestNudgeAfterAPacketNamesOnlyCapturesItDoesNotCarry(t *testing.T) {
+	scope := readLedgerScope(t, "research", nil)
+	hooks := scope.BindCell()
+	hooks.Begin(SessionFrame{})
+	_, _ = scope.Read("https://a.example/1")
+	hooks.SearchCounts()
+	packet := `{"kind":"evidence_update","summary":"s","sources":[{"source_id":"s1","kind":"web_source","target":{"uri":"https://a.example/1","capture_id":"cap-a.example/1"}}]}`
+	if _, err := scope.ReportPacket("texture", packet, ""); err != nil {
+		t.Fatal(err)
+	}
+	hooks.SearchCounts()
+	_, _ = scope.Read("https://b.example/2")
+	lines := strings.Join(hooks.SearchCounts(), "\n")
+	if !strings.Contains(lines, "cap-b.example/2") || strings.Contains(lines, "cap-a.example/1") || !strings.Contains(lines, "another interim packet") {
+		t.Fatalf("a read after a packet must be nudged for itself only:\n%s", lines)
 	}
 }
 
