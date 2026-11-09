@@ -152,9 +152,12 @@ func (m *runMemoryManager) carryTexturePriorConversation(ctx context.Context) er
 // holds this actor's memory, else the actor's newest run with memory; the
 // continuity is the agent's, never a run's (PD2). Carried messages keep
 // their message role: a runtime injection authorizes delivery only in the
-// run it was injected into, so none is carried as one. Run-context turns are
-// the earlier run's facts and are dropped, and a last cell cut off before
-// its result is dropped. The bound is the run's own threshold compaction.
+// run it was injected into, so none is carried as one. Every earlier message,
+// run-context turns included, is carried byte for byte so the provider's
+// warm prompt cache holds across wakes (owner, 2026-11-09: history is kept,
+// never trimmed); the new run's context turn, prompt and frame are appended
+// after it. A last cell cut off before its result is dropped. The bound is
+// the run's own threshold compaction.
 func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, computerID, agentID, runID string) error {
 	sourceRunID := strings.TrimSpace(metadataStringValue(m.rec.Metadata, runMetadataActorRewarmSource))
 	var priorEntries []types.RunMemoryEntry
@@ -186,6 +189,10 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 	}
 	checkpoint, tail := latestRunMemoryCheckpointAndTail(priorEntries)
 	tail = carryableRunMemoryTail(tail)
+	// The carried checkpoint renders as the same message it rendered as in
+	// the source run: same summary, same TokensBefore (the number is in the
+	// rendered text), so message 0 is byte-equal at every hop.
+	checkpointTokens := latestRunMemoryCheckpointTokens(priorEntries)
 	if m.batchedAppends() {
 		// tape.group_commit: the checkpoint and the carried messages are one
 		// write instead of one tape event each.
@@ -197,7 +204,7 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 				AgentID:      agentID,
 				Kind:         types.RunMemoryEntryCompaction,
 				Summary:      checkpoint,
-				TokensBefore: estimateRawMessagesTokens(buildRunMemoryContext(priorEntries)),
+				TokensBefore: checkpointTokens,
 				Reason:       "actor_rewarm",
 				Details: map[string]any{
 					"source_loop_id":    sourceRunID,
@@ -221,7 +228,7 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 			AgentID:      agentID,
 			Kind:         types.RunMemoryEntryCompaction,
 			Summary:      checkpoint,
-			TokensBefore: estimateRawMessagesTokens(buildRunMemoryContext(priorEntries)),
+			TokensBefore: checkpointTokens,
 			Reason:       "actor_rewarm",
 			Details: map[string]any{
 				"source_loop_id":    sourceRunID,
@@ -256,7 +263,18 @@ func runMemoryEntriesOfAgent(entries []types.RunMemoryEntry, agentID string) boo
 	return found
 }
 
-// carryableRunMemoryTail drops run-context turns and tool results whose call
+// latestRunMemoryCheckpointTokens is the TokensBefore of the newest
+// compaction entry, the number its rendered summary message embeds.
+func latestRunMemoryCheckpointTokens(entries []types.RunMemoryEntry) int {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Kind == types.RunMemoryEntryCompaction {
+			return entries[i].TokensBefore
+		}
+	}
+	return 0
+}
+
+// carryableRunMemoryTail drops tool results whose call
 // is not carried, and cuts the tail before the first tool_use whose result
 // never arrived, so the carried conversation is one a provider accepts.
 func carryableRunMemoryTail(tail []types.RunMemoryEntry) []types.RunMemoryEntry {
@@ -264,9 +282,6 @@ func carryableRunMemoryTail(tail []types.RunMemoryEntry) []types.RunMemoryEntry 
 	pending := map[string]int{} // tool_use id -> index in out of its call
 	called := map[string]bool{}
 	for _, entry := range tail {
-		if isRunContextMessage(entry.Message) {
-			continue
-		}
 		var parsed struct {
 			Content []struct {
 				Type      string `json:"type"`

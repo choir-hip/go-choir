@@ -14,7 +14,8 @@ package agentcore
 //  3. A carried runtime injection counts as delivered in the new run.
 //  4. The carry crosses actors.
 //  5. The carried tail ends on a tool_use with no result.
-//  6. Old run-context turns are carried.
+//  6. Old run-context turns are dropped (2026-11-09: they are carried verbatim;
+//     see texture_carry_append_test.go).
 //  7. A carried checkpoint is re-expanded or dropped.
 //  8. A non-Texture run with the flag changes.
 
@@ -156,8 +157,8 @@ func TestTextureHoldTrajectoryCarriesTheEarlierConversationVerbatim(t *testing.T
 	if strings.Contains(all, "DANGLING-CELL") {
 		t.Fatalf("a tool_use without its result was carried:\n%s", all)
 	}
-	if strings.Contains(all, "OLD-RUN-FACTS") {
-		t.Fatalf("the earlier run-context turn was carried:\n%s", all)
+	if !strings.Contains(all, "OLD-RUN-FACTS") {
+		t.Fatalf("the earlier run-context turn was not carried verbatim (append-only, 2026-11-09):\n%s", all)
 	}
 	if !strings.Contains(all, "NEW-RUN-FACTS") || !strings.Contains(string(messages[len(messages)-1]), "integrate_execution_findings") {
 		t.Fatalf("the new wake's turns do not follow the carried conversation:\n%s", all)
