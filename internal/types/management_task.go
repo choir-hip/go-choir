@@ -168,6 +168,11 @@ const (
 	// TaskClosureRunPassivated closes a task whose run a planned restart
 	// parked: tasks are not resumed (R2-12).
 	TaskClosureRunPassivated = "run_passivated"
+	// TaskClosureExpired closes a task that waited in the queue past
+	// the queue's maximum age (the paper, 2026-11-09: 1763 queued, the
+	// oldest 70 hours old). Its captures are closed with it, never
+	// delegated again; the closing Report lists them as residuals.
+	TaskClosureExpired = "expired_in_queue"
 )
 
 // ManagementTaskSystemAgentID is the provenance of the task's final Report.
@@ -242,6 +247,10 @@ const DispositionOpen = "open"
 // CaptureFateClosedAfterCrashes marks a capture whose task round two crash
 // boots closed: it is never delegated again (R2-17).
 const CaptureFateClosedAfterCrashes = "closed_after_two_crashes"
+
+// CaptureFateExpiredInQueue marks a capture whose task expired in the queue:
+// a day-old capture is not news, so it is never delegated again.
+const CaptureFateExpiredInQueue = TaskClosureExpired
 
 // CaptureDisposition is the per-capture index object (R2-4, §6.4), keyed
 // by capture id on the computer. It indexes the record that disposed the

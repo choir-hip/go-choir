@@ -165,6 +165,12 @@ type Runtime struct {
 	// managementTaskStartMu serializes the management task slot starter
 	// (R2-6), so two wakes cannot both take the last slot.
 	managementTaskStartMu sync.Mutex
+	// managementTaskNow replaces the queue-expiry clock in tests; nil is
+	// time.Now.
+	managementTaskNow func() time.Time
+	// managementTaskLastSweep is when the queue-expiry sweep last ran;
+	// guarded by managementTaskStartMu.
+	managementTaskLastSweep time.Time
 
 	cfg         provideriface.Config
 	store       *store.Store

@@ -113,12 +113,24 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 			busy++
 		}
 	}
-	if busy >= slots {
+	// The paper's slots are nearly always full, so the expiry sweep cannot
+	// wait for a free slot; it runs at most once a minute while they are
+	// full, so a busy computer does not decode its whole queue on every wake.
+	now := rt.managementTaskClock()
+	sweep := now.Sub(rt.managementTaskLastSweep) >= managementTaskSweepEvery
+	if busy >= slots && !sweep {
 		return nil, nil
 	}
 	queued, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskQueued)
 	if err != nil {
 		return nil, fmt.Errorf("management tasks: list queued: %w", err)
+	}
+	if sweep {
+		rt.managementTaskLastSweep = now
+		queued = rt.expireStaleQueuedTasks(ctx, queued, managementTaskExpireBatch)
+	}
+	if busy >= slots {
+		return nil, nil
 	}
 	var first *types.RunRecord
 	for _, task := range store.NewestQueuedFirst(queued) {
@@ -139,6 +151,51 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 		}
 	}
 	return first, nil
+}
+
+// managementTaskQueueMaxAge is how long a task may wait in the queue. A
+// capture a day old is not news (the paper, 2026-11-09: 1763 queued, the
+// oldest 70 hours old, growing 11 an hour): older tasks close as
+// expired_in_queue instead of waiting forever.
+const managementTaskQueueMaxAge = 24 * time.Hour
+
+// managementTaskExpireBatch bounds the closures one wake makes, oldest
+// first, so a backlog does not hold the single-connection write pool; later
+// wakes finish the rest.
+const managementTaskExpireBatch = 200
+
+// managementTaskSweepEvery spaces the expiry sweeps made while every slot is
+// busy.
+const managementTaskSweepEvery = time.Minute
+
+func (rt *Runtime) managementTaskClock() time.Time {
+	if rt.managementTaskNow != nil {
+		return rt.managementTaskNow()
+	}
+	return time.Now()
+}
+
+// expireStaleQueuedTasks closes the queued tasks older than the queue's
+// maximum age (at most a batch per call, oldest first) and returns the
+// queue without them. The closing Report lists every capture as a residual,
+// the captures are closed with the task, and the close wakes no one and
+// starts nothing. queued is ListManagementTasks' oldest-first listing.
+func (rt *Runtime) expireStaleQueuedTasks(ctx context.Context, queued []types.ManagementTask, batch int) []types.ManagementTask {
+	cutoff := rt.managementTaskClock().Add(-managementTaskQueueMaxAge)
+	var fresh []types.ManagementTask
+	closed := 0
+	for _, task := range queued {
+		if !task.CreatedAt.Before(cutoff) || closed >= batch {
+			fresh = append(fresh, task)
+			continue
+		}
+		closed++
+		rt.closeManagementTask(ctx, task, types.TaskClosureExpired, "", "", "")
+		if cur, err := rt.store.GetManagementTask(taskCustodianReads(ctx), task.OwnerID, task.ComputerID, task.TaskID); err == nil && cur.State != types.ManagementTaskClosed {
+			fresh = append(fresh, task) // the close did not land: leave it for a later wake
+		}
+	}
+	return fresh
 }
 
 // managementTaskClaimGrace bounds a claim with no bound run: claim, run
@@ -523,7 +580,7 @@ func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, ca
 	if err != nil || !found {
 		return err == nil, err
 	}
-	if d.Kind != "" || d.Fate == types.CaptureFateClosedAfterCrashes {
+	if d.Kind != "" || d.Fate == types.CaptureFateClosedAfterCrashes || d.Fate == types.CaptureFateExpiredInQueue {
 		return false, nil
 	}
 	if d.LeaseTask == "" {

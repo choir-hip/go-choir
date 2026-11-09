@@ -131,7 +131,7 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 		if rec.Report != nil {
 			stop = rec.Report.StopReason
 		}
-		return !rec.TaskOutcome.Clean && stop != types.ClosureReasonInterruptedByRestart
+		return !rec.TaskOutcome.Clean && stop != types.ClosureReasonInterruptedByRestart && stop != types.TaskClosureExpired
 	}
 	return false
 }
@@ -399,6 +399,8 @@ func (p *taskPlan) openTask(row types.ManagementTask, cast types.CommitmentRecor
 		switch {
 		case v.Fate == types.CaptureFateClosedAfterCrashes:
 			return inboxRefused("capture %s was closed after two crashes interrupted its tasks; it is not delegated again", c)
+		case v.Fate == types.CaptureFateExpiredInQueue:
+			return inboxRefused("capture %s expired in the queue; it is not delegated again", c)
 		case v.Kind != "":
 			return inboxRefused("capture %s is already disposed (%s by record %s); nothing is left to delegate", c, v.Kind, v.RecordID)
 		case v.LeaseTask != "" && v.LeaseTask != row.TaskID:
@@ -507,6 +509,10 @@ func (p *taskPlan) closeTask(taskID string, rec types.CommitmentRecord) (types.C
 			reason = outcome.Reason
 		}
 		outcome.Residuals = append(outcome.Residuals, types.TaskResidual{CaptureID: c, Reason: reason})
+		if stop == types.TaskClosureExpired {
+			ix.value.Fate = types.CaptureFateExpiredInQueue
+			p.markIndex(c)
+		}
 		if stop == types.ClosureReasonInterruptedByRestart {
 			// R2-17: a capture whose task round two crash boots closed is
 			// closed with that cause.
@@ -537,7 +543,9 @@ func (p *taskPlan) closeTask(taskID string, rec types.CommitmentRecord) (types.C
 	row.State, row.ClosureReason, row.ClosingRecordID, row.ClosedAt, row.UpdatedAt = types.ManagementTaskClosed, stop, rec.RecordID, &at, p.now
 	r.value = row
 	p.markRow(taskID)
-	if stop != types.ClosureReasonInterruptedByRestart {
+	// A crash boot's closures and an expiry sweep start nothing: the
+	// starter that follows an expiry claims the fresh work.
+	if stop != types.ClosureReasonInterruptedByRestart && stop != types.TaskClosureExpired {
 		if err := p.startNextQueued(taskID, rec.RecordID); err != nil {
 			return rec, err
 		}
