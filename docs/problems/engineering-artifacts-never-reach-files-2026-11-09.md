@@ -39,6 +39,31 @@ report with a chart, put it in Files, open it in Reader, embed the chart.
    cannot reach the owner even when the capsule runs. Nor does any desk verb
    open a Files path in Reader.
 
+## Finding for (1), from d@e's recent_log (2026-11-09, read-only)
+
+The hypothesis above was wrong: neither the claude route nor attestation is
+involved. The launcher only forks /run/capsule/broker. The **computer
+store snapshot** took the whole 90 s spawn budget: `spawn
+phase=computer_store took=1m28.759s` (04:36:00), `1m27.952s` (04:38:35),
+`1m28.531s` (04:41:36), each `store=false` with `scan
+run_memory_entries.summary: context deadline exceeded` or `copy: context
+deadline exceeded`; the launcher then got an expired context, hence
+"capsule start broker launcher: context deadline exceeded". The other
+spawn phases took 23 ms, 741 ms and 55 ms. The snapshot is `VACUUM INTO`
+plus a secret scan of every text column (internal/store/snapshot_to.go
+~110-122, scanColumnForSecrets :321) over a 95 MB state.db. In the same
+windows the guest ceiling reclaim cut used memory from about 2.7 GiB to
+1.3-1.6 GiB against `ceiling_mib=1024` (04:35:05, 04:38:06, 04:41:05) with
+refault rates near 340/s, and vmctl saw `pressure=true signals=memory,io`.
+Physics: copying and scanning 95 MB should take a few seconds; 88 s means
+the copy ran while the reclaim evicted its pages (thrash). Since
+computer-state-for-claude-mode (2026-11-03) claude capsules take the store
+copy too.
+
+So (1) is two defects: the snapshot is charged to the launch deadline (a
+slow but live copy kills the spawn), and the memory ceiling reclaims a
+guest's working set while it is building a capsule.
+
 ## Belief and next
 
 The L7 acceptance cannot pass until both are fixed. Design space for (2),
