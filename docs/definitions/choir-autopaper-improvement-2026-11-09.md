@@ -11,25 +11,25 @@ definition_version: 4
 # preparation for reviewing and deciding on the auto paper improvement mission
 # once I wake up."
 #
-# DRAFT FOR THE OWNER'S MORNING REVIEW. Not executable. Read "Decisions for the
-# owner" at the end first. The roadmap places it in stage 3
-# (docs/roadmap-2026-10-31.md: "images in articles"); ACTIVE.md queues it as
-# "the next mission, Autopaper improvements", after the modular architecture
-# mission (whose Phase 8 is still running) and after the two queued audits.
-# Nothing here starts before the owner promotes it.
+# Drafted for the owner's morning review; promoted 2026-11-09 on the owner's
+# order ("one more key feature before we go into the auto paper
+# improvements") after the ordinary prompt path closed. ACTIVE.md and the
+# mission graph name it the live station. "Decisions for the owner" run on
+# their recommended defaults until answered. The roadmap places it in stage 3
+# (docs/roadmap-2026-10-31.md: "images in articles").
 #
 # Inputs: docs/research/autopaper-media-and-rights-2026-10-14/ (README is the
 # image plan; its section 6 steps 2 to 8 are this mission's build list),
 # docs/autopaper-sw-design-2026-10-09.md, docs/problems/autopaper-intake-
 # defects-2026-10-14.md, docs/problems/autopaper-daily-digest-phase1-2026-10-20.md,
 # docs/design/autopaper-learning-materiality-2026-11-04.md.
-readiness: drafted
+readiness: executable
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: devin (rounds 1 and 2 SEND_BACK, answered in b7d7a79c0 and this commit)
+  frozen_ref: origin/main b7d7a79c0 plus the round-2 answers
+  verdict: accept_on_answers
+  evidence_ref: session scratchpad dv-ap/review.out and dv-ap2/review.out
 
 metamission:
   stations:
@@ -43,7 +43,8 @@ metamission:
     photos, then source link cards, then the front-page and article renderer.
     One dependency bends it: S2 to S4 produce media objects that nothing
     shows until S5, so S5's minimal slice (render a media object on the
-    article page, collapsed) lands with S2, and S5 proper (front page,
+    article page, collapsed) lands with S2 and is not gated by S5's
+    depends_on, which gates S5 proper; S5 proper (front page,
     expansion, credit lines) closes the mission. S4 needs only S2's capture
     metadata, so it may run beside S3. One file carries the stations; a
     station gets its own goal file only when it outgrows its section.
@@ -189,8 +190,9 @@ finish:
     - action: >-
         Throughout: no new owner ask appears in the paper's disclosure gate
         counts (no new Autopaper ask; the prompt-bar and texture asks belong to the ordinary-computer approvals audit) and the
-        paper keeps publishing during every deploy.
-      proves: The mission did not break the paper's standing rules.
+        paper keeps publishing during every deploy. At close, the audit
+        re-runs S1's capture-to-publish measure against S1's baseline.
+      proves: The mission did not break the paper's standing rules or slow it.
       evidence_class: deployed observability read
   rollback: >-
     Every station is additive. Revert the station's commits; media objects are
@@ -281,8 +283,8 @@ boundaries:
     objects from the publication's metadata and the block is adopted later.
 
 now:
-  status: checkpoint_incomplete  # drafted; nothing runs until the owner promotes it
-  slice: "Owner review of this draft; no implementation slice is active."
+  status: working
+  slice: "S1: the paper's measured defects first (stale queue D13, quota incidents), then the audit export."
   source_ref: origin/main 3bafcbf9e
   deploy_identity: paper daa7fcd10 at 2026-11-09T03:10Z
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -327,7 +329,8 @@ now:
       stale) versus real coverage, which sets how large S1's fixes are and
       whether images should wait on them.
     next_observation: >-
-      After promotion, S1 step 1: a read-only per-source and per-story export
+      After the queue and quota fixes deploy: the paper's queue age and
+      quota_ledger; then S1 step 1, a read-only per-source and per-story export
       from the paper's tape and object graph, run twice a day apart.
   blocker_or_risk: >-
     The owner put this mission next (2026-11-09: "one more key feature before

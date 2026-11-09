@@ -14,15 +14,15 @@ throughline (`skills/throughline/SKILL.md`). Direction:
 ## Live station (2026-11-09): Autopaper improvement
 
 **Goal:** [`definitions/choir-autopaper-improvement-2026-11-09.md`](definitions/choir-autopaper-improvement-2026-11-09.md)
-(`readiness: drafted`; promoted after one Devin review of the file, on the
-owner's order). Run it with
+(`readiness: executable`, on the owner's order after two Devin review
+rounds). Run it with
 `/goal docs/definitions/choir-autopaper-improvement-2026-11-09.md`.
 
 Owner, 2026-11-09: "Okay, one more key feature before we go into the auto
 paper improvements", so the ordinary prompt path and its added features came
 first and Autopaper is next, then Autoradio. The draft's "Decisions for the
 owner" run on their recommended defaults until answered (No Blocking Asks).
-S1, the source audit, is read-only and starts first; the paper's /health
+S1, the source audit, starts first (its report is read-only; its fixes are orange); the paper's /health
 contention and its stale queue (D13) are S1 items.
 
 ## Complete (2026-11-09): the ordinary prompt path
