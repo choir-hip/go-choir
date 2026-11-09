@@ -561,8 +561,7 @@ func bedrockToolID(id string) string {
 
 // bedrockSanitizeMessages removes what Bedrock answers 400 to when a history
 // was written by another model: tool ids outside the allowed alphabet,
-// thinking blocks without a signature, empty text blocks, and messages left
-// with no content.
+// thinking blocks, empty text blocks, and messages left with no content.
 func bedrockSanitizeMessages(msgs []anthropicMessage) []anthropicMessage {
 	out := make([]anthropicMessage, 0, len(msgs))
 	for _, m := range msgs {
@@ -574,9 +573,11 @@ func bedrockSanitizeMessages(msgs []anthropicMessage) []anthropicMessage {
 					continue
 				}
 			case "thinking", "redacted_thinking":
-				if c.Signature == "" && c.Type == "thinking" {
-					continue
-				}
+				// This wire never stores Bedrock's own thinking
+				// (parseBedrockResponse keeps none), so any thinking
+				// block here was signed by another provider or by
+				// nobody, and Bedrock answers 400 to both.
+				continue
 			case "tool_use":
 				c.ID = bedrockToolID(c.ID)
 			case "tool_result":
@@ -746,7 +747,7 @@ func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropic
 		}}
 	}
 
-	ar.Messages = bedrockSanitizeMessages(convertMessages(req.Messages))
+	ar.Messages = convertMessages(req.Messages)
 	ar.Tools = convertToolDefs(req.Tools)
 	return ar
 }

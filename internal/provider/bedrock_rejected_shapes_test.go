@@ -7,15 +7,15 @@ import (
 )
 
 // Five shapes Bedrock answers 400 to on Haiku 5.5 (direct probes, 2026-11-09):
-// (1) a tool_use id outside ^[a-zA-Z0-9_-]+$, (2) a thinking block without a
-// signature, (3) an empty text block, (4) a tool without input_schema,
+// (1) a tool_use id outside ^[a-zA-Z0-9_-]+$, (2) a thinking block whose signature is
+// missing or another provider's, (3) an empty text block, (4) a tool without input_schema,
 // (5) temperature. A transcript from a crouton/OpenRouter/DeepSeek run can
 // carry 1 to 4; none may reach the wire. (5) is unreachable: the Bedrock body
 // has no sampling fields; the test pins that.
 func TestBedrockHaiku55NoRejectedShapeReachesTheWire(t *testing.T) {
 	p, _ := NewBedrockProvider(BedrockConfig{Region: "us-east-1", ModelID: "us.anthropic.claude-haiku-5-5", AuthToken: "tok"})
 	build := func() []byte {
-		unsigned := `[{"type":"thinking","thinking":"foreign reasoning"}]`
+		unsigned := `[{"type":"thinking","thinking":"foreign reasoning"},{"type":"thinking","thinking":"signed by another provider","signature":"Zm9yZWlnbg=="}]`
 		msgs := []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: ""}, {Type: "text", Text: "wake"}}},
 			{Role: "assistant", ReasoningContent: unsigned, Content: []Block{{Type: "text", Text: ""}, {Type: "tool_use", ID: "functions.eval:0", Name: "eval", Input: json.RawMessage(`{}`)}}},
@@ -60,9 +60,7 @@ func TestBedrockHaiku55NoRejectedShapeReachesTheWire(t *testing.T) {
 					t.Fatalf("empty text block in message %d: %s", i, raw)
 				}
 			case "thinking", "redacted_thinking":
-				if s, _ := c["signature"].(string); s == "" {
-					t.Fatalf("unsigned thinking block in message %d: %s", i, raw)
-				}
+				t.Fatalf("thinking block in message %d (none is Bedrock-signed on this wire): %s", i, raw)
 			case "tool_use":
 				useID = c["id"]
 			case "tool_result":
