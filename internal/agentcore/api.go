@@ -32,6 +32,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -893,6 +894,10 @@ type guestObservabilityResponse struct {
 	// summary and its rollback copy (store/header_body_split.go). Absent on
 	// a store that never migrated.
 	Store *guestStoreObservability `json:"store,omitempty"`
+	// QuotaLedger is the computer's holds on models out of quota or failing:
+	// which member, until when, and whether the end is the provider's reset,
+	// an estimate or a failure demotion. Read-only; no secrets.
+	QuotaLedger []toolregistry.QuotaHold `json:"quota_ledger"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -1035,6 +1040,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		},
 		ActGate: &writerGateObservability{Mode: "enforce package desks, observe first-party", Counts: actgate.Counts()},
 	}
+	resp.QuotaLedger = h.rt.quotaLedger.Holds(time.Now())
 	if r.URL.Query().Get("goroutines") == "1" {
 		resp.Goroutines = goroutineDump()
 	}

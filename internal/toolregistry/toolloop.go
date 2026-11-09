@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
+	"hash/fnv"
 	"log"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -439,6 +441,44 @@ type QuotaLedger struct {
 	mu      sync.Mutex
 	until   map[string]time.Time
 	strikes map[string]int
+	// source is why a member is held: a provider's own reset, an estimate
+	// (no reset named), or a failure demotion.
+	source map[string]string
+}
+
+// Why a member is held, as QuotaHold.Source names it.
+const (
+	QuotaHoldProviderReset = "provider_reset"
+	QuotaHoldEstimated     = "estimated"
+	QuotaHoldFailure       = "failure"
+)
+
+// QuotaHold is one member's hold in the ledger, for observability. No
+// secrets: a member id, a time and a source.
+type QuotaHold struct {
+	Member string    `json:"member"`
+	Until  time.Time `json:"until"`
+	Source string    `json:"source"`
+	// Strikes is the consecutive failures behind a failure demotion.
+	Strikes int `json:"strikes,omitempty"`
+}
+
+// Holds is the ledger's holds still in force at now, by member.
+func (l *QuotaLedger) Holds(now time.Time) []QuotaHold {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := []QuotaHold{}
+	for id, until := range l.until {
+		if !until.After(now) {
+			continue
+		}
+		out = append(out, QuotaHold{Member: id, Until: until, Source: l.source[id], Strikes: l.strikes[id]})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Member < out[j].Member })
+	return out
 }
 
 // How long a model that failed (not a quota, which names its own reset) is
@@ -476,6 +516,8 @@ func (l *QuotaLedger) Demote(sel provideriface.LLMSelection, now time.Time) time
 	until := now.Add(hold)
 	if cur := l.until[id]; cur.After(until) {
 		until = cur
+	} else {
+		l.setSourceLocked(id, QuotaHoldFailure)
 	}
 	l.until[id] = until
 	return until
@@ -490,14 +532,22 @@ func (l *QuotaLedger) Succeed(sel provideriface.LLMSelection) {
 	id := servingSelectionID(sel)
 	delete(l.until, id)
 	delete(l.strikes, id)
+	delete(l.source, id)
 	l.mu.Unlock()
 }
 
 // NewQuotaLedger returns an empty ledger.
 func NewQuotaLedger() *QuotaLedger { return &QuotaLedger{until: map[string]time.Time{}} }
 
-// Mark records that sel is out of quota until the given time.
+// Mark records that sel is out of quota until the given time, a reset the
+// provider named.
 func (l *QuotaLedger) Mark(sel provideriface.LLMSelection, until time.Time) {
+	l.MarkSourced(sel, until, false)
+}
+
+// MarkSourced is Mark with the hold's source: estimated when the provider
+// named no reset and the loop guessed one.
+func (l *QuotaLedger) MarkSourced(sel provideriface.LLMSelection, until time.Time, estimated bool) {
 	if l == nil {
 		return
 	}
@@ -506,7 +556,20 @@ func (l *QuotaLedger) Mark(sel provideriface.LLMSelection, until time.Time) {
 	if l.until == nil {
 		l.until = map[string]time.Time{}
 	}
-	l.until[servingSelectionID(sel)] = until
+	id := servingSelectionID(sel)
+	l.until[id] = until
+	if estimated {
+		l.setSourceLocked(id, QuotaHoldEstimated)
+	} else {
+		l.setSourceLocked(id, QuotaHoldProviderReset)
+	}
+}
+
+func (l *QuotaLedger) setSourceLocked(id, source string) {
+	if l.source == nil {
+		l.source = map[string]string{}
+	}
+	l.source[id] = source
 }
 
 // Until is when sel's quota is expected back; zero when sel is not known to
@@ -524,6 +587,7 @@ func (l *QuotaLedger) Until(sel provideriface.LLMSelection, now time.Time) time.
 	}
 	if !until.After(now) {
 		delete(l.until, id)
+		delete(l.source, id)
 		return time.Time{}
 	}
 	return until
@@ -536,6 +600,7 @@ func (l *QuotaLedger) Forget(sel provideriface.LLMSelection) {
 	}
 	l.mu.Lock()
 	delete(l.until, servingSelectionID(sel))
+	delete(l.source, servingSelectionID(sel))
 	l.mu.Unlock()
 }
 
@@ -550,7 +615,36 @@ var (
 	// quota error, a visible end and not a pause.
 	providerQuotaIncidentBackoff = []time.Duration{15 * time.Second, 30 * time.Second, 15 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 5 * time.Minute, 5 * time.Minute}
 	providerQuotaNow             = time.Now
+	// providerQuotaSleep waits out an incident round; a seam for tests.
+	providerQuotaSleep = sleepContext
+	// providerQuotaIncidentMinWait is the least a round waits, so a reset
+	// a second away is not a retry a second later.
+	providerQuotaIncidentMinWait = 5 * time.Second
+	// providerQuotaJitterMax spreads the runs of one computer, which all
+	// wait for the same reset, so they do not retry in lockstep.
+	providerQuotaJitterMax = 5 * time.Second
 )
+
+// providerQuotaIncidentBound is how long an every-model-out-of-quota incident
+// may last before the run fails: the schedule's total (about 18 minutes).
+func providerQuotaIncidentBound() time.Duration {
+	var total time.Duration
+	for _, d := range providerQuotaIncidentBackoff {
+		total += d
+	}
+	return total
+}
+
+// quotaRetryJitter is a deterministic offset in [0, providerQuotaJitterMax)
+// from the run and the round, so runs differ and a test is stable.
+func quotaRetryJitter(runID, conversationID string, round int) time.Duration {
+	if providerQuotaJitterMax <= 0 {
+		return 0
+	}
+	h := fnv.New32a()
+	fmt.Fprintf(h, "%s|%s|%d", runID, conversationID, round)
+	return time.Duration(h.Sum32()) % providerQuotaJitterMax
+}
 
 // transientProviderRetryDelay spaces the tool loop's three retries of a
 // transient provider outage. A var so a test can shorten it.
@@ -1078,38 +1172,48 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				if until.IsZero() || !until.After(now) {
 					until = now.Add(providerQuotaUnknownHold)
 				}
-				ledger.Mark(activeLLMConfig, until)
 				quotaEstimated = q.RetryAtEstimated || q.RetryAt.IsZero()
+				ledger.MarkSourced(activeLLMConfig, until, quotaEstimated || q.RetryAt.IsZero() || !q.RetryAt.After(now))
 				if switchOnQuota("provider_quota", err) {
 					continue
 				}
 				// Every model of the chain is out of quota at once: a
 				// bounded retry of the chain with a short backoff, told
 				// loudly as an incident.
-				incidentRounds++
-				if incidentRounds > len(providerQuotaIncidentBackoff) {
-					return "", totalUsage, fmt.Errorf("tool loop iteration %d: every model is out of quota after %d retry rounds over %s: %w",
-						i, len(providerQuotaIncidentBackoff), now.Sub(incidentSince).Round(time.Second), err)
-				}
+				// The incident is bounded by time: it fails only after it has
+				// lasted the schedule's total, however many waits that took.
+				// A wait never ends before the earliest known reset (a
+				// retry earlier asks the gateway for the same quota answer
+				// and spends nothing but a round), and a wait that is cut
+				// short by the bound is the last one
+				// (docs/problems/paper-quota-incidents-2026-11-09.md).
 				if incidentSince.IsZero() {
 					incidentSince = now
 				}
+				bound := providerQuotaIncidentBound()
+				if now.Sub(incidentSince) >= bound {
+					return "", totalUsage, fmt.Errorf("tool loop iteration %d: every model is out of quota after %d retry rounds over %s: %w",
+						i, incidentRounds, now.Sub(incidentSince).Round(time.Second), err)
+				}
+				incidentRounds++
 				order := quotaOrder()
-				delay := providerQuotaIncidentBackoff[incidentRounds-1]
+				delay := providerQuotaIncidentBackoff[min(incidentRounds, len(providerQuotaIncidentBackoff))-1]
 				var soonest time.Time
 				for _, sel := range order {
 					if u := ledger.Until(sel, now); !u.IsZero() && (soonest.IsZero() || u.Before(soonest)) {
 						soonest = u
 					}
 				}
-				if !soonest.IsZero() && soonest.Sub(now) < delay {
-					delay = max(soonest.Sub(now), time.Second)
+				if !soonest.IsZero() {
+					delay = max(soonest.Sub(now), providerQuotaIncidentMinWait)
 				}
+				delay += quotaRetryJitter(ExecutionContextFrom(ctx).RunID, options.conversationID, incidentRounds)
+				delay = min(delay, bound-now.Sub(incidentSince))
 				names := make([]string, 0, len(order))
 				for _, sel := range order {
 					names = append(names, servingSelectionID(sel))
 				}
-				detail := fmt.Sprintf("every model of the chain is out of quota (%s); the loop retries the chain, round %d of %d", strings.Join(names, ", "), incidentRounds, len(providerQuotaIncidentBackoff))
+				detail := fmt.Sprintf("every model of the chain is out of quota (%s); the loop retries the chain, round %d, giving up after %s", strings.Join(names, ", "), incidentRounds, bound)
 				incident = types.NewProviderQuotaWait("run", firstNonEmpty(q.Provider, activeLLMConfig.Provider), firstNonEmpty(q.Model, activeLLMConfig.Model), incidentSince, soonest, quotaEstimated, delay, detail)
 				incident.Stamp(now)
 				if options.providerIncident != nil {
@@ -1119,7 +1223,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					payload, _ := json.Marshal(map[string]any{
 						"reason":         "provider_quota_incident",
 						"round":          incidentRounds,
-						"rounds_max":     len(providerQuotaIncidentBackoff),
+						"bound_ms":       bound.Milliseconds(),
 						"delay_ms":       delay.Milliseconds(),
 						"models":         names,
 						"provider_error": err.Error(),
@@ -1127,7 +1231,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					})
 					emit(types.EventRunRetry, "provider_quota_incident", payload)
 				}
-				if sleepErr := sleepContext(ctx, delay); sleepErr != nil {
+				if sleepErr := providerQuotaSleep(ctx, delay); sleepErr != nil {
 					return "", totalUsage, fmt.Errorf("tool loop iteration %d: every model is out of quota: %w", i, sleepErr)
 				}
 				// The retry round asks the gateway again, the whole chain.

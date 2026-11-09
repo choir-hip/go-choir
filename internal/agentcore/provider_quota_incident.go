@@ -129,6 +129,18 @@ func (rt *Runtime) providerQuotaIncidentHookFor(ownerID, computerID, runID, agen
 	}
 	return func(ctx context.Context, w *types.WaitState, ended string) {
 		t := rt.providerWaits()
+		// A run's incident sleep is not stalled work: it suspends the
+		// activation's progress deadline and gives the time back when the
+		// incident ends (activation_deadline.go; docs/problems/paper-quota-
+		// incidents-2026-11-09.md). A research child shares its parent's
+		// activation, so it never suspends it.
+		if rec != nil {
+			if w.Active() {
+				activationDeadlineFrom(ctx).suspend(w)
+			} else {
+				activationDeadlineFrom(ctx).resume()
+			}
+		}
 		if !w.Active() {
 			t.mu.Lock()
 			e := t.entries[runID]
