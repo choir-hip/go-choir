@@ -44,6 +44,7 @@ import (
 	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
@@ -836,6 +837,16 @@ var ogRoleSkipKinds = map[string]map[string]bool{
 	"choir.event":            {"kind": true, "phase": true},
 }
 
+// isModelServedBody reports whether a choir.event body carries a model.served
+// payload, by the payload's schema. Its payload.role is a provenance role
+// (types.ModelServedRoleSystem1), not desk vocabulary.
+func isModelServedBody(decoded any) bool {
+	m, _ := decoded.(map[string]any)
+	payload, _ := m["payload"].(map[string]any)
+	schema, _ := payload["schema"].(string)
+	return schema == types.ModelServedSchema
+}
+
 // ogRoleFieldsFromJSON collects declared role-bearing leaves from one JSON
 // document for kind, excluding non-desk same-named fields.
 func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmigrate.Field) {
@@ -844,7 +855,13 @@ func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmi
 		return
 	}
 	skip := ogRoleSkipKinds[kind]
+	servedLine := kind == "choir.event" && isModelServedBody(decoded)
 	ogWalkStrings(decoded, "", func(path, v string) string {
+		if servedLine && path == "payload.role" {
+			// A model.served line's role names what the call served
+			// (system1), not a desk.
+			return v
+		}
 		key := path
 		if i := strings.LastIndex(key, "."); i >= 0 {
 			key = key[i+1:]

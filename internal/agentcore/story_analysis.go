@@ -233,7 +233,10 @@ func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.Exe
 		a.Error = "no platform to read the entity candidates from (choir.platform_url is not set on this computer)"
 		return a
 	}
-	idf, err := rt.store.StoryLibraryIDF(ctx, owner)
+	// The library's word counts are a host-computed scalar over Texture's
+	// documents, read as their custodian like the story's own reads above (S3
+	// review B3); no cell reads the documents.
+	idf, err := rt.store.StoryLibraryIDF(objectgraph.WithCustodianReader(ctx, "choir.texture_document"), owner)
 	if err != nil {
 		log.Printf("story analysis: %s: library frequencies: %v (rarity unknown)", docID, err)
 		idf = nil
