@@ -2407,6 +2407,9 @@ const legacyUncataloguedMaxTokens = 4096
 const (
 	outputBudgetFloor  = 4096
 	outputBudgetMargin = 2048
+	// mediaBlockTokens is what one image or document block is charged in
+	// the prompt estimate.
+	mediaBlockTokens = 6000
 )
 
 // defaultMaxTokens is the output budget for a protocol that requires one
@@ -2431,8 +2434,9 @@ func defaultMaxTokens(n int, modelID string) int {
 
 // fitOutputBudget brings the budget down to what the model's context window
 // leaves after the prompt: a provider refuses a call whose prompt plus budget
-// passes the window. The prompt is estimated from the request's size (three
-// bytes a token, which overestimates), so a short prompt keeps the maximum.
+// passes the window. The prompt is estimated from the request's size at three
+// bytes a token: high for prose, low for dense text, where the provider's
+// refusal stands as before. A short prompt keeps the maximum.
 func fitOutputBudget(ar *anthropicRequest, modelID string) {
 	if _, known := modelcatalog.MaxOutputTokensKnown(modelID); !known {
 		return
@@ -2441,7 +2445,18 @@ func fitOutputBudget(ar *anthropicRequest, modelID string) {
 	if err != nil {
 		return
 	}
-	room := modelcatalog.ContextWindowTokensForModel(modelID) - len(body)/3 - outputBudgetMargin
+	// A media payload is charged by its block, not its base64 length: an
+	// image costs a few thousand tokens however many bytes carry it.
+	text, media := len(body), 0
+	for _, m := range ar.Messages {
+		for _, c := range m.Content {
+			if src, ok := c.Source.(map[string]string); ok && src["data"] != "" {
+				text -= len(src["data"])
+				media++
+			}
+		}
+	}
+	room := modelcatalog.ContextWindowTokensForModel(modelID) - text/3 - media*mediaBlockTokens - outputBudgetMargin
 	if room < outputBudgetFloor {
 		room = outputBudgetFloor
 	}

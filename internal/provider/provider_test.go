@@ -1226,8 +1226,14 @@ func TestRequiredOutputBudgetIsTheModelsMaximum(t *testing.T) {
 	if got >= 20000 || got < outputBudgetFloor {
 		t.Errorf("a prompt 20,000 tokens short of the window: max_tokens = %d, want under 20000 and at least %d", got, outputBudgetFloor)
 	}
-	// A prompt past the window keeps the floor: the provider's own refusal
-	// is the overflow signal the run compacts on.
+	// Images are charged by the block, not by base64 length: two 600 KB
+	// screenshots leave the maximum standing.
+	shot := Block{Type: "image", Source: &MediaSource{Kind: "base64", MIMEType: "image/png", Data: strings.Repeat("A", 600_000)}}
+	shots := LLMRequest{Model: haiku45, Messages: []Message{{Role: "user", Content: []Block{shot, shot, {Type: "text", Text: "what changed?"}}}}}
+	if got := p.buildRequestBody(shots).MaxTokens; got != 64000 {
+		t.Errorf("two screenshots on Haiku 4.5: max_tokens = %d, want 64000", got)
+	}
+	// A prompt past the window keeps the floor; the provider refuses it.
 	huge := LLMRequest{Model: haiku45, Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: strings.Repeat("a", window*4)}}}}}
 	if got := p.buildRequestBody(huge).MaxTokens; got != outputBudgetFloor {
 		t.Errorf("a prompt past the window: max_tokens = %d, want the floor %d", got, outputBudgetFloor)
