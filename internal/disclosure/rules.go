@@ -206,7 +206,7 @@ func OwnerFlowAtoms() []string { return append([]string(nil), ownerFlowAtoms...)
 // delegation chain (enforce flip section 6.2). A desk message between two of
 // the owner's own built-in desks the host resolved as a pair (Texture and
 // research, Texture and management, management and engineering, management
-// and its task role, each direction) that carries one of ownerFlowAtoms is
+// and research, management and its task role, each direction) that carries one of ownerFlowAtoms is
 // allowed without an ask. Only the verdict changes: the labels stay on the
 // message, the record and the run exactly as before. It covers the desk
 // message sink alone and lifts an Ask, never a Deny; publication, mail,

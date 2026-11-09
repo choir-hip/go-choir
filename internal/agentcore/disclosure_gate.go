@@ -299,7 +299,10 @@ func (r ownerFlowRoles) pair(from, to string) bool {
 			return false
 		case a == r.texture && (b == r.research || b == r.admitter):
 			return true
-		case a == r.admitter && b == r.performer:
+		case a == r.admitter && (b == r.performer || b == r.research):
+			// Management casts research for evidence an assignment needs
+			// (L7, d@e 2026-11-09: a FRED fetch parked on an ask); Texture
+			// already sends research the same owner text.
 			return true
 		case a == r.admitter && r.parentOf != nil:
 			// management to its own task role: the role's parent is the
@@ -315,7 +318,7 @@ func (r ownerFlowRoles) pair(from, to string) bool {
 // ownerDeskPair reports whether a desk message runs between two built-in desks
 // on the owner's delegation chain, in either direction (disclosure.OwnerFlow):
 // Texture and research, Texture and management, management and engineering,
-// management and its task role. The registry names every end, so no desk name
+// management and research, management and its task role. The registry names every end, so no desk name
 // is keyed here, and a package desk is never an end.
 func ownerDeskPair(from, to string) bool {
 	// The Delegate path spells the task's inbox management-task:<id> while the

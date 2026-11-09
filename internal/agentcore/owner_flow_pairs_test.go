@@ -27,11 +27,11 @@ func TestOwnerFlowPairsAreTheDelegationChainOnly(t *testing.T) {
 		{tex, res, true}, {res, tex, true},
 		{tex, mgmt, true}, {mgmt, tex, true},
 		{mgmt, eng, true}, {eng, mgmt, true},
+		{mgmt, res, true}, {res, mgmt, true},
 		{mgmt, task, true}, {task, mgmt, true},
 		// Nothing else is covered.
 		{tex, eng, false}, {eng, tex, false},
 		{res, eng, false}, {eng, res, false},
-		{res, mgmt, false}, {mgmt, res, false},
 		{task, tex, false}, {task, eng, false}, {task, res, false},
 		{deskmanifest.ResearchWeb, res, false}, {res, deskmanifest.ResearchWeb, false},
 		// A message whose two ends are the same built-in system desk discloses
