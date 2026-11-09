@@ -22,7 +22,7 @@ second account, and the launcher offered no row to switch back to the first.
 
 ## Belief state
 
-Hypothesis, strongly supported by the code and not yet confirmed from the
+Hypothesis, consistent with the code and not yet confirmed from the
 auth log: the owner's first session predated the switcher (or came from the
 desktop handoff), so it was never a member of a set. The log line to read is
 `operation=account_set_add` for the second sign-in, and whether the request
@@ -43,10 +43,12 @@ for a different user, add that session to the new set as a non-active
 member. This is auth and session code: red, two review seats, proved on d@e
 with two test accounts before it lands.
 
-## Also reported: b@c "on old code"
+## Likelier cause, found after this was written
 
-At 22:40 UTC b@c's computer reported build `cb149a273`, the deployed
-release, with no divergence. What the owner saw as old is not yet
-identified; candidates are a cached browser bundle, or the launcher package
-the page loaded before the switch. Needs the owner's observation (which
-screen, what was missing) before any change.
+The second account was b@c, and b@c serves a frontend from 2026-11-08 that
+has no account switcher in it
+([stale frontend after a base restore](stale-frontend-after-base-restore-2026-11-09.md)).
+The page the owner landed on could not show a way back whatever the account
+set held. The hypothesis above is still unconfirmed and may also be true;
+test it with two accounts whose computers both serve the current frontend
+before building the fix.

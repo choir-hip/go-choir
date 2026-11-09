@@ -614,13 +614,16 @@ Both are on branch `integrate-1109` and need a repair before they land.
 
 ### Reported by the owner at the stopping point
 
-- The account switcher adds a second account but offers no way back to the
-  first. Cause in code: a session from before the switcher is never added to
-  the browser's account set
+- b@c serves an old frontend (old Settings, old dock). A base restore
+  copies the frontend of that day into the computer's release store, and no
+  deploy refreshes the copy; b@c's is from its 2026-11-08 restore. Its
+  binary and its candidates are current
+  ([problem](../problems/stale-frontend-after-base-restore-2026-11-09.md)).
+  Not fixed. Other computers are not yet checked.
+- The account switcher gave no way back after adding b@c. The likeliest
+  cause is the item above: b@c's frontend predates the switcher. A second
+  cause in the auth code is unconfirmed
   ([problem](../problems/account-switcher-no-switch-back-2026-11-09.md)).
-  Not fixed; the fix is auth code and needs two review seats.
-- b@c looked to be on old code. Its computer reported the deployed build
-  at 22:40 UTC, so what looked old is not yet identified.
 - The theme rounds on b@c: the `tidepool` round was closed as stuck after
   an hour with no activity.
 
