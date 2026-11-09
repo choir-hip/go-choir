@@ -838,13 +838,14 @@ var ogRoleSkipKinds = map[string]map[string]bool{
 }
 
 // isModelServedBody reports whether a choir.event body carries a model.served
-// payload, by the payload's schema. Its payload.role is a provenance role
-// (types.ModelServedRoleSystem1), not desk vocabulary.
+// or search.served payload, by the payload's schema. Its payload.role is a
+// provenance role (types.ModelServedRoleSystem1, or a research child's role
+// such as research_web), not desk vocabulary.
 func isModelServedBody(decoded any) bool {
 	m, _ := decoded.(map[string]any)
 	payload, _ := m["payload"].(map[string]any)
 	schema, _ := payload["schema"].(string)
-	return schema == types.ModelServedSchema
+	return schema == types.ModelServedSchema || schema == types.SearchServedSchema
 }
 
 // ogRoleFieldsFromJSON collects declared role-bearing leaves from one JSON

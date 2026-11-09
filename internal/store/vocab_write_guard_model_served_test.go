@@ -46,6 +46,13 @@ func TestVocabWriteGuardPassesTheJudgesModelServedLine(t *testing.T) {
 		t.Fatalf("boot fence refused the stored line: %v", err)
 	}
 
+	// A research child's search.served line has the same shape
+	// (tools_desk.go writes its role beside the schema).
+	search, _ := json.Marshal(map[string]any{"schema": types.SearchServedSchema, "role": "research_web"})
+	if err := write("ev-search", search); err != nil {
+		t.Fatalf("a research child's search.served line refused by the real write guard: %v", err)
+	}
+
 	// A bad desk role in a served-shaped payload is still refused.
 	var other map[string]any
 	_ = json.Unmarshal(good, &other)
