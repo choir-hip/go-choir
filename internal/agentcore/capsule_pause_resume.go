@@ -229,7 +229,7 @@ func (rt *Runtime) runPausedResume(a types.EngineeringAssignment) {
 // its first turn (Decision 9).
 func (rt *Runtime) pauseResumeNote(rec capsule.PauseRecord) string {
 	var b strings.Builder
-	b.WriteString("Your sandbox was paused for a platform update and has resumed. The cell that was running and the kernel state are gone; jobs that were running were interrupted (rerun them); /computer/files was read again and may differ; tool paths in /tmp, $HOME and $GOCACHE that name old store paths may be stale.")
+	b.WriteString("Your sandbox was paused for a platform update and has resumed. The cell that was running and the kernel state are gone; jobs that were running were interrupted (rerun them); /computer/files was read again and may differ; /tmp is empty after the resume; tool paths in $HOME and $GOCACHE that name old store paths may be stale.")
 	if now := rt.buildCommit(); rec.ReleaseCommit != "" && now != "" && rec.ReleaseCommit != now {
 		b.WriteString(" The platform release changed (" + shortDigest(rec.ReleaseCommit) + " to " + shortDigest(now) + "); files the sandbox copied up from the root (for example under /etc) keep their old-release content.")
 	}
@@ -285,7 +285,11 @@ func (rt *Runtime) pausedActivationDeferral(ctx context.Context, rec *types.RunR
 	if rt == nil || rt.store == nil || !assignedEngineeringRun(rec) || rt.capsulePauser() == nil {
 		return nil
 	}
-	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, metadataStringValue(rec.Metadata, "assignment_id"), 1)
+	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	if attempt == 0 {
+		attempt = 1
+	}
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, metadataStringValue(rec.Metadata, "assignment_id"), attempt)
 	if err != nil || assignment.Disposition.Terminal() {
 		return nil
 	}

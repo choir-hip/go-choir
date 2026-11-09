@@ -596,3 +596,112 @@ func TestBootNeverSparesATakenRecord(t *testing.T) {
 		})
 	}
 }
+
+// B2: the preserved upper is sandbox-written and Spawn's host-side code
+// follows paths in it as root. A symlink (or file) at any name Spawn touches
+// must not survive the seed, and the receipt writer must not follow one.
+func TestSeededUpperLosesSymlinksAtEveryNameSpawnTouches(t *testing.T) {
+	state := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "victim"), []byte("host file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spareUpper := filepath.Join(state, PausedSpareDir, "capsule-sym", "upper")
+	if err := os.MkdirAll(spareUpper, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range seededTopLevelNames {
+		if err := os.Symlink(outside, filepath.Join(spareUpper, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A plain directory with symlinks below it, and real work beside them.
+	for _, d := range []string{"nix", "selfdev", "etc"} {
+		if err := os.Remove(filepath.Join(spareUpper, d)); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(filepath.Join(spareUpper, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for rel := range map[string]bool{"nix/store": true, "selfdev/bundle": true, "selfdev/carried": true, "etc/passwd": true, "etc/group": true, "etc/hosts": true, "etc/nsswitch.conf": true} {
+		if err := os.Symlink(outside, filepath.Join(spareUpper, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(spareUpper, "etc", "kept"), []byte("work"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(state, "capsule-sym", "upper")
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := seedCapsuleUpper(state, SpawnSpec{CapsuleID: "capsule-sym", SeedUpper: spareUpper}, dest); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	for _, name := range seededTopLevelNames {
+		if info, err := os.Lstat(filepath.Join(dest, name)); err == nil && !info.IsDir() {
+			t.Errorf("%s survived the seed as a non-directory (%s)", name, info.Mode())
+		}
+	}
+	for _, rel := range seededNestedNames {
+		if _, err := os.Lstat(filepath.Join(dest, rel)); err == nil {
+			t.Errorf("%s survived the seed", rel)
+		}
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dest, "dev")); len(entries) != 0 {
+		t.Errorf("dev was not recreated fresh: %v", entries)
+	}
+	if b, err := os.ReadFile(filepath.Join(dest, "etc", "kept")); err != nil || string(b) != "work" {
+		t.Errorf("real work in a plain directory was lost: %q %v", b, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(outside, "victim")); string(b) != "host file" {
+		t.Error("the host file changed")
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 1 {
+		t.Errorf("something was written outside the capsule: %v", entries)
+	}
+}
+
+// The receipt writer is the second defense: even on an unsanitized upper it
+// never writes through a symlink at computer or at receipt.json.
+func TestWriteComputerStateReceiptDoesNotFollowSymlinks(t *testing.T) {
+	outside := t.TempDir()
+	upper := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(upper, "computer")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeComputerStateReceipt(upper, ComputerStateReceipt{}); err == nil {
+		t.Fatal("the receipt was written through a symlinked computer directory")
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Fatalf("the receipt landed outside: %v", entries)
+	}
+}
+
+// N5: the resume's digest runs outside the executor lock, under a
+// per-capsule guard, so a reader of the executor (/health, the reconcile
+// guard) does not stall behind a large upper.
+func TestPrepareResumeDigestRunsOutsideTheExecutorLock(t *testing.T) {
+	e, rec, _ := sparedExecutor(t, "capsule-lock")
+	entered, release := make(chan struct{}), make(chan struct{})
+	resumeDigestHook = func() { close(entered); <-release }
+	t.Cleanup(func() { resumeDigestHook = nil })
+	done := make(chan error, 1)
+	go func() { _, err := e.PrepareResume(context.Background(), wantFor(rec)); done <- err }()
+	<-entered
+	probe := make(chan struct{})
+	go func() { _ = e.HasCapsule("capsule-lock"); _ = e.LookupPause("capsule-lock"); close(probe) }()
+	select {
+	case <-probe:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the executor lock is held across the digest")
+	}
+	if _, err := e.PrepareResume(context.Background(), wantFor(rec)); err == nil || !strings.Contains(err.Error(), "already being resumed") {
+		t.Fatalf("a concurrent resume of the same capsule = %v, want the guard", err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+}

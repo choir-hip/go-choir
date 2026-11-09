@@ -54,6 +54,7 @@ type fakePauseCapsule struct {
 	gate    chan struct{}  // PauseCapsule waits on it when non-nil
 	pauseEr error
 	ackErr  error
+	ackFail map[string]error
 	prepEr  error
 	spawnEr error
 	mintEr  error
@@ -140,6 +141,9 @@ func (f *fakePauseCapsule) AckPause(id string, now time.Time) error {
 	defer f.mu.Unlock()
 	if f.ackErr != nil {
 		return f.ackErr
+	}
+	if err := f.ackFail[id]; err != nil {
+		return err
 	}
 	l, ok := f.look[id]
 	if !ok {
@@ -802,7 +806,7 @@ func TestPlannedBootResumesOnceWithASeededSpawn(t *testing.T) {
 	// The resume context reaches the run's first turn, once.
 	run := &types.RunRecord{Metadata: map[string]any{"assignment_id": f.assignment.AssignmentID}}
 	note := f.rt.takePauseResumeNote(run)
-	for _, want := range []string{"paused for a platform update", "kernel state are gone", "rerun them", "/computer/files", "/tmp, $HOME and $GOCACHE"} {
+	for _, want := range []string{"paused for a platform update", "kernel state are gone", "rerun them", "/computer/files", "/tmp is empty after the resume", "$HOME and $GOCACHE"} {
 		if !strings.Contains(note, want) {
 			t.Fatalf("the resume note lacks %q: %s", want, note)
 		}
@@ -1108,5 +1112,103 @@ func TestIdleMarkWithAPauseSurfaceStillWritesTheMarker(t *testing.T) {
 		if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); err != nil {
 			t.Fatalf("idle mark %q: no marker: %v", query, err)
 		}
+	}
+}
+
+// B1: a later entry's refused ack leaves no marker; the capsule acked earlier
+// in the same call must not stay frozen for ever (the TTL path refuses once
+// acked). The watchdog starts with the ack and unpauses it.
+func TestPauseRefusedLaterAckDoesNotStrandTheEarlierAckedCapsule(t *testing.T) {
+	f := newPauseFixture(t)
+	f.rt.pauseTune.watchdog = 15 * time.Millisecond
+	other := f.openSecondAssignment(t)
+	f.mark(t, "?allow_busy=1")
+	f.rt.waitCapsulePauses()
+	ids := []string{f.capsuleID, other.Binding.CapsuleID}
+	if ids[0] > ids[1] {
+		ids[0], ids[1] = ids[1], ids[0]
+	}
+	f.fake.mu.Lock()
+	f.fake.ackFail = map[string]error{ids[1]: errors.New("expired between the clock read and the ack")}
+	f.fake.mu.Unlock()
+	code, body := f.mark(t, "?allow_busy=1")
+	if code != http.StatusConflict || !strings.Contains(body, `"reason":"paused_awaiting_ack"`) || f.markerExists() {
+		t.Fatalf("refused later ack: status=%d body=%s marker=%v", code, body, f.markerExists())
+	}
+	pauseEventually(t, "the earlier-acked capsule to unpause with no marker pending", func() bool { return !f.fake.IsPaused(ids[0]) })
+}
+
+// N4: the exclusion is for allow_busy marks only: an ordinary mark over a
+// committed pause refuses as today and writes no marker.
+func TestPauseExclusionIsAllowBusyOnly(t *testing.T) {
+	f := newPauseFixture(t)
+	f.mark(t, "?allow_busy=1")
+	f.rt.waitCapsulePauses()
+	code, body := f.mark(t, "")
+	if code != http.StatusConflict || !strings.Contains(body, `"live_capsules":1`) || f.markerExists() {
+		t.Fatalf("ordinary mark over a committed pause: status=%d body=%s marker=%v", code, body, f.markerExists())
+	}
+}
+
+// N2: a pause that has not committed is held by the ack and refuses it.
+func TestPauseAckRefusesWhileAnEntryHasNotCommitted(t *testing.T) {
+	f := newPauseFixture(t)
+	f.mark(t, "?allow_busy=1")
+	f.rt.waitCapsulePauses()
+	other := f.openSecondAssignment(t)
+	f.fake.gate = make(chan struct{})
+	f.rt.startCapsulePause(other)
+	refusal, err := f.rt.ackPausedCapsules(context.Background(), true, func() error { return nil })
+	if err != nil || refusal == "" {
+		t.Fatalf("ack with a pause in progress = %q, %v, want a refusal", refusal, err)
+	}
+	close(f.fake.gate)
+	f.rt.waitCapsulePauses()
+}
+
+// N3: an abandoned pause re-arms the bound deadline a deferral may have eaten.
+func TestAbandonedPauseRearmsTheDeadline(t *testing.T) {
+	f := newPauseFixture(t)
+	var mu sync.Mutex
+	var kinds []string
+	f.rt.kernelMode = true
+	f.rt.scheduleActor = func(_ context.Context, _, _, _, kind, _, _, _ string, _ time.Time) error {
+		mu.Lock()
+		kinds = append(kinds, kind)
+		mu.Unlock()
+		return nil
+	}
+	f.fake.pauseEr = fmt.Errorf("%w: token", capsule.ErrPauseRefused)
+	f.mark(t, "?allow_busy=1")
+	f.rt.waitCapsulePauses()
+	mu.Lock()
+	defer mu.Unlock()
+	for _, k := range kinds {
+		if k == assignedEngineeringFateDeadlineUpdateKind {
+			return
+		}
+	}
+	t.Fatalf("no deadline wake armed after an abandoned pause (scheduled %v)", kinds)
+}
+
+// N1: the activation gate reads the run's own assignment attempt.
+func TestPausedActivationDeferralUsesTheRunsAttempt(t *testing.T) {
+	f := newPauseFixture(t)
+	f.fake.mu.Lock()
+	f.fake.look[f.capsuleID] = capsule.PauseLookup{Where: capsule.PauseSpared, Record: capsule.PauseRecord{AssignmentID: f.assignment.AssignmentID}}
+	f.fake.mu.Unlock()
+	run := &types.RunRecord{
+		OwnerID: f.assignment.Binding.OwnerID, ComputerID: f.assignment.Binding.ComputerID, AgentProfile: "engineering",
+		Metadata: map[string]any{"assignment_id": f.assignment.AssignmentID, "assignment_attempt": 2},
+	}
+	if !assignedEngineeringRun(run) {
+		t.Skip("not an assigned engineering run in this tree")
+	}
+	if err := f.rt.pausedActivationDeferral(context.Background(), run); err != nil {
+		t.Fatalf("a run of attempt 2 was gated on attempt 1's assignment: %v", err)
+	}
+	run.Metadata["assignment_attempt"] = 1
+	if err := f.rt.pausedActivationDeferral(context.Background(), run); !errors.Is(err, ErrActivationOccurrenceMustRemainUnprocessed) {
+		t.Fatalf("attempt 1 = %v, want deferral", err)
 	}
 }

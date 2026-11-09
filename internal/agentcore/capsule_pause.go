@@ -233,7 +233,13 @@ func (rt *Runtime) plannedRestartGate(ctx context.Context, allowBusy bool) (work
 		return plannedRestartWork{}, false, fmt.Errorf("cannot read engineering assignments: %w", err)
 	}
 	now := rt.pauseTune.clock()
-	committed := rt.committedPausedAssignments(assignments, now)
+	// The exclusion is for allow_busy marks only: a paused run stays in
+	// rt.running, so an ordinary mark would refuse on it anyway, and an
+	// ordinary computer's sweep waits for idle.
+	var committed map[string]bool
+	if allowBusy {
+		committed = rt.committedPausedAssignments(assignments, now)
+	}
 	work, err = rt.plannedRestartBusyExcluding(ctx, true, committed)
 	if err != nil || !work.unsafe() || !allowBusy {
 		return work, false, err
@@ -304,6 +310,8 @@ func (rt *Runtime) startCapsulePause(a types.EngineeringAssignment) {
 			entry.gone = true
 			rt.pauses.remove(entry)
 			log.Printf("runtime: pause of capsule %s abandoned: %v", capsuleID, err)
+			// A deadline wake that deferred to the pause is lost with it.
+			rt.armAssignedEngineeringDeadline(a)
 			return
 		}
 		entry.committed = true
@@ -381,12 +389,16 @@ func (rt *Runtime) unpauseAllCapsules() {
 // it). With no committed pause it only runs write.
 func (rt *Runtime) ackPausedCapsules(ctx context.Context, allowBusy bool, write func() error) (refusal string, err error) {
 	var held []*capsulePauseEntry
+	pending := false
 	for _, entry := range rt.pauses.snapshot() {
 		entry.mu.Lock()
-		if entry.gone || !entry.committed {
+		if entry.gone {
 			entry.mu.Unlock()
 			continue
 		}
+		// An entry whose pause has not committed is held too (it is a
+		// pause in progress), and refuses the ack below.
+		pending = pending || !entry.committed
 		held = append(held, entry)
 	}
 	defer func() {
@@ -407,12 +419,16 @@ func (rt *Runtime) ackPausedCapsules(ctx context.Context, allowBusy bool, write 
 		return "", fmt.Errorf("cannot read engineering assignments: %w", lerr)
 	}
 	now := rt.pauseTune.clock()
-	committed := rt.committedPausedAssignments(assignments, now)
+	// Only an allow_busy mark excludes a committed pause (r3 scope).
+	var committed map[string]bool
+	if allowBusy {
+		committed = rt.committedPausedAssignments(assignments, now)
+	}
 	work, werr := rt.plannedRestartBusyExcluding(ctx, true, committed)
 	if werr != nil {
 		return "", werr
 	}
-	if work.unsafe() {
+	if work.unsafe() || pending {
 		return capsulePauseRefusalPausing, nil
 	}
 	for _, entry := range held {
@@ -429,11 +445,13 @@ func (rt *Runtime) ackPausedCapsules(ctx context.Context, allowBusy bool, write 
 			return capsulePauseRefusalAwaiting, nil
 		}
 		entry.acked = true
-	}
-	werr = write()
-	for _, entry := range held {
+		// The watchdog starts with the ack, not after the marker write: a
+		// later entry's refused ack (or a failed marker write) leaves no
+		// marker, and the TTL path refuses once acked, so only the watchdog
+		// can unpause this capsule (it unpauses when no marker is pending).
 		rt.watchPausedCapsule(entry)
 	}
+	werr = write()
 	return "", werr
 }
 

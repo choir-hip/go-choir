@@ -56,9 +56,12 @@ type Executor struct {
 	executionReceipts map[string]ExecutionReceipt
 	grantedReceipts   map[string]GrantedExecutionReceipt
 	stateDir          string
-	artifactDir       string
-	lowerDir          string
-	sourceDir         string
+	// resumingIDs is the per-capsule guard of a paused capsule's resume
+	// (PrepareResume); guarded by mu.
+	resumingIDs map[string]bool
+	artifactDir string
+	lowerDir    string
+	sourceDir   string
 	// computerFilesRoot is the files root an engineering capsule's
 	// /computer/files snapshots (SetComputerFilesRoot); empty gives none.
 	computerFilesRoot string

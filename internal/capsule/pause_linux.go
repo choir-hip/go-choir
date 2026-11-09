@@ -328,11 +328,28 @@ func (e *Executor) PrepareResume(ctx context.Context, want PauseRecord) (PausedS
 	if !validCapsuleResidueIdentity(id) {
 		return PausedSeed{}, fmt.Errorf("resume identity is invalid")
 	}
+	// e.mu is held only to check liveness and to take the per-capsule
+	// resuming guard; the teardown, the digest and the moves run outside it,
+	// so /health and the reconcile guard do not stall behind a large upper.
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if _, live := e.capsules[id]; live {
+		e.mu.Unlock()
 		return PausedSeed{}, fmt.Errorf("resume: capsule %s is live in this process", id)
 	}
+	if e.resumingIDs[id] {
+		e.mu.Unlock()
+		return PausedSeed{}, fmt.Errorf("resume: capsule %s is already being resumed", id)
+	}
+	if e.resumingIDs == nil {
+		e.resumingIDs = map[string]bool{}
+	}
+	e.resumingIDs[id] = true
+	e.mu.Unlock()
+	defer func() {
+		e.mu.Lock()
+		delete(e.resumingIDs, id)
+		e.mu.Unlock()
+	}()
 	own := filepath.Join(e.stateDir, id)
 	spare := filepath.Join(e.pausedSpareRoot(), id)
 	// Residue first: a process-only restart keeps the boot id, so the old
@@ -376,6 +393,9 @@ func (e *Executor) PrepareResume(ctx context.Context, want PauseRecord) (PausedS
 	if !rec.Acked {
 		return PausedSeed{}, fmt.Errorf("resume: the pause was never acknowledged for a restart")
 	}
+	if resumeDigestHook != nil {
+		resumeDigestHook()
+	}
 	upper := filepath.Join(spare, "upper")
 	digest, files, bytes, err := digestUpper(ctx, upper)
 	if err != nil {
@@ -391,16 +411,19 @@ func (e *Executor) PrepareResume(ctx context.Context, want PauseRecord) (PausedS
 	return PausedSeed{Record: rec, UpperDir: upper, Dir: spare}, nil
 }
 
+// resumeDigestHook is a test seam: it runs before the resume's upper digest,
+// outside the executor lock.
+var resumeDigestHook func()
+
 // CompleteResume finishes a seeded spawn: the rest of the old directory is
-// deleted and the consumed record is left in the new directory, where a
-// second resume finds it.
+// deleted (outside the executor lock) and the consumed record is left in the
+// new directory, where a second resume finds it. The per-capsule /tmp goes
+// with the old directory; the resumed capsule has a fresh, empty one.
 func (e *Executor) CompleteResume(seed PausedSeed) error {
 	raw, err := json.Marshal(seed.Record)
 	if err != nil {
 		return err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	if err := removePrivateTree(seed.Dir); err != nil {
 		return fmt.Errorf("resume: delete the old pause directory: %w", err)
 	}
@@ -454,6 +477,67 @@ func seedCapsuleUpper(stateDir string, spec SpawnSpec, upper string) error {
 	}
 	if err := os.Rename(seed, upper); err != nil {
 		return fmt.Errorf("capsule seed upper: %w", err)
+	}
+	// The preserved upper is sandbox-written, and Spawn's host-side code
+	// follows paths inside it as root (identity etc files, the computer
+	// receipt, the mount targets). A symlink or file the sandbox put at a
+	// name Spawn touches would redirect those writes and mounts at the host.
+	// The sandbox is dead, so nothing races this pass.
+	return sanitizeSeededUpper(upper)
+}
+
+// seededTopLevelNames are the top-level names Spawn creates, writes or
+// mounts under in the upper or the merged view.
+var seededTopLevelNames = []string{"computer", "etc", "home", "root", "var", "dev", "nix", "selfdev", "tmp", "run", "mnt", "proc", "sys"}
+
+// seededNestedNames are the paths below them Spawn touches.
+var seededNestedNames = []string{
+	"nix/store", "selfdev/bundle", "selfdev/carried", "computer/receipt.json",
+	"etc/passwd", "etc/group", "etc/hosts", "etc/nsswitch.conf",
+}
+
+// sanitizeSeededUpper removes, from a seeded upper, anything at a name Spawn
+// touches that is not a plain directory (a symlink, a file, a device): the
+// name is recreated by Spawn as it does for an empty upper. dev is removed
+// whole and made again fresh. A name that is a plain directory stays, with
+// the sandbox's work inside. computer/receipt.json and the etc identity
+// files are files Spawn rewrites, so any entry there goes.
+func sanitizeSeededUpper(upper string) error {
+	for _, name := range seededTopLevelNames {
+		path := filepath.Join(upper, name)
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("capsule seed upper: inspect %s: %w", name, err)
+		}
+		if name == "dev" || !info.IsDir() {
+			if err := removePrivateTree(path); err != nil {
+				return fmt.Errorf("capsule seed upper: remove %s: %w", name, err)
+			}
+			if name == "dev" {
+				if err := os.Mkdir(path, 0o755); err != nil {
+					return fmt.Errorf("capsule seed upper: recreate dev: %w", err)
+				}
+			}
+		}
+	}
+	for _, rel := range seededNestedNames {
+		path := filepath.Join(upper, filepath.FromSlash(rel))
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("capsule seed upper: inspect %s: %w", rel, err)
+		}
+		fileTarget := rel == "computer/receipt.json" || strings.HasPrefix(rel, "etc/")
+		if fileTarget || !info.IsDir() {
+			if err := removePrivateTree(path); err != nil {
+				return fmt.Errorf("capsule seed upper: remove %s: %w", rel, err)
+			}
+		}
 	}
 	return nil
 }

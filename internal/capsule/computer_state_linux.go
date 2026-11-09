@@ -147,18 +147,37 @@ func chownTreeNoFollow(root string, uid, gid int) error {
 // /computer/receipt.json (in the upper, beside the store copy) for the
 // engineer and the proofs; the Capsule keeps the same record.
 func writeComputerStateReceipt(upperDir string, receipt ComputerStateReceipt) error {
-	dir := filepath.Join(upperDir, "computer")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	if err := os.Lchown(dir, computerLayerOwner, computerLayerGroup); err != nil {
-		return err
-	}
+	// Through file descriptors, never following a link: a seeded upper is
+	// sandbox-written (a resume), so "computer" or "receipt.json" may be a
+	// symlink the host must not write through.
 	raw, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "receipt.json"), append(raw, '\n'), 0o444)
+	upperFD, err := unix.Open(upperDir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(upperFD)
+	dirFD, err := openOrCreateDirAt(upperFD, "computer")
+	if err != nil {
+		return err
+	}
+	defer unix.Close(dirFD)
+	if err := unix.Fchown(dirFD, computerLayerOwner, computerLayerGroup); err != nil {
+		return err
+	}
+	if err := unix.Unlinkat(dirFD, "receipt.json", 0); err != nil && !errors.Is(err, unix.ENOENT) {
+		return err
+	}
+	fileFD, err := unix.Openat(dirFD, "receipt.json", unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o444)
+	if err != nil {
+		return err
+	}
+	file := os.NewFile(uintptr(fileFD), "receipt.json")
+	defer file.Close()
+	_, err = file.Write(append(raw, '\n'))
+	return err
 }
 
 // mkdirOwned creates one directory of the layer: 0755, owned by the
