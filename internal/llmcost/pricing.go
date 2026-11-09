@@ -92,6 +92,9 @@ var pricingTable = []ModelPricing{
 	// docs/problems/synthetic-provider-onboarding-2026-10-22.md). Exact, or
 	// the prefix match below prices it at DeepSeek's own rate.
 	{Provider: "synthetic", Model: "deepseek-v4.1-flash-1017", InputPerMillion: 0.60, CachedInputPerMillion: 0.03, OutputPerMillion: 1.20},
+	// Claude Haiku 5.5 on Bedrock (2026-11-09): $0.10/M in, $0.50/M out.
+	{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
+	{Provider: "bedrock", Model: "global.anthropic.claude-haiku-5-5", InputPerMillion: 0.10, OutputPerMillion: 0.50},
 	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
 	// limited time" with no end date; LongCat 2.5 Preview lists at about
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.

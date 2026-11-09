@@ -157,7 +157,7 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	}
 	other := strings.Join(rest, ",")
 	fallbacks, _ := metadata[MetadataFallbacks].(string)
-	if member == "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" || fallbacks != other || other == "" || metadata[MetadataSpec] != "pool:default" || metadata[MetadataAssignment] != "hash" || metadata[MetadataThread] != "traj-1" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
+	if member == "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" || fallbacks != other || other == "" || metadata[MetadataSpec] != "pool:default" || metadata[MetadataAssignment] != "hash" || metadata[MetadataThread] != "traj-1" || metadata[MetadataReasoningEffort] != "low" || metadata[MetadataPolicySource] != "platform_fallback" {
 		t.Fatalf("enriched metadata = %#v", metadata)
 	}
 	explicit := map[string]any{MetadataProvider: "custom", MetadataModel: "custom-model"}
@@ -243,7 +243,7 @@ func TestAssignSyntheticLunaSplitsOneToOneAndNeverFailsOver(t *testing.T) {
 	// not the first and each has the other five as fallbacks.
 	for i := 0; i < 600; i++ {
 		chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, fmt.Sprintf("thread-%d", i))
-		if chosen.Model != "stealth/crouton-alpha" || len(fallbacks) != 5 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[4].Provider != "chatgpt" {
+		if chosen.Model != "stealth/crouton-alpha" || len(fallbacks) != 6 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[4].Provider != "chatgpt" {
 			t.Fatalf("default pool thread-%d: %+v with fallbacks %+v", i, chosen, fallbacks)
 		}
 	}
@@ -431,7 +431,7 @@ func TestAssignLunaSyntheticGivesLunaEveryThreadAndSyntheticAsFallback(t *testin
 	if _, fb, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "t"); len(fb) != 0 {
 		t.Fatalf("explicit synthetic pin has fallbacks %+v", fb)
 	}
-	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 5 || fb[0].Model == chosen.Model {
+	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 6 || fb[0].Model == chosen.Model {
 		t.Fatalf("default pool changed: %+v %+v", chosen, fb)
 	}
 	seen := map[string]int{}

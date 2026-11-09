@@ -129,6 +129,16 @@ func SupportedModels() []ModelInfo {
 			Provider:        "bedrock",
 			MaxOutputTokens: 8192,
 		},
+		// Claude Haiku 5.5 on Bedrock (owner 2026-11-09): the paper's last
+		// fallback, $0.10/M in and $0.50/M out. Adaptive thinking; the effort
+		// goes in output_config.
+		{
+			ID:                  "us.anthropic.claude-haiku-5-5",
+			DisplayName:         "Claude Haiku 5.5",
+			Provider:            "bedrock",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 1_000_000,
+		},
 		{
 			ID:              "us.anthropic.claude-sonnet-4-6",
 			DisplayName:     "Claude Sonnet 4.6",
@@ -274,7 +284,7 @@ func SupportedModels() []ModelInfo {
 		// River (owner 2026-11-09: self-development while Synthetic DeepSeek
 		// is spent). The same DeepSeek V4.1 Flash 1017 snapshot; the window
 		// matches Synthetic's until River's own is probed. In one pool only:
-		// river.
+		// selfdev.
 		{
 			ID:                  "deepseek-ai/DeepSeek-V4.1-Flash-1017",
 			DisplayName:         "DeepSeek V4.1 Flash 1017 (River)",
@@ -431,6 +441,15 @@ func (m PoolMember) SlotWeight() int {
 // no Synthetic member now; a crouton outage waits (the quota incident waits up
 // to 18 min for the earliest reset). Synthetic stays in the catalog and in the
 // named pools below, for a computer or benchmark that names it.
+//
+// Owner 2026-11-09: "We shouldn't have outages if we can handle it. Crouton
+// and other free models ideally. Then haiku for paper and synthetic DeepSeek
+// and river for self-dev (with sonnet delegate for Eng). And let's use low
+// reasoning for everything (except sonnet which can be med)". So the default
+// pool (the paper and ordinary computers) is crouton-alpha, the free
+// fallbacks, gpt-6-luna, then Bedrock Claude Haiku 5.5 last, with no
+// Synthetic and no River; the selfdev pool is crouton-alpha, the same free
+// fallbacks, then Synthetic, then River, with no Haiku.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
@@ -440,6 +459,7 @@ func Pools() map[string][]PoolMember {
 			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
 			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
+			{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true},
 		},
 		SyntheticLunaPool: {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
@@ -449,10 +469,14 @@ func Pools() map[string][]PoolMember {
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
-		RiverPool: {
-			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
-			{Provider: "openrouter", Model: "stealth/crouton-alpha", FallbackOnly: true},
-			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
+		SelfDevPool: {
+			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
+			{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
+			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
+			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 		CroutonSyntheticLunaPool: {
 			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
@@ -477,10 +501,10 @@ const LunaSyntheticPool = "luna-synthetic"
 // DeepSeek V4.1 Flash 1017 and gpt-6-luna.
 const SyntheticLunaPool = "synthetic-luna"
 
-// RiverPool names the self-development pool for River (owner 2026-11-09):
-// River's DeepSeek V4.1 Flash 1017 takes every thread; crouton-alpha, then
-// gpt-6-luna, are fallback-only. The default pool is unchanged.
-const RiverPool = "river"
+// SelfDevPool names the self-development pool (owner 2026-11-09): the same
+// free models as the default pool, then Synthetic's DeepSeek V4.1 Flash 1017,
+// then River's, all fallback-only after crouton-alpha. No Haiku.
+const SelfDevPool = "selfdev"
 
 // NoFailover reports whether a pool's threads never move to another member
 // when their model fails: the member that fails, fails. The default rule is

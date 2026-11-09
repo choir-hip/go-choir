@@ -33,6 +33,9 @@ const (
 	Workdir = "/workspace/platform"
 	// Model is the one model the delegate runs.
 	Model = "claude-sonnet-5-5"
+	// Effort is the delegate's reasoning effort, set through Claude Code's
+	// CLAUDE_CODE_EFFORT_LEVEL environment variable.
+	Effort = "medium"
 	// TokenEnv is the variable Claude Code sends as its bearer to the base
 	// URL: the capsule's relay secret, which the capsule's egress proxy
 	// swaps for the computer's gateway bearer. It is set on the claude
@@ -437,6 +440,9 @@ func Env(base []string, home, token string) ([]string, error) {
 		// The gateway relay serves the delegate's one model; Claude Code's
 		// background calls use the same one instead of a model the relay
 		// refuses.
+		// Medium effort for the Sonnet delegate (owner 2026-11-09: low for
+		// everything except Sonnet, which can be medium).
+		"CLAUDE_CODE_EFFORT_LEVEL="+Effort,
 		"ANTHROPIC_MODEL="+Model,
 		"ANTHROPIC_SMALL_FAST_MODEL="+Model,
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL="+Model,

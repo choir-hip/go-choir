@@ -47,7 +47,7 @@ const (
 	// policyVersionLine marks a policy file written from the current
 	// platform default. A file without it is rewritten at load; a file
 	// carrying ownerEditedLine is the owner's and is kept.
-	policyVersionLine = "# platform-policy-version: 3"
+	policyVersionLine = "# platform-policy-version: 4"
 	ownerEditedLine   = "# owner-edited"
 )
 
@@ -632,10 +632,11 @@ reasoning = "low"
 
 [roles.management]
 model = "pool:default"
-reasoning = "high"
+reasoning = "low"
 
 [roles.engineering]
 model = "pool:default"
+reasoning = "low"
 
 [roles.research]
 model = "pool:default"
@@ -643,10 +644,12 @@ reasoning = "low"
 
 [roles.verifier]
 model = "pool:default"
+reasoning = "low"
 requires = ["text", "tool_use"]
 
 [roles.verifier_multimodal]
 model = "pool:default"
+reasoning = "low"
 requires = ["image", "tool_use"]
 `
 }
@@ -654,9 +657,9 @@ requires = ["image", "tool_use"]
 func fallbackPolicy(_ provideriface.Config) Policy {
 	// Owner 2026-10-12: every role runs on the default pool, assigned per
 	// thread (modelcatalog.Pools: crouton-alpha first, free members and
-	// gpt-6-luna behind it; no Synthetic since 2026-11-09). Texture
-	// runs at low effort (owner, 2026-11-08: "research and texture can use low
-	// reasoning") and management keeps high; opencode-go ignores the setting.
+	// gpt-6-luna behind it; no Synthetic since 2026-11-09). Every
+	// role runs at low effort (owner, 2026-11-09: low reasoning for
+	// everything; the Sonnet delegate runs medium).
 	pool := func(effort string) provideriface.LLMSelection {
 		return provideriface.LLMSelection{Model: defaultPoolSpec, ReasoningEffort: effort, Source: "platform_fallback"}
 	}
@@ -664,12 +667,12 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 		Defaults: pool("low"),
 		Roles: map[string]provideriface.LLMSelection{
 			deskmanifest.FrontDoorName():         pool("low"),
-			deskmanifest.AdmitterName():          pool("high"),
-			deskmanifest.PerformerName():         pool(""),
+			deskmanifest.AdmitterName():          pool("low"),
+			deskmanifest.PerformerName():         pool("low"),
 			deskmanifest.ResearcherName():        pool("low"),
 			deskmanifest.DocumentCustodianName(): pool("low"),
-			VerifierRole:                         pool(""),
-			MultimodalVerifierRole:               pool(""),
+			VerifierRole:                         pool("low"),
+			MultimodalVerifierRole:               pool("low"),
 		},
 		Source: "platform_fallback",
 	}

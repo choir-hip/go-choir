@@ -364,6 +364,9 @@ type BedrockProvider struct {
 	anthropicV string // anthropic version header
 }
 
+// defaultBedrockRegion is used when AWS_REGION is unset.
+const defaultBedrockRegion = "us-east-1"
+
 // BedrockConfig holds configuration for creating a BedrockProvider.
 type BedrockConfig struct {
 	Region    string
@@ -397,7 +400,12 @@ func NewBedrockProvider(cfg BedrockConfig) (*BedrockProvider, error) {
 // from environment variables (AWS_REGION, AWS_BEARER_TOKEN_BEDROCK) and
 // the given model ID. The model is a runtime concern, not an env var.
 func NewBedrockProviderFromEnv(modelID string) (*BedrockProvider, error) {
-	region := os.Getenv("AWS_REGION")
+	region := strings.TrimSpace(os.Getenv("AWS_REGION"))
+	if region == "" {
+		// A default, not a switch: the gateway env carried the token with no
+		// AWS_REGION and the provider silently failed to resolve.
+		region = defaultBedrockRegion
+	}
 	token := os.Getenv("AWS_BEARER_TOKEN_BEDROCK")
 
 	p, err := NewBedrockProvider(BedrockConfig{
@@ -481,10 +489,31 @@ func (p *BedrockProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 	return parseBedrockResponse(resp, modelID)
 }
 
+// bedrockAdaptiveEffort reports whether a Bedrock model takes its reasoning
+// effort in output_config (Claude Haiku 5.5: thinking is adaptive and on by
+// default; budget_tokens, non-default sampling and assistant prefill are 400s).
+func bedrockAdaptiveEffort(modelID string) bool {
+	return strings.Contains(modelID, "claude-haiku-5-5")
+}
+
+// bedrockEffort maps Choir's reasoning setting to output_config.effort. Unset
+// is low (owner 2026-11-09: low reasoning for everything).
+func bedrockEffort(effort string) string {
+	switch e := strings.ToLower(strings.TrimSpace(effort)); e {
+	case "medium", "high", "xhigh", "max":
+		return e
+	default:
+		return "low"
+	}
+}
+
 func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 	ar := anthropicRequest{
 		MaxTokens:        defaultMaxTokens(req.MaxTokens),
 		AnthropicVersion: p.anthropicV,
+	}
+	if bedrockAdaptiveEffort(effectiveModel(req.Model, p.modelID)) {
+		ar.OutputConfig = &anthropicOutputConfig{Effort: bedrockEffort(req.ReasoningEffort)}
 	}
 
 	// Bedrock: system prompt with cache_control for prompt caching.
@@ -1906,15 +1935,20 @@ func convertOpenAIChatTools(tools []ToolDef) []openAIChatTool {
 // --- Shared types and helpers ---
 
 type anthropicRequest struct {
-	Model            string             `json:"model,omitempty"` // empty for Bedrock (model in URL)
-	System           any                `json:"system,omitempty"`
-	Messages         []anthropicMessage `json:"messages"`
-	Tools            []anthropicTool    `json:"tools,omitempty"`
-	ToolChoice       any                `json:"tool_choice,omitempty"`
-	Thinking         *anthropicThinking `json:"thinking,omitempty"`
-	MaxTokens        int                `json:"max_tokens"`
-	Stream           bool               `json:"stream,omitempty"`
-	AnthropicVersion string             `json:"anthropic_version,omitempty"`
+	Model            string                 `json:"model,omitempty"` // empty for Bedrock (model in URL)
+	System           any                    `json:"system,omitempty"`
+	Messages         []anthropicMessage     `json:"messages"`
+	Tools            []anthropicTool        `json:"tools,omitempty"`
+	ToolChoice       any                    `json:"tool_choice,omitempty"`
+	Thinking         *anthropicThinking     `json:"thinking,omitempty"`
+	OutputConfig     *anthropicOutputConfig `json:"output_config,omitempty"`
+	MaxTokens        int                    `json:"max_tokens"`
+	Stream           bool                   `json:"stream,omitempty"`
+	AnthropicVersion string                 `json:"anthropic_version,omitempty"`
+}
+
+type anthropicOutputConfig struct {
+	Effort string `json:"effort"`
 }
 
 type anthropicThinking struct {

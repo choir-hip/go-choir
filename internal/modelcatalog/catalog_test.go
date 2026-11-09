@@ -36,9 +36,10 @@ func TestDefaultPoolMembers(t *testing.T) {
 		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
 		{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
+		{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true},
 	}
 	for _, m := range pool {
-		if m.Provider == "synthetic" {
+		if m.Provider == "synthetic" || m.Provider == "river" {
 			t.Fatalf("default pool holds a synthetic member %v (owner 2026-11-09: save Synthetic DeepSeek)", m)
 		}
 	}
@@ -60,7 +61,7 @@ func TestDefaultPoolMembers(t *testing.T) {
 		for _, m := range members {
 			// The OpenCode members are the free iceman and beam in the
 			// default pool (owner 2026-11-05); OpenCode's paid models stay out.
-			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && (name != DefaultPool || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
+			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && ((name != DefaultPool && name != SelfDevPool) || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
 				t.Fatalf("pool %s carries OpenCode member %v", name, m)
 			}
 		}
@@ -143,7 +144,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 6 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
+	if d := Pools()[DefaultPool]; len(d) != 7 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {
@@ -169,7 +170,7 @@ func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
 	for name, members := range Pools() {
 		for _, m := range members {
 			free := m.Model == "recursive/flint-v1.0:free" || m.Model == "nvidia/nemotron-3.5-super-vl:free"
-			if m.Provider == "openrouter" && !(m.Model == "stealth/crouton-alpha" && (name == CroutonSyntheticLunaPool || name == RiverPool || name == DefaultPool)) && !(free && name == DefaultPool) {
+			if m.Provider == "openrouter" && !(m.Model == "stealth/crouton-alpha" && (name == CroutonSyntheticLunaPool || name == SelfDevPool || name == DefaultPool)) && !(free && (name == DefaultPool || name == SelfDevPool)) {
 				t.Fatalf("pool %s carries openrouter member %v", name, m)
 			}
 		}
@@ -206,5 +207,47 @@ func TestCroutonSyntheticLunaPool(t *testing.T) {
 	}
 	if NoFailover(CroutonSyntheticLunaPool) {
 		t.Fatal("crouton-synthetic-luna must fail over")
+	}
+}
+
+// The self-development pool (owner 2026-11-09). Ways it could fail: crouton is
+// not the only weighted member; Synthetic or River is missing, out of order or
+// weighted; Haiku leaks in; a member is not in the catalog.
+func TestSelfDevPool(t *testing.T) {
+	if SelfDevPool != "selfdev" {
+		t.Fatalf("SelfDevPool = %q", SelfDevPool)
+	}
+	want := []PoolMember{
+		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
+		{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
+		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
+		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+		{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+	}
+	pool := Pools()[SelfDevPool]
+	if len(pool) != len(want) {
+		t.Fatalf("selfdev pool = %v", pool)
+	}
+	for i := range want {
+		if pool[i] != want[i] {
+			t.Fatalf("selfdev pool[%d] = %v, want %v", i, pool[i], want[i])
+		}
+		if _, ok := Lookup(want[i].Provider, want[i].Model); !ok {
+			t.Fatalf("selfdev member %v missing from SupportedModels", want[i])
+		}
+		if pool[i].Provider == "bedrock" {
+			t.Fatal("selfdev pool holds Haiku")
+		}
+	}
+	if NoFailover(SelfDevPool) {
+		t.Fatal("selfdev pool must fail over")
+	}
+}
+
+func TestHaiku55Catalogued(t *testing.T) {
+	if _, ok := Lookup("bedrock", "us.anthropic.claude-haiku-5-5"); !ok {
+		t.Fatal("Haiku 5.5 missing from SupportedModels")
 	}
 }
