@@ -86,6 +86,14 @@ type SpawnSpec struct {
 	// its durable binding; research, desk-tool and verifier spawns never set
 	// it, so verification never depends on /computer.
 	ComputerState bool
+
+	// SeedUpper is a trusted-runtime input of a paused capsule's resume
+	// (docs/design/sandbox-pause-resume-2026-11-09.md, Decision 8): the
+	// preserved upper directory, under the executor's own paused-capsule
+	// area (PausedSpareDir), which Spawn renames (same filesystem, no copy)
+	// into the new capsule's upper before the mount. Everything else is
+	// Spawn's ordinary path. Empty for every other spawn.
+	SeedUpper string `json:"-"`
 }
 
 type SourcePreflight struct {

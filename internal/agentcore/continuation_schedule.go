@@ -338,6 +338,11 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 	if assignment.Binding.ParentAgentID != agentID {
 		return nil
 	}
+	// A pause record defers the deadline to the resume wake (sandbox pause
+	// design, Decision 7); the resume and the unpause both arm it again.
+	if rt.capsulePausedOrResuming(assignment) {
+		return nil
+	}
 	if assignedEngineeringFatePending(assignment) {
 		return rt.resumeStrandedFateAssignmentIfPending(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
 	}

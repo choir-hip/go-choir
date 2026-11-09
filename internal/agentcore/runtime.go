@@ -329,6 +329,12 @@ type Runtime struct {
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
 	capsuleExecutor *capsule.Executor
+	// pauses is the table of capsules this process pauses for a planned
+	// update, and pauseRuntime the test substitute for the executor's pause
+	// surface (capsule_pause.go); pauseTune holds the pause's bounds.
+	pauses       capsulePauseTable
+	pauseRuntime assignmentPauseRuntime
+	pauseTune    capsulePauseTuning
 	// steps tracks the named in-flight steps of long operations for
 	// /api/runtime/observability (step_trace.go); stepsOnce creates it.
 	steps     *steptrace.Tracker
@@ -4104,7 +4110,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
 		withPromptBudget(llmConfig.Model, estimateTextTokens(renderedSystemPrompt)).
 		withRunContext(
-			func() json.RawMessage { return runContextMessage(time.Now(), "") },
+			func() json.RawMessage { return runContextMessage(time.Now(), rt.takePauseResumeNote(rec)) },
 			func() json.RawMessage { return runContextMessage(time.Now(), runFacts) },
 		)
 	initialMailboxPhase := ""

@@ -151,6 +151,9 @@ func (rt *Runtime) revokeAssignedCapsuleKeeping(ctx context.Context, assignment 
 	if exec == nil {
 		return assignment, fmt.Errorf("assigned capsule executor unavailable")
 	}
+	// A revoke ends any pause of this capsule (owner cancel, a terminal
+	// trajectory): the pause entry, its TTL and its admission block go with it.
+	rt.dropCapsulePause(assignment.Binding.CapsuleID)
 	intentRef := assignment.CapsuleIntentRef
 	if assignment.CapsuleDisposition != types.EngineeringCapsuleRevokeRequested && assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 		intentRef = "capsule-revoke-intent:" + objectgraph.SHA256([]byte(strings.Join([]string{
@@ -666,6 +669,14 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, "restart completed terminal trajectory assignment fate")
 			continue
 		}
+		// A paused capsule (or a resume of one) is owned by the pause
+		// machinery on every entry to this reconcile, not only the boot
+		// sweep (sandbox pause design, Decision 7): without this it fails
+		// assignedEngineeringCapsuleUsable (frozen, not active) and is
+		// revoked. A crash boot deletes the record and falls through.
+		if rt.reconcilePausedAssignment(ctx, assignment, crashBoot) {
+			continue
+		}
 		if crashBoot {
 			if interruptErr := rt.interruptAssignmentAtCrashBoot(ctx, assignment); interruptErr != nil {
 				return interruptErr
@@ -882,9 +893,24 @@ func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx contex
 			log.Printf("runtime: boot Engineering assignment capsule sweep trajectory %s: %v", assignment.Binding.TrajectoryID, err)
 		}
 	}
+	// A spared pause directory no resume was armed for is deleted now.
+	rt.sweepSparedPausesAfterReconcile()
 	if _, planned := rt.BootWasPlannedRestart(); planned {
-		rt.resumeQueuedEngineeringRequestsAtPlannedBoot(ctx, computerID)
-		rt.rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx, computerID)
+		after := func() {
+			rt.resumeQueuedEngineeringRequestsAtPlannedBoot(ctx, computerID)
+			rt.rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx, computerID)
+		}
+		if rt.pausedResumesInFlight() {
+			// Queued requests are admitted, and bound deadlines re-armed,
+			// only after the paused assignments are resolved (failure 10);
+			// the boot does not wait for the resumes.
+			go func() {
+				rt.waitPausedResumes()
+				after()
+			}()
+		} else {
+			after()
+		}
 	} else {
 		rt.closeRetainedCandidatesAtCrashBoot(ctx)
 	}
@@ -905,6 +931,9 @@ func (rt *Runtime) rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx context.Conte
 	for _, a := range assignments {
 		if a.Disposition != types.EngineeringAssignmentBound || a.CapsuleDisposition != types.EngineeringCapsuleActive {
 			continue
+		}
+		if rt.capsulePausedOrResuming(a) {
+			continue // the resume arms it when it completes
 		}
 		rt.armAssignedEngineeringDeadline(a)
 	}

@@ -88,6 +88,37 @@ func PlannedRestartMarkerPending(storePath string, now time.Time) bool {
 	return plannedRestartMarkerPending(storePath, now)
 }
 
+// PlannedRestartSparesPausedCapsules reports, without consuming the marker,
+// whether this boot follows a planned restart whose reason is a platform
+// update and may resume paused capsules (sandbox pause design, Decision 6
+// and the r3 reason-aware spare). It is evaluated at processStartedAt, the
+// instant ConsumePlannedRestartMarker judges the marker at, and answers
+// exactly as that consumption will: a readable marker of this binary's
+// work-state epoch, no older than plannedRestartMaxAge, with the platform
+// update reason. A restore-reason marker (PlannedRestartSelfDevelopmentRestore),
+// a crash, an unreadable marker or a stale one spares nothing.
+func PlannedRestartSparesPausedCapsules(storePath string, now time.Time) bool {
+	path := PlannedRestartMarkerPath(storePath)
+	if path == "" {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var marker PlannedRestart
+	if json.Unmarshal(raw, &marker) != nil || marker.RequestedAt.IsZero() {
+		return false
+	}
+	if marker.WorkStateEpoch != CurrentWorkStateEpoch {
+		return false
+	}
+	if age := now.Sub(marker.RequestedAt); age < 0 || age > plannedRestartMaxAge {
+		return false
+	}
+	return marker.Reason == PlannedRestartPlatformRefresh
+}
+
 // errHibernateFenced refuses a planned-restart mark while the hibernate fence
 // is closed: the marker would be written into the snapshot being taken.
 var errHibernateFenced = errors.New("hibernate_fenced: the guest is being hibernated; a planned restart cannot be marked now")
@@ -546,6 +577,13 @@ func (w plannedRestartWork) unsafe() bool {
 // fails closed: an unreadable operation or assignment list is an error, not
 // idle.
 func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (plannedRestartWork, error) {
+	return rt.plannedRestartBusyWith(ctx, countCapsules, nil)
+}
+
+// plannedRestartBusyWith is plannedRestartBusy with the assignments in
+// excluded (committed pauses, capsule_pause.go) left out of both halves of
+// the gate. Only the deploy-refresh mark passes a set.
+func (rt *Runtime) plannedRestartBusyWith(ctx context.Context, countCapsules bool, excluded map[string]bool) (plannedRestartWork, error) {
 	work := plannedRestartWork{Running: rt.RunningCount(), SnapshotInFlight: rt.snapshots.inFlight.Load()}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	if computerID == "" {
@@ -559,6 +597,9 @@ func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (
 		now := time.Now().UTC()
 		for _, operation := range ops {
 			switch {
+			case pausedExecutingOperation(operation, excluded):
+				// A paused capsule's executing operation survives the restart
+				// with its record (sandbox pause design, Decision 1).
 			case slices.Contains(selfdevBusyStates, operation.State):
 				work.SelfdevActive++
 			case selfdevDecisionHeld(operation, now):
@@ -570,7 +611,7 @@ func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (
 		}
 	}
 	if countCapsules {
-		live, err := rt.liveCapsuleCount(ctx)
+		live, err := rt.liveCapsuleCountExcluding(ctx, excluded)
 		if err != nil {
 			return work, err
 		}
@@ -593,6 +634,14 @@ func (rt *Runtime) liveCapsulesCountable() bool {
 // vmctl's idle decision reads) both call it. It fails closed: an unreadable
 // assignment list is an error, never a 0 that reads as idle.
 func (rt *Runtime) liveCapsuleCount(ctx context.Context) (int, error) {
+	return rt.liveCapsuleCountExcluding(ctx, nil)
+}
+
+// liveCapsuleCountExcluding is liveCapsuleCount without the assignments in
+// excluded: the restart gate's view of committed pauses. /health and the
+// host's idle, crash-loop and busy fallbacks never pass a set, so a paused
+// capsule still counts as live there.
+func (rt *Runtime) liveCapsuleCountExcluding(ctx context.Context, excluded map[string]bool) (int, error) {
 	if !rt.liveCapsulesCountable() {
 		return 0, errLiveCapsulesUncountable
 	}
@@ -603,7 +652,7 @@ func (rt *Runtime) liveCapsuleCount(ctx context.Context) (int, error) {
 	}
 	live := 0
 	for _, assignment := range assignments {
-		if plannedRestartLiveCapsule(assignment) {
+		if plannedRestartLiveCapsule(assignment) && !excluded[assignment.AssignmentID] {
 			live++
 		}
 	}
@@ -714,6 +763,10 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		// The host withdrew the refresh: new engineering need not wait for
 		// it. Cleared only once the marker is gone (review 1).
 		h.rt.clearRefreshHold()
+		// Nothing restarts after all: capsules this process paused for the
+		// restart thaw and their runs continue (sandbox pause design,
+		// Decision 5; the unpause retries until it succeeds).
+		h.rt.unpauseAllCapsules()
 		writeAPIJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 		return
 	}
@@ -747,7 +800,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	// is refused or the restart follows.
 	askedAt := h.rt.refreshHoldNow()
 	h.rt.noteRefreshAsked(target, askedAt)
-	work, err := h.rt.plannedRestartBusy(r.Context(), true)
+	work, pausing, err := h.rt.plannedRestartGate(r.Context(), allowBusy)
 	if err != nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: " + err.Error()})
 		return
@@ -756,12 +809,15 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	// asks, allow_busy included, the way a live capsule does: a correctness
 	// refusal, bounded by selfdevDecisionHoldCap, not a switch.
 	held := work.SelfdevAwaitingDecision > 0
-	if work.unsafe() || held || (work.Running > 0 && !allowBusy) {
+	if work.unsafe() || held || pausing || (work.Running > 0 && !allowBusy) {
 		// A refused request restarts nothing: an earlier request's
 		// synchronous mode is undone unless its marker is still durable.
 		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
 		why, reason := "guest is busy; restart deferred to its next idle moment", ""
 		switch {
+		case pausing && !held:
+			why = "live capsules are pausing for the restart; the mark completes once every pause is committed"
+			reason = capsulePauseRefusalPausing
 		case work.unsafe():
 			why = "a self-development operation, a live capsule or a streaming snapshot would not survive a restart; restart deferred until it settles"
 		case held:
@@ -776,7 +832,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
 			SnapshotInFlight:        work.SnapshotInFlight,
 			SelfdevAwaitingDecision: work.SelfdevAwaitingDecision, HeldOperations: work.HeldOperations,
-			HoldsNewWork: h.rt.refreshHoldsNewWork(askedAt),
+			HoldsNewWork: pausing || h.rt.refreshHoldsNewWork(askedAt),
 		})
 		return
 	}
@@ -785,17 +841,38 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	// and new telemetry takes the acknowledged path until the kill. A failed
 	// drain is recorded on the marker, not fatal (the same seam as
 	// markPlannedRestart; design 4.5).
-	marker, err := h.rt.writeHostPlannedRestartMarker(storePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()})
+	// With committed pauses, the gate re-check, the acks in the pause
+	// records, the marker write and the sync all run under each paused
+	// capsule's mutex (sandbox pause design, r3: the ack is atomic against
+	// the pre-ack TTL unpause).
+	var marker PlannedRestart
+	refusal, err := h.rt.ackPausedCapsules(r.Context(), allowBusy, func() error {
+		var markErr error
+		marker, markErr = h.rt.writeHostPlannedRestartMarker(storePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()})
+		if markErr != nil {
+			return markErr
+		}
+		releaseSlot() // the marker is durable: the fence may close and will see it
+		marker.WorkStateEpoch = CurrentWorkStateEpoch
+		// The kill skips every fsync the guest's writers left to the kernel (a
+		// frozen bundle, its screens): flush them all before the answer
+		// that lets the host kill (docs/problems/awaiting-candidate-unreadable-after-refresh-2026-10-26.md).
+		syncFilesystems()
+		return nil
+	})
+	if refusal != "" {
+		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+			Error:   "a paused capsule is not yet acknowledgeable for the restart; the host asks again",
+			Outcome: "busy", Reason: refusal, AllowBusy: allowBusy,
+			RunningRuns: work.Running, LiveCapsules: work.LiveCapsules, HoldsNewWork: true,
+		})
+		return
+	}
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}
-	releaseSlot() // the marker is durable: the fence may close and will see it
-	marker.WorkStateEpoch = CurrentWorkStateEpoch
-	// The kill skips every fsync the guest's writers left to the kernel (a
-	// frozen bundle, its screens): flush them all before the answer
-	// that lets the host kill (docs/problems/awaiting-candidate-unreadable-after-refresh-2026-10-26.md).
-	syncFilesystems()
 	log.Printf("runtime: host requested a planned restart (%s %s; allow_busy=%v, interrupting %d running run(s))", marker.Reason, marker.Target, allowBusy, work.Running)
 	writeAPIJSON(w, http.StatusOK, plannedRestartWrittenResponse{PlannedRestart: marker, InterruptedRunningRuns: work.Running})
 }

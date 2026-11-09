@@ -9,13 +9,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
-func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error) {
+func configuredCapsuleExecutor(db *store.Store, storePath string, processStartedAt time.Time) (*capsule.Executor, bool, error) {
 	broker := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER_PATH"))
 	state := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR"))
 	source := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
@@ -34,7 +37,9 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 	if err := os.Chmod(state, 0o700); err != nil {
 		return nil, false, fmt.Errorf("secure capsule state directory: %w", err)
 	}
-	state, err := capsule.BootScopedStateDir(state)
+	state, err := capsule.BootScopedStateDir(state, func() bool {
+		return agentcore.PlannedRestartSparesPausedCapsules(storePath, processStartedAt)
+	})
 	if err != nil {
 		return nil, false, err
 	}

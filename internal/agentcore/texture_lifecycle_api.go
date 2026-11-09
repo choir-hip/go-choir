@@ -78,6 +78,9 @@ var ErrActivationOccurrenceMustRemainUnprocessed = errors.New("activation occurr
 // not be persisted is returned to the actor handler so the exact occurrence
 // remains unprocessed.
 func (rt *Runtime) ExecuteActivationSyncChecked(ctx context.Context, rec *types.RunRecord) error {
+	if err := rt.pausedActivationDeferral(ctx, rec); err != nil {
+		return err
+	}
 	rt.ExecuteActivationSync(ctx, rec)
 	if rec == nil {
 		return fmt.Errorf("runtime: activation returned no run")

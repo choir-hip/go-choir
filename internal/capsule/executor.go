@@ -657,6 +657,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, fmt.Errorf("capsule create state: %w", err)
 	}
 	_ = os.Chmod(base, 0o755)
+	if spec.SeedUpper != "" {
+		// A paused capsule's resume (Decision 8): the preserved upper moves
+		// into place before anything is mounted.
+		if err := seedCapsuleUpper(e.stateDir, spec, caps.UpperDir); err != nil {
+			_ = removePrivateTree(base)
+			return nil, err
+		}
+	}
 	mounted := false
 	defer func() {
 		if retErr == nil {
@@ -1069,6 +1077,10 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	}
 	caps.State = StateDestroying
 	caps.stopping.Store(true)
+	// ForceDestroy (owner cancel, a terminal trajectory) clears the pause
+	// and its admission block; the directory's record goes with the tree.
+	caps.paused.Store(false)
+	caps.pauseBlock.Store(false)
 	if caps.broker != nil {
 		_ = caps.broker.Close()
 	}
@@ -1773,6 +1785,9 @@ func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string
 	if caps == nil {
 		return nil, fmt.Errorf("capsule granted diff unavailable")
 	}
+	if caps.paused.Load() || caps.pauseBlock.Load() {
+		return nil, ErrCapsulePaused
+	}
 	caps.mu.RLock()
 	state := caps.State
 	caps.mu.RUnlock()
@@ -1808,6 +1823,9 @@ func (e *Executor) ThawGranted(ctx context.Context, agentRunID, handle string) e
 	if caps == nil {
 		return fmt.Errorf("capsule granted thaw unavailable")
 	}
+	if caps.paused.Load() || caps.pauseBlock.Load() {
+		return ErrCapsulePaused
+	}
 	caps.mu.RLock()
 	state := caps.State
 	caps.mu.RUnlock()
@@ -1829,6 +1847,9 @@ func (e *Executor) InspectGrantedWorktree(ctx context.Context, agentRunID, handl
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
 	if err != nil || !capability.AgentRole.MutatesCapsule() {
 		return GrantedWorktree{}, fmt.Errorf("capsule granted worktree unavailable")
+	}
+	if caps.paused.Load() || caps.pauseBlock.Load() {
+		return GrantedWorktree{}, ErrCapsulePaused
 	}
 	caps.mu.RLock()
 	state := caps.State

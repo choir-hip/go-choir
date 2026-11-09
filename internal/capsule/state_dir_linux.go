@@ -27,15 +27,25 @@ const StateFloorBytes = int64(4 << 30)
 // capsules. A guest-core restart within one boot keeps the same directory,
 // so orphan cleanup by capsule id still finds its residue. A directory
 // that still has anything mounted under it is left alone.
-func BootScopedStateDir(root string) (string, error) {
+//
+// sparePaused is asked once, at the sweep, whether this boot follows a
+// planned platform-update restart that may resume paused capsules
+// (docs/design/sandbox-pause-resume-2026-11-09.md, Decision 6). It is
+// injected because this package does not import agentcore, and it must
+// answer from the marker's reason at the process start instant the marker
+// is consumed at. When it says yes, an earlier boot's capsule directory that
+// holds a valid, acknowledged pause record is renamed (unmounted: a fresh
+// kernel) into root/boot-<id>/.paused instead of being deleted; the rest of
+// the earlier boot is swept as before. A nil sparePaused sweeps everything.
+func BootScopedStateDir(root string, sparePaused func() bool) (string, error) {
 	raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	if err != nil {
 		return "", fmt.Errorf("read boot id: %w", err)
 	}
-	return bootScopedStateDir(root, strings.TrimSpace(string(raw)))
+	return bootScopedStateDir(root, strings.TrimSpace(string(raw)), sparePaused)
 }
 
-func bootScopedStateDir(root, bootID string) (string, error) {
+func bootScopedStateDir(root, bootID string, sparePaused func() bool) (string, error) {
 	if bootID == "" || strings.ContainsAny(bootID, "/.") {
 		return "", fmt.Errorf("boot id is invalid")
 	}
@@ -49,6 +59,13 @@ func bootScopedStateDir(root, bootID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := os.MkdirAll(current, 0o700); err != nil {
+		return "", fmt.Errorf("create capsule state directory: %w", err)
+	}
+	if err := os.Chmod(current, 0o700); err != nil {
+		return "", fmt.Errorf("secure capsule state directory: %w", err)
+	}
+	spare := sparePaused != nil && sparePaused()
 	for _, entry := range entries {
 		name := entry.Name()
 		if !entry.IsDir() || !strings.HasPrefix(name, "boot-") || name == "boot-"+bootID {
@@ -58,17 +75,47 @@ func bootScopedStateDir(root, bootID string) (string, error) {
 		if hasMountUnder(mounts, stale) {
 			continue
 		}
+		if spare {
+			if err := sparePausedDirs(stale, filepath.Join(current, PausedSpareDir)); err != nil {
+				return "", err
+			}
+		}
 		if err := removePrivateTree(stale); err != nil {
 			return "", fmt.Errorf("remove capsule state of an earlier boot: %w", err)
 		}
 	}
-	if err := os.MkdirAll(current, 0o700); err != nil {
-		return "", fmt.Errorf("create capsule state directory: %w", err)
-	}
-	if err := os.Chmod(current, 0o700); err != nil {
-		return "", fmt.Errorf("secure capsule state directory: %w", err)
-	}
 	return current, nil
+}
+
+// sparePausedDirs moves each capsule directory of an earlier boot that holds
+// a valid, acknowledged pause record into dest. A directory that fails to
+// move is left to the sweep (and so deleted: the assignment closes).
+func sparePausedDirs(stale, dest string) error {
+	children, err := os.ReadDir(stale)
+	if err != nil {
+		return nil
+	}
+	for _, child := range children {
+		if !child.IsDir() || child.Name() == PausedSpareDir {
+			continue
+		}
+		dir := filepath.Join(stale, child.Name())
+		rec, err := readPauseRecord(dir)
+		if err != nil || rec.CapsuleID != child.Name() || !rec.Acked {
+			continue
+		}
+		if err := os.MkdirAll(dest, 0o700); err != nil {
+			return fmt.Errorf("create paused capsule area: %w", err)
+		}
+		target := filepath.Join(dest, child.Name())
+		if _, err := os.Lstat(target); err == nil {
+			continue
+		}
+		if err := os.Rename(dir, target); err != nil {
+			continue
+		}
+	}
+	return nil
 }
 
 func mountPointsUnder(root string) ([]string, error) {

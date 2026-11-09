@@ -86,6 +86,11 @@ type Capsule struct {
 	// stopping is set before a destroy (or a failed spawn's cleanup) stops
 	// the broker, so its exit is not read as a death (broker_exit_linux.go).
 	stopping atomic.Bool
+	// pauseBlock closes operation admission from the start of a pause until
+	// it is unwound or the capsule goes (Decision 3); paused is set once the
+	// pause record is committed, and makes thaw, extract and inspect refuse.
+	pauseBlock atomic.Bool
+	paused     atomic.Bool
 	// listenerMu guards listener: the broker watch closes it from its own
 	// goroutine, a destroy under the executor's lock.
 	listenerMu sync.Mutex
@@ -276,6 +281,9 @@ func (c *Capsule) Destroy(ctx context.Context) error {
 // acquireOp increments the inflight operation counter. Must be paired
 // with releaseOp. Rejects if capsule is not active or is quiescing.
 func (c *Capsule) acquireOp() error {
+	if c.pauseBlock.Load() {
+		return fmt.Errorf("capsule %s: %s", c.ID, PauseBlockMessage)
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

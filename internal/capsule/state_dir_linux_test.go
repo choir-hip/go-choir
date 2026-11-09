@@ -33,7 +33,7 @@ func TestBootScopedStateDirRemovesOnlyEarlierBoots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := bootScopedStateDir(root, "now")
+	got, err := bootScopedStateDir(root, "now", nil)
 	if err != nil {
 		t.Fatalf("bootScopedStateDir: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestBootScopedStateDirRemovesOnlyEarlierBoots(t *testing.T) {
 			t.Fatalf("%s removed: %v", path, err)
 		}
 	}
-	if _, err := bootScopedStateDir(root, "../x"); err == nil {
+	if _, err := bootScopedStateDir(root, "../x", nil); err == nil {
 		t.Fatal("a boot id with a path separator was accepted")
 	}
 }
