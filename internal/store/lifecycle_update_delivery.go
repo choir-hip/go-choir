@@ -140,9 +140,13 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			seq = update.ReducerSeq + 1
 		}
 		exhausted := item.Exhaust || update.DeliveryAttempts+1 > req.MaxAttempts
+		exhaustReason := "delivery_attempts_exhausted"
+		if r := strings.TrimSpace(item.Reason); item.Exhaust && r != "" {
+			exhaustReason = r
+		}
 		if exhausted {
 			update.Disposition = types.UpdateDelivered
-			update.DispositionReason = "delivery_attempts_exhausted"
+			update.DispositionReason = exhaustReason
 			update.DispositionRef = req.CommandID
 			update.DeliveredToRunID = ""
 			update.DeliveredAt = nil
@@ -178,7 +182,7 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			if update.Direction == types.LifecyclePacketDirectionControl || update.Direction == types.LifecyclePacketDirectionDirective {
 				failKind = types.LifecycleControlActivationFailed
 			}
-			if err := emit(failKind, update, "delivery_attempts_exhausted"); err != nil {
+			if err := emit(failKind, update, exhaustReason); err != nil {
 				return types.LifecycleResult{}, err
 			}
 		} else if strings.TrimSpace(req.TargetRunID) == "" {

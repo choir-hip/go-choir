@@ -1027,6 +1027,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if clock != nil {
 				req.Clock = clock.cell()
 			}
+			var capsuleShownIDs []string // set when the window was cut; noted once the cell ran
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
 				req.Records = reduction.records.view
@@ -1038,13 +1039,12 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				// broker's frame carries no Backlog marker yet, so an engineer
 				// is not told how many are past the window.
 				var updatesRemaining int
-				req.Updates, updatesRemaining = pendingCellUpdatesWindow(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
+				req.Updates, updatesRemaining, _ = pendingCellUpdatesWindow(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
 				if updatesRemaining > 0 {
-					shownIDs := make([]string, 0, len(req.Updates))
+					capsuleShownIDs = make([]string, 0, len(req.Updates))
 					for _, u := range req.Updates {
-						shownIDs = append(shownIDs, u.UpdateID)
+						capsuleShownIDs = append(capsuleShownIDs, u.UpdateID)
 					}
-					rt.noteUpdatesShown(toolregistry.ExecutionContextFrom(ctx).RunID, shownIDs, true)
 				}
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
@@ -1073,6 +1073,10 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 					}
 				}
 				return "", err
+			}
+			if capsuleShownIDs != nil && result.Error == "" {
+				// A cell that failed consumes nothing.
+				rt.noteUpdatesShown(execCtx.RunID, capsuleShownIDs, true)
 			}
 			if result.CalibrationRead {
 				rt.noteCalibrationRead(ctx, execCtx, req.Calibration, delivery)

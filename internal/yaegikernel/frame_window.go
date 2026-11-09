@@ -27,6 +27,11 @@ const (
 	// as a stub that keeps its identity (seq, ids, kind, sender), so the
 	// cursor can still pass it and the desk can still name it.
 	FrameItemBudget = 256 << 10
+	// FrameUpdateMaxBytes bounds one update that can be shown whole. A larger
+	// one cannot be shown whole in a frame, so the host settles it with a
+	// visible cause (too_large_to_show) instead of holding the head of the
+	// window or consuming it unseen.
+	FrameUpdateMaxBytes = 2 << 20
 	// frameHeadroom is kept free under MaxFramePayload.
 	frameHeadroom = 64 << 10
 	// stubTextBytes bounds the text a stub keeps.
@@ -42,6 +47,9 @@ type FrameBacklog struct {
 	// pending updates past the window.
 	RecordsRemaining int64 `json:"records_remaining,omitempty"`
 	UpdatesRemaining int   `json:"updates_remaining,omitempty"`
+	// UpdatesTooLarge counts the pending updates the host settled at this
+	// cell's start because one could not be shown whole (UpdateTooLarge).
+	UpdatesTooLarge int `json:"updates_too_large,omitempty"`
 	// Truncated is set when the transport, not the host's window, cut the
 	// frame to fit MaxFramePayload.
 	Truncated bool `json:"truncated,omitempty"`
@@ -66,6 +74,9 @@ func RecordSize(r InboxRecord) int {
 	}
 	return len(b)
 }
+
+// UpdateSize is an update's size on the wire.
+func UpdateSize(u PendingUpdate) int { return updateSize(u) }
 
 func updateSize(u PendingUpdate) int {
 	b, err := json.Marshal(u)
@@ -97,7 +108,7 @@ func stubRecord(r InboxRecord, size int) InboxRecord {
 		ConversationID: r.ConversationID, Round: r.Round, Final: r.Final,
 		ParentID: r.ParentID, RelatedIDs: r.RelatedIDs, CreatedAt: r.CreatedAt,
 		Objective: clipText(r.Objective),
-		Body:      fmt.Sprintf("[record cut: %d bytes is over the %d-byte bound of one record in a cell frame; its identity and this note remain]", size, FrameItemBudget),
+		Body:      fmt.Sprintf("[record cut: its %d bytes do not fit a cell frame (one record is shown whole up to %d bytes, and a seq that is still over the frame is stubbed largest first); its identity and this note remain, the full record is on the tape]", size, FrameItemBudget),
 	}
 }
 
@@ -149,12 +160,12 @@ func TailRecords(recs []InboxRecord, budget int) []InboxRecord {
 }
 
 // WindowUpdates returns the oldest updates, in order, that fit budget bytes,
-// and how many were left out. The first update is always returned, whole
-// however large: an update is never shown cut, because the host consumes what
-// the cell was shown (a Texture turn delivers the reports its cell saw, a
-// Management report consumes the ids its wake turn named), and a cut update
-// would be consumed unread. An update too large for the frame is therefore
-// not shown at all (fitFrame) and stays pending.
+// and how many were left out. The first update is always returned, whole: an
+// update is never shown cut, because the host consumes what the cell was shown
+// (a Texture turn delivers the reports its cell saw, a Management report
+// consumes the ids its wake turn named), and a cut update would be consumed
+// unread. The caller has already settled any update over FrameUpdateMaxBytes
+// (it cannot be shown whole), so the first fits the frame.
 //
 // The oldest window repeats until its updates are disposed: a desk that
 // leaves them pending is shown the same ones again, not the ones past them.
@@ -245,11 +256,12 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 			return nil, frame, err
 		}
 	}
-	// Last resort: a single update, or a single seq of records, too large for
-	// the frame stays unshown and pending. The cursor does not pass it (the
-	// cell shows no record past it, so recordsShown does not move), and
-	// Backlog says the frame was cut, so the desk is held there visibly
-	// rather than passed over a record it never read.
+	// What is left is a lone seq of records, and perhaps one update, still
+	// over the frame. Updates go first: left out they stay pending, and
+	// nothing is lost. Then the seq's records are stubbed, largest first, until
+	// it fits: every record reaches the desk whole or as a visible identity
+	// stub, so the cursor always advances past a seq and the body stays on the
+	// tape. Records are the cursor's, updates are the window's.
 	if len(raw) > limit && len(frame.Updates) > 0 {
 		backlog.UpdatesRemaining += len(frame.Updates)
 		frame.Updates = nil
@@ -257,6 +269,27 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 			return nil, frame, err
 		}
 	}
+	if len(raw) > limit && len(frame.Records) > 0 {
+		frame.Records = append([]InboxRecord(nil), frame.Records...)
+		for len(raw) > limit {
+			largest, largestSize := -1, 4<<10
+			for i, r := range frame.Records {
+				if size := RecordSize(r); size > largestSize {
+					largest, largestSize = i, size
+				}
+			}
+			if largest < 0 {
+				break
+			}
+			frame.Records[largest] = stubRecord(frame.Records[largest], largestSize)
+			if err := remarshal(); err != nil {
+				return nil, frame, err
+			}
+		}
+	}
+	// Even all stubbed it does not fit (thousands of records in one seq):
+	// nothing of it is shown, the cursor does not pass it, and the frame says
+	// the desk was cut.
 	if len(raw) > limit && len(frame.Records) > 0 {
 		backlog.RecordsRemaining += int64(len(frame.Records))
 		frame.Records = nil

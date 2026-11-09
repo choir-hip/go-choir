@@ -752,7 +752,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// RLM prompt-as-variable: pending update_coagent records ride the
 			// frame so choir.Updates() exposes them inside the cell. The chat
 			// wake turn carries only ids.
-			updates, updatesRemaining := pendingCellUpdatesWindow(ctx, rt, execCtx)
+			updates, updatesRemaining, updatesTooLarge := pendingCellUpdatesWindow(ctx, rt, execCtx)
 			// A story's research desk reads its story's entity analysis,
 			// built at the run's first cell (slice c0 §4).
 			analysis := rt.storyAnalysisFor(ctx, deskRole, execCtx)
@@ -791,7 +791,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
 				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration,
-				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining)})
+				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining, updatesTooLarge)})
 			// The host consumes only the updates the cell was shown whole.
 			// A cell that failed consumes nothing.
 			if evalErr == nil {
@@ -939,16 +939,16 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 // this desk's agent and maps them into the cell-visible PendingUpdate shape
 // (RLM prompt-as-variable: the payload lives on the frame, not in chat).
 func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingUpdate {
-	out, _ := pendingCellUpdatesWindow(ctx, rt, execCtx)
+	out, _, _ := pendingCellUpdatesWindow(ctx, rt, execCtx)
 	return out
 }
 
 // frameBacklog is what a cell's window left out, or nil when it left nothing.
-func frameBacklog(records int64, updates int) *yaegikernel.FrameBacklog {
-	if records <= 0 && updates <= 0 {
+func frameBacklog(records int64, updates, tooLarge int) *yaegikernel.FrameBacklog {
+	if records <= 0 && updates <= 0 && tooLarge <= 0 {
 		return nil
 	}
-	return &yaegikernel.FrameBacklog{RecordsRemaining: records, UpdatesRemaining: updates}
+	return &yaegikernel.FrameBacklog{RecordsRemaining: records, UpdatesRemaining: updates, UpdatesTooLarge: tooLarge}
 }
 
 // pendingCellUpdatesWindow is pendingCellUpdates cut to the frame's updates
@@ -957,13 +957,17 @@ func frameBacklog(records int64, updates int) *yaegikernel.FrameBacklog {
 // shown whole they overflowed the 4 MiB frame. The host consumes only the
 // updates a cell was shown (noteUpdatesShown, wakeWindowIDs), so an update
 // past the window stays pending for a later window.
-func pendingCellUpdatesWindow(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) ([]yaegikernel.PendingUpdate, int) {
-	shown, remaining := windowUpdatePackets(pendingCellPackets(ctx, rt, execCtx))
+func pendingCellUpdatesWindow(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) ([]yaegikernel.PendingUpdate, int, int) {
+	packets := pendingCellPackets(ctx, rt, execCtx)
+	// An update too large to be shown whole is settled with a visible cause
+	// before the window is cut (update_window.go).
+	tooLarge := rt.settleUnshowableUpdates(ctx, execCtx.RunRecord, packets)
+	shown, remaining := windowUpdatePackets(packets)
 	out := make([]yaegikernel.PendingUpdate, 0, len(shown))
 	for _, u := range shown {
 		out = append(out, pendingUpdateView(u))
 	}
-	return out, remaining
+	return out, remaining, tooLarge
 }
 
 // pendingUpdateView is the update as the cell reads it.

@@ -2089,6 +2089,33 @@ func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, owner
 	return count, nil
 }
 
+// SettleWorkerUpdate terminalizes one mailbox-authority update that can never
+// be shown to its desk (it is too large for a cell frame) with a visible
+// cause: it is marked delivered to runID, its disposition is delivered and its
+// disposition reason is reason. It is not consumed as if read: the reason says
+// it was not.
+func (s *Store) SettleWorkerUpdate(ctx context.Context, ownerID, targetAgentID, updateID, runID, reason string) error {
+	s.workerUpdateMu.Lock()
+	defer s.workerUpdateMu.Unlock()
+	rec, err := s.GetWorkerUpdateOG(ctx, ownerID, strings.TrimSpace(updateID))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("settle worker update: get %s: %w", updateID, err)
+	}
+	if rec.TargetAgentID != strings.TrimSpace(targetAgentID) || rec.LifecycleVersion > 0 || rec.DeliveredToRunID != "" {
+		return nil
+	}
+	now := time.Now().UTC()
+	rec.DeliveredToRunID, rec.DeliveredAt = runID, &now
+	rec.Disposition, rec.DispositionReason = types.UpdateDelivered, strings.TrimSpace(reason)
+	if err := s.CreateWorkerUpdateOG(ctx, rec); err != nil {
+		return fmt.Errorf("settle worker update: put %s: %w", updateID, err)
+	}
+	return s.refreshCoagentMailboxCursorOG(ctx, ownerID, targetAgentID)
+}
+
 // MarkWorkerUpdatesDelivered marks update_coagent records addressed to
 // targetAgentID as consumed by the loop that woke for them.
 func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID, targetAgentID string, updateIDs []string, runID string) error {

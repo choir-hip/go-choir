@@ -189,14 +189,27 @@ func TestFitFrameNeverSplitsASeq(t *testing.T) {
 		t.Fatalf("seqs must be whole or absent: %v", m)
 	}
 
-	// One seq alone over the frame (25 x 200 KiB = 5 MB): it is not shown at
-	// all, so the cursor does not pass any of it, and the frame says it was cut.
+	// One seq alone over the frame (25 x 200 KiB = 5 MB): every record still
+	// reaches the desk, the largest as visible identity stubs until it fits,
+	// so the cursor passes the seq and nothing behind it is unreachable.
 	frame = SessionFrame{ID: "g", Records: group(5, 25)}
-	_, sent, err = fitFrame(frame)
-	if err != nil {
-		t.Fatal(err)
+	raw, sent, err := fitFrame(frame)
+	if err != nil || len(raw) > MaxFramePayload {
+		t.Fatalf("fitFrame: %d bytes, %v", len(raw), err)
 	}
-	if len(sent.Records) != 0 || sent.Backlog == nil || !sent.Backlog.Truncated || sent.Backlog.RecordsRemaining != 25 {
-		t.Fatalf("an over-frame seq must be left out whole and counted: %d records, %+v", len(sent.Records), sent.Backlog)
+	if len(sent.Records) != 25 {
+		t.Fatalf("a lone over-frame seq must be shown, all 25 records: %d", len(sent.Records))
+	}
+	stubs := 0
+	for _, r := range sent.Records {
+		if r.Seq != 5 || r.RecordID == "" {
+			t.Fatalf("a stub must keep its identity: %+v", r.RecordID)
+		}
+		if strings.Contains(r.Body, "record cut") {
+			stubs++
+		}
+	}
+	if stubs == 0 || stubs == 25 {
+		t.Fatalf("expected some, not all, records stubbed (largest first, only until it fits): %d", stubs)
 	}
 }

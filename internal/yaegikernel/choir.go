@@ -1466,6 +1466,9 @@ func (s *ChoirScope) Context() map[string]string {
 		if b.UpdatesRemaining > 0 {
 			out["updates_remaining"] = strconv.Itoa(b.UpdatesRemaining)
 		}
+		if b.UpdatesTooLarge > 0 {
+			out["updates_too_large"] = strconv.Itoa(b.UpdatesTooLarge)
+		}
 		if b.Truncated {
 			out["backlog_truncated"] = "true"
 		}

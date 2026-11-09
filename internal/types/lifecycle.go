@@ -397,6 +397,9 @@ type ReconcileUpdateDeliveryItem struct {
 	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
 	ExpectedRunID            string `json:"expected_run_id"`
 	Exhaust                  bool   `json:"exhaust,omitempty"`
+	// Reason, with Exhaust, is the visible cause the packet terminalizes with
+	// (default delivery_attempts_exhausted).
+	Reason string `json:"reason,omitempty"`
 }
 
 // ReconcileUpdateDeliveryRequest binds pending producer reports to their

@@ -213,3 +213,108 @@ func mailboxWindowCase(t *testing.T, record bool) {
 		}
 	}
 }
+
+// Rule (b): an update that cannot be shown whole is settled with a visible
+// cause, never left at the head of the window and never consumed as if read;
+// the next update is then shown.
+func TestOverFrameUpdateIsSettledWithAVisibleCauseAndTheNextIsShown(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID, targetAgentID := "user-alice", "coagent:toolarge"
+	now := time.Now().UTC()
+	dispatch := func(id string, size int, at time.Duration) {
+		update := types.CoagentSourcePacket{
+			UpdateID: id, OwnerID: ownerID, AgentID: "engineering:impl", TargetAgentID: targetAgentID,
+			ChannelID: "chan-toolarge", TrajectoryID: "traj-toolarge", Role: agentprofile.Engineering,
+			Packet: testCoagentUpdatePacket("evidence_update", id), Content: strings.Repeat("c", size), CreatedAt: now.Add(at),
+		}
+		message := types.ChannelMessage{ChannelID: update.ChannelID, FromAgentID: update.AgentID, ToAgentID: targetAgentID,
+			TrajectoryID: update.TrajectoryID, Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt}
+		if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+			t.Fatalf("dispatch %s: %v", id, err)
+		}
+	}
+	dispatch("update-huge", 3<<20, 0)
+	dispatch("update-small", 10<<10, time.Second)
+	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
+	if err != nil || len(pending) != 2 {
+		t.Fatalf("pending = %d, %v", len(pending), err)
+	}
+	rec := &types.RunRecord{RunID: "run-toolarge", AgentID: targetAgentID, OwnerID: ownerID, ComputerID: "autoputer-test"}
+
+	// The window never has the oversize update at its head, and a wake never
+	// names it.
+	shown, _ := windowUpdatePackets(pending)
+	if len(shown) != 1 || shown[0].UpdateID != "update-small" {
+		t.Fatalf("window = %v, want only update-small", shown)
+	}
+	if ids := wakeWindowIDs(rec, pending); ids["update-huge"] || !ids["update-small"] {
+		t.Fatalf("wake window = %v", ids)
+	}
+
+	if n := rt.settleUnshowableUpdates(ctx, rec, pending); n != 1 {
+		t.Fatalf("settled %d updates, want 1", n)
+	}
+	got, err := s.GetWorkerUpdate(ctx, ownerID, "update-huge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DeliveredAt == nil || got.Disposition != types.UpdateDelivered || got.DispositionReason != UpdateTooLargeToShow {
+		t.Fatalf("the oversize update has no visible fate: %+v", got)
+	}
+	left, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
+	if err != nil || len(left) != 1 || left[0].UpdateID != "update-small" {
+		t.Fatalf("pending after settle = %v, %v; the next update must be next", left, err)
+	}
+	// Idempotent: settling again changes nothing and does not touch the small one.
+	if n := rt.settleUnshowableUpdates(ctx, rec, pending); n != 1 {
+		t.Logf("second settle reported %d", n)
+	}
+	if left, _ := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10); len(left) != 1 {
+		t.Fatalf("a second settle disturbed the pending set: %v", left)
+	}
+}
+
+// Rule (c): the persistent-Management update_coagent mint stamps only the
+// window, and the completion marks only what was stamped and shown. This is
+// the paper's own desk.
+func TestPersistentManagementMintStampsOnlyTheWindow(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "user-alice"
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure management agent: %v", err)
+	}
+	now := time.Now().UTC()
+	content := strings.Repeat("c", 100<<10)
+	for i := 0; i < 30; i++ {
+		update := types.CoagentSourcePacket{
+			UpdateID: fmt.Sprintf("update-pm-%02d", i), OwnerID: ownerID, AgentID: "texture:control",
+			TargetAgentID: managementAgent.AgentID, ChannelID: managementAgent.ChannelID, TrajectoryID: "traj-pm",
+			Role: agentprofile.Texture, Direction: types.LifecyclePacketDirectionControl,
+			Packet: testEffectfulExecutionRequestPacket("work " + fmt.Sprint(i)), Content: content, CreatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+		message := types.ChannelMessage{ChannelID: update.ChannelID, FromAgentID: update.AgentID, ToAgentID: update.TargetAgentID,
+			TrajectoryID: update.TrajectoryID, Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt}
+		if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+			t.Fatalf("dispatch %d: %v", i, err)
+		}
+	}
+	run, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
+	if err != nil || run == nil {
+		t.Fatalf("reconcile: %v, %v", run, err)
+	}
+	stamped := metadataStringSlice(run.Metadata["worker_update_ids"])
+	if len(stamped) == 0 || len(stamped) >= 30 {
+		t.Fatalf("stamped %d of 30 ids, want only the window", len(stamped))
+	}
+	waitForRuntimeRunTerminal(t, rt, run.RunID, ownerID, 10*time.Second)
+	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, managementAgent.AgentID, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 30-len(stamped) {
+		t.Fatalf("%d pending after the run, want the %d past the window", len(pending), 30-len(stamped))
+	}
+}

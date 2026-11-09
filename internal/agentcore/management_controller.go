@@ -375,8 +375,11 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 		metadata["work_item_ids"] = []string{targetWorkItemID}
 	}
 	if !lifecycleControls {
-		ids := make([]string, 0, len(updates))
-		for _, update := range updates {
+		// Stamp only the window the run's wake and frames show: the run
+		// is delivered the ids stamped here, and nothing else.
+		stamped, _ := windowUpdatePackets(updates)
+		ids := make([]string, 0, len(stamped))
+		for _, update := range stamped {
 			if id := strings.TrimSpace(update.UpdateID); id != "" {
 				ids = append(ids, id)
 			}
@@ -834,6 +837,12 @@ func (rt *Runtime) markPersistentManagementRunUpdatesDelivered(ctx context.Conte
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
+	if len(updateIDs) == 0 {
+		return nil
+	}
+	// Only what the run's cells were shown (or the first window), as the
+	// generic completion marks: this path used to mark the whole stamped list.
+	updateIDs = rt.consumableUpdateIDs(ctx, rec, updateIDs)
 	if len(updateIDs) == 0 {
 		return nil
 	}
@@ -2698,10 +2707,13 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord, delivered *activation
 			}
 			seen, seenRevisions := lifecycleInjectionIDsFromRunMemory(rec, entries)
 			delivered.mergeInto(seen, seenRevisions)
+			// Ready only for an update the injector would name: the window,
+			// not the whole backlog (wakeWindowIDs).
+			windowed := wakeWindowIDs(rec, updates)
 			for _, update := range updates {
 				id := strings.TrimSpace(update.UpdateID)
 				if id != "" && !seen[id] {
-					if !coagentUpdateDeliverableForRun(rec, update) {
+					if !windowed[id] || !coagentUpdateDeliverableForRun(rec, update) {
 						continue
 					}
 					return true, nil

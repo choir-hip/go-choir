@@ -2,9 +2,11 @@ package agentcore
 
 import (
 	"context"
+	"log"
 	"strings"
 	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -33,18 +35,80 @@ import (
 // backlog does not starve a window's updates, but a window nobody disposes
 // holds the ones behind it.
 
+// UpdateTooLargeToShow is the visible cause an update is settled with when it
+// cannot be shown whole in a cell frame.
+const UpdateTooLargeToShow = "too_large_to_show"
+
+// unshowableUpdate reports whether an update is too large to be shown whole.
+func unshowableUpdate(u types.CoagentSourcePacket) bool {
+	return yaegikernel.UpdateSize(pendingUpdateView(u)) > yaegikernel.FrameUpdateMaxBytes
+}
+
 // windowUpdatePackets returns the oldest packets whose cell views fit the
-// frame's updates budget, and how many were left out.
+// frame's updates budget, and how many were left out. An update too large to
+// be shown whole is in neither: it is settled (settleUnshowableUpdates), and
+// is never the head of the window, named by a wake, or consumed.
 func windowUpdatePackets(packets []types.CoagentSourcePacket) (shown []types.CoagentSourcePacket, remaining int) {
-	if len(packets) == 0 {
+	showable := make([]types.CoagentSourcePacket, 0, len(packets))
+	views := make([]yaegikernel.PendingUpdate, 0, len(packets))
+	for _, u := range packets {
+		view := pendingUpdateView(u)
+		if yaegikernel.UpdateSize(view) > yaegikernel.FrameUpdateMaxBytes {
+			continue
+		}
+		showable = append(showable, u)
+		views = append(views, view)
+	}
+	if len(showable) == 0 {
 		return nil, 0
 	}
-	views := make([]yaegikernel.PendingUpdate, len(packets))
-	for i, u := range packets {
-		views[i] = pendingUpdateView(u)
-	}
 	kept, remaining := yaegikernel.WindowUpdates(views, yaegikernel.FrameUpdatesBudget)
-	return packets[:len(kept)], remaining
+	return showable[:len(kept)], remaining
+}
+
+// settleUnshowableUpdates settles each update in packets that is too large to
+// be shown whole, with the visible cause too_large_to_show, and returns how
+// many it settled. It is the rule's fate for an item that cannot reach the
+// desk: not held at the head of the window, not re-named by every wake, not
+// consumed as if read. A lifecycle update terminalizes through the
+// delivery-reconcile command (as delivery_attempts_exhausted does); a mailbox
+// update through SettleWorkerUpdate.
+func (rt *Runtime) settleUnshowableUpdates(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) int {
+	if rt == nil || rt.store == nil || rec == nil {
+		return 0
+	}
+	settled := 0
+	for _, u := range packets {
+		if !unshowableUpdate(u) {
+			continue
+		}
+		id := strings.TrimSpace(u.UpdateID)
+		var err error
+		if u.LifecycleVersion > 0 {
+			req := types.ReconcileUpdateDeliveryRequest{
+				OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
+				CommandID:    "too-large-to-show:" + id,
+				TrajectoryID: u.TrajectoryID, TargetAgentID: u.TargetAgentID, MaxAttempts: 1,
+				Items: []types.ReconcileUpdateDeliveryItem{{
+					UpdateID: id, ProducerAgentID: u.AgentID, ProducerUpdateID: u.ProducerUpdateID,
+					ExpectedLifecycleVersion: u.LifecycleVersion, ExpectedRunID: u.DeliveredToRunID,
+					Exhaust: true, Reason: UpdateTooLargeToShow,
+				}},
+			}
+			if req.CommandDigest, err = store.ComputeReconcileUpdateDeliveryDigest(req); err == nil {
+				_, err = rt.store.ReconcileUpdateDelivery(ctx, req)
+			}
+		} else {
+			err = rt.store.SettleWorkerUpdate(ctx, rec.OwnerID, u.TargetAgentID, id, rec.RunID, UpdateTooLargeToShow)
+		}
+		if err != nil {
+			log.Printf("desk cell: settle too-large update %s for %s: %v", id, rec.AgentID, err)
+			continue
+		}
+		log.Printf("desk cell: update %s for %s is too large to show in a cell frame; settled as %s", id, rec.AgentID, UpdateTooLargeToShow)
+		settled++
+	}
+	return settled
 }
 
 // wakeWindowIDs is the ids of the deliverable updates a cell's frame would
