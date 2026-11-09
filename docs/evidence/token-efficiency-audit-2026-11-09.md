@@ -15,6 +15,44 @@ shared brief is `brief.md` there. The first measurement is
 [paper-token-budget-2026-11-09.md](paper-token-budget-2026-11-09.md), corrected
 below. No paid calls were made and nothing was posted to any computer.
 
+## Owner rulings on this audit (2026-11-09, afternoon)
+
+The owner read the levers and ruled. Where a lever below conflicts, the ruling
+wins; the affected levers are marked.
+
+- **Never batch between Texture and other desks.** "We do not want to be
+  batching the research to texture, interim wakes ... the interim messages are
+  the whole system. That's the whole value prop. That's how you actually have
+  relatively live updating supervision surface while you're working in the
+  background."
+- **Texture keeps its history.** "I don't want to be making texture stateless
+  or forget its history. We just need to make sure that when another desk wakes
+  texture, we're properly using the warm cache." Lever 5 is withdrawn. A wake
+  appends to Texture's prompt context and reads the cache.
+- **Never trim tool results.** "We absolutely should not be trimming tool
+  results. That breaks caching." Caching is assumed on everywhere; crouton is
+  free and does not matter. The "trim on routes that cannot cache" clause of
+  lever 3 is withdrawn. Returning less in the first place is allowed; cutting
+  it later is not.
+- **Research: search, read and the interim send to Texture in one cell.**
+  Lever 6 stands in that form: fewer model calls, the same interims, none
+  delayed.
+- **Progressive disclosure, cache-aware.** Prompts explain how the REPL works,
+  and the model finds verbs from the REPL as it needs them (lever 8).
+- **Review every system prompt** for simplification with behaviour held
+  constant; management's is the first suspect.
+- **Claude delegate: delegate more, not less.** It explores the repo before
+  or instead of being briefed with pasted findings. Open investigation:
+  Claude Code as a desk through an MCP server that sends and receives desk
+  messages.
+- **The corpus search 403 is a bug to root-cause now.**
+- **Jev parallelism is tabled** until its own document is settled (levers 10
+  and 11 wait on it).
+
+Follow-up investigations for these rulings are in
+[token-efficiency-2026-11-09/followup/](token-efficiency-2026-11-09/followup/)
+as they land.
+
 ## The target
 
 The test every lever is ranked against: **the paper runs on Haiku 5.5 or
@@ -80,9 +118,8 @@ against the ~25M/h left once the management fix is live.
    hit rate 92%, intake 86%, texture 73% (overhead-and-caching.md,
    research.md). Crouton cannot cache, so this is a routing decision, and the
    natural moment is when crouton's free week ends. Rule from the measurements:
-   **on a caching endpoint keep history append-only and do not trim it**
-   (trimming breaks the cached prefix and costs more); trim old tool output
-   only on routes that cannot cache.
+   **keep history append-only and never trim it** (trimming breaks the
+   cached prefix and costs more). *Owner ruling: no trimming on any route.*
 4. **Management retry budget.** A wake that commits no act after two
    activations closes with a visible fate instead of being retried. The wedge
    was retried 175–183 times; this caps any future wedge at about 0.2M tokens
@@ -91,14 +128,17 @@ against the ~25M/h left once the management fix is live.
 
 ### Tier 2: fewer calls per unit of work
 
-5. **Texture as a stateless single-call wake.** Fresh run per wake, source
+5. **Withdrawn by owner ruling (Texture keeps its history; wakes append to
+   the warm cache).** As first written: Texture as a stateless single-call
+   wake. Fresh run per wake, source
    excerpts and the Cast shape in the first turn, the verb list trimmed: about
    8k tokens per wake against 45k, **−80% of Texture**, about 10% of the paper
    now and 20% after the wedge (texture.md, communication.md). Quality risk
    low to medium: the frame must carry the owner's directions and open casts
    that the carried conversation carries today. Diff-based revisions are not
    a lever (81% of each revision is rewritten; documents are small).
-6. **Research: one search-wait-read digest cell.** Most of a run's 18.5 calls
+6. **Research: one search-wait-read-send cell** (owner ruling: the interim
+   send to Texture is in the same cell and is never batched or delayed). Most of a run's 18.5 calls
    are 100-token micro-steps that each resend 10–28k tokens; batching to
    about 8 calls saves 55–65% of research, 17% of the paper now, 35% after the
    wedge (research.md L2). With it: return only the blocks that match the Cast
@@ -166,7 +206,9 @@ levers:
 
 ## What this adds up to
 
-Physics, after the wedge, with levers 3, 5, 6, 7 and 10:
+Physics, after the wedge, with levers 3, 5, 6, 7 and 10 as first written
+(lever 5 is now withdrawn; with Texture carried and cached instead, its 5.5M/h
+stays raw but is mostly cache-read, which adds about $1 a day on Haiku):
 
 - research about 14.6M/h → about 5.5M/h raw; texture 5.5 → about 1.1; intake
   model runs 3.2 → about 1; healthy management 1–2; so about 9M/h raw against
