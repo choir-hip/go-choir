@@ -428,9 +428,69 @@ func WithQuotaLedger(l *QuotaLedger) ToolLoopOption {
 
 // QuotaLedger records which models are known to be out of quota, until when.
 // Safe for concurrent runs; a nil ledger records nothing.
+//
+// It is also the computer's availability record: a model that failed in a way
+// that moves a run to another pool member (a 5xx, a plain 429, a timeout, an
+// open circuit) is demoted here too, with a hold that doubles on each
+// consecutive failure and ends on its first success, so the next run, on any
+// desk of the computer, goes straight past it (docs/problems/pool-routing-
+// walks-known-dead-members-2026-11-09.md). Runtime knowledge, not setting.
 type QuotaLedger struct {
-	mu    sync.Mutex
-	until map[string]time.Time
+	mu      sync.Mutex
+	until   map[string]time.Time
+	strikes map[string]int
+}
+
+// How long a model that failed (not a quota, which names its own reset) is
+// held: failureHoldBase after the first failure, doubling per consecutive
+// failure up to failureHoldCap.
+const (
+	failureHoldBase = time.Minute
+	failureHoldCap  = 15 * time.Minute
+)
+
+// Demote records a failure of sel at now and holds it for the doubled
+// failure hold; it returns the time the hold ends. A hold already longer
+// (a quota reset) is kept.
+func (l *QuotaLedger) Demote(sel provideriface.LLMSelection, now time.Time) time.Time {
+	if l == nil {
+		return time.Time{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.until == nil {
+		l.until = map[string]time.Time{}
+	}
+	if l.strikes == nil {
+		l.strikes = map[string]int{}
+	}
+	id := servingSelectionID(sel)
+	hold := failureHoldBase
+	for n := l.strikes[id]; n > 0 && hold < failureHoldCap; n-- {
+		hold *= 2
+	}
+	hold = min(hold, failureHoldCap)
+	if l.strikes[id] < 16 {
+		l.strikes[id]++
+	}
+	until := now.Add(hold)
+	if cur := l.until[id]; cur.After(until) {
+		until = cur
+	}
+	l.until[id] = until
+	return until
+}
+
+// Succeed records that sel answered: its hold and its failure count end.
+func (l *QuotaLedger) Succeed(sel provideriface.LLMSelection) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	id := servingSelectionID(sel)
+	delete(l.until, id)
+	delete(l.strikes, id)
+	l.mu.Unlock()
 }
 
 // NewQuotaLedger returns an empty ledger.
@@ -1094,6 +1154,21 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, noImageModelError(err))
 					}
 				}
+				// The member failed past its own retries: the computer knows
+				// it, so no run goes to it until its hold ends. The failover
+				// goes to the first later member the ledger does not hold;
+				// all held, the next in order.
+				now := providerQuotaNow()
+				ledger.Demote(activeLLMConfig, now)
+				for k := idx; k < len(options.fallbackLLMConfigs); k++ {
+					if messagesCarryImage(messages) && !modelcatalog.SupportsImage(options.fallbackLLMConfigs[k].Model) {
+						continue
+					}
+					if ledger.Until(options.fallbackLLMConfigs[k], now).IsZero() {
+						idx = k
+						break
+					}
+				}
 				// Only an error the backoff would have waited on owes the
 				// last member a round: a 5xx or an open circuit never had one.
 				if IsProviderRateLimitError(err) && failsOverWithoutRetry(err) {
@@ -1145,6 +1220,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			}
 			incident, incidentSince, incidentRounds = nil, time.Time{}, 0
 		}
+
+		// The model answered: it is available, whatever the ledger held.
+		ledger.Succeed(activeLLMConfig)
 
 		// Accumulate token usage.
 		totalUsage.Add(resp.Usage)

@@ -237,26 +237,14 @@ func TestAssignSyntheticLunaSplitsOneToOneAndNeverFailsOver(t *testing.T) {
 	if syn < 1800 || syn > 2200 || syn+luna != 4000 {
 		t.Fatalf("split = %v, want about 2000 each of 4000", seen)
 	}
-	// The default pool (owner 2026-11-05) splits iceman, beam, crouton,
-	// flint, nemotron and luna one share each; each thread fails over to the
-	// other six members, and no thread starts on Synthetic, a fallback-only
-	// member.
-	defaultSeen := map[string]int{}
-	for i := 0; i < 6000; i++ {
+	// The default pool (owner 2026-11-09) leads with crouton-alpha, which
+	// takes every thread; the other five members and Synthetic are
+	// fallback-only, in pool order, so no thread starts on a member that is
+	// not the first and each has the other six as fallbacks.
+	for i := 0; i < 600; i++ {
 		chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, fmt.Sprintf("thread-%d", i))
-		defaultSeen[chosen.Model]++
-		if len(fallbacks) != 6 || chosen.Provider == "synthetic" {
+		if chosen.Model != "stealth/crouton-alpha" || len(fallbacks) != 6 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[5].Provider != "synthetic" {
 			t.Fatalf("default pool thread-%d: %+v with fallbacks %+v", i, chosen, fallbacks)
-		}
-		for _, fb := range fallbacks {
-			if fb.Model == chosen.Model {
-				t.Fatalf("default pool thread-%d falls back to its own member: %+v", i, fallbacks)
-			}
-		}
-	}
-	for _, m := range []string{"iceman-contributor-free", "beam-free", "stealth/crouton-alpha", "recursive/flint-v1.0:free", "nvidia/nemotron-3.5-super-vl:free", "gpt-6-luna"} {
-		if d := defaultSeen[m]; d < 850 || d > 1150 {
-			t.Fatalf("default split = %v, want about 1000 each of 6000", defaultSeen)
 		}
 	}
 	// A concrete member named directly has no fallback either.

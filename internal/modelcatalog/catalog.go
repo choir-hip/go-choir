@@ -400,15 +400,26 @@ func (m PoolMember) SlotWeight() int {
 // crouton-alpha, flint and nemotron, and gpt-6-luna, one share each,
 // failing over in order; Synthetic's DeepSeek 1017 (its quota ran out on
 // 2026-11-05) is a fallback-only last member.
+// Owner 2026-11-09: "it shouldn't cycle through all these models that we
+// already know in advance are not going to work. It should go straight to the
+// one that does work, which currently is the Crouton Alpha ... we should be
+// using Crouton Alpha for almost everything right now, and we can also use
+// Synthetic DeepSeek ... seldomly, or save it for getting the timing of
+// things" (a benchmark). The default pool leads with crouton-alpha, the only
+// member assigned threads; iceman, beam, flint, nemotron and luna stay behind
+// it as fallback-only members and Synthetic stays last. The tool loop skips a
+// member the computer's availability record holds (quota or a recent failure)
+// until its hold ends (docs/problems/pool-routing-walks-known-dead-members-
+// 2026-11-09.md).
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
-			{Provider: "opencode-go", Model: "beam-free", Weight: 1},
 			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", Weight: 1},
-			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", Weight: 1},
-			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+			{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
+			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
+			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
+			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 		SyntheticLunaPool: {

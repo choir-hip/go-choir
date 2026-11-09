@@ -27,15 +27,15 @@ import "testing"
 // out moves to the other.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
-	// Owner 2026-11-05: iceman, beam, crouton, flint, nemotron and luna,
-	// one share each, Synthetic's DeepSeek 1017 a fallback-only last member.
+	// Owner 2026-11-09: crouton-alpha leads and takes every thread; the
+	// rest are fallback-only behind it, Synthetic's DeepSeek 1017 last.
 	want := []PoolMember{
-		{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
-		{Provider: "opencode-go", Model: "beam-free", Weight: 1},
 		{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
-		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", Weight: 1},
-		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", Weight: 1},
-		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+		{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
+		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
+		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
+		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
+		{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
 		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 	}
 	if len(pool) != len(want) {
@@ -139,7 +139,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 7 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1}) || !d[6].FallbackOnly {
+	if d := Pools()[DefaultPool]; len(d) != 7 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) || !d[6].FallbackOnly {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {
