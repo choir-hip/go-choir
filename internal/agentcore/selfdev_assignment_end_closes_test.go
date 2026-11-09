@@ -649,3 +649,44 @@ func TestSlotReplayClosesTheOperation(t *testing.T) {
 		t.Fatalf("operation after the slot replay = %s %q, want failed", operation.State, operation.TerminalError)
 	}
 }
+
+// Failure modes of closing a settled trajectory's candidates: (1) a frozen
+// candidate of the settled trajectory stays open and holds deploys; (2) the
+// close takes another trajectory's candidate; (3) the close takes an
+// awaiting_approval candidate, which is the owner's decision; (4) a second
+// settle observation re-fails or errors on an already closed row.
+func TestSettledTrajectoryClosesItsUndecidedCandidatesOnly(t *testing.T) {
+	ctx := context.Background()
+	rt, _, assignment := assignmentEndFixture(t, "owner-settled-close")
+	frozenID := seedAssignmentOperation(t, rt, assignment, selfdev.StateFrozen, "verify tray-1: legacy screens bundle; shots are taken after the host build")
+	now := time.Now().UTC()
+	seed := func(id, trajectory, state string) {
+		t.Helper()
+		if _, err := rt.store.DB().Exec(`INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, verifier_refs_json, bundle_digest, desired_head, effective_head, state, last_intent_error, created_at, updated_at) VALUES (?, ?, ?, '', ?, '', '', '[]', '', '', '', ?, '', ?, ?)`,
+			id, assignment.Binding.ComputerID, "key-"+id, trajectory, state, now, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("op-other-trajectory", "some-other-trajectory", selfdev.StateFrozen)
+	seed("op-awaiting", assignment.Binding.TrajectoryID, selfdev.StateAwaitingApproval)
+	for i := 0; i < 2; i++ {
+		rt.closeSettledTrajectoryCandidates(ctx, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID)
+	}
+	state := func(id string) selfdev.Operation {
+		t.Helper()
+		op, err := rt.selfdevOperations.Get(ctx, assignment.Binding.ComputerID, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return op
+	}
+	if op := state(frozenID); op.State != selfdev.StateFailed || op.TerminalError != selfdevSettledTrajectoryCause {
+		t.Fatalf("the settled trajectory's frozen candidate = %s %q, want failed %q", op.State, op.TerminalError, selfdevSettledTrajectoryCause)
+	}
+	if op := state("op-other-trajectory"); op.State != selfdev.StateFrozen {
+		t.Fatalf("another trajectory's candidate = %s, want frozen", op.State)
+	}
+	if op := state("op-awaiting"); op.State != selfdev.StateAwaitingApproval {
+		t.Fatalf("an awaiting_approval candidate = %s, want left to the owner", op.State)
+	}
+}

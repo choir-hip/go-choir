@@ -95,6 +95,10 @@ type Store struct {
 	// terminal state (SetRunTerminalObserver); the lease service ends the
 	// run's leases through it (MA3.4), so no terminal path can forget to.
 	runTerminal atomic.Pointer[func(runID string)]
+	// trajectorySettled is told of every trajectory the lifecycle settlement
+	// reducer settles (SetTrajectorySettledObserver), so the runtime can close
+	// what the trajectory left open (its undecided self-development candidates).
+	trajectorySettled atomic.Pointer[func(ownerID, computerID, trajectoryID string)]
 	// retireCited is the cited-event-id snapshot (a JSON array) of the
 	// telemetry run in flight, nil outside one (telemetry_retire.go).
 	retireCited atomic.Pointer[string]
@@ -387,6 +391,9 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 		}
 		req.CommandDigest, _ = ComputeSettleLifecycleTrajectoryDigest(req)
 		if _, err = s.SettleLifecycleTrajectory(ctx, req); err == nil {
+			if f := s.trajectorySettled.Load(); f != nil && *f != nil {
+				(*f)(req.OwnerID, req.ComputerID, req.TrajectoryID)
+			}
 			return nil
 		}
 		if !errors.Is(err, ErrConcurrentStateChange) {
@@ -503,6 +510,12 @@ func (s *Store) UpdateRunWithEvent(ctx context.Context, rec types.RunRecord, eve
 // (the activation paths, the management controller, the boot closures) and
 // through TerminalizeRun.
 func (s *Store) SetRunTerminalObserver(f func(runID string)) { s.runTerminal.Store(&f) }
+
+// SetTrajectorySettledObserver registers f, called after the lifecycle
+// settlement reducer settles a trajectory (not on replay of a settled one).
+func (s *Store) SetTrajectorySettledObserver(f func(ownerID, computerID, trajectoryID string)) {
+	s.trajectorySettled.Store(&f)
+}
 
 func (s *Store) noteRunTerminal(runID string) {
 	if f := s.runTerminal.Load(); f != nil && *f != nil && strings.TrimSpace(runID) != "" {

@@ -710,6 +710,11 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		// A closed round with a scorable desk-to-desk Cast is judged
 		// (desk_cast_judge.go).
 		s.SetDeskCastOutcomeNotifier(rt.noteDeskCastOutcome)
+		// A settled trajectory closes its undecided candidates
+		// (selfdev_settled_trajectory.go).
+		s.SetTrajectorySettledObserver(func(ownerID, computerID, trajectoryID string) {
+			go rt.closeSettledTrajectoryCandidates(context.Background(), computerID, trajectoryID)
+		})
 	}
 	if operations, err := selfdev.NewStore(s, s); err == nil {
 		rt.selfdevOperations = operations

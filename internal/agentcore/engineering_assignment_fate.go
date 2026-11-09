@@ -521,10 +521,16 @@ func (rt *Runtime) failTrajectorySelfdevOperations(ctx context.Context, computer
 // Store's write mutex (and, on the reconcile paths,
 // engineeringAssignmentOpenMu) forever.
 func (rt *Runtime) failSelfdevOperation(ctx context.Context, operation selfdev.Operation, reason string) {
+	rt.failSelfdevOperationFrom(ctx, operation, reason, selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested)
+}
+
+// failSelfdevOperationFrom is failSelfdevOperation restricted to the states in
+// closable, re-read on every attempt: a state that moved out of the set (a
+// verdict that took a verified candidate to its owner's decision) is left alone.
+func (rt *Runtime) failSelfdevOperationFrom(ctx context.Context, operation selfdev.Operation, reason string, closable ...string) {
 	ctx, cancel := selfdevCloseContext(ctx)
 	defer cancel()
 	trimmedReason := strings.TrimSpace(reason)
-	closable := []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested}
 	for attempt := 0; attempt < selfdevCloseAttempts; attempt++ {
 		current, err := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
 		if err != nil {

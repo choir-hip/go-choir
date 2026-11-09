@@ -130,6 +130,7 @@ func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context)
 		rt.markSelfDevelopmentOperationsInterruptedAfterCrash(ctx)
 	}
 	rt.closeUndecidedSelfDevelopmentOperationsAtBoot(ctx, computerID)
+	rt.closeSettledTrajectoryCandidatesAtBoot(ctx, computerID)
 	if planned {
 		return
 	}

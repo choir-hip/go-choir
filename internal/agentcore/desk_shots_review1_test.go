@@ -233,11 +233,24 @@ func TestVerifyOfAPackageBundleWithScreensNeedsFindingsAndSeenScreens(t *testing
 	if _, err := reduce.commitVerifyIntent(ctx, intent(both)); err != nil && (strings.Contains(err.Error(), "carries screens") || strings.Contains(err.Error(), "run's memory") || strings.Contains(err.Error(), "legacy screens")) {
 		t.Fatalf("verify with findings and seen screens = %v", err)
 	}
-	// (d) a platform bundle with screens and no plan is refused.
+	// (d) a platform bundle with screens and no plan can never pass: Verify
+	// records a fail verdict (a terminal fate), it does not leave the
+	// candidate frozen behind a refusal.
 	if _, err := rt.store.DB().Exec(`UPDATE self_development_operations SET kind = '' WHERE operation_id = ?`, operationID); err != nil {
 		t.Fatal(err)
 	}
-	refused(both, "legacy screens bundle")
+	if _, err := reduce.commitVerifyIntent(ctx, intent(both)); err != nil && strings.Contains(err.Error(), "legacy screens bundle") {
+		t.Fatalf("a legacy screens bundle stays a refusal that holds the candidate frozen: %v", err)
+	}
+	// The fixture has no verdict authority, so the verdict stops there; what
+	// matters is that it reached the verdict instead of the stamped refusal.
+	after, getErr := rt.selfdevOperations.Get(ctx, assignment.Binding.ComputerID, operationID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if strings.Contains(after.LastIntentError, "legacy screens bundle") || !strings.Contains(after.LastIntentError, "verification authority unavailable") {
+		t.Fatalf("a legacy screens bundle did not reach the fail verdict: %q", after.LastIntentError)
+	}
 }
 
 var _ = time.Second

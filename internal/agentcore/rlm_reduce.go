@@ -1883,14 +1883,19 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if decision == "pass" && operation.State == selfdev.StateFrozen {
 		bundle, _, readErr := readBoundSelfDevelopmentBundle(filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest), operation)
 		if readErr == nil {
-			refusal := verifyShotRefusal(operation, bundle)
-			if refusal == "" && len(bundle.Screens) > 0 {
-				refusal = r.verifyScreensRefusal(ctx, bundle, in.ShotFindings)
-			}
-			if refusal != "" {
-				reason := fmt.Sprintf("verify %s: %s", in.LocalID, refusal)
-				stamp(reason)
-				return nil, fmt.Errorf("reduce: %s", reason)
+			// A refusal that depends only on the frozen bundle (a legacy
+			// screens bundle, an oversize plan) can never pass on a retry: it
+			// is a fail verdict, so the candidate gets a terminal fate and the
+			// engineer the rejection, not a frozen hold on every deploy.
+			if refusal := verifyShotRefusal(operation, bundle); refusal != "" {
+				decision = "fail"
+				verdictExtra[verdictReasonKey] = fmt.Sprintf("verify %s: %s", in.LocalID, refusal)
+			} else if len(bundle.Screens) > 0 {
+				if refusal = r.verifyScreensRefusal(ctx, bundle, in.ShotFindings); refusal != "" {
+					reason := fmt.Sprintf("verify %s: %s", in.LocalID, refusal)
+					stamp(reason)
+					return nil, fmt.Errorf("reduce: %s", reason)
+				}
 			}
 			if bundle.ShotPlan != nil && !rebase {
 				request := ""
