@@ -102,6 +102,11 @@ type Subject struct {
 	// update (HasPrior).
 	PriorCeiling []string
 	HasPrior     bool
+	// OwnShell: the record is the owner's own-track update of a package the
+	// base image provides (pkgrelease.Record.OwnShellUpdate), published by
+	// decision (plan 12.1, decision of 2026-11-08). Its ui.shell grant is
+	// reviewed by management instead of refused.
+	OwnShell bool
 }
 
 // CapabilityKey is one ceiling entry: grant(args), args sorted.
@@ -203,7 +208,9 @@ func (p Plan) NeedsReview() bool { return len(p.Seats) > 0 && p.Refusal == "" }
 //	I0 to I1                  mechanical      management's verdict
 //	I2                        management's verdict (both)
 //	I3                        management's verdict (both)
-//	I4                        first-party only: refused for a Library release
+//	I4                        first-party only: refused for a Library release,
+//	                          except ui.shell on an owner's own-track base
+//	                          update (OwnShell): management's verdict
 //
 // The second model family a thin publisher at I3 used to get is gone, a
 // deliberate reduction: management's chain already fails over across
@@ -219,9 +226,29 @@ func PlanFor(s Subject, strong bool) Plan {
 	case types.ImpactI2, types.ImpactI3:
 		p.Seats = one
 	default:
+		if s.OwnShell && onlyShellAtI4(s.Manifest) {
+			p.Seats = one
+			break
+		}
 		p.Refusal = "an I4 grant is first-party only; a Library release cannot be reviewed into one"
 	}
 	return p
+}
+
+// onlyShellAtI4 reports whether ui.shell is the manifest's only I4 grant and
+// every grant has a known impact class: an own-track base update may hold
+// ui.shell, and nothing else at I4.
+func onlyShellAtI4(m apppackage.Manifest) bool {
+	for _, c := range m.Capabilities {
+		impact, ok := trust.GrantImpact(c.Grant)
+		if !ok {
+			return false
+		}
+		if impact == types.ImpactI4 && c.Grant != apppackage.GrantUIShell {
+			return false
+		}
+	}
+	return true
 }
 
 // Flow renders the source-to-sink paths the ceiling opens as sentences (the

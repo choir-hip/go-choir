@@ -169,6 +169,7 @@ func (rt *Runtime) installReviewPlanFor(ctx context.Context, ownerID, computerID
 	if installreview.Passed(checks) {
 		subject.Manifest = parsed
 	}
+	subject.OwnShell = rec.OwnShellUpdate()
 	plan := installreview.PlanFor(subject, rt.publisherStrong(ctx, ownerID, computerID, subject.Publisher, subject.Manifest))
 	return subject, checks, plan
 }

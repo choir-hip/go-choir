@@ -102,6 +102,19 @@ func TestPlanIsOneDeskVerdictAtEveryReviewableLevel(t *testing.T) {
 	if p.Refusal == "" {
 		t.Fatalf("an I4 grant from a Library release is planned: %+v", p)
 	}
+	// The owner's own-track update of a base shell package (decision of
+	// 2026-11-08, plan 12.1) is not refused: management's verdict is owed.
+	own := subjectOf(manifestWith(t, `{"grant":"ui.shell"}`, ""))
+	own.OwnShell = true
+	if p := PlanFor(own, true); p.Refusal != "" || strings.Join(p.Seats, ",") != SeatDesk {
+		t.Fatalf("an own-track base shell update is not reviewed by management: %+v", p)
+	}
+	// OwnShell does not admit an unknown grant.
+	odd := subjectOf(manifestWith(t, `{"grant":"ui.mystery"}`, ""))
+	odd.OwnShell = true
+	if p := PlanFor(odd, true); p.Refusal == "" {
+		t.Fatalf("OwnShell admitted an unknown grant: %+v", p)
+	}
 	// An unknown grant fails closed to I4.
 	p = PlanFor(subjectOf(manifestWith(t, `{"grant":"ui.mystery"}`, "")), true)
 	if p.Risk != types.ImpactI4 || p.Refusal == "" {
