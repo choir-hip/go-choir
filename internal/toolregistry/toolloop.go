@@ -605,6 +605,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	var completionGuardWaits int
 	var parkAttempts int
 	var partialTextFragments []string
+	var repeats repeatTracker
 
 	appendMessageWithContext := func(appendCtx context.Context, role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
@@ -1427,6 +1428,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
+			stepWaited := false
 			if requiredNextTool == nil && options.batchWait != nil {
 				waited, ok, err := options.batchWait(ctx, resp.ToolCalls, toolResults)
 				if err != nil {
@@ -1443,6 +1445,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					return combinedFinalText(resp.Text), totalUsage, nil
 				}
 				if ok && waited.Continue {
+					stepWaited = true
 					completionGuardWaits++
 					if completionGuardWaits > maxCompletionGuardWaits {
 						return "", totalUsage, fmt.Errorf("tool loop: completion guard waited %d times", maxCompletionGuardWaits)
@@ -1453,6 +1456,29 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
+			// No-progress rule: the same call with the same result again and
+			// again is told once, then stopped with a visible fate. A step that waited
+			// for an outside event (a job) let time pass, so it is not a repeat.
+			verdict, repTool, repN := repeatOK, "", 0
+			if !stepWaited {
+				verdict, repTool, repN = repeats.observe(resp.ToolCalls, toolResults)
+			}
+			switch verdict {
+			case repeatNotice:
+				noticeMsg, _ := json.Marshal(map[string]any{
+					"role":    "user",
+					"content": []any{map[string]any{"type": "text", "text": noProgressNoticeText(repTool, repN)}},
+				})
+				if err := appendMessage(types.RunMemoryRoleRuntimeInjection, noticeMsg); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist no-progress notice: %w", err)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{"tool": repTool, "repeats": repN, "reason": "no_progress_notice"})
+					emit(types.EventRunRetry, "no_progress", payload)
+				}
+			case repeatStop:
+				return "", totalUsage, &NoProgressError{Tool: repTool, Count: repN}
+			}
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
 
 		case "end_turn", "":
@@ -1776,7 +1802,7 @@ func isProviderPreconditionError(err error) bool {
 // limits, 5xx and timeouts, and a model the provider or the catalog does
 // not serve. A malformed request of ours is not one.
 func IsModelFailoverError(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, ErrNoProgress) {
 		return false
 	}
 	if isTransientProviderError(err) || IsProviderRateLimitError(err) || errors.Is(err, context.DeadlineExceeded) {
@@ -1831,7 +1857,7 @@ func stripProviderReplay(messages []json.RawMessage) []json.RawMessage {
 }
 
 func isTransientProviderError(err error) bool {
-	if err == nil {
+	if err == nil || errors.Is(err, ErrNoProgress) {
 		return false
 	}
 	var transient interface{ Transient() bool }
@@ -2053,7 +2079,7 @@ func isCircuitOpenError(err error) bool {
 }
 
 func IsProviderRateLimitError(err error) bool {
-	if err == nil {
+	if err == nil || errors.Is(err, ErrNoProgress) {
 		return false
 	}
 	text := strings.ToLower(err.Error())
