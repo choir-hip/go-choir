@@ -533,7 +533,7 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 		}}
 	}
 
-	ar.Messages = bedrockSanitizeMessages(convertMessages(req.Messages))
+	ar.Messages = bedrockPairToolResults(bedrockSanitizeMessages(convertMessages(req.Messages)))
 	// Bedrock caches only at explicit breakpoints: the system one above
 	// (tools + system) and this one (the history so far).
 	markHistoryCacheBreakpoint(ar.Messages)
@@ -595,6 +595,79 @@ func bedrockSanitizeMessages(msgs []anthropicMessage) []anthropicMessage {
 		}
 		m.Content = kept
 		out = append(out, m)
+	}
+	return out
+}
+
+// bedrockNoToolResult is the result given to a call whose result the history
+// never recorded.
+const bedrockNoToolResult = "(no result was recorded for this call)"
+
+// bedrockPairToolResults makes every tool_use answered in the very next
+// message, which Bedrock requires (400: "tool_use ids were found without
+// tool_result blocks immediately after"). A carried history can end a run on
+// a call whose result was never appended, and the next wake then appends a
+// plain user message. An unanswered call gets a fixed placeholder result,
+// placed first in the next user message, or in a new user message when the
+// next message is not the user's. A tool_result that answers no call in the
+// previous message becomes text. The repair is a pure function of the
+// history, so the cached prefix stays byte-stable.
+func bedrockPairToolResults(msgs []anthropicMessage) []anthropicMessage {
+	out := make([]anthropicMessage, 0, len(msgs)+1)
+	var open []string // calls of the previous message, in order
+	placeholders := func(answered map[string]bool) []anthropicContent {
+		var blocks []anthropicContent
+		for _, id := range open {
+			if !answered[id] {
+				blocks = append(blocks, anthropicContent{Type: "tool_result", ToolUseID: id, Content: bedrockNoToolResult})
+			}
+		}
+		return blocks
+	}
+	for _, m := range msgs {
+		if m.Role != "user" {
+			if len(open) > 0 {
+				out = append(out, anthropicMessage{Role: "user", Content: placeholders(nil)})
+			}
+			open = nil
+			for _, c := range m.Content {
+				if c.Type == "tool_use" {
+					open = append(open, c.ID)
+				}
+			}
+			out = append(out, m)
+			continue
+		}
+		isOpen := map[string]bool{}
+		for _, id := range open {
+			isOpen[id] = true
+		}
+		answered := map[string]bool{}
+		var results, rest []anthropicContent
+		for _, c := range m.Content {
+			if c.Type != "tool_result" {
+				rest = append(rest, c)
+				continue
+			}
+			if isOpen[c.ToolUseID] && !answered[c.ToolUseID] {
+				answered[c.ToolUseID] = true
+				results = append(results, c)
+				continue
+			}
+			if text := strings.TrimSpace(c.Content); text != "" {
+				rest = append(rest, anthropicContent{Type: "text", Text: "[tool result] " + text})
+			}
+		}
+		content := append(append(placeholders(answered), results...), rest...)
+		open = nil
+		if len(content) == 0 {
+			continue
+		}
+		m.Content = content
+		out = append(out, m)
+	}
+	if len(open) > 0 {
+		out = append(out, anthropicMessage{Role: "user", Content: placeholders(nil)})
 	}
 	return out
 }
