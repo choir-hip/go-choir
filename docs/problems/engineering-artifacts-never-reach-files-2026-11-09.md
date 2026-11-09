@@ -74,3 +74,16 @@ bytes, with types refused outside an allowlist), and the completion names
 the paths so Texture can embed them with the L8 {{image}} and {{file}}
 tokens; or a host-side render tool for Texture. The first keeps engineering
 the maker of artifacts and reuses the screens path.
+
+## Owner correction (2026-11-09, late)
+
+Owner: "No, we can't be wasting time like this. No big startup rituals."
+The first fix brief (give the snapshot its own budget phase) treated the
+copy as legitimate and only moved its cost. That is the wrong frame. The
+copy is the whole store (`VACUUM INTO`), then deletes of the kinds the
+lease does not name, then a scan of every text column: its cost grows
+with the computer, not with what the capsule needs. The redirected fix:
+a spawn copies no store by default (an ordinary assignment such as a PDF
+report names no store kinds); an assignment that does need state gets a
+copy built from only the named kinds' rows, so the copy and its secret
+scan cost what the capsule uses. The launch keeps its own deadline.
