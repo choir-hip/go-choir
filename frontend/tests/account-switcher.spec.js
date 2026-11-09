@@ -206,4 +206,22 @@ test.describe('account switcher', () => {
     await expect(page.locator('[data-app-root], .app-root[data-auth-state="signed_out"]').first()).toBeVisible();
     await expect(page.locator('.app-root')).toHaveAttribute('data-auth-state', 'signed_out');
   });
+
+  test('a single-account logout announces nothing: no sibling reload, no self-reload', async ({ context }) => {
+    await mockServer(context, { signedIn: ['user-alice'], active: 'user-alice' });
+    const a = await context.newPage();
+    const b = await context.newPage();
+    await openDesk(a);
+    await b.goto(BASE_URL);
+    await expect(b.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible();
+    let bLoads = 0;
+    let aLoads = 0;
+    b.on('load', () => { bLoads += 1; });
+    a.on('load', () => { aLoads += 1; });
+    await a.locator('[data-prompt-surface-logout]').click();
+    await expect(a.locator('.app-root')).toHaveAttribute('data-auth-state', 'signed_out');
+    await a.waitForTimeout(1500);
+    expect(bLoads).toBe(0);
+    expect(aLoads).toBe(0);
+  });
 });

@@ -29,7 +29,7 @@
   import DeviceApproveRoute from './lib/DeviceApproveRoute.svelte';
   import { legacyAutopaperRedirect } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
-  import { announceSwitch, markReturning, onAccountSwitched, scopedKey, setLastUserId, switchAccount } from './lib/accounts.js';
+  import { markReturning, onAccountSwitched, scopedKey, setLastUserId, switchAccount } from './lib/accounts.js';
   import { prepareAccountSwitch } from './lib/shell-services';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
@@ -328,7 +328,6 @@
           // The switch failed: stay signed out; the account stays in the menu.
         }
       }
-      announceSwitch('');
     } catch (_err) {
       // Logout request failed — still transition to signed-out
       // state locally so the user is not stuck in the shell.

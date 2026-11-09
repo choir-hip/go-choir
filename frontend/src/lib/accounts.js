@@ -16,6 +16,9 @@ const LAST_USER_KEY = 'choir.auth.lastUserId';
 const RECONCILE_KEY = 'choir.accounts.reconcile';
 const RECONCILE_WINDOW_MS = 15000;
 
+// Every broadcast carries the sender's tab id; a tab ignores its own.
+const TAB_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
 // ---------------------------------------------------------------------------
 // Per-user storage keys
 // ---------------------------------------------------------------------------
@@ -112,14 +115,14 @@ export function announceSwitch(userId) {
   try {
     if (typeof BroadcastChannel !== 'undefined') {
       const ch = new BroadcastChannel(CHANNEL_NAME);
-      ch.postMessage({ type: 'account-switched', user_id: userId || '' });
+      ch.postMessage({ type: 'account-switched', user_id: userId || '', from: TAB_ID });
       ch.close();
     }
   } catch (_err) {
     // The storage event below is the fallback.
   }
   try {
-    window.localStorage?.setItem(SWITCHED_STORAGE_KEY, JSON.stringify({ user_id: userId || '', at: Date.now() }));
+    window.localStorage?.setItem(SWITCHED_STORAGE_KEY, JSON.stringify({ user_id: userId || '', from: TAB_ID, at: Date.now() }));
   } catch (_err) {
     // Neither channel: the account_switched session result is the backstop.
   }
@@ -132,7 +135,7 @@ export function onAccountSwitched(callback) {
     if (typeof BroadcastChannel !== 'undefined') {
       ch = new BroadcastChannel(CHANNEL_NAME);
       ch.onmessage = (event) => {
-        if (event?.data?.type === 'account-switched') callback(event.data.user_id || '');
+        if (event?.data?.type === 'account-switched' && event.data.from !== TAB_ID) callback(event.data.user_id || '');
       };
     }
   } catch (_err) {
@@ -141,7 +144,8 @@ export function onAccountSwitched(callback) {
   const onStorage = (event) => {
     if (event.key !== SWITCHED_STORAGE_KEY || !event.newValue) return;
     try {
-      callback(JSON.parse(event.newValue).user_id || '');
+      const data = JSON.parse(event.newValue);
+      if (data.from !== TAB_ID) callback(data.user_id || '');
     } catch (_err) {
       callback('');
     }

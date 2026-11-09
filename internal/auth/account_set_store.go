@@ -62,6 +62,10 @@ func rotateTx(tx *sql.Tx, oldID string, ns *RefreshSession) error {
 	if _, err := tx.Exec("UPDATE account_set_member SET refresh_session_id = ? WHERE refresh_session_id = ?", ns.ID, oldID); err != nil {
 		return fmt.Errorf("rotate refresh session: repoint member: %w", err)
 	}
+	// A renewing set is in use: keep it ahead of the idle sweep.
+	if _, err := tx.Exec("UPDATE account_set SET last_used_at = ? WHERE id IN (SELECT set_id FROM account_set_member WHERE refresh_session_id = ?)", time.Now().UTC(), ns.ID); err != nil {
+		return fmt.Errorf("rotate refresh session: touch set: %w", err)
+	}
 	return nil
 }
 
@@ -121,6 +125,13 @@ func (s *Store) AddAccountToSet(presentedHash, newHash, userID, sessionID string
 		err = tx.QueryRow("SELECT id FROM account_set WHERE handle_hash = ?", presentedHash).Scan(&setID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return "", false, fmt.Errorf("add account: find set: %w", err)
+		}
+	}
+	if setID != "" {
+		// The handle rotates on every add: a handle planted in the browser
+		// (cookie tossing) is never kept past the first sign-in.
+		if _, err = tx.Exec("UPDATE account_set SET handle_hash = ? WHERE id = ?", newHash, setID); err != nil {
+			return "", false, fmt.Errorf("add account: rotate handle: %w", err)
 		}
 	}
 	if setID == "" {
@@ -233,10 +244,67 @@ func (s *Store) ListAccountSet(set *AccountSet) ([]AccountListing, error) {
 	}
 	for _, l := range all {
 		if !l.SignedIn {
-			_, _ = s.db.Exec("DELETE FROM account_set_member WHERE set_id = ? AND user_id = ?", set.ID, l.UserID)
+			s.deleteDeadMember(set.ID, l.UserID)
 		}
 	}
 	return out, nil
+}
+
+// deleteDeadMember deletes a member only while it still has no live session
+// (a switch may have revived it since it was read), then keeps the set's
+// active_user_id pointing at a member. It returns the rows deleted.
+func (s *Store) deleteDeadMember(setID, userID string) int64 {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.Exec(`DELETE FROM account_set_member WHERE set_id = ? AND user_id = ? AND NOT EXISTS
+		(SELECT 1 FROM refresh_sessions r WHERE r.id = account_set_member.refresh_session_id AND r.expires_at > ?)`,
+		setID, userID, time.Now().UTC())
+	if err != nil {
+		return 0
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		if err := repairSetTx(tx, setID); err != nil {
+			return 0
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0
+	}
+	return n
+}
+
+// repairSetTx drops a set with no members, else points active_user_id at a
+// member (a live one first) when it names none.
+func repairSetTx(tx *sql.Tx, setID string) error {
+	var remaining int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM account_set_member WHERE set_id = ?", setID).Scan(&remaining); err != nil {
+		return err
+	}
+	if remaining == 0 {
+		_, err := tx.Exec("DELETE FROM account_set WHERE id = ?", setID)
+		return err
+	}
+	var named int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM account_set s JOIN account_set_member m
+		ON m.set_id = s.id AND m.user_id = s.active_user_id WHERE s.id = ?`, setID).Scan(&named); err != nil {
+		return err
+	}
+	if named > 0 {
+		return nil
+	}
+	var next string
+	err := tx.QueryRow(`SELECT m.user_id FROM account_set_member m
+		LEFT JOIN refresh_sessions r ON r.id = m.refresh_session_id AND r.expires_at > ?
+		WHERE m.set_id = ? ORDER BY (r.id IS NULL), m.added_at DESC LIMIT 1`, time.Now().UTC(), setID).Scan(&next)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE account_set SET active_user_id = ? WHERE id = ?", next, setID)
+	return err
 }
 
 // RemoveAccountMember deletes a member and, when it was the last, the set.
@@ -325,8 +393,34 @@ func (s *Store) DeleteAccountSet(setID string) error {
 // DeleteAccountMembersForUser removes a user's member rows from every set
 // (used when all of that user's sessions are revoked on every device).
 func (s *Store) DeleteAccountMembersForUser(userID string) error {
-	_, err := s.db.Exec("DELETE FROM account_set_member WHERE user_id = ?", userID)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.Query("SELECT set_id FROM account_set_member WHERE user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+	var sets []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		sets = append(sets, id)
+	}
+	_ = rows.Close()
+	if _, err := tx.Exec("DELETE FROM account_set_member WHERE user_id = ?", userID); err != nil {
+		return err
+	}
+	for _, id := range sets {
+		if err := repairSetTx(tx, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // SweepAccountSets deletes members whose session row is gone or expired and

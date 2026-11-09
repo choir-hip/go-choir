@@ -148,13 +148,8 @@ func (h *Handler) addToAccountSet(w http.ResponseWriter, r *http.Request, user *
 	if oldTokenHash != "" {
 		h.revokeRotatedGraceChain(oldTokenHash)
 	}
-	raw := newRaw
-	if !created {
-		if c, cerr := r.Cookie(AccountsCookieName); cerr == nil {
-			raw = c.Value
-		}
-	}
-	h.setAccountsCookie(w, raw)
+	_ = created
+	h.setAccountsCookie(w, newRaw)
 }
 
 // revokeRotatedGraceChain deletes the grace entries that lead to the session
@@ -223,6 +218,17 @@ func (h *Handler) accountGateRefuses(r *http.Request, refreshHash string) (bool,
 		}
 	}
 	return false, ""
+}
+
+// accountSwitchedError is the rotation refusal when a switch committed after
+// the renewal passed its first gate.
+type accountSwitchedError struct{ ActiveUserID string }
+
+func (e *accountSwitchedError) Error() string { return "account switched" }
+
+func isAccountSwitched(err error) bool {
+	var e *accountSwitchedError
+	return errors.As(err, &e)
 }
 
 func writeAccountSwitched(w http.ResponseWriter, active string) {
@@ -436,6 +442,8 @@ func (h *Handler) HandleAccountSignout(w http.ResponseWriter, r *http.Request) {
 		if next != "" {
 			resp.NextUserID = next
 			resp.Authenticated = true // the browser stays signed in; the follow-up switch sets the pair
+			// The signed-out account's pair must not linger in the jar.
+			h.clearAuthCookies(w)
 		} else {
 			h.clearAuthCookies(w)
 		}

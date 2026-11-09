@@ -515,6 +515,11 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, oldSession *RefreshSession, user *User) error {
 	h.rotateMu.Lock()
 	defer h.rotateMu.Unlock()
+	// A switch may have committed while this renewal waited for the lock:
+	// re-run the gate under it and write no cookie on refusal.
+	if refused, active := h.accountGateRefuses(r, oldSession.TokenHash); refused {
+		return &accountSwitchedError{ActiveUserID: active}
+	}
 	// A racing rotator already did this one: hand out its session.
 	if grace, ok := h.getRotatedGrace(oldSession.TokenHash); ok {
 		h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
@@ -1374,6 +1379,11 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	if err := h.rotateRefreshSession(w, r, rs, user); err != nil {
 		if errors.Is(err, ErrRotationLost) {
 			writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+			return
+		}
+		var switched *accountSwitchedError
+		if errors.As(err, &switched) {
+			writeAccountSwitched(w, switched.ActiveUserID)
 			return
 		}
 		log.Printf("[auth] operation=session_refresh user_id=%s result=error step=rotate_refresh error=%q", user.ID, err)
