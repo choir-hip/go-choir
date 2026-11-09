@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/toolresidency"
 )
 
 func newEnv(t *testing.T) env {
@@ -43,7 +45,7 @@ func TestResidentAndEvict(t *testing.T) {
 	if res == 0 {
 		t.Skip("no page-cache measurement on this platform or filesystem (mincore reports nothing)")
 	}
-	syncAll() // fadvise drops only clean pages
+	toolresidency.SyncAll() // fadvise drops only clean pages
 	e.evict("toolchain")
 	after, _ := e.resident("toolchain")
 	if after >= res {

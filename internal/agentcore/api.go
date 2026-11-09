@@ -920,6 +920,14 @@ type guestObservabilityResponse struct {
 	// Memory is the guest's /proc/meminfo view, read per request, so a
 	// staging probe reads it here instead of over SSH.
 	Memory *guestMemoryObservability `json:"memory,omitempty"`
+	// MemCachedBytes is /proc/meminfo's Cached in bytes (the page cache the
+	// tool layers' pages count against).
+	MemCachedBytes uint64 `json:"mem_cached_bytes,omitempty"`
+	// ToolLayers is each mounted guest tool layer's page-cache residency, busy
+	// state and last idle eviction, measured per request; empty on the single
+	// image and off Linux. ToolLayerTimer is the idle-eviction schedule.
+	ToolLayers     []toolLayerObservability     `json:"tool_layers"`
+	ToolLayerTimer *toolLayerTimerObservability `json:"tool_layer_timer,omitempty"`
 	// MemoryDetail is where the guest's memory goes, only with
 	// ?memory=detail: the meminfo split, resident memory by process name
 	// and by cgroup, and how much of the page cache is this computer's
@@ -1039,6 +1047,15 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
+		resp.MemCachedBytes = guestmem.Meminfo(string(raw))["Cached"]
+	}
+	resp.ToolLayerTimer = toolLayerTimer()
+	if layers, ok := boundedObservabilityRead(toolLayerReadBudget+time.Second, func() []toolLayerObservability {
+		return readToolLayers(r.Context(), "/nix", "/proc", "/run/choir-tool-evict")
+	}); ok {
+		resp.ToolLayers = layers
+	} else {
+		resp.ToolLayers = []toolLayerObservability{}
 	}
 	unanswered := func(name string) { resp.Unanswered = append(resp.Unanswered, name) }
 	if h.rt.store != nil {

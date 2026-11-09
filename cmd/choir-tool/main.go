@@ -16,18 +16,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/toolresidency"
 )
 
-const idleGrace = 10 * time.Minute
+const idleGrace = toolresidency.IdleGrace
 
 type env struct {
 	mountRoot string // holds .ro-tool-<layer> directories; /nix in the guest
@@ -47,98 +48,20 @@ func defaultEnv() env {
 // by absolute path and have no stamp.
 var toolchainStamps = map[string]bool{"go": true, "gcc": true, "cc": true, "g++": true, "c++": true}
 
-func (e env) layerDir(layer string) string { return filepath.Join(e.mountRoot, ".ro-tool-"+layer) }
+func (e env) layerDir(layer string) string { return toolresidency.LayerDir(e.mountRoot, layer) }
 
-func (e env) layers() []string {
-	ents, _ := os.ReadDir(e.mountRoot)
-	var out []string
-	for _, d := range ents {
-		if n, ok := strings.CutPrefix(d.Name(), ".ro-tool-"); ok && n != "" {
-			out = append(out, n)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// walkFiles calls fn for each regular file under dir; symlinks are skipped.
-func walkFiles(dir string, fn func(path string, size int64)) {
-	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.Type().IsRegular() {
-			if info, err := d.Info(); err == nil {
-				fn(p, info.Size())
-			}
-		}
-		return nil
-	})
-}
+func (e env) layers() []string { return toolresidency.Layers(e.mountRoot) }
 
 func (e env) resident(layer string) (res, total int64) {
-	walkFiles(e.layerDir(layer), func(p string, size int64) {
-		total += size
-		res += fileResident(p, size)
-	})
+	res, total, _ = toolresidency.Resident(context.Background(), e.layerDir(layer))
 	return
 }
 
-func (e env) evict(layer string) {
-	walkFiles(e.layerDir(layer), func(p string, _ int64) { dropFile(p) })
-}
+func (e env) evict(layer string) { _ = toolresidency.Evict(context.Background(), e.layerDir(layer)) }
 
-// busy returns the pids that map or execute a file of the layer. The layer's
-// store paths are the top-level entries of its mount, seen by processes as
-// /nix/store/<entry>.
+// busy returns the pids that map or execute a file of the layer.
 func (e env) busy(layer string) []int {
-	ents, err := os.ReadDir(e.layerDir(layer))
-	if err != nil {
-		return nil
-	}
-	var prefixes []string
-	for _, d := range ents {
-		prefixes = append(prefixes, "/nix/store/"+d.Name())
-	}
-	match := func(s string) bool {
-		s = strings.TrimSuffix(s, " (deleted)")
-		// Anywhere in the path: a capsule's chroot or merged root renders
-		// the store path behind its own prefix.
-		for _, p := range prefixes {
-			if strings.HasSuffix(s, p) || strings.Contains(s, p+"/") {
-				return true
-			}
-		}
-		return false
-	}
-	procs, _ := os.ReadDir(e.procRoot)
-	var pids []int
-	for _, d := range procs {
-		pid, err := strconv.Atoi(d.Name())
-		if err != nil {
-			continue
-		}
-		base := filepath.Join(e.procRoot, d.Name())
-		hit := false
-		if exe, err := os.Readlink(filepath.Join(base, "exe")); err == nil && match(exe) {
-			hit = true
-		}
-		if !hit {
-			if b, err := os.ReadFile(filepath.Join(base, "maps")); err == nil {
-				for _, line := range strings.Split(string(b), "\n") {
-					if i := strings.IndexByte(line, '/'); i >= 0 && match(line[i:]) {
-						hit = true
-						break
-					}
-				}
-			}
-		}
-		if hit {
-			pids = append(pids, pid)
-		}
-	}
-	sort.Ints(pids)
-	return pids
+	return toolresidency.Busy(context.Background(), e.procRoot, e.layerDir(layer))
 }
 
 func readStamp(path string) (time.Time, bool) {
@@ -212,11 +135,13 @@ func (e env) evictIdle(w func(any)) error {
 				err = os.WriteFile(filepath.Join(e.stateDir, l), []byte(strconv.FormatInt(e.now().Unix(), 10)+"\n"), 0o644)
 			}
 			fail(err)
+			fail(toolresidency.RecordRun(e.stateDir, l, e.now(), false))
 			w(r)
 			continue
 		}
 		if t, ok := e.lastUse(l); ok && e.now().Sub(t) < idleGrace {
 			r.Reason = "used within grace"
+			fail(toolresidency.RecordRun(e.stateDir, l, e.now(), false))
 			w(r)
 			continue
 		}
@@ -224,6 +149,7 @@ func (e env) evictIdle(w func(any)) error {
 		e.evict(l)
 		after, _ := e.resident(l)
 		r.Evicted, r.ResidentBefore, r.ResidentAfter, r.ResidentBytes, r.Reason = true, &before, &after, after, "idle"
+		fail(toolresidency.RecordRun(e.stateDir, l, e.now(), true))
 		w(r)
 	}
 	return firstErr

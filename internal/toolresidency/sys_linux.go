@@ -1,6 +1,6 @@
 //go:build linux
 
-package main
+package toolresidency
 
 import (
 	"os"
@@ -9,8 +9,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// fileResident returns the bytes of the file in the page cache (mincore).
-func fileResident(path string, size int64) int64 {
+// FileResident returns the bytes of the file in the page cache (mincore).
+func FileResident(path string, size int64) int64 {
 	if size <= 0 {
 		return 0
 	}
@@ -43,8 +43,8 @@ func fileResident(path string, size int64) int64 {
 	return res
 }
 
-// dropFile asks the kernel to drop the file's clean cached pages.
-func dropFile(path string) {
+// DropFile asks the kernel to drop the file's clean cached pages.
+func DropFile(path string) {
 	f, err := os.Open(path)
 	if err != nil {
 		return
@@ -53,4 +53,4 @@ func dropFile(path string) {
 	f.Close()
 }
 
-func syncAll() { unix.Sync() }
+func SyncAll() { unix.Sync() }
