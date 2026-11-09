@@ -2759,15 +2759,88 @@ func prepareCapsuleRoot(root, upperDir string) error {
 	return nil
 }
 
+// Test seams for the residue teardown: the mountinfo source and the unmount.
+var (
+	capsuleMountinfoRead = func() ([]byte, error) { return os.ReadFile("/proc/self/mountinfo") }
+	capsuleUnmount       = func(path string, flags int) error { return unix.Unmount(path, flags) }
+)
+
+// selectCapsuleMounts returns the mount points in mountinfo that lie strictly
+// under root, deepest first (a later mount at the same path first). Mountinfo
+// records the kernel's resolved paths, so no sandbox-writable symlink can
+// redirect a selection; a mount point outside root is never chosen.
+func selectCapsuleMounts(mountinfo []byte, root string) []string {
+	root = filepath.Clean(root)
+	type entry struct {
+		path  string
+		depth int
+		seq   int
+	}
+	var found []entry
+	unescape := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	for i, line := range strings.Split(string(mountinfo), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		mp := filepath.Clean(unescape.Replace(fields[4]))
+		if !strings.HasPrefix(mp, root+"/") {
+			continue
+		}
+		found = append(found, entry{mp, strings.Count(mp, "/"), i})
+	}
+	sort.SliceStable(found, func(i, j int) bool {
+		if found[i].depth != found[j].depth {
+			return found[i].depth > found[j].depth
+		}
+		return found[i].seq > found[j].seq
+	})
+	out := make([]string, len(found))
+	for i, f := range found {
+		out[i] = f.path
+	}
+	return out
+}
+
+// pathUnderRootIsSymlinkFree reports whether every component of path below
+// root is a real entry (Lstat, no symlink), so a name reached through the
+// sandbox-writable tree cannot lead off the capsule root.
+func pathUnderRootIsSymlinkFree(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return false
+	}
+	cur := root
+	for _, part := range strings.Split(rel, "/") {
+		cur = filepath.Join(cur, part)
+		info, err := os.Lstat(cur)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// unmountCapsuleRoot detaches only the mount points mountinfo shows under the
+// capsule's own root, deepest first, never through a symlink, and detaches the
+// root itself last.
 func unmountCapsuleRoot(root string) error {
-	// Nested mounts detach before the overlay root; order is leaf-first.
-	bundleMount := filepath.Join(root, "selfdev", "bundle")
-	_ = unix.Unmount(bundleMount, unix.MNT_DETACH)
-	currentSystemMount := filepath.Join(root, "run", "current-system")
-	_ = unix.Unmount(currentSystemMount, unix.MNT_DETACH)
-	brokerMount := filepath.Join(root, "run", "capsule", "broker")
-	_ = unix.Unmount(brokerMount, unix.MNT_DETACH)
-	if err := unix.Unmount(root, unix.MNT_DETACH); err != nil && err != unix.EINVAL {
+	root = filepath.Clean(root)
+	if data, err := capsuleMountinfoRead(); err == nil {
+		bases := []string{root}
+		if real, err := filepath.EvalSymlinks(root); err == nil && real != root {
+			bases = append(bases, real)
+		}
+		for _, base := range bases {
+			for _, mp := range selectCapsuleMounts(data, base) {
+				if !pathUnderRootIsSymlinkFree(base, mp) {
+					continue
+				}
+				_ = capsuleUnmount(mp, unix.MNT_DETACH|unix.UMOUNT_NOFOLLOW)
+			}
+		}
+	}
+	if err := capsuleUnmount(root, unix.MNT_DETACH|unix.UMOUNT_NOFOLLOW); err != nil && err != unix.EINVAL {
 		return fmt.Errorf("capsule unmount root: %w", err)
 	}
 	return nil
