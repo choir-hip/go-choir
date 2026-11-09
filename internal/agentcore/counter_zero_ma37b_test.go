@@ -304,8 +304,9 @@ func countStr(n uint64) string {
 // MA3.7b 7b: Resolve, Disagreement and Cancel are addressed non-envelope acts;
 // when they name a desk (or, for a retract, the desk the retracted act
 // addressed) a built-in desk's run carrying owner-private labels is counted at
-// the desk-message sink and not blocked. The addressee is management and the
-// sender research: Texture's messages to research are admitted by the
+// the desk-message sink and not blocked. The addressee is engineering and the
+// sender research (research to management is an owner desk pair and asks
+// nothing for the owner-flow atoms): Texture's messages to research are admitted by the
 // texture.brief lease, and its messages to management are on the owner flow's
 // delegation chain (enforce flip D1), so neither is an ask.
 func TestResolveDisagreementAndCancelAreGatedAndCounted(t *testing.T) {
@@ -313,9 +314,9 @@ func TestResolveDisagreementAndCancelAreGatedAndCounted(t *testing.T) {
 	exec := f.run(t, "run-7b", agentprofile.Research, "write", types.OwnerPrivateLabel("document"))
 	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
 	for i, in := range []yaegikernel.StagedIntent{
-		{LocalID: "r1", Kind: yaegikernel.IntentResolve, ToDesk: agentprofile.Management, TargetRef: "rec-1", Resolve: `{"verdict":"confirmed"}`},
-		{LocalID: "d1", Kind: yaegikernel.IntentDisagreement, ToDesk: agentprofile.Management, Disagreement: `{"commitment_id":"rec-1"}`},
-		{LocalID: "c1", Kind: yaegikernel.IntentCancel, ToDesk: agentprofile.Management, TargetRef: "rec-1"},
+		{LocalID: "r1", Kind: yaegikernel.IntentResolve, ToDesk: agentprofile.Engineering, TargetRef: "rec-1", Resolve: `{"verdict":"confirmed"}`},
+		{LocalID: "d1", Kind: yaegikernel.IntentDisagreement, ToDesk: agentprofile.Engineering, Disagreement: `{"commitment_id":"rec-1"}`},
+		{LocalID: "c1", Kind: yaegikernel.IntentCancel, ToDesk: agentprofile.Engineering, TargetRef: "rec-1"},
 	} {
 		disclosure.ResetCounts()
 		if err := r.gateMessageDisclosure(context.Background(), in); err != nil {
@@ -329,7 +330,7 @@ func TestResolveDisagreementAndCancelAreGatedAndCounted(t *testing.T) {
 	target := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:7b", Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips"},
-		Cast:      &types.CommitmentCast{}, Inbox: "management:doc-7b", SenderInbox: "texture:doc-7b", Addressee: "management:doc-7b",
+		Cast:      &types.CommitmentCast{}, Inbox: "engineering:doc-7b", SenderInbox: "texture:doc-7b", Addressee: "engineering:doc-7b",
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{AgentID: "texture:doc-7b"},
 	}

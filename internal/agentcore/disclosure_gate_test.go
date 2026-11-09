@@ -600,10 +600,12 @@ func TestATextureBriefToResearchIsAdmittedByTheCustodianLease(t *testing.T) {
 		t.Fatalf("T2: a mail label rode the brief = %v", err)
 	}
 
-	// T3: management's message to research and Texture's to management mint
-	// nothing and ask.
+	// T3: management's message to research mints nothing (management and
+	// research are an owner desk pair for the owner-flow atoms, so a label
+	// outside the atoms is what still asks) and Texture's to management mints
+	// nothing.
 	before := len(f.rt.leases.Live(f.owner))
-	mgmt := f.run(t, "run-mgmt", agentprofile.Management, "x", doc)
+	mgmt := f.run(t, "run-mgmt", agentprofile.Management, "x", doc, types.OwnerPrivateLabel("mail"))
 	if err := reduction(mgmt).gateMessageDisclosure(ctx, cast("c3", agentprofile.Research)); !asks(err) {
 		t.Fatalf("T3: management's message to research = %v", err)
 	}
@@ -651,8 +653,8 @@ func TestAResearchAnswerCarryingTextureLabelsIsAdmittedByTheCustodian(t *testing
 		t.Fatalf("the admitted answer spent System 1 (%d calls)", f.judge.callCount())
 	}
 	// The same labels to a desk that is not the custodian still ask.
-	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Management, "Report findings"); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
-		t.Fatalf("texture labels to management = %v", err)
+	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Engineering, "Report findings"); err == nil || !strings.Contains(err.Error(), "waits on the owner") {
+		t.Fatalf("texture labels to engineering = %v", err)
 	}
 }
 
@@ -662,11 +664,11 @@ func TestTheGateTalliesTheSiteOfAnObservedAsk(t *testing.T) {
 	f := newDisclosureFixture(t, "sites", 62840)
 	// A system desk is decided in observe mode; a package desk is always
 	// enforced, so the fixture's app desk would block.
-	// Research to management is no pair on the owner's delegation chain, so a
-	// document label asks (Texture to management would not).
+	// Research to engineering is no pair on the owner's delegation chain, so a
+	// document label asks (research to management, a pair, would not).
 	exec := f.run(t, "run-sites", agentprofile.Research, "x", types.OwnerPrivateLabel("document"))
 	r := &rlmCallReduction{mb: f.rt, rec: exec.RunRecord, scope: ReductionScope{RunID: exec.RunID, OwnerID: f.owner, ComputerID: f.computer, DeskAgentID: exec.AgentID}}
-	in := yaegikernel.StagedIntent{LocalID: "s1", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Management + ":inst-secret-1", Statement: "private body text"}
+	in := yaegikernel.StagedIntent{LocalID: "s1", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Engineering + ":inst-secret-1", Statement: "private body text"}
 	if err := r.gateMessageDisclosure(context.Background(), in); err != nil {
 		t.Fatalf("an observed ask blocked: %v", err)
 	}
@@ -676,7 +678,7 @@ func TestTheGateTalliesTheSiteOfAnObservedAsk(t *testing.T) {
 		if strings.Contains(k, "private") && !strings.Contains(k, "owner_private:document") || strings.Contains(k, "secret") || strings.Contains(k, "body") {
 			t.Fatalf("a site key carries content: %q", k)
 		}
-		if strings.HasPrefix(k, "desk_message|ask|") && strings.Contains(k, "->"+agentprofile.Management+"|cast|owner_private:document") && n == 1 {
+		if strings.HasPrefix(k, "desk_message|ask|") && strings.Contains(k, "->"+agentprofile.Engineering+"|cast|owner_private:document") && n == 1 {
 			found = true
 		}
 	}
@@ -725,8 +727,8 @@ func TestOwnerCapturesFlowBetweenTextureAndResearchWithoutAnAsk(t *testing.T) {
 		}
 	}
 	// Anywhere else it still asks: another desk, publication, library release.
-	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Management, "report"); err == nil {
-		t.Error("a capture to management did not ask")
+	if err := f.gate(res, agentprofile.Research, disclosure.SinkDeskMessage, agentprofile.Engineering, "report"); err == nil {
+		t.Error("a capture to engineering did not ask")
 	}
 	for _, sink := range []disclosure.Sink{disclosure.SinkPublication, disclosure.SinkLibraryRelease} {
 		if err := f.gate(tex, agentprofile.Texture, sink, "elsewhere", "send"); err == nil {

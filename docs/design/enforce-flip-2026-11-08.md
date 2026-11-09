@@ -192,6 +192,9 @@ between Texture and research. In r1 it covers exactly these directed pairs:
 - management to its own task role (management-task), and the task back to management. This is
   the intake delegation. The pair is resolved through the manifest: a KindRole's parent desk is
   the admitter.
+- management to and from research (added 2026-11-09, commit 060ab0f22: the owner ruled on
+  2026-11-06 that owner-internal desk flow needs no approval, and a management cast for evidence
+  parked on an ask).
 
 It carries exactly these labels: capture, evidence, document, texture, model-policy, computers
 and prompt-bar. These are the counted atoms plus the two the owner ruled on.
