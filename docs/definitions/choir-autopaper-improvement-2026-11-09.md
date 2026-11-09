@@ -37,7 +37,7 @@ metamission:
     - {id: S2_charts_maps, path: "this file, station S2", readiness: drafted, status: pending, depends_on: [S1_source_audit]}
     - {id: S3_subject_photos, path: "this file, station S3", readiness: drafted, status: pending, depends_on: [S2_charts_maps]}
     - {id: S4_source_link_cards, path: "this file, station S4", readiness: drafted, status: pending, depends_on: [S2_charts_maps]}
-    - {id: S5_renderers, path: "this file, station S5", readiness: drafted, status: pending, depends_on: [S2_charts_maps]}
+    - {id: S5_renderers, path: "this file, station S5", readiness: drafted, status: pending, depends_on: [S2_charts_maps, S3_subject_photos, S4_source_link_cards]}
   order: >-
     The owner's order: source audit, then charts and maps, then subject
     photos, then source link cards, then the front-page and article renderer.
@@ -120,7 +120,9 @@ start:
 
 finish:
   deliver: >-
-    The paper publishes sourced stories as fast as it does today or faster,
+    The paper publishes sourced stories as fast as it does today or faster
+    (the closing audit re-runs S1's capture-to-publish measure against S1's
+    baseline),
     from sources it demonstrably uses well, and a story that has a chart, a
     map, a properly licensed subject photo or a source link card shows it,
     with credit, on the article page and (if the owner decides) the front
@@ -186,7 +188,7 @@ finish:
       evidence_class: deployed Playwright proof, screenshots under docs/evidence/
     - action: >-
         Throughout: no new owner ask appears in the paper's disclosure gate
-        counts (publication ask stays at its observed 6 or lower) and the
+        counts (no new Autopaper ask; the prompt-bar and texture asks belong to the ordinary-computer approvals audit) and the
         paper keeps publishing during every deploy.
       proves: The mission did not break the paper's standing rules.
       evidence_class: deployed observability read
@@ -200,7 +202,7 @@ finish:
     rollback in the shared mission.
   landing:
     required: true
-    environment: staging https://choir.news, then the paper by ring walk
+    environment: staging https://choir.news, then the paper; every landing commit carries Ring-Expedite (owner tempo until Autoradio is solid), and the paper is still held until each ring is seen healthy
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
 
 value:
@@ -232,7 +234,7 @@ homotopy:
 
 boundaries:
   mutation_class: >-
-    S1 yellow (read-only measurement) plus orange for fixes it justifies.
+    S1 yellow for the audit report itself; orange for a new read endpoint (step 1), for rights-signal recording at fetch (D7) and for the fixes it justifies.
     S2, S3, S4 orange (new product API, object kind, capture fields; the Jev
     image judgement is model routing, so orange with rollback named).
     S5 orange. The shared Texture media block is RED (Texture canonical
@@ -254,7 +256,7 @@ boundaries:
     - No secrets and no owner email addresses in the repo.
   excluded:
     - Adding sources. This mission may recommend them from the audit; adding one is a later mission.
-    - Video and podcast transcription as sources, the YouTube InnerTube decision, and robots.txt, TDMRep and aipref enforcement (research steps 2 and 9). S1 may record rights signals at fetch only if the owner approves in "Decisions for the owner".
+    - Video and podcast transcription as sources, the YouTube InnerTube decision, and robots.txt, TDMRep and aipref enforcement (research steps 2 and 9). S1 records rights signals at fetch (record only, no blocking) on D7's default.
     - Paid wire photos, the Getty viewer, stock and AI illustration (research ranks them last). AI illustration, if ever, is a separate decision.
     - The Texture media block itself (research step 8). It is shared with the ordinary-path mission (below), a red change that mission owns. This mission waits for it or ships media objects through a published-renderer path that does not touch Texture canonical writes (the recommended default, decision D9).
     - Personalised or op-ed sections (roadmap stage 3's other items) and the learning system (docs/design/autopaper-learning-materiality-2026-11-04.md).
@@ -263,6 +265,7 @@ boundaries:
     - Publication path and front list (route and publication projection).
     - The object graph's new kind registration (custody and writer-gate tables).
     - Gateway and provider calls made by the image judgement.
+    - The reader, writer and disclosure gates (in enforce). The buildStoryAnalysis refusal (desk:research reading choir.texture_document) is fixed on research's read path through Texture's custodian surface, not by widening what the gate allows; a fix that changes a gate's allow set is red and takes tier 2 review.
   shared_dependency: >-
     Texture media embeds (images and charts, PDF and file artifacts, YouTube
     and audio) are shared with the ordinary-path mission queued in ACTIVE.md
@@ -280,7 +283,7 @@ boundaries:
 now:
   status: checkpoint_incomplete  # drafted; nothing runs until the owner promotes it
   slice: "Owner review of this draft; no implementation slice is active."
-  source_ref: origin/main 92f49ad05
+  source_ref: origin/main 3bafcbf9e
   deploy_identity: paper daa7fcd10 at 2026-11-09T03:10Z
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
@@ -308,7 +311,7 @@ now:
   decision:
     what: >-
       Draft stations in the owner's order with the recommended defaults in
-      "Decisions for the owner"; none is settled until the owner answers.
+      "Decisions for the owner"; the recommended defaults run until the owner answers (No Blocking Asks).
     kind: purpose
     status: proposal
     evidence_ref: this file
@@ -327,14 +330,17 @@ now:
       After promotion, S1 step 1: a read-only per-source and per-story export
       from the paper's tape and object graph, run twice a day apart.
   blocker_or_risk: >-
-    The modular architecture mission is still in Phase 8 and ACTIVE.md queues
-    two audits ahead of this. The Texture media block is shared and red. Legal
+    The owner put this mission next (2026-11-09: "one more key feature before
+    we go into the auto paper improvements"); ACTIVE.md and the mission graph
+    name it the live station, and its only dependency, the ordinary prompt
+    path, is complete. The modular architecture mission's Phase 8 runs in
+    parallel; a build station defers only on a named conflict with it. The Texture media block is shared and red. Legal
     questions in the research (README section 7) are unanswered; v1 avoids them
     by choosing the lowest-risk image classes and keeping og:image a link.
   next_action: >-
-    Owner reads "Decisions for the owner", answers or accepts the defaults, and
-    promotes the file (reviewed, one Devin seat; then executable). No agent
-    starts S1 before that.
+    S1 runs now on the defaults: the paper's measured defects come first (the
+    stale queue, D13, and the quota incidents in
+    docs/problems/paper-quota-incidents-2026-11-09.md), then the audit export.
 
 receipts: []
 ---
@@ -440,7 +446,7 @@ Each has a recommended default; the draft assumes the default until answered.
 | D7 | Rights signals at fetch (robots.txt, TDMRep, paywall state) | Record only, no blocking, as a side effect of S1's capture work; enforcement is a later mission. | Research step 2: orange, additive, shows good faith. |
 | D8 | Model for the image judgement | crouton-alpha first through the paper's policy; benchmark DeepSeek on a fixed fixture set only to compare, never as the paper's runtime. | Standing rule. |
 | D9 | How media reaches a story before the Texture media block exists | Media objects attach to the publication (metadata), rendered by the published renderer; the Texture block is adopted when the shared mission lands it, and the media object is the block's target. | Keeps this mission out of red Texture canonical writes. |
-| D10 | When does this mission start | After Phase 8 closes and the two queued audits (ACTIVE.md); S1 is read-only and could start sooner at the owner's word. | The roadmap's stage rule and the owner's "finish this mission first". |
+| D10 | When does this mission start | Now: the owner put it next on 2026-11-09 ("before we go into the auto paper improvements"); S1 first; a build station defers only on a named conflict with modular Phase 8. | The owner's order; the mission graph names it the live station. |
 | D11 | Subject photo classes in S3 | Wikimedia Commons first; US federal works and Library of Congress after; Europeana and Flickr later or never. | Smallest licence surface first. |
-| D12 | Withdrawal and takedown | Marking a media object withdrawn removes it from every render; a contact address on the About page; no DMCA agent registered in v1 (README Q8 stays with the lawyer). | The paper never asks for approval, so withdrawal must be an owner or operator act, not a gate. |
+| D12 | Withdrawal and takedown | Marking a media object withdrawn removes it from every render; a contact route on the About page served from configuration (a role address, never an owner address in the repo); no DMCA agent registered in v1 (README Q8 stays with the lawyer). | The paper never asks for approval, so withdrawal must be an owner or operator act, not a gate. |
 | D13 | Stale-queue rule | Close queued tasks older than 24 h with a residual instead of running them, newest first (extends the 2026-11-08 residual). | The 57 h-old queue is not news; this is an S1 fix and the owner may prefer to start it now. |
