@@ -30,42 +30,52 @@ mode-0600 file and pass `--api-key-file`.
 
 The policy is one file in the paper's own store, `System/model-policy.toml`.
 The computer reads it at the start of every run, so a change needs no
-restart.
+restart. One command changes it (`choir ... ` below stands for
+`choir --computer <paper id> --api-key-file <key file>`):
 
-1. Save the current file as the rollback. The server keeps no earlier
-   revision.
-
-   ```sh
-   choir --computer <paper id> --api-key-file <key file> \
-     files get System/model-policy.toml \
-     > ~/.config/choir-qa/traces/paper-model-policy-before-$(date +%Y%m%d).toml
-   ```
-
+1. Read the current policy and what each role resolves to:
+   `choir ... policy get`.
 2. Edit a copy. Keep the `# owner-edited` line: without it the platform
    overwrites the file with its default at the next policy version. Say in
-   the file's header what changed, when, and where the rollback copy is.
-3. Parse the copy locally (`python3 -c "import tomllib; tomllib.load(open(f,'rb'))"`).
-   The server does not validate; a file that fails to parse falls back to
-   the last valid policy without telling the writer.
-4. Write it: `choir ... files put System/model-policy.toml --local <copy>`
-   (`PUT /api/files/System/model-policy.toml`, raw body).
-5. Read back: `files get` matches the copy byte for byte, and
-   `GET /api/model-policy/resolve?role=<role>` shows the model and effort
-   for texture, management, management_task, research and engineering.
-   `POST /api/model-policy/verify` makes a real model call; use it when a
-   model or provider changed, not for an effort change.
-6. Record the change in the mission ledger: what, why, the rollback file.
+   the file's header what changed and when.
+3. Write it: `choir ... policy set --local <copy>`. The CLI refuses a copy
+   without the `# owner-edited` line (`--allow-unmarked` overrides it on
+   purpose). The server then parses the file with the loader's own parser
+   and refuses, with the line or field named and nothing saved, a file that
+   does not parse, names an unknown role, pool, key or effort, or names a
+   model the catalog does not list for its provider. A file that passes
+   replaces the old one, and the old one is kept as a revision. The command
+   reads the file back, requires it to match byte for byte, and prints the
+   revision name and what each of texture, management, management_task,
+   research and engineering now resolves to.
+4. When a model or provider changed (not for an effort change), make a real
+   call: `choir ... policy verify --role <role>`.
+5. Record the change in the mission ledger: what, why, the revision name.
 
-Rollback: `files put` the saved copy and read back.
+Rollback: `choir ... policy rollback` restores the latest kept revision, or
+`policy rollback --to <name>` one named by `choir ... policy revisions`. It
+goes through the same validated write. The server keeps the last 20
+revisions under `System/model-policy.revisions/`, named by UTC time.
+
+The same five verbs are MCP tools (`policy_get`, `policy_set` with a
+`content` argument, `policy_revisions`, `policy_rollback`, `policy_verify`).
+
+Fallback, if the verbs are unavailable (an older build): save the current
+file with `files get System/model-policy.toml`, edit a copy that keeps the
+`# owner-edited` line, parse it locally
+(`python3 -c "import tomllib; tomllib.load(open(f,'rb'))"`; an older server
+does not validate, and a file that fails to parse falls back to the last
+valid policy without telling the writer), `files put System/model-policy.toml
+--local <copy>`, read it back with `files get` and compare byte for byte,
+check `GET /api/model-policy/resolve?role=<role>` for each role, and roll
+back by putting the saved copy.
 
 ## What this path lacks
 
 - No sign-in for the owner: no GUI, and the CLI works only from the machine
   that holds the saved session.
-- No policy verbs in the CLI (`get`, `set`, `verify`, `diff`, `rollback`);
-  no schedule, health or restart verbs.
-- No server-side validation, no earlier revisions, and no record on the
-  paper's tape that the policy changed or who changed it.
+- No schedule, health or restart verbs, and no policy `diff` verb.
+- No record on the paper's tape that the policy changed or who changed it.
 
 ## Acts on record
 

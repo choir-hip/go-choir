@@ -447,6 +447,20 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
+	// The model policy is validated before it replaces the working file, and
+	// the file it replaces is kept as a revision. Every other path is a plain write.
+	revision := ""
+	if fh.isPolicyFile(absPath) {
+		if msg := checkPolicyWrite(body); msg != "" {
+			writeFileError(w, http.StatusUnprocessableEntity, msg)
+			return
+		}
+		if revision, err = fh.keepPolicyRevision(absPath, body); err != nil {
+			writeFileError(w, http.StatusInternalServerError, "failed to keep the previous policy revision")
+			return
+		}
+	}
+
 	if err := ownerfiles.WriteFile(absPath, body, mode); err != nil {
 		if os.IsPermission(err) {
 			writeFileError(w, http.StatusForbidden, "access denied")
@@ -466,12 +480,16 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 		Size:       int64(len(body)),
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	resp := map[string]string{
 		"status":  "updated",
 		"message": "file saved",
-	})
+	}
+	if revision != "" {
+		resp["revision"] = revision
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleDelete removes a file or directory at the given path.
