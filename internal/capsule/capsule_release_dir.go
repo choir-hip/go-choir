@@ -40,7 +40,12 @@ func prepareCapsuleReleaseDir(upperDir string, uid, gid int) error {
 	// The screens directory sits beside release: the engineer (host uid
 	// 65534) writes its screenshots there, and only the leaf is capsule-owned.
 	// It is not opaque: the guest has no lower screens to hide.
-	return prepareCapsuleLeafDir(upperDir, ScreensPrefix, uid, gid, false)
+	if err := prepareCapsuleLeafDir(upperDir, ScreensPrefix, uid, gid, false); err != nil {
+		return err
+	}
+	// The deliverables directory is the same: what the assignment makes for
+	// the owner (deliverables.go).
+	return prepareCapsuleLeafDir(upperDir, DeliverablesPrefix, uid, gid, false)
 }
 
 func prepareCapsuleLeafDir(upperDir, prefix string, uid, gid int, opaque bool) error {

@@ -106,7 +106,7 @@ func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) 
 // loop skips directories, and the classifier ignores them.
 func dropPristineReleaseScaffold(manifests []FileManifest) []FileManifest {
 	// Leaves first (the release and screens directories), then their parents.
-	chain := []string{strings.TrimSuffix(ReleaseTreePrefix, "/"), strings.TrimSuffix(ScreensPrefix, "/"), "var/lib/artifact", "var/lib", "var"}
+	chain := []string{strings.TrimSuffix(ReleaseTreePrefix, "/"), strings.TrimSuffix(ScreensPrefix, "/"), strings.TrimSuffix(DeliverablesPrefix, "/"), "var/lib/artifact", "var/lib", "var"}
 	dropped := map[string]bool{}
 	for _, path := range chain {
 		occupied := false

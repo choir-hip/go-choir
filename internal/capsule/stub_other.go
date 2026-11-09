@@ -98,6 +98,9 @@ func (e *Executor) ResolveGrantedFreezeBindings(string, string) (string, string,
 func (e *Executor) StageGrantedRelease(context.Context, string, string, string) (*StagedRelease, error) {
 	return nil, stubErr("stage")
 }
+func (e *Executor) StageGrantedDeliverables(context.Context, string, string, string) (*StagedDeliverables, error) {
+	return nil, stubErr("stage deliverables")
+}
 func (e *Executor) MintCapability(string, AgentRole, string, time.Duration) (*Capability, error) {
 	return nil, stubErr("mint")
 }

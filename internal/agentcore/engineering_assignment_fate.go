@@ -1208,6 +1208,11 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
 		}
+		// The assignment's deliverables for the owner (the capsule's output
+		// directory) are filed in Files while the capsule is still physically
+		// frozen, and the report's summary names their paths and refusals.
+		// A re-drive after a crash re-files the same names by rename.
+		report = rt.landAssignmentDeliverables(ctx, assignment, rec.RunID, handle, report)
 		report, resolveErr = traceCall(rt, rec.RunID, "complete.bind_receipts", func() (types.EngineeringAssignmentReport, error) {
 			return rt.bindFrozenAssignmentExecutionReceipts(ctx, fate, assignment, handle, report, frozenDigest)
 		})
