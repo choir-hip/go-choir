@@ -28,6 +28,9 @@ type SessionFrame struct {
 	Source string            `json:"source,omitempty"`
 	Close  bool              `json:"close,omitempty"`
 	Inbox  []IncomingMessage `json:"inbox,omitempty"`
+	// RunID names the run this cell belongs to. A desk session persists
+	// across runs; the read ledger is per run and resets when RunID changes.
+	RunID string `json:"run_id,omitempty"`
 
 	// Doc carries the cell-start document snapshot for a texture desk cell
 	// (R3d): the bound doc's current revision id + content, so the cell

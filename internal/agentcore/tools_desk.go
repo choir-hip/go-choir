@@ -789,7 +789,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// their labels: the values they defined are still defined.
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
-			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
+			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
 				Updates: updates, Records: reduction.records.view, Analysis: analysis, Calibration: shownCalibration})
 			if res.CalibrationRead {
 				rt.noteCalibrationRead(ctx, execCtx, shownCalibration, delivery)

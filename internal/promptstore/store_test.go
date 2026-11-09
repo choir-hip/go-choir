@@ -105,6 +105,22 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 	}
 }
 
+// The research prompt carries the source floor, the pack-everything rule and
+// the early interim packet (problems/ordinary-prompt-path-2026-11-09.md 1.5
+// item 1): read at least 8 independent sources across hosts or say why fewer.
+func TestResearchPromptCarriesTheSourceFloorAndEarlyReport(t *testing.T) {
+	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
+	if err != nil {
+		t.Fatalf("load research prompt: %v", err)
+	}
+	flat := strings.Join(strings.Fields(prompt.Content), " ")
+	for _, want := range []string{"at least 8 independent sources across distinct hosts", "say in the Report why fewer", "Every capture that supports a claim goes in a packet", "as soon as the first source is captured"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("research prompt lacks %q", want)
+		}
+	}
+}
+
 // Registering an app desk leaves the prompt store alone: only rows with a
 // stored role prompt are prompt roles, so Load, List and Save for every
 // built-in desk work, and the app desk has no prompt role.

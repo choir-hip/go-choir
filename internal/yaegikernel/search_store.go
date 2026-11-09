@@ -232,6 +232,67 @@ func (st *SearchStore) List() []Search {
 	return out
 }
 
+// summaryMaxBytes keeps a Summary under the cell output cut (8000 runes).
+const summaryMaxBytes = 5000
+
+// Summary prints one search's results deduped by host: a count per host and
+// its first two hits (title and URL), hosts in first-seen order. It stays
+// under summaryMaxBytes, so a 40-result search is read whole rather than cut
+// in the middle (problems/ordinary-prompt-path-2026-11-09.md section 1.2 item 3).
+func (st *SearchStore) Summary(id string) (string, error) {
+	s, err := st.Get(id)
+	if err != nil {
+		return "", err
+	}
+	type group struct {
+		host string
+		hits []SearchHit
+	}
+	var groups []*group
+	byHost := map[string]*group{}
+	for _, hit := range s.Results {
+		host := hostOf(hit.URL)
+		g := byHost[host]
+		if g == nil {
+			g = &group{host: host}
+			byHost[host] = g
+			groups = append(groups, g)
+		}
+		g.hits = append(g.hits, hit)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %q: %d results on %d hosts, %d/%d providers answered\n", s.ID, s.Query, len(s.Results), len(groups), s.Answered, s.Total)
+	for i, g := range groups {
+		var line strings.Builder
+		fmt.Fprintf(&line, "%s (%d)", g.host, len(g.hits))
+		for j, hit := range g.hits {
+			if j == 2 {
+				break
+			}
+			title := strings.Join(strings.Fields(hit.Title), " ")
+			if r := []rune(title); len(r) > 80 {
+				title = string(r[:80]) + "..."
+			}
+			fmt.Fprintf(&line, "\n  %s | %s", title, hit.URL)
+		}
+		line.WriteString("\n")
+		if b.Len()+line.Len() > summaryMaxBytes {
+			fmt.Fprintf(&b, "... %d more hosts; read choir.Searches.Get(%q).Results for them\n", len(groups)-i, s.ID)
+			break
+		}
+		b.WriteString(line.String())
+	}
+	return b.String(), nil
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return strings.TrimSpace(raw)
+	}
+	return strings.TrimPrefix(strings.ToLower(u.Host), "www.")
+}
+
 func (st *SearchStore) unknownLocked(id string) error {
 	if len(st.order) == 0 {
 		return fmt.Errorf("no search %q: this session has started no search", id)

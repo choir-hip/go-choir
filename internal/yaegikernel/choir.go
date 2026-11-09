@@ -101,6 +101,9 @@ type ChoirScope struct {
 	// search's arrivals the desk has been told about in a cell result.
 	searches   *SearchStore
 	searchTold map[string]int
+	// ledger is this session's read ledger (read_ledger.go): every Read, its
+	// capture or its error, so a failed Read is never invisible.
+	ledger readLedger
 	// cellOuts keeps this session's cut cell outputs for choir.CellOut (LR
 	// lever 6, cell_output.go). Only a desk worker started with
 	// KeepCellOutput fills it.
@@ -221,6 +224,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 	return CellHooks{
 		Begin: func(frame SessionFrame) {
 			s.reissueHandle()
+			s.ledger.beginRun(frame.RunID)
 			s.tray.Store(&Tray{})
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
@@ -253,7 +257,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			return out
 		},
 		Refusals:        s.takeRefusals,
-		SearchCounts:    s.searchCountLines,
+		SearchCounts:    s.cellNoteLines,
 		RecordsShown:    s.recordsShown.Load,
 		JobsAwaited:     s.takeAwaited,
 		CalibrationRead: s.calibrationRead.Load,
@@ -418,6 +422,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Searches":         func() reflect.Value { return reflect.ValueOf(s.searches) }, // a value: choir.Searches.Get(id), .List()
 		"Research":         func() reflect.Value { return reflect.ValueOf(s.Research) },
 		"Read":             func() reflect.Value { return reflect.ValueOf(s.Read) },
+		"Reads":            func() reflect.Value { return reflect.ValueOf(s.Reads) },
+		"Captures":         func() reflect.Value { return reflect.ValueOf(s.Captures) },
 		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },
 		"SourceAPI":        func() reflect.Value { return reflect.ValueOf(s.SourceAPI) },
 		"ReadCapture":      func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
@@ -647,6 +653,7 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 func (s *ChoirScope) Read(url string) (JSON, error) {
 	var out JSON
 	err := s.call(ActionRead, ReadPayload{URL: url}, &out)
+	s.recordRead(url, out, err)
 	return out, err
 }
 
@@ -1868,7 +1875,11 @@ func (s *ChoirScope) ReportPacket(toDesk string, packet any, resolverID string) 
 	if packetJSON, err = checkReportPacket(packetJSON); err != nil {
 		return "", err
 	}
-	return t.ReportPacket(toDesk, packetJSON, resolverID)
+	ref, err := t.ReportPacket(toDesk, packetJSON, resolverID)
+	if err == nil {
+		s.notePacketSent(packetJSON)
+	}
+	return ref, err
 }
 
 // Resolve closes a commitment with a typed evidence-bearing resolver verdict.
