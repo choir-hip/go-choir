@@ -208,10 +208,20 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 					reason = updated.Reason
 				}
 				body := map[string]any{"outcome": updated.Outcome, "reason": reason}
+				if updated.ReasonCode != "" {
+					body["reason_code"] = updated.ReasonCode
+				}
+				if updated.Reason != "" {
+					body["message"] = updated.Reason
+				}
 				if len(updated.Refusal) > 0 {
 					body["detail"] = updated.Refusal
 				}
-				writeJSON(w, http.StatusConflict, body)
+				status := http.StatusConflict
+				if updated.Outcome == "failed" {
+					status = http.StatusInternalServerError
+				}
+				writeJSON(w, status, body)
 				return
 			}
 		}

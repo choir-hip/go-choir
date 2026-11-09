@@ -406,6 +406,12 @@ func (h *Handler) HandleDeployRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
 	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		if req.OwnerBusy {
+			// A structured skip, so the owner's click names it.
+			writeVMCTLJSON(w, http.StatusConflict, deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: err.Error(), ReasonCode: ownerReasonRouteRefused,
+				UserID: req.UserID, DesktopID: req.DesktopID})
+			return
+		}
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}

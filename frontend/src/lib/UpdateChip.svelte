@@ -20,10 +20,12 @@
   const POLL_MS = 5 * 60 * 1000;
   const RESTART_POLL_MS = 4000;
   const RESTART_GIVE_UP_MS = 4 * 60 * 1000;
+  const CONFIRM_POLL_MS = 3000;
+  const CONFIRM_GIVE_UP_MS = 90 * 1000;
 
   let available = false;
   let target = '';
-  let phase = 'idle'; // idle | confirm | sending | restarting | current
+  let phase = 'idle'; // idle | confirm | sending | confirming | restarting | current
   let message = '';
   let timer = null;
   let restartTimer = null;
@@ -58,7 +60,7 @@
       if (!res.ok) return null;
       const body = await res.json();
       const signal = body?.update_available || null;
-      if (phase !== 'restarting' && phase !== 'current') {
+      if (phase !== 'restarting' && phase !== 'confirming' && phase !== 'current') {
         available = Boolean(signal);
         target = signal?.target || '';
       }
@@ -113,7 +115,51 @@
     }, RESTART_POLL_MS);
   }
 
+  // The computer's realization epoch and state, from the lifecycle status route.
+  async function readStatus() {
+    try {
+      const res = await fetchWithRenewal(`${path}/lifecycle/status`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) return { reachable: false };
+      const body = await res.json();
+      return { reachable: true, epoch: Number(body?.realization_epoch), state: String(body?.state || '') };
+    } catch {
+      return { reachable: false };
+    }
+  }
+
+  // The proxy gave up (502/504/network) but the act does not stop. Say
+  // "Restarting..." only once something shows it began: the epoch moved, or the
+  // computer is no longer reachable and active. Otherwise give a plain message.
+  function confirmRestartStarted(epochBefore) {
+    phase = 'confirming';
+    message = '';
+    const started = Date.now();
+    const tick = async () => {
+      if (destroyed || phase !== 'confirming') return;
+      const status = await readStatus();
+      const moved = status.reachable && Number.isFinite(epochBefore) && Number.isFinite(status.epoch) && status.epoch > epochBefore;
+      const away = !status.reachable || (status.state && status.state !== 'active');
+      if (moved || away) {
+        beginRestarting();
+        return;
+      }
+      if (Date.now() - started > CONFIRM_GIVE_UP_MS) {
+        phase = 'idle';
+        message = 'The restart could not be confirmed. Try again.';
+        return;
+      }
+      setTimeout(tick, CONFIRM_POLL_MS);
+    };
+    setTimeout(tick, CONFIRM_POLL_MS);
+  }
+
   const REFUSALS = {
+    ring_waits: 'Waiting for its turn in the rollout.',
+    held: 'This computer is on hold, so it cannot restart for an update.',
+    divergent: 'This computer runs its own version, so it is not updated automatically.',
+    not_active: 'The computer is not running. It will start on the new version.',
+    route_refused: 'The computer\'s version route is not ready. Try again shortly.',
+    no_release: 'There is no release to update to yet.',
     live_capsule: 'An engineering sandbox is running; it can be paused for the restart once sandbox pause lands.',
     selfdev_active: 'A self-development change is being applied. Try again in a moment.',
     selfdev_awaiting_decision: 'A self-development change is waiting for your decision.',
@@ -124,14 +170,14 @@
   function refusalText(body) {
     const reason = String(body?.reason || '');
     if (REFUSALS[reason]) return REFUSALS[reason];
-    if (/in flight/i.test(reason)) return '';
-    if (body?.outcome === 'skipped' || /waits|rolled|ring/i.test(reason)) return 'Waiting for its turn in the rollout.';
+    if (reason === 'refresh_in_flight') return '';
     return 'The computer is busy right now. It will update at its next quiet moment.';
   }
 
   async function restart() {
     phase = 'sending';
     message = '';
+    const epochBefore = (await readStatus()).epoch;
     let res;
     try {
       res = await fetchWithRenewal(`${path}/lifecycle/update`, {
@@ -141,7 +187,7 @@
       });
     } catch {
       // The proxy's wait ended or the link dropped; the act does not stop.
-      beginRestarting();
+      confirmRestartStarted(epochBefore);
       return;
     }
     let body = null;
@@ -166,7 +212,10 @@
         message = text;
       }
     } else if (res.status === 502 || res.status === 504) {
-      beginRestarting();
+      confirmRestartStarted(epochBefore);
+    } else if (res.status === 500 && body?.outcome === 'failed') {
+      phase = 'idle';
+      message = 'The restart failed. Try again.';
     } else {
       phase = 'idle';
       message = 'The restart could not be started. Try again.';
@@ -186,10 +235,12 @@
   });
 </script>
 
-{#if available || phase === 'restarting' || phase === 'current'}
+{#if available || phase === 'restarting' || phase === 'confirming' || phase === 'current'}
   <div class="update-chip" data-update-chip data-update-state={phase === 'idle' ? 'available' : phase} role="status" aria-live="polite">
     {#if phase === 'restarting'}
       <span class="label" data-update-label>Restarting...</span>
+    {:else if phase === 'confirming'}
+      <span class="label" data-update-label>Checking...</span>
     {:else if phase === 'current'}
       <span class="label" data-update-label>{message}</span>
     {:else if phase === 'confirm'}

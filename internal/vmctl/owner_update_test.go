@@ -270,3 +270,64 @@ func newRingOnlyFixture(t *testing.T) (*Handler, *mockVMManager, *fakeGuestMarke
 	h.guestServedCommit = func(context.Context, VMOwnership) string { return "" }
 	return h, mock, fake
 }
+
+// Review follow-up: every owner-update answer is structured (a code the chip
+// can name), and a non-active computer never reaches trackedDeployRefresh.
+func TestOwnerUpdateReasonCodesAndNonActive(t *testing.T) {
+	// in flight has its own code.
+	h, _, _ := newRingOnlyFixture(t)
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "old" }
+	release, _ := h.deployRefreshState().begin("owner-up", "primary")
+	_, resp := postOwnerUpdate(t, h, "owner-up")
+	release()
+	if resp.ReasonCode != "refresh_in_flight" {
+		t.Fatalf("in flight code = %q", resp.ReasonCode)
+	}
+	// divergent and the ring gate each have a code.
+	h, _, fake := newRingOnlyFixture(t)
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "old" }
+	h.registry.mu.Lock()
+	for _, o := range h.registry.ownerships {
+		o.DivergenceStatus = "divergent"
+	}
+	h.registry.mu.Unlock()
+	code, resp := postOwnerUpdate(t, h, "owner-up")
+	if code != http.StatusConflict || resp.Outcome != deployRefreshSkipped || resp.ReasonCode != "divergent" {
+		t.Fatalf("divergent: %d %+v", code, resp)
+	}
+	if len(fake.marks) != 0 {
+		t.Fatal("divergent computer was marked")
+	}
+	f := newRingHandlerFixture(t)
+	f.deploy("r2", "commit-r2")
+	f.h.syncRingWalk()
+	f.reg.SetVMManager(&aheadOfPinManager{f.mgr})
+	f.h.guestServedCommit = func(context.Context, VMOwnership) string { return "commit-r1" }
+	if _, resp = postOwnerUpdate(t, f.h, "ring-other"); resp.ReasonCode != "ring_waits" {
+		t.Fatalf("ring code = %q", resp.ReasonCode)
+	}
+	// A stopped computer: skipped not_active, no GrantDeployRetry, no rescue boot.
+	h, mgr, fake := newRingOnlyFixture(t)
+	h.registry.mu.Lock()
+	for _, o := range h.registry.ownerships {
+		o.State = VMStateStopped
+	}
+	h.registry.mu.Unlock()
+	code, resp = postOwnerUpdate(t, h, "owner-up")
+	if code != http.StatusConflict || resp.Outcome != deployRefreshSkipped || resp.ReasonCode != "not_active" {
+		t.Fatalf("stopped: %d %+v", code, resp)
+	}
+	if len(fake.marks) != 0 || len(mgr.refreshes) != 0 {
+		t.Fatalf("stopped computer marked or booted: %v %v", fake.marks, mgr.refreshes)
+	}
+}
+
+// A route refusal (a plain 409 before the refresh) is a structured skip.
+func TestOwnerUpdateRouteRefusalIsStructuredSkip(t *testing.T) {
+	h, _, _ := newRingOnlyFixture(t)
+	h.routeAuthorityRequired = true
+	code, resp := postOwnerUpdate(t, h, "owner-up")
+	if code != http.StatusConflict || resp.Outcome != deployRefreshSkipped || resp.ReasonCode != "route_refused" || resp.Reason == "" {
+		t.Fatalf("route refusal: %d %+v", code, resp)
+	}
+}

@@ -19,8 +19,8 @@ const BASE_URL = process.env.GO_CHOIR_UX_BASE_URL || 'http://127.0.0.1:5173';
 const SHOTS = process.env.UPDATE_NOW_SHOTS || '';
 const CID = 'cmp-update-test';
 
-async function mockComputer(page, { signal, post }) {
-  const state = { signal, posts: [], signalReads: 0 };
+async function mockComputer(page, { signal, post, epochs }) {
+  const state = { signal, posts: [], signalReads: 0, statusReads: 0, epoch: 7 };
   await page.route('**/api/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.route('**/api/shell/bootstrap', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ computer_id: CID }) }));
   await page.route('**/auth/session', (route) => route.fulfill({
@@ -30,7 +30,12 @@ async function mockComputer(page, { signal, post }) {
     state.signalReads += 1;
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ computer_id: CID, update_available: state.signal }) });
   });
+  await page.route(`**/api/computers/${CID}/lifecycle/status**`, (route) => {
+    state.statusReads += 1;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ computer_id: CID, state: 'active', realization_epoch: state.epoch }) });
+  });
   await page.route(`**/api/computers/${CID}/lifecycle/update**`, async (route) => {
+    if (epochs) state.epoch += 1; // the restart began (the proxy's wait ended later)
     state.posts.push({ method: route.request().method(), body: JSON.parse(route.request().postData() || '{}') });
     if (post === 'abort') return route.abort('timedout');
     return route.fulfill({ status: post.status, contentType: 'application/json', body: JSON.stringify(post.body) });
@@ -107,7 +112,11 @@ const REFUSALS = [
   ['live_capsule', 'deferred', 'An engineering sandbox is running; it can be paused for the restart once sandbox pause lands.', '05-deferred-capsule'],
   ['selfdev_active', 'deferred', 'A self-development change is being applied. Try again in a moment.', '06-deferred-apply'],
   ['selfdev_awaiting_decision', 'deferred', 'A self-development change is waiting for your decision.', '07-deferred-candidate'],
-  ['ring R3 waits: ring walk w is at R0', 'skipped', 'Waiting for its turn in the rollout.', '08-skipped-ring'],
+  ['ring_waits', 'skipped', 'Waiting for its turn in the rollout.', '08-skipped-ring'],
+  ['held', 'skipped', 'This computer is on hold, so it cannot restart for an update.', '10-skipped-held'],
+  ['divergent', 'skipped', 'This computer runs its own version, so it is not updated automatically.', '11-skipped-divergent'],
+  ['not_active', 'skipped', 'The computer is not running. It will start on the new version.', '12-skipped-not-active'],
+  ['retry_later', 'deferred', 'The computer is busy right now. It will update at its next quiet moment.', '13-deferred-retry'],
 ];
 for (const [reason, outcome, words, shotName] of REFUSALS) {
   test(`U5 ${outcome} (${reason.slice(0, 20)}) shows plain words and keeps the chip`, async ({ page }) => {
@@ -123,20 +132,53 @@ for (const [reason, outcome, words, shotName] of REFUSALS) {
   });
 }
 
-test('U6 a proxy timeout is shown as Restarting...', async ({ page }) => {
+test('U6 a proxy timeout is Restarting... only once the epoch moved', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockComputer(page, { signal: AVAILABLE, post: 'abort', epochs: true });
+  await boot(page);
+  await open(page);
+  await page.locator('[data-update-confirm]').click();
+  await expect(page.locator('[data-update-label]')).toHaveText('Restarting...', { timeout: 15_000 });
+});
+
+test('U6b a timeout with no restart gives a plain message, never Restarting...', async ({ page }) => {
+  test.setTimeout(150_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockComputer(page, { signal: AVAILABLE, post: 'abort' });
   await boot(page);
   await open(page);
   await page.locator('[data-update-confirm]').click();
-  await expect(page.locator('[data-update-label]')).toHaveText('Restarting...');
+  await expect(page.locator('[data-update-label]')).not.toHaveText('Restarting...');
+  await expect(page.locator('[data-update-message]')).toHaveText('The restart could not be confirmed. Try again.', { timeout: 110_000 });
+  await expect(page.locator('[data-update-open]')).toBeVisible();
+  await shot(page, '14-unconfirmed');
+});
+
+test('U6c a failed restart (500) says so and does not show Restarting...', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockComputer(page, { signal: AVAILABLE, post: { status: 500, body: { outcome: 'failed', reason: 'failed' } } });
+  await boot(page);
+  await open(page);
+  await page.locator('[data-update-confirm]').click();
+  await expect(page.locator('[data-update-message]')).toHaveText('The restart failed. Try again.');
+  await expect(page.locator('[data-update-chip]')).toHaveAttribute('data-update-state', 'available');
+});
+
+test('U6d a plain 502 with no epoch change is not Restarting...', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockComputer(page, { signal: AVAILABLE, post: { status: 502, body: { error: 'lifecycle actuation failed' } } });
+  await boot(page);
+  await open(page);
+  await page.locator('[data-update-confirm]').click();
+  await page.waitForTimeout(4000);
+  await expect(page.locator('[data-update-label]')).not.toHaveText('Restarting...');
 });
 
 test('U7 a second click while one is in flight shows Restarting...', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockComputer(page, {
     signal: AVAILABLE,
-    post: { status: 409, body: { outcome: 'deferred', reason: 'a deploy refresh of this computer is already in flight' } },
+    post: { status: 409, body: { outcome: 'deferred', reason: 'refresh_in_flight' } },
   });
   await boot(page);
   await open(page);

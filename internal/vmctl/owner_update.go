@@ -15,6 +15,51 @@ import (
 // gate, the held and divergent rules, the one-in-flight rule, the
 // planned-restart marker and the pending bookkeeping are the deploy's own.
 
+// Reason codes of an owner update that restarted nothing. The chip names each
+// by code, never by matching reason text.
+const (
+	ownerReasonInFlight     = "refresh_in_flight"
+	ownerReasonRouteRefused = "route_refused"
+	ownerReasonHeld         = "held"
+	ownerReasonDivergent    = "divergent"
+	ownerReasonNotActive    = "not_active"
+	ownerReasonRingWaits    = "ring_waits"
+	ownerReasonRetryLater   = "retry_later"
+	ownerReasonFailed       = "failed"
+	ownerReasonNoRelease    = "no_release"
+)
+
+// ownerReasonCode names why an owner update that did not refresh or find the
+// computer current restarted nothing. A guest refusal already carries its code.
+func ownerReasonCode(resp deployRefreshResponse) string {
+	if resp.ReasonCode != "" {
+		return resp.ReasonCode
+	}
+	switch resp.Outcome {
+	case deployRefreshDeferred:
+		if resp.Reason == deployRefreshInFlightReason {
+			return ownerReasonInFlight
+		}
+		return ownerReasonRetryLater
+	case deployRefreshSkipped:
+		switch {
+		case resp.Reason == "held":
+			return ownerReasonHeld
+		case resp.Reason == "divergent":
+			return ownerReasonDivergent
+		case strings.HasPrefix(resp.Reason, "not active"):
+			return ownerReasonNotActive
+		case resp.Reason == "no release to update to":
+			return ownerReasonNoRelease
+		}
+		// The ring gate is the only other skip.
+		return ownerReasonRingWaits
+	case deployRefreshFailed:
+		return ownerReasonFailed
+	}
+	return ""
+}
+
 // ownerUpdate resolves the target (pin-aware guestReleaseFor, never
 // caller-chosen), answers "current" when the guest already serves it, and
 // otherwise runs the tracked deploy refresh with allow_busy.
@@ -26,9 +71,16 @@ func (h *Handler) ownerUpdate(ctx context.Context, req deployRefreshRequest) (de
 	_, commit := h.guestReleaseFor(stableComputerID(own.UserID, own.DesktopID, own.ComputerID))
 	if commit == "" {
 		return deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: "no release to update to", VMID: own.VMID, ComputerID: own.ComputerID,
-			UserID: own.UserID, DesktopID: own.DesktopID, State: string(own.State)}, http.StatusConflict
+			UserID: own.UserID, DesktopID: own.DesktopID, State: string(own.State), ReasonCode: ownerReasonNoRelease}, http.StatusConflict
 	}
 	req.Target = commit
+	if own.State != VMStateActive {
+		// Nothing to restart; and never into trackedDeployRefresh, whose
+		// realDeploy side effects (GrantDeployRetry, a rescue boot of a stopped
+		// computer) are not an owner's click.
+		return deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: "not active (state=" + string(own.State) + ")", ReasonCode: ownerReasonNotActive,
+			Target: commit, VMID: own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, State: string(own.State)}, http.StatusConflict
+	}
 	if own.State == VMStateActive {
 		// Before the gate, the marker or any pending entry: a computer already
 		// on the release is a no-op. A served commit that cannot be read is
@@ -41,6 +93,7 @@ func (h *Handler) ownerUpdate(ctx context.Context, req deployRefreshRequest) (de
 	}
 	resp, status := h.trackedDeployRefresh(ctx, req, "owner-update")
 	resp.Target = commit
+	resp.ReasonCode = ownerReasonCode(resp)
 	return resp, status
 }
 

@@ -62,8 +62,18 @@ func (c *Client) OwnerUpdateContext(ctx context.Context, userID, desktopID strin
 	}
 	var result OwnerUpdateResult
 	structured := json.Unmarshal(body, &result) == nil && result.Outcome != ""
-	if structured && (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusConflict) {
-		return &result, nil
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusConflict, http.StatusNotFound, http.StatusInternalServerError:
+		if structured {
+			return &result, nil
+		}
+		if resp.StatusCode == http.StatusConflict {
+			// An unstructured 409 is a refusal before the refresh: a skip with its reason.
+			var plain vmctlErrorResponse
+			if json.Unmarshal(body, &plain) == nil && plain.Error != "" {
+				return &OwnerUpdateResult{Outcome: "skipped", Reason: plain.Error, ReasonCode: ownerReasonRetryLater}, nil
+			}
+		}
 	}
 	if refusal := decodeRecoveryRefusal(resp.StatusCode, body, resp.Header.Get("Retry-After")); refusal != nil {
 		return nil, refusal

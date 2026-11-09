@@ -247,3 +247,38 @@ func TestComputerUpdateSignalRoute(t *testing.T) {
 		t.Fatalf("signed out: %d", rec.Code)
 	}
 }
+
+// Review follow-up: a vmctl failure or a plain refusal is a named answer, not a
+// 502 the chip would read as "the restart is running".
+func TestComputerUpdateFailedAndCodesAreNamedNotBadGateway(t *testing.T) {
+	f := newUpdateFixture(t)
+	*f.outcomeStatus = http.StatusInternalServerError
+	*f.outcome = vmctl.OwnerUpdateResult{Outcome: "failed", Reason: "boot failed", ReasonCode: "failed"}
+	rec := f.post(f.ownerToken, "", "f1")
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"reason":"failed"`) {
+		t.Fatalf("failed: %d %s", rec.Code, rec.Body.String())
+	}
+	*f.outcomeStatus = http.StatusConflict
+	*f.outcome = vmctl.OwnerUpdateResult{Outcome: "deferred", Reason: "a deploy refresh of this computer is already in flight", ReasonCode: "refresh_in_flight"}
+	rec = f.post(f.ownerToken, "", "f2")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"reason":"refresh_in_flight"`) {
+		t.Fatalf("in flight: %d %s", rec.Code, rec.Body.String())
+	}
+	*f.outcomeStatus = http.StatusNotFound
+	*f.outcome = vmctl.OwnerUpdateResult{Outcome: "skipped", Reason: "no computer"}
+	if rec = f.post(f.ownerToken, "", "f3"); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"skipped"`) {
+		t.Fatalf("no computer: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOwnerUpdateClientMapsAPlainConflictToASkip(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"route does not join"}`))
+	}))
+	defer srv.Close()
+	res, err := vmctl.NewClient(srv.URL).OwnerUpdateContext(context.Background(), "u", "primary")
+	if err != nil || res.Outcome != "skipped" || res.Reason != "route does not join" {
+		t.Fatalf("plain 409: %+v err=%v", res, err)
+	}
+}
