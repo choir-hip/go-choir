@@ -4131,7 +4131,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A Texture run reads its frame before its first model call and again
 	// whenever its document or records change (Cut 2 2a).
 	frameTurns := rt.textureFrameInjector(rec)
-	injectUserTurns := composeInjectors(frameTurns, rt.coagentUpdateTurnInjectorWithInitialPhase(rec, initialMailboxPhase))
+	activationDeliveredSet := newActivationDelivered()
+	injectUserTurns := composeInjectors(frameTurns, rt.coagentUpdateTurnInjectorWithDelivered(rec, initialMailboxPhase, activationDeliveredSet))
 	initialMessages, err = memory.initialize(ctx, initialMessages)
 	if err != nil {
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
@@ -4229,7 +4230,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		// a bounded reminder, then fail the run so assignment fate joins.
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(rt.engineeringCompletionGuard(rec, deliveries)))
 	}
-	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
+	if waiter := rt.coagentParkWaiter(rec, activationDeliveredSet); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
 	// A provider quota switches the run to the next model that can serve it

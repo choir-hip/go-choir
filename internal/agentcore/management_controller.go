@@ -11,6 +11,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -2458,7 +2459,60 @@ func runMemoryUserMessageTexts(raw json.RawMessage) []string {
 	return out
 }
 
+// activationDelivered is the set of occurrences one activation (one tool loop)
+// has been handed. The durable-memory seen scan stays the authority across
+// restarts, but it matches envelopes by trajectory, agent and run; a packet it
+// fails to match was redelivered at every end of turn (the paper's management
+// wedge, paper-token-budget-2026-11-09 section 1.3). The injector and the park
+// waiter share one set so they agree on what is still undelivered. Ids are
+// marked when the message is built, before the caller appends it: a failed
+// append ends the activation (the run errors out), so the packet stays pending
+// in the store for the next activation, which starts with an empty set.
+type activationDelivered struct {
+	mu        sync.Mutex
+	updates   map[string]bool
+	revisions map[string]bool
+}
+
+func newActivationDelivered() *activationDelivered {
+	return &activationDelivered{updates: map[string]bool{}, revisions: map[string]bool{}}
+}
+
+func (d *activationDelivered) mergeInto(updates, revisions map[string]bool) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for id := range d.updates {
+		updates[id] = true
+	}
+	for id := range d.revisions {
+		revisions[id] = true
+	}
+}
+
+func (d *activationDelivered) markUpdates(ids []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, id := range ids {
+		d.updates[id] = true
+	}
+}
+
+func (d *activationDelivered) markRevisions(ids []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, id := range ids {
+		d.revisions[id] = true
+	}
+}
+
 func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecord, initialPhase string) toolregistry.InjectUserTurnsFunc {
+	return rt.coagentUpdateTurnInjectorWithDelivered(rec, initialPhase, newActivationDelivered())
+}
+
+func (rt *Runtime) coagentUpdateTurnInjectorWithDelivered(rec *types.RunRecord, initialPhase string, delivered *activationDelivered) toolregistry.InjectUserTurnsFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
@@ -2477,6 +2531,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			return nil, fmt.Errorf("derive delivered lifecycle occurrences from run memory: %w", err)
 		}
 		seenUpdates, seenOwnerRevisions := lifecycleInjectionIDsFromRunMemory(rec, entries)
+		delivered.mergeInto(seenUpdates, seenOwnerRevisions)
 		phase := coagentPacketDeliveryMid
 		if finalCheckpoint {
 			phase = coagentPacketDeliveryFinal
@@ -2486,10 +2541,11 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			// later arrivals after a successful append are mid-activation turns.
 			phase = initialPhase
 		}
-		ownerMessages, _, err := rt.lifecycleOwnerRevisionTurnForRun(context.Background(), rec, phase, seenOwnerRevisions)
+		ownerMessages, ownerRevisionIDs, err := rt.lifecycleOwnerRevisionTurnForRun(context.Background(), rec, phase, seenOwnerRevisions)
 		if err != nil {
 			return nil, fmt.Errorf("list pending owner revision turns: %w", err)
 		}
+		delivered.markRevisions(ownerRevisionIDs)
 		updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
@@ -2513,6 +2569,11 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		if err != nil {
 			return nil, err
 		}
+		freshIDs := make([]string, 0, len(fresh))
+		for _, update := range fresh {
+			freshIDs = append(freshIDs, strings.TrimSpace(update.UpdateID))
+		}
+		delivered.markUpdates(freshIDs)
 		return append(ownerMessages, msgs...), nil
 	}
 }
@@ -2596,7 +2657,7 @@ func managementParkDecision(ready, authored, open bool) toolregistry.ToolLoopPar
 	}
 }
 
-func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoopParkWaiterFunc {
+func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord, delivered *activationDelivered) toolregistry.ToolLoopParkWaiterFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
@@ -2620,7 +2681,8 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoop
 			if err != nil {
 				return false, fmt.Errorf("derive parked delivery occurrences from run memory: %w", err)
 			}
-			seen, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
+			seen, seenRevisions := lifecycleInjectionIDsFromRunMemory(rec, entries)
+			delivered.mergeInto(seen, seenRevisions)
 			for _, update := range updates {
 				id := strings.TrimSpace(update.UpdateID)
 				if id != "" && !seen[id] {

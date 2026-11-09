@@ -147,6 +147,13 @@ const maxCompletionGuardWaits = 128
 
 const maxToolLoopParkResumes = 16
 
+// maxFinalCheckpointInjections bounds how many times one tool loop re-enters
+// the model because the injector had a packet at the final checkpoint. A
+// final-checkpoint injection the model answers with another end_turn and no
+// tool call also ends the loop at once: the packet stays unprocessed in the
+// store for the next wake (paper-token-budget-2026-11-09, section 1.3).
+const maxFinalCheckpointInjections = 3
+
 var requiredNextToolCallTimeout = 45 * time.Second
 
 const requiredNextToolDefaultMaxTokens = 2048
@@ -708,6 +715,8 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	var completionGuardAttempts int
 	var completionGuardWaits int
 	var parkAttempts int
+	finalCheckpointInjections := 0
+	lastTurnWasFinalInjection := false
 	var partialTextFragments []string
 	var repeats repeatTracker
 
@@ -1394,6 +1403,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 
 		switch resp.StopReason {
 		case "tool_use":
+			lastTurnWasFinalInjection = false
 			if len(resp.ToolCalls) == 0 {
 				return "", totalUsage, fmt.Errorf("tool loop: provider returned tool_use without tool calls")
 			}
@@ -1654,12 +1664,14 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 				continue
 			}
-			if injectUserTurns != nil {
+			if injectUserTurns != nil && !lastTurnWasFinalInjection && finalCheckpointInjections < maxFinalCheckpointInjections {
 				injected, err := injectUserTurns(true)
 				if err != nil {
 					return "", totalUsage, fmt.Errorf("tool loop final inbox checkpoint: %w", err)
 				}
 				if len(injected) > 0 {
+					finalCheckpointInjections++
+					lastTurnWasFinalInjection = true
 					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist assistant final message: %w", err)
 					}
@@ -1740,16 +1752,24 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist parked assistant message: %w", err)
 					}
+					if finalCheckpointInjections >= maxFinalCheckpointInjections {
+						return combinedFinalText(resp.Text), totalUsage, nil
+					}
 					injected, err := injectUserTurns(true)
 					if err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop inject turns after park: %w", err)
 					}
 					if len(injected) == 0 {
-						return "", totalUsage, fmt.Errorf("tool loop park waiter continued without injected turns")
+						// The waiter's readiness and the injector disagreed (the
+						// packet was already delivered this activation). Nothing
+						// is left to inject: fall through to complete.
+						return combinedFinalText(resp.Text), totalUsage, nil
 					}
 					if err := appendInjected(injected); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist injected turns after park: %w", err)
 					}
+					finalCheckpointInjections++
+					lastTurnWasFinalInjection = true
 					parkAttempts++
 					continue
 				}

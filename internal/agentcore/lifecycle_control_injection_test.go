@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -2004,4 +2005,71 @@ func normalizedControlPacket(packet types.SourcePacket) (types.SourcePacket, err
 	packet.SchemaVersion = types.CoagentSourcePacketSchemaV1
 	packet = coagentpacket.Normalize(packet)
 	return packet, coagentpacket.Validate(packet)
+}
+
+// A packet delivered at the final checkpoint is not delivered again in the
+// same activation, even if the durable-memory seen scan does not recognize it
+// (paper-token-budget-2026-11-09, section 1.3).
+func TestFinalCheckpointDeliversPacketOncePerActivation(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := bindResearchControlFixture(t, rt, s, "owner-final-once", "final-once")
+	inject := rt.coagentUpdateTurnInjectorWithInitialPhase(&fixture.run, "")
+	first, err := inject(true)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first final checkpoint=%s err=%v", first, err)
+	}
+	// Deliberately not appended to run memory: the seen scan cannot help.
+	second, err := inject(true)
+	if err != nil || len(second) != 0 {
+		t.Fatalf("final checkpoint redelivered=%s err=%v", second, err)
+	}
+	// A fresh injector (the next activation) still sees the unprocessed packet.
+	next := rt.coagentUpdateTurnInjectorWithInitialPhase(&fixture.run, "")
+	again, err := next(true)
+	if err != nil || len(again) != 1 {
+		t.Fatalf("next activation lost the packet=%s err=%v", again, err)
+	}
+}
+
+// The real mismatch path: the durable envelope names a different trajectory
+// than the run record, so the run-memory seen scan skips it. The per-activation
+// delivered set still stops the redelivery, mid-activation too, and the park
+// waiter agrees with the injector about what is undelivered.
+func TestScanMismatchedPacketIsNotRedeliveredAndParkWaiterAgrees(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := bindResearchControlFixture(t, rt, s, "owner-scan-mismatch", "scan-mismatch")
+	fixture.run.Metadata = cloneMetadata(fixture.run.Metadata)
+	fixture.run.Metadata["actor_park_on_idle"] = true
+	delivered := newActivationDelivered()
+	inject := rt.coagentUpdateTurnInjectorWithDelivered(&fixture.run, "", delivered)
+	waiter := rt.coagentParkWaiter(&fixture.run, delivered)
+	if waiter == nil {
+		t.Fatal("no park waiter")
+	}
+	before, err := waiter(context.Background(), toolregistry.ToolLoopParkState{})
+	if err != nil || !before.Continue {
+		t.Fatalf("waiter before delivery=%+v err=%v", before, err)
+	}
+	first, err := inject(false)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first mid delivery=%s err=%v", first, err)
+	}
+	mismatched := strings.ReplaceAll(string(first[0]), fixture.trajectoryID, "some-other-trajectory")
+	if mismatched == string(first[0]) {
+		t.Fatal("fixture trajectory not present in the packet")
+	}
+	appendAuthenticatedInjectionForTest(t, s, fixture.run, json.RawMessage(mismatched))
+	// The scan alone does not recognize the mismatched envelope.
+	if fresh, err := rt.coagentUpdateTurnInjectorWithInitialPhase(&fixture.run, "")(false); err != nil || len(fresh) != 1 {
+		t.Fatalf("scan unexpectedly recognized the mismatched envelope: %s err=%v", fresh, err)
+	}
+	for _, final := range []bool{false, true} {
+		if again, err := inject(final); err != nil || len(again) != 0 {
+			t.Fatalf("redelivered (final=%v)=%s err=%v", final, again, err)
+		}
+	}
+	after, err := waiter(context.Background(), toolregistry.ToolLoopParkState{})
+	if err != nil || after.Continue {
+		t.Fatalf("waiter reports a phantom ready=%+v err=%v", after, err)
+	}
 }
