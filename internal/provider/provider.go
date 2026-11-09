@@ -544,6 +544,7 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 			ar.Tools[i].InputSchema = map[string]any{"type": "object"}
 		}
 	}
+	fitOutputBudget(&ar, effectiveModel(req.Model, p.modelID))
 	return ar
 }
 
@@ -827,6 +828,7 @@ func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropic
 
 	ar.Messages = convertMessages(req.Messages)
 	ar.Tools = convertToolDefs(req.Tools)
+	fitOutputBudget(&ar, modelID)
 	return ar
 }
 
@@ -1671,7 +1673,7 @@ func (p *OpenCodeProvider) buildResponsesRequestBody(req LLMRequest, modelID str
 }
 
 func (p *OpenCodeProvider) buildMessagesRequestBody(req LLMRequest, modelID string) anthropicRequest {
-	return anthropicRequest{
+	ar := anthropicRequest{
 		Model:      modelID,
 		MaxTokens:  defaultMaxTokens(req.MaxTokens, modelID),
 		Stream:     req.Stream,
@@ -1685,6 +1687,8 @@ func (p *OpenCodeProvider) buildMessagesRequestBody(req LLMRequest, modelID stri
 			return []anthropicSystemBlock{{Type: "text", Text: req.System}}
 		}(),
 	}
+	fitOutputBudget(&ar, modelID)
+	return ar
 }
 
 func openCodeEndpoint(baseURL, suffix string) string {
@@ -2392,17 +2396,58 @@ func convertToolDefs(tools []ToolDef) []anthropicTool {
 	return out
 }
 
+// legacyUncataloguedMaxTokens is the budget of a model the catalog does not
+// list when the call names none: its real maximum is unknown, and a guess
+// above it is refused by the provider.
+const legacyUncataloguedMaxTokens = 4096
+
+// outputBudgetFloor and outputBudgetMargin bound fitOutputBudget: the budget
+// is never brought below the floor, and the margin covers the error of the
+// prompt estimate.
+const (
+	outputBudgetFloor  = 4096
+	outputBudgetMargin = 2048
+)
+
 // defaultMaxTokens is the output budget for a protocol that requires one
 // (Anthropic messages). There is no cap below the model's own maximum (owner
 // 2026-11-09): a call that names no budget gets the catalog maximum, and a
 // budget above it (set for the model the run fell back from) is brought down
-// to it, since the provider refuses a larger one.
+// to it, since the provider refuses a larger one. A model the catalog does
+// not list keeps the call's budget, or legacyUncataloguedMaxTokens.
 func defaultMaxTokens(n int, modelID string) int {
-	limit := maxOutputTokensForModel(modelID)
+	limit, known := modelcatalog.MaxOutputTokensKnown(modelID)
+	if !known {
+		if n <= 0 {
+			return legacyUncataloguedMaxTokens
+		}
+		return n
+	}
 	if n <= 0 || n > limit {
 		return limit
 	}
 	return n
+}
+
+// fitOutputBudget brings the budget down to what the model's context window
+// leaves after the prompt: a provider refuses a call whose prompt plus budget
+// passes the window. The prompt is estimated from the request's size (three
+// bytes a token, which overestimates), so a short prompt keeps the maximum.
+func fitOutputBudget(ar *anthropicRequest, modelID string) {
+	if _, known := modelcatalog.MaxOutputTokensKnown(modelID); !known {
+		return
+	}
+	body, err := json.Marshal(ar)
+	if err != nil {
+		return
+	}
+	room := modelcatalog.ContextWindowTokensForModel(modelID) - len(body)/3 - outputBudgetMargin
+	if room < outputBudgetFloor {
+		room = outputBudgetFloor
+	}
+	if ar.MaxTokens > room {
+		ar.MaxTokens = room
+	}
 }
 
 func maxOutputTokensForModel(modelID string) int {

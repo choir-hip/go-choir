@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 )
 
 func TestMaxOutputTokensForModelUsesSupportedModelCatalog(t *testing.T) {
@@ -1206,5 +1208,28 @@ func TestRequiredOutputBudgetIsTheModelsMaximum(t *testing.T) {
 	}
 	if got := defaultMaxTokens(0, "glm-5.2"); got != 131072 {
 		t.Errorf("no budget on glm-5.2: %d, want 131072", got)
+	}
+	// A model the catalog does not list: its maximum is unknown, so the call's
+	// budget stands, or the old 4,096.
+	if got := defaultMaxTokens(0, "not-in-the-catalog"); got != 4096 {
+		t.Errorf("no budget on an uncatalogued model: %d, want 4096", got)
+	}
+	if got := defaultMaxTokens(9000, "not-in-the-catalog"); got != 9000 {
+		t.Errorf("an explicit budget on an uncatalogued model: %d, want 9000", got)
+	}
+	// A prompt near the window: the budget is what the window leaves, since
+	// Bedrock refuses prompt plus budget above the window.
+	const haiku45 = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+	window := modelcatalog.ContextWindowTokensForModel(haiku45)
+	big := LLMRequest{Model: haiku45, Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: strings.Repeat("a", (window-20000)*3)}}}}}
+	got := p.buildRequestBody(big).MaxTokens
+	if got >= 20000 || got < outputBudgetFloor {
+		t.Errorf("a prompt 20,000 tokens short of the window: max_tokens = %d, want under 20000 and at least %d", got, outputBudgetFloor)
+	}
+	// A prompt past the window keeps the floor: the provider's own refusal
+	// is the overflow signal the run compacts on.
+	huge := LLMRequest{Model: haiku45, Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: strings.Repeat("a", window*4)}}}}}
+	if got := p.buildRequestBody(huge).MaxTokens; got != outputBudgetFloor {
+		t.Errorf("a prompt past the window: max_tokens = %d, want the floor %d", got, outputBudgetFloor)
 	}
 }

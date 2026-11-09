@@ -156,8 +156,6 @@ const maxFinalCheckpointInjections = 3
 
 var requiredNextToolCallTimeout = 45 * time.Second
 
-const requiredNextToolDefaultMaxTokens = 2048
-
 // ToolLoopOption configures optional tool-loop behavior.
 type ToolLoopOption func(*toolLoopOptions)
 
@@ -1052,13 +1050,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		initialToolChoiceApplied := false
 		if len(toolDefs) > 0 && requiredNextTool != nil {
 			req.ToolChoice = exactRequiredToolChoice(requiredNextTool.Name)
-			if req.MaxTokens <= 0 {
-				// Normal Fireworks agent turns intentionally omit max_tokens, but
-				// forced continuation turns are only supposed to emit a tool call.
-				// Give that narrow call a finite budget so provider defaults cannot
-				// spend the whole required-tool timeout in open-ended reasoning.
-				req.MaxTokens = requiredNextToolDefaultMaxTokens
-			}
 		} else if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
 			initialToolChoiceApplied = true
 			req.ToolChoice = options.initialToolChoice

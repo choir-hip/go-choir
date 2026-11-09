@@ -551,6 +551,18 @@ func MaxOutputTokensForModel(modelID string) int {
 	return DefaultMaxOutputTokens
 }
 
+// MaxOutputTokensKnown returns the catalog's maximum output tokens for a
+// model ID and whether the catalog lists one.
+func MaxOutputTokensKnown(modelID string) (int, bool) {
+	modelID = strings.TrimSpace(modelID)
+	for _, model := range SupportedModels() {
+		if model.ID == modelID && model.MaxOutputTokens > 0 {
+			return model.MaxOutputTokens, true
+		}
+	}
+	return 0, false
+}
+
 // ContextWindowTokensForModel returns the advertised context window size for a
 // model ID. Falls back to DefaultContextWindowTokens if the model is not found
 // or does not advertise a window.
