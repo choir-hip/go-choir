@@ -691,8 +691,8 @@ grep -q 'VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "o
 
 grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-bases' && grep -q 'd /var/lib/go-choir/guest-bases 0755 root root -' "$nix" && ok "nix: guest-bases exists (tmpfiles) and vmctl reads it read-only" || bad "nix: guest-bases is not wired for vmctl"
 
-grep -q 'VM_GUEST_LAYERED_COMPUTERS=' "$nix" && grep -q 'VM_GUEST_LAYERED_RELEASE_LINK=/var/lib/go-choir/guest-layered"' "$nix" && grep -qE '^\s*guestLayeredComputers = \[ "computer-59c902c5d46caecc0a180a8557164e72" \];' "$nix" && ok "nix: the layered ring selector is on for d@e (ComputerIDs only)" || bad "nix: the layered ring selector is missing or not set to d@e"
-grep -q 'VM_GUEST_TOOL_PROFILE=${guestToolProfile}' "$nix" && grep -q 'VM_GUEST_TOOLS_DIR=/var/lib/go-choir/guest-tools"' "$nix" && grep -qE '^\s*guestToolProfile = "toolchain=\*;office=none;browser=\*;delegate=\$\{claudeDelegateComputers\}";' "$nix" && grep -qE '^\s*claudeDelegateComputers = ' "$nix" \
+grep -q 'VM_GUEST_LAYERED_COMPUTERS=' "$nix" && grep -q 'VM_GUEST_LAYERED_RELEASE_LINK=/var/lib/go-choir/guest-layered"' "$nix" && grep -qE '^\s*guestLayeredComputers = \[ "\*" \];' "$nix" && ok "nix: the layered ring selector names every computer (the S3 flip)" || bad "nix: the layered ring selector is missing or not set to every computer"
+grep -q 'VM_GUEST_TOOL_PROFILE=${guestToolProfile}' "$nix" && grep -q 'VM_GUEST_TOOLS_DIR=/var/lib/go-choir/guest-tools"' "$nix" && grep -qE '^\s*guestToolProfile = "toolchain=\*;office=\*;browser=\*;delegate=\*";' "$nix" && grep -qE '^\s*claudeDelegateComputers = ' "$nix" \
 	&& grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-tools' && grep -q 'd /var/lib/go-choir/guest-tools 0755 root root -' "$nix" \
 	&& ok "nix: the tool layer profile and guest-tools are wired for vmctl" || bad "nix: the tool layer profile or guest-tools wiring is missing"
 grep -q 'system.activationScripts.go-choir-guest-release-layered' "$nix" && grep -q 'guestImageLayered' "$nix" && ok "nix: the layered image is a second release and a second link, never the guest link" || bad "nix: the layered release activation is missing"

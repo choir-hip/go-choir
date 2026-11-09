@@ -13,9 +13,10 @@ package vmmanager
 //	VM_GUEST_TOOL_PROFILE  layer=selector;layer=selector;...
 //
 // A selector is the standard computer selector (computer_select.go: ids,
-// class:<warmness class>, "*"), plus "none". The Claude binary layer is
-// named by the delegate's computer ids (nix/node-b.nix claudeDelegateComputers,
-// the list the gateway's relay serves). The browser is not a grant: every computer
+// class:<warmness class>, "*"), plus "none". Every layer is attached for
+// every computer (nix/node-b.nix guestToolProfile, owner 2026-11-08): an
+// unread layer costs no page cache, and the Claude delegate's authority is the
+// gateway relay's grant list, not the binary. The browser is not a grant: every computer
 // gets it (docs/problems/selfdev-screens-are-not-files-2026-11-03.md). A layer the profile does not name is attached
 // for every computer, so an unconfigured or new layer never takes a tool away.
 // The choice is made at a cold boot and recorded in the launch config; a wake
