@@ -572,6 +572,9 @@ type Runtime struct {
 	// sourcePreflight replaces the capsule executor's source preflight in the
 	// engineering cast plan (tests; nil uses capsuleExecutor).
 	sourcePreflight sourcePreflighter
+	// captureInputs replaces corpusd as the capture source for an
+	// assignment's inputs (tests; nil uses cfg.CorpusdURL).
+	captureInputs assignmentCaptureSource
 	// U1b: the booted base's objects are fetched into the guest repository.
 	sourceBaseFetchMu       sync.Mutex
 	sourceBaseFetchRunning  bool

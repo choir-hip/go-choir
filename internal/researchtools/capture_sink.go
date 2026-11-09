@@ -155,6 +155,36 @@ func (c *CorpusdCaptureSink) ReadCapture(ctx context.Context, captureID string, 
 	return json.RawMessage(raw), nil
 }
 
+// OpenCaptureBody streams the raw bytes as fetched of a capture, named by the
+// record's content_blob_id ("sha256:<hex>"), from corpusd. The caller closes
+// it and bounds what it reads.
+func (c *CorpusdCaptureSink) OpenCaptureBody(ctx context.Context, contentBlobID string) (io.ReadCloser, error) {
+	if c == nil || c.BaseURL == "" {
+		return nil, fmt.Errorf("capture body: corpusd URL is not configured")
+	}
+	hash := strings.TrimPrefix(strings.TrimSpace(contentBlobID), "sha256:")
+	if len(hash) != 64 || strings.Trim(hash, "0123456789abcdef") != "" {
+		return nil, fmt.Errorf("capture body: %q is not a sha256 blob id", contentBlobID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/internal/platform/captures/bodies/"+hash, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := c.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("corpusd returned %d for the capture body", resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
 // ListCaptures returns the computer's captures, newest first, at most limit
 // of them, from corpusd's object list (captures carry no body in the row).
 func (c *CorpusdCaptureSink) ListCaptures(ctx context.Context, ownerID, computerID string, limit int) ([]objectgraph.Object, error) {

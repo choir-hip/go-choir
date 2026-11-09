@@ -59,6 +59,12 @@ type SpawnSpec struct {
 	// failure 15, problem 1, option A).
 	CarriedPatchDir string
 
+	// InputsDir is a trusted-runtime input: the host-side directory of the
+	// evidence a Cast named (the files and manifest.json StageInputs wrote),
+	// laid read-only in the source lower at /var/lib/artifact/inputs
+	// (inputs.go). Hardlinked where the filesystem allows, copied otherwise.
+	InputsDir string
+
 	// Egress makes this an ecosystem_proxy (L2) capsule: the executor serves
 	// an egress proxy on EgressSocketPath and the broker forwards loopback
 	// TCP to it. It is a trusted-runtime input read from the durable

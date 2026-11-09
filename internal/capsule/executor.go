@@ -707,7 +707,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, fmt.Errorf("capsule source lower reference: %w", err)
 	}
 	timer.phase("source_lower_ready", fmt.Sprintf("cache_hit=%t", cacheHit))
-	extraLower := spec.VerifierBundleDir != "" || spec.CarriedPatchDir != ""
+	extraLower := spec.VerifierBundleDir != "" || spec.CarriedPatchDir != "" || spec.InputsDir != ""
 	if extraLower {
 		_ = os.MkdirAll(sourceLower, 0o755)
 		_ = os.Chmod(sourceLower, 0o755)
@@ -734,6 +734,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		}
 	}
 	timer.phase("selfdev_inputs", fmt.Sprintf("verifier=%t carried=%t", spec.VerifierBundleDir != "", spec.CarriedPatchDir != ""))
+	if spec.InputsDir != "" {
+		// Only the named bodies, bounded by StageInputs; no store copy.
+		linked, copied, inputBytes, err := materializeInputs(ctx, spec.InputsDir, filepath.Join(sourceLower, filepath.FromSlash(InputsPrefix)))
+		if err != nil {
+			return nil, fmt.Errorf("capsule inputs: %w", err)
+		}
+		timer.phase("inputs", fmt.Sprintf("linked=%d copied=%d bytes=%d", linked, copied, inputBytes))
+	}
 	caps.SourceSnapshotDigest = sourceDigest
 	pinnedLayers := cacheLower
 	if extraLower {

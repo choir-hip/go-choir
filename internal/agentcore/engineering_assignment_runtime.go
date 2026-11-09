@@ -919,7 +919,15 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		created = &capsule.Capsule{ID: capsuleID, State: capsule.StateActive}
 	} else {
 		var spawnErr error
+		// Evidence the Cast names reaches the capsule as read-only files
+		// (engineering_inputs.go); a failure there never fails the spawn.
+		inputsDir, removeInputs := rt.stageAssignmentInputs(ctx, assignment)
+		if inputsDir != "" {
+			spec.InputsDir = inputsDir
+			phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "inputs", phaseStarted)
+		}
 		created, spawnErr = exec.Spawn(ctx, spec)
+		removeInputs()
 		if spawnErr != nil {
 			spawnErr = fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr)
 			if busy := engineeringHostMemoryWait(assignmentID, spawnErr); busy != nil && rt.kernelMode && rt.scheduleActor != nil {
