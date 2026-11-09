@@ -97,3 +97,14 @@ func TestParseYouTubeURL(t *testing.T) {
 		}
 	}
 }
+
+func TestAudioURLRefusesAnEncodedControlCharacter(t *testing.T) {
+	for _, u := range []string{"https://a.example.com/x%0Ay.mp3", "https://a.example.com/x%00.mp3", "https://a.example.com/x%7F.ogg"} {
+		if err := ValidAudioURL(u); err == nil {
+			t.Errorf("ValidAudioURL(%q) accepted", u)
+		}
+	}
+	if err := ValidAudioURL("https://a.example.com/x%20y.mp3"); err != nil {
+		t.Errorf("an encoded space is a plain character: %v", err)
+	}
+}

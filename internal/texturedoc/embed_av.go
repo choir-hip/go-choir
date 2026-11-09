@@ -87,6 +87,13 @@ func ValidAudioURL(raw string) error {
 	if err != nil {
 		return err
 	}
+	// The decoded path names the default title; a control character there
+	// would split the token's frame line (review: %0A in the path).
+	for _, r := range u.Path {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("must not hold an encoded control character")
+		}
+	}
 	if audioExts[strings.ToLower(path.Ext(u.Path))] {
 		return nil
 	}
