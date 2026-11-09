@@ -21,7 +21,7 @@ type PackageManifest = {
   version: string;
   origin: string;
   display: { title: string; icon: string; description: string };
-  app: {
+  app?: {
     entry: string;
     abi: string;
     aliases?: string[];
@@ -87,7 +87,9 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
       const name = manifest?.name;
       // A shell-surface package draws no window (shell-slots.ts registers its
       // surfaces); what it contributes still applies.
-      if (typeof name === 'string' && name && manifest.app === undefined && Array.isArray((manifest as any).provides) && isObject(manifest.display)) {
+      // A pack (contributes, no app, no provides) is the same: data only.
+      if (typeof name === 'string' && name && manifest.app === undefined && isObject(manifest.display)
+        && (Array.isArray((manifest as any).provides) || isObject(manifest.contributes))) {
         if (!taken.has(name)) {
           taken.add(name);
           if (isObject(manifest.contributes)) contributions.push({ name, contributes: manifest.contributes });

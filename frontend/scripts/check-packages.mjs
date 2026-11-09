@@ -214,7 +214,7 @@ function checkLinks(contributes, owner, where) {
 
 // contributes.themes: { id, file } with the file in the package, JSON, schema 2, the same id.
 // The token, safe-value and contrast rules run when the theme registers (theme.ts) and in tests/theme-contract.spec.js.
-function checkThemes(contributes, dir, where) {
+function checkThemes(contributes, dir, where, owner) {
   if (contributes.themes === undefined) return;
   if (!Array.isArray(contributes.themes)) {
     fail(where, 'themes must be an array');
@@ -227,6 +227,8 @@ function checkThemes(contributes, dir, where) {
     if (typeof t.id !== 'string' || !/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/.test(t.id)) fail(at, 'id must be lowercase letters, digits and dashes');
     else if (ids.has(t.id)) fail(at, `id "${t.id}" is listed twice`);
     else ids.add(t.id);
+    // X3: a theme id is the package's own namespace (apppackage/contributes.go).
+    if (owner && typeof t.id === 'string' && t.id !== owner && !t.id.startsWith(`${owner}.`)) fail(at, `id "${t.id}" must be "${owner}" or start with "${owner}." (X3)`);
     if (typeof t.file !== 'string' || !/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/.test(t.file) || t.file.split('/').includes('..')) {
       fail(at, 'file must be a relative .json path inside the package');
       return;
@@ -393,10 +395,13 @@ function checkProvides(manifest, where, pkgDir) {
 
 function checkManifest(manifest, dirName, where, pkgDir) {
   const provider = isObject(manifest) && manifest.provides !== undefined && manifest.app === undefined;
+  // A pack is data only: no app, no shell surface, and contributes (themes,
+  // commands, keybindings) is its whole content. It has no App.svelte.
+  const pack = isObject(manifest) && manifest.app === undefined && manifest.provides === undefined && manifest.contributes !== undefined;
   const ok = strictKeys(
     manifest, where,
     // SDK 2.0.0 (X1): opens moved into contributes; a top-level opens is refused as an unknown key.
-    provider ? ['schema', 'name', 'version', 'display', 'provides'] : ['schema', 'name', 'version', 'display', 'app'],
+    provider ? ['schema', 'name', 'version', 'display', 'provides'] : pack ? ['schema', 'name', 'version', 'display', 'contributes'] : ['schema', 'name', 'version', 'display', 'app'],
     ['kinds', 'uses_kinds', 'contributes', 'capabilities'],
   );
   if (!ok) return;
@@ -409,12 +414,22 @@ function checkManifest(manifest, dirName, where, pkgDir) {
     for (const k of ['title', 'icon', 'description']) if (!str(manifest.display[k])) fail(`${where} display`, `"${k}" must be a non-empty string`);
   }
 
-  if (provider) {
-    checkProvides(manifest, where, pkgDir);
+  if (provider) checkProvides(manifest, where, pkgDir);
+  if (provider || pack) {
     if (Array.isArray(manifest.contributes?.opens) && manifest.contributes.opens.length) fail(where, 'contributes.opens needs an app to open the file');
   }
+  if (pack && isObject(manifest.contributes)) {
+    const c = manifest.contributes;
+    if (!['commands', 'keybindings', 'themes', 'links', 'settings', 'menus', 'desks'].some((k) => Array.isArray(c[k]) ? c[k].length > 0 : c[k] !== undefined && isObject(c[k]))) {
+      fail(where, 'a package with no app contributes nothing: it needs a theme, a command, a keybinding or another contribution');
+    }
+    if (Array.isArray(c.links) && c.links.length) fail(where, 'contributes.links opens the package\'s app and the package has none');
+    for (const [i, cmd] of (Array.isArray(c.commands) ? c.commands : []).entries()) {
+      if (isObject(cmd?.run) && cmd.run.handler !== undefined) fail(`${where} contributes.commands[${i}]`, 'run.handler needs an app; a pack command is a data action');
+    }
+  }
   const app = manifest.app;
-  if (!provider && strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases', 'requires_sdk'])) {
+  if (!provider && !pack && strictKeys(app, `${where} app`, ['entry', 'abi', 'launcher', 'window', 'auth', 'theme'], ['aliases', 'requires_sdk'])) {
     if (app.requires_sdk !== undefined && (typeof app.requires_sdk !== 'string' || !/^\^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$/.test(app.requires_sdk))) {
       fail(`${where} app`, 'requires_sdk must be "^MAJOR.MINOR"');
     }
@@ -468,7 +483,7 @@ function checkManifest(manifest, dirName, where, pkgDir) {
     const c = manifest.contributes;
     if (c.desks !== undefined) checkDesks(c.desks, manifest.name, pkgDir, `${where} contributes`);
     checkCommands(c, manifest.name, `${where} contributes`);
-    checkThemes(c, pkgDir, `${where} contributes`);
+    checkThemes(c, pkgDir, `${where} contributes`, manifest.name);
     checkLinks(c, manifest.name, `${where} contributes`);
     checkSettings(c, `${where} contributes`);
     checkMenus(c, manifest.name, ids(c), `${where} contributes`);

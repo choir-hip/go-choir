@@ -130,6 +130,49 @@ const badCases = [
   ['zero-packages', (root) => fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true }), /required package "image" is missing/],
 ];
 
+// A data-only package (a pack): no app, no App.svelte; themes and commands only.
+function writePack(root, dir, mutate = () => {}) {
+  const d = path.join(root, 'src/packages', dir);
+  fs.mkdirSync(d, { recursive: true });
+  const m = {
+    schema: 'choir.package/v2', name: dir, version: '0.1.0',
+    display: { title: 'Pack', icon: 'P', description: 'A theme pack.' },
+    contributes: {
+      themes: [{ id: `${dir}.dark`, file: 'theme.json' }],
+      commands: [{ id: `${dir}.use`, title: 'Use', scope: 'global', run: { action: 'setTheme', theme: `${dir}.dark` } }],
+    },
+  };
+  mutate(m);
+  fs.writeFileSync(path.join(d, 'choir-package.json'), JSON.stringify(m));
+  fs.writeFileSync(path.join(d, 'theme.json'), JSON.stringify({ schema_version: 2, id: `${dir}.dark` }));
+}
+
+test.describe('check-packages.mjs data-only packages', () => {
+  test('accepts a pack with themes and a command and no App.svelte', () => {
+    const root = makeFixture();
+    writePack(root, 'zz-pack');
+    const r = runCheck(root);
+    expect(r.out).toContain('zz-pack');
+    expect(r.code, r.out).toBe(0);
+  });
+  const packBad = [
+    ['a theme id outside the package namespace', (m) => { m.contributes.themes[0].id = 'futuristic-noir'; }, /X3/],
+    ['a pack that contributes nothing', (m) => { m.contributes = {}; }, /contributes nothing/],
+    ['a pack command with a handler', (m) => { m.contributes.commands[0].run = { handler: true }; }, /needs an app/],
+    ['a pack that opens files', (m) => { m.contributes.opens = [{ media_type: 'x/y', extensions: ['zzq'] }]; }, /needs an app/],
+    ['a manifest with neither app nor contributes', (m) => { delete m.contributes; }, /missing field "app"/],
+  ];
+  for (const [label, mutate, pattern] of packBad) {
+    test(`refuses ${label}`, () => {
+      const root = makeFixture();
+      writePack(root, 'zz-pack', mutate);
+      const r = runCheck(root);
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toMatch(pattern);
+    });
+  }
+});
+
 test.describe('check-packages.mjs', () => {
   test('passes on the real tree', () => {
     const r = runCheck(frontendRoot);

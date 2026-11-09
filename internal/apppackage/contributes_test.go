@@ -267,3 +267,20 @@ func TestLinkHomeIsFirstPartyAndNeedsNoParams(t *testing.T) {
 		t.Fatalf("a link without parameters or home must be refused, got %v", err)
 	}
 }
+
+// An app-less manifest that only opens files, or whose theme takes another
+// package's namespace, is refused; neither app nor contributes stays refused.
+func TestPackRefusals(t *testing.T) {
+	cases := map[string]func(map[string]any){
+		"opens without an app": func(v map[string]any) {
+			contrib(v)["opens"] = []any{map[string]any{"media_type": "x/y", "extensions": []any{"zzq"}}}
+		},
+		"theme in a stranger's name":  func(v map[string]any) { contrib(v)["themes"].([]any)[0].(map[string]any)["id"] = "other.dark" },
+		"neither app nor contributes": func(v map[string]any) { delete(v, "contributes") },
+	}
+	for name, mutate := range cases {
+		if _, err := ParseManifest(packJSON(t, mutate), OriginPublished); !errors.Is(err, ErrInvalidManifest) {
+			t.Errorf("%s: must be refused, got %v", name, err)
+		}
+	}
+}
