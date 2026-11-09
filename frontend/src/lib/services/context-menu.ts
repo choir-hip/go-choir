@@ -317,7 +317,7 @@ export function presentMenu(request: ContextMenuRequest): boolean {
   const active = activeRenderer();
   if (active && active.id !== BASE_RENDERER_ID && !defaultRenderers.has(active.id)) {
     const id = active.id;
-    items = [...items, { separator: true }, { id: USE_DEFAULT_ID, label: 'Use default menu', essential: true, onSelect: () => { void shellKernel.services.decline(root, RENDERER_SLOT, id); } }];
+    items = [...items, { separator: true }, { id: USE_DEFAULT_ID, label: 'Use default menu', essential: true, onSelect: () => { shellKernel.services.trip(RENDERER_SLOT, id, 'set aside by the owner (Use default menu)'); } }];
   }
   const intercepted = [...interceptors.values()].some((t) => t === null || t.includes(target.kind));
   const finish = (entries: ContextMenuEntry[]) => {

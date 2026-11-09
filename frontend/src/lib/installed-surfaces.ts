@@ -31,7 +31,8 @@ import type { ComponentType } from 'svelte';
 import { installedPackages, isSurfacePackage, loadPackageModule, type InstalledPackageRecord, type PackageModule } from './apps/packages';
 import { sdkSatisfies } from './sdk-version';
 import { hasInTreeSurface, recoveryBoot, registerSurfaceOf, removeSurfacePackage, restoreSurfacePackage, surfaceScope } from './shell-slots';
-import { onFailover } from './services/failover';
+import { shellKernel } from './shell-kernel';
+import { PackageLoadError } from './apps/packages';
 
 type SurfaceModule = PackageModule & { surface?: (service: string, ctx: { sdk: unknown; package: string }) => unknown; release?: () => void };
 export type SurfaceLoader = (record: InstalledPackageRecord) => Promise<SurfaceModule>;
@@ -66,7 +67,8 @@ export function describeInstalledSurfaces(): InstalledSurfaceState[] {
 }
 
 function eligible(r: InstalledPackageRecord): boolean {
-  return isSurfacePackage(r) && r.isolation === 'shell' && r.available !== false;
+  // Only a package the base image ships is displaced (mount is "in place of"); other names wait for their own admission.
+  return isSurfacePackage(r) && r.isolation === 'shell' && r.available !== false && hasInTreeSurface(r.name);
 }
 
 let defaultSdk: Promise<unknown> | null = null;
@@ -76,15 +78,23 @@ async function shellSdk(): Promise<unknown> {
   return defaultSdk;
 }
 
-async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: () => Promise<unknown>): Promise<void> {
+async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: () => Promise<unknown>, replaced: boolean): Promise<void> {
+  let gone = replaced; // the in-tree package is not registered (displaced by this mount, or by the release it replaces)
   const name = record.name;
   const fingerprint = fingerprintOf(record);
-  const refuse = (reason: string) => {
+  let module: SurfaceModule | null = null;
+  // A refused mount leaves the slot to the in-tree package: restored when this
+  // mount had already displaced it (a replace), and the module's CSS stops.
+  const refuse = async (reason: string, transient = false) => {
     console.warn(`[shell] installed surface ${name} not mounted: ${reason}`);
-    refused.set(name, { fingerprint, record, reason });
+    try { module?.release?.(); } catch { /* ignore */ }
+    if (gone) {
+      await removeSurfacePackage(name);
+      if (!recoveryBoot) await restoreSurfacePackage(name);
+    }
+    if (!transient) refused.set(name, { fingerprint, record, reason });
   };
   if (!sdkSatisfies(record.requires_sdk)) return refuse(`needs SDK ${record.requires_sdk}`);
-  let module: SurfaceModule;
   const provides = providesOf(record);
   const components: { provide: Provide; component: ComponentType }[] = [];
   try {
@@ -97,12 +107,14 @@ async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: (
       components.push({ provide, component: component as ComponentType });
     }
   } catch (err) {
-    return refuse((err as Error)?.message || String(err));
+    // A fetch that failed (the network, a 5xx) is tried again at the next sync; a bad module is not.
+    const transient = !(err instanceof PackageLoadError) || err.state === 'unavailable';
+    return refuse((err as Error)?.message || String(err), transient);
   }
 
   // Displace the base image's package of the same name, then register the installed surfaces.
-  const displaced = hasInTreeSurface(name);
   await removeSurfacePackage(name);
+  gone = true;
   const scope = surfaceScope(name);
   try {
     for (const { provide, component } of components) {
@@ -112,10 +124,13 @@ async function mount(record: InstalledPackageRecord, load: SurfaceLoader, sdk: (
       }, scope);
     }
   } catch (err) {
-    await removeSurfacePackage(name);
-    if (displaced) await restoreSurfacePackage(name);
     return refuse((err as Error)?.message || String(err));
   }
+  // The registrars swallow what they refuse (a slot the shell lacks, a missing
+  // component, an SDK out of range): every provide must be in the kernel's list.
+  const services = (shellKernel.services.describe().services || {}) as Record<string, { providers: { id: string }[] }>;
+  const missing = components.filter(({ provide }) => !services[String(provide.service)]?.providers.some((p) => p.id === name));
+  if (missing.length) return refuse(`${missing.map((m) => m.provide.service).join(', ')} did not register`);
   refused.delete(name);
   setAside.delete(name);
   live.set(name, { fingerprint, record, module });
@@ -149,33 +164,36 @@ export function syncInstalledSurfaces(
         if (!rec || fingerprintOf(rec) !== entry.fingerprint) map.delete(name);
       }
     }
+    const replaced = new Set<string>();
     for (const [name, entry] of [...live]) {
       const rec = want.get(name);
       if (!rec) await unmount(name, true); // I4
-      else if (fingerprintOf(rec) !== entry.fingerprint) await unmount(name, false); // I5
+      else if (fingerprintOf(rec) !== entry.fingerprint) { await unmount(name, false); replaced.add(name); } // I5
     }
     if (recoveryBoot) return; // I1
     for (const [name, rec] of want) {
       if (live.has(name)) continue;
       const fingerprint = fingerprintOf(rec);
       if (setAside.get(name)?.fingerprint === fingerprint || refused.get(name)?.fingerprint === fingerprint) continue; // I3
-      await mount(rec, load, sdk);
+      await mount(rec, load, sdk, replaced.has(name));
     }
   };
   queue = queue.then(run, run).catch((err) => { console.warn('[shell] installed surfaces:', err); });
   return queue;
 }
 
-// I3: a displacing installed provider that the kernel set aside gives the slot back to the in-tree package.
-onFailover((_slot, id, reason) => {
+// I3: a displacing installed provider the kernel set aside (the watchdog, a
+// refused activation, the owner's "Use default menu", a yank) gives the slot
+// back to the in-tree package. Every set-aside path reaches this listener.
+shellKernel.services.onTrip((slot, id, reason) => {
   const entry = live.get(id);
-  if (!entry) return;
+  if (!entry || !providesOf(entry.record).some((p) => p.service === slot)) return;
   live.delete(id);
   setAside.set(id, { fingerprint: entry.fingerprint, record: entry.record, reason });
   queue = queue.then(async () => {
     await removeSurfacePackage(id);
     try { entry.module.release?.(); } catch { /* ignore */ }
-    if (hasInTreeSurface(id)) await restoreSurfacePackage(id);
+    if (hasInTreeSurface(id) && !recoveryBoot) await restoreSurfacePackage(id);
   }).catch((err) => { console.warn('[shell] installed surface failover:', err); });
 });
 

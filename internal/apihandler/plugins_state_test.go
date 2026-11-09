@@ -65,7 +65,7 @@ func TestPluginsStateListsInstalledProviders(t *testing.T) {
 		if ownerID != "owner-1" {
 			t.Errorf("slot source asked for owner %q", ownerID)
 		}
-		return []agentcore.InstalledSlot{{Slot: "contextMenu.renderer", Package: "menu-default", ReleaseID: "r1", Isolation: "shell", Priority: 10, Available: true, Active: true}}
+		return []agentcore.InstalledSlot{{Slot: "contextMenu.renderer", Package: "menu-default", ReleaseID: "r1", Isolation: "shell", Priority: 10, Available: true, Eligible: true}}
 	})
 	rec := httptest.NewRecorder()
 	h.HandlePluginsState(rec, authenticatedCostsRequest(http.MethodGet, "/api/plugins/state", "owner-1"))
@@ -79,7 +79,7 @@ func TestPluginsStateListsInstalledProviders(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Slots) != 1 || out.Slots[0].Package != "menu-default" || !out.Slots[0].Active || out.Slots[0].Slot != "contextMenu.renderer" || out.Scope.Name != "kernel" {
+	if len(out.Slots) != 1 || out.Slots[0].Package != "menu-default" || !out.Slots[0].Eligible || out.Slots[0].Slot != "contextMenu.renderer" || out.Scope.Name != "kernel" {
 		t.Fatalf("state = %s", rec.Body.String())
 	}
 	// With no source the field is an empty list, never absent.

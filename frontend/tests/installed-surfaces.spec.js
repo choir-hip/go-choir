@@ -62,17 +62,17 @@ const THROWS = `<script>
 {#if request}<div>never</div>{/if}
 `;
 
-function buildSurface(files) {
+function buildSurface(files, name = 'menu-default') {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'choir-surface-'));
   const front = path.join(tmp, 'frontend');
-  const pkg = path.join(front, 'src/packages/menu-default');
+  const pkg = path.join(front, 'src/packages', name);
   fs.mkdirSync(pkg, { recursive: true });
   for (const [rel, content] of Object.entries(files)) fs.writeFileSync(path.join(pkg, rel), content);
   for (const script of ['build-module.mjs', 'package-boundary-plugin.mjs', 'css-fetch-functions.json']) fs.copyFileSync(path.join(runtimeDir, script), path.join(front, script));
   fs.copyFileSync(path.join(frontendRoot, 'package.json'), path.join(front, 'package.json'));
   fs.symlinkSync(path.join(frontendRoot, 'node_modules'), path.join(front, 'node_modules'));
   const out = path.join(tmp, 'module.js');
-  const r = spawnSync(process.execPath, [path.join(front, 'build-module.mjs'), front, 'menu-default', out, '^2.0'], { encoding: 'utf8', cwd: front });
+  const r = spawnSync(process.execPath, [path.join(front, 'build-module.mjs'), front, name, out, '^2.0'], { encoding: 'utf8', cwd: front });
   const bytes = r.status === 0 ? fs.readFileSync(out) : null;
   fs.rmSync(tmp, { recursive: true, force: true });
   if (!bytes) throw new Error(`surface build failed: ${r.stdout}${r.stderr}`);
@@ -80,13 +80,21 @@ function buildSurface(files) {
 }
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
-let good; let throws;
+const LAUNCHER_MANIFEST = {
+  schema: 'choir.package/v2', name: 'launcher', version: '1.1.0',
+  display: { title: 'Launcher', icon: 'L', description: 'An installed launcher' },
+  kinds: [], uses_kinds: [], contributes: { desks: [] },
+  capabilities: [{ grant: 'ui.shell' }],
+  provides: [{ service: 'launcher', abi: 'choir.service/launcher/v1', entry: 'Launcher.surface.svelte', requires_sdk: '^2.0' }],
+};
+let good; let throws; let launcher;
 
 test.beforeAll(() => {
   test.skip(!fs.existsSync(path.join(frontendRoot, 'node_modules/vite')), 'frontend/node_modules is not installed');
   const manifest = JSON.stringify(MANIFEST);
   good = buildSurface({ 'choir-package.json': manifest, 'Menu.surface.svelte': GOOD });
   throws = buildSurface({ 'choir-package.json': manifest, 'Menu.surface.svelte': THROWS });
+  launcher = buildSurface({ 'choir-package.json': JSON.stringify(LAUNCHER_MANIFEST), 'Launcher.surface.svelte': '<div data-installed-launcher>installed launcher</div>\n' }, 'launcher');
 });
 
 const record = (bytes, extra = {}) => ({
@@ -106,7 +114,7 @@ const record = (bytes, extra = {}) => ({
 
 async function openShell(page, query = '') {
   await page.route(/\/(auth|api)\//, (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthenticated"}' }));
-  for (const bytes of [good, throws]) {
+  for (const bytes of [good, throws, launcher]) {
     await page.route(`**/api/packages/modules/${sha256(bytes)}.js`, (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: bytes.toString('utf8') }));
   }
   await page.goto(BASE_URL + query);
@@ -213,4 +221,74 @@ test('I2: ?recovery=core mounts no installed surface and the base menu answers',
   await page.waitForTimeout(500);
   expect(await surfaceState(page)).toEqual([]);
   await expect(page.locator('[data-installed-menu]')).toHaveCount(0);
+});
+
+// Review blockers 1 to 4 (Sonnet, Devin).
+
+test('B1: a replacement release the shell refuses leaves the in-tree menu serving, not an empty slot', async ({ page }) => {
+  await openShell(page);
+  await install(page, [record(good)]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['active']);
+  // A newer release whose SDK range this shell cannot satisfy replaces it.
+  await install(page, [record(good, { install_id: 'install-newer', requires_sdk: '^9.0' })]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['refused']);
+  await expect.poll(async () => (await recoveryRow(page)).active).toBe('menu-default');
+  await page.locator('[data-desktop-icon][data-desktop-icon-id="files"]').click({ button: 'right' });
+  await expect(page.locator('[data-context-menu]').first()).toBeVisible();
+  await expect(page.locator('[data-installed-menu]')).toHaveCount(0);
+});
+
+test('B2: a provide the slot registrar swallows is detected, and the in-tree menu keeps serving', async ({ page }) => {
+  await openShell(page);
+  // The per-provide SDK range is one this shell cannot satisfy: registerRendererSurface skips it silently.
+  const manifest = { ...MANIFEST, provides: [{ ...MANIFEST.provides[0], requires_sdk: '^9.0' }] };
+  await install(page, [record(good, { manifest })]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['refused']);
+  await expect.poll(async () => (await recoveryRow(page)).active).toBe('menu-default');
+  await page.locator('[data-desktop-icon][data-desktop-icon-id="files"]').click({ button: 'right' });
+  await expect(page.locator('[data-context-menu]').first()).toBeVisible();
+  await expect(page.locator('[data-installed-menu]')).toHaveCount(0);
+});
+
+test('B3: "Use default menu" on an installed renderer brings the in-tree menu back and leaves no decline behind', async ({ page }) => {
+  await openShell(page);
+  const rec = record(good);
+  await install(page, [rec]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['active']);
+  const icon = page.locator('[data-desktop-icon][data-desktop-icon-id="files"]');
+  await icon.click({ button: 'right' });
+  await page.locator('[data-installed-item="use-default-menu"]').click();
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['set-aside']);
+  await expect.poll(async () => (await recoveryRow(page)).active).toBe('menu-default');
+  await icon.click({ button: 'right' });
+  await expect(page.locator('[data-context-menu]').first()).toBeVisible(); // the in-tree menu, not the last resort
+  await expect(page.locator('[data-last-resort="menu"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // Nothing is held against the slot: uninstall, install again, and the installed menu serves.
+  const declined = await inShell(page, '/src/lib/shell-kernel.ts', '(k) => k.shellKernel.snapshot().services?.["contextMenu.renderer"] ?? k.shellKernel.services.describe().declined');
+  expect(JSON.stringify(declined ?? {})).not.toContain('menu-default"]');
+  await install(page, []);
+  await expect.poll(async () => (await surfaceState(page)).length).toBe(0);
+  await install(page, [rec]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => s.state)).toEqual(['active']);
+  await icon.click({ button: 'right' });
+  await expect(page.locator('[data-installed-menu]')).toBeVisible();
+});
+
+test('B4: a provider the kernel sets aside inside reconcile (activate failed) gives the slot back to the in-tree package', async ({ page }) => {
+  await openShell(page);
+  // A subscriber that throws for any launcher but the in-tree one makes the installed launcher's activation fail.
+  await inShell(page, '/src/lib/shell-slots.ts', `(s) => {
+    let inTree = null;
+    s.activeSurfaces.subscribe((m) => {
+      if (!inTree && m.launcher) inTree = m.launcher.component;
+      if (m.launcher && inTree && m.launcher.component !== inTree) throw new Error('fixture: activation refused');
+    });
+  }`);
+  const manifest = LAUNCHER_MANIFEST;
+  await install(page, [record(launcher, { name: 'launcher', manifest })]);
+  await expect.poll(async () => (await surfaceState(page)).map((s) => `${s.package}:${s.state}`)).toEqual(['launcher:set-aside']);
+  expect((await surfaceState(page))[0].reason).toContain('activate failed');
+  await expect.poll(async () => (await inShell(page, '/src/lib/shell-slots.ts', `(s) => s.describeRecovery().find((r) => r.slot === 'launcher').active`))).toBe('launcher');
+  await expect(page.locator('[data-installed-launcher]')).toHaveCount(0);
 });

@@ -83,6 +83,8 @@ export class Services {
   /** Failures of queue jobs (also traced as `job-error:`); never swallowed. */
   readonly errors: unknown[] = [];
 
+  private readonly tripListeners = new Set<(name: string, id: string, reason: string) => void>();
+
   constructor(
     private readonly now: () => number,
     private readonly watchdog: WatchdogOptions,
@@ -219,6 +221,23 @@ export class Services {
   }
 
   /**
+   * Hear every provider the kernel sets aside, whichever path did it: trip,
+   * the watchdog, or a failed activation inside reconcile (L4: a restore of
+   * the base package must not depend on who noticed). Returns the disposer.
+   */
+  onTrip(fn: (name: string, id: string, reason: string) => void): () => void {
+    this.tripListeners.add(fn);
+    return () => { this.tripListeners.delete(fn); };
+  }
+
+  private tripped(name: string, p: ProviderRec, reason: string): void {
+    p.tripped = reason;
+    for (const fn of this.tripListeners) {
+      try { fn(name, p.spec.id, reason); } catch { /* a listener never breaks the kernel */ }
+    }
+  }
+
+  /**
    * Take a provider out of the ranking at once, with the reason recorded (a
    * surface that failed to mount, a yanked release). Like a watchdog trip it
    * is permanent for this registration: the reason stays in describe() and
@@ -228,7 +247,7 @@ export class Services {
   trip(name: string, id: string, reason: string): boolean {
     const p = this.table.get(name)?.providers.find((x) => x.spec.id === id);
     if (!p || p.tripped) return false;
-    p.tripped = reason || 'set aside';
+    this.tripped(name, p, reason || 'set aside');
     this.enqueue(() => this.reconcile(name));
     return true;
   }
@@ -246,7 +265,7 @@ export class Services {
     p.failures = p.failures.filter((f) => t - f < this.watchdog.windowMs);
     p.failures.push(t);
     if (p.failures.length < this.watchdog.failures) return false;
-    p.tripped = reason;
+    this.tripped(name, p, reason);
     this.enqueue(() => this.reconcile(name));
     return true;
   }
@@ -340,7 +359,7 @@ export class Services {
           }
         } catch (err) {
           next.act = null;
-          next.tripped = `activate failed: ${String(err)}`; // V7
+          this.tripped(name, next, `activate failed: ${String(err)}`); // V7
           await act.dispose();
           this.enqueue(() => this.reconcile(name));
         }
