@@ -52,7 +52,9 @@ type policyWriteResult struct {
 
 func hasOwnerEditedLine(raw []byte) bool {
 	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.TrimSpace(line) == policyOwnerEdited {
+		// The platform keeps a file that contains the mark anywhere
+		// (modelpolicy), so a mark with a note after it counts.
+		if strings.HasPrefix(strings.TrimSpace(line), policyOwnerEdited) {
 			return true
 		}
 	}

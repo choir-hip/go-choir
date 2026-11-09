@@ -545,3 +545,97 @@ Not built in this mission.
     model favors a desk);
   - the platform order after iOS;
   - CarPlay.
+
+## 8. Where the main thread stopped (2026-11-09 evening)
+
+The owner closed the main session here and asked for a new session for the
+next mission. This section is the state that session starts from. Evidence
+for each line is in the
+[mission ledger](../definitions/choir-autopaper-improvement-2026-11-09.ledger.md).
+
+### Landed and deployed
+
+- **Model policy control** (79061b7a8): a write of `System/model-policy.toml`
+  is validated and keeps the old file as a revision;
+  `choir policy get|set|revisions|rollback|verify`. Proved on d@e.
+- **Output cap** (cb149a273): every catalogued model gets its maximum output,
+  fitted to the context window; an image is charged by the block. Named
+  edges, none fixed:
+  - non-streaming calls keep a 10-minute timeout, which a maximum-length
+    answer can pass;
+  - the qwen and glm maxima and the Sonnet 4.6 and Opus 4.6 windows are
+    catalog values, not probed;
+  - telemetry records `max_tokens=0` where the cap is derived;
+  - a token-dense prompt is under-estimated at three bytes a token;
+  - Bedrock's sanitized 400 is not read as a context overflow, so the run
+    fails over and does not compact.
+- **The integration stack** (the commit that carries this section): mixed
+  Bedrock cache lifetimes with cache writes priced into spend, verb cards
+  with `choir.Help`, research's search, read and interim in one cell, three
+  of the four prompt cuts, and the design
+  [coding-agent-desk-over-mcp-2026-11-09.md](coding-agent-desk-over-mcp-2026-11-09.md).
+
+### Built, reviewed, not landed
+
+Both are on branch `integrate-1109` and need a repair before they land.
+
+- **Delegate-first engineering** (506bf659d, 02dbe83a8). The review found
+  three blocking security defects: the delegate can write its own acceptance
+  spec, status and artifact; the changed set is read from file times, which
+  miss backdating, deletes, symlinks and `dist`; the artifact is not
+  authenticated. The commit also carries a built binary at the repo root,
+  which must not land.
+- **The management task opening** (09884e328): the host hands a task its
+  records and the newest story page in the first turn. The review found that
+  the text arrives without the data wrapper, that a resumed run marks records
+  and the story library as shown though the text was dropped, and that the
+  story read skips the `owner_private:story` label.
+
+### Proofs owed on what landed
+
+- A live Bedrock call with both cache lifetimes, read from the gateway's
+  usage line.
+- A research round on d@e using `Search`, `ReadAll` and `Cut` in one cell.
+- A measured prompt size per desk with verb cards, and a `choir.Help` call
+  in a real run.
+- The prompt cuts against the 100,000-token bound (engineering 200,000) on
+  d@e.
+
+### Checks owed on the paper (read-only)
+
+- A Bedrock success after the orphan `tool_use` fix (eb21f1df8).
+- No more vocabulary refusals for `model.served` lines.
+- Compaction under 90,000 tokens.
+- Calls still running at `reasoning=high`.
+- Bedrock exposure: at 22:17 UTC the paper had put 443 calls on Bedrock in
+  one hour ($1.30). Held for a day that is about $31, over the $20 cap.
+  Crouton's free window ends about 2026-11-10, and every web search provider
+  answered `quota_limited`.
+
+### Owner rulings from this session that the next one inherits
+
+- The host never sends research material straight to Texture; desks keep
+  their boundaries.
+- Engineering is delegate-first where a delegate grant exists.
+- No output cap below the model's maximum.
+- Thinking and caching stay on; tool results are never trimmed; Texture
+  keeps its history and is not batched with other desks.
+- Prompts stay within 100,000 tokens, engineering within 200,000.
+
+### Open design questions
+
+- The coding-agent desk over MCP: whether `engineering_progress_relay.go`'s
+  relay to Texture is deleted with it.
+- Prompt cuts not taken: the conductor prompt, and the conditional text for
+  intake and event wakes.
+- Mixed cache lifetimes: the legacy execution-phase cost path is not split
+  by lifetime, and a 5-minute tail can expire inside a slow loop.
+- The second wave (`choir.Gather`) is not started.
+
+### Worktrees and branches left behind
+
+- `land-1109`: what landed. Safe to remove.
+- `integrate-1109`: the full stack with the two unlanded pieces. Keep.
+- `output-max`: landed. Safe to remove.
+- Builder worktrees under `.claude/worktrees/agent-*`: their commits are in
+  `integrate-1109`. Safe to remove after a look at `git status` in each.
