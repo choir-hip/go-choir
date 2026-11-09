@@ -111,7 +111,7 @@ friction.
    Lanes B and F set their concurrency from these numbers, and the re-sort
    time in section 6 is set from them.
 
-**Wave 1 (five lanes in parallel):**
+**Wave 1 (six lanes in parallel):**
 
 | Lane | Scope | Depends on | Owns |
 |---|---|---|---|
@@ -120,6 +120,7 @@ friction.
 | C1. Texture revisions | the revise call with sources and parents, Revise, forking, progressive updates | 0.1 | `internal/textureowner/prompt_bar.go` and the Texture write path |
 | G1. House style guide | the house style guide as a Texture, applied at read time only | none | the read path only; it does not touch the write path |
 | H1. Ledger records | the record types for responses, forks, publications, citations and gate verdicts | 0.1, 0.3 | defines the records; C1 and C2 emit them |
+| Q. Article quality | duplicates, length, English, roundups, cite markers, old bad stories; revisions to existing mechanisms only | none | `internal/agentcore/intake_labels.go`, `internal/agentcore/story_publish.go`, `internal/store/management_tasks.go`, the writer and management prompts, the published-citation renderer |
 
 **Wave 2 (each lane starts as its dependency lands, not when all of wave 1
 lands):**
@@ -143,8 +144,11 @@ owner's edit, with the parent recorded. Its proof is a revision on d@e
 whose record names its base. D, E and F start on that slice. Lane A runs
 beside the path; it is cheap and unblocks B and F.
 
+Lane Q is off the critical path and depends on nothing, so it can start
+first. Its section fix sits in lane B's file and goes to lane B.
+
 Concurrency: about five builders at once across the Mac and the agents VM,
-with compiles staggered (`CLAUDE.md`). Wave 2 has six lanes. Start them in
+with compiles staggered (`CLAUDE.md`). Wave 1 and wave 2 have six lanes each. Start them in
 dependency order as wave 1 lanes free up rather than all at once.
 
 **QA pass:**
@@ -373,6 +377,64 @@ I found no existing design doc for it; the owner has meant to build it.
 Owner: "This is just going to expand and simplify as we build and use it
 more." Pass 1 gets it working; it does not need to be final.
 
+### Q. Article quality
+
+Problem and evidence:
+[docs/problems/autopaper-article-quality-2026-11-09.md](../problems/autopaper-article-quality-2026-11-09.md).
+Of 5,736 published stories, 78% are under 300 words, at least 161 repeat
+another story's event, and 32 are not in English.
+
+Owner, 2026-11-09: "we should look to fix existing systems, not build a new
+system, and then we have two systems for the same function." Every item
+below revises a mechanism that already runs. The gaps are hypotheses from
+code; read the traces of two or three flagged stories for each before
+changing it (`CLAUDE.md`, "Review the traces").
+
+- **Duplicates.** The existing checks look back three to six hours.
+  - Widen Jev's candidate list from the 30 newest stories to title overlap
+    across the whole index window, with tokenizing that is not
+    English-only (`intake_labels.go:50-53`). Lane A's batching goes in
+    first, because the label call is already about 9k tokens.
+  - Make management's read cover the same window: page the story list to a
+    stated depth, or have the host put the top title matches in the task's
+    first turn.
+  - Extend the library-moved guard (`management_tasks.go:638`) to refuse a
+    new story whose headline closely matches one anywhere in the index.
+  - Existing duplicates: the paper folds each group into one story and the
+    others redirect to it. Use the publication paths that exist; if none
+    can redirect, record that as a finding and do not build a merge system.
+- **Length.** The owner's standard: "a full page in general, at least",
+  and "not that anything should be extra long for no reason".
+  - Give the writer prompt a depth expectation and remove the lines that
+    push toward brevity (`texture.yaml:40-46`, :70).
+  - Add a word floor to the held conditions in `AutoPublishRevision`
+    (`story_publish.go:187-286`). A held story keeps researching; it is not
+    dropped.
+  - Length tracks sources (median 106 words at two sources, 493 at six or
+    more), so the writer should seek more than the two-outlet floor before
+    it stops.
+  - Check whether the 33 published placeholders predate the gates or came
+    through the owner's publish route, and close whichever it was.
+- **English.** One line in the writer prompt: write in English whatever the
+  sources' language. Add a held condition when the body is not English.
+  Non-English sources stay; they are wanted as evidence.
+- **Roundups.** One rule in the management prompt and its task overlay: a
+  capture that reports several events is split into its events or
+  declined, never made into one story.
+- **Cite markers.** Collapse adjacent markers that resolve to the same
+  source in the published-citation renderer.
+- **Process text.** A held condition for "Status" and "Revision N" lines,
+  which the prompt already forbids.
+- **Sections** (lane B's file). Stories lose their section after the
+  scorer's 14-day retention; keep a section once assigned, and backfill.
+- **Old bad stories.** One pass over the flagged list in the evidence
+  folder: retitle or withdraw the 18 brief-titled stories, withdraw the
+  placeholders, and have the paper rewrite the 32 non-English stories in
+  English.
+
+Proof: rerun the audit against staging after a week of new stories, and
+compare the new stories' numbers with the table in the problem doc.
+
 ### Custodians for the new kinds
 
 Section lists, style guides, themes, the algorithm and algorithm² are
@@ -416,6 +478,9 @@ own story does not count.
 7. The reader asks about an uncovered story and adds a source by asking.
 8. A user sees their behavior ledger, and an algorithm² proposal that came
    from it.
+9. Lane Q: over a week of new stories, the audit rerun shows no new
+   non-English story, no new roundup story, no new story under the word
+   floor, and fewer duplicate groups per day than the 2026-11-09 audit.
 
 All of it is on the tape, every Jev call's cost is recorded, and the
 measured Jev limits are written down.
