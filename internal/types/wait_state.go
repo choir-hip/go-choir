@@ -278,6 +278,8 @@ func ProviderDisplayName(provider string) string {
 		return "ChatGPT"
 	case "openrouter":
 		return "OpenRouter"
+	case "river":
+		return "River"
 	case "opencode-go", "opencode":
 		return "OpenCode"
 	case "zai":

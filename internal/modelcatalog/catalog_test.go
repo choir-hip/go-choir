@@ -169,7 +169,7 @@ func TestOpenRouterCroutonAlphaCatalogued(t *testing.T) {
 	for name, members := range Pools() {
 		for _, m := range members {
 			free := m.Model == "recursive/flint-v1.0:free" || m.Model == "nvidia/nemotron-3.5-super-vl:free"
-			if m.Provider == "openrouter" && !(m.Model == "stealth/crouton-alpha" && (name == CroutonSyntheticLunaPool || name == DefaultPool)) && !(free && name == DefaultPool) {
+			if m.Provider == "openrouter" && !(m.Model == "stealth/crouton-alpha" && (name == CroutonSyntheticLunaPool || name == RiverPool || name == DefaultPool)) && !(free && name == DefaultPool) {
 				t.Fatalf("pool %s carries openrouter member %v", name, m)
 			}
 		}

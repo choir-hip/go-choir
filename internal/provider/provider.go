@@ -334,6 +334,10 @@ type ProviderConfig struct {
 	// Synthetic is not initialized even if SYNTHETIC_API_KEY is set.
 	SyntheticModels []string
 
+	// RiverModels lists River model IDs; the first seeds the provider. Empty
+	// means River is not initialized even if RIVER_API_KEY is set.
+	RiverModels []string
+
 	// OpenRouterModels lists OpenRouter model IDs (e.g.,
 	// "stealth/crouton-alpha"). The first entry seeds the provider instance;
 	// request.Model controls per-call selection. If empty, OpenRouter chat
@@ -3492,6 +3496,14 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		if p, err := NewSyntheticProviderFromEnv(cfg.SyntheticModels[0]); err == nil {
 			mp.Register("synthetic", p)
 			log.Printf("provider: resolved synthetic (seed_model=%s)", p.modelID)
+		}
+	}
+
+	// Try River. Register one provider; req.Model selects the model.
+	if os.Getenv("RIVER_API_KEY") != "" && len(cfg.RiverModels) > 0 {
+		if p, err := NewRiverProviderFromEnv(cfg.RiverModels[0]); err == nil {
+			mp.Register("river", p)
+			log.Printf("provider: resolved river (seed_model=%s)", p.modelID)
 		}
 	}
 

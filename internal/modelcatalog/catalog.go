@@ -271,6 +271,18 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 524288,
 		},
 
+		// River (owner 2026-11-09: self-development while Synthetic DeepSeek
+		// is spent). The same DeepSeek V4.1 Flash 1017 snapshot; the window
+		// matches Synthetic's until River's own is probed. In one pool only:
+		// river.
+		{
+			ID:                  "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+			DisplayName:         "DeepSeek V4.1 Flash 1017 (River)",
+			Provider:            "river",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 524288,
+		},
+
 		// OpenRouter's stealth/crouton-alpha (owner 2026-11-03: free for a
 		// week, a test arm runs every desk on it). Public models listing
 		// and a keyed probe that day: a 1048576-token window (943718 max
@@ -437,6 +449,11 @@ func Pools() map[string][]PoolMember {
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
+		RiverPool: {
+			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
+			{Provider: "openrouter", Model: "stealth/crouton-alpha", FallbackOnly: true},
+			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
+		},
 		CroutonSyntheticLunaPool: {
 			{Provider: "openrouter", Model: "stealth/crouton-alpha", Weight: 1},
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
@@ -459,6 +476,11 @@ const LunaSyntheticPool = "luna-synthetic"
 // SyntheticLunaPool names the pool that splits threads between Synthetic's
 // DeepSeek V4.1 Flash 1017 and gpt-6-luna.
 const SyntheticLunaPool = "synthetic-luna"
+
+// RiverPool names the self-development pool for River (owner 2026-11-09):
+// River's DeepSeek V4.1 Flash 1017 takes every thread; crouton-alpha, then
+// gpt-6-luna, are fallback-only. The default pool is unchanged.
+const RiverPool = "river"
 
 // NoFailover reports whether a pool's threads never move to another member
 // when their model fails: the member that fails, fails. The default rule is

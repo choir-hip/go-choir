@@ -176,6 +176,7 @@ func loadProviderConfig() provider.ProviderConfig {
 		},
 		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
 		SyntheticModels:   []string{"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"},
+		RiverModels:       []string{"deepseek-ai/DeepSeek-V4.1-Flash-1017"},
 		OpenRouterModels:  []string{"stealth/crouton-alpha", "recursive/flint-v1.0:free", "nvidia/nemotron-3.5-super-vl:free"},
 	}
 
@@ -200,6 +201,9 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_SYNTHETIC_MODELS"); v != "" {
 		cfg.SyntheticModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_RIVER_MODELS"); v != "" {
+		cfg.RiverModels = strings.Split(v, ",")
 	}
 	if v := os.Getenv("GATEWAY_OPENROUTER_MODELS"); v != "" {
 		cfg.OpenRouterModels = strings.Split(v, ",")
