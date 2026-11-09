@@ -147,23 +147,32 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 	// Pointer-only wire shape: `update_refs` replaces the payload-bearing
 	// `updates` list. lifecycleInjectionIDsFromRunMemory still reads
 	// `updates[].update_id`, so keep an id-only array for dedupe.
-	payload, err := json.Marshal(map[string]any{
-		"schema":             packet.Schema,
-		"packet_type":        packet.PacketType,
-		"delivery_phase":     packet.DeliveryPhase,
-		"target_agent_id":    packet.TargetAgentID,
-		"owner_id":           packet.OwnerID,
-		"computer_id":        packet.ComputerID,
-		"target_run_id":      packet.TargetRunID,
-		"channel_id":         packet.ChannelID,
-		"trajectory_id":      packet.TrajectoryID,
-		"instruction":        packet.Instruction + " The payloads are already bound inside your cell as choir.Updates() — read them there; do not re-request them.",
-		"source_entities":    packet.SourceEntities,
-		"source_rejections":  packet.SourceRejections,
-		"source_instruction": packet.SourceInstruction,
-		"update_refs":        refs,
-		"updates":            updateIDsToStubs(updateIDs),
-	})
+	// The source keys ride only when they carry something: three empty keys
+	// were about 70 bytes of every wake (system-prompt-review.md 1.6).
+	envelope := map[string]any{
+		"schema":          packet.Schema,
+		"packet_type":     packet.PacketType,
+		"delivery_phase":  packet.DeliveryPhase,
+		"target_agent_id": packet.TargetAgentID,
+		"owner_id":        packet.OwnerID,
+		"computer_id":     packet.ComputerID,
+		"target_run_id":   packet.TargetRunID,
+		"channel_id":      packet.ChannelID,
+		"trajectory_id":   packet.TrajectoryID,
+		"instruction":     packet.Instruction + " The payloads are in choir.Updates(); do not re-request them.",
+		"update_refs":     refs,
+		"updates":         updateIDsToStubs(updateIDs),
+	}
+	if len(packet.SourceEntities) > 0 {
+		envelope["source_entities"] = packet.SourceEntities
+	}
+	if len(packet.SourceRejections) > 0 {
+		envelope["source_rejections"] = packet.SourceRejections
+	}
+	if packet.SourceInstruction != "" {
+		envelope["source_instruction"] = packet.SourceInstruction
+	}
+	payload, err := json.Marshal(envelope)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal coagent update packet: %w", err)
 	}
@@ -225,12 +234,12 @@ func coagentUpdatePacketPreamble(deliveryPhase string) string {
 func coagentUpdateInstruction(deliveryPhase string) string {
 	switch deliveryPhase {
 	case coagentPacketDeliveryFinal:
-		return "New update_coagent records arrived before this activation finished. Process them before ending the turn."
+		return "New updates arrived before this activation finished. Process them before ending the turn."
 	case coagentPacketDeliveryThread:
-		return "Pending update_coagent records are appended as the first mailbox turn for this activation. Process them before continuing."
+		return "Pending updates are this activation's first mailbox turn. Process them before continuing."
 	case coagentPacketDeliveryCold:
-		return "Pending update_coagent records are being delivered at activation start. Incorporate them before continuing."
+		return "Pending updates are delivered at activation start. Incorporate them before continuing."
 	default:
-		return "New update_coagent records arrived while this activation was running. Treat this packet as the next user turn."
+		return "New updates arrived while this activation was running. Treat this packet as the next user turn."
 	}
 }
