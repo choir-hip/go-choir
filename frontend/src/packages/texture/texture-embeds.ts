@@ -220,7 +220,7 @@ function videoHTML(e: EmbedFields): string {
     : '<div class="texture-embed-unresolvable">This video cannot be shown (malformed video id)</div>';
   const link = ok ? ` <a class="texture-embed-source" href="https://www.youtube.com/watch?v=${e.videoID}" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>` : '';
   return `<figure${figureAttrs(e, { 'data-embed-state': ok ? 'ready' : 'unresolvable', 'data-embed-video-id': ok ? e.videoID : '-' })}>`
-    + `<div class="texture-embed-video">${frame}</div>`
+    + `<div class="texture-embed-video-box">${frame}</div>`
     + `<figcaption>${caption ? `<span class="texture-embed-caption">${escapeHTML(caption)}</span>` : ''}${link}</figcaption></figure>`;
 }
 
@@ -237,8 +237,7 @@ function audioHTML(e: EmbedFields): string {
     : '<div class="texture-embed-unresolvable">This audio cannot be played (not an https URL)</div>';
   const link = ok ? ` <a class="texture-embed-source" href="${escapeHTML(e.url)}" target="_blank" rel="noopener noreferrer">Source</a>` : '';
   return `<figure${figureAttrs(e, { 'data-embed-state': ok ? 'ready' : 'unresolvable' })}>`
-    + `<span class="texture-embed-caption">${escapeHTML(title)}</span>${player}`
-    + `<figcaption>${link}</figcaption></figure>`;
+    + `<figcaption><span class="texture-embed-caption">${escapeHTML(title)}</span>${link}</figcaption>${player}</figure>`;
 }
 
 /** One embed block as HTML. */

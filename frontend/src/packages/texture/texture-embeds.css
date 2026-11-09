@@ -129,7 +129,7 @@
 
 /* Video and audio embeds (station L8): a 16:9 youtube-nocookie frame, and a
    native audio player with its title and a source link. */
-.rendered-doc .texture-embed-video {
+.rendered-doc .texture-embed-video-box {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;

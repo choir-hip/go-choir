@@ -19,6 +19,7 @@
 //     frame URL, drops the sandbox or lazy loading, or autoplays; an audio
 //     embed plays a non-https source, autoplays, or preloads the file.
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import {
   allBlankOperations,
   applyEntriesToAdd,
@@ -305,4 +306,24 @@ test('an audio embed is a native no-autoplay player for an https source only', (
     expect(isAudioURL(bad)).toBe(false);
     expect(renderEmbedBlockHTML(node(bad))).not.toContain('<audio');
   }
+});
+
+test('a video embed keeps its caption and source link visible beside the 16:9 frame', async ({ page }) => {
+  await page.route('**/*', (route) => route.abort());
+  const css = readFileSync(new URL('../src/packages/texture/texture-embeds.css', import.meta.url), 'utf8');
+  const html = renderEmbedBlockHTML({ type: 'embed', attrs: { id: 'embed-v', kind: 'video', alt: 'The talk', caption: 'The talk', target: { video_id: 'dQw4w9WgXcQ' } } })
+    + renderEmbedBlockHTML({ type: 'embed', attrs: { id: 'embed-a', kind: 'audio', title: 'Episode 42', target: { url: 'https://example.org/ep.mp3' } } });
+  await page.setContent(`<style>${css}</style><div class="rendered-doc" style="width:640px">${html}</div>`);
+  const viewport = page.viewportSize();
+  for (const sel of ['[data-embed-kind="video"] figcaption .texture-embed-caption', '[data-embed-kind="video"] .texture-embed-source', '[data-embed-kind="audio"] .texture-embed-caption', '[data-embed-kind="audio"] .texture-embed-source']) {
+    const loc = page.locator(sel);
+    await expect(loc).toBeVisible();
+    const box = await loc.boundingBox();
+    expect(box.height).toBeGreaterThan(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  }
+  const frame = await page.locator('.texture-embed-video-box').boundingBox();
+  const figure = await page.locator('[data-embed-kind="video"]').boundingBox();
+  expect(Math.abs(frame.width / frame.height - 16 / 9)).toBeLessThan(0.05);
+  expect(figure.height).toBeGreaterThan(frame.height);
 });

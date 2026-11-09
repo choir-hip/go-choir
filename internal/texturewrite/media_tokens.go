@@ -222,7 +222,7 @@ func clipRef(s string) string {
 	return s
 }
 
-// mediaTokenInline is the refusal for an image or file token inside text.
+// mediaTokenInline is the refusal for a media token (image, file, video, audio) inside text.
 func mediaTokenInline(kind string, line int) *LineError {
 	return &LineError{Line: line, Msg: "{{" + kind + "}} is a block of its own, not inline text: put it alone on its own line, with a blank line or another block around it"}
 }
