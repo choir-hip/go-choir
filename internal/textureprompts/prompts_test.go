@@ -12,8 +12,7 @@ import (
 func TestPromptCoreTeachesWriteCitationsAndTurnVerbs(t *testing.T) {
 	prompt := DefaultSystemPrompt()
 	for _, want := range []string{
-		"choir.Write(edits, why)", "@replace", "@insert", "@delete", "@move", "@section", "@all",
-		`{{cite r2.c1 "`, "{{ref", "names its line",
+		"choir.Write(edits, why)", "@all", "{{ref", "names its line",
 		"choir.Done(why)", "choir.Wait(why)", "choir.Reject(record, why)",
 		`choir.Cast("research", objective, packet, req)`, `choir.Cast("management", objective, packet, req)`, "execution_request",
 		"choir.ReadDoc()", "frame", "r1..rM", "b1..bN",
@@ -95,9 +94,12 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// 6.6k once a Cast or Ask had to state its p_success, weight and
 	// settlement (modular architecture MA1.3). 6.8k once Write could place
 	// engineering's image and file (station L8). 7k once it could embed a
-	// cited YouTube video and audio episode.
-	if n := len(prompt); n > 7000 {
-		t.Errorf("prompt core is %d characters; the budget is about 7k", n)
+	// cited YouTube video and audio episode. 6.2k once the directive and
+	// embed grammar lived only in Write's generated documentation (the
+	// 2026-11-09 prompt cut; the built prompt is pinned to teach it in
+	// agentcore's TestTexturePromptCutKeepsWriteGrammar).
+	if n := len(prompt); n > 6200 {
+		t.Errorf("prompt core is %d characters; the budget is about 6.2k", n)
 	}
 }
 

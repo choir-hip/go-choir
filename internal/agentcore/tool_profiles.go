@@ -263,10 +263,15 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\n")
 		b.WriteString(surface)
 	}
-	b.WriteString(runtimeprompts.PeerCoordination(runtimeprompts.PeerCoordinationOptions{
-		InCellCarrier: deskCarrierLive(profile) || deskmanifest.IsAssignmentPerformer(profile),
-		Verbs:         peerActVerbs(profile, rec, hidden...),
-	}))
+	// Texture's own prompt carries the req rule (system-prompt-review.md B3),
+	// so it gets no trailer; every other desk's trailer names only the verbs
+	// that desk holds.
+	if profile != deskmanifest.DocumentCustodianName() {
+		b.WriteString(runtimeprompts.PeerCoordination(runtimeprompts.PeerCoordinationOptions{
+			InCellCarrier: deskCarrierLive(profile) || deskmanifest.IsAssignmentPerformer(profile),
+			Verbs:         peerActVerbs(profile, rec, hidden...),
+		}))
+	}
 	return b.String(), nil
 }
 
