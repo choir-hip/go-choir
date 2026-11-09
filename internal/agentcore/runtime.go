@@ -1463,6 +1463,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	if err := rt.admitDeskWake(agentRecProfile, now); err != nil {
 		return nil, err
 	}
+	metadata, _ = rt.inheritTrajectoryPolicyOverlay(ctx, ownerID, metadata)
 	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
 	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
 		metadata[runMetadataModel] = model
@@ -1794,6 +1795,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		metadata["capsule_handle"] = grantedCapsuleHandle
 	}
 	role := firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentRole), metadataStringValue(metadata, runMetadataAgentProfile))
+	metadata, _ = rt.inheritTrajectoryPolicyOverlay(ctx, ownerID, metadata)
 	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
 	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
 		metadata[runMetadataModel] = model
@@ -5454,4 +5456,35 @@ func (rt *Runtime) runMemoryLossErr(rec *types.RunRecord) error {
 // default one cannot be encoded: open the document custodian's app.
 func defaultOpenTextureDecision() string {
 	return `{"action":"open_app","app":"` + deskmanifest.DocumentCustodianName() + `","title":"Texture","seed_prompt":"","create_initial_version":false}`
+}
+
+// inheritTrajectoryPolicyOverlay makes a model policy overlay follow its
+// trajectory. A run created without an overlay of its own takes the one its
+// trajectory recorded at start (TrajectoryRecord.SubjectRefs, durable on the
+// tape), so every desk the trajectory casts (research, management,
+// engineering) resolves through the same overlay, each by its own role
+// section; a role the overlay does not name keeps the default. A trajectory
+// with no recorded overlay, or one that cannot be read, leaves the metadata
+// unchanged. It reports whether an overlay was inherited.
+func (rt *Runtime) inheritTrajectoryPolicyOverlay(ctx context.Context, ownerID string, metadata map[string]any) (map[string]any, bool) {
+	if rt == nil || rt.store == nil || metadata == nil {
+		return metadata, false
+	}
+	if strings.TrimSpace(metadataStringValue(metadata, modelpolicy.MetadataPolicyOverlayID)) != "" {
+		return metadata, false
+	}
+	trajectoryID := strings.TrimSpace(metadataStringValue(metadata, runMetadataTrajectoryID))
+	if trajectoryID == "" {
+		return metadata, false
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, rt.TextureComputerID(), trajectoryID)
+	if err != nil {
+		return metadata, false
+	}
+	overlayID := strings.TrimSpace(trajectory.SubjectRefs[types.TrajectoryRefModelPolicyOverlay])
+	if overlayID == "" {
+		return metadata, false
+	}
+	metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
+	return metadata, true
 }

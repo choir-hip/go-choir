@@ -1067,10 +1067,14 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
 		run.Metadata[modelpolicy.MetadataPolicyOverlayID] = overlay
 	}
+	var inheritedOverlay bool
+	run.Metadata, inheritedOverlay = rt.inheritTrajectoryPolicyOverlay(ctx, ownerID, run.Metadata)
 	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, run.AgentProfile, run.Metadata)
 	// Fail closed on policy errors like the Texture eval path: an unknown or
 	// unresolvable overlay must not silently fall back to the default model.
-	if policyErr := metadataStringValue(run.Metadata, modelpolicy.MetadataPolicyError); policyErr != "" {
+	// An overlay inherited from the trajectory (expired since the start) falls
+	// back to the default with the error left visible in metadata.
+	if policyErr := metadataStringValue(run.Metadata, modelpolicy.MetadataPolicyError); policyErr != "" && !inheritedOverlay {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("model policy overlay did not resolve: %s", policyErr))
 	}
 	if model := metadataStringValue(run.Metadata, modelpolicy.MetadataModel); model != "" {

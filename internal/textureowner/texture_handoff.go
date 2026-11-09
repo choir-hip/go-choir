@@ -252,6 +252,9 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 			CreatedAt: now, UpdatedAt: now,
 		},
 	}
+	if overlayID := strings.TrimSpace(metadataString(rec.Metadata, modelpolicy.MetadataPolicyOverlayID)); overlayID != "" {
+		start.SubjectRefs[types.TrajectoryRefModelPolicyOverlay] = overlayID
+	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	started, err := h.Store.StartLifecycle(ctx, start)
 	if err != nil {

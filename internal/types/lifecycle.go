@@ -111,6 +111,11 @@ type StartLifecycleRequest struct {
 // trajectory is one episode of work; a document outlives its episodes.
 const TrajectoryRefContinues = "continues_trajectory_id"
 
+// TrajectoryRefModelPolicyOverlay is the subject ref a trajectory carries when
+// its prompt chose a model policy overlay: the overlay follows the trajectory,
+// so every desk it casts resolves its model through the same overlay.
+const TrajectoryRefModelPolicyOverlay = "model_policy_overlay_id"
+
 // ContinueLifecycleDocumentRequest starts the next live trajectory on a
 // document whose trajectory settled. The settled trajectory stays settled;
 // the document's trajectory pointer, its head and its desks move to the new
