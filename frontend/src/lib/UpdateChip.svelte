@@ -162,12 +162,27 @@
     not_active: 'The computer is not running. It will start on the new version.',
     route_refused: 'The computer\'s version route is not ready. Try again shortly.',
     no_release: 'There is no release to update to yet.',
-    live_capsule: 'An engineering sandbox is running; it can be paused for the restart once sandbox pause lands.',
+    live_capsule: 'An engineering sandbox is running and cannot be paused right now. Try again shortly.',
     selfdev_active: 'A self-development change is being applied. Try again in a moment.',
     selfdev_awaiting_decision: 'A self-development change is waiting for your decision.',
     snapshot_in_flight: 'A snapshot is being taken. Try again in a moment.',
     hibernate_fenced: 'The computer is going to sleep. Try again after it wakes.',
   };
+
+  // The guest pauses a live engineering sandbox in the background and answers
+  // "pausing", then "paused_awaiting_ack" until a mark with the owner's
+  // allow-busy acks it; the sweep's marks do not. So the chip asks again each
+  // minute while the sandbox pauses, bounded, and each ask is a fresh key.
+  const PAUSE_REASONS = new Set(['pausing', 'paused_awaiting_ack']);
+  const PAUSE_RETRY_MS = 60_000;
+  const PAUSE_RETRY_MAX = 15;
+  let pauseTries = 0;
+  let pauseTimer = null;
+
+  function stopPauseRetry() {
+    if (pauseTimer) clearTimeout(pauseTimer);
+    pauseTimer = null;
+  }
 
   function refusalText(body) {
     const reason = String(body?.reason || '');
@@ -176,8 +191,10 @@
     return 'The computer is busy right now. It will update at its next quiet moment.';
   }
 
-  async function restart() {
-    phase = 'sending';
+  async function restart(fromPause = false) {
+    if (!fromPause) pauseTries = 0;
+    stopPauseRetry();
+    phase = fromPause ? 'pausing' : 'sending';
     message = '';
     const epochBefore = (await readStatus()).epoch;
     let res;
@@ -205,6 +222,15 @@
         available = false;
         message = '';
       }, 2500);
+    } else if (res.status === 409 && PAUSE_REASONS.has(String(body?.reason || ''))) {
+      pauseTries += 1;
+      if (pauseTries >= PAUSE_RETRY_MAX) {
+        phase = 'idle';
+        message = 'The sandbox could not be paused for the restart. Try again later.';
+        return;
+      }
+      phase = 'pausing';
+      pauseTimer = setTimeout(() => { if (!destroyed) void restart(true); }, PAUSE_RETRY_MS);
     } else if (res.status === 409) {
       const text = refusalText(body);
       if (text === '') {
@@ -234,20 +260,23 @@
     destroyed = true;
     if (timer) clearInterval(timer);
     stopRestartPoll();
+    stopPauseRetry();
   });
 </script>
 
-{#if available || phase === 'restarting' || phase === 'confirming' || phase === 'current'}
+{#if available || phase === 'restarting' || phase === 'confirming' || phase === 'current' || phase === 'pausing'}
   <div class="update-chip" data-update-chip data-update-state={phase === 'idle' ? 'available' : phase} role="status" aria-live="polite">
     {#if phase === 'restarting'}
       <span class="label" data-update-label>Restarting...</span>
+    {:else if phase === 'pausing'}
+      <span class="label" data-update-label>Pausing the engineering sandbox for the restart...</span>
     {:else if phase === 'confirming'}
       <span class="label" data-update-label>Checking...</span>
     {:else if phase === 'current'}
       <span class="label" data-update-label>{message}</span>
     {:else if phase === 'confirm'}
       <span class="label" data-update-label>Running work resumes after the restart.</span>
-      <button type="button" class="act primary" data-update-confirm on:click={restart}>Restart</button>
+      <button type="button" class="act primary" data-update-confirm on:click={() => restart()}>Restart</button>
       <button type="button" class="act" data-update-cancel on:click={() => (phase = 'idle')}>Not now</button>
     {:else}
       <button type="button" class="chip" data-update-open disabled={phase === 'sending'} title={target ? `Release ${target.slice(0, 8)}` : ''} on:click={() => { message = ''; phase = 'confirm'; }}>

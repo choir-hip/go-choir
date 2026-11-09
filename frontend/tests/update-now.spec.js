@@ -38,7 +38,8 @@ async function mockComputer(page, { signal, post, epochs }) {
     if (epochs) state.epoch += 1; // the restart began (the proxy's wait ended later)
     state.posts.push({ method: route.request().method(), body: JSON.parse(route.request().postData() || '{}') });
     if (post === 'abort') return route.abort('timedout');
-    return route.fulfill({ status: post.status, contentType: 'application/json', body: JSON.stringify(post.body) });
+    const answer = Array.isArray(post) ? post[Math.min(state.posts.length - 1, post.length - 1)] : post;
+    return route.fulfill({ status: answer.status, contentType: 'application/json', body: JSON.stringify(answer.body) });
   });
   return state;
 }
@@ -109,7 +110,7 @@ test('U4 a 200 current says Already up to date and clears', async ({ page }) => 
 });
 
 const REFUSALS = [
-  ['live_capsule', 'deferred', 'An engineering sandbox is running; it can be paused for the restart once sandbox pause lands.', '05-deferred-capsule'],
+  ['live_capsule', 'deferred', 'An engineering sandbox is running and cannot be paused right now. Try again shortly.', '05-deferred-capsule'],
   ['selfdev_active', 'deferred', 'A self-development change is being applied. Try again in a moment.', '06-deferred-apply'],
   ['selfdev_awaiting_decision', 'deferred', 'A self-development change is waiting for your decision.', '07-deferred-candidate'],
   ['ring_waits', 'skipped', 'Waiting for its turn in the rollout.', '08-skipped-ring'],
@@ -198,4 +199,45 @@ test('U8 phone width: the chip fits without a sideways scroll', async ({ page })
   const box = await chip(page).boundingBox();
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(390);
+});
+
+test('U9 a live sandbox pauses: the chip asks again each minute until the restart goes through', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.clock.install();
+  const state = await mockComputer(page, { signal: AVAILABLE, post: [
+    { status: 409, body: { outcome: 'deferred', reason: 'pausing', detail: { outcome: 'busy', reason: 'pausing' } } },
+    { status: 409, body: { outcome: 'deferred', reason: 'paused_awaiting_ack', detail: { outcome: 'busy', reason: 'paused_awaiting_ack' } } },
+    { status: 201, body: { receipt_id: 'r-pause' } },
+  ] });
+  await boot(page);
+  await open(page);
+  await page.locator('[data-update-confirm]').click();
+  await expect(chip(page)).toHaveAttribute('data-update-state', 'pausing');
+  await expect(page.locator('[data-update-label]')).toHaveText('Pausing the engineering sandbox for the restart...');
+  await shot(page, '15-pausing');
+  expect(state.posts).toHaveLength(1);
+  await page.clock.fastForward(61_000);
+  await expect.poll(() => state.posts.length).toBe(2);
+  await expect(chip(page)).toHaveAttribute('data-update-state', 'pausing');
+  await page.clock.fastForward(61_000);
+  await expect.poll(() => state.posts.length).toBe(3);
+  await expect(chip(page)).toHaveAttribute('data-update-state', 'restarting');
+  const keys = new Set(state.posts.map((p) => p.body.idempotency_key));
+  expect(keys.size).toBe(3); // each ask is a fresh key
+});
+
+test('U9b a sandbox that will not pause stops asking and says so', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.clock.install();
+  const state = await mockComputer(page, { signal: AVAILABLE, post: { status: 409, body: { outcome: 'deferred', reason: 'pausing' } } });
+  await boot(page);
+  await open(page);
+  await page.locator('[data-update-confirm]').click();
+  await expect(chip(page)).toHaveAttribute('data-update-state', 'pausing');
+  for (let n = 2; n <= 15; n++) {
+    await page.clock.fastForward(61_000);
+    await expect.poll(() => state.posts.length).toBe(n);
+  }
+  await expect(page.locator('[data-update-message]')).toHaveText('The sandbox could not be paused for the restart. Try again later.');
+  expect(state.posts.length).toBe(15);
 });
