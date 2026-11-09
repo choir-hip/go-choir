@@ -7,3 +7,4 @@ Append-only. One line per move; newest last.
 - 2026-11-09 L2 built: prompt bar, Sources while revising, search.served event and search providers in Sources (1adebd1e2, epoch 115); Devin review running.
 - 2026-11-09 L3 built: layered image on every computer ("*"), every tool layer attached, delegate granted to d@e and the owner's computer (e6efe56c5); tier 2 review (Devin plus a Sonnet seat) running.
 - 2026-11-09 Promoted to executable by the owner; tempo: expedite everything until Autoradio is solid (CLAUDE.md updated).
+- 2026-11-09 L3.5 added by the owner: tools attach on demand, not at boot. Physics: an attached but unread layer already costs no page cache and its bytes are stored once on the host, so L3.5 buys modularity (no tool in a computer's store until it is used, adding a tool without a cold boot), not memory. Design next.

@@ -116,6 +116,7 @@ now:
     L1 pool routing by availability — landed ead8873b6 (Devin ACCEPT), deploy in flight;
     L2 prompt bar, Sources while revising, search providers in Sources — built 1adebd1e2 (epoch 115), Devin review running, then push;
     L3 layered image on every computer, every tool layer attached, delegate granted to d@e and the owner's computer — built e6efe56c5, tier 2 review (Devin and a Sonnet seat) running;
+    L3.5 tools attach on demand (owner, 2026-11-09: "we should be able to only load things like Claude Code or the browser when they're actually needed"): every tool slot boots empty; the first use of a tool asks vmctl, which swaps the slot's backing file to the real layer through Firecracker's drive PATCH, and the guest mounts it at the tool's own mount point (not inside the store overlay, whose lowers cannot change live); hibernate binds the drive set as it stands. Design first (docs/design/guest-tool-layers-2026-10-31.md section 9 names the obstacles), then build, proved on d@e: a cold boot reads no tool bytes, the first claude or browser call attaches its layer within a bounded wait, and a hibernate and wake keeps it;
     L4 Synthetic DeepSeek benchmark at low, medium, high on d@e (the latency budget);
     L5 research: interim packets enforced, a visible read ledger, a pack floor (problem doc 1.5 items 1-3, 3.2 item 1);
     L6 tool loop stop rule: identical-cell detector plus a visible stop fate (problem doc 2.4 item 1);
@@ -131,7 +132,7 @@ now:
   believed_state: "Texture and research work but slowly; research under-uses sources; routing now skips known-dead members (deploying); the fleet is still single-image except d@e; the delegate is proven on b@c only before the sandbox change"
   main_uncertainty: "whether the layered image holds memory and boot on the paper-sized computers (the S3 memory gate was never measured on a matched peer); whether research picks better sources once its reads are visible"
   next_observation: "L3 review verdicts; L1 and L2 deploys; d@e delegate status after L3 deploys"
-  next_action: "land L2 and L3 through review; then L4 benchmark and L6 stop rule on d@e"
+  next_action: "land L2 and L3 through review; write the L3.5 design while they deploy; then L4 benchmark and L6 stop rule on d@e"
   ledger: docs/definitions/choir-ordinary-prompt-path-2026-11-09.ledger.md
 ---
 
