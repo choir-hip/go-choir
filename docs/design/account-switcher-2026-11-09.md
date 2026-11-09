@@ -61,16 +61,24 @@ CLI-free browser sessions of today) rotates exactly as now.
 statement of which member owns the cookie pair; the list's `active` flag is
 derived from it. Switch and sign-in set it in the same transaction that
 rotates the session. `/auth/session` and `tryRefreshRotation`, when the
-request carries `choir_accounts` and the presented refresh session (or its
-grace entry) is a member of that set whose user is not `active_user_id`,
+request carries `choir_accounts` and the presented refresh session, whether
+resolved from the store or from the rotation grace table, is a member of that
+set whose user is not `active_user_id`,
 refuse: they write no cookie at all, and return 200
 `{authenticated:false, reason:"account_switched", active_user_id}`. This is
 checked before the grace lookup, so the grace path cannot reverse a switch
 either. A request with no set cookie, or a session that is not a member, is
 untouched. A stale tab (or a late `fetchWithRenewal` retry carrying the old
 account's refresh cookie) therefore gets a clean "account switched" result and
-cannot flip the cookie jar back. The frontend treats that reason as "reload",
-not as a logout. Sibling tabs are told at once: the switching tab posts
+cannot flip the cookie jar back. The frontend never bare-reloads on that
+reason (a jar that still holds a live non-active member's pair would loop):
+it reconciles first, POSTing `switch` to the named `active_user_id`, which
+sets the active pair, and then reloads. The access JWT path (a valid,
+unexpired `choir_access`, at most 5 minutes) also checks membership when the
+request carries the set cookie: a JWT for a member that is not
+`active_user_id` gets 401 `account_switched` at the proxy and the auth
+service, so the divergence window after a lost switch response is closed at
+the first request, not after the JWT expires. Sibling tabs are told at once: the switching tab posts
 `{type:"account-switched", user_id}` on a `BroadcastChannel("choir-accounts")`
 and writes a `choir.accounts.switched` localStorage key as the fallback (the
 `storage` event fires in the other tabs). Each receiving tab flushes desktop
@@ -83,8 +91,11 @@ refused). The server resolves the set from `choir_accounts`, finds the member,
 checks its refresh-session row is live (not revoked, not expired), then in one
 transaction rotates that session (via `RotateRefreshSession`, the grace table
 as today) and sets `active_user_id`; it then sets `choir_access` and
-`choir_refresh` for that user. A switch to the already-active user is an
-idempotent no-op (200, no rotation). The previously active account's session
+`choir_refresh` for that user. A switch to the already-active user does
+not rotate, but it still sets the active pair from the member session (a
+fresh access JWT, the current refresh cookie), so it repairs a jar that
+diverged from `active_user_id` (a lost switch response, a reordered
+response, an abandoned signout handoff). The previously active account's session
 stays a member and live; it simply stops being the cookie pair. A member whose
 session is dead is shown as "signed out" and switching to it opens sign-in for
 that account (prefilled email). The identity is always server-derived: the body
@@ -104,12 +115,15 @@ thing that sets cookies for it). The set-wide and per-member actions are new
 routes with new names, so no query parameter is overloaded:
 
 - `POST /auth/accounts/signout {user_id}`: deletes that member and its refresh
-  session row (and its grace entry). For an inactive member nothing else
+  session row and the grace entries keyed to that session's rotated tokens
+  (the grace table is keyed by rotated refresh token, not by member). For an inactive member nothing else
   changes and no cookie is written. For the active member it runs today's
   logout for that session, then, if another live member exists, returns
   `next_user_id` (and sets `active_user_id` to it, leaving the cookie switch to
   the follow-up `switch` call); if none, it is the empty-set case.
 - `POST /auth/accounts/logout-all`: revokes every member session of the set
+  and each member's rotation grace entries (`revokeRotatedGraceForUser` per
+  member),
   (this browser's accounts only; no `DeleteRefreshSessionsByUserID`, other
   devices of those users stay signed in), deletes the set, and clears all three
   cookies. It is browser-scope, so the passkey gate does not apply (an email
@@ -185,6 +199,11 @@ per-account notifications from inactive accounts.
 11. Stale tab: after a switch A to B, a renewal carrying A's refresh cookie
     (including inside the grace window) gets `account_switched`, writes no
     cookie, and a following request still resolves B.
+12a. A jar that diverged (it holds member A's pair while `active_user_id` is
+    B): the first request gets `account_switched`, the frontend POSTs
+    `switch` to B (which sets B's pair) and reloads once; no reload loop.
+12b. A valid access JWT for a non-active member is refused at the proxy
+    with `account_switched` when the set cookie is present.
 12. A sibling tab receives the switch broadcast, flushes and reloads, and its
     next call runs under B; with the broadcast dropped, the `account_switched`
     result does the same.
@@ -216,3 +235,6 @@ per-account notifications from inactive accounts.
 | localStorage enumeration incomplete | adopted | keys listed, `choir.auth.lastUserId` pointer |
 | grace TTL comment (30s) and dead `rotationGraceDuration` | deferred | pre-existing, not part of this change; live default is `AUTH_ROTATION_GRACE_TTL` 15s |
 | strip-header citation range | adopted | the claim stands; anchors are proxy/handlers.go:44-94 with call sites :725/875/1051 |
+| r1 N1 reload loop on a diverged jar | adopted | reconcile by `switch` to `active_user_id` before reload; the no-op switch still sets the pair; the JWT path checks membership |
+| r1 N2 gate wording (store and grace) | adopted | gate text covers both |
+| r1 N3 grace revocation in logout-all; signout grace wording | adopted | per-member `revokeRotatedGraceForUser`; grace keyed by rotated token |
