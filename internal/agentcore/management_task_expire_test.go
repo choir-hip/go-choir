@@ -143,3 +143,36 @@ func TestStaleQueuedTaskExpiryIsBatched(t *testing.T) {
 		t.Fatalf("the next wake did not finish the rest: %d remaining", len(remaining))
 	}
 }
+
+// TestStaleQueuedTaskNeverStarts (Devin r1 finding 1): between sweeps a free
+// slot must not claim a task past the queue's age; it stays queued for the
+// next sweep, and the fresh task takes the slot.
+func TestStaleQueuedTaskNeverStarts(t *testing.T) {
+	f, old, fresh, gate := expireFixture(t, "owner-task-expire-nostart", 2, 1)
+	defer close(gate)
+	ctx := context.Background()
+	f.rt.managementTaskLastSweep = f.rt.managementTaskClock() // inside the cooldown: no sweep
+
+	if _, err := f.rt.startQueuedManagementTasks(ctx, f.owner, f.computer); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range old {
+		if got := f.task(o.TaskID).State; got != types.ManagementTaskQueued {
+			t.Fatalf("stale task %s is %s between sweeps, want queued", o.TaskID, got)
+		}
+	}
+	if got := f.task(fresh[0].TaskID).State; got != types.ManagementTaskRunning {
+		t.Fatalf("fresh task is %s, want running", got)
+	}
+
+	// With every slot taken and no fresh work, a stale task still never starts.
+	f.rt.cfg.ManagementTaskSlots = 2
+	if _, err := f.rt.startQueuedManagementTasks(ctx, f.owner, f.computer); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range old {
+		if got := f.task(o.TaskID).State; got != types.ManagementTaskQueued {
+			t.Fatalf("stale task %s is %s with a free slot, want queued", o.TaskID, got)
+		}
+	}
+}

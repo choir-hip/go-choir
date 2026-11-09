@@ -126,16 +126,23 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 		return nil, fmt.Errorf("management tasks: list queued: %w", err)
 	}
 	if sweep {
-		rt.managementTaskLastSweep = now
 		queued = rt.expireStaleQueuedTasks(ctx, queued, managementTaskExpireBatch)
+		rt.managementTaskLastSweep = rt.managementTaskClock()
 	}
 	if busy >= slots {
 		return nil, nil
 	}
+	// A task past the queue's age never starts, even when a sweep has not
+	// reached it (between sweeps, past a batch, or after a failed close): it
+	// waits for the next sweep to close it.
+	cutoff := now.Add(-managementTaskQueueMaxAge)
 	var first *types.RunRecord
 	for _, task := range store.NewestQueuedFirst(queued) {
 		if busy >= slots {
 			break
+		}
+		if task.CreatedAt.Before(cutoff) {
+			continue
 		}
 		rec, err := rt.startManagementTask(ctx, task, slots)
 		if err != nil {
@@ -365,6 +372,9 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 		return
 	}
 	log.Printf("runtime: closed management task %s: %s", task.TaskID, reason)
+	if reason == types.TaskClosureExpired {
+		return // a host-minted expiry Report did no work to score
+	}
 	rt.scoreClosedTask(ctx, current, closing.RecordID)
 }
 
