@@ -293,102 +293,6 @@ func TestWalkUpperdirSkipsTheComputerStateLayer(t *testing.T) {
 	}
 }
 
-type fakeStoreSource struct {
-	estimate int64
-	err      error
-	wrote    bool
-}
-
-func (f *fakeStoreSource) SnapshotEstimate(context.Context) (int64, error) { return f.estimate, nil }
-
-func (f *fakeStoreSource) SnapshotForCapsule(_ context.Context, dir string, _ []string) (ComputerStoreCopy, error) {
-	f.wrote = true
-	if err := os.WriteFile(filepath.Join(dir, "state.db"), []byte("copy"), 0o600); err != nil {
-		return ComputerStoreCopy{}, err
-	}
-	if err := os.Mkdir(filepath.Join(dir, "state.texture"), 0o755); err != nil {
-		return ComputerStoreCopy{}, err
-	}
-	if f.err != nil {
-		return ComputerStoreCopy{}, f.err
-	}
-	return ComputerStoreCopy{Sequence: 7, Head: "h7", Bytes: 4}, nil
-}
-
-// The store copy is charged against the state volume's floor, owned by the
-// capsule's mapped uid, and a refused or failed copy leaves no file
-// (S3 failure modes 3, 5 and 9).
-func TestComputerStoreCopyIsChargedOwnedAndCleanedUp(t *testing.T) {
-	unprivilegedLayerOwner(t)
-	restore := computerStoreFreeBytes
-	t.Cleanup(func() { computerStoreFreeBytes = restore })
-
-	// Fits: free is the floor plus the copy and the allowance.
-	computerStoreFreeBytes = func(string) (int64, error) { return StateFloorBytes + 3*computerStoreAllowance, nil }
-	upper := t.TempDir()
-	source := &fakeStoreSource{estimate: computerStoreAllowance / 2}
-	e := &Executor{stateDir: t.TempDir()}
-	e.SetComputerStore(source)
-	receipt := &ComputerStateReceipt{}
-	e.writeComputerStoreCopy(context.Background(), upper, SpawnSpec{StoreKinds: []string{"choir.run"}, StoreLeaseID: "lease-x"}, receipt)
-	if receipt.Store == nil || receipt.Store.Sequence != 7 || receipt.StoreRefused != "" {
-		t.Fatalf("receipt = %+v", receipt)
-	}
-	for _, rel := range []string{"computer", "computer/state.db", "computer/state.texture"} {
-		info, err := os.Lstat(filepath.Join(upper, rel))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if st := info.Sys().(*syscall.Stat_t); int(st.Uid) != computerLayerOwner || int(st.Gid) != computerLayerGroup {
-			t.Fatalf("%s owned by %d:%d", rel, st.Uid, st.Gid)
-		}
-	}
-
-	if receipt.Store.LeaseID != "lease-x" {
-		t.Fatalf("the copy does not name its lease: %+v", receipt.Store)
-	}
-
-	// No lease names store kinds: no copy (MA3.4, X6).
-	upper = t.TempDir()
-	source = &fakeStoreSource{estimate: 1}
-	e.SetComputerStore(source)
-	receipt = &ComputerStateReceipt{}
-	e.writeComputerStoreCopy(context.Background(), upper, SpawnSpec{}, receipt)
-	if receipt.Store != nil || receipt.StoreRefused == "" || source.wrote {
-		t.Fatalf("a copy was taken without a lease: %+v wrote=%t", receipt, source.wrote)
-	}
-
-	// Does not fit: refused before any copy, nothing written.
-	computerStoreFreeBytes = func(string) (int64, error) { return StateFloorBytes + computerStoreAllowance, nil }
-	upper = t.TempDir()
-	source = &fakeStoreSource{estimate: 1 << 30}
-	e.SetComputerStore(source)
-	receipt = &ComputerStateReceipt{}
-	e.writeComputerStoreCopy(context.Background(), upper, SpawnSpec{StoreKinds: []string{"choir.run"}, StoreLeaseID: "lease-x"}, receipt)
-	if receipt.Store != nil || receipt.StoreRefused == "" || source.wrote {
-		t.Fatalf("an oversize copy was taken: %+v wrote=%t", receipt, source.wrote)
-	}
-	if _, err := os.Lstat(filepath.Join(upper, "computer", "state.db")); err == nil {
-		t.Fatal("a refused copy left a file")
-	}
-
-	// Fails mid-copy: the partial files are removed.
-	computerStoreFreeBytes = func(string) (int64, error) { return StateFloorBytes + 3*computerStoreAllowance, nil }
-	upper = t.TempDir()
-	source = &fakeStoreSource{estimate: 1, err: fmt.Errorf("a blanking was refused")}
-	e.SetComputerStore(source)
-	receipt = &ComputerStateReceipt{}
-	e.writeComputerStoreCopy(context.Background(), upper, SpawnSpec{StoreKinds: []string{"choir.run"}, StoreLeaseID: "lease-x"}, receipt)
-	if receipt.Store != nil || receipt.StoreRefused == "" {
-		t.Fatalf("receipt = %+v", receipt)
-	}
-	for _, rel := range []string{"computer/state.db", "computer/state.texture"} {
-		if _, err := os.Lstat(filepath.Join(upper, rel)); err == nil {
-			t.Fatalf("a failed copy left %s", rel)
-		}
-	}
-}
-
 // A walk that cannot build a kept entry fails whole: a layer is whole or
 // absent (round-1 review, DeepSeek 1).
 func TestSnapshotWalkFailsWholeWhenAnEntryCannotBeBuilt(t *testing.T) {
@@ -473,14 +377,9 @@ func TestPrepareComputerStateWithholdsOnlyARawCredential(t *testing.T) {
 		{"raw token in the env", SpawnSpec{ComputerState: true, Egress: true, ClaudeDelegate: true, Env: []string{"CLAUDE_CODE_OAUTH_TOKEN=" + envSentinel}}, relay, true},
 	} {
 		base, upper := t.TempDir(), t.TempDir()
-		source := &fakeStoreSource{estimate: 1}
 		e := &Executor{stateDir: t.TempDir()}
 		e.SetComputerFilesRoot(root, filepath.Join(root, "Source", "platform"))
-		e.SetComputerStore(source)
 		receipt, layer := e.prepareComputerState(context.Background(), c.spec, c.token, base)
-		if receipt.ComputerState == ComputerStateProvided {
-			e.writeComputerStoreCopy(context.Background(), upper, SpawnSpec{StoreKinds: []string{"choir.run"}, StoreLeaseID: "lease-x"}, receipt)
-		}
 		if err := writeComputerStateReceipt(upper, *receipt); err != nil {
 			t.Fatal(err)
 		}
@@ -490,13 +389,13 @@ func TestPrepareComputerStateWithholdsOnlyARawCredential(t *testing.T) {
 			t.Fatalf("%s: the receipt names a credential (%d bytes)", c.name, len(raw))
 		}
 		if c.held {
-			if layer != "" || layerErr == nil || source.wrote || receipt.ComputerState != ComputerStateWithheldRawCredential || !strings.Contains(string(raw), ComputerStateWithheldRawCredential) {
-				t.Fatalf("%s: layer=%q layerOnDisk=%t storeCopied=%t receipt=%s", c.name, layer, layerErr == nil, source.wrote, raw)
+			if layer != "" || layerErr == nil || receipt.ComputerState != ComputerStateWithheldRawCredential || !strings.Contains(string(raw), ComputerStateWithheldRawCredential) {
+				t.Fatalf("%s: layer=%q layerOnDisk=%t receipt=%s", c.name, layer, layerErr == nil, raw)
 			}
 			continue
 		}
-		if layer == "" || !source.wrote || receipt.ComputerState != ComputerStateProvided {
-			t.Fatalf("%s: layer=%q storeCopied=%t receipt=%s", c.name, layer, source.wrote, raw)
+		if layer == "" || receipt.ComputerState != ComputerStateProvided {
+			t.Fatalf("%s: layer=%q receipt=%s", c.name, layer, raw)
 		}
 		files := filepath.Join(layer, "computer", "files")
 		if _, err := os.Lstat(filepath.Join(files, "notes", "a.md")); err != nil {

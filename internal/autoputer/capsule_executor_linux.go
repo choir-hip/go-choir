@@ -69,10 +69,6 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 	// An implementation assignment's capsule snapshots the files root at
 	// /computer/files (docs/design/capsule-overlay-computer-state-2026-11-03.md).
 	executor.SetComputerFilesRoot(provideriface.ResolveFilesRoot(os.Getenv("AUTOPUTER_FILES_ROOT")), source)
-	// and gets a private copy of the store at /computer/state.db.
-	if db != nil {
-		executor.SetComputerStore(capsuleStoreCopySource{db: db})
-	}
 	// U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section
 	// 4.6): the source projection runs on every computer (capsule overlay S4),
 	// so Freeze reuses the running binary when no binary-input path differs
@@ -139,18 +135,4 @@ func configuredCapsuleExecutor(db *store.Store) (*capsule.Executor, bool, error)
 		log.Printf("capsule executor: no vmctl route; build capsules reserve nothing on the host")
 	}
 	return executor, true, nil
-}
-
-// capsuleStoreCopySource gives the capsule executor the store copy and
-// nothing else of the store: a file in the capsule's upper, never a handle.
-type capsuleStoreCopySource struct{ db *store.Store }
-
-func (s capsuleStoreCopySource) SnapshotEstimate(ctx context.Context) (int64, error) {
-	return s.db.SnapshotEstimate(ctx)
-}
-
-func (s capsuleStoreCopySource) SnapshotForCapsule(ctx context.Context, dir string, kinds []string) (capsule.ComputerStoreCopy, error) {
-	r, err := s.db.SnapshotToKinds(ctx, dir, kinds)
-	return capsule.ComputerStoreCopy{ComputerID: r.ComputerID, Sequence: r.Sequence, Head: r.Head, Bytes: r.Bytes,
-		CopyMS: r.CopyMS, ScanMS: r.ScanMS, ScannedBytes: r.ScannedBytes, Blanked: r.Blanked, LeftOut: r.LeftOut, Withheld: r.Withheld}, err
 }

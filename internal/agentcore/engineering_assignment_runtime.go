@@ -871,8 +871,8 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	cancelOpen := func(cause error) error { return rt.cancelUnboundAssignment(assignment, cause) }
 	phaseStarted := time.Now()
 	sagaStarted := phaseStarted
-	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
-	defer cancelSpawn()
+	// The executor owns the spawn's deadlines: capsule.SpawnLaunchBudget for
+	// launching.
 	memory, cpu, pids := engineeringAssignmentMemoryMax, engineeringAssignmentCPUQuota, engineeringAssignmentPidsMax
 	claude := binding.NetworkMode == types.EngineeringCapsuleNetworkClaude
 	if claude {
@@ -882,18 +882,6 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	// The request is the size chosen above, a Claude capsule's included:
 	// doctrine's memory.high never sits below what the capsule used to get.
 	spec := engineeringAssignmentSpawnSpec(capsuleID, runID, binding, preflight, memory, cpu, pids, claude)
-	// X6 (MA3.4): the store copy is a lease. The kinds the capsule is given
-	// are the kinds the lease for this assignment names; no lease, no copy.
-	if spec.ComputerState && rt.leases != nil {
-		// A refused or failed lease fails the spawn visibly, with the cause on
-		// the assignment, rather than starting a capsule that silently lacks
-		// its store copy.
-		granted, leaseErr := rt.leases.IssueCapsule(ctx, ownerID, computerID, assignmentID, runID, binding.AssignedAgentID)
-		if leaseErr != nil {
-			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("the capsule's store lease was refused: %w", leaseErr))
-		}
-		spec.StoreKinds, spec.StoreLeaseID = granted.Scope.Kinds, granted.LeaseID
-	}
 	// Option A (failure 15, problem 1): an earlier failed round's work on this
 	// trajectory is offered as an inert patch the engineer may apply in this
 	// fresh capsule. Never fatal: a refusal is recorded and the capsule starts
@@ -931,7 +919,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		created = &capsule.Capsule{ID: capsuleID, State: capsule.StateActive}
 	} else {
 		var spawnErr error
-		created, spawnErr = exec.Spawn(spawnCtx, spec)
+		created, spawnErr = exec.Spawn(ctx, spec)
 		if spawnErr != nil {
 			spawnErr = fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr)
 			if busy := engineeringHostMemoryWait(assignmentID, spawnErr); busy != nil && rt.kernelMode && rt.scheduleActor != nil {

@@ -99,10 +99,12 @@
 // Each shot starts from a clean desktop (resetDesktop, before the page opens);
 // one shot is one page load plus its single act, so there is no between-step reset.
 //
-// Real content: when /computer/state.db exists (an implementation capsule's
-// private copy of the computer's store), the helper starts an autoputer itself
-// over /computer (RUNTIME_STORE_PATH=/computer/state AUTOPUTER_FILES_ROOT=
-// /computer/files AUTOPUTER_PORT=8082 CHOIR_GUEST_TRUST_LOOPBACK=1) as a child
+// Real content: when /computer/files exists (an implementation capsule's
+// point-in-time copy of the owner's files; there is no store copy), the helper
+// starts an autoputer itself over those files with a fresh empty store in the
+// capsule's scratch (RUNTIME_STORE_PATH=<tmp>/choir-shot-store/state
+// AUTOPUTER_FILES_ROOT=/computer/files AUTOPUTER_PORT=8082
+// CHOIR_GUEST_TRUST_LOOPBACK=1) as a child
 // of this process, so it lives exactly as long as the shots, and kills it at
 // exit. The binary is /var/lib/artifact/release/bin/autoputer, else
 // /tmp/autoputer, else built once with go build from /workspace/platform. The
@@ -172,6 +174,8 @@ export const THEME_SCHEMA_VERSION = 2;
 export const THEME_PREFERENCE_PATH = '/api/preferences/theme';
 const STEP_MS = 15000;
 export const COMPUTER_DIR = '/computer';
+// The shots' own empty store, in scratch: no copy of the computer's store exists.
+export const SHOT_STORE_PATH = path.join(os.tmpdir(), 'choir-shot-store', 'state');
 export const AUTOPUTER_PORT = 8082;
 export const AUTOPUTER_USER = 'owner';
 const AUTOPUTER_BINARIES = ['/var/lib/artifact/release/bin/autoputer', '/tmp/autoputer'];
@@ -945,7 +949,7 @@ export function isProxied(pathname) {
 }
 
 export function autoputerEnv(base = process.env) {
-  return { ...base, RUNTIME_STORE_PATH: `${COMPUTER_DIR}/state`, AUTOPUTER_FILES_ROOT: `${COMPUTER_DIR}/files`, AUTOPUTER_PORT: String(AUTOPUTER_PORT), CHOIR_GUEST_TRUST_LOOPBACK: '1' };
+  return { ...base, RUNTIME_STORE_PATH: SHOT_STORE_PATH, AUTOPUTER_FILES_ROOT: `${COMPUTER_DIR}/files`, AUTOPUTER_PORT: String(AUTOPUTER_PORT), CHOIR_GUEST_TRUST_LOOPBACK: '1' };
 }
 
 function portOpen(port) {
@@ -977,6 +981,7 @@ function waitForPort(port, child, deadlineMs) {
 // process and returns it once its port accepts connections.
 async function startAutoputer(root, holder) {
   if (await portOpen(AUTOPUTER_PORT)) throw new Error(`127.0.0.1:${AUTOPUTER_PORT} already accepts connections (an autoputer started by hand?); stop it, since the shots would read its content`);
+  fs.mkdirSync(path.dirname(SHOT_STORE_PATH), { recursive: true });
   let bin = pickAutoputerBinary();
   if (!bin) {
     bin = AUTOPUTER_BINARIES[1];
@@ -1285,7 +1290,7 @@ async function main() {
   try { pw = req('playwright'); } catch { pw = req('@playwright/test'); } // npm hoists playwright; either exports chromium
   const { chromium } = pw;
   const dist = build(frontend, deps);
-  const useComputer = o.computer && fs.existsSync(path.join(COMPUTER_DIR, 'state.db'));
+  const useComputer = o.computer && fs.existsSync(path.join(COMPUTER_DIR, 'files'));
   const holder = { child: null, log: autoputerLogPath(o.out) }; // handlers first: a signal during the build or the wait must not orphan the child
   const stopAutoputer = () => { if (holder.child && holder.child.exitCode === null) holder.child.kill(); };
   process.on('exit', stopAutoputer);

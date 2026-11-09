@@ -252,10 +252,6 @@ type Request struct {
 	Duration time.Duration
 	Fields   *types.RequestFields
 
-	// capsule marks the platform's own store-copy lease (IssueCapsule): its
-	// bound is the built-in kind table minus the withheld kinds, not a desk
-	// ceiling. Unexported: only this package can ask.
-	capsule bool
 	// grant marks a platform-issued first-party grant lease (IssueTextureSearch):
 	// its bound is the grant table (grants.go), not a desk ceiling.
 	grant bool
@@ -366,10 +362,10 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 			return Record{}, refuse("%v", err)
 		}
 	}
-	// The lease policy shapes a desk's own ask; the platform's grants and
-	// the capsule copy stay per-task (policy.go).
+	// The lease policy shapes a desk's own ask; the platform's grants stay
+	// per-task (policy.go).
 	var dec decision
-	if !req.capsule && !req.grant {
+	if !req.grant {
 		dec = s.decidePolicy(req.OwnerID, []string{req.Desk, deskName}, req.ModelID, req.Scope)
 		if dec.durable {
 			if got, ok := s.attachDurable(ctx, req.OwnerID, req.ComputerID, string(holder), req.RunID, req.Scope); ok {
@@ -384,7 +380,7 @@ func (s *Service) Request(ctx context.Context, req Request) (Record, error) {
 		Custodians: custodians, Scope: req.Scope, Purpose: req.Purpose, RequestRef: requestID,
 		NotBefore: now, IssuedAt: now, State: StateActive, HolderModel: req.ModelID,
 	}
-	if !req.capsule && !req.grant {
+	if !req.grant {
 		b := dec.basis
 		r.Basis = &b
 	}
@@ -460,17 +456,7 @@ func (s *Service) decide(req Request) (string, objectgraph.Writer, []string, err
 	if len(req.Scope.Refs) > 0 {
 		return "", "", nil, refuse("refs scope only a by-ref grant")
 	}
-	if req.capsule {
-		allowed := map[string]bool{}
-		for _, k := range CapsuleStoreKinds() {
-			allowed[k] = true
-		}
-		for _, k := range req.Scope.Kinds {
-			if !allowed[k] {
-				return "", "", nil, refuse("kind %q is outside what a capsule store lease may name", k)
-			}
-		}
-	} else if err := withinCeiling(desk, req.Scope); err != nil {
+	if err := withinCeiling(desk, req.Scope); err != nil {
 		return "", "", nil, err
 	}
 	seen := map[string]bool{}

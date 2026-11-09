@@ -65,9 +65,6 @@ type Executor struct {
 	// computerFilesLeaveOut are the directories under it the snapshot leaves
 	// out by structure (relative, slash separated), with their reasons.
 	computerFilesLeaveOut map[string]string
-	// computerStore takes the store copy at /computer/state.db
-	// (SetComputerStore); nil gives none.
-	computerStore ComputerStoreSource
 	// commitDigests caches the canonical digest of sourceDir's commits this
 	// process has read in full (commitDigest); see commitDigestKey.
 	commitDigestMu sync.Mutex
@@ -345,6 +342,7 @@ func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, broker
 		return e
 	}
 	e.publicKey, e.privateKey = publicKey, privateKey
+	sweepSourceCacheBuilds(e.stateDir)
 	e.brokerDigest, e.initErr = digestRegularFile(e.brokerPath)
 	// Restart rule: jobs open before this boot ended with their capsules.
 	e.closeInterruptedJobs()
@@ -519,6 +517,11 @@ func (e *Executor) commitDigest(ctx context.Context, commit string) (string, err
 	return digest, nil
 }
 
+// SpawnLaunchBudget bounds launching a capsule (admission, source, bind,
+// broker start, activation). The computer-state files layer is built between
+// two launch contexts, so a slow walk never hands the launch an expired one.
+const SpawnLaunchBudget = 90 * time.Second
+
 // Spawn creates an isolated capsule with a private user/PID/mount/network/UTS/
 // IPC/cgroup namespace, overlay root, cgroup-v2 budget, and broker process.
 func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retErr error) {
@@ -529,6 +532,12 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	// first deferred call runs last, so the total sees the cleanup's error.
 	timer := newSpawnPhaseTimer(spec.CapsuleID)
 	defer func() { timer.done(retErr) }()
+	// The launch deadline bounds launching (admission, source, bind, broker),
+	// never the store snapshot, which has its own budget; the launch gets a
+	// fresh deadline after the snapshot so it never starts expired.
+	parentCtx := ctx
+	ctx, cancelLaunch := context.WithTimeout(parentCtx, SpawnLaunchBudget)
+	defer cancelLaunch()
 	// A build capsule reserves its baseline on the host first, off the
 	// executor lock (S4): a refusal refuses the spawn with the host's reason; a host
 	// that cannot be asked leaves the spawn as before. A spawn that fails
@@ -683,50 +692,26 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		}
 	}
 	timer.phase("state_dir", fmt.Sprintf("preflight=%t", spawnPreflight))
+	// The pinned source is a shared, content-addressed, read-only lower
+	// (source_cache.go): built once per subject digest, then a hit costs a
+	// stat. Only the selfdev inputs (verifier bundle, carried patch) are
+	// per-capsule, in sourceLower.
 	sourceLower := filepath.Join(base, "source-lower")
-	_ = os.MkdirAll(sourceLower, 0o755)
-	_ = os.Chmod(sourceLower, 0o755)
-	_ = os.MkdirAll(filepath.Join(sourceLower, "workspace"), 0o755)
-	_ = os.Chmod(filepath.Join(sourceLower, "workspace"), 0o755)
-	sourceTarget := filepath.Join(sourceLower, "workspace", "platform")
-	var sourceDigest string
-	if strings.HasPrefix(source.ArtifactRef, subjectArtifactPrefix) {
-		artifactRoot, artifactDigest, resolveErr := e.subjectArtifactPath(source.ArtifactRef)
-		if resolveErr != nil || source.SubjectDigest == "" || artifactDigest != source.SubjectDigest {
-			return nil, fmt.Errorf("capsule spawn requires exact candidate source artifact and subject digest")
-		}
-		if err := copyCanonicalSubjectTree(ctx, artifactRoot, sourceTarget); err != nil {
-			return nil, fmt.Errorf("capsule pin candidate source: %w", err)
-		}
-		timer.phase("source_candidate_copy")
-		sourceDigest, err = digestCanonicalSubjectTree(ctx, sourceTarget)
-		timer.phase("source_digest_copy")
-	} else {
-		const prefix = "capsule-source-git:"
-		raw := strings.TrimPrefix(source.ArtifactRef, prefix)
-		separator := strings.Index(raw, ":sha256:")
-		if !strings.HasPrefix(source.ArtifactRef, prefix) || separator <= 0 || raw[separator+len(":sha256:"):] != source.SubjectDigest {
-			return nil, fmt.Errorf("capsule spawn requires exact preflight git source and subject digest")
-		}
-		commit := raw[:separator]
-		decodedCommit, decodeErr := hex.DecodeString(commit)
-		if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
-			return nil, fmt.Errorf("capsule spawn preflight git commit is invalid")
-		}
-		// The copy is checked against the digest the binding pins, not
-		// against a second read of the commit.
-		sourceDigest, err = copyImmutableCommitTreeTimed(ctx, e.sourceDir, commit, sourceTarget, source.SubjectDigest, timer)
-	}
-	if err := spawnSourceRefusal(err, source.SubjectDigest, sourceDigest); err != nil {
+	cacheLower, cacheKey, cacheHit, err := e.pinnedSourceLower(ctx, source, timer)
+	if err != nil {
 		return nil, err
 	}
-	if err := requireFrozenComputerSurfaceSource(sourceTarget); err != nil {
-		return nil, err
+	caps.sourceCacheKey = cacheKey
+	sourceDigest := source.SubjectDigest
+	if err := writeSourceLowerRef(base, cacheLower); err != nil {
+		return nil, fmt.Errorf("capsule source lower reference: %w", err)
 	}
-	if err := makeSubjectTreeReadOnly(filepath.Join(sourceLower, "workspace", "platform")); err != nil {
-		return nil, err
+	timer.phase("source_lower_ready", fmt.Sprintf("cache_hit=%t", cacheHit))
+	extraLower := spec.VerifierBundleDir != "" || spec.CarriedPatchDir != ""
+	if extraLower {
+		_ = os.MkdirAll(sourceLower, 0o755)
+		_ = os.Chmod(sourceLower, 0o755)
 	}
-	timer.phase("source_lower_ready")
 	if spec.VerifierBundleDir != "" {
 		bundleTarget := filepath.Join(sourceLower, "selfdev", "bundle")
 		if err := copyCanonicalSubjectTree(ctx, spec.VerifierBundleDir, bundleTarget); err != nil {
@@ -750,7 +735,11 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}
 	timer.phase("selfdev_inputs", fmt.Sprintf("verifier=%t carried=%t", spec.VerifierBundleDir != "", spec.CarriedPatchDir != ""))
 	caps.SourceSnapshotDigest = sourceDigest
-	lowerLayers := sourceLower + ":" + e.lowerDir
+	pinnedLayers := cacheLower
+	if extraLower {
+		pinnedLayers = sourceLower + ":" + cacheLower
+	}
+	lowerLayers := pinnedLayers + ":" + e.lowerDir
 	var computerState *ComputerStateReceipt
 	if spec.ComputerState {
 		// The computer's state as data, between the source and the guest
@@ -759,7 +748,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		var layer string
 		computerState, layer = e.prepareComputerState(ctx, spec, claudeToken, base)
 		if layer != "" {
-			lowerLayers = sourceLower + ":" + layer + ":" + e.lowerDir
+			lowerLayers = pinnedLayers + ":" + layer + ":" + e.lowerDir
 		}
 		timer.phase("computer_files", fmt.Sprintf("state=%q files=%t linked=%d", computerState.ComputerState, computerState.Files, computerState.LinkedFiles))
 	}
@@ -770,23 +759,17 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, err
 	}
 	if computerState != nil {
-		// The store copy goes straight into the upper, before the mount: a
-		// private file the capsule's SQLite writes in place, one charge.
-		if computerState.ComputerState == ComputerStateProvided {
-			e.writeComputerStoreCopy(ctx, caps.UpperDir, spec, computerState)
-		}
 		if err := writeComputerStateReceipt(caps.UpperDir, *computerState); err != nil {
 			// The copies are data, not a precondition: the capsule starts,
 			// and the Capsule and the log keep the receipt.
 			log.Printf("capsule %s: computer state receipt not written: %v", spec.CapsuleID, err)
 		}
 		caps.ComputerState = computerState
-		storeBytes, storeSeq := int64(0), uint64(0)
-		if computerState.Store != nil {
-			storeBytes, storeSeq = computerState.Store.Bytes, computerState.Store.Sequence
-		}
-		log.Printf("capsule %s: computer state files=%t linked=%d bytes=%d left_out=%v lock_held_ms=%d refused=%q store_bytes=%d store_sequence=%d store_refused=%q", spec.CapsuleID, computerState.Files, computerState.LinkedFiles, computerState.LinkedBytes, computerState.LeftOutCounts, computerState.LockHeldMS, computerState.Refused, storeBytes, storeSeq, computerState.StoreRefused)
-		timer.phase("computer_store", fmt.Sprintf("store=%t", computerState.Store != nil))
+		log.Printf("capsule %s: computer state files=%t linked=%d bytes=%d left_out=%v lock_held_ms=%d refused=%q", spec.CapsuleID, computerState.Files, computerState.LinkedFiles, computerState.LinkedBytes, computerState.LeftOutCounts, computerState.LockHeldMS, computerState.Refused)
+		cancelLaunch()
+		var cancelFresh context.CancelFunc
+		ctx, cancelFresh = context.WithTimeout(parentCtx, SpawnLaunchBudget)
+		defer cancelFresh()
 	}
 	if err := MountOverlayFS(caps.MergedDir, caps.UpperDir, caps.WorkDir, lowerLayers); err != nil {
 		return nil, err
@@ -2336,13 +2319,13 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		return nil, fmt.Errorf("capsule freeze: %s is for a platform source change; this candidate is %s", ShotPlanFile, describeCandidateLayer(patchSHA, layer))
 	}
 	// Screens: the engineer's own screenshots, beside release/.
-	screenChanges := dropRestoredToBase(changes, caps.MergedDir, filepath.Join(caps.MergedDir, "..", "source-lower"))
+	screenChanges := dropRestoredToBase(changes, caps.MergedDir, pinnedSourceLowerRoot(caps.MergedDir))
 	screens, err := e.stageScreens(ctx, rootFD, screenChanges, temporary, plan != nil)
 	if err != nil {
 		return nil, err
 	}
 	// A change to the UI needs at least one screen (screens_required.go).
-	lowerRoot := filepath.Join(caps.MergedDir, "..", "source-lower")
+	lowerRoot := pinnedSourceLowerRoot(caps.MergedDir)
 	baseHasDir := func(rel string) bool {
 		_, isDir, err := readSourceBeneath(lowerRoot, platformSourcePrefix+"/"+rel)
 		return err == nil && isDir

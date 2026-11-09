@@ -27,7 +27,10 @@ type capsuleCgroup interface {
 // Capsule represents a single capsule instance — an isolated execution
 // environment with its own namespaces, cgroups, overlayfs, and broker.
 type Capsule struct {
-	mu                   sync.RWMutex
+	mu sync.RWMutex
+	// sourceCacheKey names the shared source lower this capsule mounts; the
+	// cache never evicts a key a live capsule holds.
+	sourceCacheKey       string
 	ID                   string
 	PID                  int
 	UpperDir             string
@@ -234,7 +237,7 @@ func (c *Capsule) Diff(ctx context.Context) ([]FileChange, error) {
 	// become one deletion per pinned source file, so the source patch, the
 	// bundle's ordered file effects and its digest all name them.
 	if c.MergedDir != "" {
-		lowerPlatform := filepath.Join(c.MergedDir, "..", "source-lower", "workspace", "platform")
+		lowerPlatform := filepath.Join(pinnedSourceLowerRoot(c.MergedDir), "workspace", "platform")
 		changes, err = expandOverlayDeletions(ctx, changes, c.UpperDir, lowerPlatform)
 		if err != nil {
 			return nil, fmt.Errorf("failed to expand overlay deletions: %w", err)

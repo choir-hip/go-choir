@@ -370,18 +370,6 @@ func TestTheCapsuleStoreCopyIsALease(t *testing.T) {
 	if !has["choir.run"] || !has["choir.commitment_record"] {
 		t.Errorf("the default capsule lease lacks the kernel's kinds: %v", kinds)
 	}
-	f := newFixture(t)
-	rec, err := f.svc.IssueCapsule(context.Background(), ownerID, computer, "asg-1", "run:asg-1", "engineering:asg-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.Assignment != "asg-1" || len(rec.Scope.Kinds) != len(kinds) {
-		t.Fatalf("capsule lease = %+v", rec)
-	}
-	// It is not a read lease: the engineering desk has no ceiling.
-	if f.svc.AdmitsKind(objectgraph.WriterEngineering, "run:asg-1", "choir.texture_document") {
-		t.Fatal("the capsule lease admitted a read of a withheld kind")
-	}
 }
 
 // MA3.7c, MA4.6: texture.search is a first-party grant lease. Only the

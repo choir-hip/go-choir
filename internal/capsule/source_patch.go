@@ -32,7 +32,7 @@ type sourcePatchFile struct {
 }
 
 // collectSourcePatchFiles reads, for every workspace/platform file change,
-// the base bytes from the pinned source snapshot (<mergedDir>/../source-lower)
+// the base bytes from the pinned source snapshot (pinnedSourceLowerRoot: the shared source cache tree)
 // and the candidate bytes from the merged tree. A directory cannot be
 // expressed in a unified diff (the files inside it carry it), so directory
 // changes are skipped.
@@ -63,7 +63,7 @@ func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePa
 			sourceChanges = append(sourceChanges, change)
 		}
 	}
-	lowerRoot := filepath.Join(mergedDir, "..", "source-lower")
+	lowerRoot := pinnedSourceLowerRoot(mergedDir)
 	var files []sourcePatchFile
 	for _, change := range sourceChanges {
 		rel := strings.TrimPrefix(change.Path, "/")

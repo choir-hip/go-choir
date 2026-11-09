@@ -128,67 +128,6 @@ func pathWithin(child, parent string) bool {
 	return err == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, "../")))
 }
 
-// SetComputerStore names the source of an engineering capsule's store copy
-// at /computer/state.db; nil gives none.
-func (e *Executor) SetComputerStore(source ComputerStoreSource) { e.computerStore = source }
-
-// writeComputerStoreCopy writes the store copy into the capsule's upper at
-// computer/state.db (with computer/state.texture/), owned by the capsule's
-// mapped uid, before the overlay mounts. It never fails the spawn: a copy
-// that does not fit or cannot be taken leaves nothing, and the receipt names
-// why. The charge keeps the state volume's floor after the copy and an
-// allowance for the capsule's own writes there.
-func (e *Executor) writeComputerStoreCopy(ctx context.Context, upperDir string, spec SpawnSpec, receipt *ComputerStateReceipt) {
-	if e.computerStore == nil {
-		receipt.StoreRefused = "no store configured"
-		return
-	}
-	// The kinds copied are the kinds a lease for this assignment names
-	// (MA3.4, X6): no lease, no copy.
-	if len(spec.StoreKinds) == 0 {
-		receipt.StoreRefused = "no lease names store kinds for this assignment"
-		return
-	}
-	estimate, err := e.computerStore.SnapshotEstimate(ctx)
-	if err != nil {
-		receipt.StoreRefused = "estimate: " + err.Error()
-		return
-	}
-	need := int64(computerStoreCopyFactor*float64(estimate)) + computerStoreAllowance
-	free, err := computerStoreFreeBytes(e.stateDir)
-	if err != nil {
-		receipt.StoreRefused = "free space unreadable: " + err.Error()
-		return
-	}
-	if free-need < StateFloorBytes {
-		receipt.StoreRefused = fmt.Sprintf("does not fit: the copy needs %d MiB (live store %d MiB), %d MiB free, %d MiB floor", need>>20, estimate>>20, free>>20, StateFloorBytes>>20)
-		return
-	}
-	dir := filepath.Join(upperDir, "computer")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		receipt.StoreRefused = "create: " + err.Error()
-		return
-	}
-	copyResult, err := e.computerStore.SnapshotForCapsule(ctx, dir, spec.StoreKinds)
-	copyResult.LeaseID = spec.StoreLeaseID
-	if err == nil {
-		err = chownTreeNoFollow(dir, computerLayerOwner, computerLayerGroup)
-	}
-	if err == nil {
-		// The charge was read before the copy; the floor holds after it too.
-		if after, ferr := computerStoreFreeBytes(e.stateDir); ferr == nil && after < StateFloorBytes {
-			err = fmt.Errorf("the state volume fell under its %d MiB floor during the copy", StateFloorBytes>>20)
-		}
-	}
-	if err != nil {
-		_ = os.RemoveAll(filepath.Join(dir, "state.db"))
-		_ = os.RemoveAll(filepath.Join(dir, "state.texture"))
-		receipt.StoreRefused = "copy: " + err.Error()
-		return
-	}
-	receipt.Store = &copyResult
-}
-
 // computerStoreFreeBytes reads the state volume's free space; tests replace it.
 var computerStoreFreeBytes = stateFreeBytes
 

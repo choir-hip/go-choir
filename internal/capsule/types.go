@@ -80,12 +80,6 @@ type SpawnSpec struct {
 	// its durable binding; research, desk-tool and verifier spawns never set
 	// it, so verification never depends on /computer.
 	ComputerState bool
-	// StoreKinds are the object kinds the assignment's lease names (MA3.4,
-	// X6): the store copy keeps only these. Empty gives no store copy; the
-	// files layer is unaffected. StoreLeaseID names the lease record, for the
-	// receipt. Trusted-runtime input, set with ComputerState.
-	StoreKinds   []string
-	StoreLeaseID string
 }
 
 type SourcePreflight struct {

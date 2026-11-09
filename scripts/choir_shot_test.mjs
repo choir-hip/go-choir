@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import {
-  autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
+  autoputerEnv, SHOT_STORE_PATH, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor, selectorTimeoutMessage,
   loadCatalogFixture, catalogAnswer, loadInstallFixture, installAnswer, isInstallPath, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow, settleProblem,
   loadPodcastFixture, podcastIndex, podcastAnswer, unservedHostNote, podcastRoute, PODCAST_FIXTURE_DIR,
@@ -77,7 +77,7 @@ assert.equal(pickAutoputerBinary(() => false), '');
 assert.ok(isProxied('/api/shell/bootstrap') && isProxied('/api'));
 assert.ok(!isProxied('/apixyz') && !isProxied('/auth/session') && !isProxied('/assets/a.js'));
 const env = autoputerEnv({});
-assert.deepEqual([env.RUNTIME_STORE_PATH, env.AUTOPUTER_FILES_ROOT, env.AUTOPUTER_PORT, env.CHOIR_GUEST_TRUST_LOOPBACK], ['/computer/state', '/computer/files', '8082', '1']);
+assert.deepEqual([env.RUNTIME_STORE_PATH, env.AUTOPUTER_FILES_ROOT, env.AUTOPUTER_PORT, env.CHOIR_GUEST_TRUST_LOOPBACK], [SHOT_STORE_PATH, '/computer/files', '8082', '1']);
 assert.equal(parseArgs(['--shots', 'x']).computer, true);
 assert.equal(parseArgs(['--shots', 'x', '--no-computer']).computer, false);
 

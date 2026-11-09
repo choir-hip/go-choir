@@ -58,7 +58,7 @@ func TestOnlyARawModelCredentialWithholdsTheComputerState(t *testing.T) {
 		}
 	}
 	r := withheldComputerState(held)
-	if r.Files || r.Store != nil || r.Refused != held || r.StoreRefused != held {
+	if r.Files || r.Refused != held {
 		t.Fatalf("withheld receipt = %+v", r)
 	}
 	encoded, _ := json.Marshal(r)

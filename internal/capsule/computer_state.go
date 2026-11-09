@@ -1,7 +1,6 @@
 package capsule
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -41,14 +40,14 @@ const (
 
 // Leave-out reasons, named in the receipt.
 const (
-	LeaveOutSource          = "source_lower"     // the computer's source is the capsule's /workspace/platform
-	LeaveOutMail            = "mail"             // the owner's emails need an owner decision
-	LeaveOutNotReadable     = "not_o+r"          // a mode the owner or a tool set; never raised, counted, never named
+	LeaveOutSource          = "source_lower"       // the computer's source is the capsule's /workspace/platform
+	LeaveOutMail            = "mail"               // the owner's emails need an owner decision
+	LeaveOutNotReadable     = "not_o+r"            // a mode the owner or a tool set; never raised, counted, never named
 	LeaveOutWritable        = "writable_by_others" // a shot layer only: g+w or o+w, counted, never named
-	LeaveOutSymlink         = "symlink"          // never followed
-	LeaveOutSpecial         = "special_file"     // socket, FIFO or device
-	LeaveOutTemporary       = "temporary"        // a writer's in-flight temporary file
-	LeaveOutOtherFilesystem = "other_filesystem" // a mount inside the files root
+	LeaveOutSymlink         = "symlink"            // never followed
+	LeaveOutSpecial         = "special_file"       // socket, FIFO or device
+	LeaveOutTemporary       = "temporary"          // a writer's in-flight temporary file
+	LeaveOutOtherFilesystem = "other_filesystem"   // a mount inside the files root
 	LeaveOutChanged         = "changed_during_walk"
 )
 
@@ -75,38 +74,6 @@ type ComputerStateReceipt struct {
 	LeftOut       []ComputerStateLeaveOut `json:"left_out,omitempty"`
 	LeftOutCounts map[string]int          `json:"left_out_counts,omitempty"`
 	LeftOutMore   int                     `json:"left_out_unnamed,omitempty"`
-	// Store is the store copy at /computer/state.db; StoreRefused names why
-	// there is none.
-	Store        *ComputerStoreCopy `json:"store,omitempty"`
-	StoreRefused string             `json:"store_refused,omitempty"`
-}
-
-// ComputerStoreCopy is what one store copy holds: the event head (the
-// second instant of the layer, beside the files lock time), sizes, the
-// secret-shape scan's work and blankings, and the sidecar parts left out.
-type ComputerStoreCopy struct {
-	ComputerID   string         `json:"computer_id,omitempty"`
-	Sequence     uint64         `json:"sequence,omitempty"`
-	Head         string         `json:"head,omitempty"`
-	Bytes        int64          `json:"bytes"`
-	CopyMS       int64          `json:"copy_ms"`
-	ScanMS       int64          `json:"scan_ms"`
-	ScannedBytes int64          `json:"scanned_bytes"`
-	Blanked      map[string]int `json:"blanked,omitempty"`
-	LeftOut      []string       `json:"left_out,omitempty"`
-	// LeaseID names the lease that chose the kinds the copy holds (MA3.4);
-	// Withheld counts the objects of the kinds it does not name, by kind.
-	LeaseID  string         `json:"lease_id,omitempty"`
-	Withheld map[string]int `json:"withheld,omitempty"`
-}
-
-// ComputerStoreSource takes the store copy for a capsule: the guest store
-// (store.Store.SnapshotToKinds, adapted by the guest core). kinds are the
-// object kinds the assignment's lease names; the copy holds those and no
-// others. The capsule never gets a store handle, only the copy's file.
-type ComputerStoreSource interface {
-	SnapshotEstimate(ctx context.Context) (int64, error)
-	SnapshotForCapsule(ctx context.Context, dir string, kinds []string) (ComputerStoreCopy, error)
 }
 
 // ComputerStateProvided marks a spawn that got the layers (each may still
@@ -165,9 +132,9 @@ func computerStateWithheld(spec SpawnSpec, delegateToken string) string {
 }
 
 // withheldComputerState is the receipt of a withheld spawn: no files layer,
-// no store copy, the reason on all three.
+// the reason on both fields.
 func withheldComputerState(reason string) *ComputerStateReceipt {
-	return &ComputerStateReceipt{ComputerState: reason, Refused: reason, StoreRefused: reason}
+	return &ComputerStateReceipt{ComputerState: reason, Refused: reason}
 }
 
 // ComputerStateLeaveOut is one named leave-out.
