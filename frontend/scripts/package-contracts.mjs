@@ -358,6 +358,7 @@ export async function stubBackend(page, { installed = [], modules = new Map(), a
       return route.fulfill({ status: own.status || 200, contentType: 'application/json', body: JSON.stringify(own.json ?? {}) });
     }
     if (p === '/auth/session') return route.fulfill({ json: { authenticated: true, user: { id: STUB_USER, username: STUB_USER } } });
+    if (p === '/auth/accounts') return route.fulfill({ json: [] });
     if (p === '/api/shell/bootstrap') return route.fulfill({ json: { computer_id: STUB_COMPUTER_ID } });
     if (p === '/api/desktop/state') return route.fulfill({ json: req.method() === 'GET' ? (seedWindow ? { windows: [seedWindow], active_window_id: seedWindow.window_id } : { windows: [], active_window_id: '' }) : { ok: true } });
     if (p === '/api/packages/installed') return route.fulfill({ json: { packages: installed } });

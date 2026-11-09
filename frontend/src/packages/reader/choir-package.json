@@ -11,7 +11,7 @@
     "entry": "App.svelte",
     "abi": "choir.app-frontend/svelte-inline/v1",
     "aliases": ["pdf", "epub"],
-    "requires_sdk": "^2.0",
+    "requires_sdk": "^2.4",
     "launcher": { "menu": true, "desktopIcon": false, "order": 110 },
     "window": {
       "singleton": false,
