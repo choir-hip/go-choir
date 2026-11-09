@@ -1269,11 +1269,15 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 					report.ObservedSubjectDigest = mutation.AfterDigest
 				}
 			}
-		} else if len(report.ExecutorReceiptRefs) != len(report.Commands) {
-			report, err = rt.bindLateAssignmentExecutionReceipts(assignment, report)
-			if err != nil {
-				return types.EngineeringAssignmentCommandResult{}, err
+		} else {
+			if len(report.ExecutorReceiptRefs) != len(report.Commands) {
+				report, err = rt.bindLateAssignmentExecutionReceipts(assignment, report)
+				if err != nil {
+					return types.EngineeringAssignmentCommandResult{}, err
+				}
 			}
+			// The capsule is gone, so its deliverables cannot be filed: say so.
+			report.Summary = withDeliverablesSummary(report.Summary, deliverablesReleasedNote)
 		}
 	}
 

@@ -36,6 +36,13 @@ func (e *Executor) StageGrantedDeliverables(ctx context.Context, agentRunID, han
 	if err != nil {
 		return nil, err
 	}
+	// The exact check Freeze runs: a claude-mode capsule's own relay token
+	// must not leave in a file. Not a heuristic scan.
+	if caps.Spec.ClaudeDelegate {
+		if err := e.refuseClaudeTokenInChanges(ctx, caps, changes); err != nil {
+			return nil, err
+		}
+	}
 	names, links := deliverableNames(changes)
 	if len(names) == 0 {
 		return &StagedDeliverables{}, nil
@@ -48,6 +55,7 @@ func (e *Executor) StageGrantedDeliverables(ctx context.Context, agentRunID, han
 	if err := os.MkdirAll(stageRoot, 0o700); err != nil {
 		return nil, err
 	}
+	sweepStaleDeliverableStages(stageRoot)
 	destDir, err := os.MkdirTemp(stageRoot, ".deliverables-")
 	if err != nil {
 		return nil, err

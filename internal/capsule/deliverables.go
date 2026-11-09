@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -36,6 +37,11 @@ const (
 	MaxDeliverableBytes = 50 << 20
 	// MaxDeliverablesTotalBytes bounds the set.
 	MaxDeliverablesTotalBytes = 200 << 20
+	// MaxDeliverableEntries bounds the directory entries examined; the rest
+	// are counted, not read.
+	MaxDeliverableEntries = 100
+	// MaxDeliverableRefusals bounds the refusals a completion lists.
+	MaxDeliverableRefusals = 20
 )
 
 var deliverableNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._ -]{0,95}$`)
@@ -100,8 +106,8 @@ func SanitizeDeliverableName(raw string) (string, error) {
 
 // SniffDeliverable checks name's extension against its first bytes and
 // returns the media type. Only these types are delivered: pdf, png, jpg/jpeg,
-// webp, gif, svg, csv, json, txt, md, html. svg and html are delivered as
-// files only: the owner's Files must not render them as a page.
+// webp, gif, csv, json, txt, md. svg and html are not: Files can serve them
+// inline in its own origin.
 func SniffDeliverable(name string, head []byte) (string, error) {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 	switch ext {
@@ -125,14 +131,6 @@ func SniffDeliverable(name string, head []byte) (string, error) {
 		if bytes.HasPrefix(head, []byte("GIF87a")) || bytes.HasPrefix(head, []byte("GIF89a")) {
 			return "image/gif", nil
 		}
-	case "svg":
-		if plainText(head) && bytes.Contains(bytes.ToLower(head), []byte("<svg")) {
-			return "image/svg+xml", nil
-		}
-	case "html":
-		if plainText(head) && bytes.Contains(head, []byte("<")) {
-			return "text/html", nil
-		}
 	case "csv":
 		if plainText(head) {
 			return "text/csv", nil
@@ -150,7 +148,7 @@ func SniffDeliverable(name string, head []byte) (string, error) {
 			return "text/markdown", nil
 		}
 	default:
-		return "", fmt.Errorf("type .%s is not delivered (pdf, png, jpg, webp, gif, svg, csv, json, txt, md, html are)", ext)
+		return "", fmt.Errorf("type .%s is not delivered (pdf, png, jpg, webp, gif, csv, json, txt, md are)", ext)
 	}
 	return "", fmt.Errorf("content is not a %s", ext)
 }
@@ -191,7 +189,7 @@ func deliverableNames(changes []FileChange) (names []string, links map[string]bo
 // stageDeliverableFiles copies the accepted files from the capsule (opened
 // through open, which must not follow symlinks) into destDir, one temp file
 // and rename each, so a crash leaves no partial file under a final name. It
-// bounds count, size and total, sniffs the type and scans for secrets. Every
+// bounds count, size and total and sniffs the type. Every
 // file it does not accept is in the refusals. destDir is created; a retry
 // replaces the same names, so it is idempotent.
 func stageDeliverableFiles(ctx context.Context, names []string, links map[string]bool, open func(name string) (screenInput, error), destDir string) ([]DeliverableFile, []DeliverableRefusal, error) {
@@ -205,11 +203,15 @@ func stageDeliverableFiles(ctx context.Context, names []string, links map[string
 	var refused []DeliverableRefusal
 	used := map[string]bool{}
 	var total int64
-	for _, raw := range names {
+	for i, raw := range names {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		refuse := func(reason string) { refused = append(refused, DeliverableRefusal{Name: raw, Reason: reason}) }
+		if i >= MaxDeliverableEntries {
+			refused = append(refused, DeliverableRefusal{Name: fmt.Sprintf("%d more entries", len(names)-i), Reason: fmt.Sprintf("not examined: only %d entries are", MaxDeliverableEntries)})
+			break
+		}
+		refuse := func(reason string) { refused = append(refused, DeliverableRefusal{Name: fmt.Sprintf("%q", raw), Reason: reason}) }
 		if links[raw] {
 			refuse("a symlink is never followed")
 			continue
@@ -267,10 +269,6 @@ func stageDeliverableFiles(ctx context.Context, names []string, links map[string
 			refuse(err.Error())
 			continue
 		}
-		if err := refuseBinarySecrets(ctx, name, data); err != nil {
-			refuse("holds secret content")
-			continue
-		}
 		sum := sha256.Sum256(data)
 		if err := writeStagedDeliverable(filepath.Join(destDir, name), data); err != nil {
 			return nil, nil, err
@@ -299,4 +297,21 @@ func writeStagedDeliverable(final string, data []byte) error {
 		return err
 	}
 	return nil
+}
+
+// sweepStaleDeliverableStages removes .deliverables-* staging directories a
+// crash left in stageRoot, those older than an hour (a live stage is seconds).
+func sweepStaleDeliverableStages(stageRoot string) {
+	entries, err := os.ReadDir(stageRoot)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), ".deliverables-") {
+			continue
+		}
+		if info, err := entry.Info(); err == nil && time.Since(info.ModTime()) > time.Hour {
+			_ = os.RemoveAll(filepath.Join(stageRoot, entry.Name()))
+		}
+	}
 }

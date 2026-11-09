@@ -34,7 +34,7 @@ func stagedDeliverables(t *testing.T, files map[string]string) (string, []capsul
 }
 
 func TestShortAssignmentID(t *testing.T) {
-	if got := shortAssignmentID("assignment-0123456789abcdef"); got != "01234567" {
+	if got := shortAssignmentID("assignment-0123456789abcdef"); got != "0123456789abcdef" {
 		t.Fatalf("got %q", got)
 	}
 	if got := shortAssignmentID("assignment-../../etc"); strings.ContainsAny(got, "./") || got == "" {
@@ -52,11 +52,11 @@ func TestLandDeliverablesFilesUnderReportsAndIsIdempotent(t *testing.T) {
 			t.Fatalf("round %d: landed %v refused %v", round, landed, refused)
 		}
 	}
-	got, err := os.ReadFile(filepath.Join(root, "Reports", "01234567", "a.txt"))
+	got, err := os.ReadFile(filepath.Join(root, "Reports", "0123456789abcdef", "a.txt"))
 	if err != nil || string(got) != "one" {
 		t.Fatalf("read back: %q, %v", got, err)
 	}
-	entries, _ := os.ReadDir(filepath.Join(root, "Reports", "01234567"))
+	entries, _ := os.ReadDir(filepath.Join(root, "Reports", "0123456789abcdef"))
 	if len(entries) != 2 {
 		t.Fatalf("directory holds %d entries (a temp file stayed?): %v", len(entries), entries)
 	}
@@ -65,7 +65,7 @@ func TestLandDeliverablesFilesUnderReportsAndIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	landDeliverables(root, id, stage, accepted)
-	got, _ = os.ReadFile(filepath.Join(root, "Reports", "01234567", "a.txt"))
+	got, _ = os.ReadFile(filepath.Join(root, "Reports", "0123456789abcdef", "a.txt"))
 	if string(got) != "two" {
 		t.Fatalf("re-copy did not replace: %q", got)
 	}
@@ -109,8 +109,8 @@ func TestDeliverablesSummaryListsPathsAndRefusalsOnce(t *testing.T) {
 	root := t.TempDir()
 	stage, accepted := stagedDeliverables(t, map[string]string{"chart.png": "png"})
 	landed, _ := landDeliverables(root, "assignment-0123456789abcdef", stage, accepted)
-	text := deliverablesSummary(landed, []capsule.DeliverableRefusal{{Name: "evil.exe", Reason: "type .exe is not delivered"}})
-	for _, want := range []string{"Reports/01234567/chart.png", "evil.exe: type .exe is not delivered"} {
+	text := deliverablesSummary(landed, []capsule.DeliverableRefusal{{Name: `"evil.exe"`, Reason: "type .exe is not delivered"}})
+	for _, want := range []string{"Reports/0123456789abcdef/chart.png", "\"evil.exe\": type .exe is not delivered"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary lacks %q:\n%s", want, text)
 		}
@@ -130,5 +130,26 @@ func TestLandAssignmentDeliverablesWithoutExecutorLeavesReport(t *testing.T) {
 	report := types.EngineeringAssignmentReport{Summary: "done"}
 	if got := rt.landAssignmentDeliverables(t.Context(), types.EngineeringAssignment{}, "run", "handle", report); got.Summary != "done" {
 		t.Fatalf("summary %q", got.Summary)
+	}
+}
+
+func TestDeliverablesSummaryCapsRefusals(t *testing.T) {
+	var refused []capsule.DeliverableRefusal
+	for i := 0; i < capsule.MaxDeliverableRefusals+5; i++ {
+		refused = append(refused, capsule.DeliverableRefusal{Name: "n", Reason: "r"})
+	}
+	text := deliverablesSummary(nil, refused)
+	if !strings.Contains(text, "and 5 more") || strings.Count(text, "- n: r") != capsule.MaxDeliverableRefusals {
+		t.Fatalf("summary:\n%s", text)
+	}
+}
+
+func TestTwoAssignmentsDoNotShareADirectory(t *testing.T) {
+	if shortAssignmentID("assignment-aaaaaaaaaaaaaaaa1111") == shortAssignmentID("assignment-aaaaaaaaaaaaaaaa2222") {
+		// same first 16 is the bound; differing ids within it must differ.
+		t.Log("ids sharing 16 hex share a directory (digest collision bound)")
+	}
+	if shortAssignmentID("assignment-aaaaaaaa11111111") == shortAssignmentID("assignment-aaaaaaaa22222222") {
+		t.Fatal("assignments differing after 8 hex share a directory")
 	}
 }

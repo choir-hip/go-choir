@@ -20,7 +20,7 @@ import (
 // it). The assignment writes them to capsule.DeliverablesDir; when the
 // assignment's capsule is frozen for its terminal report, the host stages the
 // regular files there (bounded, type-sniffed, symlinks never followed) and
-// files them in the owner's Files at Reports/<short assignment id>/<name>
+// files them in the owner's Files at Reports/<assignment id>/<name>
 // through ownerfiles, the one writer. The report's summary lists the Files
 // paths and every refusal, so the caller (Texture or management) can embed
 // them. The summary is derivation, never identity input, so the report's
@@ -31,10 +31,15 @@ import (
 // file under.
 const deliverablesReportsDir = "Reports"
 
+// deliverablesReleasedNote is the summary line when the capsule was already
+// released at the report, so its output directory could not be read.
+const deliverablesReleasedNote = "deliverables unavailable: capsule already released"
+
 var shortAssignmentIDPattern = regexp.MustCompile(`[^A-Za-z0-9]`)
 
-// shortAssignmentID is the assignment's short directory name: the first eight
-// characters of its digest ("assignment-<hex>").
+// shortAssignmentID is the assignment's directory name: the first sixteen
+// characters of its digest ("assignment-<hex>"), enough that two assignments
+// do not share a directory.
 func shortAssignmentID(assignmentID string) string {
 	id := strings.TrimPrefix(assignmentID, "assignment-")
 	id = strings.TrimPrefix(id, "sha256:")
@@ -42,7 +47,7 @@ func shortAssignmentID(assignmentID string) string {
 	if id == "" {
 		return "unknown"
 	}
-	return id[:min(len(id), 8)]
+	return id[:min(len(id), 16)]
 }
 
 // landedDeliverable is one file filed in Files.
@@ -63,7 +68,7 @@ func landDeliverables(filesRoot, assignmentID, stageDir string, accepted []capsu
 	var refused []capsule.DeliverableRefusal
 	if strings.TrimSpace(filesRoot) == "" {
 		for _, f := range accepted {
-			refused = append(refused, capsule.DeliverableRefusal{Name: f.Name, Reason: "no file tree on this computer"})
+			refused = append(refused, capsule.DeliverableRefusal{Name: fmt.Sprintf("%q", f.Name), Reason: "no file tree on this computer"})
 		}
 		return nil, refused
 	}
@@ -71,18 +76,18 @@ func landDeliverables(filesRoot, assignmentID, stageDir string, accepted []capsu
 	dir, err := mkdirBeneath(filesRoot, rel)
 	if err != nil {
 		for _, f := range accepted {
-			refused = append(refused, capsule.DeliverableRefusal{Name: f.Name, Reason: "Files directory unavailable: " + err.Error()})
+			refused = append(refused, capsule.DeliverableRefusal{Name: fmt.Sprintf("%q", f.Name), Reason: "Files directory unavailable: " + err.Error()})
 		}
 		return nil, refused
 	}
 	for _, f := range accepted {
 		if _, err := capsule.SanitizeDeliverableName(f.Name); err != nil || f.Name != filepath.Base(f.Name) {
-			refused = append(refused, capsule.DeliverableRefusal{Name: f.Name, Reason: "not a plain file name"})
+			refused = append(refused, capsule.DeliverableRefusal{Name: fmt.Sprintf("%q", f.Name), Reason: "not a plain file name"})
 			continue
 		}
 		src := filepath.Join(stageDir, f.Name)
 		if err := copyDeliverable(src, filepath.Join(dir, f.Name)); err != nil {
-			refused = append(refused, capsule.DeliverableRefusal{Name: f.Name, Reason: "copy into Files failed: " + err.Error()})
+			refused = append(refused, capsule.DeliverableRefusal{Name: fmt.Sprintf("%q", f.Name), Reason: "copy into Files failed: " + err.Error()})
 			continue
 		}
 		landed = append(landed, landedDeliverable{DeliverableFile: f, Path: rel + "/" + f.Name})
@@ -127,7 +132,11 @@ func deliverablesSummary(landed []landedDeliverable, refused []capsule.Deliverab
 	}
 	if len(refused) > 0 {
 		b.WriteString("Deliverables not delivered:\n")
-		for _, r := range refused {
+		for i, r := range refused {
+			if i >= capsule.MaxDeliverableRefusals {
+				fmt.Fprintf(&b, "- and %d more\n", len(refused)-i)
+				break
+			}
 			fmt.Fprintf(&b, "- %s: %s\n", r.Name, r.Reason)
 		}
 	}
