@@ -139,9 +139,10 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 	// query, MA3.7c); 39 with model.served (the models that served a run,
 	// docs/problems/model-provenance-unwired-2026-11-05.md); 40 with
 	// setting.updated (a package setting the owner changed, MA5.S6); 41 with
-	// trust.breaker (a circuit-breaker trip, MA7.8).
-	if batched != 10 || acknowledged != 41 {
-		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 41", batched, acknowledged)
+	// trust.breaker (a circuit-breaker trip, MA7.8); 42 with search.served
+	// (the search providers that served a run, beside model.served).
+	if batched != 10 || acknowledged != 42 {
+		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 42", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
 	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), ""); err == nil {
