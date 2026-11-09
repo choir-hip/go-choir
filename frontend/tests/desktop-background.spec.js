@@ -7,6 +7,7 @@
 //  B5 a path under mail/ (Mail-agent custody) is listed, or painted when stored;
 //  B6 the image is inlined as a data URI instead of the Files read route;
 //  B7 the picker is unusable at phone width.
+// (The picker is the Files modal now; the whole picker/menu/tab flow is in appearance-flow.spec.js.)
 // /api is mocked as other specs do; the preference route is a small stateful stub.
 import { test, expect } from '@playwright/test';
 
@@ -73,13 +74,15 @@ async function openSettings(page) {
 
 async function pickSky(page) {
   await page.locator('[data-background-choose]').click();
-  await expect(page.locator('[data-background-picker]')).toBeVisible();
-  // B5: mail/ is never offered, nor non-images.
-  await expect(page.locator('[data-background-dir="mail"]')).toHaveCount(0);
-  await expect(page.locator('[data-background-file="notes.txt"]')).toHaveCount(0);
-  await page.locator('[data-background-dir="Pictures"]').click();
-  await expect(page.locator('[data-background-file="doc.pdf"]')).toHaveCount(0);
-  await page.locator('[data-background-file="sky.png"]').click();
+  await expect(page.locator('[data-file-picker]')).toBeVisible();
+  // B5: mail/ is never offered, nor non-images (the Images filter hides them).
+  await expect(page.locator('[data-picker-entry="mail"]')).toHaveCount(0);
+  await expect(page.locator('[data-picker-entry="notes.txt"]')).toHaveCount(0);
+  await page.locator('[data-picker-entry="Pictures"]').click();
+  await expect(page.locator('[data-picker-entry="doc.pdf"]')).toHaveCount(0);
+  await page.locator('[data-picker-entry="sky.png"]').click();
+  await page.locator('[data-picker-choose]').click();
+  await expect(page.locator('[data-file-picker]')).toHaveCount(0);
 }
 
 const desktop = (page) => page.locator('[data-desktop]');

@@ -60,6 +60,7 @@
   } from '../../lib/app-sdk';
   import type { ContextMenuEntry, FileOpener } from '../../lib/app-sdk';
   import { previewFiles, previewFolderEntries } from './preview-data';
+  import { fileIconFor, formatFileSize, isImageName, setDesktopBackground, sortEntries } from '../../lib/app-sdk';
   export let authenticated = false;
 
   // Auto-focus action for inputs
@@ -137,11 +138,7 @@
       }
       const data = await res.json();
       // Sort: directories first, then files, both alphabetically
-      entries = (data || []).sort((a, b) => {
-        if (a.type === 'directory' && b.type !== 'directory') return -1;
-        if (a.type !== 'directory' && b.type === 'directory') return 1;
-        return a.name.localeCompare(b.name);
-      });
+      entries = sortEntries(data || []);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         shellSessionExpired();
@@ -572,6 +569,14 @@
     if (!(await copyText(path, path))) showActionStatus(path);
   }
 
+  // The same write the Settings control makes (setDesktopBackground).
+  async function setAsWallpaper(entry) {
+    if (!requireAuth('file_mutation')) return;
+    const path = entrySegments(entry).join('/');
+    const result = await setDesktopBackground(path);
+    showActionStatus(result.ok ? `Desktop wallpaper set to ${path}` : result.error || 'Could not set the wallpaper');
+  }
+
   async function uploadInto(folderSegments) {
     if (!requireAuth('file_upload')) return;
     uploadError = '';
@@ -612,6 +617,9 @@
     const items: ContextMenuEntry[] = [
       { id: 'open', label: 'Open', onSelect: () => handleFileClick(entry) },
     ];
+    if (isImageName(entry.name) && String(currentPath[0] || '').toLowerCase() !== 'mail') {
+      items.push({ id: 'set-wallpaper', label: 'Set as desktop wallpaper', onSelect: () => void setAsWallpaper(entry) });
+    }
     items.push(
       { separator: true },
       { id: 'rename', label: 'Rename…', onSelect: () => startRename(entry) },
@@ -675,30 +683,9 @@
     shellOpenFile([...currentPath, entry.name].join('/'), { asText: true, importToTexture: true });
   }
 
-  function isTextureShortcutName(name) {
-    if (typeof name !== 'string') return false;
-    const lower = name.toLowerCase();
-    return lower.endsWith('.texture') || lower.endsWith('.texture');
-  }
-
-
   function isTextureImportableDocumentName(name) {
     const lower = String(name || '').toLowerCase();
     return lower.endsWith('.docx') || lower.endsWith('.pdf');
-  }
-
-  function fileIconFor(entry) {
-    if (entry.type === 'directory') return '📁';
-    if (isTextureShortcutName(entry.name)) return '📝';
-    const mediaRoute = mediaRouteForFileName(entry.name);
-    if (mediaRoute?.appId === 'image') return '🖼️';
-    if (mediaRoute?.appId === 'audio') return '🎧';
-    if (mediaRoute?.appId === 'video') return '🎬';
-    if (mediaRoute?.mediaType === 'application/pdf') return '📄';
-    if (mediaRoute?.mediaType === 'application/epub+zip') return '📚';
-    if (mediaRoute?.appId === 'slides') return '🖥️';
-    if (mediaRoute?.appId === 'calendar') return '📅';
-    return '📄';
   }
 
   function handleNewFolderClick() {
@@ -742,14 +729,6 @@
   function cancelDelete() {
     deleteTarget = null;
     deleteError = '';
-  }
-
-  function formatFileSize(bytes) {
-    if (bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const val = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1);
-    return `${val} ${units[i]}`;
   }
 
   // Can go back/forward?

@@ -161,6 +161,17 @@ export type { Disposer } from './event-helpers';
 export { getSetting, onSetting, setSetting, settingSections } from './services/settings';
 export type { PackageSettingsSection, SettingField, SettingResult, SettingsSection } from './services/settings';
 
+// Choosing a file and the desktop background (2.3.0): the Files picker in the
+// shell modal (resolves to a Files path, or null when cancelled), the one write
+// that makes a Files image the desktop background (Settings and Files'
+// "Set as desktop wallpaper" use it), the picker-then-write flow, and the
+// listing helpers the Files app and the picker share.
+export { pickFile } from './file-picker';
+export type { PickFileOptions } from './file-picker';
+export { chooseDesktopBackground, setDesktopBackground } from './desktop-background';
+export { fileIconFor, formatFileSize, isImageName, sortEntries } from './files-listing';
+export type { FileEntry } from './files-listing';
+
 // Who provides each shell slot (2.1.0, slice L2): the providers of every
 // single-slot shell service from the kernel's snapshot, the owner's recorded
 // choice (a selection record on the owner's tape) and "Use default", which

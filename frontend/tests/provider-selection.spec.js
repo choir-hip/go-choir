@@ -159,6 +159,7 @@ test.describe('Who provides this? in the shell', () => {
     await page.locator('[data-desk-menu-button]').first().click();
     await page.locator('[data-desk-sheet-app][data-desk-app-id="settings"]').first().click();
     const content = page.locator('[data-window][data-window-app-id="settings"] [data-window-content]').first();
+    await content.locator('[data-settings-tab="packages"]').click(); // Settings is tabs; "Who provides this?" is on Packages
     await content.locator('[data-who-provides]').waitFor();
     return content;
   }

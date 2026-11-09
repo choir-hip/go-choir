@@ -20,6 +20,9 @@
 //    surface tokens (bg, panel...) for windows are untouched;
 //  - bytes come from the owner-authenticated Files read route, never a data URI;
 //  - mail/ is Mail-agent custody: never listed, selected or painted.
+import { getSetting, setSetting, type SettingResult } from './services/settings';
+import { pickFile } from './file-picker';
+
 export const BACKGROUND_SETTING_PKG = 'settings';
 export const BACKGROUND_KEY = 'background';
 export const BACKGROUND_FIT_KEY = 'background_fit';
@@ -53,4 +56,33 @@ export function backgroundLayerStyle(rawPath: unknown, rawFit: unknown): string 
   const repeat = fit === 'tile' ? 'repeat' : 'no-repeat';
   const position = fit === 'tile' ? '0 0' : 'center';
   return `background-image:url("${url}");background-size:${size};background-repeat:${repeat};background-position:${position}`;
+}
+
+/**
+ * Make a Files image the desktop background: the one write the Settings
+ * control, the picker and Files' "Set as desktop wallpaper" all use. A path
+ * the rules refuse (not an image, under mail/) is not saved.
+ */
+export async function setDesktopBackground(path: string): Promise<SettingResult> {
+  const clean = cleanBackgroundPath(path);
+  if (!clean) return { ok: false, error: 'Choose a png, jpg, webp or gif image outside mail/' };
+  return setSetting(BACKGROUND_KEY, clean, BACKGROUND_SETTING_PKG);
+}
+
+/**
+ * Open the Files picker on images and, if the owner chooses one, make it the
+ * background. Resolves to the path, or null when cancelled (nothing changes).
+ */
+export async function chooseDesktopBackground(): Promise<{ path: string | null; result?: SettingResult }> {
+  const current = cleanBackgroundPath(await getSetting(BACKGROUND_KEY, BACKGROUND_SETTING_PKG));
+  const path = await pickFile({
+    title: 'Choose a desktop background',
+    confirmLabel: 'Use as background',
+    extensions: BACKGROUND_EXTENSIONS,
+    filterLabel: 'Images',
+    hideAtRoot: ['mail'],
+    startPath: current,
+  });
+  if (!path) return { path: null };
+  return { path, result: await setDesktopBackground(path) };
 }

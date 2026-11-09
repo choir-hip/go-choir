@@ -5,7 +5,7 @@
   import { buildInfo, copyText, openApp, resetDesktop } from '../../lib/app-sdk';
   import { getTheme, onThemeChange, setTheme } from '../../lib/app-sdk';
   import { addLiveEventListener, liveEventKind } from '../../lib/app-sdk';
-  import { settingSections, getSetting, setSetting, onSetting, pickFiles, uploadFiles, currentDeviceId } from '../../lib/app-sdk';
+  import { settingSections, getSetting, setSetting, onSetting, pickFiles, uploadFiles, currentDeviceId, chooseDesktopBackground, setDesktopBackground } from '../../lib/app-sdk';
   import PackageSettings from './PackageSettings.svelte';
   import WhoProvides from './WhoProvides.svelte';
   import {
@@ -18,6 +18,42 @@
   } from '../../lib/app-sdk';
 
   export let currentUser = null;
+  // The window's launch context. `settingsTab` deep-links a tab (the desktop's
+  // "Background and theme..." menu opens Settings on 'appearance'); the shell
+  // merges a new context into the open singleton window, so `settingsTabSeq`
+  // (a counter the opener bumps) makes a repeat request for the same tab land
+  // again after the owner moved away. An unknown tab falls back to the first.
+  export let appContext = {};
+
+  const TABS = [
+    { id: 'appearance', label: 'Appearance' },
+    { id: 'account', label: 'Account & keys' },
+    { id: 'packages', label: 'Packages' },
+    { id: 'system', label: 'System' },
+  ];
+  let tab = TABS[0].id;
+  let seenTabRequest = '';
+  $: {
+    const key = `${appContext?.settingsTab ?? ''}#${appContext?.settingsTabSeq ?? ''}`;
+    if (key !== seenTabRequest) {
+      seenTabRequest = key;
+      if (appContext?.settingsTab !== undefined) {
+        tab = TABS.some((t) => t.id === appContext.settingsTab) ? appContext.settingsTab : TABS[0].id;
+      }
+    }
+  }
+  function onTabKeydown(event, index) {
+    const last = TABS.length - 1;
+    let next = -1;
+    if (event.key === 'ArrowRight') next = index === last ? 0 : index + 1;
+    else if (event.key === 'ArrowLeft') next = index === 0 ? last : index - 1;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = last;
+    if (next < 0) return;
+    event.preventDefault();
+    tab = TABS[next].id;
+    event.currentTarget.parentElement?.querySelector(`[data-settings-tab="${TABS[next].id}"]`)?.focus();
+  }
 
   // ---- Desktop background: its own setting, separate from the theme ----
   // (lib/desktop-background.ts holds the rules; a package may import only the SDK,
@@ -27,9 +63,6 @@
   const BG_FOLDER = 'Pictures/Backgrounds';
   let bgPath = '';
   let bgFit = 'cover';
-  let bgBrowsing = false;
-  let bgDir = [];
-  let bgEntries = [];
   let bgError = '';
   let bgNotice = '';
   let bgBusy = false;
@@ -56,28 +89,24 @@
   async function useThemeColour() {
     if (await saveBg('background', '')) { bgPath = ''; bgNotice = 'Using the theme colour'; }
   }
-  async function chooseBgFile(path) {
-    if (await saveBg('background', path)) { bgPath = path; bgBrowsing = false; bgNotice = `Background set to ${path}`; }
+  async function useBgPath(path) {
+    const result = await setDesktopBackground(path);
+    if (!result.ok) { bgError = result.error || 'Could not save the background'; return false; }
+    bgPath = path;
+    bgNotice = `Background set to ${path}`;
+    return true;
   }
   async function chooseBgFit(fit) {
     if (await saveBg('background_fit', fit)) bgFit = fit;
   }
-  async function browseBg(dir = bgDir) {
+  // The Files picker in a modal. Cancelling changes nothing.
+  async function chooseFromFiles() {
     bgError = '';
-    try {
-      const res = await fetchWithRenewal(filesURL(dir), { method: 'GET' });
-      if (!res.ok) { bgError = `Files answered ${res.status}`; return; }
-      const list = await res.json();
-      bgDir = dir;
-      bgBrowsing = true;
-      bgEntries = (Array.isArray(list) ? list : [])
-        // Mail is the Mail agent's custody: never offered.
-        .filter((e) => !(dir.length === 0 && String(e.name).toLowerCase() === 'mail'))
-        .filter((e) => e.type === 'directory' || isBgImage(e.name))
-        .sort((a, b) => (a.type === b.type ? String(a.name).localeCompare(String(b.name)) : a.type === 'directory' ? -1 : 1));
-    } catch (_err) {
-      bgError = 'Could not list Files';
-    }
+    const { path, result } = await chooseDesktopBackground();
+    if (!path) return;
+    if (!result?.ok) { bgError = result?.error || 'Could not save the background'; return; }
+    bgPath = path;
+    bgNotice = `Background set to ${path}`;
   }
   async function ensureBgFolder() {
     let parts = [];
@@ -96,7 +125,7 @@
     try {
       await ensureBgFolder();
       const [stored] = await uploadFiles(picked, { folder: BG_FOLDER });
-      await chooseBgFile(stored);
+      await useBgPath(stored);
     } catch (err) {
       bgError = err?.message || 'The upload failed';
     } finally {
@@ -483,7 +512,144 @@
     <p>Product settings only. Runtime prompt policy and agent internals are not exposed here.</p>
   </div>
 
-  <div class="settings-grid">
+  <div class="settings-tabs" role="tablist" aria-label="Settings sections" data-settings-tabs>
+    {#each TABS as t, i}
+      <button
+        type="button"
+        role="tab"
+        id={`settings-tab-${t.id}`}
+        class="settings-tab"
+        class:active={tab === t.id}
+        aria-selected={tab === t.id}
+        aria-controls="settings-panel"
+        tabindex={tab === t.id ? 0 : -1}
+        data-settings-tab={t.id}
+        on:click={() => (tab = t.id)}
+        on:keydown={(event) => onTabKeydown(event, i)}
+      >{t.label}</button>
+    {/each}
+  </div>
+
+  <div class="settings-grid" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`} data-settings-panel={tab}>
+    {#if tab === 'appearance'}
+    <section class="settings-card" data-settings-theme>
+      <div>
+        <h3>Theme</h3>
+        <p class="muted">Validated theme config with editable presets.</p>
+      </div>
+      <div class="theme-swatch" use:cssVars={themePreviewVars} aria-label="Current theme preview">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <p class="theme-status" data-settings-theme-validation>
+        {selectedTheme.name}: {themeValidation.ok ? 'valid config' : themeValidation.errors.join(', ')}
+      </p>
+      <div class="theme-presets" data-theme-presets>
+        {#each themeChoices as theme}
+          <button
+            class:active={theme.id === selectedTheme.id}
+            class="theme-preset"
+            data-theme-preset={theme.id}
+            on:click={() => selectTheme(theme)}
+          >
+            <span class="preset-dot" style={`background: ${theme.colors.accent}`}></span>
+            <span>{theme.name}</span>
+          </button>
+        {/each}
+      </div>
+      <details class="theme-dev-panel">
+        <summary>Advanced theme JSON</summary>
+        <textarea
+          id="theme-editor"
+          class="theme-editor"
+          data-theme-editor
+          spellcheck="false"
+          value={themeJSON}
+          aria-invalid={themeError ? 'true' : 'false'}
+          aria-describedby="theme-editor-help theme-editor-feedback"
+          on:input={handleThemeJSONInput}
+        ></textarea>
+        <p id="theme-editor-help" class="theme-dev-help">Edit known theme values, then apply the draft. Unsafe or unknown CSS values are rejected.</p>
+        <div class="theme-dev-actions">
+          <button type="button" class="theme-apply-btn" data-theme-apply on:click={applyThemeJSON} disabled={!!themeError || !hasThemeDraft}>
+            Apply draft
+          </button>
+          <button type="button" class="theme-revert-btn" data-theme-revert on:click={revertThemeJSON} disabled={!hasThemeDraft}>
+            Revert
+          </button>
+        </div>
+      </details>
+      {#if themeError}
+        <p id="theme-editor-feedback" class="theme-error" data-theme-error role="alert">{themeError}</p>
+      {:else if themeNotice}
+        <p id="theme-editor-feedback" class="theme-notice" data-theme-notice role="status">{themeNotice}</p>
+      {/if}
+    </section>
+
+    <section class="settings-card" data-settings-background>
+      <div>
+        <h3>Desktop background</h3>
+        <p class="muted">An image from Files. Themes never change it, and it never changes the theme.</p>
+      </div>
+      <p class="theme-status" data-settings-background-current>
+        {bgPath ? `Image: ${bgPath}` : 'Theme colour'}
+      </p>
+      <div class="theme-presets">
+        <button class="theme-preset" class:active={!bgPath} data-background-theme-colour on:click={useThemeColour}>Theme colour</button>
+        <button class="theme-preset" data-background-choose on:click={chooseFromFiles}>Choose from Files…</button>
+        <button class="theme-preset" data-background-upload disabled={bgBusy} on:click={uploadBg}>{bgBusy ? 'Uploading...' : 'Upload a new image'}</button>
+      </div>
+      <div class="theme-presets" data-background-fits>
+        {#each BG_FITS as fit}
+          <button class="theme-preset" class:active={bgFit === fit} data-background-fit={fit} on:click={() => chooseBgFit(fit)}>{fit}</button>
+        {/each}
+      </div>
+      {#if bgNotice}<p class="theme-notice" data-background-notice>{bgNotice}</p>{/if}
+      {#if bgError}<p class="settings-error" role="alert" data-background-error>{bgError}</p>{/if}
+    </section>
+
+    <section class="settings-card" data-settings-desktop>
+      <div>
+        <h3>Desktop layout</h3>
+        <p class="muted">Place the prompt surface for QA, or reset open windows and icon positions.</p>
+      </div>
+      <div class="layout-setting" data-settings-prompt-placement>
+        <div>
+          <strong>Prompt surface</strong>
+          <span>{selectedTheme.layout.promptSurfacePlacement === 'top' ? 'Pinned to top' : 'Pinned to bottom'}</span>
+        </div>
+        <div class="segmented-control" role="group" aria-label="Prompt surface placement">
+          <button
+            type="button"
+            class:active={selectedTheme.layout.promptSurfacePlacement !== 'top'}
+            data-settings-prompt-placement-bottom
+            aria-pressed={selectedTheme.layout.promptSurfacePlacement !== 'top'}
+            on:click={() => setPromptSurfacePlacement('bottom')}
+          >
+            Bottom
+          </button>
+          <button
+            type="button"
+            class:active={selectedTheme.layout.promptSurfacePlacement === 'top'}
+            data-settings-prompt-placement-top
+            aria-pressed={selectedTheme.layout.promptSurfacePlacement === 'top'}
+            on:click={() => setPromptSurfacePlacement('top')}
+          >
+            Top
+          </button>
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button class="secondary-action" data-settings-open-compute-monitor on:click={handleOpenComputeMonitor}>
+          Open Compute Monitor
+        </button>
+        <button class="secondary-action" data-settings-reset-desktop on:click={handleResetDesktop}>
+          Reset layout
+        </button>
+      </div>
+    </section>
+    {:else if tab === 'account'}
     <section class="settings-card" data-settings-account>
       <div>
         <h3>Account</h3>
@@ -642,149 +808,13 @@
         </div>
       </section>
     {/if}
-
-    <section class="settings-card" data-settings-theme>
-      <div>
-        <h3>Theme</h3>
-        <p class="muted">Validated theme config with editable presets.</p>
-      </div>
-      <div class="theme-swatch" use:cssVars={themePreviewVars} aria-label="Current theme preview">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <p class="theme-status" data-settings-theme-validation>
-        {selectedTheme.name}: {themeValidation.ok ? 'valid config' : themeValidation.errors.join(', ')}
-      </p>
-      <div class="theme-presets" data-theme-presets>
-        {#each themeChoices as theme}
-          <button
-            class:active={theme.id === selectedTheme.id}
-            class="theme-preset"
-            data-theme-preset={theme.id}
-            on:click={() => selectTheme(theme)}
-          >
-            <span class="preset-dot" style={`background: ${theme.colors.accent}`}></span>
-            <span>{theme.name}</span>
-          </button>
-        {/each}
-      </div>
-      <details class="theme-dev-panel">
-        <summary>Advanced theme JSON</summary>
-        <textarea
-          id="theme-editor"
-          class="theme-editor"
-          data-theme-editor
-          spellcheck="false"
-          value={themeJSON}
-          aria-invalid={themeError ? 'true' : 'false'}
-          aria-describedby="theme-editor-help theme-editor-feedback"
-          on:input={handleThemeJSONInput}
-        ></textarea>
-        <p id="theme-editor-help" class="theme-dev-help">Edit known theme values, then apply the draft. Unsafe or unknown CSS values are rejected.</p>
-        <div class="theme-dev-actions">
-          <button type="button" class="theme-apply-btn" data-theme-apply on:click={applyThemeJSON} disabled={!!themeError || !hasThemeDraft}>
-            Apply draft
-          </button>
-          <button type="button" class="theme-revert-btn" data-theme-revert on:click={revertThemeJSON} disabled={!hasThemeDraft}>
-            Revert
-          </button>
-        </div>
-      </details>
-      {#if themeError}
-        <p id="theme-editor-feedback" class="theme-error" data-theme-error role="alert">{themeError}</p>
-      {:else if themeNotice}
-        <p id="theme-editor-feedback" class="theme-notice" data-theme-notice role="status">{themeNotice}</p>
-      {/if}
-    </section>
-
-    <section class="settings-card" data-settings-desktop>
-      <div>
-        <h3>Desktop layout</h3>
-        <p class="muted">Place the prompt surface for QA, or reset open windows and icon positions.</p>
-      </div>
-      <div class="layout-setting" data-settings-prompt-placement>
-        <div>
-          <strong>Prompt surface</strong>
-          <span>{selectedTheme.layout.promptSurfacePlacement === 'top' ? 'Pinned to top' : 'Pinned to bottom'}</span>
-        </div>
-        <div class="segmented-control" role="group" aria-label="Prompt surface placement">
-          <button
-            type="button"
-            class:active={selectedTheme.layout.promptSurfacePlacement !== 'top'}
-            data-settings-prompt-placement-bottom
-            aria-pressed={selectedTheme.layout.promptSurfacePlacement !== 'top'}
-            on:click={() => setPromptSurfacePlacement('bottom')}
-          >
-            Bottom
-          </button>
-          <button
-            type="button"
-            class:active={selectedTheme.layout.promptSurfacePlacement === 'top'}
-            data-settings-prompt-placement-top
-            aria-pressed={selectedTheme.layout.promptSurfacePlacement === 'top'}
-            on:click={() => setPromptSurfacePlacement('top')}
-          >
-            Top
-          </button>
-        </div>
-      </div>
-      <div class="settings-actions">
-        <button class="secondary-action" data-settings-open-compute-monitor on:click={handleOpenComputeMonitor}>
-          Open Compute Monitor
-        </button>
-        <button class="secondary-action" data-settings-reset-desktop on:click={handleResetDesktop}>
-          Reset layout
-        </button>
-      </div>
-    </section>
-
+    {:else if tab === 'packages'}
     <section class="settings-card" data-settings-providers>
       <div>
         <h3>Who provides this?</h3>
         <p class="muted">The package drawing each part of Choir's own screen, and your choice. Use default switches back without uninstalling anything.</p>
       </div>
       <WhoProvides />
-    </section>
-
-    <section class="settings-card" data-settings-background>
-      <div>
-        <h3>Desktop background</h3>
-        <p class="muted">An image from Files. Themes never change it, and it never changes the theme.</p>
-      </div>
-      <p class="theme-status" data-settings-background-current>
-        {bgPath ? `Image: ${bgPath}` : 'Theme colour'}
-      </p>
-      <div class="theme-presets">
-        <button class="theme-preset" class:active={!bgPath} data-background-theme-colour on:click={useThemeColour}>Theme colour</button>
-        <button class="theme-preset" data-background-choose on:click={() => browseBg([])}>Choose from Files</button>
-        <button class="theme-preset" data-background-upload disabled={bgBusy} on:click={uploadBg}>{bgBusy ? 'Uploading...' : 'Upload'}</button>
-      </div>
-      <div class="theme-presets" data-background-fits>
-        {#each BG_FITS as fit}
-          <button class="theme-preset" class:active={bgFit === fit} data-background-fit={fit} on:click={() => chooseBgFit(fit)}>{fit}</button>
-        {/each}
-      </div>
-      {#if bgBrowsing}
-        <div class="bg-picker" data-background-picker>
-          <p class="muted">/{bgDir.join('/')}</p>
-          <div class="theme-presets">
-            {#if bgDir.length > 0}
-              <button class="theme-preset" data-background-up on:click={() => browseBg(bgDir.slice(0, -1))}>..</button>
-            {/if}
-            {#each bgEntries as entry (entry.name)}
-              {#if entry.type === 'directory'}
-                <button class="theme-preset" data-background-dir={entry.name} on:click={() => browseBg([...bgDir, entry.name])}>{entry.name}/</button>
-              {:else}
-                <button class="theme-preset" data-background-file={entry.name} on:click={() => chooseBgFile([...bgDir, entry.name].join('/'))}>{entry.name}</button>
-              {/if}
-            {/each}
-          </div>
-          {#if bgEntries.length === 0}<p class="muted">No images or folders here.</p>{/if}
-        </div>
-      {/if}
-      {#if bgNotice}<p class="theme-notice" data-background-notice>{bgNotice}</p>{/if}
-      {#if bgError}<p class="settings-error" role="alert" data-background-error>{bgError}</p>{/if}
     </section>
 
     {#if $settingSections.some((sec) => sec.pkg !== 'settings')}
@@ -796,7 +826,7 @@
         <PackageSettings />
       </section>
     {/if}
-
+    {:else if tab === 'system'}
     <section class="settings-card status-card" data-settings-runtime-status>
       <div class="status-header">
         <div>
@@ -832,6 +862,7 @@
         </dl>
       {/if}
     </section>
+    {/if}
   </div>
 </section>
 
@@ -881,6 +912,47 @@
   .muted {
     color: var(--choir-text-muted);
     line-height: 1.45;
+  }
+
+  .settings-tabs {
+    display: flex;
+    gap: 0.35rem;
+    margin-bottom: 0.85rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-tab {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .settings-tab:hover {
+    background: var(--choir-state-hover);
+  }
+
+  .settings-tab.active {
+    background: var(--choir-accent);
+    color: var(--choir-on-accent, var(--choir-bg));
+  }
+
+  .settings-tab:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: 2px;
   }
 
   .settings-grid {

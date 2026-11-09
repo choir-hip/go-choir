@@ -690,9 +690,12 @@ test('Settings opens as safe product settings without prompt APIs', async ({ pag
   await openAppViaIcon(page, 'settings');
   const settings = page.locator('[data-settings-app]');
   await expect(settings).toBeVisible({ timeout: 5000 });
-  await expect(settings.locator('[data-settings-account]')).toContainText(email);
-  await expect(settings.locator('[data-settings-runtime-status]')).toBeVisible();
+  // Settings is tabs (Appearance first).
   await expect(settings.locator('[data-settings-theme-validation]')).toContainText('valid config');
+  await settings.locator('[data-settings-tab="account"]').click();
+  await expect(settings.locator('[data-settings-account]')).toContainText(email);
+  await settings.locator('[data-settings-tab="system"]').click();
+  await expect(settings.locator('[data-settings-runtime-status]')).toBeVisible();
   await expect(settings).not.toContainText('Editable role prompt');
   await page.waitForTimeout(300);
   expect(forbiddenRequests).toHaveLength(0);

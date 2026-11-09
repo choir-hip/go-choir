@@ -54,6 +54,8 @@
   import { promptTargetFor } from './prompt-focus';
   import { dismissNotification, notifications, postNotification } from './services/notifications';
   import './menu-host';
+  import { contextMenu } from './context-menu';
+  import ModalHost from './ModalHost.svelte';
   import './installed-surfaces';
   import './services/windows';
   import { installContextCoverage } from './context-coverage';
@@ -1490,6 +1492,33 @@
     void postNotification(String(message ?? ''), { kind: options.kind, durationMs: options.durationMs });
   }
 
+  // ---- Desktop context menu (owner, 2026-11-09: the desktop itself offers
+  // "edit the background and theme", opening Settings on its Appearance tab) ----
+  // Windows sit inside the desktop area, so the menu is offered only when the
+  // press landed on the empty desktop (not a window, an icon or the prompt).
+  let desktopMenuTarget = null;
+  function noteDesktopMenuTarget(event) {
+    desktopMenuTarget = event.target;
+  }
+  function onEmptyDesktop(target) {
+    if (!(target instanceof Element)) return false;
+    return !target.closest('[data-window], [data-desktop-icon], button, a, input, textarea, select, [data-context-menu-bound]:not([data-desktop-windows])');
+  }
+  function openSettingsOn(tab) {
+    handleLaunchApp({ detail: { appId: 'settings', appContext: { settingsTab: tab, settingsTabSeq: Date.now() } } });
+  }
+  function desktopMenuItems() {
+    if (!authenticated || !onEmptyDesktop(desktopMenuTarget)) return [];
+    return [
+      { id: 'change-background', label: 'Change background…', onSelect: () => openSettingsOn('appearance') },
+      { id: 'change-theme', label: 'Change theme…', onSelect: () => openSettingsOn('appearance') },
+      // The coverage fallback's desktop actions (context-coverage.ts) stay on the empty desktop.
+      { id: 'show-desktop', label: 'Show desktop', onSelect: () => handleShowDesktop() },
+      { id: 'overview', label: 'Window overview', onSelect: () => handleShowDesktopOverview() },
+      { id: 'launcher', label: 'Launcher', onSelect: () => toggleLauncher() },
+    ];
+  }
+
   // ---- Lifecycle ----
 
   // The SDK's shell functions (lib/shell-services.ts) act through these.
@@ -1667,7 +1696,14 @@
     <div class="desktop-background" data-desktop-background-layer style={backgroundStyle} aria-hidden="true"></div>
   {/if}
   <!-- Desktop surface (floating icons + windows, full viewport width) -->
-  <div class="desktop-area {desktopReady ? 'state-loaded' : 'state-loading'}" data-desktop-windows>
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div
+    class="desktop-area {desktopReady ? 'state-loaded' : 'state-loading'}"
+    data-desktop-windows
+    on:contextmenu|capture={noteDesktopMenuTarget}
+    on:pointerdown|capture={noteDesktopMenuTarget}
+    use:contextMenu={{ label: 'Desktop actions', items: desktopMenuItems }}
+  >
     <!--
       Ambient constellation behind the plane. Atmosphere, not content: it is
       dimmed in desktop-motion.css, is never interactive, and adds no DOM
@@ -1880,6 +1916,7 @@
       on:apps={() => toggleLauncher()}
     />
   </ShellSlot>
+  <ModalHost />
 </div>
 
 <style>

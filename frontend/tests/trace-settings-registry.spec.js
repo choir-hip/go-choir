@@ -99,7 +99,10 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   await openApp(page, 'settings');
   const settings = page.locator('[data-settings-app]').last();
   await expect(settings).toBeVisible({ timeout: 10000 });
+  // Settings is tabs (Appearance first): the account is on its own tab.
+  await settings.locator('[data-settings-tab="account"]').click();
   await expect(settings.locator('[data-settings-account]')).toContainText(email);
+  await settings.locator('[data-settings-tab="appearance"]').click();
   await expect(settings.locator('[data-settings-theme-validation]')).toContainText('valid config');
   await expect(settings.locator('[data-theme-presets]')).toBeVisible();
   await expect(settings.locator('[data-theme-preset="carbon-fiber-kintsugi"]')).toBeVisible();
