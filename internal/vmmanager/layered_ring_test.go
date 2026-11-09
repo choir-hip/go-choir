@@ -14,8 +14,12 @@ package vmmanager
 //      (the floor moved) instead of resuming across layouts.
 //   G6 a layered snapshot of a ring computer wakes onto its own layered
 //      release while the computer stays in the ring.
-//   G7 the selector takes ComputerIDs only (no class:, no "*"), and an empty
+//   G7 the selector takes ComputerIDs and "*" (no class:), and an empty
 //      value selects nothing.
+//   G8 "*" selects every computer, the fleet flip (S3, owner 2026-11-08: "We
+//      need to get every computer updated"); the ring walk's pin still orders
+//      when each computer reaches the new layout, and a computer whose layered
+//      release does not load still launches the single image.
 
 import (
 	"encoding/json"
@@ -193,16 +197,37 @@ func TestLayeredRingSnapshotFollowsTheRing(t *testing.T) {
 }
 
 // G7
-func TestLayeredRingSelectorTakesComputerIDsOnly(t *testing.T) {
+func TestLayeredRingSelectorTakesComputerIDsAndStar(t *testing.T) {
 	got := parseLayeredComputers("computer-a, class:test * computer-b\ncomputer-c")
-	if strings.Join(got, "|") != "computer-a|computer-b|computer-c" {
-		t.Fatalf("parsed = %v; want only plain ComputerIDs", got)
+	if strings.Join(got, "|") != "computer-a|*|computer-b|computer-c" {
+		t.Fatalf("parsed = %v; want plain ComputerIDs and *", got)
 	}
 	if len(parseLayeredComputers("")) != 0 || len(parseLayeredComputers("  \n")) != 0 {
 		t.Fatal("an empty selector selected something")
 	}
+	if got := parseLayeredComputers("computer-*, *x"); len(got) != 0 {
+		t.Fatalf("parsed = %v; a partial wildcard must select nothing", got)
+	}
 	m := &Manager{cfg: ManagerConfig{GuestLayeredLink: "/x", GuestLayeredComputers: []string{"computer-a"}}}
 	if !m.layeredSelected("computer-a") || m.layeredSelected("computer-ab") || m.layeredSelected("") || m.layeredSelected("class:test") {
 		t.Fatal("layeredSelected is not an exact ComputerID match")
+	}
+}
+
+// G8
+func TestLayeredRingStarSelectsEveryComputer(t *testing.T) {
+	r := newRingFixture(t, []string{"*"})
+	for _, id := range []string{ringComputer, "computer-x"} {
+		if cfg := bindFor(r.mgr, id); cfg.GuestRelease != relR2 || cfg.BaseDiskPath == "" {
+			t.Fatalf("computer %q: launch = release %q base %q; want layered %s", id, cfg.GuestRelease, cfg.BaseDiskPath, relR2)
+		}
+	}
+	m := &Manager{cfg: ManagerConfig{GuestLayeredLink: "/x", GuestLayeredComputers: []string{"*"}}}
+	if m.layeredSelected("") {
+		t.Fatal("* selected an empty ComputerID")
+	}
+	m.cfg.GuestLayeredLink = ""
+	if m.layeredSelected("computer-x") {
+		t.Fatal("* selected a computer with no layered link configured")
 	}
 }

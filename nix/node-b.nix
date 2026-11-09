@@ -41,30 +41,35 @@ let
   # (docs/evidence/density-d2-floor-share-2026-10-26.md). Rollback: false.
   snapshotReleaseRetain = true;
   # The layered guest image ring (docs/design/layered-guest-image-2026-10-31.md
-  # S2; progressive delivery R0). ComputerIDs only. These computers cold boot
-  # the layered image (a slow erofs base reused across deploys plus a small app
-  # layer per deploy); every other computer keeps the single image. ON for the
-  # proof computer d@e as shipped. A ring computer whose layered release or
-  # base is missing launches the single image. Rollback: remove the id (the
-  # computer is single at its next cold boot); widen ring by ring.
-  guestLayeredComputers = [ "computer-59c902c5d46caecc0a180a8557164e72" ];
+  # S2, S3; progressive delivery). "*" is every computer: the fleet flip (owner
+  # 2026-11-08: "d@e is the only computer on the new layered guest image ...
+  # We need to get every computer updated"). The layered image is a slow erofs
+  # base reused across deploys plus a small app layer per deploy, with the
+  # heavy tools as their own layers. Joining is a cold boot (the floor digests
+  # differ), so each computer reaches it at its ring's planned refresh, the
+  # paper last (the ring walk's pin). A computer whose layered release or base
+  # is missing launches the single image. Rollback: the R0 list
+  # [ "computer-59c902c5d46caecc0a180a8557164e72" ] (each computer is single at
+  # its next cold boot). The single-image build is deleted after the walk
+  # reaches the paper (S3).
+  guestLayeredComputers = [ "*" ];
   # Guest tool layers (docs/design/guest-tool-layers-2026-10-31.md 4): which
-  # heavy tools a layered ring computer gets, per layer. Selectors are the
-  # computer selector tokens plus none; a layer not
-  # named here is attached for every
-  # computer. The ring computer without a matching rule gets the slot's empty
-  # placeholder, so the tool is absent from its store (a clear error, never a
-  # hang). Office: no Go caller (2026-10-31 inventory); the tool exec log
-  # measures use on the single-image fleet. Rollback: add the layer to the
-  # computer here (its next cold boot attaches it), or remove the computer from
-  # guestLayeredComputers (the single image carries every tool). Browser: every
-  # computer, no grant (owner 2026-11-03: "every computer should have visual
-  # capture. That shouldn't be anything special"); an engineer's Playwright
-  # uses it (docs/problems/selfdev-screens-are-not-files-2026-11-03.md).
-  # Rollback: browser=${claudeDelegateComputers} narrows it to the delegate list.
-  # The Claude binary layer follows the delegate's computers (the list the
-  # gateway's relay serves, below).
-  guestToolProfile = "toolchain=*;office=none;browser=*;delegate=${claudeDelegateComputers}";
+  # heavy tools a layered computer gets, per layer. Selectors are the computer
+  # selector tokens plus none; a layer not named here is attached for every
+  # computer, and a computer without a matching rule gets the slot's empty
+  # placeholder (the tool absent from its store: a clear error, never a hang).
+  # Every layer is attached for every computer (owner 2026-11-08: a tool
+  # "should be something which is not loaded when it's not needed"). An
+  # attached layer is a read-only block device: it costs no guest or host page
+  # cache until a process reads it, and its bytes are stored once on the host
+  # for every computer (design 15). So attaching is not loading, and the
+  # single image's tools all stay available as the fleet moves to layered.
+  # Authority is not the binary: the Claude delegate's spend grant is the
+  # gateway relay's list (claudeDelegateComputers, below), and a computer off
+  # that list reads "not granted" from the gateway. Rollback: name a layer
+  # none or a computer list here (its next cold boot attaches the
+  # placeholder).
+  guestToolProfile = "toolchain=*;office=*;browser=*;delegate=*";
   # Claude delegate grant (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md,
   # design section). The owner's Claude token stays on the host, in the
   # gateway; these computers' engineering capsules reach Anthropic through
@@ -82,8 +87,11 @@ let
   # 2026-11-02; plus selfdev-arm-claude (computer-a875023a…) 2026-11-03, the
   # Claude arm of the apps goal; plus selfdev-arm-luna (computer-2bf3cab1…)
   # 2026-11-03 by owner request ("we can have luna delegate to claude"), so the
-  # Luna arm's heavy work runs on the Sonnet delegate under GPT token pressure.
-  claudeDelegateComputers = "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02,computer-2bf3cab1e3ebf3eb24a515c4603cf954";
+  # Luna arm's heavy work runs on the Sonnet delegate under GPT token pressure;
+  # plus d@e (computer-59c902c5…) and the owner's computer (computer-03335285…)
+  # 2026-11-08 by owner request ("we should let D at E and B at C and my
+  # computer all have access to the Claude delegate").
+  claudeDelegateComputers = "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02,computer-2bf3cab1e3ebf3eb24a515c4603cf954,computer-59c902c5d46caecc0a180a8557164e72,computer-03335285269bdba4f94377e56879f9e6";
   claudeDelegateExpires = "2026-11-17T00:00:00Z";
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
