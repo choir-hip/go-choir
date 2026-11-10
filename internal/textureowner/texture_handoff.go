@@ -195,6 +195,10 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	if initialPrompt == "" {
 		initialPrompt = routeSeedPrompt
 	}
+	askedStory := metadataStringValue(rec.Metadata, askIntentMetadataKey) == askIntentStory
+	if askedStory {
+		initialPrompt = storyAskObjective(routeSeedPrompt)
+	}
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this Texture document."
 	}
@@ -227,6 +231,9 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		"owner_email": metadataString(rec.Metadata, "owner_email"), "created_from": "conductor",
 		"source": "user_prompt", "revision_role": "input", "input_origin": "user_prompt",
 		"texture_version": "v0", "prompt_unix_ts": now.Unix(),
+	}
+	if askedStory {
+		userRevisionMetadata["asked"] = askIntentStory
 	}
 	userRevMeta, _ := json.Marshal(userRevisionMetadata)
 	userRev := types.Revision{

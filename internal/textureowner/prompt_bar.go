@@ -332,6 +332,9 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 	}
 	title := provider.InitialTextureTitle(text, "")
 	metadata := promptBarMetadata(text, commandID, ownerEmail, requestedApp)
+	if isStoryAsk(ctx) {
+		metadata[askIntentMetadataKey] = askIntentStory
+	}
 	if sourceURL != "" {
 		metadata["content_source_url"] = sourceURL
 		metadata["content_media_type"] = mediaType
