@@ -5,11 +5,11 @@ package agentcore
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
@@ -19,19 +19,23 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-func TestBootKeepsAStaleCurrentWhenTheRouteCannotBeRead(t *testing.T) {
+// The real boot answer: vmctl does not count the computer as live yet, so
+// every route read is refused (403). The follow must not need the route; the
+// restaged manifest carries exactly the refs `current` records, and a route
+// that would answer other refs is never consulted.
+func TestBootFollowsWithoutConsultingTheRoute(t *testing.T) {
 	computerID := "computer-follow-route"
 	rt, updaterRoot, baseline := followBaseRuntime(t, computerID)
 	staleDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>old deploy</html>")
 	pointCurrent(t, updaterRoot, staleDigest)
-	mode := "error"
+	stale, _, err := updater.ReadPinnedManifest(updaterRoot, staleDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if mode == "error" {
-			http.Error(w, "vmctl is restarting", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{RouteAbsent: true})
+		calls.Add(1)
+		http.Error(w, "caller not bound to route slot computer: caller is not bound to a live computer", http.StatusForbidden)
 	}))
 	defer server.Close()
 	rt.selfdevRoute = vmctl.NewClient(server.URL)
@@ -40,19 +44,49 @@ func TestBootKeepsAStaleCurrentWhenTheRouteCannotBeRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := rt.ensureServingBaselineAtBoot(context.Background(), computerID, baseline); err != nil {
-		t.Fatal(err)
-	}
-	if got := servedIndex(t, updaterRoot); got != "<html>old deploy</html>" {
-		t.Fatalf("restaged with a route error: served %q", got)
-	}
-	// An answer of "absent" is an answer: the follow goes ahead.
-	mode = "absent"
-	if _, err := rt.ensureServingBaselineAtBoot(context.Background(), computerID, baseline); err != nil {
+	manifest, err := rt.ensureServingBaselineAtBoot(context.Background(), computerID, baseline)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if got := servedIndex(t, updaterRoot); got != "<html>new deploy</html>" {
-		t.Fatalf("an absent route blocked the follow: served %q", got)
+		t.Fatalf("a refused route blocked the follow: served %q", got)
+	}
+	if manifest.CodeRef != stale.CodeRef || manifest.ArtifactProgramRef != stale.ArtifactProgramRef || manifest.CodeRef == "code:genesis" {
+		t.Fatalf("refs %q %q, want current's %q %q", manifest.CodeRef, manifest.ArtifactProgramRef, stale.CodeRef, stale.ArtifactProgramRef)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("the follow consulted the route %d times", calls.Load())
+	}
+}
+
+// A current that records genesis refs restages with genesis refs.
+func TestBootFollowCarriesGenesisRefsWhenCurrentRecordsThem(t *testing.T) {
+	computerID := "computer-follow-genesis"
+	rt, updaterRoot, baseline := followBaseRuntime(t, computerID)
+	// Stage genesis from a trusted copy of the old content.
+	oldRoot := filepath.Join(updaterRoot, "incoming", "old-root")
+	if err := os.MkdirAll(filepath.Join(oldRoot, "frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldRoot, "frontend", "index.html"), []byte("<html>old deploy</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	genesis, err := updater.BuildBaselineManifest(oldRoot, computerID, "code:genesis", "artifact-program:genesis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := updater.StageBaselineRelease(updaterRoot, oldRoot, genesis); err != nil {
+		t.Fatal(err)
+	}
+	if err := updater.RestagePinnedRelease(updaterRoot, genesis.ContentDigest); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := rt.ensureServingBaselineAtBoot(context.Background(), computerID, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if servedIndex(t, updaterRoot) != "<html>new deploy</html>" || manifest.CodeRef != "code:genesis" || manifest.ArtifactProgramRef != "artifact-program:genesis" {
+		t.Fatalf("served %q refs %q %q", servedIndex(t, updaterRoot), manifest.CodeRef, manifest.ArtifactProgramRef)
 	}
 }
 
@@ -90,7 +124,11 @@ func TestBootConvergesAfterACrashBetweenStageAndSwap(t *testing.T) {
 	rt, updaterRoot, baseline := followBaseRuntime(t, computerID)
 	staleDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>old deploy</html>")
 	pointCurrent(t, updaterRoot, staleDigest)
-	target, err := rt.servingBaselineManifest(context.Background(), computerID, baseline)
+	stale, _, err := updater.ReadPinnedManifest(updaterRoot, staleDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := updater.BuildBaselineManifest(baseline, computerID, stale.CodeRef, stale.ArtifactProgramRef)
 	if err != nil {
 		t.Fatal(err)
 	}

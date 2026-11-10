@@ -656,14 +656,13 @@ func (rt *Runtime) followBootedBase(ctx context.Context, computerID, baselineRoo
 		log.Printf("runtime: base frontend follow deferred: apply journal %s is unsettled or unreadable", journal)
 		return current
 	}
-	target, err, routeErr := rt.servingBaselineManifestWithRoute(ctx, computerID, baselineRoot)
+	// The target carries the refs `current` already records: a plain base
+	// copy's code and artifact refs do not change when its frontend is
+	// refreshed, and the route cannot be read at boot (vmctl does not count
+	// the computer live yet, so it answers 403). Genesis refs stay genesis.
+	target, err := updater.BuildBaselineManifest(baselineRoot, computerID, current.CodeRef, current.ArtifactProgramRef)
 	if err != nil {
 		log.Printf("runtime: base frontend follow skipped: the booted baseline manifest: %v", err)
-		return current
-	}
-	if routeErr != nil {
-		// The manifest would carry genesis refs instead of the route's.
-		log.Printf("runtime: base frontend follow skipped: the route cannot be read: %v", routeErr)
 		return current
 	}
 	floor := rt.storeFloorPath()
@@ -708,35 +707,22 @@ func (rt *Runtime) liveCurrentOr(fallback updater.ReleaseManifest) updater.Relea
 // current ones, or genesis when no route answers. The boot import and the
 // forced-modularity migration name the same release through it.
 func (rt *Runtime) servingBaselineManifest(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error) {
-	manifest, err, _ := rt.servingBaselineManifestWithRoute(ctx, computerID, baselineRoot)
-	return manifest, err
-}
-
-// servingBaselineManifestWithRoute also returns the route read's failure
-// (nil when no route is configured, the route answers, or it answers
-// "absent"). The manifest then carries genesis refs; a caller that must not
-// bind them on a vmctl hiccup (the boot follow) checks routeErr.
-func (rt *Runtime) servingBaselineManifestWithRoute(ctx context.Context, computerID, baselineRoot string) (updater.ReleaseManifest, error, error) {
 	codeRef := "code:genesis"
 	artifactRef := "artifact-program:genesis"
-	var routeErr error
 	if rt.selfdevRoute != nil {
 		slotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
-		if err != nil {
-			routeErr = err
-		} else if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err != nil {
-			routeErr = err
-		} else if !resolution.RouteAbsent {
-			if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
-				codeRef = rCode
-			}
-			if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
-				artifactRef = rArt
+		if err == nil {
+			if resolution, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, slotID); err == nil && !resolution.RouteAbsent {
+				if rCode := string(resolution.Slot.Current.CodeRef); rCode != "" {
+					codeRef = rCode
+				}
+				if rArt := string(resolution.Slot.Current.ArtifactProgramRef); rArt != "" {
+					artifactRef = rArt
+				}
 			}
 		}
 	}
-	manifest, err := updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
-	return manifest, err, routeErr
+	return updater.BuildBaselineManifest(baselineRoot, computerID, codeRef, artifactRef)
 }
 
 // isPureBaseImportManifest is releaseIsPureBaseImport's test on a manifest

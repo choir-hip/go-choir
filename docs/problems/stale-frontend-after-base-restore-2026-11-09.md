@@ -275,3 +275,48 @@ restaged manifest can carry the refs `current` already records. That removes
 the boot-time dependency and still never downgrades refs to genesis. This is
 the fourth round on this mechanism; the change is to remove the dependency
 the earlier rounds kept guarding, not to add another guard.
+
+### Fix for the failed deployed proof (round 4)
+
+The follow no longer reads the route. `followBootedBase` builds its target
+with `updater.BuildBaselineManifest(baselineRoot, computerID,
+current.CodeRef, current.ArtifactProgramRef)`: the same builder the boot
+import uses, fed the refs the verified `current` already records. A
+`current` that records genesis refs restages with genesis refs, so nothing
+changes meaning. `StageBaselineRelease` accepts it: marker
+`genesis-baseline`, no layering entrypoint, a finalized digest, source
+under `/nix/store` (or the updater's `incoming/`). `servingBaselineManifest`
+is as it was for its other callers (boot import when `current` is missing,
+migration, base restore, revert); `servingBaselineManifestWithRoute` is
+deleted.
+
+Corrections to the failure list: item 2's "a route that answers differently
+between boots restages" no longer holds (the refs come from `current`, so a
+restage happens only when the frontend content differs). Items 17 (the
+route guard) and its test `TestBootKeepsAStaleCurrentWhenTheRouteCannotBeRead`
+are withdrawn: the guard was the failure. Replaced by
+`TestBootFollowsWithoutConsultingTheRoute` (a route that answers 403 on
+every call and would answer other refs: the follow runs, the restaged
+manifest carries exactly current's refs, the route is called zero times) and
+`TestBootFollowCarriesGenesisRefsWhenCurrentRecordsThem`. Lesson: the
+earlier tests used a route that answered or was absent; the real boot
+answer is a refusal.
+
+Boot dependencies of `followBootedBase` at `EnsureComputerSurface` time
+(called from the actor adapter's `Start`, before `Runtime.Start`):
+
+- Updater root: `WithSelfDevelopmentUpdater` (`internal/autoputer/run.go`)
+  sets it from env at runtime construction; it is a directory on the
+  persistent disk, and the same mount `VerifyCurrentRelease` already reads
+  in this function before the follow.
+- Updater daemon: not needed. Stage and swap are filesystem operations in
+  this process; the lock check only opens and flocks files under
+  `operations/`.
+- Store floor: `rt.store` is set when the runtime is built (`store: s`,
+  `runtime.go:705`); `storeFloorPath` only joins a path, `""` skips the
+  check, and an unreadable floor keeps the old `current`.
+- Baseline root: `trustedBaselineReleaseRoot()` reads
+  `CHOIR_BASELINE_RELEASE_ROOT`, which the boot wrapper exports before the
+  runtime starts (`nix/autoputer-vm.nix:148`); an empty or non-`/nix/store`
+  root skips the follow.
+- Route, vmctl, event store, tape: none used.
