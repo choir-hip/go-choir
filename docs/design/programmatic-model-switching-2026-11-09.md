@@ -235,3 +235,47 @@ the catalog lists once the Devin provider lands. Not adopted: cutting
 `default_effort` (both seats), overruled by the owner's ruling, with the
 file migration it needs now specified in 3.3; automatic revert on a health
 signal (Sonnet), deferred and named as a residual in 5.1.
+
+## 9. Failure list (M1 build)
+
+Written before the code. Each row names the test that covers it
+(`internal/modelpolicy/pools_test.go` unless a path is given; CLI tests in
+`cmd/choir/policy_lead_test.go`).
+
+| # | Way M1 could fail | Test |
+|---|---|---|
+| 1 | Shorthand `members = ["a", "b"]` parses but the first member does not lead, or the rest are not fallback-only in order. | `TestPoolShorthandFlattens` |
+| 2 | Shorthand shadows a compiled pool with more than one weighted member (`synthetic-luna`) or `NoFailover` and is accepted, silently flattening it. | `TestShorthandShadowingWeightedOrNoFailoverPoolRefused` |
+| 3 | Shorthand over a single-lead failover pool (`default`, `selfdev`) is refused by mistake. | `TestShorthandShadowingSingleLeadPoolAccepted` |
+| 4 | Inline tables: `weight`, `fallback_only` and `failover` are dropped or misread; a missing `failover` is not true; weight below 1, weight together with fallback_only, an unknown inline key, mixed strings and tables, a missing `model`, an unqualified model, a duplicate section, an unknown pool key all pass. | `TestPoolInlineTables`, `TestPoolParseRefusals` |
+| 5 | A multi-line `members` array (the shape the CLI writes), a trailing comma, a `#` inside a model string, comments between lines, or `]` and `}` inside a string break the line parser or the section detector. | `TestPoolMultilineArrayAndComments` |
+| 6 | The unknown-key scan in `ValidateText` reads array body lines as keys and refuses a valid file. | `TestValidateTextAcceptsPoolSections` |
+| 7 | Resolver split: a reader left on the compiled map (`Assign`, `Selections`, `ContinuationChain`, `RoleChain`, `unknownPool`, the overlay parser, the research child, the verify tool, the resolve endpoint) gives the compiled answer while the file says otherwise. | `TestEveryReaderUsesTheResolver`, `TestNoDirectCompiledPoolReaders` (source grep) |
+| 8 | A new direct reader of `catalogPools` or `modelcatalog.Pools()` appears in the package outside the resolver. | `TestNoDirectCompiledPoolReaders` |
+| 9 | A member the catalog does not list invalidates the whole file at run start, instead of being dropped with a note. | `TestStaleMemberDroppedWithDiagnostic` |
+| 10 | The dropped-member note is not surfaced in `llm_policy_error` the way `retired_remapped` is. | `TestStaleMemberDiagnosticReachesMetadata` |
+| 11 | A stale or uncatalogued member is accepted at write time (`ValidateText`, the `choir policy set` path). | `TestValidateTextRefusesUncataloguedMember`, `TestPolicyPutRefusesUncataloguedMember` (CLI, real files handler) |
+| 12 | A pool whose members are all dropped runs with no members, or silently loses its name: it must fall back to the compiled pool of that name, with a note. | `TestAllMembersStaleFallsBackToCompiled` |
+| 13 | A file pool with a name the compiled map lacks and no usable member leaves roles naming it pointing at nothing and invalidates the file: it must stay defined, fail closed at the role with `unknown_pool`, and not invalidate the file. | `TestFilePoolWithoutCompiledNamesAndNoMembers` |
+| 14 | A file pool with a name the compiled map lacks (`mine`) is refused because `unknownPool` checks the compiled map only. | `TestFileDefinedPoolNamedByRole` |
+| 15 | A pinned role naming a file-defined pool (`model = "pool:mine"`) fails to parse, or Assign returns `unknown_pool`. | `TestFileDefinedPoolNamedByRole` |
+| 16 | An overlay naming a file-defined pool is refused; an overlay drops the base policy's file pools when merged. | `TestOverlayNamingFilePool` |
+| 17 | Weighted assignment and failover differ for a file pool: weights do not split threads, `failover = false` still returns fallbacks, a file pool shadowing `synthetic-luna` loses its no-failover meaning. | `TestFilePoolAssignWeightsAndFailover` |
+| 18 | The continuation chain at a quota incident reads the compiled default pool instead of the file's, so a switched-away model comes back at quota time. | `TestContinuationChainReadsFilePool` |
+| 19 | The image-turn role chain (`RoleChain`) expands the compiled pool, so the desk shots gate checks the wrong members. | `TestRoleChainReadsFilePool` |
+| 20 | A retired-model remap sends the thread to the compiled default pool when the file redefines `default`. | `TestRetiredRemapUsesFileDefaultPool` |
+| 21 | `ensureDefaultPolicyFile` rewrites a file with a pool section when it lacks both the version line and the owner-edited mark, losing the pools. | `TestEnsureDefaultPolicyFileKeepsPoolFile` |
+| 22 | The platform default text changes behaviour for a file without pools (M2 owns that; M1 must not touch it). | existing `TestManagerRewritesUnversionedPlatformPolicy` still passes unchanged |
+| 23 | Concurrent reads race on a shared pool map (the cached last-valid policy is read by many runs). | `TestConcurrentPoolReads` under `-race` (the map is never written after parse) |
+| 24 | Rollback restores an older file without pool sections: the pools silently revert to the release's, and `policy get` still says `file`. | `TestPolicyLeadThenRollbackRestoresRelease` (CLI), `policy get` source test |
+| 25 | `policy lead` on a pool that is weighted or has failover disabled flattens it without `--single-lead`. | `TestPolicyLeadRefusesWeightedAndNoFailover` |
+| 26 | `policy lead` of a metered member succeeds without `--allow-paid`, or does not print the price. | `TestPolicyLeadMeteredNeedsAllowPaid` |
+| 27 | `policy lead` of a member the catalog lacks is written (the server must refuse it through the validated PUT, and the file must be unchanged). | `TestPolicyLeadUncataloguedRefused` |
+| 28 | `policy lead` reorders fallbacks, duplicates the lead, or drops members when the lead is already a member, or when it is new. | `TestPolicyLeadReordersAndAdds` |
+| 29 | `policy lead` run twice writes a different file the second time (not idempotent) or grows the file with duplicate sections. | `TestPolicyLeadIdempotent` |
+| 30 | `policy lead` or `pin` leaves the file without the owner-edited mark, or wipes comments and role sections of an owner file. | `TestPolicyLeadKeepsRolesAndMark` |
+| 31 | `policy pin` misses a pool, or writes a pool in a form the parser reads differently from the resolved one (round trip). | `TestPolicyPinRoundTrip`, `TestRenderedPoolParsesToSameMembers` |
+| 32 | `policy get` does not show where each pool came from, or shows `file` for a pool the file does not define. | `TestPolicyGetShowsPoolSources`, `TestResolvedPoolsSource` |
+| 33 | The resolve endpoint's `pools` field breaks callers that read the existing fields, or the CLI prints the pool table once per role. | `TestPolicyGetShowsPoolSources` |
+| 34 | "Metered" is read from a table the CLI cannot import without heavy dependencies. | checked at build: `internal/llmcost` imports only `deskmanifest` and `types`; used directly |
+| 35 | A pool name or model string in the CLI-written TOML carries characters that break out of the string (injection through `--pool` or the model). | `TestPolicyLeadRefusesBadNames` |
