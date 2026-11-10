@@ -764,32 +764,6 @@
    "note": "On in nix; the audit listed the env-file value as unknown. Verify the unit-env file and nix agree."
   },
   {
-   "id": "corpusd_opinion_listing",
-   "kind": "host_env",
-   "life": "ops",
-   "owner": "front",
-   "class": "orange",
-   "surface": "paper",
-   "introduced": "2026-10-28",
-   "nix": [
-    "CORPUSD_OPINION_LISTING"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "review_by": "2027-01-20",
-   "ring": "all",
-   "nix_value": "on",
-   "promote": [
-    {
-     "metric": "opinion_listing_ok",
-     "bound": "true"
-    }
-   ],
-   "retire": "keep: off removes every opinion piece from the front at once (kill switch)"
-  },
-  {
    "id": "maild_digest",
    "kind": "host_env",
    "life": "release",

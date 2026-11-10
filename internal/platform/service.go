@@ -83,11 +83,6 @@ type Service struct {
 	// publicBaseURL is the host a published piece's read_url names
 	// (CORPUSD_PUBLIC_BASE_URL); empty means DefaultPublicBaseURL.
 	publicBaseURL string
-	// opinionListing is the opinion kill switch (CORPUSD_OPINION_LISTING);
-	// off by default. opinionDailyLimit is the per-user daily cap on new
-	// opinion pieces (CORPUSD_OPINION_DAILY_LIMIT); zero means the default.
-	opinionListing    bool
-	opinionDailyLimit int
 	// frontImportance attaches model-judged importance scores to front
 	// rows when its scores file is present (publication_front_importance.go).
 	frontImportance frontImportanceCache
