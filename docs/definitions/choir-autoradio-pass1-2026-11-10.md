@@ -267,6 +267,17 @@ and the desk reads its own scored record when it builds the next run
 sheet. New settlement rule kinds (heard through, skipped early) and
 trusted playback events from the phone are design work for lane D.
 
+## The first app is a lab (owner, 2026-11-10)
+
+"The first autoradio app should be experiments ... as full-featured and
+realistic/complete as possible while also being maximally modular so we
+can switch things at runtime." The first build is the real radio with
+every stage behind one interface, a configuration that changes between
+turns, a record of every turn and replay of kept turns
+([the lab note](../design/autoradio-lab-2026-11-10.md)). The owner's
+iPhone 14 Pro Max is the oldest supported phone. Narrowing to one
+configuration comes after the experiments and deletes the losers.
+
 ## Order of work
 
 **Step 0** (three agents, in parallel):
