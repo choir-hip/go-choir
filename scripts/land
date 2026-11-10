@@ -224,7 +224,9 @@ write_runner() { # $1 = file
 cd "\$1" || exit 2
 ulimit -n 65536 2>/dev/null || true
 export GOMAXPROCS=\${GOMAXPROCS:-4}
-TD=\$(mktemp -d "\${TMPDIR:-/tmp}/land-XXXXXX"); export TMPDIR=\$TD
+# macOS sets TMPDIR with a trailing slash; a "//" in the path makes the files
+# API tests refuse every request (seen 2026-11-10), so strip it.
+T0=\${TMPDIR:-/tmp}; TD=\$(mktemp -d "\${T0%/}/land-XXXXXX"); export TMPDIR=\$TD
 fin() { rc=\$?; rm -rf "\$TD"; echo "EXIT \$rc"; }
 trap fin EXIT
 run() { echo "## \$*"; "\$@"; rc=\$?; [ \$rc -eq 0 ] || { echo "STEP FAILED (\$rc): \$*"; exit \$rc; }; }
