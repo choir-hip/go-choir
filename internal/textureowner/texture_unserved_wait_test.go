@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -434,5 +435,62 @@ func TestCrashBootClosesTextureWorkWhoseAskWasNeverAnswered(t *testing.T) {
 	}
 	if w := textureWork(t, s, rec); w.Status != types.WorkItemRefused || !strings.Contains(w.Reason, "interrupted by a restart") {
 		t.Fatalf("work = %s %q, want refused, interrupted by a restart", w.Status, w.Reason)
+	}
+}
+
+// Round 2 review, F1: the Idle backstop and the bare-Write guard read the same
+// "is anything working on this request" predicate, so an Ask or Escalate still
+// being worked must serve the request there too, not only after a Wait.
+func TestIdleTurnAndBareWriteLeaveTheRequestOpenWhileAnAskIsOutstanding(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-idle-ask")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	ask := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchAsk(rec, "texture-cell:ask:idle")}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, ask, "idle-ask-1"); err != nil {
+		t.Fatal(err)
+	}
+	// An unrelated wake ends in an Idle turn while the Ask is still worked.
+	idle := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Idle: agentcore.TextureIdleNoActReason})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, idle, "idle-ask-2"); err != nil {
+		t.Fatalf("Idle turn: %v", err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+		t.Fatalf("work = %s %q, want open while the Ask is outstanding", w.Status, w.Reason)
+	}
+	// A bare Write (no Cast, Wait or Done) is a progress revision, not refused.
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, writeTurn(base.RevisionID, nil)), "idle-ask-3"); err != nil {
+		t.Fatalf("bare Write while an Ask is outstanding: %v", err)
+	}
+}
+
+// The boot leg keeps its exemption: the asked desk's run is closed there.
+func TestIdleTurnClosesOnceNothingIsOutstanding(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-idle-noask")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	idle := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Idle: agentcore.TextureIdleNoActReason})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, idle, "noask-1"); err != nil {
+		t.Fatal(err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemRefused {
+		t.Fatalf("work = %s, want refused with nothing outstanding", w.Status)
+	}
+}
+
+// Round 2 review, F3: an Escalate is a standalone intent committed in the
+// cell's staged order, not folded into the turn. Committed before the Wait
+// turn it serves the Wait. (Staged after the Wait it commits after the check
+// and the Wait is closed over: a named residual in the cluster record.)
+func TestWaitAfterAStandaloneEscalateStaysOpen(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-escalate-standalone")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	commitRecords(t, s, rec, "standalone-escalate", nil, managementEscalate(rec, "texture-cell:escalate:standalone"))
+	wait := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "escalated to management"})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, wait, "standalone-1"); err != nil {
+		t.Fatal(err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+		t.Fatalf("work = %s %q, want open while management holds the Escalate", w.Status, w.Reason)
 	}
 }
