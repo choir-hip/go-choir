@@ -28,6 +28,48 @@ import (
 //   - a new release while a walk runs leaves pins pointing at a release
 //     nothing proved;
 //   - a vmctl restart loses the walk.
+//
+// Zero time floors (owner, 2026-11-10; rings advance on health alone before
+// launch). Failure modes, written first:
+//   - a ring with zero running members (down, held, divergent) stalls the
+//     walk, or passes the proof ring (R0) or the paper's ring (R5) unseen;
+//   - a ring below its minimum count (R1 has 1 of 3, R3 has 1 of 2) waits
+//     for members that do not exist;
+//   - a member whose refresh failed, or that the sweep deferred busy, holds
+//     its ring forever;
+//   - a member that WAS refreshed is skipped: the ring closes before it was
+//     seen healthy on the release (the whole point of the order);
+//   - a member refreshed, then crashing or wedging after the next ring
+//     opened, is no longer watched, so the release is not rolled back;
+//   - a rollback after later rings opened leaves a closed ring's computer on
+//     the bad release, or leaves a later ring unpinned;
+//   - an expedite stops working or stops guarding with zero floors;
+//   - a second release arriving mid-walk leaves pins on an unproven release;
+//   - a vmctl restart mid-walk loses the walk or its progress;
+//   - the full walk with every member healthy takes longer than a handful of
+//     ticks (the estimate in the design doc), or no tick at all (a ring that
+//     closes in the tick that opened it with a member still off the release).
+//
+// Zero time floors (owner, 2026-11-10; rings advance on health alone before
+// launch). Failure modes, written first:
+//   - a ring with zero running members (down, held, divergent) stalls the
+//     walk, or passes the proof ring (R0) or the paper's ring (R5) unseen;
+//   - a ring below its minimum count (R1 has 1 of 3, R3 has 1 of 2) waits
+//     for members that do not exist;
+//   - a member whose refresh failed, or that the sweep deferred busy, holds
+//     its ring forever;
+//   - a member that WAS refreshed is skipped: the ring closes before it was
+//     seen healthy on the release (the whole point of the order);
+//   - a member refreshed, then crashing or wedging after the next ring
+//     opened, is no longer watched, so the release is not rolled back;
+//   - a rollback after later rings opened leaves a closed ring's computer on
+//     the bad release, or leaves a later ring unpinned;
+//   - an expedite stops working or stops guarding with zero floors;
+//   - a second release arriving mid-walk leaves pins on an unproven release;
+//   - a vmctl restart mid-walk loses the walk or its progress;
+//   - the full walk with every member healthy takes longer than a handful of
+//     ticks (the estimate in the design doc), or no tick at all (a ring that
+//     closes in the tick that opened it with a member still off the release).
 
 var (
 	rwT0   = time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
@@ -201,7 +243,10 @@ func TestRingGuardsKnownBadFixtures(t *testing.T) {
 			return o
 		}, 1},
 		{"crash restart", ringGuardCrash, func(i int) ringMemberObs {
+			// Not yet answering /health (inside the readiness delay), so the
+			// ring stays open until the crash arrives.
 			o := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+			o.Health = &ringHealth{Answered: false}
 			if i > 0 {
 				o.Crashes = loadCrashFixture(t, "crashes-unhealthy.json")
 			}
@@ -539,8 +584,22 @@ func TestRingWalkStatePersists(t *testing.T) {
 	}
 }
 
-// The time floor holds a ring whose members are healthy from the first tick.
+// The shipped floors are zero before launch (owner, 2026-11-10).
+func TestRingShippedTimeFloorsAreZero(t *testing.T) {
+	for _, r := range ringOrder {
+		if f := ringSoaks[r].Floor; f != 0 {
+			t.Fatalf("ring %s time floor = %s; the floors are zero before launch", r, f)
+		}
+	}
+}
+
+// The time-floor mechanism is kept for launch (the floors are zero before
+// it): with a floor set, the floor holds a ring whose members are healthy
+// from the first tick.
 func TestRingTimeFloorHolds(t *testing.T) {
+	saved := ringSoaks[ringR0]
+	ringSoaks[ringR0] = ringSoak{Floor: 10 * time.Minute, MinExposure: saved.MinExposure}
+	defer func() { ringSoaks[ringR0] = saved }()
 	s := newWalkingState(t)
 	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
 	floor := int(ringSoaks[ringR0].Floor / time.Minute)
@@ -709,8 +768,10 @@ func TestRingBootGuardScoped(t *testing.T) {
 	held.Active, held.Held, held.Health = false, true, nil
 	down := healthyObs(rwTest2, ringR1, "")
 	down.Active, down.Health = false, nil
-	t3 := healthyObs(rwTest3, ringR1, rwTo.Single)
-	for i := 1; i <= int(ringSoaks[ringR0].Floor/time.Minute)+1; i++ {
+	// t3 is asked onto the release but not there yet, so R1 stays open.
+	t3 := healthyObs(rwTest3, ringR1, rwFrom.Single)
+	t3.Health = nil
+	for i := 1; i <= 3; i++ {
 		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, held, down, t3})
 	}
 	if s.Walk.Current != 1 {
@@ -759,7 +820,7 @@ func TestRingExposureFloorCount(t *testing.T) {
 	}
 	opened := s.Walk.Rings[1].OpenedAt
 	s.step(opened.Add(time.Minute), obs)
-	s.step(opened.Add(2*time.Hour+time.Minute), obs)
+	s.step(opened.Add(2*time.Minute), obs)
 	if s.Walk.Current < 2 || s.Walk.Rings[1].Outcome != ringOutcomeClean {
 		t.Fatalf("R1 with 3 of 4 exposed must close clean: %+v", s.Walk.Rings[1])
 	}
@@ -982,7 +1043,7 @@ func TestRingTimingRecorded(t *testing.T) {
 	if len(st.Timing) < 2 {
 		t.Fatalf("timing missing: %+v", st.Timing)
 	}
-	if st.Timing[0].Ring != ringR0 || st.Timing[0].ClosedAfterSeconds != 600 || st.Timing[0].LastReachedAfterSeconds != 120 {
+	if st.Timing[0].Ring != ringR0 || st.Timing[0].ClosedAfterSeconds != 120 || st.Timing[0].LastReachedAfterSeconds != 120 {
 		t.Fatalf("R0 timing = %+v", st.Timing[0])
 	}
 	if st.Timing[1].Ring != ringR1 || st.Timing[1].LastReachedAfterSeconds != 780 || st.Timing[1].Reached != 1 {
@@ -1098,5 +1159,376 @@ func TestRingExpediteHoldsR5WhenPaperUnobserved(t *testing.T) {
 		if p.Ring == ringR5 && !p.ClosedAt.IsZero() {
 			t.Fatalf("R5 closed with the paper unobserved: %+v", p)
 		}
+	}
+}
+
+// ---- zero time floors (owner, 2026-11-10) ----
+
+// rwFleet is a simulated fleet for the zero-floor walk: a tick steps the
+// walk, then the retry sweep refreshes every enrolled member at once (the
+// real sweep runs right after the tick); the next tick reads /health.
+type rwFleet struct {
+	t     *testing.T
+	s     *ringWalkState
+	now   time.Time
+	obs   map[string]*ringMemberObs
+	order []string
+	all   []ringEvent
+}
+
+func newRwFleet(t *testing.T) *rwFleet {
+	return &rwFleet{t: t, s: newWalkingState(t), now: rwT0, obs: map[string]*ringMemberObs{}}
+}
+
+func (f *rwFleet) add(id string, ring ringID, onTarget bool) *ringMemberObs {
+	rel := rwFrom.Single
+	if onTarget {
+		rel = rwTo.Single
+	}
+	o := healthyObs(id, ring, rel)
+	f.obs[id] = &o
+	f.order = append(f.order, id)
+	return &o
+}
+
+func (f *rwFleet) list() []ringMemberObs {
+	var out []ringMemberObs
+	for _, id := range f.order {
+		out = append(out, *f.obs[id])
+	}
+	return out
+}
+
+// tick advances one minute and applies the sweep: enrolled members take the
+// target release.
+func (f *rwFleet) tick() {
+	f.now = f.now.Add(time.Minute)
+	ev, acts := f.s.step(f.now, f.list())
+	f.all = append(f.all, ev...)
+	for _, a := range acts {
+		if a.Kind == ringActionEnroll && a.Target == rwTo.SingleCommit {
+			if o := f.obs[a.ComputerID]; o != nil && o.Active {
+				o.Release = rwTo.Single
+				o.Pending = false
+			}
+		}
+	}
+}
+
+func (f *rwFleet) closed(r ringID) *ringEvent {
+	for _, e := range f.all {
+		if e.Event == ringEventRingClosed && e.Ring == r {
+			e := e
+			return &e
+		}
+	}
+	return nil
+}
+
+func (f *rwFleet) opened(r ringID) *ringEvent {
+	for _, e := range f.all {
+		if e.Event == ringEventRingOpened && e.Ring == r {
+			e := e
+			return &e
+		}
+	}
+	return nil
+}
+
+const rwOwner = "computer-03335285269bdba4f94377e56879f9e6"
+const rwOther1 = "computer-dddd0000000000000000000000000001"
+const rwOther2 = "computer-dddd0000000000000000000000000002"
+const rwPlat = "computer-eeee0000000000000000000000000001"
+
+// The walk with every member healthy: d@e already refreshed by CI, every
+// other member needs one sweep refresh. Each ring closes one tick after it
+// opened (the refreshed member is read once on the target), so the paper's
+// ring opens 5 ticks (5 minutes) after the walk start and the walk completes
+// 1 tick later: a handful of minutes, not hours.
+func TestRingZeroFloorFullWalkTiming(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	for _, id := range []string{rwTest1, rwTest2, rwTest3} {
+		f.add(id, ringR1, false)
+	}
+	f.add(rwOwner, ringR2, false)
+	f.add(rwOther1, ringR3, false)
+	f.add(rwOther2, ringR3, false)
+	f.add(rwPlat, ringR4, false)
+	f.add(ringPaperComputer, ringR5, false)
+	for i := 0; i < 12 && f.s.Walk.Status == ringWalkWalking; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Status != ringWalkComplete {
+		t.Fatalf("walk did not complete: %+v", f.s.Walk.Status)
+	}
+	start := f.s.Walk.StartedAt
+	if paper := f.opened(ringR5).At.Sub(start); paper != 5*time.Minute {
+		t.Fatalf("paper ring opened %s after the walk start, want 5m", paper)
+	}
+	if done := f.s.Walk.EndedAt.Sub(start); done != 6*time.Minute {
+		t.Fatalf("walk completed %s after start, want 6m", done)
+	}
+	prev := f.closed(ringR0)
+	if prev == nil || prev.Outcome != ringOutcomeClean {
+		t.Fatalf("R0 did not close clean: %+v", prev)
+	}
+	for _, r := range ringOrder[1:] {
+		op, cl := f.opened(r), f.closed(r)
+		if op == nil || cl == nil || op.At.Before(prev.At) {
+			t.Fatalf("ring %s opened before the ring before it closed", r)
+		}
+		// A refreshed member must be seen healthy: no ring closes in the tick
+		// that opened it.
+		if !cl.At.After(op.At) {
+			t.Fatalf("ring %s closed in the tick that opened it with a member still off the release", r)
+		}
+		prev = cl
+	}
+	if f.s.Baseline != rwTo {
+		t.Fatalf("baseline did not move")
+	}
+}
+
+// A ring with zero running members (down, held, divergent) is clean at once
+// (R1 to R4); the paper is still refreshed and seen healthy.
+func TestRingZeroFloorRingWithNoRunningMembers(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	down := f.add(rwTest1, ringR1, false)
+	down.Active, down.Health = false, nil
+	held := f.add(rwOwner, ringR2, false)
+	held.Held, held.Health = true, nil
+	div := f.add(rwOther1, ringR3, false)
+	div.Divergent, div.Health = true, nil
+	plat := f.add(rwPlat, ringR4, false)
+	plat.Active, plat.Health = false, nil
+	f.add(ringPaperComputer, ringR5, false)
+	for i := 0; i < 8 && f.s.Walk.Status == ringWalkWalking; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Status != ringWalkComplete {
+		t.Fatalf("walk stalled on rings with no running member: current %d", f.s.Walk.Current)
+	}
+	for _, r := range []ringID{ringR1, ringR2, ringR3, ringR4} {
+		if cl := f.closed(r); cl == nil || cl.Outcome != ringOutcomeSkippedNoExposure {
+			t.Fatalf("ring %s with no running member: %+v", r, cl)
+		}
+	}
+	if cl := f.closed(ringR5); cl == nil || cl.Outcome != ringOutcomeClean {
+		t.Fatalf("the paper must be refreshed and seen healthy: %+v", cl)
+	}
+}
+
+// R0 with d@e not running holds (the proof ring is never passed unseen), and
+// the paper deferred busy holds R5 (its refresh is unguarded once the ring
+// closes).
+func TestRingZeroFloorProofAndPaperStillHold(t *testing.T) {
+	f := newRwFleet(t)
+	de := f.add(ringProofComputer, ringR0, false)
+	de.Active, de.Health = false, nil
+	for i := 0; i < 5; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Current != 0 {
+		t.Fatalf("R0 passed with d@e down")
+	}
+	g := newRwFleet(t)
+	g.add(ringProofComputer, ringR0, true)
+	paper := g.add(ringPaperComputer, ringR5, false)
+	paper.Pending, paper.Deferred = true, true
+	for i := 0; i < 10; i++ {
+		g.tick()
+	}
+	if g.s.Walk.Current != 5 || g.closed(ringR5) != nil {
+		t.Fatalf("R5 closed with the paper deferred and unseen: current %d", g.s.Walk.Current)
+	}
+}
+
+// A ring below its minimum (R1 with 1 of 3, R3 with 1 of 2) does not wait for
+// members that do not exist, but the one member is seen healthy.
+func TestRingZeroFloorRingBelowMinimum(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	f.add(rwTest1, ringR1, false)
+	f.add(rwOther1, ringR3, false)
+	f.add(ringPaperComputer, ringR5, false)
+	for i := 0; i < 8 && f.s.Walk.Status == ringWalkWalking; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Status != ringWalkComplete {
+		t.Fatalf("walk stalled below a ring minimum: current %d", f.s.Walk.Current)
+	}
+	for _, r := range []ringID{ringR1, ringR3} {
+		cl := f.closed(r)
+		if cl == nil || cl.Outcome != ringOutcomeClean || cl.Soak.Exposed != 1 {
+			t.Fatalf("ring %s must close clean with its one member seen healthy: %+v", r, cl)
+		}
+	}
+}
+
+// A member whose refresh failed, or that the sweep deferred busy, does not
+// hold its ring; a member that was refreshed but is not answering yet does.
+func TestRingZeroFloorUnrefreshableDoesNotHoldRefreshedDoes(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	failed := f.add(rwTest1, ringR1, false)
+	failed.FailedTarget = rwTo.SingleCommit
+	busy := f.add(rwTest2, ringR1, false)
+	busy.Pending, busy.Deferred = true, true
+	slow := f.add(rwTest3, ringR1, false)
+	slow.Health = &ringHealth{Answered: false, Detail: "booting"}
+	for i := 0; i < 4; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Current != 1 {
+		t.Fatalf("R1 closed (or R0 did not) while a refreshed member was not seen healthy: current %d", f.s.Walk.Current)
+	}
+	// It answers: now R1 closes on it, without the failed or the busy one.
+	f.obs[rwTest3].Health = &ringHealth{Answered: true, Status: 200}
+	f.tick()
+	if cl := f.closed(ringR1); cl == nil || cl.Outcome != ringOutcomeClean || cl.Soak.Exposed != 1 {
+		t.Fatalf("R1 must close on the refreshed healthy member: %+v", cl)
+	}
+}
+
+// A member of a closed ring that crashes after the next ring opened still
+// breaches: every opened ring is watched until the walk ends, and the
+// rollback returns the computers of all opened rings.
+func TestRingZeroFloorCrashAfterNextRingOpenedRollsBack(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	f.add(rwOwner, ringR2, false)
+	slowR3 := f.add(rwOther1, ringR3, false)
+	slowR3.Health = &ringHealth{Answered: false} // R3 stays open
+	f.tick()
+	f.tick() // R1 closed, R2 open
+	f.tick() // R2 closed, R3 open
+	if f.s.Walk.Current != 3 || f.closed(ringR1) == nil {
+		t.Fatalf("setup: R3 not open: current %d", f.s.Walk.Current)
+	}
+	t1.Crashes = []CrashRecord{{At: f.now.Add(30 * time.Second).Format(time.RFC3339Nano), Kind: "unhealthy_restart", Cause: "guest exited"}}
+	f.tick()
+	if f.s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("a crash in closed R1 while R3 is open did not roll back: %s", f.s.Walk.Status)
+	}
+	if b := f.s.Walk.Rings[1].Breach; b == nil || b.Guard != ringGuardCrash || b.ComputerID != rwTest1 {
+		t.Fatalf("breach not recorded on R1: %+v", f.s.Walk.Rings[1].Breach)
+	}
+	if f.s.Walk.Rings[3].Outcome != ringOutcomeStoppedByRollback {
+		t.Fatalf("the open ring must stop: %+v", f.s.Walk.Rings[3].Outcome)
+	}
+	// Every computer is pinned to from; the returns cover the closed rings.
+	for _, ring := range ringOrder {
+		if single, _ := f.s.pinFor("x", ring); single != rwFrom.Single {
+			t.Fatalf("ring %s not pinned to from after rollback", ring)
+		}
+	}
+	ret := map[string]bool{}
+	for _, id := range f.s.Walk.Returning {
+		ret[id] = true
+	}
+	if !ret[ringProofComputer] || !ret[rwTest1] || !ret[rwOwner] {
+		t.Fatalf("returns must cover the computers of closed rings on the target: %v", f.s.Walk.Returning)
+	}
+}
+
+// A wedge on d@e after R1 opened rolls everything back too (R0 is watched
+// for the whole walk).
+func TestRingZeroFloorWedgeInProofRingAfterR1Opened(t *testing.T) {
+	f := newRwFleet(t)
+	de := f.add(ringProofComputer, ringR0, true)
+	slow := f.add(rwTest1, ringR1, false)
+	slow.Health = &ringHealth{Answered: false}
+	f.tick()
+	if f.s.Walk.Current != 1 {
+		t.Fatalf("setup: R1 not open")
+	}
+	de.Health = loadHealthFixture(t, "health-appender-wedged.json")
+	f.tick()
+	f.tick()
+	if f.s.Walk.Status != ringWalkRolledBack || f.s.Walk.Rings[0].Breach == nil || f.s.Walk.Rings[0].Breach.Guard != ringGuardWedge {
+		t.Fatalf("a wedge on d@e after R1 opened must roll back: %s", f.s.Walk.Status)
+	}
+}
+
+// An expedite still opens every ring at once and still watches for its 10
+// minutes with zero floors.
+func TestRingZeroFloorExpediteStillWorks(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	f.add(rwTest1, ringR1, false)
+	f.add(ringPaperComputer, ringR5, false)
+	if _, err := f.s.expedite(f.now, "key fix", "owner", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.s.Walk.Rings) != len(ringOrder) {
+		t.Fatalf("expedite did not open every ring")
+	}
+	for i := 0; i < 9; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Status != ringWalkWalking {
+		t.Fatalf("expedited walk completed inside its %s watch", ringExpediteWatch)
+	}
+	for i := 0; i < 3; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Status != ringWalkComplete {
+		t.Fatalf("expedited walk did not complete after the watch: %s", f.s.Walk.Status)
+	}
+}
+
+// A second release arriving mid-walk supersedes it and starts again from the
+// last release that finished a walk.
+func TestRingZeroFloorSecondReleaseMidWalk(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	slow := f.add(rwTest1, ringR1, false)
+	slow.Health = &ringHealth{Answered: false}
+	f.tick()
+	third := ringReleasePair{Single: "thirdsingle", SingleCommit: "commit-third", Layered: "thirdlayered", LayeredCommit: "commit-third-l"}
+	ev := f.s.observeRelease(third, f.now.Add(time.Minute))
+	if !hasEvent(ev, ringEventWalkSuperseded) || !hasEvent(ev, ringEventWalkStarted) {
+		t.Fatalf("second release must supersede and start a walk: %+v", ev)
+	}
+	if f.s.Walk.From != rwFrom || f.s.Walk.To != third || f.s.Walk.Current != 0 {
+		t.Fatalf("new walk must run from the last good release: %+v", f.s.Walk)
+	}
+	if single, _ := f.s.pinFor(rwTest1, ringR1); single != rwFrom.Single {
+		t.Fatalf("R1 must be pinned to the last good release again")
+	}
+}
+
+// A vmctl restart mid-walk keeps the walk and its progress, and the walk
+// finishes on the loaded state.
+func TestRingZeroFloorVmctlRestartMidWalk(t *testing.T) {
+	dir := t.TempDir()
+	statePath, historyPath := filepath.Join(dir, "ring-walk.json"), filepath.Join(dir, "ring-walk-history.jsonl")
+	r := newRingWalkRunner()
+	if err := r.load(statePath, historyPath); err != nil {
+		t.Fatal(err)
+	}
+	r.observe(rwFrom, rwT0.Add(-time.Hour))
+	r.observe(rwTo, rwT0)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	slow := healthyObs(rwTest1, ringR1, rwTo.Single)
+	slow.Health = &ringHealth{Answered: false}
+	r.stepWith(rwT0.Add(time.Minute), []ringMemberObs{de, slow})
+	if r.state.Walk.Current != 1 {
+		t.Fatalf("setup: R1 not open")
+	}
+	r2 := newRingWalkRunner()
+	if err := r2.load(statePath, historyPath); err != nil {
+		t.Fatal(err)
+	}
+	if w := r2.state.Walk; w == nil || w.Status != ringWalkWalking || w.Current != 1 || w.Rings[0].Outcome != ringOutcomeClean {
+		t.Fatalf("restart lost the walk: %+v", r2.state.Walk)
+	}
+	slow.Health = &ringHealth{Answered: true, Status: 200}
+	r2.stepWith(rwT0.Add(2*time.Minute), []ringMemberObs{de, slow})
+	if r2.state.Walk == nil || r2.state.Walk.Status != ringWalkComplete {
+		t.Fatalf("walk did not finish after the restart: %+v", r2.state.Walk)
 	}
 }
