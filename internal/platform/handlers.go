@@ -181,7 +181,7 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 		switch {
 		case errors.Is(err, ErrOpinionDailyLimit):
 			status = http.StatusTooManyRequests
-		case errors.Is(err, ErrOpinionListingOff), errors.Is(err, ErrOpinionModeConflict):
+		case errors.Is(err, ErrOpinionModeConflict):
 			status = http.StatusConflict
 		}
 		writeJSON(w, status, apiError{Error: err.Error()})

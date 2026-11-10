@@ -26,7 +26,6 @@ func newOpinionService(t *testing.T) (*Service, *Store) {
 	t.Helper()
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "signing.key"))
-	svc.SetOpinionListing(true)
 	return svc, store
 }
 
@@ -54,42 +53,22 @@ func opinionRows(t *testing.T, svc *Service) []FrontStory {
 	return page.Stories
 }
 
-func TestOpinionKillSwitchOff(t *testing.T) {
-	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "signing.key"))
-	// Default off in code: a publish is refused and nothing is written.
-	if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", "doc-op", 1, "My view", "A view on harbors."); !errors.Is(err, ErrOpinionListingOff) {
-		t.Fatalf("opinion publish with the switch off = %v, want ErrOpinionListingOff", err)
-	}
-	svc.SetOpinionListing(true)
+func TestOpinionPublishesAndIsListedWithNoSwitch(t *testing.T) {
+	svc, _ := newOpinionService(t)
 	if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", "doc-op", 1, "My view", "A view on harbors."); err != nil {
-		t.Fatalf("opinion publish with the switch on: %v", err)
+		t.Fatalf("opinion publish: %v", err)
 	}
 	if rows := opinionRows(t, svc); len(rows) != 1 {
 		t.Fatalf("opinion bucket = %d rows, want 1", len(rows))
 	}
 	res, err := svc.SearchPublishedPieces(context.Background(), "harbors", 10)
 	if err != nil || len(res.Pieces) != 1 || res.Pieces[0].Kind != "opinion" {
-		t.Fatalf("research search with the switch on: %v %+v", err, res)
-	}
-	// Switched off: the bucket is empty (not an error) and research finds none.
-	svc.SetOpinionListing(false)
-	if rows := opinionRows(t, svc); len(rows) != 0 {
-		t.Fatalf("opinion bucket with the switch off = %d rows, want 0", len(rows))
-	}
-	res, err = svc.SearchPublishedPieces(context.Background(), "harbors", 10)
-	if err != nil || len(res.Pieces) != 0 {
-		t.Fatalf("research search with the switch off: %v %+v", err, res)
-	}
-	// A new version is refused too.
-	if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", "doc-op", 2, "My view", "Revised."); !errors.Is(err, ErrOpinionListingOff) {
-		t.Fatalf("opinion v2 with the switch off = %v", err)
+		t.Fatalf("research search: %v %+v", err, res)
 	}
 }
 
 func TestOpinionPublicationIsNotAnAutopaperStory(t *testing.T) {
 	f := newFrontFixture(t)
-	f.svc.SetOpinionListing(true)
 	// An allowlist that does not name the writer: the Opinion bucket does not
 	// depend on CORPUSD_AUTOPAPER_OWNERS.
 	f.svc.SetAutopaperOwners([]string{"paper-owner"})
@@ -134,16 +113,22 @@ func TestOpinionPublicationIsNotAnAutopaperStory(t *testing.T) {
 	}
 }
 
+// TestOpinionDailyLimitIsAConstant: the limit is a code constant, not a setting.
+func TestOpinionDailyLimitIsAConstant(t *testing.T) {
+	if OpinionDailyLimit != 5 {
+		t.Fatalf("OpinionDailyLimit = %d, want 5", OpinionDailyLimit)
+	}
+}
+
 func TestOpinionDailyLimit(t *testing.T) {
 	svc, store := newOpinionService(t)
-	svc.SetOpinionDailyLimit(3)
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= OpinionDailyLimit; i++ {
 		if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", fmt.Sprintf("doc-%d", i), 1, fmt.Sprintf("Piece %d", i), "Words."); err != nil {
 			t.Fatalf("piece %d: %v", i, err)
 		}
 	}
-	if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", "doc-4", 1, "Piece 4", "Words."); !errors.Is(err, ErrOpinionDailyLimit) {
-		t.Fatalf("fourth piece in a day = %v, want ErrOpinionDailyLimit", err)
+	if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", "doc-over", 1, "Piece over", "Words."); !errors.Is(err, ErrOpinionDailyLimit) {
+		t.Fatalf("piece past the limit in a day = %v, want ErrOpinionDailyLimit", err)
 	}
 	// A new version of an existing piece is not a new listing row.
 	if _, err := publishOpinion(svc, "writer-1", "writer-aa11bb", "doc-1", 2, "Piece 1", "Words revised."); err != nil {
@@ -220,7 +205,6 @@ func TestOpinionPublishOfAPlainPublicationIsRefused(t *testing.T) {
 // crafted link cannot hide it), and a hand-published Texture as neither.
 func TestResolvedPublicationNamesOpinionKindAndAuthor(t *testing.T) {
 	f := newFrontFixture(t)
-	f.svc.SetOpinionListing(true)
 	op, err := publishOpinion(f.svc, "writer-1", "writer-aa11bb", "doc-op", 1, "My view", "I think so.")
 	if err != nil {
 		t.Fatal(err)
@@ -247,23 +231,8 @@ func TestResolvedPublicationNamesOpinionKindAndAuthor(t *testing.T) {
 	}
 }
 
-func TestOpinionListingSwitchParsesOnlyOn(t *testing.T) {
-	for raw, want := range map[string]bool{"on": true, " ON ": true, "true": true, "1": true, "": false, "off": false, "no": false, "maybe": false} {
-		if got := ParseOpinionListing(raw); got != want {
-			t.Fatalf("ParseOpinionListing(%q) = %v, want %v", raw, got, want)
-		}
-	}
-	t.Setenv("CORPUSD_OPINION_LISTING", "on")
-	t.Setenv("CORPUSD_OPINION_DAILY_LIMIT", "7")
-	cfg, err := LoadConfig()
-	if err != nil || cfg.OpinionListingRaw != "on" || cfg.OpinionDailyLimitRaw != "7" {
-		t.Fatalf("config = %+v %v", cfg, err)
-	}
-}
-
 func TestOpinionHTTPStatuses(t *testing.T) {
 	svc, _ := newOpinionService(t)
-	svc.SetOpinionDailyLimit(1)
 	h := NewHandler(svc)
 	post := func(doc, label string) int {
 		raw, _ := json.Marshal(PublishTextureRequest{OwnerID: "writer-1", SourceDocID: doc, SourceRevisionID: doc + "-1", RevisionNumber: 1,
@@ -274,17 +243,15 @@ func TestOpinionHTTPStatuses(t *testing.T) {
 		h.HandleInternalPublishTexture(w, req)
 		return w.Code
 	}
-	if got := post("doc-a", "writer-aa11bb"); got != http.StatusCreated {
-		t.Fatalf("first piece = %d", got)
+	for i := 0; i < OpinionDailyLimit; i++ {
+		if got := post(fmt.Sprintf("doc-%d", i), "writer-aa11bb"); got != http.StatusCreated {
+			t.Fatalf("piece %d = %d", i, got)
+		}
 	}
-	if got := post("doc-b", "writer-aa11bb"); got != http.StatusTooManyRequests {
+	if got := post("doc-over", "writer-aa11bb"); got != http.StatusTooManyRequests {
 		t.Fatalf("over the limit = %d, want 429", got)
 	}
 	if got := post("doc-c", "a@b.co"); got != http.StatusBadRequest {
 		t.Fatalf("email label = %d, want 400", got)
-	}
-	svc.SetOpinionListing(false)
-	if got := post("doc-d", "writer-aa11bb"); got != http.StatusConflict {
-		t.Fatalf("switch off = %d, want 409", got)
 	}
 }

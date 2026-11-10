@@ -11,10 +11,6 @@
  *   OPED_ARTIFACT_DIR         where to write the JSON receipt
  *                             (default <repo>/docs/evidence)
  *
- * Needs CORPUSD_OPINION_LISTING=on on the target (nix/node-b.nix sets it). With
- * the switch off the publish answers 409 and this spec fails on purpose: the
- * deploy did not turn the feature on.
- *
  * Ways this could fail (the problem doc's failure modes, as checked here):
  *   F1 The piece is on the news front, or its page carries the AI disclosure.
  *   F2 An anonymous caller can publish to Opinion.
@@ -93,7 +89,7 @@ test('a signed-in account publishes an op-ed that a logged-out reader finds unde
 
   // 3. Publish as opinion with the signed-in session.
   const published = await api(page, 'POST', '/api/platform/texture/opinions', { doc_id: docID, revision_id: revisionID });
-  expect(published.status, `publish as opinion: ${JSON.stringify(published.body)} (409 means CORPUSD_OPINION_LISTING is off)`).toBe(201);
+  expect(published.status, `publish as opinion: ${JSON.stringify(published.body)}`).toBe(201);
   const routePath = published.body?.route_path;
   expect(routePath, 'route path').toMatch(/^\/pub\/texture\//);
   const slug = routePath.replace('/pub/texture/', '');

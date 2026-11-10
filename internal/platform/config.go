@@ -64,12 +64,6 @@ type Config struct {
 	// PublicBaseURL is CORPUSD_PUBLIC_BASE_URL: the host a published
 	// piece's read_url names (default https://choir.news).
 	PublicBaseURL string
-	// OpinionListingRaw is CORPUSD_OPINION_LISTING: "on" publishes, lists and
-	// searches opinion pieces; anything else (the default) hides them all.
-	// OpinionDailyLimitRaw is CORPUSD_OPINION_DAILY_LIMIT: new opinion pieces
-	// per user per 24 hours (default 5).
-	OpinionListingRaw    string
-	OpinionDailyLimitRaw string
 	// FrontImportancePath is CORPUSD_FRONT_IMPORTANCE_PATH: the scores file
 	// the host front-importance timer writes (cmd/front-importance). The
 	// front list attaches its scores read-only; a missing or bad file
@@ -100,8 +94,6 @@ func LoadConfig() (*Config, error) {
 		TapeSegments:             os.Getenv("PLATFORM_TAPE_SEGMENTS"),
 		AutopaperOwnersRaw:       os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
 		PublicBaseURL:            os.Getenv("CORPUSD_PUBLIC_BASE_URL"),
-		OpinionListingRaw:        os.Getenv("CORPUSD_OPINION_LISTING"),
-		OpinionDailyLimitRaw:     os.Getenv("CORPUSD_OPINION_DAILY_LIMIT"),
 		FrontImportancePath:      envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
 	}
 	if err := cfg.validate(); err != nil {

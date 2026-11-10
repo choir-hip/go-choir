@@ -173,3 +173,11 @@ published-search cap of 100 rows and a published article that could not
 be cited; repaired, both, by this change; introduced, an opinion piece
 has no unpublish or moderation path beyond the kill switch (named in
 Open items).
+
+## Update 2026-11-10 (lane C2)
+
+The kill switch `CORPUSD_OPINION_LISTING` is deleted (owner rule 2026-11-03,
+contract D7 and A7). Opinion publishing and listing are always on. The daily
+limit is the constant `platform.OpinionDailyLimit` (5); `CORPUSD_OPINION_DAILY_LIMIT`
+is gone from config and nix. Statements above about the switch and the env
+limit describe the earlier state. Rollback is a revert.

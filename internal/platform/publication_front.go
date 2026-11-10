@@ -228,11 +228,6 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 		return nil, ErrInvalidFrontCursor
 	}
 	opinion := section == FrontSectionOpinion
-	if opinion && !s.opinionEnabled() {
-		// The kill switch hides the whole section: an empty bucket, not an
-		// error, so the front renders without it.
-		return &FrontPage{Stories: []FrontStory{}}, nil
-	}
 	if section != "" && !opinion {
 		return s.listFrontSection(ctx, og, limit, after, section)
 	}
