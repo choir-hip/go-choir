@@ -269,7 +269,17 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		eventWakes := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) &&
 			rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
 		if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
-			usage.Labelled, usage.Unlabelled = rt.labelCaptures(ctx, ownerID, computerID, sched.SourceID, report.Captured)
+			// Held for the computer's flush, and waited for here, so the
+			// labels exist before the arrival wakes management (as before
+			// the batching). No schedule lock is held across the wait:
+			// sourceScheduleMu was released after the in-flight mark above
+			// and is taken again after the arrival below. A failed label
+			// still announces, unlabelled. Per-call timeouts bound the wait;
+			// ctx and a stop end it.
+			select {
+			case <-rt.enqueueIntakeLabels(ownerID, computerID, sched.SourceID, report.Captured):
+			case <-ctx.Done():
+			}
 		}
 		// With intake.events on, the new captures queue for the event
 		// layer, which resolves every source's captures together onto

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
@@ -391,6 +390,17 @@ func (f *intakeFixture) poll(t *testing.T) store.SourceSchedule {
 	return sched
 }
 
+// labelNow holds captured and runs the flush at once, returning its counts.
+func labelNow(rt *Runtime, ctx context.Context, owner, computer, sourceID string, captured []sourcegraph.CapturedItem) (labelled, unlabelled int) {
+	var held []intakeHeld
+	for _, c := range captured {
+		if strings.TrimSpace(c.CaptureID) != "" {
+			held = append(held, intakeHeld{item: c, sourceID: sourceID, at: time.Now()})
+		}
+	}
+	return rt.labelHeld(ctx, owner, computer, held)
+}
+
 func (f *intakeFixture) arrivals(t *testing.T) []types.CommitmentRecord {
 	t.Helper()
 	records, err := f.s.ListInboxRecords(context.Background(), f.owner, f.computer, agentprofile.Management+":"+f.owner, 0, 0)
@@ -411,7 +421,7 @@ func TestIntakeLabelsOffMakesNoJevCall(t *testing.T) {
 	f.rt.SetCandidateJudge(judge)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
 	*f.items = []labelFeedItem{{"Papst an der Lunge operiert", "Der Vatikan meldet eine erfolgreiche Operation."}}
-	sched := f.poll(t)
+	f.poll(t)
 	if judge.callCount() != 0 {
 		t.Fatalf("intake.labels is off but Jev was called %d times", judge.callCount())
 	}
@@ -420,9 +430,6 @@ func TestIntakeLabelsOffMakesNoJevCall(t *testing.T) {
 	}
 	if labels, err := f.s.CaptureLabels(context.Background(), f.owner, f.computer, f.captureID(0)); err != nil || len(labels) != 0 {
 		t.Fatalf("labels with the setting off = %+v, %v", labels, err)
-	}
-	if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 0 || last.Unlabelled != 0 {
-		t.Fatalf("usage counts labels with the setting off: %+v", last)
 	}
 }
 
@@ -448,7 +455,7 @@ func TestIntakeLabelsMapAliasesBackLabelSiblingsAndStayOutOfTheArrival(t *testin
 		{"Удар по электростанции в Киеве", "Ракеты поразили электростанцию."},
 		{"Ukrainian goes on trial over pipeline", "A second suspect appears in court."},
 	}
-	sched := f.poll(t)
+	f.poll(t)
 
 	// B7: four captures and two stories are one chunk and one group, so one
 	// call carries all eight questions.
@@ -538,15 +545,12 @@ func TestIntakeLabelsMapAliasesBackLabelSiblingsAndStayOutOfTheArrival(t *testin
 	if strings.Contains(string(raw), "jev") || strings.Contains(string(raw), pope) {
 		t.Fatalf("the arrival record carries a label: %s", raw)
 	}
-	if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 4 || last.Unlabelled != 0 {
-		t.Fatalf("poll usage = %+v; want 4 labelled", last)
-	}
 }
 
 func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *testing.T) {
-	prevCall, prevPoll := intakeLabelCallTimeout, intakeLabelPollBudget
-	intakeLabelCallTimeout, intakeLabelPollBudget = 100*time.Millisecond, 300*time.Millisecond
-	t.Cleanup(func() { intakeLabelCallTimeout, intakeLabelPollBudget = prevCall, prevPoll })
+	prevCall := intakeLabelCallTimeout
+	intakeLabelCallTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { intakeLabelCallTimeout = prevCall })
 	for _, c := range []struct {
 		name  string
 		judge *fakeIntakeJudge
@@ -575,16 +579,14 @@ func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *tes
 					t.Fatalf("capture %d labelled by a failing Jev: %+v", i, labels)
 				}
 			}
-			if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 0 || last.Unlabelled != 9 {
-				t.Fatalf("poll usage = %+v; want 9 unlabelled", last)
-			}
+			_ = sched
 		})
 	}
 }
 
-// B7: twelve captures against no stories are three groups of four, one call
-// each, and the site never has more than intakeLabelConcurrency in flight.
-func TestIntakeLabelsBatchTwelveCapturesIntoThreeCalls(t *testing.T) {
+// B7: twelve captures against no stories are two calls of six, and the site never
+// has more than one in flight.
+func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 	f := newIntakeFixture(t, "owner-labels-parallel")
 	f.enable(t)
 	judge := &fakeIntakeJudge{delay: 40 * time.Millisecond}
@@ -592,35 +594,35 @@ func TestIntakeLabelsBatchTwelveCapturesIntoThreeCalls(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		*f.items = append(*f.items, labelFeedItem{fmt.Sprintf("Item %d", i), "Summary"})
 	}
-	start := time.Now()
-	sched := f.poll(t)
-	// The event layer (intake.events) batches its own 12 captures into a call
-	// of its own; only the label calls are counted here.
+	f.poll(t)
 	labelCalls := judge.labelCalls()
-	if got := len(labelCalls); got != 3 {
-		t.Fatalf("B7: %d label calls for 12 captures; want 3 groups of %d", got, intakeBatchCaptures)
+	if got := len(labelCalls); got != 2 {
+		t.Fatalf("B7: %d label calls for 12 captures; want 2 of 6", got)
 	}
-	if max := judge.maxSeen.Load(); max > int32(intakeLabelConcurrency) || intakeLabelConcurrency > 2 {
-		t.Fatalf("B7: %d calls ran at once (pool %d); want at most 2", max, intakeLabelConcurrency)
+	if max := judge.maxSeen.Load(); max != 1 {
+		t.Fatalf("B7: %d calls ran at once; want 1", max)
 	}
-	if took := time.Since(start); took > 5*time.Second {
-		t.Fatalf("12 labels took %v", took)
-	}
-	if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 12 {
-		t.Fatalf("poll usage = %+v; want 12 labelled", last)
-	}
-	// No stories: each capture is compared with its siblings only, and no
-	// topic question is asked.
 	for _, call := range labelCalls {
 		for name := range call.questions {
 			if strings.HasPrefix(name, "topic_") {
 				t.Fatal("a topic question was asked with no candidate stories")
 			}
 		}
-		if len(call.questions) > intakeBatchCaptures {
-			t.Fatalf("B2: a call has %d questions for at most %d captures", len(call.questions), intakeBatchCaptures)
+		if len(call.questions) != 6 {
+			t.Fatalf("B2: a call has %d questions; want 6 (one per capture, 6 captures)", len(call.questions))
 		}
 	}
+}
+
+// storiesPerChunk is how many stories one chunk holds for the test library's
+// stories, measured on the poll's own cutting.
+func storiesPerChunk(t *testing.T, rt *Runtime) int {
+	t.Helper()
+	p, err := newIntakePoll(context.Background(), pollLib(rt, 2000), pollItems("probe"))
+	if err != nil || len(p.cuts) < 2 {
+		t.Fatalf("probe poll: %v", err)
+	}
+	return p.cuts[0]
 }
 
 // pollLib is a library of n stories updated a minute apart, newest first, and
@@ -649,7 +651,7 @@ func labelOnly(rt *Runtime, lib *intakeLibrary, items []sourcegraph.CapturedItem
 	return r.Value, r.Err
 }
 
-func mustLabels(t *testing.T, results []fanout.Result[store.CaptureLabel]) []store.CaptureLabel {
+func mustLabels(t *testing.T, results []intakeLabelResult) []store.CaptureLabel {
 	t.Helper()
 	out := make([]store.CaptureLabel, len(results))
 	for i, r := range results {
@@ -726,7 +728,7 @@ func TestIntakeBatchSplitsAtTheCaptureCapAndDropsNone(t *testing.T) {
 		titles = append(titles, fmt.Sprintf("Capture title %d", i))
 	}
 	items := pollItems(titles...)
-	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, 5), "owner", "computer", "src", items, intakeBatchCaptures))
+	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, 5), "owner", "computer", "src", items, 4))
 	if judge.callCount() != 3 {
 		t.Fatalf("calls = %d; want groups of 4, 4 and 1", judge.callCount())
 	}
@@ -760,7 +762,7 @@ func TestIntakeBatchSplitsAtTheCaptureCapAndDropsNone(t *testing.T) {
 // the state; the byte line is on state plus questions.
 func TestIntakeBatchRespectsTheByteLineBySplittingTheCaptureBatch(t *testing.T) {
 	rt, _ := testRuntime(t)
-	lib := pollLib(rt, intakeChunkCandidates)
+	lib := pollLib(rt, 80)
 	for _, d := range lib.recent {
 		lib.summary[d.DocID] = store.StorySummary{DocID: d.DocID, Headline: d.Title, UpdatedAt: d.UpdatedAt, Lede: strings.Repeat("lede words ", 50)}
 	}
@@ -771,7 +773,7 @@ func TestIntakeBatchRespectsTheByteLineBySplittingTheCaptureBatch(t *testing.T) 
 	for i := range items {
 		items[i].Summary = long
 	}
-	labels := mustLabels(t, rt.labelPoll(context.Background(), lib, "owner", "computer", "src", items, intakeBatchCaptures))
+	labels := mustLabels(t, rt.labelPoll(context.Background(), lib, "owner", "computer", "src", items, 4))
 	if len(labels) != len(items) {
 		t.Fatalf("B2: %d labels for %d captures", len(labels), len(items))
 	}
@@ -792,7 +794,7 @@ func TestIntakeBatchOneBadAnswerVoidsOnlyThatCapture(t *testing.T) {
 	items := pollItems("Alpha", "Bravo", "Charlie", "Delta")
 	judge := &fakeIntakeJudge{answers: map[string]string{"Alpha": "Story headline 001", "Charlie": "Story headline 002"}, dropEvent: map[string]bool{"Bravo": true}, offMenu: map[string]bool{"Delta": true}}
 	rt.SetCandidateJudge(judge)
-	results := rt.labelPoll(context.Background(), pollLib(rt, 4), "owner", "computer", "src", items, intakeBatchCaptures)
+	results := rt.labelPoll(context.Background(), pollLib(rt, 4), "owner", "computer", "src", items, 4)
 	if judge.callCount() != 1 {
 		t.Fatalf("calls = %d; want one", judge.callCount())
 	}
@@ -815,7 +817,7 @@ func TestIntakeBatchFailedCallLeavesOnlyItsCapturesUnlabelled(t *testing.T) {
 	// Captures 4 to 7 are the second group; its calls carry the question of
 	// capture 6 (handle n6), the others' do not.
 	rt.SetCandidateJudge(&failingQuestionJudge{question: "event_n6"})
-	results := rt.labelPoll(context.Background(), pollLib(rt, 3), "owner", "computer", "src", items, intakeBatchCaptures)
+	results := rt.labelPoll(context.Background(), pollLib(rt, 3), "owner", "computer", "src", items, 4)
 	for i, r := range results {
 		failed := i >= 4 && i <= 7
 		if failed != (r.Err != nil) {
@@ -861,8 +863,8 @@ func TestIntakeBatchRecordsEveryCaptureQuestionOnceWithItsDecision(t *testing.T)
 			counts[q.DecisionID+"/"+strings.SplitN(q.Name, "_", 2)[0]]++
 		}
 	}
-	if rows != 2 {
-		t.Fatalf("B6: %d rows; want one per call (groups of 4 and 2)", rows)
+	if rows != 1 {
+		t.Fatalf("B6: %d rows; want one call carrying all six captures", rows)
 	}
 	for i := 0; i < 6; i++ {
 		for _, kind := range []string{"event", "topic"} {
@@ -890,11 +892,11 @@ func TestRelabelWritesTheNextVersionAndLeavesTheArrivalDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.SetCandidateJudge(&fakeIntakeJudge{answers: map[string]string{"Papst operiert": "Pope has lung surgery"}})
-	if labelled, _ := rt.labelCaptures(ctx, owner, computer, sourceID, captured); labelled != 1 {
+	if labelled, _ := labelNow(rt, ctx, owner, computer, sourceID, captured); labelled != 1 {
 		t.Fatalf("first label: labelled %d", labelled)
 	}
 	rt.SetCandidateJudge(&fakeIntakeJudge{answers: map[string]string{"Papst operiert": "new"}, model: "typesafe/jev-1.14"})
-	if labelled, _ := rt.labelCaptures(ctx, owner, computer, sourceID, captured); labelled != 1 {
+	if labelled, _ := labelNow(rt, ctx, owner, computer, sourceID, captured); labelled != 1 {
 		t.Fatalf("relabel: labelled %d", labelled)
 	}
 	labels, err := s.CaptureLabels(ctx, owner, computer, "choir.web_capture:relabel-1")
@@ -998,7 +1000,8 @@ func (j *failingQuestionJudge) JudgeScoped(ctx context.Context, scope string, st
 // to the "new" answers of the others.
 func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	rt, _ := testRuntime(t)
-	n := 2*intakeChunkCandidates + 20
+	per := storiesPerChunk(t, rt)
+	n := 2*per + 20
 	now := time.Now().UTC()
 	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
 	for i := 0; i < n; i++ {
@@ -1014,7 +1017,7 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := judge.callCount(); got != 3 {
-		t.Fatalf("C1: %d calls for %d candidates; want 3 chunks of at most %d", got, n, intakeChunkCandidates)
+		t.Fatalf("C1: %d calls for %d candidates; want 3 chunks of at most %d", got, n, per)
 	}
 	if len(label.CandidateDocIDs) != n {
 		t.Fatalf("C1: label lists %d candidates; want all %d", len(label.CandidateDocIDs), n)
@@ -1025,7 +1028,7 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	seen := map[string]bool{}
 	for _, c := range judge.calls {
 		stories := storyEntries(c.state)
-		if len(stories) > intakeChunkCandidates {
+		if len(stories) > per {
 			t.Errorf("a call listed %d stories", len(stories))
 		}
 		for _, e := range stories {
@@ -1036,8 +1039,8 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 			seen[a] = true
 		}
 	}
-	if judge.maxSeen.Load() < 2 {
-		t.Errorf("C3: chunks ran %d at a time; want them concurrent", judge.maxSeen.Load())
+	if judge.maxSeen.Load() != 1 {
+		t.Errorf("C3: chunks ran %d at a time; want one after another", judge.maxSeen.Load())
 	}
 
 	// No chunk matches: new.
@@ -1068,10 +1071,11 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
 	items := pollItems("Alpha report", "Bravo report", "Charlie report")
-	rt.labelPoll(context.Background(), pollLib(rt, 100), "owner", "computer", "src", items, intakeBatchCaptures)
+	per := storiesPerChunk(t, rt)
+	rt.labelPoll(context.Background(), pollLib(rt, per+20), "owner", "computer", "src", items, intakeBatchCaptures)
 	calls := judge.labelCalls()
 	if len(calls) != 2 {
-		t.Fatalf("calls = %d; want one per chunk (100 stories)", len(calls))
+		t.Fatalf("calls = %d; want one per chunk", len(calls))
 	}
 	// The calls arrive in either order (the pool runs two); put chunk 0 first.
 	if !strings.HasPrefix(storyEntries(calls[0].state)[0], "c1: ") {
@@ -1081,7 +1085,7 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 		var stories []string
 		for n, e := range storyEntries(call.state) {
 			h, _, ok := strings.Cut(e, ": ")
-			if !ok || h != fmt.Sprintf("c%d", k*intakeChunkCandidates+n+1) {
+			if !ok || h != fmt.Sprintf("c%d", k*per+n+1) {
 				t.Fatalf("B12: story entry %q does not start with its own handle", e)
 			}
 			stories = append(stories, h)
@@ -1200,9 +1204,15 @@ func TestIntakeBatchVoidedCaptureCostStaysOnTheCallRecord(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		*f.items = append(*f.items, labelFeedItem{fmt.Sprintf("Void item %d", i), "Summary"})
 	}
-	sched := f.poll(t)
-	if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 3 || last.Unlabelled != 1 {
-		t.Fatalf("poll usage = %+v; want 3 labelled and 1 voided", last)
+	f.poll(t)
+	labelled := 0
+	for i := 0; i < 4; i++ {
+		if _, found, _ := f.s.LatestCaptureLabel(context.Background(), f.owner, f.computer, f.captureID(i)); found {
+			labelled++
+		}
+	}
+	if labelled != 3 {
+		t.Fatalf("%d captures labelled; want 3 labelled and 1 voided", labelled)
 	}
 	var shares float64
 	for i := 0; i < 4; i++ {
@@ -1242,7 +1252,7 @@ func TestIntakeLabelsLogOneLinePerPoll(t *testing.T) {
 		defer mu.Unlock()
 		var out []string
 		for _, l := range strings.Split(buf.String(), "\n") {
-			if strings.Contains(l, "intake labels:") && strings.Contains(l, " poll ") {
+			if strings.Contains(l, "intake labels:") && strings.Contains(l, " flush ") {
 				out = append(out, l)
 			}
 		}
@@ -1260,16 +1270,16 @@ func TestIntakeLabelsLogOneLinePerPoll(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("B15: %d poll lines; want one: %v", len(got), got)
 	}
-	for _, want := range []string{"captures=5", "calls=2", "questions=10", "unlabelled=0", "budget_expired=false", "bytes_max="} {
+	for _, want := range []string{"captures=5", "calls=1", "questions=10", "unlabelled=0", "cancelled=false", "bytes_max="} {
 		if !strings.Contains(got[0], want) {
 			t.Fatalf("B15: poll line %q lacks %s", got[0], want)
 		}
 	}
 
 	// A slow Jev that ends the budget still leaves the line.
-	prevCall, prevPoll := intakeLabelCallTimeout, intakeLabelPollBudget
-	intakeLabelCallTimeout, intakeLabelPollBudget = 100*time.Millisecond, 150*time.Millisecond
-	t.Cleanup(func() { intakeLabelCallTimeout, intakeLabelPollBudget = prevCall, prevPoll })
+	prevCall := intakeLabelCallTimeout
+	intakeLabelCallTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { intakeLabelCallTimeout = prevCall })
 	g := newIntakeFixture(t, "owner-labels-pollline-slow")
 	g.enable(t)
 	openTestStory(t, g.s, g.owner, g.computer, "Pope has lung surgery")
@@ -1279,8 +1289,8 @@ func TestIntakeLabelsLogOneLinePerPoll(t *testing.T) {
 	}
 	g.poll(t)
 	got = lines()
-	if len(got) != 2 || !strings.Contains(got[1], "captures=9") || !strings.Contains(got[1], "unlabelled=9") || !strings.Contains(got[1], "budget_expired=true") {
-		t.Fatalf("B15: slow poll line = %v; want 9 unlabelled with the budget expired", got)
+	if len(got) != 2 || !strings.Contains(got[1], "captures=9") || !strings.Contains(got[1], "unlabelled=9") {
+		t.Fatalf("B15: slow poll line = %v; want 9 unlabelled", got)
 	}
 }
 

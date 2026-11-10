@@ -108,7 +108,7 @@ func TestIntakeLabelerReadsTheStoryIndexNotTextureKinds(t *testing.T) {
 	captured := []sourcegraph.CapturedItem{{CaptureID: "choir.web_capture:x9-1", Title: "Papst operiert", URL: "https://x9.example/1", Language: "de", Summary: "Vatikan", Outlet: "DW"}}
 	rt.SetCandidateJudge(&fakeIntakeJudge{answers: map[string]string{"Papst operiert": "Pope has lung surgery"}})
 	objectgraph.ResetReaderGateCounts()
-	if labelled, _ := rt.labelCaptures(ctx, owner, computer, sourceID, captured); labelled != 1 {
+	if labelled, _ := labelNow(rt, ctx, owner, computer, sourceID, captured); labelled != 1 {
 		t.Fatalf("labelled %d", labelled)
 	}
 	labels, err := st.CaptureLabels(ctx, owner, computer, "choir.web_capture:x9-1")
