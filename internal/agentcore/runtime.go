@@ -305,7 +305,6 @@ type Runtime struct {
 	subCallCtx          context.Context
 	subCallCancel       context.CancelFunc
 	subCallGate         chan struct{}
-	subCallNext         time.Time
 
 	// dispatchActor is the function hook that the actor runtime adapter
 	// sets. When the business logic needs to start a run or wake an agent,

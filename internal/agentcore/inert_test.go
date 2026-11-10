@@ -147,9 +147,6 @@ func sampledLocalID(scope ReductionScope, kind string, flagged bool) string {
 // and the sampled judge, held here, never blocks the cell.
 func TestInertCastStillCommitsAndRunsAndTheJudgeNeverBlocksIt(t *testing.T) {
 	rt, _ := testRuntime(t)
-	oldSpacing := subCallJudgeSpacing
-	subCallJudgeSpacing = 0
-	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
 	judge := &subCallJudge{inertHold: make(chan struct{}), inertStarted: make(chan struct{}, 1), pick: map[string]string{"p0.contradictable": "no"}}
 	rt.SetCandidateJudge(judge)
 	scope := inertReductionScope(rt, "cell-inert-cast")
@@ -212,9 +209,6 @@ func TestInertCastStillCommitsAndRunsAndTheJudgeNeverBlocksIt(t *testing.T) {
 // prediction, its model, desk or weight.
 func TestInertJudgeSampleIsScoredAgainstTheRules(t *testing.T) {
 	rt, s := testRuntime(t)
-	oldSpacing := subCallJudgeSpacing
-	subCallJudgeSpacing = 0
-	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
 	// p0 is the flagged record, p1 the unflagged, p2 a flagged one the judge
 	// calls informative, p3 an unflagged one it calls informative.
 	judge := &subCallJudge{pick: map[string]string{"p0.contradictable": "no", "p1.contradictable": "no", "p2.contradictable": "yes", "p3.contradictable": "yes"}}
@@ -371,9 +365,6 @@ func TestInertSamplingCoversSubCallAndRecordsRouteCasts(t *testing.T) {
 	rt, s := testRuntime(t)
 	judge := &subCallJudge{}
 	rt.SetCandidateJudge(judge)
-	oldSpacing := subCallJudgeSpacing
-	subCallJudgeSpacing = 0
-	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
 	owner, computer := "owner-rr", rt.cfg.ComputerID
 	management := "management:" + owner
 	scope := ReductionScope{FromAgentID: management, DeskAgentID: management, FromRole: agentprofile.Management, ChannelID: management,
@@ -404,9 +395,6 @@ func TestInertSamplingCoversSubCallAndRecordsRouteCasts(t *testing.T) {
 // prediction text per record is bounded.
 func TestInertJudgeCallIsChunkedAndBounded(t *testing.T) {
 	rt, s := testRuntime(t)
-	oldSpacing := subCallJudgeSpacing
-	subCallJudgeSpacing = 0
-	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
 	judge := &subCallJudge{}
 	rt.SetCandidateJudge(judge)
 	n := subCallJudgeBatchMax*2 + 3

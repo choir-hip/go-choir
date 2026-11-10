@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"log"
 	"strconv"
 	"strings"
@@ -216,9 +217,22 @@ func (rt *Runtime) settleDeskCastRounds(ctx context.Context, owner, computer str
 		}
 		items = append(items, roundItems...)
 	}
-	for start := 0; start < len(items); start += deskCastJudgeBatchMax {
+	// Ask every batch together; a round can span batches and its counters
+	// are plain fields, so the answers are applied one batch at a time, in
+	// order.
+	batches := (len(items) + deskCastJudgeBatchMax - 1) / deskCastJudgeBatchMax
+	asked := fanout.Do(ctx, subCallJudgeConcurrency, batches, func(ctx context.Context, b int) (deskCastAsk, error) {
+		start := b * deskCastJudgeBatchMax
+		return rt.askDeskCastBatch(ctx, items[start:min(start+deskCastJudgeBatchMax, len(items))]), nil
+	})
+	for b := range asked {
+		start := b * deskCastJudgeBatchMax
 		end := min(start+deskCastJudgeBatchMax, len(items))
-		rt.judgeDeskCastBatch(ctx, owner, computer, items[start:end])
+		ask := asked[b].Value
+		if asked[b].Err != nil { // the context ended before this batch started
+			ask = deskCastAsk{failure: system1Message(asked[b].Err)}
+		}
+		rt.judgeDeskCastBatch(ctx, owner, computer, items[start:end], ask)
 	}
 	for _, r := range rounds {
 		phase, reason := types.SubCallPhaseAnswered, r.reason
@@ -458,9 +472,33 @@ func deskCastJudgeRequest(items []deskItem) (json.RawMessage, map[string]json.Ra
 	return state, rawQuestions, nil
 }
 
-// judgeDeskCastBatch makes one judge call for a chunk and writes each Cast's
-// settlement. The usage rides on the first round of the chunk.
-func (rt *Runtime) judgeDeskCastBatch(ctx context.Context, owner, computer string, items []deskItem) {
+// deskCastAsk is the judge's answer to one batch, or why there is none.
+type deskCastAsk struct {
+	raw       json.RawMessage
+	questions int
+	failure   string
+}
+
+// askDeskCastBatch makes the one judge call of a chunk. It changes no round,
+// so batches can be asked together.
+func (rt *Runtime) askDeskCastBatch(ctx context.Context, items []deskItem) deskCastAsk {
+	if rt.candidateJudge == nil {
+		return deskCastAsk{failure: "no decision model is bound on this computer"}
+	}
+	state, rawQuestions, err := deskCastJudgeRequest(items)
+	if err != nil {
+		return deskCastAsk{failure: err.Error()}
+	}
+	raw, err := rt.callSubCallJudge(ctx, state, rawQuestions)
+	if err != nil {
+		return deskCastAsk{failure: system1Message(err)}
+	}
+	return deskCastAsk{raw: raw, questions: len(rawQuestions)}
+}
+
+// judgeDeskCastBatch writes each Cast's settlement from a chunk's answer. The
+// usage rides on the first round of the chunk.
+func (rt *Runtime) judgeDeskCastBatch(ctx context.Context, owner, computer string, items []deskItem, ask deskCastAsk) {
 	fail := func(reason string) {
 		for _, it := range items {
 			it.round.failed++
@@ -469,20 +507,11 @@ func (rt *Runtime) judgeDeskCastBatch(ctx context.Context, owner, computer strin
 			}
 		}
 	}
-	if rt.candidateJudge == nil {
-		fail("no decision model is bound on this computer")
+	if ask.failure != "" {
+		fail(ask.failure)
 		return
 	}
-	state, rawQuestions, err := deskCastJudgeRequest(items)
-	if err != nil {
-		fail(err.Error())
-		return
-	}
-	raw, err := rt.callSubCallJudge(ctx, state, rawQuestions)
-	if err != nil {
-		fail(system1Message(err))
-		return
-	}
+	raw := ask.raw
 	var dist jevDistribution
 	if err := json.Unmarshal(raw, &dist); err != nil {
 		fail("the judge's answer did not decode: " + system1Message(err))
@@ -517,7 +546,7 @@ func (rt *Runtime) judgeDeskCastBatch(ctx context.Context, owner, computer strin
 		rt.sampleMaterialDisagreement(ctx, owner, computer, it.scored, []types.CommitmentRecord{rec})
 	}
 	rt.recordJevCostFor(ctx, owner, items[0].cast.Provenance.RunID, firstNonEmpty(items[0].cast.Provenance.Desk, items[0].cast.SenderInbox),
-		"desk_cast_judge", model, dist.Provider, dist.Usage, len(rawQuestions))
+		"desk_cast_judge", model, dist.Provider, dist.Usage, ask.questions)
 }
 
 // checkDeskCastSettler refuses a settlement of a desk Cast by anyone but a

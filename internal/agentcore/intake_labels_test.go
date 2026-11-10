@@ -439,7 +439,7 @@ func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *tes
 	}
 }
 
-func TestIntakeLabelsRunAtMostFourAtOnce(t *testing.T) {
+func TestIntakeLabelsRunAtMostTwelveAtOnce(t *testing.T) {
 	f := newIntakeFixture(t, "owner-labels-parallel")
 	f.enable(t)
 	judge := &fakeIntakeJudge{delay: 40 * time.Millisecond}
@@ -449,8 +449,8 @@ func TestIntakeLabelsRunAtMostFourAtOnce(t *testing.T) {
 	}
 	start := time.Now()
 	sched := f.poll(t)
-	if max := judge.maxSeen.Load(); max > 4 || max < 2 {
-		t.Fatalf("at most %d calls ran at once; want parallel, at most 4", max)
+	if max := judge.maxSeen.Load(); max > int32(intakeLabelConcurrency) || max < 4 {
+		t.Fatalf("at most %d calls ran at once; want parallel, at most 12", max)
 	}
 	if took := time.Since(start); took > 5*time.Second {
 		t.Fatalf("12 labels took %v", took)

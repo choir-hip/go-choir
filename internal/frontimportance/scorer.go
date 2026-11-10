@@ -14,6 +14,7 @@ package frontimportance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -27,6 +28,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/gateway"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
@@ -107,7 +109,7 @@ func Main(args []string) int {
 	fs.StringVar(&cfg.FrontURL, "front-url", envOr("FRONT_IMPORTANCE_FRONT_URL", defaultFrontURL), "corpusd internal front list URL")
 	fs.StringVar(&cfg.ScoresPath, "scores", envOr("FRONT_IMPORTANCE_SCORES_PATH", defaultScoresPath), "scores file to write")
 	fs.IntVar(&cfg.Pages, "pages", envInt("FRONT_IMPORTANCE_PAGES", 1), "front list pages to read, following next_cursor (backfill)")
-	fs.IntVar(&cfg.MaxCalls, "max-calls", 80, "most Jev calls per run")
+	fs.IntVar(&cfg.MaxCalls, "max-calls", 200, "most Jev calls per run")
 	fs.DurationVar(&cfg.Budget, "budget", 3*time.Minute, "time budget for the run's Jev calls")
 	fs.DurationVar(&cfg.CallTime, "call-timeout", 45*time.Second, "time limit for one Jev call")
 	fs.DurationVar(&cfg.Retention, "retention", envDuration("FRONT_IMPORTANCE_RETENTION", defaultRetention), "how long a score row is kept after its story leaves the scored window")
@@ -134,6 +136,13 @@ func Main(args []string) int {
 	return 0
 }
 
+// scorerConcurrency is how many stories are asked at once: one story a call
+// at about 110 ms, so 80 calls take about 1 s instead of 9 s.
+const scorerConcurrency = 12
+
+// errScoreDeferred marks a story the run's time budget ran out before.
+var errScoreDeferred = errors.New("front-importance: time budget spent")
+
 type runStats struct {
 	Stories, Kept, Scored, Failed, Deferred int
 	Depth                                   depthStats
@@ -152,6 +161,10 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 	previous := readScores(cfg.ScoresPath)
 	next := scoresFile{Version: 1, Scores: map[string]scoreRow{}}
 	deadline := now().Add(cfg.Budget)
+	// Plan first: which stories keep their row, which are asked, which wait
+	// for a later run. Then ask the asked ones scorerConcurrency at a time;
+	// every answer lands in its story's slot, so order is the front list's.
+	var asked []frontStory
 	calls := 0
 	for _, story := range stories {
 		id := strings.TrimSpace(story.PublicationID)
@@ -164,7 +177,7 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			stats.Kept++
 			continue
 		}
-		if calls >= cfg.MaxCalls || !now().Before(deadline) {
+		if calls >= cfg.MaxCalls {
 			// Out of budget: a newer revision keeps its old score until a
 			// later run rescores it.
 			if had {
@@ -174,15 +187,30 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			continue
 		}
 		calls++
+		asked = append(asked, story)
+	}
+	results := fanout.Do(ctx, scorerConcurrency, len(asked), func(ctx context.Context, i int) (scoreRow, error) {
+		if !now().Before(deadline) {
+			return scoreRow{}, errScoreDeferred
+		}
 		callCtx, cancel := context.WithTimeout(ctx, cfg.CallTime)
-		row, err := scoreStory(callCtx, jev, story)
-		cancel()
+		defer cancel()
+		return scoreStory(callCtx, jev, asked[i])
+	})
+	for i, story := range asked {
+		id := strings.TrimSpace(story.PublicationID)
+		old, had := previous.Scores[id]
+		row, err := results[i].Value, results[i].Err
 		if err != nil {
-			log.Printf("front-importance: score %s: %v", id, err)
-			stats.Failed++
 			if had {
 				next.Scores[id] = old
 			}
+			if errors.Is(err, errScoreDeferred) {
+				stats.Deferred++
+				continue
+			}
+			log.Printf("front-importance: score %s: %v", id, err)
+			stats.Failed++
 			continue
 		}
 		row.ScoredAt = now().UTC().Format(time.RFC3339)

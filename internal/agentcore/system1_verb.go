@@ -190,6 +190,10 @@ type system1Ask struct {
 	// call: a host caller that freezes its own record (the prompt router's
 	// route record, MA4.8) names the model there.
 	model *string
+	// background marks a call that can wait (the host's story analysis): it
+	// draws on the gateway's bulk share. Every other call, the desk's own
+	// question, the prompt router and the disclosure gate, is interactive.
+	background bool
 }
 
 // system1Subject is what a host-built question asks about.
@@ -271,7 +275,11 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 	if err != nil {
 		return nil, err
 	}
-	raw, err := callJudgeWithin(ctx, rt.candidateJudge, "", system1CallTimeout, state, rawQuestions)
+	scope := judgmentScopeInteractive
+	if ask.background {
+		scope = ""
+	}
+	raw, err := callJudgeWithin(ctx, rt.candidateJudge, scope, system1CallTimeout, state, rawQuestions)
 	if err != nil {
 		rt.recordSystem1Failure(ctx, exec, owner, computer, runID, digest, requestID, err)
 		return nil, fmt.Errorf("choir.System1: the judge call failed: %s", system1Message(err))
