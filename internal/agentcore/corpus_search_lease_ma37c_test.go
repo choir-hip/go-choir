@@ -108,7 +108,7 @@ func TestTextureSearchIsTheTextureChildsUnderItsLease(t *testing.T) {
 	// stories, and its SearchTexture is refused by the custodian (no lease).
 	objectgraph.ResetReaderGateCounts()
 	got := object(cell(parentCtx, agentprofile.Research, `r, err := choir.SearchWireCorpus("traffic schedule", 25)
-fmt.Println(r, err)`), "{\"capture_count\"")
+fmt.Println(r, err)`), "{\"published\"")
 	for _, key := range []string{"results", "results_note", "count"} {
 		if _, has := got[key]; has {
 			t.Errorf("the world corpus search answered the owner's stories (%s): %v", key, got)
