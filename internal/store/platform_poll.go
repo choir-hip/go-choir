@@ -78,6 +78,7 @@ type PollGateItem struct {
 	AuthorLabel     string    `json:"author_label,omitempty"`
 	ManifestHash    string    `json:"manifest_hash"`
 	StoryDocID      string    `json:"story_doc_id"`
+	PublisherID     string    `json:"publisher_id,omitempty"`
 	RespondsToID    string    `json:"responds_to_version_id"`
 	RespondsToRoute string    `json:"responds_to_route,omitempty"`
 	RespondsToPub   string    `json:"responds_to_publication_id,omitempty"`

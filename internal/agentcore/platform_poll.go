@@ -268,6 +268,9 @@ func (rt *Runtime) pollNotices(ctx context.Context, feed PlatformFeed, poll *sto
 		if err != nil {
 			return err
 		}
+		for _, sk := range got.Skipped {
+			skipPollItem(poll, sk.ID, sk.Reason)
+		}
 		for _, item := range got.Items {
 			notice := item.Notice
 			notice.RemoteRef = item.ID
@@ -305,6 +308,9 @@ func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store
 		if err != nil {
 			feedErr = err
 			break
+		}
+		for _, sk := range got.Skipped {
+			skipPollItem(poll, sk.ID, sk.Reason)
 		}
 		for _, item := range got.Items {
 			if why := opedItemInvalid(owner, computer, item); why != "" {

@@ -118,7 +118,7 @@ func (rt *Runtime) queueOpedForGate(ctx context.Context, poll *store.PlatformPol
 		poll.GateQueue = map[string]store.PollGateItem{}
 	}
 	poll.GateQueue[item.VersionID] = store.PollGateItem{VersionID: item.VersionID, RoutePath: item.RoutePath, AuthorLabel: item.AuthorLabel,
-		ManifestHash: item.ManifestHash, StoryDocID: item.StoryDocID, RespondsToID: item.RespondsTo.PublicationVersionID,
+		ManifestHash: item.ManifestHash, StoryDocID: item.StoryDocID, PublisherID: item.PublisherID, RespondsToID: item.RespondsTo.PublicationVersionID,
 		RespondsToRoute: item.RespondsTo.RoutePath, RespondsToPub: item.RespondsTo.PublicationID}
 }
 
@@ -158,8 +158,10 @@ func (rt *Runtime) runOpedGates(ctx context.Context, feed PlatformFeed, poll *st
 			continue
 		}
 		ran++
-		poll.GateLog = append(poll.GateLog, store.PollGateCall{Publisher: item.AuthorLabel, Story: item.StoryDocID, At: time.Now().UTC()})
-		run, err = rt.gateOne(ctx, feed, owner, computer, item)
+		// A call counts against the day's bounds only once it is issued.
+		run, err = rt.gateOne(ctx, feed, owner, computer, item, func() {
+			poll.GateLog = append(poll.GateLog, store.PollGateCall{Publisher: gatePublisherKey(item), Story: item.StoryDocID, At: time.Now().UTC()})
+		})
 		if err != nil {
 			item.Failures, item.LastAt, item.Cause = item.Failures+1, time.Now().UTC(), clipChars(err.Error(), types.OpedTextMaxRunes)
 			log.Printf("oped gate: %s failed (%d of %d): %v", v, item.Failures, opedGateMaxFailures, err)
@@ -203,7 +205,7 @@ func opedQuestions() (map[string]json.RawMessage, error) {
 
 // gateOne judges one op-ed and commits its verdict record. It returns the
 // verdict's run. A verdict already on the tape is done.
-func (rt *Runtime) gateOne(ctx context.Context, feed PlatformFeed, owner, computer string, item gateItem) (int, error) {
+func (rt *Runtime) gateOne(ctx context.Context, feed PlatformFeed, owner, computer string, item gateItem, issued func()) (int, error) {
 	if rt.opedRecordExists(ctx, owner, computer, types.OpedVerdictRecordID(item.VersionID, 1)) {
 		return 1, nil
 	}
@@ -234,6 +236,9 @@ func (rt *Runtime) gateOne(ctx context.Context, feed PlatformFeed, owner, comput
 		return 0, err
 	}
 	started := time.Now()
+	if issued != nil {
+		issued()
+	}
 	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "oped_gate", DecisionID: item.VersionID, Scope: judgmentScopeOpedGate}, opedGateCallTimeout, state, questions)
 	if err != nil {
 		return 0, fmt.Errorf("Jev: %w", err)
@@ -341,7 +346,7 @@ func gateOverBound(poll *store.PlatformPoll, item gateItem) string {
 			continue
 		}
 		kept = append(kept, c)
-		if c.Publisher == item.AuthorLabel {
+		if c.Publisher == gatePublisherKey(item) {
 			publisher++
 		}
 		if c.Story == item.StoryDocID {
@@ -372,4 +377,13 @@ func (rt *Runtime) concludeGateOverBound(ctx context.Context, owner, computer st
 		return 0, err
 	}
 	return 1, nil
+}
+
+// gatePublisherKey is who an op-ed's judgment is charged to: the publishing
+// owner corpusd names, never the byline (free to choose or to borrow).
+func gatePublisherKey(item gateItem) string {
+	if item.PublisherID != "" {
+		return "owner:" + item.PublisherID
+	}
+	return "unknown"
 }
