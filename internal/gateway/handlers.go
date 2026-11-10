@@ -25,13 +25,11 @@ const inferenceTimeout = 10 * time.Minute
 
 // HealthResponse is the JSON structure returned by GET /health.
 type gatewayHealthResponse struct {
-	Status               string   `json:"status"`
-	Service              string   `json:"service"`
-	Provider             string   `json:"provider"`
-	ActiveIdentities     int      `json:"active_identities"`
-	RateLimitMaxRequests int      `json:"rate_limit_max_requests,omitempty"`
-	RateLimitWindowMs    int64    `json:"rate_limit_window_ms,omitempty"`
-	SearchProviders      []string `json:"search_providers,omitempty"`
+	Status           string   `json:"status"`
+	Service          string   `json:"service"`
+	Provider         string   `json:"provider"`
+	ActiveIdentities int      `json:"active_identities"`
+	SearchProviders  []string `json:"search_providers,omitempty"`
 	// PromptCache is the per-provider cached-input share since the gateway
 	// started: sample it twice and subtract for an hourly ratio.
 	PromptCache map[string]gatewayCacheHealth `json:"prompt_cache,omitempty"`
@@ -193,7 +191,8 @@ type Handler struct {
 	registry     *IdentityRegistry
 	provider     provider.Provider        // single provider mode (backward compat)
 	providers    *provider.MultiProvider  // multi-provider mode (may be nil)
-	rateLimiter  *PerAutoputerRateLimiter // per-autoputer rate limiter (may be nil)
+	rateLimiter  *PerAutoputerRateLimiter // the Anthropic relay's per-computer counter only (may be nil); no model or search route draws on it
+	calls        callTally                // calls per computer per hour, logged (call_tally.go); never a limit
 	searchClient *SearchClient            // web search client with rotation (may be nil)
 	breakers     *BreakerRegistry         // per-provider circuit breakers (may be nil)
 	jevTransport *JevTransport            // OpenRouter Decisions transport (may be nil)
@@ -302,14 +301,6 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Service:          "gateway",
 		Provider:         providerName,
 		ActiveIdentities: h.registry.ActiveCount(),
-	}
-
-	if h.rateLimiter != nil {
-		used, limit, resetIn := h.rateLimiter.Status("__health_check__")
-		_ = used
-		_ = resetIn
-		resp.RateLimitMaxRequests = limit
-		resp.RateLimitWindowMs = h.rateLimiter.window.Milliseconds()
 	}
 
 	if h.searchClient != nil {
@@ -447,24 +438,6 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Enforce per-autoputer rate limiting (VAL-GATEWAY-005).
-	if h.rateLimiter != nil {
-		if !h.rateLimiter.Record(computerID) {
-			_, _, resetIn := h.rateLimiter.Status(computerID)
-			retrySeconds := int(resetIn.Seconds())
-			if retrySeconds < 1 {
-				retrySeconds = 1
-			}
-			log.Printf("gateway: rate limit exceeded for autoputer %s", computerID)
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
-			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{
-				Error: fmt.Sprintf("rate limit exceeded for autoputer %s (limit %d requests per %s)",
-					computerID, h.rateLimiter.maxReqs, h.rateLimiter.window),
-			})
-			return
-		}
-	}
-
 	// Name the computer as the call's image decode caller (bunch 116, F2).
 	r = withModelDecodeCaller(r, computerID)
 
@@ -516,6 +489,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	// (problems/models-configured-text-only-2026-10-15.md, FM11).
 	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v %s)",
 		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream, provider.SummarizeMedia(req.Messages))
+	h.calls.Call(computerID, p.Name())
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
@@ -550,6 +524,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 
 	// Step 6: Return the successful response.
 	log.Print("gateway: " + inferenceSuccessLine("inference succeeded", computerID, resp))
+	h.calls.InputTokens(computerID, resp.ProviderName, resp.Usage.InputTokens)
 
 	writeGatewayJSON(w, http.StatusOK, ProviderResponse{
 		ID:               resp.ID,
@@ -624,6 +599,7 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 	}
 
 	log.Print("gateway: " + inferenceSuccessLine("streaming inference succeeded", computerID, resp))
+	h.calls.InputTokens(computerID, resp.ProviderName, resp.Usage.InputTokens)
 }
 
 // resolveProvider selects the appropriate provider for the given request.
@@ -986,25 +962,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Enforce per-autoputer search rate limiting. Search uses a separate
-	// bucket from inference so exploratory search bursts cannot starve the
-	// model calls needed to summarize findings or revise documents.
-	if h.rateLimiter != nil {
-		bucketKey := rateLimitBucketKey(computerID, "search")
-		if !h.rateLimiter.Record(bucketKey) {
-			_, _, resetIn := h.rateLimiter.Status(bucketKey)
-			retrySeconds := int(resetIn.Seconds())
-			if retrySeconds < 1 {
-				retrySeconds = 1
-			}
-			log.Printf("gateway: search rate limit exceeded for autoputer %s", computerID)
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
-			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{
-				Error: fmt.Sprintf("rate limit exceeded for autoputer %s", computerID),
-			})
-			return
-		}
-	}
+	h.calls.Call(computerID, "search")
 
 	// Step 3: Decode the request.
 	var req SearchRequest

@@ -150,6 +150,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		writeGatewayJSON(w, http.StatusServiceUnavailable, openAIErrorResponse("no provider configured"))
 		return
 	}
+	h.calls.Call(computerID, p.Name())
 
 	llmReq := provider.LLMRequest{
 		Provider:        gwReq.Provider,
@@ -248,18 +249,6 @@ func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *htt
 		}
 		writeGatewayJSON(w, status, openAIErrorResponse(message))
 		return "", false
-	}
-	if h.rateLimiter != nil {
-		if !h.rateLimiter.Record(rateLimitBucketKey(computerID, scope)) {
-			_, _, resetIn := h.rateLimiter.Status(rateLimitBucketKey(computerID, scope))
-			retrySeconds := int(resetIn.Seconds())
-			if retrySeconds < 1 {
-				retrySeconds = 1
-			}
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
-			writeGatewayJSON(w, http.StatusTooManyRequests, openAIErrorResponse("rate limit exceeded"))
-			return "", false
-		}
 	}
 	return computerID, true
 }

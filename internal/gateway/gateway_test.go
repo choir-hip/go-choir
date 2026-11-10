@@ -622,8 +622,6 @@ func TestHandleIssueCredential_MissingInternalHeaderDenied(t *testing.T) {
 	}
 }
 
-
-
 func TestHandleEnsureCredentialImportsUnknownCredentialWithoutEchoingToken(t *testing.T) {
 	h, reg := setupHandlerNoProvider(t)
 	rawToken := "autoputer-existing-vm:host-held-token"
@@ -1224,64 +1222,6 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 	}
 	if resp.ProviderName != "fireworks" {
 		t.Errorf("ProviderName = %q, want %q", resp.ProviderName, "fireworks")
-	}
-}
-
-func TestMultiProvider_RateLimitStillWorks(t *testing.T) {
-	// Verify rate limiting works with multi-provider handler.
-	reg := NewIdentityRegistry(1 * time.Hour)
-
-	fireworksProvider := &mockProvider{
-		name: "fireworks",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "fw-resp-001",
-			Text:         "Hello!",
-			Model:        "deepseek-v4-flash",
-			StopReason:   "end_turn",
-			ProviderName: "fireworks",
-			Usage:        provider.Usage{InputTokens: 5, OutputTokens: 5},
-		},
-	}
-
-	mp := provider.NewMultiProvider()
-	mp.Register("fireworks", fireworksProvider)
-
-	rl := NewPerAutoputerRateLimiter(2, 1*time.Minute) // 2 requests per minute
-	h := NewMultiHandlerWithRateLimit(reg, mp, rl)
-
-	result, _ := reg.IssueCredential("autoputer-rl")
-
-	payload := ProviderRequest{
-		Provider: "fireworks",
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	}
-	body, _ := json.Marshal(payload)
-
-	// First two requests should succeed.
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-		req.Header.Set("Authorization", "Bearer "+result.RawToken)
-		req.Header.Set("Content-Type", "application/json")
-
-		w := httptest.NewRecorder()
-		h.HandleInference(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
-		}
-	}
-
-	// Third request should be rate limited.
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusTooManyRequests {
-		t.Fatalf("rate limited request: status = %d, want %d", w.Code, http.StatusTooManyRequests)
 	}
 }
 
