@@ -142,9 +142,12 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 	// trust.breaker (a circuit-breaker trip, MA7.8); 42 with search.served
 	// (the search providers that served a run, beside model.served); 43 with
 	// platform.computer.model_policy (a platform operator's write of a
-	// platform computer's model policy, recorded before the write).
-	if batched != 10 || acknowledged != 43 {
-		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 43", batched, acknowledged)
+	// platform computer's model policy, recorded before the write); 45 with
+	// platform.computer.schedule and platform.computer.restart (a platform
+	// operator's schedule start or stop and planned restart, each recorded
+	// before the act, operator O4 and O5).
+	if batched != 10 || acknowledged != 45 {
+		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 45", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
 	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), ""); err == nil {
