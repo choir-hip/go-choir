@@ -2567,11 +2567,13 @@ in
         "GATEWAY_CHATGPT_MODELS=gpt-6-luna"
         "GATEWAY_CHATGPT_REASONING_EFFORT=low"
         # Which OpenCode keys serve is policy, not a credential edit (owner,
-        # 2026-10-22: "ChatGPT and Opencode api key alt 0 only currently").
-        # Names key variables in gateway-provider.env; unlisted keys never
-        # serve. OPENCODE_API_KEY answers 401
-        # (docs/problems/opencode-401-key-never-parked-2026-10-22.md).
-        "GATEWAY_OPENCODE_KEYS=OPENCODE_API_KEY_ALT_0"
+        # 2026-10-22). Names key variables in gateway-provider.env; unlisted
+        # keys never serve. Owner, 2026-11-10: a new key is in
+        # OPENCODE_API_KEY and the older keys are retired, so the free
+        # opencode-go pool members (iceman, beam) can serve ahead of the paid
+        # tail. Before this, no listed key was configured and every
+        # opencode-go call failed "unsupported provider".
+        "GATEWAY_OPENCODE_KEYS=OPENCODE_API_KEY"
         # Tokens are currently issued at autoputer/VM bootstrap and not
         # proactively rotated. Use a longer TTL in staging to avoid
         # authentication lapses during normal multi-hour sessions.
