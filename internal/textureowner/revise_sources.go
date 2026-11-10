@@ -78,15 +78,22 @@ func (c corpusdVersionReader) ReadPublicationVersion(ctx context.Context, versio
 // versionReader is the handler's reader: the one set for tests, else the
 // platform's.
 func (h *Handler) versionReader() PublicationVersionReader {
+	var platform PublicationVersionReader
 	if h.PublicationVersions != nil {
-		return h.PublicationVersions
-	}
-	if h.Core != nil {
+		platform = h.PublicationVersions
+	} else if h.Core != nil {
 		if base := strings.TrimRight(h.Core.CorpusdURL(), "/"); base != "" {
-			return corpusdVersionReader{baseURL: base, client: &http.Client{Timeout: 20 * time.Second}}
+			platform = corpusdVersionReader{baseURL: base, client: &http.Client{Timeout: 20 * time.Second}}
 		}
 	}
-	return nil
+	// A local algorithm2 proposal is served beside the platform's versions
+	// (algorithm2_owner.go): the one seam where "a source must be a published
+	// version" (contract 1, decision D9) is relaxed, and only for a call the
+	// owner's acceptance of that proposal makes.
+	if strings.TrimSpace(h.Algorithm2Dir) != "" {
+		return proposalVersionReader{h: h, platform: platform}
+	}
+	return platform
 }
 
 // resolvedSource is one source after validation: its version and its link.

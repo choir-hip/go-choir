@@ -24,6 +24,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case "/api/texture/markdown-lineage/import":
 		h.HandleTextureImportMarkdownLineage(w, r)
 		return
+	case "/api/texture/algorithm2/ledger", "/api/texture/algorithm2/proposals", "/api/texture/algorithm2/round":
+		h.HandleAlgorithm2(w, r)
+		return
 	case "/api/texture/fork":
 		h.HandleTextureFork(w, r)
 		return
@@ -32,6 +35,10 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	case relatedReviewPath:
 		h.HandleTextureRelatedReview(w, r)
+		return
+	}
+	if strings.HasPrefix(path, algorithm2ProposalsPrefix) {
+		h.HandleAlgorithm2(w, r)
 		return
 	}
 	if strings.HasPrefix(path, agentcore.TextureLifecyclePathPrefix) {

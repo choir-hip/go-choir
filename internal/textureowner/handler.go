@@ -54,6 +54,17 @@ type Handler struct {
 	// PublicationVersions reads the published versions the revise call takes,
 	// merges and forks; nil reads them from the platform (revise_sources.go).
 	PublicationVersions PublicationVersionReader
+	// Algorithm2Dir is where this computer keeps algorithm2 proposals and the
+	// time of the last round (algorithm2_owner.go); empty means the feature
+	// has no home and its routes answer 503.
+	Algorithm2Dir string
+	// algorithm2Model, algorithm2Now and algorithm2ProcessStart are test
+	// seams: nil / zero read the model policy, the clock and the handler's
+	// construction time.
+	algorithm2Model        func(ctx context.Context, ownerID, system, user string) (string, error)
+	algorithm2Now          func() time.Time
+	algorithm2ProcessStart time.Time
+	algorithm2Mu           sync.Mutex
 
 	textureEditMu sync.Mutex
 	// rejectedRoundOf overrides the rejected-round read in tests
@@ -113,6 +124,8 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		Content:     core.TextureContentService(),
 		ModelPolicy: core.TextureModelPolicy(),
 		Provider:    core.TextureProvider(),
+
+		algorithm2ProcessStart: time.Now(),
 	}
 	// The crash boot asks this desk to close the open Texture work nothing
 	// serves (agentcore closeUnservedTextureWorkAfterCrash).

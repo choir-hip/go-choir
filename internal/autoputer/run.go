@@ -684,6 +684,12 @@ func Run() {
 	}
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
+	// Algorithm2's proposals and round clock live beside the store, not in the
+	// owner's synced files: the behavior ledger they come from never leaves
+	// the computer.
+	if rtCfg.StorePath != "" {
+		textureHandler.Algorithm2Dir = strings.TrimSuffix(rtCfg.StorePath, filepath.Ext(rtCfg.StorePath)) + ".algorithm2"
+	}
 	if err := rt.BindTextureOwner(textureHandler); err != nil {
 		boot.fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}
