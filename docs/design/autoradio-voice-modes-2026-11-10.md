@@ -108,6 +108,95 @@ is the number to tune: the owner proposes five minutes; no published
 system uses more than about ten seconds, so this is new and the speaker
 check is what makes it plausible.
 
+## Addressing: a cascade, not one detector (added 2026-11-10, second pass)
+
+Owner, 2026-11-10: no "hey" or "okay"; candidate bare words are "radio",
+"choir", "DJ" and "tetra"; "maybe custom words are the right approach.
+That could be part of onboarding"; "we need to be able to model the
+accuracy during onboarding to guide the user to pick a functional wake
+word".
+
+Two more research passes (history, and 2026 only) changed the plan:
+
+- **Nothing in 2026 replaces a small detector** for a phone playing speech.
+  The year's papers join a text-defined keyword with speaker verification
+  in one tiny model, and detect device-directed speech from interaction
+  history, but none has released code or tested against playback.
+- **The text-defined detector is too loose alone.** Its own figure is 0.27
+  false triggers per utterance on its negative set. It is a first stage.
+- **Bare short words need the extra stages.** Apple shipped bare "Siri"
+  only with a second-stage checker and speaker identification run twice,
+  on the trigger and again on the trigger plus the request.
+- **The device's own speech is the adversary.** Commercial speakers woke
+  about once an hour on television dialogue (PETS 2020). Amazon's paper on
+  barge-in during playback finds the fix is the playback reference, not the
+  word.
+- **Amazon patented a way to score a word before training** (US 9,275,637):
+  phonetic distance to a corpus of real speech, how often the phone
+  sequence occurs in it, neighbours in the lexicon, pronunciation
+  ambiguity, and frequency.
+
+The cascade:
+
+1. **Loose first stage.** The text-defined spotter on the phone's
+   microphone, set to fire easily on the listener's word.
+2. **Self-reference veto (our own idea, untested).** The app knows exactly
+   what it is playing. Run the same spotter on the playback signal itself.
+   A trigger on the microphone that coincides with a trigger on the
+   playback is the programme, not the listener, and is dropped. This costs
+   no playback quality, unlike voice processing.
+3. **Confirmation.** On a surviving trigger only: the speaker check on the
+   trigger and the words that follow it, and a transcript match on that
+   short stretch of audio.
+4. **Window.** After a confirmed turn, no word is needed until the window
+   lapses.
+
+Because stages 2 and 3 do the rejecting, the word matters less than it
+would with a single detector.
+
+### Choosing and grading the word
+
+There is a default word, chosen by the owner after the bench results, and
+onboarding lets the listener choose their own. The listener says the word
+four or five times; the same recordings enrol the voice.
+
+Onboarding grades a candidate two ways:
+
+- **Will it fire by itself?** From text, at once: the patent's measures
+  over transcripts of our own programme audio. Then acoustically: the
+  spotter set to the word, run over a stored sample of programme audio.
+- **Will it miss this listener?** The spotter's score margin on the
+  enrolment recordings, clean and mixed with programme audio.
+
+The verdict is a precommitment record with a stated probability. The field
+settles it: a wake followed by an immediate cancel is a false trigger; a
+button press straight after a failed attempt is a miss.
+
+### The test bench
+
+Offline, on the build VM, before a phone is involved. For each candidate
+word:
+
+- positives from real speakers (single-word clips cut from Common Voice,
+  with its accent labels; the Multilingual Spoken Words Corpus where it has
+  the word) and from multi-speaker synthetic speech for words nobody has
+  recorded;
+- noise: programme audio mixed at a ladder of levels, standard noise sets,
+  simulated room and pocket acoustics;
+- negatives: hours of programme audio, general speech without the word,
+  and a list of near-sounding words.
+
+Measured: miss rate by accent and noise level, false triggers per hour on
+each negative set, and the best threshold. Run over about two hundred
+words, the results are the ground truth for fitting and checking the
+onboarding grader. First run: "radio", "choir", "DJ", "tetra", their "hey"
+forms for comparison, and a spread of coined and rare three-syllable
+words.
+
+Limits: the bench runs the open model, the phone a compressed build of it;
+simulated rooms are not real rooms. The bench ranks words; the owner's QA
+session gives the absolute numbers.
+
 ## What the spike must answer
 
 On the owner's iPhone, with a podcast playing, on the loudspeaker and on
@@ -164,3 +253,10 @@ above the threshold. The numbers are for hill-climbing after that.
   [Picovoice on word choice](https://picovoice.ai/docs/tips/choosing-a-wake-word/).
 - Follow-up windows: Alexa Follow-Up Mode (5 s), Google Continued
   Conversation (about 8 s).
+- Second pass: [Apple voice trigger](https://machinelearning.apple.com/research/voice-trigger),
+  [PETS 2020 misactivations](https://petsymposium.org/popets/2020/popets-2020-0072.php),
+  [Amazon on barge-in during playback](https://arxiv.org/pdf/2111.10639),
+  [wake word evaluation patent](https://patents.google.com/patent/US9275637),
+  [ZP-KWS](https://arxiv.org/abs/2606.20106),
+  [addressee detection](https://arxiv.org/abs/2604.08412),
+  [prefix bias](https://arxiv.org/abs/2602.08930).
