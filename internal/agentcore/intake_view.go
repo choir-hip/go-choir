@@ -69,6 +69,15 @@ func captureLabelView(l store.CaptureLabel) yaegikernel.CaptureLabelView {
 // frame came from, never the role of the run whose context the cell carries
 // (MA6.3: the run's role is not the frame's authority).
 func (rt *Runtime) storiesEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
+	return rt.storiesEgressWithin(ctx, deskRole, exec, payload, 0)
+}
+
+// storiesEgressWithin is storiesEgress for a page that, when window is set,
+// also holds every story updated within window (at most storiesMaxLimit),
+// not only the newest limit: a window of time, not a count, so a busy hour
+// does not push a story out of what management sees. The page is never
+// shorter than the limit asks.
+func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage, window time.Duration) (json.RawMessage, error) {
 	role := strings.TrimSpace(deskRole)
 	if !deskmanifest.Holds(role, "intake.read") {
 		return nil, fmt.Errorf("the story library is read under the intake.read grant, which %q does not hold", role)
@@ -116,9 +125,21 @@ func (rt *Runtime) storiesEgress(ctx context.Context, deskRole string, exec tool
 		// its texture:new commits carry (management delegation R2-5).
 		rt.noteStoryLibraryShown(ctx, exec.RunID, owner, computer)
 	}
-	sums, err := rt.store.ListStoryIndex(ctx, owner, computer, before, beforeDoc, limit+1)
+	read := limit + 1
+	if window > 0 {
+		read = storiesMaxLimit + 1
+	}
+	sums, err := rt.store.ListStoryIndex(ctx, owner, computer, before, beforeDoc, read)
 	if err != nil {
 		return nil, err
+	}
+	if window > 0 {
+		cutoff := time.Now().UTC().Add(-window)
+		in := 0
+		for in < len(sums) && !sums[in].UpdatedAt.Before(cutoff) {
+			in++
+		}
+		limit = min(max(limit, in), storiesMaxLimit)
 	}
 	page := yaegikernel.StoriesPage{Stories: []yaegikernel.StoryEntry{}}
 	more := len(sums) > limit
