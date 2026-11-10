@@ -45,9 +45,14 @@ type FrontStory struct {
 	// scores file when it scores this story; absent otherwise.
 	Importance int  `json:"importance,omitempty"`
 	Promo      bool `json:"promo,omitempty"`
-	// Section (world, us_politics, business, tech_ai) also comes from the
-	// scores file; absent when unscored or scored before sections existed.
-	Section string `json:"section,omitempty"`
+	// Section is the story's primary section id, and Sections every section
+	// it belongs to (a story can be in several), from the scores file under
+	// the section list's thresholds; absent when unscored. A story no
+	// section's threshold admits is placed in its top section with
+	// SectionFallback set.
+	Section         string   `json:"section,omitempty"`
+	Sections        []string `json:"sections,omitempty"`
+	SectionFallback bool     `json:"section_fallback,omitempty"`
 	// SourceCount and Words are the depth of the latest version: distinct
 	// cited sources, counted as the reader's "Sources N" counts them, and
 	// the body's length in words. Both are absent when the version has no
@@ -74,6 +79,9 @@ type FrontRoute struct {
 type FrontPage struct {
 	Stories    []FrontStory `json:"stories"`
 	NextCursor string       `json:"next_cursor,omitempty"`
+	// Sections is the paper's section list, from the scorer's published
+	// list; absent when the scorer has published none.
+	Sections []FrontSectionInfo `json:"sections,omitempty"`
 }
 
 // frontCursor is the keyset position after the last publication a page
@@ -206,7 +214,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 		return nil, fmt.Errorf("platform service: object graph store unavailable")
 	}
 	section = strings.TrimSpace(section)
-	if section != "" && section != FrontSectionOpinion && !frontSections[section] {
+	if section != "" && section != FrontSectionOpinion && !s.frontSectionValid(section) {
 		return nil, ErrInvalidFrontSection
 	}
 	if limit <= 0 {
@@ -276,6 +284,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 	})
 	if !opinion {
 		s.attachFrontImportance(page.Stories)
+		page.Sections = s.frontSectionInfos()
 	}
 	return page, nil
 }
@@ -291,7 +300,14 @@ func (s *Service) listFrontSection(ctx context.Context, og *ObjectGraphStore, li
 	if len(scores) == 0 {
 		return page, nil
 	}
-	inSection := func(id string) bool { return scores[id].Section == section }
+	inSection := func(id string) bool {
+		for _, in := range scores[id].Sections {
+			if in == section {
+				return true
+			}
+		}
+		return false
+	}
 	batchSize := frontSectionBatchSize
 	if batchSize < 1 {
 		batchSize = 1
@@ -342,6 +358,7 @@ func (s *Service) listFrontSection(ctx context.Context, og *ObjectGraphStore, li
 		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
 	})
 	s.attachFrontImportance(page.Stories)
+	page.Sections = s.frontSectionInfos()
 	return page, nil
 }
 
