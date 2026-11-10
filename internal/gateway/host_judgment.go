@@ -62,7 +62,7 @@ func (h *Handler) HandleHostJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), jevTransportTimeout)
+	ctx, cancel := context.WithTimeout(withJevSite(r.Context(), r), jevTransportTimeout)
 	defer cancel()
 	response, err := h.jevTransport.Decide(ctx, label, request)
 	if err != nil {
